@@ -1,11 +1,14 @@
 #include "dada.h"
 #include "ipcio.h"
 #include "multilog.h"
+#include "disk_array.h"
+#include "ascii_header.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <errno.h>
 
 void usage()
 {
@@ -14,42 +17,118 @@ void usage()
 	   " -b <buffersize>\n"
 	   " -f <filesize>\n"
 	   " -F <rootfilename>\n"
-	   " -d run as daemon\n"
-	   " -A Adaptive sleep algorithm (slow virtual memory flushing)\n");
+	   " -d run as daemon\n");
+}
+
+int64_t write_loop (dada_t* dada, ipcio_t* data_block, multilog_t* log,
+		    int fd, uint64_t bytes_to_write, uint64_t optimal_bufsz)
+{
+  /* The buffer used for file I/O */
+  static char* buffer = 0;
+  static uint64_t buffer_size = 0;
+
+  /* counters */
+  uint64_t bytes_written = 0;
+  ssize_t bytes = 0;
+
+  while (!ipcbuf_eod((ipcbuf_t*)data_block) && bytes_to_write) {
+
+    if (buffer_size > bytes_to_write)
+      bytes = bytes_to_write;
+    else
+      bytes = buffer_size;
+ 
+    bytes = ipcio_read (data_block, buffer, bytes);
+    if (bytes < 0) {
+      multilog (log, LOG_ERR, "ipcio_read error %s\n", strerror(errno));
+      return -1;
+    }
+
+    bytes = write (fd, buffer, bytes);
+    if (bytes < 0) {
+      multilog (log, LOG_ERR, "write error %s\n", strerror(errno));
+      return bytes_written;
+    }
+
+    bytes_to_write -= bytes;
+    bytes_written += bytes;
+
+  }
+
+  return bytes_written;
 }
 
 int main_loop (dada_t* dada,
 	       ipcio_t* data_block,
 	       ipcbuf_t* header_block,
+	       disk_array_t* disk_array,
 	       multilog_t* log)
 {
+  /* The header from the ring buffer */
   char* header = 0;
   uint64_t header_size = 0;
 
-  char* buffer = 0;
-  uint64_t buffer_size = 0;
+  /* Expected header size, as read from HDR_SIZE attribute */
+  unsigned exp_header_size = 0;
 
-  uint64_t bytes_read = 0;
+  /* The duplicate of the header */
+  static char* dup = 0;
+  static uint64_t dup_size = 0;
+
+  /* Optimal buffer size, as returned by disk array */
+  uint64_t opt_buffer_size;
+
+  /* Byte counts */
+  uint64_t total_bytes_written = 0;
+  int64_t bytes_written = 0;
 
   /* Wait for the next valid header sub-block */
   header = ipcbuf_get_next_read (header_block, &header_size);
-    
-  // get the header size and duplicate it
+
+  /* Check that header is of advertised size */
+  if (ascii_header_get (header, "HDR_SIZE", "%u", &exp_header_size) != 1) {
+    multilog (log, LOG_ERR, "Header block does not have HDR_SIZE");
+    return -1;
+  }
+
+  if (exp_header_size < header_size)
+    header_size = exp_header_size;
+
+  else if (exp_header_size > header_size) {
+    multilog (log, LOG_ERR, "HDR_SIZE is greater than header block size");
+    return -1;
+  }
+
+  /* Duplicate the header */
+  if (header_size > dup_size) {
+    dup = realloc (dup, header_size);
+    dup_size = header_size;
+  }
+  memcpy (dup, header, header_size);
 
   ipcbuf_mark_cleared (header_block);
 
+  /* Write data until the end of the data stream */
   while (!ipcbuf_eod((ipcbuf_t*)data_block)) {
 
-    bytes_read = ipcio_read (data_block, buffer, buffer_size);
+    OPEN a file on the disk_array;
+    ADJUST the header OBS_OFFSET by total_bytes written
+    WRITE the header;
 
-    if (bytes_read < 0) {
-      perror ("ipcio_read error");
+    /* Write data until the end of the file or data stream */
+    bytes_written = write_loop (dada, data_block, multilog, 
+				fd, file_size, opt_buffer_size);
+
+    if (bytes_written < 0)
       return -1;
-    }
+
+    total_bytes_written += bytes_written;
+
+    CLOSE the file;
 
   }
 
-  ipcio_reset (data_block);
+  ipcbuf_reset ((ipcbuf_t*)data_block);
 
   return 0;
 
@@ -68,7 +147,10 @@ int main (int argc, char **argv)
   ipcbuf_t header_block = IPCBUF_INIT;
 
   /* DADA Logger */
-  multilog_t* log;
+  multilog_t* log = 0;
+
+  /* Array of disks to which data will be written */
+  disk_array_t* disk_array = 0;
 
   /* Flag set in daemon mode */
   char daemon = 0;
@@ -137,7 +219,7 @@ int main (int argc, char **argv)
 
   while (!state.quit) {
 
-    if (main_loop (dada, &data_block, &header_block, log) < 0)
+    if (main_loop (dada, &data_block, &header_block, disk_array, log) < 0)
       multilog (log, LOG_ERR, "Error during transfer\n");
 
   }
@@ -165,4 +247,3 @@ int main (int argc, char **argv)
 
   return EXIT_SUCCESS;
 }
-
