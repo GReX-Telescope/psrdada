@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <stdarg.h>
 
+// #define _DEBUG 1
+
 multilog_t* multilog_open (char syslog)
 {
   multilog_t* m = (multilog_t*) malloc (sizeof(multilog_t));
@@ -10,6 +12,7 @@ multilog_t* multilog_open (char syslog)
   m->syslog = syslog;
   m->logs = 0;
   m->nlog = 0;
+  m->port = 0;
 
   pthread_mutex_init(&(m->mutex), NULL);
 
@@ -56,8 +59,22 @@ int multilog (multilog_t* m, int priority, const char* format, ...)
 
   pthread_mutex_lock (&(m->mutex));
 
-  for (ilog=0; ilog < m->nlog; ilog++)
-    vfprintf(m->logs[ilog], format, arguments);
+#ifdef _DEBUG
+  fprintf (stderr, "multilog: %d logs\n", m->nlog);
+#endif
+
+  for (ilog=0; ilog < m->nlog; ilog++)  {
+    if (ferror (m->logs[ilog]))  {
+#ifdef _DEBUG
+      fprintf (stderr, "multilog: error on log[%d]", ilog);
+#endif
+      m->logs[ilog] = m->logs[m->nlog-1];
+      m->nlog --;
+      ilog --;
+    }
+    else if (vfprintf(m->logs[ilog], format, arguments) < 0)
+      perror ("multilog: error vfprintf");
+  }
 
   pthread_mutex_unlock (&(m->mutex));
 
