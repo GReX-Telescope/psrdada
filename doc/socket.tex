@@ -25,23 +25,27 @@
   if (cfd < 0)
     perror ("Error accepting connection");
 \end{verbatim}
-The open file descriptor returned by {\tt sock\_accept} may be used
-in calls to the standard C I/O routines, {\tt read} and {\tt write}
-as well as {\tt send} and {\tt recv}.  Furthermore, the open file
-descriptor can be converted into a stream by calling {\tt fdopen}.
-It is important to note that a stream should be opened for only read
-or write access, never both; e.g.
+The open file descriptor returned by {\tt sock\_accept} may be used in
+calls to the standard C I/O routines, {\tt read} and {\tt write} as
+well as {\tt send} and {\tt recv}.  Furthermore, the open file
+descriptor can be converted into a stream by calling {\tt fdopen}.  It
+is important to note that sockets do not support seeking; therefore, a
+stream should be opened for only read or write access, never both.
+For example.
 \begin{verbatim}
-  /* two separate file streams are required for reading and writing */
+  /* two separate I/O streams are required for reading and writing */
   FILE* sockin = fdopen (cfd, "r");
   FILE* sockout = fdopen (cfd, "w");
 
-  /* set the socket output to be line-buffered */
+  /* line buffer the socket stream output */
   setvbuf (sockout, 0, _IOLBF, 0);
 \end{verbatim}
-The server can now read from {\tt sockin} using standard C stream I/O
+The server can now read from {\tt sockin} using standard C I/O stream
 routines such as {\tt fscanf}, {\tt fread}, and {\tt fgets}.  It can
 also write to {\tt sockout} using {\tt fprintf} and {\tt fwrite}.
+The call to {\tt setvbuf} is important; without this call, it would
+be necessary to {\tt fflush} the output stream to ensure that messages
+are communicated immediately.
 
 \subsection{Example Client}
 
@@ -61,4 +65,4 @@ also write to {\tt sockout} using {\tt fprintf} and {\tt fwrite}.
   fprintf (stderr, "connected to %s %d\n", hostname, port);
 \end{verbatim}
 As with the server, the socket file descriptor may be accessed using
-standard C stream I/O routines by calling {\tt fdopen}.
+standard C I/O stream routines by calling {\tt fdopen}.
