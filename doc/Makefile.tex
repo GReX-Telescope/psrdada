@@ -32,12 +32,16 @@ all: ps
 ps: $(PSS)
 dvi: $(DVIS)
 
-.PHONY : clean
-clean :
+.PHONY : clean veryclean texclean verytexclean
+
+# this trick makes Makefile.tex compatible with Makefile.extended
+clean : texclean
+veryclean : verytexclean
+
+texclean :
 	-rm -f *.aux *.bbl *.blg *.log *.toc
 
-.PHONY : cleanall
-cleanall :
+verytexclean :
 	-rm -f *.aux *.bbl *.blg *.log *.toc *.dvi *.ps
 
 %:%.ps
