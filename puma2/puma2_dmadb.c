@@ -11,12 +11,13 @@ void usage()
 {
     fprintf (stdout,
 	   "puma2_dmadb [options]\n"
-	     " -d run as daemon\n"
-	     " -i Observation Id string\n"	
-	     " -n # of buffers to acquire\n"
-	     " -s # of seconds to acquire\n"
-	     " -v verbose messages\n"
-	     " -W flag buffers readable\n"
+	     " -d             run as daemon\n"
+             " -H filename    ascii header information in file\n"
+	     " -i idstr       observation id string\n"	
+	     " -n nbuf        # of buffers to acquire\n"
+	     " -s sec         # of seconds to acquire\n"
+	     " -v             verbose messages\n"
+	     " -W             flag buffers readable\n"
 	     );
     
 }
@@ -52,8 +53,11 @@ int main (int argc, char **argv)
     char *ObsId = "Test";
     unsigned long fSize=1073741824;
 
+    /* the filename from which the header will be read */
+    char* header_file = 0;
+
     int arg = 0;
-    while ((arg=getopt(argc,argv,"di:n:s:vxS:W")) != -1) {
+    while ((arg=getopt(argc,argv,"dH:i:n:s:vxS:W")) != -1) {
 	switch (arg) {
 	    
 	    case 'd':
@@ -63,6 +67,10 @@ int main (int argc, char **argv)
 	    case 'v':
 		verbose=1;
 		break;
+
+            case 'H':
+                header_file = optarg;
+                break;
 
 	    case 'i':
 		if (verbose) fprintf(stderr,"ObsId is %s \n",optarg);
@@ -155,8 +163,6 @@ int main (int argc, char **argv)
 
     if (verbose) fprintf(stderr,"ipcbuf_lock_write to header block succeeded\n");
 
-    header_strlen = strlen(header);
-    
     header_size = ipcbuf_get_bufsz (&header_block);
     multilog (log, LOG_INFO, "header block size = %llu\n", header_size);
     
@@ -167,9 +173,18 @@ int main (int argc, char **argv)
 	return EXIT_FAILURE;
     }
 
-    memcpy (header_buf, header, header_strlen);
-    memset (header_buf + header_strlen, '\0', header_size - header_strlen);
-    
+    if (header_file)  {
+      if (fread_all (header_buf, header_size, header_file) < 0)  {
+        multilog (log, LOG_ERR, "Could not read header from %s\n", header_file);
+        return EXIT_FAILURE;
+      }
+    }
+    else {
+      header_strlen = strlen(header);
+      memcpy (header_buf, header, header_strlen);
+      memset (header_buf + header_strlen, '\0', header_size - header_strlen);
+    }
+
     /* Set the header size attribute */ 
     if (ascii_header_set (header_buf, "HDR_SIZE", "%llu", header_size) < 0) {
 	multilog (log, LOG_ERR, "Could not write HDR_SIZE to header\n");
