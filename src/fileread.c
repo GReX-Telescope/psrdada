@@ -14,6 +14,11 @@ long fileread (const char* filename, char* buffer, unsigned bufsz)
     return -1;
   }
 
+  if (fsize > bufsz) {
+    fprintf (stderr, "fileread: filesize=%ld > bufsize=%u\n", fsize, bufsz);
+    return -1;
+  }
+
   fptr = fopen (filename, "r");
   if (!fptr) {
     fprintf (stderr, "fileread: fopen(%s) %s\n", filename, strerror(errno));
