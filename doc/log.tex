@@ -5,10 +5,12 @@ logged and/or communicated to possibly more than one listener.  Therefore,
 all messages will be sent using the {\tt multilog} API.  A multilog session
 is opened by calling
 \begin{verbatim}
-multilog_t* multilog_open (char syslog);
+multilog_t* multilog_open (const char* program_name, char syslog);
 \end{verbatim}
 \vspace{-6mm}
 \begin{itemize}
+\item {\tt program\_name} the name of the program will precede each log message
+\vspace{-2mm}
 \item {\tt syslog} if non-zero, all messages are cc'd to syslog
 \end{itemize}
 and closed by calling
