@@ -1,11 +1,9 @@
-LOCAL_ROOT = ../..
+LOCAL_ROOT = ../../..
 include $(LOCAL_ROOT)/include/Makefile.standard
 
-LIBRARY = libdada.a
+PROGRAMS = puma2_dma2db.c
 
-LIB_SRCS = dada_db.c
-
-INCLUDES = dada_db.h
+LDFLAGS += -ldada -lcomm
 
 include $(LOCAL_ROOT)/include/Makefile.extended
 
