@@ -104,13 +104,21 @@ The following header parameters will be included in the PuMa-II ASCII header:
 \vspace{-2mm}
 \item{\tt HOSTNAME} host name of the machine on which data were written
 \vspace{-2mm}
-\item{\tt FILENAME} full path of the file to which data were written
+\item{\tt FILE\_NAME} full path of the file to which data were written
+\vspace{-2mm}
+\item{\tt FILE\_SIZE} requested size of data files
+\vspace{-2mm}
+\item{\tt FILE\_NUMBER} number of data files written prior to this one
 \vspace{-2mm}
 \item{\tt OBS\_ID} the identifier for the observations
 \vspace{-2mm}
-\item{\tt OBS\_START} the UTC of the first sample in the observation
+\item{\tt UTC\_START} the UTC of the first sample in the observation
+\vspace{-2mm}
+\item{\tt MJD\_START} the MJD of the first sample
 \vspace{-2mm}
 \item{\tt OBS\_OFFSET} the number of bytes from the start of the observation
+\vspace{-2mm}
+\item{\tt OBS\_OVERLAP} the amount by which neighbouring files overlap
 \end{itemize}
 
 \subsection{Notes}
@@ -135,5 +143,8 @@ writing data to a Secondary Node via a network interface, it would set
 {\tt OBS\_OFFSET} to the number of bytes that preceded the first byte
 of data to follow the header in the transmission.
 
+The {\tt OBS\_OVERLAP} parameter is used by {\tt db2nic} to determine
+the amount by which neighbouring data segments that are sent to
+different Secondary nodes should overlap.
 
 
