@@ -1,0 +1,52 @@
+\documentclass{scrreprt}
+\usepackage[T1]{fontenc}
+\usepackage[latin1]{inputenc}
+\usepackage{psfig}
+
+\makeatletter
+\makeatother
+
+\begin{document}
+
+\title{PuMa-II Software Specification}
+
+\author{W.H.B.\ van Straten, B.W.\ Stappers, and K.\ Ramesh}
+
+\maketitle
+\tableofcontents{}
+
+\begin{abstract}
+This document specifies the software element of the 2nd generation of
+the Dutch Pulsar Machine, PuMa-II, to be installed at the Westerbork
+Synthesis Radio Telescope, WSRT, in 2005.  PuMa-II will consist of
+eight data acquisition machines, called the \emph{primary units}, and
+a processing cluster of \emph{secondary units}.
+
+Each primary unit will interface with one of the 20\, MHz, 12-bit
+sampled outputs of the WSRT tied-array beam former.  On each machine,
+a custom-designed interface card (PiC) will re-sample the data with
+8-bit resolution and write the data to computer RAM via a direct
+memory access (DMA) interface.  A large file storage facility,
+implemented using hardware RAID controllers, will be used to store
+data locally, and a high-speed interconnect will enable the data to be
+sent to secondary nodes for data reduction.
+
+The communications plan and protocol used for sending the data from
+primary to secondary node may change over the life of the PuMa-II
+instrument.  Therefore, an adaptable and modular design philosophy has
+been employed in software at every level of communications, command,
+and control.  This document contains an overview of the software
+model, including a discussion of the design decisions made, and
+followed by a description of the requirements of each element.
+
+\end{abstract}
+
+\input{intro}
+
+\input{primary}
+
+\input{secondary}
+
+\input{summary}
+
+\end{document}

@@ -1,0 +1,65 @@
+\chapter{Secondary Unit}
+
+The Secondary units will contain a large amount of RAM and some
+moderate data storage medium, such as a magnetic tape device or hard
+drive.  Secondary units will receive large blocks of digitized data
+from the Primary Unit via high-speed interconnect, and process the
+data within a flexible system of handshaking.  Although any number of
+Data Client processes may be run on the Secondary units, this paper
+will provide details for two specific clients: a Data Storage Client,
+and a Data Reduction Client.
+
+\section{Data Flow Control Software}
+
+Data Flow Control software running on the Secondary units will
+establish and maintain high-bandwidth data communication channels with
+a single Primary Unit.  Data received via this communication channel
+will be copied to the Data Block.  By a handshaking protocol described
+in Section~\ref{sec:data_block}, the Data Flow Control Software will
+cooperate with Data Client Software and ensure that all received data
+is processed (storage or reduction).
+
+\section{Data Client Software}
+
+Data Client software running on the Secondary units will read the
+digitized data from the Data Block shared memory and operate on this
+data.  Upon completion of a sub-block of data, it may be flagged as
+processed, allowing the Data Flow Control software to write over this
+sub-block.  This handshaking protocol is similar to that used by the
+EDT DMA driver.
+
+\subsection{Data Storage Client: {\tt db2disk}}
+
+Write a block to disk, flag as processed.
+
+\subsection{Data Reduction Client: {\tt dspsr}}
+
+Process a block of data and flag as processed or process a file on
+disk and remove it.
+
+\section{Data Block}
+\label{sec:data_block}
+
+The Data Block will be allocated as a shared memory resource.  It will
+consist of a primary header followed by a number of sub-blocks.  Each
+sub-block will have a corresponding variable to indicate the state of
+the block: empty, data valid, or data processed.
+
+All processes may read from the Data Block shared memory, but only the
+Data Flow Control process may write to it.  In addition, only one Data
+Client will be given the permission to set the ``data processed'' flag
+of the sub-blocks.
+
+Only the data from one observation can be held in the Data Block at
+one time.  The relevant observation information (such as bandwidth,
+centre frequency, source, start time, etc.) is stored in the primary
+header space of the Data Block.  Each sub-block with ``data valid''
+will also have an associated byte count that may be used to calculate
+the time offset from the start of the observation.
+
+If the Data Flow Control software cannot obtain a ``data processed''
+or ``empty'' sub-block, an overflow condition occurs, and overflow
+handling routines must propagate an appropriate message to the Primary
+unit.  Depending upon the mode of operation, this condition may be
+interpreted as an error, or as a signal to move on to the next
+Secondary unit in the data transmission queue.

@@ -1,0 +1,40 @@
+\chapter{Summary}
+
+The following table summarizes the software that will be developed,
+its basic functionality, and the machine on which it will run.
+
+\vspace{5mm}
+
+\begin{tabular}{l|p{8cm}|l}
+
+Name & \multicolumn{1}{c}{Function} & Machine \\ \hline
+
+{\tt dma2db} & Transfers data from EDT buffers to the Data Block.
+	& Primary \\
+
+{\tt db2disk} & Reads data from the Data Block and writes it, with
+	header information, to disk. & Secondary \\
+
+{\tt db2nic} & Reads data from the Data Block and sends it, with
+	header information, to a Seconday Unit. & Primary \\
+
+{\tt nic2db} & Receives data from Primary unit and writes it to the 
+	Data Block. & Secondary \\
+
+{\tt dspsr} & Attaches to the Data Block and processes raw data
+	according to specification, writing results to disk. &
+	Secondary \\
+
+{\tt puma2} & Connects to the Command and Control interface of the
+	various Primary units.  Accepts and maintains external
+	text-based control connection.  & variable \\
+
+{\tt puma2tcs} & Translates Parkes TCS control structure packets into
+	text-based commands as accepted by {\tt puma2} control
+	connection.  & variable \\
+
+{\tt puma2tui} & Textual user interface connects to {\tt puma2},
+	displays various quantities of interest, and controls
+	the instrument. & variable \\
+
+\end{tabular}
