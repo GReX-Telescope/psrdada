@@ -4,8 +4,6 @@
 
 #include <unistd.h>
 #include <stdlib.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 
 void usage()
 {
@@ -30,6 +28,7 @@ int main (int argc, char **argv)
 
   /* Flag set in daemon mode */
   char daemon = 0;
+  pid_t pid;
 
   /* Flag set in verbose mode */
   char verbose = 0;
@@ -60,13 +59,13 @@ int main (int argc, char **argv)
   /* set up for daemon usage */	  
   if (daemon) {
 
-    if (fork() < 0)
+    pid = fork();
+
+    if (pid < 0)
       exit(EXIT_FAILURE);
 
-    exit(EXIT_SUCCESS);
-
-    /* Change the file mode mask */
-    umask(0);
+    if (pid > 0)
+      exit(EXIT_SUCCESS);
 
     /* Create a new SID for the child process */
     if (setsid() < 0)
