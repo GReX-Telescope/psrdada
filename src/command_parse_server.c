@@ -133,6 +133,8 @@ static void* command_parse_server (void * arg)
   int comm_fd = 0;
   FILE* fptr = 0;
 
+  pthread_t tmp_thread;
+
   listen_fd = sock_create (&(server->port));
   if (listen_fd < 0)  {
     perror ("command_parse_server: Error creating socket");
@@ -181,15 +183,13 @@ static void* command_parse_server (void * arg)
     fprintf (stderr, "command_parse_server: output=%p\n", parser->output);
 #endif
 
-    pthread_t thread;
-
-    if (pthread_create (&thread, 0, command_parser, parser) < 0) {
+    if (pthread_create (&tmp_thread, 0, command_parser, parser) < 0) {
       perror ("command_parse_serve: Error creating new thread");
       return 0;
     }
 
     /* thread cannot be joined; resources will be deallocated on exit */
-    pthread_detach (thread);
+    pthread_detach (tmp_thread);
 
   }
 
