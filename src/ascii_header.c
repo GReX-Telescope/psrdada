@@ -51,7 +51,7 @@ int ascii_header_set (char* header, const char* keyword,
     dup = strdup (eol);
 
   /* %Xs dictates only a minumum string length */
-  if (sprintf (key, "%-12s %-20s   ", keyword, value) < 0) {
+  if (sprintf (key, "%-12s %-20s", keyword, value) < 0) {
     if (dup)
       free (dup);
     perror ("ascii_header_set: error sprintf\n");
