@@ -7,17 +7,17 @@ is opened by calling
 \begin{verbatim}
 multilog_t* multilog_open (const char* program_name, char syslog);
 \end{verbatim}
-\vspace{-6mm}
+
 \begin{itemize}
 \item {\tt program\_name} the name of the program will precede each log message
-\vspace{-2mm}
+
 \item {\tt syslog} if non-zero, all messages are cc'd to syslog
 \end{itemize}
 and closed by calling
 \begin{verbatim}
 int multilog_close (multilog_t* log);
 \end{verbatim}
-\vspace{-6mm}
+
 \begin{itemize}
 \item {\tt log} pointer to an open multilog session
 \end{itemize}
@@ -25,24 +25,24 @@ Once opened, file streams may be added by calling
 \begin{verbatim}
 int multilog_add (multilog_t* log, FILE* fptr);
 \end{verbatim}
-\vspace{-6mm}
+
 \begin{itemize}
 \item {\tt log} pointer to an open multilog session
-\vspace{-2mm}
+
 \item {\tt fptr} pointer to an open file stream
 \end{itemize}
 Messages are written to all file streams (and syslog, if enabled) by calling
 \begin{verbatim}
 int multilog (multilog_t* log, int priority, const char* format, ...);
 \end{verbatim}
-\vspace{-6mm}
+
 \begin{itemize}
 \item {\tt log} pointer to an open multilog session
-\vspace{-2mm}
+
 \item {\tt priority} a {\tt syslog} priority
-\vspace{-2mm}
+
 \item {\tt format} an fprintf-style formatting string
-\vspace{-2mm}
+
 \item {\tt ...} the value(s) to be printed according to the format
 \end{itemize}
 

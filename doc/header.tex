@@ -29,14 +29,14 @@ which includes:
 int ascii_header_set (char* header, const char* keyword,
                       const char* format, ...);
 \end{verbatim}
-\vspace{-6mm}
+
 \begin{itemize}
 \item {\tt header} pointer to a null-terminated ASCII header block
-\vspace{-2mm}
+
 \item {\tt keyword} the name of the attribute to be set
-\vspace{-2mm}
+
 \item {\tt format} an fprintf-style formatting string
-\vspace{-2mm}
+
 \item {\tt ...} the value(s) to be printed following the keyword
 \end{itemize}
 and
@@ -44,14 +44,14 @@ and
 int ascii_header_get (const char* header, const char* keyword,
                       const char* format, ...);
 \end{verbatim}
-\vspace{-6mm}
+
 \begin{itemize}
 \item {\tt header} pointer to a null-terminated ASCII header block
-\vspace{-2mm}
+
 \item {\tt keyword} the name of the attribute to be queried
-\vspace{-2mm}
+
 \item {\tt format} an fscanf-style formatting string
-\vspace{-2mm}
+
 \item {\tt ...} the value(s) to be parsed following the keyword
 \end{itemize}
 
@@ -95,29 +95,29 @@ cause the length of the string to exceed that of the allocated memory.
 The following header parameters will be included in the PuMa-II ASCII header:
 \begin{itemize}
 \item{\tt HEADER} name of the header
-\vspace{-2mm}
+
 \item{\tt HDR\_VERSION} version of the header
-\vspace{-2mm}
+
 \item{\tt HDR\_SIZE} size of the header in bytes
-\vspace{-2mm}
+
 \item{\tt PRIMARY} host name of the Primary Node on which the data was acquired
-\vspace{-2mm}
+
 \item{\tt HOSTNAME} host name of the machine on which data were written
-\vspace{-2mm}
+
 \item{\tt FILE\_NAME} full path of the file to which data were written
-\vspace{-2mm}
+
 \item{\tt FILE\_SIZE} requested size of data files
-\vspace{-2mm}
+
 \item{\tt FILE\_NUMBER} number of data files written prior to this one
-\vspace{-2mm}
+
 \item{\tt OBS\_ID} the identifier for the observations
-\vspace{-2mm}
+
 \item{\tt UTC\_START} the UTC of the first sample in the observation
-\vspace{-2mm}
+
 \item{\tt MJD\_START} the MJD of the first sample
-\vspace{-2mm}
+
 \item{\tt OBS\_OFFSET} the number of bytes from the start of the observation
-\vspace{-2mm}
+
 \item{\tt OBS\_OVERLAP} the amount by which neighbouring files overlap
 \end{itemize}
 

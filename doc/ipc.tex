@@ -24,14 +24,11 @@ To create a ring buffer, call
 \begin{verbatim}
 int ipcbuf_create (ipcbuf_t* ptr, int key, uint64 nbufs, uint64 bufsz);
 \end{verbatim}
-\vspace{-6mm}
+\vspace{-3mm}
 \begin{itemize}
 \item {\tt ptr} is a pointer to an unallocated ring buffer handle
-\vspace{-2mm}
 \item {\tt key} is a unique identifier (range of acceptable values???)
-\vspace{-2mm}
 \item {\tt nbufs} is the number of sub-blocks in the ring buffer
-\vspace{-2mm}
 \item {\tt bufsz} is the size of each sub-block in the ring buffer
 \end{itemize}
 After the ring buffer has been created, it is ready for use.   The ring
@@ -39,7 +36,7 @@ buffer resources will remain available until calling
 \begin{verbatim}
 int ipcbuf_destroy (ipcbuf_t* ptr);
 \end{verbatim}
-\vspace{-6mm}
+\vspace{-3mm}
 \begin{itemize}
 \item {\tt ptr} is a pointer to an allocated ring buffer handle
 \end{itemize}
@@ -50,17 +47,16 @@ Block ring buffer, call
 \begin{verbatim}
 int ipcbuf_connect (ipcbuf_t* ptr, int key);
 \end{verbatim}
-\vspace{-6mm}
+\vspace{-3mm}
 \begin{itemize}
 \item {\tt ptr} is a pointer to an unallocated ring buffer handle
-\vspace{-2mm}
 \item {\tt key} is the unique identifier passed to {\tt ipcbuf\_create}
 \end{itemize}
 To disconnect, call
 \begin{verbatim}
 int ipcbuf_disconnect (ipcbuf_t* ptr);
 \end{verbatim}
-\vspace{-6mm}
+\vspace{-3mm}
 \begin{itemize}
 \item {\tt ptr} is a pointer to a connected ring buffer handle
 \end{itemize}
@@ -97,7 +93,7 @@ by calling,
 \begin{verbatim}
 int ipcbuf_lock_write (ipcbuf_t* ptr);
 \end{verbatim}
-\vspace{-6mm}
+\vspace{-3mm}
 \begin{itemize}
 \item {\tt ptr} is a pointer to a connected ring buffer handle.
 \end{itemize}
@@ -105,7 +101,7 @@ Similarly, write permission may be relinquished by calling
 \begin{verbatim}
 int ipcbuf_unlock_write (ipcbuf_t* ptr);
 \end{verbatim}
-\vspace{-6mm}
+\vspace{-3mm}
 \begin{itemize}
 \item {\tt ptr} is a pointer to a connected ring buffer handle.
 \end{itemize}
@@ -116,28 +112,24 @@ After locking write access to the Data Block ring buffer, the Write
 Client will generally enter a loop in which it
 \begin{enumerate}
 \item requests the next sub-block to which data may be written, 
-\vspace{-2mm}
 \item fills the sub-block
-\vspace{-2mm}
 \item marks the sub-block as filled
 \end{enumerate}
 Step 1 is performed by calling
 \begin{verbatim}
 char* ipcbuf_get_next_write (ipcbuf_t* ptr);
 \end{verbatim}
-\vspace{-6mm}
+\vspace{-3mm}
 \begin{itemize}
 \item {\tt ptr} is a pointer to a connected ring buffer handle
-\vspace{-2mm}
 \item RETURN value is the pointer to the next available sub-block
 \end{itemize}
 \begin{verbatim}
 int ipcbuf_mark_filled (ipcbuf_t* ptr, uint64 nbytes);
 \end{verbatim}
-\vspace{-6mm}
+\vspace{-3mm}
 \begin{itemize}
 \item {\tt ptr} is a pointer to a connected ring buffer handle
-\vspace{-2mm}
 \item {\tt nbytes} is the number of valid bytes in the sub-block
 \end{itemize}
 
@@ -161,7 +153,7 @@ necessary to first disable the start-of-data flag by calling
 \begin{verbatim}
 int ipcbuf_disable_sod (ipcbuf_t* ptr);
 \end{verbatim}
-\vspace{-6mm}
+\vspace{-3mm}
 \begin{itemize}
 \item {\tt ptr} is a pointer to a connected ring buffer handle
 \end{itemize}
@@ -174,12 +166,10 @@ raises the start-of-data flag by calling
 \begin{verbatim}
 int ipcbuf_enable_sod (ipcbuf_t* ptr, uint64 st_buf, uint64 st_byte);
 \end{verbatim}
-\vspace{-6mm}
+\vspace{-3mm}
 \begin{itemize}
 \item {\tt ptr} is a pointer to a connected ring buffer handle
-\vspace{-2mm}
 \item {\tt st\_buf} is the absolute count of the first valid sub-block
-\vspace{-2mm}
 \item {\tt st\_byte} is the first valid byte in the first valid sub-block
 \end{itemize}
 
@@ -207,7 +197,7 @@ access to the buffer by calling,
 \begin{verbatim}
 int ipcbuf_lock_read (ipcbuf_t* ptr);
 \end{verbatim}
-\vspace{-6mm}
+\vspace{-3mm}
 \begin{itemize}
 \item {\tt ptr} is a pointer to a connected ring buffer handle
 \end{itemize}
@@ -215,7 +205,7 @@ Similarly, read permission may be relinquished by calling
 \begin{verbatim}
 int ipcbuf_unlock_read (ipcbuf_t* ptr);
 \end{verbatim}
-\vspace{-6mm}
+\vspace{-3mm}
 \begin{itemize}
 \item {\tt ptr} is a pointer to a connected ring buffer handle
 \end{itemize}
@@ -226,28 +216,24 @@ After locking read access to the Data Block ring buffer, the Read Client
 will generally enter a loop in which it
 \begin{enumerate}
 \item requests the next sub-block containing data, 
-\vspace{-2mm}
 \item operates on the data in the sub-block
-\vspace{-2mm}
 \item marks the sub-block as cleared
 \end{enumerate}
 Step 1 is performed by calling
 \begin{verbatim}
 char* ipcbuf_get_next_read (ipcbuf_t* ptr, uint64* bytes);
 \end{verbatim}
-\vspace{-6mm}
+\vspace{-3mm}
 \begin{itemize}
 \item {\tt ptr} is a pointer to a connected ring buffer handle
-\vspace{-2mm}
 \item {\tt bytes} will be set to the number of valid bytes in the sub-block
-\vspace{-2mm}
 \item RETURN value is the pointer to the first valid byte in the sub-block
 \end{itemize}
 Step 3 is performed by calling
 \begin{verbatim}
 int ipcbuf_mark_cleared (ipcbuf_t* ptr);
 \end{verbatim}
-\vspace{-6mm}
+\vspace{-3mm}
 \begin{itemize}
 \item {\tt ptr} is a pointer to a connected ring buffer handle
 \end{itemize}
@@ -269,14 +255,11 @@ To create an abstract ring buffer, call
 \begin{verbatim}
 int ipcio_create (ipcio_t* ptr, int key, uint64 nbufs, uint64 bufsz);
 \end{verbatim}
-\vspace{-6mm}
+\vspace{-3mm}
 \begin{itemize}
 \item {\tt ptr} is a pointer to an unallocated abstract ring buffer handle
-\vspace{-2mm}
 \item {\tt key} is a unique identifier (range of acceptable values???)
-\vspace{-2mm}
 \item {\tt nbufs} is the number of sub-blocks in the ring buffer
-\vspace{-2mm}
 \item {\tt bufsz} is the size of each sub-block in the ring buffer
 \end{itemize}
 After the abstract ring buffer has been created, it is ready for use
@@ -284,7 +267,7 @@ and the resources will remain available until calling
 \begin{verbatim}
 int ipcio_destroy (ipcio_t* ptr);
 \end{verbatim}
-\vspace{-6mm}
+\vspace{-3mm}
 \begin{itemize}
 \item {\tt ptr} is a pointer to an allocated abstract ring buffer handle
 \end{itemize}
@@ -293,17 +276,16 @@ call
 \begin{verbatim}
 int ipcio_connect (ipcio_t* ptr, int key);
 \end{verbatim}
-\vspace{-6mm}
+\vspace{-3mm}
 \begin{itemize}
 \item {\tt ptr} is a pointer to an unallocated abstract ring buffer handle
-\vspace{-2mm}
 \item {\tt key} is the unique identifier passed to {\tt ipcio\_create}
 \end{itemize}
 To disconnect, call
 \begin{verbatim}
 int ipcio_disconnect (ipcio_t* ptr);
 \end{verbatim}
-\vspace{-6mm}
+\vspace{-3mm}
 \begin{itemize}
 \item {\tt ptr} is a pointer to a connected ring buffer handle
 \end{itemize}
@@ -321,10 +303,9 @@ the Write or Read Client must first call
 \begin{verbatim}
 int ipcio_open (ipcio_t* ptr, char rw);
 \end{verbatim}
-\vspace{-6mm}
+\vspace{-3mm}
 \begin{itemize}
 \item {\tt ptr} is a pointer to a connected abstract ring buffer handle.
-\vspace{-2mm}
 \item {\tt rw} is either `W', `w', `R', or `r'
 \end{itemize}
 The meanings of the {\tt rw} character codes are as follows:
@@ -338,7 +319,7 @@ Similarly, write or read permission may be relinquished by calling
 \begin{verbatim}
 int ipcio_close (ipcio_t* ptr);
 \end{verbatim}
-\vspace{-6mm}
+\vspace{-3mm}
 \begin{itemize}
 \item {\tt ptr} is a pointer to a connected ring buffer handle.
 \end{itemize}
@@ -347,28 +328,22 @@ to the Data Block. Data are written to the abstract ring buffer by calling
 \begin{verbatim}
 ssize_t ipcio_write (ipcio_t* ptr, char* buf, size_t nbytes);
 \end{verbatim}
-\vspace{-6mm}
+\vspace{-3mm}
 \begin{itemize}
 \item {\tt ptr} is a pointer to a connected abstract ring buffer handle
-\vspace{-2mm}
 \item {\tt buf} is a pointer to the data to be written
-\vspace{-2mm}
 \item {\tt nbytes} is the number of bytes to be written
-\vspace{-2mm}
 \item RETURN value is the number of bytes written, or -1 on error
 \end{itemize}
 Data are read from the abstract ring buffer by calling
 \begin{verbatim}
 ssize_t ipcio_read (ipcio_t* ptr, char* buf, size_t nbytes);
 \end{verbatim}
-\vspace{-6mm}
+\vspace{-3mm}
 \begin{itemize}
 \item {\tt ptr} is a pointer to a connected abstract ring buffer handle
-\vspace{-2mm}
 \item {\tt buf} is a pointer to the buffer to be filled
-\vspace{-2mm}
 \item {\tt nbytes} is the number of bytes to be read
-\vspace{-2mm}
 \item RETURN value is the number of bytes read, or -1 on error
 \end{itemize}
 
@@ -395,10 +370,9 @@ The Write Client may then raise the start-of-data flag by calling
 \begin{verbatim}
 int ipcio_start (ipcio_t* ptr, uint64 st_byte);
 \end{verbatim}
-\vspace{-6mm}
+\vspace{-3mm}
 \begin{itemize}
 \item {\tt ptr} is a pointer to a connected ring buffer handle
-\vspace{-2mm}
 \item {\tt offset} is the byte offset after {\tt ipcio\_open}
 \end{itemize}
 To write an end-of-data flag without closing
@@ -406,7 +380,7 @@ the abstract ring buffer, the Write Client must call
 \begin{verbatim}
 int ipcio_stop (ipcio_t* ptr);
 \end{verbatim}
-\vspace{-6mm}
+\vspace{-3mm}
 \begin{itemize}
 \item {\tt ptr} is a pointer to a connected abstract ring buffer handle
 \end{itemize}

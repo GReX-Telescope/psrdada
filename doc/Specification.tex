@@ -1,8 +1,18 @@
 \documentclass{scrreprt}
 \usepackage{psfig}
+\usepackage{atbeginend}
 
 \makeatletter
 \makeatother
+
+\BeforeBegin{itemize}{\setlength{\topsep}{-2mm}}
+\BeforeBegin{itemize}{\setlength{\partopsep}{-2mm}}
+
+\BeforeBegin{enumerate}{\setlength{\topsep}{-2mm}}
+\BeforeBegin{enumerate}{\setlength{\partopsep}{-2mm}}
+
+\AfterBegin{itemize}{\setlength{\itemsep}{-1mm}}
+\AfterBegin{enumerate}{\setlength{\itemsep}{-1mm}}
 
 \begin{document}
 
