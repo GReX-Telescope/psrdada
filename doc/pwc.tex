@@ -10,14 +10,10 @@ Client (PWC) software.  In the case of PuMa-II, the PWC is
 \subsection{Operational States}
 
 The PWC has four main states of operation:
-\vspace{-2mm}
 \begin{itemize}
 \item {\bf idle} waiting for configuration parameters
-\vspace{-2mm}
 \item {\bf prepared} configuration parameters received; waiting for start
-\vspace{-2mm}
 \item {\bf recording invalid} recording data in over-write mode
-\vspace{-2mm}
 \item {\bf recording valid} recording data in lock-step mode
 \end{itemize}
 
@@ -36,9 +32,7 @@ that can be received in this state:
 
 \begin{itemize}
 \item {\tt\bf INV\_START} enter the {\bf recording invalid} state
-\vspace{-2mm}
 \item {\tt\bf START} enter the {\bf recording valid} state
-\vspace{-2mm}
 \item {\tt\bf START $\langle duration\rangle$} same as {\tt START}, record
 	for the duraction specified in either {\it seconds}, {\it samples},
 	or {\it HH:MM:SS}.
@@ -56,11 +50,9 @@ following commands is received:
 
 \begin{itemize}
 \item {\tt\bf STOP} enter the {\bf idle} state immediately
-\vspace{-2mm}
 \item {\tt\bf VAL\_START YYYY-MM-DD-hh:mm:ss} raise the valid data flag
 	at the specified UTC time in the data stream and enter the {\bf
 	recording valid} state
-\vspace{-2mm}
 \item {\tt\bf VAL\_START YYYY-MM-DD-hh:mm:ss $\langle duration\rangle$} same 
 	as {\tt VAL\_START}, record for the duraction specified in either
 	{\it seconds}, {\it samples}, or {\it HH:MM:SS}.
@@ -81,10 +73,8 @@ of the following commands is received:
 
 \begin{itemize}
 \item {\tt\bf STOP} enter the {\bf idle} state immediately
-\vspace{-2mm}
 \item {\tt\bf STOP YYYY-MM-DD-hh:mm:ss} enter the {\bf idle} state
 	at the specified time
-\vspace{-2mm}
 \item {\tt\bf VAL\_STOP YYYY-MM-DD-hh:mm:ss} raise the end of data flag
 	at the specified UTC time in the data stream and enter the {\bf
 	recording invalid} state
@@ -92,5 +82,47 @@ of the following commands is received:
 
 Note that the UTC time specified in the first argument to both {\tt STOP}
 and {\tt VAL\_STOP} {\bf must} be in the future.
+
+\subsection{Top Down Description}
+
+The following describes the behaviour of the Primary Write Client
+
+\begin{itemize}
+\item Initialization
+	\begin{itemize}
+	\item read configuration file
+	\item parse command line options
+	\item initialize DMA and PiC cards
+	\item connect to Data and Header Blocks
+	\item open a port and listen for command connection
+	\end{itemize}
+\item Main Loop
+	\begin{itemize}
+	\item Idle State
+		\begin{itemize}
+		\item wait for configuration
+		\item set configuration
+		\item enter {\bf prepared} state
+		\end{itemize}
+	\item Prepared State
+		\begin{itemize}
+		\item wait for a command
+		\item if command={\tt *START}, enter recording state
+		\item if command={\tt STOP}, return to {\bf idle} state
+		\end{itemize}
+	\item Recording (Valid or Invalid) State
+		\begin{itemize}
+		\item check for a command
+		\item if command={\tt STOP}, return to {\bf idle} state
+		\item if state={\tt recording invalid} and command={\tt VAL\_START}, \\ enter the {\bf recording valid} state
+		\end{itemize}
+	\end{itemize}
+\item Shutdown
+	\begin{itemize}
+	\item close command connection
+	\item disconnect from Data and Header Blocks
+	\end{itemize}
+\end{itemize}
+
 
 
