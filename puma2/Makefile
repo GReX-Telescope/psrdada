@@ -1,9 +1,9 @@
 LOCAL_ROOT = ../../..
 include $(LOCAL_ROOT)/include/Makefile.standard
 
-PROGRAMS = puma2_dma2db.c
+PROGRAMS = puma2_dmadb.c
 
-LDFLAGS += -ldada -lcomm
+LDFLAGS += -ldada
 
 include $(LOCAL_ROOT)/include/Makefile.extended
 
