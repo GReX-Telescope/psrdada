@@ -74,6 +74,7 @@ int multilog (multilog_t* m, int priority, const char* format, ...)
 #ifdef _DEBUG
       fprintf (stderr, "multilog: error on log[%d]", ilog);
 #endif
+      fclose (m->logs[ilog]);
       m->logs[ilog] = m->logs[m->nlog-1];
       m->nlog --;
       ilog --;
