@@ -9,10 +9,10 @@ extern "C" {
 
 int sock_getname (char* self, int length, int alias);
 
-int sock_create (int* port, int block);
-int sock_accept (int fd, int block);
+int sock_create (int* port);
+int sock_accept (int fd);
 
-int sock_open (const char* host, int port, int block);
+int sock_open (const char* host, int port);
 int sock_close (int fd);
 
 int sock_read (int fd, void* buf, size_t size);

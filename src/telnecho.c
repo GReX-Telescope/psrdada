@@ -33,7 +33,7 @@ int main (int argc, char** argv)
   }
 
 
-  sfd = sock_create (&port, 1);
+  sfd = sock_create (&port);
   if (sfd < 0)  {
     perror ("Error creating socket\n");
     return -1;
@@ -42,11 +42,10 @@ int main (int argc, char** argv)
   do  {
 
     fprintf (stderr, "%s available on %d\n",hostname, port);
-    cfd = sock_accept (sfd, 1);
+    cfd = sock_accept (sfd);
     fprintf (stderr, "Connection accepted.\n");
     
     sockin = fdopen (cfd, "r");
-
     sockout = fdopen (cfd, "w");
 
     // set the socket output to be line-buffered

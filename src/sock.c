@@ -23,7 +23,7 @@
 
 
 char* sock_herrstr (h_error)
-int h_error;
+     int h_error;
 {
   switch (h_error) {
   case HOST_NOT_FOUND:
@@ -67,9 +67,8 @@ int sock_getname (self, length, alias)
   return 0;
 }
 
-int sock_create (port, block)
+int sock_create (port)
      int  *port;
-     int  block;  /* flag for blocking */
 {
   struct sockaddr_in server;
   int fd;
@@ -100,11 +99,6 @@ int sock_create (port, block)
   }
   *port = ntohs(server.sin_port);
   
-  if (block)
-    sock_block (fd);
-  else
-    sock_nonblock (fd);
-
   /* listen for up to ten queued connection requests */
   if (listen(fd, 10) < 0)  {
     perror ("sockCreate: (err) listen");
@@ -114,33 +108,26 @@ int sock_create (port, block)
 }
 
 
-int sock_accept (fd, block)
-int fd;
-int block;
+int sock_accept (fd)
+     int fd;
 {
-    int new_fd;
+  int new_fd;
 
 #ifdef MSDOS
-    struct sockaddr_in dummy;
-    int dummy_size;
-    new_fd = accept (fd, &dummy, &dummy_size);
+  struct sockaddr_in dummy;
+  int dummy_size;
+  new_fd = accept (fd, &dummy, &dummy_size);
 #else
-    new_fd = accept (fd, (struct sockaddr *)NULL, NULL);
+  new_fd = accept (fd, (struct sockaddr *)NULL, NULL);
 #endif
 
-    if (block)
-        sock_block (new_fd);
-    else
-        sock_nonblock (new_fd);
-
-    return new_fd;
+  return new_fd;
 }
 
 /* opens an existing socket connection */
-int sock_open (host, port, block)
+int sock_open (host, port)
      const char* host;
      int   port;
-     int   block;
 {
   u_long addr;
   struct hostent *hp;
@@ -192,10 +179,6 @@ int sock_open (host, port, block)
     return -1;
   }
 
-  if (block)
-    sock_block (fd);
-  else
-    sock_nonblock (fd);
   return fd;
 }
 
@@ -265,13 +248,13 @@ int sock_ready (int fd, int* to_read, int* to_write, float timeout)
 
 
 /* returns a value of zero if no bytes were read before timeout seconds
-   // have passed, -1 on error. */
+// have passed, -1 on error. */
 int sock_tm_read (int fd, void* buf, size_t size, float timeout)
-/*(fd, buf, size, timeout)*/
+     /*(fd, buf, size, timeout)*/
      /*     int   fd;
-     char* buf;
-     size_t   size;
-     float timeout;*/
+	    char* buf;
+	    size_t   size;
+	    float timeout;*/
 {
   int rd;
   int retval = sock_ready (fd, &rd, NULL, timeout);
@@ -285,11 +268,11 @@ int sock_tm_read (int fd, void* buf, size_t size, float timeout)
 
 int sock_tm_write (int fd, void* buf, size_t size, float timeout)
 
-/* (fd, buf, size, timeout)
-     int    fd;
-     void*  buf;
-     size_t size;
-     float  timeout; */
+     /* (fd, buf, size, timeout)
+	int    fd;
+	void*  buf;
+	size_t size;
+	float  timeout; */
 {
   int wt;
   int retval = sock_ready (fd, NULL, &wt, timeout);
@@ -302,99 +285,99 @@ int sock_tm_write (int fd, void* buf, size_t size, float timeout)
 
 
 int sock_read (fd, buf, size)
-int   fd;
-void* buf;
-size_t   size;
+     int   fd;
+     void* buf;
+     size_t   size;
 {
-    int ret;
+  int ret;
 
-    ret = read (fd, buf, size);
-    if (ret == -1)
+  ret = read (fd, buf, size);
+  if (ret == -1)
     {
 #ifdef __alpha
-        if ( errno == EAGAIN || errno == EWOULDBLOCK )
+      if ( errno == EAGAIN || errno == EWOULDBLOCK )
 #endif
 #ifdef sgi
         if ( errno == EAGAIN || errno == EWOULDBLOCK )
 #endif
 #ifdef sun
-        if ( errno == EAGAIN )
+	  if ( errno == EAGAIN )
 #endif
 #ifdef _OSK
-        if ( errno == EWOULDBLOCK )
+	    if ( errno == EWOULDBLOCK )
 #endif
-            ret = 0;
+	      ret = 0;
     }
 
-    return ret;
+  return ret;
 }
 
 int sock_write (fd, buf, size)
-int   fd;
-const void* buf;
-size_t   size;
+     int   fd;
+     const void* buf;
+     size_t   size;
 {
-    int ret;
+  int ret;
 
-    ret = write (fd, buf, size);
-    if (ret == -1)
+  ret = write (fd, buf, size);
+  if (ret == -1)
     {
 #ifdef __alpha
-        if ( errno == EAGAIN || errno == EWOULDBLOCK )
+      if ( errno == EAGAIN || errno == EWOULDBLOCK )
 #endif
 #ifdef sgi
         if ( errno == EAGAIN || errno == EWOULDBLOCK )
 #endif
 #ifdef sun
-        if ( errno == EAGAIN )
+	  if ( errno == EAGAIN )
 #endif
 #ifdef _OSK
-        if ( errno == EWOULDBLOCK )
+	    if ( errno == EWOULDBLOCK )
 #endif
-            ret = 0;
+	      ret = 0;
     }
     
-    return ret;
+  return ret;
 }
 
 #ifdef _OSK
 int sock_block (fd)
-int fd;
+     int fd;
 {
-    struct sgbuf buf;
-    _gs_opt(fd,&buf);
-    buf.sg_noblock = 0;
-    _ss_opt(fd,&buf);
+  struct sgbuf buf;
+  _gs_opt(fd,&buf);
+  buf.sg_noblock = 0;
+  _ss_opt(fd,&buf);
 }
 
 int sock_nonblock (fd)
-int fd;
+     int fd;
 {
-    struct sgbuf buf;
-    _gs_opt(fd,&buf);
-    buf.sg_noblock = 1;
-    _ss_opt(fd,&buf);
+  struct sgbuf buf;
+  _gs_opt(fd,&buf);
+  buf.sg_noblock = 1;
+  _ss_opt(fd,&buf);
 }
 
 
 #else
 
 int sock_block (fd)
-int fd;
+     int fd;
 {
-    int flags;
-    flags = fcntl(fd,F_GETFL);
-    flags &= ~(O_NONBLOCK);
-    return fcntl(fd,F_SETFL,flags);
+  int flags;
+  flags = fcntl(fd,F_GETFL);
+  flags &= ~(O_NONBLOCK);
+  return fcntl(fd,F_SETFL,flags);
 }
 
 int sock_nonblock (fd)
-int fd;
+     int fd;
 {
-    int flags;
-    flags = fcntl(fd,F_GETFL);
-    flags |= O_NONBLOCK;
-    return fcntl(fd,F_SETFL,flags);
+  int flags;
+  flags = fcntl(fd,F_GETFL);
+  flags |= O_NONBLOCK;
+  return fcntl(fd,F_SETFL,flags);
 }
   
 #endif
