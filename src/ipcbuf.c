@@ -1,8 +1,4 @@
 #include <stdio.h>
-/*
-#include <stdlib.h>
-#include <assert.h>
-*/
 #include <string.h>
 #include <errno.h>
 
@@ -10,11 +6,6 @@
 #include <sys/ipc.h>
 #include <sys/sem.h>
 #include <sys/shm.h>
-
-/*
-#include <sys/time.h>
-#include <unistd.h>
-*/
 
 #include "ipcbuf.h"
 #include "ipcutil.h"
@@ -40,8 +31,8 @@
 #define IPCBUF_VIEWER  1  /* connected */
 
 #define IPCBUF_WRITER  2  /* one process that writes to the buffer */
-#define IPCBUF_WREADY  3  /* data written to buffer will not be over-written */
-#define IPCBUF_WRITING 4  /* start-of-data flag has been raised */
+#define IPCBUF_WRITING 3  /* start-of-data flag has been raised */
+#define IPCBUF_WCHANGE 4  /* next operation will change writing state */
 
 #define IPCBUF_READER  5  /* one process that reads from the buffer */
 #define IPCBUF_READING 6  /* start-of-data flag has been raised */
@@ -320,10 +311,10 @@ int ipcbuf_lock_write (ipcbuf_t* id)
     return -1;
   }
 
-  /* WREADY is a special state that means the process will switch into the
+  /* WCHANGE is a special state that means the process will change into the
      WRITING state on the first call to get_next_write */
 
-  id->state = IPCBUF_WREADY;
+  id->state = IPCBUF_WCHANGE;
 
   return 0;
 }
@@ -350,11 +341,24 @@ int ipcbuf_unlock_write (ipcbuf_t* id)
   return 0;
 }
 
+int ipcbuf_enable_eod (ipcbuf_t* id)
+{
+  /* must be the designated writer */
+  if (id->state != IPCBUF_WRITING) {
+    fprintf (stderr, "ipcbuf_enable_eod: not writing\n");
+    return -1;
+  }
+
+  id->state = IPCBUF_WCHANGE;
+
+  return 0;
+}
+
 int ipcbuf_disable_sod (ipcbuf_t* id)
 {
   /* must be the designated writer */
-  if (id->state != IPCBUF_WREADY) {
-    fprintf (stderr, "ipcbuf_disable_sod: not ready for writing\n");
+  if (id->state != IPCBUF_WCHANGE) {
+    fprintf (stderr, "ipcbuf_disable_sod: not able to change writing state\n");
     return -1;
   }
 
@@ -369,7 +373,7 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
   unsigned new_bufs = 0;
 
   /* must be the designated writer */
-  if (id->state != IPCBUF_WRITER && id->state != IPCBUF_WREADY) {
+  if (id->state != IPCBUF_WRITER && id->state != IPCBUF_WCHANGE) {
     fprintf (stderr, "ipcbuf_enable_sod: not writer\n");
     return -1;
   }
@@ -449,7 +453,7 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
 char ipcbuf_is_writer (ipcbuf_t* id)
 {
   int state = id->state;
-  return state==IPCBUF_WRITER || state==IPCBUF_WREADY || state==IPCBUF_WRITING;
+  return state==IPCBUF_WRITER || state==IPCBUF_WCHANGE || state==IPCBUF_WRITING;
 }
 
 char* ipcbuf_get_next_write (ipcbuf_t* id)
@@ -463,10 +467,10 @@ char* ipcbuf_get_next_write (ipcbuf_t* id)
     return NULL;
   }
 
-  if (id->state == IPCBUF_WREADY) {
+  if (id->state == IPCBUF_WCHANGE) {
 
 #if _DEBUG
-  fprintf (stderr, "ipcbuf_get_next_write: WREADY->WRITING\n");
+  fprintf (stderr, "ipcbuf_get_next_write: WCHANGE->WRITING\n");
 #endif
 
     if (ipcbuf_enable_sod (id, 0, 0) < 0) {
@@ -479,6 +483,12 @@ char* ipcbuf_get_next_write (ipcbuf_t* id)
 #if _DEBUG
   fprintf (stderr, "ipcbuf_get_next_write: waitbuf=%llu\n", id->waitbuf);
 #endif
+
+  if (id->waitbuf > sync->nbufs+1) {
+    fprintf (stderr, "ipcbuf_get_next_write: waitbuf=%llu > nbufs+1=%llu\n",
+	     id->waitbuf, sync->nbufs+1);
+    return NULL;
+  }
 
   /* waitbuf can be greater than the number of buffers when the last
    buffer of the previous session is equal to the first buffer of the
@@ -514,12 +524,17 @@ int ipcbuf_mark_filled (ipcbuf_t* id, uint64_t nbytes)
   }
 
   /* increment the buffers written semaphore only if WRITING */
-  if (id->state != IPCBUF_WRITING)  {
+  if (id->state == IPCBUF_WRITER)  {
     id->sync->writebuf ++;
     return 0;
   }
 
-  if (nbytes < id->sync->bufsz) {
+  if (id->state == IPCBUF_WCHANGE || nbytes < id->sync->bufsz) {
+
+#if _DEBUG
+    if (id->state == IPCBUF_WCHANGE)
+      fprintf (stderr, "ipcbuf_mark_filled: WCHANGE->WRITER\n");
+#endif
 
 #if _DEBUG
     fprintf (stderr, "ipcbuf_mark_filled: decrement EODACK=%d\n",
@@ -540,6 +555,9 @@ int ipcbuf_mark_filled (ipcbuf_t* id, uint64_t nbytes)
       fprintf (stderr, "ipcbuf_mark_filled: end buf=%llu byte=%llu\n",
 	       id->sync->e_buf, id->sync->e_byte);
 #endif
+
+    if (nbytes == id->sync->bufsz)
+      id->sync->writebuf ++;
 
   }
   else

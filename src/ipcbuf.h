@@ -88,6 +88,9 @@ extern "C" {
   /*! Enable the start-of-data flag */
   int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t st_buf, uint64_t st_byte);
 
+  /*! Enable the end-of-data flag */
+  int ipcbuf_enable_eod (ipcbuf_t* id);
+
   /*! Get the next empty buffer available for writing.  The
     calling process must have locked "data writer" status with a call
     to ipcbuf_lock_write. */

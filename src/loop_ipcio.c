@@ -51,7 +51,7 @@ int main (int argc, char** argv)
   int debug = 0;
   int arg;
 
-  while ((arg = getopt(argc, argv, "db:n:k:rw")) != -1) {
+  while ((arg = getopt(argc, argv, "db:n:k:qrw")) != -1) {
 
     switch (arg)  {
     case 'h':
@@ -72,6 +72,10 @@ int main (int argc, char** argv)
 
     case 'k':
       key = atoi (optarg);
+      break;
+
+    case 'q':
+      quick = 1;
       break;
 
     }
@@ -153,6 +157,12 @@ int main (int argc, char** argv)
 
     }
 
+    if (open)  {
+      fprintf (stderr, "Closing\n");
+      ipcio_close (&ringbuf);
+    }
+
+    sleep (1);
     fprintf (stderr, "Scheduling IPC resources for destruction\n");
     ipcio_destroy (&ringbuf);
 

@@ -59,18 +59,26 @@ int ipcio_open (ipcio_t* ipc, char rdwrt)
     fprintf (stderr, "ipcio_open: invalid rdwrt = '%c'\n", rdwrt);
     return -1;
   }
+
   ipc -> rdwrt = rdwrt;
   ipc -> bytes = 0;
   ipc -> curbuf = 0;
 
   if (rdwrt == 'w' || rdwrt == 'W') {
+
     /* read from file, write to shm */
     if (ipcbuf_lock_write (&(ipc->buf)) < 0) {
       fprintf (stderr, "ipcio_open: error ipcbuf_lock_write\n");
       return -1;
     }
-    ipc -> rdwrt = 'W';
-    return ipcbuf_reset (&(ipc->buf));
+
+    if (rdwrt == 'w' && ipcbuf_disable_sod(&(ipc->buf)) < 0) {
+      fprintf (stderr, "ipcio_open: error ipcbuf_disable_sod\n");
+      return -1;
+    }
+
+    return 0;
+
   }
 
   if (rdwrt == 'R') {
@@ -86,10 +94,16 @@ int ipcio_open (ipcio_t* ipc, char rdwrt)
 /* start writing valid data to an ipcbuf */
 int ipcio_start (ipcio_t* ipc, uint64_t sample)
 {
+  if (ipc->rdwrt != 'w') {
+    fprintf (stderr, "ipcio_start: invalid ipcio_t\n");
+    return -1;
+  }
+
   uint64_t bufsz   = ipcbuf_get_bufsz(&(ipc->buf));
   uint64_t st_buf  = sample / bufsz;
   uint64_t st_byte = sample % bufsz;
 
+  ipc->rdwrt = 'W';
   return ipcbuf_enable_sod (&(ipc->buf), st_buf, st_byte);
 }
 
@@ -101,10 +115,14 @@ int ipcio_stop_close (ipcio_t* ipc, char unlock)
 
 #if _DEBUG
     if (ipc->curbuf)
-      fprintf (stderr, "ipcio_close:W buffer:%llu "UI64
-	       " bytes. buf[0]=%x\n",
+      fprintf (stderr, "ipcio_close:W buffer:%llu %llu bytes. buf[0]=%x\n",
 	       ipc->buf.sync->writebuf, ipc->bytes, ipc->curbuf[0]);
 #endif
+
+    if (ipcbuf_enable_eod (&(ipc->buf)) < 0) {
+      fprintf (stderr, "ipcio_close:W error ipcbuf_enable_eod\n");
+      return -1;
+    }
 
     if (ipcbuf_mark_filled (&(ipc->buf), ipc->bytes) < 0) {
       fprintf (stderr, "ipcio_close:W error ipcbuf_mark_filled\n");
@@ -112,17 +130,17 @@ int ipcio_stop_close (ipcio_t* ipc, char unlock)
     }
 
     if (ipc->bytes == ipcbuf_get_bufsz(&(ipc->buf))) {
-
 #if _DEBUG
-      fprintf (stderr, "ipcio_close:W last buffer\n");
+      fprintf (stderr, "ipcio_close:W last buffer was filled\n");
 #endif
-
-      if (ipcbuf_mark_filled (&(ipc->buf), 0) < 0)  {
-	fprintf (stderr, "ipcio_close:W error ipcbuf_mark_filled EOF\n");
-	return -1;
-      }
-
+      ipc->curbuf = 0;
     }
+
+    ipc->rdwrt = 'w';
+
+  }
+
+  if (ipc -> rdwrt == 'w') {
 
     if (unlock) {
 
@@ -179,7 +197,7 @@ ssize_t ipcio_write (ipcio_t* ipc, char* ptr, size_t bytes)
   size_t space = 0;
   size_t towrite = bytes;
 
-  if (ipc -> rdwrt != 'W') {
+  if (ipc->rdwrt != 'W' && ipc->rdwrt != 'w') {
     fprintf (stderr, "ipcio_write: invalid ipcio_t\n");
     return -1;
   }
