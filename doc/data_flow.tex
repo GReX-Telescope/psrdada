@@ -9,16 +9,15 @@ ring buffer protocol, which will be known as the Data Block.
 \section{Data Block}
 \label{sec:data_block}
 
-On each machine, only one Data Block will exist.  The Data Block will
-be allocated as a shared memory resource, logically divided into a
-header block followed by a number of sub-blocks.  At the beginning of
-an observation, the header block will be initialized with the relevant
-observation information (such as bandwidth, centre frequency, source,
-start time, etc.) and the ring buffered cleared.  Data will be written
-to sub-blocks in sequential order until the end of the observation, at
-which point an end-of-data flag will be raised.  Therefore, only one
-contiguous stream of data may be represented in the Data Block at any
-one time.
+The Data Block will be allocated as a shared memory resource,
+logically divided into a header block followed by a number of
+sub-blocks.  At the beginning of an observation, the header block will
+be initialized with the relevant observation information (such as
+bandwidth, centre frequency, source, start time, etc.) and the ring
+buffered cleared.  Data will be written to sub-blocks in sequential
+order until the end of the observation, at which point an end-of-data
+flag will be raised.  Therefore, only one contiguous stream of data
+may be represented in the Data Block at any one time.
 
 Each sub-block will have a corresponding variable to indicate the
 state of the block: empty, or valid.  Each sub-block flagged as valid
@@ -98,10 +97,10 @@ Block.
 
 The {\tt nic2db} software has the responsibility to monitor the Data
 Block and ensure that there is sufficient space to hold incoming data
-packets.  I will send a message to the Primary node if there is
-insufficient space, and the Primary node will cease data transfer to
-the current Secondary node, possibly beginning data transfer to the
-next in node in the ring.
+packets.  It will send a message to the Primary node if there is
+insufficient space, and the Primary node will cease data transfer,
+possibly initiating data transfer to the next in Secondary node in the
+ring.
 
 \newpage
 \section{Data Flow Read Clients}

@@ -8,7 +8,7 @@ of the PuMa-II instrument.
 \begin{itemize}
 \item {\bf offline} processing: performed after the recording has finished
 \item {\bf simultaneous} processing: performed during the recording
-\item {\bf real-time} processing: as above, but completely in memory
+\item {\bf diskless} processing: as above, but completely in memory
 \end{itemize}
 
 \subsubsection{Offline Data Reduction}
@@ -27,7 +27,7 @@ run during the observation.  In this mode, data are sent directly to
 Secondary nodes and written to disk.  As before, {\tt dspsr} will be
 run on the data files.
 
-\subsubsection{Real-time Data Reduction}
+\subsubsection{Diskless Data Reduction}
 
 In the final stage of PuMa-II evolution, the data reduction software
 will be able to keep up completely with the flow of data on the
@@ -38,5 +38,6 @@ reduction tasks to a grid computing facility.
 
 \section{Configuration and Scheduling}
 
-The data processing parameters will be specified by high-level
-configuration and scheduling software.
+The data processing parameters will be specified by the Configuration
+and Scheduling software, which will schedule and record all data
+reduction operations.

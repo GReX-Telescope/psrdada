@@ -40,9 +40,8 @@ storage medium.
 \centerline{\psfig{figure=layout.eps,width=3.5in,angle=0}}
 \caption [\sffamily PuMa-II Data Flow]
 {
-Schematic Overview of PuMa-II Data Flow.  The fat lines indicate the 
-direction of data flow.  Note the parallel use of the RAM Data Block 
-on both Primary and Secondary nodes.
+Schematic overview of PuMa-II data flow; note the parallelism and 
+symmetry of the operations on Primary and Secondary nodes.
 }
 \label{fig:layout}
 \end{figure}
@@ -84,11 +83,12 @@ inter-process communication (IPC) locking method, known as a
 semaphore.
 
 Rational: It is better to begin with multiple processes and IPC in the
-early states of development because this paradigm is more modular.
+early stages of development because this paradigm is more modular.
 For example, the process that reads data from the Data Block and
-writes it to local storage may be run on either a Primary or Secondary
-node.  If data reduction can later be performed in real-time, the disk
-writing client may be replaced by a data processing client.
+writes it to local file storage may be run on either a Primary or
+Secondary node.  If data reduction can later be performed in
+real-time, the disk writing client may be replaced by a data
+processing client.
 
 \subsubsection{Data Reduction}
 
@@ -144,5 +144,6 @@ and:
 
 \subsubsection{Configuration and Scheduling}
 
-Configuration and scheduling will be make use of a database interface.
-TO DO: Describe this in more detail.
+Configuration and scheduling software will be make use of database
+information to configure the PuMa-II instrument and schedule data
+reduction operations, based upon the parameters of the observation.

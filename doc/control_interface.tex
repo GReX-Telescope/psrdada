@@ -1,2 +1,54 @@
 \chapter{Control Interface Software}
 
+The Control Interface software will implement the single instrument
+look and feel of PuMa-II.  A single process, {\tt puma2}, will:
+
+\begin{itemize}
+\item connect to the Command and Monitoring interface of required processes
+\vspace{-2mm}
+\item issue commands as necessary to the required processes
+\vspace{-2mm}
+\item collate monitoring information from the cluster nodes
+\vspace{-2mm}
+\item provide Command and Monitoring connections to outside world
+\vspace{-2mm}
+\item start and stop PuMa-II processes on any node as required
+\end{itemize}
+
+The number and variety of Data Flow Control Command and Monitoring
+connections required will depend upon the amount of flexibility
+desired. For example, if a configuration parameter such as the size of
+the data blocks written to Secondary node (or file) must change from
+observation to observation, then it will be necessary to communicate
+these changes to the {\tt db2nic} or {\tt db2disk} processes on each
+Primary node.  It will also be necessary to associate an observation
+ID with each configuration.  Because of the large file storage space
+on the Primary nodes, the {\tt db2nic} process may significantly lag
+(in time) the primary control process.  Therefore, the configuration
+commands that it receives would have to be queued.  Even with only the
+Data Block buffer, the Data Client process could be busy when
+configuration commands for the next observation are sent. \\
+
+In addition to maintaining the required control connections with
+processes on each of the Primary nodes, the Control Interface software
+will also present a Command and Monitoring connection to the outside
+world.  To this connection, an operator can connect to issue commands
+and check on the status of the instrument/observation.  As before,
+multiple communication channels may be connected, but only one will be
+able to send control commands.  The operator will connect using a
+textual user interface program, {\tt puma2tui}, which will present all
+information from the Control Interface in an organized manner,
+possibly employing the curses terminal control library.
+
+Another process, {\tt puma2tcs}, will be written to provide automated
+control of the PuMa-II instrument by the WSRT TCS.  Commands sent by
+TCS will be received by {\tt puma2tcs}, converted to text commands,
+and sent to {\tt puma2} through the same operator interface.
+
+The Control Interface software will enable complete initialization of
+the PuMa-II instrument through a single command.  That is, on any or
+all nodes, it will be able to start and stop various processes, create
+and destroy the Data Block shared memory and semaphore resources, and
+perform whatever other tasks prove useful in the initialization and
+configuration of the PuMa-II instrument.
+
