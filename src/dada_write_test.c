@@ -2,6 +2,7 @@
 #include "ipcio.h"
 #include "multilog.h"
 #include "ascii_header.h"
+#include "fread_all.h"
 
 #include <unistd.h>
 #include <stdlib.h>
@@ -11,7 +12,7 @@ void usage()
 {
   fprintf (stdout,
 	   "dada_write_test [options]\n"
-	   " -h filename    ascii header information in file\n"
+	   " -H filename    ascii header information in file\n"
 	   " -g gigabytes   number of gigabytes to write\n");
 }
 
@@ -50,6 +51,9 @@ int main (int argc, char **argv)
   /* the size of the header buffer */
   uint64_t header_size = 0;
 
+  /* the filename from which the header will be read */
+  char* header_file = 0;
+
   /* the size of the data buffer */
   uint64_t data_size = 1024 * 1024;
 
@@ -63,12 +67,16 @@ int main (int argc, char **argv)
   float one_gigabyte = 1024.0 * 1024.0 * 1024.0;
 
   int arg = 0;
-  while ((arg=getopt(argc,argv,"g:v")) != -1) {
+  while ((arg=getopt(argc,argv,"g:H:v")) != -1) {
     switch (arg) {
 
     case 'g':
       gigabytes = atof (optarg);
       bytes_to_write = (uint64_t) (gigabytes * one_gigabyte);
+      break;
+
+    case 'H':
+      header_file = optarg;
       break;
       
     case 'v':
@@ -122,8 +130,17 @@ int main (int argc, char **argv)
     return EXIT_FAILURE;
   }
 
-  memcpy (header_buf, header, header_strlen);
-  memset (header_buf + header_strlen, '\0', header_size - header_strlen);
+  if (header_file)  {
+    if (fread_all (header_buf, header_size, header_file) < 0)  {
+      multilog (log, LOG_ERR, "Could not read header from %s\n", header_file);
+      return EXIT_FAILURE;
+    }
+  }
+  else { 
+    header_strlen = strlen(header);
+    memcpy (header_buf, header, header_strlen);
+    memset (header_buf + header_strlen, '\0', header_size - header_strlen);
+  }
 
   /* Set the header size attribute */ 
   if (ascii_header_set (header_buf, "HDR_SIZE", "%llu", header_size) < 0) {
