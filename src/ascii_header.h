@@ -8,7 +8,7 @@
   \param keyword  the header keyword, such as NPOL
   \param code     printf/scanf code, such as "%d"
 
-  \retval 0 on success, -1 on failure
+  \retval 0 or 1 on success, -1 on failure
 
   \pre The code(s) must match the type(s) of the argument(s).
 

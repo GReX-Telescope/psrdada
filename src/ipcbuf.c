@@ -134,7 +134,7 @@ int ipcbuf_get (ipcbuf_t* id, int flag)
 */
 
 /* start with some random key for all of the pieces */
-static int curkey = 0x69;
+static int curkey = 0xc2;
 
 int ipcbuf_create (ipcbuf_t* id, int key, uint64_t nbufs, uint64_t bufsz)
 {
