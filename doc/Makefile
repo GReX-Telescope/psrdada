@@ -1,17 +1,9 @@
-LOCAL_ROOT = ../../..
-include ${LOCAL_ROOT}/include/Makefile.standard
+LOCAL_ROOT := ../../..
+include $(LOCAL_ROOT)/include/Makefile.standard
 
-Specification: Specification.dvi
+DOCS := Specification.tex
 
-TEXS := Specification.tex intro.tex primary.tex secondary.tex summary.tex
-FIGS := layout.ps
+Specification.dvi: layout.eps
 
-# date is there to stop make from caring that bibtex returns an error
-# code due to mutiply defined entries
-Specification.dvi: $(TEXS) $(FIGS)
-	latex Specification
-	latex Specification
+include $(LOCAL_ROOT)/include/Makefile.tex
 
-# convert xfig file format (.fig) to Postscript (.ps)
-%.ps: %.fig
-	fig2dev -L ps $< > $@
