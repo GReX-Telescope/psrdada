@@ -65,24 +65,8 @@ especially if they are all to be started on the same UTC second.  For
 this reason, it will not suffice to remotely start the processes at
 the desired beginning of each observation.  The processes must be
 persistent and must maintain socket communications with the Control
-Interface.  The following commands will be supported over this
-interface:
-
-\begin{itemize}
-\item {\tt START} start recording data at the next interval; continue
-  until {\tt STOP} command is received
-\item {\tt START seconds} start recording for the specified number of
-  seconds
-\item {\tt STOP} stop the current recording
-\item {\tt SET key=value} set the specified Data Block header parameter
-\item {\tt GET key}
-\item {\tt OVERLAP bytes} set the amount by which output data blocks
-  should overlap
-\end{itemize}
-
-The {\tt OVERLAP} parameter is set in the Data Block header, and is used
-by {\tt db2nic} to determine the amount by which data sent to different
-Secondary nodes should overlap.
+Interface.  The Command Interface to {\tt dma2db} is described in
+Section~\ref{sec:pwc}.
 
 \section{Monitoring}
 
