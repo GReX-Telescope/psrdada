@@ -1,6 +1,8 @@
 #include <stdio.h>
+/*
 #include <stdlib.h>
 #include <assert.h>
+*/
 #include <string.h>
 #include <errno.h>
 
@@ -8,8 +10,11 @@
 #include <sys/ipc.h>
 #include <sys/sem.h>
 #include <sys/shm.h>
+
+/*
 #include <sys/time.h>
 #include <unistd.h>
+*/
 
 #include "ipcbuf.h"
 #include "ipcutil.h"
@@ -83,7 +88,7 @@ int ipcbuf_get (ipcbuf_t* id, int flag)
 {
   int retval = 0;
   ipcsync_t* sync = 0;
-  uint64 size = 0;
+  uint64_t size = 0;
 
   if (!id)  {
     fprintf (stderr, "ipcbuf_get: invalid ipcbuf_t*\n");
@@ -140,12 +145,12 @@ int ipcbuf_get (ipcbuf_t* id, int flag)
 /* start with some random key for all of the pieces */
 static int curkey = 0x69;
 
-int ipcbuf_create (ipcbuf_t* id, int key, uint64 nbufs, uint64 bufsz)
+int ipcbuf_create (ipcbuf_t* id, int key, uint64_t nbufs, uint64_t bufsz)
 {
   int flag = IPCUTIL_PERM | IPC_CREAT | IPC_EXCL;
 
 #if _DEBUG
-  fprintf (stderr, "ipcbuf_create: key=%d nbufs="UI64" bufsz="UI64"\n",
+  fprintf (stderr, "ipcbuf_create: key=%d nbufs=%llu bufsz=%llu\n",
 	   key, nbufs, bufsz);
 #endif
 
@@ -218,7 +223,7 @@ int ipcbuf_connect (ipcbuf_t* id, int key)
   }
 
 #if _DEBUG
-  fprintf (stderr, "ipcbuf_connect: key=0x%x nbufs="UI64" bufsz="UI64"\n",
+  fprintf (stderr, "ipcbuf_connect: key=0x%x nbufs=%llu bufsz=%llu\n",
 	   key, id->sync->nbufs, id->sync->bufsz);
 #endif
 
@@ -358,7 +363,7 @@ int ipcbuf_disable_sod (ipcbuf_t* id)
   return 0;
 }
 
-int ipcbuf_enable_sod (ipcbuf_t* id, uint64 start_buf, uint64 start_byte)
+int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
 {
   ipcsync_t* sync = id -> sync;
   unsigned new_bufs = 0;
@@ -370,14 +375,14 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64 start_buf, uint64 start_byte)
   }
 
 #if _DEBUG
-  fprintf (stderr, "ipcbuf_enable_sod: start buf="UI64" writebuf="UI64"\n",
+  fprintf (stderr, "ipcbuf_enable_sod: start buf=%llu writebuf=%llu\n",
 	   start_buf, sync->writebuf);
 #endif
 
   /* start_buf must be less than or equal to the number of buffers written */
   if (start_buf > sync->writebuf) {
     fprintf (stderr,
-	     "ipcbuf_enable_sod: start_buf="UI64" > writebuf="UI64"\n",
+	     "ipcbuf_enable_sod: start_buf=%llu > writebuf=%llu\n",
 	     start_buf, sync->writebuf);
     return -1;
   }
@@ -385,7 +390,7 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64 start_buf, uint64 start_byte)
   if (sync->writebuf >= sync->nbufs &&
       start_buf <= sync->writebuf - sync->nbufs ) {
     fprintf (stderr,
-	     "ipcbuf_enable_sod: start_buf="UI64" <= start_min="UI64"\n",
+	     "ipcbuf_enable_sod: start_buf=%llu <= start_min=%llu\n",
 	     start_buf, sync->writebuf-sync->nbufs);
     return -1;
   }
@@ -393,7 +398,7 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64 start_buf, uint64 start_byte)
   /* start_byte must be less than or equal to the size of the buffer */
   if (start_byte > sync->bufsz) {
     fprintf (stderr,
-	     "ipcbuf_enable_sod: start_byte="UI64" > bufsz="UI64"\n",
+	     "ipcbuf_enable_sod: start_byte=%llu > bufsz=%llu\n",
 	     start_byte, sync->bufsz);
     return -1;
   }
@@ -413,14 +418,14 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64 start_buf, uint64 start_byte)
   sync->s_byte = start_byte;
 
 #if _DEBUG
-  fprintf (stderr, "ipcbuf_enable_sod: start buf="UI64" byte="UI64"\n",
+  fprintf (stderr, "ipcbuf_enable_sod: start buf=%llu byte=%llu\n",
            sync->s_buf, sync->s_byte);
 #endif
 
   new_bufs = sync->writebuf - start_buf;
 
 #if _DEBUG
-  fprintf (stderr, "ipcbuf_enable_sod: waitbuf="UI64" newbufs=%u\n",
+  fprintf (stderr, "ipcbuf_enable_sod: waitbuf=%llu newbufs=%u\n",
            id->waitbuf, new_bufs);
 #endif
 
@@ -449,7 +454,7 @@ char ipcbuf_is_writer (ipcbuf_t* id)
 
 char* ipcbuf_get_next_write (ipcbuf_t* id)
 {
-  uint64 bufnum = 0;
+  uint64_t bufnum = 0;
   ipcsync_t* sync = id -> sync;
 
   /* must be the designated writer */
@@ -472,7 +477,7 @@ char* ipcbuf_get_next_write (ipcbuf_t* id)
   }
 
 #if _DEBUG
-  fprintf (stderr, "ipcbuf_get_next_write: waitbuf="UI64"\n", id->waitbuf);
+  fprintf (stderr, "ipcbuf_get_next_write: waitbuf=%llu\n", id->waitbuf);
 #endif
 
   /* waitbuf can be greater than the number of buffers when the last
@@ -500,7 +505,7 @@ char* ipcbuf_get_next_write (ipcbuf_t* id)
   return id->base + sync->bufsz * bufnum;
 }
 
-int ipcbuf_mark_filled (ipcbuf_t* id, uint64 nbytes)
+int ipcbuf_mark_filled (ipcbuf_t* id, uint64_t nbytes)
 {
   /* must be the designated writer */
   if (!ipcbuf_is_writer(id))  {
@@ -532,7 +537,7 @@ int ipcbuf_mark_filled (ipcbuf_t* id, uint64 nbytes)
     id->state = IPCBUF_WRITER;
 
 #if _DEBUG
-      fprintf (stderr, "ipcbuf_mark_filled: end buf="UI64" byte="UI64"\n",
+      fprintf (stderr, "ipcbuf_mark_filled: end buf=%llu byte=%llu\n",
 	       id->sync->e_buf, id->sync->e_byte);
 #endif
 
@@ -610,10 +615,10 @@ char ipcbuf_is_reader (ipcbuf_t* id)
 }
 
 
-char* ipcbuf_get_next_read (ipcbuf_t* id, uint64* bytes)
+char* ipcbuf_get_next_read (ipcbuf_t* id, uint64_t* bytes)
 {
-  uint64 bufnum;
-  uint64 start = 0;
+  uint64_t bufnum;
+  uint64_t start = 0;
 
   if (ipcbuf_eod (id))
     return NULL;
@@ -634,7 +639,7 @@ char* ipcbuf_get_next_read (ipcbuf_t* id, uint64* bytes)
     if (id->state == IPCBUF_READER) {
 
 #if _DEBUG
-      fprintf (stderr, "ipcbuf_get_next_read: start buf="UI64" byte="UI64"\n",
+      fprintf (stderr, "ipcbuf_get_next_read: start buf=%llu byte=%llu\n",
 	       id->sync->s_buf, id->sync->s_byte);
 #endif
 
@@ -743,7 +748,7 @@ int ipcbuf_reset (ipcbuf_t* id)
     return 0;
 
 #if _DEBUG
-  fprintf (stderr, "ipcbuf_reset: decrement CLEAR=%d by "UI64"\n",
+  fprintf (stderr, "ipcbuf_reset: decrement CLEAR=%d by %llu\n",
 	   semctl (id->semid, IPCBUF_CLEAR, GETVAL), id->waitbuf);
 #endif
 
@@ -881,22 +886,22 @@ int ipcbuf_sod (ipcbuf_t* id)
   return id->state == IPCBUF_READING;
 }
 
-uint64 ipcbuf_get_write_count (ipcbuf_t* id)
+uint64_t ipcbuf_get_write_count (ipcbuf_t* id)
 {
   return id -> sync -> writebuf;
 }
 
-uint64 ipcbuf_get_read_count (ipcbuf_t* id)
+uint64_t ipcbuf_get_read_count (ipcbuf_t* id)
 {
   return id -> sync -> readbuf;
 }
 
-uint64 ipcbuf_get_nbufs (ipcbuf_t* id)
+uint64_t ipcbuf_get_nbufs (ipcbuf_t* id)
 {
   return id -> sync -> nbufs;
 }
 
-uint64 ipcbuf_get_bufsz (ipcbuf_t* id)
+uint64_t ipcbuf_get_bufsz (ipcbuf_t* id)
 {
   return id -> sync -> bufsz;
 }

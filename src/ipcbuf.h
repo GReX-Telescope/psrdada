@@ -1,5 +1,5 @@
-#ifndef __IPCBUF_H
-#define __IPCBUF_H
+#ifndef __DADA_IPCBUF_H
+#define __DADA_IPCBUF_H
 
 /* ************************************************************************
 
@@ -8,8 +8,7 @@
 
    ************************************************************************ */
 
-#include <sys/types.h> 
-#include "environ.h"
+#include <inttypes.h> 
 
 #ifdef __cplusplus
 extern "C" {
@@ -20,18 +19,18 @@ extern "C" {
     key_t semkey;    /* semaphore key */
     key_t shmkey;    /* shared memory key */
 
-    uint64 nbufs;    /* the number of buffers in the ring */
-    uint64 bufsz;    /* the size of the buffers in the ring */
+    uint64_t nbufs;    /* the number of buffers in the ring */
+    uint64_t bufsz;    /* the size of the buffers in the ring */
 
-    uint64 readbuf;  /* count of next buffer to read */
-    uint64 writebuf; /* count of next buffer to write */
+    uint64_t readbuf;  /* count of next buffer to read */
+    uint64_t writebuf; /* count of next buffer to write */
 
-    uint64 s_buf;    /* the first valid buffer when sod is raised */
-    uint64 s_byte;   /* the first valid byte when sod is raised */
+    uint64_t s_buf;    /* the first valid buffer when sod is raised */
+    uint64_t s_byte;   /* the first valid byte when sod is raised */
 
     int eod;         /* end of data flag */
-    uint64 e_buf;    /* the last valid buffer when sod is raised */
-    uint64 e_byte;   /* the last valid byte when sod is raised */
+    uint64_t e_buf;    /* the last valid buffer when sod is raised */
+    uint64_t e_byte;   /* the last valid byte when sod is raised */
 
   } ipcsync_t;
 
@@ -46,8 +45,8 @@ extern "C" {
     ipcsync_t* sync; /* pointer to sync structure in shared memory */
     char* base;      /* base address of ring buffer in shared memory */
 
-    uint64 viewbuf;  /* count of next buffer to look at (non-reader) */
-    uint64 waitbuf;  /* count of buffers on which to wait */
+    uint64_t viewbuf;  /* count of next buffer to look at (non-reader) */
+    uint64_t waitbuf;  /* count of buffers on which to wait */
 
   } ipcbuf_t;
 
@@ -60,7 +59,7 @@ extern "C" {
      //////////////////////////////////////////////////////////////////// */
 
   /*! Initialize an ipcbuf_t struct, creating shm and sem */
-  int ipcbuf_create (ipcbuf_t* ringbuf, int key, uint64 nbufs, uint64 bufsz);
+  int ipcbuf_create (ipcbuf_t* ringbuf, int key, uint64_t nbufs, uint64_t bufsz);
 
   /*! Connect to an already created ipcsync_t struct in shm */
   int ipcbuf_connect (ipcbuf_t* ringbuf, int key);
@@ -87,7 +86,7 @@ extern "C" {
   int ipcbuf_disable_sod (ipcbuf_t* id);
 
   /*! Enable the start-of-data flag */
-  int ipcbuf_enable_sod (ipcbuf_t* id, uint64 st_buf, uint64 st_byte);
+  int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t st_buf, uint64_t st_byte);
 
   /*! Get the next empty buffer available for writing.  The
     calling process must have locked "data writer" status with a call
@@ -99,7 +98,7 @@ extern "C" {
     calling process must have locked "data writer" status with a call
     to ipcbuf_lock_write.  If nbytes is less than bufsz, then end of
     data is implicitly set. */
-  int ipcbuf_mark_filled (ipcbuf_t* id, uint64 nbytes);
+  int ipcbuf_mark_filled (ipcbuf_t* id, uint64_t nbytes);
 
   /* ////////////////////////////////////////////////////////////////////
      
@@ -114,7 +113,7 @@ extern "C" {
   int ipcbuf_unlock_read (ipcbuf_t* id);
 
   /*! Get the next full buffer, and the number of bytes in it */
-  char* ipcbuf_get_next_read (ipcbuf_t* id, uint64* bytes);
+  char* ipcbuf_get_next_read (ipcbuf_t* id, uint64_t* bytes);
 
   /*! Declare that the last buffer to be returned by
     ipcbuf_get_next_read has been cleared and can be recycled.  The
@@ -129,16 +128,16 @@ extern "C" {
   int ipcbuf_eod (ipcbuf_t* id);
 
   /*! Return the number of bytes written to the ring buffer */
-  uint64 ipcbuf_get_write_count (ipcbuf_t* id);
+  uint64_t ipcbuf_get_write_count (ipcbuf_t* id);
 
   /*! Return the number of bytes read from the ring buffer */
-  uint64 ipcbuf_get_read_count (ipcbuf_t* id);
+  uint64_t ipcbuf_get_read_count (ipcbuf_t* id);
 
   /*! Return the number of buffers in the ring buffer */
-  uint64 ipcbuf_get_nbufs (ipcbuf_t* id);
+  uint64_t ipcbuf_get_nbufs (ipcbuf_t* id);
 
   /*! Return the size of each buffer in the ring */
-  uint64 ipcbuf_get_bufsz (ipcbuf_t* id);
+  uint64_t ipcbuf_get_bufsz (ipcbuf_t* id);
 
   /*! Reset the buffer count and end of data flags */
   int ipcbuf_reset (ipcbuf_t* id);

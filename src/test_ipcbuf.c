@@ -10,14 +10,14 @@ int main (int argc, char** argv)
   key_t key = 0x69;       /* some id number like a port number, i guess */
   int   arg;
 
-  uint64 nbufs = 4;
+  uint64_t nbufs = 4;
 #ifdef _SC_PAGE_SIZE
-  uint64 bufsz = sysconf (_SC_PAGE_SIZE);
+  uint64_t bufsz = sysconf (_SC_PAGE_SIZE);
 #else
-  uint64 bufsz = 1000000;
+  uint64_t bufsz = 1000000;
 #endif
 
-  uint64 offset = 0;
+  uint64_t offset = 0;
 
   char* read = NULL;
   char* write = NULL;
@@ -43,7 +43,7 @@ int main (int argc, char** argv)
       return 0;
 
     case 'b':
-      if (sscanf (optarg, UI64, &bufsz) < 1) {
+      if (sscanf (optarg, "%llu", &bufsz) < 1) {
 	fprintf (stderr, "test_ipcbuf could not parse -b %s", optarg);
 	return -1;
       }
@@ -54,14 +54,14 @@ int main (int argc, char** argv)
       break;
 
     case 'n':
-      if (sscanf (optarg, UI64, &nbufs) < 1) {
+      if (sscanf (optarg, "%llu", &nbufs) < 1) {
 	fprintf (stderr, "test_ipcbuf could not parse -n %s", optarg);
 	return -1;
       }
       break;
 
     case 'o':
-      if (sscanf (optarg, UI64, &offset) < 1) {
+      if (sscanf (optarg, "%llu", &offset) < 1) {
 	fprintf (stderr, "test_ipcbuf could not parse -o %s", optarg);
 	return -1;
       }
@@ -109,7 +109,7 @@ int main (int argc, char** argv)
     
     /* this process is reading from the file and creates the shared memory */
     fprintf (stderr, "Creating shared memory ring buffer."
-	     " nbufs="UI64" bufsz="UI64"\n", nbufs, bufsz);
+	     " nbufs=%llu bufsz=%llu\n", nbufs, bufsz);
 
     if (ipcbuf_create (&ringbuf, key, nbufs, bufsz) < 0) {
       fprintf (stderr, "Error creating shared memory ring buffer\n");
@@ -137,7 +137,7 @@ int main (int argc, char** argv)
       /* read from the file into the buffer */
       bytesio = fread (buf, 1, bufsz, fptr);
 
-      fprintf (stderr, "buffer:"UI64" %d bytes. buf[0]='%c'\n",
+      fprintf (stderr, "buffer:%llu %d bytes. buf[0]='%c'\n",
 	       ipcbuf_get_write_count(&ringbuf), bytesio, buf[0]);
 
       if (ipcbuf_mark_filled (&ringbuf, bytesio) < 0) {
@@ -202,7 +202,7 @@ int main (int argc, char** argv)
     nbufs = ipcbuf_get_nbufs(&ringbuf);
     bufsz = ipcbuf_get_bufsz(&ringbuf);
 
-    fprintf (stderr, " nbufs="UI64" bufsz="UI64"\n", nbufs, bufsz);
+    fprintf (stderr, " nbufs=%llu bufsz=%llu\n", nbufs, bufsz);
 
     while ( ! ipcbuf_eod (&ringbuf) ) { 
 
@@ -213,7 +213,7 @@ int main (int argc, char** argv)
 	return -1;
       }
 
-      fprintf (stderr, "buffer:"UI64" "UI64" bytes. buf[0]='%c'\n",
+      fprintf (stderr, "buffer:%llu %llu bytes. buf[0]='%c'\n",
 	       ipcbuf_get_read_count (&ringbuf), bufsz, buf[0]);
       
       bytesio = fwrite (buf, bufsz, 1, fptr);

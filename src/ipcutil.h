@@ -1,15 +1,11 @@
-#ifndef __IPCUTIL_H
-#define __IPCUTIL_H
+#ifndef __DADA_IPCUTIL_H
+#define __DADA_IPCUTIL_H
 
 /* ************************************************************************
 
-   ipcbuf_t - a struct and associated routines for creation and management
-   of a ring buffer in shared memory
+   utilities for creation of shared memory and operations on semaphores
 
    ************************************************************************ */
-
-#include <sys/types.h> 
-#include "environ.h"
 
 #define IPCUTIL_PERM 0666 /* default: read/write permissions for all */
 

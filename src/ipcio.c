@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <assert.h>
 
 #include "ipcio.h"
 
@@ -15,7 +14,7 @@ void ipcio_init (ipcio_t* ipc)
 }
 
 /* create a new shared memory block and initialize an ipcio_t struct */
-int ipcio_create (ipcio_t* ipc, int key, uint64 nbufs, uint64 bufsz)
+int ipcio_create (ipcio_t* ipc, int key, uint64_t nbufs, uint64_t bufsz)
 {
   if (ipcbuf_create (&(ipc->buf), key, nbufs, bufsz) < 0) {
     fprintf (stderr, "ipcio_create: ipcbuf_create error\n");
@@ -85,11 +84,11 @@ int ipcio_open (ipcio_t* ipc, char rdwrt)
 }
 
 /* start writing valid data to an ipcbuf */
-int ipcio_start (ipcio_t* ipc, uint64 sample)
+int ipcio_start (ipcio_t* ipc, uint64_t sample)
 {
-  uint64 bufsz   = ipcbuf_get_bufsz(&(ipc->buf));
-  uint64 st_buf  = sample / bufsz;
-  uint64 st_byte = sample % bufsz;
+  uint64_t bufsz   = ipcbuf_get_bufsz(&(ipc->buf));
+  uint64_t st_buf  = sample / bufsz;
+  uint64_t st_byte = sample % bufsz;
 
   return ipcbuf_enable_sod (&(ipc->buf), st_buf, st_byte);
 }
@@ -102,7 +101,7 @@ int ipcio_stop_close (ipcio_t* ipc, char unlock)
 
 #if _DEBUG
     if (ipc->curbuf)
-      fprintf (stderr, "ipcio_close:W buffer:"UI64" "UI64
+      fprintf (stderr, "ipcio_close:W buffer:%llu "UI64
 	       " bytes. buf[0]=%x\n",
 	       ipc->buf.sync->writebuf, ipc->bytes, ipc->curbuf[0]);
 #endif
@@ -211,7 +210,7 @@ ssize_t ipcio_write (ipcio_t* ipc, char* ptr, size_t bytes)
     else {
 
 #if _DEBUG
-      fprintf (stderr, "ipcio_write buffer:"UI64" "UI64" bytes. buf[0]=%x\n",
+      fprintf (stderr, "ipcio_write buffer:%llu %llu bytes. buf[0]=%x\n",
 	       ipc->buf.sync->writebuf, ipc->bytes, ipc->curbuf[0]);
 #endif
 
@@ -249,7 +248,7 @@ ssize_t ipcio_read (ipcio_t* ipc, char* ptr, size_t bytes)
       ipc->curbuf = ipcbuf_get_next_read (&(ipc->buf), &(ipc->curbufsz));
 
 #if _DEBUG
-      fprintf (stderr, "ipcio_read buffer:"UI64" "UI64" bytes. buf[0]=%x\n",
+      fprintf (stderr, "ipcio_read buffer:%llu %llu bytes. buf[0]=%x\n",
 	       ipc->buf.sync->readbuf, ipc->curbufsz, ipc->curbuf[0]);
 #endif
 
@@ -268,7 +267,7 @@ ssize_t ipcio_read (ipcio_t* ipc, char* ptr, size_t bytes)
 
     if (space > 0) {
 
-      /* fprintf (stderr, "space=%d curbufsz="UI64" bytes"UI64"\n",
+      /* fprintf (stderr, "space=%d curbufsz=%llu bytes%llu\n",
 	 space, ipc->curbufsz, ipc->bytes); */
 
       memcpy (ptr, ipc->curbuf + ipc->bytes, space);
@@ -295,19 +294,19 @@ ssize_t ipcio_read (ipcio_t* ipc, char* ptr, size_t bytes)
   return toread - bytes;
 }
 
-int64 ipcio_seek (ipcio_t* ipc, int64 offset, int whence)
+int64_t ipcio_seek (ipcio_t* ipc, int64_t offset, int whence)
 {
   /* the current absolute byte count position in the ring buffer */
-  uint64 current = 0;
+  uint64_t current = 0;
   /* the absolute value of the offset */
-  uint64 abs_offset = 0;
+  uint64_t abs_offset = 0;
   /* space left in the current buffer */
-  uint64 space = 0;
+  uint64_t space = 0;
   /* end of current buffer flag */
   int eobuf = 0;
 
-  uint64 bufsz = ipcbuf_get_bufsz (&(ipc->buf));
-  uint64 nbuf = ipcbuf_get_read_count (&(ipc->buf));
+  uint64_t bufsz = ipcbuf_get_bufsz (&(ipc->buf));
+  uint64_t nbuf = ipcbuf_get_read_count (&(ipc->buf));
   if (nbuf > 0)
     nbuf -= 1;
 
@@ -318,9 +317,9 @@ int64 ipcio_seek (ipcio_t* ipc, int64 offset, int whence)
 
   if (offset < 0) {
     /* can only go back to the beginning of the current buffer ... */
-    abs_offset = (uint64) -offset;
+    abs_offset = (uint64_t) -offset;
     if (abs_offset > ipc->bytes) {
-      fprintf (stderr, "ipcio_seek: "UI64" > max backwards "UI64"\n",
+      fprintf (stderr, "ipcio_seek: %llu > max backwards %llu\n",
 	       abs_offset, ipc->bytes);
       return -1;
     }

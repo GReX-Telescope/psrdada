@@ -11,11 +11,11 @@ int main (int argc, char** argv)
   key_t key = 0x69;       /* some id number like a port number, i guess */
   int   arg;
 
-  uint64 nbufs = 4;
+  uint64_t nbufs = 4;
 #ifdef _SC_PAGE_SIZE
-  uint64 bufsz = sysconf (_SC_PAGE_SIZE);
+  uint64_t bufsz = sysconf (_SC_PAGE_SIZE);
 #else
-  uint64 bufsz = 1000000;
+  uint64_t bufsz = 1000000;
 #endif
 
   char* read = NULL;
@@ -89,7 +89,7 @@ int main (int argc, char** argv)
 
     /* this process is reading from the file and creates the shared memory */
     fprintf (stderr, "Creating shared memory ring buffer."
-	     " nbufs="UI64" bufsz="UI64"\n", nbufs, bufsz);
+	     " nbufs=%llu bufsz=%llu\n", nbufs, bufsz);
 
     if (ipcio_create (&ringbuf, key, nbufs, bufsz) < 0) {
       fprintf (stderr, "Error creating shared memory ring buffer\n");

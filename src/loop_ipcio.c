@@ -24,11 +24,11 @@ int main (int argc, char** argv)
 
   key_t key = 0x69;
 
-  uint64 nbufs = 32;
+  uint64_t nbufs = 32;
 #ifdef _SC_PAGE_SIZE
-  uint64 bufsz = sysconf (_SC_PAGE_SIZE);
+  uint64_t bufsz = sysconf (_SC_PAGE_SIZE);
 #else
-  uint64 bufsz = 4*1024;
+  uint64_t bufsz = 4*1024;
 #endif
 
   unsigned long* smbuf = 0;
@@ -40,7 +40,7 @@ int main (int argc, char** argv)
 
   unsigned long nlong;
   unsigned long ilong = 0;
-  uint64 jlong = 0;
+  uint64_t jlong = 0;
 
   ssize_t bytesio = 0;
 
@@ -93,7 +93,7 @@ int main (int argc, char** argv)
 
     /* this process is reading from the file and creates the shared memory */
     fprintf (stderr, "Creating shared memory ring buffer."
-	     " nbufs="UI64" bufsz="UI64"\n", nbufs, bufsz);
+	     " nbufs=%llu bufsz=%llu\n", nbufs, bufsz);
 
     if (ipcio_create (&ringbuf, key, nbufs, bufsz) < 0) {
       fprintf (stderr, "Error creating shared memory ring buffer\n");
@@ -111,7 +111,7 @@ int main (int argc, char** argv)
 	open = 1;
       }
       else {
-	fprintf (stderr, "Starting at "UI64"\n", jlong);
+	fprintf (stderr, "Starting at %llu\n", jlong);
 	if (ipcio_start (&ringbuf, jlong*sizeof(unsigned long)) < 0) {
           fprintf (stderr, "Error while starting\n");
           return -1;
