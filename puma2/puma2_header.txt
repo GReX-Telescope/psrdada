@@ -10,8 +10,9 @@ OBS_ID       unset               # observation ID
 PRIMARY      unset               # primary node host name
 SECONDARY    unset               # secondary node host name
 FILE_NAME    unset               # full path of the data file
-FILE_SIZE    unset               # requested size of data files
-FILE_NUMBER  unset               # number of data file
+
+FILE_SIZE    160000000           # requested size of data files
+FILE_NUMBER  0                   # number of data file
 
 # time of the rising edge of the first time sample
 UTC_START    unset               # yyyy-mm-dd-hh:mm:ss.fs
