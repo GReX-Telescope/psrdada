@@ -1,0 +1,42 @@
+\chapter{Data Reduction Software}
+
+\section{Operational Phases}
+
+The data reduction software will evolve through three phases in the life
+of the PuMa-II instrument.
+
+\begin{itemize}
+\item {\bf offline} processing: performed after the recording has finished
+\item {\bf simultaneous} processing: performed during the recording
+\item {\bf real-time} processing: as above, but completely in memory
+\end{itemize}
+
+\subsubsection{Offline Data Reduction}
+
+In the initial version of PuMa-II, the data reduction software will
+operate only on data files stored on local disk space, and only after
+the recording has completed.  After the observations have been
+completed, the data files from each Primary node will be farmed out to
+the Secondary nodes, and {\tt dspsr} will be run on each data file, as
+specified by the Configuration and Scheduling software.
+
+\subsubsection{Simultaneous Data Reduction}
+
+In the next stage of development, the data reduction software will be
+run during the observation.  In this mode, data are sent directly to
+Secondary nodes and written to disk.  As before, {\tt dspsr} will be
+run on the data files.
+
+\subsubsection{Real-time Data Reduction}
+
+In the final stage of PuMa-II evolution, the data reduction software
+will be able to keep up completely with the flow of data on the
+Primary nodes.  In this case, the data is never written to disk, and
+{\tt dspsr} will operate as a Read Client directly connected to the
+Data Block.  Another Read Client may be written that will farm data
+reduction tasks to a grid computing facility.
+
+\section{Configuration and Scheduling}
+
+The data processing parameters will be specified by high-level
+configuration and scheduling software.
