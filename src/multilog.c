@@ -3,17 +3,25 @@
 #include <stdlib.h>
 #include <stdarg.h>
 
-/*! Initialize parameter values */
-int multilog_init (multilog_t* m)
+multilog_t* multilog_open (char syslog)
 {
-  m->syslog = 0;
+  multilog_t* m = (multilog_t*) malloc (sizeof(multilog_t));
+
+  m->syslog = syslog;
   m->logs = 0;
   m->nlog = 0;
 
   return 0;
 }
 
-/*! Add a listener to the multilog */
+int multilog_close (multilog_t* m)
+{
+  if (m->logs)
+    free (m->logs);
+  free (m);
+  return 0;
+}
+
 int multilog_add (multilog_t* m, FILE* fptr)
 {
   m->nlog ++;
@@ -23,7 +31,6 @@ int multilog_add (multilog_t* m, FILE* fptr)
   return 0;
 }
 
-/*! Write a message to all listening streams */
 int multilog (multilog_t* m, int priority, const char* format, ...)
 {
   unsigned ilog = 0;

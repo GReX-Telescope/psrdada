@@ -20,8 +20,11 @@ extern "C" {
 
   } multilog_t;
 
-  /*! Initialize parameter values */
-  int multilog_init (multilog_t* m);
+  /*! Open a multilogger */
+  multilog_t* multilog_open (char syslog);
+
+  /*! Close a multilogger */
+  int multilog_close (multilog_t* m);
 
   /*! Add a listener to the multilog */
   int multilog_add (multilog_t* m, FILE* fptr);
