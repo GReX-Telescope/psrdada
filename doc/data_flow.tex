@@ -11,9 +11,9 @@ ring buffer protocol, which will be known as the Data Block.
 
 The Data Block is a ring buffer that will be allocated as a shared
 memory resource, logically divided into a header block followed by a
-number of sub-blocks.  Each sub-block will also have an associated
-byte count that may be used to calculate the time offset from the
-start of the observation.  Only one contiguous stream of data may be
+number of sub-blocks.  Each sub-block will have an associated byte
+count that may be used to calculate the time offset from the start of
+the observation.  Only one contiguous stream of data may be
 represented in the Data Block at any one time; therefore, the size of
 the Data Block will determine the maximum amount of time required to
 flush the ring buffer between stopping an observation and starting the
@@ -56,23 +56,24 @@ arbitrary number of times between the start and end of data.
 A single, high-priority process, called the Write Client, will be
 given write access to the Data Block; only the Write Client can change
 the state of a sub-block from empty to full.  The Write Client can
-write invalid data to the ring buffer before flagging the start of the
-observation.  In this way, it can write data without activating the
+write data to the ring buffer before flagging the start of the
+observation.  In this way, it can clock data without activating the
 Read Clients, and may change the state of the validity flags before
 raising the start-of-data flag.
 
-The Write Client will not write data to the next sub-block until its
-state is empty, and after filling a sub-block will change its state to
-full and set the data validity byte offsets.  If the Write Client
-cannot obtain an empty sub-block, an overflow condition will occur;
-this condition will be handled according to the mode of operation:
+After raising the start-of-data flag, the Write Client will not write
+data to a sub-block until its state is empty; after filling a
+sub-block, it will change its state to full and set the data validity
+byte offsets.  If the Write Client cannot obtain an empty sub-block,
+an overflow condition will occur; this condition will be handled
+according to the mode of operation:
 
 \begin{itemize}
 
 \item {\bf contiguous}, a contiguous stream of data is required (as is
   often the case in search observations).  In this case, data overflow
   is treated as an error that is propagated to the Command and Control
-  software, and data acquisition in stopped.
+  software, and data acquisition is stopped.
 
 \item {\bf discontinuous}, an end-of-data is written to the Data
   Block, and the Write Client continues to receive data from its
@@ -96,11 +97,9 @@ One or more Read Clients may attach to the Data Block and read the
 data from sub-blocks marked as full.  Only the bytes designated as
 valid will be used from each sub-block.  Only a single, high-priority
 Read Client will be given permission to change the state of a
-sub-block from full to empty.  
-
-Read Clients will access sub-blocks in contiguous order after the
-start-of-data flag is raised and until the end-of-data condition is
-encountered.
+sub-block from full to empty.  Read Clients will access sub-blocks in
+contiguous order after the start-of-data flag is raised and until the
+end-of-data condition is encountered.
 
 \subsubsection{Example}
 

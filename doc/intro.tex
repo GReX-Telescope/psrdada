@@ -32,9 +32,7 @@ These are divided into two main classes:
 
 A single Primary node may have multiple Secondary nodes associated
 with it.  To these, it will send the observed data either during an
-offline, post-recording stage or in quasi-realtime.  The Secondary
-nodes will contain a large amount of RAM and a moderate internal data
-storage medium.
+offline, post-recording stage or in real-time.
 
 \begin{figure}
 \centerline{\psfig{figure=layout.eps,width=3.5in,angle=0}}
@@ -82,7 +80,7 @@ Therefore, access to the Data Block will be controlled by an
 inter-process communication (IPC) locking method, known as a
 semaphore.
 
-Rational: It is better to begin with multiple processes and IPC in the
+Rationale: It is better to begin with multiple processes and IPC in the
 early stages of development because this paradigm is more modular.
 For example, the process that reads data from the Data Block and
 writes it to local file storage may be run on either a Primary or
