@@ -3,7 +3,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-// typedef int (*command) (void* context, FILE* reply, char* arguments);
+// #define _DEBUG 1
 
 int command_parse_help (void* context, FILE* fptr, char* arg)
 {
@@ -20,6 +20,10 @@ int command_parse_help (void* context, FILE* fptr, char* arg)
   return 0;
 }
 
+int command_parse_exit (void* context, FILE* fptr, char* arg)
+{
+  return COMMAND_PARSE_EXIT;
+}
 
 /* create a new command parser */
 command_parse_t* command_parse_create ()
@@ -30,6 +34,7 @@ command_parse_t* command_parse_create ()
   c -> reply = stdout;
 
   command_parse_add (c, command_parse_help, c, "help", "print this list", 0);
+  command_parse_add (c, command_parse_exit, c, "exit", "exit parser", 0);
   return c;
 }
 
@@ -92,17 +97,35 @@ int command_parse_add (command_parse_t* parser,
 }
 
 /* parse a command */
-int command_parse (command_parse_t* parser, const char* command)
+int command_parse (command_parse_t* parser, char* command)
 {
-  char* dup = strdup (command);
-  char* key = strsep (&dup, " \t\n");
-  char* arg = dup;
+  return command_parse_output (parser, command, parser->reply);
+}
+
+/* parse a command */
+int command_parse_output (command_parse_t* parser, char* cmd, FILE* out)
+{
+  char* key = strsep (&cmd, " \r\t\n");
   unsigned icmd;
 
-  for (icmd=0; icmd < parser->ncmd; icmd++)
-    if (strcmp (key, parser->cmds[icmd].name) == 0)
-      return parser->cmds[icmd].cmd (parser->cmds[icmd].context,
-				     parser->reply, arg);
+#ifdef _DEBUG
+  fprintf (stderr, "command_parse: key '%s'\n", key);
+#endif
+  
+  for (icmd=0; icmd < parser->ncmd; icmd++) {
+    
+#ifdef _DEBUG
+    fprintf (stderr, "command_parse: compare '%s'\n", parser->cmds[icmd].name);
+#endif
+    
+    if (strcmp (key, parser->cmds[icmd].name) == 0) {
+#ifdef _DEBUG
+      fprintf (stderr, "command_parse: match %d\n", icmd);
+#endif
+      return parser->cmds[icmd].cmd (parser->cmds[icmd].context, out, cmd);
+    }
+
+  }
 
   return -1;
 }

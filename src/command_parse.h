@@ -2,10 +2,11 @@
 #define __DADA_command_parse_h
 
 #include <stdio.h>
-#include <pthread.h>
 
 /* pointer to a function that implements a command */
 typedef int (*command) (void* context, FILE* reply, char* arguments);
+
+#define COMMAND_PARSE_EXIT 13
 
 typedef struct {
 
@@ -38,13 +39,6 @@ typedef struct {
   /* I/O stream to be used when replying */
   FILE* reply;
 
-  /* for multi-threaded use of the command_parse */
-  pthread_mutex_t mutex;
-  pthread_t thread;
-
-  /* the port on which command_parse_server is listening */
-  int port;
-
 } command_parse_t;
 
 
@@ -65,9 +59,9 @@ int command_parse_add (command_parse_t* parser,
 		       const char* long_help);
 
 /* parse a command */
-int command_parse (command_parse_t* parser, const char* command);
+int command_parse (command_parse_t* parser, char* command);
 
-/*! Start another thread to receive command socket connections */
-int command_parse_serve (command_parse_t* m, int port);
+/* parse a command; different output */
+int command_parse_output (command_parse_t* parser, char* command, FILE* out);
 
 #endif
