@@ -61,9 +61,6 @@ typedef struct {
   /* I/O stream to which output is written */
   FILE* output;
 
-  /* thread id */
-  pthread_t thread;
-
 } command_parse_thread_t;
 
 /*! this thread does the actual command I/O */
@@ -184,10 +181,15 @@ static void* command_parse_server (void * arg)
     fprintf (stderr, "command_parse_server: output=%p\n", parser->output);
 #endif
 
-    if (pthread_create (&(parser->thread), 0, command_parser, parser) < 0) {
+    pthread_t thread;
+
+    if (pthread_create (&thread, 0, command_parser, parser) < 0) {
       perror ("command_parse_serve: Error creating new thread");
       return 0;
     }
+
+    /* thread cannot be joined; resources will be deallocated on exit */
+    pthread_detach (thread);
 
   }
 
@@ -217,6 +219,7 @@ int command_parse_serve (command_parse_server_t* server, int port)
 #endif
 
   server->port = port;
+
   if (pthread_create (&(server->thread), 0, command_parse_server, server) < 0)
     {
       perror ("command_parse_serve: Error creating new thread");
