@@ -34,9 +34,6 @@ typedef struct {
   /* size of the array */
   unsigned ncmd;
 
-  /* additional context for each subsequently added command */
-  void* context;
-
   /* I/O stream to be used when replying */
   FILE* reply;
 
