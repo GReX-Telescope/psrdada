@@ -15,6 +15,7 @@ extern "C" {
 
   typedef struct {
 
+    char*    name;    /* name of the program */
     char     syslog;  /* set to true to use syslog */
     FILE**   logs;    /* streams to which messages will be written */
     unsigned nlog;    /* number of streams */
@@ -28,7 +29,7 @@ extern "C" {
   } multilog_t;
 
   /*! Open a multilogger */
-  multilog_t* multilog_open (char syslog);
+  multilog_t* multilog_open (const char* program_name, char syslog);
 
   /*! Close a multilogger */
   int multilog_close (multilog_t* m);

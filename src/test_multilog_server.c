@@ -9,7 +9,7 @@ int main ()
   time_t seconds;
 
   fprintf (stderr, "Opening multilog\n");
-  log = multilog_open (0);
+  log = multilog_open ("time", 0);
 
   // fprintf (stderr, "Adding stderr to multilog\n");
   // multilog_add (log, stderr);

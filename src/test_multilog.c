@@ -6,7 +6,7 @@ int main ()
   multilog_t* log = 0;
 
   fprintf (stderr, "Opening multilog\n");
-  log = multilog_open (0);
+  log = multilog_open ("test", 0);
 
   fprintf (stderr, "Adding stderr to multilog\n");
   multilog_add (log, stderr);
