@@ -174,7 +174,7 @@ int main (int argc, char **argv)
     }
 
     if (header_file)  {
-      if (fread_all (header_buf, header_size, header_file) < 0)  {
+      if (fileread (header_file, header_buf, header_size) < 0)  {
         multilog (log, LOG_ERR, "Could not read header from %s\n", header_file);
         return EXIT_FAILURE;
       }
