@@ -11,7 +11,7 @@ multilog_t* multilog_open (char syslog)
   m->logs = 0;
   m->nlog = 0;
 
-  return 0;
+  return m;
 }
 
 int multilog_close (multilog_t* m)
