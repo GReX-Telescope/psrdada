@@ -1,52 +1,64 @@
 \chapter{Configuration and Scheduling Software}
 
-PuMa-II configuration will depend upon the objectives of the
-experiment and may change from observation to observation.
+Depending upon the objectives of the experiment, PuMa-II configuration
+may change from observation to observation.
 
-\section{Configuration}
+\section{Instrumental Configuration}
 
-The configuration software will set up various operational parameters,
-including:
-
+Based upon the parameters of observation, the {\tt puma2} control
+program will set up various operational parameters, including:
 \begin{itemize}
-\item DMA buffer size
-\item Data Block buffer size
-\item network packet size
+\item buffer sizes: DMA, Data Block, file and network I/O
+\vspace{-2mm}
 \item number of Primary nodes
+\vspace{-2mm}
 \item number of Secondary nodes
-\item assignment of Secondary to Primary node
+\vspace{-2mm}
+\item assignment of Secondary to Primary nodes
+\vspace{-2mm}
 \item operational mode: offline, simultaneous, or diskless
+\vspace{-2mm}
 \item overlap required between Secondary nodes
 \end{itemize}
+These operational parameters will be stored in a {\bf configuration
+database}, which will specify the instrument configuration and data
+reduction requirements for various combinations of source, receiver,
+centre frequency, band width, etc.
 
-\section{Scheduling}
+Entries in the configuration database may have an expiration date
+associated with them.  In this manner, the observer may specify
+special configuration and/or reduction options for a specific
+experiment without permanently changing the default behaviour.
 
-The scheduling software will work with a database in order to decide
-upon the best PuMa-II instrument configuration and data reduction
-operations.  Before the {\bf diskless} mode of data reduction is
-implemented, all data will exist as a file on either the Primary or
-Secondary nodes.  Whenever a file is written to disk, an entry will be
-registered in a centralized {\bf observations database}, which will
-contain basic header information such as
+\section{Data Reduction}
+
+The Configuration and Scheduling program, {\tt puma2skd}, will be used
+to configure and schedule all data reduction operations.  Before the
+{\bf diskless} mode of data reduction is implemented, all data will
+exist as a file on either the Primary or Secondary nodes.  Whenever a
+file is written to disk, an entry will be registered in a centralized
+{\bf observations database}, which will contain basic header
+information such as
 \begin{itemize}
 \item source name
+\vspace{-2mm}
 \item start time (UTC)
+\vspace{-2mm}
 \item centre frequency (MHz)
+\vspace{-2mm}
 \item band width (MHz)
 \end{itemize}
 as well as the location (machine and file name) of the data.  Each
 entry will also contain a time-stamped list of {\bf performed
 operations}, describing when the data was written, when and how it was
 processed, when it was deleted, etc.  The header information will be
-used to find matches in a {\bf configuration database}, which will
-specify the instrument configuration and data reduction requirements
-for each source.  An observation may be processed in multiple ways, as
-specified by the list of {\bf requested operations} in the
-configuration database entry.
+used to find matches in the configuration database.  An observation
+may be processed in multiple ways, as specified by the list of {\bf
+requested operations} in the configuration database entry.
 
 If it is possible to achieve two requested operations in one execution
 of {\tt dspsr} then this will be done.  Otherwise, data reduction
-operation will be performed one at a time.  After each operation is
+operations will be performed one at a time.  After each operation is
 completed, it will be recorded in the list of performed operations of
 the observations database entry.
 
@@ -57,9 +69,3 @@ requested operations in the corresponding configuration database
 entry.  An observation will be considered completely processed when
 the list of performed operations is equal to the list of requested
 operations.  At this point, the raw data will be deleted or archived.
-
-Entries in the configuration database may have an expiration date
-associated with them.  In this manner, the observer may specify
-special configuration and/or reduction options for a specific
-experiment without permanently corrupting the default behaviour.
-
