@@ -16,8 +16,8 @@ extern "C" {
 
   typedef struct {
 
-    key_t semkey;    /* semaphore key */
-    key_t shmkey;    /* shared memory key */
+    key_t  semkey;     /* semaphore key */
+    key_t* shmkey;     /* shared memory keys */
 
     uint64_t nbufs;    /* the number of buffers in the ring */
     uint64_t bufsz;    /* the size of the buffers in the ring */
@@ -28,7 +28,7 @@ extern "C" {
     uint64_t s_buf;    /* the first valid buffer when sod is raised */
     uint64_t s_byte;   /* the first valid byte when sod is raised */
 
-    int eod;         /* end of data flag */
+    int eod;           /* end of data flag */
     uint64_t e_buf;    /* the last valid buffer when sod is raised */
     uint64_t e_byte;   /* the last valid byte when sod is raised */
 
@@ -36,21 +36,21 @@ extern "C" {
 
   typedef struct {
 
-    int state;       /* the state of the process: writer, reader, etc. */
+    int state;         /* the state of the process: writer, reader, etc. */
 
-    int semid;       /* semaphore id */
-    int shmid;       /* ring buffer shared memory id */
-    int syncid;      /* sync struct shared memory id */
+    int  syncid;       /* sync struct shared memory id */
+    int  semid;        /* semaphore id */
+    int* shmid;        /* ring buffer shared memory id */
 
-    ipcsync_t* sync; /* pointer to sync structure in shared memory */
-    char* base;      /* base address of ring buffer in shared memory */
+    ipcsync_t* sync;   /* pointer to sync structure in shared memory */
+    char** buffer;     /* base addresses of sub-blocks in shared memory */
 
     uint64_t viewbuf;  /* count of next buffer to look at (non-reader) */
     uint64_t waitbuf;  /* count of buffers on which to wait */
 
   } ipcbuf_t;
 
-#define IPCBUF_INIT {0, -1,-1,-1, 0,0, 0,0}
+#define IPCBUF_INIT {0, -1,-1,0, 0,0, 0,0}
 
   /* ////////////////////////////////////////////////////////////////////
      

@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
@@ -55,19 +56,22 @@ static void fsleep (double seconds)
   \param key the shared memory key
   \param flag the flags to pass to shmget
 */
-int ipcsync_get (ipcbuf_t* id, key_t key, int flag)
+int ipcsync_get (ipcbuf_t* id, key_t key, uint64_t nbufs, int flag)
 {
+  int required = sizeof(ipcsync_t) + sizeof(key_t) * nbufs;
+
   if (!id) {
     fprintf (stderr, "ipcsync_get: invalid ipcbuf_t*\n");
     return -1;
   }
 
-  id->sync = ipc_alloc (key, sizeof(ipcsync_t), flag, &(id->syncid));
+  id->sync = ipc_alloc (key, required, flag, &(id->syncid));
   if (id->sync == 0) {
     fprintf (stderr, "ipcsync_get: ipc_alloc error\n");
     return -1;
   }
 
+  id -> sync -> shmkey = (key_t*) (id->sync + 1);
   id -> state = 0;
   id -> viewbuf = 0;
   id -> waitbuf = 0;
@@ -79,7 +83,7 @@ int ipcbuf_get (ipcbuf_t* id, int flag)
 {
   int retval = 0;
   ipcsync_t* sync = 0;
-  uint64_t size = 0;
+  uint64_t ibuf = 0;
 
   if (!id)  {
     fprintf (stderr, "ipcbuf_get: invalid ipcbuf_t*\n");
@@ -88,19 +92,12 @@ int ipcbuf_get (ipcbuf_t* id, int flag)
 
   sync = id -> sync;
 
-  size = sync->nbufs * sync->bufsz;
-
 #if _DEBUG
   fprintf (stderr, "ipcbuf_get: semkey=0x%x shmkey=0x%x\n",
 	   sync->semkey, sync->shmkey);
 #endif
 
-  /* four semaphores are created in this id:
-     - lock write
-     - lock read
-     - waiting to write
-     - waiting to read
-  */
+  /* all semaphores are created in this id */
   id->semid = semget (sync->semkey, IPCBUF_NSEM, flag);
 
   if (id->semid < 0) {
@@ -113,10 +110,20 @@ int ipcbuf_get (ipcbuf_t* id, int flag)
   fprintf (stderr, "ipcbuf_get: semid=%d\n", id->semid);
 #endif
 
-  id->base = ipc_alloc (sync->shmkey, size, flag, &(id->shmid));
-  if ( id->base == 0 ) {
-    perror ("ipcbuf_get: ipc_alloc");
-    retval = -1;
+  id->buffer = (char**) malloc (sizeof(char*) * sync->nbufs);
+  id->shmid = (int*) malloc (sizeof(int) * sync->nbufs);
+
+  for (ibuf=0; ibuf < sync->nbufs; ibuf++) {
+
+    id->buffer[ibuf] = ipc_alloc (sync->shmkey[ibuf], sync->bufsz, 
+				  flag, id->shmid + ibuf);
+
+    if ( id->buffer[ibuf] == 0 ) {
+      perror ("ipcbuf_get: ipc_alloc");
+      retval = -1;
+      break;
+    }
+    
   }
 
   return retval;
@@ -138,6 +145,7 @@ static int curkey = 0xc2;
 
 int ipcbuf_create (ipcbuf_t* id, int key, uint64_t nbufs, uint64_t bufsz)
 {
+  uint64_t ibuf = 0;
   int flag = IPCUTIL_PERM | IPC_CREAT | IPC_EXCL;
 
 #if _DEBUG
@@ -145,7 +153,7 @@ int ipcbuf_create (ipcbuf_t* id, int key, uint64_t nbufs, uint64_t bufsz)
 	   key, nbufs, bufsz);
 #endif
 
-  if (ipcsync_get (id, key, flag) < 0) {
+  if (ipcsync_get (id, key, nbufs, flag) < 0) {
     fprintf (stderr, "ipcbuf_create: ipcsync_get error\n");
     return -1;
   }
@@ -160,14 +168,18 @@ int ipcbuf_create (ipcbuf_t* id, int key, uint64_t nbufs, uint64_t bufsz)
   id -> sync -> e_byte = 0;
 
   id -> sync -> semkey = curkey; curkey ++;
-  id -> sync -> shmkey = curkey; curkey ++;
+
+  for (ibuf = 0; ibuf < nbufs; ibuf++) {
+    id -> sync -> shmkey[ibuf] = curkey;
+    curkey ++;
+  }
 
   id -> sync -> readbuf = 0;
   id -> sync -> writebuf = 0;
 
   id -> sync -> eod = 0;
 
-  id -> base    = 0;
+  id -> buffer  = 0;
   id -> waitbuf = 0;
 
   if (ipcbuf_get (id, flag) < 0) {
@@ -176,8 +188,8 @@ int ipcbuf_create (ipcbuf_t* id, int key, uint64_t nbufs, uint64_t bufsz)
   }
 
 #if _DEBUG
-  fprintf (stderr, "ipcbuf_create: sync_shmid=%d semid=%d data_shmid=%d\n",
-	   id->syncid, id->semid, id->shmid);
+  fprintf (stderr, "ipcbuf_create: syncid=%d semid=%d\n",
+	   id->syncid, id->semid);
 #endif
 
   /* ready to be locked by writer and reader processes */
@@ -208,7 +220,7 @@ int ipcbuf_connect (ipcbuf_t* id, int key)
 {
   int flag = IPCUTIL_PERM;
 
-  if (ipcsync_get (id, key, flag) < 0) {
+  if (ipcsync_get (id, key, 0, flag) < 0) {
     fprintf (stderr, "ipcbuf_connect: ipcsync_get error\n");
     return -1;
   }
@@ -218,7 +230,7 @@ int ipcbuf_connect (ipcbuf_t* id, int key)
 	   key, id->sync->nbufs, id->sync->bufsz);
 #endif
 
-  id -> base   = 0;
+  id -> buffer = 0;
 
   if (ipcbuf_get (id, flag) < 0) {
     fprintf (stderr, "ipcbuf_connect: ipcbuf_get error\n");
@@ -226,8 +238,8 @@ int ipcbuf_connect (ipcbuf_t* id, int key)
   }
 
 #if _DEBUG
-  fprintf (stderr, "ipcbuf_connect: sync_shmid=%d semid=%d data_shmid=%d\n",
-	   id->syncid, id->semid, id->shmid);
+  fprintf (stderr, "ipcbuf_connect: syncid=%d semid=%d\n",
+	   id->syncid, id->semid);
 #endif
 
   id -> state = IPCBUF_VIEWER;
@@ -237,6 +249,8 @@ int ipcbuf_connect (ipcbuf_t* id, int key)
 
 int ipcbuf_disconnect (ipcbuf_t* id)
 {
+  uint64_t ibuf = 0;
+
   if (!id) {
     fprintf (stderr, "ipcbuf_disconnect: invalid ipcbuf_t\n");
     return -1;
@@ -247,24 +261,29 @@ int ipcbuf_disconnect (ipcbuf_t* id)
 
   id->sync = 0;
 
-  if (id->base && shmdt (id->base) < 0)
-    perror ("ipcbuf_disconnect: shmdt(base)");
+  for (ibuf = 0; ibuf < id->sync->nbufs; ibuf++)
+    if (id->buffer[ibuf] && shmdt (id->buffer[ibuf]) < 0)
+      perror ("ipcbuf_disconnect: shmdt(buffer)");
 
-  id->base = 0;
-  id -> state = IPCBUF_DISCON; 
+  if (id->buffer) free (id->buffer); id->buffer = 0;
+  if (id->shmid) free (id->shmid); id->shmid = 0;
+
+  id->state = IPCBUF_DISCON; 
 
   return 0;
 }
 
 int ipcbuf_destroy (ipcbuf_t* id)
 {
+  uint64_t ibuf = 0;
+
   if (!id) {
     fprintf (stderr, "ipcbuf_destroy: invalid ipcbuf_t\n");
     return -1;
   }
 
 #if _DEBUG
-  fprintf (stderr, "ipcbuf_destroy: sync_shmid=%d\n", id->syncid);
+  fprintf (stderr, "ipcbuf_destroy: syncid=%d\n", id->syncid);
 #endif
 
   if (id->syncid>-1 && shmctl (id->syncid, IPC_RMID, 0) < 0)
@@ -280,14 +299,22 @@ int ipcbuf_destroy (ipcbuf_t* id)
     perror ("ipcbuf_destroy: semctl");
   id->semid = -1;
 
+  for (ibuf = 0; ibuf < id->sync->nbufs; ibuf++) {
+
 #if _DEBUG
-  fprintf (stderr, "ipcbuf_destroy: data_shmid=%d\n", id->shmid);
+    fprintf (stderr, "ipcbuf_destroy: id[%llu]=%x\n", ibuf, id->shmid[ibuf]);
 #endif
 
-  if (id->shmid>-1 && shmctl (id->shmid, IPC_RMID, 0) < 0)
-    perror ("ipcbuf_destroy: buf shmctl");
-  id->base = 0;
-  id->shmid = -1;
+    if (id->buffer)
+      id->buffer[ibuf] = 0;
+
+    if (id->shmid[ibuf]>-1 && shmctl (id->shmid[ibuf], IPC_RMID, 0) < 0)
+      perror ("ipcbuf_destroy: buf shmctl");
+
+  }
+
+  if (id->buffer) free (id->buffer); id->buffer = 0;
+  if (id->shmid) free (id->shmid); id->shmid = 0;
 
   return 0;
 }
@@ -512,7 +539,7 @@ char* ipcbuf_get_next_write (ipcbuf_t* id)
 
   bufnum = sync->writebuf % sync->nbufs;
 
-  return id->base + sync->bufsz * bufnum;
+  return id->buffer[bufnum];
 }
 
 int ipcbuf_mark_filled (ipcbuf_t* id, uint64_t nbytes)
@@ -704,7 +731,7 @@ char* ipcbuf_get_next_read (ipcbuf_t* id, uint64_t* bytes)
       *bytes = id->sync->bufsz - start;
   }
 
-  return id->base + id->sync->bufsz * bufnum + start;
+  return id->buffer[bufnum] + start;
 }
 
 
@@ -850,7 +877,9 @@ int ipcbuf_hard_reset (ipcbuf_t* id)
 
 int ipcbuf_lock (ipcbuf_t* id)
 {
-  if (id->syncid<0 || id->shmid<0)
+  uint64_t ibuf = 0;
+
+  if (id->syncid < 0 || id->shmid == 0)
     return -1;
 
 #ifdef SHM_LOCK
@@ -859,10 +888,12 @@ int ipcbuf_lock (ipcbuf_t* id)
     return -1;
   }
 
-  if (shmctl (id->shmid, SHM_LOCK, 0) < 0) {
-    perror ("ipcbuf_lock: shmctl (shmid, SHM_LOCK)");
-    return -1;
-  }
+  for (ibuf = 0; ibuf < id->sync->nbufs; ibuf++)
+    if (shmctl (id->shmid[ibuf], SHM_LOCK, 0) < 0) {
+      perror ("ipcbuf_lock: shmctl (shmid, SHM_LOCK)");
+      return -1;
+    }
+
 #else
   fprintf(stderr, "Warning: ipcbuf_lock called but does nothing on this platform!\n");
 #endif
@@ -872,7 +903,9 @@ int ipcbuf_lock (ipcbuf_t* id)
 
 int ipcbuf_unlock (ipcbuf_t* id)
 {
-  if (id->syncid<0 || id->shmid<0)
+  uint64_t ibuf = 0;
+
+  if (id->syncid < 0 || id->shmid == 0)
     return -1;
 
 #ifdef SHM_UNLOCK
@@ -881,10 +914,12 @@ int ipcbuf_unlock (ipcbuf_t* id)
     return -1;
   }
 
-  if (shmctl (id->shmid, SHM_UNLOCK, 0) < 0) {
-    perror ("ipcbuf_lock: shmctl (shmid, SHM_UNLOCK)");
-    return -1;
-  }
+  for (ibuf = 0; ibuf < id->sync->nbufs; ibuf++)
+    if (shmctl (id->shmid[ibuf], SHM_UNLOCK, 0) < 0) {
+      perror ("ipcbuf_lock: shmctl (shmid, SHM_UNLOCK)");
+      return -1;
+    }
+
 #else
   fprintf(stderr, "Warning: ipcbuf_unlock does nothing on this platform!\n");
 #endif
