@@ -20,7 +20,7 @@ void usage()
 	   " -d run as daemon\n");
 }
 
-int64_t write_loop (dada_t* dada, ipcio_t* data_block, multilog_t* log,
+int64_t write_loop (ipcio_t* data_block, multilog_t* log,
 		    int fd, uint64_t bytes_to_write, uint64_t optimal_bufsz)
 {
   /* The buffer used for file I/O */
@@ -69,7 +69,8 @@ int main_loop (dada_t* dada,
   uint64_t header_size = 0;
 
   /* Expected header size, as read from HDR_SIZE attribute */
-  unsigned exp_header_size = 0;
+  uint64_t hdr_size = 0;
+  uint64_t hdr_offset = 0;
 
   /* The duplicate of the header */
   static char* dup = 0;
@@ -86,15 +87,15 @@ int main_loop (dada_t* dada,
   header = ipcbuf_get_next_read (header_block, &header_size);
 
   /* Check that header is of advertised size */
-  if (ascii_header_get (header, "HDR_SIZE", "%u", &exp_header_size) != 1) {
+  if (ascii_header_get (header, "HDR_SIZE", "%llu", &hdr_size) != 1) {
     multilog (log, LOG_ERR, "Header block does not have HDR_SIZE");
     return -1;
   }
 
-  if (exp_header_size < header_size)
-    header_size = exp_header_size;
+  if (hdr_size < header_size)
+    header_size = hdr_size;
 
-  else if (exp_header_size > header_size) {
+  else if (hdr_size > header_size) {
     multilog (log, LOG_ERR, "HDR_SIZE is greater than header block size");
     return -1;
   }
@@ -108,15 +109,32 @@ int main_loop (dada_t* dada,
 
   ipcbuf_mark_cleared (header_block);
 
+  /* Get the header offset */
+  if (ascii_header_get (dup, "OBS_OFFSET", "%llu", &hdr_offset) != 1) {
+    multilog (log, LOG_ERR, "Header block does not have OBS_OFFSET");
+    return -1;
+  }
+
   /* Write data until the end of the data stream */
   while (!ipcbuf_eod((ipcbuf_t*)data_block)) {
 
     OPEN a file on the disk_array;
-    ADJUST the header OBS_OFFSET by total_bytes written
-    WRITE the header;
+
+    hdr_offset += total_bytes_written;
+
+    /* Set the header offset */
+    if (ascii_header_set (dup, "OBS_OFFSET", "%llu", hdr_offset) != 1) {
+      multilog (log, LOG_ERR, "Error writing OBS_OFFSET");
+      return -1;
+    }
+
+    if (write (fd, dup, header_size) < header_size) {
+      multilog (log, LOG_ERR, "Error writing header: %s", sterror(errno));
+      return -1;
+    }
 
     /* Write data until the end of the file or data stream */
-    bytes_written = write_loop (dada, data_block, multilog, 
+    bytes_written = write_loop (data_block, multilog, 
 				fd, file_size, opt_buffer_size);
 
     if (bytes_written < 0)
@@ -124,7 +142,10 @@ int main_loop (dada_t* dada,
 
     total_bytes_written += bytes_written;
 
-    CLOSE the file;
+    if (close (fd) < 0) {
+      multilog (log, LOG_ERR, "Error closing %s: %s", 
+		filename, strerror(errno));
+    }
 
   }
 
@@ -219,7 +240,7 @@ int main (int argc, char **argv)
 
   while (!state.quit) {
 
-    if (main_loop (dada, &data_block, &header_block, disk_array, log) < 0)
+    if (main_loop (&dada, &data_block, &header_block, disk_array, log) < 0)
       multilog (log, LOG_ERR, "Error during transfer\n");
 
   }
