@@ -1,29 +1,15 @@
 \chapter{Control Interface Software}
 
 The Control Interface software will implement the single instrument
-look and feel of PuMa-II.  A single process, {\tt puma2}, will:
+look and feel of PuMa-II.  A single process, {\tt puma2\_nexus}, will:
 
 \begin{itemize}
-\item connect to the Command and Monitoring interface of required processes
-\item issue commands as necessary to the required processes
-\item collate monitoring information from the cluster nodes
+\item connect to the Command interface of the Primary Write Clients
+\item issue commands as necessary to each Primary Write Client
+\item collate monitoring information from all processes
 \item provide Command and Monitoring connections to outside world
 \item start and stop PuMa-II processes on any node as required
 \end{itemize}
-
-The number and variety of Data Flow Control Command and Monitoring
-connections required will depend upon the amount of flexibility
-desired. For example, if a configuration parameter such as the size of
-the data blocks written to Secondary node (or file) must change from
-observation to observation, then it will be necessary to communicate
-these changes to the {\tt db2nic} or {\tt db2disk} processes on each
-Primary node.  It will also be necessary to associate an observation
-ID with each configuration.  Because of the large file storage space
-on the Primary nodes, the {\tt db2nic} process may significantly lag
-(in time) the primary control process.  Therefore, the configuration
-commands that it receives would have to be queued.  Even with only the
-Data Block buffer, the Data Client process could be busy when
-configuration commands for the next observation are sent.
 
 In addition to maintaining the required control connections with
 processes on each of the Primary nodes, the Control Interface software
@@ -48,3 +34,39 @@ and destroy the Data Block shared memory and semaphore resources, and
 perform whatever other tasks prove useful in the initialization and
 configuration of the PuMa-II instrument.
 
+\section{Data Flow configuration}
+
+The {\tt puma2\_nexus} software will distribute Data Flow configuration
+options to each of the Primary Write Clients.  Data Flow configuration
+describes the parameters of the Data Flow Control software that may
+need to change from observation to observation.  These currently
+include:
+\begin{itemize}
+\item{\tt FILE\_SIZE} requested size of data files
+\item{\tt OBS\_OVERLAP} the amount by which neighbouring files overlap
+\item{\tt TARGET\_NODES} the nodes to which data will be sent
+\end{itemize}
+These parameters configure the behaviour of the {\tt db2nic} or {\tt
+db2disk} processes.  As there may be a long delay between the time at
+which the data was acquired on the Primary node and that at which data
+reaches the Secondary nodes, these processes must be able to operate
+independently of the Control Interface software.  Therefore, the
+Data Flow configuration parameters will be stored as attributes in the
+ASCII Header for each observation (see Chapter~\ref{ch:header}).  The
+Header Block for each Primary Write Client is unique and each data
+path may be configured independently.
+
+The {\tt puma2\_nexus} software will read all configuration parameters
+from observation specification files.  This file will contain all
+information about the observation, including the Data Flow
+configuration configuration parameters, as described in the following
+section.  The {\tt puma2\_nexus} will parse the specification file and
+create a unique header for each of the Primary Write Clients.
+
+\section{Observation Specification}
+
+Each observation must be completely specified before it may be started
+on the PuMa-II instrument.  Specifications will be created using the
+specification tool, a graphical user interface designed to ease the
+creation, duplication, and verification of observation and data
+reduction configurations.

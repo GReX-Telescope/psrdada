@@ -1,4 +1,3 @@
-\newpage
 \section{Primary Write Client Command Interface}
 \label{sec:pwc}
 
@@ -20,7 +19,7 @@ The PWC has four main states of operation:
 \subsubsection{Idle State}
 
 In the idle state, the PWC sleeps until configuration parameters are
-sent from the control software.  All configuration paramters are sent
+sent from the control software.  All configuration parameters are sent
 in a single ASCII header.  This header is copied to the Header Block,
 and the PWC enters the {\bf prepared} state.
 
@@ -34,7 +33,7 @@ that can be received in this state:
 \item {\tt\bf INV\_START} enter the {\bf recording invalid} state
 \item {\tt\bf START} enter the {\bf recording valid} state
 \item {\tt\bf START $\langle duration\rangle$} same as {\tt START}, record
-	for the duraction specified in either {\it seconds}, {\it samples},
+	for the duration specified in either {\it seconds}, {\it samples},
 	or {\it HH:MM:SS}.
 \end{itemize}
 For each of the above commands, the PWC will enter the specified state
@@ -47,17 +46,15 @@ In this state, the PWC software clocks data into the Data Block but
 does not flag the data as valid.  The PWC will overwrite the data in
 each sub-block, and will remain in this state until one of the
 following commands is received:
-
 \begin{itemize}
 \item {\tt\bf STOP} enter the {\bf idle} state immediately
 \item {\tt\bf VAL\_START YYYY-MM-DD-hh:mm:ss} raise the valid data flag
 	at the specified UTC time in the data stream and enter the {\bf
 	recording valid} state
 \item {\tt\bf VAL\_START YYYY-MM-DD-hh:mm:ss $\langle duration\rangle$} same 
-	as {\tt VAL\_START}, record for the duraction specified in either
+	as {\tt VAL\_START}, record for the duration specified in either
 	{\it seconds}, {\it samples}, or {\it HH:MM:SS}.
 \end{itemize}
-
 Note that the UTC time specified in the first argument to {\tt
 VAL\_START} may be any time in the future.  If it is in the past, then
 the difference between the specified UTC and the present cannot be
@@ -89,6 +86,7 @@ The following describes the behaviour of the Primary Write Client
 
 \begin{itemize}
 \item Initialization
+\vspace{-3mm}
 	\begin{itemize}
 	\item read configuration file
 	\item parse command line options
@@ -97,27 +95,42 @@ The following describes the behaviour of the Primary Write Client
 	\item open a port and listen for command connection
 	\end{itemize}
 \item Main Loop
+\vspace{-3mm}
 	\begin{itemize}
 	\item Idle State
+	\vspace{-2mm}
 		\begin{itemize}
 		\item wait for configuration
 		\item set configuration
 		\item enter {\bf prepared} state
 		\end{itemize}
 	\item Prepared State
+	\vspace{-2mm}
 		\begin{itemize}
 		\item wait for a command
 		\item if command={\tt *START}, enter recording state
 		\item if command={\tt STOP}, return to {\bf idle} state
 		\end{itemize}
-	\item Recording (Valid or Invalid) State
+	\item Recording Invalid State (loop)
+	\vspace{-2mm}
 		\begin{itemize}
 		\item check for a command
 		\item if command={\tt STOP}, return to {\bf idle} state
-		\item if state={\tt recording invalid} and command={\tt VAL\_START}, \\ enter the {\bf recording valid} state
+		\item if command={\tt VAL\_START}, enter the {\bf recording valid} state
+		\item copy buffer from DMA to Data Block
+		\end{itemize}
+	\item Recording Valid State (loop)
+	\vspace{-2mm}
+		\begin{itemize}
+		\item check for a command
+		\item if command={\tt STOP}, flag end of data (EOD) and return to {\bf idle} state
+		\item if command={\tt VAL\_STOP}, flag EOD and enter the {\bf recording invalid} state
+		\item wait for next free Data Block sub-block
+		\item copy buffer from DMA to Data Block and flag as valid
 		\end{itemize}
 	\end{itemize}
 \item Shutdown
+\vspace{-3mm}
 	\begin{itemize}
 	\item close command connection
 	\item disconnect from Data and Header Blocks
