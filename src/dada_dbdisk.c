@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
+#include <fcntl.h>
 
 void usage()
 {
@@ -226,22 +227,37 @@ int main_loop (dada_t* dada,
     bytes_written = write_loop (data_block, log, 
 				fd, file_size, optimal_buffer_size);
 
+    gettimeofday (&end_loop, NULL);
+
+    if (close (fd) < 0)
+      multilog (log, LOG_ERR, "Error closing %s: %s\n", 
+		file_name, strerror(errno));
+
     if (bytes_written < 0)
       return -1;
 
-    gettimeofday (&end_loop, NULL);
 
-    write_time = diff_time(start_loop, end_loop);
 
-    multilog (log, LOG_INFO, "%llu bytes written to %s in %lfs (%lg MB/s)\n",
-	      bytes_written, file_name, write_time,
-	      bytes_written/(1e6*write_time));
+    if (bytes_written == 0)  {
 
-    obs_offset += bytes_written;
+      if (chmod (file_name, S_IRWXU) < 0)
+	multilog (log, LOG_ERR, "Error chmod (%s, rwx): %s\n", 
+		  file_name, strerror(errno));
 
-    if (close (fd) < 0) {
-      multilog (log, LOG_ERR, "Error closing %s: %s\n", 
-		file_name, strerror(errno));
+      if (remove (file_name) < 0)
+	multilog (log, LOG_ERR, "Error remove (%s): %s\n", 
+		  file_name, strerror(errno));
+
+    }
+    else {
+      
+      write_time = diff_time(start_loop, end_loop);
+      multilog (log, LOG_INFO, "%llu bytes written to %s in %lfs (%lg MB/s)\n",
+		bytes_written, file_name, write_time,
+		bytes_written/(1e6*write_time));
+      
+      obs_offset += bytes_written;
+
     }
 
     file_number ++;
