@@ -283,15 +283,6 @@ int ipcbuf_destroy (ipcbuf_t* id)
   }
 
 #if _DEBUG
-  fprintf (stderr, "ipcbuf_destroy: syncid=%d\n", id->syncid);
-#endif
-
-  if (id->syncid>-1 && shmctl (id->syncid, IPC_RMID, 0) < 0)
-    perror ("ipcbuf_destroy: sync shmctl");
-  id->sync = 0;
-  id->syncid = -1;
-
-#if _DEBUG
   fprintf (stderr, "ipcbuf_destroy: semid=%d\n", id->semid);
 #endif
 
@@ -315,6 +306,15 @@ int ipcbuf_destroy (ipcbuf_t* id)
 
   if (id->buffer) free (id->buffer); id->buffer = 0;
   if (id->shmid) free (id->shmid); id->shmid = 0;
+
+#if _DEBUG
+  fprintf (stderr, "ipcbuf_destroy: syncid=%d\n", id->syncid);
+#endif
+
+  if (id->syncid>-1 && shmctl (id->syncid, IPC_RMID, 0) < 0)
+    perror ("ipcbuf_destroy: sync shmctl");
+  id->sync = 0;
+  id->syncid = -1;
 
   return 0;
 }
