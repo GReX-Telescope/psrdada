@@ -256,17 +256,17 @@ int ipcbuf_disconnect (ipcbuf_t* id)
     return -1;
   }
 
-  if (id->sync && shmdt (id->sync) < 0)
-    perror ("ipcbuf_disconnect: shmdt(sync)");
-
-  id->sync = 0;
-
   for (ibuf = 0; ibuf < id->sync->nbufs; ibuf++)
     if (id->buffer[ibuf] && shmdt (id->buffer[ibuf]) < 0)
       perror ("ipcbuf_disconnect: shmdt(buffer)");
 
   if (id->buffer) free (id->buffer); id->buffer = 0;
   if (id->shmid) free (id->shmid); id->shmid = 0;
+
+  if (id->sync && shmdt (id->sync) < 0)
+    perror ("ipcbuf_disconnect: shmdt(sync)");
+
+  id->sync = 0;
 
   id->state = IPCBUF_DISCON; 
 
