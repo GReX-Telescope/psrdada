@@ -170,7 +170,7 @@ int disk_array_open (disk_array_t* array, char* filename, uint64_t filesize,
 
   int fd = -1;
 
-  int flags = O_WRONLY | O_CREAT;
+  int flags = O_WRONLY | O_CREAT | O_TRUNC;
   int perms = S_IRUSR | S_IRGRP;
 
   if (array->overwrite)
