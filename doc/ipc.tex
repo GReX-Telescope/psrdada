@@ -288,10 +288,8 @@ int ipcio_destroy (ipcio_t* ptr);
 \begin{itemize}
 \item {\tt ptr} is a pointer to an allocated abstract ring buffer handle
 \end{itemize}
-That is, even if the process that created the ring buffer exits, the
-shared memory and semaphore resources will remain allocated in
-computer memory.  In order to connect to a previously created Data
-Block ring buffer, call
+In order to connect to a previously created Data Block ring buffer,
+call
 \begin{verbatim}
 int ipcio_connect (ipcio_t* ptr, int key);
 \end{verbatim}
@@ -327,7 +325,14 @@ int ipcio_open (ipcio_t* ptr, char rw);
 \begin{itemize}
 \item {\tt ptr} is a pointer to a connected abstract ring buffer handle.
 \vspace{-2mm}
-\item {\tt rw} is either `W' or `R'
+\item {\tt rw} is either `W', `w', `R', or `r'
+\end{itemize}
+The meanings of the {\tt rw} character codes are as follows:
+\begin{itemize}
+\item {\bf W} open for writing valid data
+\item {\bf w} open for writing before valid data
+\item {\bf R} open for reading as primary Read Client
+\item {\bf r} open for reading as secondary Read Client
 \end{itemize}
 Similarly, write or read permission may be relinquished by calling
 \begin{verbatim}
@@ -338,9 +343,7 @@ int ipcio_close (ipcio_t* ptr);
 \item {\tt ptr} is a pointer to a connected ring buffer handle.
 \end{itemize}
 When the Write Client calls {\tt ipcio\_close}, an end-of-data is written
-to the Data Block.
-
-Data are written to the abstract ring buffer by calling
+to the Data Block. Data are written to the abstract ring buffer by calling
 \begin{verbatim}
 ssize_t ipcio_write (ipcio_t* ptr, char* buf, size_t nbytes);
 \end{verbatim}
@@ -354,7 +357,6 @@ ssize_t ipcio_write (ipcio_t* ptr, char* buf, size_t nbytes);
 \vspace{-2mm}
 \item RETURN value is the number of bytes written, or -1 on error
 \end{itemize}
-
 Data are read from the abstract ring buffer by calling
 \begin{verbatim}
 ssize_t ipcio_read (ipcio_t* ptr, char* buf, size_t nbytes);
@@ -387,9 +389,8 @@ uint64 nbufs = ipcbuf_get_nbufs ((ipcbuf_t*)(&datablock));
 
 \subsection{Writing before Start-of-Data}
 
-To begin writing data before the actual start of valid data, it is
-necessary to first disable the start-of-data flag by calling {\tt 
-ipcbuf\_disable\_sod} (as described in section~\ref{sec:prewrite}).
+To begin writing to the Data Block before the actual start of valid data, 
+it is necessary to call {\tt ipcio\_open} with the `w' argument.
 The Write Client may then raise the start-of-data flag by calling
 \begin{verbatim}
 int ipcio_start (ipcio_t* ptr, uint64 st_byte);
@@ -400,8 +401,7 @@ int ipcio_start (ipcio_t* ptr, uint64 st_byte);
 \vspace{-2mm}
 \item {\tt offset} is the byte offset after {\tt ipcio\_open}
 \end{itemize}
-Note that {\tt ipcio\_start} is only a convenience interface to {\tt
-ipcbuf\_enable\_sod}.  To write an end-of-data flag without closing
+To write an end-of-data flag without closing
 the abstract ring buffer, the Write Client must call
 \begin{verbatim}
 int ipcio_stop (ipcio_t* ptr);
@@ -410,4 +410,9 @@ int ipcio_stop (ipcio_t* ptr);
 \begin{itemize}
 \item {\tt ptr} is a pointer to a connected abstract ring buffer handle
 \end{itemize}
-The end-of-data flag is raised after the last byte written.
+The end-of-data flag is raised after the last byte written.  
+As long as each call to {\tt ipcio\_start} is matched by a corresponding
+call to {\tt ipcio\_stop}, these functions can be called an arbitrary
+number of times between the call to {\tt ipcio\_open} 
+and {\tt ipcio\_close}.
+
