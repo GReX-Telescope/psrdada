@@ -94,7 +94,7 @@ int ipcbuf_get (ipcbuf_t* id, int flag)
 
 #if _DEBUG
   fprintf (stderr, "ipcbuf_get: semkey=0x%x shmkey=0x%x\n",
-	   sync->semkey, sync->shmkey);
+	   sync->semkey, sync->shmkey[0]);
 #endif
 
   /* all semaphores are created in this id */
@@ -479,8 +479,8 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
 
 char ipcbuf_is_writer (ipcbuf_t* id)
 {
-  int state = id->state;
-  return state==IPCBUF_WRITER || state==IPCBUF_WCHANGE || state==IPCBUF_WRITING;
+  int who = id->state;
+  return who==IPCBUF_WRITER || who==IPCBUF_WCHANGE || who==IPCBUF_WRITING;
 }
 
 char* ipcbuf_get_next_write (ipcbuf_t* id)
