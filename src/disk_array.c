@@ -1,11 +1,14 @@
 #include "disk_array.h"
 
 #include <sys/stat.h>
-#include <unistd.h>
+#include <sys/types.h>
+#include <fcntl.h>
 
+#include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <errno.h>
 
 // #define _DEBUG 1
 
@@ -36,6 +39,7 @@ int disk_array_destroy (disk_array_t* array)
   return 0;
 }
 
+#ifdef _DEBUG
 static void fprintf_bytes (FILE* fptr, void* id, unsigned nbyte)
 {
   char* byte = (char*) id;
@@ -45,6 +49,7 @@ static void fprintf_bytes (FILE* fptr, void* id, unsigned nbyte)
     fprintf (stderr, "%x ", byte[ibyte]);
   fprintf (stderr, "\n");
 }
+#endif
 
 /*! Add a disk to the array */
 int disk_array_add (disk_array_t* array, char* path)
@@ -118,32 +123,70 @@ uint64_t disk_array_get_total (disk_array_t* array)
   return array->space;
 }
 
+uint64_t get_available (const char* filename)
+{
+  struct statfs info;
+  uint64_t space = 0;
+
+  if (statfs (filename, &info) < 0) {
+    fprintf (stderr, "get_available error statfs(%s): %s",
+	     filename, strerror(errno));
+    return 0;
+  }
+  
+  space = info.f_bfree;
+  space *= info.f_bsize;
+
+  return space;
+}
+
 /*! Get the available amount of disk space */
 uint64_t disk_array_get_available (disk_array_t* array)
 {
   uint64_t available_space = 0;
-  uint64_t new_space = 0;
-  struct statfs info;
   unsigned idisk;
 
   pthread_mutex_lock (&(array->mutex));
 
-  for (idisk = 0; idisk < array->ndisk; idisk++) {
-
-    if (statfs (array->disks[idisk].path, &info) < 0) {
-      fprintf (stderr, "disk_array_add error statfs(%s)", 
-	       array->disks[idisk].path);
-      perror ("");
-      continue;
-    }
-
-    new_space = info.f_bfree;
-    new_space *= info.f_bsize;
-
-    available_space += new_space;
-  }
+  for (idisk = 0; idisk < array->ndisk; idisk++)
+    available_space += get_available (array->disks[idisk].path);
 
   pthread_mutex_unlock (&(array->mutex));
 
   return available_space;
+}
+
+/*! Open a file on the disk array, return the open file descriptor */
+int disk_array_open (disk_array_t* array, char* filename, uint64_t filesize,
+		     uint64_t* optimal_buffer_size)
+{
+  static char* fullname = 0;
+  unsigned idisk;
+  int fd = -1;
+
+  pthread_mutex_lock (&(array->mutex));
+
+  for (idisk = 0; idisk < array->ndisk; idisk++)
+    if (get_available (array->disks[idisk].path) > filesize) {
+
+      if (!fullname)
+	fullname = malloc (FILENAME_MAX);
+
+      strcpy (fullname, array->disks[idisk].path);
+      strcat (fullname, "/");
+      strcat (fullname, filename);
+      strcpy (filename, fullname);
+
+      fd = open (fullname, O_WRONLY|O_CREAT|O_EXCL, S_IRUSR|S_IRGRP);
+
+      if (optimal_buffer_size)
+	*optimal_buffer_size = array->disks[idisk].info.f_bsize;
+
+      break;
+    }
+
+  pthread_mutex_unlock (&(array->mutex));
+
+  return fd;
+
 }

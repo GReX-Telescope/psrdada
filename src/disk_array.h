@@ -43,6 +43,9 @@ extern "C" {
   /*! Add a disk to the array */
   int disk_array_add (disk_array_t*, char* path);
 
+  /*! Open a file on the disk array, return the open file descriptor */
+  int disk_array_open (disk_array_t*, char* name, uint64_t size, uint64_t* bs);
+
   /*! Get the total amount of disk space */
   uint64_t disk_array_get_total (disk_array_t*);
 
