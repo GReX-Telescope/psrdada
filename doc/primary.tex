@@ -1,14 +1,14 @@
 
-\chapter{Primary Unit}
+\chapter{Primary Node}
 
 This machine talks directly to the PiC through its PCI interface (and
 through the DMA card?).  It is responsible for farming out the
-digitized data to multiple secondary units.
+digitized data to multiple Secondary nodes.
 
 \section{Data Flow Control Software}
 
 The Data Flow Control software running on the Primary and Secondary
-Units is divided into three sections:
+nodes is divided into three sections:
 \begin{itemize}
 \item Direct Memory Access (DMA)
 \item File Input/Output (FIO)
@@ -18,7 +18,7 @@ Units is divided into three sections:
 \subsection{Direct Memory Access (DMA)}
 
 Direct Memory Access (DMA) transfer of digitized data from the PiC to
-Primary Unit RAM occurs via a DMA card that is commercially available
+Primary node RAM occurs via a DMA card that is commercially available
 from Engineering Design Team (EDT).  The DMA control software will:
 
 \begin{enumerate}
@@ -51,23 +51,23 @@ to flag Data Block buffers as finished.
 
 This process will read buffers from the Data Block, write them to
 disk, and flag the written buffers as finished.  It can be run on
-either Primary or Secondary Units, depending on the mode of operation.
+either Primary or Secondary nodes, depending on the mode of operation.
 
 \subsection{Network Input/Output (NIO)}
 
 The software for network I/O will run on both Primary and Secondary
-Units.  The protocol for the network communications will be a simple,
+nodes.  The protocol for the network communications will be a simple,
 custom-built design on top of internet sockets.  This may change in
 the future to some sort of grid-based protocol.
 
 Header information (including all available observation information as
 well as offset byte counts) will be sent with each block of data sent
-from the Primary to Secondary Units.  The process running on each
-Secondary unit will receive the data and write it to the Data Block in
+from the Primary to Secondary nodes.  The process running on each
+Secondary node will receive the data and write it to the Data Block in
 its own shared memory.
 
 The Secondary NIO software has the responsibility to monitor the
 shared memory and ensure that there is sufficient space to hold
 incoming data packets.  If there is insufficient space, the Primary
-NIO should cease transfer to the current Secondary Unit and begin
+NIO should cease transfer to the current Secondary node and begin
 transferring data to the next in the ring.

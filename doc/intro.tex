@@ -22,15 +22,15 @@ These are divided into two main classes:
 
 \begin{enumerate}
 
-\item Primary Units - workstations equipped with Direct Memory Access 
+\item Primary nodes - workstations equipped with Direct Memory Access 
 	(DMA) card, large data storage, and high-speed interconnect.
 
-\item Secondary Units - workstations equipped with high-speed interconnect
+\item Secondary nodes - workstations equipped with high-speed interconnect
 	and modest data storage facilities.
 
 \end{enumerate}
 
-A single Primary unit may have multiple Secondary units associated
+A single Primary node may have multiple Secondary nodes associated
 with it.  To these, it sends the digitized data in round-robin
 fashion.  The various components of the workstation cluster are
 depicted in simplified form in Figure~\ref{fig:layout}.
@@ -41,7 +41,7 @@ depicted in simplified form in Figure~\ref{fig:layout}.
 {
 Schematic Overview of PuMa-II.  The fat line indicates the direction
 of data flow.  Note the parallel use of the RAM Data Block on both
-Primary and Secondary Units.
+Primary and Secondary nodes.
 }
 \label{fig:layout}
 \end{figure}
@@ -67,15 +67,15 @@ connections.
 \subsubsection{Data Flow Control}
 
 Data Flow Control software will establish the high-bandwidth network
-connections between the Primary and Secondary units.  This software
+connections between the Primary and Secondary nodes.  This software
 will control all aspects pertaining to the flow of data from the DMA
-card on the Primary unit to local storage and/or the remote RAM and/or
-disk storage of the Secondary units.  In the case of online pulsar
+card on the Primary node to local storage and/or the remote RAM and/or
+disk storage of the Secondary nodes.  In the case of online pulsar
 processing, this communication will include the overlap required to
 compensate for data reduction losses (owing to dispersion smearing,
 filter rise times, etc.).  
 
-On both Primary and Secondary units, data will be stored in a large
+On both Primary and Secondary nodes, data will be stored in a large
 buffer established as shared memory, called the Data Block.  The
 various tasks that must run in parallel will be implemented as unique
 processes, as opposed to multiple threads of a single process.
@@ -86,13 +86,13 @@ Rational: It is better to begin with multiple processes and
 inter-process control in the early states of development because this
 paradigm is more modular.  For example, the process that reads data
 from the Data Block and writes it to local storage may be run on
-either a primary or secondary node.  If data reduction can later be
+either a Primary or Secondary node.  If data reduction can later be
 performed in real-time, the disk writing client may be replaced by a
 data processing client.
 
 \subsubsection{Data Reduction}
 
-On both Primary and Secondary units, one or more Data Clients may
+On both Primary and Secondary nodes, one or more Data Clients may
 attach to the Data Block and operate on the data.  The Data Block will
 be logically divided into a number of sub-blocks.  Each sub-block may
 be flagged as ``processed'' by the clients in order that the Data Flow
@@ -116,7 +116,7 @@ described in Configuration and Scheduling.
 
 Command and Monitoring software includes the Command software that
 establishes low-bandwidth network communication channels between
-Primary and Secondary units and the Control Interfaces.  These
+Primary and Secondary nodes and the Control Interfaces.  These
 channels are used for sending high-level control commands, such as
 start, stop, and information about the source.  These communication
 channels may be implemented as a control thread in each component of
@@ -132,7 +132,7 @@ TCS, disk space consumption, network traffic, CPU load, etc.
 The Control Interface software defines the centralized command/control
 point, and will be connected to the various communication channels
 established by the Control and Monitoring software on each of the
-Primary and Secondary units.  The Control Interface may be run on any
+Primary and Secondary nodes.  The Control Interface may be run on any
 workstation, and provides the means through which other processes may
 treat PuMa-II as a single instrument.  For example, a text or
 graphical user interface and/or automated scheduling program may

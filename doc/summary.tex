@@ -16,9 +16,9 @@ Name & \multicolumn{1}{c}{Function} & Machine \\ \hline
 	header information, to disk. & Secondary \\
 
 {\tt db2nic} & Reads data from the Data Block and sends it, with
-	header information, to a Seconday Unit. & Primary \\
+	header information, to a Seconday node. & Primary \\
 
-{\tt nic2db} & Receives data from Primary unit and writes it to the 
+{\tt nic2db} & Receives data from Primary node and writes it to the 
 	Data Block. & Secondary \\
 
 {\tt dspsr} & Attaches to the Data Block and processes raw data
@@ -26,7 +26,7 @@ Name & \multicolumn{1}{c}{Function} & Machine \\ \hline
 	Secondary \\
 
 {\tt puma2} & Connects to the Command and Control interface of the
-	various Primary units.  Accepts and maintains external
+	various Primary nodes.  Accepts and maintains external
 	text-based control connection.  & variable \\
 
 {\tt puma2tcs} & Translates Parkes TCS control structure packets into
