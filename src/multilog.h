@@ -7,6 +7,7 @@
 
 #include <syslog.h>
 #include <stdio.h>
+#include <pthread.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -17,6 +18,9 @@ extern "C" {
     char     syslog;  /* set to true to use syslog */
     FILE**   logs;    /* streams to which messages will be written */
     unsigned nlog;    /* number of streams */
+
+    /* for multi-threaded use of the multilog */
+    pthread_mutex_t mutex;
 
   } multilog_t;
 
