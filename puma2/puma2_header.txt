@@ -17,7 +17,7 @@ FILE_NUMBER  unset               # number of data file
 UTC_START    unset               # yyyy-mm-dd-hh:mm:ss.fs
 MJD_START    unset               # MJD equivalent to the start UTC
 
-OBS_OFFSET   unset               # bytes offset from the start MJD/UTC
+OBS_OFFSET   0                   # bytes offset from the start MJD/UTC
 OBS_OVERLAP  0                   # bytes by which neighbouring files overlap
 
 # description of the source
