@@ -24,9 +24,9 @@ int multilog_close (multilog_t* m)
 
 int multilog_add (multilog_t* m, FILE* fptr)
 {
+  m->logs = realloc (m->logs, (m->nlog+1)*sizeof(multilog_t));
+  m->logs[m->nlog] = fptr;
   m->nlog ++;
-  m->logs = realloc (m->logs, m->nlog);
-  m->logs[m->nlog-1] = fptr;
 
   return 0;
 }
