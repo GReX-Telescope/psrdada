@@ -149,10 +149,10 @@ extern "C" {
   int ipcbuf_hard_reset (ipcbuf_t* id);
 
   /*! Lock the shared memory into physical RAM (must be su) */
-  int ipcbuf_lock_shm (ipcbuf_t* id);
+  int ipcbuf_lock (ipcbuf_t* id);
 
   /*! Unlock the shared memory from physical RAM (allow swap) */
-  int ipcbuf_unlock_shm (ipcbuf_t* id);
+  int ipcbuf_unlock (ipcbuf_t* id);
 
   /*! Useful utility */
   void* shm_alloc (key_t key, size_t size, int flag, int* id);
