@@ -21,6 +21,9 @@ extern "C" {
 
     /* for multi-threaded use of the multilog */
     pthread_mutex_t mutex;
+    pthread_t thread;
+
+    int port;         /* the port on which multilog_server is listening */
 
   } multilog_t;
 
@@ -35,6 +38,9 @@ extern "C" {
 
   /*! Write a message to all listening streams */
   int multilog (multilog_t* m, int priority, const char* format, ...);
+
+  /*! Start another thread to receive log socket connections */
+  int multilog_serve (multilog_t* m, int port);
 
 #ifdef __cplusplus
 	   }
