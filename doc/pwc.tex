@@ -1,0 +1,96 @@
+\newpage
+\section{Primary Write Client Command Interface}
+\label{sec:pwc}
+
+This section describes the behaviour of the Write Client software that
+will run on each of the Primary nodes, known as the Primary Write
+Client (PWC) software.  In the case of PuMa-II, the PWC is 
+{\tt puma2\_dmadb}.
+
+\subsection{Operational States}
+
+The PWC has four main states of operation:
+\vspace{-2mm}
+\begin{itemize}
+\item {\bf idle} waiting for configuration parameters
+\vspace{-2mm}
+\item {\bf prepared} configuration parameters received; waiting for start
+\vspace{-2mm}
+\item {\bf recording invalid} recording data in over-write mode
+\vspace{-2mm}
+\item {\bf recording valid} recording data in lock-step mode
+\end{itemize}
+
+\subsubsection{Idle State}
+
+In the idle state, the PWC sleeps until configuration parameters are
+sent from the control software.  All configuration paramters are sent
+in a single ASCII header.  This header is copied to the Header Block,
+and the PWC enters the {\bf prepared} state.
+
+\subsubsection{Prepared State}
+
+In the prepared state, the PWC sleeps until a start command is sent
+from the control software.  There are three different start commands
+that can be received in this state:
+
+\begin{itemize}
+\item {\tt\bf INV\_START} enter the {\bf recording invalid} state
+\vspace{-2mm}
+\item {\tt\bf START} enter the {\bf recording valid} state
+\vspace{-2mm}
+\item {\tt\bf START $\langle duration\rangle$} same as {\tt START}, record
+	for the duraction specified in either {\it seconds}, {\it samples},
+	or {\it HH:MM:SS}.
+\end{itemize}
+For each of the above commands, the PWC will enter the specified state
+at the next available opportunity (for PuMa-II, on the next {\tt
+SYSTICK}).
+
+\subsubsection{Recording Invalid State}
+
+In this state, the PWC software clocks data into the Data Block but
+does not flag the data as valid.  The PWC will overwrite the data in
+each sub-block, and will remain in this state until one of the
+following commands is received:
+
+\begin{itemize}
+\item {\tt\bf STOP} enter the {\bf idle} state immediately
+\vspace{-2mm}
+\item {\tt\bf VAL\_START YYYY-MM-DD-hh:mm:ss} raise the valid data flag
+	at the specified UTC time in the data stream and enter the {\bf
+	recording valid} state
+\vspace{-2mm}
+\item {\tt\bf VAL\_START YYYY-MM-DD-hh:mm:ss $\langle duration\rangle$} same 
+	as {\tt VAL\_START}, record for the duraction specified in either
+	{\it seconds}, {\it samples}, or {\it HH:MM:SS}.
+\end{itemize}
+
+Note that the UTC time specified in the first argument to {\tt
+VAL\_START} may be any time in the future.  If it is in the past, then
+the difference between the specified UTC and the present cannot be
+greater than the amount of time corresponding to the length of the
+Data Block.
+
+\subsubsection{Recording Valid State}
+
+In this state, the PWC software clocks data into the Data Block, flags
+the data as valid, and will not overwrite a sub-block until it has
+been flagged as cleared.  The PWC will remain in this state until one
+of the following commands is received:
+
+\begin{itemize}
+\item {\tt\bf STOP} enter the {\bf idle} state immediately
+\vspace{-2mm}
+\item {\tt\bf STOP YYYY-MM-DD-hh:mm:ss} enter the {\bf idle} state
+	at the specified time
+\vspace{-2mm}
+\item {\tt\bf VAL\_STOP YYYY-MM-DD-hh:mm:ss} raise the end of data flag
+	at the specified UTC time in the data stream and enter the {\bf
+	recording invalid} state
+\end{itemize}
+
+Note that the UTC time specified in the first argument to both {\tt STOP}
+and {\tt VAL\_STOP} {\bf must} be in the future.
+
+
