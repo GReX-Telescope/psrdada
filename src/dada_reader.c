@@ -53,10 +53,10 @@ int main (int argc, char **argv)
 
   dada_init (&dada);
 
+  log = multilog_open ("dada_writer", daemon);
+
   /* set up for daemon usage */	  
   if (daemon) {
-
-    openlog ("dada_db2disk", LOG_CONS, LOG_USER);
 
     if (fork() < 0)
       exit(EXIT_FAILURE);
@@ -65,7 +65,7 @@ int main (int argc, char **argv)
 
   }
 
-  log = multilog_open (daemon);
+  multilog_serve (log, dada.log_port);
 
   /* First connect to the shared memory */
   if (ipcio_connect (&data_block, dada.data_key) < 0) {

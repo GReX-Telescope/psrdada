@@ -59,10 +59,10 @@ int main (int argc, char **argv)
 
   dada_init (&dada);
 
+  log = multilog_open ("dada_dbdisk", daemon);
+
   /* set up for daemon usage */	  
   if (daemon) {
-
-    openlog ("dada_db2disk", LOG_CONS, LOG_USER);
 
     if (fork() < 0)
       exit(EXIT_FAILURE);
@@ -71,7 +71,8 @@ int main (int argc, char **argv)
 
   }
 
-  log = multilog_open (daemon);
+
+  multilog_serve (log, dada.log_port);
 
   /* First connect to the shared memory */
   if (ipcio_connect (&data_block, dada.data_key) < 0) {
@@ -80,7 +81,7 @@ int main (int argc, char **argv)
   }
 
   if (ipcbuf_lock_write ((ipcbuf_t*)&data_block) < 0) {
-    multilog (log, LOG_ERR,"Could not lock designated writer status\n");
+    multilog (log, LOG_ERR, "Could not lock designated writer status\n");
     return EXIT_FAILURE;
   }
 
@@ -90,13 +91,13 @@ int main (int argc, char **argv)
   }
 
   if (ipcbuf_lock_write (&header_block) < 0) {
-    multilog (log, LOG_ERR,"Could not lock designated writer status\n");
+    multilog (log, LOG_ERR, "Could not lock designated writer status\n");
     return EXIT_FAILURE;
   }
 
   /* Disconnect to the shared memory */
   if (ipcbuf_unlock_write ((ipcbuf_t*)&data_block) < 0) {
-    multilog (log, LOG_ERR,"Could not unlock designated writer status\n");
+    multilog (log, LOG_ERR, "Could not unlock designated writer status\n");
     return EXIT_FAILURE;
   }
 
