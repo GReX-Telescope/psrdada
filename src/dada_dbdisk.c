@@ -16,7 +16,7 @@ void usage()
 	   "dada_dbdisk [options]\n"
 	   " -b <buffersize>\n"
 	   " -f <filesize>\n"
-	   " -F <rootfilename>\n"
+	   " -D <disk path>\n"
 	   " -d run as daemon\n");
 }
 
@@ -31,13 +31,16 @@ int64_t write_loop (ipcio_t* data_block, multilog_t* log,
   uint64_t bytes_written = 0;
   ssize_t bytes = 0;
 
+  buffer_size = 512 * optimal_bufsz;
+  buffer = (char*) malloc (buffer_size);
+
   while (!ipcbuf_eod((ipcbuf_t*)data_block) && bytes_to_write) {
 
     if (buffer_size > bytes_to_write)
       bytes = bytes_to_write;
     else
       bytes = buffer_size;
- 
+
     bytes = ipcio_read (data_block, buffer, bytes);
     if (bytes < 0) {
       multilog (log, LOG_ERR, "ipcio_read error %s\n", strerror(errno));
@@ -100,9 +103,16 @@ int main_loop (dada_t* dada,
   /* Wait for the next valid header sub-block */
   header = ipcbuf_get_next_read (header_block, &header_size);
 
+  if (!header) {
+    multilog (log, LOG_ERR, "Could not get next header\n");
+    return -1;
+  }
+
+  header_size = ipcbuf_get_bufsz (header_block);
+
   /* Check that header is of advertised size */
   if (ascii_header_get (header, "HDR_SIZE", "%llu", &hdr_size) != 1) {
-    multilog (log, LOG_ERR, "Header block does not have HDR_SIZE");
+    multilog (log, LOG_ERR, "Header block does not have HDR_SIZE\n");
     return -1;
   }
 
@@ -110,7 +120,9 @@ int main_loop (dada_t* dada,
     header_size = hdr_size;
 
   else if (hdr_size > header_size) {
-    multilog (log, LOG_ERR, "HDR_SIZE is greater than header block size");
+    multilog (log, LOG_ERR, "HDR_SIZE=%llu is greater than hdr bufsz=%llu\n",
+              hdr_size, header_size);
+    multilog (log, LOG_DEBUG, "ASCII header dump\n%s", header);
     return -1;
   }
 
@@ -125,25 +137,25 @@ int main_loop (dada_t* dada,
 
   /* Get the observation ID */
   if (ascii_header_get (dup, "OBS_ID", "%s", obs_id) != 1) {
-    multilog (log, LOG_WARNING, "Header block does not have OBS_ID");
+    multilog (log, LOG_WARNING, "Header block does not have OBS_ID\n");
     strcpy (obs_id, "UNKNOWN");
   }
 
   /* Get the header offset */
   if (ascii_header_get (dup, "OBS_OFFSET", "%llu", &obs_offset) != 1) {
-    multilog (log, LOG_WARNING, "Header block does not have OBS_OFFSET");
+    multilog (log, LOG_WARNING, "Header block does not have OBS_OFFSET\n");
     obs_offset = 0;
   }
 
   /* Get the file size */
-  if (ascii_header_get (dup, "FILE_SIZE", "%lu", &file_size) != 1) {
-    multilog (log, LOG_WARNING, "Header block does not have FILE_SIZE");
+  if (ascii_header_get (dup, "FILE_SIZE", "%llu", &file_size) != 1) {
+    multilog (log, LOG_WARNING, "Header block does not have FILE_SIZE\n");
     file_size = DADA_DEFAULT_FILESIZE;
   }
 
   /* Get the file number */
-  if (ascii_header_get (dup, "FILE_NUMBER", "%lu", &file_number) != 1) {
-    multilog (log, LOG_WARNING, "Header block does not have FILE_NUMBER");
+  if (ascii_header_get (dup, "FILE_NUMBER", "%u", &file_number) != 1) {
+    multilog (log, LOG_WARNING, "Header block does not have FILE_NUMBER\n");
     file_number = 0;
   }
 
@@ -152,6 +164,8 @@ int main_loop (dada_t* dada,
 
   /* Write data until the end of the data stream */
   while (!ipcbuf_eod((ipcbuf_t*)data_block)) {
+
+    snprintf (file_name, FILENAME_MAX, "%s.%06u.dada", obs_id, file_number);
 
     fd = disk_array_open (array, file_name, file_size, &optimal_buffer_size);
 
@@ -164,19 +178,19 @@ int main_loop (dada_t* dada,
 	      file_name, file_size);
 
     /* Set the header offset */
-    if (ascii_header_set (dup, "OBS_OFFSET", "%llu", obs_offset) != 1) {
-      multilog (log, LOG_ERR, "Error writing OBS_OFFSET");
+    if (ascii_header_set (dup, "OBS_OFFSET", "%llu", obs_offset) < 0) {
+      multilog (log, LOG_ERR, "Error writing OBS_OFFSET\n");
       return -1;
     }
 
     /* Set the file number */
-    if (ascii_header_set (dup, "FILE_NUMBER", "%lu", file_number) != 1) {
-      multilog (log, LOG_ERR, "Error writing FILE_NUMBER");
+    if (ascii_header_set (dup, "FILE_NUMBER", "%u", file_number) < 0) {
+      multilog (log, LOG_ERR, "Error writing FILE_NUMBER\n");
       return -1;
     }
 
     if (write (fd, dup, header_size) < header_size) {
-      multilog (log, LOG_ERR, "Error writing header: %s", strerror(errno));
+      multilog (log, LOG_ERR, "Error writing header: %s\n", strerror(errno));
       return -1;
     }
 
@@ -193,7 +207,7 @@ int main_loop (dada_t* dada,
     obs_offset += bytes_written;
 
     if (close (fd) < 0) {
-      multilog (log, LOG_ERR, "Error closing %s: %s", 
+      multilog (log, LOG_ERR, "Error closing %s: %s\n", 
 		file_name, strerror(errno));
     }
 
@@ -236,12 +250,22 @@ int main (int argc, char **argv)
   char verbose = 0;
 
   int arg = 0;
-  while ((arg=getopt(argc,argv,"dv")) != -1) {
+
+  disk_array = disk_array_create ();
+
+  while ((arg=getopt(argc,argv,"dD:v")) != -1) {
     switch (arg) {
 
       case 'd':
 	daemon=1;
 	break;
+
+      case 'D':
+        if (disk_array_add (disk_array, optarg) < 0) {
+          fprintf (stderr, "Could not add '%s' to disk array\n", optarg);
+          return EXIT_FAILURE;
+        }
+        break;
 
       case 'v':
         verbose=1;
