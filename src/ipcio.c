@@ -94,14 +94,14 @@ int ipcio_open (ipcio_t* ipc, char rdwrt)
 /* start writing valid data to an ipcbuf */
 int ipcio_start (ipcio_t* ipc, uint64_t sample)
 {
+  uint64_t bufsz   = ipcbuf_get_bufsz(&(ipc->buf));
+  uint64_t st_buf  = sample / bufsz;
+  uint64_t st_byte = sample % bufsz;
+
   if (ipc->rdwrt != 'w') {
     fprintf (stderr, "ipcio_start: invalid ipcio_t\n");
     return -1;
   }
-
-  uint64_t bufsz   = ipcbuf_get_bufsz(&(ipc->buf));
-  uint64_t st_buf  = sample / bufsz;
-  uint64_t st_byte = sample % bufsz;
 
   ipc->rdwrt = 'W';
   return ipcbuf_enable_sod (&(ipc->buf), st_buf, st_byte);

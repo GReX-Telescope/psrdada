@@ -8,10 +8,10 @@
 
 multilog_t* multilog_open (const char* program_name, char syslog)
 {
+  multilog_t* m = (multilog_t*) malloc (sizeof(multilog_t));
+
   if (syslog)
     openlog (program_name, LOG_CONS, LOG_USER);
-
-  multilog_t* m = (multilog_t*) malloc (sizeof(multilog_t));
 
   m->syslog = syslog;
   m->name = strdup(program_name);
