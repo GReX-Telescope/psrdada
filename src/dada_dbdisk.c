@@ -61,27 +61,41 @@ int64_t write_loop (ipcio_t* data_block, multilog_t* log,
 int main_loop (dada_t* dada,
 	       ipcio_t* data_block,
 	       ipcbuf_t* header_block,
-	       disk_array_t* disk_array,
+	       disk_array_t* array,
 	       multilog_t* log)
 {
+  /* The duplicate of the header from the ring buffer */
+  static char* dup = 0;
+  static uint64_t dup_size = 0;
+
   /* The header from the ring buffer */
   char* header = 0;
   uint64_t header_size = 0;
 
-  /* Expected header size, as read from HDR_SIZE attribute */
+  /* header size, as defined by HDR_SIZE attribute */
   uint64_t hdr_size = 0;
-  uint64_t hdr_offset = 0;
+  /* byte offset from start of data, as defined by OBS_OFFSET attribute */
+  uint64_t obs_offset = 0;
 
-  /* The duplicate of the header */
-  static char* dup = 0;
-  static uint64_t dup_size = 0;
+  /* file size, as defined by FILE_SIZE attribute */
+  uint64_t file_size = 0;
+  /* file offset from start of data, as defined by FILE_NUMBER attribute */
+  unsigned file_number = 0;
+
+  /* observation id, as defined by OBS_ID attribute */
+  char obs_id [DADA_OBS_ID_MAXLEN] = "";
 
   /* Optimal buffer size, as returned by disk array */
-  uint64_t opt_buffer_size;
+  uint64_t optimal_buffer_size;
 
-  /* Byte counts */
-  uint64_t total_bytes_written = 0;
+  /* Byte count */
   int64_t bytes_written = 0;
+
+  /* File name */
+  static char* file_name = 0;
+
+  /* File descriptor */
+  int fd = -1;
 
   /* Wait for the next valid header sub-block */
   header = ipcbuf_get_next_read (header_block, &header_size);
@@ -109,43 +123,81 @@ int main_loop (dada_t* dada,
 
   ipcbuf_mark_cleared (header_block);
 
-  /* Get the header offset */
-  if (ascii_header_get (dup, "OBS_OFFSET", "%llu", &hdr_offset) != 1) {
-    multilog (log, LOG_ERR, "Header block does not have OBS_OFFSET");
-    return -1;
+  /* Get the observation ID */
+  if (ascii_header_get (dup, "OBS_ID", "%s", obs_id) != 1) {
+    multilog (log, LOG_WARNING, "Header block does not have OBS_ID");
+    strcpy (obs_id, "UNKNOWN");
   }
+
+  /* Get the header offset */
+  if (ascii_header_get (dup, "OBS_OFFSET", "%llu", &obs_offset) != 1) {
+    multilog (log, LOG_WARNING, "Header block does not have OBS_OFFSET");
+    obs_offset = 0;
+  }
+
+  /* Get the file size */
+  if (ascii_header_get (dup, "FILE_SIZE", "%lu", &file_size) != 1) {
+    multilog (log, LOG_WARNING, "Header block does not have FILE_SIZE");
+    file_size = DADA_DEFAULT_FILESIZE;
+  }
+
+  /* Get the file number */
+  if (ascii_header_get (dup, "FILE_NUMBER", "%lu", &file_number) != 1) {
+    multilog (log, LOG_WARNING, "Header block does not have FILE_NUMBER");
+    file_number = 0;
+  }
+
+  if (!file_name)
+    file_name = malloc (FILENAME_MAX);
 
   /* Write data until the end of the data stream */
   while (!ipcbuf_eod((ipcbuf_t*)data_block)) {
 
-    OPEN a file on the disk_array;
+    fd = disk_array_open (array, file_name, file_size, &optimal_buffer_size);
 
-    hdr_offset += total_bytes_written;
+    if (fd < 0) {
+      multilog (log, LOG_ERR, "Error opening %s\n", file_name);
+      return -1;
+    }
+
+    multilog (log, LOG_INFO, "%s opened for writing %llu bytes\n",
+	      file_name, file_size);
 
     /* Set the header offset */
-    if (ascii_header_set (dup, "OBS_OFFSET", "%llu", hdr_offset) != 1) {
+    if (ascii_header_set (dup, "OBS_OFFSET", "%llu", obs_offset) != 1) {
       multilog (log, LOG_ERR, "Error writing OBS_OFFSET");
       return -1;
     }
 
+    /* Set the file number */
+    if (ascii_header_set (dup, "FILE_NUMBER", "%lu", file_number) != 1) {
+      multilog (log, LOG_ERR, "Error writing FILE_NUMBER");
+      return -1;
+    }
+
     if (write (fd, dup, header_size) < header_size) {
-      multilog (log, LOG_ERR, "Error writing header: %s", sterror(errno));
+      multilog (log, LOG_ERR, "Error writing header: %s", strerror(errno));
       return -1;
     }
 
     /* Write data until the end of the file or data stream */
-    bytes_written = write_loop (data_block, multilog, 
-				fd, file_size, opt_buffer_size);
+    bytes_written = write_loop (data_block, log, 
+				fd, file_size, optimal_buffer_size);
 
     if (bytes_written < 0)
       return -1;
 
-    total_bytes_written += bytes_written;
+    multilog (log, LOG_INFO, "%llu bytes written to %s\n",
+	      bytes_written, file_name);
+
+    obs_offset += bytes_written;
 
     if (close (fd) < 0) {
       multilog (log, LOG_ERR, "Error closing %s: %s", 
-		filename, strerror(errno));
+		file_name, strerror(errno));
     }
+
+    file_number ++;
 
   }
 
@@ -155,6 +207,9 @@ int main_loop (dada_t* dada,
 
 }
 
+struct {
+  char quit;
+} state;
 
 int main (int argc, char **argv)
 {
