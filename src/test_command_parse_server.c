@@ -19,9 +19,8 @@ typedef struct {
 /* values of the state variable */
 #define TEST_NONE    0
 #define TEST_FLOAT   1
-#define TEST_INT     2
-#define TEST_DOUBLES 3
-#define TEST_QUIT    4
+#define TEST_DOUBLES 2
+#define TEST_QUIT    3
 
 /* this function implements the "echo" command; it ignores the context */
 int echo (void* context, FILE* fptr, char* args)
@@ -49,20 +48,13 @@ int parse_float (void* context, FILE* fptr, char* args)
 }
 
 /* this function implements the "int" command */
-int parse_int (void* context, FILE* fptr, char* args)
+int parse_reset (void* context, FILE* fptr, char* args)
 {
   test_t* test = (test_t*) context;
-  int value;
 
-  if (sscanf (args, "%d", &value) != 1) {
-    fprintf (fptr, "Error could not parse int from %s\n", args);
-    return -1;
-  }
+  multilog (test->log, LOG_INFO, "resetting!\n");
 
-  multilog (test->log, LOG_INFO, "just parsed an int!\n");
-
-  test->int_value = value;
-  test->state = TEST_INT;
+  test->state = TEST_NONE;
   return 0;
 }
 
@@ -107,13 +99,13 @@ int main ()
   command_parse_add (parser, parse_float, &test, 
 		     "float", "parse argument as float", NULL);
 
-  fprintf (stderr, "Adding parse_int to command_parse\n");
-  command_parse_add (parser, parse_int, &test, 
-		     "int", "parse argument as int", NULL);
-
   fprintf (stderr, "Adding parse_double to command_parse\n");
   command_parse_add (parser, parse_double, &test, 
 		     "double", "parse two arguments as double", NULL);
+
+  fprintf (stderr, "Adding parse_reset to command_parse\n");
+  command_parse_add (parser, parse_reset, &test,
+                     "reset", "reset state", NULL);
 
   /* open the information port */
   multilog_serve (test.log, 2020);
@@ -131,9 +123,6 @@ int main ()
     switch (test.state) {
     case TEST_FLOAT:
       multilog (test.log, LOG_INFO, "float = %f\n", test.float_value);
-      break;
-    case TEST_INT:
-      multilog (test.log, LOG_INFO, "int = %d\n", test.int_value);
       break;
     case TEST_DOUBLES:
       multilog (test.log, LOG_INFO, "doubles = %lf %lf\n",
