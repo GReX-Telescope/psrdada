@@ -23,11 +23,9 @@ and {\tt db2nic}.  These automatic processes need only start reading
 from the Data Block when it is active, as determined by the behaviour
 of the Write Client.  They start when the header is initialized and
 stop when the end of data flag is raised.
-
 Also, the {\tt nic2db} Write Client can be run as an automatic process
 that starts when it receives packets from the Primary Node and ends
 when the end of data message is received.
-
 If it is shown that the operation of these Data Clients may have to
 change from observation to observation, then there are two possible
 solutions:
