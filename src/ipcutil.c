@@ -24,7 +24,7 @@ void* ipc_alloc (key_t key, int size, int flag, int* shmid)
 
   id = shmget (key, size, flag);
   if (id < 0) {
-    fprintf (stderr, "ipc_alloc: shmget (key=%x, size=%d, flag=%x) %s",
+    fprintf (stderr, "ipc_alloc: shmget (key=%x, size=%d, flag=%x) %s\n",
              key, size, flag, strerror(errno));
     return 0;
   }
