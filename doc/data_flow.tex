@@ -44,6 +44,7 @@ upon the mode of operation, this condition may be interpreted as an
 error, or as a signal to move on to the next Secondary node in the
 data transmission queue.
 
+\newpage
 \section{Data Flow Write Clients}
 
 Write Client software will read data from a device and write it to
@@ -102,6 +103,7 @@ insufficient space, and the Primary node will cease data transfer to
 the current Secondary node, possibly beginning data transfer to the
 next in node in the ring.
 
+\newpage
 \section{Data Flow Read Clients}
 
 Read Client software will read data from the Data Block and write it
@@ -118,7 +120,7 @@ mode of operation.
 
 This software runs on the Primary nodes; it reads from the Data Block
 and writes to one or more Secondary nodes, breaking up data into
-packets of arbitary length.  The total length of data sent to an
+packets of arbitrary length.  The total length of data sent to an
 individual Secondary node will be independent of the Data Block buffer
 sizes, and may depend on the overlap specified by the Configuration
 and Scheduling software.
