@@ -31,9 +31,10 @@ These are divided into two main classes:
 \end{enumerate}
 
 A single Primary node may have multiple Secondary nodes associated
-with it.  To these, it sends the digitized data in round-robin
-fashion.  The various components of the workstation cluster are
-depicted in simplified form in Figure~\ref{fig:layout}.
+with it.  To these, it will send the observed data either during an
+offline, post-recording stage or in quasi-realtime.  The Secondary
+nodes will contain a large amount of RAM and a moderate internal data
+storage medium.
 
 \begin{figure}
 \centerline{\psfig{figure=layout.eps,width=3.5in,angle=0}}
@@ -52,8 +53,8 @@ The major functionality of PuMa-II is divided into five categories:
 
 \begin{enumerate}
 
-\item Data Flow Control - the high-bandwidth data transfer control software
-\item Data Reduction - process and archive the baseband data
+\item Data Flow Control - high-bandwidth data transfer and storage
+\item Data Reduction - process and archive the observed data
 \item Command and Monitoring - communication channels for external control
 \item Control Interface - centralized access to Command and Monitoring
 \item Configuration and Scheduling - files and databases for automated control
@@ -61,56 +62,49 @@ The major functionality of PuMa-II is divided into five categories:
 \end{enumerate}
 
 Communication between each of the levels of software will take place
-primarily through shared memory resources and internet socket
+primarily through shared memory, semaphores, and internet socket
 connections.
 
 \subsubsection{Data Flow Control}
 
-Data Flow Control software will establish the high-bandwidth network
-connections between the Primary and Secondary nodes.  This software
-will control all aspects pertaining to the flow of data from the DMA
-card on the Primary node to local storage and/or the remote RAM and/or
-disk storage of the Secondary nodes.  In the case of online pulsar
-processing, this communication will include the overlap required to
-compensate for data reduction losses (owing to dispersion smearing,
-filter rise times, etc.).  
+Data Flow Control software will control all aspects of the
+high-bandwidth data recording, including DMA control, interim storage
+on internal RAID, and high-speed transfer between the Primary and
+Secondary nodes.  The transfer to Secondary nodes will include the
+overlap required to compensate for data reduction losses (owing to
+dispersion smearing, filter rise times, etc.) as specified by the
+Configuration and Scheduling software.
 
 On both Primary and Secondary nodes, data will be stored in a large
 buffer established as shared memory, called the Data Block.  The
 various tasks that must run in parallel will be implemented as unique
 processes, as opposed to multiple threads of a single process.
 Therefore, access to the Data Block will be controlled by an
-inter-process locking method, such as a semaphore.
+inter-process communication (IPC) locking method, known as a
+semaphore.
 
-Rational: It is better to begin with multiple processes and
-inter-process control in the early states of development because this
-paradigm is more modular.  For example, the process that reads data
-from the Data Block and writes it to local storage may be run on
-either a Primary or Secondary node.  If data reduction can later be
-performed in real-time, the disk writing client may be replaced by a
-data processing client.
+Rational: It is better to begin with multiple processes and IPC in the
+early states of development because this paradigm is more modular.
+For example, the process that reads data from the Data Block and
+writes it to local storage may be run on either a Primary or Secondary
+node.  If data reduction can later be performed in real-time, the disk
+writing client may be replaced by a data processing client.
 
 \subsubsection{Data Reduction}
 
 On both Primary and Secondary nodes, one or more Data Clients may
-attach to the Data Block and operate on the data.  The Data Block will
-be logically divided into a number of sub-blocks.  Each sub-block may
-be flagged as ``processed'' by the clients in order that the Data Flow
-Control software may over-write the information contained by that
-sub-block.  After writing each sub-block, the Data Flow Control
-software will set a flag to indicate that the block contains new data.
+attach to the Data Block and operate on the data.  A single,
+high-priority Data Client will be given permission to flag sub-blocks
+as processed.  Initially, this client will be part of the Data Flow
+Control software that writes the data to local file storage.  Later,
+this client may be a data processing client.  
 
-A single, high-priority Data Client will be given permission to flag
-sub-blocks as completed.  Initially, this client will be part of the
-Data Flow Control software that writes the data to local file storage.
-Later, this client may be a data processing client.  Data Clients may
-perform any number of tasks, including various forms of data
-reduction, calculation and display of data quality statistics such as
-the bandpass, storage of the data to some form of medium, or farming
-the data out to a grid.
-
-The data reduction client will basically do as it is told, as
-described in Configuration and Scheduling.
+Data Clients may perform any number of tasks, including various forms
+of data reduction, calculation and display of data quality statistics
+such as the bandpass, storage of the data to some form of medium, or
+farming the data out to a grid.  The data reduction client will
+process the data according to the specifications of the Configuration
+and Scheduling software.
 
 \subsubsection{Command and Monitoring}
 
@@ -132,20 +126,20 @@ TCS, disk space consumption, network traffic, CPU load, etc.
 The Control Interface software defines the centralized command/control
 point, and will be connected to the various communication channels
 established by the Control and Monitoring software on each of the
-Primary and Secondary nodes.  The Control Interface may be run on any
-workstation, and provides the means through which other processes may
-treat PuMa-II as a single instrument.  For example, a text or
-graphical user interface and/or automated scheduling program may
-connect to PuMa-II, issue commands, and inquire about the status of
-the instrument.  A textual user interface (TUI) will be developed to
-connect to the Control Interface and:
+Primary and Secondary nodes.  The Control Interface software should be
+run on a single designated workstation, as it will provide the means
+through which other processes may treat PuMa-II as a single
+instrument.  For example, a text or graphical user interface and/or
+automated scheduling program may connect to PuMa-II, issue commands,
+and inquire about the status of the instrument.  A textual user
+interface (TUI) will be developed to connect to the Control Interface
+and:
 \begin{itemize}
 \item allow PuMa-II to be configured, started, and stopped;
 \vspace{-2mm}
 \item display various status variables; and
 \vspace{-2mm}
-\item create plots of diagnostic graphs, 
-      such as the passband and digitizer statistics
+\item create diagnostic plots, such as the passband and digitizer statistics
 \end{itemize}
 
 \subsubsection{Configuration and Scheduling}

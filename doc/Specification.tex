@@ -17,8 +17,8 @@
 This document specifies the software element of the 2nd generation of
 the Dutch Pulsar Machine, PuMa-II, to be installed at the Westerbork
 Synthesis Radio Telescope, WSRT, in 2005.  PuMa-II will consist of
-eight data acquisition machines, called the \emph{Primary Nodes}, and
-a processing cluster of \emph{Secondary Nodes}.
+eight data acquisition machines, called the \emph{Primary} nodes, and
+a processing cluster of \emph{Secondary} nodes.
 
 Each Primary Node will interface with one of the 20\, MHz, 12-bit
 sampled outputs of the WSRT tied-array beam former.  On each machine,
@@ -27,23 +27,21 @@ a custom-designed interface card (PiC) will re-sample the data with
 memory access (DMA) interface.  A large file storage facility,
 implemented as internal RAID, will be used to store data locally, and
 a high-speed interconnect will be used to send the data to Secondary
-Nodes for data reduction.
+nodes for data reduction.
 
 The communications plan and protocol used for sending the data from
 Primary to Secondary node may change over the life of the PuMa-II
 instrument.  Therefore, an adaptable and modular design philosophy has
-been employed in software at every level of communications, command,
-and control.  This document contains an overview of the software
-model, including a discussion of the design decisions made, and
-followed by a description of the requirements of each element.
+been employed in the data flow control software, based on the use of a
+ring buffer in shared memory.  This document contains an overview of
+the software model, including a discussion of the design decisions
+made at each level of command, control, and configuration.
 
 \end{abstract}
 
 \input{intro}
 
-\input{primary}
-
-\input{secondary}
+\input{data_flow}
 
 \input{summary}
 

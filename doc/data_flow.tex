@@ -1,0 +1,128 @@
+\chapter{Data Flow Control Software}
+
+Data Flow Control software running on the Primary and Secondary nodes
+must handle the flow of data in a modular and extensible manner,
+enabling future developments by replacement of a single component.
+The required modularity is met by basing all data transfer on a single
+ring buffer protocol, which will be known as the Data Block.
+
+\section{Data Block}
+\label{sec:data_block}
+
+On each machine, only one Data Block will exist.  The Data Block will
+be allocated as a shared memory resource, logically divided into a
+header block followed by a number of sub-blocks.  At the beginning of
+an observation, the header block will be initialized with the relevant
+observation information (such as bandwidth, centre frequency, source,
+start time, etc.) and the ring buffered cleared.  Data will be written
+to sub-blocks in sequential order until the end of the observation, at
+which point an end-of-data flag will be raised.  Therefore, only one
+contiguous stream of data may be represented in the Data Block at any
+one time.
+
+Each sub-block will have a corresponding variable to indicate the
+state of the block: empty, or valid.  Each sub-block flagged as valid
+will also have an associated byte count that may be used to calculate
+the time offset from the start of the observation.
+
+A single, high-priority process, called the Write Client, will be
+given write access to the Data Block; only the Write Client can change
+the state of a sub-block from empty to valid.  The Write Client will
+not write data to the next sub-block until its state is empty, and
+after filling a sub-block will change its state to valid.
+
+One or more Read Clients may attach to the Data Block and read the
+data from sub-blocks marked as valid.  However, only a single,
+high-priority Read Client will be given permission to change the state
+of a sub-block from valid to empty.  This process will access
+sub-blocks in contiguous order.
+
+If the Write Client cannot obtain an empty sub-block, an overflow
+condition will occur, and overflow handling routines must propagate an
+appropriate message to the Command and Control software.  Depending
+upon the mode of operation, this condition may be interpreted as an
+error, or as a signal to move on to the next Secondary node in the
+data transmission queue.
+
+\section{Data Flow Write Clients}
+
+Write Client software will read data from a device and write it to
+the Data Block.
+
+\subsection{DMA Client: {\tt dma2db}}
+
+The DMA Client software, {\tt dma2db}, is responsible for transferring
+data from the telescope to the Data Block.  It will talk directly to
+the PiC through its PCI interface, start and stop the data transfer,
+and record the UTC start time of the observation.  Data from the PiC
+will be transferred to Primary node RAM via a Direct Memory Access
+(DMA) card that is commercially available from Engineering Design Team
+(EDT).  The DMA Client software will:
+
+\begin{enumerate}
+
+\item allocate a number of fixed memory buffers of a size and number
+to be determined during the testing stage;
+
+\item send start and stop instructions to the PiC via the PCI/DMA interface;
+
+\item determine the UTC start time of the first sample recorded
+
+\item copy filled DMA buffers to the Data Block; and
+
+\item monitor the number of DMA buffers filled and copied, ensuring that
+no data overflow occurs.
+
+\end{enumerate}
+
+\noindent
+The DMA buffers will be separate from the Data Block buffers and
+accessed only by the DMA card driver and {\tt dma2db}.  Once started,
+DMA transfer will continue uninterrupted until a stop flag is raised
+or an overflow occurs.
+
+\subsection{Network Interface Client: {\tt nic2db}}
+
+The software for network I/O will run on both Primary and Secondary
+nodes.  Data Flow Control software running on the Secondary nodes will
+establish and maintain a high-bandwidth data communication channel
+with a single Primary node.  The protocol for the network
+communications will be a simple, custom-built design on top of
+internet sockets.  This may change in the future to some sort of
+grid-based protocol.  Data received via this communication channel
+will be copied to the Data Block in contiguous order.  Each packet of
+data will be preceded by a copy of the Data Block header from the
+Primary node.  This header will be copied to the Secondary node Data
+Block.
+
+The {\tt nic2db} software has the responsibility to monitor the Data
+Block and ensure that there is sufficient space to hold incoming data
+packets.  I will send a message to the Primary node if there is
+insufficient space, and the Primary node will cease data transfer to
+the current Secondary node, possibly beginning data transfer to the
+next in node in the ring.
+
+\section{Data Flow Read Clients}
+
+Read Client software will read data from the Data Block and write it
+to a device.
+
+\subsection{Data Storage Client: {\tt db2disk}}
+
+Writes data blocks to disk, breaking up data into files of arbitrary
+length.  Each file will be preceded by the header block from the Data
+Block.  Runs on either Primary or Secondary nodes, depending on the
+mode of operation.
+
+\subsection{Network Interface Client: {\tt db2nic}}
+
+This software runs on the Primary nodes; it reads from the Data Block
+and writes to one or more Secondary nodes, breaking up data into
+packets of arbitary length.  The total length of data sent to an
+individual Secondary node will be independent of the Data Block buffer
+sizes, and may depend on the overlap specified by the Configuration
+and Scheduling software.
+
+Header information (including all available observation information as
+well as offset byte counts) will be sent with each packet of data sent
+to the Secondary nodes.
