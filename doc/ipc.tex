@@ -1,0 +1,252 @@
+\chapter{Data Block}
+
+In this chapter, the Data Block API is specified in detail.  The Data
+Block is the ring buffer through which the primary data flow will take
+place on both primary and secondary nodes in the PuMa-II cluster.
+Access to the ring buffer shared memory is controlled by an
+inter-process communication semaphore.
+
+The Data Block API includes software for creating and initializing the
+shared memory and semaphore resources, locking the shared memory into
+physical RAM, connecting to the ring buffer, writing data to the ring
+buffer and reading data from the ring buffer.
+
+\section{Creation, Connection, and Destruction}
+
+The Data Block ring buffer is accessed through a data type named {\tt
+ipcbuf\_t}, which is declared and initialized as in the following
+example:
+\begin{verbatim}
+#include "ipcbuf.h"
+ipcbuf_t ringbuf = IPCBUF_INIT;
+\end{verbatim}
+To create a ring buffer, call
+\begin{verbatim}
+int ipcbuf_create (ipcbuf_t* ptr, int key, uint64 nbufs, uint64 bufsz);
+\end{verbatim}
+\vspace{-6mm}
+\begin{itemize}
+\item {\tt ptr} is a pointer to an unallocated ring buffer handle
+\vspace{-2mm}
+\item {\tt key} is a unique identifier (range of acceptable values???)
+\vspace{-2mm}
+\item {\tt nbufs} is the number of sub-blocks in the ring buffer
+\vspace{-2mm}
+\item {\tt bufsz} is the size of each sub-block in the ring buffer
+\end{itemize}
+After the ring buffer has been created, it is ready for use.   The ring
+buffer resources will remain available until calling
+\begin{verbatim}
+int ipcbuf_destroy (ipcbuf_t* ptr);
+\end{verbatim}
+\vspace{-6mm}
+\begin{itemize}
+\item {\tt ptr} is a pointer to an allocated ring buffer handle
+\end{itemize}
+That is, even if the process that created the ring buffer exits, the
+shared memory and semaphore resources will remain allocated in
+computer memory.  In order to connect to a previously created Data
+Block ring buffer, call
+\begin{verbatim}
+int ipcbuf_connect (ipcbuf_t* ptr, int key);
+\end{verbatim}
+\vspace{-6mm}
+\begin{itemize}
+\item {\tt ptr} is a pointer to an unallocated ring buffer handle
+\vspace{-2mm}
+\item {\tt key} is the unique identifier passed to {\tt ipcbuf\_create}
+\end{itemize}
+To disconnect, call
+\begin{verbatim}
+int ipcbuf_disconnect (ipcbuf_t* ptr);
+\end{verbatim}
+\vspace{-6mm}
+\begin{itemize}
+\item {\tt ptr} is a pointer to a connected ring buffer handle
+\end{itemize}
+Note that, after calling {\tt ipcbuf\_create}, the process is connected
+to the newly-created ring buffer and it is not necessary to call 
+{\tt ipcbuf\_connect}.  Similarly, after calling {\tt ipcbuf\_destroy},
+it is not necessary (or possible) to call {\tt ipcbuf\_disconnect}.
+After the process is connected to the Data Block ring buffer, it is
+possible to write or read data.
+
+\subsection{Locking into Physical RAM}
+
+In order to ensure that the Data Block ring buffer remains in RAM and
+is not swapped out by the virtual memory manager, call
+\begin{verbatim}
+int ipcbuf_lock_shm (ipcbuf_t* ptr);
+\end{verbatim}
+and, to unlock,
+\begin{verbatim}
+int ipcbuf_unlock_shm (ipcbuf_t* ptr);
+\end{verbatim}
+
+
+\section{Writing to the Data Block}
+
+After connecting to the Data Block ring buffer, it is
+possible to write data to it.
+
+\subsection{Locking and Unlocking Write Access}
+
+Naturally, only one process may write data to the ring buffer;
+therefore, the Write Client must first lock write access to the buffer
+by calling,
+\begin{verbatim}
+int ipcbuf_lock_write (ipcbuf_t* ptr);
+\end{verbatim}
+\vspace{-6mm}
+\begin{itemize}
+\item {\tt ptr} is a pointer to a connected ring buffer handle.
+\end{itemize}
+Similarly, write permission may be relinquished by calling
+\begin{verbatim}
+int ipcbuf_unlock_write (ipcbuf_t* ptr);
+\end{verbatim}
+\vspace{-6mm}
+\begin{itemize}
+\item {\tt ptr} is a pointer to a connected ring buffer handle.
+\end{itemize}
+
+\subsection{Write Loop}
+
+After locking write access to the Data Block ring buffer, the Write
+Client will generally enter a loop in which it
+\begin{enumerate}
+\item requests the next sub-block to which data may be written, 
+\vspace{-2mm}
+\item fills the sub-block
+\vspace{-2mm}
+\item marks the sub-block as filled
+\end{enumerate}
+Step 1 is performed by calling
+\begin{verbatim}
+char* ipcbuf_get_next_write (ipcbuf_t* ptr);
+\end{verbatim}
+\vspace{-6mm}
+\begin{itemize}
+\item {\tt ptr} is a pointer to a connected ring buffer handle
+\vspace{-2mm}
+\item RETURN value is the pointer to the next available sub-block
+\end{itemize}
+\begin{verbatim}
+int ipcbuf_mark_filled (ipcbuf_t* ptr, uint64 nbytes);
+\end{verbatim}
+\vspace{-6mm}
+\begin{itemize}
+\item {\tt ptr} is a pointer to a connected ring buffer handle
+\vspace{-2mm}
+\item {\tt nbytes} is the number of valid bytes in the sub-block
+\end{itemize}
+
+If {\tt nbytes} is less than the number of bytes in each sub-block, as
+set by the {\tt bufsz} argument to {\tt ipcbuf\_create}, then an
+end-of-data condition is set.
+
+\subsection{Writing before Start-of-Data}
+
+By default, when a Data Block ring buffer is created, the
+start-of-data state is enabled and any data written by the Write
+Client will be made available to the Read Client.  However, in some
+cases it may be useful for the Write Client to write data to the Data
+Block before making it available to the Write Client.  For example,
+the trigger to begin data acquisition may arrive later than the
+desired data acquisition start time.
+
+To begin writing data before the actual start of valid data, it is
+necessary to first disable the start-of-data flag by calling
+\begin{verbatim}
+int ipcbuf_disable_sod (ipcbuf_t* ptr);
+\end{verbatim}
+\vspace{-6mm}
+\begin{itemize}
+\item {\tt ptr} is a pointer to a connected ring buffer handle
+\end{itemize}
+The Write Client may then enter a loop identical to that described in
+the previous section: requesting, filling, and marking.  However, when
+the start-of-data flag is disabled, the message that a sub-block has
+been filled is not passed on to the Read Client and the Write Client
+will over-write filled sub-blocks as necessary.  The Write Client
+raises the start-of-data flag by calling
+\begin{verbatim}
+int ipcbuf_enable_sod (ipcbuf_t* ptr, uint64 st_buf, uint64 st_byte);
+\end{verbatim}
+\vspace{-6mm}
+\begin{itemize}
+\item {\tt ptr} is a pointer to a connected ring buffer handle
+\vspace{-2mm}
+\item {\tt st\_buf} is the absolute count of the first valid sub-block
+\vspace{-2mm}
+\item {\tt st\_byte} is the first valid byte in the first valid sub-block
+\end{itemize}
+
+Note that {\tt st\_buf} is an absolute sub-block count, equal to the
+total number of sub-blocks filled before the first valid sub-block.
+Naturally, it is not possible to raise the start-of-data flag for a
+buffer that has already been over-written.  Therefore, the start
+sub-block count plus the total number of sub-blocks must be greater
+than the current sub-block count, or
+\begin{verbatim}
+st_buf > ipcbuf_get_write_count - ipcbuf_get_nbufs
+\end{verbatim}
+
+
+\section{Reading from the Data Block}
+
+After connecting to the Data Block ring buffer, it is possible to read
+data from it.  
+
+\subsection{Locking and Unlocking Read Access}
+
+Only one process may remove data from the ring buffer by flagging it
+as cleared.  This process, the Read Client, must first lock read
+access to the buffer by calling,
+\begin{verbatim}
+int ipcbuf_lock_read (ipcbuf_t* ptr);
+\end{verbatim}
+\vspace{-6mm}
+\begin{itemize}
+\item {\tt ptr} is a pointer to a connected ring buffer handle
+\end{itemize}
+Similarly, read permission may be relinquished by calling
+\begin{verbatim}
+int ipcbuf_unlock_read (ipcbuf_t* ptr);
+\end{verbatim}
+\vspace{-6mm}
+\begin{itemize}
+\item {\tt ptr} is a pointer to a connected ring buffer handle
+\end{itemize}
+
+\subsection{Read Loop}
+
+After locking read access to the Data Block ring buffer, the Read Client
+will generally enter a loop in which it
+\begin{enumerate}
+\item requests the next sub-block containing data, 
+\vspace{-2mm}
+\item operates on the data in the sub-block
+\vspace{-2mm}
+\item marks the sub-block as cleared
+\end{enumerate}
+Step 1 is performed by calling
+\begin{verbatim}
+char* ipcbuf_get_next_read (ipcbuf_t* ptr, uint64* bytes);
+\end{verbatim}
+\vspace{-6mm}
+\begin{itemize}
+\item {\tt ptr} is a pointer to a connected ring buffer handle
+\vspace{-2mm}
+\item {\tt bytes} will be set to the number of valid bytes in the sub-block
+\vspace{-2mm}
+\item RETURN value is the pointer to the first valid byte in the sub-block
+\end{itemize}
+Step 3 is performed by calling
+\begin{verbatim}
+int ipcbuf_mark_cleared (ipcbuf_t* ptr);
+\end{verbatim}
+\vspace{-6mm}
+\begin{itemize}
+\item {\tt ptr} is a pointer to a connected ring buffer handle
+\end{itemize}
