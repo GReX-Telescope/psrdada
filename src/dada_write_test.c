@@ -16,10 +16,10 @@ void usage()
 }
 
 static char* default_header =
-"OBS_ID      dada_write_test.0001\n"
-"OBS_OFFSET  100\n"
-"FILE_SIZE   1073741824\n"
-"FILE_NUMBER 3\n";
+"OBS_ID       dada_write_test.0001\n"
+"OBS_OFFSET   100\n"
+"FILE_SIZE    1073741824\n"
+"FILE_NUMBER  3\n";
 
 int main (int argc, char **argv)
 {
@@ -59,23 +59,31 @@ int main (int argc, char **argv)
   /* Flag set in verbose mode */
   char verbose = 0;
 
+  float gigabytes = 0.0;
+  float one_gigabyte = 1024.0 * 1024.0 * 1024.0;
+
   int arg = 0;
-  while ((arg=getopt(argc,argv,"v")) != -1) {
+  while ((arg=getopt(argc,argv,"g:v")) != -1) {
     switch (arg) {
 
-      case 'v':
-        verbose=1;
-        break;
-
-      default:
-	usage ();
-	return 0;
-
+    case 'g':
+      gigabytes = atof (optarg);
+      bytes_to_write = (uint64_t) (gigabytes * one_gigabyte);
+      break;
+      
+    case 'v':
+      verbose=1;
+      break;
+      
+    default:
+      usage ();
+      return 0;
+      
     }
   }
-
+  
   dada_init (&dada);
-
+  
   log = multilog_open ("dada_write_test", 0);
   multilog_add (log, stderr);
 
@@ -128,7 +136,13 @@ int main (int argc, char **argv)
     return EXIT_FAILURE;
   }
 
+  fprintf (stderr, "Writing %llu bytes to data block\n", bytes_to_write);
+
   while (bytes_to_write)  {
+
+    if (data_size > bytes_to_write)
+      data_size = bytes_to_write;
+
     //fprintf (stderr, "Writing %llu bytes to data block\n", data_size);
     if (ipcio_write (&data_block, data, data_size) < 0)  {
       multilog (log, LOG_ERR, "Could not write %llu bytes to data block\n",
@@ -147,6 +161,16 @@ int main (int argc, char **argv)
 
   if (ipcio_disconnect (&data_block) < 0) {
     multilog (log, LOG_ERR, "Failed to disconnect from data block\n");
+    return EXIT_FAILURE;
+  }
+
+  if (ipcbuf_mark_filled (&header_block, 0) < 0)  {
+    multilog (log, LOG_ERR, "Could not write end of data to header block\n");
+    return EXIT_FAILURE;
+  }
+
+  if (ipcbuf_reset (&header_block) < 0)  {
+    multilog (log, LOG_ERR, "Could not reset header block\n");
     return EXIT_FAILURE;
   }
 
