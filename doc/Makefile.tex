@@ -1,5 +1,11 @@
+#-*-Makefile-*- helps emacs recognize this file as a Makefile
 
+##########################################################################
+#
 # standard Makefile rules for latex stuff
+#
+##########################################################################
+
 .SUFFIXES: .ps .dvi
 
 # Standard ways of making things
@@ -9,22 +15,31 @@
 
 %.dvi: %.tex
 # Get new refs
-	latex `echo $@ | awk -F. '{print $$1}'`
+	latex $*
 # Generate tex for em
-	bibtex `echo $@ | awk -F. '{print $$1}'`
+	bibtex $* ; date
 # Tell latex about them
-	latex `echo $@ | awk -F. '{print $$1}'`
+	latex $* 
 # Second pass to fix cross-references
-	latex `echo $@ | awk -F. '{print $$1}'`
+	latex $*
 
 # standard targets
 # Note, DOCS must be set to a list of .tex files first
 DVIS := ${DOCS:.tex=.dvi}
 PSS := ${DOCS:.tex=.ps}
-FIRSTNAME := ${DOCS:.tex=}	
+
 all: ps
 ps: $(PSS)
 dvi: $(DVIS)
 
+.PHONY : clean
+clean :
+	-rm -f *.aux *.bbl *.blg *.log *.toc
+
+.PHONY : cleanall
+cleanall :
+	-rm -f *.aux *.bbl *.blg *.log *.toc *.dvi *.ps
+
 %:%.ps
 	@echo $@.ps is up-to-date.
+
