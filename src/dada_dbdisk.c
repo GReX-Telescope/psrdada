@@ -3,6 +3,7 @@
 #include "multilog.h"
 #include "disk_array.h"
 #include "ascii_header.h"
+#include "diff_time.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,10 +15,9 @@ void usage()
 {
   fprintf (stdout,
 	   "dada_dbdisk [options]\n"
-	   " -b <buffersize>\n"
-	   " -f <filesize>\n"
-	   " -D <disk path>\n"
-	   " -d run as daemon\n");
+	   " -D <path>  add a disk to which data will be written\n"
+	   " -W         over-write exisiting files\n"
+	   " -d         run as daemon\n");
 }
 
 int64_t write_loop (ipcio_t* data_block, multilog_t* log,
@@ -94,18 +94,44 @@ int main_loop (dada_t* dada,
   /* Byte count */
   int64_t bytes_written = 0;
 
+  /* Time at start and end of write loop */
+  struct timeval start_loop, end_loop;
+
+  /* Time required to write data */
+  double write_time = 0;
+
   /* File name */
   static char* file_name = 0;
 
   /* File descriptor */
   int fd = -1;
 
-  /* Wait for the next valid header sub-block */
-  header = ipcbuf_get_next_read (header_block, &header_size);
+  while (!header_size) {
 
-  if (!header) {
-    multilog (log, LOG_ERR, "Could not get next header\n");
-    return -1;
+    /* Wait for the next valid header sub-block */
+    header = ipcbuf_get_next_read (header_block, &header_size);
+
+    if (!header) {
+      multilog (log, LOG_ERR, "Could not get next header\n");
+      return -1;
+    }
+
+    if (!header_size) {
+
+      ipcbuf_mark_cleared (header_block);
+
+      if (ipcbuf_eod (header_block)) {
+	multilog (log, LOG_INFO, "End of data on header block\n");
+	ipcbuf_reset (header_block);
+      }
+      else {
+	multilog (log, LOG_ERR, "Empty header block\n");
+	return -1;
+      }
+
+    }
+
+
   }
 
   header_size = ipcbuf_get_bufsz (header_block);
@@ -194,6 +220,8 @@ int main_loop (dada_t* dada,
       return -1;
     }
 
+    gettimeofday (&start_loop, NULL);
+
     /* Write data until the end of the file or data stream */
     bytes_written = write_loop (data_block, log, 
 				fd, file_size, optimal_buffer_size);
@@ -201,8 +229,13 @@ int main_loop (dada_t* dada,
     if (bytes_written < 0)
       return -1;
 
-    multilog (log, LOG_INFO, "%llu bytes written to %s\n",
-	      bytes_written, file_name);
+    gettimeofday (&end_loop, NULL);
+
+    write_time = diff_time(start_loop, end_loop);
+
+    multilog (log, LOG_INFO, "%llu bytes written to %s in %lfs (%lg MB/s)\n",
+	      bytes_written, file_name, write_time,
+	      bytes_written/(1e6*write_time));
 
     obs_offset += bytes_written;
 
@@ -253,30 +286,34 @@ int main (int argc, char **argv)
 
   disk_array = disk_array_create ();
 
-  while ((arg=getopt(argc,argv,"dD:v")) != -1) {
+  while ((arg=getopt(argc,argv,"dD:vW")) != -1)
     switch (arg) {
+      
+    case 'd':
+      daemon=1;
+      break;
+      
+    case 'D':
+      if (disk_array_add (disk_array, optarg) < 0) {
+	fprintf (stderr, "Could not add '%s' to disk array\n", optarg);
+	return EXIT_FAILURE;
+      }
+      break;
+      
+    case 'v':
+      verbose=1;
+      break;
+      
+    case 'W':
+      disk_array_set_overwrite (disk_array, 1);
+      break;
 
-      case 'd':
-	daemon=1;
-	break;
-
-      case 'D':
-        if (disk_array_add (disk_array, optarg) < 0) {
-          fprintf (stderr, "Could not add '%s' to disk array\n", optarg);
-          return EXIT_FAILURE;
-        }
-        break;
-
-      case 'v':
-        verbose=1;
-        break;
-
-      default:
-	usage ();
-	return 0;
-
+    default:
+      usage ();
+      return 0;
+      
     }
-  }
+
 
   dada_init (&dada);
 
