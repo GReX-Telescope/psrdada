@@ -1,0 +1,30 @@
+
+# standard Makefile rules for latex stuff
+.SUFFIXES: .ps .dvi
+
+# Standard ways of making things
+
+%.ps: %.dvi 
+	dvips $< -o $@ 
+
+%.dvi: %.tex
+# Get new refs
+	latex `echo $@ | awk -F. '{print $$1}'`
+# Generate tex for em
+	bibtex `echo $@ | awk -F. '{print $$1}'`
+# Tell latex about them
+	latex `echo $@ | awk -F. '{print $$1}'`
+# Second pass to fix cross-references
+	latex `echo $@ | awk -F. '{print $$1}'`
+
+# standard targets
+# Note, DOCS must be set to a list of .tex files first
+DVIS := ${DOCS:.tex=.dvi}
+PSS := ${DOCS:.tex=.ps}
+FIRSTNAME := ${DOCS:.tex=}	
+all: ps
+ps: $(PSS)
+dvi: $(DVIS)
+
+%:%.ps
+	@echo $@.ps is up-to-date.
