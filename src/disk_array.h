@@ -29,6 +29,8 @@ extern "C" {
     unsigned ndisk;    /* number of disks */
     uint64_t space;    /* number of bytes total */
 
+    char overwrite;    /* when set, allow data file to be over-written */
+
     /* for multi-threaded use of the dbdisk struct */
     pthread_mutex_t mutex;
     
@@ -42,6 +44,9 @@ extern "C" {
 
   /*! Add a disk to the array */
   int disk_array_add (disk_array_t*, char* path);
+
+  /*! Enable/disable file overwriting */
+  int disk_array_set_overwrite (disk_array_t* array, char value);
 
   /*! Open a file on the disk array, return the open file descriptor */
   int disk_array_open (disk_array_t*, char* name, uint64_t size, uint64_t* bs);

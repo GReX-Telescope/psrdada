@@ -19,6 +19,7 @@ disk_array_t* disk_array_create ()
   array -> disks = 0;
   array -> ndisk = 0;
   array -> space = 0;
+  array -> overwrite = 0;
 
   pthread_mutex_init(&(array->mutex), NULL);
 
@@ -117,6 +118,10 @@ int disk_array_add (disk_array_t* array, char* path)
   return 0;
 }
 
+int disk_array_set_overwrite (disk_array_t* array, char value)
+{
+  return array->overwrite = value;
+}
 
 uint64_t disk_array_get_total (disk_array_t* array)
 {
@@ -162,7 +167,16 @@ int disk_array_open (disk_array_t* array, char* filename, uint64_t filesize,
 {
   static char* fullname = 0;
   unsigned idisk;
+
   int fd = -1;
+
+  int flags = O_WRONLY | O_CREAT;
+  int perms = S_IRUSR | S_IRGRP;
+
+  if (array->overwrite)
+    perms |= S_IWUSR;
+  else
+    flags |= O_EXCL;
 
   pthread_mutex_lock (&(array->mutex));
 
@@ -177,7 +191,7 @@ int disk_array_open (disk_array_t* array, char* filename, uint64_t filesize,
       strcat (fullname, filename);
       strcpy (filename, fullname);
 
-      fd = open (fullname, O_WRONLY|O_CREAT|O_EXCL, S_IRUSR|S_IRGRP);
+      fd = open (fullname, flags, perms);
 
       if (optimal_buffer_size)
 	*optimal_buffer_size = array->disks[idisk].info.f_bsize;
