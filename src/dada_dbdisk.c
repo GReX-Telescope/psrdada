@@ -9,6 +9,8 @@
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 void usage()
 {
@@ -261,15 +263,31 @@ int main (int argc, char **argv)
 
     /* set up for daemon usage */	  
     if (fork() < 0)
-      exit(EXIT_FAILURE);
+      exit (EXIT_FAILURE);
 
-    exit(EXIT_SUCCESS);
+    exit (EXIT_SUCCESS);
+
+    /* Change the file mode mask */
+    umask(0);
+
+    /* Create a new SID for the child process */
+    if (setsid() < 0)
+      exit (EXIT_FAILURE);
+              
+    /* Change the current working directory */
+    if (chdir("/") < 0)
+      exit (EXIT_FAILURE);
+        
+    /* Close out the standard file descriptors */
+    close(STDIN_FILENO);
+    close(STDOUT_FILENO);
+    close(STDERR_FILENO);
+
+    multilog_serve (log, dada.log_port);
 
   }
   else
     multilog_add (log, stderr);
-
-  multilog_serve (log, dada.log_port);
 
   /* First connect to the shared memory */
   if (ipcbuf_connect (&header_block, dada.hdr_key) < 0) {

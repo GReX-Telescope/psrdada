@@ -4,6 +4,8 @@
 
 #include <unistd.h>
 #include <stdlib.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 void usage()
 {
@@ -63,9 +65,25 @@ int main (int argc, char **argv)
 
     exit(EXIT_SUCCESS);
 
-  }
+    /* Change the file mode mask */
+    umask(0);
 
-  multilog_serve (log, dada.log_port);
+    /* Create a new SID for the child process */
+    if (setsid() < 0)
+      exit (EXIT_FAILURE);
+              
+    /* Change the current working directory */
+    if (chdir("/") < 0)
+      exit (EXIT_FAILURE);
+        
+    /* Close out the standard file descriptors */
+    close(STDIN_FILENO);
+    close(STDOUT_FILENO);
+    close(STDERR_FILENO);
+
+    multilog_serve (log, dada.log_port);
+
+  }
 
   /* First connect to the shared memory */
   if (ipcio_connect (&data_block, dada.data_key) < 0) {
