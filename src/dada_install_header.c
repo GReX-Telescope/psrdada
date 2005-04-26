@@ -11,17 +11,20 @@
 #include <stdio.h>
 
 #include "futils.h"
+#include "ascii_header.h"
 
 #define APPEND    0
 #define MERGE     1
 #define OVERWRITE 2
+#define MODIFY    3
 
 void usage ()
 {
-  printf ("dada_install_header -H header_filename [-o] data_filename[s]\n"
-          "header_filename contains ascii header\n"
-          "data_filename contains binary data\n"
-          "specify -o to overwrite existing header [default=append]\n");
+  printf ("dada_install_header [options] filename[s]\n"
+          "options:\n"
+          "  -H filename  specify file containing ascii header\n"
+          "  -o           overwrite existing header [default=append]\n"
+          "  -p key=value set a single key,value pair\n");
 }
 
 int main (int argc, char** argv)
@@ -29,13 +32,18 @@ int main (int argc, char** argv)
   unsigned header_size = 4096;
   char* new_header = 0;
   char* old_header = 0;
+
   char* header_filename = 0;
+
+  char* key = 0;
+  char* value = 0;
+
   unsigned todo = APPEND;
 
   int arg;
   int fd;
 
-  while ((arg = getopt(argc, argv, "hH:o")) != -1) {
+  while ((arg = getopt(argc, argv, "hH:op:")) != -1) {
 
     switch (arg)  {
     case 'h':
@@ -50,6 +58,18 @@ int main (int argc, char** argv)
       todo = OVERWRITE;
       break;
 
+    case 'p':
+      value = strchr (optarg, '=');
+      if (!value) {
+        fprintf (stderr, "Could not parse key=value from '%s'\n", optarg);
+        return -1;
+      }
+      key = optarg;
+      *value = '\0';
+      value ++;
+      todo = MODIFY;
+      break;
+
     default:
       fprintf (stderr, "unrecognized option\n");
       return -1;
@@ -58,17 +78,20 @@ int main (int argc, char** argv)
 
   }
 
-  if (!header_filename)  {
-    fprintf (stderr, "Please specify header filename with -H\n");
+  if ((!header_filename && todo != MODIFY) || 
+      (header_filename && todo == MODIFY)) {
+    fprintf (stderr, "Please specify either -H or -p\n");
     return -1;
   }
 
-  new_header = (char*) malloc (header_size);
   old_header = (char*) malloc (header_size);
 
-  if (fileread (header_filename, new_header, header_size) < 0)  {
-    fprintf (stderr, "Could not read header from %s\n", header_filename);
-    return -1;
+  if (header_filename) {
+    new_header = (char*) malloc (header_size);
+    if (fileread (header_filename, new_header, header_size) < 0)  {
+      fprintf (stderr, "Could not read header from %s\n", header_filename);
+      return -1;
+    }
   }
 
   for (arg=optind; arg<argc; arg++)  {
@@ -93,8 +116,12 @@ int main (int argc, char** argv)
       strcat (old_header, "\n");
       strcat (old_header, new_header);
     }
-    else if (todo == OVERWRITE)
+    else if (todo == OVERWRITE)  {
       strcpy (old_header, new_header);
+    }
+    else if (todo == MODIFY)  {
+      ascii_header_set (old_header, key, "%s", value);
+    }
     else {
       fprintf (stderr, "Unsupported mode: internal error\n");
       return -1;
@@ -106,7 +133,6 @@ int main (int argc, char** argv)
       close (fd);
       continue;
     }
-
 
     fprintf (stderr, "Writing header: %u bytes\n", header_size);
 
