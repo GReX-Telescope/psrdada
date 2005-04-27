@@ -17,10 +17,10 @@
   char ascii_header[ASCII_HEADER_SIZE] = ASCII_HEADER_INIT;
 
   char* telescope_name = "parkes";
-  ascii_header_set (ascii_header, "TELESCOPE", "%s", telescope_name);
+  ascii_header_set (ascii_header, "TELESCOPE", telescope_name);
 
   float bandwidth = 64.0;
-  ascii_header_set (ascii_header, "BW", "%f", float);
+  ascii_header_set (ascii_header, "BW", "%f", bandwidth);
 
   [...]
 
