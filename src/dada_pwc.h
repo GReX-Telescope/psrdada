@@ -1,15 +1,17 @@
-#ifndef __DADA_PWC_H
-#define __DADA_PWC_H
+#ifndef __DADA_PRIMARY_H
+#define __DADA_PRIMARY_H
 
 /* ************************************************************************
 
-   dada_pwc_t - a struct and associated routines for creation and
+   dada_primary_t - a struct and associated routines for creation and
    management of a dada primary write client control connection
 
    ************************************************************************ */
 
-#include <stdio.h>
-#include <pthread.h>
+#include "command_parse_server.h"
+#include "multilog.h"
+//#include <stdio.h>
+//#include <pthread.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -26,12 +28,6 @@ extern "C" {
     /*! The primary write client identifier */
     int id;
 
-    /*! The I/O stream to the other end of the connection */
-    FILE* to;
-
-    /*! The I/O stream from the other end of the connection */
-    FILE* from;
-
     /*! The ASCII header sent/received via the connection */
     char* header;
 
@@ -41,22 +37,28 @@ extern "C" {
     /* for multi-threaded use of the connection */
     pthread_mutex_t mutex;
 
-  } dada_pwc_t;
+    /*! The command parse server */ 
+    command_parse_server_t* server;
+
+    /*! The command parser */
+    command_parse_t* parser;
+
+  } dada_primary_t;
 
   /*! Create a new DADA primary write client connection */
-  dada_pwc_t* dada_pwc_create ();
+  dada_primary_t* dada_primary_create ();
 
   /*! Destroy a DADA primary write client connection */
-  int dada_pwc_destroy (dada_pwc_t* pwc);
+  int dada_primary_destroy (dada_primary_t* primary);
 
   /*! Check to see if a command has arrived */
-  int dada_pwc_command_check (dada_pwc_t* pwc);
+  int dada_primary_command_check (dada_primary_t* primary);
 
   /*! Get the next command from the connection; wait until command received */
-  int dada_pwc_command_get (dada_pwc_t* pwc);
+  int dada_primary_command_get (dada_primary_t* primary);
 
   /*! Reply to the last command received */
-  int dada_pwc_command_reply (dada_pwc_t* pwc);
+  int dada_primary_command_reply (dada_primary_t* primary);
 
 #ifdef __cplusplus
 	   }

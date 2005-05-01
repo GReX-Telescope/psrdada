@@ -2,42 +2,72 @@
 
 #include <stdlib.h>
 
-/*! Create a new DADA primary write client connection */
-dada_pwc_t* dada_pwc_create ()
+int dada_primary_get_header (void* context, FILE* fptr, char* args)
 {
-  dada_pwc_t* pwc = (dada_pwc_t*) malloc (sizeof(dada_pwc_t));
+  dada_primary_t* primary = (dada_primary_t*) context;
+
+  if (strlen (args) > primary->header_size)
+    fprintf (fptr, "header too large (max %d bytes)\n", primary->header_size);
+
+  pthread_mutex_lock(&(primary->mutex));
+  strcpy (primary->header, args);
+  pthread_mutex_unlock(&(primary->mutex));
+
+  fprintf (fptr, "HEADER=%s\n", primary->header);
+  return 0;
+}
+
+/*! Create a new DADA primary write client connection */
+dada_primary_t* dada_primary_create ()
+{
+  dada_primary_t* primary = (dada_primary_t*) malloc (sizeof(dada_primary_t));
 
   /* default header size */
-  pwc -> header_size = 4096;
+  primary -> header_size = 4096;
 
   /* default command port */
-  pwc -> port = 0xdada;
+  primary -> port = 0xdada;
 
-  pthread_mutex_init(&(pwc->mutex), NULL);
+  /* for multi-threaded use of primary */
+  pthread_mutex_init(&(primary->mutex), NULL);
 
-  return pwc;
+  /* command parser */
+  primary -> parser = command_parse_create ();
+
+  command_parse_add (primary->parser, dada_primary_get_header, primary,
+		     "header", "set the primary header", NULL);
+
+  primary -> server = command_parse_server_create (primary -> parser);
+
+  command_parse_server_set_welcome (primary -> server,
+				    "DADA primary write client command");
+
+  /* open the command/control port */
+  command_parse_serve (primary->server, primary->port);
+
+  return primary;
 }
 
 /*! Destroy a DADA primary write client connection */
-int dada_pwc_destroy (dada_pwc_t* pwc)
+int dada_primary_destroy (dada_primary_t* primary)
 {
   return 0;
 }
 
 /*! Check to see if a command has arrived */
-int dada_pwc_command_check (dada_pwc_t* pwc)
+int dada_primary_command_check (dada_primary_t* primary)
 {
   return 0;
 }
 
 /*! Get the next command from the connection; wait until command received */
-int dada_pwc_command_get (dada_pwc_t* pwc)
+int dada_primary_command_get (dada_primary_t* primary)
 {
   return 0;
 }
 
 /*! Reply to the last command received */
-int dada_pwc_command_reply (dada_pwc_t* pwc)
+int dada_primary_command_reply (dada_primary_t* primary)
 {
   return 0;
 }
