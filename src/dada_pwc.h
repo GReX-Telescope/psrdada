@@ -105,14 +105,17 @@ extern "C" {
   /*! Destroy a DADA primary write client connection */
   int dada_primary_destroy (dada_primary_t* primary);
 
+  /*! Primary write client should exit when this is true */
+  int dada_primary_quit (dada_primary_t* primary);
+
   /*! Check to see if a command has arrived */
   int dada_primary_command_check (dada_primary_t* primary);
 
   /*! Get the next command from the connection; wait until command received */
   int dada_primary_command_get (dada_primary_t* primary);
 
-  /*! Reply to the last command received */
-  int dada_primary_command_reply (dada_primary_t* primary);
+  /*! Acknowledge the last command received */
+  int dada_primary_command_ack (dada_primary_t* primary, int state);
 
 #ifdef __cplusplus
 	   }
