@@ -105,8 +105,15 @@ int command_parse (command_parse_t* parser, char* command)
 /* parse a command */
 int command_parse_output (command_parse_t* parser, char* cmd, FILE* out)
 {
-  char* key = strsep (&cmd, " \r\t\n");
-  unsigned icmd;
+  const char* whitespace = " \r\t\n";
+  unsigned icmd = 0;
+  char* key = 0;
+
+  /* skip leading whitespace */
+  while (*cmd && strchr (whitespace, *cmd))
+    cmd ++;
+
+  key = strsep (&cmd, whitespace);
 
 #ifdef _DEBUG
   fprintf (stderr, "command_parse: key '%s'\n", key);
@@ -122,6 +129,15 @@ int command_parse_output (command_parse_t* parser, char* cmd, FILE* out)
 #ifdef _DEBUG
       fprintf (stderr, "command_parse: match %d\n", icmd);
 #endif
+
+      /* skip leading whitespace */
+      while (*cmd && strchr (whitespace, *cmd))
+	cmd ++;
+
+      /* ignore null strings */
+      if (! *cmd)
+	cmd = 0;
+
       return parser->cmds[icmd].cmd (parser->cmds[icmd].context, out, cmd);
     }
 
