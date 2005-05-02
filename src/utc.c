@@ -5,6 +5,12 @@
 #include <string.h>
 #include <ctype.h>
 
+time_t str2time (const char* str)
+{
+  struct tm time;
+  return str2tm (&time, str);
+}
+
 time_t str2tm (struct tm* time, const char* str)
 {
   char* temp = 0;         /* duplicate of input */

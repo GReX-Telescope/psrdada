@@ -15,6 +15,9 @@ extern "C" {
   /*! parse a string into struct tm; return equivalent time_t */
   time_t str2tm (struct tm* time, const char* str);
 
+  /*! parse a string and return equivalent time_t */
+  time_t str2time (const char* str);
+
 #ifdef __cplusplus
 }
 #endif
