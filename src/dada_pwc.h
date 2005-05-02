@@ -1,9 +1,9 @@
-#ifndef __DADA_PRIMARY_H
-#define __DADA_PRIMARY_H
+#ifndef __DADA_PWC_H
+#define __DADA_PWC_H
 
 /* ************************************************************************
 
-   dada_primary_t - a struct and associated routines for creation and
+   dada_pwc_t - a struct and associated routines for creation and
    management of a dada primary write client control connection
 
    ************************************************************************ */
@@ -20,16 +20,16 @@ extern "C" {
   enum {
 
     /*! idle: no data is being recorded */
-    dada_primary_idle,
+    dada_pwc_idle,
 
     /*! prepared: no data is being recorded, header received */
-    dada_primary_prepared,
+    dada_pwc_prepared,
 
-    /*! recording invalid: data is being recorded in over-write mode */
-    dada_primary_recording_invalid,
+    /*! clocking: data is being clocked in over-write mode */
+    dada_pwc_clocking,
 
-    /*! recording valid: data is being recorded in lock-step mode */
-    dada_primary_recording_valid
+    /*! recording: data is being recorded */
+    dada_pwc_recording
 
   };
 
@@ -37,25 +37,25 @@ extern "C" {
   enum {
 
     /*! none: no command available */
-    dada_primary_no_command = 0x00,
+    dada_pwc_no_command,
 
     /*! header: configuration parameters are available */
-    dada_primary_header = 0x01,
+    dada_pwc_header,
 
-    /*! invalid start: enter the recording invalid state */
-    dada_primary_invalid_start = 0x02,
+    /*! clock: enter the clocking data state */
+    dada_pwc_clock,
 
-    /*! valid start: enter the recording valid state at the specified time */
-    dada_primary_valid_start = 0x03,
+    /*! record start: enter the recording state (from clocking state) */
+    dada_pwc_record_start,
 
-    /*! start: enter the recording valid state */
-    dada_primary_start = 0x04,
+    /*! record stop: enter the clocking state (from recording state) */
+    dada_pwc_record_stop,
 
-    /*! stop: stop recording */
-    dada_primary_stop = 0x05,
+    /*! start: enter the recording state */
+    dada_pwc_start,
 
-    /*! time specified: a UTC is associated with the command */
-    dada_primary_time_specified = 0x08
+    /*! stop: enter the idle state */
+    dada_pwc_stop
 
   };
 
@@ -97,25 +97,28 @@ extern "C" {
     /* for multi-threaded polling */
     pthread_cond_t cond;
 
-  } dada_primary_t;
+  } dada_pwc_t;
 
   /*! Create a new DADA primary write client connection */
-  dada_primary_t* dada_primary_create ();
+  dada_pwc_t* dada_pwc_create ();
 
   /*! Destroy a DADA primary write client connection */
-  int dada_primary_destroy (dada_primary_t* primary);
+  int dada_pwc_destroy (dada_pwc_t* primary);
+
+  /*! Start the command parsing server */
+  int dada_pwc_serve (dada_pwc_t* primary);
 
   /*! Primary write client should exit when this is true */
-  int dada_primary_quit (dada_primary_t* primary);
+  int dada_pwc_quit (dada_pwc_t* primary);
 
   /*! Check to see if a command has arrived */
-  int dada_primary_command_check (dada_primary_t* primary);
+  int dada_pwc_command_check (dada_pwc_t* primary);
 
   /*! Get the next command from the connection; wait until command received */
-  int dada_primary_command_get (dada_primary_t* primary);
+  int dada_pwc_command_get (dada_pwc_t* primary);
 
   /*! Acknowledge the last command received */
-  int dada_primary_command_ack (dada_primary_t* primary, int state);
+  int dada_pwc_command_ack (dada_pwc_t* primary, int state);
 
 #ifdef __cplusplus
 	   }
