@@ -195,15 +195,35 @@ static void* command_parse_server (void * arg)
 
   return 0;
 }
+
 /* set the welcome message */
 int command_parse_server_set_welcome (command_parse_server_t* s, const char* w)
 {
   if (!s)
     return -1;
+
   if (s->welcome)
     free (s->welcome);
   if (w)
     s->welcome = strdup (w);
+  else
+    s->welcome = 0;
+
+  return 0;
+}
+
+/* set the prompt */
+int command_parse_server_set_prompt (command_parse_server_t* s, const char* p)
+{
+  if (!s)
+    return -1;
+
+  if (s->prompt)
+    free (s->prompt);
+  if (p)
+    s->prompt = strdup (p);
+  else
+    s->prompt = 0;
 
   return 0;
 }
@@ -211,8 +231,11 @@ int command_parse_server_set_welcome (command_parse_server_t* s, const char* w)
 int command_parse_serve (command_parse_server_t* server, int port)
 {
   sighandler_t handler = signal (SIGPIPE, SIG_IGN);
+
+#if 0
   if (handler != SIG_DFL)
     signal (SIGPIPE, handler);
+#endif
 
 #ifdef _DEBUG
   fprintf (stderr, "command_parse_serve: server=%p\n", server);
