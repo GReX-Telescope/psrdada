@@ -4,8 +4,7 @@
 int main ()
 {
   dada_pwc_t* pwc = 0;
-  int command = 0;
-  time_t utc = 0;
+  dada_pwc_command_t command = DADA_PWC_COMMAND_INIT;
 
   fprintf (stderr, "Creating dada_pwc\n");
   pwc = dada_pwc_create ();
@@ -19,9 +18,9 @@ int main ()
 
     command = dada_pwc_command_get (pwc);
 
-    fprintf (stderr, "command = %d\n", command);
+    fprintf (stderr, "command = %d\n", command.code);
 
-    switch (command) {
+    switch (command.code) {
 
     case dada_pwc_header:
       fprintf (stderr, "HEADER=%s", pwc->header);

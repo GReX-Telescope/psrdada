@@ -10,6 +10,8 @@
 
 #include "command_parse_server.h"
 #include "multilog.h"
+
+#include <inttypes.h> 
 #include <time.h>
 
 #ifdef __cplusplus
@@ -61,6 +63,24 @@ extern "C" {
 
   typedef struct {
 
+    /*! The command code */
+    int code;
+
+    /*! The UTC associated with the command */
+    time_t utc;
+
+    /*! The duration associated with the command */
+    uint64_t duration;
+
+    /*! The ASCII header associated with the command */
+    char* header;
+
+  } dada_pwc_command_t;
+
+#define DADA_PWC_COMMAND_INIT {0,0,0,0}
+
+  typedef struct {
+
     /*! The name of the host on which primary write client is running */
     char* host;
 
@@ -74,13 +94,10 @@ extern "C" {
     int state;
 
     /*! The last command received */
-    int command;
+    dada_pwc_command_t command;
 
     /*! The ASCII header sent/received via the connection */
     char* header;
-
-    /*! The UTC associated with the command */
-    time_t utc;
 
     /*! The size of the ASCII header */
     unsigned header_size;
@@ -115,7 +132,7 @@ extern "C" {
   int dada_pwc_command_check (dada_pwc_t* primary);
 
   /*! Get the next command from the connection; wait until command received */
-  int dada_pwc_command_get (dada_pwc_t* primary);
+  dada_pwc_command_t dada_pwc_command_get (dada_pwc_t* primary);
 
   /*! Acknowledge the last command received */
   int dada_pwc_command_ack (dada_pwc_t* primary, int state);

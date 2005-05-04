@@ -6,19 +6,19 @@
 
 /*! Set the command state */
 int dada_pwc_command_set (dada_pwc_t* primary, FILE* output,
-			      int command, time_t utc, char* header)
+			  dada_pwc_command_t command)
 {
   int ret = 0;
 
   if (!primary)
     return -1;
-
+  
   pthread_mutex_lock(&(primary->mutex));
 
-  while (primary->command != dada_pwc_no_command)
+  while (primary->command.code != dada_pwc_no_command)
     pthread_cond_wait(&(primary->cond), &(primary->mutex));
 
-  switch (command) {
+  switch (command.code) {
 
   case dada_pwc_header:
     if (primary->state != dada_pwc_idle) {
@@ -68,11 +68,6 @@ int dada_pwc_command_set (dada_pwc_t* primary, FILE* output,
   if (ret == 0) {
 
     primary->command = command;
-    primary->utc = utc;
-    
-    if (header)
-      strcpy (primary->header, header);
-    
     pthread_cond_signal (&(primary->cond));
 
   }
@@ -96,8 +91,14 @@ int dada_pwc_cmd_header (void* context, FILE* fptr, char* args)
   while ( (hdr = strchr(hdr, '\\')) != 0 )
     *hdr = '\n';
 
-  if (dada_pwc_command_set (primary, fptr, 
-				dada_pwc_header, 0, args) < 0)
+  if (args)
+    strcpy (primary->header, args);
+    
+  dada_pwc_command_t command = DADA_PWC_COMMAND_INIT;
+  command.code = dada_pwc_header;
+  command.header = primary->header;
+
+  if (dada_pwc_command_set (primary, fptr, command) < 0)
     return -1;
 
   return 0;
@@ -122,43 +123,56 @@ time_t dada_pwc_parse_time (FILE* fptr, char* args)
 int dada_pwc_cmd_clock (void* context, FILE* fptr, char* args)
 {
   dada_pwc_t* primary = (dada_pwc_t*) context;
-  time_t utc = dada_pwc_parse_time (fptr, args);
 
-  return dada_pwc_command_set (primary, fptr, dada_pwc_clock, utc, 0);
+  dada_pwc_command_t command = DADA_PWC_COMMAND_INIT;
+  command.code = dada_pwc_clock;
+  command.utc = dada_pwc_parse_time (fptr, args);
+
+  return dada_pwc_command_set (primary, fptr, command);
 }
 
 int dada_pwc_cmd_record_start (void* context, FILE* fptr, char* args)
 {
   dada_pwc_t* primary = (dada_pwc_t*) context;
-  time_t utc = dada_pwc_parse_time (fptr, args);
 
-  return dada_pwc_command_set (primary, fptr, dada_pwc_record_start,
-				   utc, 0);
+  dada_pwc_command_t command = DADA_PWC_COMMAND_INIT;
+  command.code = dada_pwc_record_start;
+  command.utc = dada_pwc_parse_time (fptr, args);
+
+  return dada_pwc_command_set (primary, fptr, command);
 }
 
 int dada_pwc_cmd_record_stop (void* context, FILE* fptr, char* args)
 {
   dada_pwc_t* primary = (dada_pwc_t*) context;
-  time_t utc = dada_pwc_parse_time (fptr, args);
 
-  return dada_pwc_command_set (primary, fptr, dada_pwc_record_stop,
-				   utc, 0);
+  dada_pwc_command_t command = DADA_PWC_COMMAND_INIT;
+  command.code = dada_pwc_record_stop;
+  command.utc = dada_pwc_parse_time (fptr, args);
+
+  return dada_pwc_command_set (primary, fptr, command);
 }
 
 int dada_pwc_cmd_start (void* context, FILE* fptr, char* args)
 {
   dada_pwc_t* primary = (dada_pwc_t*) context;
-  time_t utc = dada_pwc_parse_time (fptr, args);
 
-  return dada_pwc_command_set (primary, fptr, dada_pwc_start, utc, 0);
+  dada_pwc_command_t command = DADA_PWC_COMMAND_INIT;
+  command.code = dada_pwc_start;
+  command.utc = dada_pwc_parse_time (fptr, args);
+
+  return dada_pwc_command_set (primary, fptr, command);
 }
 
 int dada_pwc_cmd_stop (void* context, FILE* fptr, char* args)
 {
   dada_pwc_t* primary = (dada_pwc_t*) context;
-  time_t utc = dada_pwc_parse_time (fptr, args);
 
-  return dada_pwc_command_set (primary, fptr, dada_pwc_stop, utc, 0);
+  dada_pwc_command_t command = DADA_PWC_COMMAND_INIT;
+  command.code = dada_pwc_stop;
+  command.utc = dada_pwc_parse_time (fptr, args);
+
+  return dada_pwc_command_set (primary, fptr, command);
 }
 
 /*! Create a new DADA primary write client connection */
@@ -176,7 +190,7 @@ dada_pwc_t* dada_pwc_create ()
   fprintf (stderr, "dada_pwc on port %d\n", primary->port);
 
   primary -> state = dada_pwc_idle;
-  primary -> command = dada_pwc_no_command;
+  primary -> command.code = dada_pwc_no_command;
 
   /* for multi-threaded use of primary */
   pthread_mutex_init(&(primary->mutex), NULL);
@@ -246,23 +260,25 @@ int dada_pwc_command_check (dada_pwc_t* primary)
   if (!primary)
     return -1;
 
-  if (primary->command != dada_pwc_no_command)
-    return 1;
+  if (primary->command.code == dada_pwc_no_command)
+    return 0;
 
-  return 0;
+  return 1;
 }
 
 /*! Get the next command from the connection; wait until command received */
-int dada_pwc_command_get (dada_pwc_t* primary)
+dada_pwc_command_t dada_pwc_command_get (dada_pwc_t* primary)
 {
-  int command = dada_pwc_no_command;
-  
-  if (!primary)
-    return -1;
+  dada_pwc_command_t command = DADA_PWC_COMMAND_INIT;
+
+  if (!primary) {
+    command.code = -1;
+    return command;
+  }
 
   pthread_mutex_lock(&(primary->mutex));
 
-  while (primary->command == dada_pwc_no_command)
+  while (primary->command.code == dada_pwc_no_command)
     pthread_cond_wait(&(primary->cond), &(primary->mutex));
 
   command = primary->command;
@@ -278,7 +294,7 @@ int dada_pwc_command_ack (dada_pwc_t* primary, int new_state)
   if (!primary)
     return -1;
 
-  switch (primary->command) {
+  switch (primary->command.code) {
 
   case dada_pwc_no_command:
     fprintf (stderr, "Cannot acknowledge no command\n");
@@ -330,7 +346,7 @@ int dada_pwc_command_ack (dada_pwc_t* primary, int new_state)
 
   pthread_mutex_lock(&(primary->mutex));
 
-  primary->command = dada_pwc_no_command;
+  primary->command.code = dada_pwc_no_command;
   primary->state = new_state;
 
   pthread_cond_signal (&(primary->cond));
