@@ -17,7 +17,7 @@ int main ()
   nexus = dada_nexus_create ();
 
   fprintf (stderr, "Initializing dada_nexus\n");
-  if (dada_nexus_init (nexus, dada_config) < 0) {
+  if (dada_nexus_configure (nexus, dada_config) < 0) {
     fprintf (stderr, "Error while configuring the DADA nexus\n");
     return -1;
   }
