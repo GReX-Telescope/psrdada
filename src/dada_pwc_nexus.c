@@ -17,19 +17,8 @@ node_t* dada_node_create ()
   return (node_t*) node;
 }
 
-int dada_pwc_nexus_config (void* context, FILE* fptr, char* args)
-{
-  dada_pwc_nexus_t* nexus = (dada_pwc_nexus_t*) context;
-
-  if (nexus->pwc->state != dada_pwc_idle) {
-    fprintf (fptr, "Cannot config when not IDLE\n");
-    return -1;
-  }
-
-  fprintf (stderr, "dada_pwc_nexus_config not implemented");
-
-  return 0;
-}
+/*! Send a unique header to each of the nodes */
+int dada_pwc_nexus_config (void* context, FILE* fptr, char* args);
 
 void dada_pwc_nexus_init (dada_pwc_nexus_t* nexus)
 {
