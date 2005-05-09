@@ -34,6 +34,12 @@ extern "C" {
 
   } node_t;
 
+  /*! Create a new node */
+  node_t* node_create ();
+
+  /*! For use by derived classes during construction */
+  void node_init (node_t* node);
+
   typedef struct {
 
     /*! The default port on which node is listening */
@@ -47,6 +53,9 @@ extern "C" {
 
     /*! The number of nodes */
     unsigned nnode;
+
+    /*! Pointer to function that creates new nodes */
+    node_t* (*node_create) ();
 
     /* for multi-threaded use of the nexus */
     pthread_mutex_t mutex;

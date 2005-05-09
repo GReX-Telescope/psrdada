@@ -8,6 +8,23 @@
 #include <unistd.h>
 #include <errno.h>
 
+void node_init (node_t* node)
+{
+  node -> host = 0;
+  node -> port = 0;
+  node -> id = -1;
+  node -> to = 0;
+  node -> from = 0;
+}
+
+/*! Create a new node */
+node_t* node_create ()
+{
+  node_t* node = (node_t*) malloc (sizeof(node_t));
+  node_init (node);
+  return node;
+}
+
 // #define _DEBUG 1
 void nexus_init (nexus_t* nexus)
 {
@@ -20,6 +37,9 @@ void nexus_init (nexus_t* nexus)
   /* no nodes */
   nexus -> nodes = 0;
   nexus -> nnode = 0;
+
+  /* default creator */
+  nexus -> node_create = &node_create;
 
   pthread_mutex_init(&(nexus->mutex), NULL);
 }
@@ -50,6 +70,7 @@ int nexus_destroy (nexus_t* nexus)
       fclose (node->to);
     if (node->from)
       fclose (node->from);
+    free (node);
   }
 
   if (nexus->nodes)
@@ -276,7 +297,7 @@ int nexus_add (nexus_t* nexus, int id, char* host_name)
   pthread_mutex_lock (&(nexus->mutex));
 
   nexus->nodes = realloc (nexus->nodes, (nexus->nnode+1)*sizeof(void*));
-  node = (node_t*) malloc (sizeof(node));
+  node = nexus->node_create();
   
   node->host = strdup (host_name);
   node->id = id;
