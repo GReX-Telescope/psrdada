@@ -108,8 +108,16 @@ int nexus_configure (nexus_t* nexus, const char* filename)
 
   buffer = (char *) malloc (fsize + 1);
 
+#ifdef _DEBUG
+  fprintf (stderr, "nexus_configure filename='%s'\n", filename);
+#endif
+
   if (fileread (filename, buffer, fsize+1) < 0)
     return -1;
+
+#ifdef _DEBUG
+  fprintf (stderr, "nexus_configure call nexus_parse\n");
+#endif
 
   error = nexus_parse (nexus, buffer);
   free (buffer);
@@ -144,9 +152,11 @@ void* node_open_thread (void* context)
   free (context);
 
   pthread_mutex_lock (&(nexus->mutex));
-  for (inode = 0; inode < nexus->nnode; inode++)
+  for (inode = 0; inode < nexus->nnode; inode++) {
+    node = (node_t*) nexus->nodes[inode];
     if (id == node->id)
       host_name = strdup (node->host);
+  }
   pthread_mutex_unlock (&(nexus->mutex));
 
   if (!host_name) {
@@ -155,6 +165,11 @@ void* node_open_thread (void* context)
   }
 
   while (fd < 0) {
+
+#ifdef _DEBUG
+  fprintf (stderr, "nexus_open_thread: call sock_open (%s,%d)\n",
+	   host_name, port);
+#endif
 
     fd = sock_open (host_name, port);
 
@@ -198,6 +213,10 @@ void* node_open_thread (void* context)
   if (to || from)
     fprintf (stderr, "node_open_thread: no NODE with id=%d\n", id);
 
+#ifdef _DEBUG
+  fprintf (stderr, "nexus_open_thread: return\n");
+#endif
+
   return 0;
 }
 
@@ -216,12 +235,16 @@ int nexus_connect (nexus_t* nexus, unsigned inode)
     return -1;
   }
   
-  node = nexus->nodes[inode];
+  node = (node_t*) nexus->nodes[inode];
 
   /* start a new thread to open a socket connection with the host */
   request = (node_open_t*) malloc (sizeof(node_open_t));
   request->nexus = nexus;
   request->id = node->id;
+
+#ifdef _DEBUG
+  fprintf (stderr, "nexus_connect: pthread_create node_open_thread\n");
+#endif
 
   if (pthread_create (&tmp_thread, 0, node_open_thread, request) < 0) {
     perror ("nexus_add: Error creating new thread");
@@ -241,12 +264,14 @@ int nexus_add (nexus_t* nexus, int id, char* host_name)
   unsigned inode = 0;
 
   /* ensure that each node in nexus has a unique id */
-  for (inode = 0; inode < nexus->nnode; inode++)
+  for (inode = 0; inode < nexus->nnode; inode++) {
+    node = (node_t*) nexus->nodes[inode];
     if (id == node->id) {
       fprintf (stderr, "nexus_add: id=%d equals that of %s\n",
 	       id, node->host);
       return -1;
     }
+  }
 
   pthread_mutex_lock (&(nexus->mutex));
 
