@@ -37,6 +37,15 @@ extern "C" {
     /*! the pwc communication server */
     dada_pwc_t* pwc;
 
+    /*! the template header for all primary write clients */
+    char* header_template;
+
+    /*! the working header */
+    char* working_header;
+
+    /*! the size of the header */
+    unsigned header_size;
+
   } dada_pwc_nexus_t;
 
   /*! Create a new DADA PWC nexus */
