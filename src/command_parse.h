@@ -58,6 +58,9 @@ int command_parse_add (command_parse_t* parser,
 		       const char* short_help,
 		       const char* long_help);
 
+/* remove a command from the list of available commands */
+int command_parse_remove (command_parse_t* parser, const char* command_name);
+
 /* parse a command */
 int command_parse (command_parse_t* parser, char* command);
 
