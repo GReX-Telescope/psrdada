@@ -128,20 +128,30 @@ static void* command_parse_server (void * arg)
 {
   command_parse_server_t* server = (command_parse_server_t*) arg;
   command_parse_thread_t* parser;
- 
+
   int listen_fd = 0;
   int comm_fd = 0;
+  int port = server->port;
   FILE* fptr = 0;
 
   pthread_t tmp_thread;
 
-  listen_fd = sock_create (&(server->port));
+#ifdef _DEBUG
+  fprintf (stderr, "command_parse_server: server=%p\n", server);
+  fprintf (stderr, "command_parse_server: sock_create (port=%d)\n", port);
+#endif
+
+  listen_fd = sock_create (&port);
   if (listen_fd < 0)  {
     perror ("command_parse_server: Error creating socket");
     return 0;
   }
 
-  while (server->port) {
+  while (port) {
+
+#ifdef _DEBUG
+    fprintf (stderr, "command_parse_server: sock_accept (fd=%d)\n", listen_fd);
+#endif
 
     comm_fd = sock_accept (listen_fd);
 
@@ -151,11 +161,15 @@ static void* command_parse_server (void * arg)
     }
 
 #ifdef _DEBUG
-    fprintf (stderr, "command_parse_server: connection. server=%p\n", server);
+    fprintf (stderr, "command_parse_server: connection accepted\n");
 #endif
 
     parser = (command_parse_thread_t*) malloc (sizeof(command_parse_thread_t));
     parser->server = server;
+
+#ifdef _DEBUG
+    fprintf (stderr, "command_parse_server: fdopen (fd=%d,r)\n", comm_fd);
+#endif
 
     fptr = fdopen (comm_fd, "r");
     if (!fptr)  {
@@ -166,6 +180,7 @@ static void* command_parse_server (void * arg)
     parser->input = fptr;
 #ifdef _DEBUG
     fprintf (stderr, "command_parse_server: input=%p\n", parser->input);
+    fprintf (stderr, "command_parse_server: fdopen (fd=%d,w)\n", comm_fd);
 #endif
 
     fptr = fdopen (comm_fd, "w");
@@ -181,12 +196,17 @@ static void* command_parse_server (void * arg)
 
 #ifdef _DEBUG
     fprintf (stderr, "command_parse_server: output=%p\n", parser->output);
+    fprintf (stderr, "command_parse_server: pthread_create command_parser\n");
 #endif
 
     if (pthread_create (&tmp_thread, 0, command_parser, parser) < 0) {
       perror ("command_parse_serve: Error creating new thread");
       return 0;
     }
+
+#ifdef _DEBUG
+    fprintf (stderr, "command_parse_server: pthread_detach\n");
+#endif
 
     /* thread cannot be joined; resources will be deallocated on exit */
     pthread_detach (tmp_thread);
@@ -230,16 +250,10 @@ int command_parse_server_set_prompt (command_parse_server_t* s, const char* p)
 
 int command_parse_serve (command_parse_server_t* server, int port)
 {
-#if 0
-  sighandler_t handler = 
-#endif
+  sighandler_t handler = signal (SIGPIPE, SIG_IGN);
 
-    signal (SIGPIPE, SIG_IGN);
-
-#if 0
   if (handler != SIG_DFL)
     signal (SIGPIPE, handler);
-#endif
 
 #ifdef _DEBUG
   fprintf (stderr, "command_parse_serve: server=%p\n", server);
