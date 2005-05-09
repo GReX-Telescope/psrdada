@@ -11,7 +11,7 @@
 #include "ipcbuf.h"
 #include "ipcutil.h"
 
-#define _DEBUG 0
+// #define _DEBUG 0
 
 /* semaphores */
 
