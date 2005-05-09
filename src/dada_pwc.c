@@ -22,35 +22,35 @@ int dada_pwc_command_set (dada_pwc_t* primary, FILE* output,
 
   case dada_pwc_header:
     if (primary->state != dada_pwc_idle) {
-      fprintf (output, "Cannot set header when state is not IDLE\n");
+      fprintf (output, "Cannot set header when not IDLE\n");
       ret = -1;
     }
     break;
 
   case dada_pwc_clock:
     if (primary->state != dada_pwc_prepared) {
-      fprintf (output, "Cannot start clocking when state is not PREPARED\n");
+      fprintf (output, "Cannot start clocking when not PREPARED\n");
       ret = -1;
     }
     break;
 
   case dada_pwc_record_start:
     if (primary->state != dada_pwc_clocking) {
-      fprintf (output, "Cannot record start when state is not CLOCKING\n");
+      fprintf (output, "Cannot record start when not CLOCKING\n");
       ret = -1;
     }
     break;
 
   case dada_pwc_record_stop:
     if (primary->state != dada_pwc_recording) {
-      fprintf (output, "Cannot record stop when state is not RECORDING\n");
+      fprintf (output, "Cannot record stop when not RECORDING\n");
       ret = -1;
     }
     break;
 
   case dada_pwc_start:
     if (primary->state != dada_pwc_prepared) {
-      fprintf (output, "Cannot start when state is not PREPARED\n");
+      fprintf (output, "Cannot start when not PREPARED\n");
       ret = -1;
     }
     break;
@@ -58,7 +58,7 @@ int dada_pwc_command_set (dada_pwc_t* primary, FILE* output,
   case dada_pwc_stop:
     if (primary->state != dada_pwc_clocking &&
 	primary->state != dada_pwc_recording) {
-      fprintf (output, "Cannot stop when state is not CLOCKING or RECORDING\n");
+      fprintf (output, "Cannot stop when not CLOCKING or RECORDING\n");
       ret = -1;
     }
     break;
