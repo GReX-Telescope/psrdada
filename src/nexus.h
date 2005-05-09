@@ -40,7 +40,7 @@ extern "C" {
   /*! For use by derived classes during construction */
   void node_init (node_t* node);
 
-  typedef struct {
+  typedef struct nexus_struct {
 
     /*! The default port on which node is listening */
     int node_port;
@@ -56,6 +56,9 @@ extern "C" {
 
     /*! Pointer to function that creates new nodes */
     node_t* (*node_create) ();
+
+    /*! Pointer to function that parses configuration */
+    int (*nexus_parse) (struct nexus_struct* n, const char* buffer);
 
     /* for multi-threaded use of the nexus */
     pthread_mutex_t mutex;
@@ -77,11 +80,17 @@ extern "C" {
   /*! Send a command to all selected nodes */
   int nexus_send (nexus_t* nexus, char* command);
 
+  /*! Send a command to the selected node */
+  int nexus_send_node (nexus_t* nexus, unsigned inode, char* command);
+
   /*! Get the number of nodes in the nexus */
   unsigned nexus_get_nnode (nexus_t* nexus);
 
   /*! For use by derived classes during construction */
   void nexus_init (nexus_t* nexus);
+
+  /*! For use by derived classes during configuration */
+  int nexus_parse (nexus_t* n, const char* buffer);
 
 #ifdef __cplusplus
 	   }

@@ -41,6 +41,9 @@ void nexus_init (nexus_t* nexus)
   /* default creator */
   nexus -> node_create = &node_create;
 
+  /* default parser */
+  nexus -> nexus_parse = &nexus_parse;
+
   pthread_mutex_init(&(nexus->mutex), NULL);
 }
 
@@ -145,7 +148,7 @@ int nexus_configure (nexus_t* nexus, const char* filename)
   fprintf (stderr, "nexus_configure call nexus_parse\n");
 #endif
 
-  error = nexus_parse (nexus, buffer);
+  error = nexus->nexus_parse (nexus, buffer);
   free (buffer);
 
   return error;
