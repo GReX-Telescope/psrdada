@@ -81,6 +81,11 @@ int nexus_destroy (nexus_t* nexus)
   return 0;
 }
 
+unsigned nexus_get_nnode (nexus_t* nexus)
+{
+  return nexus->nnode;
+}
+
 int nexus_parse (nexus_t* n, const char* buffer)
 {
   char node_name [16];

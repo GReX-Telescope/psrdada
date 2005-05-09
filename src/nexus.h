@@ -77,6 +77,9 @@ extern "C" {
   /*! Send a command to all selected nodes */
   int nexus_send (nexus_t* nexus, char* command);
 
+  /*! Get the number of nodes in the nexus */
+  unsigned nexus_get_nnode (nexus_t* nexus);
+
   /*! For use by derived classes during construction */
   void nexus_init (nexus_t* nexus);
 
