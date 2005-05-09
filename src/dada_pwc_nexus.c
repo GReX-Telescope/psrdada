@@ -1,4 +1,6 @@
 #include "dada_pwc_nexus.h"
+#include "ascii_header.h"
+
 #include <stdlib.h>
 
 void dada_node_init (dada_node_t* node)
@@ -20,17 +22,36 @@ node_t* dada_node_create ()
 /*! Send a unique header to each of the nodes */
 int dada_pwc_nexus_config (void* context, FILE* fptr, char* args);
 
+int dada_pwc_nexus_parse (nexus_t* n, const char* buffer)
+{
+  dada_pwc_nexus_t* nexus = (dada_pwc_nexus_t*) n;
+
+  if (nexus_parse (n, buffer) < 0)
+    return -1;
+
+  unsigned hdr_size;
+  if (ascii_header_get (buffer, "HDR_SIZE", "%u", &hdr_size) < 0)
+    fprintf (stderr, "dada_pwc_nexus_parse: using default HDR_SIZE\n");
+  else
+    dada_pwc_set_header_size (nexus->pwc, hdr_size);
+
+  return 0;
+}
+
 void dada_pwc_nexus_init (dada_pwc_nexus_t* nexus)
 {
   nexus_t* nexus_base = (nexus_t*) nexus;
   nexus_init (nexus_base);
+
   nexus_base->node_create = &dada_node_create;
+  nexus_base->nexus_parse = &dada_pwc_nexus_parse;
 
 #ifdef _DEBUG
   fprintf (stderr, "dada_pwc_nexus_init dada_pwc_create\n");
 #endif
 
   nexus->pwc = dada_pwc_create ();
+  nexus->header_template = 0;
 
 #ifdef _DEBUG
   fprintf (stderr, "dada_pwc_nexus_init command_parse_add\n");
