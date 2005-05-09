@@ -122,6 +122,9 @@ extern "C" {
   /*! Destroy a DADA primary write client connection */
   int dada_pwc_destroy (dada_pwc_t* primary);
 
+  /*! Set the size of the buffer used to store the header information */
+  int dada_pwc_set_header_size (dada_pwc_t* primary, unsigned header_size);
+
   /*! Start the command parsing server */
   int dada_pwc_serve (dada_pwc_t* primary);
 

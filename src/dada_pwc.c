@@ -1,4 +1,5 @@
 #include "dada_pwc.h"
+#include "dada.h"
 #include "utc.h"
 
 #include <stdlib.h>
@@ -181,11 +182,11 @@ dada_pwc_t* dada_pwc_create ()
   dada_pwc_t* primary = (dada_pwc_t*) malloc (sizeof(dada_pwc_t));
 
   /* default header size */
-  primary -> header_size = 4096;
+  primary -> header_size = DADA_DEFAULT_HDR_SIZE;
   primary -> header = (char *) malloc (primary->header_size);
 
   /* default command port */
-  primary -> port = 0xdada;
+  primary -> port = DADA_DEFAULT_PWC_PORT;
 
   fprintf (stderr, "dada_pwc on port %d\n", primary->port);
 
@@ -221,6 +222,22 @@ dada_pwc_t* dada_pwc_create ()
 
   return primary;
 }
+
+int dada_pwc_set_header_size (dada_pwc_t* primary, unsigned header_size)
+{
+  if (!primary)
+    return -1;
+
+  pthread_mutex_lock(&(primary->mutex));
+
+  primary -> header_size = header_size;
+  primary -> header = (char *) realloc (primary->header_size, header_size);
+
+  pthread_mutex_unlock(&(primary->mutex));
+
+  return 0;
+}
+
 
 /*! Destroy a DADA primary write client connection */
 int dada_pwc_serve (dada_pwc_t* primary)
