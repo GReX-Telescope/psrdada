@@ -231,7 +231,7 @@ int dada_pwc_set_header_size (dada_pwc_t* primary, unsigned header_size)
   pthread_mutex_lock(&(primary->mutex));
 
   primary -> header_size = header_size;
-  primary -> header = (char *) realloc (primary->header_size, header_size);
+  primary -> header = (char *) realloc (primary->header, header_size);
 
   pthread_mutex_unlock(&(primary->mutex));
 
