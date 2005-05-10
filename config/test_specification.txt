@@ -1,0 +1,21 @@
+# a specification contains parameters common to all bands ...
+
+FILE_SIZE    800000000
+OBS_OVERLAP  0
+TELESCOPE    WSRT
+SOURCE       PSR_0505+2020
+NPOL         2
+NBIT         8
+NDIM         1
+TSAMP        0.025
+RA           05:05:00
+DEC          20:20:01
+
+# ... as well as parameters specific to individual bands
+
+Band0_FREQ         1300
+Band0_BW           20
+
+Band1_FREQ         1400
+Band1_BW           -20
+

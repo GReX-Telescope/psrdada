@@ -1,0 +1,14 @@
+# these parameters are copied from the observation specification to the
+# Header Block of each Primary Write Client
+FILE_SIZE
+OBS_OVERLAP
+TELESCOPE
+SOURCE
+FREQ
+BW
+NPOL
+NBIT
+NDIM
+TSAMP
+RA
+DEC
