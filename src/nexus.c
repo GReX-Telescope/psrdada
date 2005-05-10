@@ -220,6 +220,10 @@ void* node_open_thread (void* context)
 
   }
 
+#ifdef _DEBUG
+  fprintf (stderr, "nexus_open_thread: connected with %s\n", host_name);
+#endif
+
   free (host_name);
 
   from = fdopen (fd, "r");
