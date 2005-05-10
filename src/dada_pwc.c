@@ -499,8 +499,9 @@ dada_pwc_command_t dada_pwc_command_get (dada_pwc_t* primary)
   return command;
 }
 
-/*! Reply to the last command received */
-int dada_pwc_command_ack (dada_pwc_t* primary, int new_state)
+/*! \param new_state the state that the primary write client has entered
+    \param utc the UTC time at which this state was entered */
+int dada_pwc_command_ack (dada_pwc_t* primary, int new_state, time_t utc)
 {
   if (!primary)
     return -1;
@@ -523,6 +524,7 @@ int dada_pwc_command_ack (dada_pwc_t* primary, int new_state)
       fprintf (stderr, "CLOCK acknowledgement state must be CLOCKING\n");
       return -1;
     }
+    primary->utc_start = utc;
     break;
 
   case dada_pwc_record_start:
@@ -544,6 +546,7 @@ int dada_pwc_command_ack (dada_pwc_t* primary, int new_state)
       fprintf (stderr, "START acknowledgement state must be RECORDING\n");
       return -1;
     }
+    primary->utc_start = utc;
     break;
 
   case dada_pwc_stop:

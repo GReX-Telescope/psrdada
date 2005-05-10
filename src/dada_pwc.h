@@ -162,7 +162,7 @@ extern "C" {
   dada_pwc_command_t dada_pwc_command_get (dada_pwc_t* primary);
 
   /*! Acknowledge the last command received */
-  int dada_pwc_command_ack (dada_pwc_t* primary, int state);
+  int dada_pwc_command_ack (dada_pwc_t* primary, int state, time_t utc);
 
 #ifdef __cplusplus
 	   }

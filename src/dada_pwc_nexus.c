@@ -141,37 +141,37 @@ int dada_pwc_nexus_serve (dada_pwc_nexus_t* nexus)
     case dada_pwc_header:
       fprintf (stderr, "HEADER=%s", command.header);
       nexus_send ((nexus_t*)nexus, "header stuff");
-      dada_pwc_command_ack (nexus->pwc, dada_pwc_prepared);
+      dada_pwc_command_ack (nexus->pwc, dada_pwc_prepared, time(0));
       break;
 
     case dada_pwc_clock:
       fprintf (stderr, "start clocking\n");
       nexus_send ((nexus_t*)nexus, "clock");
-      dada_pwc_command_ack (nexus->pwc, dada_pwc_clocking);
+      dada_pwc_command_ack (nexus->pwc, dada_pwc_clocking, time(0));
       break;
 
     case dada_pwc_record_start:
       fprintf (stderr, "clocking->recording\n");
       nexus_send ((nexus_t*)nexus, "rec_start");
-      dada_pwc_command_ack (nexus->pwc, dada_pwc_recording);
+      dada_pwc_command_ack (nexus->pwc, dada_pwc_recording, time(0));
       break;
       
     case dada_pwc_record_stop:
       fprintf (stderr, "recording->clocking\n");
       nexus_send ((nexus_t*)nexus, "rec_stop");
-      dada_pwc_command_ack (nexus->pwc, dada_pwc_clocking);
+      dada_pwc_command_ack (nexus->pwc, dada_pwc_clocking, time(0));
       break;
 
     case dada_pwc_start:
       fprintf (stderr, "start recording\n");
       nexus_send ((nexus_t*)nexus, "start");
-      dada_pwc_command_ack (nexus->pwc, dada_pwc_recording);
+      dada_pwc_command_ack (nexus->pwc, dada_pwc_recording, time(0));
       break;
 
     case dada_pwc_stop:
       fprintf (stderr, "stopping\n");
       nexus_send ((nexus_t*)nexus, "stop");
-      dada_pwc_command_ack (nexus->pwc, dada_pwc_idle);
+      dada_pwc_command_ack (nexus->pwc, dada_pwc_idle, time(0));
       break;
 
     }
