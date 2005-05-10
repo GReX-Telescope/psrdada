@@ -24,13 +24,65 @@ void string_array_free (string_array* list)
    free (list);
 }
 
+/*! Return the requested string */
+char* string_array_get (string_array* list, unsigned pos)
+{
+  if (pos < list->size)
+    return list->strs[pos];
+  return 0;
+}
+
+/*! Return the size of the array */
+unsigned string_array_size (string_array* list)
+{
+  return list->size;
+}
+
+/*! All empty strings and any text following the # symbol will be ignored. */
+int string_array_load (string_array* list, const char* filename)
+{
+  const char* whitespace = " \r\t\n";
+  char* text = 0;
+
+  unsigned buffer_size = 1024;
+  static char* buffer = 0;
+  FILE* fptr = fopen (filename, "r");
+
+  if (!fptr) {
+    fprintf (stderr, "string_array_load: error fopen(%s) %s\n",
+	     filename, strerror(errno));
+    return -1;
+  }
+
+  if (!buffer)
+    buffer = malloc (buffer_size);
+  while (fgets (buffer, buffer_size, fptr)) {
+
+    /* truncate string at first # */
+    text = strchr (buffer, '#');
+    if (text)
+      *text = '\0';
+
+    /* skip leading whitespace */
+    text = buffer;
+    while (*text && strchr (whitespace, *text))
+      text ++;
+
+    if (*text != '\0')
+      string_array_append (list, text);
+
+  }
+
+  return 0;
+}
+
 /*! This function will insert the string "entry" into the array of
    string_array referenced by "list".  It will be placed into the array
    at the index "pos" (starting at zero).  If a string already
    exists at this position, all entries will be bumped toward the end of
    the array.  If pos > list->size_entries, -1 will be returned.
  */
-int string_array_insert (string_array* list, char* entry, unsigned pos)
+int string_array_insert (string_array* list, const char* entry, unsigned pos)
 {
   char** temp;
   unsigned val;
@@ -52,7 +104,7 @@ int string_array_insert (string_array* list, char* entry, unsigned pos)
   return 0;
 }
 
-int string_array_append (string_array* list, char* entry)
+int string_array_append (string_array* list, const char* entry)
 {
   return (string_array_insert (list, entry, list->size));
 }
