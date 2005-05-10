@@ -21,20 +21,43 @@ node_t* dada_node_create ()
   return (node_t*) node;
 }
 
-int dada_pwc_nexus_parse (nexus_t* n, const char* buffer)
+int dada_pwc_nexus_parse (nexus_t* n, const char* config)
 {
+  /* the nexus is actually a DADA PWC nexus */
   dada_pwc_nexus_t* nexus = (dada_pwc_nexus_t*) n;
+
+  /* the name of the parameter file parsed from the config */
+  char* param_file = 0;
+
+  /* the size of the header parsed from the config */
   unsigned hdr_size = 0;
 
-  if (nexus_parse (n, buffer) < 0)
+  /* the status returned by sub-routines */
+  int status = 0;
+
+  if (nexus_parse (n, config) < 0)
     return -1;
 
-  if (ascii_header_get (buffer, "HDR_SIZE", "%u", &hdr_size) < 0)
+  if (ascii_header_get (config, "HDR_SIZE", "%u", &hdr_size) < 0)
     fprintf (stderr, "dada_pwc_nexus_parse: using default HDR_SIZE\n");
   else
     dada_pwc_set_header_size (nexus->pwc, hdr_size);
 
-  return 0;
+  /* load configuration parameters from the specified file */
+  param_file = malloc (FILENAME_MAX);
+
+  if (ascii_header_get (config, "CONFIG_PARAM_FILE", "%s", param_file) < 0)
+    fprintf (stderr, "dada_pwc_nexus_parse: no CONFIG_PARAM_FILE in config\n");
+
+  else {
+    fprintf (stderr, "dada_pwc_nexus_parse: loading configuration parameters\n"
+	     "from %s\n", param_file);
+    status = string_array_load (nexus->config_params, param_file);
+  }
+
+  free (param_file);
+
+  return status;
 }
 
 /*! Send a unique header to each of the nodes */
@@ -58,6 +81,8 @@ void dada_pwc_nexus_init (dada_pwc_nexus_t* nexus)
 #endif
 
   nexus->pwc = dada_pwc_create ();
+  nexus->config_params = string_array_create ();
+
   nexus->header_template = 0;
 
 #ifdef _DEBUG

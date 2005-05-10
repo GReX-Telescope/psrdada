@@ -10,6 +10,7 @@
 
 #include "dada_pwc.h"
 #include "nexus.h"
+#include "string_array.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -39,6 +40,9 @@ extern "C" {
 
     /*! the template header for all primary write clients */
     char* header_template;
+
+    /*! an array of configuration parameters to be parsed into header */
+    string_array* config_params;
 
   } dada_pwc_nexus_t;
 
