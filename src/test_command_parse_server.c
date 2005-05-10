@@ -11,7 +11,7 @@ typedef struct {
   double double_value1;  /* a double-precision value */
   double double_value2;  /* a second double-precision value */
 
-  /* means of communicating changes in state to multiple */
+  /* means of communicating changes in state to multiple viewers */
   multilog_t* log;
 
 } test_t;
