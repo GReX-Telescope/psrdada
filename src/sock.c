@@ -5,7 +5,6 @@
 #include <errno.h>
 #include <string.h>
 
-
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/types.h>
@@ -14,13 +13,16 @@
 #include <arpa/inet.h>
 #include <sys/time.h>
 
-
 #ifdef LINUX
 #include <sys/ioctl.h>
 #endif
 
 #include <netdb.h>
 
+#ifdef _REENTRANT
+#include <pthread.h>
+static pthread_mutex_t sock_mutex = PTHREAD_MUTEX_INITIALIZER;
+#endif
 
 char* sock_herrstr (h_error)
      int h_error;
@@ -54,16 +56,32 @@ int sock_getname (self, length, alias)
     perror ("sock_getname: gethostname");
     return -1;
   }
+
   if (!alias) {
+
+#ifdef _REENTRANT
+    pthread_mutex_lock (&sock_mutex);
+#endif
+
     hp = gethostbyname(self);
-    if (hp == (struct hostent *)NULL)  {
+
+    if (hp) {
+      memcpy (&in.s_addr, *(hp->h_addr_list), sizeof (in.s_addr));
+      strncpy (self, inet_ntoa(in), length);
+    }
+
+#ifdef _REENTRANT
+    pthread_mutex_unlock (&sock_mutex);
+#endif
+
+    if (!hp) {
       fprintf (stderr, "sock_getname: gethostbyname: %s\n",
 	       sock_herrstr(h_errno));
       return -1;
     }
-    (void) memcpy(&in.s_addr, *(hp->h_addr_list), sizeof (in.s_addr));
-    strncpy (self, inet_ntoa(in), length);
+
   }
+
   return 0;
 }
 
@@ -129,45 +147,40 @@ int sock_open (host, port)
      const char* host;
      int   port;
 {
-  u_long addr;
   struct hostent *hp;
   struct sockaddr_in server;
   int fd;
 
-#if 1
-  if ((int)(addr = inet_addr(host)) == -1) {
-    /* name is not of the form a.b.c.d ... try gethostbyname */
-    hp = gethostbyname(host);
-  }
-  else {
-    hp = gethostbyaddr((char *)&addr, sizeof (addr), AF_INET);
-  }
-#else
-  /* re-entrant interfaces for multi-threaded applications vary across 
-     platforms. to return... WvS */
-  struct hostent hp_data;
-  char          buffer[2048];
-  int           buflen = 2048;
-  int h_errno;
-  
-  hp = gethostbyname_r(host_name, &hp_data, buffer, buflen, &h_errno);
+#ifdef _REENTRANT
+  pthread_mutex_lock (&sock_mutex);
 #endif
 
-  if (hp == (struct hostent *)NULL)  {
+  hp = gethostbyname(host);
+
+  if (hp) {
+
+    server.sin_family = AF_INET;
+
+#ifdef MSDOS
+    memset((char *)&server, 0, sizeof(server));
+    memcpy(&server.sin_addr, hp->h_addr, hp->h_length);
+#else
+    memcpy(&(server.sin_addr.s_addr), hp->h_addr, hp->h_length);
+#endif
+    server.sin_port = htons(port);
+  
+  }
+
+#ifdef _REENTRANT
+  pthread_mutex_unlock (&sock_mutex);
+#endif
+
+  if (hp == NULL)  {
     fprintf (stderr, "sock_open: host information for %s not found: %s\n",
 	     host, sock_herrstr(h_errno));
     return -1;
   }
-  server.sin_family = AF_INET;
 
-#ifdef MSDOS
-  memset((char *)&server, 0, sizeof(server));
-  memcpy(&server.sin_addr, hp->h_addr, hp->h_length);
-#else
-  memcpy(&(server.sin_addr.s_addr), hp->h_addr, hp->h_length);
-#endif
-  server.sin_port = htons(port);
-  
   /* create a socket and connect to the low level controller */
   if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)  {
     perror ("sock_open: (err) socket");
