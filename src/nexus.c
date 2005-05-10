@@ -28,15 +28,15 @@ node_t* node_create ()
 // #define _DEBUG 1
 void nexus_init (nexus_t* nexus)
 {
-  /* default command port */
-  nexus -> node_port = 0xdada;
-
   /* default polling interval */
   nexus -> polling_interval = 10;
 
   /* no nodes */
+  nexus -> node_port = 0;
   nexus -> nodes = 0;
   nexus -> nnode = 0;
+
+  nexus -> node_prefix = strdup ("NODE");
 
   /* default creator */
   nexus -> node_create = &node_create;
@@ -96,9 +96,15 @@ int nexus_parse (nexus_t* n, const char* buffer)
 
   unsigned inode, nnode = 0;
 
-  if (ascii_header_get (buffer, "COM_PORT", "%d", &(n->node_port)) < 0) {
-    fprintf (stderr, "nexus_parse: using default COM_PORT\n");
-    n->node_port = 0xdada;
+  sprintf (node_name, "%s_PORT", n->node_prefix);
+  if (ascii_header_get (buffer, node_name, "%d", &(n->node_port)) < 0) {
+    fprintf (stderr, "nexus_parse: %s not specified.", node_name);
+    if (n->node_port)
+      fprintf (stderr, " using default=%d\n", n->node_port);
+    else {
+      fprintf (stderr, " no default available\n");
+      return -1;
+    }
   }
 
   if (ascii_header_get (buffer, "COM_POLL", "%d", &(n->polling_interval)) <0) {
@@ -106,15 +112,18 @@ int nexus_parse (nexus_t* n, const char* buffer)
     n->polling_interval = 10;
   }
 
-  if (ascii_header_get (buffer, "NUM_NODE", "%u", &nnode) < 0)
+  sprintf (node_name, "NUM_%s", n->node_prefix);
+  if (ascii_header_get (buffer, node_name, "%u", &nnode) < 0) {
+    fprintf (stderr, "nexus_parse: no %s keyword in config!\n", node_name);
     nnode = 0;
+  }
 
   if (!nnode)
     fprintf (stderr, "nexus_parse: WARNING no Nodes!\n");
 
   for (inode=0; inode < nnode; inode++) {
 
-    sprintf (node_name, "NODE_%u", inode);
+    sprintf (node_name, "%s_%u", n->node_prefix, inode);
 
     if (ascii_header_get (buffer, node_name, "%s", host_name) < 0)
       fprintf (stderr, "nexus_parse: WARNING no host name for %s\n", 

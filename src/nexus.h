@@ -54,6 +54,9 @@ extern "C" {
     /*! The number of nodes */
     unsigned nnode;
 
+    /*! This prefix is used when parsing configuration from a text file */
+    char* node_prefix;
+
     /*! Pointer to function that creates new nodes */
     node_t* (*node_create) ();
 
