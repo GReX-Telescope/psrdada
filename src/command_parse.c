@@ -142,6 +142,12 @@ int command_parse_output (command_parse_t* parser, char* cmd, FILE* out)
       while (*cmd && strchr (whitespace, *cmd))
 	cmd ++;
 
+      /* cut trailing whitespace */
+      key = strchr (cmd, '\0') -1 ;
+      while (key > cmd && strchr (whitespace, *key)) {
+	*key = '\0'; key --;
+      }
+
       /* ignore null strings */
       if (! *cmd)
 	cmd = 0;
