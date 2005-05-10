@@ -77,6 +77,7 @@ int dada_pwc_nexus_config (void* context, FILE* output, char* args)
 
   }
 
-  return dada_pwc_command_ack (nexus->pwc, dada_pwc_prepared);
+  nexus->pwc->state = dada_pwc_prepared;
+  return 0;
 }
 
