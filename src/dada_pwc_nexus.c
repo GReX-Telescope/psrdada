@@ -25,11 +25,11 @@ int dada_pwc_nexus_config (void* context, FILE* fptr, char* args);
 int dada_pwc_nexus_parse (nexus_t* n, const char* buffer)
 {
   dada_pwc_nexus_t* nexus = (dada_pwc_nexus_t*) n;
+  unsigned hdr_size = 0;
 
   if (nexus_parse (n, buffer) < 0)
     return -1;
 
-  unsigned hdr_size;
   if (ascii_header_get (buffer, "HDR_SIZE", "%u", &hdr_size) < 0)
     fprintf (stderr, "dada_pwc_nexus_parse: using default HDR_SIZE\n");
   else

@@ -80,6 +80,7 @@ int dada_pwc_command_set (dada_pwc_t* primary, FILE* output,
 
 int dada_pwc_cmd_header (void* context, FILE* fptr, char* args)
 {
+  dada_pwc_command_t command = DADA_PWC_COMMAND_INIT;
   dada_pwc_t* primary = (dada_pwc_t*) context;
   char* hdr = args;
 
@@ -95,7 +96,6 @@ int dada_pwc_cmd_header (void* context, FILE* fptr, char* args)
   if (args)
     strcpy (primary->header, args);
     
-  dada_pwc_command_t command = DADA_PWC_COMMAND_INIT;
   command.code = dada_pwc_header;
   command.header = primary->header;
 
