@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 void usage()
 {
@@ -117,6 +118,7 @@ int main (int argc, char **argv)
   }
 
   data = (char*) malloc (data_size);
+  assert (data != 0);
 
   header_strlen = strlen(header);
 

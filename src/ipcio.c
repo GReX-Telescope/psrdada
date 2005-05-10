@@ -4,7 +4,7 @@
 
 #include "ipcio.h"
 
-#define _DEBUG 0
+// #define _DEBUG 1
 
 void ipcio_init (ipcio_t* ipc)
 {
@@ -113,7 +113,7 @@ int ipcio_stop_close (ipcio_t* ipc, char unlock)
 {
   if (ipc -> rdwrt == 'W') {
 
-#if _DEBUG
+#ifdef _DEBUG
     if (ipc->curbuf)
       fprintf (stderr, "ipcio_close:W buffer:%llu %llu bytes. buf[0]=%x\n",
 	       ipc->buf.sync->writebuf, ipc->bytes, ipc->curbuf[0]);
@@ -130,7 +130,7 @@ int ipcio_stop_close (ipcio_t* ipc, char unlock)
     }
 
     if (ipc->bytes == ipcbuf_get_bufsz(&(ipc->buf))) {
-#if _DEBUG
+#ifdef _DEBUG
       fprintf (stderr, "ipcio_close:W last buffer was filled\n");
 #endif
       ipc->curbuf = 0;
@@ -144,7 +144,7 @@ int ipcio_stop_close (ipcio_t* ipc, char unlock)
 
     if (unlock) {
 
-#if _DEBUG
+#ifdef _DEBUG
       fprintf (stderr, "ipcio_close:W calling ipcbuf_reset\n");
 #endif
 
@@ -227,7 +227,7 @@ ssize_t ipcio_write (ipcio_t* ipc, char* ptr, size_t bytes)
     }
     else {
 
-#if _DEBUG
+#ifdef _DEBUG
       fprintf (stderr, "ipcio_write buffer:%llu %llu bytes. buf[0]=%x\n",
 	       ipc->buf.sync->writebuf, ipc->bytes, ipc->curbuf[0]);
 #endif
@@ -265,7 +265,7 @@ ssize_t ipcio_read (ipcio_t* ipc, char* ptr, size_t bytes)
 
       ipc->curbuf = ipcbuf_get_next_read (&(ipc->buf), &(ipc->curbufsz));
 
-#if _DEBUG
+#ifdef _DEBUG
       fprintf (stderr, "ipcio_read buffer:%llu %llu bytes. buf[0]=%x\n",
 	       ipc->buf.sync->readbuf, ipc->curbufsz, ipc->curbuf[0]);
 #endif

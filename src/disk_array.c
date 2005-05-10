@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#include <assert.h>
 
 // #define _DEBUG 1
 
@@ -16,6 +17,8 @@
 disk_array_t* disk_array_create ()
 {
   disk_array_t* array = (disk_array_t*) malloc (sizeof(disk_array_t));
+  assert (array != 0);
+
   array -> disks = 0;
   array -> ndisk = 0;
   array -> space = 0;
@@ -55,8 +58,13 @@ static void fprintf_bytes (FILE* fptr, void* id, unsigned nbyte)
 /*! Add a disk to the array */
 int disk_array_add (disk_array_t* array, char* path)
 {
+  /* free space on new disk */
   uint64_t new_space = 0;
+  /* pointer to new disk_t structure in array */
+  disk_t* new_disk = 0;
+  /* array counter */
   unsigned idisk;
+  /* used while ensuring that two disks are different */
   int diff;
 
   struct statfs info;
@@ -105,12 +113,16 @@ int disk_array_add (disk_array_t* array, char* path)
   }
 
   array->disks = realloc (array->disks, (array->ndisk+1)*sizeof(disk_t));
+  assert (array->disks != 0);
 
-  array->disks[array->ndisk].info = info;
-  array->disks[array->ndisk].device = buf.st_dev;
-  array->disks[array->ndisk].path = strdup (path);
-
+  new_disk = array->disks + array->ndisk;
   array->ndisk ++;
+
+  new_disk->info = info;
+  new_disk->device = buf.st_dev;
+  new_disk->path = strdup (path);
+  assert (new_disk->path != 0);
+
   array->space += new_space;
 
   pthread_mutex_unlock (&(array->mutex));
@@ -185,6 +197,7 @@ int disk_array_open (disk_array_t* array, char* filename, uint64_t filesize,
 
       if (!fullname)
 	fullname = malloc (FILENAME_MAX);
+      assert (fullname != 0);
 
       strcpy (fullname, array->disks[idisk].path);
       strcat (fullname, "/");

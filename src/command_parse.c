@@ -2,6 +2,7 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <assert.h>
 
 // #define _DEBUG 1
 
@@ -29,6 +30,8 @@ int command_parse_exit (void* context, FILE* fptr, char* arg)
 command_parse_t* command_parse_create ()
 {
   command_parse_t* c = malloc (sizeof(command_parse_t));
+  assert (c != 0);
+
   c -> cmds = 0;
   c -> ncmd = 0;
   c -> reply = stdout;
@@ -73,21 +76,26 @@ int command_parse_add (command_parse_t* parser,
     return -1;
   }
 
-  parser->cmds = (command_t*) realloc (parser->cmds,
-				       (parser->ncmd+1)*sizeof(command_t));
+  parser->cmds = realloc (parser->cmds, (parser->ncmd+1)*sizeof(command_t));
+  assert (parser->cmds != 0);
 
   parser->cmds[parser->ncmd].cmd = cmd;
   parser->cmds[parser->ncmd].context = context;
 
   parser->cmds[parser->ncmd].name = strdup(command_name);
+  assert (parser->cmds[parser->ncmd].name != 0);
 
-  if (short_help)
+  if (short_help)  {
     parser->cmds[parser->ncmd].help = strdup(short_help);
+    assert (parser->cmds[parser->ncmd].help != 0);
+  }
   else
     parser->cmds[parser->ncmd].help = 0;
 
-  if (long_help)
+  if (long_help) {
     parser->cmds[parser->ncmd].more = strdup(long_help);
+    assert (parser->cmds[parser->ncmd].more != 0);
+  }
   else
     parser->cmds[parser->ncmd].more = 0;
 

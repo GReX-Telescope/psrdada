@@ -4,6 +4,7 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <assert.h>
 
 int dada_pwc_config_header (string_array* params, const char* prefix,
 			    char* header, const char* config)
@@ -76,6 +77,7 @@ int dada_pwc_nexus_header_parse (dada_pwc_nexus_t* n, const char* buffer)
     node = (dada_node_t*) n->nexus.nodes[inode];
     if (node->header_size < n->pwc->header_size) {
       node->header = realloc (node->header, n->pwc->header_size);
+      assert (node->header != 0);
       node->header_size = n->pwc->header_size;
     }
 

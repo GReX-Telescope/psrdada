@@ -18,12 +18,19 @@ command_parse_server_create (command_parse_t* parser)
     return 0;
 
   server = (command_parse_server_t*) malloc (sizeof(command_parse_server_t));
+  assert (server != 0);
 
   server -> parser = parser;
   server -> welcome = 0;
   server -> prompt = strdup ("> ");
+  assert (server->prompt != 0);
+
   server -> ok = strdup ("ok\n");
+  assert (server->ok != 0);
+
   server -> fail = strdup ("fail\n");
+  assert (server->fail != 0);
+
   server -> port = 0;
 
   pthread_mutex_init(&(server->mutex), NULL);
@@ -165,6 +172,8 @@ static void* command_parse_server (void * arg)
 #endif
 
     parser = (command_parse_thread_t*) malloc (sizeof(command_parse_thread_t));
+    assert (parser != 0);
+
     parser->server = server;
 
 #ifdef _DEBUG
@@ -208,7 +217,7 @@ static void* command_parse_server (void * arg)
     fprintf (stderr, "command_parse_server: pthread_detach\n");
 #endif
 
-    /* thread cannot be joined; resources will be deallocated on exit */
+    /* thread cannot be joined; resources will be destroyed on exit */
     pthread_detach (tmp_thread);
 
   }
@@ -224,8 +233,10 @@ int command_parse_server_set_welcome (command_parse_server_t* s, const char* w)
 
   if (s->welcome)
     free (s->welcome);
-  if (w)
+  if (w) {
     s->welcome = strdup (w);
+    assert (s->welcome != 0);
+  }
   else
     s->welcome = 0;
 
@@ -240,8 +251,10 @@ int command_parse_server_set_prompt (command_parse_server_t* s, const char* p)
 
   if (s->prompt)
     free (s->prompt);
-  if (p)
+  if (p)  {
     s->prompt = strdup (p);
+    assert (s->prompt != 0);
+  }
   else
     s->prompt = 0;
 

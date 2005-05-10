@@ -7,6 +7,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <assert.h>
 
 void node_init (node_t* node)
 {
@@ -21,6 +22,7 @@ void node_init (node_t* node)
 node_t* node_create ()
 {
   node_t* node = (node_t*) malloc (sizeof(node_t));
+  assert (node != 0);
   node_init (node);
   return node;
 }
@@ -37,6 +39,7 @@ void nexus_init (nexus_t* nexus)
   nexus -> nnode = 0;
 
   nexus -> node_prefix = strdup ("NODE");
+  assert (nexus->node_prefix != 0);
 
   /* default creator */
   nexus -> node_create = &node_create;
@@ -51,6 +54,7 @@ void nexus_init (nexus_t* nexus)
 nexus_t* nexus_create ()
 {
   nexus_t* nexus = (nexus_t*) malloc (sizeof(nexus_t));
+  assert (nexus != 0);
   nexus_init (nexus);
   return nexus;
 }
@@ -145,6 +149,7 @@ int nexus_configure (nexus_t* nexus, const char* filename)
   long fsize = filesize (filename);
 
   buffer = (char *) malloc (fsize + 1);
+  assert (buffer != 0);
 
 #ifdef _DEBUG
   fprintf (stderr, "nexus_configure filename='%s'\n", filename);
@@ -192,8 +197,10 @@ void* node_open_thread (void* context)
   pthread_mutex_lock (&(nexus->mutex));
   for (inode = 0; inode < nexus->nnode; inode++) {
     node = (node_t*) nexus->nodes[inode];
-    if (id == node->id)
+    if (id == node->id) {
       host_name = strdup (node->host);
+      assert (host_name != 0);
+    }
   }
   pthread_mutex_unlock (&(nexus->mutex));
 
@@ -281,6 +288,8 @@ int nexus_connect (nexus_t* nexus, unsigned inode)
 
   /* start a new thread to open a socket connection with the host */
   request = (node_open_t*) malloc (sizeof(node_open_t));
+  assert (request != 0);
+
   request->nexus = nexus;
   request->id = node->id;
 
@@ -293,7 +302,7 @@ int nexus_connect (nexus_t* nexus, unsigned inode)
     return -1;
   }
 
-  /* thread cannot be joined; resources will be deallocated on exit */
+  /* thread cannot be joined; resources will be destroyed on exit */
   pthread_detach (tmp_thread);
 
   return 0;
@@ -318,9 +327,14 @@ int nexus_add (nexus_t* nexus, int id, char* host_name)
   pthread_mutex_lock (&(nexus->mutex));
 
   nexus->nodes = realloc (nexus->nodes, (nexus->nnode+1)*sizeof(void*));
+  assert (nexus->nodes != 0);
+
   node = nexus->node_create();
+  assert (node != 0);
   
   node->host = strdup (host_name);
+  assert (node->host != 0);
+
   node->id = id;
   node->to = 0;
   node->from = 0;

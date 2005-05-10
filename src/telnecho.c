@@ -1,9 +1,10 @@
+#include "sock.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
-
-#include "sock.h"
+#include <assert.h>
 
 int main (int argc, char** argv)
 {
@@ -20,6 +21,8 @@ int main (int argc, char** argv)
   unsigned bufsize = 1024;
 
   char* inmsg = (char*) malloc ( bufsize );
+  assert (inmsg != 0);
+
   char hostname [100];
   int port;
 

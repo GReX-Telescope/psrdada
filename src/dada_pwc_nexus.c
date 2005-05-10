@@ -4,6 +4,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 void dada_node_init (dada_node_t* node)
 {
@@ -17,6 +18,7 @@ void dada_node_init (dada_node_t* node)
 node_t* dada_node_create ()
 {
   dada_node_t* node = (dada_node_t*) malloc (sizeof(dada_node_t));
+  assert (node != 0);
   dada_node_init (node);
   return (node_t*) node;
 }
@@ -45,6 +47,7 @@ int dada_pwc_nexus_parse (nexus_t* n, const char* config)
 
   /* load configuration parameters from the specified file */
   param_file = malloc (FILENAME_MAX);
+  assert (param_file != 0);
 
   if (ascii_header_get (config, "CONFIG_PARAM_FILE", "%s", param_file) < 0)
     fprintf (stderr, "dada_pwc_nexus_parse: no CONFIG_PARAM_FILE in config\n");
@@ -73,6 +76,8 @@ void dada_pwc_nexus_init (dada_pwc_nexus_t* nexus)
 
   nexus_base->node_port = DADA_DEFAULT_PWC_PORT;
   nexus_base->node_prefix = strdup ("PWC");
+  assert (nexus_base->node_prefix != 0);
+
   nexus_base->node_create = &dada_node_create;
   nexus_base->nexus_parse = &dada_pwc_nexus_parse;
 
@@ -99,6 +104,7 @@ dada_pwc_nexus_t* dada_pwc_nexus_create ()
 {
   dada_pwc_nexus_t* nexus = 0;
   nexus = (dada_pwc_nexus_t*) malloc (sizeof(dada_pwc_nexus_t));
+  assert (nexus != 0);
   dada_pwc_nexus_init (nexus);
   return nexus;
 }

@@ -2,6 +2,9 @@
    installs ascii header information in dada files
 */
 
+#include "futils.h"
+#include "ascii_header.h"
+
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -9,9 +12,7 @@
 #include <errno.h>
 #include <string.h>
 #include <stdio.h>
-
-#include "futils.h"
-#include "ascii_header.h"
+#include <assert.h>
 
 #define APPEND    0
 #define MERGE     1
@@ -85,9 +86,11 @@ int main (int argc, char** argv)
   }
 
   old_header = (char*) malloc (header_size);
+  assert (old_header != 0);
 
   if (header_filename) {
     new_header = (char*) malloc (header_size);
+    assert (new_header != 0);
     if (fileread (header_filename, new_header, header_size) < 0)  {
       fprintf (stderr, "Could not read header from %s\n", header_filename);
       return -1;

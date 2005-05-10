@@ -4,6 +4,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 /*! Set the command state */
 int dada_pwc_command_set (dada_pwc_t* primary, FILE* output,
@@ -184,10 +185,12 @@ int dada_pwc_cmd_stop (void* context, FILE* fptr, char* args)
 dada_pwc_t* dada_pwc_create ()
 {
   dada_pwc_t* primary = (dada_pwc_t*) malloc (sizeof(dada_pwc_t));
+  assert (primary != 0);
 
   /* default header size */
   primary -> header_size = DADA_DEFAULT_HDR_SIZE;
   primary -> header = (char *) malloc (primary->header_size);
+  assert (primary->header != 0);
 
   /* default command port */
   primary -> port = DADA_DEFAULT_PWC_PORT;
@@ -236,6 +239,7 @@ int dada_pwc_set_header_size (dada_pwc_t* primary, unsigned header_size)
 
   primary -> header_size = header_size;
   primary -> header = (char *) realloc (primary->header, header_size);
+  assert (primary->header != 0);
 
   pthread_mutex_unlock(&(primary->mutex));
 

@@ -1,10 +1,10 @@
+#include "ipcio.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
-
-#include "ipcio.h"
-
+#include <assert.h>
 
 int main (int argc, char** argv)
 {
@@ -82,6 +82,7 @@ int main (int argc, char** argv)
 
   smbufsz = bufsz/3 + 7;
   smbuf = malloc (smbufsz);
+  assert (smbuf != 0);
 
   fprintf (stderr, "small buf size = %d\n", smbufsz);
 

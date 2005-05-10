@@ -1,17 +1,17 @@
+#include "ipcbuf.h"
+#include "ipcutil.h"
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#include <assert.h>
 
-#include <sys/types.h>
 #include <sys/ipc.h>
 #include <sys/sem.h>
 #include <sys/shm.h>
 
-#include "ipcbuf.h"
-#include "ipcutil.h"
-
-// #define _DEBUG 0
+// #define _DEBUG 1
 
 /* semaphores */
 
@@ -92,7 +92,7 @@ int ipcbuf_get (ipcbuf_t* id, int flag)
 
   sync = id -> sync;
 
-#if _DEBUG
+#ifdef _DEBUG
   fprintf (stderr, "ipcbuf_get: semkey=0x%x shmkey=0x%x\n",
 	   sync->semkey, sync->shmkey[0]);
 #endif
@@ -106,12 +106,14 @@ int ipcbuf_get (ipcbuf_t* id, int flag)
     retval = -1;
   }
 
-#if _DEBUG
+#ifdef _DEBUG
   fprintf (stderr, "ipcbuf_get: semid=%d\n", id->semid);
 #endif
 
   id->buffer = (char**) malloc (sizeof(char*) * sync->nbufs);
+  assert (id->buffer != 0);
   id->shmid = (int*) malloc (sizeof(int) * sync->nbufs);
+  assert (id->shmid != 0);
 
   for (ibuf=0; ibuf < sync->nbufs; ibuf++) {
 
@@ -148,7 +150,7 @@ int ipcbuf_create (ipcbuf_t* id, int key, uint64_t nbufs, uint64_t bufsz)
   uint64_t ibuf = 0;
   int flag = IPCUTIL_PERM | IPC_CREAT | IPC_EXCL;
 
-#if _DEBUG
+#ifdef _DEBUG
   fprintf (stderr, "ipcbuf_create: key=%d nbufs=%llu bufsz=%llu\n",
 	   key, nbufs, bufsz);
 #endif
@@ -187,7 +189,7 @@ int ipcbuf_create (ipcbuf_t* id, int key, uint64_t nbufs, uint64_t bufsz)
     return -1;
   }
 
-#if _DEBUG
+#ifdef _DEBUG
   fprintf (stderr, "ipcbuf_create: syncid=%d semid=%d\n",
 	   id->syncid, id->semid);
 #endif
@@ -225,7 +227,7 @@ int ipcbuf_connect (ipcbuf_t* id, int key)
     return -1;
   }
 
-#if _DEBUG
+#ifdef _DEBUG
   fprintf (stderr, "ipcbuf_connect: key=0x%x nbufs=%llu bufsz=%llu\n",
 	   key, id->sync->nbufs, id->sync->bufsz);
 #endif
@@ -237,7 +239,7 @@ int ipcbuf_connect (ipcbuf_t* id, int key)
     return -1;
   }
 
-#if _DEBUG
+#ifdef _DEBUG
   fprintf (stderr, "ipcbuf_connect: syncid=%d semid=%d\n",
 	   id->syncid, id->semid);
 #endif
@@ -282,7 +284,7 @@ int ipcbuf_destroy (ipcbuf_t* id)
     return -1;
   }
 
-#if _DEBUG
+#ifdef _DEBUG
   fprintf (stderr, "ipcbuf_destroy: semid=%d\n", id->semid);
 #endif
 
@@ -292,7 +294,7 @@ int ipcbuf_destroy (ipcbuf_t* id)
 
   for (ibuf = 0; ibuf < id->sync->nbufs; ibuf++) {
 
-#if _DEBUG
+#ifdef _DEBUG
     fprintf (stderr, "ipcbuf_destroy: id[%llu]=%x\n", ibuf, id->shmid[ibuf]);
 #endif
 
@@ -307,7 +309,7 @@ int ipcbuf_destroy (ipcbuf_t* id)
   if (id->buffer) free (id->buffer); id->buffer = 0;
   if (id->shmid) free (id->shmid); id->shmid = 0;
 
-#if _DEBUG
+#ifdef _DEBUG
   fprintf (stderr, "ipcbuf_destroy: syncid=%d\n", id->syncid);
 #endif
 
@@ -327,7 +329,7 @@ int ipcbuf_lock_write (ipcbuf_t* id)
     return -1;
   }
 
-#if _DEBUG
+#ifdef _DEBUG
   fprintf (stderr, "ipcbuf_lock_write: decrement WRITE=%d\n",
 	   semctl (id->semid, IPCBUF_WRITE, GETVAL));
 #endif
@@ -353,7 +355,7 @@ int ipcbuf_unlock_write (ipcbuf_t* id)
     return -1;
   }
 
-#if _DEBUG
+#ifdef _DEBUG
   fprintf (stderr, "ipcbuf_unlock_write: increment WRITE=%d\n",
 	   semctl (id->semid, IPCBUF_WRITE, GETVAL));
 #endif
@@ -405,7 +407,7 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
     return -1;
   }
 
-#if _DEBUG
+#ifdef _DEBUG
   fprintf (stderr, "ipcbuf_enable_sod: start buf=%llu writebuf=%llu\n",
 	   start_buf, sync->writebuf);
 #endif
@@ -434,7 +436,7 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
     return -1;
   }
 
-#if _DEBUG
+#ifdef _DEBUG
   fprintf (stderr, "ipcbuf_enable_sod: decrement SODACK=%d\n",
 	   semctl (id->semid, IPCBUF_SODACK, GETVAL));
 #endif
@@ -448,14 +450,14 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
   sync->s_buf  = start_buf;
   sync->s_byte = start_byte;
 
-#if _DEBUG
+#ifdef _DEBUG
   fprintf (stderr, "ipcbuf_enable_sod: start buf=%llu byte=%llu\n",
            sync->s_buf, sync->s_byte);
 #endif
 
   new_bufs = sync->writebuf - start_buf;
 
-#if _DEBUG
+#ifdef _DEBUG
   fprintf (stderr, "ipcbuf_enable_sod: waitbuf=%llu newbufs=%u\n",
            id->waitbuf, new_bufs);
 #endif
@@ -463,7 +465,7 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
   id->waitbuf += new_bufs;
   id->state = IPCBUF_WRITING;
 
-#if _DEBUG
+#ifdef _DEBUG
   fprintf (stderr, "ipcbuf_enable_sod: increment FULL=%d by %u\n",
 	   semctl (id->semid, IPCBUF_FULL, GETVAL), new_bufs);
 #endif
@@ -496,7 +498,7 @@ char* ipcbuf_get_next_write (ipcbuf_t* id)
 
   if (id->state == IPCBUF_WCHANGE) {
 
-#if _DEBUG
+#ifdef _DEBUG
   fprintf (stderr, "ipcbuf_get_next_write: WCHANGE->WRITING\n");
 #endif
 
@@ -507,7 +509,7 @@ char* ipcbuf_get_next_write (ipcbuf_t* id)
 
   }
 
-#if _DEBUG
+#ifdef _DEBUG
   fprintf (stderr, "ipcbuf_get_next_write: waitbuf=%llu\n", id->waitbuf);
 #endif
 
@@ -522,7 +524,7 @@ char* ipcbuf_get_next_write (ipcbuf_t* id)
    current session */
   while (id->waitbuf >= sync->nbufs) {
 
-#if _DEBUG
+#ifdef _DEBUG
     fprintf (stderr, "ipcbuf_get_next_write: decrement CLEAR=%d\n",
 	     semctl (id->semid, IPCBUF_CLEAR, GETVAL));
 #endif
@@ -558,12 +560,12 @@ int ipcbuf_mark_filled (ipcbuf_t* id, uint64_t nbytes)
 
   if (id->state == IPCBUF_WCHANGE || nbytes < id->sync->bufsz) {
 
-#if _DEBUG
+#ifdef _DEBUG
     if (id->state == IPCBUF_WCHANGE)
       fprintf (stderr, "ipcbuf_mark_filled: WCHANGE->WRITER\n");
 #endif
 
-#if _DEBUG
+#ifdef _DEBUG
     fprintf (stderr, "ipcbuf_mark_filled: decrement EODACK=%d\n",
 	     semctl (id->semid, IPCBUF_EODACK, GETVAL));
 #endif
@@ -578,7 +580,7 @@ int ipcbuf_mark_filled (ipcbuf_t* id, uint64_t nbytes)
     id->sync -> eod = 1;
     id->state = IPCBUF_WRITER;
 
-#if _DEBUG
+#ifdef _DEBUG
       fprintf (stderr, "ipcbuf_mark_filled: end buf=%llu byte=%llu\n",
 	       id->sync->e_buf, id->sync->e_byte);
 #endif
@@ -590,7 +592,7 @@ int ipcbuf_mark_filled (ipcbuf_t* id, uint64_t nbytes)
   else
     id->sync->writebuf ++;
 
-#if _DEBUG
+#ifdef _DEBUG
   fprintf (stderr, "ipcbuf_mark_filled: increment FULL=%d\n",
 	   semctl (id->semid, IPCBUF_FULL, GETVAL));
 #endif
@@ -613,7 +615,7 @@ int ipcbuf_lock_read (ipcbuf_t* id)
     return -1;
   }
 
-#if _DEBUG
+#ifdef _DEBUG
   fprintf (stderr, "ipcbuf_lock_read: decrement READ=%d\n",
 	   semctl (id->semid, IPCBUF_READ, GETVAL));
 #endif
@@ -624,7 +626,7 @@ int ipcbuf_lock_read (ipcbuf_t* id)
     return -1;
   }
 
-#if _DEBUG
+#ifdef _DEBUG
   fprintf (stderr, "ipcbuf_lock_read: reader status locked\n");
 #endif
 
@@ -639,7 +641,7 @@ int ipcbuf_unlock_read (ipcbuf_t* id)
     return -1;
   }
 
-#if _DEBUG
+#ifdef _DEBUG
   fprintf (stderr, "ipcbuf_unlock_read: increment READ=%d\n",
 	   semctl (id->semid, IPCBUF_READ, GETVAL));
 #endif
@@ -670,7 +672,7 @@ char* ipcbuf_get_next_read (ipcbuf_t* id, uint64_t* bytes)
 
   if (ipcbuf_is_reader (id)) {
 
-#if _DEBUG
+#ifdef _DEBUG
     fprintf (stderr, "ipcbuf_get_next_read: decrement FULL=%d\n", 
 	     semctl (id->semid, IPCBUF_FULL, GETVAL));
 #endif
@@ -683,7 +685,7 @@ char* ipcbuf_get_next_read (ipcbuf_t* id, uint64_t* bytes)
 
     if (id->state == IPCBUF_READER) {
 
-#if _DEBUG
+#ifdef _DEBUG
       fprintf (stderr, "ipcbuf_get_next_read: start buf=%llu byte=%llu\n",
 	       id->sync->s_buf, id->sync->s_byte);
 #endif
@@ -692,7 +694,7 @@ char* ipcbuf_get_next_read (ipcbuf_t* id, uint64_t* bytes)
       id->sync->readbuf = id->sync->s_buf;
       start = id->sync->s_byte;
 
-#if _DEBUG
+#ifdef _DEBUG
     fprintf (stderr, "ipcbuf_get_next_read: increment SODACK=%d\n",
 	     semctl (id->semid, IPCBUF_SODACK, GETVAL));
 #endif
@@ -742,7 +744,7 @@ int ipcbuf_mark_cleared (ipcbuf_t* id)
     return -1;
   }
 
-#if _DEBUG
+#ifdef _DEBUG
   fprintf (stderr, "ipcbuf_mark_cleared: increment CLEAR=%d\n",
 	   semctl (id->semid, IPCBUF_CLEAR, GETVAL));
 #endif
@@ -753,7 +755,7 @@ int ipcbuf_mark_cleared (ipcbuf_t* id)
 
   if (id->sync->eod && id->sync->readbuf == id->sync->e_buf)  {
 
-#if _DEBUG
+#ifdef _DEBUG
     fprintf (stderr, "ipcbuf_mark_cleared: increment EODACK=%d; CLEAR=%d\n",
 	     semctl (id->semid, IPCBUF_EODACK, GETVAL),
 	     semctl (id->semid, IPCBUF_CLEAR, GETVAL));
@@ -792,7 +794,7 @@ int ipcbuf_reset (ipcbuf_t* id)
   if (sync->writebuf == 0)
     return 0;
 
-#if _DEBUG
+#ifdef _DEBUG
   fprintf (stderr, "ipcbuf_reset: decrement CLEAR=%d by %llu\n",
 	   semctl (id->semid, IPCBUF_CLEAR, GETVAL), id->waitbuf);
 #endif
@@ -803,7 +805,7 @@ int ipcbuf_reset (ipcbuf_t* id)
     return -1;
   }
 
-#if _DEBUG
+#ifdef _DEBUG
   fprintf (stderr, "ipcbuf_reset: decrement SODACK=%d\n",
 	   semctl (id->semid, IPCBUF_SODACK, GETVAL));
 #endif
@@ -813,7 +815,7 @@ int ipcbuf_reset (ipcbuf_t* id)
     return -1;
   }
 
-#if _DEBUG
+#ifdef _DEBUG
   fprintf (stderr, "ipcbuf_reset: decrement EODACK=%d\n",
 	   semctl (id->semid, IPCBUF_EODACK, GETVAL));
 #endif
@@ -828,7 +830,7 @@ int ipcbuf_reset (ipcbuf_t* id)
   sync->eod = 0;
   id->waitbuf = 0;
 
-#if _DEBUG
+#ifdef _DEBUG
   fprintf (stderr, "ipcbuf_reset: increment SODACK=%d\n",
 	   semctl (id->semid, IPCBUF_SODACK, GETVAL));
 #endif
@@ -839,7 +841,7 @@ int ipcbuf_reset (ipcbuf_t* id)
     return -1;
   }
 
-#if _DEBUG
+#ifdef _DEBUG
   fprintf (stderr, "ipcbuf_reset: increment EODACK=%d\n",
 	   semctl (id->semid, IPCBUF_EODACK, GETVAL));
 #endif

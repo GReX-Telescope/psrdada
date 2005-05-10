@@ -3,6 +3,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 /*! parse a configuration into unique headers for each primary write client */
 int dada_pwc_nexus_header_parse (dada_pwc_nexus_t* n, const char* buffer);
@@ -50,6 +51,7 @@ int dada_pwc_nexus_config (void* context, FILE* output, char* args)
   }
 
   buffer = (char *) malloc (fsize + 1);
+  assert (buffer != 0);
 
   if (fileread (filename, buffer, fsize+1) < 0) {
     fprintf (output, "Cannot read '%s'\n", filename);

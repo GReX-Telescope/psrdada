@@ -75,10 +75,8 @@ int main (int argc, char **argv)
 	    case 'i':
 		if (verbose) fprintf(stderr,"ObsId is %s \n",optarg);
 		if(optarg) {
-		    size_t len;
-		    len = strlen(optarg);
-		    ObsId = malloc(len);
-		   memcpy (ObsId, optarg, len);
+		    ObsId = strdup (optarg);
+                    assert (ObsId != 0);
 		}
 		else usage();
 		break;

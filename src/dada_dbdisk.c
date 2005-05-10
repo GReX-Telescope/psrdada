@@ -11,6 +11,7 @@
 #include <string.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <assert.h>
 
 void usage()
 {
@@ -34,6 +35,7 @@ int64_t write_loop (ipcio_t* data_block, multilog_t* log,
 
   buffer_size = 512 * optimal_bufsz;
   buffer = (char*) malloc (buffer_size);
+  assert (buffer != 0);
 
   while (!ipcbuf_eod((ipcbuf_t*)data_block) && bytes_to_write) {
 
@@ -156,6 +158,7 @@ int main_loop (dada_t* dada,
   /* Duplicate the header */
   if (header_size > dup_size) {
     dup = realloc (dup, header_size);
+    assert (dup != 0);
     dup_size = header_size;
   }
   memcpy (dup, header, header_size);
@@ -188,6 +191,7 @@ int main_loop (dada_t* dada,
 
   if (!file_name)
     file_name = malloc (FILENAME_MAX);
+  assert (file_name != 0);
 
   /* Write data until the end of the data stream */
   while (!ipcbuf_eod((ipcbuf_t*)data_block)) {

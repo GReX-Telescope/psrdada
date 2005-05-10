@@ -3,18 +3,21 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
+#include <assert.h>
 
 // #define _DEBUG 1
 
 multilog_t* multilog_open (const char* program_name, char syslog)
 {
   multilog_t* m = (multilog_t*) malloc (sizeof(multilog_t));
+  assert (m != 0);
 
   if (syslog)
     openlog (program_name, LOG_CONS, LOG_USER);
 
   m->syslog = syslog;
   m->name = strdup(program_name);
+  assert (m->name != 0);
   m->logs = 0;
   m->nlog = 0;
   m->port = 0;
@@ -45,6 +48,7 @@ int multilog_add (multilog_t* m, FILE* fptr)
   pthread_mutex_lock (&(m->mutex));
 
   m->logs = realloc (m->logs, (m->nlog+1)*sizeof(multilog_t));
+  assert (m->logs != 0);
   m->logs[m->nlog] = fptr;
   m->nlog ++;
 

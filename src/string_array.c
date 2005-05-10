@@ -10,6 +10,8 @@
 string_array* string_array_create ()
 {
   string_array* list = (string_array*) malloc (sizeof(string_array));
+  assert (list != 0);
+
   list->size = 0;
   list->strs = NULL;
   return list;
@@ -56,6 +58,8 @@ int string_array_load (string_array* list, const char* filename)
 
   if (!buffer)
     buffer = malloc (buffer_size);
+  assert (buffer != 0);
+
   while (fgets (buffer, buffer_size, fptr)) {
 
     /* truncate string at first # */
@@ -91,14 +95,13 @@ int string_array_insert (string_array* list, const char* entry, unsigned pos)
     return -1;
 
   temp = (char**) realloc (list->strs, (list->size+1)*sizeof(char**));
-  if (temp == NULL) {
-    perror ("string_array_insert: realloc failed!\n");
-    return -1;
-  }
+  assert (temp != 0);
+
   list->strs = temp;
   for (val = list->size; val > pos; val--)
     list->strs[val] = list->strs[val-1];
   list->strs[pos] = strdup (entry);
+  assert (list->strs[pos] != 0);
   list->size ++;
 
   return 0;
@@ -126,15 +129,14 @@ int string_array_remove (string_array* list, unsigned pos)
   for (val=pos; val<list->size; val++)
     list->strs[val] = list->strs[val+1];
 
-  temp = (char**) realloc (list->strs, (list->size)*sizeof(char**));
   if (list->size == 0) {
+    free (list->strs);
     list->strs = NULL;
     return 0;
   }
-  if (temp == NULL) {
-    perror ("string_array_remove: realloc failed!\n");
-    return -1;
-  }
+
+  temp = (char**) realloc (list->strs, (list->size)*sizeof(char**));
+  assert (temp != 0);
   list->strs = temp;
 
   return 0;

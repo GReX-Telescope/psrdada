@@ -1,17 +1,16 @@
+#include "ipcutil.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
 #include <errno.h>
 #include <string.h>
 
-#include <sys/types.h>
 #include <sys/ipc.h>
 #include <sys/sem.h>
 #include <sys/shm.h>
 
-#include "ipcutil.h"
-
-#define _DEBUG 0
+// #define _DEBUG 1
 
 /* *************************************************************** */
 /*!
@@ -29,7 +28,7 @@ void* ipc_alloc (key_t key, int size, int flag, int* shmid)
     return 0;
   }
 
-#if _DEBUG
+#ifdef _DEBUG
   fprintf (stderr, "ipc_alloc: shmid=%d\n", id);
 #endif
 
@@ -42,7 +41,7 @@ void* ipc_alloc (key_t key, int size, int flag, int* shmid)
     return 0;
   }
 
-#if _DEBUG
+#ifdef _DEBUG
   fprintf (stderr, "ipc_alloc: shmat=%p\n", buf);
 #endif
 

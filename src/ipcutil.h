@@ -1,6 +1,8 @@
 #ifndef __DADA_IPCUTIL_H
 #define __DADA_IPCUTIL_H
 
+#include <sys/types.h>
+
 /* ************************************************************************
 
    utilities for creation of shared memory and operations on semaphores
