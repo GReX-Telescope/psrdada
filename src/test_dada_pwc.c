@@ -1,6 +1,8 @@
 #include "dada_pwc.h"
 #include "multilog.h"
 
+#include <unistd.h>
+
 int main ()
 {
   dada_pwc_t* pwc = 0;
@@ -16,41 +18,160 @@ int main ()
 
   while (!dada_pwc_quit (pwc)) {
 
-    command = dada_pwc_command_get (pwc);
+    /* currently in idle state ... */
 
-    fprintf (stderr, "command = %d\n", command.code);
+    while (!dada_pwc_quit (pwc)) {
 
-    switch (command.code) {
+      command = dada_pwc_command_get (pwc);
 
-    case dada_pwc_header:
-      fprintf (stderr, "HEADER=%s", pwc->header);
-      dada_pwc_command_ack (pwc, dada_pwc_prepared);
-      break;
+      if (command.code == dada_pwc_header)  {
 
-    case dada_pwc_clock:
-      fprintf (stderr, "start clocking\n");
-      dada_pwc_command_ack (pwc, dada_pwc_clocking);
-      break;
+        fprintf (stderr, "HEADER=%s", command.header);
 
-    case dada_pwc_record_start:
-      fprintf (stderr, "clocking->recording\n");
-      dada_pwc_command_ack (pwc, dada_pwc_recording);
-      break;
-      
-    case dada_pwc_record_stop:
-      fprintf (stderr, "recording->clocking\n");
-      dada_pwc_command_ack (pwc, dada_pwc_clocking);
-      break;
+        /* here is where the header would be written to the Header Block e.g. 
 
-    case dada_pwc_start:
-      fprintf (stderr, "start recording\n");
-      dada_pwc_command_ack (pwc, dada_pwc_recording);
-      break;
+        memcpy (header_buf, command.header, header_size);
+        if (ipcbuf_mark_filled (&header_block, header_size) < 0)  {
+          multilog (log, LOG_ERR, "Could not mark filled header block\n");
+          return EXIT_FAILURE;
+        }
 
-    case dada_pwc_stop:
-      fprintf (stderr, "stopping\n");
-      dada_pwc_command_ack (pwc, dada_pwc_idle);
-      break;
+        */
+
+        dada_pwc_command_ack (pwc, dada_pwc_prepared, time(0));
+
+      }
+
+      else if (command.code == dada_pwc_clock)  {
+
+        fprintf (stderr, "Start clocking data\n");
+
+        /* here is where the Data Block would be set to over-write e.g.
+
+        if (ipcio_open (data_block, 'w') < 0)  {
+          multilog (log, LOG_ERR, "Could not open data block\n");
+          return EXIT_FAILURE;
+        }
+
+        */
+
+        /* here time(0) should be replaced by the actual clock start time */ 
+        dada_pwc_command_ack (pwc, dada_pwc_clocking, time(0));
+
+        /* enter the write loop */
+        break;
+
+      }
+
+      else if (command.code == dada_pwc_start)  {
+
+        fprintf (stderr, "Start recording data\n");
+
+        /* here is where the Data Block would be set to over-write e.g.
+
+        if (ipcio_open (data_block, 'W') < 0)  {
+          multilog (log, LOG_ERR, "Could not open data block\n");
+          return EXIT_FAILURE;
+        }
+
+        */
+
+        /* here time(0) should be replaced by the actual record start time */
+        dada_pwc_command_ack (pwc, dada_pwc_recording, time(0));
+
+        /* enter the write loop */
+        break;
+
+      }
+
+    }
+
+    /* currently in the clocking/recording state */
+
+    while (!dada_pwc_quit (pwc)) {
+
+      /* check to see if a command has been registered */
+      if (dada_pwc_command_check (pwc))  {
+
+        command = dada_pwc_command_get (pwc);
+
+        if (command.code == dada_pwc_record_stop)  {
+
+          fprintf (stderr, "recording->clocking\n");
+
+          /* here is where the Data Block would be stopped e.g.
+
+          if (ipcio_stop (data_block) < 0)  {
+            multilog (log, LOG_ERR, "Could not stop data block\n");
+            return EXIT_FAILURE;
+          }
+
+          */
+
+          dada_pwc_command_ack (pwc, dada_pwc_clocking, time(0));
+
+        }
+
+        if (command.code == dada_pwc_record_start)  {
+
+          fprintf (stderr, "clocking->recording\n");
+
+          /* here is where the Data Block would be started e.g.
+
+          if (ipcio_start, (data_block, command.byte_count) < 0)  {
+            multilog (log, LOG_ERR, "Could not stop data block\n");
+            return EXIT_FAILURE;
+          }
+
+          */
+
+          dada_pwc_command_ack (pwc, dada_pwc_recording, time(0));
+
+        }
+
+        else if (command.code == dada_pwc_stop)  {
+
+          fprintf (stderr, "stopping\n");
+ 
+          /* here is where the Data Block would be closed e.g.
+
+          if (ipcio_close (data_block) < 0)  {
+            multilog (log, LOG_ERR, "Could not close data block\n");
+            return EXIT_FAILURE;
+          }
+
+          */
+
+          dada_pwc_command_ack (pwc, dada_pwc_idle, time(0));
+
+          /* enter the idle state */
+          break;
+
+        }
+
+      }
+
+      if (pwc->state == dada_pwc_recording)
+        fprintf (stderr, "recording\n");
+      else if (pwc->state == dada_pwc_clocking)
+        fprintf (stderr, "clocking\n");
+
+      sleep (1);
+
+      /* here is where the writing would occur e.g.
+
+      if ( (data = edt_wait_for_buffers(edt_p, 1)) == NULL){
+        edt_perror("edt_wait");
+        multilog(log,LOG_ERR,"edt_wait error\n");
+        return EXIT_FAILURE;
+      }
+
+      if (( ipcio_write(&data_block, data, bufsize) ) < bufsize ){
+        multilog(log, LOG_ERR, "Cannot write requested bytes to SHM\n");
+        return EXIT_FAILURE;
+      }
+
+      */
 
     }
 
