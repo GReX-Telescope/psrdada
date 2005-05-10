@@ -21,21 +21,36 @@ extern "C" {
   /*! The states in which the primary write client may be found */
   enum {
 
+    /*! undefined: the primary write client is in an undefined state */
+    dada_pwc_undefined,
+
     /*! idle: no data is being recorded */
     dada_pwc_idle,
+
+    /*! prepare_requested: preparing/configuring next recording */
+    dada_pwc_prepare_requested,
 
     /*! prepared: no data is being recorded, header received */
     dada_pwc_prepared,
 
+    /*! clock_requested: will begin clocking data at the next opportunity */
+    dada_pwc_clock_requested,
+
     /*! clocking: data is being clocked in over-write mode */
     dada_pwc_clocking,
 
+    /*! record_requested: will begin recording data at the next opportunity */
+    dada_pwc_record_requested,
+
     /*! recording: data is being recorded */
-    dada_pwc_recording
+    dada_pwc_recording,
+
+    /*! stop_requested: will stop recording data at the next opportunity */
+    dada_pwc_stop_requested
 
   };
 
-  /*! The states in which the primary write client may be found */
+  /*! The commands that may be issued to the primary write client */
   enum {
 
     /*! none: no command available */
@@ -69,8 +84,8 @@ extern "C" {
     /*! The UTC associated with the command */
     time_t utc;
 
-    /*! The duration associated with the command */
-    uint64_t duration;
+    /*! The duration (in bytes) associated with the command */
+    uint64_t byte_count;
 
     /*! The ASCII header associated with the command */
     char* header;
@@ -92,6 +107,15 @@ extern "C" {
 
     /*! The state of the primary write client */
     int state;
+
+    /*! Used to convert times to bytes */
+    uint64_t bytes_per_second;
+
+    /*! Used to convert samples to bytes */
+    unsigned bits_per_sample;
+
+    /*! The UTC of first time sample in ring buffer */
+    time_t utc_start;
 
     /*! The last command received */
     dada_pwc_command_t command;

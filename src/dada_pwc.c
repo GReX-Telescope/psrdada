@@ -1,11 +1,40 @@
 #include "dada_pwc.h"
 #include "dada.h"
+
+#include "ascii_header.h"
 #include "utc.h"
 
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
 
+int dada_pwc_command_set_byte_count (dada_pwc_t* primary, FILE* output,
+				   dada_pwc_command_t* command)
+{
+  if (!primary->utc_start) {
+    fprintf (output, "UTC of first time sample unknown\n");
+    return -1;
+  }
+  if (!primary->bytes_per_second) {
+    fprintf (output, "bytes per second not known\n");
+    return -1;
+  }
+
+  if (command->utc < primary->utc_start) {
+    fprintf (output, "requested UTC precedes UTC of first time sample\n");
+    command->utc = 0;
+    command->byte_count = 0;
+    return 0;
+  }
+
+  /* the number of second between start and requested UTC of command */
+  command->byte_count = command->utc - primary->utc_start;
+  /* the byte count at which to execute the command */
+  command->byte_count *= primary->bytes_per_second;
+
+  return 0;
+}
+  
 /*! Set the command state */
 int dada_pwc_command_set (dada_pwc_t* primary, FILE* output,
 			  dada_pwc_command_t command)
@@ -15,7 +44,7 @@ int dada_pwc_command_set (dada_pwc_t* primary, FILE* output,
   if (!primary)
     return -1;
   
-  pthread_mutex_lock(&(primary->mutex));
+  pthread_mutex_lock (&(primary->mutex));
 
   while (primary->command.code != dada_pwc_no_command)
     pthread_cond_wait(&(primary->cond), &(primary->mutex));
@@ -74,9 +103,51 @@ int dada_pwc_command_set (dada_pwc_t* primary, FILE* output,
 
   }
 
-  pthread_mutex_unlock(&(primary->mutex));
+  pthread_mutex_unlock (&(primary->mutex));
 
   return ret;
+}
+
+int dada_pwc_parse_bytes_per_second (dada_pwc_t* primary,
+				     FILE* fptr, const char* header)
+{
+  unsigned npol;  /* number of polarizations */
+  unsigned nbit;  /* nubmer of bits per sample */
+  unsigned ndim;  /* number of dimensions */
+
+  uint64_t bits_per_second = 0;
+
+  double sampling_interval;
+
+  if (ascii_header_get (header, "NPOL", "%d", &npol) < 0) {
+    fprintf (fptr, "failed to parse NPOL - assuming 2\n");
+    npol = 2;
+  }
+
+  if (ascii_header_get (header, "NBIT", "%d", &nbit) < 0) {
+    fprintf (fptr, "failed to parse NBIT - assuming 8\n");
+    nbit = 8;
+  }
+
+  if (ascii_header_get (header, "NDIM", "%d", &ndim) < 0) {
+    fprintf (fptr, "failed to parse NDIM - assuming 1\n");
+    ndim = 1;
+  }
+
+  primary->bits_per_sample = nbit * npol * ndim;
+
+  if (ascii_header_get (header, "TSAMP", "%lf", &sampling_interval) < 0) {
+    fprintf (fptr, "failed to parse TSAMP\n");
+    primary->bytes_per_second = 0;
+    return -1;
+  }
+
+  /* IMPORTANT: TSAMP is the sampling period in microseconds */
+  bits_per_second = nbit * npol * ndim * ((uint64_t)(1e6/sampling_interval));
+
+  primary->bytes_per_second = bits_per_second / 8;
+
+  return 0;
 }
 
 int dada_pwc_cmd_header (void* context, FILE* fptr, char* args)
@@ -99,8 +170,11 @@ int dada_pwc_cmd_header (void* context, FILE* fptr, char* args)
   while ( (hdr = strchr(hdr, '\\')) != 0 )
     *hdr = '\n';
 
+  if (dada_pwc_parse_bytes_per_second (primary, fptr, args) < 0)
+    return -1;
+
   strcpy (primary->header, args);
-    
+
   command.code = dada_pwc_header;
   command.header = primary->header;
 
@@ -109,6 +183,94 @@ int dada_pwc_cmd_header (void* context, FILE* fptr, char* args)
 
   return 0;
 }
+
+uint64_t dada_pwc_parse_duration (dada_pwc_t* primary,
+				  FILE* fptr, const char* args)
+{
+  unsigned hh, mm, ss;
+  uint64_t byte_count;
+
+  if (sscanf (args, "%u:%u:%u", &hh, &mm, &ss) == 3) {
+
+    if (!primary->bytes_per_second) {
+      fprintf (fptr, "bytes per second not known\n");
+      return 0;
+    }
+
+    if (mm > 59) {
+      fprintf (fptr, "invalid minutes = %u\n", mm);
+      return 0;
+    }
+
+    if (ss > 59) {
+      fprintf (fptr, "invalid seconds = %u\n", ss);
+      return 0;
+    }
+
+    byte_count = hh;
+    byte_count *= 3600;
+    byte_count += 60 * mm;
+    byte_count += ss;
+    byte_count *= primary->bytes_per_second;
+
+    return byte_count;
+
+  }
+
+  if (sscanf (args, "%llu", &byte_count) == 1) {
+
+    if (!primary->bits_per_sample) {
+      fprintf (fptr, "bits per sample not known\n");
+      return 0;
+    }
+
+    byte_count *= primary->bits_per_sample;
+    byte_count /= 8;
+
+    return byte_count;
+
+  }
+
+  fprintf (fptr, "could not parse duration from '%s'\n", args);
+
+  return 0;
+}
+
+int dada_pwc_cmd_duration (void* context, FILE* fptr, char* args)
+{
+  dada_pwc_t* primary = (dada_pwc_t*) context;
+  uint64_t byte_count = 0;
+
+  int status = 0;
+
+  if (!args) {
+    fprintf (fptr, "please specify duration\n");
+    return -1;
+  }
+
+  byte_count = dada_pwc_parse_duration (primary, fptr, args);
+
+  if (!byte_count)
+    return -1;
+
+  pthread_mutex_lock (&(primary->mutex));
+
+  while (primary->command.code != dada_pwc_no_command)
+    pthread_cond_wait (&(primary->cond), &(primary->mutex));
+
+  if (primary->state != dada_pwc_record_requested &&
+      primary->state != dada_pwc_recording)
+    primary->command.byte_count = byte_count;
+  else {
+    fprintf (stderr, "Cannot set DURATION while recording\n");
+    status = -1;
+  }
+
+  pthread_mutex_unlock (&(primary->mutex));
+
+  return status;
+}
+
 
 time_t dada_pwc_parse_time (FILE* fptr, char* args)  
 {
@@ -132,7 +294,7 @@ int dada_pwc_cmd_clock (void* context, FILE* fptr, char* args)
 
   dada_pwc_command_t command = DADA_PWC_COMMAND_INIT;
   command.code = dada_pwc_clock;
-  command.utc = dada_pwc_parse_time (fptr, args);
+  command.utc = 0;
 
   return dada_pwc_command_set (primary, fptr, command);
 }
@@ -145,6 +307,14 @@ int dada_pwc_cmd_record_start (void* context, FILE* fptr, char* args)
   command.code = dada_pwc_record_start;
   command.utc = dada_pwc_parse_time (fptr, args);
 
+  if (!command.utc) {
+    fprintf (fptr, "rec_start requires a valid utc argument\n");
+    return -1;
+  }
+
+  if (dada_pwc_command_set_byte_count (primary, fptr, &command) < 0)
+    return -1;
+
   return dada_pwc_command_set (primary, fptr, command);
 }
 
@@ -155,6 +325,14 @@ int dada_pwc_cmd_record_stop (void* context, FILE* fptr, char* args)
   dada_pwc_command_t command = DADA_PWC_COMMAND_INIT;
   command.code = dada_pwc_record_stop;
   command.utc = dada_pwc_parse_time (fptr, args);
+
+  if (!command.utc) {
+    fprintf (fptr, "rec_stop requires a valid utc argument\n");
+    return -1;
+  }
+
+  if (dada_pwc_command_set_byte_count (primary, fptr, &command) < 0)
+    return -1;
 
   return dada_pwc_command_set (primary, fptr, command);
 }
@@ -178,6 +356,8 @@ int dada_pwc_cmd_stop (void* context, FILE* fptr, char* args)
   command.code = dada_pwc_stop;
   command.utc = dada_pwc_parse_time (fptr, args);
 
+  if (command.utc && dada_pwc_command_set_byte_count (primary, fptr, &command)<0)
+    return -1;
   return dada_pwc_command_set (primary, fptr, command);
 }
 
@@ -186,6 +366,12 @@ dada_pwc_t* dada_pwc_create ()
 {
   dada_pwc_t* primary = (dada_pwc_t*) malloc (sizeof(dada_pwc_t));
   assert (primary != 0);
+
+  primary -> state = dada_pwc_idle;
+  primary -> command.code = dada_pwc_no_command;
+  primary -> bytes_per_second = 0;
+  primary -> bits_per_sample = 0;
+  primary -> utc_start = 0;
 
   /* default header size */
   primary -> header_size = DADA_DEFAULT_HDR_SIZE;
@@ -197,9 +383,6 @@ dada_pwc_t* dada_pwc_create ()
 
   fprintf (stderr, "dada_pwc on port %d\n", primary->port);
 
-  primary -> state = dada_pwc_idle;
-  primary -> command.code = dada_pwc_no_command;
-
   /* for multi-threaded use of primary */
   pthread_mutex_init(&(primary->mutex), NULL);
   pthread_cond_init (&(primary->cond), NULL);
@@ -209,6 +392,9 @@ dada_pwc_t* dada_pwc_create ()
 
   command_parse_add (primary->parser, dada_pwc_cmd_header, primary,
 		     "header", "set the primary header", NULL);
+
+  command_parse_add (primary->parser, dada_pwc_cmd_duration, primary,
+		     "duration", "set the duration of next recording", NULL);
 
   command_parse_add (primary->parser, dada_pwc_cmd_start, primary,
 		     "start", "enter the recording state", NULL);
@@ -235,13 +421,13 @@ int dada_pwc_set_header_size (dada_pwc_t* primary, unsigned header_size)
   if (!primary)
     return -1;
 
-  pthread_mutex_lock(&(primary->mutex));
+  pthread_mutex_lock (&(primary->mutex));
 
   primary -> header_size = header_size;
   primary -> header = (char *) realloc (primary->header, header_size);
   assert (primary->header != 0);
 
-  pthread_mutex_unlock(&(primary->mutex));
+  pthread_mutex_unlock (&(primary->mutex));
 
   return 0;
 }
@@ -301,14 +487,14 @@ dada_pwc_command_t dada_pwc_command_get (dada_pwc_t* primary)
     return command;
   }
 
-  pthread_mutex_lock(&(primary->mutex));
+  pthread_mutex_lock (&(primary->mutex));
 
   while (primary->command.code == dada_pwc_no_command)
     pthread_cond_wait(&(primary->cond), &(primary->mutex));
 
   command = primary->command;
 
-  pthread_mutex_unlock(&(primary->mutex));
+  pthread_mutex_unlock (&(primary->mutex));
 
   return command;
 }
@@ -369,13 +555,14 @@ int dada_pwc_command_ack (dada_pwc_t* primary, int new_state)
 
   }
 
-  pthread_mutex_lock(&(primary->mutex));
+  pthread_mutex_lock (&(primary->mutex));
 
   primary->command.code = dada_pwc_no_command;
+  primary->command.byte_count = 0;
   primary->state = new_state;
 
   pthread_cond_signal (&(primary->cond));
-  pthread_mutex_unlock(&(primary->mutex));
+  pthread_mutex_unlock (&(primary->mutex));
 
   return 0;
 }
