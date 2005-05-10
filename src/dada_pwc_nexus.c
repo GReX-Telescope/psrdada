@@ -1,7 +1,9 @@
 #include "dada_pwc_nexus.h"
 #include "ascii_header.h"
+#include "dada.h"
 
 #include <stdlib.h>
+#include <string.h>
 
 void dada_node_init (dada_node_t* node)
 {
@@ -19,9 +21,6 @@ node_t* dada_node_create ()
   return (node_t*) node;
 }
 
-/*! Send a unique header to each of the nodes */
-int dada_pwc_nexus_config (void* context, FILE* fptr, char* args);
-
 int dada_pwc_nexus_parse (nexus_t* n, const char* buffer)
 {
   dada_pwc_nexus_t* nexus = (dada_pwc_nexus_t*) n;
@@ -38,11 +37,19 @@ int dada_pwc_nexus_parse (nexus_t* n, const char* buffer)
   return 0;
 }
 
+/*! Send a unique header to each of the nodes */
+int dada_pwc_nexus_config (void* context, FILE* fptr, char* args);
+
 void dada_pwc_nexus_init (dada_pwc_nexus_t* nexus)
 {
   nexus_t* nexus_base = (nexus_t*) nexus;
   nexus_init (nexus_base);
 
+  if (nexus_base->node_prefix)
+    free (nexus_base->node_prefix);
+
+  nexus_base->node_port = DADA_DEFAULT_PWC_PORT;
+  nexus_base->node_prefix = strdup ("PWC");
   nexus_base->node_create = &dada_node_create;
   nexus_base->nexus_parse = &dada_pwc_nexus_parse;
 
