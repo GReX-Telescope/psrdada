@@ -7,14 +7,13 @@ int main ()
 {
   multilog_t* log = 0;
   time_t seconds;
+  int port = 2030;
 
   fprintf (stderr, "Opening multilog\n");
   log = multilog_open ("time", 0);
 
-  // fprintf (stderr, "Adding stderr to multilog\n");
-  // multilog_add (log, stderr);
-
-  multilog_serve (log, 2020);
+  fprintf (stderr, "Serving on %d\n", port);
+  multilog_serve (log, port);
 
   while (1) {
     time(&seconds);
