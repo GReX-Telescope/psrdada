@@ -17,6 +17,9 @@ int main ()
   /* the number of bytes written each time */
   uint64_t write_bytes = 0;
 
+  /* flag set when a state change has been requested */
+  int change_state = 0;
+
   fprintf (stderr, "Creating dada_pwc\n");
   pwc = dada_pwc_create ();
 
@@ -136,8 +139,10 @@ int main ()
 	  else
 	    fprintf (stderr, "clocking->recording\n");
 
-	  if (!command.byte_count)
-	    fprintf (stderr, "Error no byte count\n");
+	  if (!command.byte_count)  {
+	    fprintf (stderr, "Effective immediately\n");
+            bytes_to_write = 0;
+          }
 
 	  else if (command.byte_count < total_bytes_written) {
 	    fprintf (stderr, "Already passed byte_count=%"PRIu64"\n",
@@ -149,6 +154,8 @@ int main ()
 	    bytes_to_write = command.byte_count - total_bytes_written;
 	    fprintf (stderr, "Will occur in %"PRIu64" bytes\n", bytes_to_write);
 	  }
+
+          change_state = 1;
 
 	}
 
@@ -214,7 +221,10 @@ int main ()
 
       fprintf (stderr, "Written %"PRIu64" bytes\n", total_bytes_written);
 
-      if (bytes_to_write && write_bytes == bytes_to_write) {
+      if ((bytes_to_write && write_bytes == bytes_to_write) ||
+          (!bytes_to_write && change_state))
+      {
+        change_state = 0;
 
 	/* it is now time to change state */
 
