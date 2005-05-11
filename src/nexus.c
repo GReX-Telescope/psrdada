@@ -446,7 +446,7 @@ int nexus_recv_node (nexus_t* nexus, unsigned inode)
   }
 
   //#ifdef _DEBUG
-  fprintf (stderr, "nexus_send: receiving from node %d not implemented\n", inode);
+  fprintf (stderr, "nexus_send: receiving not implemented\n");
   //#endif
 
   
@@ -459,6 +459,10 @@ int nexus_send (nexus_t* nexus, char* command)
 {
   unsigned inode = 0;
   int status = 0;
+
+#ifdef _DEBUG
+    fprintf (stderr, "nexus_send command '%s'\n", command);
+#endif
 
   pthread_mutex_lock (&(nexus->mutex));
 
