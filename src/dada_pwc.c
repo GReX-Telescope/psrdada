@@ -11,6 +11,22 @@
 int dada_pwc_command_set_byte_count (dada_pwc_t* primary, FILE* output,
 				     dada_pwc_command_t* command)
 {
+  if (!primary->convert_to_bytes) {
+#ifdef _DEBUG
+    fprintf (stderr, "dada_pwc_command_set_byte_count not converting\n");
+#endif
+    command->byte_count = 0;
+    return 0;
+  }
+
+  if (!command->utc) {
+#ifdef _DEBUG
+    fprintf (stderr, "dada_pwc_command_set_byte_count no UTC\n");
+#endif
+    command->byte_count = 0;
+    return 0;
+  }
+
   if (!primary->utc_start) {
     fprintf (output, "UTC of first time sample unknown\n");
     return -1;
@@ -22,6 +38,10 @@ int dada_pwc_command_set_byte_count (dada_pwc_t* primary, FILE* output,
 
   if (command->utc < primary->utc_start) {
     fprintf (output, "requested UTC precedes UTC of first time sample\n");
+#ifdef _DEBUG
+    fprintf (stderr, "requested UTC precedes UTC of first time sample\n");
+#endif
+
     command->utc = 0;
     command->byte_count = 0;
     return 0;
@@ -29,8 +49,19 @@ int dada_pwc_command_set_byte_count (dada_pwc_t* primary, FILE* output,
 
   /* the number of second between start and requested UTC of command */
   command->byte_count = command->utc - primary->utc_start;
+
+#ifdef _DEBUG
+  fprintf (stderr, "dada_pwc_command_set_byte_count seconds = %"PRIu64"\n",
+           command->byte_count);
+#endif
+
   /* the byte count at which to execute the command */
   command->byte_count *= primary->bytes_per_second;
+
+#ifdef _DEBUG
+  fprintf (stderr, "dada_pwc_command_set_byte_count bytes = %"PRIu64"\n",
+           command->byte_count);
+#endif
 
   return 0;
 }
@@ -356,8 +387,7 @@ int dada_pwc_cmd_stop (void* context, FILE* fptr, char* args)
   command.code = dada_pwc_stop;
   command.utc = dada_pwc_parse_time (fptr, args);
 
-  if (command.utc && 
-      dada_pwc_command_set_byte_count (primary, fptr, &command) < 0)
+  if (dada_pwc_command_set_byte_count (primary, fptr, &command) < 0)
     return -1;
 
   return dada_pwc_command_set (primary, fptr, command);
@@ -371,6 +401,7 @@ dada_pwc_t* dada_pwc_create ()
 
   primary -> state = dada_pwc_idle;
   primary -> command.code = dada_pwc_no_command;
+  primary -> convert_to_bytes = 1;
 
   primary -> bytes_per_second = 0;
   primary -> bits_per_sample = 0;

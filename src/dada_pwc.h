@@ -96,6 +96,9 @@ extern "C" {
     /*! The state of the primary write client */
     int state;
 
+    /*! When true, convert times and sample counts to bytes */
+    int convert_to_bytes;
+
     /*! Used to convert times to bytes */
     uint64_t bytes_per_second;
 
