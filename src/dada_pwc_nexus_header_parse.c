@@ -54,7 +54,6 @@ int dada_pwc_config_header (string_array* params, const char* prefix,
   return 0;
 }
 
-
 int dada_pwc_nexus_header_parse (dada_pwc_nexus_t* n, const char* buffer)
 {
   char node_name [16] = "";
@@ -62,10 +61,11 @@ int dada_pwc_nexus_header_parse (dada_pwc_nexus_t* n, const char* buffer)
 
   unsigned inode, nnode = nexus_get_nnode ((nexus_t*) n);
 
-  /* First set up the common header parameters */
   if (n->header_template)
+    /* Read the header template */
     fileread (n->header_template, n->pwc->header, n->pwc->header_size);
   else
+    /* Start with empty header */
     n->pwc->header[0] = '\0';
 
   if (dada_pwc_config_header (n->config_params, node_name,
