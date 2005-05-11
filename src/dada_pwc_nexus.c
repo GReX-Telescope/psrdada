@@ -25,6 +25,21 @@ node_t* dada_node_create ()
   return (node_t*) node;
 }
 
+/*! load lines from param_file, then take only first word from each line */
+int dada_pwc_nexus_parse_params (string_array* params, const char* param_file)
+{
+  const char* whitespace = " \r\t\n";
+  unsigned iparam = 0;
+
+  if (string_array_load (params, param_file) < 0)
+    return -1;
+
+  for (iparam=0; iparam < string_array_size(params); iparam++)
+    strtok (string_array_get(params, iparam), whitespace);
+
+  return 0;
+}
+
 /*! Parse DADA PWC nexus configuration parameters from the config buffer */
 int dada_pwc_nexus_parse (nexus_t* n, const char* config)
 {
@@ -61,11 +76,10 @@ int dada_pwc_nexus_parse (nexus_t* n, const char* config)
     /* load specification parameters from the specified file */
     fprintf (stderr, "dada_pwc_nexus_parse: loading specification parameters\n"
 	     "from %s\n", param_file);
-    status = string_array_load (nexus->config_params, param_file);
+    status = dada_pwc_nexus_parse_params (nexus->config_params, param_file);
   }
 
   free (param_file);
-
   return status;
 }
 
@@ -92,6 +106,10 @@ void dada_pwc_nexus_init (dada_pwc_nexus_t* nexus)
 #endif
 
   nexus->pwc = dada_pwc_create ();
+
+  /* do not convert times and sample counts into bytes */
+  nexus->pwc->convert_to_bytes = 0;
+
   nexus->config_params = string_array_create ();
 
   nexus->header_template = 0;
