@@ -151,7 +151,7 @@ int ipcbuf_create (ipcbuf_t* id, int key, uint64_t nbufs, uint64_t bufsz)
   int flag = IPCUTIL_PERM | IPC_CREAT | IPC_EXCL;
 
 #ifdef _DEBUG
-  fprintf (stderr, "ipcbuf_create: key=%d nbufs=%llu bufsz=%llu\n",
+  fprintf (stderr, "ipcbuf_create: key=%d nbufs=%"PRIu64" bufsz=%"PRIu64"\n",
 	   key, nbufs, bufsz);
 #endif
 
@@ -228,7 +228,7 @@ int ipcbuf_connect (ipcbuf_t* id, int key)
   }
 
 #ifdef _DEBUG
-  fprintf (stderr, "ipcbuf_connect: key=0x%x nbufs=%llu bufsz=%llu\n",
+  fprintf (stderr, "ipcbuf_connect: key=0x%x nbufs=%"PRIu64" bufsz=%"PRIu64"\n",
 	   key, id->sync->nbufs, id->sync->bufsz);
 #endif
 
@@ -295,7 +295,7 @@ int ipcbuf_destroy (ipcbuf_t* id)
   for (ibuf = 0; ibuf < id->sync->nbufs; ibuf++) {
 
 #ifdef _DEBUG
-    fprintf (stderr, "ipcbuf_destroy: id[%llu]=%x\n", ibuf, id->shmid[ibuf]);
+    fprintf (stderr, "ipcbuf_destroy: id[%"PRIu64"]=%x\n", ibuf, id->shmid[ibuf]);
 #endif
 
     if (id->buffer)
@@ -408,14 +408,14 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
   }
 
 #ifdef _DEBUG
-  fprintf (stderr, "ipcbuf_enable_sod: start buf=%llu writebuf=%llu\n",
+  fprintf (stderr, "ipcbuf_enable_sod: start buf=%"PRIu64" writebuf=%"PRIu64"\n",
 	   start_buf, sync->writebuf);
 #endif
 
   /* start_buf must be less than or equal to the number of buffers written */
   if (start_buf > sync->writebuf) {
     fprintf (stderr,
-	     "ipcbuf_enable_sod: start_buf=%llu > writebuf=%llu\n",
+	     "ipcbuf_enable_sod: start_buf=%"PRIu64" > writebuf=%"PRIu64"\n",
 	     start_buf, sync->writebuf);
     return -1;
   }
@@ -423,7 +423,7 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
   if (sync->writebuf >= sync->nbufs &&
       start_buf <= sync->writebuf - sync->nbufs ) {
     fprintf (stderr,
-	     "ipcbuf_enable_sod: start_buf=%llu <= start_min=%llu\n",
+	     "ipcbuf_enable_sod: start_buf=%"PRIu64" <= start_min=%"PRIu64"\n",
 	     start_buf, sync->writebuf-sync->nbufs);
     return -1;
   }
@@ -431,7 +431,7 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
   /* start_byte must be less than or equal to the size of the buffer */
   if (start_byte > sync->bufsz) {
     fprintf (stderr,
-	     "ipcbuf_enable_sod: start_byte=%llu > bufsz=%llu\n",
+	     "ipcbuf_enable_sod: start_byte=%"PRIu64" > bufsz=%"PRIu64"\n",
 	     start_byte, sync->bufsz);
     return -1;
   }
@@ -451,14 +451,14 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
   sync->s_byte = start_byte;
 
 #ifdef _DEBUG
-  fprintf (stderr, "ipcbuf_enable_sod: start buf=%llu byte=%llu\n",
+  fprintf (stderr, "ipcbuf_enable_sod: start buf=%"PRIu64" byte=%"PRIu64"\n",
            sync->s_buf, sync->s_byte);
 #endif
 
   new_bufs = sync->writebuf - start_buf;
 
 #ifdef _DEBUG
-  fprintf (stderr, "ipcbuf_enable_sod: waitbuf=%llu newbufs=%u\n",
+  fprintf (stderr, "ipcbuf_enable_sod: waitbuf=%"PRIu64" newbufs=%u\n",
            id->waitbuf, new_bufs);
 #endif
 
@@ -510,11 +510,11 @@ char* ipcbuf_get_next_write (ipcbuf_t* id)
   }
 
 #ifdef _DEBUG
-  fprintf (stderr, "ipcbuf_get_next_write: waitbuf=%llu\n", id->waitbuf);
+  fprintf (stderr, "ipcbuf_get_next_write: waitbuf=%"PRIu64"\n", id->waitbuf);
 #endif
 
   if (id->waitbuf > sync->nbufs+1) {
-    fprintf (stderr, "ipcbuf_get_next_write: waitbuf=%llu > nbufs+1=%llu\n",
+    fprintf (stderr, "ipcbuf_get_next_write: waitbuf=%"PRIu64" > nbufs+1=%"PRIu64"\n",
 	     id->waitbuf, sync->nbufs+1);
     return NULL;
   }
@@ -581,7 +581,7 @@ int ipcbuf_mark_filled (ipcbuf_t* id, uint64_t nbytes)
     id->state = IPCBUF_WRITER;
 
 #ifdef _DEBUG
-      fprintf (stderr, "ipcbuf_mark_filled: end buf=%llu byte=%llu\n",
+      fprintf (stderr, "ipcbuf_mark_filled: end buf=%"PRIu64" byte=%"PRIu64"\n",
 	       id->sync->e_buf, id->sync->e_byte);
 #endif
 
@@ -686,7 +686,7 @@ char* ipcbuf_get_next_read (ipcbuf_t* id, uint64_t* bytes)
     if (id->state == IPCBUF_READER) {
 
 #ifdef _DEBUG
-      fprintf (stderr, "ipcbuf_get_next_read: start buf=%llu byte=%llu\n",
+      fprintf (stderr, "ipcbuf_get_next_read: start buf=%"PRIu64" byte=%"PRIu64"\n",
 	       id->sync->s_buf, id->sync->s_byte);
 #endif
 
@@ -795,7 +795,7 @@ int ipcbuf_reset (ipcbuf_t* id)
     return 0;
 
 #ifdef _DEBUG
-  fprintf (stderr, "ipcbuf_reset: decrement CLEAR=%d by %llu\n",
+  fprintf (stderr, "ipcbuf_reset: decrement CLEAR=%d by %"PRIu64"\n",
 	   semctl (id->semid, IPCBUF_CLEAR, GETVAL), id->waitbuf);
 #endif
 

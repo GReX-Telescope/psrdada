@@ -217,7 +217,7 @@ uint64_t dada_pwc_parse_duration (dada_pwc_t* primary,
 
   }
 
-  if (sscanf (args, "%llu", &byte_count) == 1) {
+  if (sscanf (args, "%"PRIu64"", &byte_count) == 1) {
 
     if (!primary->bits_per_sample) {
       fprintf (fptr, "bits per sample not known\n");

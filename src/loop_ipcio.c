@@ -99,7 +99,7 @@ int main (int argc, char** argv)
 
     /* this process is reading from the file and creates the shared memory */
     fprintf (stderr, "Creating shared memory ring buffer."
-	     " nbufs=%llu bufsz=%llu\n", nbufs, bufsz);
+	     " nbufs=%"PRIu64" bufsz=%"PRIu64"\n", nbufs, bufsz);
 
     if (ipcio_create (&ringbuf, key, nbufs, bufsz) < 0) {
       fprintf (stderr, "Error creating shared memory ring buffer\n");
@@ -117,7 +117,7 @@ int main (int argc, char** argv)
 	open = 1;
       }
       else {
-	fprintf (stderr, "Starting at %llu\n", jlong);
+	fprintf (stderr, "Starting at %"PRIu64"\n", jlong);
 	if (ipcio_start (&ringbuf, jlong*sizeof(unsigned long)) < 0) {
           fprintf (stderr, "Error while starting\n");
           return -1;

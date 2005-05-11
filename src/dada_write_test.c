@@ -123,7 +123,7 @@ int main (int argc, char **argv)
   header_strlen = strlen(header);
 
   header_size = ipcbuf_get_bufsz (&header_block);
-  multilog (log, LOG_INFO, "header block size = %llu\n", header_size);
+  multilog (log, LOG_INFO, "header block size = %"PRIu64"\n", header_size);
 
   header_buf = ipcbuf_get_next_write (&header_block);
 
@@ -145,7 +145,7 @@ int main (int argc, char **argv)
   }
 
   /* Set the header size attribute */ 
-  if (ascii_header_set (header_buf, "HDR_SIZE", "%llu", header_size) < 0) {
+  if (ascii_header_set (header_buf, "HDR_SIZE", "%"PRIu64"", header_size) < 0) {
     multilog (log, LOG_ERR, "Could not write HDR_SIZE to header\n");
     return -1;
   }
@@ -155,16 +155,16 @@ int main (int argc, char **argv)
     return EXIT_FAILURE;
   }
 
-  fprintf (stderr, "Writing %llu bytes to data block\n", bytes_to_write);
+  fprintf (stderr, "Writing %"PRIu64" bytes to data block\n", bytes_to_write);
 
   while (bytes_to_write)  {
 
     if (data_size > bytes_to_write)
       data_size = bytes_to_write;
 
-    //fprintf (stderr, "Writing %llu bytes to data block\n", data_size);
+    //fprintf (stderr, "Writing %"PRIu64" bytes to data block\n", data_size);
     if (ipcio_write (&data_block, data, data_size) < 0)  {
-      multilog (log, LOG_ERR, "Could not write %llu bytes to data block\n",
+      multilog (log, LOG_ERR, "Could not write %"PRIu64" bytes to data block\n",
                 data_size);
       return EXIT_FAILURE;
     } 

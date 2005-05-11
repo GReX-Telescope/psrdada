@@ -81,7 +81,7 @@ int main ()
 
         if (command.byte_count) {
 	  bytes_to_write = command.byte_count;
-          fprintf (stderr, "Will record %llu bytes\n", bytes_to_write);
+          fprintf (stderr, "Will record %"PRIu64" bytes\n", bytes_to_write);
 	}
 
         /* here is where the Data Block would be set to over-write e.g.
@@ -140,14 +140,14 @@ int main ()
 	    fprintf (stderr, "Error no byte count\n");
 
 	  else if (command.byte_count < total_bytes_written) {
-	    fprintf (stderr, "Already passed byte_count=%llu\n",
+	    fprintf (stderr, "Already passed byte_count=%"PRIu64"\n",
 		     command.byte_count);
 	    bytes_to_write = 0;
 	  }
 
 	  else {
 	    bytes_to_write = command.byte_count - total_bytes_written;
-	    fprintf (stderr, "Will occur in %llu bytes\n", bytes_to_write);
+	    fprintf (stderr, "Will occur in %"PRIu64" bytes\n", bytes_to_write);
 	  }
 
 	}
@@ -177,12 +177,12 @@ int main ()
       if (pwc->state == dada_pwc_recording) {
 	fprintf (stderr, "recording\n");
 	if (command.code ==  dada_pwc_record_stop)
-	  fprintf (stderr, "record stop in %llu bytes\n", bytes_to_write);
+	  fprintf (stderr, "record stop in %"PRIu64" bytes\n", bytes_to_write);
       }
       else if (pwc->state == dada_pwc_clocking) {
 	fprintf (stderr, "clocking\n");
 	if (command.code ==  dada_pwc_record_start)
-	  fprintf (stderr, "record start in %llu bytes\n", bytes_to_write);
+	  fprintf (stderr, "record start in %"PRIu64" bytes\n", bytes_to_write);
       }
 
       /* Actual buffer size will be the size of the EDT buffer.  Here,
@@ -212,7 +212,7 @@ int main ()
 
       total_bytes_written += write_bytes;
 
-      fprintf (stderr, "Written %llu bytes\n", total_bytes_written);
+      fprintf (stderr, "Written %"PRIu64" bytes\n", total_bytes_written);
 
       if (bytes_to_write && write_bytes == bytes_to_write) {
 

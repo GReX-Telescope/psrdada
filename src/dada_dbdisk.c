@@ -140,7 +140,7 @@ int main_loop (dada_t* dada,
   header_size = ipcbuf_get_bufsz (header_block);
 
   /* Check that header is of advertised size */
-  if (ascii_header_get (header, "HDR_SIZE", "%llu", &hdr_size) != 1) {
+  if (ascii_header_get (header, "HDR_SIZE", "%"PRIu64"", &hdr_size) != 1) {
     multilog (log, LOG_ERR, "Header block does not have HDR_SIZE\n");
     return -1;
   }
@@ -149,7 +149,7 @@ int main_loop (dada_t* dada,
     header_size = hdr_size;
 
   else if (hdr_size > header_size) {
-    multilog (log, LOG_ERR, "HDR_SIZE=%llu is greater than hdr bufsz=%llu\n",
+    multilog (log, LOG_ERR, "HDR_SIZE=%"PRIu64" is greater than hdr bufsz=%"PRIu64"\n",
               hdr_size, header_size);
     multilog (log, LOG_DEBUG, "ASCII header dump\n%s", header);
     return -1;
@@ -172,13 +172,13 @@ int main_loop (dada_t* dada,
   }
 
   /* Get the header offset */
-  if (ascii_header_get (dup, "OBS_OFFSET", "%llu", &obs_offset) != 1) {
+  if (ascii_header_get (dup, "OBS_OFFSET", "%"PRIu64"", &obs_offset) != 1) {
     multilog (log, LOG_WARNING, "Header block does not have OBS_OFFSET\n");
     obs_offset = 0;
   }
 
   /* Get the file size */
-  if (ascii_header_get (dup, "FILE_SIZE", "%llu", &file_size) != 1) {
+  if (ascii_header_get (dup, "FILE_SIZE", "%"PRIu64"", &file_size) != 1) {
     multilog (log, LOG_WARNING, "Header block does not have FILE_SIZE\n");
     file_size = DADA_DEFAULT_FILESIZE;
   }
@@ -205,11 +205,11 @@ int main_loop (dada_t* dada,
       return -1;
     }
 
-    multilog (log, LOG_INFO, "%s opened for writing %llu bytes\n",
+    multilog (log, LOG_INFO, "%s opened for writing %"PRIu64" bytes\n",
 	      file_name, file_size);
 
     /* Set the header offset */
-    if (ascii_header_set (dup, "OBS_OFFSET", "%llu", obs_offset) < 0) {
+    if (ascii_header_set (dup, "OBS_OFFSET", "%"PRIu64"", obs_offset) < 0) {
       multilog (log, LOG_ERR, "Error writing OBS_OFFSET\n");
       return -1;
     }
@@ -256,7 +256,7 @@ int main_loop (dada_t* dada,
     else {
       
       write_time = diff_time(start_loop, end_loop);
-      multilog (log, LOG_INFO, "%llu bytes written to %s in %lfs (%lg MB/s)\n",
+      multilog (log, LOG_INFO, "%"PRIu64" bytes written to %s in %lfs (%lg MB/s)\n",
 		bytes_written, file_name, write_time,
 		bytes_written/(1e6*write_time));
       

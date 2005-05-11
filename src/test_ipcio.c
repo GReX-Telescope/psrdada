@@ -90,7 +90,7 @@ int main (int argc, char** argv)
 
     /* this process is reading from the file and creates the shared memory */
     fprintf (stderr, "Creating shared memory ring buffer."
-	     " nbufs=%llu bufsz=%llu\n", nbufs, bufsz);
+	     " nbufs=%"PRIu64" bufsz=%"PRIu64"\n", nbufs, bufsz);
 
     if (ipcio_create (&ringbuf, key, nbufs, bufsz) < 0) {
       fprintf (stderr, "Error creating shared memory ring buffer\n");

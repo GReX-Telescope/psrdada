@@ -23,7 +23,7 @@ int main ()
   total = disk_array_get_total (array);
   avail = disk_array_get_available (array);
 
-  fprintf (stderr, "total: %llu bytes   avail: %llu bytes\n", total, avail);
+  fprintf (stderr, "total: %"PRIu64" bytes   avail: %"PRIu64" bytes\n", total, avail);
 
   fprintf (stderr, "Closing array\n");
   disk_array_destroy (array);

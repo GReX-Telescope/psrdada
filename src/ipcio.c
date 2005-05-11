@@ -115,7 +115,7 @@ int ipcio_stop_close (ipcio_t* ipc, char unlock)
 
 #ifdef _DEBUG
     if (ipc->curbuf)
-      fprintf (stderr, "ipcio_close:W buffer:%llu %llu bytes. buf[0]=%x\n",
+      fprintf (stderr, "ipcio_close:W buffer:%"PRIu64" %"PRIu64" bytes. buf[0]=%x\n",
 	       ipc->buf.sync->writebuf, ipc->bytes, ipc->curbuf[0]);
 #endif
 
@@ -228,7 +228,7 @@ ssize_t ipcio_write (ipcio_t* ipc, char* ptr, size_t bytes)
     else {
 
 #ifdef _DEBUG
-      fprintf (stderr, "ipcio_write buffer:%llu %llu bytes. buf[0]=%x\n",
+      fprintf (stderr, "ipcio_write buffer:%"PRIu64" %"PRIu64" bytes. buf[0]=%x\n",
 	       ipc->buf.sync->writebuf, ipc->bytes, ipc->curbuf[0]);
 #endif
 
@@ -266,7 +266,7 @@ ssize_t ipcio_read (ipcio_t* ipc, char* ptr, size_t bytes)
       ipc->curbuf = ipcbuf_get_next_read (&(ipc->buf), &(ipc->curbufsz));
 
 #ifdef _DEBUG
-      fprintf (stderr, "ipcio_read buffer:%llu %llu bytes. buf[0]=%x\n",
+      fprintf (stderr, "ipcio_read buffer:%"PRIu64" %"PRIu64" bytes. buf[0]=%x\n",
 	       ipc->buf.sync->readbuf, ipc->curbufsz, ipc->curbuf[0]);
 #endif
 
@@ -285,7 +285,7 @@ ssize_t ipcio_read (ipcio_t* ipc, char* ptr, size_t bytes)
 
     if (space > 0) {
 
-      /* fprintf (stderr, "space=%d curbufsz=%llu bytes%llu\n",
+      /* fprintf (stderr, "space=%d curbufsz=%"PRIu64" bytes%"PRIu64"\n",
 	 space, ipc->curbufsz, ipc->bytes); */
 
       memcpy (ptr, ipc->curbuf + ipc->bytes, space);
@@ -337,7 +337,7 @@ int64_t ipcio_seek (ipcio_t* ipc, int64_t offset, int whence)
     /* can only go back to the beginning of the current buffer ... */
     abs_offset = (uint64_t) -offset;
     if (abs_offset > ipc->bytes) {
-      fprintf (stderr, "ipcio_seek: %llu > max backwards %llu\n",
+      fprintf (stderr, "ipcio_seek: %"PRIu64" > max backwards %"PRIu64"\n",
 	       abs_offset, ipc->bytes);
       return -1;
     }
