@@ -7,6 +7,9 @@ int main ()
 {
   dada_pwc_t* pwc = 0;
   dada_pwc_command_t command = DADA_PWC_COMMAND_INIT;
+  uint64_t byte_count = 0;
+  uint64_t bytes_to_write = 0;
+  uint64_t buffer_size = 0;
 
   fprintf (stderr, "Creating dada_pwc\n");
   pwc = dada_pwc_create ();
@@ -19,6 +22,9 @@ int main ()
   while (!dada_pwc_quit (pwc)) {
 
     /* currently in idle state ... */
+
+    byte_count = 0;
+    bytes_to_write = 0;
 
     while (!dada_pwc_quit (pwc)) {
 
@@ -46,6 +52,9 @@ int main ()
 
         fprintf (stderr, "Start clocking data\n");
 
+        if (command.byte_count)
+          fprintf (stderr, "There shouldn't be a byte count for clocking\n");
+
         /* here is where the Data Block would be set to over-write e.g.
 
         if (ipcio_open (data_block, 'w') < 0)  {
@@ -66,6 +75,11 @@ int main ()
       else if (command.code == dada_pwc_start)  {
 
         fprintf (stderr, "Start recording data\n");
+
+        if (command.byte_count) {
+	  bytes_to_write = command.byte_count;
+          fprintf (stderr, "Will record %llu bytes\n", bytes_to_write);
+	}
 
         /* here is where the Data Block would be set to over-write e.g.
 
@@ -95,37 +109,27 @@ int main ()
 
         command = dada_pwc_command_get (pwc);
 
-        if (command.code == dada_pwc_record_stop)  {
+        if (command.code == dada_pwc_record_stop ||
+	    command.code == dada_pwc_record_start)  {
 
-          fprintf (stderr, "recording->clocking\n");
+	  if (command.code == dada_pwc_record_stop)
+	    fprintf (stderr, "recording->clocking\n");
+	  else
+	    fprintf (stderr, "clocking->recording\n");
 
-          /* here is where the Data Block would be stopped e.g.
+	  if (!command.byte_count)
+	    fprintf (stderr, "Error no byte count\n");
 
-          if (ipcio_stop (data_block) < 0)  {
-            multilog (log, LOG_ERR, "Could not stop data block\n");
-            return EXIT_FAILURE;
-          }
+	  else if (command.byte_count < byte_count) {
+	    fprintf (stderr, "Already passed byte_count=%llu\n",
+		     command.byte_count);
+	    bytes_to_write = 0;
+	  }
 
-          */
-
-          dada_pwc_command_ack (pwc, dada_pwc_clocking, time(0));
-
-        }
-
-        if (command.code == dada_pwc_record_start)  {
-
-          fprintf (stderr, "clocking->recording\n");
-
-          /* here is where the Data Block would be started e.g.
-
-          if (ipcio_start, (data_block, command.byte_count) < 0)  {
-            multilog (log, LOG_ERR, "Could not stop data block\n");
-            return EXIT_FAILURE;
-          }
-
-          */
-
-          dada_pwc_command_ack (pwc, dada_pwc_recording, time(0));
+	  else {
+	    bytes_to_write = command.byte_count - byte_count;
+	    fprintf (stderr, "Will occur in %llu bytes\n", bytes_to_write);
+	  }
 
         }
 
@@ -151,10 +155,52 @@ int main ()
 
       }
 
-      if (pwc->state == dada_pwc_recording)
+      if (pwc->state == dada_pwc_recording) {
         fprintf (stderr, "recording\n");
-      else if (pwc->state == dada_pwc_clocking)
+
+      }
+
+      else if (pwc->state == dada_pwc_clocking) {
         fprintf (stderr, "clocking\n");
+      }
+
+      buffer_size = pwc->bytes_per_second;
+      if (bytes_to_write && buffer_size > bytes_to_write)
+	buffer_size = bytes_to_write;
+
+      if (pwc->state == dada_pwc_clock_requested) {
+
+	fprintf (stderr, "record stop in %llu bytes\n", bytes_to_write);
+	
+	/* here is where the Data Block would be stopped e.g.
+	   
+	   if (ipcio_stop (data_block) < 0)  {
+	   multilog (log, LOG_ERR, "Could not stop data block\n");
+	   return EXIT_FAILURE;
+	   }
+	   
+	*/
+	
+	dada_pwc_command_ack (pwc, dada_pwc_clocking, time(0));
+	
+      }
+
+      else if (pwc->state == dada_pwc_record_requested) {
+
+        fprintf (stderr, "record start in %llu bytes\n", bytes_to_write);
+	
+	/* here is where the Data Block would be started e.g.
+	   
+	   if (ipcio_start, (data_block, command.byte_count) < 0)  {
+	   multilog (log, LOG_ERR, "Could not stop data block\n");
+	   return EXIT_FAILURE;
+	   }
+	   
+	*/
+	
+	dada_pwc_command_ack (pwc, dada_pwc_recording, time(0));
+	
+      }
 
       sleep (1);
 
