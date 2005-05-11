@@ -8,7 +8,7 @@
 /*! parse a configuration into unique headers for each primary write client */
 int dada_pwc_nexus_header_parse (dada_pwc_nexus_t* n, const char* buffer);
 
-int dada_pwc_nexus_config (void* context, FILE* output, char* args)
+int dada_pwc_nexus_cmd_config (void* context, FILE* output, char* args)
 {
   dada_pwc_nexus_t* nexus = (dada_pwc_nexus_t*) context;
   dada_node_t* node = 0;
