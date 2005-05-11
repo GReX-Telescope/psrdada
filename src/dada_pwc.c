@@ -9,7 +9,7 @@
 #include <assert.h>
 
 int dada_pwc_command_set_byte_count (dada_pwc_t* primary, FILE* output,
-				   dada_pwc_command_t* command)
+				     dada_pwc_command_t* command)
 {
   if (!primary->utc_start) {
     fprintf (output, "UTC of first time sample unknown\n");
@@ -258,13 +258,12 @@ int dada_pwc_cmd_duration (void* context, FILE* fptr, char* args)
   while (primary->command.code != dada_pwc_no_command)
     pthread_cond_wait (&(primary->cond), &(primary->mutex));
 
-  if (primary->state != dada_pwc_record_requested &&
-      primary->state != dada_pwc_recording)
-    primary->command.byte_count = byte_count;
-  else {
+  if (primary->state == dada_pwc_recording) {
     fprintf (stderr, "Cannot set DURATION while recording\n");
     status = -1;
   }
+  else
+    primary->command.byte_count = byte_count;
 
   pthread_mutex_unlock (&(primary->mutex));
 
@@ -344,6 +343,7 @@ int dada_pwc_cmd_start (void* context, FILE* fptr, char* args)
   dada_pwc_command_t command = DADA_PWC_COMMAND_INIT;
   command.code = dada_pwc_start;
   command.utc = dada_pwc_parse_time (fptr, args);
+  command.byte_count = primary->command.byte_count;
 
   return dada_pwc_command_set (primary, fptr, command);
 }
@@ -356,8 +356,10 @@ int dada_pwc_cmd_stop (void* context, FILE* fptr, char* args)
   command.code = dada_pwc_stop;
   command.utc = dada_pwc_parse_time (fptr, args);
 
-  if (command.utc && dada_pwc_command_set_byte_count (primary, fptr, &command)<0)
+  if (command.utc && 
+      dada_pwc_command_set_byte_count (primary, fptr, &command) < 0)
     return -1;
+
   return dada_pwc_command_set (primary, fptr, command);
 }
 
@@ -369,6 +371,7 @@ dada_pwc_t* dada_pwc_create ()
 
   primary -> state = dada_pwc_idle;
   primary -> command.code = dada_pwc_no_command;
+
   primary -> bytes_per_second = 0;
   primary -> bits_per_sample = 0;
   primary -> utc_start = 0;
@@ -493,6 +496,8 @@ dada_pwc_command_t dada_pwc_command_get (dada_pwc_t* primary)
     pthread_cond_wait(&(primary->cond), &(primary->mutex));
 
   command = primary->command;
+  primary->command.code = dada_pwc_no_command;
+  primary->command.byte_count = 0;
 
   pthread_mutex_unlock (&(primary->mutex));
 
@@ -501,67 +506,53 @@ dada_pwc_command_t dada_pwc_command_get (dada_pwc_t* primary)
 
 /*! \param new_state the state that the primary write client has entered
     \param utc the UTC time at which this state was entered */
-int dada_pwc_command_ack (dada_pwc_t* primary, int new_state, time_t utc)
+int dada_pwc_set_state (dada_pwc_t* primary, int new_state, time_t utc)
 {
   if (!primary)
     return -1;
 
-  switch (primary->command.code) {
+  switch (primary->state) {
 
-  case dada_pwc_no_command:
-    fprintf (stderr, "Cannot acknowledge no command\n");
-    return -1;
-
-  case dada_pwc_header:
+  case dada_pwc_idle:
     if (new_state != dada_pwc_prepared) {
-      fprintf (stderr, "HEADER acknowledgement state must be PREPARED\n");
+      fprintf (stderr, "IDLE can change only to PREPARED\n");
       return -1;
     }
     break;
 
-  case dada_pwc_clock:
-    if (new_state != dada_pwc_clocking) {
-      fprintf (stderr, "CLOCK acknowledgement state must be CLOCKING\n");
+  case dada_pwc_prepared:
+    if (new_state != dada_pwc_clocking &&
+	new_state != dada_pwc_recording) {
+      fprintf (stderr, "PREPARED can change only to CLOCKING or RECORDING\n");
       return -1;
     }
     primary->utc_start = utc;
     break;
 
-  case dada_pwc_record_start:
-    if (new_state != dada_pwc_recording) {
-      fprintf (stderr, "REC_START acknowledgement state must be RECORDING\n");
+  case dada_pwc_clocking:
+    if (new_state != dada_pwc_recording &&
+	new_state != dada_pwc_idle) {
+      fprintf (stderr, "CLOCKING can change only to RECORDING or IDLE\n");
       return -1;
     }
     break;
 
-  case dada_pwc_record_stop:
-    if (new_state != dada_pwc_clocking) {
-      fprintf (stderr, "REC_STOP acknowledgement state must be CLOCKING\n");
+  case dada_pwc_recording:
+    if (new_state != dada_pwc_clocking &&
+	new_state != dada_pwc_idle) {
+      fprintf (stderr, "RECORDING can change only to CLOCKING or IDLE\n");
       return -1;
     }
     break;
 
-  case dada_pwc_start:
-    if (new_state != dada_pwc_recording) {
-      fprintf (stderr, "START acknowledgement state must be RECORDING\n");
-      return -1;
-    }
-    primary->utc_start = utc;
-    break;
-
-  case dada_pwc_stop:
-    if (new_state != dada_pwc_idle) {
-      fprintf (stderr, "STOP acknowledgement state must be IDLE\n");
-      return -1;
-    }
-    break;
+  default:
+    fprintf (stderr, "current state is UNDEFINED\n");
+    return -1;
 
   }
 
   pthread_mutex_lock (&(primary->mutex));
 
-  primary->command.code = dada_pwc_no_command;
-  primary->command.byte_count = 0;
   primary->state = new_state;
 
   pthread_cond_signal (&(primary->cond));

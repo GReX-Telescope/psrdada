@@ -27,26 +27,14 @@ extern "C" {
     /*! idle: no data is being recorded */
     dada_pwc_idle,
 
-    /*! prepare_requested: preparing/configuring next recording */
-    dada_pwc_prepare_requested,
-
     /*! prepared: no data is being recorded, header received */
     dada_pwc_prepared,
-
-    /*! clock_requested: will begin clocking data at the next opportunity */
-    dada_pwc_clock_requested,
 
     /*! clocking: data is being clocked in over-write mode */
     dada_pwc_clocking,
 
-    /*! record_requested: will begin recording data at the next opportunity */
-    dada_pwc_record_requested,
-
     /*! recording: data is being recorded */
     dada_pwc_recording,
-
-    /*! stop_requested: will stop recording data at the next opportunity */
-    dada_pwc_stop_requested
 
   };
 
@@ -117,7 +105,7 @@ extern "C" {
     /*! The UTC of first time sample in ring buffer */
     time_t utc_start;
 
-    /*! The last command received */
+    /*! The currently queued command */
     dada_pwc_command_t command;
 
     /*! The ASCII header sent/received via the connection */
@@ -162,7 +150,8 @@ extern "C" {
   dada_pwc_command_t dada_pwc_command_get (dada_pwc_t* primary);
 
   /*! Acknowledge the last command received */
-  int dada_pwc_command_ack (dada_pwc_t* primary, int state, time_t utc);
+  int dada_pwc_set_state (dada_pwc_t* primary, int state, time_t utc);
+
 
 #ifdef __cplusplus
 	   }
