@@ -20,6 +20,7 @@ time_t fake_start_function (dada_pwc_main_t* pwcm, time_t utc)
 void* fake_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
 {
   *size = pwcm->pwc->bytes_per_second;
+  sleep (1);
   return (void*) 1;
 }
 
