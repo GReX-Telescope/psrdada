@@ -1,5 +1,7 @@
 #include "dada_pwc_main.h"
 
+#include <unistd.h> /* sleep */
+
 /*! Pointer to the function that starts data transfer */
 time_t fake_start_function (dada_pwc_main_t* pwcm, time_t utc, void* context)
 {
