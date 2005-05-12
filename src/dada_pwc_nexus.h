@@ -44,6 +44,9 @@ extern "C" {
     /*! an array of configuration parameters to be parsed into header */
     string_array* config_params;
 
+    /*! pointer to function used to convert between time representations */
+    struct tm* (*convert_to_tm) (const time_t* timep);
+
   } dada_pwc_nexus_t;
 
   /*! Create a new DADA PWC nexus */
