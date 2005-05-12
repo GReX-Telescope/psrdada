@@ -1,5 +1,5 @@
-#ifndef __DADA_PWC_H
-#define __DADA_PWC_H
+#ifndef __DADA_PWC_MAIN_H
+#define __DADA_PWC_MAIN_H
 
 /* ************************************************************************
 
@@ -11,14 +11,26 @@
 #include "dada_pwc.h"
 #include "multilog.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-  typedef struct {
+  typedef struct dada_pwc_main {
 
-    /* The primary write client control connection */
+    /*! The primary write client control connection */
     dada_pwc_t* pwc;
 
-    /* The current command from the control connection */
+    /*! The current command from the PWC control connection */
     dada_pwc_command_t command;
+
+    /*! The status and error logging interface */
+    multilog_t* log;
+
+    /*! Pointer to the function that starts data transfer */
+    time_t (*start_function) (struct dada_pwc_main*, time_t, void* context);
+
+    /*! Additional context information to be passed to start_function */
+    void* context;
 
   } dada_pwc_main_t;
 
