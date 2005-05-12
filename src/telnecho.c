@@ -18,13 +18,14 @@ int main (int argc, char** argv)
   FILE* sockout = 0;
 
   char* rgot = NULL;
+
+  char hostname [100];
+  int port;
+
   unsigned bufsize = 1024;
 
   char* inmsg = (char*) malloc ( bufsize );
   assert (inmsg != 0);
-
-  char hostname [100];
-  int port;
 
   port = 20013;
   if (argc > 1)
