@@ -4,8 +4,8 @@ The Control Interface software will implement the single instrument
 look and feel of PuMa-II.  A single process, {\tt puma2\_nexus}, will:
 
 \begin{itemize}
-\item connect to the Command interface of the Primary Write Clients
-\item issue commands as necessary to each Primary Write Client
+\item connect to the Command interface of each Primary Write Client (PWC)
+\item issue commands as necessary to each PWC
 \item collate monitoring information from all processes
 \item provide Command and Monitoring connections to outside world
 \item start and stop PuMa-II processes on any node as required
@@ -37,7 +37,7 @@ configuration of the PuMa-II instrument.
 \section{Data Flow configuration}
 
 The {\tt puma2\_nexus} software will distribute Data Flow configuration
-options to each of the Primary Write Clients.  Data Flow configuration
+options to each Primary Write Client (PWC).  Data Flow configuration
 describes the parameters of the Data Flow Control software that may
 need to change between observations.  These currently
 include:
@@ -53,7 +53,7 @@ reaches the Secondary nodes, these processes must be able to operate
 independently of the Control Interface software.  Therefore, the
 Data Flow configuration parameters will be stored as attributes in the
 ASCII Header for each observation (see Chapter~\ref{ch:header}).  The
-Header Block for each Primary Write Client is unique and each data
+Header Block for each PWC is unique and each data
 path may be configured independently.
 
 The {\tt puma2\_nexus} software will read all configuration parameters
@@ -61,7 +61,7 @@ from observation specification files.  This file will contain all
 information about the observation, including the Data Flow
 configuration configuration parameters, as described in the following
 section.  The {\tt puma2\_nexus} will parse the specification file and
-create a unique header for each of the Primary Write Clients.
+create a unique header for each PWC.
 
 \section{Observation Specification}
 
@@ -70,3 +70,16 @@ on the PuMa-II instrument.  Specifications will be created using the
 specification tool, a graphical user interface designed to ease the
 creation, duplication, and verification of observation and data
 reduction configurations.
+
+\section{Control Interface Configuration}
+
+Will also be read from a text file.  Parameters include:
+\begin{itemize}
+\item{\tt PWC\_PORT} the port to connect with the PWC Command Interface 
+\item{\tt NUM\_PWC} the number of Primary Write Clients
+\item{\tt PWC\_$N$} the name of the $N$th Primary Write Client
+\item{\tt COM\_POLL} the polling interval for communication connections
+\item{\tt HDR\_SIZE} the size of the Data Header
+\item{\tt HDR\_TEMPLATE} file containing the header template
+\item{\tt SPEC\_PARAM\_FILE} file containing the specification parameter list
+\end{itemize}
