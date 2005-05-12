@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-  typedef struct dada_pwc_main {
+  typedef struct dpwcm {
 
     /*! The primary write client control connection */
     dada_pwc_t* pwc;
@@ -27,9 +27,15 @@ extern "C" {
     multilog_t* log;
 
     /*! Pointer to the function that starts data transfer */
-    time_t (*start_function) (struct dada_pwc_main*, time_t, void* context);
+    time_t (*start_function) (struct dpwcm*, time_t);
 
-    /*! Additional context information to be passed to start_function */
+    /*! Pointer to the function that returns a data buffer */
+    void* (*buffer_function) (struct dpwcm*, uint64_t* size);
+
+    /*! Pointer to the function that stops data transfer */
+    int (*stop_function) (struct dpwcm*);
+
+    /*! Additional context information */
     void* context;
 
   } dada_pwc_main_t;

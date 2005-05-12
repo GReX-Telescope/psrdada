@@ -2,8 +2,7 @@
 
 #include <unistd.h> /* sleep */
 
-/*! Pointer to the function that starts data transfer */
-time_t fake_start_function (dada_pwc_main_t* pwcm, time_t utc, void* context)
+time_t fake_start_function (dada_pwc_main_t* pwcm, time_t utc)
 {
   time_t now = time(0);
   unsigned sleep_time = 0;
@@ -18,13 +17,27 @@ time_t fake_start_function (dada_pwc_main_t* pwcm, time_t utc, void* context)
   return now;
 }
 
+void* fake_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
+{
+  *size = pwcm->pwc->bytes_per_second;
+  return (void*) 1;
+}
+
+int fake_stop_function (dada_pwc_main_t* pwcm)
+{
+  return 0;
+}
+
 int main ()
 {
   dada_pwc_main_t* pwcm = 0;
 
   fprintf (stderr, "Creating dada pwc main\n");
   pwcm = dada_pwc_main_create ();
-  pwcm->start_function = fake_start_function;
+
+  pwcm->start_function  = fake_start_function;
+  pwcm->buffer_function = fake_buffer_function;
+  pwcm->stop_function   = fake_stop_function;
 
   fprintf (stderr, "Creating dada pwc control interface\n");
   pwcm->pwc = dada_pwc_create ();
