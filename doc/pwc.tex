@@ -80,6 +80,17 @@ effect immediately.  If {\tt DURATION} has been specified, it will not
 be corrected to reflect the difference between requested and actual
 start times.
 
+The command interface described in this section is implemented by the
+{\tt dada\_pwc} software, as documented in Appendix~\ref{app:dada_pwc}.
+
+\section{Primary Write Client Main Loop}
+\label{sec:pwc_main}
+
+In addition to providing the command interface described in the
+previous section, the Primary Write Client must implement the transfer
+of data to the Data Block.  This section gives an outline of how this
+will be done.
+
 \subsection{Top Down Description}
 
 The following describes the behaviour of the Primary Write Client
@@ -138,5 +149,16 @@ The following describes the behaviour of the Primary Write Client
 	\end{itemize}
 \end{itemize}
 
+\begin{figure}
+\centerline{\psfig{figure=pwc_state.eps,height=3in,angle=0}}
+\caption [\sffamily PuMa-II Control Flow]
+{
+Schematic overview of PuMa-II control flow.  Note that the state 
+can be toggled between clocking and recording.
+}
+\label{fig:pwc_state}
+\end{figure}
 
-
+The behaviour described in this section is implemented by the {\tt
+dada\_pwc\_main} software, as documented in
+Appendix~\ref{app:dada_pwc_main}.
