@@ -1,7 +1,5 @@
 #include "dada_pwc_main.h"
-
 #include <stdlib.h>
-#include <unistd.h> /* sleep */
 
 /*! Create a new DADA primary write client main loop */
 dada_pwc_main_t* dada_pwc_main_create ()
@@ -43,51 +41,51 @@ int dada_pwc_main (dada_pwc_main_t* pwcm)
 {
   if (!pwcm) {
     fprintf (stderr, "dada_pwc_main no main!\n");
-    return -1;
+    return EXIT_FAILURE;
   }
 
   if (!pwcm->pwc) {
     fprintf (stderr, "dada_pwc_main no PWC command connection\n");
-    return -1;
+    return EXIT_FAILURE;
   }
 
   if (!pwcm->log) {
     fprintf (stderr, "dada_pwc_main no logging facility\n");
-    return -1;
+    return EXIT_FAILURE;
   }
 
   if (!pwcm->start_function) {
     fprintf (stderr, "dada_pwc_main no start function\n");
-    return -1;
+    return EXIT_FAILURE;
   }
 
   if (!pwcm->buffer_function) {
     fprintf (stderr, "dada_pwc_main no buffer function\n");
-    return -1;
+    return EXIT_FAILURE;
   }
 
   if (!pwcm->stop_function) {
     fprintf (stderr, "dada_pwc_main no stop function\n");
-    return -1;
+    return EXIT_FAILURE;
   }
 
   while (!dada_pwc_quit (pwcm->pwc)) {
 
     /* Enter the idle/prepared state. */
     if (dada_pwc_main_prepare (pwcm) < 0)
-      return -1;
+      return EXIT_FAILURE;
 
     /* Start the data transfer. */
     if (dada_pwc_main_start_transfer (pwcm) < 0)
-      return -1;
+      return EXIT_FAILURE;
 
     /* Enter the clocking/recording state. */
     if (dada_pwc_main_transfer_data (pwcm) < 0)
-      return -1;
+      return EXIT_FAILURE;
 
     /* Stop the data transfer. */
     if (dada_pwc_main_stop_transfer (pwcm) < 0)
-      return -1;
+      return EXIT_FAILURE;
 
   } 
 
@@ -112,7 +110,7 @@ int dada_pwc_main_prepare (dada_pwc_main_t* pwcm)
 
       */
 
-      dada_pwc_set_state (pwcm->pwc, dada_pwc_prepared, time(0));
+      dada_pwc_set_state (pwcm->pwc, dada_pwc_prepared, 0);
 
     }
 
@@ -123,17 +121,14 @@ int dada_pwc_main_prepare (dada_pwc_main_t* pwcm)
       if (pwcm->command.byte_count) {
 	multilog (pwcm->log, LOG_ERR, "dada_pwc_main_idle internal error.  "
 		 "byte count specified in CLOCK command\n");
-	return -1;
+	return EXIT_FAILURE;
       }
 
-      /* here is where the Data Block would be set to over-write e.g.
-	 
-      if (ipcio_open (pwcm->data_block, 'w') < 0)  {
-        multilog (log, LOG_ERR, "Could not open data block\n");
+      /* Open the Data Block in clocking mode */
+      if (pwcm->data_block && ipcio_open (pwcm->data_block, 'w') < 0)  {
+        multilog (pwcm->log, LOG_ERR, "Could not open data block\n");
         return EXIT_FAILURE;
       }
-      
-      */
 
       /* leave the idle state loop */
       return 0;
@@ -148,15 +143,12 @@ int dada_pwc_main_prepare (dada_pwc_main_t* pwcm)
 	multilog (pwcm->log, LOG_INFO,
 		  "Will record %"PRIu64" bytes\n", pwcm->command.byte_count);
 
-      /* here is where the Data Block would be set to over-write e.g.
-
-      if (ipcio_open (pwcm->data_block, 'W') < 0)  {
-        multilog (log, LOG_ERR, "Could not open data block\n");
+      /* Open the Data Block in recording mode */
+      if (pwcm->data_block && ipcio_open (pwcm->data_block, 'W') < 0)  {
+        multilog (pwcm->log, LOG_ERR, "Could not open data block\n");
         return EXIT_FAILURE;
       }
       
-      */
-
       /* leave the idle state loop */
       return 0;
 
@@ -164,7 +156,7 @@ int dada_pwc_main_prepare (dada_pwc_main_t* pwcm)
     else {
       multilog (pwcm->log, LOG_ERR, "dada_pwc_main_prepare internal error = "
 	       "unexpected command code %d\n", pwcm->command.code);
-      return -1;
+      return EXIT_FAILURE;
     }
 
   }
@@ -175,6 +167,8 @@ int dada_pwc_main_prepare (dada_pwc_main_t* pwcm)
 /*! The transit to clocking/recording state */
 int dada_pwc_main_start_transfer (dada_pwc_main_t* pwcm)
 {
+  uint64_t header_size = 0;
+
   /* If utc != 0, the start function should attempt to start the data
      transfer at the specified utc.  Otherwise, start as soon as
      possible.  Regardless, the start function should return the UTC
@@ -183,21 +177,24 @@ int dada_pwc_main_start_transfer (dada_pwc_main_t* pwcm)
 
   time_t utc = pwcm->start_function (pwcm, pwcm->command.utc);
 
+
   if (utc <= 0) {
     multilog (pwcm->log, LOG_ERR, "dada_pwc_main_start_transfer"
 	      " start function returned invalid UTC\n");
-    return -1;
+    return EXIT_FAILURE;
   }
 
-  /* here is where UTC_START would be written to the header and
-     the header would be made available to write clients
+  /* here is where UTC_START would be written to the header */
 
-     if (ipcbuf_mark_filled (pwcm->header_block, pwcm->header_size) < 0)  {
-       multilog (log, LOG_ERR, "Could not mark filled header block\n");
-       return EXIT_FAILURE;
-     }
 
-  */
+  /* make header available on Header Block */
+  if (pwcm->header_block) {
+    header_size = ipcbuf_get_bufsz (pwcm->header_block);
+    if (ipcbuf_mark_filled (pwcm->header_block, header_size) < 0)  {
+      multilog (pwcm->log, LOG_ERR, "Could not mark filled header block\n");
+      return EXIT_FAILURE;
+    }
+  }
 
   if (pwcm->command.code == dada_pwc_clock)
     return dada_pwc_set_state (pwcm->pwc, dada_pwc_clocking, utc);
@@ -207,7 +204,7 @@ int dada_pwc_main_start_transfer (dada_pwc_main_t* pwcm)
 
   multilog (pwcm->log, LOG_ERR, "dada_pwc_main_start_transfer"
 	    " internal error = invalid state\n");
-  return -1;
+  return EXIT_FAILURE;
 }
 
 
@@ -223,8 +220,8 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
   /* the number of bytes to write to the Data Block */
   uint64_t bytes_to_write = pwcm->command.byte_count;
 
-  /* the number of bytes written each time */
-  uint64_t write_bytes = 0;
+  /* the number of bytes to be copied from buffer */
+  uint64_t buf_bytes = 0;
 
   /* pointer to the data buffer */
   char* buffer = 0;
@@ -251,7 +248,7 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
 	multilog (pwcm->log, LOG_ERR,
 		  "dada_pwc_main_transfer data internal error = "
 		  "unexpected command code %d\n", pwcm->command.code);
-	return -1;
+	return EXIT_FAILURE;
       }
 
       if (pwcm->command.byte_count > total_bytes_written) {
@@ -301,28 +298,30 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
 
       if (!buffer || !buffer_size) {
         multilog (pwcm->log, LOG_ERR, "buffer function error\n");
-        return -1;
+        return EXIT_FAILURE;
       }
 
       /* If the transit_byte is set, do not write more than the requested
 	 amount of data to the Data Block */
-      write_bytes = buffer_size;
-      if (transit_byte && write_bytes > bytes_to_write)
-	write_bytes = bytes_to_write;
+      buf_bytes = buffer_size;
+      if (transit_byte && buf_bytes > bytes_to_write)
+	buf_bytes = bytes_to_write;
 
-      /* here is where the writing would occur e.g.
+      /* write the bytes to the Data Block */
+      if (pwcm->data_block &&
+	  ipcio_write (pwcm->data_block, buffer, buf_bytes) < buf_bytes) {
 
-      if (( ipcio_write(&data_block, data, write_bytes) ) < write_bytes ){
-      multilog(log, LOG_ERR, "Cannot write requested bytes to SHM\n");
-      return EXIT_FAILURE;
+	multilog (pwcm->log, LOG_ERR, "Cannot write %"PRIu64
+		  " bytes to Data Block\n", buf_bytes);
+
+	return EXIT_FAILURE;
+
       }
 
-      */
-
-      total_bytes_written += write_bytes;
+      total_bytes_written += buf_bytes;
 
       if (bytes_to_write)
-	bytes_to_write -= write_bytes;
+	bytes_to_write -= buf_bytes;
 
       multilog (pwcm->log, LOG_INFO, "Written %"PRIu64" bytes\n",
 		total_bytes_written);
@@ -343,16 +342,13 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
 
 	multilog (pwcm->log, LOG_INFO, "record stop\n");
 	
-	/* here is where the Data Block would be stopped e.g.
-	   
-	   if (ipcio_stop (data_block) < 0)  {
-	     multilog (log, LOG_ERR, "Could not stop data block\n");
-	     return EXIT_FAILURE;
-	   }
-	   
-	*/
+	/* stop valid data on the Data Block at the last byte written */
+	if (pwcm->data_block && ipcio_stop (pwcm->data_block) < 0)  {
+	  multilog (pwcm->log, LOG_ERR, "Could not stop data block\n");
+	  return EXIT_FAILURE;
+	}
 	
-	dada_pwc_set_state (pwcm->pwc, dada_pwc_clocking, time(0));
+	dada_pwc_set_state (pwcm->pwc, dada_pwc_clocking, 0);
 	
       }
 
@@ -360,16 +356,15 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
 
 	multilog (pwcm->log, LOG_INFO, "record start\n");
 	
-	/* here is where the Data Block would be started e.g.
-	   
-	   if (ipcio_start, (data_block, pwcm->command.byte_count) < 0)  {
-	     multilog (log, LOG_ERR, "Could not stop data block\n");
-	     return EXIT_FAILURE;
-	   }
-	   
-	*/
+	/* start valid data on the Data Block at the requested byte */
+	if (pwcm->data_block && 
+	    ipcio_start (pwcm->data_block, pwcm->command.byte_count) < 0)  {
+	  multilog (pwcm->log, LOG_ERR, "Could not start data block"
+		    " at %"PRIu64"\n", pwcm->command.byte_count);
+	  return EXIT_FAILURE;
+	}
 	
-	dada_pwc_set_state (pwcm->pwc, dada_pwc_recording, time(0));
+	dada_pwc_set_state (pwcm->pwc, dada_pwc_recording, 0);
 	
       }
 
@@ -387,28 +382,26 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
 	 the Data Block */
 
       /* offset the buffer pointer by the amount already written */
-      buffer += write_bytes;
+      buffer += buf_bytes;
       /* set the number of remaining samples */
-      write_bytes = buffer_size - write_bytes;
+      buf_bytes = buffer_size - buf_bytes;
 
-      if (write_bytes) {
+      if (buf_bytes && pwcm->data_block) {
 
-	/* here is where the writing would occur e.g.
+	/* write the bytes to the Data Block */
+	if (ipcio_write (pwcm->data_block, buffer, buf_bytes) < buf_bytes) {
 
-	 if (( ipcio_write(&data_block, data, write_bytes) ) < write_bytes ){
-	   multilog(log, LOG_ERR, "Cannot write requested bytes to SHM\n");
-	   return EXIT_FAILURE;
-	 }
+	  multilog (pwcm->log, LOG_ERR, "Cannot write %"PRIu64
+		    " bytes to Data Block\n", buf_bytes);
+	  return EXIT_FAILURE;
 
-	*/
+	}
 
-	total_bytes_written += write_bytes;
+	total_bytes_written += buf_bytes;
 
       }
 
     }
-
-    sleep (1);
 
   }
 
@@ -422,17 +415,15 @@ int dada_pwc_main_stop_transfer (dada_pwc_main_t* pwcm)
   if (pwcm->stop_function (pwcm) < 0)  {
     multilog (pwcm->log, LOG_ERR, "dada_pwc_main_stop_transfer"
 	      " stop function returned error code\n");
-    return -1;
+    return EXIT_FAILURE;
   }
 
-  /* here is where the Data Block would be closed e.g.
+  /* close the Data Block */
      
-     if (ipcio_close (data_block) < 0)  {
-       multilog (log, LOG_ERR, "Could not close data block\n");
-       return EXIT_FAILURE;
-     }
-
-  */
+  if (pwcm->data_block && ipcio_close (pwcm->data_block) < 0)  {
+    multilog (pwcm->log, LOG_ERR, "Could not close Data Block\n");
+    return EXIT_FAILURE;
+  }
   
   dada_pwc_set_state (pwcm->pwc, dada_pwc_idle, 0);
 

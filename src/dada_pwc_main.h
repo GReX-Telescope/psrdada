@@ -10,6 +10,7 @@
 
 #include "dada_pwc.h"
 #include "multilog.h"
+#include "ipcio.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -20,11 +21,14 @@ extern "C" {
     /*! The primary write client control connection */
     dada_pwc_t* pwc;
 
-    /*! The current command from the PWC control connection */
-    dada_pwc_command_t command;
-
     /*! The status and error logging interface */
     multilog_t* log;
+
+    /*! The Data Block interface */
+    ipcio_t* data_block;
+
+    /*! The Header Block interface */
+    ipcbuf_t* header_block;
 
     /*! Pointer to the function that starts data transfer */
     time_t (*start_function) (struct dpwcm*, time_t);
@@ -37,6 +41,9 @@ extern "C" {
 
     /*! Additional context information */
     void* context;
+
+    /*! The current command from the PWC control connection */
+    dada_pwc_command_t command;
 
   } dada_pwc_main_t;
 
