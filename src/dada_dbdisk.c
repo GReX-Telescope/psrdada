@@ -1,9 +1,9 @@
+#include "dada_prc_main.h"
 #include "dada.h"
-#include "ipcio.h"
-#include "multilog.h"
+
 #include "disk_array.h"
 #include "ascii_header.h"
-#include "diff_time.h"
+#include "daemon.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,272 +22,168 @@ void usage()
 	   " -d         run as daemon\n");
 }
 
-int64_t write_loop (ipcio_t* data_block, multilog_t* log,
-		    int fd, uint64_t bytes_to_write, uint64_t optimal_bufsz)
-{
-  /* The buffer used for file I/O */
-  static char* buffer = 0;
-  static uint64_t buffer_size = 0;
+typedef struct {
 
-  /* counters */
-  uint64_t bytes_written = 0;
-  ssize_t bytes = 0;
+  /* the set of disks to which data may be written */
+  disk_array_t* array;
 
-  buffer_size = 512 * optimal_bufsz;
-  buffer = (char*) malloc (buffer_size);
-  assert (buffer != 0);
+  /* current observation id, as defined by OBS_ID attribute */
+  char obs_id [DADA_OBS_ID_MAXLEN];
 
-  while (!ipcbuf_eod((ipcbuf_t*)data_block) && bytes_to_write) {
+  /* current filename */
+  char file_name [FILENAME_MAX];
 
-    if (buffer_size > bytes_to_write)
-      bytes = bytes_to_write;
-    else
-      bytes = buffer_size;
-
-    bytes = ipcio_read (data_block, buffer, bytes);
-    if (bytes < 0) {
-      multilog (log, LOG_ERR, "ipcio_read error %s\n", strerror(errno));
-      return -1;
-    }
-
-    bytes = write (fd, buffer, bytes);
-    if (bytes < 0) {
-      multilog (log, LOG_ERR, "write error %s\n", strerror(errno));
-      return bytes_written;
-    }
-
-    bytes_to_write -= bytes;
-    bytes_written += bytes;
-
-  }
-
-  return bytes_written;
-}
-
-int main_loop (dada_t* dada,
-	       ipcio_t* data_block,
-	       ipcbuf_t* header_block,
-	       disk_array_t* array,
-	       multilog_t* log)
-{
-  /* The duplicate of the header from the ring buffer */
-  static char* dup = 0;
-  static uint64_t dup_size = 0;
-
-  /* The header from the ring buffer */
-  char* header = 0;
-  uint64_t header_size = 0;
-
-  /* header size, as defined by HDR_SIZE attribute */
-  uint64_t hdr_size = 0;
-  /* byte offset from start of data, as defined by OBS_OFFSET attribute */
-  uint64_t obs_offset = 0;
-
-  /* file size, as defined by FILE_SIZE attribute */
-  uint64_t file_size = 0;
   /* file offset from start of data, as defined by FILE_NUMBER attribute */
-  unsigned file_number = 0;
+  unsigned file_number;
+
+} dada_dbdisk_t;
+
+#define DADA_DBDISK_INIT { 0, "", "", 0 }
+
+/*! Function that opens the data transfer target */
+int file_open_function (dada_prc_main_t* prcm)
+{
+  /* the dada_dbdisk specific data */
+  dada_dbdisk_t* dbdisk = 0;
+  
+  /* status and error logging facility */
+  multilog_t* log;
+
+  /* the header */
+  char* header = 0;
 
   /* observation id, as defined by OBS_ID attribute */
   char obs_id [DADA_OBS_ID_MAXLEN] = "";
 
-  /* Optimal buffer size, as returned by disk array */
-  uint64_t optimal_buffer_size;
+  /* size of each file to be written in bytes, as determined by FILE_SIZE */
+  uint64_t file_size = 0;
 
-  /* Byte count */
-  int64_t bytes_written = 0;
+  /* the optimal buffer size for writing to file */
+  uint64_t optimal_bytes = 0;
 
-  /* Time at start and end of write loop */
-  struct timeval start_loop, end_loop;
-
-  /* Time required to write data */
-  double write_time = 0;
-
-  /* File name */
-  static char* file_name = 0;
-
-  /* File descriptor */
+  /* the open file descriptor */
   int fd = -1;
 
-  while (!header_size) {
+  assert (prcm != 0);
 
-    /* Wait for the next valid header sub-block */
-    header = ipcbuf_get_next_read (header_block, &header_size);
+  dbdisk = (dada_dbdisk_t*) prcm->context;
+  assert (dbdisk != 0);
 
-    if (!header) {
-      multilog (log, LOG_ERR, "Could not get next header\n");
-      return -1;
-    }
+  log = prcm->log;
+  assert (log != 0);
 
-    if (!header_size) {
-
-      ipcbuf_mark_cleared (header_block);
-
-      if (ipcbuf_eod (header_block)) {
-	multilog (log, LOG_INFO, "End of data on header block\n");
-	ipcbuf_reset (header_block);
-      }
-      else {
-	multilog (log, LOG_ERR, "Empty header block\n");
-	return -1;
-      }
-
-    }
-
-
-  }
-
-  header_size = ipcbuf_get_bufsz (header_block);
-
-  /* Check that header is of advertised size */
-  if (ascii_header_get (header, "HDR_SIZE", "%"PRIu64"", &hdr_size) != 1) {
-    multilog (log, LOG_ERR, "Header block does not have HDR_SIZE\n");
-    return -1;
-  }
-
-  if (hdr_size < header_size)
-    header_size = hdr_size;
-
-  else if (hdr_size > header_size) {
-    multilog (log, LOG_ERR, "HDR_SIZE=%"PRIu64" is greater than hdr bufsz=%"PRIu64"\n",
-              hdr_size, header_size);
-    multilog (log, LOG_DEBUG, "ASCII header dump\n%s", header);
-    return -1;
-  }
-
-  /* Duplicate the header */
-  if (header_size > dup_size) {
-    dup = realloc (dup, header_size);
-    assert (dup != 0);
-    dup_size = header_size;
-  }
-  memcpy (dup, header, header_size);
-
-  ipcbuf_mark_cleared (header_block);
+  header = prcm->header;
+  assert (header != 0);
 
   /* Get the observation ID */
-  if (ascii_header_get (dup, "OBS_ID", "%s", obs_id) != 1) {
-    multilog (log, LOG_WARNING, "Header block does not have OBS_ID\n");
+  if (ascii_header_get (prcm->header, "OBS_ID", "%s", obs_id) != 1) {
+    multilog (log, LOG_WARNING, "Header block does not define OBS_ID\n");
     strcpy (obs_id, "UNKNOWN");
   }
 
-  /* Get the header offset */
-  if (ascii_header_get (dup, "OBS_OFFSET", "%"PRIu64"", &obs_offset) != 1) {
-    multilog (log, LOG_WARNING, "Header block does not have OBS_OFFSET\n");
-    obs_offset = 0;
+  /* check to see if we are still working with the same observation */
+  if (strcmp (obs_id, dbdisk->obs_id) != 0) {
+    dbdisk->file_number = 0;
+    multilog (log, LOG_INFO, "New OBS_ID=%s -> file number=0\n", obs_id);
+  }
+  else {
+    dbdisk->file_number++;
+    multilog (log, LOG_INFO, "Continue OBS_ID=%s -> file number=%lu\n",
+	      obs_id, dbdisk->file_number);
   }
 
+  /* Set the file number to be written to the header */
+  if (ascii_header_set (header, "FILE_NUMBER", "%u", dbdisk->file_number)<0) {
+    multilog (log, LOG_ERR, "Error writing FILE_NUMBER\n");
+    return -1;
+  }
+
+  /* set the current observation id */
+  strcpy (dbdisk->obs_id, obs_id);
+
+  /* create the current file name */
+  snprintf (dbdisk->file_name, FILENAME_MAX,
+	    "%s.%06u.dada", obs_id, dbdisk->file_number);
+
   /* Get the file size */
-  if (ascii_header_get (dup, "FILE_SIZE", "%"PRIu64"", &file_size) != 1) {
-    multilog (log, LOG_WARNING, "Header block does not have FILE_SIZE\n");
+  if (ascii_header_get (header, "FILE_SIZE", "%"PRIu64, &file_size) != 1) {
+    multilog (log, LOG_WARNING, "Header block does not define FILE_SIZE\n");
     file_size = DADA_DEFAULT_FILESIZE;
   }
 
-  /* Get the file number */
-  if (ascii_header_get (dup, "FILE_NUMBER", "%u", &file_number) != 1) {
-    multilog (log, LOG_WARNING, "Header block does not have FILE_NUMBER\n");
-    file_number = 0;
+  /* Open the file */
+  fd = disk_array_open (dbdisk->array, dbdisk->file_name,
+			file_size, &optimal_bytes);
+
+  if (fd < 0) {
+    multilog (log, LOG_ERR, "Error opening %s\n", dbdisk->file_name);
+    return -1;
   }
 
-  if (!file_name)
-    file_name = malloc (FILENAME_MAX);
-  assert (file_name != 0);
+  multilog (log, LOG_INFO, "%s opened for writing %"PRIu64" bytes\n",
+	    dbdisk->file_name, file_size);
 
-  /* Write data until the end of the data stream */
-  while (!ipcbuf_eod((ipcbuf_t*)data_block)) {
-
-    snprintf (file_name, FILENAME_MAX, "%s.%06u.dada", obs_id, file_number);
-
-    fd = disk_array_open (array, file_name, file_size, &optimal_buffer_size);
-
-    if (fd < 0) {
-      multilog (log, LOG_ERR, "Error opening %s\n", file_name);
-      return -1;
-    }
-
-    multilog (log, LOG_INFO, "%s opened for writing %"PRIu64" bytes\n",
-	      file_name, file_size);
-
-    /* Set the header offset */
-    if (ascii_header_set (dup, "OBS_OFFSET", "%"PRIu64"", obs_offset) < 0) {
-      multilog (log, LOG_ERR, "Error writing OBS_OFFSET\n");
-      return -1;
-    }
-
-    /* Set the file number */
-    if (ascii_header_set (dup, "FILE_NUMBER", "%u", file_number) < 0) {
-      multilog (log, LOG_ERR, "Error writing FILE_NUMBER\n");
-      return -1;
-    }
-
-    if (write (fd, dup, header_size) < header_size) {
-      multilog (log, LOG_ERR, "Error writing header: %s\n", strerror(errno));
-      return -1;
-    }
-
-    gettimeofday (&start_loop, NULL);
-
-    /* Write data until the end of the file or data stream */
-    bytes_written = write_loop (data_block, log, 
-				fd, file_size, optimal_buffer_size);
-
-    gettimeofday (&end_loop, NULL);
-
-    if (close (fd) < 0)
-      multilog (log, LOG_ERR, "Error closing %s: %s\n", 
-		file_name, strerror(errno));
-
-    if (bytes_written < 0)
-      return -1;
-
-
-
-    if (bytes_written == 0)  {
-
-      if (chmod (file_name, S_IRWXU) < 0)
-	multilog (log, LOG_ERR, "Error chmod (%s, rwx): %s\n", 
-		  file_name, strerror(errno));
-
-      if (remove (file_name) < 0)
-	multilog (log, LOG_ERR, "Error remove (%s): %s\n", 
-		  file_name, strerror(errno));
-
-    }
-    else {
-      
-      write_time = diff_time(start_loop, end_loop);
-      multilog (log, LOG_INFO, "%"PRIu64" bytes written to %s in %lfs (%lg MB/s)\n",
-		bytes_written, file_name, write_time,
-		bytes_written/(1e6*write_time));
-      
-      obs_offset += bytes_written;
-
-    }
-
-    file_number ++;
-
-  }
-
-  ipcbuf_reset ((ipcbuf_t*)data_block);
+  prcm->fd = fd;
+  prcm->transfer_bytes = file_size;
+  prcm->optimal_bytes = 512 * optimal_bytes;
 
   return 0;
-
 }
 
-struct {
-  char quit;
-} state;
+/*! Function that closes the data file */
+int file_close_function (dada_prc_main_t* prcm, uint64_t bytes_written)
+{
+  /* the dada_dbdisk specific data */
+  dada_dbdisk_t* dbdisk = 0;
+
+  /* status and error logging facility */
+  multilog_t* log;
+
+  assert (prcm != 0);
+
+  dbdisk = (dada_dbdisk_t*) prcm->context;
+  assert (dbdisk != 0);
+
+  log = prcm->log;
+  assert (log != 0);
+
+  if (close (prcm->fd) < 0)
+    multilog (log, LOG_ERR, "Error closing %s: %s\n", 
+	      dbdisk->file_name, strerror(errno));
+
+  if (!bytes_written)  {
+
+    multilog (log, LOG_ERR, "Removing empty file: %s\n", dbdisk->file_name);
+
+    if (chmod (dbdisk->file_name, S_IRWXU) < 0)
+      multilog (log, LOG_ERR, "Error chmod (%s, rwx): %s\n", 
+		dbdisk->file_name, strerror(errno));
+    
+    if (remove (dbdisk->file_name) < 0)
+      multilog (log, LOG_ERR, "Error remove (%s): %s\n", 
+		dbdisk->file_name, strerror(errno));
+    
+  }
+
+  return 0;
+}
 
 int main (int argc, char **argv)
 {
   /* DADA configuration */
   dada_t dada;
 
+  /* DADA Data Block to Disk configuration */
+  dada_dbdisk_t dbdisk = DADA_DBDISK_INIT;
+
   /* DADA Data Block */
   ipcio_t data_block = IPCIO_INIT;
 
   /* DADA Header Block */
   ipcbuf_t header_block = IPCBUF_INIT;
+
+  /* DADA Primary Read Client main loop */
+  dada_prc_main_t* prcm = 0;
 
   /* DADA Logger */
   multilog_t* log = 0;
@@ -297,10 +193,12 @@ int main (int argc, char **argv)
 
   /* Flag set in daemon mode */
   char daemon = 0;
-  pid_t pid;
 
   /* Flag set in verbose mode */
   char verbose = 0;
+
+  /* Quit flag */
+  char quit = 0;
 
   int arg = 0;
 
@@ -340,30 +238,8 @@ int main (int argc, char **argv)
   log = multilog_open ("dada_dbdisk", daemon);
 
   if (daemon) {
-
-    pid = fork();
-
-    if (pid < 0)
-      exit(EXIT_FAILURE);
-
-    if (pid > 0)
-      exit(EXIT_SUCCESS);
-
-    /* Create a new SID for the child process */
-    if (setsid() < 0)
-      exit (EXIT_FAILURE);
-              
-    /* Change the current working directory */
-    if (chdir("/") < 0)
-      exit (EXIT_FAILURE);
-        
-    /* Close out the standard file descriptors */
-    close(STDIN_FILENO);
-    close(STDOUT_FILENO);
-    close(STDERR_FILENO);
-
+    be_a_daemon ();
     multilog_serve (log, dada.log_port);
-
   }
   else
     multilog_add (log, stderr);
@@ -375,7 +251,7 @@ int main (int argc, char **argv)
   }
 
   if (ipcbuf_lock_read (&header_block) < 0) {
-    multilog (log, LOG_ERR, "Could not lock designated writer status\n");
+    multilog (log, LOG_ERR, "Could not lock designated reader status\n");
     return EXIT_FAILURE;
   }
 
@@ -389,10 +265,21 @@ int main (int argc, char **argv)
     return EXIT_FAILURE;
   }
 
+  prcm = dada_prc_main_create ();
 
-  while (!state.quit) {
+  prcm->log = log;
 
-    if (main_loop (&dada, &data_block, &header_block, disk_array, log) < 0)
+  prcm->data_block = &data_block;
+  prcm->header_block = &header_block;
+
+  prcm->open_function = file_open_function;
+  prcm->close_function = file_close_function;
+
+  prcm->context = &dbdisk;
+
+  while (!quit) {
+
+    if (dada_prc_main (prcm) < 0)
       multilog (log, LOG_ERR, "Error during transfer\n");
 
   }
