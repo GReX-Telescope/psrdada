@@ -26,24 +26,35 @@ extern "C" {
     /*! The Header Block interface */
     ipcbuf_t* header_block;
 
-    /*! The optimal size in bytes for each data transfer to the target */
-    uint64_t optimal_bytes;
-
     /*! Pointer to the function that opens the data transfer target */
     int (*open_function) (struct dada_prc_main*);
 
     /*! Pointer to the function that writes data to the transfer target */
     int64_t (*write_function) (struct dada_prc_main*, 
-			       void* data, uint64_t* size);
+			       void* data, uint64_t data_size);
 
     /*! Pointer to the function that closes the data transfer target */
-    int (*close_function) (struct dada_prc_main*);
+    int (*close_function) (struct dada_prc_main*, uint64_t bytes_written);
+
+    /*! Additional context information */
+    void* context;
+
+    /* The header to be transfered to the target */
+    char* header;
+
+    /* The size of the header */
+    uint64_t header_size;
+
+    /* The open function should set the following three attributes */
 
     /*! The file descriptor of the data transfer target */
     int fd;
 
-    /*! Additional context information */
-    void* context;
+    /*! The total number of bytes to be transfered to the target */
+    uint64_t transfer_bytes;
+
+    /*! The optimal number of bytes to transfer to the target at one time */
+    uint64_t optimal_bytes;
 
   } dada_prc_main_t;
 
