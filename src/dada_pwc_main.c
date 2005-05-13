@@ -5,6 +5,7 @@
 dada_pwc_main_t* dada_pwc_main_create ()
 {
   dada_pwc_main_t* pwcm = malloc (sizeof(dada_pwc_main_t));
+  assert (pwcm != 0);
 
   pwcm -> pwc = 0;
   pwcm -> log = 0;

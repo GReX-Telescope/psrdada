@@ -16,7 +16,7 @@
 extern "C" {
 #endif
 
-  typedef struct dpwcm {
+  typedef struct dada_pwc_main {
 
     /*! The primary write client control connection */
     dada_pwc_t* pwc;
@@ -31,13 +31,13 @@ extern "C" {
     ipcbuf_t* header_block;
 
     /*! Pointer to the function that starts data transfer */
-    time_t (*start_function) (struct dpwcm*, time_t);
+    time_t (*start_function) (struct dada_pwc_main*, time_t utc);
 
     /*! Pointer to the function that returns a data buffer */
-    void* (*buffer_function) (struct dpwcm*, uint64_t* size);
+    void* (*buffer_function) (struct dada_pwc_main*, uint64_t* size);
 
     /*! Pointer to the function that stops data transfer */
-    int (*stop_function) (struct dpwcm*);
+    int (*stop_function) (struct dada_pwc_main*);
 
     /*! Additional context information */
     void* context;
@@ -51,10 +51,10 @@ extern "C" {
   dada_pwc_main_t* dada_pwc_main_create ();
 
   /*! Destroy a DADA primary write client main loop */
-  void dada_pwc_main_destroy (dada_pwc_main_t* primary);
+  void dada_pwc_main_destroy (dada_pwc_main_t* pwcm);
 
   /*! Run the DADA primary write client main loop */
-  int dada_pwc_main (dada_pwc_main_t* main);
+  int dada_pwc_main (dada_pwc_main_t* pwcm);
 
 #ifdef __cplusplus
 	   }
