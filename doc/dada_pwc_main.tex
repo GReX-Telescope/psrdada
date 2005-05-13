@@ -20,7 +20,7 @@ dada_pwc_main_t* pwcm = dada_pwc_main_create ();
 After creation, the following member variables must be initialized:
 \begin{enumerate}
 
-\item {\bf {\tt pwc}} a pointer to a {\tt dada\_pwc\_t} struct; 
+\item {\bf {\tt pwc}} pointer to a {\tt dada\_pwc\_t} struct; 
    this struct is used to communicate between the thread that parses
    external commands from the Command Interface and the thread that
    runs the PWC Main Loop.  The {\tt pwc} member variable can simply
@@ -34,13 +34,16 @@ if (dada_pwc_serve (pwcm->pwc) < 0)
   /* report an error message */
 \end{verbatim}
 
+\item {\bf {\tt log}} pointer to the {\tt multilog\_t} struct
+	that will be used for status and error reporting
+
 \item {\bf {\tt data\_block}} pointer to the {\tt ipcio\_t} struct 
 	that is connected to the Data Block
 
 \item {\bf {\tt header\_block}} pointer to the {\tt ipcio\_t} struct
 	that is connected to the Header Block
 
-\item {\bf {\tt start\_function}} a pointer to a function that starts the 
+\item {\bf {\tt start\_function}} pointer to the function that starts the 
   data transfer:
 \begin{verbatim}
 time_t start_function (dada_pwc_main_t*, time_t utc);
@@ -52,7 +55,7 @@ time_t start_function (dada_pwc_main_t*, time_t utc);
   data transfer, and should return the UTC of the first time sample to
   be transfered or zero on error.
 
-\item {\bf {\tt buffer\_function}} a pointer to a function that returns
+\item {\bf {\tt buffer\_function}} pointer to the function that returns
   the next buffer to be written to the Data Block:
 \begin{verbatim}
 void* buffer_function (dada_pwc_main_t*, uint64_t* size);
@@ -61,7 +64,7 @@ void* buffer_function (dada_pwc_main_t*, uint64_t* size);
   the {\tt NULL} pointer on error.  The size of the buffer (in bytes)
   should be returned in the {\tt size} argument.
 
-\item {\bf {\tt stop\_function}} a pointer to a function that stops
+\item {\bf {\tt stop\_function}} pointer to the function that stops
   the data transfer:
 \begin{verbatim}
 int stop_function (dada_pwc_main_t*);
