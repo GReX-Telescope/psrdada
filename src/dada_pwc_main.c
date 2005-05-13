@@ -12,6 +12,9 @@ dada_pwc_main_t* dada_pwc_main_create ()
   pwcm -> pwc = 0;
   pwcm -> log = 0;
 
+  pwcm -> data_block = 0;
+  pwcm -> header_block = 0;
+
   pwcm -> start_function = 0;
   pwcm -> buffer_function = 0;
   pwcm -> stop_function = 0;
