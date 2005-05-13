@@ -1,5 +1,7 @@
 #include "dada_pwc_main.h"
+
 #include <stdlib.h>
+#include <assert.h>
 
 /*! Create a new DADA primary write client main loop */
 dada_pwc_main_t* dada_pwc_main_create ()
