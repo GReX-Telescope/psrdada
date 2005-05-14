@@ -1,5 +1,7 @@
-#ifndef __DADA_H
-#define __DADA_H
+#ifndef __DADA_DEF_H
+#define __DADA_DEF_H
+
+#include <unistd.h>
 
 /* ************************************************************************
 
@@ -7,17 +9,20 @@
 
    ************************************************************************ */
 
-/* default file size of 1 GB */
-#define DADA_DEFAULT_FILESIZE 1073741824
-
-/* default header size of 4kB */
-#define DADA_DEFAULT_HDR_SIZE 4096
-
 /* key to connect to header block shared memory */
 #define DADA_HEADER_BLOCK_KEY   0xdada
 
 /* key to connect to data block shared memory */
 #define DADA_DATA_BLOCK_KEY     0xdadb
+
+/* default number of blocks in Data Block */
+#define DADA_DEFAULT_BLOCK_NUM  32
+
+/* default size of blocks in Data Block */
+#define DADA_DEFAULT_BLOCK_SIZE  ((uint64_t) sysconf (_SC_PAGE_SIZE) * 128)
+
+/* default size of block in Header Block */
+#define DADA_DEFAULT_HEADER_SIZE ((uint64_t) sysconf (_SC_PAGE_SIZE))
 
 /* default port to connect to primary write client command interface */
 #define DADA_DEFAULT_PWC_PORT   56026
@@ -30,6 +35,9 @@
 
 /* default port to connect to dbnic logging interface */
 #define DADA_DEFAULT_DBNIC_LOG  56047
+
+/* default file size of 1 GB */
+#define DADA_DEFAULT_FILESIZE 1073741824
 
 /* maximum length of observation id string */
 #define DADA_OBS_ID_MAXLEN 64
