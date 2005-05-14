@@ -1,5 +1,5 @@
 #include "dada_pwc.h"
-#include "dada.h"
+#include "dada_def.h"
 
 #include "ascii_header.h"
 #include "utc.h"
@@ -408,7 +408,7 @@ dada_pwc_t* dada_pwc_create ()
   primary -> utc_start = 0;
 
   /* default header size */
-  primary -> header_size = DADA_DEFAULT_HDR_SIZE;
+  primary -> header_size = DADA_DEFAULT_HEADER_SIZE;
   primary -> header = (char *) malloc (primary->header_size);
   assert (primary->header != 0);
 
