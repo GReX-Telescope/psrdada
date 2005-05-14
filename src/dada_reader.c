@@ -1,6 +1,5 @@
-#include "dada.h"
-#include "ipcio.h"
-#include "multilog.h"
+#include "dada_hdu.h"
+#include "daemon.h"
 
 #include <unistd.h>
 #include <stdlib.h>
@@ -14,21 +13,17 @@ void usage()
 
 int main (int argc, char **argv)
 {
-  /* DADA configuration */
-  dada_t dada;
-
-  /* DADA Data Block */
-  ipcio_t data_block = IPCIO_INIT;
-
-  /* DADA Header Block */
-  ipcbuf_t header_block = IPCBUF_INIT;
+  /* DADA Header plus Data Unit */
+  dada_hdu_t* hdu = 0;
 
   /* DADA Logger */
   multilog_t* log;
 
+  /* DADA Logger port */
+  int log_port = 0xdada;
+
   /* Flag set in daemon mode */
   char daemon = 0;
-  pid_t pid;
 
   /* Flag set in verbose mode */
   char verbose = 0;
@@ -52,79 +47,31 @@ int main (int argc, char **argv)
     }
   }
 
-  dada_init (&dada);
-
   log = multilog_open ("dada_writer", daemon);
 
   /* set up for daemon usage */	  
   if (daemon) {
-
-    pid = fork();
-
-    if (pid < 0)
-      exit(EXIT_FAILURE);
-
-    if (pid > 0)
-      exit(EXIT_SUCCESS);
-
-    /* Create a new SID for the child process */
-    if (setsid() < 0)
-      exit (EXIT_FAILURE);
-              
-    /* Change the current working directory */
-    if (chdir("/") < 0)
-      exit (EXIT_FAILURE);
-        
-    /* Close out the standard file descriptors */
-    close(STDIN_FILENO);
-    close(STDOUT_FILENO);
-    close(STDERR_FILENO);
-
-    multilog_serve (log, dada.log_port);
-
+    be_a_daemon ();
+    multilog_serve (log, log_port);
   }
 
-  /* First connect to the shared memory */
-  if (ipcio_connect (&data_block, dada.data_key) < 0) {
-    multilog (log, LOG_ERR, "Failed to connect to data block\n");
+  hdu = dada_hdu_create (log);
+
+  if (dada_hdu_connect (hdu) < 0)
     return EXIT_FAILURE;
-  }
 
-  if (ipcbuf_lock_read ((ipcbuf_t*)&data_block) < 0) {
-    multilog (log, LOG_ERR,"Could not lock designated reader status\n");
+  if (dada_hdu_lock_read (hdu) < 0)
     return EXIT_FAILURE;
-  }
 
-  if (ipcbuf_connect (&header_block, dada.hdr_key) < 0) {
-    multilog (log, LOG_ERR, "Failed to connect to header block\n");
-    return EXIT_FAILURE;
-  }
+  /* main loop */
 
-  if (ipcbuf_lock_read (&header_block) < 0) {
-    multilog (log, LOG_ERR,"Could not lock designated reader status\n");
+  if (dada_hdu_unlock_read (hdu) < 0)
     return EXIT_FAILURE;
-  }
 
-  /* Disconnect from the shared memory */
-  if (ipcbuf_unlock_read ((ipcbuf_t*)&data_block) < 0) {
-    multilog (log, LOG_ERR,"Could not unlock designated reader status\n");
+  if (dada_hdu_disconnect (hdu) < 0)
     return EXIT_FAILURE;
-  }
 
-  if (ipcio_disconnect (&data_block) < 0) {
-    multilog (log, LOG_ERR, "Failed to disconnect from data block\n");
-    return EXIT_FAILURE;
-  }
-
-  if (ipcbuf_unlock_read (&header_block) < 0) {
-    multilog (log, LOG_ERR,"Could not unlock designated reader status\n");
-    return EXIT_FAILURE;
-  }
-
-  if (ipcbuf_disconnect (&header_block) < 0) {
-    multilog (log, LOG_ERR, "Failed to disconnect from header block\n");
-    return EXIT_FAILURE;
-  }
+  dada_hdu_destroy (hdu);
 
   return EXIT_SUCCESS;
 }

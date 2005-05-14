@@ -1,5 +1,6 @@
 #include "dada_prc_main.h"
-#include "dada.h"
+#include "dada_hdu.h"
+#include "dada_def.h"
 
 #include "disk_array.h"
 #include "ascii_header.h"
@@ -170,17 +171,11 @@ int file_close_function (dada_prc_main_t* prcm, uint64_t bytes_written)
 
 int main (int argc, char **argv)
 {
-  /* DADA configuration */
-  dada_t dada;
-
   /* DADA Data Block to Disk configuration */
   dada_dbdisk_t dbdisk = DADA_DBDISK_INIT;
 
-  /* DADA Data Block */
-  ipcio_t data_block = IPCIO_INIT;
-
-  /* DADA Header Block */
-  ipcbuf_t header_block = IPCBUF_INIT;
+  /* DADA Header plus Data Unit */
+  dada_hdu_t* hdu = 0;
 
   /* DADA Primary Read Client main loop */
   dada_prc_main_t* prcm = 0;
@@ -232,45 +227,29 @@ int main (int argc, char **argv)
       
     }
 
-
-  dada_init (&dada);
-
   log = multilog_open ("dada_dbdisk", daemon);
 
   if (daemon) {
     be_a_daemon ();
-    multilog_serve (log, dada.log_port);
+    multilog_serve (log, DADA_DEFAULT_DBDISK_LOG);
   }
   else
     multilog_add (log, stderr);
 
-  /* First connect to the shared memory */
-  if (ipcbuf_connect (&header_block, dada.hdr_key) < 0) {
-    multilog (log, LOG_ERR, "Failed to connect to header block\n");
-    return EXIT_FAILURE;
-  }
+  hdu = dada_hdu_create (log);
 
-  if (ipcbuf_lock_read (&header_block) < 0) {
-    multilog (log, LOG_ERR, "Could not lock designated reader status\n");
+  if (dada_hdu_connect (hdu) < 0)
     return EXIT_FAILURE;
-  }
 
-  if (ipcio_connect (&data_block, dada.data_key) < 0) {
-    multilog (log, LOG_ERR, "Failed to connect to data block\n");
+  if (dada_hdu_lock_read (hdu) < 0)
     return EXIT_FAILURE;
-  }
-
-  if (ipcio_open (&data_block, 'R') < 0) {
-    multilog (log, LOG_ERR, "Failed to open data block for reading\n");
-    return EXIT_FAILURE;
-  }
 
   prcm = dada_prc_main_create ();
 
   prcm->log = log;
 
-  prcm->data_block = &data_block;
-  prcm->header_block = &header_block;
+  prcm->data_block = hdu->data_block;
+  prcm->header_block = hdu->header_block;
 
   prcm->open_function = file_open_function;
   prcm->close_function = file_close_function;
@@ -284,26 +263,11 @@ int main (int argc, char **argv)
 
   }
 
-  /* Disconnect from the shared memory */
-  if (ipcio_close (&data_block) < 0) {
-    multilog (log, LOG_ERR, "Could not unlock designated writer status\n");
+  if (dada_hdu_unlock_read (hdu) < 0)
     return EXIT_FAILURE;
-  }
 
-  if (ipcio_disconnect (&data_block) < 0) {
-    multilog (log, LOG_ERR, "Failed to disconnect from data block\n");
+  if (dada_hdu_disconnect (hdu) < 0)
     return EXIT_FAILURE;
-  }
-
-  if (ipcbuf_unlock_write (&header_block) < 0) {
-    multilog (log, LOG_ERR,"Could not unlock designated writer status\n");
-    return EXIT_FAILURE;
-  }
-
-  if (ipcbuf_disconnect (&header_block) < 0) {
-    multilog (log, LOG_ERR, "Failed to disconnect from header block\n");
-    return EXIT_FAILURE;
-  }
 
   return EXIT_SUCCESS;
 }
