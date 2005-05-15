@@ -149,17 +149,6 @@ int main (int argc, char **argv)
     bytes_to_write -= data_size;
   }
 
-
-  if (ipcbuf_mark_filled (hdu->header_block, 0) < 0)  {
-    multilog (log, LOG_ERR, "Could not write end of data to header block\n");
-    return EXIT_FAILURE;
-  }
-
-  if (ipcbuf_reset (hdu->header_block) < 0)  {
-    multilog (log, LOG_ERR, "Could not reset header block\n");
-    return EXIT_FAILURE;
-  }
-
   if (dada_hdu_unlock_write (hdu) < 0)
     return EXIT_FAILURE;
 
