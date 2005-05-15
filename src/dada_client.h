@@ -1,10 +1,10 @@
-#ifndef __DADA_PRC_MAIN_H
-#define __DADA_PRC_MAIN_H
+#ifndef __DADA_CLIENT_H
+#define __DADA_CLIENT_H
 
 /* ************************************************************************
 
-   dada_prc_main_t - a struct and associated routines for creation and
-   execution of a dada primary read client main loop
+   dada_client_t - a struct and associated routines for creation and
+   execution of a dada read or write client main loop
 
    ************************************************************************ */
 
@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-  typedef struct dada_prc_main {
+  typedef struct dada_client {
 
     /*! The status and error logging interface */
     multilog_t* log;
@@ -27,14 +27,14 @@ extern "C" {
     ipcbuf_t* header_block;
 
     /*! Pointer to the function that opens the data transfer target */
-    int (*open_function) (struct dada_prc_main*);
+    int (*open_function) (struct dada_client*);
 
-    /*! Pointer to the function that writes data to the transfer target */
-    int64_t (*write_function) (struct dada_prc_main*, 
-			       void* data, uint64_t data_size);
+    /*! Pointer to the function that transfers data to/from the target */
+    int64_t (*io_function) (struct dada_client*, 
+			    void* data, uint64_t data_size);
 
     /*! Pointer to the function that closes the data transfer target */
-    int (*close_function) (struct dada_prc_main*, uint64_t bytes_written);
+    int (*close_function) (struct dada_client*, uint64_t bytes_written);
 
     /*! Additional context information */
     void* context;
@@ -50,22 +50,22 @@ extern "C" {
     /*! The file descriptor of the data transfer target */
     int fd;
 
-    /*! The total number of bytes to be transfered to the target */
+    /*! The total number of bytes to be transfered to/from the target */
     uint64_t transfer_bytes;
 
-    /*! The optimal number of bytes to transfer to the target at one time */
+    /*! The optimal number of bytes to transfer to/from the target buffer */
     uint64_t optimal_bytes;
 
-  } dada_prc_main_t;
+  } dada_client_t;
 
-  /*! Create a new DADA primary write client main loop */
-  dada_prc_main_t* dada_prc_main_create ();
+  /*! Create a new DADA client main loop */
+  dada_client_t* dada_client_create ();
 
-  /*! Destroy a DADA primary write client main loop */
-  void dada_prc_main_destroy (dada_prc_main_t* pwcm);
+  /*! Destroy a DADA client main loop */
+  void dada_client_destroy (dada_client_t* client);
 
-  /*! Run the DADA primary write client main loop */
-  int dada_prc_main (dada_prc_main_t* pwcm);
+  /*! Run the DADA client main loop */
+  int dada_client (dada_client_t* client);
 
 #ifdef __cplusplus
 	   }

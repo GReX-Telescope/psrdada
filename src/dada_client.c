@@ -1,4 +1,4 @@
-#include "dada_prc_main.h"
+#include "dada_client.h"
 #include "dada_def.h"
 
 #include "ascii_header.h"
@@ -11,39 +11,39 @@
 #include <errno.h>
 
 /*! Create a new DADA primary write client main loop */
-dada_prc_main_t* dada_prc_main_create ()
+dada_client_t* dada_client_create ()
 {
-  dada_prc_main_t* prcm = malloc (sizeof(dada_prc_main_t));
-  assert (prcm != 0);
+  dada_client_t* client = malloc (sizeof(dada_client_t));
+  assert (client != 0);
 
-  prcm -> log = 0;
-  prcm -> data_block = 0;
-  prcm -> header_block = 0;
+  client -> log = 0;
+  client -> data_block = 0;
+  client -> header_block = 0;
 
-  prcm -> open_function = 0;
-  prcm -> write_function = 0;
-  prcm -> close_function = 0;
+  client -> open_function = 0;
+  client -> write_function = 0;
+  client -> close_function = 0;
 
-  prcm -> context = 0;
+  client -> context = 0;
 
-  prcm -> header = 0;
-  prcm -> header_size = 0;
+  client -> header = 0;
+  client -> header_size = 0;
 
-  prcm -> fd = -1;
-  prcm -> transfer_bytes = 0;
-  prcm -> optimal_bytes = 0;
+  client -> fd = -1;
+  client -> transfer_bytes = 0;
+  client -> optimal_bytes = 0;
 
-  return prcm;
+  return client;
 }
 
 /*! Destroy a DADA primary write client main loop */
-void dada_prc_main_destroy (dada_prc_main_t* prcm)
+void dada_client_destroy (dada_client_t* client)
 {
-  free (prcm);
+  free (client);
 }
 
 /*! Read from the Data Block and write to the open target */
-int64_t dada_prc_write_loop (dada_prc_main_t* prcm)
+int64_t dada_prc_write_loop (dada_client_t* client)
 {
   /* The buffer used for transfer from Data Block to target */
   static char* buffer = 0;
@@ -57,30 +57,30 @@ int64_t dada_prc_write_loop (dada_prc_main_t* prcm)
   multilog_t* log = 0;
   int fd = -1;
 
-  assert (prcm != 0);
+  assert (client != 0);
 
-  if (buffer_size < prcm->optimal_bytes) {
-    buffer_size = 512 * prcm->optimal_bytes;
+  if (buffer_size < client->optimal_bytes) {
+    buffer_size = 512 * client->optimal_bytes;
     buffer = (char*) realloc (buffer, buffer_size);
     assert (buffer != 0);
   }
 
-  log = prcm->log;
+  log = client->log;
   assert (log != 0);
 
-  fd = prcm->fd;
+  fd = client->fd;
   assert (fd >= 0);
 
-  bytes_to_write = prcm->transfer_bytes;
+  bytes_to_write = client->transfer_bytes;
 
-  while (!ipcbuf_eod((ipcbuf_t*)prcm->data_block) && bytes_to_write) {
+  while (!ipcbuf_eod((ipcbuf_t*)client->data_block) && bytes_to_write) {
 
     if (buffer_size > bytes_to_write)
       bytes = bytes_to_write;
     else
       bytes = buffer_size;
 
-    bytes = ipcio_read (prcm->data_block, buffer, bytes);
+    bytes = ipcio_read (client->data_block, buffer, bytes);
     if (bytes < 0) {
       multilog (log, LOG_ERR, "ipcio_read error %s\n", strerror(errno));
       return -1;
@@ -100,7 +100,7 @@ int64_t dada_prc_write_loop (dada_prc_main_t* prcm)
   return bytes_written;
 }
 
-int dada_prc_main (dada_prc_main_t* prcm)
+int dada_client (dada_client_t* client)
 {
   /* pointer to the status and error logging facility */
   multilog_t* log = 0;
@@ -123,16 +123,16 @@ int dada_prc_main (dada_prc_main_t* prcm)
   /* Time required to write data */
   double write_time = 0;
 
-  assert (prcm != 0);
+  assert (client != 0);
 
-  log = prcm->log;
+  log = client->log;
   assert (log != 0);
 
 
   while (!header_size) {
 
     /* Wait for the next valid header sub-block */
-    header = ipcbuf_get_next_read (prcm->header_block, &header_size);
+    header = ipcbuf_get_next_read (client->header_block, &header_size);
 
     if (!header) {
       multilog (log, LOG_ERR, "Could not get next header\n");
@@ -141,11 +141,11 @@ int dada_prc_main (dada_prc_main_t* prcm)
 
     if (!header_size) {
 
-      ipcbuf_mark_cleared (prcm->header_block);
+      ipcbuf_mark_cleared (client->header_block);
 
-      if (ipcbuf_eod (prcm->header_block)) {
+      if (ipcbuf_eod (client->header_block)) {
 	multilog (log, LOG_INFO, "End of data on header block\n");
-	ipcbuf_reset (prcm->header_block);
+	ipcbuf_reset (client->header_block);
       }
       else {
 	multilog (log, LOG_ERR, "Empty header block\n");
@@ -156,7 +156,7 @@ int dada_prc_main (dada_prc_main_t* prcm)
 
   }
 
-  header_size = ipcbuf_get_bufsz (prcm->header_block);
+  header_size = ipcbuf_get_bufsz (client->header_block);
 
   /* Check that header is of advertised size */
   if (ascii_header_get (header, "HDR_SIZE", "%"PRIu64, &hdr_size) != 1) {
@@ -175,38 +175,38 @@ int dada_prc_main (dada_prc_main_t* prcm)
   }
 
   /* Duplicate the header */
-  if (header_size > prcm->header_size) {
-    prcm->header = realloc (prcm->header, header_size);
-    assert (prcm->header != 0);
-    prcm->header_size = header_size;
+  if (header_size > client->header_size) {
+    client->header = realloc (client->header, header_size);
+    assert (client->header != 0);
+    client->header_size = header_size;
   }
-  memcpy (prcm->header, header, header_size);
+  memcpy (client->header, header, header_size);
 
-  ipcbuf_mark_cleared (prcm->header_block);
+  ipcbuf_mark_cleared (client->header_block);
 
   /* Get the header offset */
-  if (ascii_header_get (prcm->header, "OBS_OFFSET",
+  if (ascii_header_get (client->header, "OBS_OFFSET",
 			"%"PRIu64, &obs_offset) != 1) {
     multilog (log, LOG_WARNING, "Header block does not have OBS_OFFSET\n");
     obs_offset = 0;
   }
 
   /* Write data until the end of the data stream */
-  while (!ipcbuf_eod((ipcbuf_t*)prcm->data_block)) {
+  while (!ipcbuf_eod((ipcbuf_t*)client->data_block)) {
 
     /* Set the header offset */
-    if (ascii_header_set (prcm->header, "OBS_OFFSET",
+    if (ascii_header_set (client->header, "OBS_OFFSET",
 			  "%"PRIu64, obs_offset) < 0) {
       multilog (log, LOG_ERR, "Error writing OBS_OFFSET\n");
       return -1;
     }
 
-    if (prcm->open_function (prcm) < 0) {
+    if (client->open_function (client) < 0) {
       multilog (log, LOG_ERR, "Error calling open function\n");
       return -1;
     }
 
-    if (write (prcm->fd, prcm->header, header_size) < header_size) {
+    if (write (client->fd, client->header, header_size) < header_size) {
       multilog (log, LOG_ERR, "Error writing header: %s\n", strerror(errno));
       return -1;
     }
@@ -214,11 +214,11 @@ int dada_prc_main (dada_prc_main_t* prcm)
     gettimeofday (&start_loop, NULL);
 
     /* Write data until the end of the transfer */
-    bytes_written = dada_prc_write_loop (prcm);
+    bytes_written = dada_prc_write_loop (client);
 
     gettimeofday (&end_loop, NULL);
 
-    if (prcm->close_function (prcm, bytes_written) < 0) {
+    if (client->close_function (client, bytes_written) < 0) {
       multilog (log, LOG_ERR, "Error calling close function\n");
       return -1;
     }
@@ -237,7 +237,7 @@ int dada_prc_main (dada_prc_main_t* prcm)
 
   }
 
-  ipcbuf_reset ((ipcbuf_t*)prcm->data_block);
+  ipcbuf_reset ((ipcbuf_t*)client->data_block);
 
   return 0;
 
