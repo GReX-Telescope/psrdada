@@ -72,6 +72,7 @@ int file_open_function (dada_prc_main_t* prcm)
 
   dbdisk = (dada_dbdisk_t*) prcm->context;
   assert (dbdisk != 0);
+  assert (dbdisk->array != 0);
 
   log = prcm->log;
   assert (log != 0);
@@ -102,8 +103,16 @@ int file_open_function (dada_prc_main_t* prcm)
     return -1;
   }
 
+#ifdef _DEBUG
+  fprintf (stderr, "dbdisk: copy the obs id\n");
+#endif
+
   /* set the current observation id */
   strcpy (dbdisk->obs_id, obs_id);
+
+#ifdef _DEBUG
+  fprintf (stderr, "dbdisk: create the file name\n");
+#endif
 
   /* create the current file name */
   snprintf (dbdisk->file_name, FILENAME_MAX,
@@ -115,12 +124,17 @@ int file_open_function (dada_prc_main_t* prcm)
     file_size = DADA_DEFAULT_FILESIZE;
   }
 
+#ifdef _DEBUG
+  fprintf (stderr, "dbdisk: open the file\n");
+#endif
+
   /* Open the file */
   fd = disk_array_open (dbdisk->array, dbdisk->file_name,
 			file_size, &optimal_bytes);
 
   if (fd < 0) {
-    multilog (log, LOG_ERR, "Error opening %s\n", dbdisk->file_name);
+    multilog (log, LOG_ERR, "Error opening %s: %s\n", dbdisk->file_name,
+              strerror (errno));
     return -1;
   }
 
@@ -186,9 +200,6 @@ int main (int argc, char **argv)
   /* DADA Logger */
   multilog_t* log = 0;
 
-  /* Array of disks to which data will be written */
-  disk_array_t* disk_array = 0;
-
   /* Flag set in daemon mode */
   char daemon = 0;
 
@@ -200,7 +211,7 @@ int main (int argc, char **argv)
 
   int arg = 0;
 
-  disk_array = disk_array_create ();
+  dbdisk.array = disk_array_create ();
 
   while ((arg=getopt(argc,argv,"dD:vW")) != -1)
     switch (arg) {
@@ -210,7 +221,7 @@ int main (int argc, char **argv)
       break;
       
     case 'D':
-      if (disk_array_add (disk_array, optarg) < 0) {
+      if (disk_array_add (dbdisk.array, optarg) < 0) {
 	fprintf (stderr, "Could not add '%s' to disk array\n", optarg);
 	return EXIT_FAILURE;
       }
@@ -221,7 +232,7 @@ int main (int argc, char **argv)
       break;
       
     case 'W':
-      disk_array_set_overwrite (disk_array, 1);
+      disk_array_set_overwrite (dbdisk.array, 1);
       break;
 
     default:
