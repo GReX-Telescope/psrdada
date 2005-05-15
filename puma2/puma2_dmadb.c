@@ -17,6 +17,7 @@ void usage()
 	     " -n nbuf        # of buffers to acquire\n"
 	     " -s sec         # of seconds to acquire\n"
 	     " -v             verbose messages\n"
+	     " -S             file size in bytes\n"
 	     " -W             flag buffers readable\n"
 	     );
     
@@ -24,10 +25,8 @@ void usage()
 
 int main (int argc, char **argv)
 {
-    /* DADA stuff */
-    dada_t dada;                    /* configuration */
-    ipcio_t data_block = IPCIO_INIT;/* Data Block */
-    ipcbuf_t header_block = IPCBUF_INIT;/* Header Block */
+    /* DADA Header plus Data Unit */
+    dada_hdu_t* hdu;
     multilog_t* log; /* Logger */
 
     char* header = default_header; /* header */
@@ -57,7 +56,7 @@ int main (int argc, char **argv)
     char* header_file = 0;
 
     int arg = 0;
-    while ((arg=getopt(argc,argv,"dH:i:n:s:vxS:W")) != -1) {
+    while ((arg=getopt(argc,argv,"dH:i:n:s:vS:W")) != -1) {
 	switch (arg) {
 	    
 	    case 'd':
@@ -116,55 +115,31 @@ int main (int argc, char **argv)
 	}
     }
     
-    dada_init (&dada);
-    
     log = multilog_open ("puma2_dmadb", daemon);
     
     /* set up for daemon usage */	  
     if (daemon) {
-	
-	if (fork() < 0)
-	    exit(EXIT_FAILURE);
-	
-	exit(EXIT_SUCCESS);
-	
+      be_a_daemon ();
+      multilog_serve (log, DADA_DEFAULT_PWC_LOG);
     }
-    
+    else
+      multilog_add (log, stderr);
+
+
     /* connect to the shared memory */
-    if (ipcio_connect (&data_block, dada.data_key) < 0) {
-	multilog (log, LOG_ERR, "Failed to connect to data block\n");
-	return EXIT_FAILURE;
-    }
 
-    if (verbose) fprintf(stderr,"ipcio_connect to data block succeeded\n");
-    
-    /* make myself designated writer */
-    if (ipcio_open (&data_block, writemode) < 0) {
-	multilog (log, LOG_ERR,"Could not lock designated writer status\n");
-	return EXIT_FAILURE;
-    }
+    hdu = dada_hdu_create (log);
 
-    if (verbose) fprintf(stderr,"ipcio_open of data block succeeded\n");
+    if (dada_hdu_connect (hdu) < 0)
+      return EXIT_FAILURE;
 
-    /* connect to header block, and fill in proper stuff */
-    if (ipcbuf_connect (&header_block, dada.hdr_key) < 0) {
-	multilog (log, LOG_ERR, "Failed to connect to header block\n");
-	return EXIT_FAILURE;
-    }
-    
-    if (verbose) fprintf(stderr,"ipcbuf_connect to header block succeeded\n");
+    if (dada_hdu_lock_write (hdu) < 0)
+      return EXIT_FAILURE;
 
-    if (ipcbuf_lock_write (&header_block) < 0) {
-	multilog (log, LOG_ERR,"Could not lock designated writer status\n");
-	return EXIT_FAILURE;
-    }
-
-    if (verbose) fprintf(stderr,"ipcbuf_lock_write to header block succeeded\n");
-
-    header_size = ipcbuf_get_bufsz (&header_block);
+    header_size = ipcbuf_get_bufsz (hdu->header_block);
     multilog (log, LOG_INFO, "header block size = %llu\n", header_size);
     
-    header_buf = ipcbuf_get_next_write (&header_block);
+    header_buf = ipcbuf_get_next_write (hdu->header_block);
     
     if (!header_buf)  {
 	multilog (log, LOG_ERR, "Could not get next header block\n");
@@ -183,7 +158,7 @@ int main (int argc, char **argv)
       memset (header_buf + header_strlen, '\0', header_size - header_strlen);
     }
 
-    /* Set the header size attribute */ 
+    /* Set the header attributes */ 
     if (ascii_header_set (header_buf, "HDR_SIZE", "%llu", header_size) < 0) {
 	multilog (log, LOG_ERR, "Could not write HDR_SIZE to header\n");
 	return -1;
@@ -201,7 +176,7 @@ int main (int argc, char **argv)
 	return -1;
     }
 
-    if (ipcbuf_mark_filled (&header_block, header_size) < 0)  {
+    if (ipcbuf_mark_filled (hdu->header_block, header_size) < 0)  {
 	multilog (log, LOG_ERR, "Could not mark filled header block\n");
 	return EXIT_FAILURE;
     }
@@ -293,15 +268,15 @@ int main (int argc, char **argv)
 	}
 
 	/* get data from EDT and write to datablock */
-	if (( ipcio_write(&data_block, data, bufsize) ) < bufsize ){
+	if (( ipcio_write(hdu->data_block, data, bufsize) ) < bufsize ){
 	    multilog(log, LOG_ERR, "Cannot write requested bytes to SHM\n");
 	    return EXIT_FAILURE;
 	}
       
         /* find out the number of buffers completed */
 	buf = edt_done_count(edt_p);
-	wrCount = ipcbuf_get_write_count ((ipcbuf_t*)&data_block);
-	rdCount = ipcbuf_get_read_count ((ipcbuf_t*)&data_block);
+	wrCount = ipcbuf_get_write_count ((ipcbuf_t*)hdu->data_block);
+	rdCount = ipcbuf_get_read_count ((ipcbuf_t*)hdu->data_block);
 	fprintf(stderr,"%d %d %d\n",buf,wrCount,rdCount);
  
     }
@@ -317,41 +292,12 @@ int main (int argc, char **argv)
 	return EXIT_FAILURE;
     }  
 
-    if (verbose) fprintf(stderr,"ipcio_close'ing\n");
-    if (ipcio_close (&data_block) < 0) {
-	multilog (log, LOG_ERR,"Could not lock designated writer status\n");
-	return EXIT_FAILURE;
-    }
-    if (verbose) fprintf(stderr,"ipcio_close'd\n");
-
-
-    if (verbose) fprintf(stderr,"ipcio_close'ing\n");
-    if (ipcio_disconnect (&data_block) < 0) {
-	multilog (log, LOG_ERR, "Failed to disconnect from data block\n");
-	return EXIT_FAILURE;
-    }
-
-    if (ipcbuf_mark_filled (&header_block, 0) < 0)  {
-    multilog (log, LOG_ERR, "Could not write end of data to header block\n");
-    return EXIT_FAILURE;
-    }
-
-    if (ipcbuf_reset (&header_block) < 0)  {
-	multilog (log, LOG_ERR, "Could not reset header block\n");
-	return EXIT_FAILURE;
-    }
-    
-  if (ipcbuf_unlock_write (&header_block) < 0) {
-      multilog (log, LOG_ERR,"Could not unlock designated writer header\n");
+    if (dada_hdu_unlock_write (hdu) < 0)
       return EXIT_FAILURE;
-  }
-  
-  if (ipcbuf_disconnect (&header_block) < 0) {
-      multilog (log, LOG_ERR, "Failed to disconnect from header block\n");
+
+    if (dada_hdu_disconnect (hdu) < 0)
       return EXIT_FAILURE;
-  }
-  
-  
-  return EXIT_SUCCESS;
+
+    return EXIT_SUCCESS;
 }
 
