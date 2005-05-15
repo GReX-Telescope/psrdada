@@ -61,7 +61,7 @@ int main (int argc, char **argv)
   float one_gigabyte = 1024.0 * 1024.0 * 1024.0;
 
   int arg = 0;
-  while ((arg=getopt(argc,argv,"g:H:v")) != -1) {
+  while ((arg=getopt(argc,argv,"g:hH:v")) != -1) {
     switch (arg) {
 
     case 'g':
@@ -76,7 +76,8 @@ int main (int argc, char **argv)
     case 'v':
       verbose=1;
       break;
-      
+
+    case 'h':
     default:
       usage ();
       return 0;
