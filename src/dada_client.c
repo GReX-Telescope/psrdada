@@ -10,7 +10,7 @@
 #include <string.h>
 #include <errno.h>
 
-/*! Create a new DADA primary write client main loop */
+/*! Create a new DADA client main loop */
 dada_client_t* dada_client_create ()
 {
   dada_client_t* client = malloc (sizeof(dada_client_t));
@@ -37,22 +37,22 @@ dada_client_t* dada_client_create ()
   return client;
 }
 
-/*! Destroy a DADA primary write client main loop */
+/*! Destroy a DADA client main loop */
 void dada_client_destroy (dada_client_t* client)
 {
   free (client);
 }
 
-/*! Read from the Data Block and write to the open target */
-int64_t dada_prc_write_loop (dada_client_t* client)
+/*! Transfer data between the Data Block and transfer target */
+int64_t dada_client_io_loop (dada_client_t* client)
 {
-  /* The buffer used for transfer from Data Block to target */
+  /* The buffer used for transfer between Data Block and transfer target */
   static char* buffer = 0;
   static uint64_t buffer_size = 0;
 
   /* counters */
-  uint64_t bytes_to_write = 0;
-  uint64_t bytes_written = 0;
+  uint64_t bytes_to_transfer = 0;
+  uint64_t bytes_transfered = 0;
   ssize_t bytes = 0;
 
   multilog_t* log = 0;
@@ -60,7 +60,7 @@ int64_t dada_prc_write_loop (dada_client_t* client)
 
   assert (client != 0);
 
-  if (buffer_size < client->optimal_bytes) {
+  if (buffer_size != client->optimal_bytes) {
     buffer_size = 512 * client->optimal_bytes;
     buffer = (char*) realloc (buffer, buffer_size);
     assert (buffer != 0);
@@ -72,33 +72,57 @@ int64_t dada_prc_write_loop (dada_client_t* client)
   fd = client->fd;
   assert (fd >= 0);
 
-  bytes_to_write = client->transfer_bytes;
+  assert (client->direction==dada_client_reader ||
+	  client->direction==dada_client_writer);
 
-  while (!ipcbuf_eod((ipcbuf_t*)client->data_block) && bytes_to_write) {
+  while (bytes_transfered < client->transfer_bytes) {
 
-    if (buffer_size > bytes_to_write)
-      bytes = bytes_to_write;
+    bytes_to_transfer = client->transfer_bytes - bytes_transfered;
+
+    if (buffer_size > bytes_to_transfer)
+      bytes = bytes_to_transfer;
     else
       bytes = buffer_size;
 
-    bytes = ipcio_read (client->data_block, buffer, bytes);
-    if (bytes < 0) {
-      multilog (log, LOG_ERR, "ipcio_read error %s\n", strerror(errno));
-      return -1;
+    if (client->direction == dada_client_reader) {
+
+      if (ipcbuf_eod((ipcbuf_t*)client->data_block))
+	break;
+
+      bytes = ipcio_read (client->data_block, buffer, bytes);
+      if (bytes < 0) {
+	multilog (log, LOG_ERR, "ipcio_read error %s\n", strerror(errno));
+	return -1;
+      }
+
     }
 
-    bytes = write (fd, buffer, bytes);
+    bytes = client->io_function (client, buffer, bytes);
     if (bytes < 0) {
-      multilog (log, LOG_ERR, "write error %s\n", strerror(errno));
-      return bytes_written;
+      multilog (log, LOG_ERR, "I/O error %s\n", strerror(errno));
+      break;
     }
 
-    bytes_to_write -= bytes;
-    bytes_written += bytes;
+    if (client->direction == dada_client_writer) {
+
+      if (bytes == 0) {
+	multilog (log, LOG_INFO, "end of input\n");
+	break;
+      }
+
+      bytes = ipcio_write (client->data_block, buffer, bytes);
+      if (bytes < 0) {
+	multilog (log, LOG_ERR, "ipcio_write error %s\n", strerror(errno));
+	return -1;
+      }
+
+    }
+
+    bytes_transfered += bytes;
 
   }
 
-  return bytes_written;
+  return bytes_transfered;
 }
 
 int dada_client (dada_client_t* client)
@@ -118,11 +142,11 @@ int dada_client (dada_client_t* client)
   /* Byte count */
   int64_t bytes_written = 0;
 
-  /* Time at start and end of write loop */
+  /* Time at start and end of transfer loop */
   struct timeval start_loop, end_loop;
 
-  /* Time required to write data */
-  double write_time = 0;
+  /* Time required to transfer data */
+  double transfer_time = 0;
 
   assert (client != 0);
 
@@ -192,7 +216,7 @@ int dada_client (dada_client_t* client)
     obs_offset = 0;
   }
 
-  /* Write data until the end of the data stream */
+  /* Transfer data until the end of the data stream */
   while (!ipcbuf_eod((ipcbuf_t*)client->data_block)) {
 
     /* Set the header offset */
@@ -207,7 +231,9 @@ int dada_client (dada_client_t* client)
       return -1;
     }
 
-    if (write (client->fd, client->header, header_size) < header_size) {
+    bytes_written = client->io_function (client, client->header, header_size);
+
+    if (bytes_written < header_size) {
       multilog (log, LOG_ERR, "Error writing header: %s\n", strerror(errno));
       return -1;
     }
@@ -215,7 +241,7 @@ int dada_client (dada_client_t* client)
     gettimeofday (&start_loop, NULL);
 
     /* Write data until the end of the transfer */
-    bytes_written = dada_prc_write_loop (client);
+    bytes_written = dada_client_io_loop (client);
 
     gettimeofday (&end_loop, NULL);
 
@@ -226,15 +252,14 @@ int dada_client (dada_client_t* client)
 
     if (bytes_written > 0) {
       
-      write_time = diff_time (start_loop, end_loop);
+      transfer_time = diff_time (start_loop, end_loop);
       multilog (log, LOG_INFO, "%"PRIu64" bytes written in %lfs "
-		"(%lg MB/s)\n", bytes_written, write_time,
-		bytes_written/(1e6*write_time));
+		"(%lg MB/s)\n", bytes_written, transfer_time,
+		bytes_written/(1e6*transfer_time));
       
       obs_offset += bytes_written;
 
     }
-
 
   }
 

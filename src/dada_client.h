@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-  enum { dada_client_undefined, dada_client_read, dada_client_write };
+  enum { dada_client_undefined, dada_client_reader, dada_client_writer };
 
   typedef struct dada_client {
 

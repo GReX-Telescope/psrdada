@@ -186,6 +186,14 @@ int file_close_function (dada_client_t* client, uint64_t bytes_written)
   return 0;
 }
 
+/*! Pointer to the function that transfers data to/from the target */
+int64_t file_write_function (dada_client_t* client, 
+			     void* data, uint64_t data_size)
+{
+  return write (client->fd, data, data_size);
+}
+
+
 int main (int argc, char **argv)
 {
   /* DADA Data Block to Disk configuration */
@@ -265,8 +273,10 @@ int main (int argc, char **argv)
   client->data_block = hdu->data_block;
   client->header_block = hdu->header_block;
 
-  client->open_function = file_open_function;
+  client->open_function  = file_open_function;
+  client->io_function    = file_write_function;
   client->close_function = file_close_function;
+  client->direction      = dada_client_reader;
 
   client->context = &dbdisk;
 
