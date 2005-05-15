@@ -36,6 +36,12 @@
 /* default port to connect to dbnic logging interface */
 #define DADA_DEFAULT_DBNIC_LOG  56047
 
+/* default port to connect to primary write client command interface */
+#define DADA_DEFAULT_NICDB_PORT 56056
+
+/* default port to connect to primary write client logging interface */
+#define DADA_DEFAULT_NICDB_LOG  56057
+
 /* default file size of 1 GB */
 #define DADA_DEFAULT_FILESIZE 1073741824
 
