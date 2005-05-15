@@ -125,7 +125,79 @@ int64_t dada_client_io_loop (dada_client_t* client)
   return bytes_transfered;
 }
 
-int dada_client (dada_client_t* client)
+int64_t dada_client_transfer (dada_client_t* client)
+{
+  /* pointer to the status and error logging facility */
+  multilog_t* log = 0;
+
+  /* Byte count */
+  int64_t bytes_transfered = 0;
+
+  /* Time at start and end of transfer loop */
+  struct timeval start_loop, end_loop;
+
+  /* Time required to transfer data */
+  double transfer_time = 0;
+
+  /* the size of the header buffer */
+  uint64_t header_size = 0;
+
+  assert (client != 0);
+
+  log = client->log;
+  assert (log != 0);
+
+  if (client->open_function (client) < 0) {
+    multilog (log, LOG_ERR, "Error calling open function\n");
+    return -1;
+  }
+
+  header_size = client->header_size;
+
+  bytes_transfered = client->io_function (client, client->header, header_size);
+
+  if (bytes_transfered < header_size) {
+    multilog (log, LOG_ERR, "Error transfering header: %s\n", strerror(errno));
+    return -1;
+  }
+
+  if (client->direction == dada_client_writer) {
+    header_size = ipcbuf_get_bufsz (client->header_block);
+    if (ipcbuf_mark_filled (client->header_block, header_size) < 0)  {
+      multilog (log, LOG_ERR, "Could not mark filled Header Block\n");
+      return EXIT_FAILURE;
+    }
+  }
+
+  multilog (log, LOG_ERR, "Transfering %"PRIu64" bytes\n",
+	    client->transfer_bytes);
+
+  gettimeofday (&start_loop, NULL);
+
+  /* Transfer data until the end of the transfer */
+  bytes_transfered = dada_client_io_loop (client);
+  
+  gettimeofday (&end_loop, NULL);
+  
+  if (client->close_function (client, bytes_transfered) < 0) {
+    multilog (log, LOG_ERR, "Error calling close function\n");
+    return -1;
+  }
+
+  if (bytes_transfered > 0) {
+      
+    transfer_time = diff_time (start_loop, end_loop);
+    multilog (log, LOG_INFO, "%"PRIu64" bytes transfered in %lfs "
+	      "(%lg MB/s)\n", bytes_transfered, transfer_time,
+	      bytes_transfered/(1e6*transfer_time));
+    
+  }
+
+  return bytes_transfered;
+}
+
+
+int dada_client_read (dada_client_t* client)
 {
   /* pointer to the status and error logging facility */
   multilog_t* log = 0;
@@ -142,17 +214,10 @@ int dada_client (dada_client_t* client)
   /* Byte count */
   int64_t bytes_written = 0;
 
-  /* Time at start and end of transfer loop */
-  struct timeval start_loop, end_loop;
-
-  /* Time required to transfer data */
-  double transfer_time = 0;
-
   assert (client != 0);
 
   log = client->log;
   assert (log != 0);
-
 
   while (!header_size) {
 
@@ -226,40 +291,12 @@ int dada_client (dada_client_t* client)
       return -1;
     }
 
-    if (client->open_function (client) < 0) {
-      multilog (log, LOG_ERR, "Error calling open function\n");
+    bytes_written = dada_client_transfer (client);
+
+    if (bytes_written < 0)
       return -1;
-    }
 
-    bytes_written = client->io_function (client, client->header, header_size);
-
-    if (bytes_written < header_size) {
-      multilog (log, LOG_ERR, "Error writing header: %s\n", strerror(errno));
-      return -1;
-    }
-
-    gettimeofday (&start_loop, NULL);
-
-    /* Write data until the end of the transfer */
-    bytes_written = dada_client_io_loop (client);
-
-    gettimeofday (&end_loop, NULL);
-
-    if (client->close_function (client, bytes_written) < 0) {
-      multilog (log, LOG_ERR, "Error calling close function\n");
-      return -1;
-    }
-
-    if (bytes_written > 0) {
-      
-      transfer_time = diff_time (start_loop, end_loop);
-      multilog (log, LOG_INFO, "%"PRIu64" bytes written in %lfs "
-		"(%lg MB/s)\n", bytes_written, transfer_time,
-		bytes_written/(1e6*transfer_time));
-      
-      obs_offset += bytes_written;
-
-    }
+    obs_offset += bytes_written;
 
   }
 
@@ -267,4 +304,50 @@ int dada_client (dada_client_t* client)
 
   return 0;
 
+}
+
+/*! Run the DADA client write loop */
+int dada_client_write (dada_client_t* client)
+{
+  /* pointer to the status and error logging facility */
+  multilog_t* log = 0;
+
+  /* The header from the ring buffer */
+  char* header = 0;
+  uint64_t header_size = 0;
+
+  /* Byte count */
+  int64_t bytes_read = 0;
+
+  assert (client != 0);
+
+  log = client->log;
+  assert (log != 0);
+
+  header_size = ipcbuf_get_bufsz (client->header_block);
+  multilog (log, LOG_INFO, "header block size = %"PRIu64"\n", header_size);
+
+  while (header_size) {
+    
+    header = ipcbuf_get_next_write (client->header_block);
+    if (!header)  {
+      multilog (log, LOG_ERR, "Could not get next header block\n");
+      return EXIT_FAILURE;
+    }
+
+    client->header = header;
+    client->header_size = header_size;
+
+    // the open function of a write client should set the header_size
+    // and transfer size attributes
+    bytes_read = dada_client_transfer (client);
+
+    if (bytes_read < 0)
+      return -1;
+
+    // signal end of data on Data Block
+
+  }
+
+  return 0;
 }

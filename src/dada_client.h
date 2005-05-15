@@ -69,8 +69,11 @@ extern "C" {
   /*! Destroy a DADA client main loop */
   void dada_client_destroy (dada_client_t* client);
 
-  /*! Run the DADA client main loop */
-  int dada_client (dada_client_t* client);
+  /*! Run the DADA client read loop */
+  int dada_client_read (dada_client_t* client);
+
+  /*! Run the DADA client write loop */
+  int dada_client_write (dada_client_t* client);
 
 #ifdef __cplusplus
 	   }
