@@ -140,12 +140,12 @@ int dada_hdu_unlock_read (dada_hdu_t* hdu)
   }
 
   if (ipcio_close (hdu->data_block) < 0) {
-    multilog (hdu->log, LOG_ERR, "Could not unlock Header Block read\n");
+    multilog (hdu->log, LOG_ERR, "Could not unlock Data Block read\n");
     return -1;
   }
 
   if (ipcbuf_unlock_read (hdu->header_block) < 0) {
-    multilog (hdu->log, LOG_ERR,"Could not unlock Data Block read\n");
+    multilog (hdu->log, LOG_ERR,"Could not unlock Header Block read\n");
     return -1;
   }
 
@@ -188,22 +188,25 @@ int dada_hdu_unlock_write (dada_hdu_t* hdu)
   }
 
   if (ipcio_close (hdu->data_block) < 0) {
-    multilog (hdu->log, LOG_ERR, "Could not unlock Header Block write\n");
+    multilog (hdu->log, LOG_ERR, "Could not unlock Data Block write\n");
+    return -1;
+  }
+
+  if (ipcbuf_mark_filled (hdu->header_block, 0) < 0)  {
+    multilog (log, LOG_ERR, "Could not write end of data to Header Block\n");
+    return -1;
+  }
+
+  if (ipcbuf_reset (hdu->header_block) < 0)  {
+    multilog (log, LOG_ERR, "Could not reset Header Block\n");
     return -1;
   }
 
   if (ipcbuf_unlock_write (hdu->header_block) < 0) {
-    multilog (hdu->log, LOG_ERR,"Could not unlock Data Block write\n");
+    multilog (hdu->log, LOG_ERR, "Could not unlock Header Block write\n");
     return -1;
   }
 
   return 0;
 }
-
-
-
-
-
-
-
 
