@@ -1,4 +1,4 @@
-#include "dada_prc_main.h"
+#include "dada_client.h"
 #include "dada_hdu.h"
 #include "dada_def.h"
 
@@ -45,7 +45,7 @@ typedef struct {
 #define DADA_DBDISK_INIT { 0, "", "", 0 }
 
 /*! Function that opens the data transfer target */
-int file_open_function (dada_prc_main_t* prcm)
+int file_open_function (dada_client_t* client)
 {
   /* the dada_dbdisk specific data */
   dada_dbdisk_t* dbdisk = 0;
@@ -68,20 +68,20 @@ int file_open_function (dada_prc_main_t* prcm)
   /* the open file descriptor */
   int fd = -1;
 
-  assert (prcm != 0);
+  assert (client != 0);
 
-  dbdisk = (dada_dbdisk_t*) prcm->context;
+  dbdisk = (dada_dbdisk_t*) client->context;
   assert (dbdisk != 0);
   assert (dbdisk->array != 0);
 
-  log = prcm->log;
+  log = client->log;
   assert (log != 0);
 
-  header = prcm->header;
+  header = client->header;
   assert (header != 0);
 
   /* Get the observation ID */
-  if (ascii_header_get (prcm->header, "OBS_ID", "%s", obs_id) != 1) {
+  if (ascii_header_get (client->header, "OBS_ID", "%s", obs_id) != 1) {
     multilog (log, LOG_WARNING, "Header block does not define OBS_ID\n");
     strcpy (obs_id, "UNKNOWN");
   }
@@ -141,15 +141,15 @@ int file_open_function (dada_prc_main_t* prcm)
   multilog (log, LOG_INFO, "%s opened for writing %"PRIu64" bytes\n",
 	    dbdisk->file_name, file_size);
 
-  prcm->fd = fd;
-  prcm->transfer_bytes = file_size;
-  prcm->optimal_bytes = 512 * optimal_bytes;
+  client->fd = fd;
+  client->transfer_bytes = file_size;
+  client->optimal_bytes = 512 * optimal_bytes;
 
   return 0;
 }
 
 /*! Function that closes the data file */
-int file_close_function (dada_prc_main_t* prcm, uint64_t bytes_written)
+int file_close_function (dada_client_t* client, uint64_t bytes_written)
 {
   /* the dada_dbdisk specific data */
   dada_dbdisk_t* dbdisk = 0;
@@ -157,15 +157,15 @@ int file_close_function (dada_prc_main_t* prcm, uint64_t bytes_written)
   /* status and error logging facility */
   multilog_t* log;
 
-  assert (prcm != 0);
+  assert (client != 0);
 
-  dbdisk = (dada_dbdisk_t*) prcm->context;
+  dbdisk = (dada_dbdisk_t*) client->context;
   assert (dbdisk != 0);
 
-  log = prcm->log;
+  log = client->log;
   assert (log != 0);
 
-  if (close (prcm->fd) < 0)
+  if (close (client->fd) < 0)
     multilog (log, LOG_ERR, "Error closing %s: %s\n", 
 	      dbdisk->file_name, strerror(errno));
 
@@ -195,7 +195,7 @@ int main (int argc, char **argv)
   dada_hdu_t* hdu = 0;
 
   /* DADA Primary Read Client main loop */
-  dada_prc_main_t* prcm = 0;
+  dada_client_t* client = 0;
 
   /* DADA Logger */
   multilog_t* log = 0;
@@ -258,21 +258,21 @@ int main (int argc, char **argv)
   if (dada_hdu_lock_read (hdu) < 0)
     return EXIT_FAILURE;
 
-  prcm = dada_prc_main_create ();
+  client = dada_client_create ();
 
-  prcm->log = log;
+  client->log = log;
 
-  prcm->data_block = hdu->data_block;
-  prcm->header_block = hdu->header_block;
+  client->data_block = hdu->data_block;
+  client->header_block = hdu->header_block;
 
-  prcm->open_function = file_open_function;
-  prcm->close_function = file_close_function;
+  client->open_function = file_open_function;
+  client->close_function = file_close_function;
 
-  prcm->context = &dbdisk;
+  client->context = &dbdisk;
 
   while (!quit) {
 
-    if (dada_prc_main (prcm) < 0)
+    if (dada_client (client) < 0)
       multilog (log, LOG_ERR, "Error during transfer\n");
 
   }

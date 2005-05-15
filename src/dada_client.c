@@ -21,8 +21,9 @@ dada_client_t* dada_client_create ()
   client -> header_block = 0;
 
   client -> open_function = 0;
-  client -> write_function = 0;
+  client -> io_function = 0;
   client -> close_function = 0;
+  client -> direction = dada_client_undefined;
 
   client -> context = 0;
 

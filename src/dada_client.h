@@ -15,6 +15,8 @@
 extern "C" {
 #endif
 
+  enum { dada_client_undefined, dada_client_read, dada_client_write };
+
   typedef struct dada_client {
 
     /*! The status and error logging interface */
@@ -44,6 +46,9 @@ extern "C" {
 
     /* The size of the header */
     uint64_t header_size;
+
+    /* The direction of data transfer */
+    char direction;
 
     /* The open function should set the following three attributes */
 
