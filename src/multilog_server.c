@@ -47,9 +47,14 @@ static void* multilog_server (void * arg)
 
 int multilog_serve (multilog_t* log, int port)
 {
-  sighandler_t handler = signal (SIGPIPE, SIG_IGN);
+#if 0
+  sighandler_t handler = 
+#endif
+  signal (SIGPIPE, SIG_IGN);
+#if 0
   if (handler != SIG_DFL)
     signal (SIGPIPE, handler);
+#endif
 
   log->port = port;
   if (pthread_create (&(log->thread), 0, multilog_server, log) < 0) {

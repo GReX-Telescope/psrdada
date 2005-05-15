@@ -263,10 +263,16 @@ int command_parse_server_set_prompt (command_parse_server_t* s, const char* p)
 
 int command_parse_serve (command_parse_server_t* server, int port)
 {
-  sighandler_t handler = signal (SIGPIPE, SIG_IGN);
+#if 0
+  sighandler_t handler = 
+#endif
 
+signal (SIGPIPE, SIG_IGN);
+
+#if 0
   if (handler != SIG_DFL)
     signal (SIGPIPE, handler);
+#endif
 
 #ifdef _DEBUG
   fprintf (stderr, "command_parse_serve: server=%p\n", server);
