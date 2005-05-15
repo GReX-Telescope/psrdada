@@ -3,8 +3,11 @@ lib_LTLIBRARIES = libpic.la
 
 libpic_la_SOURCES = pic.c
 
-bin_PROGRAMS = puma2_dmadb.c
+bin_PROGRAMS = puma2_dmadb
 
-INCLUDES = -I/opt/pic -I/opt/EDTpcd
+check_PROGRAMS = testpic
+
+INCLUDES = -I../src -I/opt/pic -I/opt/EDTpcd
+
 LDADD = ../src/libdada.la libpic.la -L/opt/EDTpcd -ledt
 
