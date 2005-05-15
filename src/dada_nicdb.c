@@ -22,6 +22,33 @@ void usage()
 	   " -d   run as daemon\n");
 }
 
+/*! Pointer to the function that transfers data to/from the target */
+int64_t sock_recv_function (dada_client_t* client, 
+			    void* data, uint64_t data_size)
+{
+  /* this function will call select to see if there is any out-of-band
+     data awaiting reception.  if so, this marks a premature end to
+     the expected transfer_bytes length.  read the new header, and
+     update the transfer_bytes attribute. if not, then recv the data.  */
+  return 0;
+}
+
+/*! Function that closes the data file */
+int sock_close_function (dada_client_t* client, uint64_t bytes_written)
+{
+  /* don't close the socket, maybe send the header back as a handshake */
+  return 0;
+}
+
+/*! Function that opens the data transfer target */
+int sock_open_function (dada_client_t* client)
+{
+  /* wait for incoming data on the socket.  recv peek the header and
+     set the header_size attribute (ensuring that it is less than the
+     header_size ???) */
+  return 0;
+}
+
 int main (int argc, char **argv)
 {
   /* DADA Header plus Data Unit */
@@ -98,6 +125,11 @@ int main (int argc, char **argv)
   client->data_block = hdu->data_block;
   client->header_block = hdu->header_block;
 
+  client->open_function  = sock_open_function;
+  client->io_function    = sock_recv_function;
+  client->close_function = sock_close_function;
+  client->direction      = dada_client_writer;
+
   signal (SIGPIPE, SIG_IGN);
 
   listen_fd = sock_create (&port);
@@ -117,7 +149,7 @@ int main (int argc, char **argv)
 
     client->fd = comm_fd;
 
-    if (dada_client (client) < 0)
+    if (dada_client_write (client) < 0)
       multilog (log, LOG_ERR, "Error during transfer\n");
 
     multilog (log, LOG_INFO, "Closing socket connection\n");
