@@ -1,5 +1,5 @@
 #include "dada_prc_main.h"
-#include "dada.h"
+#include "dada_def.h"
 
 #include "ascii_header.h"
 #include "diff_time.h"

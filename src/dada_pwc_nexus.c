@@ -1,6 +1,6 @@
 #include "dada_pwc_nexus.h"
 #include "ascii_header.h"
-#include "dada.h"
+#include "dada_def.h"
 
 #include <stdlib.h>
 #include <string.h>

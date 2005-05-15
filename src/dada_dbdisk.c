@@ -14,6 +14,9 @@
 #include <fcntl.h>
 #include <assert.h>
 
+#include <sys/types.h>
+#include <sys/stat.h>
+
 void usage()
 {
   fprintf (stdout,
