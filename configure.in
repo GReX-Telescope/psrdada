@@ -17,7 +17,7 @@ AC_PROG_LIBTOOL
 
 AC_CHECK_LIB([m], [sin])
 
-CFLAGS = -O2 -pthread -Wall
+CFLAGS="-O2 -pthread -Wall"
 
 #
 # Checks for header files.
