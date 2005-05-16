@@ -7,9 +7,9 @@
 #include <errno.h>
 #include <ctype.h>
 
-string_array* string_array_create ()
+string_array_t* string_array_create ()
 {
-  string_array* list = (string_array*) malloc (sizeof(string_array));
+  string_array_t* list = (string_array_t*) malloc (sizeof(string_array_t));
   assert (list != 0);
 
   list->size = 0;
@@ -17,7 +17,7 @@ string_array* string_array_create ()
   return list;
 }
 
-void string_array_free (string_array* list)
+void string_array_free (string_array_t* list)
 {
    unsigned i;
    for (i=0; i < list->size; i++)
@@ -27,7 +27,7 @@ void string_array_free (string_array* list)
 }
 
 /*! Return the requested string */
-char* string_array_get (string_array* list, unsigned pos)
+char* string_array_get (string_array_t* list, unsigned pos)
 {
   if (pos < list->size)
     return list->strs[pos];
@@ -35,13 +35,13 @@ char* string_array_get (string_array* list, unsigned pos)
 }
 
 /*! Return the size of the array */
-unsigned string_array_size (string_array* list)
+unsigned string_array_size (string_array_t* list)
 {
   return list->size;
 }
 
 /*! All empty strings and any text following the # symbol will be ignored. */
-int string_array_load (string_array* list, const char* filename)
+int string_array_load (string_array_t* list, const char* filename)
 {
   const char* whitespace = " \r\t\n";
   char* text = 0;
@@ -86,7 +86,7 @@ int string_array_load (string_array* list, const char* filename)
    exists at this position, all entries will be bumped toward the end of
    the array.  If pos > list->size_entries, -1 will be returned.
  */
-int string_array_insert (string_array* list, const char* entry, unsigned pos)
+int string_array_insert (string_array_t* list, const char* entry, unsigned pos)
 {
   char** temp;
   unsigned val;
@@ -107,12 +107,12 @@ int string_array_insert (string_array* list, const char* entry, unsigned pos)
   return 0;
 }
 
-int string_array_append (string_array* list, const char* entry)
+int string_array_append (string_array_t* list, const char* entry)
 {
   return (string_array_insert (list, entry, list->size));
 }
 
-int string_array_remove (string_array* list, unsigned pos)
+int string_array_remove (string_array_t* list, unsigned pos)
 {
   unsigned val;
   char ** temp;
@@ -142,7 +142,7 @@ int string_array_remove (string_array* list, unsigned pos)
   return 0;
 }
 
-int string_array_switch (string_array* list, unsigned pos1, unsigned pos2)
+int string_array_switch (string_array_t* list, unsigned pos1, unsigned pos2)
 /* This function switches the two string_array in the array "list" indexed
    by "pos1" and "pos2".  */
 {
@@ -153,7 +153,7 @@ int string_array_switch (string_array* list, unsigned pos1, unsigned pos2)
   return 0;
 }
 
-char* string_array_search (string_array* list, char* match)
+char* string_array_search (string_array_t* list, char* match)
 /* this function returns the string in "list" containing
    the string "match".  If the string does not exist in the array,
    NULL is returned.  */
