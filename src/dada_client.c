@@ -250,7 +250,7 @@ int dada_client_read (dada_client_t* client)
 
   /* Check that header is of advertised size */
   if (ascii_header_get (header, "HDR_SIZE", "%"PRIu64, &hdr_size) != 1) {
-    multilog (log, LOG_ERR, "Header block does not have HDR_SIZE\n");
+    multilog (log, LOG_ERR, "Header with no HDR_SIZE\n");
     return -1;
   }
 
@@ -277,7 +277,7 @@ int dada_client_read (dada_client_t* client)
   /* Get the header offset */
   if (ascii_header_get (client->header, "OBS_OFFSET",
 			"%"PRIu64, &obs_offset) != 1) {
-    multilog (log, LOG_WARNING, "Header block does not have OBS_OFFSET\n");
+    multilog (log, LOG_WARNING, "Header with no OBS_OFFSET\n");
     obs_offset = 0;
   }
 

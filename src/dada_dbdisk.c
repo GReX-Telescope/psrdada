@@ -82,7 +82,7 @@ int file_open_function (dada_client_t* client)
 
   /* Get the observation ID */
   if (ascii_header_get (client->header, "OBS_ID", "%s", obs_id) != 1) {
-    multilog (log, LOG_WARNING, "Header block does not define OBS_ID\n");
+    multilog (log, LOG_WARNING, "Header with no OBS_ID\n");
     strcpy (obs_id, "UNKNOWN");
   }
 
@@ -120,7 +120,7 @@ int file_open_function (dada_client_t* client)
 
   /* Get the file size */
   if (ascii_header_get (header, "FILE_SIZE", "%"PRIu64, &file_size) != 1) {
-    multilog (log, LOG_WARNING, "Header block does not define FILE_SIZE\n");
+    multilog (log, LOG_WARNING, "Header with no FILE_SIZE\n");
     file_size = DADA_DEFAULT_FILESIZE;
   }
 
