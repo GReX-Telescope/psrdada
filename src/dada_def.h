@@ -45,6 +45,8 @@
 /* default file size of 1 GB */
 #define DADA_DEFAULT_FILESIZE 1073741824
 
+#define DADA_DEFAULT_XFERSIZE DADA_DEFAULT_FILESIZE
+
 /* maximum length of observation id string */
 #define DADA_OBS_ID_MAXLEN 64
 
