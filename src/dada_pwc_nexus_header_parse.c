@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <assert.h>
 
-int dada_pwc_config_header (string_array* params, const char* prefix,
+int dada_pwc_config_header (string_array_t* params, const char* prefix,
 			    char* header, const char* config)
 {
   char param_name  [64] = "";

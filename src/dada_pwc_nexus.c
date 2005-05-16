@@ -26,12 +26,12 @@ node_t* dada_node_create ()
 }
 
 /*! load lines from param_file, then take only first word from each line */
-int dada_pwc_nexus_parse_params (string_array* params, const char* param_file)
+int dada_pwc_nexus_parse_params (string_array_t* params, const char* filename)
 {
   const char* whitespace = " \r\t\n";
   unsigned iparam = 0;
 
-  if (string_array_load (params, param_file) < 0)
+  if (string_array_load (params, filename) < 0)
     return -1;
 
   for (iparam=0; iparam < string_array_size(params); iparam++)
