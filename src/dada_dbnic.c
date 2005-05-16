@@ -81,7 +81,7 @@ int sock_open_function (dada_client_t* client)
 
   /* Get the observation ID */
   if (ascii_header_get (client->header, "OBS_ID", "%s", obs_id) != 1) {
-    multilog (log, LOG_WARNING, "Header block does not define OBS_ID\n");
+    multilog (log, LOG_WARNING, "Header with no OBS_ID\n");
     strcpy (obs_id, "UNKNOWN");
   }
 
@@ -116,9 +116,16 @@ int sock_open_function (dada_client_t* client)
 #endif
 
   /* Get the file size */
-  if (ascii_header_get (header, "TRANSFER_SIZE", "%"PRIu64, &xfer_size) != 1) {
-    multilog (log, LOG_WARNING, "Header does not define TRANSFER_SIZE\n");
+  if (ascii_header_get (header, "TRANSFER_SIZE", "%"PRIu64, &xfer_size) != 1)
+  {
+    multilog (log, LOG_WARNING, "Header with no TRANSFER_SIZE\n");
     xfer_size = DADA_DEFAULT_XFERSIZE;
+
+    if (ascii_header_set (header, "TRANSFER_SIZE", "%"PRIu64, xfer_size) < 0)
+    {
+      multilog (log, LOG_ERR, "Could not set TRANSFER_SIZE in Header\n");
+      return -1;
+    }
   }
 
 #ifdef _DEBUG
@@ -151,6 +158,12 @@ int sock_close_function (dada_client_t* client, uint64_t bytes_written)
   /* status and error logging facility */
   multilog_t* log;
 
+  /* received header */
+  static char* header = 0;
+
+  /* received header size */
+  static uint64_t header_size = 0;
+
   assert (client != 0);
 
   dbnic = (dada_dbnic_t*) client->context;
@@ -161,11 +174,48 @@ int sock_close_function (dada_client_t* client, uint64_t bytes_written)
 
   if (bytes_written < client->transfer_bytes) {
 
+    multilog (log, LOG_INFO, "Transfer stopped early at %"PRIu64" bytes\n",
+	      bytes_written);
+
     /* send an out of band header with an updated transfer_size */
+    if (ascii_header_set (header, "TRANSFER_SIZE", "%"PRIu64, bytes_written)<0)
+    {
+      multilog (log, LOG_ERR, "Could not set TRANSFER_SIZE in Header\n");
+      return -1;
+    }
+
+    if (send (client->fd, client->header, client->header_size, 
+	      MSG_NOSIGNAL | MSG_OOB) < client->header_size)
+    {
+      multilog (log, LOG_ERR, "Could not send out-of-band Header: %s\n",
+		strerror(errno));
+      return -1;
+    }
 
   }
 
+  if (header_size < client->header_size) {
+    header = realloc (header, client->header_size);
+    assert (header != 0);
+    header_size = client->header_size;
+  }
+
   /* receive the acknowledgement header from the target node */
+  if (recv (client->fd, header, client->header_size, 
+	    MSG_NOSIGNAL | MSG_WAITALL) < client->header_size)
+    {
+      multilog (log, LOG_ERR, "Could not recv acknowledgement Header: %s\n",
+		strerror(errno));
+      return -1;
+    }
+
+  if (strcmp (client->header, header) != 0) {
+    multilog (log, LOG_ERR, "Invalid acknowledgement Header:\n");
+    multilog (log, LOG_ERR, "START HEADER\n%s\nEND HEADER\n", header);
+    multilog (log, LOG_ERR, "Should be:\n");
+    multilog (log, LOG_ERR, "START HEADER\n%s\nEND HEADER\n", client->header);
+    return -1;
+  }
 
   return 0;
 }

@@ -14,6 +14,9 @@
 #include <errno.h>
 #include <assert.h>
 
+#include <sys/types.h>
+#include <sys/socket.h>
+
 void usage()
 {
   fprintf (stdout,
@@ -26,26 +29,90 @@ void usage()
 int64_t sock_recv_function (dada_client_t* client, 
 			    void* data, uint64_t data_size)
 {
-  /* this function will call select to see if there is any out-of-band
-     data awaiting reception.  if so, this marks a premature end to
-     the expected transfer_bytes length.  read the new header, and
-     update the transfer_bytes attribute. if not, then recv the data.  */
-  return 0;
+  int64_t received = recv (client->fd, data, data_size,
+			   MSG_NOSIGNAL | MSG_WAITALL);
+
+  if (received < 0)
+    return -1;
+
+  if (received < data_size) {
+
+    /* The transmission was cut short; most likely due to out-of-band
+       data awaiting reception.  If this is the case, then it is a message
+       from dbnic with an updated header; recv this header and parse
+       the new TRANSFER_LENGTH attribute from it. */
+
+    if (recv (client->fd, client->header, client->header_size, 
+	      MSG_NOSIGNAL | MSG_WAITALL | MSG_OOB) < client->header_size) {
+      multilog (client->log, LOG_ERR, 
+		"Could not recv out-of-band Header: %s\n", strerror(errno));
+      return -1;
+    }
+
+    /* Get the transfer size */
+    if (ascii_header_get (client->header, "TRANSFER_SIZE", "%"PRIu64,
+			  &(client->transfer_bytes)) != 1)
+    {
+      multilog (client->log, LOG_ERR, "Header with no TRANSFER_SIZE\n");
+      return -1;
+    }
+
+  }
+
+  return received;
 }
 
 /*! Function that closes the data file */
 int sock_close_function (dada_client_t* client, uint64_t bytes_written)
 {
-  /* don't close the socket, maybe send the header back as a handshake */
+  /* don't close the socket; just send the header back as a handshake */
+
+  if (send (client->fd, client->header, client->header_size, 
+	    MSG_NOSIGNAL | MSG_WAITALL) < client->header_size) {
+    multilog (client->log, LOG_ERR, 
+	      "Could not send acknowledgment Header: %s\n", strerror(errno));
+    return -1;
+  }
+
   return 0;
 }
 
 /*! Function that opens the data transfer target */
 int sock_open_function (dada_client_t* client)
 {
-  /* wait for incoming data on the socket.  recv peek the header and
-     set the header_size attribute (ensuring that it is less than the
-     header_size ???) */
+  unsigned hdr_size = 0;
+
+  if (recv (client->fd, client->header, client->header_size, 
+	    MSG_NOSIGNAL | MSG_WAITALL | MSG_PEEK) < client->header_size) {
+    multilog (client->log, LOG_ERR, 
+	      "Could not recv a peek at the Header: %s\n", strerror(errno));
+    return -1;
+  }
+
+  /* Get the transfer size */
+  if (ascii_header_get (client->header, "TRANSFER_SIZE", "%"PRIu64,
+			&(client->transfer_bytes)) != 1)  {
+    multilog (client->log, LOG_ERR, "Header with no TRANSFER_SIZE\n");
+    return -1;
+  }
+
+  /* Get the header size */
+  if (ascii_header_get (client->header, "HDR_SIZE", "%"PRIu64, &hdr_size) != 1)
+  {
+    multilog (client->log, LOG_ERR, "Header with no HDR_SIZE\n");
+    return -1;
+  }
+
+  /* Ensure that the incoming header fits in the client header buffer */
+  if (hdr_size > client->header_size) {
+    multilog (client->log, LOG_ERR, "HDR_SIZE=%u > Block size=%"PRIu64"\n",
+	      hdr_size, client->header_size);
+    return -1;
+
+  }
+
+  client->header_size = hdr_size;
+
   return 0;
 }
 
