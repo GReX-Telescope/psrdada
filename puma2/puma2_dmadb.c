@@ -31,6 +31,12 @@ int initialize(dmadb_t* dmadb)
 {
   int verbose = dmadb->verbose; /* saves some typing */
 
+  /* initialize parameters */
+
+  dmadb->nbufs = 0;
+  dmadb->nbufs = 100;
+  dmadb->fSize = 800000000;
+  dmadb->ObsId = "Test001";
   /* open PiC card - makes the device available for further writes  */
 
   if (verbose) fprintf(stderr,"opening PiC Device");
@@ -38,7 +44,8 @@ int initialize(dmadb_t* dmadb)
     fprintf(stderr,"PiC open failed\n");
     return 0;
   }    
-  /* disarm pic as a safety measure */
+
+  /* disarm pic as a precautionary measure */
   if ( (pic_configure(&dmadb->pic, 2)) < 0 ){
     fprintf(stderr,"Cannot disarm PiC\n");
     return 0;
@@ -81,10 +88,9 @@ time_t arm_pic(dada_pwc_main_t* pwcm, time_t start_utc)
   time_t now;
   unsigned sleep_time = 0;
   /* get our context here, all required parameters are here */
-  //struct dmadb_t* dmadb = (struct dmadb_t*)pwcm->context;
   dmadb_t* dmadb = (dmadb_t*)pwcm->context;
   int verbose = dmadb->verbose; /* saves some typing */
-  
+
   /* wait for atleast 10-second before start time */
   now = time(0);
 
@@ -186,14 +192,13 @@ int main (int argc, char **argv)
 
     /* flags */
     char daemon = 0; /*daemon mode */
-    char verbose = 0;/* verbose mode */
+    int verbose = 0; /* verbose mode */
     int mode = 0;
 
     /* dmadb stuff, all EDT/PiC stuff is in here */
     
     dmadb_t dmadb;
-    
-   
+       
     int nSecs = 100,nbufs=0, buf=0;
     int wrCount,rdCount;
     char *ObsId = "Test";
