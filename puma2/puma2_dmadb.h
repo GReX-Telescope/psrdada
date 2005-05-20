@@ -2,6 +2,7 @@
 
 #include "dada_hdu.h"
 #include "dada_def.h"
+#include "dada_pwc_main.h"
 
 #include "ipcio.h"
 #include "multilog.h"
@@ -20,4 +21,17 @@
 #include "edtinc.h"
 
 /* EDT recommends datarate/20 for bufsize */
-#define bufsize 4000000
+#define BUFSIZE 4000000
+
+/* structures dmadb datatype  */
+typedef struct{
+  int verbose; /* verbosity flag */
+  int nbufs; /* number of buffers to acquire */
+  int fSize; /* file size of data */
+  int nSecs; /* number of seconds to acquire */
+  int buf;
+  EdtDev* edt_p;
+  pic_t pic; /* pic data structure */
+  char *data;
+}dmadb_t;
+  
