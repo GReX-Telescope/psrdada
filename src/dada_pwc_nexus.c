@@ -146,8 +146,6 @@ int dada_pwc_nexus_configure (dada_pwc_nexus_t* nexus, const char* filename)
   return nexus_configure ((nexus_t*) nexus, filename);
 }
 
-#define TIMESTR "%Y-%m-%d-%H:%M:%S"
-
 int dada_pwc_nexus_send (dada_pwc_nexus_t* nexus, dada_pwc_command_t command)
 {
   unsigned buffer_size = 128;
@@ -168,7 +166,7 @@ int dada_pwc_nexus_send (dada_pwc_nexus_t* nexus, dada_pwc_command_t command)
     
   case dada_pwc_record_start:
     fprintf (stderr, "clocking->recording\n");
-    strftime (buffer, buffer_size, "rec_start " TIMESTR,
+    strftime (buffer, buffer_size, "rec_start " DADA_TIMESTR,
 	      nexus->convert_to_tm (&command.utc));
     nexus_send ((nexus_t*)nexus, buffer);
     status = dada_pwc_set_state (nexus->pwc, dada_pwc_recording, time(0));
@@ -176,7 +174,7 @@ int dada_pwc_nexus_send (dada_pwc_nexus_t* nexus, dada_pwc_command_t command)
     
   case dada_pwc_record_stop:
     fprintf (stderr, "recording->clocking\n");
-    strftime (buffer, buffer_size, "rec_stop " TIMESTR,
+    strftime (buffer, buffer_size, "rec_stop " DADA_TIMESTR,
 	      nexus->convert_to_tm (&command.utc));
     nexus_send ((nexus_t*)nexus, buffer);
     status = dada_pwc_set_state (nexus->pwc, dada_pwc_clocking, time(0));
@@ -187,7 +185,7 @@ int dada_pwc_nexus_send (dada_pwc_nexus_t* nexus, dada_pwc_command_t command)
     if (!command.utc)
       nexus_send ((nexus_t*)nexus, "start");
     else {
-      strftime (buffer, buffer_size, "start " TIMESTR,
+      strftime (buffer, buffer_size, "start " DADA_TIMESTR,
 		nexus->convert_to_tm (&command.utc));
       nexus_send ((nexus_t*)nexus, buffer);
     }
@@ -199,7 +197,7 @@ int dada_pwc_nexus_send (dada_pwc_nexus_t* nexus, dada_pwc_command_t command)
     if (!command.utc)
       nexus_send ((nexus_t*)nexus, "stop");
     else {
-      strftime (buffer, buffer_size, "stop " TIMESTR,
+      strftime (buffer, buffer_size, "stop " DADA_TIMESTR,
 		nexus->convert_to_tm (&command.utc));
       nexus_send ((nexus_t*)nexus, buffer);
     }
