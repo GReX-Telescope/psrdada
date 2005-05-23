@@ -165,4 +165,22 @@ char* string_array_search (string_array_t* list, char* match)
   return 0;
 }
 
+/* remove from list if word not found in filter */
+int string_array_filter (string_array_t* list, const char* filter)
+{
+  unsigned istr = 0;
+  for (istr=0; istr < string_array_size (list); istr++)
+    if (!strstr (filter, string_array_get (list, istr)))
+      string_array_remove (list, istr);
+  return 0;
+}
 
+/* add tokens from string to list - input string is modified */
+int string_array_tok (string_array_t* list, char* string, const char* white)
+{
+  char* word = 0;
+  for (word = strtok (string, white); word != 0; word = strtok (NULL, white))
+    if (!string_array_search (list, word))
+      string_array_append (list, word);  
+  return 0;
+}
