@@ -43,6 +43,108 @@ typedef struct {
 
 #define DADA_DBNIC_INIT { 0, 0, 0, "" }
 
+int setup_nodes (dada_client_t* client)
+{
+  /* the dada_dbnic specific data */
+  dada_dbnic_t* dbnic = 0;
+  
+  /* the currently open connections */
+  node_array_t* array = 0;
+
+  /* the list of hosts with which a data connection should be established */
+  string_array_t* hosts = 0;
+
+  /* status and error logging facility */
+  multilog_t* log;
+
+  /* the header */
+  char* header = 0;
+
+  /* the host name */
+  char* name = 0;
+
+  /* target nodes, as defined by TARGET_NODES attribute */
+  char target_nodes [256];
+
+  /* loop counters */
+  unsigned inode=0;
+
+  assert (client != 0);
+
+  dbnic = (dada_dbnic_t*) client->context;
+  assert (dbnic != 0);
+
+  array = dbnic->array;
+  assert (array != 0);
+
+  log = client->log;
+  assert (log != 0);
+
+  header = client->header;
+  assert (header != 0);
+
+  /* Get the target nodes */
+  if (ascii_header_get (header, "TARGET_NODES", "%s", target_nodes) == 1) {
+
+    multilog (log, LOG_INFO, "TARGET_NODES=%s\n", target_nodes);
+
+    if (!dbnic->hdr_node_names)
+      dbnic->hdr_node_names = string_array_create ();
+
+    /* remove entries not in target_nodes string */
+    string_array_filter (dbnic->hdr_node_names, target_nodes);
+
+    /* add nodes from target_nodes string */
+    string_array_tok (dbnic->hdr_node_names, target_nodes, " ,\t\n");
+
+    hosts = dbnic->hdr_node_names;
+
+  }
+
+  else if (dbnic->usr_node_names) {
+
+    multilog (log, LOG_INFO, "Using specified nodes\n");
+    hosts = dbnic->usr_node_names;
+
+  }
+
+  else {
+
+    multilog (log, LOG_WARNING, "Header with no TARGET_NODES"
+	      " and no specified nodes\n");
+
+    return -1;
+
+  }
+
+  /* close the connections that are no longer required */
+  while (inode < node_array_size (array)) {
+    name = node_array_get (array, inode)->name;
+    if (!string_array_search (hosts, name)) {
+      multilog (log, LOG_INFO, "Closing %s\n", name);
+      node_array_remove (array, inode);
+    }
+    else
+      inode ++;
+  }
+
+  /* open the connections that are not already open */
+  for (inode=0; inode < string_array_size (hosts); inode++) {
+    name = string_array_get (hosts, inode);
+    if (!node_array_search (array, name)) {
+      multilog (log, LOG_INFO, "Opening %s\n", name);
+      if (node_array_add (array, name, DADA_DEFAULT_NICDB_PORT) < 0) {
+	multilog (log, LOG_ERR, "Could not add (%s,%d) to node array\n",
+		  name, DADA_DEFAULT_NICDB_PORT);
+	return -1;
+      }
+    }
+  }
+
+  return 0;
+}
+
+
 /*! Function that opens the data transfer target */
 int sock_open_function (dada_client_t* client)
 {
@@ -57,9 +159,6 @@ int sock_open_function (dada_client_t* client)
 
   /* observation id, as defined by OBS_ID attribute */
   char obs_id [DADA_OBS_ID_MAXLEN] = "";
-
-  /* target nodes, as defined by TARGET_NODES attribute */
-  char target_nodes [256];
 
   /* size of each transfer in bytes, as defined by TRANSFER_SIZE attribute */
   uint64_t xfer_size = 0;
@@ -84,7 +183,7 @@ int sock_open_function (dada_client_t* client)
   assert (header != 0);
 
   /* Get the observation ID */
-  if (ascii_header_get (client->header, "OBS_ID", "%s", obs_id) != 1) {
+  if (ascii_header_get (header, "OBS_ID", "%s", obs_id) != 1) {
     multilog (log, LOG_WARNING, "Header with no OBS_ID\n");
     strcpy (obs_id, "UNKNOWN");
   }
@@ -92,34 +191,13 @@ int sock_open_function (dada_client_t* client)
   /* check to see if we are still working with the same observation */
   if (strcmp (obs_id, dbnic->obs_id) == 0)
     multilog (log, LOG_INFO, "Continue OBS_ID=%s\n", obs_id);
+
   else {
 
-    /* Get the target nodes */
-    if (ascii_header_get (client->header, "TARGET_NODES", "%s", target_nodes)
-	!= 1)
-      multilog (log, LOG_WARNING, "Header with no TARGET_NODES\n");
+    multilog (log, LOG_INFO, "New OBS_ID=%s\n", obs_id);
+    if (setup_nodes (client) < 0)
+      return -1;
 
-    else {
-
-      if (!dbnic->hdr_node_names)
-	dbnic->hdr_node_names = string_array_create ();
-
-      /* remove entries not in target_nodes string */
-      string_array_filter (dbnic->hdr_node_names, target_nodes);
-
-      /* add nodes from target_nodes string */
-      string_array_tok (dbnic->hdr_node_names, target_nodes, " ,\t\n");
-
-    }
-
-    /* here we look for TARGET_NODES and parse them; if already in
-       hdr_node_names, do nothing; remove hdr_node_names not in
-       TARGET_NODES.  It TARGET_NODES not given, delete all and check
-       for usr_node_names; if not specified then error.  Whichever
-       list of names is used in the end, ensure that a connection is
-       open in array to each node in X_node_names */
-
-    multilog (log, LOG_INFO, "New OBS_ID=%s node names are\n", obs_id);
   }
 
   /* Here maybe we should change the obs id or in some way ensure that
@@ -285,10 +363,9 @@ int main (int argc, char **argv)
       break;
       
     case 'D':
-      if (node_array_add (dbnic.array, optarg, DADA_DEFAULT_NICDB_PORT) < 0) {
-	fprintf (stderr, "Could not add '%s' to node array\n", optarg);
-	return EXIT_FAILURE;
-      }
+      if (!dbnic.usr_node_names)
+	dbnic.usr_node_names = string_array_create ();
+      string_array_append (dbnic.usr_node_names, optarg);
       break;
       
     case 'v':
