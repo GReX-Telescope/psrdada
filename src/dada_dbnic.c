@@ -355,14 +355,14 @@ int main (int argc, char **argv)
 
   dbnic.array = node_array_create ();
 
-  while ((arg=getopt(argc,argv,"dD:vW")) != -1)
+  while ((arg=getopt(argc,argv,"dN:v")) != -1)
     switch (arg) {
       
     case 'd':
       daemon=1;
       break;
       
-    case 'D':
+    case 'N':
       if (!dbnic.usr_node_names)
 	dbnic.usr_node_names = string_array_create ();
       string_array_append (dbnic.usr_node_names, optarg);
