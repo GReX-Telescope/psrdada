@@ -1,6 +1,10 @@
 #include "dada_pwc_main.h"
+#include "dada_def.h"
+
+#include "ascii_header.h"
 
 #include <stdlib.h>
+#include <string.h>
 #include <assert.h>
 
 /*! Create a new DADA primary write client main loop */
@@ -20,6 +24,8 @@ dada_pwc_main_t* dada_pwc_main_create ()
   pwcm -> stop_function = 0;
 
   pwcm -> context = 0;
+  pwcm -> header = 0;
+  pwcm -> header_size = 0;
 
   return pwcm;
 }
@@ -101,6 +107,16 @@ int dada_pwc_main (dada_pwc_main_t* pwcm)
 /*! The idle and prepared states of the DADA primary write client main loop */
 int dada_pwc_main_prepare (dada_pwc_main_t* pwcm)
 {
+  /* get next available Header Block */
+  if (pwcm->header_block) {
+    pwcm->header_size = ipcbuf_get_bufsz (pwcm->header_block);
+    pwcm->header = ipcbuf_get_next_write (pwcm->header_block);
+    if (!pwcm->header) {
+      multilog (pwcm->log, LOG_ERR, "Could not get next header block\n");
+      return EXIT_FAILURE;
+    }
+  }
+
   while (!dada_pwc_quit (pwcm->pwc)) {
 
     pwcm->command = dada_pwc_command_get (pwcm->pwc);
@@ -110,11 +126,8 @@ int dada_pwc_main_prepare (dada_pwc_main_t* pwcm)
       multilog (pwcm->log, LOG_INFO, 
 		"HEADER START\n%s\nHEADER END\n", pwcm->command.header);
 
-      /* here is where the header would be written to the Header Block e.g. 
-
-      memcpy (pwcm->header, command.header, pwcm->header_size);
-
-      */
+      if (pwcm->header_block)
+	strncpy (pwcm->header, pwcm->command.header, pwcm->header_size);
 
       dada_pwc_set_state (pwcm->pwc, dada_pwc_prepared, 0);
 
@@ -173,8 +186,6 @@ int dada_pwc_main_prepare (dada_pwc_main_t* pwcm)
 /*! The transit to clocking/recording state */
 int dada_pwc_main_start_transfer (dada_pwc_main_t* pwcm)
 {
-  uint64_t header_size = 0;
-
   /* If utc != 0, the start function should attempt to start the data
      transfer at the specified utc.  Otherwise, start as soon as
      possible.  Regardless, the start function should return the UTC
@@ -183,23 +194,35 @@ int dada_pwc_main_start_transfer (dada_pwc_main_t* pwcm)
 
   time_t utc = pwcm->start_function (pwcm, pwcm->command.utc);
 
+  unsigned buffer_size = 64;
+  static char* buffer = 0;
+
+  if (!buffer)
+    buffer = malloc (buffer_size);
+  assert (buffer != 0);
 
   if (utc <= 0) {
-    multilog (pwcm->log, LOG_ERR, "dada_pwc_main_start_transfer"
-	      " start function returned invalid UTC\n");
+    multilog (pwcm->log, LOG_ERR, "start_function returned invalid UTC\n");
     return EXIT_FAILURE;
   }
 
-  /* here is where UTC_START would be written to the header */
-
+  strftime (buffer, buffer_size, DADA_TIMESTR, gmtime (&utc));
+  multilog (pwcm->log, LOG_INFO, "UTC_START = %s\n", buffer);
 
   /* make header available on Header Block */
   if (pwcm->header_block) {
-    header_size = ipcbuf_get_bufsz (pwcm->header_block);
-    if (ipcbuf_mark_filled (pwcm->header_block, header_size) < 0)  {
+
+    /* write UTC_START to the header */
+    if (ascii_header_set (pwcm->header, "UTC_START", "%s", buffer) < 0) {
+      multilog (pwcm->log, LOG_ERR, "failed ascii_header_set UTC_START\n");
+      return EXIT_FAILURE;
+    }
+
+    if (ipcbuf_mark_filled (pwcm->header_block, pwcm->header_size) < 0)  {
       multilog (pwcm->log, LOG_ERR, "Could not mark filled header block\n");
       return EXIT_FAILURE;
     }
+
   }
 
   if (pwcm->command.code == dada_pwc_clock)

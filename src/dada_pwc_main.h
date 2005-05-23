@@ -45,6 +45,12 @@ extern "C" {
     /*! The current command from the PWC control connection */
     dada_pwc_command_t command;
 
+    /*! the unique header for this primary write client */
+    char* header;
+
+    /*! the size of the header */
+    unsigned header_size;
+
   } dada_pwc_main_t;
 
   /*! Create a new DADA primary write client main loop */
