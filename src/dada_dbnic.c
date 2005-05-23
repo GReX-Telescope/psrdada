@@ -58,7 +58,10 @@ int sock_open_function (dada_client_t* client)
   /* observation id, as defined by OBS_ID attribute */
   char obs_id [DADA_OBS_ID_MAXLEN] = "";
 
-  /* size of each transfer in bytes, as determined by TRANSFER_SIZE */
+  /* target nodes, as defined by TARGET_NODES attribute */
+  char target_nodes [256];
+
+  /* size of each transfer in bytes, as defined by TRANSFER_SIZE attribute */
   uint64_t xfer_size = 0;
 
   /* the optimal buffer size for writing to file */
@@ -66,6 +69,7 @@ int sock_open_function (dada_client_t* client)
 
   /* the open file descriptor */
   int fd = -1;
+
 
   assert (client != 0);
 
@@ -89,6 +93,24 @@ int sock_open_function (dada_client_t* client)
   if (strcmp (obs_id, dbnic->obs_id) == 0)
     multilog (log, LOG_INFO, "Continue OBS_ID=%s\n", obs_id);
   else {
+
+    /* Get the target nodes */
+    if (ascii_header_get (client->header, "TARGET_NODES", "%s", target_nodes)
+	!= 1)
+      multilog (log, LOG_WARNING, "Header with no TARGET_NODES\n");
+
+    else {
+
+      if (!dbnic->hdr_node_names)
+	dbnic->hdr_node_names = string_array_create ();
+
+      /* remove entries not in target_nodes string */
+      string_array_filter (dbnic->hdr_node_names, target_nodes);
+
+      /* add nodes from target_nodes string */
+      string_array_tok (dbnic->hdr_node_names, target_nodes, " ,\t\n");
+
+    }
 
     /* here we look for TARGET_NODES and parse them; if already in
        hdr_node_names, do nothing; remove hdr_node_names not in
@@ -222,7 +244,7 @@ int sock_close_function (dada_client_t* client, uint64_t bytes_written)
 
 /*! Pointer to the function that transfers data to/from the target */
 int64_t sock_send_function (dada_client_t* client, 
-			     void* data, uint64_t data_size)
+			    void* data, uint64_t data_size)
 {
   return send (client->fd, data, data_size, MSG_NOSIGNAL);
 }
@@ -230,7 +252,7 @@ int64_t sock_send_function (dada_client_t* client,
 
 int main (int argc, char **argv)
 {
-  /* DADA Data Block to Disk configuration */
+  /* DADA Data Block to Node configuration */
   dada_dbnic_t dbnic = DADA_DBNIC_INIT;
 
   /* DADA Header plus Data Unit */
@@ -263,8 +285,8 @@ int main (int argc, char **argv)
       break;
       
     case 'D':
-      if (node_array_add (dbnic.array, optarg) < 0) {
-	fprintf (stderr, "Could not add '%s' to disk array\n", optarg);
+      if (node_array_add (dbnic.array, optarg, DADA_DEFAULT_NICDB_PORT) < 0) {
+	fprintf (stderr, "Could not add '%s' to node array\n", optarg);
 	return EXIT_FAILURE;
       }
       break;
