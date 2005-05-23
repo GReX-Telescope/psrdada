@@ -1,8 +1,5 @@
 #include "node_array.h"
-
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <fcntl.h>
+#include "sock.h"
 
 #include <unistd.h>
 #include <stdlib.h>
@@ -43,7 +40,7 @@ int node_array_destroy (node_array_t* array)
 }
 
 /*! Add a node to the array */
-int node_array_add (node_array_t* array, char* name)
+int node_array_add (node_array_t* array, const char* name, int port)
 {
   /* pointer to new node_t structure in array */
   node_t* new_node = 0;
@@ -51,12 +48,21 @@ int node_array_add (node_array_t* array, char* name)
   /* array counter */
   unsigned inode;
 
+  /* the new file descriptor for the open socket */
+  int fd = sock_open (name, port);
+  if (fd < 0) {
+    fprintf (stderr, "node_array_add: error sock_open(%s,%d) %s \n",
+	     name, port, strerror(errno));
+    return -1;
+  }
+
   pthread_mutex_lock (&(array->mutex));
 
   /* ensure that each node in array is a unique device */
   for (inode = 0; inode < array->nnode; inode++) {
     if (!strcmp (name, array->nodes[inode].name)) {
       fprintf (stderr, "node_array_add: %s is already in array\n", name);
+      close (fd);
       pthread_mutex_unlock (&(array->mutex));
       return -1;
     }
@@ -68,7 +74,11 @@ int node_array_add (node_array_t* array, char* name)
   new_node = array->nodes + array->nnode;
   array->nnode ++;
 
+  new_node->fd = fd;
+  new_node->space = 0;
+  new_node->port = port;
   new_node->name = strdup (name);
+
   assert (new_node->name != 0);
 
   pthread_mutex_unlock (&(array->mutex));

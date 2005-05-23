@@ -16,6 +16,7 @@ extern "C" {
 
     int      fd;       /* file descriptor of socket connected to node */
     char*    name;     /* hostname of node */
+    int      port;     /* port number on hostname */
     uint64_t space;    /* number of bytes space left on node */
 
   } node_t;
@@ -38,10 +39,7 @@ extern "C" {
   int node_array_destroy (node_array_t*);
 
   /*! Add a node to the array */
-  int node_array_add (node_array_t*, char* path);
-
-  /*! Enable/disable file overwriting */
-  int node_array_set_overwrite (node_array_t* array, char value);
+  int node_array_add (node_array_t*, const char* name, int port);
 
   /*! Return the open file descriptor of a node in the array */
   int node_array_open (node_array_t*, uint64_t size, uint64_t* bs);
