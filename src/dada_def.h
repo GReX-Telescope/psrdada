@@ -50,4 +50,8 @@
 /* maximum length of observation id string */
 #define DADA_OBS_ID_MAXLEN 64
 
+/* the format of the UTC_START string used in call to strftime */
+#define DADA_TIMESTR "%Y-%m-%d-%H:%M:%S"
+
+
 #endif
