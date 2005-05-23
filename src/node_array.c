@@ -39,6 +39,20 @@ int node_array_destroy (node_array_t* array)
   return 0;
 }
 
+/*! Return the requested node */
+node_t* node_array_get (node_array_t* array, unsigned pos)
+{
+  if (pos < array->nnode)
+    return &(array->nodes[pos]);
+  return 0;
+}
+
+/*! Return the nnode of the array */
+unsigned node_array_size (node_array_t* array)
+{
+  return array->nnode;
+}
+
 /*! Add a node to the array */
 int node_array_add (node_array_t* array, const char* name, int port)
 {
@@ -86,6 +100,40 @@ int node_array_add (node_array_t* array, const char* name, int port)
   return 0;
 }
 
+/*! Remove the specified node from the array */
+int node_array_remove (node_array_t* array, unsigned inode)
+{
+  /* array counter */
+  unsigned jnode = 0;
+
+  /* the new file descriptor for the open socket */
+  int status = 0;
+
+  assert (array != 0);
+  assert (inode < array->nnode);
+
+  pthread_mutex_lock (&(array->mutex));
+
+  status = sock_close (array->nodes[inode].fd);
+  if (status < 0)
+    fprintf (stderr, "node_array_remove: error sock_close %s \n",
+	     strerror(errno));
+
+  free (array->nodes[inode].name);
+  array->nnode --;
+
+  /* ensure that each node in array is a unique device */
+  for (jnode = inode; jnode < array->nnode; jnode++)
+    array->nodes[jnode] = array->nodes[jnode+1];
+
+  array->nodes = realloc (array->nodes, (array->nnode)*sizeof(node_t));
+  assert (array->nodes != 0);
+
+  pthread_mutex_unlock (&(array->mutex));
+
+  return status;
+}
+
 /*! Get the available amount of node space */
 uint64_t node_array_get_available (node_array_t* array)
 {
@@ -116,4 +164,13 @@ int node_array_open (node_array_t* array, uint64_t filesize,
 
   return fd;
 
+}
+
+node_t* node_array_search (node_array_t* array, const char* match)
+{
+  unsigned i;
+  for (i=0; i < array->nnode; i++)
+    if (strcmp(array->nodes[i].name, match) == 0)
+      return &(array->nodes[i]);
+  return 0;
 }

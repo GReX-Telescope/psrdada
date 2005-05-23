@@ -38,8 +38,20 @@ extern "C" {
   /*! Destroy a node array */
   int node_array_destroy (node_array_t*);
 
+  /*! Return the specified node */
+  node_t* node_array_get (node_array_t*, unsigned inode);
+
+  /*! Return the size of the array */
+  unsigned node_array_size (node_array_t*);
+
   /*! Add a node to the array */
   int node_array_add (node_array_t*, const char* name, int port);
+
+  /*! Remove the specified node from the array */
+  int node_array_remove (node_array_t*, unsigned inode);
+
+  /*! Search for node with given host name */
+  node_t* node_array_search (node_array_t*, const char* host_name);
 
   /*! Return the open file descriptor of a node in the array */
   int node_array_open (node_array_t*, uint64_t size, uint64_t* bs);
