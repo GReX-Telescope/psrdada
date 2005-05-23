@@ -16,7 +16,7 @@
 #define DADA_DATA_BLOCK_KEY     0xdadb
 
 /* default number of blocks in Data Block */
-#define DADA_DEFAULT_BLOCK_NUM  32
+#define DADA_DEFAULT_BLOCK_NUM  ((uint64_t) 32)
 
 /* default size of blocks in Data Block */
 #define DADA_DEFAULT_BLOCK_SIZE  ((uint64_t) sysconf (_SC_PAGE_SIZE) * 128)
