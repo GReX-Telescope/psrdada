@@ -153,7 +153,7 @@ int string_array_switch (string_array_t* list, unsigned pos1, unsigned pos2)
   return 0;
 }
 
-char* string_array_search (string_array_t* list, char* match)
+char* string_array_search (string_array_t* list, const char* match)
 /* this function returns the string in "list" containing
    the string "match".  If the string does not exist in the array,
    NULL is returned.  */

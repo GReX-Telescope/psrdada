@@ -34,7 +34,7 @@ int string_array_remove (string_array_t*, unsigned pos);
 int string_array_switch (string_array_t*, unsigned pos1, unsigned pos2);
 
 /*! Return the matching string (null if not found) */
-char* string_array_search (string_array_t*, char* match);
+char* string_array_search (string_array_t*, const char* match);
 
 /*! remove from list if word not found in filter */
 int string_array_filter (string_array_t*, const char* filter);
