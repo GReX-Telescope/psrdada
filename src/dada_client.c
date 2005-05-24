@@ -53,7 +53,7 @@ int64_t dada_client_io_loop (dada_client_t* client)
   /* counters */
   uint64_t bytes_to_transfer = 0;
   uint64_t bytes_transfered = 0;
-  ssize_t bytes = 0;
+  int64_t bytes = 0;
 
   multilog_t* log = 0;
   int fd = -1;
@@ -61,9 +61,14 @@ int64_t dada_client_io_loop (dada_client_t* client)
   assert (client != 0);
 
   if (buffer_size != client->optimal_bytes) {
-    buffer_size = 512 * client->optimal_bytes;
+    buffer_size = client->optimal_bytes;
     buffer = (char*) realloc (buffer, buffer_size);
     assert (buffer != 0);
+
+#ifdef _DEBUG
+    fprintf (stderr, "buffer size = %"PRIu64"\n", buffer_size);
+#endif
+
   }
 
   log = client->log;
@@ -89,6 +94,10 @@ int64_t dada_client_io_loop (dada_client_t* client)
       if (ipcbuf_eod((ipcbuf_t*)client->data_block))
 	break;
 
+#ifdef _DEBUG
+    fprintf (stderr, "calling ipcio_read %p %"PRIi64"\n", buffer, bytes);
+#endif
+
       bytes = ipcio_read (client->data_block, buffer, bytes);
       if (bytes < 0) {
 	multilog (log, LOG_ERR, "ipcio_read error %s\n", strerror(errno));
@@ -97,7 +106,16 @@ int64_t dada_client_io_loop (dada_client_t* client)
 
     }
 
+#ifdef _DEBUG
+    fprintf (stderr, "calling io_function %p %"PRIi64"\n", buffer, bytes);
+#endif
+
     bytes = client->io_function (client, buffer, bytes);
+
+#ifdef _DEBUG
+    fprintf (stderr, "io_function returns %"PRIi64"\n", bytes);
+#endif
+
     if (bytes < 0) {
       multilog (log, LOG_ERR, "I/O error %s\n", strerror(errno));
       break;
@@ -151,8 +169,24 @@ int64_t dada_client_transfer (dada_client_t* client)
     multilog (log, LOG_ERR, "Error calling open function\n");
     return -1;
   }
+  if (!client->header_size) {
+    multilog (log, LOG_ERR, "header_size=0 after call to open_function\n");
+    return -1;
+  }
+  if (!client->transfer_bytes) {
+    multilog (log, LOG_ERR, "transfer_bytes=0 after call to open_function\n");
+    return -1;
+  }
+  if (!client->optimal_bytes) {
+    multilog (log, LOG_ERR, "optimal_bytes=0 after call to open_function\n");
+    return -1;
+  }
 
   header_size = client->header_size;
+
+#ifdef _DEBUG
+fprintf (stderr, "HEADER START\n%s\nHEADER END\n", client->header);
+#endif
 
   bytes_transfered = client->io_function (client, client->header, header_size);
 
@@ -169,8 +203,8 @@ int64_t dada_client_transfer (dada_client_t* client)
     }
   }
 
-  multilog (log, LOG_ERR, "Transfering %"PRIu64" bytes\n",
-	    client->transfer_bytes);
+  multilog (log, LOG_ERR, "Transfering %"PRIu64" bytes in %"PRIu64
+            " byte blocks\n", client->transfer_bytes, client->optimal_bytes);
 
   gettimeofday (&start_loop, NULL);
 
@@ -346,6 +380,15 @@ int dada_client_write (dada_client_t* client)
       return -1;
 
     // signal end of data on Data Block
+    if (ipcio_close (client->data_block) < 0)  {
+      multilog (log, LOG_ERR, "Could not close Data Block\n");
+      return -1;
+    }
+
+    if (ipcio_open (client->data_block, 'W') < 0) {
+      multilog (log, LOG_ERR, "Could not re-open Data Block for writing\n");
+      return -1;
+    }
 
   }
 
