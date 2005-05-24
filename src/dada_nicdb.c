@@ -25,99 +25,85 @@ void usage()
 	   " -d   run as daemon\n");
 }
 
-int64_t sock_recv (int fd, char* buffer, uint64_t size, int flags)
+int64_t sock_recv (int fd, char* buffer, uint64_t size, int flags, float tmout)
 {
+  int ready = 0;
   int64_t received = 0;
   uint64_t total_received = 0;
 
-  fd_set* readset = 0;
-  fd_set* excpset = 0;
-
-  fd_set set;
-  FD_ZERO (&set);
-  FD_SET (fd,&set);
-
-fprintf (stderr, "sock_recv (%d, %p, %lu, %d)\n", fd, buffer, 
-         (unsigned long) size, flags);
-
-  if (flags & MSG_OOB)  {
-fprintf (stderr, "OOB\n");
-    excpset = &set;
-}
-  else  {
-fprintf (stderr, "NORMAL\n");
-    readset = &set;
-}
+  char peek = flags & MSG_PEEK;
 
   while (size) {
 
-#if 0
-    if (select (fd+1, readset, NULL, excpset, NULL) < 0) {
-      perror ("sock_recv select");
+    if (sock_ready (fd, &ready, 0, tmout) < 0) {
+      perror ("sock_recv sock_ready");
       return -1;
     }
 
-    if (FD_ISSET (fd, &set)) {
+    if (!ready) {
+#ifdef _DEBUG
+  fprintf (stderr, "sock_recv not ready for reading. timeout=%f\n", tmout);
 #endif
+      break;
+    }
 
-      received = recv (fd, buffer, size,
-		       MSG_NOSIGNAL | MSG_WAITALL | flags);
-fprintf (stderr, "received=%lu\n", (unsigned long) received);
-
-#if 0
-}
-    else  {
-fprintf (stderr, "FD_ISNOTSET!\n");
-      received = 0;
-}
-#endif
-
+    received = recv (fd, buffer, size, MSG_NOSIGNAL | MSG_WAITALL | flags);
     if (received < 0) {
       perror ("sock_recv recv");
       return -1;
     }
-    else if (!received)
+    else if (received == 0) {
+#ifdef _DEBUG
+      fprintf (stderr, "sock_recv received zero bytes\n");
+#endif
       break;
+    }
+#ifdef _DEBUG
+    fprintf (stderr, "received=%"PRIu64"\n", received);
+#endif
 
-    size -= received;
-    buffer += received;
-    total_received += received;
+    if (!peek) {
+      size -= received;
+      buffer += received;
+      total_received += received;
+    }
+    else if (received == size)
+      return received;
+
   }
 
   return total_received;
 }
 
+static uint64_t total_received = 0;
 
 /*! Pointer to the function that transfers data to/from the target */
 int64_t sock_recv_function (dada_client_t* client, 
 			    void* data, uint64_t data_size)
 {
-  int64_t received = sock_recv (client->fd, data, data_size, 0);
+#ifdef _DEBUG
+  fprintf (stderr, "sock_recv_function %p %"PRIu64"\n", data, data_size);
+#endif
+
+  int64_t received = sock_recv (client->fd, data, data_size, 0, 0.25);
 
   if (received < 0)
     return -1;
 
+  total_received += received;
+
   if (received < data_size) {
 
-    /* The transmission was cut short; most likely due to out-of-band
-       data awaiting reception.  If this is the case, then it is a message
-       from dbnic with an updated header; recv this header and parse
-       the new TRANSFER_LENGTH attribute from it. */
+    /* The transmission has been cut short.  Reset transfer_bytes. */
+    if (total_received > client->header_size)
+      total_received -= client->header_size;
+    else
+      total_received = 0;
 
-    if (sock_recv (client->fd, client->header, client->header_size, MSG_OOB)
-	< client->header_size) {
-      multilog (client->log, LOG_ERR, 
-		"Could not recv out-of-band Header: %s\n", strerror(errno));
-      return -1;
-    }
+    client->transfer_bytes = total_received;
 
-    /* Get the transfer size */
-    if (ascii_header_get (client->header, "TRANSFER_SIZE", "%"PRIu64,
-			  &(client->transfer_bytes)) != 1)
-    {
-      multilog (client->log, LOG_ERR, "Header with no TRANSFER_SIZE\n");
-      return -1;
-    }
+    multilog (client->log, LOG_WARNING, "Transfer stopped early at %"PRIu64
+	      " bytes\n", client->transfer_bytes);
 
   }
 
@@ -128,6 +114,18 @@ int64_t sock_recv_function (dada_client_t* client,
 int sock_close_function (dada_client_t* client, uint64_t bytes_written)
 {
   /* don't close the socket; just send the header back as a handshake */
+  if (total_received > client->header_size)
+    total_received -= client->header_size;
+  else
+    total_received = 0;
+
+  if (ascii_header_set (client->header, "TRANSFER_SIZE", "%"PRIu64,
+			total_received) < 0)  {
+    multilog (client->log, LOG_ERR, "Could not set TRANSFER_SIZE\n");
+    return -1;
+  }
+
+  total_received = 0;
 
   if (send (client->fd, client->header, client->header_size, 
 	    MSG_NOSIGNAL | MSG_WAITALL) < client->header_size) {
@@ -145,7 +143,8 @@ int sock_open_function (dada_client_t* client)
   unsigned hdr_size = 0;
   int ret = 0;
 
-  ret = sock_recv (client->fd, client->header, client->header_size, MSG_OOB);
+  ret = sock_recv (client->fd, client->header, client->header_size,
+		   MSG_PEEK, -1 /* block indefinitely */);
 
   if (ret < client->header_size) {
     multilog (client->log, LOG_ERR, 
@@ -181,6 +180,7 @@ fprintf (stderr, "HEADER START\n%s\nHEADER END\n", client->header);
   }
 
   client->header_size = hdr_size;
+  client->optimal_bytes = 1024 * 1024;
 
   return 0;
 }
@@ -290,11 +290,9 @@ int main (int argc, char **argv)
 
     multilog (log, LOG_INFO, "Closing socket connection\n");
 
-    if (sock_close (comm_fd) < 0) {
-      multilog (log, LOG_ERR, "Error accepting connection: %s\n",
+    if (sock_close (comm_fd) < 0)
+      multilog (log, LOG_ERR, "Error closing connection: %s\n",
 		strerror(errno));
-      return -1;
-    }
 
   }
 

@@ -242,14 +242,6 @@ int sock_open_function (dada_client_t* client)
     return -1;
   }
 
-  if (send (fd, client->header, client->header_size,
-            MSG_NOSIGNAL | MSG_OOB) < client->header_size)
-  {
-    multilog (log, LOG_ERR, "Could not send out-of-band Header: %s\n",
-              strerror(errno));
-    return -1;
-  }
-
   multilog (log, LOG_INFO, "Ready for writing %"PRIu64" bytes\n", xfer_size);
 
   client->fd = fd;
@@ -283,27 +275,16 @@ int sock_close_function (dada_client_t* client, uint64_t bytes_written)
   assert (log != 0);
 
   if (bytes_written < client->transfer_bytes) {
-
     multilog (log, LOG_INFO, "Transfer stopped early at %"PRIu64" bytes\n",
 	      bytes_written);
 
-    /* send an out of band header with an updated transfer_size */
-    if (ascii_header_set (client->header, "TRANSFER_SIZE",
-			  "%"PRIu64, bytes_written) < 0)
-    {
-      multilog (log, LOG_ERR, "Could not set TRANSFER_SIZE in Header\n");
+    if (ascii_header_set (client->header, "TRANSFER_SIZE", "%"PRIu64,
+			  bytes_written) < 0)  {
+      multilog (client->log, LOG_ERR, "Could not set TRANSFER_SIZE\n");
       return -1;
     }
-
-    if (send (client->fd, client->header, client->header_size, 
-	      MSG_NOSIGNAL | MSG_OOB) < client->header_size)
-    {
-      multilog (log, LOG_ERR, "Could not send out-of-band Header: %s\n",
-		strerror(errno));
-      return -1;
-    }
-
   }
+
 
   if (header_size < client->header_size) {
     header = realloc (header, client->header_size);
@@ -335,6 +316,9 @@ int sock_close_function (dada_client_t* client, uint64_t bytes_written)
 int64_t sock_send_function (dada_client_t* client, 
 			    void* data, uint64_t data_size)
 {
+#ifdef _DEBUG
+  fprintf (stderr, "sock_send_function %p %"PRIu64"\n", data, data_size);
+#endif
   return send (client->fd, data, data_size, MSG_NOSIGNAL);
 }
 
