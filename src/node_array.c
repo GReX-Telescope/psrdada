@@ -162,6 +162,7 @@ int node_array_open (node_array_t* array, uint64_t filesize,
   array->cnode ++;
   pthread_mutex_unlock (&(array->mutex));
 
+  *optimal_buffer_size = 4096;
   return fd;
 
 }
