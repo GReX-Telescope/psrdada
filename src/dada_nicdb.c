@@ -25,12 +25,74 @@ void usage()
 	   " -d   run as daemon\n");
 }
 
+int64_t sock_recv (int fd, char* buffer, uint64_t size, int flags)
+{
+  int64_t received = 0;
+  uint64_t total_received = 0;
+
+  fd_set* readset = 0;
+  fd_set* excpset = 0;
+
+  fd_set set;
+  FD_ZERO (&set);
+  FD_SET (fd,&set);
+
+fprintf (stderr, "sock_recv (%d, %p, %lu, %d)\n", fd, buffer, 
+         (unsigned long) size, flags);
+
+  if (flags & MSG_OOB)  {
+fprintf (stderr, "OOB\n");
+    excpset = &set;
+}
+  else  {
+fprintf (stderr, "NORMAL\n");
+    readset = &set;
+}
+
+  while (size) {
+
+#if 0
+    if (select (fd+1, readset, NULL, excpset, NULL) < 0) {
+      perror ("sock_recv select");
+      return -1;
+    }
+
+    if (FD_ISSET (fd, &set)) {
+#endif
+
+      received = recv (fd, buffer, size,
+		       MSG_NOSIGNAL | MSG_WAITALL | flags);
+fprintf (stderr, "received=%lu\n", (unsigned long) received);
+
+#if 0
+}
+    else  {
+fprintf (stderr, "FD_ISNOTSET!\n");
+      received = 0;
+}
+#endif
+
+    if (received < 0) {
+      perror ("sock_recv recv");
+      return -1;
+    }
+    else if (!received)
+      break;
+
+    size -= received;
+    buffer += received;
+    total_received += received;
+  }
+
+  return total_received;
+}
+
+
 /*! Pointer to the function that transfers data to/from the target */
 int64_t sock_recv_function (dada_client_t* client, 
 			    void* data, uint64_t data_size)
 {
-  int64_t received = recv (client->fd, data, data_size,
-			   MSG_NOSIGNAL | MSG_WAITALL);
+  int64_t received = sock_recv (client->fd, data, data_size, 0);
 
   if (received < 0)
     return -1;
@@ -42,8 +104,8 @@ int64_t sock_recv_function (dada_client_t* client,
        from dbnic with an updated header; recv this header and parse
        the new TRANSFER_LENGTH attribute from it. */
 
-    if (recv (client->fd, client->header, client->header_size, 
-	      MSG_NOSIGNAL | MSG_WAITALL | MSG_OOB) < client->header_size) {
+    if (sock_recv (client->fd, client->header, client->header_size, MSG_OOB)
+	< client->header_size) {
       multilog (client->log, LOG_ERR, 
 		"Could not recv out-of-band Header: %s\n", strerror(errno));
       return -1;
@@ -81,13 +143,20 @@ int sock_close_function (dada_client_t* client, uint64_t bytes_written)
 int sock_open_function (dada_client_t* client)
 {
   unsigned hdr_size = 0;
+  int ret = 0;
 
-  if (recv (client->fd, client->header, client->header_size, 
-	    MSG_NOSIGNAL | MSG_WAITALL | MSG_PEEK) < client->header_size) {
+  ret = sock_recv (client->fd, client->header, client->header_size, MSG_OOB);
+
+  if (ret < client->header_size) {
     multilog (client->log, LOG_ERR, 
-	      "Could not recv a peek at the Header: %s\n", strerror(errno));
+	      "recv %d out of %d peek at the Header: %s\n", 
+	      ret, client->header_size, strerror(errno));
     return -1;
   }
+
+#ifdef _DEBUG
+fprintf (stderr, "HEADER START\n%s\nHEADER END\n", client->header);
+#endif
 
   /* Get the transfer size */
   if (ascii_header_get (client->header, "TRANSFER_SIZE", "%"PRIu64,

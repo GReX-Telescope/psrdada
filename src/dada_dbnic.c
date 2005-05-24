@@ -218,8 +218,10 @@ int sock_open_function (dada_client_t* client)
   /* Get the file size */
   if (ascii_header_get (header, "TRANSFER_SIZE", "%"PRIu64, &xfer_size) != 1)
   {
-    multilog (log, LOG_WARNING, "Header with no TRANSFER_SIZE\n");
     xfer_size = DADA_DEFAULT_XFERSIZE;
+
+    multilog (log, LOG_WARNING, "Header with no TRANSFER_SIZE. Setting to %"
+              PRIu64"\n", xfer_size);
 
     if (ascii_header_set (header, "TRANSFER_SIZE", "%"PRIu64, xfer_size) < 0)
     {
@@ -232,11 +234,19 @@ int sock_open_function (dada_client_t* client)
   fprintf (stderr, "dbnic: open the socket\n");
 #endif
 
-  /* Open the file */
+  /* Get the socket connection */
   fd = node_array_open (dbnic->array, xfer_size, &optimal_bytes);
 
   if (fd < 0) {
     multilog (log, LOG_ERR, "Error node_array_open: %s\n", strerror (errno));
+    return -1;
+  }
+
+  if (send (fd, client->header, client->header_size,
+            MSG_NOSIGNAL | MSG_OOB) < client->header_size)
+  {
+    multilog (log, LOG_ERR, "Could not send out-of-band Header: %s\n",
+              strerror(errno));
     return -1;
   }
 
@@ -278,7 +288,8 @@ int sock_close_function (dada_client_t* client, uint64_t bytes_written)
 	      bytes_written);
 
     /* send an out of band header with an updated transfer_size */
-    if (ascii_header_set (header, "TRANSFER_SIZE", "%"PRIu64, bytes_written)<0)
+    if (ascii_header_set (client->header, "TRANSFER_SIZE",
+			  "%"PRIu64, bytes_written) < 0)
     {
       multilog (log, LOG_ERR, "Could not set TRANSFER_SIZE in Header\n");
       return -1;
