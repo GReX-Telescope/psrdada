@@ -18,11 +18,11 @@ include_HEADERS = ascii_header.h multilog.h sock.h		\
 	dada_pwc_main.h dada_client.h
 
 bin_PROGRAMS = dada_db dada_write_test dada_dbdisk dada_dbnic dada_nicdb \
-	dada_install_header dada_pwc_command
+	dada_install_header dada_pwc_command dada_pwc_demo
 
 check_PROGRAMS = test_multilog test_ipcbuf test_ipcio loop_ipcio	\
 	test_command_parser test_multilog_server telnecho		\
-	test_command_parse_server test_dada_nexus test_dada_pwc		\
+	test_command_parse_server test_dada_nexus			\
 	dada_writer dada_reader $(TESTS)
 
 TESTS = test_uint64_t test_disk_array
