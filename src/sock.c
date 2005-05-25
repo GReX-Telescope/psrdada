@@ -213,12 +213,15 @@ int sock_close (int fd)
 int sock_ready (int fd, int* to_read, int* to_write, float timeout)
 {
   int ret=0;
-#ifndef _OSK
-  struct timeval tmout;
-  fd_set readset, writeset;
-  fd_set *rdsp = NULL;
-  fd_set *wrsp = NULL;
+
   struct timeval* tmoutp = NULL;
+  struct timeval tmout;
+
+  fd_set *rdsp = NULL;
+  fd_set readset;
+
+  fd_set *wrsp = NULL;
+  fd_set writeset;
 
   if (to_read) {
     FD_ZERO (&readset);
@@ -230,8 +233,6 @@ int sock_ready (int fd, int* to_read, int* to_write, float timeout)
     FD_SET (fd, &writeset);
     wrsp = &writeset;
   }
-  /* Willem requires an indefinite block, please do not remove this code,
-     despite its kludgyness */
   if (timeout >= 0.0) {
     tmout.tv_sec =  (long) timeout;
     tmout.tv_usec = (long) ( (timeout - (float) tmout.tv_sec) * 1e6 );
@@ -243,7 +244,7 @@ int sock_ready (int fd, int* to_read, int* to_write, float timeout)
     perror ("sock_ready: (err) select");
     return -1;
   }
-  if (ret == 0)
+  if (!ret)
     return 0;
 
   if (to_read && FD_ISSET(fd,&readset)) {
@@ -254,7 +255,7 @@ int sock_ready (int fd, int* to_read, int* to_write, float timeout)
     *to_write = 1;
     ret = 1;
   }
-#endif
+
   return ret;
 }
 
