@@ -327,6 +327,19 @@ ssize_t ipcio_read (ipcio_t* ipc, char* ptr, size_t bytes)
   return toread - bytes;
 }
 
+uint64_t ipcio_tell (ipcio_t* ipc)
+{
+  uint64_t bufsz = ipcbuf_get_bufsz (&(ipc->buf));
+  uint64_t nbuf = 0;
+
+  if (ipc -> rdwrt == 'R' || ipc -> rdwrt == 'r')
+    nbuf = ipcbuf_get_read_count (&(ipc->buf));
+  else if (ipc -> rdwrt == 'W' || ipc -> rdwrt == 'w')
+    nbuf = ipcbuf_get_write_count (&(ipc->buf));
+
+  return nbuf * bufsz + ipc->bytes;
+}
+
 int64_t ipcio_seek (ipcio_t* ipc, int64_t offset, int whence)
 {
   /* the current absolute byte count position in the ring buffer */
