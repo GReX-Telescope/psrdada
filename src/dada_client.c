@@ -284,8 +284,9 @@ int dada_client_read (dada_client_t* client)
 
   /* Check that header is of advertised size */
   if (ascii_header_get (header, "HDR_SIZE", "%"PRIu64, &hdr_size) != 1) {
-    multilog (log, LOG_ERR, "Header with no HDR_SIZE\n");
-    return -1;
+    multilog (log, LOG_ERR, "Header with no HDR_SIZE. Setting to %"PRIu64"\n",
+	      header_size);
+    hdr_size = header_size;
   }
 
   if (hdr_size < header_size)
