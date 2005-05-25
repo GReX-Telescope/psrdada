@@ -350,7 +350,7 @@ int ipcbuf_lock_write (ipcbuf_t* id)
 
 int ipcbuf_unlock_write (ipcbuf_t* id)
 {
-  if (id->state != IPCBUF_WRITER) {
+  if (!ipcbuf_is_writer (id)) {
     fprintf (stderr, "ipcbuf_unlock_write: state != WRITER\n");
     return -1;
   }
@@ -369,6 +369,12 @@ int ipcbuf_unlock_write (ipcbuf_t* id)
 
   return 0;
 }
+
+char ipcbuf_is_writing (ipcbuf_t* id)
+{
+  return id->state == IPCBUF_WRITING;
+}
+ 
 
 int ipcbuf_enable_eod (ipcbuf_t* id)
 {

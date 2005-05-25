@@ -104,6 +104,9 @@ extern "C" {
     data is implicitly set. */
   int ipcbuf_mark_filled (ipcbuf_t* id, uint64_t nbytes);
 
+  char ipcbuf_is_writing (ipcbuf_t* id);
+  char ipcbuf_is_writer (ipcbuf_t* id);
+
   /* ////////////////////////////////////////////////////////////////////
      
      FUNCTIONS USED BY THE PROCESS READING FROM SHARED MEMORY
