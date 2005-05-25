@@ -44,6 +44,9 @@ extern "C" {
   /* stop reading/writing to an ipcbuf */
   int ipcio_close (ipcio_t* ipc);
 
+  /* return true if already open */
+  int ipcio_is_open (ipcio_t* ipc);
+
   /* free all resources reserved for the ring buffer */
   int ipcio_destroy (ipcio_t* ipc);
 
