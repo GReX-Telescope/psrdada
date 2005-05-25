@@ -60,7 +60,7 @@ int ipcio_open (ipcio_t* ipc, char rdwrt)
     return -1;
   }
 
-  ipc -> rdwrt = rdwrt;
+  ipc -> rdwrt = 0;
   ipc -> bytes = 0;
   ipc -> curbuf = 0;
 
@@ -77,6 +77,7 @@ int ipcio_open (ipcio_t* ipc, char rdwrt)
       return -1;
     }
 
+    ipc -> rdwrt = rdwrt;
     return 0;
 
   }
@@ -88,6 +89,7 @@ int ipcio_open (ipcio_t* ipc, char rdwrt)
     }
   }
 
+  ipc -> rdwrt = rdwrt;
   return 0;
 }
 
@@ -119,21 +121,25 @@ int ipcio_stop_close (ipcio_t* ipc, char unlock)
 	       ipc->buf.sync->writebuf, ipc->bytes, ipc->curbuf[0]);
 #endif
 
-    if (ipcbuf_enable_eod (&(ipc->buf)) < 0) {
-      fprintf (stderr, "ipcio_close:W error ipcbuf_enable_eod\n");
-      return -1;
-    }
+    if (ipcbuf_is_writing(&(ipc->buf))) {
 
-    if (ipcbuf_mark_filled (&(ipc->buf), ipc->bytes) < 0) {
-      fprintf (stderr, "ipcio_close:W error ipcbuf_mark_filled\n");
-      return -1;
-    }
+      if (ipcbuf_enable_eod (&(ipc->buf)) < 0) {
+        fprintf (stderr, "ipcio_close:W error ipcbuf_enable_eod\n");
+        return -1;
+      }
 
-    if (ipc->bytes == ipcbuf_get_bufsz(&(ipc->buf))) {
+      if (ipcbuf_mark_filled (&(ipc->buf), ipc->bytes) < 0) {
+        fprintf (stderr, "ipcio_close:W error ipcbuf_mark_filled\n");
+        return -1;
+      }
+
+      if (ipc->bytes == ipcbuf_get_bufsz(&(ipc->buf))) {
 #ifdef _DEBUG
-      fprintf (stderr, "ipcio_close:W last buffer was filled\n");
+        fprintf (stderr, "ipcio_close:W last buffer was filled\n");
 #endif
-      ipc->curbuf = 0;
+        ipc->curbuf = 0;
+      }
+
     }
 
     ipc->rdwrt = 'w';
@@ -160,6 +166,7 @@ int ipcio_stop_close (ipcio_t* ipc, char unlock)
 
     }
 
+    ipc -> rdwrt = 0;
     return 0;
 
   }
@@ -171,6 +178,7 @@ int ipcio_stop_close (ipcio_t* ipc, char unlock)
       return -1;
     }
 
+    ipc -> rdwrt = 0;
     return 0;
 
   }
@@ -189,6 +197,13 @@ int ipcio_stop (ipcio_t* ipc)
 int ipcio_close (ipcio_t* ipc)
 {
   return ipcio_stop_close (ipc, 1);
+}
+
+/* return 1 if the ipcio is open for reading or writing */
+int ipcio_is_open (ipcio_t* ipc)
+{
+  char rdwrt = ipc->rdwrt;
+  return rdwrt == 'R' || rdwrt == 'r' || rdwrt == 'w' || rdwrt == 'W';
 }
 
 /* write bytes to ipcbuf */
