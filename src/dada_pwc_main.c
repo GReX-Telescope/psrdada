@@ -117,6 +117,15 @@ int dada_pwc_main_prepare (dada_pwc_main_t* pwcm)
     }
   }
 
+  /* ensure that Data Block is closed */
+  if (pwcm->data_block && ipcio_is_open (pwcm->data_block)) {
+    if (ipcio_close (pwcm->data_block) < 0)
+    {
+      multilog (pwcm->log, LOG_ERR, "Could not close Data Block\n");
+      return EXIT_FAILURE;
+    }
+  } 
+
   while (!dada_pwc_quit (pwcm->pwc)) {
 
     pwcm->command = dada_pwc_command_get (pwcm->pwc);
