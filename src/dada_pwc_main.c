@@ -456,8 +456,19 @@ int dada_pwc_main_stop_transfer (dada_pwc_main_t* pwcm)
     return EXIT_FAILURE;
   }
 
+  /* If currently clocking, the reader will still be blocking */
+  if (pwcm->pwc->state == dada_pwc_clocking && pwcm->data_block) {
+
+    /* start valid data on the Data Block at the last byte */
+    if (ipcio_start (pwcm->data_block, ipcio_tell(pwcm->data_block)) < 0)  {
+      multilog (pwcm->log, LOG_ERR, "Could not fake start Data Block"
+		" at %"PRIu64"\n", pwcm->command.byte_count);
+      return EXIT_FAILURE;
+    }
+
+  }
+
   /* close the Data Block */
-     
   if (pwcm->data_block && ipcio_close (pwcm->data_block) < 0)  {
     multilog (pwcm->log, LOG_ERR, "Could not close Data Block\n");
     return EXIT_FAILURE;
