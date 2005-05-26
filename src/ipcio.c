@@ -16,7 +16,7 @@ void ipcio_init (ipcio_t* ipc)
 /* create a new shared memory block and initialize an ipcio_t struct */
 int ipcio_create (ipcio_t* ipc, int key, uint64_t nbufs, uint64_t bufsz)
 {
-  if (ipcbuf_create (&(ipc->buf), key, nbufs, bufsz) < 0) {
+  if (ipcbuf_create ((ipcbuf_t*)ipc, key, nbufs, bufsz) < 0) {
     fprintf (stderr, "ipcio_create: ipcbuf_create error\n");
     return -1;
   }
@@ -27,7 +27,7 @@ int ipcio_create (ipcio_t* ipc, int key, uint64_t nbufs, uint64_t bufsz)
 /* connect to an already created ipcbuf_t struct in shared memory */
 int ipcio_connect (ipcio_t* ipc, int key)
 {
-  if (ipcbuf_connect (&(ipc->buf), key) < 0) {
+  if (ipcbuf_connect ((ipcbuf_t*)ipc, key) < 0) {
     fprintf (stderr, "ipcio_connect: ipcbuf_connect error\n");
     return -1;
   }
@@ -38,7 +38,7 @@ int ipcio_connect (ipcio_t* ipc, int key)
 /* disconnect from an already connected ipcbuf_t struct in shared memory */
 int ipcio_disconnect (ipcio_t* ipc)
 {
-  if (ipcbuf_disconnect (&(ipc->buf)) < 0) {
+  if (ipcbuf_disconnect ((ipcbuf_t*)ipc) < 0) {
     fprintf (stderr, "ipcio_disconnect: ipcbuf_disconnect error\n");
     return -1;
   }
@@ -49,7 +49,7 @@ int ipcio_disconnect (ipcio_t* ipc)
 int ipcio_destroy (ipcio_t* ipc)
 {
   ipcio_init (ipc);
-  return ipcbuf_destroy (&(ipc->buf));
+  return ipcbuf_destroy ((ipcbuf_t*)ipc);
 }
 
 /* start reading/writing to an ipcbuf */
@@ -67,12 +67,12 @@ int ipcio_open (ipcio_t* ipc, char rdwrt)
   if (rdwrt == 'w' || rdwrt == 'W') {
 
     /* read from file, write to shm */
-    if (ipcbuf_lock_write (&(ipc->buf)) < 0) {
+    if (ipcbuf_lock_write ((ipcbuf_t*)ipc) < 0) {
       fprintf (stderr, "ipcio_open: error ipcbuf_lock_write\n");
       return -1;
     }
 
-    if (rdwrt == 'w' && ipcbuf_disable_sod(&(ipc->buf)) < 0) {
+    if (rdwrt == 'w' && ipcbuf_disable_sod((ipcbuf_t*)ipc) < 0) {
       fprintf (stderr, "ipcio_open: error ipcbuf_disable_sod\n");
       return -1;
     }
@@ -83,7 +83,7 @@ int ipcio_open (ipcio_t* ipc, char rdwrt)
   }
 
   if (rdwrt == 'R') {
-    if (ipcbuf_lock_read (&(ipc->buf)) < 0) {
+    if (ipcbuf_lock_read ((ipcbuf_t*)ipc) < 0) {
       fprintf (stderr, "ipcio_open: error ipcbuf_lock_read\n");
       return -1;
     }
@@ -96,7 +96,7 @@ int ipcio_open (ipcio_t* ipc, char rdwrt)
 /* start writing valid data to an ipcbuf */
 int ipcio_start (ipcio_t* ipc, uint64_t sample)
 {
-  uint64_t bufsz   = ipcbuf_get_bufsz(&(ipc->buf));
+  uint64_t bufsz   = ipcbuf_get_bufsz((ipcbuf_t*)ipc);
   uint64_t st_buf  = sample / bufsz;
   uint64_t st_byte = sample % bufsz;
 
@@ -106,7 +106,7 @@ int ipcio_start (ipcio_t* ipc, uint64_t sample)
   }
 
   ipc->rdwrt = 'W';
-  return ipcbuf_enable_sod (&(ipc->buf), st_buf, st_byte);
+  return ipcbuf_enable_sod ((ipcbuf_t*)ipc, st_buf, st_byte);
 }
 
 
@@ -121,19 +121,19 @@ int ipcio_stop_close (ipcio_t* ipc, char unlock)
 	       ipc->buf.sync->writebuf, ipc->bytes, ipc->curbuf[0]);
 #endif
 
-    if (ipcbuf_is_writing(&(ipc->buf))) {
+    if (ipcbuf_is_writing((ipcbuf_t*)ipc)) {
 
-      if (ipcbuf_enable_eod (&(ipc->buf)) < 0) {
+      if (ipcbuf_enable_eod ((ipcbuf_t*)ipc) < 0) {
         fprintf (stderr, "ipcio_close:W error ipcbuf_enable_eod\n");
         return -1;
       }
 
-      if (ipcbuf_mark_filled (&(ipc->buf), ipc->bytes) < 0) {
+      if (ipcbuf_mark_filled ((ipcbuf_t*)ipc, ipc->bytes) < 0) {
         fprintf (stderr, "ipcio_close:W error ipcbuf_mark_filled\n");
         return -1;
       }
 
-      if (ipc->bytes == ipcbuf_get_bufsz(&(ipc->buf))) {
+      if (ipc->bytes == ipcbuf_get_bufsz((ipcbuf_t*)ipc)) {
 #ifdef _DEBUG
         fprintf (stderr, "ipcio_close:W last buffer was filled\n");
 #endif
@@ -154,12 +154,12 @@ int ipcio_stop_close (ipcio_t* ipc, char unlock)
       fprintf (stderr, "ipcio_close:W calling ipcbuf_reset\n");
 #endif
 
-      if (ipcbuf_reset (&(ipc->buf)) < 0) {
+      if (ipcbuf_reset ((ipcbuf_t*)ipc) < 0) {
 	fprintf (stderr, "ipcio_close:W error ipcbuf_reset\n");
 	return -1;
       }
 
-      if (ipcbuf_unlock_write (&(ipc->buf)) < 0) {
+      if (ipcbuf_unlock_write ((ipcbuf_t*)ipc) < 0) {
 	fprintf (stderr, "ipcio_close:W error ipcbuf_unlock_write\n");
 	return -1;
       }
@@ -173,7 +173,7 @@ int ipcio_stop_close (ipcio_t* ipc, char unlock)
 
   if (ipc -> rdwrt == 'R') {
 
-    if (ipcbuf_unlock_read (&(ipc->buf)) < 0) {
+    if (ipcbuf_unlock_read ((ipcbuf_t*)ipc) < 0) {
       fprintf (stderr, "ipcio_close:R error ipcbuf_unlock_read\n");
       return -1;
     }
@@ -220,7 +220,7 @@ ssize_t ipcio_write (ipcio_t* ipc, char* ptr, size_t bytes)
   while (bytes) {
 
     if (!ipc->curbuf) {
-      ipc->curbuf = ipcbuf_get_next_write (&(ipc->buf));
+      ipc->curbuf = ipcbuf_get_next_write ((ipcbuf_t*)ipc);
 
       if (!ipc->curbuf) {
 	fprintf (stderr, "ipcio_write: ipcbuf_next_write\n");
@@ -230,7 +230,7 @@ ssize_t ipcio_write (ipcio_t* ipc, char* ptr, size_t bytes)
       ipc->bytes = 0;
     }
 
-    space = ipcbuf_get_bufsz(&(ipc->buf)) - ipc->bytes;
+    space = ipcbuf_get_bufsz((ipcbuf_t*)ipc) - ipc->bytes;
     if (space > bytes)
       space = bytes;
 
@@ -240,7 +240,8 @@ ssize_t ipcio_write (ipcio_t* ipc, char* ptr, size_t bytes)
       ptr += space;
       bytes -= space;
     }
-    else {
+
+    if (ipc->bytes == ipcbuf_get_bufsz((ipcbuf_t*)ipc)) {
 
 #ifdef _DEBUG
       fprintf (stderr, "ipcio_write buffer:%"PRIu64" %"PRIu64" bytes. buf[0]=%x\n",
@@ -248,13 +249,14 @@ ssize_t ipcio_write (ipcio_t* ipc, char* ptr, size_t bytes)
 #endif
 
       /* the buffer has been filled */
-      if (ipcbuf_mark_filled (&(ipc->buf), ipc->bytes) < 0) {
+      if (ipcbuf_mark_filled ((ipcbuf_t*)ipc, ipc->bytes) < 0) {
 	fprintf (stderr, "ipcio_write: ipcbuf_mark_filled\n");
 	return -1;
       }
 
-
       ipc->curbuf = 0;
+      ipc->bytes = 0;
+
     }
 
   }
@@ -274,11 +276,11 @@ ssize_t ipcio_read (ipcio_t* ipc, char* ptr, size_t bytes)
     return -1;
   }
 
-  while (bytes && ! ipcbuf_eod(&(ipc->buf))) {
+  while (bytes && ! ipcbuf_eod((ipcbuf_t*)ipc)) {
 
     if (!ipc->curbuf) {
 
-      ipc->curbuf = ipcbuf_get_next_read (&(ipc->buf), &(ipc->curbufsz));
+      ipc->curbuf = ipcbuf_get_next_read ((ipcbuf_t*)ipc, &(ipc->curbufsz));
 
 #ifdef _DEBUG
       fprintf (stderr, "ipcio_read buffer:%"PRIu64" %"PRIu64" bytes. buf[0]=%x\n",
@@ -313,7 +315,7 @@ ssize_t ipcio_read (ipcio_t* ipc, char* ptr, size_t bytes)
     else {
 
       if (ipc -> rdwrt == 'R') {
-	if (ipcbuf_mark_cleared (&(ipc->buf)) < 0) {
+	if (ipcbuf_mark_cleared ((ipcbuf_t*)ipc) < 0) {
 	  fprintf (stderr, "ipcio_write: error ipcbuf_mark_filled\n");
 	  return -1;
 	}
@@ -329,13 +331,13 @@ ssize_t ipcio_read (ipcio_t* ipc, char* ptr, size_t bytes)
 
 uint64_t ipcio_tell (ipcio_t* ipc)
 {
-  uint64_t bufsz = ipcbuf_get_bufsz (&(ipc->buf));
+  uint64_t bufsz = ipcbuf_get_bufsz ((ipcbuf_t*)ipc);
   uint64_t nbuf = 0;
 
   if (ipc -> rdwrt == 'R' || ipc -> rdwrt == 'r')
-    nbuf = ipcbuf_get_read_count (&(ipc->buf));
+    nbuf = ipcbuf_get_read_count ((ipcbuf_t*)ipc);
   else if (ipc -> rdwrt == 'W' || ipc -> rdwrt == 'w')
-    nbuf = ipcbuf_get_write_count (&(ipc->buf));
+    nbuf = ipcbuf_get_write_count ((ipcbuf_t*)ipc);
 
   return nbuf * bufsz + ipc->bytes;
 }
@@ -351,8 +353,8 @@ int64_t ipcio_seek (ipcio_t* ipc, int64_t offset, int whence)
   /* end of current buffer flag */
   int eobuf = 0;
 
-  uint64_t bufsz = ipcbuf_get_bufsz (&(ipc->buf));
-  uint64_t nbuf = ipcbuf_get_read_count (&(ipc->buf));
+  uint64_t bufsz = ipcbuf_get_bufsz ((ipcbuf_t*)ipc);
+  uint64_t nbuf = ipcbuf_get_read_count ((ipcbuf_t*)ipc);
   if (nbuf > 0)
     nbuf -= 1;
 
@@ -375,10 +377,10 @@ int64_t ipcio_seek (ipcio_t* ipc, int64_t offset, int whence)
   else {
     /* ... but can seek forward until end of data */
 
-    while (offset && ! (ipcbuf_eod(&(ipc->buf)) && eobuf)) {
+    while (offset && ! (ipcbuf_eod((ipcbuf_t*)ipc) && eobuf)) {
 
       if (!ipc->curbuf || eobuf) {
-	ipc->curbuf = ipcbuf_get_next_read (&(ipc->buf), &(ipc->curbufsz));
+	ipc->curbuf = ipcbuf_get_next_read ((ipcbuf_t*)ipc, &(ipc->curbufsz));
 	if (!ipc->curbuf) {
 	  fprintf (stderr, "ipcio_seek: error ipcbuf_next_read\n");
 	  return -1;
@@ -401,8 +403,8 @@ int64_t ipcio_seek (ipcio_t* ipc, int64_t offset, int whence)
 
   }
 
-  bufsz = ipcbuf_get_bufsz (&(ipc->buf));
-  nbuf = ipcbuf_get_read_count (&(ipc->buf));
+  bufsz = ipcbuf_get_bufsz ((ipcbuf_t*)ipc);
+  nbuf = ipcbuf_get_read_count ((ipcbuf_t*)ipc);
   if (nbuf > 0)
     nbuf -= 1;
 
