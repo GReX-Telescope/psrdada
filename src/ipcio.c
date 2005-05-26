@@ -93,6 +93,13 @@ int ipcio_open (ipcio_t* ipc, char rdwrt)
   return 0;
 }
 
+uint64_t ipcio_get_start_minimum (ipcio_t* ipc)
+{
+  uint64_t bufsz  = ipcbuf_get_bufsz ((ipcbuf_t*)ipc);
+  uint64_t minbuf = ipcbuf_get_sod_minbuf ((ipcbuf_t*)ipc);
+  return minbuf * bufsz;
+}
+
 /* start writing valid data to an ipcbuf */
 int ipcio_start (ipcio_t* ipc, uint64_t sample)
 {
@@ -105,8 +112,13 @@ int ipcio_start (ipcio_t* ipc, uint64_t sample)
     return -1;
   }
 
+  if (ipcbuf_enable_sod ((ipcbuf_t*)ipc, st_buf, st_byte) < 0) {
+    fprintf (stderr, "ipcio_start fail ipcbuf_enable_sod\n");
+    return -1;
+  }
+
   ipc->rdwrt = 'W';
-  return ipcbuf_enable_sod ((ipcbuf_t*)ipc, st_buf, st_byte);
+  return 0;
 }
 
 
@@ -144,26 +156,25 @@ int ipcio_stop_close (ipcio_t* ipc, char unlock)
 
     ipc->rdwrt = 'w';
 
+    if (!unlock)
+      return 0;
+
   }
 
   if (ipc -> rdwrt == 'w') {
 
-    if (unlock) {
-
 #ifdef _DEBUG
-      fprintf (stderr, "ipcio_close:W calling ipcbuf_reset\n");
+    fprintf (stderr, "ipcio_close:W calling ipcbuf_reset\n");
 #endif
 
-      if (ipcbuf_reset ((ipcbuf_t*)ipc) < 0) {
-	fprintf (stderr, "ipcio_close:W error ipcbuf_reset\n");
-	return -1;
-      }
+    if (ipcbuf_reset ((ipcbuf_t*)ipc) < 0) {
+      fprintf (stderr, "ipcio_close:W error ipcbuf_reset\n");
+      return -1;
+    }
 
-      if (ipcbuf_unlock_write ((ipcbuf_t*)ipc) < 0) {
-	fprintf (stderr, "ipcio_close:W error ipcbuf_unlock_write\n");
-	return -1;
-      }
-
+    if (ipcbuf_unlock_write ((ipcbuf_t*)ipc) < 0) {
+      fprintf (stderr, "ipcio_close:W error ipcbuf_unlock_write\n");
+      return -1;
     }
 
     ipc -> rdwrt = 0;
@@ -190,6 +201,10 @@ int ipcio_stop_close (ipcio_t* ipc, char unlock)
 /* stop writing valid data to an ipcbuf */
 int ipcio_stop (ipcio_t* ipc)
 {
+  if (ipc->rdwrt != 'W') {
+    fprintf (stderr, "ipcio_stop: not writing!\n");
+    return -1;
+  }
   return ipcio_stop_close (ipc, 0);
 }
 
@@ -341,6 +356,8 @@ uint64_t ipcio_tell (ipcio_t* ipc)
 
   return nbuf * bufsz + ipc->bytes;
 }
+
+
 
 int64_t ipcio_seek (ipcio_t* ipc, int64_t offset, int whence)
 {

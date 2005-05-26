@@ -50,6 +50,9 @@ extern "C" {
   /*! free all resources reserved for the ring buffer */
   int ipcio_destroy (ipcio_t* ipc);
 
+  /*! get the minimum byte that may be passed to ipcio_start */
+  uint64_t ipcio_get_start_minimum (ipcio_t* ipc);
+
   /*! enable start of data on the specified byte */
   int ipcio_start (ipcio_t* ipc, uint64_t byte);
 
