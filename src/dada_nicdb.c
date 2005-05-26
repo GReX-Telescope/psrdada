@@ -94,7 +94,8 @@ int64_t sock_recv_function (dada_client_t* client,
 
   if (received < data_size) {
 
-    /* The transmission has been cut short.  Reset transfer_bytes. */
+    /* The transmission has been cut short.  Reset transfer_bytes.
+       Do not adjust total_received; it is used in sock_close_function */
     if (total_received > client->header_size)
       total_received -= client->header_size;
     else
@@ -114,13 +115,8 @@ int64_t sock_recv_function (dada_client_t* client,
 int sock_close_function (dada_client_t* client, uint64_t bytes_written)
 {
   /* don't close the socket; just send the header back as a handshake */
-  if (total_received > client->header_size)
-    total_received -= client->header_size;
-  else
-    total_received = 0;
-
   if (ascii_header_set (client->header, "TRANSFER_SIZE", "%"PRIu64,
-			total_received) < 0)  {
+			bytes_written) < 0)  {
     multilog (client->log, LOG_ERR, "Could not set TRANSFER_SIZE\n");
     return -1;
   }
@@ -140,8 +136,11 @@ int sock_close_function (dada_client_t* client, uint64_t bytes_written)
 /*! Function that opens the data transfer target */
 int sock_open_function (dada_client_t* client)
 {
-  unsigned hdr_size = 0;
-  int ret = 0;
+  uint64_t hdr_size = 0;
+  uint64_t transfer_size = 0;
+  int64_t ret = 0;
+
+  assert (client != 0);
 
   ret = sock_recv (client->fd, client->header, client->header_size,
 		   MSG_PEEK, -1 /* block indefinitely */);
@@ -154,12 +153,12 @@ int sock_open_function (dada_client_t* client)
   }
 
 #ifdef _DEBUG
-fprintf (stderr, "HEADER START\n%s\nHEADER END\n", client->header);
+fprintf (stderr, "peek HEADER START\n%sHEADER END\n", client->header);
 #endif
 
   /* Get the transfer size */
   if (ascii_header_get (client->header, "TRANSFER_SIZE", "%"PRIu64,
-			&(client->transfer_bytes)) != 1)  {
+			&transfer_size) != 1)  {
     multilog (client->log, LOG_ERR, "Header with no TRANSFER_SIZE\n");
     return -1;
   }
@@ -176,11 +175,15 @@ fprintf (stderr, "HEADER START\n%s\nHEADER END\n", client->header);
     multilog (client->log, LOG_ERR, "HDR_SIZE=%u > Block size=%"PRIu64"\n",
 	      hdr_size, client->header_size);
     return -1;
-
   }
 
   client->header_size = hdr_size;
   client->optimal_bytes = 1024 * 1024;
+  client->transfer_bytes = transfer_size;
+
+#ifdef _DEBUG
+  fprintf (stderr, "sock_open_function returns\n");
+#endif
 
   return 0;
 }
