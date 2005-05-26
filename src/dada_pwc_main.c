@@ -118,13 +118,12 @@ int dada_pwc_main_prepare (dada_pwc_main_t* pwcm)
   }
 
   /* ensure that Data Block is closed */
-  if (pwcm->data_block && ipcio_is_open (pwcm->data_block)) {
-    if (ipcio_close (pwcm->data_block) < 0)
-    {
-      multilog (pwcm->log, LOG_ERR, "Could not close Data Block\n");
-      return EXIT_FAILURE;
-    }
-  } 
+  if (pwcm->data_block && ipcio_is_open (pwcm->data_block)
+      && ipcio_close (pwcm->data_block) < 0)
+  {
+    multilog (pwcm->log, LOG_ERR, "Could not close Data Block\n");
+    return EXIT_FAILURE;
+  }
 
   while (!dada_pwc_quit (pwcm->pwc)) {
 
@@ -227,7 +226,8 @@ int dada_pwc_main_start_transfer (dada_pwc_main_t* pwcm)
       return EXIT_FAILURE;
     }
 
-    if (ipcbuf_mark_filled (pwcm->header_block, pwcm->header_size) < 0)  {
+    if (pwcm->command.code == dada_pwc_start &&
+	ipcbuf_mark_filled (pwcm->header_block, pwcm->header_size) < 0)  {
       multilog (pwcm->log, LOG_ERR, "Could not mark filled header block\n");
       return EXIT_FAILURE;
     }
@@ -245,11 +245,57 @@ int dada_pwc_main_start_transfer (dada_pwc_main_t* pwcm)
   return EXIT_FAILURE;
 }
 
+/*! Switch from clocking to recording states */
+int dada_pwc_main_record_start (dada_pwc_main_t* pwcm)
+{
+  /* the minimum offset at which recording may start */
+  uint64_t minimum_record_start = 0;
+
+  /* the next header to be written */
+  char* header = 0;
+
+  minimum_record_start = ipcio_get_start_minimum (pwcm->data_block);
+
+  if (pwcm->command.byte_count < minimum_record_start) {
+    multilog (pwcm->log, LOG_ERR, "Requested start byte=%"PRIu64
+	      " reset to minimum=%"PRIu64"\n",
+	      pwcm->command.byte_count, minimum_record_start);
+    pwcm->command.byte_count = minimum_record_start;
+  }
+
+  header = ipcbuf_get_next_write (pwcm->header_block);
+  if (header != pwcm->header) {
+    /* the case if there is more than one sub-block in Header Block */
+    memcpy (header, pwcm->header, pwcm->header_size);
+    pwcm->header = header;
+  }
+
+  /* write OBS_OFFSET to the header */
+  if (ascii_header_set (pwcm->header, "OBS_OFFSET", "%"PRIu64,
+			pwcm->command.byte_count) < 0) {
+    multilog (pwcm->log, LOG_ERR, "fail ascii_header_set OBS_OFFSET\n");
+    return -1;
+  }
+
+  /* start valid data on the Data Block at the requested byte */
+  if (ipcio_start (pwcm->data_block, pwcm->command.byte_count) < 0)  {
+    multilog (pwcm->log, LOG_ERR, "Could not start data block"
+	      " at %"PRIu64"\n", pwcm->command.byte_count);
+    return -1;
+  }
+
+  if (ipcbuf_mark_filled (pwcm->header_block, pwcm->header_size) < 0)  {
+    multilog (pwcm->log, LOG_ERR, "Could not mark filled header block\n");
+    return -1;
+  }
+
+  return 0;
+}
 
 /*! The clocking and recording states of the DADA PWC main loop */
 int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
 {
-  /* the number of bytes written to the Data Block */
+  /* total number of bytes written to the Data Block */
   uint64_t total_bytes_written = 0;
 
   /* the byte at which the state will change */
@@ -260,6 +306,9 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
 
   /* the number of bytes to be copied from buffer */
   uint64_t buf_bytes = 0;
+
+  /* the number of bytes written to the Data Block */
+  int64_t bytes_written = 0;
 
   /* pointer to the data buffer */
   char* buffer = 0;
@@ -277,11 +326,11 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
       multilog (pwcm->log, LOG_INFO, "command code %d\n", pwcm->command.code);
       
       if (pwcm->command.code == dada_pwc_record_stop)
-	multilog (pwcm->log, LOG_INFO, "recording->clocking");
+	multilog (pwcm->log, LOG_INFO, "recording->clocking\n");
       else if (pwcm->command.code == dada_pwc_record_start)
-	multilog (pwcm->log, LOG_INFO, "clocking->recording");
+	multilog (pwcm->log, LOG_INFO, "clocking->recording\n");
       else if (pwcm->command.code == dada_pwc_stop)
-	multilog (pwcm->log, LOG_INFO, "stopping");
+	multilog (pwcm->log, LOG_INFO, "stopping\n");
       else {
 	multilog (pwcm->log, LOG_ERR,
 		  "dada_pwc_main_transfer data internal error = "
@@ -346,13 +395,15 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
 	buf_bytes = bytes_to_write;
 
       /* write the bytes to the Data Block */
-      if (pwcm->data_block &&
-	  ipcio_write (pwcm->data_block, buffer, buf_bytes) < buf_bytes) {
+      if (pwcm->data_block) {
 
-	multilog (pwcm->log, LOG_ERR, "Cannot write %"PRIu64
-		  " bytes to Data Block\n", buf_bytes);
+	bytes_written = ipcio_write (pwcm->data_block, buffer, buf_bytes);
 
-	return EXIT_FAILURE;
+	if (bytes_written < 0 || bytes_written < buf_bytes) {
+	  multilog (pwcm->log, LOG_ERR, "Cannot write %"PRIu64
+		    " bytes to Data Block\n", buf_bytes);
+	  return EXIT_FAILURE;
+	}
 
       }
 
@@ -393,14 +444,9 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
       else if (pwcm->command.code ==  dada_pwc_record_start) {
 
 	multilog (pwcm->log, LOG_INFO, "record start\n");
-	
-	/* start valid data on the Data Block at the requested byte */
-	if (pwcm->data_block && 
-	    ipcio_start (pwcm->data_block, pwcm->command.byte_count) < 0)  {
-	  multilog (pwcm->log, LOG_ERR, "Could not start data block"
-		    " at %"PRIu64"\n", pwcm->command.byte_count);
+
+	if (dada_pwc_main_record_start (pwcm) < 0)
 	  return EXIT_FAILURE;
-	}
 	
 	dada_pwc_set_state (pwcm->pwc, dada_pwc_recording, 0);
 	
@@ -454,18 +500,6 @@ int dada_pwc_main_stop_transfer (dada_pwc_main_t* pwcm)
     multilog (pwcm->log, LOG_ERR, "dada_pwc_main_stop_transfer"
 	      " stop function returned error code\n");
     return EXIT_FAILURE;
-  }
-
-  /* If currently clocking, the reader will still be blocking */
-  if (pwcm->pwc->state == dada_pwc_clocking && pwcm->data_block) {
-
-    /* start valid data on the Data Block at the last byte */
-    if (ipcio_start (pwcm->data_block, ipcio_tell(pwcm->data_block)) < 0)  {
-      multilog (pwcm->log, LOG_ERR, "Could not fake start Data Block"
-		" at %"PRIu64"\n", pwcm->command.byte_count);
-      return EXIT_FAILURE;
-    }
-
   }
 
   /* close the Data Block */
