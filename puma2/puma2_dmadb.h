@@ -30,6 +30,7 @@ typedef struct{
   int fSize; /* file size of data */
   int nSecs; /* number of seconds to acquire */
   int buf;
+  char daemon; /*daemon mode */
   char *ObsId;
   EdtDev* edt_p;
   pic_t pic; /* pic data structure */
