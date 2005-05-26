@@ -26,6 +26,7 @@ dada_pwc_main_t* dada_pwc_main_create ()
   pwcm -> context = 0;
   pwcm -> header = 0;
   pwcm -> header_size = 0;
+  pwcm -> verbose = 0;
 
   return pwcm;
 }
@@ -316,6 +317,8 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
   /* size of the data buffer */
   uint64_t buffer_size = 0;
 
+  char* command_string = 0;
+
   while (!dada_pwc_quit (pwcm->pwc)) {
 
     /* check to see if a new command has been registered */
@@ -323,14 +326,15 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
 
       pwcm->command = dada_pwc_command_get (pwcm->pwc);
 
-      multilog (pwcm->log, LOG_INFO, "command code %d\n", pwcm->command.code);
+      if (pwcm->verbose)
+	multilog (pwcm->log, LOG_INFO, "command %d\n", pwcm->command.code);
       
       if (pwcm->command.code == dada_pwc_record_stop)
-	multilog (pwcm->log, LOG_INFO, "recording->clocking\n");
+	command_string = "recording->clocking";
       else if (pwcm->command.code == dada_pwc_record_start)
-	multilog (pwcm->log, LOG_INFO, "clocking->recording\n");
+	command_string = "clocking->recording";
       else if (pwcm->command.code == dada_pwc_stop)
-	multilog (pwcm->log, LOG_INFO, "stopping\n");
+	command_string = "stopping";
       else {
 	multilog (pwcm->log, LOG_ERR,
 		  "dada_pwc_main_transfer data internal error = "
@@ -341,12 +345,13 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
       if (pwcm->command.byte_count > total_bytes_written) {
 	transit_byte = pwcm->command.byte_count;
 	bytes_to_write = pwcm->command.byte_count - total_bytes_written;
+
 	multilog (pwcm->log, LOG_INFO, 
-		  " in %"PRIu64" bytes\n", bytes_to_write);
+		  "%s in %"PRIu64" bytes\n", command_string, bytes_to_write);
       }
 
       else {
-	multilog (pwcm->log, LOG_INFO, " immediately\n");
+	multilog (pwcm->log, LOG_INFO, "%s immediately\n", command_string);
 	transit_byte = total_bytes_written;
 	bytes_to_write = 0;
 
@@ -358,24 +363,26 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
       }
 	
     }
-      
-    if (pwcm->pwc->state == dada_pwc_recording)
-      multilog (pwcm->log, LOG_INFO, "recording\n");
-    else if (pwcm->pwc->state == dada_pwc_clocking)
-      multilog (pwcm->log, LOG_INFO, "clocking\n");
 
-    if (transit_byte) {
+    if (pwcm->verbose) {
+      if (pwcm->pwc->state == dada_pwc_recording)
+	multilog (pwcm->log, LOG_INFO, "recording\n");
+      else if (pwcm->pwc->state == dada_pwc_clocking)
+	multilog (pwcm->log, LOG_INFO, "clocking\n");
 
-      if (pwcm->command.code ==  dada_pwc_record_stop)
-	multilog (pwcm->log, LOG_INFO, "record stop in %"PRIu64" bytes\n",
-		  bytes_to_write);
-      else if (pwcm->command.code ==  dada_pwc_record_start)
-	multilog (pwcm->log, LOG_INFO, "record start in %"PRIu64" bytes\n",
-		  bytes_to_write);
-      else if (pwcm->command.code ==  dada_pwc_record_stop)
-	multilog (pwcm->log, LOG_INFO, "stop in %"PRIu64" bytes\n",
-		  bytes_to_write);
+      if (transit_byte) {
 
+	if (pwcm->command.code ==  dada_pwc_record_stop)
+	  multilog (pwcm->log, LOG_INFO, "record stop in %"PRIu64" bytes\n",
+		    bytes_to_write);
+	else if (pwcm->command.code ==  dada_pwc_record_start)
+	  multilog (pwcm->log, LOG_INFO, "record start in %"PRIu64" bytes\n",
+		    bytes_to_write);
+	else if (pwcm->command.code ==  dada_pwc_record_stop)
+	  multilog (pwcm->log, LOG_INFO, "stop in %"PRIu64" bytes\n",
+		    bytes_to_write);
+
+      }
     }
 
     if (!transit_byte || bytes_to_write) {
@@ -412,13 +419,15 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
       if (bytes_to_write)
 	bytes_to_write -= buf_bytes;
 
-      multilog (pwcm->log, LOG_INFO, "Written %"PRIu64" bytes\n",
-		total_bytes_written);
+      if (pwcm->verbose)
+	multilog (pwcm->log, LOG_INFO, "Written %"PRIu64" bytes\n",
+		  total_bytes_written);
 
     }
 
-    fprintf (stderr, "transit=%"PRIu64" total=%"PRIu64"\n",
-	     transit_byte, total_bytes_written);
+    if (pwcm->verbose)
+      multilog (pwcm->log, LOG_INFO, "transit=%"PRIu64" total=%"PRIu64"\n",
+		transit_byte, total_bytes_written);
 
     if (transit_byte == total_bytes_written) {
 

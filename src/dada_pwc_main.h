@@ -51,6 +51,9 @@ extern "C" {
     /*! the size of the header */
     unsigned header_size;
 
+    /*! verbosity level */
+    int verbose;
+
   } dada_pwc_main_t;
 
   /*! Create a new DADA primary write client main loop */
