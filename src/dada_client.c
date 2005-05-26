@@ -165,27 +165,29 @@ int64_t dada_client_transfer (dada_client_t* client)
   log = client->log;
   assert (log != 0);
 
+#ifdef _DEBUG
+  fprintf (stderr, "dada_client_transfer call open_function\n");
+#endif
+
   if (client->open_function (client) < 0) {
     multilog (log, LOG_ERR, "Error calling open function\n");
     return -1;
   }
-  if (!client->header_size) {
-    multilog (log, LOG_ERR, "header_size=0 after call to open_function\n");
-    return -1;
-  }
-  if (!client->transfer_bytes) {
-    multilog (log, LOG_ERR, "transfer_bytes=0 after call to open_function\n");
-    return -1;
-  }
-  if (!client->optimal_bytes) {
-    multilog (log, LOG_ERR, "optimal_bytes=0 after call to open_function\n");
-    return -1;
-  }
+
+#ifdef _DEBUG
+  fprintf (stderr, "open_function returned\n");
+#endif
+
+  assert (client->header != 0);
+  assert (client->header_size != 0);
+  assert (client->transfer_bytes != 0);
+  assert (client->optimal_bytes != 0);
 
   header_size = client->header_size;
 
 #ifdef _DEBUG
-fprintf (stderr, "HEADER START\n%s\nHEADER END\n", client->header);
+  fprintf (stderr, "before calling io_function:\n");
+  fprintf (stderr, "HEADER START\n%sHEADER END\n", client->header);
 #endif
 
   bytes_transfered = client->io_function (client, client->header, header_size);
@@ -298,7 +300,7 @@ int dada_client_read (dada_client_t* client)
 
   else if (hdr_size > header_size) {
     multilog (log, LOG_ERR, "HDR_SIZE=%"PRIu64
-	      " is greater than hdr bufsz=%"PRIu64"\n", hdr_size, header_size);
+	      " > Header Block size=%"PRIu64"\n", hdr_size, header_size);
     multilog (log, LOG_DEBUG, "ASCII header dump\n%s", header);
     return -1;
   }
