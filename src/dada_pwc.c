@@ -186,13 +186,16 @@ int dada_pwc_cmd_header (void* context, FILE* fptr, char* args)
   dada_pwc_command_t command = DADA_PWC_COMMAND_INIT;
   dada_pwc_t* primary = (dada_pwc_t*) context;
   char* hdr = args;
+  size_t length = 0;
 
   if (!args) {
     fprintf (fptr, "no header specified\n");
     return -1;
   }
 
-  if (strlen (args) > primary->header_size) {
+  length = strlen (args);
+
+  if (length > primary->header_size) {
     fprintf (fptr, "header too large (max %d bytes)\n", primary->header_size);
     return -1;
   }
@@ -205,6 +208,12 @@ int dada_pwc_cmd_header (void* context, FILE* fptr, char* args)
     return -1;
 
   strcpy (primary->header, args);
+
+  /* add a new line to the end */
+  if (primary->header[length-1] != '\n' && length+1 < primary->header_size) {
+    primary->header[length] = '\n';
+    primary->header[length+1] = '\0';
+  }
 
   command.code = dada_pwc_header;
   command.header = primary->header;
