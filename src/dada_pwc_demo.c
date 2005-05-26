@@ -27,15 +27,21 @@ static uint64_t buffer_size = 0;
 
 void* fake_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
 {
-  if (buffer_size < pwcm->pwc->bytes_per_second) {
-    buffer_size = pwcm->pwc->bytes_per_second;
+  uint64_t fake_buffer_size = pwcm->pwc->bytes_per_second;
+
+  /* to simulate buffer size equal to ring buffer size
+     fake_buffer_size = ipcbuf_get_bufsz ((ipcbuf_t*)pwcm->data_block);
+   */
+
+  if (buffer_size < fake_buffer_size) {
+    buffer_size = fake_buffer_size;
     buffer = realloc (buffer, buffer_size);
     assert (buffer != 0);
   }
 
   sleep (1);
 
-  *size = pwcm->pwc->bytes_per_second;
+  *size = fake_buffer_size;
   return buffer;
 }
 
