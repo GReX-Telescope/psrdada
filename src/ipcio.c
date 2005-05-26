@@ -291,7 +291,7 @@ ssize_t ipcio_read (ipcio_t* ipc, char* ptr, size_t bytes)
     return -1;
   }
 
-  while (bytes && ! ipcbuf_eod((ipcbuf_t*)ipc)) {
+  while (!ipcbuf_eod((ipcbuf_t*)ipc)) {
 
     if (!ipc->curbuf) {
 
@@ -311,14 +311,11 @@ ssize_t ipcio_read (ipcio_t* ipc, char* ptr, size_t bytes)
 
     }
 
-    space = ipc->curbufsz - ipc->bytes;
-    if (space > bytes)
-      space = bytes;
+    if (bytes)  {
 
-    if (space > 0) {
-
-      /* fprintf (stderr, "space=%d curbufsz=%"PRIu64" bytes%"PRIu64"\n",
-	 space, ipc->curbufsz, ipc->bytes); */
+      space = ipc->curbufsz - ipc->bytes;
+      if (space > bytes)
+        space = bytes;
 
       memcpy (ptr, ipc->curbuf + ipc->bytes, space);
       
@@ -330,17 +327,18 @@ ssize_t ipcio_read (ipcio_t* ipc, char* ptr, size_t bytes)
 
     if (ipc->bytes == ipc->curbufsz) {
 
-      if (ipc -> rdwrt == 'R') {
-	if (ipcbuf_mark_cleared ((ipcbuf_t*)ipc) < 0) {
-	  fprintf (stderr, "ipcio_write: error ipcbuf_mark_filled\n");
-	  return -1;
-	}
+      if (ipc -> rdwrt == 'R' && ipcbuf_mark_cleared ((ipcbuf_t*)ipc) < 0) {
+	fprintf (stderr, "ipcio_write: error ipcbuf_mark_filled\n");
+	return -1;
       }
 
       ipc->curbuf = 0;
       ipc->bytes = 0;
 
     }
+    else if (!bytes)
+      break;
+
   }
 
   return toread - bytes;
