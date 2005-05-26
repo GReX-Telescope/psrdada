@@ -402,6 +402,16 @@ int ipcbuf_disable_sod (ipcbuf_t* id)
   return 0;
 }
 
+uint64_t ipcbuf_get_sod_minbuf (ipcbuf_t* id)
+{
+  ipcsync_t* sync = id -> sync;
+
+  if (sync->writebuf < sync->nbufs)
+    return 0;
+  else
+    return sync->writebuf - sync->nbufs + 1;
+}
+
 int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
 {
   ipcsync_t* sync = id -> sync;
@@ -426,8 +436,7 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
     return -1;
   }
 
-  if (sync->writebuf >= sync->nbufs &&
-      start_buf <= sync->writebuf - sync->nbufs ) {
+  if (start_buf < ipcbuf_get_sod_minbuf (id)) {
     fprintf (stderr,
 	     "ipcbuf_enable_sod: start_buf=%"PRIu64" <= start_min=%"PRIu64"\n",
 	     start_buf, sync->writebuf-sync->nbufs);
@@ -468,7 +477,6 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
            id->waitbuf, new_bufs);
 #endif
 
-  id->waitbuf += new_bufs;
   id->state = IPCBUF_WRITING;
 
 #ifdef _DEBUG
@@ -481,6 +489,8 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
     fprintf (stderr, "ipcbuf_enable_sod: error increment FULL\n");
     return -1;
   }
+
+  id->waitbuf = semctl (id->semid, IPCBUF_FULL, GETVAL);
 
   return 0;
 }

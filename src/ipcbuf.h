@@ -89,6 +89,9 @@ extern "C" {
   /*! Enable the start-of-data flag */
   int ipcbuf_enable_sod (ipcbuf_t*, uint64_t st_buf, uint64_t st_byte);
 
+  /*! Get the minimum possible buffer number that be start of data */
+  uint64_t ipcbuf_get_sod_minbuf (ipcbuf_t* id);
+
   /*! Enable the end-of-data flag */
   int ipcbuf_enable_eod (ipcbuf_t*);
 
