@@ -327,7 +327,8 @@ ssize_t ipcio_read (ipcio_t* ipc, char* ptr, size_t bytes)
       bytes -= space;
 
     }
-    else {
+
+    if (ipc->bytes == ipc->curbufsz) {
 
       if (ipc -> rdwrt == 'R') {
 	if (ipcbuf_mark_cleared ((ipcbuf_t*)ipc) < 0) {
@@ -337,6 +338,7 @@ ssize_t ipcio_read (ipcio_t* ipc, char* ptr, size_t bytes)
       }
 
       ipc->curbuf = 0;
+      ipc->bytes = 0;
 
     }
   }
