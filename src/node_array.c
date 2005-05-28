@@ -62,21 +62,12 @@ int node_array_add (node_array_t* array, const char* name, int port)
   /* array counter */
   unsigned inode;
 
-  /* the new file descriptor for the open socket */
-  int fd = sock_open (name, port);
-  if (fd < 0) {
-    fprintf (stderr, "node_array_add: error sock_open(%s,%d) %s \n",
-	     name, port, strerror(errno));
-    return -1;
-  }
-
   pthread_mutex_lock (&(array->mutex));
 
   /* ensure that each node in array is a unique device */
   for (inode = 0; inode < array->nnode; inode++) {
     if (!strcmp (name, array->nodes[inode].name)) {
       fprintf (stderr, "node_array_add: %s is already in array\n", name);
-      close (fd);
       pthread_mutex_unlock (&(array->mutex));
       return -1;
     }
@@ -88,7 +79,6 @@ int node_array_add (node_array_t* array, const char* name, int port)
   new_node = array->nodes + array->nnode;
   array->nnode ++;
 
-  new_node->fd = fd;
   new_node->space = 0;
   new_node->port = port;
   new_node->name = strdup (name);
@@ -113,11 +103,6 @@ int node_array_remove (node_array_t* array, unsigned inode)
   assert (inode < array->nnode);
 
   pthread_mutex_lock (&(array->mutex));
-
-  status = sock_close (array->nodes[inode].fd);
-  if (status < 0)
-    fprintf (stderr, "node_array_remove: error sock_close %s \n",
-	     strerror(errno));
 
   free (array->nodes[inode].name);
   array->nnode --;
@@ -154,17 +139,25 @@ uint64_t node_array_get_available (node_array_t* array)
 int node_array_open (node_array_t* array, uint64_t filesize,
 		     uint64_t* optimal_buffer_size)
 {
-  int fd;
+  int fd = -1;
+  node_t* node = 0;
 
   pthread_mutex_lock (&(array->mutex));
   array->cnode %= array->nnode;
-  fd = array->nodes[array->cnode].fd;
-  array->cnode ++;
+
+  node = array->nodes + array->cnode;
+
+  /* the new file descriptor for the open socket */
+  fd = sock_open (node->name, node->port);
+  if (fd < 0)
+    fprintf (stderr, "node_array_open: error sock_open(%s,%d) %s \n",
+             node->name, node->port, strerror(errno));
+  else
+    array->cnode ++;
   pthread_mutex_unlock (&(array->mutex));
 
   *optimal_buffer_size = 4096;
   return fd;
-
 }
 
 node_t* node_array_search (node_array_t* array, const char* match)

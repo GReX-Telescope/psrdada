@@ -14,7 +14,6 @@ extern "C" {
 
   typedef struct {
 
-    int      fd;       /* file descriptor of socket connected to node */
     char*    name;     /* hostname of node */
     int      port;     /* port number on hostname */
     uint64_t space;    /* number of bytes space left on node */
