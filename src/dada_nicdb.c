@@ -25,27 +25,14 @@ void usage()
 	   " -d   run as daemon\n");
 }
 
-int64_t sock_recv (int fd, char* buffer, uint64_t size, int flags, float tmout)
+int64_t sock_recv (int fd, char* buffer, uint64_t size, int flags)
 {
-  int ready = 0;
   int64_t received = 0;
   uint64_t total_received = 0;
 
   char peek = flags & MSG_PEEK;
 
   while (size) {
-
-    if (sock_ready (fd, &ready, 0, tmout) < 0) {
-      perror ("sock_recv sock_ready");
-      return -1;
-    }
-
-    if (!ready) {
-#ifdef _DEBUG
-  fprintf (stderr, "sock_recv not ready for reading. timeout=%f\n", tmout);
-#endif
-      break;
-    }
 
     received = recv (fd, buffer, size, MSG_NOSIGNAL | MSG_WAITALL | flags);
     if (received < 0) {
@@ -85,7 +72,7 @@ int64_t sock_recv_function (dada_client_t* client,
   fprintf (stderr, "sock_recv_function %p %"PRIu64"\n", data, data_size);
 #endif
 
-  int64_t received = sock_recv (client->fd, data, data_size, 0, 0.25);
+  int64_t received = sock_recv (client->fd, data, data_size, 0);
 
   if (received < 0)
     return -1;
@@ -130,8 +117,17 @@ int sock_close_function (dada_client_t* client, uint64_t bytes_written)
     return -1;
   }
 
+  if (sock_close (client->fd) < 0) {
+    multilog (client->log, LOG_ERR, "Could not close socket: %s\n",
+              strerror(errno));
+    return -1;
+  }
+
+  client->fd = -1;
   return 0;
 }
+
+static int listen_fd;
 
 /*! Function that opens the data transfer target */
 int sock_open_function (dada_client_t* client)
@@ -142,8 +138,14 @@ int sock_open_function (dada_client_t* client)
 
   assert (client != 0);
 
-  ret = sock_recv (client->fd, client->header, client->header_size,
-		   MSG_PEEK, -1 /* block indefinitely */);
+  client->fd = sock_accept (listen_fd);
+  if (client->fd < 0)  {
+    multilog (client->log, LOG_ERR, "Error accepting connection: %s\n",
+              strerror(errno));
+    return -1;
+  } 
+
+  ret = sock_recv (client->fd, client->header, client->header_size, MSG_PEEK);
 
   if (ret < client->header_size) {
     multilog (client->log, LOG_ERR, 
@@ -201,12 +203,6 @@ int main (int argc, char **argv)
 
   /* port on which to listen for incoming connections */
   int port = DADA_DEFAULT_NICDB_PORT;
-
-  /* file descriptor of passive socket */
-  int listen_fd = 0;
-
-  /* file descriptor of active socket */
-  int comm_fd = 0;
 
   /* Flag set in daemon mode */
   char daemon = 0;
@@ -279,23 +275,8 @@ int main (int argc, char **argv)
 
   while (!quit) {
 
-    comm_fd = sock_accept (listen_fd);
-    if (comm_fd < 0)  {
-      multilog (log, LOG_ERR, "Error accepting connection: %s\n",
-		strerror(errno));
-      return -1;
-    }
-
-    client->fd = comm_fd;
-
     if (dada_client_write (client) < 0)
       multilog (log, LOG_ERR, "Error during transfer\n");
-
-    multilog (log, LOG_INFO, "Closing socket connection\n");
-
-    if (sock_close (comm_fd) < 0)
-      multilog (log, LOG_ERR, "Error closing connection: %s\n",
-		strerror(errno));
 
   }
 
