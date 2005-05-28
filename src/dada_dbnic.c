@@ -285,6 +285,10 @@ int sock_close_function (dada_client_t* client, uint64_t bytes_written)
     }
   }
 
+  if (shutdown (client->fd, SHUT_WR) < 0) {
+    multilog (client->log, LOG_ERR, "Could not set shutdown write socket\n");
+    return -1;
+  }
 
   if (header_size < client->header_size) {
     header = realloc (header, client->header_size);
@@ -300,6 +304,13 @@ int sock_close_function (dada_client_t* client, uint64_t bytes_written)
 		strerror(errno));
       return -1;
     }
+
+  if (close (client->fd) < 0)  {
+    multilog (log, LOG_ERR, "Could not close socket\n");
+    /* return -1; */
+  }
+
+  client->fd = -1;
 
   if (strcmp (client->header, header) != 0) {
     multilog (log, LOG_ERR, "Invalid acknowledgement Header:\n");
