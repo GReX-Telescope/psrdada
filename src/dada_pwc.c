@@ -215,6 +215,10 @@ int dada_pwc_cmd_header (void* context, FILE* fptr, char* args)
     primary->header[length+1] = '\0';
   }
 
+  /* set the number of bytes per second in the header */
+  ascii_header_set (primary->header, "BYTES_PER_SECOND", "%"PRIu64,
+                    primary->bytes_per_second);
+
   command.code = dada_pwc_header;
   command.header = primary->header;
 
