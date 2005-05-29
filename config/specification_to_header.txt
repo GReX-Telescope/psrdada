@@ -2,6 +2,7 @@
 # Header Block of each Primary Write Client
 FILE_SIZE
 OBS_OVERLAP
+TARGET_NODES
 TELESCOPE
 SOURCE
 FREQ
