@@ -15,7 +15,9 @@ DEC          20:20:01
 
 Band0_FREQ         1300
 Band0_BW           20
+Band0_TARGET_NODES node01,node02
 
 Band1_FREQ         1400
 Band1_BW           -20
+Band1_TARGET_NODES node03,node04
 
