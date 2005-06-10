@@ -155,6 +155,12 @@ int dada_hdu_unlock_read (dada_hdu_t* hdu)
 /*! Lock DADA Header plus Data Unit designated writer */
 int dada_hdu_lock_write (dada_hdu_t* hdu)
 {
+   return dada_hdu_lock_write_spec (hdu, 'W');
+}
+
+/*! Lock DADA Header plus Data Unit designated writer with specified mode */
+int dada_hdu_lock_write_spec (dada_hdu_t* hdu, char writemode)
+{
   assert (hdu != 0);
   assert (hdu->log != 0);
 
@@ -168,7 +174,7 @@ int dada_hdu_lock_write (dada_hdu_t* hdu)
     return -1;
   }
 
-  if (ipcio_open (hdu->data_block, 'W') < 0) {
+  if (ipcio_open (hdu->data_block, writemode) < 0) {
     multilog (hdu->log, LOG_ERR, "Could not lock Data Block for writing\n");
     return -1;
   }
