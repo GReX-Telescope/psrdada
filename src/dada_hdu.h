@@ -52,6 +52,9 @@ extern "C" {
   /*! Unlock DADA Header plus Data Unit designated writer */
   int dada_hdu_unlock_write (dada_hdu_t* hdu);
 
+  /*! Lock DADA Header plus Data Unit designated writer */
+  int dada_hdu_lock_write_spec (dada_hdu_t* hdu, char writemode);
+
 #ifdef __cplusplus
 	   }
 #endif
