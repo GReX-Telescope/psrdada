@@ -67,12 +67,6 @@ int pic_edt_init(dmadb_t* dmadb)
     }
   if (verbose) fprintf(stderr,"...done\n");
   
-  /* flush stale buffers in the EDT card */
-  edt_flush_fifo(dmadb->edt_p) ;     
-  
-  /* setup EDT to do continuous transfers */
-  edt_start_buffers(dmadb->edt_p, 0) ; 
-  
   return 0;
 
 }
@@ -107,6 +101,12 @@ time_t arm_pic(dada_pwc_main_t* pwcm, time_t start_utc)
     }
     fprintf(stderr,"\n");
   }  
+
+ /* flush stale buffers in the EDT card */
+  edt_flush_fifo(dmadb->edt_p) ;     
+  
+  /* setup EDT to do continuous transfers from now on */
+  edt_start_buffers(dmadb->edt_p, 0) ; 
 
   /*PiC is arm'ed now. When the next 10-Sec pulse arrives */
   /*EDT will receive both clock and enable data*/
@@ -150,7 +150,7 @@ void* get_next_buf(dada_pwc_main_t* pwcm, uint64_t* size)
     multilog(pwcm->log,LOG_ERR,"EDT Overrun\n");
   }
   
-  /* is it (void *) or (char *)? */
+  /* return the acquired data buffer */
   return (void*) dmadb->data;
 
 }

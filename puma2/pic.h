@@ -10,7 +10,7 @@
 /* various locations in pic board */
 
 #define BASE_ADDR 0x00
-#define START_ADDR (BASE_ADDR + 0x01)
+#define START_ADDR (BASE_ADDR + 0x04)
 #define STOP_ADDR (BASE_ADDR + 0x08)
 
 /* #define STOP_ADDR  (BASE_ADDR + 0x04) */
@@ -34,7 +34,7 @@
 #define EN_LINK_TEST (0x0008)
 #define GET_TP (0x0010) /* compute total power*/
 #define START  (0x04)
-#define STOP   (0x04)
+#define STOP   (0x08)
 
 
 typedef struct {
