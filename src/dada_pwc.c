@@ -37,7 +37,6 @@ int dada_pwc_command_set_byte_count (dada_pwc_t* primary, FILE* output,
   }
 
   if (command->utc < primary->utc_start) {
-    fprintf (output, "requested UTC precedes UTC of first time sample\n");
 #ifdef _DEBUG
     fprintf (stderr, "requested UTC precedes UTC of first time sample\n");
 #endif
@@ -428,7 +427,9 @@ dada_pwc_t* dada_pwc_create ()
   /* default command port */
   primary -> port = DADA_DEFAULT_PWC_PORT;
 
+#ifdef _DEBUG
   fprintf (stderr, "dada_pwc on port %d\n", primary->port);
+#endif
 
   /* for multi-threaded use of primary */
   pthread_mutex_init(&(primary->mutex), NULL);
