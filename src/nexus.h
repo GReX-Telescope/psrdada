@@ -40,6 +40,12 @@ extern "C" {
   /*! For use by derived classes during construction */
   void node_init (node_t* node);
 
+  /*! Send a command to the node */
+  int node_send (node_t* node, char* command);
+
+  /*! Receive a reply from the node */
+  int node_recv (node_t* node, char* buffer, unsigned size);
+
   typedef struct nexus_struct {
 
     /*! The nodes */
@@ -69,12 +75,16 @@ extern "C" {
     /*! Pointer to function that parses configuration */
     int (*nexus_parse) (struct nexus_struct* n, const char* buffer);
 
+    /*! Pointer to function that initializes a new connection with a node */
+    int (*node_init) (node_t*);
+
     /* for multi-threaded use of the nexus */
     pthread_mutex_t mutex;
     
   } nexus_t;
 
 #define NEXUS_DEFAULT_RECV_BUFSZ 1024
+#define NEXUS_NODE_IO_ERROR -2
 
   /*! Create a new nexus */
   nexus_t* nexus_create ();

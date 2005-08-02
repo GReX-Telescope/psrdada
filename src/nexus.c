@@ -55,6 +55,9 @@ void nexus_init (nexus_t* nexus)
   /* default parser */
   nexus -> nexus_parse = &nexus_parse;
 
+  /* no node initialization by default */
+  nexus -> node_init = 0;
+
   pthread_mutex_init(&(nexus->mutex), NULL);
 }
 
@@ -264,6 +267,9 @@ void* node_open_thread (void* context)
       node->to = to;
       node->from = from;
       to = from = 0;
+      if (nexus->node_init)
+	nexus->node_init (node);
+      break;
     }
   }
   pthread_mutex_unlock (&(nexus->mutex));
@@ -376,8 +382,7 @@ int nexus_restart (nexus_t* nexus, unsigned inode)
 /*! Send a command to the specified node */
 int nexus_send_node (nexus_t* nexus, unsigned inode, char* command)
 {
-  FILE* to = 0;
-  node_t* node = 0;
+  int status = 0;
 
   if (!nexus)
     return -1;
@@ -388,32 +393,43 @@ int nexus_send_node (nexus_t* nexus, unsigned inode, char* command)
     return -1;
   }
 
-  node = (node_t*) nexus->nodes[inode];
-  to = node->to;
+  status = node_send (nexus->nodes[inode], command);
+
+  if (status == NEXUS_NODE_IO_ERROR) {
+    if (nexus_restart (nexus, inode) < 0)
+      fprintf (stderr, "nexus_send_node: error restart node %d\n", inode);
+    return -1;
+  }
+
+  return status;
+}
+
+/*! Send a command to the node */
+int node_send (node_t* node, char* command)
+{
+  FILE* to = node->to;
 
   if (!to) {
 #ifdef _DEBUG
-    fprintf (stderr, "nexus_send_node: node %d not online\n", inode);
+    fprintf (stderr, "node_send: node not online\n");
 #endif
     return -1;
   }
 
   if (ferror (to)) {
 #ifdef _DEBUG
-    fprintf (stderr, "nexus_send_node: error on node %d", inode);
+    fprintf (stderr, "node_send: error on node");
 #endif
-    if (nexus_restart (nexus, inode) < 0)
-      fprintf (stderr, "nexus_send_node: error restart node %d\n", inode);
-    return -1;
+    return NEXUS_NODE_IO_ERROR;
   }
 
 #ifdef _DEBUG
-  fprintf (stderr, "nexus_send: sending to node %d\n", inode);
+  fprintf (stderr, "node_send: sending to node\n");
 #endif
 
   if (fprintf (node->to, "%s\n", command) < 0) {
-    fprintf (stderr, "nexus_send_node: node %d '%s'\n\t%s",
-	     inode, command, strerror(errno));
+    fprintf (stderr, "node_send: '%s'\n\t%s",
+	     command, strerror(errno));
     return -1;
   }
 
@@ -423,9 +439,7 @@ int nexus_send_node (nexus_t* nexus, unsigned inode, char* command)
 /*! Receive a reply from the specified node */
 int nexus_recv_node (nexus_t* nexus, unsigned inode)
 {
-  FILE* from = 0;
-  node_t* node = 0;
-  char* buf = 0;
+  int status = 0;
 
   if (!nexus)
     return -1;
@@ -436,43 +450,77 @@ int nexus_recv_node (nexus_t* nexus, unsigned inode)
     return -1;
   }
     
-  node = (node_t*) nexus->nodes[inode];
-  from = node->from;
+  status = node_recv (nexus->nodes[inode],
+		      nexus->recv_buffer,
+		      nexus->recv_bufsz);
+
+  if (status == NEXUS_NODE_IO_ERROR) {
+    if (nexus_restart (nexus, inode) < 0)
+      fprintf (stderr, "nexus_send_node: error restart node %d\n", inode);
+    return -1;
+  }
+
+  return status;
+}
+
+/*! Receive a reply from the node */
+int node_recv (node_t* node, char* buffer, unsigned size)
+{
+  char* buf = buffer;
+  FILE* from = node->from;
+
+  char* found = 0;
+  char c = 0;
 
   if (!from) {
 #ifdef _DEBUG
-    fprintf (stderr, "nexus_recv_node: node %d not online\n", inode);
+    fprintf (stderr, "node_recv: node not online\n");
 #endif
     return -1;
   }
 
   if (ferror (from)) {
 #ifdef _DEBUG
-    fprintf (stderr, "nexus_recv_node: error on node %d", inode);
+    fprintf (stderr, "node_recv: error on node");
 #endif
-    if (nexus_restart (nexus, inode) < 0)
-      fprintf (stderr, "nexus_recv_node: error restart node %d\n", inode);
+    return NEXUS_NODE_IO_ERROR;
+  }
+
+  while ( (buf=fgets (buf, size, from)) ) {
+
+#ifdef _DEBUG
+    fprintf (stderr, "node_recv: '%s'\n", buf);
+#endif
+
+    if ( (c=fgetc (from))=='>' )
+      break;
+    else 
+      ungetc (c, from);
+
+    buf += strlen(buf);
+
+  }
+
+  /* remove the space following the prompt */
+  fgetc (from);
+
+  if ( (found=strchr (buf, '\r')) )
+    *found = '\n';
+
+  if (strstr (buf, "fail\n"))
     return -1;
-  }
 
-  while ( (buf=fgets (nexus->recv_buffer, nexus->recv_bufsz, node->from)) ) {
+  /* null-terminate before the ok message */
+  found = strstr (buf, "ok\n");
+  if (found)
+    *found = '\0';
 
-#ifdef _DEBUG
-  fprintf (stderr, "nexus_recv: '%s'\n", nexus->recv_buffer);
-#endif
+  /* remove the final newline */
+  found = strrchr (buffer, '\n');
+  if (found)
+    *found = '\0';
 
-    if (!strstr (nexus->recv_buffer, "ok\r") && fgetc (node->from)=='>')
-      return 0;
-    else if (!strstr (nexus->recv_buffer, "fail\r") && fgetc (node->from)=='>')
-      return -1;
-    
-  }
-
-#ifdef _DEBUG
-  fprintf (stderr, "nexus_recv: unexpected msg:'%s'\n", nexus->recv_buffer);
-#endif
-
-  return -1;
+  return 0;
 }
 
 /*! Send a command to all selected nodes */
