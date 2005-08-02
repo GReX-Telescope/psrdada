@@ -104,6 +104,52 @@ int command_parse_add (command_parse_t* parser,
   return 0;
 }
 
+/* remove a command from the list of available commands */
+int command_parse_remove (command_parse_t* parser, const char* key)
+{
+  unsigned icmd = 0;
+
+#ifdef _DEBUG
+  fprintf (stderr, "command_parse_remove: '%s'\n", key);
+#endif
+  
+  for (icmd=0; icmd < parser->ncmd; icmd++) {
+    
+#ifdef _DEBUG
+    fprintf (stderr, "command_parse_remove: compare '%s'\n",
+	     parser->cmds[icmd].name);
+#endif
+    
+    if (strcmp (key, parser->cmds[icmd].name) == 0) {
+#ifdef _DEBUG
+      fprintf (stderr, "command_parse: match %d\n", icmd);
+#endif
+      break;
+    }
+
+  }
+
+  if (icmd == parser->ncmd) {
+    fprintf (stderr, "command_parse_remove: no command named '%s'\n", key);
+    return -1;
+  }
+
+  free (parser->cmds[icmd].name);
+  if (parser->cmds[icmd].help)
+    free (parser->cmds[icmd].help);
+  if (parser->cmds[icmd].more)
+    free (parser->cmds[icmd].more);
+
+  parser->ncmd --;
+
+  for (; icmd < parser->ncmd; icmd++)
+    parser->cmds[icmd] = parser->cmds[icmd+1];
+
+  return 0;
+
+}
+
+
 /* parse a command */
 int command_parse (command_parse_t* parser, char* command)
 {
