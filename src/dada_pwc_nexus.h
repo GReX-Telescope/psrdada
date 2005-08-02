@@ -27,6 +27,9 @@ extern "C" {
     /*! the size of the header */
     unsigned header_size;
 
+    /*! the state of the node */
+    dada_pwc_state_t state;
+
   } dada_node_t;
 
 
@@ -41,7 +44,7 @@ extern "C" {
     /*! the template header for all primary write clients */
     char* header_template;
 
-    /*! an array of configuration parameters to be parsed into header */
+    /*! an array of configuration parameters to be parsed into the header */
     string_array_t* config_params;
 
     /*! pointer to function used to convert between time representations */

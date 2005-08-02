@@ -6,6 +6,8 @@
 #include <string.h>
 #include <assert.h>
 
+// #define _DEBUG 1
+
 /*! Initialize a new dada_node_t struct with default empty values */
 void dada_node_init (dada_node_t* node)
 {
@@ -14,6 +16,7 @@ void dada_node_init (dada_node_t* node)
 
   node -> header = 0;
   node -> header_size = 0;
+  node -> state = dada_pwc_undefined;
 }
 
 /*! Return pointer to a newly allocated and initialized dada_node_t struct */
@@ -23,6 +26,57 @@ node_t* dada_node_create ()
   assert (node != 0);
   dada_node_init (node);
   return (node_t*) node;
+}
+
+/*! Pointer to function that initializes a new connection with a node */
+int dada_pwc_node_init (node_t* node)
+{
+  dada_node_t* dada_node = (dada_node_t*) node;
+
+  unsigned buffer_size = 1024;
+  static char* buffer = 0;
+
+  char* key = 0;
+
+  if (!buffer)
+    buffer = malloc (buffer_size);
+  assert (buffer != 0);
+
+#ifdef _DEBUG
+  fprintf (stderr, "dada_pwc_node_init: receiving the welcome message\n");
+#endif
+
+  if (node_recv (node, buffer, buffer_size) < 0) {
+    dada_node -> state = dada_pwc_undefined;
+    return -1;
+  }
+
+#ifdef _DEBUG
+  fprintf (stderr, "dada_pwc_node_init: requesting state\n");
+#endif
+
+  if (node_send (node, "state") < 0) {
+    dada_node -> state = dada_pwc_undefined;
+    return -1;
+  }
+
+#ifdef _DEBUG
+  fprintf (stderr, "dada_pwc_node_init: receiving state\n");
+#endif
+
+  if (node_recv (node, buffer, buffer_size) < 0) {
+    dada_node -> state = dada_pwc_undefined;
+    return -1;
+  }
+
+#ifdef _DEBUG
+  fprintf (stderr, "dada_pwc_node_init: received '%s'\n", buffer);
+#endif
+
+  key = strtok (buffer, " \t\n\r");
+
+  dada_node->state = dada_pwc_string_to_state (key);
+  return 0;
 }
 
 /*! load lines from param_file, then take only first word from each line */
@@ -98,6 +152,7 @@ void dada_pwc_nexus_init (dada_pwc_nexus_t* nexus)
 
   nexus_base->node_port = DADA_DEFAULT_PWC_PORT;
   nexus_base->node_create = &dada_node_create;
+  nexus_base->node_init   = &dada_pwc_node_init;
   nexus_base->nexus_parse = &dada_pwc_nexus_parse;
 
 #ifdef _DEBUG
@@ -122,6 +177,8 @@ void dada_pwc_nexus_init (dada_pwc_nexus_t* nexus)
 
   command_parse_add (nexus->pwc->parser, dada_pwc_nexus_cmd_config, nexus,
 		     "config", "configure all nodes", NULL);
+
+  command_parse_remove (nexus->pwc->parser, "header");
 
 }
 
