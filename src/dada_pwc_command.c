@@ -30,13 +30,21 @@ int main (int argc, char **argv)
   /* configuration file name */
   char* dada_config = getenv ("DADA_CONFIG");
 
-  while ((arg=getopt(argc,argv,"dv")) != -1)
+  fprintf (stderr, "Creating DADA PWC nexus\n");
+  nexus = dada_pwc_nexus_create ();
+
+  while ((arg=getopt(argc,argv,"dp:v")) != -1)
     switch (arg) {
       
     case 'd':
       daemon=1;
       break;
       
+    case 'p':
+      nexus->pwc->port = atoi(optarg);
+      fprintf (stderr, "DADA PWC nexus port set to %d\n", nexus->pwc->port);
+      break;
+
     case 'v':
       verbose=1;
       break;
@@ -60,9 +68,6 @@ int main (int argc, char **argv)
   }
   else
     multilog_add (log, stderr);
-
-  fprintf (stderr, "Creating DADA PWC nexus\n");
-  nexus = dada_pwc_nexus_create ();
 
   fprintf (stderr, "Configuring DADA PWC nexus\n");
   if (dada_pwc_nexus_configure (nexus, dada_config) < 0) {
