@@ -8,6 +8,51 @@
 #include <string.h>
 #include <assert.h>
 
+/*! Parse a string and return the state */
+dada_pwc_state_t dada_pwc_string_to_state (const char* key)
+{
+  if (!strcasecmp (key, "idle"))
+    return dada_pwc_idle;
+  if (!strcasecmp (key, "prepared"))
+    return dada_pwc_prepared;
+  if (!strcasecmp (key, "clocking"))
+    return dada_pwc_clocking;
+  if (!strcasecmp (key, "recording"))
+    return dada_pwc_recording;
+
+  return dada_pwc_undefined;
+}
+
+/*! Return the string corresponding to the state */
+const char* dada_pwc_state_to_string (dada_pwc_state_t state)
+{
+  switch (state) {
+
+  case dada_pwc_idle:
+    return "idle";
+
+  case dada_pwc_prepared:
+    return "prepared";
+
+  case dada_pwc_clocking:
+    return "clocking";
+
+  case dada_pwc_recording:
+    return "recording";
+
+  default:
+    return "undefined";
+
+  }
+}
+
+int dada_pwc_cmd_state (void* context, FILE* fptr, char* args)
+{
+  dada_pwc_t* primary = (dada_pwc_t*) context;
+  fprintf (fptr, "%s\n", dada_pwc_state_to_string( primary->state ));
+  return 0;
+}
+
 int dada_pwc_command_set_byte_count (dada_pwc_t* primary, FILE* output,
 				     dada_pwc_command_t* command)
 {
@@ -437,6 +482,9 @@ dada_pwc_t* dada_pwc_create ()
 
   /* command parser */
   primary -> parser = command_parse_create ();
+
+  command_parse_add (primary->parser, dada_pwc_cmd_state, primary,
+		     "state", "get the state", NULL);
 
   command_parse_add (primary->parser, dada_pwc_cmd_header, primary,
 		     "header", "set the primary header", NULL);

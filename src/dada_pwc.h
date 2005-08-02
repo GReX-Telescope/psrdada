@@ -19,7 +19,7 @@ extern "C" {
 #endif
 
   /*! The states in which the primary write client may be found */
-  enum {
+  typedef enum {
 
     /*! undefined: the primary write client is in an undefined state */
     dada_pwc_undefined,
@@ -36,7 +36,13 @@ extern "C" {
     /*! recording: data is being recorded */
     dada_pwc_recording,
 
-  };
+  } dada_pwc_state_t;
+
+  /*! Parse a string and return the state */
+  dada_pwc_state_t dada_pwc_string_to_state (const char* key);
+
+  /*! Return the string corresponding to the state */
+  const char* dada_pwc_state_to_string (dada_pwc_state_t state);
 
   /*! The commands that may be issued to the primary write client */
   enum {
@@ -94,7 +100,7 @@ extern "C" {
     int id;
 
     /*! The state of the primary write client */
-    int state;
+    dada_pwc_state_t state;
 
     /*! When true, convert times and sample counts to bytes */
     int convert_to_bytes;
