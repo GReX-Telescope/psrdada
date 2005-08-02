@@ -55,24 +55,30 @@ int main (int argc, char** argv)
   /* Primary write client main loop  */
   dada_pwc_main_t* pwcm = 0;
 
-  /* Primary write client main loop  */
+  /* DADA Header plus Data Block */
   dada_hdu_t* hdu = 0;
 
   /* DADA Logger */
   multilog_t* log = 0;
 
   /* flags */
+  int connect_hdu = 0;
+
   char daemon = 0; /*daemon mode */
   int verbose = 0; /* verbose mode */
 
   int arg = 0;
-  while ((arg=getopt(argc,argv,"dhv")) != -1)
+  while ((arg=getopt(argc,argv,"dhlv")) != -1)
     switch (arg) {
 	    
     case 'd':
       daemon=1;
       break;
-      
+
+    case 'l':
+      connect_hdu = 1;
+      break;
+
     case 'v':
       verbose=1;
       break;
@@ -98,18 +104,22 @@ int main (int argc, char** argv)
   pwcm->stop_function   = fake_stop_function;
   pwcm->log             = log;
 
-  /* connect to the shared memory */
-  fprintf (stderr, "Connecting to shared memory\n");
-  hdu = dada_hdu_create (log);
+  if (connect_hdu) {
 
-  if (dada_hdu_connect (hdu) < 0)
-    return -1;
-  
-  if (dada_hdu_lock_write (hdu) < 0)
-    return -1;
+    /* connect to the shared memory */
+    fprintf (stderr, "Connecting to shared memory\n");
+    hdu = dada_hdu_create (log);
+    
+    if (dada_hdu_connect (hdu) < 0)
+      return -1;
+    
+    if (dada_hdu_lock_write (hdu) < 0)
+      return -1;
+    
+    pwcm->data_block      = hdu->data_block;
+    pwcm->header_block    = hdu->header_block;
 
-  pwcm->data_block      = hdu->data_block;
-  pwcm->header_block    = hdu->header_block;
+  }
 
   fprintf (stderr, "Creating dada pwc control interface\n");
   pwcm->pwc = dada_pwc_create ();
