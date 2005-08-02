@@ -79,7 +79,16 @@ int dada_pwc_nexus_cmd_config (void* context, FILE* output, char* args)
 
   }
 
-  nexus->pwc->state = dada_pwc_prepared;
-  return 0;
+  for (inode=0; inode < nnode; inode++) {
+    if (nexus_recv_node ((nexus_t*) nexus, inode) < 0) {
+      fprintf (stderr, "nexus_send error inode=%d\n", inode);
+      error = -1;
+    }
+  }
+
+  if (error == 0)
+    nexus->pwc->state = dada_pwc_prepared;
+
+  return error;
 }
 
