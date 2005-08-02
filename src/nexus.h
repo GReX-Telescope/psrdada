@@ -42,12 +42,6 @@ extern "C" {
 
   typedef struct nexus_struct {
 
-    /*! The default port on which node is listening */
-    int node_port;
-
-    /*! The polling interval for connecting with nodes */
-    unsigned polling_interval;
-
     /*! The nodes */
     void** nodes;
 
@@ -56,6 +50,18 @@ extern "C" {
 
     /*! This prefix is used when parsing configuration from a text file */
     char* node_prefix;
+
+    /*! The default port on which node is listening */
+    int node_port;
+
+    /*! The polling interval for connecting with nodes */
+    unsigned polling_interval;
+
+    /*! The buffer used for receiving messages from nodes */
+    char* recv_buffer;
+
+    /*! The size of the receive buffer */
+    unsigned recv_bufsz;
 
     /*! Pointer to function that creates new nodes */
     node_t* (*node_create) ();
@@ -67,6 +73,8 @@ extern "C" {
     pthread_mutex_t mutex;
     
   } nexus_t;
+
+#define NEXUS_DEFAULT_RECV_BUFSZ 1024
 
   /*! Create a new nexus */
   nexus_t* nexus_create ();
@@ -83,8 +91,11 @@ extern "C" {
   /*! Send a command to all selected nodes */
   int nexus_send (nexus_t* nexus, char* command);
 
-  /*! Send a command to the selected node */
+  /*! Send a command to the specified node */
   int nexus_send_node (nexus_t* nexus, unsigned inode, char* command);
+
+  /*! Receive a reply from the specified node */
+  int nexus_recv_node (nexus_t* nexus, unsigned inode);
 
   /*! Get the number of nodes in the nexus */
   unsigned nexus_get_nnode (nexus_t* nexus);

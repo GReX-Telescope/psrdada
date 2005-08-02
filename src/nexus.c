@@ -9,6 +9,8 @@
 #include <errno.h>
 #include <assert.h>
 
+// #define _DEBUG 1
+
 void node_init (node_t* node)
 {
   node -> host = 0;
@@ -27,19 +29,25 @@ node_t* node_create ()
   return node;
 }
 
-// #define _DEBUG 1
 void nexus_init (nexus_t* nexus)
 {
-  /* default polling interval */
-  nexus -> polling_interval = 10;
-
   /* no nodes */
-  nexus -> node_port = 0;
   nexus -> nodes = 0;
   nexus -> nnode = 0;
 
+  /* default prefix */
   nexus -> node_prefix = strdup ("NODE");
   assert (nexus->node_prefix != 0);
+
+  /* default polling interval */
+  nexus -> polling_interval = 10;
+
+  /* no default port */
+  nexus -> node_port = 0;
+
+  /* default receive buffer */
+  nexus -> recv_buffer = malloc (NEXUS_DEFAULT_RECV_BUFSZ);
+  nexus -> recv_bufsz = NEXUS_DEFAULT_RECV_BUFSZ;
 
   /* default creator */
   nexus -> node_create = &node_create;
@@ -245,8 +253,9 @@ void* node_open_thread (void* context)
     return 0;
   }
 
-  /* do not buffer the output */
+  /* do not buffer the I/O */
   setbuf (to, 0);
+  setbuf (from, 0);
 
   pthread_mutex_lock (&(nexus->mutex));
   for (inode = 0; inode < nexus->nnode; inode++) {
@@ -411,17 +420,18 @@ int nexus_send_node (nexus_t* nexus, unsigned inode, char* command)
   return 0;
 }
 
-/*! Send a command to the specified node */
+/*! Receive a reply from the specified node */
 int nexus_recv_node (nexus_t* nexus, unsigned inode)
 {
   FILE* from = 0;
   node_t* node = 0;
+  char* buf = 0;
 
   if (!nexus)
     return -1;
 
   if (inode >= nexus->nnode) {
-    fprintf (stderr, "nexus_send_node: node %d >= nnode=%d",
+    fprintf (stderr, "nexus_recv_node: node %d >= nnode=%d",
 	     inode, nexus->nnode);
     return -1;
   }
@@ -431,27 +441,38 @@ int nexus_recv_node (nexus_t* nexus, unsigned inode)
 
   if (!from) {
 #ifdef _DEBUG
-    fprintf (stderr, "nexus_send_node: node %d not online\n", inode);
+    fprintf (stderr, "nexus_recv_node: node %d not online\n", inode);
 #endif
     return -1;
   }
 
   if (ferror (from)) {
 #ifdef _DEBUG
-    fprintf (stderr, "nexus_send_node: error on node %d", inode);
+    fprintf (stderr, "nexus_recv_node: error on node %d", inode);
 #endif
     if (nexus_restart (nexus, inode) < 0)
-      fprintf (stderr, "nexus_send_node: error restart node %d\n", inode);
+      fprintf (stderr, "nexus_recv_node: error restart node %d\n", inode);
     return -1;
   }
 
-  //#ifdef _DEBUG
-  fprintf (stderr, "nexus_send: receiving not implemented\n");
-  //#endif
+  while ( (buf=fgets (nexus->recv_buffer, nexus->recv_bufsz, node->from)) ) {
 
-  
+#ifdef _DEBUG
+  fprintf (stderr, "nexus_recv: '%s'\n", nexus->recv_buffer);
+#endif
 
-  return 0;
+    if (!strstr (nexus->recv_buffer, "ok\r") && fgetc (node->from)=='>')
+      return 0;
+    else if (!strstr (nexus->recv_buffer, "fail\r") && fgetc (node->from)=='>')
+      return -1;
+    
+  }
+
+#ifdef _DEBUG
+  fprintf (stderr, "nexus_recv: unexpected msg:'%s'\n", nexus->recv_buffer);
+#endif
+
+  return -1;
 }
 
 /*! Send a command to all selected nodes */
