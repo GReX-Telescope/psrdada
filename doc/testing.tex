@@ -4,14 +4,14 @@
 This chapter describes the various programs that have been designed to
 facilitate testing and development of the DADA software
 
-\section{Primary Write Client Demonstration, {\tt dada_pwc_demo}}
+\section{Primary Write Client Demonstration, {\tt dada\_pwc\_demo}}
 
 The Primary Write Client (PWC) Demonstration program, {\tt
-dada_pwc_demo}, implements an example PWC interface.  It does not
+dada\_pwc\_demo}, implements an example PWC interface.  It does not
 actually acquire any data and therefore can be run on any computer.
 This program has two modes of operation: free and locked.
 
-In {\em free} mode, {\tt dada_pwc_demo} does not connect to the Header
+In {\em free} mode, {\tt dada\_pwc\_demo} does not connect to the Header
 and Data Blocks; therefore, it is not necessary to create the shared
 memory resources and run a Primary Read Client program.  This mode is
 most useful when testing the command interface and state machine of
@@ -20,10 +20,10 @@ the Primary Write Client.  To run in {\em free} mode, simply type
 dada_pwc_demo
 \end{verbatim}
 
-In {\em locked} mode, {\tt dada_pwc_demo} connects to the Header
+In {\em locked} mode, {\tt dada\_pwc\_demo} connects to the Header
 and Data Blocks; therefore, it is necessary to first create the shared
 memory resources and also run a Primary Read Client program, such
-as {\tt dada_dbdisk}.  This mode is most useful when testing the
+as {\tt dada\_dbdisk}.  This mode is most useful when testing the
 interface between Primary Write Client, Header and Data Blocks, and
 Primary Read Client software.  To run in {\em locked} mode, for example
 \begin{verbatim}
@@ -31,4 +31,3 @@ dada_db            # create the shared memory resources
 dada_pwc_demo -l   # run in locked mode
 \end{verbatim}
 
-\end{enumerate}
