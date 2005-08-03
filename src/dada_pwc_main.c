@@ -84,6 +84,9 @@ int dada_pwc_main (dada_pwc_main_t* pwcm)
     return -1;
   }
 
+  if (!pwcm->pwc->log)
+    pwcm->pwc->log = pwcm->log;
+
   while (!dada_pwc_quit (pwcm->pwc)) {
 
     /* Enter the idle/prepared state. */
