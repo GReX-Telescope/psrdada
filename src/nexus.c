@@ -58,6 +58,9 @@ void nexus_init (nexus_t* nexus)
   /* no node initialization by default */
   nexus -> node_init = 0;
 
+  /* no mirror by default */
+  nexus -> mirror = 0;
+
   pthread_mutex_init(&(nexus->mutex), NULL);
 }
 
@@ -313,7 +316,7 @@ int nexus_connect (nexus_t* nexus, unsigned inode)
 #endif
 
   if (pthread_create (&tmp_thread, 0, node_open_thread, request) < 0) {
-    perror ("nexus_add: Error creating new thread");
+    perror ("nexus_connect: Error creating new thread");
     return -1;
   }
 
@@ -359,7 +362,13 @@ int nexus_add (nexus_t* nexus, int id, char* host_name)
 
   pthread_mutex_unlock (&(nexus->mutex));
 
-  return nexus_connect (nexus, nexus->nnode-1);
+  if (nexus_connect (nexus, nexus->nnode-1) < 0)
+    return -1;
+
+  if (nexus->mirror)
+    return nexus_add (nexus->mirror, id, host_name);
+
+  return 0;
 }
 
 

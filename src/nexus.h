@@ -78,6 +78,9 @@ extern "C" {
     /*! Pointer to function that initializes a new connection with a node */
     int (*node_init) (node_t*);
 
+    /*! If specified, make a mirror of this nexus */
+    struct nexus_struct* mirror;
+
     /* for multi-threaded use of the nexus */
     pthread_mutex_t mutex;
     
