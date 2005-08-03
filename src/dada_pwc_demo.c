@@ -88,13 +88,12 @@ int main (int argc, char** argv)
   log = multilog_open ("dada_pwc_demo", daemon);
     
   /* set up for daemon usage */	  
-  if (daemon) {
+  if (daemon)
     be_a_daemon ();
-    multilog_serve (log, DADA_DEFAULT_PWC_LOG);
-  }
   else
     multilog_add (log, stderr);
-
+  
+  multilog_serve (log, DADA_DEFAULT_PWC_LOG);
 
   fprintf (stderr, "Creating dada pwc main\n");
   pwcm = dada_pwc_main_create ();
