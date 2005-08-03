@@ -164,6 +164,8 @@ extern "C" {
   /*! Acknowledge the last command received */
   int dada_pwc_set_state (dada_pwc_t* primary, int state, time_t utc);
 
+  /*! Callback for the duration command */
+  int dada_pwc_cmd_duration (void* context, FILE* fptr, char* args);
 
 #ifdef __cplusplus
 	   }
