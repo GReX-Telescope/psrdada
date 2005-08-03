@@ -10,6 +10,7 @@
 
 #include "dada_pwc.h"
 #include "nexus.h"
+#include "monitor.h"
 #include "string_array.h"
 
 #ifdef __cplusplus
@@ -30,7 +31,7 @@ extern "C" {
     /*! the state of the node */
     dada_pwc_state_t state;
 
-  } dada_node_t;
+  } dada_pwc_node_t;
 
 
   typedef struct {
@@ -40,6 +41,9 @@ extern "C" {
 
     /*! the pwc communication server */
     dada_pwc_t* pwc;
+
+    /*! the monitor of the mirror nexus */
+    monitor_t* monitor;
 
     /*! the template header for all primary write clients */
     char* header_template;

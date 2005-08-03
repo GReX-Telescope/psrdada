@@ -9,7 +9,7 @@
 // #define _DEBUG 1
 
 /*! Initialize a new dada_node_t struct with default empty values */
-void dada_node_init (dada_node_t* node)
+void dada_pwc_node_init (dada_pwc_node_t* node)
 {
   node_t* node_base = (node_t*) node;
   node_init (node_base);
@@ -20,18 +20,18 @@ void dada_node_init (dada_node_t* node)
 }
 
 /*! Return pointer to a newly allocated and initialized dada_node_t struct */
-node_t* dada_node_create ()
+node_t* dada_pwc_node_create ()
 {
-  dada_node_t* node = (dada_node_t*) malloc (sizeof(dada_node_t));
+  dada_pwc_node_t* node = (dada_pwc_node_t*) malloc (sizeof(dada_pwc_node_t));
   assert (node != 0);
-  dada_node_init (node);
+  dada_pwc_node_init (node);
   return (node_t*) node;
 }
 
 /*! Pointer to function that initializes a new connection with a node */
-int dada_pwc_node_init (node_t* node)
+int dada_pwc_nexus_node_init (node_t* node)
 {
-  dada_node_t* dada_node = (dada_node_t*) node;
+  dada_pwc_node_t* dada_pwc_node = (dada_pwc_node_t*) node;
 
   unsigned buffer_size = 1024;
   static char* buffer = 0;
@@ -47,7 +47,7 @@ int dada_pwc_node_init (node_t* node)
 #endif
 
   if (node_recv (node, buffer, buffer_size) < 0) {
-    dada_node -> state = dada_pwc_undefined;
+    dada_pwc_node -> state = dada_pwc_undefined;
     return -1;
   }
 
@@ -56,7 +56,7 @@ int dada_pwc_node_init (node_t* node)
 #endif
 
   if (node_send (node, "state") < 0) {
-    dada_node -> state = dada_pwc_undefined;
+    dada_pwc_node -> state = dada_pwc_undefined;
     return -1;
   }
 
@@ -65,7 +65,7 @@ int dada_pwc_node_init (node_t* node)
 #endif
 
   if (node_recv (node, buffer, buffer_size) < 0) {
-    dada_node -> state = dada_pwc_undefined;
+    dada_pwc_node -> state = dada_pwc_undefined;
     return -1;
   }
 
@@ -75,7 +75,7 @@ int dada_pwc_node_init (node_t* node)
 
   key = strtok (buffer, " \t\n\r");
 
-  dada_node->state = dada_pwc_string_to_state (key);
+  dada_pwc_node->state = dada_pwc_string_to_state (key);
   return 0;
 }
 
@@ -140,6 +140,29 @@ int dada_pwc_nexus_parse (nexus_t* n, const char* config)
 /*! Send a unique header to each of the nodes */
 int dada_pwc_nexus_cmd_config (void* context, FILE* fptr, char* args);
 
+int dada_pwc_nexus_update_state (dada_pwc_nexus_t* nexus)
+{
+  fprintf (stderr, "TO DO: update the state of the dada_pwc!\n");
+  return 0;
+}
+
+int dada_pwc_nexus_handle_message (void* me, unsigned inode, const char* msg)
+{
+  char state_string [16];
+  dada_pwc_nexus_t* nexus = (dada_pwc_nexus_t*) me;
+  dada_pwc_node_t* node = nexus->nexus.nodes[inode];
+
+  char* state_change = strstr (msg, "STATE = ");
+
+  if (state_change) {
+    sscanf (state_change, "STATE = %s", state_string);
+    node->state = dada_pwc_string_to_state (state_string);
+    dada_pwc_nexus_update_state (nexus);
+  }
+
+  return 0;
+}
+
 void dada_pwc_nexus_init (dada_pwc_nexus_t* nexus)
 {
   nexus_t* nexus_base = (nexus_t*) nexus;
@@ -151,18 +174,28 @@ void dada_pwc_nexus_init (dada_pwc_nexus_t* nexus)
   assert (nexus_base->node_prefix != 0);
 
   nexus_base->node_port = DADA_DEFAULT_PWC_PORT;
-  nexus_base->node_create = &dada_node_create;
-  nexus_base->node_init   = &dada_pwc_node_init;
+  nexus_base->node_create = &dada_pwc_node_create;
+  nexus_base->node_init   = &dada_pwc_nexus_node_init;
   nexus_base->nexus_parse = &dada_pwc_nexus_parse;
+  nexus_base->mirror = nexus_create ();
+
+  nexus_base->mirror->node_port = DADA_DEFAULT_PWC_LOG;
 
 #ifdef _DEBUG
   fprintf (stderr, "dada_pwc_nexus_init dada_pwc_create\n");
 #endif
 
+  
   nexus->pwc = dada_pwc_create ();
 
   /* do not convert times and sample counts into bytes */
   nexus->pwc->convert_to_bytes = 0;
+
+  /* set up the monitor of the mirror */
+  nexus->monitor = monitor_create ();
+  nexus->monitor->nexus = nexus_base->mirror;
+  nexus->monitor->handle_message = &dada_pwc_nexus_handle_message;
+  nexus->monitor->context = nexus;
 
   /* convert time_t to local time strings */
   nexus->convert_to_tm = localtime;
@@ -275,6 +308,8 @@ int dada_pwc_nexus_serve (dada_pwc_nexus_t* nexus)
     fprintf (stderr, "dada_pwc_nexus_serve: could not start PWC server\n");
     return -1;
   }
+
+  monitor_launch (nexus->monitor);
 
   while (!dada_pwc_quit (nexus->pwc)) {
 
