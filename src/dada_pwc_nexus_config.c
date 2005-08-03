@@ -11,7 +11,7 @@ int dada_pwc_nexus_header_parse (dada_pwc_nexus_t* n, const char* buffer);
 int dada_pwc_nexus_cmd_config (void* context, FILE* output, char* args)
 {
   dada_pwc_nexus_t* nexus = (dada_pwc_nexus_t*) context;
-  dada_node_t* node = 0;
+  dada_pwc_node_t* node = 0;
 
   unsigned inode, nnode = nexus_get_nnode ((nexus_t*) nexus);
 
@@ -66,7 +66,7 @@ int dada_pwc_nexus_cmd_config (void* context, FILE* output, char* args)
 
   for (inode=0; inode < nnode; inode++) {
 
-    node = (dada_node_t*) nexus->nexus.nodes[inode];
+    node = (dada_pwc_node_t*) nexus->nexus.nodes[inode];
     strcpy (nexus->pwc->header, "header ");
     strcat (nexus->pwc->header, node->header);
 

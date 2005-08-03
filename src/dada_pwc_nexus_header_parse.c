@@ -57,7 +57,7 @@ int dada_pwc_config_header (string_array_t* params, const char* prefix,
 int dada_pwc_nexus_header_parse (dada_pwc_nexus_t* n, const char* buffer)
 {
   char node_name [16] = "";
-  dada_node_t* node = 0;
+  dada_pwc_node_t* node = 0;
 
   unsigned inode, nnode = nexus_get_nnode ((nexus_t*) n);
 
@@ -74,7 +74,7 @@ int dada_pwc_nexus_header_parse (dada_pwc_nexus_t* n, const char* buffer)
 
   for (inode=0; inode < nnode; inode++) {
 
-    node = (dada_node_t*) n->nexus.nodes[inode];
+    node = (dada_pwc_node_t*) n->nexus.nodes[inode];
     if (node->header_size < n->pwc->header_size) {
       node->header = realloc (node->header, n->pwc->header_size);
       assert (node->header != 0);
