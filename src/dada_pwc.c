@@ -508,6 +508,7 @@ dada_pwc_t* dada_pwc_create ()
 		     "rec_stop", "enter the clocking state", NULL);
 
   primary -> server = 0;
+  primary -> log = 0;
 
   return primary;
 }
@@ -648,6 +649,10 @@ int dada_pwc_set_state (dada_pwc_t* primary, int new_state, time_t utc)
 
   primary->state = new_state;
 
+  if (primary->log)
+    multilog (primary->log, LOG_INFO, 
+	      "STATE = %s\n", dada_pwc_state_to_string(new_state));
+  
   pthread_cond_signal (&(primary->cond));
   pthread_mutex_unlock (&(primary->mutex));
 

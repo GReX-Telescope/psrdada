@@ -129,6 +129,9 @@ extern "C" {
     /*! The command parser */
     command_parse_t* parser;
 
+    /*! The message logging facility */
+    multilog_t* log;
+
     /* for multi-threaded use of the struct */
     pthread_mutex_t mutex;
 
