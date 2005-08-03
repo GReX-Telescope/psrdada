@@ -8,6 +8,10 @@
 /*! parse a configuration into unique headers for each primary write client */
 int dada_pwc_nexus_header_parse (dada_pwc_nexus_t* n, const char* buffer);
 
+/*! defined in dada_pwc.c */
+int dada_pwc_parse_bytes_per_second (dada_pwc_t* primary,
+				     FILE* fptr, const char* header);
+
 int dada_pwc_nexus_cmd_config (void* context, FILE* output, char* args)
 {
   dada_pwc_nexus_t* nexus = (dada_pwc_nexus_t*) context;
@@ -75,7 +79,11 @@ int dada_pwc_nexus_cmd_config (void* context, FILE* output, char* args)
     while ( (hdr = strchr(hdr, '\n')) != 0 )
       *hdr = '\\';
 
-    nexus_send_node ((nexus_t*) nexus, inode, nexus->pwc->header);
+    if (nexus_send_node ((nexus_t*) nexus, inode, nexus->pwc->header) < 0)
+      return -1;
+
+    if (inode==0)
+      dada_pwc_parse_bytes_per_second (nexus->pwc, output, nexus->pwc->header);
 
   }
 
