@@ -1,7 +1,7 @@
 
 lib_LTLIBRARIES = libdada.la
 
-libdada_la_SOURCES = ascii_header.c multilog.c sock.c			\
+libdada_la_SOURCES = ascii_header.c multilog.c sock.c monitor.c		\
 	ipcutil.c ipcbuf.c ipcio.c disk_array.c node_array.c		\
 	command_parse.c command_parse_server.c string_array.c		\
 	diff_time.c nexus.c filesize.c fileread.c utc.c daemon.c	\
@@ -10,7 +10,7 @@ libdada_la_SOURCES = ascii_header.c multilog.c sock.c			\
 	dada_pwc_nexus_config.c dada_pwc_nexus_header_parse.c		\
 	multilog_server.c
 
-include_HEADERS = ascii_header.h multilog.h sock.h		\
+include_HEADERS = ascii_header.h multilog.h sock.h monitor.h	\
 	ipcutil.h ipcbuf.h ipcio.h disk_array.h node_array.h	\
 	command_parse.h command_parse_server.h string_array.h	\
 	diff_time.h nexus.h futils.h utc.h daemon.h dada_def.h	\
