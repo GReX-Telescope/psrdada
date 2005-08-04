@@ -11,23 +11,53 @@ dada\_pwc\_demo}, implements an example PWC interface.  It does not
 actually acquire any data and therefore can be run on any computer.
 This program has two modes of operation: free and locked.
 
-In {\em free} mode, {\tt dada\_pwc\_demo} does not connect to the Header
-and Data Blocks; therefore, it is not necessary to create the shared
-memory resources and run a Primary Read Client program.  This mode is
-most useful when testing the command interface and state machine of
-the Primary Write Client.  To run in {\em free} mode, simply type
+In {\em free} mode, {\tt dada\_pwc\_demo} does not connect to the
+Header and Data Blocks; therefore, it is not necessary to create the
+shared memory resources and run a Primary Read Client program.  This
+mode is most useful when testing the command interface and state
+machine of the Primary Write Client.  To run in {\em free} mode,
+simply type
 \begin{verbatim}
 dada_pwc_demo
 \end{verbatim}
 
-In {\em locked} mode, {\tt dada\_pwc\_demo} connects to the Header
-and Data Blocks; therefore, it is necessary to first create the shared
-memory resources and also run a Primary Read Client program, such
-as {\tt dada\_dbdisk}.  This mode is most useful when testing the
+In {\em locked} mode, {\tt dada\_pwc\_demo} connects to the Header and
+Data Blocks; therefore, it is necessary to first create the shared
+memory resources and also run a Primary Read Client program, such as
+{\tt dada\_dbdisk}.  This mode is most useful when testing the
 interface between Primary Write Client, Header and Data Blocks, and
-Primary Read Client software.  To run in {\em locked} mode, for example
+Primary Read Client software.  To run in {\em locked} mode, for
+example
 \begin{verbatim}
-dada_db            # create the shared memory resources
+dada_db -d         # destroy existing shared memory resources
+dada_db            # create new shared memory resources
 dada_pwc_demo -l   # run in locked mode
 \end{verbatim}
+The first step is particularly useful when debugging.
+In another window on the same machine, you might also run
+\begin{verbatim}
+dada_dbdisk -WD /tmp
+\end{verbatim}
 
+To connect with the PWC demonstration program and begin issuing
+commands, simply run
+\begin{verbatim}
+telnet localhost 56026
+\end{verbatim}
+or replace {\tt localhost} with the name of the machine on which the
+program is running.
+
+\subsection{Primary Write Client Command, {\tt dada\_pwc\_command}}
+
+It is also possible to control one or more instance of {\tt
+dada\_pwc\_demo} using the Primary Write Client Command program, {\tt
+dada\_pwc\_command}.  By default, {\tt dada\_pwc\_command} uses the
+same port number (56026) as {\tt dada\_pwc\_demo}.  Therefore, if you
+are running both programs on the same machine, it will be necessary to
+specify a different port number for the command interface; e.g.
+\begin{verbatim}
+dada_pwc_command -p 20013
+\end{verbatim}
+
+The PWC command program must be configured as described in ???;
+it also requires the use of specification files to prepare for recording.
