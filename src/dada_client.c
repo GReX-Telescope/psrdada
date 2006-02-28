@@ -60,6 +60,9 @@ int64_t dada_client_io_loop (dada_client_t* client)
 
   assert (client != 0);
 
+  log = client->log;
+  assert (log != 0);
+
   if (buffer_size != client->optimal_bytes) {
     buffer_size = client->optimal_bytes;
     buffer = (char*) realloc (buffer, buffer_size);
@@ -70,9 +73,6 @@ int64_t dada_client_io_loop (dada_client_t* client)
 #endif
 
   }
-
-  log = client->log;
-  assert (log != 0);
 
   fd = client->fd;
   assert (fd >= 0);

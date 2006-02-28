@@ -28,7 +28,7 @@ dada_pwc_main_t* dada_pwc_main_create ()
   pwcm -> context = 0;
   pwcm -> header = 0;
   pwcm -> header_size = 0;
-  pwcm -> verbose = 0;
+  pwcm -> verbose = 1;
 
   return pwcm;
 }
@@ -274,6 +274,9 @@ int dada_pwc_main_record_start (dada_pwc_main_t* pwcm)
 
   minimum_record_start = ipcio_get_start_minimum (pwcm->data_block);
 
+  multilog (pwcm->log, LOG_INFO, "minimum_record_start=%"PRIu64"\n",
+	    minimum_record_start);
+
   if (pwcm->command.byte_count < minimum_record_start) {
     multilog (pwcm->log, LOG_ERR, "Requested start byte=%"PRIu64
 	      " reset to minimum=%"PRIu64"\n",
@@ -294,6 +297,9 @@ int dada_pwc_main_record_start (dada_pwc_main_t* pwcm)
     multilog (pwcm->log, LOG_ERR, "fail ascii_header_set OBS_OFFSET\n");
     return -1;
   }
+
+  multilog (pwcm->log, LOG_INFO, "command.byte_count=%"PRIu64"\n",
+	    pwcm->command.byte_count);
 
   /* start valid data on the Data Block at the requested byte */
   if (ipcio_start (pwcm->data_block, pwcm->command.byte_count) < 0)  {
@@ -433,8 +439,13 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
       /* If the transit_byte is set, do not write more than the requested
 	 amount of data to the Data Block */
       buf_bytes = buffer_size;
+      
       if (transit_byte && buf_bytes > bytes_to_write)
 	buf_bytes = bytes_to_write;
+
+      multilog (pwcm->log, LOG_INFO, "prev. buf_bytes=%"PRIu64" " 
+                " curr. buf_bytes=%"PRIu64" bytes_to_write=%"PRIu64" \n",
+		buffer_size,buf_bytes,bytes_to_write);
 
       /* write the bytes to the Data Block */
       if (pwcm->data_block) {

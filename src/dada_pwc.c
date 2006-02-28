@@ -282,10 +282,10 @@ uint64_t dada_pwc_parse_duration (dada_pwc_t* primary,
 				  FILE* fptr, const char* args)
 {
   unsigned hh, mm, ss;
-  uint64_t byte_count;
+  uint64_t byte_count; 
 
   if (sscanf (args, "%u:%u:%u", &hh, &mm, &ss) == 3) {
-
+   
     if (!primary->bytes_per_second) {
       fprintf (fptr, "bytes per second not known\n");
       return 0;

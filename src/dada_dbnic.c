@@ -317,7 +317,7 @@ int sock_close_function (dada_client_t* client, uint64_t bytes_written)
     multilog (log, LOG_ERR, "START HEADER\n%s\nEND HEADER\n", header);
     multilog (log, LOG_ERR, "Should be:\n");
     multilog (log, LOG_ERR, "START HEADER\n%s\nEND HEADER\n", client->header);
-    return -1;
+    return 0;
   }
 
   return 0;
@@ -416,7 +416,7 @@ int main (int argc, char **argv)
   client->context = &dbnic;
 
   while (!quit) {
-
+    
     if (dada_client_read (client) < 0)
       multilog (log, LOG_ERR, "Error during transfer\n");
 

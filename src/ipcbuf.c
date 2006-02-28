@@ -1,5 +1,6 @@
 #include "ipcbuf.h"
 #include "ipcutil.h"
+#include <time.h>
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -731,6 +732,7 @@ char* ipcbuf_get_next_read (ipcbuf_t* id, uint64_t* bytes)
     /* KLUDGE!  wait until writebuf is incremented without sem operations */
     while (id->sync->writebuf <= id->viewbuf)
       fsleep (0.1);
+
 
     if (id->viewbuf + id->sync->nbufs < id->sync->writebuf)
       id->viewbuf = id->sync->writebuf - id->sync->nbufs + 1;
