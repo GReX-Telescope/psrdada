@@ -7,39 +7,59 @@
 
 int main (int argc, char** argv)
 {
-  key_t key = 0x69;       /* some id number like a port number, i guess */
+  key_t key = 0x69;
   int   arg;
 
-  uint64_t nbufs = 4;
+  uint64_t nbufs = 16;
 #ifdef _SC_PAGE_SIZE
   uint64_t bufsz = sysconf (_SC_PAGE_SIZE);
 #else
   uint64_t bufsz = 1000000;
 #endif
 
+  uint64_t n64 = bufsz/sizeof(uint64_t);
+  uint64_t i64 = 0;
+  uint64_t check64 = 0;
+
+  unsigned ntest = 1024 * 64;
+  unsigned itest = 0;
+  unsigned double_hit = 0;
+
+  uint64_t* buf   = 0;
+  uint64_t  count = 0;
+
   uint64_t offset = 0;
+  uint64_t raise_sod = 0;
+  uint64_t raise_eod = 0;
 
-  char* read = NULL;
-  char* write = NULL;
+  char must_set_sod = 0;
+  uint64_t sodbuf = 0;
+  uint64_t sodbyte = 0;
 
-  FILE* fptr = 0;
-  char* filename = 0;
-  char perm[2];
+
+  char read = 0;
+  char write = 0;
 
   ipcbuf_t ringbuf = IPCBUF_INIT;
 
-  char* buf = 0;
-  size_t bytesio = 0;
+  uint64_t bytesio = 0;
+
+  char verbose = 0;
 
   int debug = 0;
-  while ((arg = getopt(argc, argv, "db:n:o:k:r:w:")) != -1) {
-
-    fprintf (stderr, "arg=%c\n", arg);
+  while ((arg = getopt(argc, argv, "b:dhn:k:wrv")) != -1) {
 
     switch (arg)  {
 
     case 'h':
-      fprintf (stderr, "test_ipcbuf -[r|w] filename\n");
+      fprintf (stderr, 
+	       "test_ipcbuf -[r|w]\n"
+	       " -b block_size  Set the size of each block in ring buffer \n"
+	       " -n nblock      Set the number of blocks in ring buffer \n"
+	       " -d             Debug mode \n"
+	       " -k key         Key to shared memory \n"
+	       " -v             Verbose mode\n"
+	       );
       return 0;
 
     case 'b':
@@ -60,19 +80,12 @@ int main (int argc, char** argv)
       }
       break;
 
-    case 'o':
-      if (sscanf (optarg, "%"PRIu64"", &offset) < 1) {
-	fprintf (stderr, "test_ipcbuf could not parse -o %s", optarg);
-	return -1;
-      }
-      break;
-
     case 'r':
-      read = optarg;
+      read = 1;
       break;
 
     case 'w':
-      write = optarg;
+      write = 1;
       break;
 
     case 'k':
@@ -82,32 +95,19 @@ int main (int argc, char** argv)
     }
   }
 
-  fprintf (stderr, "arg=%d\n", arg);
-
   if ((read && write) || !(read || write)) {
     fprintf (stderr, "Please specify one of -r or -w\n");
     return -1;
   }
 
-  if (read) {
-    filename = read;
-    strcpy (perm, "r");
-  }
-  else {
-    filename = write;
-    strcpy (perm, "w");
-  }
+  srand (13);
+  count = 0;
 
-  fptr = fopen (filename, perm);
-  if (!fptr) {
-    fprintf (stderr, "Could not open %s\n", filename);
-    perror ("");
-    return -1;
-  }
+  fprintf (stderr, "Running %u tests ...\n", ntest);
 
-  if (read) {
+  if (write) {
     
-    /* this process is reading from the file and creates the shared memory */
+    /* this process is writing to and creates the shared memory */
     fprintf (stderr, "Creating shared memory ring buffer."
 	     " nbufs=%"PRIu64" bufsz=%"PRIu64"\n", nbufs, bufsz);
 
@@ -116,56 +116,106 @@ int main (int argc, char** argv)
       return -1;
     }
 
-    /* read from file, write to shm */
+    /* lock write to shm */
     if (ipcbuf_lock_write (&ringbuf) < 0) {
       fprintf (stderr, "Error ipcbuf_lock_write\n");
       return -1;
     }
 
-    if (offset)
-      ipcbuf_disable_sod (&ringbuf);
+    /* going to test the start/stop features */
+    ipcbuf_disable_sod (&ringbuf);
 
-    do {
+    for (itest=0; itest < ntest; itest++)  {
 
-      /* get the next buffer to be filled */
-      buf = ipcbuf_get_next_write (&ringbuf);
-      if (!buf) {
-	fprintf (stderr, "error ipcbuf_get_next_write\n");
-	return -1;
-      }
+      raise_sod = raise_eod + rand()%(4 * nbufs * n64);
 
-      /* read from the file into the buffer */
-      bytesio = fread (buf, 1, bufsz, fptr);
+      if (raise_sod%n64 == raise_eod%n64)
+	double_hit ++;
 
-      fprintf (stderr, "buffer:%"PRIu64" %d bytes. buf[0]='%c'\n",
-	       ipcbuf_get_write_count(&ringbuf), bytesio, buf[0]);
+      offset = raise_sod + rand()%((nbufs-2) * n64);
+      raise_eod = offset + n64 + rand()%(8 * nbufs * n64);
 
-      if (ipcbuf_mark_filled (&ringbuf, bytesio) < 0) {
-	fprintf (stderr, "error ipcbuf_mark_filled\n");
-	return -1;
-      }
+      if (verbose)
+	fprintf (stderr, "test:%u sod=%"PRIu64" off=%"PRIu64" eod=%"PRIu64"\n",
+		 itest, raise_sod, offset, raise_eod);
 
-      if (!ipcbuf_sod (&ringbuf)) {
+      must_set_sod = 1;
+      sodbuf = raise_sod * sizeof(uint64_t) / bufsz;
+      sodbyte = raise_sod * sizeof(uint64_t) % bufsz;
 
-	if (offset < bufsz)
-	  ipcbuf_enable_sod (&ringbuf, 
-			     ipcbuf_get_write_count(&ringbuf)-1, offset);
-	else
-	  offset -= bufsz;
+      while (count < raise_eod) {
 
-      }
-
-      fprintf (stderr, "End of data: %d %d\n",
-	       ringbuf.sync->eod, ipcbuf_eod (&ringbuf));
-
-      if (debug) {
-	if (ipcbuf_get_write_count(&ringbuf) == ipcbuf_get_nbufs(&ringbuf)) {
-	  fprintf (stderr, "Pause\n");
-	  getchar();
+	/* get the next buffer to be filled */
+	buf = (uint64_t*) ipcbuf_get_next_write (&ringbuf);
+	if (!buf) {
+	  fprintf (stderr, "error ipcbuf_get_next_write\n");
+	  return -1;
 	}
+
+	for (i64=0; i64<n64; i64++) {
+	  buf[i64] = count;
+	  count ++;
+	}
+
+#ifdef _DEBUG
+	fprintf (stderr, "buffer:%"PRIu64" buf[0]=%"PRIu64"\n",
+		 ipcbuf_get_write_count(&ringbuf), buf[0]);
+#endif
+
+	bytesio = bufsz;
+	if (count >= raise_eod) {
+
+	  bytesio -= (count - raise_eod) * sizeof(uint64_t);
+
+	  if (verbose)
+	    fprintf (stderr, "Enabling end-of-data buf=%"PRIu64
+		     " byte=%"PRIu64"\n",
+		     ipcbuf_get_write_count(&ringbuf), bytesio);
+	  
+ 	  if (ipcbuf_enable_eod (&ringbuf) < 0) {
+	    fprintf (stderr, "Failure to raise eod count=%"PRIu64
+		     " eod=%"PRIu64" sod=%"PRIu64" offset=%"PRIu64"\n",
+		     count, raise_eod, raise_sod, offset);
+	    return -1;
+	  }
+
+	}
+
+	if (ipcbuf_mark_filled (&ringbuf, bytesio) < 0) {
+	  fprintf (stderr, "error ipcbuf_mark_filled\n");
+	  return -1;
+	}
+
+	if (count >= offset && must_set_sod) {
+
+	  if (verbose)
+	    fprintf (stderr, "Enabling start-of-data buf=%"PRIu64
+		     " byte=%"PRIu64"\n", sodbuf, sodbyte);
+	  
+	  if (ipcbuf_enable_sod (&ringbuf, sodbuf, sodbyte) < 0)
+	    return -1;
+
+	  must_set_sod = 0;
+
+	}
+
+#ifdef _DEBUG
+	fprintf (stderr, "End of data: %d %d\n",
+		 ringbuf.sync->eod[ringbuf.xfer], ipcbuf_eod (&ringbuf));
+#endif
+
+	if (debug) {
+	  if (ipcbuf_get_write_count(&ringbuf) == ipcbuf_get_nbufs(&ringbuf)) {
+	    fprintf (stderr, "Pause\n");
+	    getchar();
+	  }
+	}
+	
       }
 
-    } while (bytesio == bufsz);
+      fprintf (stderr, "Finished %.2f %%\r", (float)itest/(float)ntest);
+
+    }
 
     if (debug) {
       fprintf (stderr, "Pause before reset\n");
@@ -183,6 +233,13 @@ int main (int argc, char** argv)
 
     fprintf (stderr, "Scheduling IPC resources for destruction\n");
     ipcbuf_destroy (&ringbuf);
+
+    fprintf (stderr,
+	     "Succesful completion!\n"
+	     "Out of %u random transfers:\n"
+	     "%u started in the same buffer as the previous transfer ended\n",
+	     ntest, double_hit);
+
   }
 
   else {
@@ -204,33 +261,71 @@ int main (int argc, char** argv)
 
     fprintf (stderr, " nbufs=%"PRIu64" bufsz=%"PRIu64"\n", nbufs, bufsz);
 
-    while ( ! ipcbuf_eod (&ringbuf) ) { 
+    for (itest=0; itest < ntest; itest++)  {
 
-      buf = ipcbuf_get_next_read (&ringbuf, &bufsz);
+      raise_sod = raise_eod + rand()%(4 * nbufs * n64);
+      offset = raise_sod + rand()%((nbufs-2) * n64);
+      raise_eod = offset + n64 + rand()%(8 * nbufs * n64);
 
-      if (!buf) {
-	fprintf (stderr, "Error ipcbuf_get_next_read\n");
-	return -1;
-      }
+      if (verbose)
+	fprintf (stderr, "test:%u sod=%"PRIu64" off=%"PRIu64" eod=%"PRIu64"\n",
+		 itest, raise_sod, offset, raise_eod);
 
-      fprintf (stderr, "buffer:%"PRIu64" %"PRIu64" bytes. buf[0]='%c'\n",
-	       ipcbuf_get_read_count (&ringbuf), bufsz, buf[0]);
-      
-      bytesio = fwrite (buf, bufsz, 1, fptr);
+      count = raise_sod;
 
-      if (ipcbuf_mark_cleared (&ringbuf) < 0) {
-	fprintf (stderr, "error ipcbuf_mark_cleared\n");
-	return -1;
-      }
+      while (count < raise_eod) {
+
+	if ( ipcbuf_eod (&ringbuf) )
+	  fprintf (stderr, "END OF DATA!\n");
+
+	buf = (uint64_t*) ipcbuf_get_next_read (&ringbuf, &bytesio);
+
+	if (!buf) {
+	  fprintf (stderr, "Error ipcbuf_get_next_read\n");
+	  return -1;
+	}
+
+#ifdef _DEBUG
+	fprintf (stderr, "buf:%"PRIu64" %"PRIu64" bytes. buf[0]=%"PRIu64" \n",
+		 ipcbuf_get_read_count (&ringbuf), bufsz, buf[0]);
+#endif
+
+	check64 = bytesio / sizeof(uint64_t);
+
+	for (i64=0; i64<check64; i64++) {
+	  if (buf[i64] != count) {
+	    fprintf (stderr, "\nERROR buf:%"PRIu64" %"PRIu64" bytes.\n",
+		     ipcbuf_get_read_count (&ringbuf), bytesio);
+	    fprintf (stderr, "buf[%"PRIu64"]=%"PRIu64" != %"PRIu64"\n",
+		     i64, buf[i64], count);
+	    return -1;
+	  }
+	  count ++;
+	}
+
+	if (verbose)
+	  fprintf (stderr, ".");
 	
-      fprintf (stderr, "End of data: %d %d\n",
-	       ringbuf.sync->eod, ipcbuf_eod (&ringbuf));
+	if (ipcbuf_mark_cleared (&ringbuf) < 0) {
+	  fprintf (stderr, "error ipcbuf_mark_cleared\n");
+	  return -1;
+	}
 
+#ifdef _DEBUG	
+	fprintf (stderr, "End of data: %d %d\n",
+		 ringbuf.sync->eod[ringbuf.xfer], ipcbuf_eod (&ringbuf));
+#endif
+
+      }
+
+      if (ipcbuf_reset (&ringbuf) < 0) {
+	fprintf (stderr, "error ipcbuf_reset\n");
+	return -1;
+      }
+      
     }
 
   }
-
-  fclose (fptr);
 
   return 0;
 }
