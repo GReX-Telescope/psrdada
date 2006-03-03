@@ -15,6 +15,8 @@
 extern "C" {
 #endif
 
+#define IPCBUF_XFERS 8 /* total transfers in buffer */
+
   typedef struct {
 
     key_t  semkey;     /* semaphore key */
@@ -22,16 +24,28 @@ extern "C" {
 
     uint64_t nbufs;    /* the number of buffers in the ring */
     uint64_t bufsz;    /* the size of the buffers in the ring */
+    char*    count;    /* the pending xfer count in each buffer in the ring */
 
-    uint64_t readbuf;  /* count of next buffer to read */
-    uint64_t writebuf; /* count of next buffer to write */
+    uint64_t r_buf;    /* count of next buffer to read */
+    uint64_t w_buf;    /* count of next buffer to write */
 
-    uint64_t s_buf;    /* the first valid buffer when sod is raised */
-    uint64_t s_byte;   /* the first valid byte when sod is raised */
+    uint64_t r_xfer;   /* the current read transfer number */
+    uint64_t w_xfer;   /* the current write transfer number */
 
-    int eod;           /* end of data flag */
-    uint64_t e_buf;    /* the last valid buffer when sod is raised */
-    uint64_t e_byte;   /* the last valid byte when sod is raised */
+    /* the first valid buffer when sod is raised */
+    uint64_t s_buf  [IPCBUF_XFERS];
+
+    /* the first valid byte when sod is raised */
+    uint64_t s_byte [IPCBUF_XFERS];
+
+    /* end of data flag */
+    char eod        [IPCBUF_XFERS];
+
+    /* the last valid buffer when sod is raised */
+    uint64_t e_buf  [IPCBUF_XFERS];
+
+    /* the last valid byte when sod is raised */
+    uint64_t e_byte [IPCBUF_XFERS];
 
   } ipcsync_t;
 
@@ -47,11 +61,12 @@ extern "C" {
     char** buffer;     /* base addresses of sub-blocks in shared memory */
 
     uint64_t viewbuf;  /* count of next buffer to look at (non-reader) */
-    uint64_t waitbuf;  /* count of buffers on which to wait */
+
+    uint64_t xfer;     /* current xfer */
 
   } ipcbuf_t;
 
-#define IPCBUF_INIT {0, -1,-1,0, 0,0, 0,0}
+#define IPCBUF_INIT {0, -1,-1,0, 0,0, 0, 0}
 
   /* ////////////////////////////////////////////////////////////////////
      
