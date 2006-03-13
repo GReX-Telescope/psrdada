@@ -2,6 +2,12 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <values.h>
+
+#include <sys/types.h>
+#include <sys/wait.h>
+
+//#define _DEBUG 1
 
 #include "ipcbuf.h"
 
@@ -21,24 +27,28 @@ int main (int argc, char** argv)
   uint64_t i64 = 0;
   uint64_t check64 = 0;
 
-  unsigned ntest = 1024 * 64;
-  unsigned itest = 0;
-  unsigned double_hit = 0;
+  uint64_t length = 0;
+  uint64_t max_length = 0;
+  uint64_t min_length = MAXINT;
 
+  unsigned ntest = 1024 * 16;
+  unsigned itest = 0;
+  unsigned twice = 0;
+  
   uint64_t* buf   = 0;
   uint64_t  count = 0;
 
   uint64_t offset = 0;
+
+  uint64_t max_offset = 0;
+  uint64_t min_offset = MAXINT;
+
   uint64_t raise_sod = 0;
   uint64_t raise_eod = 0;
 
   char must_set_sod = 0;
   uint64_t sodbuf = 0;
   uint64_t sodbyte = 0;
-
-
-  char read = 0;
-  char write = 0;
 
   ipcbuf_t ringbuf = IPCBUF_INIT;
 
@@ -47,13 +57,13 @@ int main (int argc, char** argv)
   char verbose = 0;
 
   int debug = 0;
-  while ((arg = getopt(argc, argv, "b:dhn:k:wrv")) != -1) {
+  while ((arg = getopt(argc, argv, "b:dhn:k:v")) != -1) {
 
     switch (arg)  {
 
     case 'h':
       fprintf (stderr, 
-	       "test_ipcbuf -[r|w]\n"
+	       "test_ipcbuf [options]\n"
 	       " -b block_size  Set the size of each block in ring buffer \n"
 	       " -n nblock      Set the number of blocks in ring buffer \n"
 	       " -d             Debug mode \n"
@@ -80,14 +90,6 @@ int main (int argc, char** argv)
       }
       break;
 
-    case 'r':
-      read = 1;
-      break;
-
-    case 'w':
-      write = 1;
-      break;
-
     case 'k':
       key = atoi (optarg);
       break;
@@ -95,17 +97,12 @@ int main (int argc, char** argv)
     }
   }
 
-  if ((read && write) || !(read || write)) {
-    fprintf (stderr, "Please specify one of -r or -w\n");
-    return -1;
-  }
-
   srand (13);
   count = 0;
 
   fprintf (stderr, "Running %u tests ...\n", ntest);
 
-  if (write) {
+  if (fork()) {
     
     /* this process is writing to and creates the shared memory */
     fprintf (stderr, "Creating shared memory ring buffer."
@@ -130,10 +127,27 @@ int main (int argc, char** argv)
       raise_sod = raise_eod + rand()%(4 * nbufs * n64);
 
       if (raise_sod%n64 == raise_eod%n64)
-	double_hit ++;
+	twice ++;
 
-      offset = raise_sod + rand()%((nbufs-2) * n64);
+      offset = rand()%((nbufs-2) * n64);
+
+      if (offset < min_offset)
+	min_offset = offset;
+
+      if (offset > max_offset)
+	max_offset = offset;
+
+      offset += raise_sod;
+
       raise_eod = offset + n64 + rand()%(8 * nbufs * n64);
+
+      length = raise_eod - raise_sod;
+
+      if (length < min_length)
+	min_length = length;
+
+      if (length > max_length)
+	max_length = length;
 
       if (verbose)
 	fprintf (stderr, "test:%u sod=%"PRIu64" off=%"PRIu64" eod=%"PRIu64"\n",
@@ -186,6 +200,12 @@ int main (int argc, char** argv)
 	  return -1;
 	}
 
+	if (count < raise_eod && ipcbuf_eod (&ringbuf)) {
+	  fprintf (stderr, "premature EOD bytesio=%"PRIu64" bufsz=%"PRIu64"\n",
+		   bytesio, bufsz);
+	  return -1;
+	}
+
 	if (count >= offset && must_set_sod) {
 
 	  if (verbose)
@@ -200,7 +220,7 @@ int main (int argc, char** argv)
 	}
 
 #ifdef _DEBUG
-	fprintf (stderr, "End of data: %d %d\n",
+	fprintf (stderr, "W: End of data: %d %d\n",
 		 ringbuf.sync->eod[ringbuf.xfer], ipcbuf_eod (&ringbuf));
 #endif
 
@@ -213,7 +233,8 @@ int main (int argc, char** argv)
 	
       }
 
-      fprintf (stderr, "Finished %.2f %%\r", (float)itest/(float)ntest);
+      fprintf (stderr, "Finished %d %%\r", 
+	       (int)(100*(float)itest/(float)ntest));
 
     }
 
@@ -236,13 +257,22 @@ int main (int argc, char** argv)
 
     fprintf (stderr,
 	     "Succesful completion!\n"
-	     "Out of %u random transfers:\n"
-	     "%u started in the same buffer as the previous transfer ended\n",
-	     ntest, double_hit);
+	     "In %u random transfers:\n"
+	     "%u started in the same buffer as the previous transfer ended\n"
+	     "\n"
+	     "Maximum transfer length: %"PRIu64"\n"
+	     "Minimum transfer length: %"PRIu64"\n"
+	     "Maximum offset from sod: %"PRIu64"\n"
+	     "Minimum offset from sod: %"PRIu64"\n",
+	     ntest, twice, max_length, min_length, max_offset, min_offset);
+
+    wait (0);
 
   }
 
   else {
+
+    sleep (1);
 
     fprintf (stderr, "Connecting to shared memory ring buffer\n");
     if (ipcbuf_connect (&ringbuf, key) < 0) {
