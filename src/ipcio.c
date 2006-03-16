@@ -108,13 +108,28 @@ int ipcio_start (ipcio_t* ipc, uint64_t sample)
   uint64_t st_buf  = sample / bufsz;
   uint64_t st_byte = sample % bufsz;
 
+  ipcbuf_t* buf = (ipcbuf_t*) ipc;
+
   if (ipc->rdwrt != 'w') {
     fprintf (stderr, "ipcio_start: invalid ipcio_t\n");
     return -1;
   }
 
-  if (ipcbuf_enable_sod ((ipcbuf_t*)ipc, st_buf, st_byte) < 0) {
-    fprintf (stderr, "ipcio_start fail ipcbuf_enable_sod\n");
+  /* check if there is a full buffer waiting to be marked */
+  if (ipcbuf_is_writing(buf) && ipc->bytes == ipcbuf_get_bufsz(buf)) {
+    
+    if (ipcbuf_mark_filled (buf, ipc->bytes) < 0) {
+      fprintf (stderr, "ipcio_start: fail ipcbuf_mark_filled\n");
+      return -1;
+    }
+
+    ipc->marked_filled = 1;
+    ipc->curbuf = 0;
+
+  }
+
+  if (ipcbuf_enable_sod (buf, st_buf, st_byte) < 0) {
+    fprintf (stderr, "ipcio_start: fail ipcbuf_enable_sod\n");
     return -1;
   }
 
