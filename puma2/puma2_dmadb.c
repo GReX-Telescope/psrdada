@@ -1,6 +1,7 @@
 
 #include "puma2_dmadb.h"
 
+#define DADA_TIMESTR "%Y-%m-%d-%H:%M:%S"
 
 static char* default_header =
 "OBS_ID      Test.0001\n"
@@ -42,7 +43,7 @@ int pic_edt_init(dmadb_t* dmadb)
   }    
 
   /* disarm pic as a precautionary measure */
-  if ( (pic_configure(&dmadb->pic, 2)) < 0 ){
+  if ( (pic_configure(&dmadb->pic, DISARM)) < 0 ){
     fprintf(stderr,"Cannot disarm PiC\n");
     return -1;
   }  
@@ -84,8 +85,8 @@ time_t arm_pic(dada_pwc_main_t* pwcm, time_t start_utc)
   /* wait for atleast 10-second before start time */
   now = time(0);
 
-  if (verbose) fprintf(stderr,"Going to start");
   if ( (start_utc - now) >= 10) {
+
     /* sleep for atleast 10 seconds before start */
     sleep_time = start_utc - now - 10;
     multilog (pwcm->log, LOG_INFO, "sleeping for %u sec\n", sleep_time);
@@ -93,7 +94,10 @@ time_t arm_pic(dada_pwc_main_t* pwcm, time_t start_utc)
     sleep (sleep_time);
   } 
   else {
+
     /* check if we're within the 'allowed window' , if not sleep */
+
+    if (verbose) fprintf(stderr,"Going to start");
     while ( (now % 10 <= 1) | (now % 10 >= 8) ) {
       usleep (250000);
       fprintf (stderr,"%d .",(int)now % 10);
@@ -111,7 +115,7 @@ time_t arm_pic(dada_pwc_main_t* pwcm, time_t start_utc)
   /*PiC is arm'ed now. When the next 10-Sec pulse arrives */
   /*EDT will receive both clock and enable data*/
 
-  if ( (pic_configure(&dmadb->pic, 1)) < 0 ){
+  if ( (pic_configure(&dmadb->pic, ARM)) < 0 ){
     multilog(pwcm->log, LOG_ERR,"Cannot arm PiC\n");
     return 0;
   }    
@@ -160,13 +164,13 @@ int stop_acq(dada_pwc_main_t* pwcm)
   dmadb_t* dmadb = (dmadb_t*)pwcm->context;
   int verbose = dmadb->verbose; /* saves some typing */
 
-  /* stop the EDT card */
+  /* stop the EDT buffers */
   if (verbose) fprintf(stderr,"Stopping EDT Device...");
   edt_stop_buffers(dmadb->edt_p) ; 
-  
+
   /* disarm pic now*/
   if (verbose) fprintf(stderr,"Stopping PiC Device...");
-  if ( (pic_configure(&dmadb->pic, 2)) < 0 ){
+  if ( (pic_configure(&dmadb->pic, DISARM)) < 0 ){
     multilog(pwcm->log, LOG_ERR,"Cannot configure PiC\n");
     return -1;
   }  
@@ -175,19 +179,16 @@ int stop_acq(dada_pwc_main_t* pwcm)
   return 0;
 }
 
-int pwc_init (dada_pwc_main_t* pwcm, dmadb_t* dmadb)
-{
-   
-  return 0;
-}
-
 int main (int argc, char **argv)
 {
     /* DADA Header plus Data Unit */
     dada_hdu_t* hdu;
-    dada_pwc_main_t* pwcm; /* primary write client main loop  */
 
-    char* header = default_header; /* header */
+    /* primary write client main loop  */
+    dada_pwc_main_t* pwcm; 
+
+    /* header */
+    char* header = default_header; 
     char* header_buf = 0;
     unsigned header_strlen = 0;/* the size of the header string */
     uint64_t header_size = 0;/* size of the header buffer */
@@ -197,12 +198,19 @@ int main (int argc, char **argv)
     char daemon = 0; /*daemon mode */
 
     int verbose = 0;/* verbose mode */
+
     int mode = 0;
 
     /* dmadb stuff, all EDT/PiC stuff is in here */
     
     dmadb_t dmadb;
     
+    time_t utc;
+
+    unsigned buffer_size = 64;
+    
+    static char* buffer = 0;
+ 
     char *src;
     int nSecs = 100,nbufs=0;
     int wrCount,rdCount;
@@ -269,7 +277,7 @@ int main (int argc, char **argv)
 
 	    case 'S':
 		if (optarg){
-		    fSize = (unsigned long)atol(optarg);
+		    fSize = atoi(optarg);
 		    fprintf(stderr,"File size will be %lu\n",fSize);
 		}
 		else usage(argv[0]);
@@ -305,23 +313,8 @@ int main (int argc, char **argv)
     pwcm = dada_pwc_main_create ();
     
     pwcm->context = &dmadb;
-   
-    /* create control communications interface */
+      
     pwcm->log = multilog_open ("puma2_dmadb", daemon);
-
-    //if (pwc_init (pwcm, &dmadb) < 0) {
-    //fprintf (stderr, "test_dada_pwc: error in main loop\n");
-    //return EXIT_FAILURE;
-    //}
-
-    /* Initializing PiC/EDT cards*/
-
-    if (verbose) fprintf(stderr,"Going to initia`lize PiC/EDT...");
-    if ( pic_edt_init(&dmadb) < 0) {
-	fprintf(stderr,"Cannot initialize EDT/PiC\n");
-	return EXIT_FAILURE;
-    }
-    if (verbose) fprintf(stderr,"done");
 
     /* set up for daemon usage */	  
     
@@ -331,138 +324,170 @@ int main (int argc, char **argv)
     }
     else
       multilog_add (pwcm->log, stderr);
+  
+    /* Initializing PiC/EDT cards*/
 
+    if (verbose) fprintf(stderr,"Going to initialize PiC/EDT...");
+    if ( pic_edt_init(&dmadb) < 0) {
+      fprintf(stderr,"Cannot initialize EDT/PiC\n");
+      return EXIT_FAILURE;
+    }
+    if (verbose) fprintf(stderr,"done");
+    
+   
     /* create the header/data blocks */
-
+    
     hdu = dada_hdu_create (pwcm->log);
-
+    
     if (dada_hdu_connect (hdu) < 0)
       return EXIT_FAILURE;
-
+    
     if (dada_hdu_lock_write_spec (hdu,writemode) < 0)
       return EXIT_FAILURE;
-
+    
     /* if we are a stand alone application */
-
+    
     if ( mode == 1){
-	  
-	header_size = ipcbuf_get_bufsz (hdu->header_block);
-	multilog (pwcm->log, LOG_INFO, "header block size = %llu\n", header_size);
-	
-	header_buf = ipcbuf_get_next_write (hdu->header_block);
-	
-	if (!header_buf)  {
-	    multilog (pwcm->log, LOG_ERR, "Could not get next header block\n");
-	    return EXIT_FAILURE;
+      
+      header_size = ipcbuf_get_bufsz (hdu->header_block);
+      multilog (pwcm->log, LOG_INFO, "header block size = %llu\n", header_size);
+      
+      header_buf = ipcbuf_get_next_write (hdu->header_block);
+      
+      if (!header_buf)  {
+	multilog (pwcm->log, LOG_ERR, "Could not get next header block\n");
+	return EXIT_FAILURE;
+      }
+      
+      /* if header file is presented, used it. If not set command line attributes */ 
+      if (header_file)  {
+	if (fileread (header_file, header_buf, header_size) < 0)  {
+	  multilog (pwcm->log, LOG_ERR, "Could not read header from %s\n", header_file);
+	  return EXIT_FAILURE;
 	}
+      }
+      else {
+	header_strlen = strlen(header);
+	memcpy (header_buf, header, header_strlen);
+	memset (header_buf + header_strlen, '\0', header_size - header_strlen);
 	
-	if (header_file)  {
-	    if (fileread (header_file, header_buf, header_size) < 0)  {
-		multilog (pwcm->log, LOG_ERR, "Could not read header from %s\n", header_file);
-		return EXIT_FAILURE;
-	    }
-	}
-	else {
-	    header_strlen = strlen(header);
-	    memcpy (header_buf, header, header_strlen);
-	    memset (header_buf + header_strlen, '\0', header_size - header_strlen);
-	}
-	
-	/* Set the header attributes */ 
 	if (ascii_header_set (header_buf, "HDR_SIZE", "%llu", header_size) < 0) {
-	    multilog (pwcm->log, LOG_ERR, "Could not write HDR_SIZE to header\n");
-	    return -1;
+	  multilog (pwcm->log, LOG_ERR, "Could not write HDR_SIZE to header\n");
+	  return -1;
 	}
 	
 	if (verbose) fprintf(stderr,"Observation ID is %s\n",ObsId);
 	if (ascii_header_set (header_buf, "OBS_ID", "%s", ObsId) < 0) {
-	    multilog (pwcm->log, LOG_ERR, "Could not write OBS_ID to header\n");
-	    return -1;
+	  multilog (pwcm->log, LOG_ERR, "Could not write OBS_ID to header\n");
+	  return -1;
 	}
 	
 	if (verbose) fprintf(stderr,"File size is %lu\n",fSize);
 	if (ascii_header_set (header_buf, "FILE_SIZE", "%lu", fSize) < 0) {
-	    multilog (pwcm->log, LOG_ERR, "Could not write FILE_SIZE to header\n");
-	    return -1;
+	  multilog (pwcm->log, LOG_ERR, "Could not write FILE_SIZE to header\n");
+	  return -1;
+	}
+      }
+      
+      /* if number of buffers is not specified, */
+      /* find it from number of seconds, based on 80 MB/sec sample rate*/
+      if (nbufs == 0)  {
+	float tmp;
+	tmp = (float)((80000000 * nSecs)/BUFSIZE);
+	nbufs = (int) tmp;
+	if (verbose) fprintf(stderr,"Number of bufs is %d %f\n",nbufs,tmp);
+      }
+      
+      /* Arm PiC now and set actual start time in header */
+      
+      utc = arm_pic(pwcm, 0);
+
+      if (!buffer)
+	buffer = malloc (buffer_size);
+      assert (buffer != 0);
+      
+      strftime (buffer, buffer_size, DADA_TIMESTR, gmtime(&utc));
+
+      /* write UTC_START to the header */
+      if (ascii_header_set (header_buf, "UTC_START", "%s", buffer) < 0) {
+	multilog (pwcm->log, LOG_ERR, "failed ascii_header_set UTC_START\n");
+	return -1;
+      }
+
+      /* donot set header parameters anymore - acqn. doesn't start */
+      if (ipcbuf_mark_filled (hdu->header_block, header_size) < 0)  {
+	multilog (pwcm->log, LOG_ERR, "Could not mark filled header block\n");
+	return EXIT_FAILURE;
+      }
+        
+      /* The write loop: repeat for n buffers */ 
+      while(dmadb.buf < nbufs -1 ){
+	
+	uint64_t bsize = BUFSIZE;
+	
+	src = (char *)get_next_buf(pwcm, &bsize);
+	
+	/* write data to datablock */
+	if (( ipcio_write(hdu->data_block, src, BUFSIZE) ) < BUFSIZE ){
+	  multilog(pwcm->log, LOG_ERR, "Cannot write requested bytes to SHM\n");
+	  return EXIT_FAILURE;
 	}
 	
-	if (ipcbuf_mark_filled (hdu->header_block, header_size) < 0)  {
-	    multilog (pwcm->log, LOG_ERR, "Could not mark filled header block\n");
-	    return EXIT_FAILURE;
-	}
+	wrCount = ipcbuf_get_write_count ((ipcbuf_t*)hdu->data_block);
+	rdCount = ipcbuf_get_read_count ((ipcbuf_t*)hdu->data_block);
+	fprintf(stderr,"%d %d %d\n",dmadb.buf,wrCount,rdCount);
 	
-		
-	/* if number of buffers is not specified, */
-	/* find it from number of seconds, based on 80 MB/sec sample rate*/
-	if (nbufs == 0)  nbufs = (80000000 * nSecs)/BUFSIZE;
-	if (verbose) fprintf(stderr,"Number of bufs is %d\n",nbufs);
-	
-	/* Arm PiC now*/
-
-	arm_pic(pwcm, 0);
-	
-	/* The write loop: repeat for n buffers */ 
-	while(dmadb.buf < nbufs){
-
-	    uint64_t bsize = BUFSIZE;
-
-	    src = (char *)get_next_buf(pwcm, &bsize);
-	    
-	    /* write data to datablock */
-	    if (( ipcio_write(hdu->data_block, src, BUFSIZE) ) < BUFSIZE ){
-		multilog(pwcm->log, LOG_ERR, "Cannot write requested bytes to SHM\n");
-		return EXIT_FAILURE;
-	    }
-	    
-	    wrCount = ipcbuf_get_write_count ((ipcbuf_t*)hdu->data_block);
-	    rdCount = ipcbuf_get_read_count ((ipcbuf_t*)hdu->data_block);
-	    fprintf(stderr,"%d %d %d\n",dmadb.buf,wrCount,rdCount);
-	    
-	}
-	
-	if ( stop_acq(pwcm) != 0)
-	    fprintf(stderr, "Error stoping acquisition");
-
-	if (dada_hdu_unlock_write (hdu) < 0)
-	    return EXIT_FAILURE;
-	
-	if (dada_hdu_disconnect (hdu) < 0)
-	    return EXIT_FAILURE;
-	
+      }
+      
+      if ( stop_acq(pwcm) != 0)
+	fprintf(stderr, "Error stopping acquisition");
+      
+      if (dada_hdu_unlock_write (hdu) < 0)
+	return EXIT_FAILURE;
+      
+      if (dada_hdu_disconnect (hdu) < 0)
+	return EXIT_FAILURE;
+      
     }
+
     /* we are controlled by PWC control interface */
+
     else{
-	
-	/*setup PWCM stuff. */
-	pwcm->start_function  = arm_pic;
-	pwcm->buffer_function = get_next_buf;
-	pwcm->stop_function   = stop_acq;
-	pwcm->data_block      = hdu->data_block;
-	pwcm->header_block    = hdu->header_block;
-
-	if (verbose) fprintf (stderr, "Creating dada pwc control interface\n");
-	pwcm->pwc = dada_pwc_create ();
-	
-	if (dada_pwc_serve (pwcm->pwc) < 0) {
-	    fprintf (stderr, "puma2_dmadb: could not start server\n");
-	    return -1;
-	}
-
-	if (dada_pwc_main (pwcm) < 0) {
-	    fprintf (stderr, "puma2_dmadb: error in PWC main loop\n");
-	    return -1;
-	}
-
-	fprintf (stderr, "Destroying pwc\n");
-	dada_pwc_destroy (pwcm->pwc);
+      
+      /*setup PWCM stuff. */
+      pwcm->start_function  = arm_pic;
+      pwcm->buffer_function = get_next_buf;
+      pwcm->stop_function   = stop_acq;
+      pwcm->data_block      = hdu->data_block;
+      pwcm->header_block    = hdu->header_block;
+      
+      if (verbose) fprintf (stderr, "Creating dada pwc control interface\n");
+      pwcm->pwc = dada_pwc_create ();
+      
+      if (dada_pwc_serve (pwcm->pwc) < 0) {
+	fprintf (stderr, "puma2_dmadb: could not start server\n");
+	return -1;
+      }
+      
+      if (dada_pwc_main (pwcm) < 0) {
+	fprintf (stderr, "puma2_dmadb: error in PWC main loop\n");
+	return -1;
+      }
+      
+      fprintf (stderr, "Destroying pwc\n");
+      dada_pwc_destroy (pwcm->pwc);
     }
-
+    
     fprintf (stderr, "Destroying pwc main\n");
     dada_pwc_main_destroy (pwcm);
-
+  
+    /* disable ring buffers, and release DMA resources */
+    if (verbose) fprintf(stderr,"disabling ring buffers EDT Device...");
+    edt_disable_ring_buffers(dmadb.edt_p) ; 
+  
     edt_close(dmadb.edt_p);
     if (verbose) fprintf(stderr,"done\n");
-      
+    
     return EXIT_SUCCESS;
 }
 
