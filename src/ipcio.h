@@ -24,10 +24,11 @@ extern "C" {
     uint64_t bytes;     /* number of bytes into current buffer */
 
     char rdwrt;         /* == r read;  == w write */
+    char marked_filled; /* flag set when curbuf has been marked filled */
 
   } ipcio_t;
 
-  static const ipcio_t IPCIO_INIT = { IPCBUF_INIT, 0,0,0,0 };
+  static const ipcio_t IPCIO_INIT = { IPCBUF_INIT, 0,0, 0, 0,0 };
 
   /*! create a new shared memory block and initialize an ipcio_t struct */
   int ipcio_create (ipcio_t* ipc, int key, uint64_t nbufs, uint64_t bufsz);

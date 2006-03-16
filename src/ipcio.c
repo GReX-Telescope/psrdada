@@ -11,6 +11,7 @@ void ipcio_init (ipcio_t* ipc)
   ipc -> bytes = 0;
   ipc -> rdwrt = 0;
   ipc -> curbuf = 0;
+  ipc -> marked_filled = 0;
 }
 
 /* create a new shared memory block and initialize an ipcio_t struct */
@@ -130,7 +131,7 @@ int ipcio_stop_close (ipcio_t* ipc, char unlock)
 #ifdef _DEBUG
     if (ipc->curbuf)
       fprintf (stderr, "ipcio_close:W buffer:%"PRIu64" %"PRIu64" bytes. buf[0]=%x\n",
-	       ipc->buf.sync->writebuf, ipc->bytes, ipc->curbuf[0]);
+	       ipc->buf.sync->w_buf, ipc->bytes, ipc->curbuf[0]);
 #endif
 
     if (ipcbuf_is_writing((ipcbuf_t*)ipc)) {
@@ -144,6 +145,10 @@ int ipcio_stop_close (ipcio_t* ipc, char unlock)
         fprintf (stderr, "ipcio_close:W error ipcbuf_mark_filled\n");
         return -1;
       }
+
+      /* Ensure that mark_filled is not called again for this buffer
+	 in ipcio_write */
+      ipc->marked_filled = 1;
 
       if (ipc->bytes == ipcbuf_get_bufsz((ipcbuf_t*)ipc)) {
 #ifdef _DEBUG
@@ -234,7 +239,43 @@ ssize_t ipcio_write (ipcio_t* ipc, char* ptr, size_t bytes)
 
   while (bytes) {
 
+    /*
+      The check for a full buffer is done at the start of the loop
+      so that if ipcio_write exactly fills a buffer before exiting,
+      the end-of-data flag can be raised before marking the buffer
+      as filled in ipcio_stop
+    */
+    if (ipc->bytes == ipcbuf_get_bufsz((ipcbuf_t*)ipc)) {
+
+
+      if (!ipc->marked_filled) {
+
+#ifdef _DEBUG
+	fprintf (stderr, "ipcio_write buffer:%"PRIu64" mark_filled\n",
+		 ipc->buf.sync->w_buf);
+#endif
+	
+	/* the buffer has been filled */
+	if (ipcbuf_mark_filled ((ipcbuf_t*)ipc, ipc->bytes) < 0) {
+	  fprintf (stderr, "ipcio_write: ipcbuf_mark_filled\n");
+	  return -1;
+	}
+
+      }
+
+      ipc->curbuf = 0;
+      ipc->bytes = 0;
+      ipc->marked_filled = 1;
+
+    }
+
     if (!ipc->curbuf) {
+
+#ifdef _DEBUG
+      fprintf (stderr, "ipcio_write buffer:%"PRIu64" ipcbuf_get_next_write\n",
+	       ipc->buf.sync->w_buf);
+#endif
+
       ipc->curbuf = ipcbuf_get_next_write ((ipcbuf_t*)ipc);
 
       if (!ipc->curbuf) {
@@ -242,6 +283,7 @@ ssize_t ipcio_write (ipcio_t* ipc, char* ptr, size_t bytes)
 	return -1;
       }
 
+      ipc->marked_filled = 0;
       ipc->bytes = 0;
     }
 
@@ -250,28 +292,16 @@ ssize_t ipcio_write (ipcio_t* ipc, char* ptr, size_t bytes)
       space = bytes;
 
     if (space > 0) {
+
+#ifdef _DEBUG
+      fprintf (stderr, "ipcio_write buffer:%"PRIu64" offset:%"PRIu64
+	       " count=%u\n", ipc->buf.sync->w_buf, ipc->bytes, space);
+#endif
+
       memcpy (ipc->curbuf + ipc->bytes, ptr, space);
       ipc->bytes += space;
       ptr += space;
       bytes -= space;
-    }
-
-    if (ipc->bytes == ipcbuf_get_bufsz((ipcbuf_t*)ipc)) {
-
-#ifdef _DEBUG
-      fprintf (stderr, "ipcio_write buffer:%"PRIu64" %"PRIu64" bytes. buf[0]=%x\n",
-	       ipc->buf.sync->writebuf, ipc->bytes, ipc->curbuf[0]);
-#endif
-
-      /* the buffer has been filled */
-      if (ipcbuf_mark_filled ((ipcbuf_t*)ipc, ipc->bytes) < 0) {
-	fprintf (stderr, "ipcio_write: ipcbuf_mark_filled\n");
-	return -1;
-      }
-
-      ipc->curbuf = 0;
-      ipc->bytes = 0;
-
     }
 
   }
@@ -299,7 +329,7 @@ ssize_t ipcio_read (ipcio_t* ipc, char* ptr, size_t bytes)
 
 #ifdef _DEBUG
       fprintf (stderr, "ipcio_read buffer:%"PRIu64" %"PRIu64" bytes. buf[0]=%x\n",
-	       ipc->buf.sync->readbuf, ipc->curbufsz, ipc->curbuf[0]);
+	       ipc->buf.sync->r_buf, ipc->curbufsz, ipc->curbuf[0]);
 #endif
 
       if (!ipc->curbuf) {
