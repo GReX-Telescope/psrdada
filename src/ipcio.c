@@ -11,7 +11,12 @@ void ipcio_init (ipcio_t* ipc)
   ipc -> bytes = 0;
   ipc -> rdwrt = 0;
   ipc -> curbuf = 0;
+
   ipc -> marked_filled = 0;
+
+  ipc -> sod_pending = 0;
+  ipc -> sod_buf  = 0;
+  ipc -> sod_byte = 0;
 }
 
 /* create a new shared memory block and initialize an ipcio_t struct */
@@ -101,42 +106,42 @@ uint64_t ipcio_get_start_minimum (ipcio_t* ipc)
   return minbuf * bufsz;
 }
 
-/* start writing valid data to an ipcbuf */
-int ipcio_start (ipcio_t* ipc, uint64_t sample)
+int ipcio_check_pending_sod (ipcio_t* ipc)
 {
-  uint64_t bufsz   = ipcbuf_get_bufsz((ipcbuf_t*)ipc);
-  uint64_t st_buf  = sample / bufsz;
-  uint64_t st_byte = sample % bufsz;
-
   ipcbuf_t* buf = (ipcbuf_t*) ipc;
+
+  if (ipc->sod_pending == 0)
+    return 0;
+
+  if (ipcbuf_get_write_count (buf) <= ipc->sod_buf)
+    return 0;
+
+  if (ipcbuf_enable_sod (buf, ipc->sod_buf, ipc->sod_byte) < 0) {
+    fprintf (stderr, "ipcio_check_pendind_sod: fail ipcbuf_enable_sod\n");
+    return -1;
+  }
+
+  ipc->sod_pending = 0;
+}
+
+/* start writing valid data to an ipcbuf */
+int ipcio_start (ipcio_t* ipc, uint64_t byte)
+{
+  ipcbuf_t* buf  = (ipcbuf_t*) ipc;
+  uint64_t bufsz = ipcbuf_get_bufsz (buf);
 
   if (ipc->rdwrt != 'w') {
     fprintf (stderr, "ipcio_start: invalid ipcio_t\n");
     return -1;
   }
 
-  /* check if there is a full buffer waiting to be marked */
-  if (ipcbuf_is_writing(buf) && ipc->bytes == ipcbuf_get_bufsz(buf)) {
-    
-    if (ipcbuf_mark_filled (buf, ipc->bytes) < 0) {
-      fprintf (stderr, "ipcio_start: fail ipcbuf_mark_filled\n");
-      return -1;
-    }
-
-    ipc->marked_filled = 1;
-    ipc->curbuf = 0;
-
-  }
-
-  if (ipcbuf_enable_sod (buf, st_buf, st_byte) < 0) {
-    fprintf (stderr, "ipcio_start: fail ipcbuf_enable_sod\n");
-    return -1;
-  }
-
+  ipc->sod_buf  = byte / bufsz;
+  ipc->sod_byte = byte % bufsz;
+  ipc->sod_pending = 1;
   ipc->rdwrt = 'W';
-  return 0;
-}
 
+  return ipcio_check_pending_sod (ipc);
+}
 
 /* stop reading/writing to an ipcbuf */
 int ipcio_stop_close (ipcio_t* ipc, char unlock)
@@ -158,6 +163,11 @@ int ipcio_stop_close (ipcio_t* ipc, char unlock)
 
       if (ipcbuf_mark_filled ((ipcbuf_t*)ipc, ipc->bytes) < 0) {
         fprintf (stderr, "ipcio_close:W error ipcbuf_mark_filled\n");
+        return -1;
+      }
+
+      if (ipcio_check_pending_sod (ipc) < 0) {
+        fprintf (stderr, "ipcio_close:W error ipcio_check_pending_sod\n");
         return -1;
       }
 
@@ -272,7 +282,12 @@ ssize_t ipcio_write (ipcio_t* ipc, char* ptr, size_t bytes)
 	
 	/* the buffer has been filled */
 	if (ipcbuf_mark_filled ((ipcbuf_t*)ipc, ipc->bytes) < 0) {
-	  fprintf (stderr, "ipcio_write: ipcbuf_mark_filled\n");
+	  fprintf (stderr, "ipcio_write: error ipcbuf_mark_filled\n");
+	  return -1;
+	}
+
+	if (ipcio_check_pending_sod (ipc) < 0) {
+	  fprintf (stderr, "ipcio_write: error ipcio_check_pending_sod\n");
 	  return -1;
 	}
 
