@@ -6,7 +6,7 @@
 #include <string.h>
 #include <assert.h>
 
-// #define _DEBUG 1
+/* #define _DEBUG 1 */
 
 /*! Initialize a new dada_node_t struct with default empty values */
 void dada_pwc_node_init (dada_pwc_node_t* node)
@@ -29,8 +29,9 @@ node_t* dada_pwc_node_create ()
 }
 
 /*! Pointer to function that initializes a new connection with a node */
-int dada_pwc_nexus_node_init (node_t* node)
+int dada_pwc_nexus_node_init (nexus_t* nexus, node_t* node)
 {
+  dada_pwc_nexus_t* dada_pwc_nexus = (dada_pwc_nexus_t*) nexus;
   dada_pwc_node_t* dada_pwc_node = (dada_pwc_node_t*) node;
 
   unsigned buffer_size = 1024;
@@ -76,7 +77,8 @@ int dada_pwc_nexus_node_init (node_t* node)
   key = strtok (buffer, " \t\n\r");
 
   dada_pwc_node->state = dada_pwc_string_to_state (key);
-  return 0;
+
+  return dada_pwc_nexus_update_state (dada_pwc_nexus);
 }
 
 /*! load lines from param_file, then take only first word from each line */
@@ -146,7 +148,11 @@ int dada_pwc_nexus_update_state (dada_pwc_nexus_t* nexus)
   unsigned inode = 0;
   unsigned nnode = 0;
 
+  /* fprintf (stderr, "dada_pwc_nexus_update_state: locking mutex\n"); */
+
   pthread_mutex_lock (&(base->mutex));
+
+  /* fprintf (stderr, "dada_pwc_nexus_update_state: mutex locked\n"); */
 
   nnode = base->nnode;
 
@@ -243,29 +249,30 @@ void dada_pwc_nexus_init (dada_pwc_nexus_t* nexus)
   nexus_base->node_prefix = strdup ("PWC");
   assert (nexus_base->node_prefix != 0);
 
+  /* over-ride the nexus base class methods with dada_pwc_nexus methods */
   nexus_base->node_port = DADA_DEFAULT_PWC_PORT;
   nexus_base->node_create = &dada_pwc_node_create;
   nexus_base->node_init   = &dada_pwc_nexus_node_init;
   nexus_base->nexus_parse = &dada_pwc_nexus_parse;
-  nexus_base->mirror = nexus_create ();
 
+  /* set up a mirror nexus for monitoring the PWC multilog messages */
+  nexus_base->mirror = nexus_create ();
   nexus_base->mirror->node_port = DADA_DEFAULT_PWC_LOG;
+
+  /* set up the monitor of the mirror nexus */
+  nexus->monitor = monitor_create ();
+  nexus->monitor->nexus = nexus_base->mirror;
+  nexus->monitor->handle_message = &dada_pwc_nexus_handle_message;
+  nexus->monitor->context = nexus;
 
 #ifdef _DEBUG
   fprintf (stderr, "dada_pwc_nexus_init dada_pwc_create\n");
 #endif
 
-  
   nexus->pwc = dada_pwc_create ();
 
   /* do not convert times and sample counts into bytes */
-  nexus->pwc->convert_to_bytes = 0;
-
-  /* set up the monitor of the mirror */
-  nexus->monitor = monitor_create ();
-  nexus->monitor->nexus = nexus_base->mirror;
-  nexus->monitor->handle_message = &dada_pwc_nexus_handle_message;
-  nexus->monitor->context = nexus;
+  // nexus->pwc->convert_to_bytes = 0;
 
   /* convert time_t to local time strings */
   nexus->convert_to_tm = localtime;
