@@ -31,6 +31,11 @@ node_t* node_create ()
 
 void nexus_init (nexus_t* nexus)
 {
+  pthread_mutexattr_t attr;
+  pthread_mutexattr_init (&attr);
+  pthread_mutexattr_settype (&attr, PTHREAD_MUTEX_RECURSIVE_NP);
+  pthread_mutex_init(&(nexus->mutex), &attr);
+
   /* no nodes */
   nexus -> nodes = 0;
   nexus -> nnode = 0;
@@ -61,7 +66,6 @@ void nexus_init (nexus_t* nexus)
   /* no mirror by default */
   nexus -> mirror = 0;
 
-  pthread_mutex_init(&(nexus->mutex), NULL);
 }
 
 /*! Create a new nexus */
@@ -271,7 +275,7 @@ void* node_open_thread (void* context)
       node->from = from;
       to = from = 0;
       if (nexus->node_init)
-	nexus->node_init (node);
+	nexus->node_init (nexus, node);
       break;
     }
   }
