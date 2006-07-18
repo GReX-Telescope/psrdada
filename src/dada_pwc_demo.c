@@ -128,6 +128,8 @@ int main (int argc, char** argv)
     return -1;
   }
 
+  fprintf (stderr, "Entering main loop\n");
+
   if (dada_pwc_main (pwcm) < 0) {
     fprintf (stderr, "dada_pwc_demo: error in main loop\n");
     return -1;

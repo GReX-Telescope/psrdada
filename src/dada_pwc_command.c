@@ -7,7 +7,7 @@
 void usage()
 {
   fprintf (stdout,
-	   "dada_nexus [options]\n"
+	   "dada_pwc_command [options]\n"
 	   " -d         run as daemon\n"
 	   " -p         port to listen\n"
 	   " -v         verbose messages\n");
