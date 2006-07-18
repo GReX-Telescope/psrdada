@@ -76,7 +76,7 @@ extern "C" {
     int (*nexus_parse) (struct nexus_struct* n, const char* buffer);
 
     /*! Pointer to function that initializes a new connection with a node */
-    int (*node_init) (node_t*);
+    int (*node_init) (struct nexus_struct*, node_t*);
 
     /*! If specified, make a mirror of this nexus */
     struct nexus_struct* mirror;
