@@ -132,9 +132,9 @@ flagging can be done only before the start of the observation.)
 Write Client software will read data from a device and write it to
 the Data Block.
 
-\subsection{DMA Client: {\tt dma2db}}
+\subsection{DMA Client: {\tt dmadb}}
 
-The DMA Client software, {\tt dma2db}, is responsible for transferring
+The DMA Client software, {\tt dmadb}, is responsible for transferring
 data from the telescope to the Data Block.  It will talk directly to
 the PiC through its PCI interface, start and stop the data transfer,
 and record the UTC start time of the observation.  Data from the PiC
@@ -160,16 +160,16 @@ no data overflow occurs.
 
 \noindent
 The DMA buffers will be separate from the Data Block buffers and
-accessed only by the DMA card driver and {\tt dma2db}.  Once started,
+accessed only by the DMA card driver and {\tt dmadb}.  Once started,
 DMA transfer will continue uninterrupted until a stop flag is raised
 or an overflow occurs.
 
-\subsection{Network Interface Client: {\tt nic2db}}
+\subsection{Network Interface Client: {\tt nicdb}}
 
 The software for network I/O will run on both Primary and Secondary
 nodes.  The Data Flow Control software running on the Secondary nodes,
-{\tt nic2db}, will open a port and listen for incoming Data Flow
-Control connections from {\tt db2nic}, which will run on the Primary
+{\tt nicdb}, will open a port and listen for incoming Data Flow
+Control connections from {\tt dbnic}, which will run on the Primary
 nodes.  A single incoming channel will be connected and used to
 establish a high-bandwidth data communication channel between a single
 Primary node and a single Secondary node.  The protocol for the
@@ -181,7 +181,7 @@ data will be preceded by a copy of the Data Block header from the
 Primary node.  This header will be copied to the Secondary node Data
 Block.
 
-The {\tt nic2db} software has the responsibility to monitor the Data
+The {\tt nicdb} software has the responsibility to monitor the Data
 Block and ensure that there is sufficient space to hold incoming data
 packets.  It will send a message to the Primary node if there is
 insufficient space, and the Primary node will cease data transfer,
@@ -193,7 +193,7 @@ ring.
 Read Client software will read data from the Data Block and write it
 to a device.
 
-\subsection{Data Storage Client: {\tt db2disk}}
+\subsection{Data Storage Client: {\tt dbdisk}}
 
 Writes data blocks to disk, breaking up data into files of arbitrary
 length.  Each file will be preceded by the header block from the Data
@@ -210,7 +210,7 @@ be added to an ASCII text log file; each entry will describe:
 This log file will be polled by the Configuration and Scheduling
 software, which will add the information to a centralized database.
 
-\subsection{Network Interface Client: {\tt db2nic}}
+\subsection{Network Interface Client: {\tt dbnic}}
 
 This software runs on the Primary nodes; it reads from the Data Block
 and writes to one or more Secondary nodes, breaking up data into

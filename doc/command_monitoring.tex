@@ -18,12 +18,12 @@ and runs automatically from that point onward.  Apart from
 configuration, the behaviour of these automatic processes will depend
 completely upon the state of the Data Block.
 
-Two Read Client programs that can run in this manner are {\tt db2disk}
-and {\tt db2nic}.  These automatic processes need only start reading
+Two Read Client programs that can run in this manner are {\tt dbdisk}
+and {\tt dbnic}.  These automatic processes need only start reading
 from the Data Block when it is active, as determined by the behaviour
 of the Write Client.  They start when the header is initialized and
 stop when the end of data flag is raised.
-Also, the {\tt nic2db} Write Client can be run as an automatic process
+Also, the {\tt nicdb} Write Client can be run as an automatic process
 that starts when it receives packets from the Primary Node and ends
 when the end of data message is received.
 If it is shown that the operation of these Data Clients may have to
@@ -57,13 +57,13 @@ additional information, and ending with the command prompt.
 
 \subsubsection{DMA Data Client}
 
-The {\tt dma2db} processes running on each of the primary nodes
+The {\tt dmadb} processes running on each of the primary nodes
 require careful synchronization with the Control Interface software,
 especially if they are all to be started on the same UTC second.  For
 this reason, it will not suffice to remotely start the processes at
 the desired beginning of each observation.  The processes must be
 persistent and must maintain socket communications with the Control
-Interface.  The Command Interface to {\tt dma2db} is described in
+Interface.  The Command Interface to {\tt dmadb} is described in
 Section~\ref{sec:pwc}.
 
 \section{Monitoring}
@@ -74,11 +74,11 @@ traffic, etc.  At the time of this writing, it is not clear if
 standard cluster monitoring tools like Ganglia will suffice.  For
 example, it may prove useful to have a regular update of which
 Secondary nodes are currently receiving data.  This information would
-have to come from {\tt db2nic}, possibly via a socket connection to
+have to come from {\tt dbnic}, possibly via a socket connection to
 this process.
 
 In addition to live monitoring, it may also prove useful to maintain a
 database of relevant statistics, such as the average time required to
 write a block of data to file or over the network.  These monitoring
-tasks would be performed by the relevant process, {\tt db2disk} and/or
-{\tt db2nic} and communicated to a central database via some protocol.
+tasks would be performed by the relevant process, {\tt dbdisk} and/or
+{\tt dbnic} and communicated to a central database via some protocol.

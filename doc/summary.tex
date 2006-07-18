@@ -9,25 +9,25 @@ its basic functionality, and the machine on which it will run.
 
 Name & \multicolumn{1}{c}{Function} & Machine \\ \hline
 
-{\tt dma2db} & Transfers data from EDT buffers to the Data Block.
+{\tt dmadb} & Transfers data from EDT buffers to the Data Block.
 	& Primary \\
 
-{\tt db2disk} & Reads data from the Data Block and writes it, with
+{\tt dbdisk} & Reads data from the Data Block and writes it, with
 	header information, to disk. & Both \\
 
-{\tt db2nic} & Reads data from the Data Block and sends it, with
+{\tt dbnic} & Reads data from the Data Block and sends it, with
 	header information, to a Secondary node. & Primary \\
 
-{\tt nic2db} & Receives data from Primary node and writes it to the 
+{\tt nicdb} & Receives data from Primary node and writes it to the 
 	Data Block. & Secondary \\
 
 {\tt dspsr} & Attaches to the Data Block and processes raw data
 	according to specification, writing results to disk. &
 	Secondary \\
 
-{\tt puma2} & Connects to the Command and Control interface of the
-	various Primary nodes.  Accepts and maintains external
-	text-based control connection.  & fixed \\
+{\tt pwc_command} & Connects to the Command and Control interface of
+	the various Primary Write Clients.  Accepts a text-based
+	control connection.  & fixed \\
 
 {\tt puma2tms} & Translates TMS control structure packets into
 	text-based commands as accepted by {\tt puma2} control

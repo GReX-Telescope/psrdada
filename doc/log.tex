@@ -57,7 +57,7 @@ for the standard C {\tt syslog} utility.
 [...]
 
   /* open a connection to syslogd using the standard C facility */
-  openlog ("dada_db2disk", LOG_CONS, LOG_USER);
+  openlog ("dada_dbdisk", LOG_CONS, LOG_USER);
 
   /* open a multilog session that will use syslog */
   multilog_t* log = multilog_open (1);
