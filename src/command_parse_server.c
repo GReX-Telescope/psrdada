@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <errno.h>
 
 // #define _DEBUG 1
 
@@ -149,6 +150,14 @@ static void* command_parse_server (void * arg)
 #endif
 
   listen_fd = sock_create (&port);
+
+  if (listen_fd < 0 && errno == EADDRINUSE) {
+    port = 0;
+    listen_fd = sock_create (&port);
+    if (listen_fd > -1)
+      fprintf (stderr, "command_parse_server: port=%d\n", port);
+  }
+
   if (listen_fd < 0)  {
     perror ("command_parse_server: Error creating socket");
     return 0;
