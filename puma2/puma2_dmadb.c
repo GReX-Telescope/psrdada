@@ -43,6 +43,7 @@ int pic_edt_init(dmadb_t* dmadb)
   }    
 
   /* disarm pic as a precautionary measure */
+ 
   if ( (pic_configure(&dmadb->pic, DISARM)) < 0 ){
     fprintf(stderr,"Cannot disarm PiC\n");
     return -1;
@@ -108,9 +109,18 @@ time_t arm_pic(dada_pwc_main_t* pwcm, time_t start_utc)
 
  /* flush stale buffers in the EDT card */
   edt_flush_fifo(dmadb->edt_p) ;     
+ 
+  /* reset EDT kernel buffers */
+  if ( edt_reset_ring_buffers(dmadb->edt_p, 0) == -1) 
+    fprintf(stderr,"error resetting ring buffers");
   
+  usleep(50000);
+
   /* setup EDT to do continuous transfers from now on */
-  edt_start_buffers(dmadb->edt_p, 0) ; 
+  if ( edt_start_buffers(dmadb->edt_p, 0) == -1){
+    fprintf(stderr,"error starting ring buffers") ; 
+    return EXIT_FAILURE;
+  }
 
   /*PiC is arm'ed now. When the next 10-Sec pulse arrives */
   /*EDT will receive both clock and enable data*/
@@ -322,9 +332,11 @@ int main (int argc, char **argv)
       be_a_daemon ();
       multilog_serve (pwcm->log, DADA_DEFAULT_PWC_LOG);
     }
-    else
-      multilog_add (pwcm->log, stderr);
-  
+    else{
+      //multilog_add (pwcm->log, stderr);
+      multilog_serve (pwcm->log, DADA_DEFAULT_PWC_LOG);
+    }
+
     /* Initializing PiC/EDT cards*/
 
     if (verbose) fprintf(stderr,"Going to initialize PiC/EDT...");
@@ -332,15 +344,17 @@ int main (int argc, char **argv)
       fprintf(stderr,"Cannot initialize EDT/PiC\n");
       return EXIT_FAILURE;
     }
-    if (verbose) fprintf(stderr,"done");
+    if (verbose) fprintf(stderr,"pic/edt init done\n");
     
    
     /* create the header/data blocks */
     
     hdu = dada_hdu_create (pwcm->log);
-    
+
     if (dada_hdu_connect (hdu) < 0)
-      return EXIT_FAILURE;
+      return EXIT_FAILURE;    
+
+    /* make data buffers readable */
     
     if (dada_hdu_lock_write_spec (hdu,writemode) < 0)
       return EXIT_FAILURE;
@@ -359,7 +373,7 @@ int main (int argc, char **argv)
 	return EXIT_FAILURE;
       }
       
-      /* if header file is presented, used it. If not set command line attributes */ 
+      /* if header file is presented, use it. If not set command line attributes */ 
       if (header_file)  {
 	if (fileread (header_file, header_buf, header_size) < 0)  {
 	  multilog (pwcm->log, LOG_ERR, "Could not read header from %s\n", header_file);
@@ -435,7 +449,7 @@ int main (int argc, char **argv)
 	
 	wrCount = ipcbuf_get_write_count ((ipcbuf_t*)hdu->data_block);
 	rdCount = ipcbuf_get_read_count ((ipcbuf_t*)hdu->data_block);
-	fprintf(stderr,"%d %d %d\n",dmadb.buf,wrCount,rdCount);
+	if (verbose) fprintf(stderr,"%d %d %d\n",dmadb.buf,wrCount,rdCount);
 	
       }
       
@@ -463,12 +477,14 @@ int main (int argc, char **argv)
       
       if (verbose) fprintf (stderr, "Creating dada pwc control interface\n");
       pwcm->pwc = dada_pwc_create ();
-      
+           
+      if (verbose) fprintf (stderr, "Creating dada server\n");
       if (dada_pwc_serve (pwcm->pwc) < 0) {
 	fprintf (stderr, "puma2_dmadb: could not start server\n");
 	return -1;
       }
       
+      if (verbose) fprintf (stderr, "Getting into PWC Control\n");
       if (dada_pwc_main (pwcm) < 0) {
 	fprintf (stderr, "puma2_dmadb: error in PWC main loop\n");
 	return -1;
