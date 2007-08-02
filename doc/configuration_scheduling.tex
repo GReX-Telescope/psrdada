@@ -1,11 +1,11 @@
 \chapter{Configuration and Scheduling Software}
 
-Depending upon the objectives of the experiment, PuMa-II configuration
+Depending upon the objectives of the experiment, DADA configuration
 may change from observation to observation.
 
 \section{Instrumental Configuration}
 
-Based upon the parameters of observation, the {\tt puma2} control
+Based upon the parameters of observation, the {\tt dada} control
 program will set up various operational parameters, including:
 \begin{itemize}
 \item buffer sizes: DMA, Data Block, file and network I/O
@@ -27,7 +27,7 @@ experiment without permanently changing the default behaviour.
 
 \section{Data Reduction}
 
-The Configuration and Scheduling program, {\tt puma2skd}, will be used
+The Configuration and Scheduling program, {\tt dadaskd}, will be used
 to configure and schedule all data reduction operations.  Before the
 {\bf diskless} mode of data reduction is implemented, all data will
 exist as a file on either the Primary or Secondary nodes.  Whenever a

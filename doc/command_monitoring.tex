@@ -2,7 +2,7 @@
 
 \section{Command}
 
-Each element of the PuMa-II software must be coordinated to operate as
+Each element of the DADA software must be coordinated to operate as
 a single instrument.  Therefore, many of the processes described in
 the previous chapter will have to be synchronized and configured
 through communications channels.  Some degree of synchronization will
@@ -68,14 +68,13 @@ Section~\ref{sec:pwc}.
 
 \section{Monitoring}
 
-Monitoring processes will be run on all nodes in the PuMa-II
-instrument, reporting on remaining disk space, CPU load, network
-traffic, etc.  At the time of this writing, it is not clear if
-standard cluster monitoring tools like Ganglia will suffice.  For
-example, it may prove useful to have a regular update of which
-Secondary nodes are currently receiving data.  This information would
-have to come from {\tt dbnic}, possibly via a socket connection to
-this process.
+Monitoring processes will be run on all nodes in the instrument,
+reporting on remaining disk space, CPU load, network traffic, etc.  At
+the time of this writing, it is not clear if standard cluster
+monitoring tools like Ganglia will suffice.  For example, it may prove
+useful to have a regular report on which Secondary nodes are currently
+receiving data.  This information would have to come from {\tt dbnic},
+possibly via a socket connection to this process.
 
 In addition to live monitoring, it may also prove useful to maintain a
 database of relevant statistics, such as the average time required to

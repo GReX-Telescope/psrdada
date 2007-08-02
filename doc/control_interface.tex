@@ -1,14 +1,14 @@
 \chapter{Control Interface Software}
 
 The Control Interface software will implement the single instrument
-look and feel of PuMa-II.  A single process, {\tt puma2\_nexus}, will:
+look and feel of a DADA-based instrument.  A single process, {\tt dada\_nexus}, will:
 
 \begin{itemize}
 \item connect to the Command interface of each Primary Write Client (PWC)
 \item issue commands as necessary to each PWC
 \item collate monitoring information from all processes
 \item provide Command and Monitoring connections to outside world
-\item start and stop PuMa-II processes on any node as required
+\item start and stop DADA processes on any node as required
 \end{itemize}
 
 In addition to maintaining the required control connections with
@@ -18,25 +18,25 @@ world.  To this connection, an operator can connect to issue commands
 and check on the status of the instrument/observation.  As before,
 multiple communication channels may be connected, but only one will be
 able to send control commands.  The operator will connect using a
-textual user interface program, {\tt puma2tui}, which will present all
+textual user interface program, {\tt dadatui}, which will present all
 information from the Control Interface in an organized manner,
 possibly employing the curses terminal control library.
 
-Another process, {\tt puma2tms}, will be written to provide automated
-control of the PuMa-II instrument by the WSRT TMS.  Commands sent by
-TMS will be received by {\tt puma2tms}, converted to text commands,
-and sent to {\tt puma2} through the operator interface.
+Another process, {\tt dadatms}, will be written to provide automated
+control of the DADA instrument by the WSRT TMS.  Commands sent by
+TMS will be received by {\tt dadatms}, converted to text commands,
+and sent to {\tt dada} through the operator interface.
 
 The Control Interface software will enable complete initialization of
-the PuMa-II instrument through a single command.  That is, on any or
+the DADA instrument through a single command.  That is, on any or
 all nodes, it will be able to start and stop various processes, create
 and destroy the Data Block shared memory and semaphore resources, and
 perform whatever other tasks prove useful in the initialization and
-configuration of the PuMa-II instrument.
+configuration of the DADA instrument.
 
 \section{Data Flow configuration}
 
-The {\tt puma2\_nexus} software will distribute Data Flow configuration
+The {\tt dada\_nexus} software will distribute Data Flow configuration
 options to each Primary Write Client (PWC).  Data Flow configuration
 describes the parameters of the Data Flow Control software that may
 need to change between observations.  These currently
@@ -56,17 +56,17 @@ ASCII Header for each observation (see Chapter~\ref{ch:header}).  The
 Header Block for each PWC is unique and each data
 path may be configured independently.
 
-The {\tt puma2\_nexus} software will read all configuration parameters
+The {\tt dada\_nexus} software will read all configuration parameters
 from observation specification files.  This file will contain all
 information about the observation, including the Data Flow
 configuration configuration parameters, as described in the following
-section.  The {\tt puma2\_nexus} will parse the specification file and
+section.  The {\tt dada\_nexus} will parse the specification file and
 create a unique header for each PWC.
 
 \section{Observation Specification}
 
 Each observation must be completely specified before it may be started
-on the PuMa-II instrument.  Specifications will be created using the
+on the DADA instrument.  Specifications will be created using the
 specification tool, a graphical user interface designed to ease the
 creation, duplication, and verification of observation and data
 reduction configurations.

@@ -17,7 +17,7 @@
 
 \subsection{Workstation Cluster}
 
-The functionality of PuMa-II will be divided across multiple workstations.
+The functionality of DADA may be divided across multiple workstations.
 These are divided into two main classes:
 
 \begin{enumerate}
@@ -36,9 +36,9 @@ offline, post-recording stage or in real-time.
 
 \begin{figure}
 \centerline{\psfig{figure=layout.eps,width=3.5in,angle=0}}
-\caption [\sffamily PuMa-II Data Flow]
+\caption [\sffamily DADA Data Flow]
 {
-Schematic overview of PuMa-II data flow; note the parallelism and 
+Schematic overview of DADA data flow; note the parallelism and 
 symmetry of the operations on Primary and Secondary nodes.
 }
 \label{fig:layout}
@@ -46,7 +46,7 @@ symmetry of the operations on Primary and Secondary nodes.
 
 \subsection{Software}
 
-The major functionality of PuMa-II is divided into five categories:
+The major functionality of DADA is divided into five categories:
 
 \begin{enumerate}
 
@@ -126,14 +126,13 @@ point, and will be connected to the various communication channels
 established by the Control and Monitoring software on each of the
 Primary and Secondary nodes.  The Control Interface software should be
 run on a single designated workstation, as it will provide the means
-through which other processes may treat PuMa-II as a single
-instrument.  For example, a text or graphical user interface and/or
-automated scheduling program may connect to PuMa-II, issue commands,
-and inquire about the status of the instrument.  A textual user
-interface (TUI) will be developed to connect to the Control Interface
-and:
+through which other processes may treat the various components as a
+single instrument.  For example, a text or graphical user interface
+and/or automated scheduling program may connect, issue commands, and
+inquire about the status of the instrument.  A textual user interface
+(TUI) will be developed to connect to the Control Interface and:
 \begin{itemize}
-\item allow PuMa-II to be configured, started, and stopped;
+\item allow DADA to be configured, started, and stopped;
 
 \item display various status variables; and
 
@@ -143,5 +142,5 @@ and:
 \subsubsection{Configuration and Scheduling}
 
 Configuration and scheduling software will be make use of database
-information to configure the PuMa-II instrument and schedule data
-reduction operations, based upon the parameters of the observation.
+information to configure the instrument and schedule data reduction
+operations, based upon the parameters of the observation.

@@ -1,7 +1,7 @@
 \chapter{Summary}
 
-The following table summarizes the software that will be developed,
-its basic functionality, and the machine on which it will run.
+The following table summarizes the DADA software, its basic
+functionality, and the machine on which it will run.
 
 \vspace{5mm}
 
@@ -10,6 +10,9 @@ its basic functionality, and the machine on which it will run.
 Name & \multicolumn{1}{c}{Function} & Machine \\ \hline
 
 {\tt dmadb} & Transfers data from EDT buffers to the Data Block.
+	& Primary \\
+
+{\bf\tt udpdb} & Transfers data from UDP stream to the Data Block.
 	& Primary \\
 
 {\tt dbdisk} & Reads data from the Data Block and writes it, with
@@ -21,23 +24,23 @@ Name & \multicolumn{1}{c}{Function} & Machine \\ \hline
 {\tt nicdb} & Receives data from Primary node and writes it to the 
 	Data Block. & Secondary \\
 
-{\tt dspsr} & Attaches to the Data Block and processes raw data
+{\bf\tt dspsr} & Attaches to the Data Block and processes raw data
 	according to specification, writing results to disk. &
 	Secondary \\
 
-{\tt pwc_command} & Connects to the Command and Control interface of
+{\tt dadanexus} & Connects to the Command and Control interface of
 	the various Primary Write Clients.  Accepts a text-based
 	control connection.  & fixed \\
 
-{\tt puma2tms} & Translates TMS control structure packets into
-	text-based commands as accepted by {\tt puma2} control
+{\bf\tt dadatcs} & Translates telescope control system commands into
+	text-based commands as accepted by {\tt dada} control
 	connection. & fixed \\
 
-{\tt puma2tui} & Textual user interface connects to {\tt puma2},
+{\bf\tt dadatui} & Textual user interface connects to {\tt dada},
 	displays various quantities of interest, and controls
 	the instrument. & variable \\
 
-{\tt puma2skd} & High-level code that schedules and records
+{\bf\tt dadaskd} & High-level code that schedules and records
         data reduction operations & fixed \\
 
 \end{tabular}

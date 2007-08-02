@@ -16,36 +16,47 @@
 
 \begin{document}
 
-\title{PuMa-II Software Specification}
+\title{Distributed Acquisition and Data Analysis (DADA) Software Specification}
 
-\author{W.H.B.\ van Straten, B.W.\ Stappers, and K.\ Ramesh}
+\author{Willem van Straten}
 
 \maketitle
 \tableofcontents{}
 
 \begin{abstract}
-This document specifies the software element of the 2nd generation of
-the Dutch Pulsar Machine, PuMa-II, to be installed at the Westerbork
-Synthesis Radio Telescope, WSRT, in 2005.  PuMa-II will consist of
-eight data acquisition machines, called the \emph{Primary} nodes, and
-a processing cluster of \emph{Secondary} nodes.
 
-Each Primary Node will interface with one of the 20\, MHz, 12-bit
-sampled outputs of the WSRT tied-array beam former.  On each machine,
-a custom-designed interface card (PiC) will re-sample the data with
-8-bit resolution and write the data to computer RAM via a direct
-memory access (DMA) interface.  A large file storage facility,
-implemented as internal RAID, will be used to store data locally, and
-a high-speed interconnect will be used to send the data to Secondary
-nodes for data reduction.
+This document describes the software component of the Distributed
+Acqusisition and Data Analysis (DADA) system.  This software has been
+developed to support the recording and processing of timeseries from
+one or more digitizers using one or more computers.  The first version
+of the code was written for the 2nd generation of the
+Caltech-Parkes-Swinburne Recorder, CPSR-II, installed at the Parkes
+Observatory in 2002.  This code was updated and revised for the 2nd
+generation of the Dutch Pulsar Machine, PuMa-II, installed at the
+Westerbork Synthesis Radio Telescope (WSRT) in 2005.  The next
+revision of this code will be used to implement the
+ATNF-Parkes-Swinburne Recorder, APSR, to be installed at Parkes in
+2007.
+
+The DADA software must be run on one or more data acquisition
+machines, called the \emph{Primary} nodes, and may optionally include
+the use of a (possibly distributed) processing cluster of
+\emph{Secondary} nodes.
+
+Each Primary Node interfaces directly with the data acquisition
+hardware at the telescope; for example, via a Direct Memory Access
+(DMA) card, a PCI card, or a Network Interface Card (NIC).  From RAM,
+the Primary Node may write the data to a local file system, forward
+the data on to one or more Secondary nodes, or process the data
+directly from RAM.
 
 The communications plan and protocol used for sending the data from
-Primary to Secondary node may change over the life of the PuMa-II
-instrument.  Therefore, an adaptable and modular design philosophy has
-been employed in the data flow control software, based on the use of a
-ring buffer in shared memory.  This document contains an overview of
-the software model, including a discussion of the design decisions
-made at each level of command, control, and configuration.
+Primary to Secondary node may change over the life of an instrument.
+Therefore, an adaptable and modular design philosophy has been
+employed in the data flow control software, based on the use of a ring
+buffer in shared memory.  This document contains an overview of the
+software model, including a discussion of the design decisions made at
+each level of command, control, and configuration.
 
 \end{abstract}
 
@@ -56,6 +67,7 @@ made at each level of command, control, and configuration.
 \input{pwc}
 \input{control_interface}
 \input{configuration_scheduling}
+\input{todo}
 \input{summary}
 
 \appendix

@@ -91,13 +91,14 @@ ascii\_header\_set} has no idea about the size of the ASCII header.
 Therefore, it is up to the user to ensure that new attributes will not
 cause the length of the string to exceed that of the allocated memory.
 
-\section{PuMa-II header parameters}
+\section{DATA header parameters}
 
-The following header parameters will be included in the PuMa-II ASCII header:
+The following header parameters will be included in the DADA ASCII header:
 \begin{itemize}
 \item{\tt HEADER} name of the header
 \item{\tt HDR\_VERSION} version of the header
 \item{\tt HDR\_SIZE} size of the header in bytes
+\item{\tt INSTRUMENT} name of the instrument
 \item{\tt PRIMARY} host name of the Primary Node on which the data was acquired
 \item{\tt HOSTNAME} host name of the machine on which data were written
 \item{\tt FILE\_NAME} full path of the file to which data were written
