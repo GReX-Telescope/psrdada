@@ -1,7 +1,9 @@
 #include "dada_hdu.h"
 #include "dada_def.h"
+#include "ascii_header.h"
 
 #include <stdlib.h>
+#include <string.h>
 #include <assert.h>
 
 /*! Create a new DADA Header plus Data Unit */
@@ -13,6 +15,9 @@ dada_hdu_t* dada_hdu_create (multilog_t* log)
   hdu -> log = log;
   hdu -> data_block = 0;
   hdu -> header_block = 0;
+
+  hdu -> header = 0;
+  hdu -> header_size = 0;
 
   return hdu;
 }
@@ -216,3 +221,81 @@ int dada_hdu_unlock_write (dada_hdu_t* hdu)
   return 0;
 }
 
+int dada_hdu_open (dada_hdu_t* hdu)
+{
+  /* pointer to the status and error logging facility */
+  multilog_t* log = 0;
+
+  /* The header from the ring buffer */
+  char* header = 0;
+  uint64_t header_size = 0;
+
+  /* header size, as defined by HDR_SIZE attribute */
+  uint64_t hdr_size = 0;
+
+  assert (hdu != 0);
+
+  log = hdu->log;
+
+  while (!header_size) {
+
+    /* Wait for the next valid header sub-block */
+    header = ipcbuf_get_next_read (hdu->header_block, &header_size);
+
+    if (!header) {
+      multilog (log, LOG_ERR, "Could not get next header\n");
+      return -1;
+    }
+
+    if (!header_size) {
+
+      ipcbuf_mark_cleared (hdu->header_block);
+
+      if (ipcbuf_eod (hdu->header_block)) {
+	multilog (log, LOG_INFO, "End of data on header block\n");
+	ipcbuf_reset (hdu->header_block);
+      }
+      else {
+	multilog (log, LOG_ERR, "Empty header block\n");
+	return -1;
+      }
+
+    }
+
+  }
+
+  header_size = ipcbuf_get_bufsz (hdu->header_block);
+
+  /* Check that header is of advertised size */
+  if (ascii_header_get (header, "HDR_SIZE", "%"PRIu64, &hdr_size) != 1) {
+    multilog (log, LOG_ERR, "Header with no HDR_SIZE. Setting to %"PRIu64"\n",
+	      header_size);
+    hdr_size = header_size;
+    if (ascii_header_set (header, "HDR_SIZE", "%"PRIu64, hdr_size) < 0) {
+      multilog (log, LOG_ERR, "Error setting HDR_SIZE\n");
+      return -1;
+    }
+  }
+
+  if (hdr_size < header_size)
+    header_size = hdr_size;
+
+  else if (hdr_size > header_size) {
+    multilog (log, LOG_ERR, "HDR_SIZE=%"PRIu64
+	      " > Header Block size=%"PRIu64"\n", hdr_size, header_size);
+    multilog (log, LOG_DEBUG, "ASCII header dump\n%s", header);
+    return -1;
+  }
+
+  /* Duplicate the header */
+  if (header_size > hdu->header_size) {
+    hdu->header = realloc (hdu->header, header_size);
+    assert (hdu->header != 0);
+    hdu->header_size = header_size;
+  }
+  memcpy (hdu->header, header, header_size);
+
+  ipcbuf_mark_cleared (hdu->header_block);
+
+  return 0;
+}

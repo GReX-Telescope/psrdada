@@ -26,6 +26,12 @@ extern "C" {
     /*! The Header Block interface */
     ipcbuf_t* header_block;
 
+    /* The header */
+    char* header;
+
+    /* The size of the header */
+    uint64_t header_size;
+
   } dada_hdu_t;
 
   /*! Create a new DADA Header plus Data Unit */
@@ -54,6 +60,9 @@ extern "C" {
 
   /*! Lock DADA Header plus Data Unit designated writer */
   int dada_hdu_lock_write_spec (dada_hdu_t* hdu, char writemode);
+
+  /*! Read the next header from the struct */
+  int dada_hdu_open (dada_hdu_t* hdu);
 
 #ifdef __cplusplus
 	   }
