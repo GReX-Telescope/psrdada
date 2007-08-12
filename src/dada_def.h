@@ -33,6 +33,9 @@
 /* default port to connect to dbdisk logging interface */
 #define DADA_DEFAULT_DBDISK_LOG 56037
 
+/* default port to connect to diskdb logging interface */
+#define DADA_DEFAULT_DISKDB_LOG 56039
+
 /* default port to connect to dbnic logging interface */
 #define DADA_DEFAULT_DBNIC_LOG  56047
 
