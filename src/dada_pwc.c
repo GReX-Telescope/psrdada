@@ -2,7 +2,7 @@
 #include "dada_def.h"
 
 #include "ascii_header.h"
-#include "utc.h"
+#include "tmutil.h"
 
 #include <stdlib.h>
 #include <string.h>
