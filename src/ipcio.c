@@ -122,6 +122,7 @@ int ipcio_check_pending_sod (ipcio_t* ipc)
   }
 
   ipc->sod_pending = 0;
+  return 0;
 }
 
 /* start writing valid data to an ipcbuf */
