@@ -62,6 +62,9 @@ int multilog (multilog_t* m, int priority, const char* format, ...)
   unsigned ilog = 0;
   va_list arguments;
 
+  if (!m)
+    return -1;
+
   va_start (arguments, format);
 
   if (m->syslog)
