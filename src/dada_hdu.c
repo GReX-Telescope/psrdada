@@ -40,7 +40,6 @@ int dada_hdu_connect (dada_hdu_t* hdu)
   ipcio_t ipcio_init = IPCIO_INIT;
 
   assert (hdu != 0);
-  assert (hdu->log != 0);
 
   if (hdu->data_block) {
     fprintf (stderr, "dada_hdu_connect: already connected\n");
@@ -84,7 +83,6 @@ int dada_hdu_disconnect (dada_hdu_t* hdu)
   int status = 0;
 
   assert (hdu != 0);
-  assert (hdu->log != 0);
 
   if (!hdu->data_block) {
     fprintf (stderr, "dada_hdu_disconnect: not connected\n");
@@ -113,7 +111,6 @@ int dada_hdu_disconnect (dada_hdu_t* hdu)
 int dada_hdu_lock_read (dada_hdu_t* hdu)
 {
   assert (hdu != 0);
-  assert (hdu->log != 0);
 
   if (!hdu->data_block) {
     fprintf (stderr, "dada_hdu_disconnect: not connected\n");
@@ -137,7 +134,6 @@ int dada_hdu_lock_read (dada_hdu_t* hdu)
 int dada_hdu_unlock_read (dada_hdu_t* hdu)
 {
   assert (hdu != 0);
-  assert (hdu->log != 0);
 
   if (!hdu->data_block) {
     fprintf (stderr, "dada_hdu_disconnect: not connected\n");
@@ -167,7 +163,6 @@ int dada_hdu_lock_write (dada_hdu_t* hdu)
 int dada_hdu_lock_write_spec (dada_hdu_t* hdu, char writemode)
 {
   assert (hdu != 0);
-  assert (hdu->log != 0);
 
   if (!hdu->data_block) {
     fprintf (stderr, "dada_hdu_disconnect: not connected\n");
@@ -191,7 +186,6 @@ int dada_hdu_lock_write_spec (dada_hdu_t* hdu, char writemode)
 int dada_hdu_unlock_write (dada_hdu_t* hdu)
 {
   assert (hdu != 0);
-  assert (hdu->log != 0);
 
   if (!hdu->data_block) {
     fprintf (stderr, "dada_hdu_disconnect: not connected\n");
