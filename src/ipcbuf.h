@@ -20,11 +20,9 @@ extern "C" {
   typedef struct {
 
     key_t  semkey;     /* semaphore key */
-    key_t* shmkey;     /* shared memory keys */
 
     uint64_t nbufs;    /* the number of buffers in the ring */
     uint64_t bufsz;    /* the size of the buffers in the ring */
-    char*    count;    /* the pending xfer count in each buffer in the ring */
 
     uint64_t r_buf;    /* count of next buffer to read */
     uint64_t w_buf;    /* count of next buffer to write */
@@ -58,7 +56,9 @@ extern "C" {
     int* shmid;        /* ring buffer shared memory id */
 
     ipcsync_t* sync;   /* pointer to sync structure in shared memory */
-    char** buffer;     /* base addresses of sub-blocks in shared memory */
+    char**     buffer; /* base addresses of sub-blocks in shared memory */
+    char*      count;  /* the pending xfer count in each buffer in the ring */
+    key_t*     shmkey; /* shared memory keys */
 
     uint64_t viewbuf;  /* count of next buffer to look at (non-reader) */
 

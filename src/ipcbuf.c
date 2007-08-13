@@ -12,7 +12,7 @@
 #include <sys/sem.h>
 #include <sys/shm.h>
 
-// #define _DEBUG 1
+/* #define _DEBUG 1 */
 
 /* semaphores */
 
@@ -75,8 +75,13 @@ int ipcsync_get (ipcbuf_t* id, key_t key, uint64_t nbufs, int flag)
   if (nbufs == 0)
     nbufs = id -> sync -> nbufs;
 
-  id -> sync -> count = (char*) (id->sync + 1);
-  id -> sync -> shmkey = (key_t*) (id->sync->count + nbufs);
+  id -> count = (char*) (id->sync + 1);
+
+#ifdef _DEBUG
+  fprintf (stderr, "SYNC=%p COUNT=%p\n", id->sync, id->count);
+#endif
+
+  id -> shmkey = (key_t*) (id->count + nbufs);
   id -> state = 0;
   id -> viewbuf = 0;
 
@@ -98,7 +103,7 @@ int ipcbuf_get (ipcbuf_t* id, int flag)
 
 #ifdef _DEBUG
   fprintf (stderr, "ipcbuf_get: semkey=0x%x shmkey=0x%x\n",
-	   sync->semkey, sync->shmkey[0]);
+	   sync->semkey, id->shmkey[0]);
 #endif
 
   /* all semaphores are created in this id */
@@ -121,7 +126,7 @@ int ipcbuf_get (ipcbuf_t* id, int flag)
 
   for (ibuf=0; ibuf < sync->nbufs; ibuf++) {
 
-    id->buffer[ibuf] = ipc_alloc (sync->shmkey[ibuf], sync->bufsz, 
+    id->buffer[ibuf] = ipc_alloc (id->shmkey[ibuf], sync->bufsz, 
 				  flag, id->shmid + ibuf);
 
     if ( id->buffer[ibuf] == 0 ) {
@@ -178,8 +183,8 @@ int ipcbuf_create (ipcbuf_t* id, int key, uint64_t nbufs, uint64_t bufsz)
   id -> sync -> semkey = curkey; curkey ++;
 
   for (ibuf = 0; ibuf < nbufs; ibuf++) {
-    id -> sync -> count[ibuf] = 0;
-    id -> sync -> shmkey[ibuf] = curkey;
+    id -> count[ibuf] = 0;
+    id -> shmkey[ibuf] = curkey;
     curkey ++;
   }
 
@@ -480,10 +485,17 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
            sync->s_buf[id->xfer], sync->s_byte[id->xfer]);
 #endif
 
+#ifdef _DEBUG
+  fprintf (stderr, "ipcbuf_enable_sod: w_buf=%"PRIu64"\n", sync->w_buf);
+#endif
 
   for (new_bufs = start_buf; new_bufs < sync->w_buf; new_bufs++) {
     bufnum = new_bufs % sync->nbufs;
-    sync->count[bufnum] ++;
+    id->count[bufnum] ++;
+#ifdef _DEBUG
+  fprintf (stderr, "ipcbuf_enable_sod: count[%"PRIu64"]=%u\n",
+           bufnum, id->count[bufnum]);
+#endif
   }
 
   new_bufs = sync->w_buf - start_buf;
@@ -540,9 +552,11 @@ char* ipcbuf_get_next_write (ipcbuf_t* id)
 
   bufnum = sync->w_buf % sync->nbufs;
 
-  while (sync->count[bufnum]) {
+  while (id->count[bufnum]) {
 
 #ifdef _DEBUG
+    fprintf (stderr, "ipcbuf_get_next_write: count[%"PRIu64"]=%u\n",
+             bufnum, id->count[bufnum]);
     fprintf (stderr, "ipcbuf_get_next_write: decrement CLEAR=%d\n",
 	     semctl (id->semid, IPCBUF_CLEAR, GETVAL));
 #endif
@@ -553,7 +567,8 @@ char* ipcbuf_get_next_write (ipcbuf_t* id)
       return NULL;
     }
 
-    sync->count[bufnum] --;
+    id->count[bufnum] --;
+
   }
 
   return id->buffer[bufnum];
@@ -614,10 +629,12 @@ int ipcbuf_mark_filled (ipcbuf_t* id, uint64_t nbytes)
 
   bufnum = sync->w_buf % sync->nbufs;
 
-  sync->count[bufnum] ++;
+  id->count[bufnum] ++;
   sync->w_buf ++;
 
 #ifdef _DEBUG
+  fprintf (stderr, "ipcbuf_mark_filled: count[%"PRIu64"]=%u\n",
+           bufnum, id->count[bufnum]);
   fprintf (stderr, "ipcbuf_mark_filled: increment FULL=%d\n",
 	   semctl (id->semid, IPCBUF_FULL, GETVAL));
 #endif
@@ -830,7 +847,7 @@ int ipcbuf_reset (ipcbuf_t* id)
 
   /* otherwise, must be the designated writer */
   if (!ipcbuf_is_writer(id))  {
-    fprintf (stderr, "ipcbuf_mark_filled: invalid state=%d\n", id->state);
+    fprintf (stderr, "ipcbuf_reset: invalid state=%d\n", id->state);
     return -1;
   }
 
@@ -838,7 +855,7 @@ int ipcbuf_reset (ipcbuf_t* id)
     return 0;
 
   for (ibuf = 0; ibuf < nbufs; ibuf++) {
-    while (sync->count[ibuf]) {
+    while (id->count[ibuf]) {
 
 #ifdef _DEBUG
       fprintf (stderr, "ipcbuf_reset: decrement CLEAR=%d\n",
@@ -851,7 +868,7 @@ int ipcbuf_reset (ipcbuf_t* id)
 	return -1;
       }
 
-      sync->count[ibuf] --;
+      id->count[ibuf] --;
 
     }
   }
