@@ -17,6 +17,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+/* #define _DEBUG 1 */
+
 void usage()
 {
   fprintf (stdout,
@@ -87,9 +89,6 @@ int file_open_function (dada_client_t* client)
   /* status and error logging facility */
   multilog_t* log;
 
-  /* the header */
-  char* header = 0;
-
   /* observation id, as defined by OBS_ID attribute */
   char obs_id [DADA_OBS_ID_MAXLEN] = "";
 
@@ -107,8 +106,7 @@ int file_open_function (dada_client_t* client)
   assert (diskdb != 0);
   assert (diskdb->array != 0);
 
-  header = client->header;
-  assert (header != 0);
+  assert (client->header != 0);
 
   log = client->log;
 
@@ -134,6 +132,7 @@ int file_open_function (dada_client_t* client)
     multilog (client->log, LOG_ERR, 
 	      "read %d out of %d bytes from Header: %s\n", 
 	      ret, client->header_size, strerror(errno));
+    file_close_function (client, 0);
     return -1;
   }
 
@@ -141,17 +140,11 @@ int file_open_function (dada_client_t* client)
 fprintf (stderr, "read HEADER START\n%sHEADER END\n", client->header);
 #endif
 
-  /* Get the file size */
-  if (ascii_header_get (header, "FILE_SIZE", "%"PRIu64, &file_size) != 1) {
-    multilog (log, LOG_WARNING, "Header with no FILE_SIZE\n");
-    file_size = DADA_DEFAULT_FILESIZE;
-  }
-
   /* Get the header size */
   if (ascii_header_get (client->header, "HDR_SIZE", "%"PRIu64, &hdr_size) != 1)
   {
-    multilog (client->log, LOG_ERR, "Header with no HDR_SIZE\n");
-    return -1;
+    multilog (log, LOG_WARNING, "Header with no HDR_SIZE\n");
+    hdr_size = DADA_DEFAULT_HEADER_SIZE;
   }
 
   /* Ensure that the incoming header fits in the client header buffer */
@@ -159,6 +152,20 @@ fprintf (stderr, "read HEADER START\n%sHEADER END\n", client->header);
     multilog (client->log, LOG_ERR, "HDR_SIZE=%u > Block size=%"PRIu64"\n",
 	      hdr_size, client->header_size);
     return -1;
+  }
+
+  /* Get the file size */
+  if (ascii_header_get (client->header, "FILE_SIZE", "%"PRIu64, &file_size)!=1)
+  {
+    multilog (log, LOG_WARNING, "Header with no FILE_SIZE\n");
+
+    struct stat buf;
+    if (fstat (client->fd, &buf) < 0)  {
+      multilog (log, LOG_ERR, "Error fstat %s\n", strerror(errno));
+      return -1;
+    }
+    file_size = buf.st_size - hdr_size;
+
   }
 
   client->header_size = hdr_size;
@@ -177,6 +184,8 @@ fprintf (stderr, "read HEADER START\n%sHEADER END\n", client->header);
 #ifdef _DEBUG
   fprintf (stderr, "file_open_function returns\n");
 #endif
+
+  lseek (client->fd, 0, SEEK_SET);
 
   return 0;
 }
@@ -201,6 +210,9 @@ int main (int argc, char **argv)
   /* Flag set in verbose mode */
   char verbose = 0;
 
+  /* Flag set when one file is specified */
+  char one_file = 0;
+
   /* Quit flag */
   char quit = 0;
 
@@ -217,6 +229,7 @@ int main (int argc, char **argv)
 
     case 'f':
       strcpy (diskdb.filename, optarg);
+      one_file = 1;
       break;
 
     case 'v':
@@ -262,8 +275,13 @@ int main (int argc, char **argv)
 
   while (!quit) {
 
-    if (dada_client_write (client) < 0)
+    if (dada_client_write (client) < 0) {
       multilog (log, LOG_ERR, "Error during transfer\n");
+      return -1;
+    }
+
+    if (one_file)
+      break;
 
   }
 
@@ -275,3 +293,4 @@ int main (int argc, char **argv)
 
   return EXIT_SUCCESS;
 }
+
