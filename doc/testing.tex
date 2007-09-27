@@ -47,17 +47,76 @@ telnet localhost 56026
 or replace {\tt localhost} with the name of the machine on which the
 program is running.
 
+As described in Section ???, it is necessary to enter the 
+{\bf prepared} state before recording can begin.  This is done by issuing
+the {\bf header} command.
+
 \subsection{Primary Write Client Command, {\tt dada\_pwc\_command}}
 
 It is also possible to control one or more instance of {\tt
 dada\_pwc\_demo} using the Primary Write Client Command program, {\tt
-dada\_pwc\_command}.  By default, {\tt dada\_pwc\_command} uses the
-same port number (56026) as {\tt dada\_pwc\_demo}.  Therefore, if you
-are running both programs on the same machine, it will be necessary to
-specify a different port number for the command interface; e.g.
+dada\_pwc\_command}. 
+
+This program takes a specification file and creates a unique header
+for each primary write client.
+
+Therefore, it requires a configuration file that specifies the number
+of primary write clients, the port on which they are listening, and
+the full path to a file that lists the parameters that should be
+copied from the specification to the header block of each primary
+write client.
+
+A sample configuration file can be found in config/test_dada.cfg.
+Make a copy of this file and edit the parameters appropriately.
+
+The SPEC_PARAM_FILE parameter must list the full path to
+config/specification_to_header.txt, which should not require editing.
+
+By default, {\tt dada\_pwc\_command} uses the same port number (56026)
+as {\tt dada\_pwc\_demo}.  Therefore, if you are running both programs
+on the same machine, it will be necessary to specify a different port
+number for the command interface; e.g.
 \begin{verbatim}
 dada_pwc_command -p 20013
 \end{verbatim}
 
-The PWC command program must be configured as described in ???;
-it also requires the use of specification files to prepare for recording.
+The PWC command program must be configured using a specification file;
+an example can be found in config/test_specification.txt.  Tell
+{\tt dada\_pwc\_command} to use this file using the ``config'' command,
+giving the full path to config/test_specification.txt.
+
+\subsubsection{Example: {\tt dada\_pwc\_command}}
+
+Suppose that you want to simulate control of two primary write clients
+on two different machines, named dada01 and dada02:
+
+\begin{enumerate}
+
+\item Copy config/test_data.cfg to \$HOME/test_my.cfg
+
+\item Copy config/specification_to_header.txt to \$HOME/spec2hdr.txt
+
+\item Copy config/test_specification.txt to \$HOME/spec.cfg
+
+\item Set the environment variable, DADA_CONFIG to \$HOME/test_my.cfg
+
+\item Edit the file, setting {\tt PWC\_0} and {\tt PWC\_1} to {\tt dada01}
+	and {\tt dada02}, and SPEC_PARAM_FILE to \$HOME/spec2hdr.txt
+        [you will have to expand the shell variable \$HOME]
+
+\item run {\tt dada\_pwc\_demo} on dada01 and dada02
+
+\item On any machine with network access to dada01 and dada02, say dada,
+      run {\tt dada\_pwc\_command -p 20013}
+
+\item On any machine with network access to dada, run {telnet dada 20013}
+
+\item Enter the specification, {\tt config \$HOME/spec.cfg} and note
+      the action on dada01 and dada02, ending with {\tt STATE = prepared}
+
+\item Type {\tt start} and note the {\tt Start recording data} messages
+      on dada01 and dada02
+
+\item Type {\tt stop} and return to {\tt STATE = idle}
+
+\end {enumerate}
