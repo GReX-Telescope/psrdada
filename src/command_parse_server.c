@@ -77,7 +77,8 @@ static void* command_parser (void * arg)
   command_parse_thread_t* parser = (command_parse_thread_t*) arg;
   command_parse_server_t* server = parser->server;
 
-  char buffer [1024];
+  /* increased from 1024 to 4096 to allow for long headers */
+  char buffer [4096];
   int ret;
 
 #ifdef _DEBUG
@@ -104,7 +105,7 @@ static void* command_parser (void * arg)
     if (server->prompt)
       fprintf (parser->output, server->prompt);
 
-    if (!fgets (buffer, 1024, parser->input) || feof (parser->input))
+    if (!fgets (buffer, 4096, parser->input) || feof (parser->input))
       break;
 
     ret = command_parse_output (server->parser, buffer, parser->output);
