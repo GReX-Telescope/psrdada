@@ -452,8 +452,8 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
 
   if (start_buf < ipcbuf_get_sod_minbuf (id)) {
     fprintf (stderr,
-	     "ipcbuf_enable_sod: start_buf=%"PRIu64" <= start_min=%"PRIu64"\n",
-	     start_buf, sync->w_buf-sync->nbufs);
+	     "ipcbuf_enable_sod: start_buf=%"PRIu64" < start_min=%"PRIu64"\n",
+	     start_buf, ipcbuf_get_sod_minbuf (id));
     return -1;
   }
 
@@ -543,7 +543,7 @@ char* ipcbuf_get_next_write (ipcbuf_t* id)
   fprintf (stderr, "ipcbuf_get_next_write: WCHANGE->WRITING enable_sod\n");
 #endif
 
-    if (ipcbuf_enable_sod (id, 0, 0) < 0) {
+    if (ipcbuf_enable_sod (id, id->sync->w_buf, 0) < 0) {
       fprintf (stderr, "ipcbuf_get_next_write: ipcbuf_enable_sod error\n");
       return NULL;
     }
@@ -705,7 +705,7 @@ char ipcbuf_is_reader (ipcbuf_t* id)
 char* ipcbuf_get_next_read (ipcbuf_t* id, uint64_t* bytes)
 {
   uint64_t bufnum;
-  uint64_t start = 0;
+  uint64_t start_byte = 0;
   ipcsync_t* sync = 0;
 
   if (ipcbuf_eod (id))
@@ -736,8 +736,13 @@ char* ipcbuf_get_next_read (ipcbuf_t* id, uint64_t* bytes)
 #endif
 
       id->state = IPCBUF_READING;
+
+      /* the writer may reset the ring buffer between transfers */
+      if (sync->r_xfer == 0)
+        id->xfer = 0;
+
       sync->r_buf = sync->s_buf[id->xfer];
-      start = sync->s_byte[id->xfer];
+      start_byte = sync->s_byte[id->xfer];
 
 #ifdef _DEBUG
     fprintf (stderr, "ipcbuf_get_next_read: increment SODACK=%d\n",
@@ -773,13 +778,17 @@ char* ipcbuf_get_next_read (ipcbuf_t* id, uint64_t* bytes)
   bufnum %= sync->nbufs;
 
   if (bytes) {
-    if (sync->eod[id->xfer] && sync->r_buf == sync->e_buf[id->xfer])
-      *bytes = sync->e_byte[id->xfer] - start;
+    if (sync->eod[id->xfer] && sync->r_buf == sync->e_buf[id->xfer]) {
+#ifdef _DEBUG
+      fprintf (stderr, "ipcbuf_get_next_read xfer=%d EOD=true and r_buf=%"PRIu64" == e_buf=%"PRIu64"\n", (int)id->xfer, sync->r_buf, sync->e_buf[id->xfer]);
+#endif
+      *bytes = sync->e_byte[id->xfer] - start_byte;
+    }
     else
-      *bytes = sync->bufsz - start;
+      *bytes = sync->bufsz - start_byte;
   }
 
-  return id->buffer[bufnum] + start;
+  return id->buffer[bufnum] + start_byte;
 }
 
 
@@ -911,6 +920,10 @@ int ipcbuf_reset (ipcbuf_t* id)
   for (ix=0; ix < IPCBUF_XFERS; ix++)
     sync->eod[ix] = 1;
 
+#if 0
+
+  WvS and AJ do not understand why these would be incremented once more ...
+
 #ifdef _DEBUG
   fprintf (stderr, "ipcbuf_reset: increment SODACK=%d\n",
 	   semctl (id->semid, IPCBUF_SODACK, GETVAL));
@@ -931,6 +944,8 @@ int ipcbuf_reset (ipcbuf_t* id)
     fprintf (stderr, "ipcbuf_reset: error incrementing IPCBUF_EODACK\n");
     return -1;
   }
+
+#endif
 
   return 0;
 }
