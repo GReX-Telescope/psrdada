@@ -369,7 +369,7 @@ int dada_client_write (dada_client_t* client)
   multilog (log, LOG_INFO, "header block size = %"PRIu64"\n", header_size);
 
   while (header_size) {
-    
+  
     header = ipcbuf_get_next_write (client->header_block);
     if (!header)  {
       multilog (log, LOG_ERR, "Could not get next header block\n");
@@ -399,5 +399,6 @@ int dada_client_write (dada_client_t* client)
 
   }
 
+  //ipcbuf_reset ((ipcbuf_t*)client->data_block);
   return 0;
 }

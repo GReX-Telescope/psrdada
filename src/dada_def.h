@@ -45,6 +45,27 @@
 /* default port to connect to primary write client logging interface */
 #define DADA_DEFAULT_NICDB_LOG  56057
 
+/* default port to connect to udpdb command interface */
+#define DADA_DEFAULT_UDPDB_PORT 56058
+
+/* default port to connect to udpdb logging interface */
+#define DADA_DEFAULT_UDPDB_LOG  56059
+
+/* default port to connect to udpdb statistics interface */
+#define DADA_DEFAULT_UDPDB_STATS  56060
+
+/* default port to connect to dbull client logging interface */
+#define DADA_DEFAULT_DBNULL_LOG  56061
+
+/* default port to connect to dbtritest client logging interface */
+#define DADA_DEFAULT_DBTRITEST_LOG  56062
+
+/* default port to connect to dada_dbmonitor logging interface */
+#define DADA_DEFAULT_DBMONITOR_LOG  56063
+
+/* default port to connect to dada_dbudp logging interface */
+#define DADA_DEFAULT_DBUDP_LOG  56064
+
 /* default file size of 1 GB */
 #define DADA_DEFAULT_FILESIZE 1073741824
 
