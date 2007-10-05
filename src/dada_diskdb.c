@@ -285,8 +285,12 @@ int main (int argc, char **argv)
 
   }
 
+  /* AJ: commented out since an unlock_write will cause the header block 
+   * header block to be marked as filled, which confuses a persistent reader 
+   *
   if (dada_hdu_unlock_write (hdu) < 0)
     return EXIT_FAILURE;
+  */
 
   if (dada_hdu_disconnect (hdu) < 0)
     return EXIT_FAILURE;
