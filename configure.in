@@ -8,6 +8,18 @@ AC_CONFIG_SRCDIR([src/dada_def.h])
 AM_INIT_AUTOMAKE([subdir-objects])
 AC_DISABLE_SHARED
 
+
+AC_CANONICAL_HOST
+case $host in
+  i?86-*-linux-*) ARCH=IA32;;
+  ia64-*-linux-*) ARCH=IA64;;
+  x86_64-*-linux-*) ARCH=AMD64;;
+  *) AC_MSG_ERROR([system is not supported]);;
+esac
+AC_SUBST(ARCH)
+
+
+
 # Checks for programs.
 AC_PROG_CC
 AC_PROG_CPP
@@ -52,7 +64,8 @@ AC_CHECK_FUNCS([gethostbyname gethostname gettimeofday inet_ntoa memset select s
 
 AM_CONFIG_HEADER([config.h])
 AC_CONFIG_FILES([src/Makefile
-		puma2/Makefile])
+		puma2/Makefile
+    3rdparty/Makefile])
 
 AC_OUTPUT
 
