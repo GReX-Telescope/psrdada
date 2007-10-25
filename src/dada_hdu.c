@@ -19,7 +19,16 @@ dada_hdu_t* dada_hdu_create (multilog_t* log)
   hdu -> header = 0;
   hdu -> header_size = 0;
 
+  dada_hdu_set_key( hdu, DADA_DEFAULT_BLOCK_KEY );
   return hdu;
+}
+
+/*! Set the key of the DADA Header plus Data Unit */
+void dada_hdu_set_key (dada_hdu_t* hdu, key_t key)
+{
+  hdu -> data_block_key = key;
+  hdu -> header_block_key = key + 1;
+
 }
 
 /*! Destroy a DADA primary write client main loop */
@@ -55,7 +64,7 @@ int dada_hdu_connect (dada_hdu_t* hdu)
   *(hdu->data_block) = ipcio_init;
 
   /* connect to the shared memory */
-  if (ipcbuf_connect (hdu->header_block, DADA_HEADER_BLOCK_KEY) < 0) {
+  if (ipcbuf_connect (hdu->header_block, hdu->header_block_key) < 0) {
     multilog (hdu->log, LOG_ERR, "Failed to connect to Header Block\n");
     free (hdu->header_block);
     hdu->header_block = 0;
@@ -64,7 +73,7 @@ int dada_hdu_connect (dada_hdu_t* hdu)
     return -1;
   }
 
-  if (ipcio_connect (hdu->data_block, DADA_DATA_BLOCK_KEY) < 0) {
+  if (ipcio_connect (hdu->data_block, hdu->data_block_key) < 0) {
     multilog (hdu->log, LOG_ERR, "Failed to connect to Data Block\n");
     free (hdu->header_block);
     hdu->header_block = 0;

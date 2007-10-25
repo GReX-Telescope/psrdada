@@ -32,10 +32,19 @@ extern "C" {
     /* The size of the header */
     uint64_t header_size;
 
+    /* The Data Block key */
+    key_t data_block_key;
+
+    /* The Header Block key */
+    key_t header_block_key;
+
   } dada_hdu_t;
 
   /*! Create a new DADA Header plus Data Unit */
   dada_hdu_t* dada_hdu_create (multilog_t* log);
+
+  /*! Set the key of the DADA Header plus Data Unit */
+  void dada_hdu_set_key (dada_hdu_t* hdu, key_t key);
 
   /*! Destroy a DADA Header plus Data Unit */
   void dada_hdu_destroy (dada_hdu_t* hdu);
