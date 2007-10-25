@@ -35,9 +35,10 @@ void* ipc_alloc (key_t key, int size, int flag, int* shmid)
   buf = shmat (id, 0, flag);
 
   if (buf == (void*)-1) {
-    fprintf (stderr, "ipc_alloc: shmat (shmid=%d=shmget "
-                     "(key=%x, size=%d, flag=%x)) = %p - %s",
-                     id, key, size, flag, buf, strerror(errno));
+    fprintf (stderr,
+	     "ipc_alloc: shmat (shmid=%d) %s\n"
+	     "ipc_alloc: after shmget (key=%x, size=%d, flag=%x)\n",
+	     id, strerror(errno), key, size, flag);
     return 0;
   }
 
