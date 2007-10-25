@@ -9,14 +9,11 @@
 
    ************************************************************************ */
 
-/* key to connect to header block shared memory */
-#define DADA_HEADER_BLOCK_KEY   0xdada
-
-/* key to connect to data block shared memory */
-#define DADA_DATA_BLOCK_KEY     0xdadb
+/* base key number used to identify DATA header and data block */
+#define DADA_DEFAULT_BLOCK_KEY 0x0000dada
 
 /* default number of blocks in Data Block */
-#define DADA_DEFAULT_BLOCK_NUM  ((uint64_t) 32)
+#define DADA_DEFAULT_BLOCK_NUM  ((uint64_t) 4)
 
 /* default size of blocks in Data Block */
 #define DADA_DEFAULT_BLOCK_SIZE  ((uint64_t) sysconf (_SC_PAGE_SIZE) * 128)
