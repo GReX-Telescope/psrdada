@@ -5,7 +5,7 @@ AC_PREREQ(2.57)
 AC_INIT([DADA],[1.0],[straten@astron.nl])
 
 AC_CONFIG_SRCDIR([src/dada_def.h])
-AM_INIT_AUTOMAKE([subdir-objects])
+AM_INIT_AUTOMAKE([foreign subdir-objects])
 AC_DISABLE_SHARED
 
 
@@ -63,7 +63,8 @@ AC_FUNC_VPRINTF
 AC_CHECK_FUNCS([gethostbyname gethostname gettimeofday inet_ntoa memset select socket strchr strcspn strdup strerror strstr])
 
 AM_CONFIG_HEADER([config.h])
-AC_CONFIG_FILES([src/Makefile
+AC_CONFIG_FILES([Makefile
+		src/Makefile
 		puma2/Makefile
     3rdparty/Makefile])
 
