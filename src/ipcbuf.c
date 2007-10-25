@@ -2,6 +2,10 @@
 #include "ipcutil.h"
 #include <time.h>
 
+#include <sys/types.h>
+#include <sys/time.h>
+#include <unistd.h>
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -92,7 +96,7 @@ int ipcbuf_get (ipcbuf_t* id, int flag)
 {
   int retval = 0;
   ipcsync_t* sync = 0;
-  uint64_t ibuf = 0;
+  uint ibuf = 0;
 
   if (!id)  {
     fprintf (stderr, "ipcbuf_get: invalid ipcbuf_t*\n");
@@ -130,7 +134,8 @@ int ipcbuf_get (ipcbuf_t* id, int flag)
 				  flag, id->shmid + ibuf);
 
     if ( id->buffer[ibuf] == 0 ) {
-      perror ("ipcbuf_get: ipc_alloc");
+      fprintf (stderr, "ipcbuf_get: ipc_alloc buffer[%u] %s\n",
+	       ibuf, strerror(errno));
       retval = -1;
       break;
     }
@@ -152,9 +157,9 @@ int ipcbuf_get (ipcbuf_t* id, int flag)
 */
 
 /* start with some random key for all of the pieces */
-static int curkey = 0xc2;
+static int key_increment  = 0x00010000;
 
-int ipcbuf_create (ipcbuf_t* id, int key, uint64_t nbufs, uint64_t bufsz)
+int ipcbuf_create (ipcbuf_t* id, key_t key, uint64_t nbufs, uint64_t bufsz)
 {
   uint64_t ibuf = 0;
   int flag = IPCUTIL_PERM | IPC_CREAT | IPC_EXCL;
@@ -180,12 +185,13 @@ int ipcbuf_create (ipcbuf_t* id, int key, uint64_t nbufs, uint64_t bufsz)
     id -> sync -> eod    [ibuf] = 1;
   }
 
-  id -> sync -> semkey = curkey; curkey ++;
+  key += key_increment;
+  id -> sync -> semkey = key;
 
   for (ibuf = 0; ibuf < nbufs; ibuf++) {
     id -> count[ibuf] = 0;
-    id -> shmkey[ibuf] = curkey;
-    curkey ++;
+    key += key_increment;
+    id -> shmkey[ibuf] = key;
   }
 
   id -> sync -> r_buf = 0;
@@ -231,7 +237,7 @@ int ipcbuf_create (ipcbuf_t* id, int key, uint64_t nbufs, uint64_t bufsz)
   return 0;
 }
 
-int ipcbuf_connect (ipcbuf_t* id, int key)
+int ipcbuf_connect (ipcbuf_t* id, key_t key)
 {
   int flag = IPCUTIL_PERM;
 
@@ -980,12 +986,13 @@ int ipcbuf_hard_reset (ipcbuf_t* id)
 
 int ipcbuf_lock (ipcbuf_t* id)
 {
+#ifdef SHM_LOCK
+
   uint64_t ibuf = 0;
 
   if (id->syncid < 0 || id->shmid == 0)
     return -1;
 
-#ifdef SHM_LOCK
   if (shmctl (id->syncid, SHM_LOCK, 0) < 0) {
     perror ("ipcbuf_lock: shmctl (syncid, SHM_LOCK)");
     return -1;
@@ -997,21 +1004,26 @@ int ipcbuf_lock (ipcbuf_t* id)
       return -1;
     }
 
+  return 0;
+
 #else
-  fprintf(stderr, "Warning: ipcbuf_lock called but does nothing on this platform!\n");
+
+  fprintf(stderr, "ipcbuf_lock does nothing on this platform!\n");
+  return -1;
+
 #endif
 
-  return 0;
 }
 
 int ipcbuf_unlock (ipcbuf_t* id)
 {
+#ifdef SHM_UNLOCK
+
   uint64_t ibuf = 0;
 
   if (id->syncid < 0 || id->shmid == 0)
     return -1;
 
-#ifdef SHM_UNLOCK
   if (shmctl (id->syncid, SHM_UNLOCK, 0) < 0) {
     perror ("ipcbuf_lock: shmctl (syncid, SHM_UNLOCK)");
     return -1;
@@ -1023,11 +1035,15 @@ int ipcbuf_unlock (ipcbuf_t* id)
       return -1;
     }
 
+  return 0;
+
 #else
-  fprintf(stderr, "Warning: ipcbuf_unlock does nothing on this platform!\n");
+
+  fprintf(stderr, "ipcbuf_unlock does nothing on this platform!\n");
+  return -1;
+
 #endif
 
-  return 0;
 }
 
 
