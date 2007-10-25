@@ -128,7 +128,7 @@ int main (int argc, char** argv)
     return -1;
   }
 
-  fprintf (stderr, "Entering main loop\n");
+  fprintf (stderr, "Available on port %d\n", pwcm->pwc->port);
 
   if (dada_pwc_main (pwcm) < 0) {
     fprintf (stderr, "dada_pwc_demo: error in main loop\n");
