@@ -75,10 +75,10 @@ extern "C" {
      //////////////////////////////////////////////////////////////////// */
 
   /*! Initialize an ipcbuf_t struct, creating shm and sem */
-  int ipcbuf_create (ipcbuf_t*, int key, uint64_t nbufs, uint64_t bufsz);
+  int ipcbuf_create (ipcbuf_t*, key_t key, uint64_t nbufs, uint64_t bufsz);
 
   /*! Connect to an already created ipcsync_t struct in shm */
-  int ipcbuf_connect (ipcbuf_t*, int key);
+  int ipcbuf_connect (ipcbuf_t*, key_t key);
 
   /*! Disconnect from a previously connected ipcsync_t struct in shm */
   int ipcbuf_disconnect (ipcbuf_t*);

@@ -20,7 +20,7 @@ void ipcio_init (ipcio_t* ipc)
 }
 
 /* create a new shared memory block and initialize an ipcio_t struct */
-int ipcio_create (ipcio_t* ipc, int key, uint64_t nbufs, uint64_t bufsz)
+int ipcio_create (ipcio_t* ipc, key_t key, uint64_t nbufs, uint64_t bufsz)
 {
   if (ipcbuf_create ((ipcbuf_t*)ipc, key, nbufs, bufsz) < 0) {
     fprintf (stderr, "ipcio_create: ipcbuf_create error\n");
@@ -31,7 +31,7 @@ int ipcio_create (ipcio_t* ipc, int key, uint64_t nbufs, uint64_t bufsz)
 }
 
 /* connect to an already created ipcbuf_t struct in shared memory */
-int ipcio_connect (ipcio_t* ipc, int key)
+int ipcio_connect (ipcio_t* ipc, key_t key)
 {
   if (ipcbuf_connect ((ipcbuf_t*)ipc, key) < 0) {
     fprintf (stderr, "ipcio_connect: ipcbuf_connect error\n");

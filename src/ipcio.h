@@ -36,10 +36,10 @@ extern "C" {
   static const ipcio_t IPCIO_INIT = { IPCBUF_INIT, 0,0, 0, 0, 0, 0,0,0 };
 
   /*! create a new shared memory block and initialize an ipcio_t struct */
-  int ipcio_create (ipcio_t* ipc, int key, uint64_t nbufs, uint64_t bufsz);
+  int ipcio_create (ipcio_t* ipc, key_t key, uint64_t nbufs, uint64_t bufsz);
 
   /*! connect to an already created ipcbuf_t struct in shared memory */
-  int ipcio_connect (ipcio_t* ipc, int key);
+  int ipcio_connect (ipcio_t* ipc, key_t key);
 
   /*! disconnect from an already connected ipcio_t struct */
   int ipcio_disconnect (ipcio_t* ipc);
