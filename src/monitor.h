@@ -10,6 +10,7 @@
 
 #include "nexus.h"
 #include "multilog.h"
+#include "dada_def.h"
 
 #ifdef __cplusplus
 extern "C" {
