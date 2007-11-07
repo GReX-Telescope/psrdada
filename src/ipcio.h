@@ -77,6 +77,11 @@ extern "C" {
   /*! tell the last byte written to the ring buffer */
   uint64_t ipcio_tell (ipcio_t* ipc);
 
+  /*! tell how many bytes can be written into the ring buffer before its full */
+  int64_t ipcio_space_left (ipcio_t* ipc);
+
+  uint64_t ipcio_get_soclock_byte(ipcio_t* ipc);
+
 #ifdef __cplusplus
 	   }
 #endif
