@@ -1,6 +1,10 @@
 #ifndef __DADA_UDP_H
 #define __DADA_UDP_H
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+
 /* Maximum size of a UDP packet */
 #define UDPBUFFSIZE 16384
 
@@ -8,7 +12,7 @@
 #define UDPHEADERSIZE 14
 
 /* Size of data component of the data packet */
-#define UDPDATASIZE 1458
+#define DEFAULT_UDPDATASIZE 1458
 
 /* header struct for UDP packet from board */ 
 typedef struct {
@@ -24,6 +28,7 @@ typedef struct {
 
 void decode_header(char *buffer, header_struct *header);
 void encode_header(char *buffer, header_struct *header);
+void print_header(header_struct *header);
 
 void encode_header(char *buffer, header_struct *header) {
 
@@ -70,6 +75,15 @@ void decode_header(char *buffer, header_struct *header) {
   header->bandID[2] = buffer[12];
   header->bandID[3] = buffer[13];
                       
+}
+
+void print_header(header_struct *header) {
+  fprintf(stderr,"length = %d\n",header->length);
+  fprintf(stderr,"source = %d\n",header->source);
+  fprintf(stderr,"sequence= %d\n",header->sequence);
+  fprintf(stderr,"bits = %d\n",header->bits);
+  fprintf(stderr,"channels = %d\n",header->channels);
+  fprintf(stderr,"bands = %d\n",header->bands);
 }
 
 #endif /* UDP_H */
