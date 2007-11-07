@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+/* #define _DEBUG 1 */
+
 void usage()
 {
   fprintf (stdout,
