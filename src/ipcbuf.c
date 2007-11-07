@@ -199,9 +199,10 @@ int ipcbuf_create (ipcbuf_t* id, key_t key, uint64_t nbufs, uint64_t bufsz)
   id -> sync -> r_xfer = 0;
   id -> sync -> w_xfer = 0;
 
-  id -> buffer  = 0;
-  id -> viewbuf = 0;
-  id -> xfer    = 0;
+  id -> buffer      = 0;
+  id -> viewbuf     = 0;
+  id -> xfer        = 0;
+  id -> soclock_buf = 0;
 
   if (ipcbuf_get (id, flag) < 0) {
     fprintf (stderr, "ipcbuf_create: ipcbuf_get error\n");
@@ -425,11 +426,33 @@ uint64_t ipcbuf_get_sod_minbuf (ipcbuf_t* id)
 {
   ipcsync_t* sync = id -> sync;
 
-  if (sync->w_buf < sync->nbufs)
-    return 0;
+  /* Since we may have multiple transfers, get the sod_minimum based on
+   * the EOD of the most recent xfer plus the number of buffers written
+   * in the meantime */
+
+  uint64_t starting_buf = 0;
+
+  if (sync->w_xfer > 0) {
+    /* xfer number of previous transfer */
+    int prev_xfer = (sync->w_xfer-1) % IPCBUF_XFERS;
+    //fprintf(stderr,"ipcbuf_get_sod_minbuf: prev_xfer = %d\n",prev_xfer);
+    //starting_buf = sync->e_buf[prev_xfer] + 1;
+  }
+  //fprintf(stderr,"ipcbuf_get_sod_minbuf: w_buf = %"PRIu64" starting_buf =  %"PRIu64"\n",sync->w_buf,starting_buf);
+
+  uint64_t new_bufs_written = sync->w_buf - starting_buf;
+  //fprintf(stderr,"ipcbuf_get_sod_minbuf: new_bufs_written = %"PRIu64"\n",new_bufs_written);
+
+  if (new_bufs_written < sync->nbufs) 
+    return starting_buf;
   else
     return sync->w_buf - sync->nbufs + 1;
+    
 }
+
+  /* start buf should be the buffer to begin on, and should be aware 
+   * of previously filled bufs, filled within the same observation
+   * or from a previous observation */
 
 int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
 {
@@ -484,7 +507,11 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
 
   sync->s_buf  [id->xfer] = start_buf;
   sync->s_byte [id->xfer] = start_byte;
-  sync->eod    [id->xfer] = 0;
+  /* changed by AJ to fix a bug where a reader is still reading this xfer
+   * and the writer wants to start writing to it... */
+  if (sync->w_buf == 0) 
+    sync->eod    [id->xfer] = 0;
+   
 
 #ifdef _DEBUG
   fprintf (stderr, "ipcbuf_enable_sod: start buf=%"PRIu64" byte=%"PRIu64"\n",
@@ -495,7 +522,7 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
   fprintf (stderr, "ipcbuf_enable_sod: w_buf=%"PRIu64"\n", sync->w_buf);
 #endif
 
-  for (new_bufs = start_buf; new_bufs < sync->w_buf; new_bufs++) {
+  for (new_bufs = sync->s_buf[id->xfer]; new_bufs < sync->w_buf; new_bufs++) {
     bufnum = new_bufs % sync->nbufs;
     id->count[bufnum] ++;
 #ifdef _DEBUG
@@ -504,7 +531,7 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
 #endif
   }
 
-  new_bufs = sync->w_buf - start_buf;
+  new_bufs = sync->w_buf - sync->s_buf[id->xfer];
 
 #ifdef _DEBUG
   fprintf (stderr, "ipcbuf_enable_sod: new_bufs=%"PRIu64"\n", new_bufs);
@@ -1077,3 +1104,25 @@ uint64_t ipcbuf_get_bufsz (ipcbuf_t* id)
 {
   return id -> sync -> bufsz;
 }
+
+uint64_t ipcbuf_get_nfull (ipcbuf_t* id) 
+{
+  return semctl (id->semid, IPCBUF_FULL, GETVAL);
+}
+
+uint64_t ipcbuf_get_nclear (ipcbuf_t* id)
+{
+  return semctl (id->semid, IPCBUF_CLEAR, GETVAL);
+}
+
+/* Sets the buffer at which clocking began.  */
+uint64_t ipcbuf_set_soclock_buf (ipcbuf_t* id)
+{
+  if (id->sync->w_xfer > 0) 
+    id->soclock_buf = id->sync->e_buf[(id->sync->w_xfer - 1) % IPCBUF_XFERS] + 1;
+  else
+    id->soclock_buf = 0;
+
+  return id->soclock_buf;
+}
+
