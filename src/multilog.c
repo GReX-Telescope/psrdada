@@ -76,7 +76,11 @@ int multilog (multilog_t* m, int priority, const char* format, ...)
   fprintf (stderr, "multilog: %d logs\n", m->nlog);
 #endif
 
+  va_end(arguments);
+
   for (ilog=0; ilog < m->nlog; ilog++)  {
+    va_start(arguments, format);
+          
     if (ferror (m->logs[ilog]))  {
 #ifdef _DEBUG
       fprintf (stderr, "multilog: error on log[%d]", ilog);
@@ -89,13 +93,12 @@ int multilog (multilog_t* m, int priority, const char* format, ...)
     else {
       fprintf (m->logs[ilog], "%s: ", m->name);
       if (vfprintf (m->logs[ilog], format, arguments) < 0)
-	perror ("multilog: error vfprintf");
+        perror ("multilog: error vfprintf");
     }
+    va_end(arguments);
   }
 
   pthread_mutex_unlock (&(m->mutex));
-
-  va_end (arguments);
 
   return 0;
 }
