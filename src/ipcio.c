@@ -106,33 +106,41 @@ uint64_t ipcio_get_start_minimum (ipcio_t* ipc)
   return minbuf * bufsz;
 }
 
+
+/* Checks if a SOD request has been requested, if it has, then it enables
+ * SOD */
 int ipcio_check_pending_sod (ipcio_t* ipc)
 {
   ipcbuf_t* buf = (ipcbuf_t*) ipc;
 
-  if (ipc->sod_pending == 0)
+  /* If the SOD flag has not been raised return 0 */
+  if (ipc->sod_pending == 0) 
     return 0;
 
+  /* The the buffer we wish to raise SOD on has not yet been written, then
+   * don't raise SOD */
   if (ipcbuf_get_write_count (buf) <= ipc->sod_buf)
     return 0;
 
+  /* Try to enable start of data on the sod_buf & sod byte */
   if (ipcbuf_enable_sod (buf, ipc->sod_buf, ipc->sod_byte) < 0) {
     fprintf (stderr, "ipcio_check_pendind_sod: fail ipcbuf_enable_sod\n");
     return -1;
   }
-
+  
   ipc->sod_pending = 0;
   return 0;
 }
 
-/* start writing valid data to an ipcbuf */
+/* start writing valid data to an ipcbuf. byte is the absolute byte relative to
+ * the start of the data block */
 int ipcio_start (ipcio_t* ipc, uint64_t byte)
 {
   ipcbuf_t* buf  = (ipcbuf_t*) ipc;
   uint64_t bufsz = ipcbuf_get_bufsz (buf);
 
   if (ipc->rdwrt != 'w') {
-    fprintf (stderr, "ipcio_start: invalid ipcio_t\n");
+    fprintf (stderr, "ipcio_start: invalid ipcio_t (%c)\n",ipc->rdwrt);
     return -1;
   }
 
@@ -151,8 +159,9 @@ int ipcio_stop_close (ipcio_t* ipc, char unlock)
 
 #ifdef _DEBUG
     if (ipc->curbuf)
-      fprintf (stderr, "ipcio_close:W buffer:%"PRIu64" %"PRIu64" bytes. buf[0]=%x\n",
-	       ipc->buf.sync->w_buf, ipc->bytes, ipc->curbuf[0]);
+      fprintf (stderr, "ipcio_close:W buffer:%"PRIu64" %"PRIu64" bytes. "
+                       "buf[0]=%x\n", ipc->buf.sync->w_buf, ipc->bytes, 
+                       ipc->curbuf[0]);
 #endif
 
     if (ipcbuf_is_writing((ipcbuf_t*)ipc)) {
@@ -173,7 +182,7 @@ int ipcio_stop_close (ipcio_t* ipc, char unlock)
       }
 
       /* Ensure that mark_filled is not called again for this buffer
-	 in ipcio_write */
+         in ipcio_write */
       ipc->marked_filled = 1;
 
       if (ipc->bytes == ipcbuf_get_bufsz((ipcbuf_t*)ipc)) {
@@ -194,6 +203,9 @@ int ipcio_stop_close (ipcio_t* ipc, char unlock)
 
   if (ipc -> rdwrt == 'w') {
 
+    /* Removed to allow a writer to write more than one transfer to the 
+     * data block */
+    /*
 #ifdef _DEBUG
     fprintf (stderr, "ipcio_close:W calling ipcbuf_reset\n");
 #endif
@@ -201,6 +213,17 @@ int ipcio_stop_close (ipcio_t* ipc, char unlock)
     if (ipcbuf_reset ((ipcbuf_t*)ipc) < 0) {
       fprintf (stderr, "ipcio_close:W error ipcbuf_reset\n");
       return -1;
+    }*/
+
+    if (ipc->buf.sync->w_xfer > 0) {
+
+      uint64_t prev_xfer = ipc->buf.sync->w_xfer - 1;
+      /* Ensure the w_buf pointer is pointing buffer after the 
+       * most recent EOD */
+      ipc->buf.sync->w_buf = ipc->buf.sync->e_buf[prev_xfer % IPCBUF_XFERS]+1;
+
+      // TODO CHECK IF WE NEED TO DECREMENT the count??
+      
     }
 
     if (ipcbuf_unlock_write ((ipcbuf_t*)ipc) < 0) {
@@ -255,6 +278,7 @@ int ipcio_is_open (ipcio_t* ipc)
 /* write bytes to ipcbuf */
 ssize_t ipcio_write (ipcio_t* ipc, char* ptr, size_t bytes)
 {
+
   size_t space = 0;
   size_t towrite = bytes;
 
@@ -273,24 +297,23 @@ ssize_t ipcio_write (ipcio_t* ipc, char* ptr, size_t bytes)
     */
     if (ipc->bytes == ipcbuf_get_bufsz((ipcbuf_t*)ipc)) {
 
-
       if (!ipc->marked_filled) {
 
 #ifdef _DEBUG
-	fprintf (stderr, "ipcio_write buffer:%"PRIu64" mark_filled\n",
-		 ipc->buf.sync->w_buf);
+        fprintf (stderr, "ipcio_write buffer:%"PRIu64" mark_filled\n",
+                 ipc->buf.sync->w_buf);
 #endif
-	
-	/* the buffer has been filled */
-	if (ipcbuf_mark_filled ((ipcbuf_t*)ipc, ipc->bytes) < 0) {
-	  fprintf (stderr, "ipcio_write: error ipcbuf_mark_filled\n");
-	  return -1;
-	}
+        
+        /* the buffer has been filled */
+        if (ipcbuf_mark_filled ((ipcbuf_t*)ipc, ipc->bytes) < 0) {
+          fprintf (stderr, "ipcio_write: error ipcbuf_mark_filled\n");
+          return -1;
+        }
 
-	if (ipcio_check_pending_sod (ipc) < 0) {
-	  fprintf (stderr, "ipcio_write: error ipcio_check_pending_sod\n");
-	  return -1;
-	}
+        if (ipcio_check_pending_sod (ipc) < 0) {
+          fprintf (stderr, "ipcio_write: error ipcio_check_pending_sod\n");
+          return -1;
+        }
 
       }
 
@@ -304,14 +327,14 @@ ssize_t ipcio_write (ipcio_t* ipc, char* ptr, size_t bytes)
 
 #ifdef _DEBUG
       fprintf (stderr, "ipcio_write buffer:%"PRIu64" ipcbuf_get_next_write\n",
-	       ipc->buf.sync->w_buf);
+               ipc->buf.sync->w_buf);
 #endif
 
       ipc->curbuf = ipcbuf_get_next_write ((ipcbuf_t*)ipc);
 
       if (!ipc->curbuf) {
-	fprintf (stderr, "ipcio_write: ipcbuf_next_write\n");
-	return -1;
+        fprintf (stderr, "ipcio_write: ipcbuf_next_write\n");
+        return -1;
       }
 
       ipc->marked_filled = 0;
@@ -326,7 +349,7 @@ ssize_t ipcio_write (ipcio_t* ipc, char* ptr, size_t bytes)
 
 #ifdef _DEBUG
       fprintf (stderr, "ipcio_write buffer:%"PRIu64" offset:%"PRIu64
-	       " count=%u\n", ipc->buf.sync->w_buf, ipc->bytes, space);
+               " count=%u\n", ipc->buf.sync->w_buf, ipc->bytes, space);
 #endif
 
       memcpy (ipc->curbuf + ipc->bytes, ptr, space);
@@ -360,12 +383,12 @@ ssize_t ipcio_read (ipcio_t* ipc, char* ptr, size_t bytes)
 
 #ifdef _DEBUG
       fprintf (stderr, "ipcio_read buffer:%"PRIu64" %"PRIu64" bytes. buf[0]=%x\n",
-	       ipc->buf.sync->r_buf, ipc->curbufsz, ipc->curbuf[0]);
+               ipc->buf.sync->r_buf, ipc->curbufsz, ipc->curbuf[0]);
 #endif
 
       if (!ipc->curbuf) {
-	fprintf (stderr, "ipcio_read: error ipcbuf_next_read\n");
-	return -1;
+        fprintf (stderr, "ipcio_read: error ipcbuf_next_read\n");
+        return -1;
       }
 
       ipc->bytes = 0;
@@ -389,8 +412,8 @@ ssize_t ipcio_read (ipcio_t* ipc, char* ptr, size_t bytes)
     if (ipc->bytes == ipc->curbufsz) {
 
       if (ipc -> rdwrt == 'R' && ipcbuf_mark_cleared ((ipcbuf_t*)ipc) < 0) {
-	fprintf (stderr, "ipcio_write: error ipcbuf_mark_filled\n");
-	return -1;
+        fprintf (stderr, "ipcio_write: error ipcbuf_mark_filled\n");
+        return -1;
       }
 
       ipc->curbuf = 0;
@@ -446,7 +469,7 @@ int64_t ipcio_seek (ipcio_t* ipc, int64_t offset, int whence)
     abs_offset = (uint64_t) -offset;
     if (abs_offset > ipc->bytes) {
       fprintf (stderr, "ipcio_seek: %"PRIu64" > max backwards %"PRIu64"\n",
-	       abs_offset, ipc->bytes);
+               abs_offset, ipc->bytes);
       return -1;
     }
     ipc->bytes -= abs_offset;
@@ -458,25 +481,25 @@ int64_t ipcio_seek (ipcio_t* ipc, int64_t offset, int whence)
     while (offset && ! (ipcbuf_eod((ipcbuf_t*)ipc) && eobuf)) {
 
       if (!ipc->curbuf || eobuf) {
-	ipc->curbuf = ipcbuf_get_next_read ((ipcbuf_t*)ipc, &(ipc->curbufsz));
-	if (!ipc->curbuf) {
-	  fprintf (stderr, "ipcio_seek: error ipcbuf_next_read\n");
-	  return -1;
-	}
-	ipc->bytes = 0;
-	eobuf = 0;
+        ipc->curbuf = ipcbuf_get_next_read ((ipcbuf_t*)ipc, &(ipc->curbufsz));
+        if (!ipc->curbuf) {
+          fprintf (stderr, "ipcio_seek: error ipcbuf_next_read\n");
+          return -1;
+        }
+        ipc->bytes = 0;
+        eobuf = 0;
       }
 
       space = ipc->curbufsz - ipc->bytes;
       if (space > offset)
-	space = offset;
+        space = offset;
 
       if (space > 0) {
-	ipc->bytes += space;
-	offset -= space;
+        ipc->bytes += space;
+        offset -= space;
       }
       else
-	eobuf = 1;
+        eobuf = 1;
     }
 
   }
@@ -487,5 +510,28 @@ int64_t ipcio_seek (ipcio_t* ipc, int64_t offset, int whence)
     nbuf -= 1;
 
   return bufsz * nbuf + ipc->bytes;
+}
+
+/* Returns the number of bytes available in the ring buffer */
+int64_t ipcio_space_left(ipcio_t* ipc) {
+
+  uint64_t bufsz = ipcbuf_get_bufsz ((ipcbuf_t *)ipc);
+  uint64_t nbufs = ipcbuf_get_nbufs ((ipcbuf_t *)ipc);
+  uint64_t full_bufs = ipcbuf_get_nfull((ipcbuf_t*) ipc);
+  uint64_t clear_bufs = ipcbuf_get_nclear((ipcbuf_t*) ipc);
+  int64_t available_bufs = (nbufs - full_bufs);
+/*
+#ifdef _DEBUG
+  fprintf(stderr,"full_bufs = %"PRIu64", clear_bufs = %"PRIu64", available_bufs = %"PRIu64", sum = %"PRIu64"\n",full_bufs, clear_bufs, available_bufs, available_bufs * bufsz);
+#endif
+*/
+  return available_bufs * bufsz;
+
+}
+
+/* Returns the byte corresponding the start of data clocking/recording */
+uint64_t ipcio_get_soclock_byte(ipcio_t* ipc) {
+  uint64_t bufsz = ipcbuf_get_bufsz ((ipcbuf_t *)ipc);
+  return bufsz * ((ipcbuf_t*)ipc)->soclock_buf;
 }
 
