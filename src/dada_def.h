@@ -51,9 +51,6 @@
 /* default port to connect to dada_dbmonitor logging interface */
 #define DADA_DEFAULT_DBMONITOR_LOG  56063
 
-/* default port to connect to dada_dbudp logging interface */
-#define DADA_DEFAULT_DBUDP_LOG  56064
-
 /* default file size of 1 GB */
 #define DADA_DEFAULT_FILESIZE 1073741824
 
