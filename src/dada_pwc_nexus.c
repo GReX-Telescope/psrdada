@@ -131,7 +131,7 @@ int dada_pwc_nexus_parse (nexus_t* n, const char* config)
   else {
     /* load specification parameters from the specified file */
     fprintf (stderr, "dada_pwc_nexus_parse: loading specification parameters\n"
-	     "from %s\n", param_file);
+             "from %s\n", param_file);
     status = dada_pwc_nexus_parse_params (nexus->config_params, param_file);
   }
 
@@ -147,6 +147,9 @@ int dada_pwc_nexus_update_state (dada_pwc_nexus_t* nexus)
 
   unsigned inode = 0;
   unsigned nnode = 0;
+  unsigned nsoft_err = 0;
+  unsigned nhard_err = 0;
+  unsigned nfatal_err = 0;
 
   /* fprintf (stderr, "dada_pwc_nexus_update_state: locking mutex\n"); */
 
@@ -156,14 +159,40 @@ int dada_pwc_nexus_update_state (dada_pwc_nexus_t* nexus)
 
   nnode = base->nnode;
 
+  /* the nexus will always be in the same state as its PWC's. The only
+   * exception to this is if nodes are in an error state. */
+  
   for (inode = 0; inode < nnode; inode++) {
     node = base->nodes[inode];
-    if (inode == 0)
+
+    if (node->state == dada_pwc_soft_error)
+      nsoft_err++;
+    else if (node->state == dada_pwc_hard_error)
+      nhard_err++;
+    else if (node->state == dada_pwc_fatal_error)
+      nfatal_err++;
+    else if (inode == (nsoft_err+nhard_err+nfatal_err)) {
+      /* set state of the first non error node */
+      state = node->state;
+    } else if (state != node->state) {
+      state = dada_pwc_undefined;
+      break;
+    }
+
+    /*if (inode == 0)
       state = node->state;
     else if (state != node->state) {
       state = dada_pwc_undefined;
       break;
-    }
+    }*/
+  }
+
+  /* If we don't have any clients that are non erroneous */
+  if ((nsoft_err+nhard_err+nfatal_err) == nnode) {
+    /* set state to the strongest error */
+    if (nsoft_err) state = dada_pwc_soft_error;
+    if (nhard_err) state = dada_pwc_hard_error;
+    if (nfatal_err) state = dada_pwc_fatal_error;
   }
 
   pthread_mutex_unlock (&(base->mutex));
@@ -204,7 +233,7 @@ int dada_pwc_nexus_cmd_state (void* context, FILE* fptr, char* args)
   unsigned nnode = 0;
 
   fprintf (fptr, "overall: %s\n", 
-	   dada_pwc_state_to_string( nexus->pwc->state ));
+           dada_pwc_state_to_string( nexus->pwc->state ));
 
   pthread_mutex_lock (&(base->mutex));
 
@@ -213,7 +242,7 @@ int dada_pwc_nexus_cmd_state (void* context, FILE* fptr, char* args)
   for (inode = 0; inode < nnode; inode++) {
     node = base->nodes[inode];
     fprintf (fptr, "PWC_%d: %s\n", inode,
-	     dada_pwc_state_to_string( node->state ));
+             dada_pwc_state_to_string( node->state ));
   }
 
   pthread_mutex_unlock (&(base->mutex));
@@ -288,17 +317,17 @@ void dada_pwc_nexus_init (dada_pwc_nexus_t* nexus)
   /* replace the header command with the config command */
   command_parse_remove (nexus->pwc->parser, "header");
   command_parse_add (nexus->pwc->parser, dada_pwc_nexus_cmd_config, nexus,
-		     "config", "configure all nodes", NULL);
+                     "config", "configure all nodes", NULL);
 
   /* replace the state command */
   command_parse_remove (nexus->pwc->parser, "state");
   command_parse_add (nexus->pwc->parser, dada_pwc_nexus_cmd_state, nexus,
-		     "state", "get the current state of all nodes", NULL);
+                     "state", "get the current state of all nodes", NULL);
 
   /* replace the duration command */
   command_parse_remove (nexus->pwc->parser, "duration");
   command_parse_add (nexus->pwc->parser, dada_pwc_nexus_cmd_duration, nexus,
-		     "duration", "set the duration of next recording", NULL);
+                     "duration", "set the duration of next recording", NULL);
 }
 
 /*! Create a new DADA nexus */
@@ -346,7 +375,7 @@ int dada_pwc_nexus_send (dada_pwc_nexus_t* nexus, dada_pwc_command_t command)
       return -1;
 
     strftime (buffer, buffer_size, "rec_start " DADA_TIMESTR,
-	      nexus->convert_to_tm (&command.utc));
+              nexus->convert_to_tm (&command.utc));
     return nexus_send ((nexus_t*)nexus, buffer);
     
   case dada_pwc_record_stop:
@@ -355,7 +384,7 @@ int dada_pwc_nexus_send (dada_pwc_nexus_t* nexus, dada_pwc_command_t command)
       return -1;
 
     strftime (buffer, buffer_size, "rec_stop " DADA_TIMESTR,
-	      nexus->convert_to_tm (&command.utc));
+              nexus->convert_to_tm (&command.utc));
     return nexus_send ((nexus_t*)nexus, buffer);
     
   case dada_pwc_start:
@@ -367,7 +396,7 @@ int dada_pwc_nexus_send (dada_pwc_nexus_t* nexus, dada_pwc_command_t command)
       return nexus_send ((nexus_t*)nexus, "start");
 
     strftime (buffer, buffer_size, "start " DADA_TIMESTR,
-	      nexus->convert_to_tm (&command.utc));
+              nexus->convert_to_tm (&command.utc));
     return nexus_send ((nexus_t*)nexus, buffer);
     
   case dada_pwc_stop:
@@ -379,9 +408,18 @@ int dada_pwc_nexus_send (dada_pwc_nexus_t* nexus, dada_pwc_command_t command)
       return nexus_send ((nexus_t*)nexus, "stop");
 
     strftime (buffer, buffer_size, "stop " DADA_TIMESTR,
-	      nexus->convert_to_tm (&command.utc));
+              nexus->convert_to_tm (&command.utc));
     return nexus_send ((nexus_t*)nexus, buffer);
-    
+
+  case dada_pwc_set_utc_start:
+    /* Special case for PWC's who must be told their UTC_START */
+    if (!command.utc)
+      return -1;
+
+    strftime (buffer, buffer_size, "set_utc_start " DADA_TIMESTR,
+              nexus->convert_to_tm (&command.utc));
+    return nexus_send ((nexus_t*)nexus, buffer);
+          
   }
 
   return -1;
