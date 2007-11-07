@@ -165,19 +165,11 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
   char zerodchar = 'c'; 
   memset(&zerodchar,0,sizeof(zerodchar));
 
-  int verbose = udpdb->verbose;
   int quit = 0;
   struct timeval timeout;
   struct timeval* timeoutp;
   fd_set *rdsp = NULL;
   fd_set readset;
-
-  /* Check if no empty buffers */
-  //int bufs_clear = semctl (((ipcbuf_t *)(pwcm->data_block))->semid, 5, GETVAL);
-  //if (bufs_clear == 0) {
-  //  if (pwcm->pwc->state == dada_pwc_recording)
-  //    multilog (log, LOG_WARNING, "Warning. no clear blocks available\n");
-  //}
 
   /* keep receiving packets until the data buffer will not take another
      full packet */
@@ -250,10 +242,6 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
           if (udpdb->expected_sequence_no == 1) 
             udpdb->packet_length = udpdb->received - UDPHEADERSIZE;
     
-          /*
-          if (verbose) fprintf(stderr,"udpdb_buffer_function (%"PRIu64") udp "
-                             "pack received, %"PRIu64"\n",i,udpdb->received);
-          */
         }
       }
 
@@ -369,13 +357,6 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
     packets_per_second = udpdb->packets_received - 
                          udpdb->packets_received_last_sec;
 
-    /*
-    if (verbose) 
-      fprintf(stderr,"packets:  %"PRIu64"  %"PRIu64" %"PRIu64"\n",
-              udpdb->packets_received, udpdb->packets_received_last_sec, 
-              packets_per_second);
-              */
-
     bytes_per_second = udpdb->bytes_received - udpdb->bytes_received_last_sec;
 
     udpdb->packets_received_last_sec = udpdb->packets_received;
@@ -392,8 +373,6 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
   }
   
   *size = buffer_counter;
-
-  /* if (verbose) fprintf(stderr,"returning %"PRIu64" bytes\n",*size);  */
 
   assert(udpdb->data != 0);
   

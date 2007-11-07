@@ -78,9 +78,6 @@ int main(int argc, char *argv[])
   /* NCHANNEL header value */
   int nchannel = 2;
 
-  /* NPOL header value */
-  int npol = 2;
-
   /* DADA logger */
   multilog_t *log = 0;
 
@@ -162,7 +159,7 @@ int main(int argc, char *argv[])
   } else {
     multilog_add(log, stderr);
   }
-  multilog_serve (log, DADA_TEST_TRIWAVEUDP_LOG);
+  multilog_serve (log, APSR_TEST_TRIWAVEUDP_LOG);
 
   udpdb_client = (char *) argv[optind];
   signal(SIGINT, signal_handler);

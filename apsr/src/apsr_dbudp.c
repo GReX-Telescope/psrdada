@@ -1,5 +1,6 @@
 #include "dada_client.h"
 #include "dada_hdu.h"
+#include "apsr_def.h"
 #include "dada_def.h"
 #include "udp.h"
 #include "sock.h"
@@ -394,7 +395,7 @@ int main (int argc, char **argv)
 
   if (daemon) {
     be_a_daemon ();
-    multilog_serve (log, DADA_DEFAULT_DBUDP_LOG);
+    multilog_serve (log, APSR_DEFAULT_DBUDP_LOG);
   }
   else
     multilog_add (log, stderr);
