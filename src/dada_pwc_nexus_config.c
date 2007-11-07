@@ -5,6 +5,8 @@
 #include <string.h>
 #include <assert.h>
 
+/* #define _DEBUG 1 */
+
 /*! parse a configuration into unique headers for each primary write client */
 int dada_pwc_nexus_header_parse (dada_pwc_nexus_t* n, const char* buffer);
 
