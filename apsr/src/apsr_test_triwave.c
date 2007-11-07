@@ -1,4 +1,4 @@
-#include "dada_def.h"
+#include "apsr_def.h"
 #include "apsr_udpdb.h"
 #include "ascii_header.h"
 #include "udp.h"
@@ -58,7 +58,7 @@ int main(int argc, char *argv[])
   int verbose = 0;
 
   /* udp port to send data to */
-  int udp_port = DADA_DEFAULT_UDPDB_PORT;
+  int udp_port = APSR_DEFAULT_UDPDB_PORT;
 
   /* total time to transmit for */ 
   uint64_t transmission_time = 5;   
@@ -249,7 +249,7 @@ int main(int argc, char *argv[])
     FILE *sockout = 0;
 
     /* Port for control from tcs simulator */
-    int port = DADA_TEST_TRIWAVEUDP_COMMAND;
+    int port = APSR_TEST_TRIWAVEUDP_COMMAND;
 
     /* create a socket on which to listen */
     int listen_fd = sock_create (&port);
@@ -397,7 +397,7 @@ void usage() {
     "\t-d            daemon mode. expects TCP/IP control\n"
     "\n\tudpdb_client is the hostname of a machine running dada_udpdb\n\n"
     ,
-    (UDPHEADERSIZE + DEFAULT_UDPDATASIZE), DADA_DEFAULT_UDPDB_PORT);
+    (UDPHEADERSIZE + DEFAULT_UDPDATASIZE), APSR_DEFAULT_UDPDB_PORT);
 }
 
 

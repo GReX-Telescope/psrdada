@@ -45,7 +45,7 @@ int main(int argc, char *argv[])
   int time_per_frame = 20;
   int size_of_frame = UDPHEADERSIZE + DEFAULT_UDPDATASIZE;
   int verbose = 0;
-  int udp_port = DADA_DEFAULT_UDPDB_PORT;
+  int udp_port = APSR_DEFAULT_UDPDB_PORT;
   int transmission_time = 5;   // num secs to transmit for
 
   /* the filename from which the header will be read */
@@ -264,7 +264,7 @@ void usage() {
     "\t-S n          size of header buffer\n"
     "\t-v            verbose output\n"
     "\n\tudpdb_client is the hostname of a machine running dada_udpdb\n\n",
-    DADA_DEFAULT_UDPDB_PORT);
+    APSR_DEFAULT_UDPDB_PORT);
 }
 
 

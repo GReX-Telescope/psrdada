@@ -64,7 +64,7 @@ void usage()
      " -d         run as daemon\n\n"
      " -1         1 transfer only\n\n"
      " desthost   udp packets sent to this hostname\n\n",
-    DADA_DEFAULT_UDPDB_PORT);
+    APSR_DEFAULT_UDPDB_PORT);
 }
 
 
@@ -344,7 +344,7 @@ int main (int argc, char **argv)
   char quit = 0;
 
   /* Port to send to*/
-  int port = DADA_DEFAULT_UDPDB_PORT;
+  int port = APSR_DEFAULT_UDPDB_PORT;
 
   int arg = 0;
 

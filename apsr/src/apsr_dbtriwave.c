@@ -1,6 +1,6 @@
 #include "dada_client.h"
 #include "dada_hdu.h"
-#include "dada_def.h"
+#include "apsr_def.h"
 #include "multilog.h"
 
 #include "node_array.h"
@@ -42,7 +42,7 @@ void usage()
      " -l num     period of triangular wave form data [default 512]\n"
      " -b num     number of bits in triangular wave form data [default 8]\n"
      " -d         run as daemon\n\n"
-     "Multilog output available on port %d\n",DADA_DEFAULT_DBTRITEST_LOG);
+     "Multilog output available on port %d\n",APSR_DEFAULT_DBTRITEST_LOG);
 }
 
 
@@ -304,7 +304,7 @@ int main (int argc, char **argv)
   else
     multilog_add (log, stderr);
 
-  multilog_serve (log, DADA_DEFAULT_DBTRITEST_LOG);
+  multilog_serve (log, APSR_DEFAULT_DBTRITEST_LOG);
 
   hdu = dada_hdu_create (log);
 

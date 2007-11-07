@@ -1,3 +1,4 @@
+#include "apsr_def.h"
 #include "apsr_udpdb.h"
 
 #include <math.h>
@@ -19,7 +20,7 @@ void usage()
      " -1             one time only mode, exit after EOD is written\n"
      " -H filename    ascii header information in file\n"
      " -c             don't verify udp headers against header block\n"
-     " -S num         file size in bytes\n",DADA_DEFAULT_UDPDB_PORT);
+     " -S num         file size in bytes\n",APSR_DEFAULT_UDPDB_PORT);
 }
 
 
@@ -434,7 +435,7 @@ int main (int argc, char **argv)
   multilog_t* log = 0;
   
   /* port on which to listen for incoming connections */
-  int port = DADA_DEFAULT_UDPDB_PORT;
+  int port = APSR_DEFAULT_UDPDB_PORT;
 
   /* Flag set in daemon mode */
   char daemon = 0;
@@ -576,7 +577,7 @@ int main (int argc, char **argv)
   udpdb.error_seconds = 10;
   udpdb.packet_length = 0;
   udpdb.statslog = multilog_open ("apsr_udpdb_stats", 0);
-  multilog_serve (udpdb.statslog, DADA_DEFAULT_UDPDB_STATS);
+  multilog_serve (udpdb.statslog, APSR_DEFAULT_UDPDB_STATS);
     
   /* Connect to shared memory */
   hdu = dada_hdu_create (pwcm->log);
