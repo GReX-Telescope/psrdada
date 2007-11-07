@@ -7,7 +7,7 @@
 #include <string.h>
 #include <assert.h>
 
-//#define _DEBUG 1
+// #define _DEBUG 1
 
 /*! Create a new DADA primary write client main loop */
 dada_pwc_main_t* dada_pwc_main_create ()
@@ -141,13 +141,6 @@ int dada_pwc_main_prepare (dada_pwc_main_t* pwcm)
     }
   }
 
-#ifdef _DEBUG
-  fprintf(stderr,"header block sync->nbufs= %"PRIu64"\n",pwcm->header_block->sync->nbufs);
-  fprintf(stderr,"header block sync->bufsz= %"PRIu64"\n",pwcm->header_block->sync->bufsz);
-  fprintf(stderr,"header block sync->w_buf= %"PRIu64"\n",pwcm->header_block->sync->w_buf);
-  fprintf(stderr,"header block sync->r_buf= %"PRIu64"\n",pwcm->header_block->sync->r_buf);
-#endif
-
   /* ensure that Data Block is closed */
   if (pwcm->data_block && ipcio_is_open (pwcm->data_block)
       && ipcio_close (pwcm->data_block) < 0)
@@ -161,11 +154,11 @@ int dada_pwc_main_prepare (dada_pwc_main_t* pwcm)
     pwcm->command = dada_pwc_command_get (pwcm->pwc);
 
     if (pwcm->command.code == dada_pwc_header)  {
-     
-      /* 
+   
+#ifdef _DEBUG 
       multilog (pwcm->log, LOG_INFO, 
                 "HEADER START\n%s\nHEADER END\n", pwcm->command.header);
-      */
+#endif
 
       if (pwcm->header_block)
         strncpy (pwcm->header, pwcm->command.header, pwcm->header_size);
