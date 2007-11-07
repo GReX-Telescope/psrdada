@@ -27,6 +27,8 @@ int main (int argc, char** argv)
 {
   uint64_t nbufs = DADA_DEFAULT_BLOCK_NUM;
   uint64_t bufsz = DADA_DEFAULT_BLOCK_SIZE;
+
+  uint64_t nhdrs = IPCBUF_XFERS;
   uint64_t hdrsz = DADA_DEFAULT_HEADER_SIZE;
 
   key_t dada_key = DADA_DEFAULT_BLOCK_KEY;
@@ -97,12 +99,13 @@ int main (int argc, char** argv)
   fprintf (stderr, "Created DADA data block with"
 	   " nbufs=%"PRIu64" bufsz=%"PRIu64"\n", nbufs, bufsz);
 
-  if (ipcbuf_create (&header, dada_key + 1, 1, hdrsz) < 0) {
+  if (ipcbuf_create (&header, dada_key + 1, nhdrs, hdrsz) < 0) {
     fprintf (stderr, "Could not create DADA header block\n");
     return -1;
   }
 
-  fprintf (stderr, "Created DADA header block with %"PRIu64" bytes\n", hdrsz);
+  fprintf (stderr, "Created DADA header block with nhdrs = %"PRIu64", hdrsz "
+                   "= %"PRIu64" bytes\n", nhdrs, hdrsz);
 
   if (lock && ipcbuf_lock (&data_block) < 0) {
     fprintf (stderr, "Could not lock DADA data block into RAM\n");
