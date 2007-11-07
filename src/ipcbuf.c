@@ -426,25 +426,12 @@ uint64_t ipcbuf_get_sod_minbuf (ipcbuf_t* id)
 {
   ipcsync_t* sync = id -> sync;
 
-  /* Since we may have multiple transfers, get the sod_minimum based on
-   * the EOD of the most recent xfer plus the number of buffers written
-   * in the meantime */
-
-  uint64_t starting_buf = 0;
-
-  if (sync->w_xfer > 0) {
-    /* xfer number of previous transfer */
-    int prev_xfer = (sync->w_xfer-1) % IPCBUF_XFERS;
-    //fprintf(stderr,"ipcbuf_get_sod_minbuf: prev_xfer = %d\n",prev_xfer);
-    //starting_buf = sync->e_buf[prev_xfer] + 1;
-  }
-  //fprintf(stderr,"ipcbuf_get_sod_minbuf: w_buf = %"PRIu64" starting_buf =  %"PRIu64"\n",sync->w_buf,starting_buf);
-
-  uint64_t new_bufs_written = sync->w_buf - starting_buf;
-  //fprintf(stderr,"ipcbuf_get_sod_minbuf: new_bufs_written = %"PRIu64"\n",new_bufs_written);
+  /* Since we may have multiple transfers, the minimum sod will be relative
+   * to the first buffer we clocked data onto */
+  uint64_t new_bufs_written = sync->w_buf - id->soclock_buf;
 
   if (new_bufs_written < sync->nbufs) 
-    return starting_buf;
+    return id->soclock_buf;
   else
     return sync->w_buf - sync->nbufs + 1;
     

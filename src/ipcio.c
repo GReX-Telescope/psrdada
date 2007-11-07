@@ -518,13 +518,15 @@ int64_t ipcio_space_left(ipcio_t* ipc) {
   uint64_t bufsz = ipcbuf_get_bufsz ((ipcbuf_t *)ipc);
   uint64_t nbufs = ipcbuf_get_nbufs ((ipcbuf_t *)ipc);
   uint64_t full_bufs = ipcbuf_get_nfull((ipcbuf_t*) ipc);
-  uint64_t clear_bufs = ipcbuf_get_nclear((ipcbuf_t*) ipc);
   int64_t available_bufs = (nbufs - full_bufs);
-/*
+
 #ifdef _DEBUG
-  fprintf(stderr,"full_bufs = %"PRIu64", clear_bufs = %"PRIu64", available_bufs = %"PRIu64", sum = %"PRIu64"\n",full_bufs, clear_bufs, available_bufs, available_bufs * bufsz);
+  uint64_t clear_bufs = ipcbuf_get_nclear((ipcbuf_t*) ipc);
+  fprintf (stderr,"ipcio_space_left: full_bufs = %"PRIu64", clear_bufs = %"
+                  PRIu64", available_bufs = %"PRIu64", sum = %"PRIu64"\n",
+                  full_bufs, clear_bufs, available_bufs, available_bufs*bufsz);
 #endif
-*/
+
   return available_bufs * bufsz;
 
 }

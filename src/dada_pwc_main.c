@@ -282,10 +282,7 @@ int dada_pwc_main_start_transfer (dada_pwc_main_t* pwcm)
   fprintf (stderr, "dada_pwc_main_start_transfer: exit change state\n");
 #endif
 
-  uint64_t socb = ipcbuf_set_soclock_buf ((ipcbuf_t*) pwcm->data_block);
-#ifdef _DEBUG
-  fprintf(stderr, "setting soclock buf to %"PRIu64"\n",socb);
-#endif
+  ipcbuf_set_soclock_buf ((ipcbuf_t*) pwcm->data_block);
 
   if (pwcm->command.code == dada_pwc_clock)
     return dada_pwc_set_state (pwcm->pwc, dada_pwc_clocking, utc);
