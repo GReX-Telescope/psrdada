@@ -64,6 +64,8 @@ extern "C" {
 
     uint64_t xfer;     /* current xfer */
 
+    uint64_t soclock_buf;  /* buffer to which the SOD is relevant */
+
   } ipcbuf_t;
 
 #define IPCBUF_INIT {0, -1,-1,0, 0,0, 0, 0}
@@ -179,8 +181,17 @@ extern "C" {
   /*! Unlock the shared memory from physical RAM (allow swap) */
   int ipcbuf_unlock (ipcbuf_t*);
 
+  /*! Return the number of buffers currently flagged as clear */
+  uint64_t ipcbuf_get_nclear (ipcbuf_t*);
+
+  /*! Return the number of buffers currently flagged as full */
+  uint64_t ipcbuf_get_nfull (ipcbuf_t*);
+
   /*! Useful utility */
   void* shm_alloc (key_t key, size_t size, int flag, int* id);
+
+  /*! set the start of clocking data buffer  */
+  uint64_t ipcbuf_set_soclock_buf(ipcbuf_t*);
 
 #ifdef __cplusplus
 	   }
