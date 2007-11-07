@@ -78,7 +78,8 @@ int64_t dada_client_io_loop (dada_client_t* client)
   assert (fd >= 0);
 
   assert (client->direction==dada_client_reader ||
-	  client->direction==dada_client_writer);
+          client->direction==dada_client_writer);
+
 
   while (bytes_transfered < client->transfer_bytes) {
 
@@ -92,7 +93,7 @@ int64_t dada_client_io_loop (dada_client_t* client)
     if (client->direction == dada_client_reader) {
 
       if (ipcbuf_eod((ipcbuf_t*)client->data_block))
-	break;
+        break;
 
 #ifdef _DEBUG
     fprintf (stderr, "calling ipcio_read %p %"PRIi64"\n", buffer, bytes);
@@ -100,8 +101,8 @@ int64_t dada_client_io_loop (dada_client_t* client)
 
       bytes = ipcio_read (client->data_block, buffer, bytes);
       if (bytes < 0) {
-	multilog (log, LOG_ERR, "ipcio_read error %s\n", strerror(errno));
-	return -1;
+        multilog (log, LOG_ERR, "ipcio_read error %s\n", strerror(errno));
+        return -1;
       }
 
     }
@@ -124,14 +125,14 @@ int64_t dada_client_io_loop (dada_client_t* client)
     if (client->direction == dada_client_writer) {
 
       if (bytes == 0) {
-	multilog (log, LOG_INFO, "end of input\n");
-	break;
+        multilog (log, LOG_INFO, "end of input\n");
+        break;
       }
 
       bytes = ipcio_write (client->data_block, buffer, bytes);
       if (bytes < 0) {
-	multilog (log, LOG_ERR, "ipcio_write error %s\n", strerror(errno));
-	return -1;
+        multilog (log, LOG_ERR, "ipcio_write error %s\n", strerror(errno));
+        return -1;
       }
 
     }
@@ -224,8 +225,8 @@ int64_t dada_client_transfer (dada_client_t* client)
       
     transfer_time = diff_time (start_loop, end_loop);
     multilog (log, LOG_INFO, "%"PRIu64" bytes transfered in %lfs "
-	      "(%lg MB/s)\n", bytes_transfered, transfer_time,
-	      bytes_transfered/(1e6*transfer_time));
+              "(%lg MB/s)\n", bytes_transfered, transfer_time,
+              bytes_transfered/(1e6*transfer_time));
     
   }
 
@@ -235,6 +236,7 @@ int64_t dada_client_transfer (dada_client_t* client)
 
 int dada_client_read (dada_client_t* client)
 {
+
   /* pointer to the status and error logging facility */
   multilog_t* log = 0;
 
@@ -270,12 +272,12 @@ int dada_client_read (dada_client_t* client)
       ipcbuf_mark_cleared (client->header_block);
 
       if (ipcbuf_eod (client->header_block)) {
-	multilog (log, LOG_INFO, "End of data on header block\n");
-	ipcbuf_reset (client->header_block);
+        multilog (log, LOG_INFO, "End of data on header block\n");
+        ipcbuf_reset (client->header_block);
       }
       else {
-	multilog (log, LOG_ERR, "Empty header block\n");
-	return -1;
+        multilog (log, LOG_ERR, "Empty header block\n");
+        return -1;
       }
 
     }
@@ -287,7 +289,7 @@ int dada_client_read (dada_client_t* client)
   /* Check that header is of advertised size */
   if (ascii_header_get (header, "HDR_SIZE", "%"PRIu64, &hdr_size) != 1) {
     multilog (log, LOG_ERR, "Header with no HDR_SIZE. Setting to %"PRIu64"\n",
-	      header_size);
+              header_size);
     hdr_size = header_size;
     if (ascii_header_set (header, "HDR_SIZE", "%"PRIu64, hdr_size) < 0) {
       multilog (log, LOG_ERR, "Error setting HDR_SIZE\n");
@@ -300,7 +302,7 @@ int dada_client_read (dada_client_t* client)
 
   else if (hdr_size > header_size) {
     multilog (log, LOG_ERR, "HDR_SIZE=%"PRIu64
-	      " > Header Block size=%"PRIu64"\n", hdr_size, header_size);
+              " > Header Block size=%"PRIu64"\n", hdr_size, header_size);
     multilog (log, LOG_DEBUG, "ASCII header dump\n%s", header);
     return -1;
   }
@@ -317,17 +319,17 @@ int dada_client_read (dada_client_t* client)
 
   /* Get the header offset */
   if (ascii_header_get (client->header, "OBS_OFFSET",
-			"%"PRIu64, &obs_offset) != 1) {
+                        "%"PRIu64, &obs_offset) != 1) {
     multilog (log, LOG_WARNING, "Header with no OBS_OFFSET\n");
     obs_offset = 0;
   }
-
+  
   /* Transfer data until the end of the data stream */
   while (!ipcbuf_eod((ipcbuf_t*)client->data_block)) {
 
     /* Set the header offset */
     if (ascii_header_set (client->header, "OBS_OFFSET",
-			  "%"PRIu64, obs_offset) < 0) {
+                          "%"PRIu64, obs_offset) < 0) {
       multilog (log, LOG_ERR, "Error writing OBS_OFFSET\n");
       return -1;
     }
