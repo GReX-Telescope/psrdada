@@ -8,6 +8,8 @@
 #include <string.h>
 #include <assert.h>
 
+/* #define _DEBUG 1 */
+
 /*! Parse a string and return the state */
 dada_pwc_state_t dada_pwc_string_to_state (const char* key)
 {
@@ -19,6 +21,12 @@ dada_pwc_state_t dada_pwc_string_to_state (const char* key)
     return dada_pwc_clocking;
   if (!strcasecmp (key, "recording"))
     return dada_pwc_recording;
+  if (!strcasecmp (key, "soft_error"))
+    return dada_pwc_soft_error;
+  if (!strcasecmp (key, "hard_error"))
+    return dada_pwc_hard_error;
+  if (!strcasecmp (key, "fatal_error"))
+    return dada_pwc_fatal_error;
 
   return dada_pwc_undefined;
 }
@@ -40,6 +48,15 @@ const char* dada_pwc_state_to_string (dada_pwc_state_t state)
   case dada_pwc_recording:
     return "recording";
 
+  case dada_pwc_soft_error:
+    return "soft_error";
+
+  case dada_pwc_hard_error:
+    return "hard_error";
+
+  case dada_pwc_fatal_error:
+    return "fatal_error";
+
   default:
     return "undefined";
 
@@ -54,8 +71,9 @@ int dada_pwc_cmd_state (void* context, FILE* fptr, char* args)
 }
 
 int dada_pwc_command_set_byte_count (dada_pwc_t* primary, FILE* output,
-				     dada_pwc_command_t* command)
+                                     dada_pwc_command_t* command)
 {
+
   if (!primary->convert_to_bytes) {
 #ifdef _DEBUG
     fprintf (stderr, "dada_pwc_command_set_byte_count not converting\n");
@@ -94,25 +112,15 @@ int dada_pwc_command_set_byte_count (dada_pwc_t* primary, FILE* output,
   /* the number of second between start and requested UTC of command */
   command->byte_count = command->utc - primary->utc_start;
 
-#ifdef _DEBUG
-  fprintf (stderr, "dada_pwc_command_set_byte_count seconds = %"PRIu64"\n",
-           command->byte_count);
-#endif
-
   /* the byte count at which to execute the command */
   command->byte_count *= primary->bytes_per_second;
-
-#ifdef _DEBUG
-  fprintf (stderr, "dada_pwc_command_set_byte_count bytes = %"PRIu64"\n",
-           command->byte_count);
-#endif
 
   return 0;
 }
   
 /*! Set the command state */
 int dada_pwc_command_set (dada_pwc_t* primary, FILE* output,
-			  dada_pwc_command_t command)
+                          dada_pwc_command_t command)
 {
   int ret = 0;
 
@@ -129,7 +137,7 @@ int dada_pwc_command_set (dada_pwc_t* primary, FILE* output,
   case dada_pwc_header:
     if (primary->state != dada_pwc_idle) {
       fprintf (output, "Cannot set header when not IDLE"
-	       " (state=%s)\n", dada_pwc_state_to_string (primary->state));
+               " (state=%s)\n", dada_pwc_state_to_string (primary->state));
       ret = -1;
     }
     break;
@@ -137,7 +145,7 @@ int dada_pwc_command_set (dada_pwc_t* primary, FILE* output,
   case dada_pwc_clock:
     if (primary->state != dada_pwc_prepared) {
       fprintf (output, "Cannot start clocking when not PREPARED"
-	       " (state=%s)\n", dada_pwc_state_to_string (primary->state));
+               " (state=%s)\n", dada_pwc_state_to_string (primary->state));
       ret = -1;
     }
     break;
@@ -145,7 +153,7 @@ int dada_pwc_command_set (dada_pwc_t* primary, FILE* output,
   case dada_pwc_record_start:
     if (primary->state != dada_pwc_clocking) {
       fprintf (output, "Cannot record start when not CLOCKING"
-	       " (state=%s)\n", dada_pwc_state_to_string (primary->state));
+               " (state=%s)\n", dada_pwc_state_to_string (primary->state));
       ret = -1;
     }
     break;
@@ -153,7 +161,7 @@ int dada_pwc_command_set (dada_pwc_t* primary, FILE* output,
   case dada_pwc_record_stop:
     if (primary->state != dada_pwc_recording) {
       fprintf (output, "Cannot record stop when not RECORDING"
-	       " (state=%s)\n", dada_pwc_state_to_string (primary->state));
+               " (state=%s)\n", dada_pwc_state_to_string (primary->state));
       ret = -1;
     }
     break;
@@ -161,20 +169,38 @@ int dada_pwc_command_set (dada_pwc_t* primary, FILE* output,
   case dada_pwc_start:
     if (primary->state != dada_pwc_prepared) {
       fprintf (output, "Cannot start when not PREPARED"
-	       " (state=%s)\n", dada_pwc_state_to_string (primary->state));
+               " (state=%s)\n", dada_pwc_state_to_string (primary->state));
       ret = -1;
     }
     break;
 
   case dada_pwc_stop:
     if (primary->state != dada_pwc_clocking &&
-	primary->state != dada_pwc_recording) {
+        primary->state != dada_pwc_recording) {
       fprintf (output, "Cannot stop when not CLOCKING or RECORDING"
-	       " (state=%s)\n", dada_pwc_state_to_string (primary->state));
+               " (state=%s)\n", dada_pwc_state_to_string (primary->state));
       ret = -1;
     }
     break;
 
+  case dada_pwc_set_utc_start:
+    if (primary->state != dada_pwc_clocking &&
+        primary->state != dada_pwc_recording) {
+      fprintf (output, "Cannot set_utc_start when not CLOCKING or RECORDING"
+               " (state=%s)\n", dada_pwc_state_to_string (primary->state));
+      ret = -1;
+    }
+    break;
+
+  case dada_pwc_reset:
+    if (primary->state != dada_pwc_soft_error &&
+        primary->state != dada_pwc_hard_error) {
+      fprintf (output, "Cannot reset when not SOFT ERROR or HARD ERROR"
+               " (state=%s)\n", dada_pwc_state_to_string (primary->state));
+      ret = -1;
+    }
+    break;
+                                                                                                    
   }
 
   if (ret == 0) {
@@ -190,7 +216,7 @@ int dada_pwc_command_set (dada_pwc_t* primary, FILE* output,
 }
 
 int dada_pwc_parse_bytes_per_second (dada_pwc_t* primary,
-				     FILE* fptr, const char* header)
+                                     FILE* fptr, const char* header)
 {
   unsigned npol;  /* number of polarizations */
   unsigned nbit;  /* nubmer of bits per sample */
@@ -279,7 +305,7 @@ int dada_pwc_cmd_header (void* context, FILE* fptr, char* args)
 }
 
 uint64_t dada_pwc_parse_duration (dada_pwc_t* primary,
-				  FILE* fptr, const char* args)
+                                  FILE* fptr, const char* args)
 {
   unsigned hh, mm, ss;
   uint64_t byte_count; 
@@ -394,6 +420,7 @@ int dada_pwc_cmd_clock (void* context, FILE* fptr, char* args)
 
 int dada_pwc_cmd_record_start (void* context, FILE* fptr, char* args)
 {
+
   dada_pwc_t* primary = (dada_pwc_t*) context;
 
   dada_pwc_command_t command = DADA_PWC_COMMAND_INIT;
@@ -456,6 +483,39 @@ int dada_pwc_cmd_stop (void* context, FILE* fptr, char* args)
   return dada_pwc_command_set (primary, fptr, command);
 }
 
+
+int dada_pwc_cmd_set_utc_start (void* context, FILE* fptr, char* args)
+{
+  dada_pwc_t* primary = (dada_pwc_t*) context;
+
+  dada_pwc_command_t command = DADA_PWC_COMMAND_INIT;
+  command.code = dada_pwc_set_utc_start;
+  command.utc = dada_pwc_parse_time (fptr, args);
+
+  /* Since the utc of the first time sample is now known, update the
+   * primary's utc_start time to reflect this 
+   * n.b. this will result in a byte_count of 0 for this command */
+  primary->utc_start = command.utc;
+
+  if (dada_pwc_command_set_byte_count (primary, fptr, &command) < 0)
+    return -1;
+
+  return dada_pwc_command_set (primary, fptr, command);
+        
+}
+
+int dada_pwc_cmd_reset (void* context, FILE* fptr, char* args)
+{
+  dada_pwc_t* primary = (dada_pwc_t*) context;
+
+  dada_pwc_command_t command = DADA_PWC_COMMAND_INIT;
+  command.code = dada_pwc_reset;
+  command.utc = 0;
+                                                                                
+  return dada_pwc_command_set (primary, fptr, command);
+
+}
+
 /*! Create a new DADA primary write client connection */
 dada_pwc_t* dada_pwc_create ()
 {
@@ -490,28 +550,33 @@ dada_pwc_t* dada_pwc_create ()
   primary -> parser = command_parse_create ();
 
   command_parse_add (primary->parser, dada_pwc_cmd_state, primary,
-		     "state", "get the current state", NULL);
+                     "state", "get the current state", NULL);
 
   command_parse_add (primary->parser, dada_pwc_cmd_header, primary,
-		     "header", "set the primary header", NULL);
+                     "header", "set the primary header", NULL);
 
   command_parse_add (primary->parser, dada_pwc_cmd_duration, primary,
-		     "duration", "set the duration of next recording", NULL);
+                     "duration", "set the duration of next recording", NULL);
 
   command_parse_add (primary->parser, dada_pwc_cmd_start, primary,
-		     "start", "enter the recording state", NULL);
+                     "start", "enter the recording state", NULL);
 
   command_parse_add (primary->parser, dada_pwc_cmd_stop, primary,
-		     "stop", "enter the idle state", NULL);
+                     "stop", "enter the idle state", NULL);
 
   command_parse_add (primary->parser, dada_pwc_cmd_clock, primary,
-		     "clock", "enter the clocking state", NULL);
+                     "clock", "enter the clocking state", NULL);
 
   command_parse_add (primary->parser, dada_pwc_cmd_record_start, primary,
-		     "rec_start", "enter the recording state", NULL);
+                     "rec_start", "enter the recording state", NULL);
 
   command_parse_add (primary->parser, dada_pwc_cmd_record_stop, primary,
-		     "rec_stop", "enter the clocking state", NULL);
+                     "rec_stop", "enter the clocking state", NULL);
+
+  command_parse_add (primary->parser, dada_pwc_cmd_set_utc_start, primary,
+                     "set_utc_start", "set the UTC_START header parameter", NULL);
+  command_parse_add (primary->parser, dada_pwc_cmd_reset, primary,
+                     "reset", "reset error state to idle", NULL);
 
   primary -> server = 0;
   primary -> log = 0;
@@ -536,7 +601,7 @@ int dada_pwc_set_header_size (dada_pwc_t* primary, unsigned header_size)
 }
 
 
-/*! Destroy a DADA primary write client connection */
+/*! */
 int dada_pwc_serve (dada_pwc_t* primary)
 {
   if (!primary)
@@ -550,7 +615,7 @@ int dada_pwc_serve (dada_pwc_t* primary)
   primary -> server = command_parse_server_create (primary -> parser);
 
   command_parse_server_set_welcome (primary -> server,
-				    "DADA primary write client command");
+                                    "DADA primary write client command");
 
   /* open the command/control port */
   return command_parse_serve (primary->server, primary->port);
@@ -614,7 +679,10 @@ int dada_pwc_set_state (dada_pwc_t* primary, int new_state, time_t utc)
   switch (primary->state) {
 
   case dada_pwc_idle:
-    if (new_state != dada_pwc_prepared) {
+    if (new_state != dada_pwc_prepared &&
+        new_state != dada_pwc_soft_error &&
+        new_state != dada_pwc_hard_error &&
+        new_state != dada_pwc_fatal_error) {
       fprintf (stderr, "IDLE can change only to PREPARED\n");
       return -1;
     }
@@ -622,7 +690,10 @@ int dada_pwc_set_state (dada_pwc_t* primary, int new_state, time_t utc)
 
   case dada_pwc_prepared:
     if (new_state != dada_pwc_clocking &&
-	new_state != dada_pwc_recording) {
+        new_state != dada_pwc_recording &&
+        new_state != dada_pwc_soft_error &&
+        new_state != dada_pwc_hard_error &&
+        new_state != dada_pwc_fatal_error) {
       fprintf (stderr, "PREPARED can change only to CLOCKING or RECORDING\n");
       return -1;
     }
@@ -631,7 +702,10 @@ int dada_pwc_set_state (dada_pwc_t* primary, int new_state, time_t utc)
 
   case dada_pwc_clocking:
     if (new_state != dada_pwc_recording &&
-	new_state != dada_pwc_idle) {
+        new_state != dada_pwc_idle &&
+        new_state != dada_pwc_soft_error &&
+        new_state != dada_pwc_hard_error &&
+        new_state != dada_pwc_fatal_error) {
       fprintf (stderr, "CLOCKING can change only to RECORDING or IDLE\n");
       return -1;
     }
@@ -639,12 +713,34 @@ int dada_pwc_set_state (dada_pwc_t* primary, int new_state, time_t utc)
 
   case dada_pwc_recording:
     if (new_state != dada_pwc_clocking &&
-	new_state != dada_pwc_idle) {
+        new_state != dada_pwc_idle &&
+        new_state != dada_pwc_soft_error &&
+        new_state != dada_pwc_hard_error &&
+        new_state != dada_pwc_fatal_error) {
       fprintf (stderr, "RECORDING can change only to CLOCKING or IDLE\n");
       return -1;
     }
     break;
 
+  case dada_pwc_soft_error:
+    if (new_state != dada_pwc_idle) {
+      fprintf (stderr, "SOFT ERROR state can only change to IDLE\n");
+      return -1;
+    }
+    break;
+
+  case dada_pwc_hard_error:
+    if (new_state != dada_pwc_idle) {
+      fprintf (stderr, "HARD ERROR state can only change to IDLE\n");
+      return -1;
+    }
+    break;
+
+  case dada_pwc_fatal_error:
+    fprintf (stderr, "FATAL ERROR state cannot be changed\n");
+    return -1;
+    break;
+    
   default:
     fprintf (stderr, "current state is UNDEFINED\n");
     return -1;
@@ -657,13 +753,11 @@ int dada_pwc_set_state (dada_pwc_t* primary, int new_state, time_t utc)
 
   if (primary->log)
     multilog (primary->log, LOG_INFO, 
-	      "STATE = %s\n", dada_pwc_state_to_string(new_state));
+              "STATE = %s\n", dada_pwc_state_to_string (new_state));
   
   pthread_cond_signal (&(primary->cond));
   pthread_mutex_unlock (&(primary->mutex));
 
   return 0;
 }
-
-
 
