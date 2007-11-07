@@ -36,6 +36,16 @@ extern "C" {
     /*! recording: data is being recorded */
     dada_pwc_recording,
 
+    /*! soft error: a soft error occurred, but the pwc can be restarted */
+    dada_pwc_soft_error,
+
+    /*! hard error: the pwc cannot be restarted, but data block is intact */
+    dada_pwc_hard_error,
+
+    /*! fatal error: a fatal error has occurred that will require the 
+     * dada clients to be killed and the data block reset */
+    dada_pwc_fatal_error
+
   } dada_pwc_state_t;
 
   /*! Parse a string and return the state */
@@ -66,8 +76,13 @@ extern "C" {
     dada_pwc_start,
 
     /*! stop: enter the idle state */
-    dada_pwc_stop
+    dada_pwc_stop,
 
+    /*! set utc: set UTC_START, and mark header block as filled */
+    dada_pwc_set_utc_start,
+
+    /*! reset the pwc, clearing error state */
+    dada_pwc_reset
   };
 
   typedef struct {
