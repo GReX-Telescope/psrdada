@@ -269,6 +269,7 @@ void* node_open_thread (void* context)
 
   pthread_mutex_lock (&(nexus->mutex));
   for (inode = 0; inode < nexus->nnode; inode++) {
+          
     node = (node_t*) nexus->nodes[inode];
     if (id == node->id) {
       node->to = to;
@@ -556,7 +557,9 @@ int nexus_send (nexus_t* nexus, char* command)
 
   for (inode = 0; inode < nexus->nnode; inode++) {
     if (nexus_recv_node (nexus, inode) < 0) {
-      fprintf (stderr, "nexus_send error inode=%d\n", inode);
+      node_t * tmpPtr = (node_t *) nexus->nodes[inode];
+      fprintf (stderr, "%s returned 'fail' for command %s\n",
+                       tmpPtr->host, command);
       status = -1;
     }
   }
