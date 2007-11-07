@@ -40,6 +40,10 @@ void* monitor_thread (void* context)
   char* buffer = malloc (buffer_size);
   assert (buffer != 0);
 
+  /* Create a multi log to view PWC collated PWC messages */
+  monitor->log = multilog_open ("dada_pwc_command_logger", 0);
+  multilog_serve (monitor->log, DADA_DEFAULT_PWC_MONITOR_LOG); 
+
 #ifdef _DEBUG
   fprintf (stderr, "monitor_thread start nexus=%p\n", monitor->nexus);
 #endif
@@ -53,56 +57,80 @@ void* monitor_thread (void* context)
     nnode = monitor->nexus->nnode;
 
 #ifdef _DEBUG
-  fprintf (stderr, "monitor_thread %u nodes\n", nnode);
+    fprintf (stderr, "monitor_thread %u nodes\n", nnode);
 #endif
 
+    /* First we add the nodes to readset for select polling */
     for (inode = 0; inode < nnode; inode++) {
+     
       node = monitor->nexus->nodes[inode];
-#ifdef _DEBUG
-      fprintf (stderr, "monitor_thread add %d\n", fileno(node->from));
-#endif
       if (node->from) {
-	fd = fileno(node->from);
-	if (fd > maxfd)
-	  maxfd = fd;
-	FD_SET (fd, &readset);
+#ifdef _DEBUG
+        fprintf (stderr, "monitor_thread add %d\n", fileno(node->from));
+#endif
+        if (feof(node->from)) {
+          fprintf(stderr, "monitor_thread: lost connection with %d\n",fileno(node->from));
+          node->to = 0;
+          node->from = 0;
+        } else {
+          fd = fileno(node->from);
+          if (fd > maxfd)
+            maxfd = fd;
+          FD_SET (fd, &readset);
+        }
       }
     }
 
     pthread_mutex_unlock (&(monitor->nexus->mutex));
 
-    if (select (maxfd + 1, &readset, NULL, NULL, NULL) < 0) {
-      perror ("monitor_thread: select");
-      free (buffer);
-      return 0;
-    }
+    if (maxfd > 0) {
+      if (select (maxfd + 1, &readset, NULL, NULL, NULL) < 0) {
+        perror ("monitor_thread: select");
+        free (buffer);
+        return 0;
+      }
 
-    pthread_mutex_lock (&(monitor->nexus->mutex));
-    nnode = monitor->nexus->nnode;
-    for (inode = 0; inode < nnode; inode++) {
-      node = monitor->nexus->nodes[inode];
+      pthread_mutex_lock (&(monitor->nexus->mutex));
+      nnode = monitor->nexus->nnode;
+      for (inode = 0; inode < nnode; inode++) {
+
+        node = monitor->nexus->nodes[inode];
+        
+        /* If this node has been setup yet */
+        if (node->from) {
 #ifdef _DEBUG
-  fprintf (stderr, "monitor_thread check %d\n", fileno(node->from));
+          fprintf (stderr, "monitor_thread check %d\n", fileno(node->from));
 #endif
-      if (FD_ISSET (fileno(node->from), &readset))
-	break;
-    }
-    pthread_mutex_unlock (&(monitor->nexus->mutex));
+          if (FD_ISSET (fileno(node->from), &readset))
+            break;
+        }
+      }
+      pthread_mutex_unlock (&(monitor->nexus->mutex));
 
-    if (inode == nnode)
-      fprintf (stderr, "monitor_thread: select returns, but no FD_ISSSET\n");
-    else {
-      fgets (buffer, buffer_size, node->from);
+      if (inode == nnode)
+        fprintf (stderr, "monitor_thread: select returns, but no FD_ISSSET\n");
+      else {
+        fgets (buffer, buffer_size, node->from);
+
+        /* If the connection dies to the pwc, reset the to/from FILE ptrs */
+        if (feof(node->from)) {
+          fprintf(stderr, "lost connection with %d\n",fileno(node->from));
+          node->to = 0;
+          node->from = 0;
+        }
 
 #ifdef _DEBUG
-      fprintf (stderr, "%u: %s", inode, buffer);
+        fprintf (stderr, "%u: %s", inode, buffer);
 #endif
-      if (monitor->log)
-	multilog (monitor->log, LOG_INFO, "%u: %s", inode, buffer);
+        if (monitor->log)
+          multilog (monitor->log, LOG_INFO, "%u: %s", inode, buffer);
 
-      if (monitor->handle_message)
-	monitor->handle_message (monitor->context, inode, buffer);
+        if (monitor->handle_message)
+          monitor->handle_message (monitor->context, inode, buffer);
+      }
 
+    } else {
+      sleep(1);
     }
 
   }
