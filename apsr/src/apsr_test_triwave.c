@@ -76,7 +76,7 @@ int main(int argc, char *argv[])
   int nbit = 8;
 
   /* NCHANNEL header value */
-  int nchannel = 2;
+  int nchannel = 1;
 
   /* DADA logger */
   multilog_t *log = 0;
