@@ -48,9 +48,6 @@ extern "C" {
     /*! the template header for all primary write clients */
     char* header_template;
 
-    /*! an array of configuration parameters to be parsed into the header */
-    string_array_t* config_params;
-
     /*! pointer to function used to convert between time representations */
     struct tm* (*convert_to_tm) (const time_t* timep);
 

@@ -8,7 +8,7 @@
 /* #define _DEBUG 1 */
 
 /*! parse a configuration into unique headers for each primary write client */
-int dada_pwc_nexus_header_parse (dada_pwc_nexus_t* n, const char* buffer);
+int dada_pwc_nexus_header_parse (dada_pwc_nexus_t* n, FILE* fptr);
 
 /*! defined in dada_pwc.c */
 int dada_pwc_parse_bytes_per_second (dada_pwc_t* primary,
@@ -22,10 +22,9 @@ int dada_pwc_nexus_cmd_config (void* context, FILE* output, char* args)
   unsigned inode, nnode = nexus_get_nnode ((nexus_t*) nexus);
 
   char* filename = args;
-  char* buffer = 0;
   char* hdr = 0;
+  FILE* fptr = 0;
 
-  long fsize = 0;
   int error = 0;
 
   if (nexus->pwc->state != dada_pwc_idle) {
@@ -34,7 +33,7 @@ int dada_pwc_nexus_cmd_config (void* context, FILE* output, char* args)
   }
 
   if (!args) {
-    fprintf (output, "Please specify config filename\n");
+    fprintf (output, "Please provide specification filename\n");
     return -1;
   }
 
@@ -49,23 +48,13 @@ int dada_pwc_nexus_cmd_config (void* context, FILE* output, char* args)
   fprintf (stderr, "dada_pwc_nexus_config fopen (%s, 'r')\n", filename);
 #endif
 
-  fsize = filesize (filename);
-
-  if (fsize < 1) {
+  fptr = fopen (filename, "r");
+  if (!fptr) {
     fprintf (output, "Cannot open '%s'\n", filename);
     return -1;
   }
 
-  buffer = (char *) malloc (fsize + 1);
-  assert (buffer != 0);
-
-  if (fileread (filename, buffer, fsize+1) < 0) {
-    fprintf (output, "Cannot read '%s'\n", filename);
-    return -1;
-  }
-
-  error = dada_pwc_nexus_header_parse (nexus, buffer);
-  free (buffer);
+  error = dada_pwc_nexus_header_parse (nexus, fptr);
 
   if (error)
     return error;

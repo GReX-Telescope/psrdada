@@ -6,47 +6,87 @@
 #include <stdlib.h>
 #include <assert.h>
 
-int dada_pwc_config_header (string_array_t* params, const char* prefix,
-			    char* header, const char* config)
+int dada_pwc_specify_header (char keep, const char* filter,
+			     char* header, FILE* fptr)
 {
-  char param_name  [64] = "";
-  char param_value [64] = "";
+  // each line read from fptr
+  char file_line [256];
 
+  // result of search for '#' in file_line
+  char* comment = 0;
+
+  // parameter name and value strings
+  char param_name  [128] = "";
+  char param_value [128] = "";
+
+  // set true if the parameter name prefix matches the filter
+  char match = 0;
+
+  // length of filter
+  unsigned filter_length;
+
+  // parameter name copied from specification to header
   char* param = 0;
-  unsigned iparam = 0, nparam = 0;
 
-  if (!params || !string_array_size (params)) {
-    fprintf (stderr, "dada_pwc_config_header no params");
-    return -1;
-  }
-  if (!prefix) {
-    fprintf (stderr, "dada_pwc_config_header no prefix");
+  if (!filter) {
+    fprintf (stderr, "dada_pwc_specify_header no filter");
     return -1;
   }
   if (!header) {
-    fprintf (stderr, "dada_pwc_config_header no header");
+    fprintf (stderr, "dada_pwc_specify_header no header");
     return -1;
   }
-  if (!config) {
-    fprintf (stderr, "dada_pwc_config_header no config");
+  if (!fptr) {
+    fprintf (stderr, "dada_pwc_specify_header no specification");
     return -1;
   }
 
-  nparam = string_array_size (params);
+  rewind (fptr);
 
-  for (iparam=0; iparam < nparam; iparam++) {
+  filter_length = strlen(filter);
 
-    param = string_array_get (params, iparam);
+  while ( fgets( file_line, 256, fptr ) ) {
 
-    sprintf (param_name, "%s%s", prefix, param);
+    comment = strchr( file_line, '#' );
+    if (comment)
+      *comment = '\0';
 
-    if (ascii_header_get (config, param_name, "%s", param_value) < 0)
-      fprintf (stderr, "dada_pwc_config_header WARNING %s not found\n",
-	       param_name);
-    else if (ascii_header_set (header, param, "%s", param_value) < 0) {
-      fprintf (stderr, "dada_pwc_config_header ERROR setting %s=%s\n",
+#ifdef _DEBUG
+    fprintf (stderr, "line=%s\n", file_line);
+#endif
+
+    if ( sscanf( file_line, "%s %s", param_name, param_value ) != 2 )
+      continue;
+
+#ifdef _DEBUG
+    fprintf (stderr, "param filter=%s name=%s value=%s\n", 
+             filter, param_name, param_value);
+#endif
+
+    match = strncmp( param_name, filter, filter_length ) == 0;
+
+#ifdef _DEBUG
+    fprintf (stderr, "match=%d keep=%d\n", (int)match, (int)keep);
+#endif
+
+    // "NOT (keep XOR match)" == "(keep AND match) OR (NOT keep AND NOT match)"
+    if ( ! (keep ^ match) ) {
+
+      param = param_name;
+
+      if (match)
+	param += filter_length;
+
+#ifdef _DEBUG
+      fprintf (stderr, "set name=%s value=%s\n", param, param_value);
+#endif
+
+      if (ascii_header_set (header, param, "%s", param_value) < 0) {
+	fprintf (stderr, "dada_pwc_specify_header ERROR setting %s=%s\n",
 	       param, param_value);
-      return -1;
+	return -1;
+      }
+
     }
       
   }
@@ -54,9 +94,9 @@ int dada_pwc_config_header (string_array_t* params, const char* prefix,
   return 0;
 }
 
-int dada_pwc_nexus_header_parse (dada_pwc_nexus_t* n, const char* buffer)
+int dada_pwc_nexus_header_parse (dada_pwc_nexus_t* n, FILE* fptr)
 {
-  char node_name [16] = "";
+  char node_name [16] = "Band";
   dada_pwc_node_t* node = 0;
 
   unsigned inode, nnode = nexus_get_nnode ((nexus_t*) n);
@@ -68,8 +108,7 @@ int dada_pwc_nexus_header_parse (dada_pwc_nexus_t* n, const char* buffer)
     /* Start with empty header */
     n->pwc->header[0] = '\0';
 
-  if (dada_pwc_config_header (n->config_params, node_name,
-			      n->pwc->header, buffer) < 0)
+  if (dada_pwc_specify_header (0, node_name, n->pwc->header, fptr) < 0)
     return -1;
 
   for (inode=0; inode < nnode; inode++) {
@@ -83,8 +122,7 @@ int dada_pwc_nexus_header_parse (dada_pwc_nexus_t* n, const char* buffer)
 
     strcpy (node->header, n->pwc->header);
     sprintf (node_name, "Band%d_", inode);
-    if (dada_pwc_config_header (n->config_params, node_name,
-				node->header, buffer) < 0)
+    if (dada_pwc_specify_header (1, node_name, node->header, fptr) < 0)
       return -1;
     
   }
