@@ -10,6 +10,8 @@
 #include <string.h>
 #include <errno.h>
 
+/* #define _DEBUG 1 */
+
 /*! Create a new DADA client main loop */
 dada_client_t* dada_client_create ()
 {
@@ -199,6 +201,11 @@ int64_t dada_client_transfer (dada_client_t* client)
   }
 
   if (client->direction == dada_client_writer) {
+
+#ifdef _DEBUG
+fprintf (stderr, "dada_client_writer HEADER START\n%sHEADER END\n", client->header);
+#endif
+
     header_size = ipcbuf_get_bufsz (client->header_block);
     if (ipcbuf_mark_filled (client->header_block, header_size) < 0)  {
       multilog (log, LOG_ERR, "Could not mark filled Header Block\n");

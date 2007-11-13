@@ -4,7 +4,7 @@
 
 #include "ipcio.h"
 
-// #define _DEBUG 1
+/* #define _DEBUG 1 */
 
 void ipcio_init (ipcio_t* ipc)
 {
@@ -332,6 +332,10 @@ ssize_t ipcio_write (ipcio_t* ipc, char* ptr, size_t bytes)
 
       ipc->curbuf = ipcbuf_get_next_write ((ipcbuf_t*)ipc);
 
+#ifdef _DEBUG
+      fprintf (stderr, "ipcio_write: ipcbuf_get_next_write returns\n");
+#endif
+
       if (!ipc->curbuf) {
         fprintf (stderr, "ipcio_write: ipcbuf_next_write\n");
         return -1;
@@ -345,11 +349,15 @@ ssize_t ipcio_write (ipcio_t* ipc, char* ptr, size_t bytes)
     if (space > bytes)
       space = bytes;
 
+#ifdef _DEBUG
+    fprintf (stderr, "ipcio_write space=%"PRIu64"\n", space);
+#endif
+
     if (space > 0) {
 
 #ifdef _DEBUG
       fprintf (stderr, "ipcio_write buffer:%"PRIu64" offset:%"PRIu64
-               " count=%u\n", ipc->buf.sync->w_buf, ipc->bytes, space);
+	       " count=%"PRIu64"\n", ipc->buf.sync->w_buf, ipc->bytes, space);
 #endif
 
       memcpy (ipc->curbuf + ipc->bytes, ptr, space);
