@@ -18,7 +18,7 @@ mode is most useful when testing the command interface and state
 machine of the Primary Write Client.  To run in {\em free} mode,
 simply type
 \begin{verbatim}
-dada_pwc_demo
+dada\_pwc\_demo
 \end{verbatim}
 
 In {\em locked} mode, {\tt dada\_pwc\_demo} connects to the Header and
@@ -29,14 +29,14 @@ interface between Primary Write Client, Header and Data Blocks, and
 Primary Read Client software.  To run in {\em locked} mode, for
 example
 \begin{verbatim}
-dada_db -d         # destroy existing shared memory resources
-dada_db            # create new shared memory resources
-dada_pwc_demo -l   # run in locked mode
+dada\_db -d         # destroy existing shared memory resources
+dada\_db            # create new shared memory resources
+dada\_pwc\_demo -l   # run in locked mode
 \end{verbatim}
 The first step is particularly useful when debugging.
 In another window on the same machine, you might also run
 \begin{verbatim}
-dada_dbdisk -WD /tmp
+dada\_dbdisk -WD /tmp
 \end{verbatim}
 
 To connect with the PWC demonstration program and begin issuing
@@ -66,24 +66,24 @@ the full path to a file that lists the parameters that should be
 copied from the specification to the header block of each primary
 write client.
 
-A sample configuration file can be found in config/test_dada.cfg.
+A sample configuration file can be found in config/test\_dada.cfg.
 Make a copy of this file and edit the parameters appropriately.
 
-The SPEC_PARAM_FILE parameter must list the full path to
-config/specification_to_header.txt, which should not require editing.
+The SPEC\_PARAM\_FILE parameter must list the full path to
+config/specification\_to\_header.txt, which should not require editing.
 
 By default, {\tt dada\_pwc\_command} uses the same port number (56026)
 as {\tt dada\_pwc\_demo}.  Therefore, if you are running both programs
 on the same machine, it will be necessary to specify a different port
 number for the command interface; e.g.
 \begin{verbatim}
-dada_pwc_command -p 20013
+dada\_pwc\_command -p 20013
 \end{verbatim}
 
 The PWC command program must be configured using a specification file;
-an example can be found in config/test_specification.txt.  Tell
+an example can be found in config/test\_specification.txt.  Tell
 {\tt dada\_pwc\_command} to use this file using the ``config'' command,
-giving the full path to config/test_specification.txt.
+giving the full path to config/test\_specification.txt.
 
 \subsubsection{Example: {\tt dada\_pwc\_command}}
 
@@ -92,16 +92,16 @@ on two different machines, named dada01 and dada02:
 
 \begin{enumerate}
 
-\item Copy config/test_data.cfg to \$HOME/test_my.cfg
+\item Copy config/test\_data.cfg to \$HOME/test\_my.cfg
 
-\item Copy config/specification_to_header.txt to \$HOME/spec2hdr.txt
+\item Copy config/specification\_to\_header.txt to \$HOME/spec2hdr.txt
 
-\item Copy config/test_specification.txt to \$HOME/spec.cfg
+\item Copy config/test\_specification.txt to \$HOME/spec.cfg
 
-\item Set the environment variable, DADA_CONFIG to \$HOME/test_my.cfg
+\item Set the environment variable, DADA\_CONFIG to \$HOME/test\_my.cfg
 
 \item Edit the file, setting {\tt PWC\_0} and {\tt PWC\_1} to {\tt dada01}
-	and {\tt dada02}, and SPEC_PARAM_FILE to \$HOME/spec2hdr.txt
+	and {\tt dada02}, and SPEC\_PARAM\_FILE to \$HOME/spec2hdr.txt
         [you will have to expand the shell variable \$HOME]
 
 \item run {\tt dada\_pwc\_demo} on dada01 and dada02
