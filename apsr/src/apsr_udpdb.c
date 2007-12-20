@@ -50,6 +50,8 @@ int udpdb_error_function (dada_pwc_main_t* pwcm) {
   if (udpdb->expected_sequence_no > 1) {
     sleep(1);
     udpdb->error_seconds--;
+    multilog (pwcm->log, LOG_WARNING, "Error Function has %"PRIu64" error "
+              "seconds remaining\n",udpdb->error_seconds);
   }
 
   if (udpdb->error_seconds <= 0) 
@@ -73,7 +75,7 @@ time_t udpdb_start_function (dada_pwc_main_t* pwcm, time_t start_utc)
   udpdb->bytes_received_this_run = 0;
   udpdb->error_seconds = 10;
   udpdb->dropped_packets_to_fill = 0;
-  udpdb->buffer_full = 0;
+  udpdb->packet_in_buffer = 0;
   udpdb->prev_time = time(0);
   udpdb->current_time = udpdb->prev_time;
   
@@ -94,28 +96,25 @@ time_t udpdb_start_function (dada_pwc_main_t* pwcm, time_t start_utc)
    * control interface. This is required when receiving data from the DFB3
    * board, but not required for data transfer */
  
-  if (udpdb->check_udp_headers) { 
-
-    if (ascii_header_get (pwcm->header, "NBAND", "%d", 
-                          &(udpdb->expected_nbands)) != 1) {
-      multilog (log, LOG_WARNING, "Warning. NBAND not set in header, "
-                                  "Using 1 as default\n");
-      ascii_header_set (pwcm->header, "NBAND", "%d", 1);
-    }
+  if (ascii_header_get (pwcm->header, "NBAND", "%d", 
+                        &(udpdb->expected_nbands)) != 1) {
+    multilog (log, LOG_WARNING, "Warning. NBAND not set in header, "
+                                "Using 1 as default\n");
+    ascii_header_set (pwcm->header, "NBAND", "%d", 1);
+  }
                                                                                 
-    if (ascii_header_get (pwcm->header, "NBIT", "%d",
-                          &(udpdb->expected_header_bits)) != 1) {
-      multilog (log, LOG_WARNING, "Warning. NBIT not set in header. "
-                                  "Using 8 as default.\n");
-      ascii_header_set (pwcm->header, "NBIT", "%d", 8);
-    }
+  if (ascii_header_get (pwcm->header, "NBIT", "%d",
+                        &(udpdb->expected_header_bits)) != 1) {
+    multilog (log, LOG_WARNING, "Warning. NBIT not set in header. "
+                                "Using 8 as default.\n");
+    ascii_header_set (pwcm->header, "NBIT", "%d", 8);
+  }
                                                                                 
-    if (ascii_header_get (pwcm->header, "NCHANNEL", "%d",
-                          &(udpdb->expected_nchannels)) != 1) {
-      multilog (log, LOG_WARNING, "Warning. NCHANNEL not set in header "
-                                  "Using 2 as default.\n");
-      ascii_header_set (pwcm->header, "NCHANNEL", "%d", 2);
-    }
+  if (ascii_header_get (pwcm->header, "NCHANNEL", "%d",
+                       &(udpdb->expected_nchannels)) != 1) {
+    multilog (log, LOG_WARNING, "Warning. NCHANNEL not set in header "
+                               "Using 2 as default.\n");
+    ascii_header_set (pwcm->header, "NCHANNEL", "%d", 2);
   }
   
   /* setup the data buffer for NUMUDPACKETS udp packets */
@@ -151,6 +150,9 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
   /* Current packet rate per second */
   uint64_t packets_per_second = 0;
 
+  /* Packets dropped in the last second */
+  uint64_t packets_dropped_this_second = 0;
+
   /* Current byte rate per secon */
   uint64_t bytes_per_second = 0;
 
@@ -158,56 +160,55 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
   uint64_t obs_data_received = 0;
   
   uint64_t i = 0;
-  uint64_t buffer_counter = 0;      // How full the data 
+  uint64_t buf_pos = 0;      // How full the data 
   header_struct header = { '0', '0', 0, '0', '0', '0',"0000", 0 };
 
   // A char with all bits set to 0
   char zerodchar = 'c'; 
   memset(&zerodchar,0,sizeof(zerodchar));
 
+  /* Flag to drop out of for loop */
   int quit = 0;
+
+  /* For select polling */
   struct timeval timeout;
-  struct timeval* timeoutp;
   fd_set *rdsp = NULL;
   fd_set readset;
 
+
   /* keep receiving packets until the data buffer will not take another
      full packet */
-  for (i=0; (!(quit) && ((buffer_counter+UDPBUFFSIZE) < udpdb->datasize));i++) {
+  for (i=0; (!(quit) && ((buf_pos+UDPBUFFSIZE) < udpdb->datasize));i++) {
 
     /* if we have missed udp packet(s), we need to send zero'd packets */
-    if (udpdb->dropped_packets_to_fill > 0) {
+    if (udpdb->dropped_packets_to_fill) {
 
-      /* Fill as many empty packets as we can*/
-      int nfills = (int) floor(
-                    (float) (udpdb->datasize - 
-                   (buffer_counter + udpdb->packet_length)) / 
-                      ((float) (udpdb->packet_length)));
+      uint64_t nfills = udpdb->datasize - (buf_pos + udpdb->packet_length) /
+                        udpdb->packet_length;
 
-      nfills = (nfills > 1) ? nfills : 1; // Max comparre
-      nfills = (nfills < udpdb->dropped_packets_to_fill ? nfills : 
-               udpdb->dropped_packets_to_fill);
-            
+      if (nfills < 1) 
+        nfills = 1;
+
+      if (nfills > udpdb->dropped_packets_to_fill)
+        nfills = udpdb->dropped_packets_to_fill;
+      
       obs_data_received = udpdb->packet_length*nfills;
-      memset((udpdb->data)+buffer_counter,zerodchar,obs_data_received);
-      buffer_counter += obs_data_received;
+      memset((udpdb->data)+buf_pos,zerodchar,obs_data_received);
+      buf_pos += obs_data_received;
       udpdb->dropped_packets_to_fill -= nfills;
       udpdb->expected_sequence_no += nfills;
 
     } else {
   
-      /* If we had a packet in the buffer from a dropped packet seqeunce */ 
-      if (udpdb->buffer_full) {
-        udpdb->buffer_full = 0;
+      /* If we had a packet in the buffer from a dropped packet sequence */ 
+      if (udpdb->packet_in_buffer) {
+        udpdb->packet_in_buffer = 0;
 
       /* else get a fresh packet */
       } else {
 
-        /* select to see if data has arrive */
-
-        /* whilst, waiting for the first packet, have an incredibly short time
-         * timeout, so that the pwc_main isn't "locked" by waiting */      
-        /* In recording state, we allow a 1 second timeout */
+        /* select to see if data has arrive. If recording, allow a 1 second
+         * timeout, else 0.1 seconds to ensure buffer function is responsive */
         if (pwcm->pwc->state == dada_pwc_recording) {
           timeout.tv_sec=1;
           timeout.tv_usec=0;
@@ -216,20 +217,16 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
           timeout.tv_usec=100000;
         }
 
-        timeoutp = &timeout;
-
         FD_ZERO (&readset);
         FD_SET (udpdb->fd, &readset);
         rdsp = &readset;
 
-        int rval = select((udpdb->fd+1),rdsp,NULL,NULL,timeoutp);
+        if ( select((udpdb->fd+1),rdsp,NULL,NULL,&timeout) == 0 ) {
 
-        if (rval == 0) {
-          if (pwcm->pwc->state == dada_pwc_recording) {
-            multilog (log, LOG_ERR, "Error. UDP packet timeout: no packet"
-                      " received for 1 second\n");
-          } 
-
+          if (pwcm->pwc->state == dada_pwc_recording && 
+              udpdb->expected_sequence_no != 1)
+            multilog (log, LOG_WARNING, "UDP packet timeout: no packet "
+                                        "received for 1 second\n");
           quit = 1;
           udpdb->received = 0;
 
@@ -237,61 +234,81 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
 
           udpdb->received = sock_recv (udpdb->fd,udpdb->buffer,UDPBUFFSIZE,0);
 
-          /* The length of all packets is defined to be the length of the 
-           * first packet... (excluding header which is hardcoded*/
-          if (udpdb->expected_sequence_no == 1) 
+          /* Length of first packet sets length of all packets */
+          if (udpdb->expected_sequence_no == 1)
             udpdb->packet_length = udpdb->received - UDPHEADERSIZE;
     
         }
       }
-
-      
+     
+      /* If the packet was not the expected size */ 
       if (udpdb->received != (UDPHEADERSIZE + udpdb->packet_length)) {
 
         /* If we are checking all the header values, then we should be using 
          * the DFB3, hence a small packet (which isn't the last packet) must
          * be erroneous. hence pad the packet with 0's...*/
-        if (udpdb->check_udp_headers) {
 
-          if (!quit) {
-            multilog (log, LOG_ERR, "Error. Received %"PRIu64" bytes from udp "
-                      "socket. Expected %d. Padding missing bytes with 0's\n",
-                      udpdb->received, (UDPHEADERSIZE + udpdb->packet_length));
+        if (!quit) {
+          multilog (log, LOG_ERR, "Received %"PRIu64" bytes in udp packet, "
+                    "expected %d.\n", udpdb->received, 
+                    (UDPHEADERSIZE + udpdb->packet_length));
+
+          /* If we received less */
+          if (udpdb->received < (UDPHEADERSIZE + udpdb->packet_length)) {
 
             char zerodchar = 'c';
             memset(&zerodchar,0,sizeof(zerodchar));
             memset((udpdb->buffer+udpdb->received),zerodchar,
                    (UDPHEADERSIZE + udpdb->packet_length)-udpdb->received);
 
-            /* now adjust the "received value to what it should have been */
-            udpdb->received = (UDPHEADERSIZE + udpdb->packet_length);
           }
 
-        } else {
+          /* now adjust the received value to what it should have been */
+          udpdb->received = (UDPHEADERSIZE + udpdb->packet_length);
+        } 
 
-          multilog (log, LOG_WARNING, "Warning. Received %"PRIu64" bytes "
-                    "from udp socket. Expected %d. Assuming its a deliberately "
-                    "shortened packet\n",udpdb->received,
-                    (UDPHEADERSIZE + udpdb->packet_length));
-
-        }
       }
 
       /* If we have received any useful data */
       if (udpdb->received > UDPHEADERSIZE) { 
+
         obs_data_received = udpdb->received - UDPHEADERSIZE;
-
         decode_header(udpdb->buffer, &header);
-        header.pollength = ((udpdb->received - header.length) * 4) / (header.bits*2);
 
+        if (udpdb->expected_sequence_no == 1) {
+
+          header.pollength = ((udpdb->received - header.length) * 4) / 
+                            (header.bits*2);
+
+          /* If the UDP packet thinks its header is different to the prescribed
+           * size, give up */
+          if (header.length != UDPHEADERSIZE) {
+            multilog (log, LOG_ERR, "Custom UDP header length incorrect. "
+                     "Expected %d bytes, received %d bytes\n",UDPHEADERSIZE,
+                     header.length);
+            buf_pos = DADA_ERROR_HARD;
+            break;
+          }
+          
+          /* Set the resoultion header variable */
+          if ( ascii_header_set (pwcm->header, "RESOLUTION", "%d", 
+                                 header.pollength) < 0) 
+          {
+            multilog (log, LOG_ERR, "Could not set RESOLUTION header parameter"
+                      " to %d\n", header.pollength); 
+            buf_pos = DADA_ERROR_HARD;
+            break;
+          }
+
+        }
+        
 #ifdef _DEBUG
         print_header(&header);
         print_udpbuffer(udpdb->buffer+header.length,received-header.length);
 #endif
       
-        // The sequence number is meant to only revert once every 6.3 days
-        // just log a warning in case this is unexpected 
         if (udpdb->expected_sequence_no > header.sequence) {
+
            multilog (log, LOG_WARNING, "Warning. packet sequence number "
                      "has reverted from %d to %d\n", 
                      udpdb->expected_sequence_no, header.sequence);
@@ -301,49 +318,57 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
         /* We have lost 1 or more packets */
         if (udpdb->expected_sequence_no < header.sequence) {
 
-          udpdb->packets_dropped += (header.sequence - 
-                                     udpdb->expected_sequence_no);
-          udpdb->packets_dropped_this_run += (header.sequence -
-                                              udpdb->expected_sequence_no);
+          uint64_t n_dropped = header.sequence - udpdb->expected_sequence_no;
+
+          /* If we have dropped more than 75% of the space in the ring buffer,
+           * this is considered an error condition, else missing data with 0's 
+           * and continue */
+
+          uint64_t drop_threshold = 0.75 * 
+                                ipcbuf_get_nbufs((ipcbuf_t*)pwcm->data_block) *
+                                ipcbuf_get_bufsz((ipcbuf_t*)pwcm->data_block);
+          
+          if (n_dropped * udpdb->packet_length > drop_threshold) {
+            multilog (log, LOG_ERR, "Too many udp packets dropped. Threshold is"
+                      " %"PRIu64" bytes , but dropped %"PRIu64" bytes \n",
+                      drop_threshold, n_dropped*udpdb->packet_length); 
+            buf_pos = DADA_ERROR_HARD;
+            break;
+          }
+                
+          udpdb->packets_dropped += n_dropped;
+          udpdb->packets_dropped_this_run += n_dropped;
 
           /* we will now need to send zero'd packets in place of lost ones */
+
           assert(udpdb->dropped_packets_to_fill == 0);
-          udpdb->dropped_packets_to_fill = (header.sequence - 
-                                          udpdb->expected_sequence_no);
+          udpdb->dropped_packets_to_fill = n_dropped;
 
           /* the buffer contains a packet, but must be sent after zeros */
-          udpdb->buffer_full = 1; 
 
-          multilog (log, LOG_WARNING, "Warning. %d packets dropped (%d "
-                    "to %d)\n",(header.sequence - udpdb->expected_sequence_no),
-                    udpdb->expected_sequence_no,header.sequence);
+          udpdb->packet_in_buffer = 1; 
 
-          // We now need to pad the appropriate amount of 0's into the 
-          // data block. This depends on the number of packets actually lost
-          // and the size of the packets
+          multilog (log, LOG_WARNING, "%d packets dropped (%d to %d)\n",
+                    n_dropped, udpdb->expected_sequence_no, header.sequence);
 
         } else {
 
-          memcpy((udpdb->data)+buffer_counter, (udpdb->buffer)+UDPHEADERSIZE,
+          /* Everything is ok! */
+
+          memcpy((udpdb->data)+buf_pos, (udpdb->buffer)+UDPHEADERSIZE,
                  obs_data_received);
 
-          buffer_counter += obs_data_received;
-
-          /* Increment statistics for reporting */
+          buf_pos += obs_data_received;
           udpdb->packets_received++;
           udpdb->packets_received_this_run++;
-
           udpdb->bytes_received += obs_data_received;
           udpdb->bytes_received_this_run += obs_data_received;
-    
-          udpdb->expected_sequence_no++;      // Setup next sequence
+          udpdb->expected_sequence_no++;
 
-          if (udpdb->check_udp_headers) 
-            check_header(header, udpdb, pwcm->log);
+          /* This could be removed for efficiency */
+          check_header(header, udpdb, pwcm->log);
 
         }
-      } else {
-        //fprintf(stderr,"Received a packet of less than %d bytes\n",UDPHEADERSIZE);
       }
     }
   }
@@ -353,7 +378,6 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
   
   if (udpdb->prev_time != udpdb->current_time) {
 
-          
     packets_per_second = udpdb->packets_received - 
                          udpdb->packets_received_last_sec;
 
@@ -361,7 +385,20 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
 
     udpdb->packets_received_last_sec = udpdb->packets_received;
     udpdb->bytes_received_last_sec = udpdb->bytes_received;
-    
+
+    packets_dropped_this_second  = udpdb->packets_dropped - udpdb->packets_dropped_last_sec;
+    udpdb->packets_dropped_last_sec = udpdb->packets_dropped;
+
+    multilog(udpdb->statslog, LOG_INFO,"%"PRIu64"\n",packets_dropped_this_second);
+  
+    /* 
+    multilog(udpdb->statslog, LOG_INFO, "%6.0f MB/s, %5.0f/%5.0f MB, %"PRIu64
+            "/%"PRIu64"\n", ((float) bytes_per_second / (1024*1024)),
+            ((float) udpdb->bytes_received_this_run/(1024*1024)),
+            ((float) udpdb->bytes_received/(1024*1024)),
+            udpdb->packets_dropped_this_run,
+            udpdb->packets_dropped);
+
     multilog(udpdb->statslog, LOG_INFO, "%7.0fM, %"PRIu64", %7.0f GB, "
                     "%6.0f MB/s, %"PRIu64", %"PRIu64"\n",
              ((float) (udpdb->packets_received_this_run/1000000)),
@@ -369,10 +406,10 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
              ((float) udpdb->bytes_received_this_run/(1024*1024*1024)),
              ((float) bytes_per_second / (1024*1024)),
              udpdb->packets_dropped_this_run,udpdb->packets_dropped);
-
+    */
   }
   
-  *size = buffer_counter;
+  *size = buf_pos;
 
   assert(udpdb->data != 0);
   
@@ -430,9 +467,6 @@ int main (int argc, char **argv)
   /* mode flag */
   int onetime = 0; 
 
-  /* header provided flag, default to check */
-  int check_udp_headers = 1; 
-  
   /* max length of header file */
   unsigned long fSize=800000000;
 
@@ -450,7 +484,7 @@ int main (int argc, char **argv)
   static char* buffer = 0;
   char *src;
 
-  while ((arg=getopt(argc,argv,"dp:vm:cS:H:n:1h")) != -1) {
+  while ((arg=getopt(argc,argv,"dp:vm:S:H:n:1h")) != -1) {
     switch (arg) {
       
     case 'd':
@@ -482,10 +516,6 @@ int main (int argc, char **argv)
       }
       break;
 
-    case 'c':
-      check_udp_headers = 0;
-      break;
- 
     case 'S':
       if (optarg){
         fSize = atoi(optarg);
@@ -540,16 +570,16 @@ int main (int argc, char **argv)
   /* Setup context information */
   udpdb.verbose = verbose;
   udpdb.port = port;
-  udpdb.check_udp_headers = check_udp_headers;
   udpdb.packets_dropped = 0;
   udpdb.packets_dropped_this_run = 0;
+  udpdb.packets_dropped_last_sec = 0;
   udpdb.packets_received = 0;
   udpdb.packets_received_this_run = 0;
   udpdb.packets_received_last_sec= 0;
   udpdb.bytes_received = 0;
   udpdb.bytes_received_last_sec = 0;
   udpdb.dropped_packets_to_fill = 0;
-  udpdb.buffer_full = 0;
+  udpdb.packet_in_buffer = 0;
   udpdb.received = 0;
   udpdb.prev_time = time(0);
   udpdb.current_time = udpdb.prev_time;
@@ -827,25 +857,25 @@ void check_udpdata(char * buffer, int buffersize, int value) {
 void check_header(header_struct header, udpdb_t *udpdb, multilog_t* log) {
 
   if (header.bits != udpdb->expected_header_bits) {
-    multilog (log, LOG_WARNING, "Warning. Packet %"PRIu64": expected %d "
+    multilog (log, LOG_WARNING, "Packet %"PRIu64": expected %d "
               "nbits per sample, received %d\n", header.sequence, 
               udpdb->expected_header_bits, header.bits);
   }
 
   if (header.channels != udpdb->expected_nchannels) {
-    multilog (log, LOG_WARNING, "Warning. Packet %"PRIu64": expected %d "
+    multilog (log, LOG_WARNING, "Packet %"PRIu64": expected %d "
               "channels, received %d\n", header.sequence,
               udpdb->expected_nchannels, header.channels);
   }
                                                                             
   if (header.bands != udpdb->expected_nbands) {
-    multilog (log, LOG_WARNING, "Warning. Packet %"PRIu64": expected %d "
+    multilog (log, LOG_WARNING, "Packet %"PRIu64": expected %d "
               "bands, received %d\n", header.sequence, udpdb->expected_nbands,
               header.bands);
   }
                                                                             
   if (header.length != UDPHEADERSIZE) {
-    multilog (log, LOG_WARNING, "Warning. Packet %"PRIu64": expected a header "
+    multilog (log, LOG_WARNING, "Packet %"PRIu64": expected a header "
               "of length %d, received %d\n", header.sequence, UDPHEADERSIZE,
               header.length);
   }

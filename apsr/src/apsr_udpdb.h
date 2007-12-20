@@ -35,14 +35,14 @@ typedef struct{
   int verbose;           /* verbosity flag */
   int fd;                /* udp socket file descriptor */
   int port;              /* port to receive UDP data */
-  int check_udp_headers; /* whether to check the UDP header against header */
   char *data;            /* data buffer for sotring of multiple udp packets */
   int datasize;          /* size of *data array */
   char *buffer;          /* buffer for a single udp packet */
-  int buffer_full;       /* flag if buffer overrun occured */
+  int packet_in_buffer;  /* flag if buffer overrun occured */
   uint64_t received;     /* number of bytes received */
   uint64_t expected_sequence_no;
   uint64_t packets_dropped;           // Total dropped
+  uint64_t packets_dropped_last_sec;  // Total dropped in the previous second
   uint64_t packets_dropped_this_run;  // Dropped b/w start and stop
   uint64_t packets_received;          // Total dropped
   uint64_t packets_received_this_run; // Dropped b/w start and stop
