@@ -35,6 +35,7 @@ dada_client_t* dada_client_create ()
   client -> fd = -1;
   client -> transfer_bytes = 0;
   client -> optimal_bytes = 0;
+  client -> quit = 0;
 
   return client;
 }
@@ -175,6 +176,12 @@ int64_t dada_client_transfer (dada_client_t* client)
   if (client->open_function (client) < 0) {
     multilog (log, LOG_ERR, "Error calling open function\n");
     return -1;
+  }
+
+  if (client->quit)
+  {
+    multilog (log, LOG_INFO, "Client quitting\n");
+    return 0;
   }
 
 #ifdef _DEBUG

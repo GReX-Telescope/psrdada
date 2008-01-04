@@ -61,6 +61,9 @@ extern "C" {
     /*! The optimal number of bytes to transfer to/from the target buffer */
     uint64_t optimal_bytes;
 
+    /*! The quit flag */
+    char quit;
+
   } dada_client_t;
 
   /*! Create a new DADA client main loop */
