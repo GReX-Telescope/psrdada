@@ -498,6 +498,8 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
     return -1;
   }
 
+  id->xfer = sync->w_xfer % IPCBUF_XFERS;
+
   sync->s_buf  [id->xfer] = start_buf;
   sync->s_byte [id->xfer] = start_byte;
 
@@ -508,7 +510,7 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
 
 #ifdef _DEBUG
   fprintf (stderr, "ipcbuf_enable_sod: xfer=%"PRIu64
-	   " start buf=%"PRIu64" byte=%"PRIu64"\n", id->xfer,
+	   " start buf=%"PRIu64" byte=%"PRIu64"\n", sync->w_xfer,
            sync->s_buf[id->xfer], sync->s_byte[id->xfer]);
 #endif
 
@@ -643,7 +645,6 @@ int ipcbuf_mark_filled (ipcbuf_t* id, uint64_t nbytes)
     sync -> e_buf  [id->xfer] = sync->w_buf;
     sync -> e_byte [id->xfer] = nbytes;
     sync -> eod    [id->xfer] = 1;
-    sync -> w_xfer++;
 
 #ifdef _DEBUG
       fprintf (stderr, "ipcbuf_mark_filled:"
@@ -651,7 +652,9 @@ int ipcbuf_mark_filled (ipcbuf_t* id, uint64_t nbytes)
 	       sync->e_buf[id->xfer], sync->e_byte[id->xfer]);
 #endif
 
-    id->xfer  = sync->w_xfer % IPCBUF_XFERS;
+    sync -> w_xfer++;
+    id->xfer = sync->w_xfer % IPCBUF_XFERS;
+
     id->state = IPCBUF_WRITER;
     id->sync->w_state = 0;
 
@@ -663,8 +666,8 @@ int ipcbuf_mark_filled (ipcbuf_t* id, uint64_t nbytes)
   sync->w_buf ++;
 
 #ifdef _DEBUG
-  fprintf (stderr, "ipcbuf_mark_filled: count[%"PRIu64"]=%u\n",
-           bufnum, id->count[bufnum]);
+  fprintf (stderr, "ipcbuf_mark_filled: count[%"PRIu64"]=%u w_buf=%"PRIu64"\n",
+           bufnum, id->count[bufnum], sync->w_buf);
   fprintf (stderr, "ipcbuf_mark_filled: increment FULL=%d\n",
 	   semctl (id->semid, IPCBUF_FULL, GETVAL));
 #endif
@@ -708,9 +711,16 @@ int ipcbuf_lock_read (ipcbuf_t* id)
   return 0;
 }
 
+char ipcbuf_is_reader (ipcbuf_t* id)
+{
+  int who = id->state;
+  return who==IPCBUF_READER || who==IPCBUF_READING || who==IPCBUF_RSTOP;
+}
+
 int ipcbuf_unlock_read (ipcbuf_t* id)
 {
-  if (id->state != IPCBUF_READER && id->state != IPCBUF_RSTOP) {
+  if (!ipcbuf_is_reader(id))
+  {
     fprintf (stderr, "ipcbuf_unlock_read: state != READER\n");
     return -1;
   }
@@ -728,13 +738,6 @@ int ipcbuf_unlock_read (ipcbuf_t* id)
   id->state = IPCBUF_VIEWER;
   return 0;
 }
-
-char ipcbuf_is_reader (ipcbuf_t* id)
-{
-  int state = id->state;
-  return state==IPCBUF_READER || state==IPCBUF_READING || state==IPCBUF_RSTOP;
-}
-
 
 char* ipcbuf_get_next_read (ipcbuf_t* id, uint64_t* bytes)
 {
@@ -762,19 +765,17 @@ char* ipcbuf_get_next_read (ipcbuf_t* id, uint64_t* bytes)
 
     if (id->state == IPCBUF_READER) {
 
+      id->xfer = sync->r_xfer % IPCBUF_XFERS;
+
 #ifdef _DEBUG
       fprintf (stderr, "ipcbuf_get_next_read: xfer=%"PRIu64
-	       " start buf=%"PRIu64" byte=%"PRIu64"\n", id->xfer,
+	       " start buf=%"PRIu64" byte=%"PRIu64"\n", sync->r_xfer,
 	       sync->s_buf[id->xfer], 
 	       sync->s_byte[id->xfer]);
 #endif
 
       id->state = IPCBUF_READING;
       id->sync->r_state = IPCBUF_READING;
-
-      /* the writer may reset the ring buffer between transfers */
-      if (sync->r_xfer == 0)
-        id->xfer = 0;
 
       sync->r_buf = sync->s_buf[id->xfer];
       start_byte = sync->s_byte[id->xfer];
@@ -800,7 +801,6 @@ char* ipcbuf_get_next_read (ipcbuf_t* id, uint64_t* bytes)
     /* KLUDGE!  wait until w_buf is incremented without sem operations */
     while (sync->w_buf <= id->viewbuf)
       fsleep (0.1);
-
 
     if (id->viewbuf + sync->nbufs < sync->w_buf)
       id->viewbuf = sync->w_buf - sync->nbufs + 1;
@@ -862,6 +862,7 @@ int ipcbuf_mark_cleared (ipcbuf_t* id)
 
     id->state = IPCBUF_RSTOP;
     id->sync->r_state = 0;
+
     sync->r_xfer ++;
     id->xfer = sync->r_xfer % IPCBUF_XFERS;
 
