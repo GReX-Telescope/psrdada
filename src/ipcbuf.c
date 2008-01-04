@@ -507,7 +507,8 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
     sync->eod [id->xfer] = 0;
 
 #ifdef _DEBUG
-  fprintf (stderr, "ipcbuf_enable_sod: start buf=%"PRIu64" byte=%"PRIu64"\n",
+  fprintf (stderr, "ipcbuf_enable_sod: xfer=%"PRIu64
+	   " start buf=%"PRIu64" byte=%"PRIu64"\n", id->xfer,
            sync->s_buf[id->xfer], sync->s_byte[id->xfer]);
 #endif
 
@@ -567,7 +568,8 @@ char* ipcbuf_get_next_write (ipcbuf_t* id)
   if (id->state == IPCBUF_WCHANGE) {
 
 #ifdef _DEBUG
-  fprintf (stderr, "ipcbuf_get_next_write: WCHANGE->WRITING enable_sod\n");
+  fprintf (stderr, "ipcbuf_get_next_write: WCHANGE->WRITING enable_sod"
+	   " w_buf=%"PRIu64"\n", id->sync->w_buf);
 #endif
 
     if (ipcbuf_enable_sod (id, id->sync->w_buf, 0) < 0) {
