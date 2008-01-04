@@ -20,6 +20,8 @@
 #include <sys/sem.h>
 #include <sys/shm.h>
 
+#define IPCBUF_EODACK 3   /* acknowledgement of end of data */
+
 void usage()
 {
 fprintf (stdout,
