@@ -48,6 +48,9 @@ typedef struct {
 
 #define DADA_DISKDB_INIT { 0, "", "", 0, 0 }
 
+/* Flag set when one file is specified */
+static char one_file = 0;
+
 /*! Pointer to the function that transfers data to/from the target */
 int64_t file_read_function (dada_client_t* client, 
 			    void* data, uint64_t data_size)
@@ -111,6 +114,12 @@ int file_open_function (dada_client_t* client)
   log = client->log;
 
   while (diskdb->filename[0] == '\0') {
+
+    if (one_file)
+    {
+      client->quit = 1;
+      return 0;
+    }
 
     /* look for a new file in the disk array */
     fprintf (stderr, "WRITE FILE SEARCH\n");
@@ -209,9 +218,6 @@ int main (int argc, char **argv)
 
   /* Flag set in verbose mode */
   char verbose = 0;
-
-  /* Flag set when one file is specified */
-  char one_file = 0;
 
   /* Quit flag */
   char quit = 0;
