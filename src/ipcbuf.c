@@ -199,6 +199,9 @@ int ipcbuf_create (ipcbuf_t* id, key_t key, uint64_t nbufs, uint64_t bufsz)
   id -> sync -> r_xfer = 0;
   id -> sync -> w_xfer = 0;
 
+  id -> sync -> r_state = 0;
+  id -> sync -> w_state = 0;
+
   id -> buffer      = 0;
   id -> viewbuf     = 0;
   id -> xfer        = 0;
@@ -363,7 +366,10 @@ int ipcbuf_lock_write (ipcbuf_t* id)
   /* WCHANGE is a special state that means the process will change into the
      WRITING state on the first call to get_next_write */
 
-  id->state = IPCBUF_WCHANGE;
+  if (id->sync->w_state == 0)
+    id->state = IPCBUF_WCHANGE;
+  else
+    id->state = IPCBUF_WRITING;
 
   return 0;
 }
@@ -494,11 +500,11 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
 
   sync->s_buf  [id->xfer] = start_buf;
   sync->s_byte [id->xfer] = start_byte;
+
   /* changed by AJ to fix a bug where a reader is still reading this xfer
    * and the writer wants to start writing to it... */
   if (sync->w_buf == 0) 
-    sync->eod    [id->xfer] = 0;
-   
+    sync->eod [id->xfer] = 0;
 
 #ifdef _DEBUG
   fprintf (stderr, "ipcbuf_enable_sod: start buf=%"PRIu64" byte=%"PRIu64"\n",
@@ -525,6 +531,7 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
 #endif
 
   id->state = IPCBUF_WRITING;
+  id->sync->w_state = IPCBUF_WRITING;
 
 #ifdef _DEBUG
   fprintf (stderr, "ipcbuf_enable_sod: increment FULL=%d by %"PRIu64"\n",
@@ -644,6 +651,7 @@ int ipcbuf_mark_filled (ipcbuf_t* id, uint64_t nbytes)
 
     id->xfer  = sync->w_xfer % IPCBUF_XFERS;
     id->state = IPCBUF_WRITER;
+    id->sync->w_state = 0;
 
   }
 
@@ -690,7 +698,11 @@ int ipcbuf_lock_read (ipcbuf_t* id)
   fprintf (stderr, "ipcbuf_lock_read: reader status locked\n");
 #endif
 
-  id->state = IPCBUF_READER;
+  if (id->sync->r_state == 0)
+    id->state = IPCBUF_READER;
+  else
+    id->state = IPCBUF_READING;
+
   return 0;
 }
 
@@ -749,13 +761,14 @@ char* ipcbuf_get_next_read (ipcbuf_t* id, uint64_t* bytes)
     if (id->state == IPCBUF_READER) {
 
 #ifdef _DEBUG
-      fprintf (stderr, "ipcbuf_get_next_read:"
-	       " start buf=%"PRIu64" byte=%"PRIu64"\n",
+      fprintf (stderr, "ipcbuf_get_next_read: xfer=%"PRIu64
+	       " start buf=%"PRIu64" byte=%"PRIu64"\n", id->xfer,
 	       sync->s_buf[id->xfer], 
 	       sync->s_byte[id->xfer]);
 #endif
 
       id->state = IPCBUF_READING;
+      id->sync->r_state = IPCBUF_READING;
 
       /* the writer may reset the ring buffer between transfers */
       if (sync->r_xfer == 0)
@@ -846,6 +859,7 @@ int ipcbuf_mark_cleared (ipcbuf_t* id)
 #endif
 
     id->state = IPCBUF_RSTOP;
+    id->sync->r_state = 0;
     sync->r_xfer ++;
     id->xfer = sync->r_xfer % IPCBUF_XFERS;
 

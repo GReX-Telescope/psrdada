@@ -27,6 +27,9 @@ extern "C" {
     uint64_t r_buf;    /* count of next buffer to read */
     uint64_t w_buf;    /* count of next buffer to write */
 
+    int r_state;       /* the state of the reader */
+    int w_state;       /* the state of the writer */
+
     uint64_t r_xfer;   /* the current read transfer number */
     uint64_t w_xfer;   /* the current write transfer number */
 
@@ -68,7 +71,7 @@ extern "C" {
 
   } ipcbuf_t;
 
-#define IPCBUF_INIT {0, -1,-1,0, 0,0, 0, 0}
+#define IPCBUF_INIT {0, -1,-1,0, 0,0,0,0, 0, 0, 0}
 
   /* ////////////////////////////////////////////////////////////////////
      
