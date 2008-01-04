@@ -279,15 +279,12 @@ int main (int argc, char **argv)
 
   client->context = &diskdb;
 
-  while (!quit) {
+  while (!client->quit) {
 
     if (dada_client_write (client) < 0) {
       multilog (log, LOG_ERR, "Error during transfer\n");
       return -1;
     }
-
-    if (one_file)
-      break;
 
   }
 
