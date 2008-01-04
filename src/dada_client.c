@@ -408,6 +408,9 @@ int dada_client_write (dada_client_t* client)
       return -1;
     }
 
+    if (client->quit)
+      break;
+
     if (ipcio_open (client->data_block, 'W') < 0) {
       multilog (log, LOG_ERR, "Could not re-open Data Block for writing\n");
       return -1;
@@ -415,6 +418,5 @@ int dada_client_write (dada_client_t* client)
 
   }
 
-  //ipcbuf_reset ((ipcbuf_t*)client->data_block);
   return 0;
 }
