@@ -32,6 +32,9 @@ extern "C" {
     /*! The I/O stream from the node */
     FILE* from;
 
+    /*! The log stream from the node */
+    FILE* log;
+
   } node_t;
 
   /*! Create a new node */
@@ -83,6 +86,9 @@ extern "C" {
 
     /* for multi-threaded use of the nexus */
     pthread_mutex_t mutex;
+
+    /* The base directory for multilog messages */
+    char* logfile_dir;
     
   } nexus_t;
 

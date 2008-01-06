@@ -1,3 +1,4 @@
+#include "dada_def.h"
 #include "nexus.h"
 #include "ascii_header.h"
 #include "futils.h"
@@ -8,6 +9,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <assert.h>
+#include <sys/stat.h>
 
 // #define _DEBUG 1
 
@@ -18,6 +20,7 @@ void node_init (node_t* node)
   node -> id = -1;
   node -> to = 0;
   node -> from = 0;
+  node -> log = 0;
 }
 
 /*! Create a new node */
@@ -66,6 +69,9 @@ void nexus_init (nexus_t* nexus)
   /* no mirror by default */
   nexus -> mirror = 0;
 
+  /* no file logging be default */
+  nexus -> logfile_dir = 0;
+  
 }
 
 /*! Create a new nexus */
@@ -95,6 +101,8 @@ int nexus_destroy (nexus_t* nexus)
       fclose (node->to);
     if (node->from)
       fclose (node->from);
+    if (node->log)
+      fclose (node->log);
     free (node);
   }
 
@@ -115,6 +123,7 @@ int nexus_parse (nexus_t* n, const char* buffer)
 {
   char node_name [16];
   char host_name [64];
+  char logfile_dir [256];
 
   unsigned inode, nnode = 0;
 
@@ -132,6 +141,40 @@ int nexus_parse (nexus_t* n, const char* buffer)
   if (ascii_header_get (buffer, "COM_POLL", "%d", &(n->polling_interval)) <0) {
     fprintf (stderr, "nexus_parse: using default COM_POLL\n");
     n->polling_interval = 10;
+  }
+
+  n->logfile_dir = NULL;
+  /* If this is the mirror nexus, then setup the log file */
+  if (ascii_header_get (buffer,"LOGFILE_DIR", "%s", &logfile_dir) < 0) {
+    fprintf (stderr,"nexus_parse: LOGFILE_DIR not specified, not logging\n");
+  } else {
+
+    if (n->mirror) {
+         
+      n->mirror->logfile_dir = malloc(strlen(getenv("DADA_ROOT")) + 1 + 
+                               strlen(logfile_dir));
+
+      sprintf(n->mirror->logfile_dir,"%s/%s",getenv("DADA_ROOT"),logfile_dir);
+
+      struct stat st;
+      stat(n->mirror->logfile_dir,&st); 
+    
+      /* check the dir:  is dir     write      execute  permissions */
+      if (!(S_ISDIR(st.st_mode))) {
+        fprintf (stderr,"nexus_parse: logfile directory %s did not exist\n",
+                                              n->mirror->logfile_dir);
+        n->mirror->logfile_dir = NULL;
+        return -1;
+      }
+
+      if (!((st.st_mode & S_IWUSR) && (st.st_mode & S_IXUSR) && 
+                                      (st.st_mode & S_IRUSR))) {
+        fprintf (stderr,"nexus_parse: logfile directory %s was not writeable\n",
+                        n->mirror->logfile_dir);
+        n->logfile_dir = NULL;
+        return -1;
+      }
+    }
   }
 
   sprintf (node_name, "NUM_%s", n->node_prefix);
@@ -207,6 +250,7 @@ void* node_open_thread (void* context)
   int fd = -1;
   FILE* to = 0;
   FILE* from = 0;
+  FILE* log = 0;
 
   unsigned inode = 0;
 
@@ -249,8 +293,6 @@ void* node_open_thread (void* context)
   fprintf (stderr, "nexus_open_thread: connected with %s\n", host_name);
 #endif
 
-  free (host_name);
-
   from = fdopen (fd, "r");
   if (!from)  {
     perror ("node_open_thread: Error creating input stream");
@@ -263,6 +305,48 @@ void* node_open_thread (void* context)
     return 0;
   }
 
+
+  /* If we are the mirror and have a logfile_dir */
+  if ((nexus->node_port == DADA_DEFAULT_PWC_LOG) && (nexus->logfile_dir)) {
+
+    char *buffer = 0;
+    int buffer_size = strlen(nexus->logfile_dir) + 1 + strlen(host_name) + 5;
+    buffer = malloc(buffer_size * sizeof(char));
+    sprintf(buffer,"%s/%s.pwc.log",nexus->logfile_dir,host_name);
+
+#ifdef _DEBUG
+    fprintf(stderr,"node->log_file = %s\n",buffer);
+#endif
+
+    log = fopen(buffer,"a");
+    if (!log) {
+      fprintf (stderr, "node_open_thread: Error creating logfile stream: %s", buffer);
+      return 0;
+    }
+  }
+
+  /* If we are the base nexus, connect the log file. This will wait for the
+   * log file of the mirror node to be connected first */
+  if (nexus->mirror && nexus->mirror->logfile_dir) {
+    assert(log == 0);
+    sleep(1);
+    while (log == 0) {
+      /* Set our log FILE* to the mirrors matching one */
+      pthread_mutex_lock (&(nexus->mirror->mutex));
+      node = (node_t*) nexus->mirror->nodes[id];
+      log = node->log;
+      pthread_mutex_unlock (&(nexus->mirror->mutex));
+      if (!(log)) {
+        fprintf (stderr, "open_thread: Waiting for FILE * from mirror nexus "
+                         "for node %d, sleeping 1 seconds before retrying\n",
+                         id);
+        sleep (1);
+      }
+    }
+  }
+ 
+  free (host_name);
+
   /* do not buffer the I/O */
   setbuf (to, 0);
   setbuf (from, 0);
@@ -274,9 +358,10 @@ void* node_open_thread (void* context)
     if (id == node->id) {
       node->to = to;
       node->from = from;
-      to = from = 0;
+      node->log = log;
+      to = from = log = 0;
       if (nexus->node_init)
-	nexus->node_init (nexus, node);
+        nexus->node_init (nexus, node);
       break;
     }
   }
@@ -361,6 +446,7 @@ int nexus_add (nexus_t* nexus, int id, char* host_name)
   node->id = id;
   node->to = 0;
   node->from = 0;
+  node->log = 0;
 
   nexus->nodes[nexus->nnode] = node;
   nexus->nnode ++;
@@ -389,6 +475,10 @@ int nexus_restart (nexus_t* nexus, unsigned inode)
   if (node->from)
     fclose (node->from);
   node->from = 0;
+
+  if (node->log)
+    fclose (node->log);
+  node->log = 0;
 
   return nexus_connect (nexus, inode);
 }
