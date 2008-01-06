@@ -40,13 +40,30 @@ void* monitor_thread (void* context)
   char* buffer = malloc (buffer_size);
   assert (buffer != 0);
 
+  /* For logging to local file */
+  FILE* pwcc_logfile = 0;   
+
   /* Create a multi log to view PWC collated PWC messages */
   monitor->log = multilog_open ("dada_pwc_command_logger", 0);
+
+  /* Turn of timestamping as they will already be stamped by the pwc */
+  monitor->log->timestamp = 0;
+
   multilog_serve (monitor->log, DADA_DEFAULT_PWC_MONITOR_LOG); 
 
 #ifdef _DEBUG
   fprintf (stderr, "monitor_thread start nexus=%p\n", monitor->nexus);
 #endif
+
+  /* If we are logging messages to file */
+  if (monitor->nexus->logfile_dir) {
+    sprintf(buffer,"%s/nexus.pwc.log",monitor->nexus->logfile_dir);
+    pwcc_logfile = fopen(buffer,"a");
+    if (!pwcc_logfile) {
+      fprintf (stderr, "Could not open pwcc log file: ");
+      perror(buffer);
+    }
+  }
 
   while (monitor->nexus) {
 
@@ -72,6 +89,7 @@ void* monitor_thread (void* context)
           fprintf(stderr, "monitor_thread: lost connection with %d\n",fileno(node->from));
           node->to = 0;
           node->from = 0;
+          node->log = 0;
         } else {
           fd = fileno(node->from);
           if (fd > maxfd)
@@ -87,6 +105,7 @@ void* monitor_thread (void* context)
       if (select (maxfd + 1, &readset, NULL, NULL, NULL) < 0) {
         perror ("monitor_thread: select");
         free (buffer);
+        if (pwcc_logfile) fclose(pwcc_logfile);
         return 0;
       }
 
@@ -117,13 +136,24 @@ void* monitor_thread (void* context)
           fprintf(stderr, "lost connection with %d\n",fileno(node->from));
           node->to = 0;
           node->from = 0;
+          node->log = 0;
         }
 
 #ifdef _DEBUG
-        fprintf (stderr, "%u: %s", inode, buffer);
+        fprintf (stderr, "%u: %s", node->host, buffer);
 #endif
+        if (node->log) {
+          fprintf(node->log,"%s",buffer);
+          fflush(node->log);
+        }
+  
+        if (pwcc_logfile) {
+          fprintf(pwcc_logfile,"%s: %s",node->host,buffer);
+          fflush(pwcc_logfile);
+        }
+        
         if (monitor->log)
-          multilog (monitor->log, LOG_INFO, "%u: %s", inode, buffer);
+          multilog (monitor->log, LOG_INFO, "%s: %s", node->host, buffer);
 
         if (monitor->handle_message)
           monitor->handle_message (monitor->context, inode, buffer);
@@ -140,6 +170,7 @@ void* monitor_thread (void* context)
 #endif
 
   free (buffer);
+  if (pwcc_logfile) fclose(pwcc_logfile);
   return 0;
 }
 
