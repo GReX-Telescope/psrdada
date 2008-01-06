@@ -220,7 +220,7 @@ fprintf (stderr, "dada_client_writer HEADER START\n%sHEADER END\n", client->head
     }
   }
 
-  multilog (log, LOG_ERR, "Transfering %"PRIu64" bytes in %"PRIu64
+  multilog (log, LOG_INFO, "Transfering %"PRIu64" bytes in %"PRIu64
             " byte blocks\n", client->transfer_bytes, client->optimal_bytes);
 
   gettimeofday (&start_loop, NULL);
@@ -278,7 +278,7 @@ int dada_client_read (dada_client_t* client)
 
     if (!header) {
       multilog (log, LOG_ERR, "Could not get next header\n");
-      return -1;
+      return DADA_ERROR_FATAL;
     }
 
     if (!header_size) {
@@ -293,9 +293,7 @@ int dada_client_read (dada_client_t* client)
         multilog (log, LOG_ERR, "Empty header block\n");
         return -1;
       }
-
     }
-
   }
 
   header_size = ipcbuf_get_bufsz (client->header_block);
