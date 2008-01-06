@@ -3,6 +3,7 @@
 
 #include <stdlib.h>
 #include <unistd.h>
+#include <string.h>
 
 /* #define _DEBUG 1 */
 
@@ -12,7 +13,9 @@ void usage()
 	   "dada_pwc_command [options]\n"
 	   " -d         run as daemon\n"
 	   " -p         port to listen\n"
-	   " -v         verbose messages\n");
+	   " -v         verbose messages\n"
+	   " -c file    use config file [default config/default_config.txt]\n"
+     "            relative to $DADA_ROOT/\n");
 }
 
 int main (int argc, char **argv)
@@ -31,13 +34,16 @@ int main (int argc, char **argv)
 
   int arg = 0;
 
+  /* dada root runtime directory */
+  char* dada_root = getenv ("DADA_ROOT");
+
   /* configuration file name */
-  char* dada_config = getenv ("DADA_CONFIG");
+  char* dada_config = "config/default_config.txt";
 
   fprintf (stderr, "Creating DADA PWC nexus\n");
   nexus = dada_pwc_nexus_create ();
 
-  while ((arg=getopt(argc,argv,"dp:v")) != -1)
+  while ((arg=getopt(argc,argv,"dp:vc:")) != -1)
     switch (arg) {
       
     case 'd':
@@ -53,14 +59,18 @@ int main (int argc, char **argv)
       verbose=1;
       break;
       
+    case 'c':
+      dada_config = optarg;
+      break;
+
     default:
       usage ();
       return 0;
       
     }
 
-  if (!dada_config) {
-    fprintf (stderr, "Please define the DADA_CONFIG environment variable\n");
+  if (!dada_root) {
+    fprintf (stderr, "Please define the DADA_ROOT environment variable\n");
     return -1;
   }
 
@@ -72,6 +82,10 @@ int main (int argc, char **argv)
   }
   else
     multilog_add (log, stderr);
+
+ 
+  char dada_config_file[strlen(dada_root)+strlen(dada_config)];
+  sprintf(dada_config_file,"%s/%s",dada_root,dada_config);
 
   fprintf (stderr, "Configuring DADA PWC nexus\n");
   if (dada_pwc_nexus_configure (nexus, dada_config) < 0) {
