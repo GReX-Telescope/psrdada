@@ -25,6 +25,9 @@ int dada_pwc_specify_header (char keep, const char* filter,
   // length of filter
   unsigned filter_length;
 
+  // string length of param_value
+  int param_value_length;
+
   // parameter name copied from specification to header
   char* param = 0;
 
@@ -55,9 +58,17 @@ int dada_pwc_specify_header (char keep, const char* filter,
     fprintf (stderr, "line=%s\n", file_line);
 #endif
 
-    if ( sscanf( file_line, "%s %s", param_name, param_value ) != 2 )
+    //if ( sscanf( file_line, "%s %s", param_name, param_value ) != 2 )
+    if ( sscanf( file_line, "%s %128[^\n]", param_name, param_value ) != 2 )
       continue;
 
+    // Remove trailing whitespace
+    param_value_length = strlen(param_value) - 1;
+    while ((param_value[param_value_length] == ' ') && (param_value_length >= 0)) {
+      param_value[param_value_length] = '\0';
+      param_value_length--;
+    }
+    
 #ifdef _DEBUG
     fprintf (stderr, "param filter=%s name=%s value=%s\n", 
              filter, param_name, param_value);
