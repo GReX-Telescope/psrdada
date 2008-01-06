@@ -25,6 +25,7 @@ extern "C" {
     pthread_t thread;
 
     int port;         /* the port on which multilog_server is listening */
+    int timestamp;    /* flag for placing a preceeding timestamp on the msg */
 
   } multilog_t;
 

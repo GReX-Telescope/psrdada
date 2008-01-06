@@ -1,4 +1,5 @@
 #include "multilog.h"
+#include "dada_def.h"
 
 #include <stdlib.h>
 #include <stdarg.h>
@@ -21,6 +22,7 @@ multilog_t* multilog_open (const char* program_name, char syslog)
   m->logs = 0;
   m->nlog = 0;
   m->port = 0;
+  m->timestamp = 1;
 
   pthread_mutex_init(&(m->mutex), NULL);
 
@@ -91,7 +93,21 @@ int multilog (multilog_t* m, int priority, const char* format, ...)
       ilog --;
     }
     else {
-      fprintf (m->logs[ilog], "%s: ", m->name);
+      if (m->timestamp) {
+        unsigned buffer_size = 64;
+        static char* buffer = 0;
+        if (!buffer)
+          buffer = malloc (buffer_size);
+        assert (buffer != 0);
+        time_t now = time(0);
+        strftime (buffer, buffer_size, DADA_TIMESTR,
+                         (struct tm*) localtime(&now));
+        fprintf(m->logs[ilog],"[%s] ",buffer);
+      }
+             
+      if (priority == LOG_ERR) fprintf(m->logs[ilog], "ERR: ");
+      if (priority == LOG_WARNING) fprintf(m->logs[ilog], "WARN: ");
+      //fprintf (m->logs[ilog], "%s: ", m->name);
       if (vfprintf (m->logs[ilog], format, arguments) < 0)
         perror ("multilog: error vfprintf");
     }
