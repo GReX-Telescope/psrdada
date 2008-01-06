@@ -406,8 +406,8 @@ int dada_pwc_nexus_serve (dada_pwc_nexus_t* nexus)
 
     command = dada_pwc_command_get (nexus->pwc);
 
-    if (dada_pwc_nexus_send (nexus, command) < 0) {
-
+    if ((command.code != dada_pwc_exit) &&
+        (dada_pwc_nexus_send (nexus, command) < 0)) {
       fprintf (stderr, "error issuing command = %d\n", command.code);
 
     }
