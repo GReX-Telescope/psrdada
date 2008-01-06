@@ -8,7 +8,7 @@
 #define APSR_DEFAULT_UDPDB_STATS  56060
 
 /* default port to connect to dbtritest client logging interface */
-#define APSR_DEFAULT_DBTRITEST_LOG  56062
+#define APSR_DEFAULT_DBTRIWAVE_LOG  56062
 
 /* default port to connect to dada_dbudp logging interface */
 #define APSR_DEFAULT_DBUDP_LOG  56064

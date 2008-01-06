@@ -384,7 +384,7 @@ int sendPacket(int sockfd, struct sockaddr_in their_addr, char *udp_data, int si
 
 void usage() {
   fprintf(stdout,
-    "test_boardudp [options] udpdb_client\n"
+    "test_apsr_triwave [options] dest_host\n"
     "\t-s n          send frames of size n bytes* [default %d]\n"
     "\t-p n          udp port to send packets to [default %d]\n"
     "\t-n n          number of seconds to transmit [default 5]\n"
