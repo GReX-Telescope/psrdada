@@ -20,7 +20,8 @@ include_HEADERS = ascii_header.h multilog.h sock.h monitor.h	\
 bin_PROGRAMS = dada_db dada_write_test dada_dbdisk dada_diskdb \
 	dada_dbnic dada_nicdb				       \
 	dada_install_header dada_pwc_command dada_pwc_demo \
-	dada_dbnull dada_dbmonitor dada_dbxferinfo dada_dbmetric
+	dada_dbnull dada_dbmonitor dada_dbxferinfo dada_dbmetric \
+	dada_header
 
 check_PROGRAMS = test_multilog test_ipcbuf loop_ipcio	\
 	test_command_parser test_multilog_server telnecho		\
