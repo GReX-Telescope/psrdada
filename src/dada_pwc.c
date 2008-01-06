@@ -200,7 +200,14 @@ int dada_pwc_command_set (dada_pwc_t* primary, FILE* output,
       ret = -1;
     }
     break;
-                                                                                                    
+
+  case dada_pwc_exit:
+    if (primary->state != dada_pwc_idle) {
+      fprintf (output, "Cannot exit when not IDLE (state=%s)\n", 
+               dada_pwc_state_to_string (primary->state));
+      ret = -1;
+    }
+    break;
   }
 
   if (ret == 0) {
@@ -516,6 +523,21 @@ int dada_pwc_cmd_reset (void* context, FILE* fptr, char* args)
 
 }
 
+int dada_pwc_cmd_quit (void* context, FILE* fptr, char* args)
+{
+  dada_pwc_t* primary = (dada_pwc_t*) context;
+
+  dada_pwc_command_t command = DADA_PWC_COMMAND_INIT;
+  command.code = dada_pwc_exit;
+  command.utc = 0;
+
+  primary->quit = 1;
+
+  return dada_pwc_command_set (primary, fptr, command);
+                                                                                                                                                      
+}
+
+
 /*! Create a new DADA primary write client connection */
 dada_pwc_t* dada_pwc_create ()
 {
@@ -575,11 +597,16 @@ dada_pwc_t* dada_pwc_create ()
 
   command_parse_add (primary->parser, dada_pwc_cmd_set_utc_start, primary,
                      "set_utc_start", "set the UTC_START header parameter", NULL);
+
+  command_parse_add (primary->parser, dada_pwc_cmd_quit, primary,
+                     "quit", "quit", NULL);
+
   command_parse_add (primary->parser, dada_pwc_cmd_reset, primary,
                      "reset", "reset error state to idle", NULL);
 
   primary -> server = 0;
   primary -> log = 0;
+  primary -> quit = 0;
 
   return primary;
 }
@@ -630,7 +657,7 @@ int dada_pwc_destroy (dada_pwc_t* primary)
 /*! Primary write client should exit when this is true */
 int dada_pwc_quit (dada_pwc_t* primary)
 {
-  return 0;
+  return primary->quit;
 }
 
 /*! Check to see if a command has arrived */
