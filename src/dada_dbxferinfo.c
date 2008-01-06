@@ -78,7 +78,8 @@ int main (int argc, char **argv)
 
   hdu = dada_hdu_create (log);
 
-  printf("connecting\n");
+  if (verbose)
+    printf("Connecting to data block\n");
   if (dada_hdu_connect (hdu) < 0)
     return EXIT_FAILURE;
 
@@ -90,26 +91,49 @@ int main (int argc, char **argv)
   uint64_t bufsz = ipcbuf_get_bufsz (hb);
   uint64_t nhbufs = ipcbuf_get_nbufs (hb);
 
-  fprintf(stderr,"HEADER BLOCK:\n");
-  fprintf(stderr,"Number of buffers: %"PRIu64"\n",nhbufs);
-  fprintf(stderr,"Buffer size: %"PRIu64"\n",bufsz);
   uint64_t total_bytes = nhbufs * bufsz;
-  fprintf(stderr,"Total buffer memory: %5.0f MB\n", ((double) total_bytes)/(1024.0*1024.0));
+  if (verbose) {
+    fprintf(stderr,"HEADER BLOCK:\n");
+    fprintf(stderr,"Number of buffers: %"PRIu64"\n",nhbufs);
+    fprintf(stderr,"Buffer size: %"PRIu64"\n",bufsz);
+    fprintf(stderr,"Total buffer memory: %5.0f MB\n", ((double) total_bytes) / 
+                                                       (1024.0*1024.0));
+  }
 
   bufsz = ipcbuf_get_bufsz (db);
   uint64_t ndbufs = ipcbuf_get_nbufs (db);
-
-  fprintf(stderr,"DATA BLOCK:\n");
-  fprintf(stderr,"Number of buffers: %"PRIu64"\n",ndbufs);
-  fprintf(stderr,"Buffer size: %"PRIu64"\n",bufsz);
   total_bytes = ndbufs * bufsz;
-  fprintf(stderr,"Total buffer memory: %5.0f MB\n", ((double) total_bytes)/(1024.0*1024.0));
+  if (verbose) {
+    fprintf(stderr,"DATA BLOCK:\n");
+    fprintf(stderr,"Number of buffers: %"PRIu64"\n",ndbufs);
+    fprintf(stderr,"Buffer size: %"PRIu64"\n",bufsz);
+    fprintf(stderr,"Total buffer memory: %5.0f MB\n", ((double) total_bytes) / 
+                                                       (1024.0*1024.0));
+  }
 
   int i=0;
   for (i=0;i<IPCBUF_XFERS;i++) {
-    fprintf(stderr,"%d: [%"PRIu64",%"PRIu64"]=>[%"PRIu64",%"PRIu64"] %d\n", i,
-                    db->sync->s_buf[i],db->sync->s_byte[i],
-                    db->sync->e_buf[i],db->sync->e_byte[i],db->sync->eod[i]);
+    if (verbose) {
+      fprintf(stderr,"Data Block Xfers:\n");
+      fprintf(stderr,"[%"PRIu64",%"PRIu64"]=>[%"PRIu64",%"PRIu64"] %d\n", 
+                      db->sync->s_buf[i],db->sync->s_byte[i],
+                      db->sync->e_buf[i],db->sync->e_byte[i],db->sync->eod[i]);
+    } else {
+      fprintf(stderr,"%"PRIu64",%"PRIu64",%"PRIu64",%"PRIu64",%d\n",
+                       db->sync->s_buf[i],db->sync->s_byte[i],
+                       db->sync->e_buf[i],db->sync->e_byte[i],db->sync->eod[i]);
+    }
+  }
+
+  if (verbose) {
+    /* Note there is only 1 XFER in the header block, and it doesn't even have
+     * a proper xfer concept in it */
+          
+    fprintf(stderr,"Header Block Xfers:\n");
+    fprintf(stderr,"[%"PRIu64",%"PRIu64"]=>[%"PRIu64",%"PRIu64"] %d\n",
+                   hb->sync->s_buf[0],hb->sync->s_byte[0],
+                   hb->sync->e_buf[0],hb->sync->e_byte[0],hb->sync->eod[0]);
+
   }
 
   if (dada_hdu_disconnect (hdu) < 0)
