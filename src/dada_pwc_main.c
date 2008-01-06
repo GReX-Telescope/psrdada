@@ -102,24 +102,24 @@ int dada_pwc_main (dada_pwc_main_t* pwcm)
 
     /* Enter the idle/prepared state. */
     rval = dada_pwc_main_prepare (pwcm);
-    if (rval < 0) dada_pwc_main_process_error(pwcm, rval);
+    if (rval < 0) dada_pwc_main_process_error (pwcm, rval);
     else {
             
       /* Start the data transfer. */
       rval = dada_pwc_main_start_transfer (pwcm);
-      if (rval < 0) dada_pwc_main_process_error(pwcm, rval);
+      if (rval < 0) dada_pwc_main_process_error (pwcm, rval);
       else {
 
         /* Enter the clocking/recording state. */
         rval = dada_pwc_main_transfer_data (pwcm);
-        if (rval < 0) dada_pwc_main_process_error(pwcm, rval); 
+        if (rval < 0) dada_pwc_main_process_error (pwcm, rval); 
 
       }
 
       /* Stop the data transfer. */
       rval = dada_pwc_main_stop_transfer (pwcm);
       if (rval < 0) 
-        dada_pwc_main_process_error(pwcm, rval);
+        dada_pwc_main_process_error (pwcm, rval);
 
     } 
   }
@@ -153,7 +153,13 @@ int dada_pwc_main_prepare (dada_pwc_main_t* pwcm)
 
     pwcm->command = dada_pwc_command_get (pwcm->pwc);
 
-    if (pwcm->command.code == dada_pwc_header)  {
+    if (pwcm->command.code == dada_pwc_reset) {
+
+      dada_pwc_set_state (pwcm->pwc, dada_pwc_idle, 0);
+
+    }
+    
+    else if (pwcm->command.code == dada_pwc_header)  {
    
 #ifdef _DEBUG 
       multilog (pwcm->log, LOG_INFO, 
@@ -577,6 +583,11 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
       /* get the next data buffer */
       buffer = pwcm->buffer_function (pwcm, &buffer_size);
 
+      /* If the buffer_function had an error */
+      if (buffer_size < 0) 
+        return buffer_size;
+
+
       if ((data_transfer_error_state) && (buffer_size != 0)) {
         data_transfer_error_state = 0;
         if (total_bytes_written) 
@@ -618,6 +629,8 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
         }
 
       }
+      
+      
       
       if (!buffer) {
         multilog (pwcm->log, LOG_ERR, "buffer function error\n");
