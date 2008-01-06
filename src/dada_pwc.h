@@ -82,7 +82,10 @@ extern "C" {
     dada_pwc_set_utc_start,
 
     /*! reset the pwc, clearing error state */
-    dada_pwc_reset
+    dada_pwc_reset,
+
+    /*! quit the pwc */
+    dada_pwc_exit
   };
 
   typedef struct {
@@ -113,6 +116,9 @@ extern "C" {
 
     /*! The primary write client identifier */
     int id;
+
+    /* flag to quit */
+    int quit;
 
     /*! The state of the primary write client */
     dada_pwc_state_t state;
