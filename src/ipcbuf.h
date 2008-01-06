@@ -148,6 +148,9 @@ extern "C" {
   /*! Get the next full buffer, and the number of bytes in it */
   char* ipcbuf_get_next_read (ipcbuf_t*, uint64_t* bytes);
 
+  /*! Gets the next full buffer, but does not modify any aspect of the ring buffer */
+  char *ipcbuf_get_next_readable (ipcbuf_t* id, uint64_t* bytes);
+
   /*! Declare that the last buffer to be returned by
     ipcbuf_get_next_read has been cleared and can be recycled.  The
     process must have locked "data reader" status with a call to
