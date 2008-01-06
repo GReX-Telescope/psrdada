@@ -107,7 +107,7 @@ int ipcbuf_get (ipcbuf_t* id, int flag)
 
 #ifdef _DEBUG
   fprintf (stderr, "ipcbuf_get: semkey=0x%x shmkey=0x%x\n",
-	   sync->semkey, id->shmkey[0]);
+                   sync->semkey, id->shmkey[0]);
 #endif
 
   /* all semaphores are created in this id */
@@ -115,7 +115,7 @@ int ipcbuf_get (ipcbuf_t* id, int flag)
 
   if (id->semid < 0) {
     fprintf (stderr, "ipcbuf_get: semget(0x%x, %d, 0x%x): %s\n",
-	     sync->semkey, IPCBUF_NSEM, flag, strerror(errno));
+                     sync->semkey, IPCBUF_NSEM, flag, strerror(errno));
     retval = -1;
   }
 
@@ -131,11 +131,11 @@ int ipcbuf_get (ipcbuf_t* id, int flag)
   for (ibuf=0; ibuf < sync->nbufs; ibuf++) {
 
     id->buffer[ibuf] = ipc_alloc (id->shmkey[ibuf], sync->bufsz, 
-				  flag, id->shmid + ibuf);
+          flag, id->shmid + ibuf);
 
     if ( id->buffer[ibuf] == 0 ) {
       fprintf (stderr, "ipcbuf_get: ipc_alloc buffer[%u] %s\n",
-	       ibuf, strerror(errno));
+                       ibuf, strerror(errno));
       retval = -1;
       break;
     }
@@ -166,7 +166,7 @@ int ipcbuf_create (ipcbuf_t* id, key_t key, uint64_t nbufs, uint64_t bufsz)
 
 #ifdef _DEBUG
   fprintf (stderr, "ipcbuf_create: key=%d nbufs=%"PRIu64" bufsz=%"PRIu64"\n",
-	   key, nbufs, bufsz);
+                   key, nbufs, bufsz);
 #endif
 
   if (ipcsync_get (id, key, nbufs, flag) < 0) {
@@ -214,7 +214,7 @@ int ipcbuf_create (ipcbuf_t* id, key_t key, uint64_t nbufs, uint64_t bufsz)
 
 #ifdef _DEBUG
   fprintf (stderr, "ipcbuf_create: syncid=%d semid=%d\n",
-	   id->syncid, id->semid);
+                   id->syncid, id->semid);
 #endif
 
   /* ready to be locked by writer and reader processes */
@@ -252,7 +252,7 @@ int ipcbuf_connect (ipcbuf_t* id, key_t key)
 
 #ifdef _DEBUG
   fprintf (stderr, "ipcbuf_connect: key=0x%x nbufs=%"PRIu64" bufsz=%"PRIu64"\n",
-	   key, id->sync->nbufs, id->sync->bufsz);
+                    key, id->sync->nbufs, id->sync->bufsz);
 #endif
 
   id -> buffer = 0;
@@ -264,7 +264,7 @@ int ipcbuf_connect (ipcbuf_t* id, key_t key)
 
 #ifdef _DEBUG
   fprintf (stderr, "ipcbuf_connect: syncid=%d semid=%d\n",
-	   id->syncid, id->semid);
+                   id->syncid, id->semid);
 #endif
 
   id -> state = IPCBUF_VIEWER;
@@ -354,7 +354,7 @@ int ipcbuf_lock_write (ipcbuf_t* id)
 
 #ifdef _DEBUG
   fprintf (stderr, "ipcbuf_lock_write: decrement WRITE=%d\n",
-	   semctl (id->semid, IPCBUF_WRITE, GETVAL));
+                   semctl (id->semid, IPCBUF_WRITE, GETVAL));
 #endif
 
   /* decrement the write semaphore (only one can) */
@@ -383,7 +383,7 @@ int ipcbuf_unlock_write (ipcbuf_t* id)
 
 #ifdef _DEBUG
   fprintf (stderr, "ipcbuf_unlock_write: increment WRITE=%d\n",
-	   semctl (id->semid, IPCBUF_WRITE, GETVAL));
+                   semctl (id->semid, IPCBUF_WRITE, GETVAL));
 #endif
 
   if (ipc_semop (id->semid, IPCBUF_WRITE, 1, SEM_UNDO) < 0) {
@@ -461,35 +461,35 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
 
 #ifdef _DEBUG
   fprintf (stderr, "ipcbuf_enable_sod: start buf=%"PRIu64" w_buf=%"PRIu64"\n",
-	   start_buf, sync->w_buf);
+                   start_buf, sync->w_buf);
 #endif
 
   /* start_buf must be less than or equal to the number of buffers written */
   if (start_buf > sync->w_buf) {
     fprintf (stderr,
-	     "ipcbuf_enable_sod: start_buf=%"PRIu64" > w_buf=%"PRIu64"\n",
-	     start_buf, sync->w_buf);
+       "ipcbuf_enable_sod: start_buf=%"PRIu64" > w_buf=%"PRIu64"\n",
+       start_buf, sync->w_buf);
     return -1;
   }
 
   if (start_buf < ipcbuf_get_sod_minbuf (id)) {
     fprintf (stderr,
-	     "ipcbuf_enable_sod: start_buf=%"PRIu64" < start_min=%"PRIu64"\n",
-	     start_buf, ipcbuf_get_sod_minbuf (id));
+       "ipcbuf_enable_sod: start_buf=%"PRIu64" < start_min=%"PRIu64"\n",
+       start_buf, ipcbuf_get_sod_minbuf (id));
     return -1;
   }
 
   /* start_byte must be less than or equal to the size of the buffer */
   if (start_byte > sync->bufsz) {
     fprintf (stderr,
-	     "ipcbuf_enable_sod: start_byte=%"PRIu64" > bufsz=%"PRIu64"\n",
-	     start_byte, sync->bufsz);
+       "ipcbuf_enable_sod: start_byte=%"PRIu64" > bufsz=%"PRIu64"\n",
+       start_byte, sync->bufsz);
     return -1;
   }
 
 #ifdef _DEBUG
   fprintf (stderr, "ipcbuf_enable_sod: decrement SODACK=%d\n",
-	   semctl (id->semid, IPCBUF_SODACK, GETVAL));
+                   semctl (id->semid, IPCBUF_SODACK, GETVAL));
 #endif
 
   /* decrement the start-of-data acknowlegement semaphore */
@@ -510,8 +510,8 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
 
 #ifdef _DEBUG
   fprintf (stderr, "ipcbuf_enable_sod: xfer=%"PRIu64
-	   " start buf=%"PRIu64" byte=%"PRIu64"\n", sync->w_xfer,
-           sync->s_buf[id->xfer], sync->s_byte[id->xfer]);
+	                 " start buf=%"PRIu64" byte=%"PRIu64"\n", sync->w_xfer,
+                   sync->s_buf[id->xfer], sync->s_byte[id->xfer]);
 #endif
 
 #ifdef _DEBUG
@@ -523,7 +523,7 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
     id->count[bufnum] ++;
 #ifdef _DEBUG
   fprintf (stderr, "ipcbuf_enable_sod: count[%"PRIu64"]=%u\n",
-           bufnum, id->count[bufnum]);
+                   bufnum, id->count[bufnum]);
 #endif
   }
 
@@ -538,7 +538,7 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
 
 #ifdef _DEBUG
   fprintf (stderr, "ipcbuf_enable_sod: increment FULL=%d by %"PRIu64"\n",
-	   semctl (id->semid, IPCBUF_FULL, GETVAL), new_bufs);
+                   semctl (id->semid, IPCBUF_FULL, GETVAL), new_bufs);
 #endif
 
   /* increment the buffers written semaphore */
@@ -571,7 +571,7 @@ char* ipcbuf_get_next_write (ipcbuf_t* id)
 
 #ifdef _DEBUG
   fprintf (stderr, "ipcbuf_get_next_write: WCHANGE->WRITING enable_sod"
-	   " w_buf=%"PRIu64"\n", id->sync->w_buf);
+	                 " w_buf=%"PRIu64"\n", id->sync->w_buf);
 #endif
 
     if (ipcbuf_enable_sod (id, id->sync->w_buf, 0) < 0) {
@@ -587,9 +587,9 @@ char* ipcbuf_get_next_write (ipcbuf_t* id)
 
 #ifdef _DEBUG
     fprintf (stderr, "ipcbuf_get_next_write: count[%"PRIu64"]=%u\n",
-             bufnum, id->count[bufnum]);
+                     bufnum, id->count[bufnum]);
     fprintf (stderr, "ipcbuf_get_next_write: decrement CLEAR=%d\n",
-	     semctl (id->semid, IPCBUF_CLEAR, GETVAL));
+                     semctl (id->semid, IPCBUF_CLEAR, GETVAL));
 #endif
 
     /* decrement the buffers read semaphore */
@@ -629,12 +629,12 @@ int ipcbuf_mark_filled (ipcbuf_t* id, uint64_t nbytes)
 #ifdef _DEBUG
     if (id->state == IPCBUF_WCHANGE)
       fprintf (stderr, "ipcbuf_mark_filled: end xfer #%"PRIu64"->%"PRIu64"\n",
-	       sync->w_xfer, id->xfer);
+                       sync->w_xfer, id->xfer);
 #endif
 
 #ifdef _DEBUG
     fprintf (stderr, "ipcbuf_mark_filled: decrement EODACK=%d\n",
-	     semctl (id->semid, IPCBUF_EODACK, GETVAL));
+                     semctl (id->semid, IPCBUF_EODACK, GETVAL));
 #endif
     
     if (ipc_semop (id->semid, IPCBUF_EODACK, -1, 0) < 0) {
@@ -648,8 +648,8 @@ int ipcbuf_mark_filled (ipcbuf_t* id, uint64_t nbytes)
 
 #ifdef _DEBUG
       fprintf (stderr, "ipcbuf_mark_filled:"
-	       " end buf=%"PRIu64" byte=%"PRIu64"\n",
-	       sync->e_buf[id->xfer], sync->e_byte[id->xfer]);
+                       " end buf=%"PRIu64" byte=%"PRIu64"\n",
+                       sync->e_buf[id->xfer], sync->e_byte[id->xfer]);
 #endif
 
     sync -> w_xfer++;
@@ -667,9 +667,9 @@ int ipcbuf_mark_filled (ipcbuf_t* id, uint64_t nbytes)
 
 #ifdef _DEBUG
   fprintf (stderr, "ipcbuf_mark_filled: count[%"PRIu64"]=%u w_buf=%"PRIu64"\n",
-           bufnum, id->count[bufnum], sync->w_buf);
+                   bufnum, id->count[bufnum], sync->w_buf);
   fprintf (stderr, "ipcbuf_mark_filled: increment FULL=%d\n",
-	   semctl (id->semid, IPCBUF_FULL, GETVAL));
+                   semctl (id->semid, IPCBUF_FULL, GETVAL));
 #endif
   
   if (ipc_semop (id->semid, IPCBUF_FULL, 1, 0) < 0) {
@@ -690,7 +690,7 @@ int ipcbuf_lock_read (ipcbuf_t* id)
 
 #ifdef _DEBUG
   fprintf (stderr, "ipcbuf_lock_read: decrement READ=%d\n",
-	   semctl (id->semid, IPCBUF_READ, GETVAL));
+                   semctl (id->semid, IPCBUF_READ, GETVAL));
 #endif
 
   /* decrement the read semaphore (only one can) */
@@ -727,7 +727,7 @@ int ipcbuf_unlock_read (ipcbuf_t* id)
 
 #ifdef _DEBUG
   fprintf (stderr, "ipcbuf_unlock_read: increment READ=%d\n",
-	   semctl (id->semid, IPCBUF_READ, GETVAL));
+                   semctl (id->semid, IPCBUF_READ, GETVAL));
 #endif
 
   if (ipc_semop (id->semid, IPCBUF_READ, 1, SEM_UNDO) < 0) {
@@ -737,6 +737,55 @@ int ipcbuf_unlock_read (ipcbuf_t* id)
 
   id->state = IPCBUF_VIEWER;
   return 0;
+}
+
+char *ipcbuf_get_next_readable (ipcbuf_t* id, uint64_t* bytes) 
+{
+  uint64_t bufnum;
+  uint64_t start_byte = 0;
+  ipcsync_t* sync = 0;
+
+  if (ipcbuf_eod (id))
+    return NULL;
+
+  sync = id->sync;
+
+  if (ipcbuf_is_reader (id)) {
+
+    /* decrement the buffers written semaphore */
+    if (ipc_semop (id->semid, IPCBUF_FULL, -1, SEM_UNDO) < 0) {
+      fprintf (stderr, "ipcbuf_get_next_read: error decrement FULL\n");
+      return NULL;
+    }
+
+    /* the writer may reset the ring buffer between transfers */
+    if (sync->r_xfer == 0)
+      id->xfer = 0;
+    else 
+      id->xfer = sync->r_buf % sync->nbufs;
+
+    bufnum = sync->s_buf[id->xfer];
+    start_byte = sync->s_byte[id->xfer];
+
+    bufnum %= sync->nbufs;
+
+  }
+
+ if (bytes) {
+    if (sync->eod[id->xfer] && sync->r_buf == sync->e_buf[id->xfer]) {
+#ifdef _DEBUG            
+      fprintf (stderr, "ipcbuf_get_next_read xfer=%d EOD=true and r_buf="
+                       "%"PRIu64" == e_buf=%"PRIu64"\n", (int)id->xfer, 
+                       sync->r_buf, sync->e_buf[id->xfer]);
+#endif
+      *bytes = sync->e_byte[id->xfer] - start_byte;
+    }
+    else
+      *bytes = sync->bufsz - start_byte;
+  }
+
+  return id->buffer[bufnum] + start_byte;
+
 }
 
 char* ipcbuf_get_next_read (ipcbuf_t* id, uint64_t* bytes)
@@ -754,7 +803,7 @@ char* ipcbuf_get_next_read (ipcbuf_t* id, uint64_t* bytes)
 
 #ifdef _DEBUG
     fprintf (stderr, "ipcbuf_get_next_read: decrement FULL=%d\n", 
-	     semctl (id->semid, IPCBUF_FULL, GETVAL));
+                     semctl (id->semid, IPCBUF_FULL, GETVAL));
 #endif
 
     /* decrement the buffers written semaphore */
@@ -769,9 +818,9 @@ char* ipcbuf_get_next_read (ipcbuf_t* id, uint64_t* bytes)
 
 #ifdef _DEBUG
       fprintf (stderr, "ipcbuf_get_next_read: xfer=%"PRIu64
-	       " start buf=%"PRIu64" byte=%"PRIu64"\n", sync->r_xfer,
-	       sync->s_buf[id->xfer], 
-	       sync->s_byte[id->xfer]);
+	                     " start buf=%"PRIu64" byte=%"PRIu64"\n", sync->r_xfer,
+	                     sync->s_buf[id->xfer], 
+	                     sync->s_byte[id->xfer]);
 #endif
 
       id->state = IPCBUF_READING;
@@ -782,13 +831,13 @@ char* ipcbuf_get_next_read (ipcbuf_t* id, uint64_t* bytes)
 
 #ifdef _DEBUG
     fprintf (stderr, "ipcbuf_get_next_read: increment SODACK=%d\n",
-	     semctl (id->semid, IPCBUF_SODACK, GETVAL));
+                     semctl (id->semid, IPCBUF_SODACK, GETVAL));
 #endif
 
       /* increment the start-of-data acknowlegement semaphore */
       if (ipc_semop (id->semid, IPCBUF_SODACK, 1, 0) < 0) {
-	fprintf (stderr, "ipcbuf_get_next_read: error increment SODACK\n");
-	return NULL;
+        fprintf (stderr, "ipcbuf_get_next_read: error increment SODACK\n");
+        return NULL;
       }
 
     }
@@ -807,6 +856,9 @@ char* ipcbuf_get_next_read (ipcbuf_t* id, uint64_t* bytes)
 
     bufnum = id->viewbuf;
     id->viewbuf ++;
+#ifdef _DEBUG
+    fprintf(stderr,"ipcbuf_get_next_read(bufnum = %"PRIu64"\n",bufnum);
+#endif
 
   }
 
@@ -815,7 +867,9 @@ char* ipcbuf_get_next_read (ipcbuf_t* id, uint64_t* bytes)
   if (bytes) {
     if (sync->eod[id->xfer] && sync->r_buf == sync->e_buf[id->xfer]) {
 #ifdef _DEBUG
-      fprintf (stderr, "ipcbuf_get_next_read xfer=%d EOD=true and r_buf=%"PRIu64" == e_buf=%"PRIu64"\n", (int)id->xfer, sync->r_buf, sync->e_buf[id->xfer]);
+      fprintf (stderr, "ipcbuf_get_next_read xfer=%d EOD=true and r_buf="
+                       "%"PRIu64" == e_buf=%"PRIu64"\n", (int)id->xfer, 
+                       sync->r_buf, sync->e_buf[id->xfer]);
 #endif
       *bytes = sync->e_byte[id->xfer] - start_byte;
     }
@@ -845,7 +899,7 @@ int ipcbuf_mark_cleared (ipcbuf_t* id)
 
 #ifdef _DEBUG
   fprintf (stderr, "ipcbuf_mark_cleared: increment CLEAR=%d\n",
-	   semctl (id->semid, IPCBUF_CLEAR, GETVAL));
+                   semctl (id->semid, IPCBUF_CLEAR, GETVAL));
 #endif
 
   /* increment the buffers cleared semaphore */
@@ -856,8 +910,8 @@ int ipcbuf_mark_cleared (ipcbuf_t* id)
 
 #ifdef _DEBUG
     fprintf (stderr, "ipcbuf_mark_cleared: increment EODACK=%d; CLEAR=%d\n",
-	     semctl (id->semid, IPCBUF_EODACK, GETVAL),
-	     semctl (id->semid, IPCBUF_CLEAR, GETVAL));
+                     semctl (id->semid, IPCBUF_EODACK, GETVAL),
+                     semctl (id->semid, IPCBUF_CLEAR, GETVAL));
 #endif
 
     id->state = IPCBUF_RSTOP;
@@ -905,13 +959,13 @@ int ipcbuf_reset (ipcbuf_t* id)
 
 #ifdef _DEBUG
       fprintf (stderr, "ipcbuf_reset: decrement CLEAR=%d\n",
-	       semctl (id->semid, IPCBUF_CLEAR, GETVAL));
+                       semctl (id->semid, IPCBUF_CLEAR, GETVAL));
 #endif
 
       /* decrement the buffers cleared semaphore */
       if (ipc_semop (id->semid, IPCBUF_CLEAR, -1, 0) < 0) {
-	fprintf (stderr, "ipcbuf_reset: error decrementing CLEAR\n");
-	return -1;
+        fprintf (stderr, "ipcbuf_reset: error decrementing CLEAR\n");
+        return -1;
       }
 
       id->count[ibuf] --;
@@ -921,7 +975,7 @@ int ipcbuf_reset (ipcbuf_t* id)
 
 #ifdef _DEBUG
   fprintf (stderr, "ipcbuf_reset: decrement SODACK=%d\n",
-	   semctl (id->semid, IPCBUF_SODACK, GETVAL));
+                   semctl (id->semid, IPCBUF_SODACK, GETVAL));
 #endif
 
   if (ipc_semop (id->semid, IPCBUF_SODACK, -IPCBUF_XFERS, 0) < 0) {
@@ -931,7 +985,7 @@ int ipcbuf_reset (ipcbuf_t* id)
 
 #ifdef _DEBUG
   fprintf (stderr, "ipcbuf_reset: decrement EODACK=%d\n",
-	   semctl (id->semid, IPCBUF_EODACK, GETVAL));
+                   semctl (id->semid, IPCBUF_EODACK, GETVAL));
 #endif
 
   if (ipc_semop (id->semid, IPCBUF_EODACK, -IPCBUF_XFERS, 0) < 0) {
@@ -963,7 +1017,7 @@ int ipcbuf_reset (ipcbuf_t* id)
 
 #ifdef _DEBUG
   fprintf (stderr, "ipcbuf_reset: increment SODACK=%d\n",
-	   semctl (id->semid, IPCBUF_SODACK, GETVAL));
+     semctl (id->semid, IPCBUF_SODACK, GETVAL));
 #endif
 
   /* ready for writer to decrement when it needs to set SOD/EOD */
@@ -974,7 +1028,7 @@ int ipcbuf_reset (ipcbuf_t* id)
 
 #ifdef _DEBUG
   fprintf (stderr, "ipcbuf_reset: increment EODACK=%d\n",
-	   semctl (id->semid, IPCBUF_EODACK, GETVAL));
+     semctl (id->semid, IPCBUF_EODACK, GETVAL));
 #endif
 
   if (ipc_semop (id->semid, IPCBUF_EODACK, 1, 0) < 0) {
