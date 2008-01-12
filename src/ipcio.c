@@ -438,86 +438,64 @@ ssize_t ipcio_read (ipcio_t* ipc, char* ptr, size_t bytes)
 
 uint64_t ipcio_tell (ipcio_t* ipc)
 {
-  uint64_t bufsz = ipcbuf_get_bufsz ((ipcbuf_t*)ipc);
-  uint64_t nbuf = 0;
+  int64_t current = 0;
 
   if (ipc -> rdwrt == 'R' || ipc -> rdwrt == 'r')
-    nbuf = ipcbuf_get_read_count ((ipcbuf_t*)ipc);
+    current = ipcbuf_tell_read ((ipcbuf_t*)ipc);
   else if (ipc -> rdwrt == 'W' || ipc -> rdwrt == 'w')
-    nbuf = ipcbuf_get_write_count ((ipcbuf_t*)ipc);
+    current = ipcbuf_tell_write ((ipcbuf_t*)ipc);
 
-  return nbuf * bufsz + ipc->bytes;
+  if (current < 0) {
+    fprintf (stderr, "ipcio_tell: failed ipcbuf_tell\n");
+    return 0;
+  }
+
+  return current + ipc->bytes;
 }
 
 
 
 int64_t ipcio_seek (ipcio_t* ipc, int64_t offset, int whence)
 {
-  /* the current absolute byte count position in the ring buffer */
-  uint64_t current = 0;
   /* the absolute value of the offset */
-  uint64_t abs_offset = 0;
-  /* space left in the current buffer */
-  uint64_t space = 0;
-  /* end of current buffer flag */
-  int eobuf = 0;
+  uint64_t current = 0;
 
-  uint64_t bufsz = ipcbuf_get_bufsz ((ipcbuf_t*)ipc);
-  uint64_t nbuf = ipcbuf_get_read_count ((ipcbuf_t*)ipc);
-  if (nbuf > 0)
-    nbuf -= 1;
+  if (whence == SEEK_CUR)
+    offset += ipcio_tell (ipc);
 
-  current = bufsz * nbuf + ipc->bytes;
+  ipc->bytes = ipc->curbufsz;
+  current = ipcio_tell (ipc);
 
-  if (whence == SEEK_SET)
-    offset -= current;
+  /* can seek forward until end of data */
 
-  if (offset < 0) {
-    /* can only go back to the beginning of the current buffer ... */
-    abs_offset = (uint64_t) -offset;
-    if (abs_offset > ipc->bytes) {
-      fprintf (stderr, "ipcio_seek: %"PRIu64" > max backwards %"PRIu64"\n",
-               abs_offset, ipc->bytes);
+  while (current < offset && ! ipcbuf_eod((ipcbuf_t*)ipc)) {
+
+    ipc->curbuf = ipcbuf_get_next_read ((ipcbuf_t*)ipc, &(ipc->curbufsz));
+    if (!ipc->curbuf) {
+      fprintf (stderr, "ipcio_seek: error ipcbuf_next_read\n");
       return -1;
     }
-    ipc->bytes -= abs_offset;
+
+    ipc->bytes = ipc->curbufsz;
+    current = ipcio_tell (ipc);
+
   }
 
-  else {
-    /* ... but can seek forward until end of data */
+  if (offset < current) {
 
-    while (offset && ! (ipcbuf_eod((ipcbuf_t*)ipc) && eobuf)) {
-
-      if (!ipc->curbuf || eobuf) {
-        ipc->curbuf = ipcbuf_get_next_read ((ipcbuf_t*)ipc, &(ipc->curbufsz));
-        if (!ipc->curbuf) {
-          fprintf (stderr, "ipcio_seek: error ipcbuf_next_read\n");
-          return -1;
-        }
-        ipc->bytes = 0;
-        eobuf = 0;
-      }
-
-      space = ipc->curbufsz - ipc->bytes;
-      if (space > offset)
-        space = offset;
-
-      if (space > 0) {
-        ipc->bytes += space;
-        offset -= space;
-      }
-      else
-        eobuf = 1;
+    /* can only go back to the beginning of the current buffer ... */
+    offset = current - offset;
+    if (offset > ipc->bytes)
+    {
+      fprintf (stderr, "ipcio_seek: %"PRIu64" > max backwards %"PRIu64"\n",
+               offset, ipc->bytes);
+      return -1;
     }
+    ipc->bytes -= offset;
 
   }
 
-  bufsz = ipcbuf_get_bufsz ((ipcbuf_t*)ipc);
-  nbuf = ipcbuf_get_read_count ((ipcbuf_t*)ipc);
-  if (nbuf > 0)
-    nbuf -= 1;
-
-  return bufsz * nbuf + ipc->bytes;
+  return ipcio_tell (ipc);
 }
 
 /* Returns the number of bytes available in the ring buffer */
