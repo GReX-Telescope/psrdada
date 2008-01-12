@@ -120,6 +120,9 @@ extern "C" {
     to ipcbuf_lock_write. */
   char* ipcbuf_get_next_write (ipcbuf_t*);
 
+  /*! Return the write buffer byte offset from the start of the transfer */
+  int64_t ipcbuf_tell_write (ipcbuf_t* id);
+
   /*! Declare that the last buffer to be returned by
     ipcbuf_get_next_write has been filled with nbytes bytes.  The
     calling process must have locked "data writer" status with a call
@@ -147,6 +150,9 @@ extern "C" {
 
   /*! Get the next full buffer, and the number of bytes in it */
   char* ipcbuf_get_next_read (ipcbuf_t*, uint64_t* bytes);
+
+  /*! Return the read buffer byte offset from the start of the transfer */
+  int64_t ipcbuf_tell_read (ipcbuf_t* id);
 
   /*! Gets the next full buffer, but does not modify any aspect of the ring buffer */
   char *ipcbuf_get_next_readable (ipcbuf_t* id, uint64_t* bytes);

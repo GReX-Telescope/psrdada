@@ -741,7 +741,7 @@ int ipcbuf_unlock_read (ipcbuf_t* id)
 
 char *ipcbuf_get_next_readable (ipcbuf_t* id, uint64_t* bytes) 
 {
-  uint64_t bufnum;
+  uint64_t bufnum = 0;
   uint64_t start_byte = 0;
   ipcsync_t* sync = 0;
 
@@ -759,10 +759,7 @@ char *ipcbuf_get_next_readable (ipcbuf_t* id, uint64_t* bytes)
     }
 
     /* the writer may reset the ring buffer between transfers */
-    if (sync->r_xfer == 0)
-      id->xfer = 0;
-    else 
-      id->xfer = sync->r_buf % sync->nbufs;
+    id->xfer = sync->r_xfer % IPCBUF_XFERS;
 
     bufnum = sync->s_buf[id->xfer];
     start_byte = sync->s_byte[id->xfer];
@@ -879,6 +876,42 @@ char* ipcbuf_get_next_read (ipcbuf_t* id, uint64_t* bytes)
 
   return id->buffer[bufnum] + start_byte;
 }
+
+
+uint64_t ipcbuf_tell (ipcbuf_t* id, uint64_t bufnum)
+{
+  ipcsync_t* sync = id->sync;
+
+  if (bufnum <= sync->s_buf[id->xfer])
+    return 0;
+
+  bufnum -= sync->s_buf[id->xfer];
+
+  return bufnum*sync->bufsz - sync->s_byte[id->xfer];
+}
+
+int64_t ipcbuf_tell_write (ipcbuf_t* id)
+{
+  if (ipcbuf_eod (id))
+    return -1;
+
+  if (!ipcbuf_is_writer (id))
+    return -1;
+
+  return ipcbuf_tell (id, id->sync->w_buf);
+}
+
+int64_t ipcbuf_tell_read (ipcbuf_t* id)
+{
+  if (ipcbuf_eod (id))
+    return -1;
+
+  if (!ipcbuf_is_reader (id))
+    return -1;
+
+  return ipcbuf_tell (id, id->sync->r_buf);
+}
+
 
 
 int ipcbuf_mark_cleared (ipcbuf_t* id)
@@ -1010,33 +1043,6 @@ int ipcbuf_reset (ipcbuf_t* id)
 
   for (ix=0; ix < IPCBUF_XFERS; ix++)
     sync->eod[ix] = 1;
-
-#if 0
-
-  WvS and AJ do not understand why these would be incremented once more ...
-
-#ifdef _DEBUG
-  fprintf (stderr, "ipcbuf_reset: increment SODACK=%d\n",
-     semctl (id->semid, IPCBUF_SODACK, GETVAL));
-#endif
-
-  /* ready for writer to decrement when it needs to set SOD/EOD */
-  if (ipc_semop (id->semid, IPCBUF_SODACK, 1, 0) < 0) {
-    fprintf (stderr, "ipcbuf_reset: error incrementing IPCBUF_SODACK\n");
-    return -1;
-  }
-
-#ifdef _DEBUG
-  fprintf (stderr, "ipcbuf_reset: increment EODACK=%d\n",
-     semctl (id->semid, IPCBUF_EODACK, GETVAL));
-#endif
-
-  if (ipc_semop (id->semid, IPCBUF_EODACK, 1, 0) < 0) {
-    fprintf (stderr, "ipcbuf_reset: error incrementing IPCBUF_EODACK\n");
-    return -1;
-  }
-
-#endif
 
   return 0;
 }
