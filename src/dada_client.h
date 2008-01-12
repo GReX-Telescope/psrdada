@@ -47,6 +47,9 @@ extern "C" {
     /* The size of the header */
     uint64_t header_size;
 
+    /* When set, the header is transfered to/from the target */
+    char header_transfer;
+
     /* The direction of data transfer */
     char direction;
 

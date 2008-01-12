@@ -31,6 +31,7 @@ dada_client_t* dada_client_create ()
 
   client -> header = 0;
   client -> header_size = 0;
+  client -> header_transfer = 1;
 
   client -> fd = -1;
   client -> transfer_bytes = 0;
@@ -83,15 +84,19 @@ int64_t dada_client_io_loop (dada_client_t* client)
   assert (client->direction==dada_client_reader ||
           client->direction==dada_client_writer);
 
-
-  while (bytes_transfered < client->transfer_bytes) {
-
-    bytes_to_transfer = client->transfer_bytes - bytes_transfered;
-
-    if (buffer_size > bytes_to_transfer)
-      bytes = bytes_to_transfer;
-    else
+  while (!client->transfer_bytes || bytes_transfered < client->transfer_bytes)
+  {
+    if (!client->transfer_bytes)
       bytes = buffer_size;
+    else
+    {
+      bytes_to_transfer = client->transfer_bytes - bytes_transfered;
+
+      if (buffer_size > bytes_to_transfer)
+	bytes = bytes_to_transfer;
+      else
+	bytes = buffer_size;
+    }
 
     if (client->direction == dada_client_reader) {
 
@@ -99,7 +104,7 @@ int64_t dada_client_io_loop (dada_client_t* client)
         break;
 
 #ifdef _DEBUG
-    fprintf (stderr, "calling ipcio_read %p %"PRIi64"\n", buffer, bytes);
+      fprintf (stderr, "calling ipcio_read %p %"PRIi64"\n", buffer, bytes);
 #endif
 
       bytes = ipcio_read (client->data_block, buffer, bytes);
@@ -190,8 +195,6 @@ int64_t dada_client_transfer (dada_client_t* client)
 
   assert (client->header != 0);
   assert (client->header_size != 0);
-  assert (client->transfer_bytes != 0);
-  assert (client->optimal_bytes != 0);
 
   header_size = client->header_size;
 
@@ -200,17 +203,22 @@ int64_t dada_client_transfer (dada_client_t* client)
   fprintf (stderr, "HEADER START\n%sHEADER END\n", client->header);
 #endif
 
-  bytes_transfered = client->io_function (client, client->header, header_size);
-
-  if (bytes_transfered < header_size) {
-    multilog (log, LOG_ERR, "Error transfering header: %s\n", strerror(errno));
-    return -1;
+  if (client->header_transfer)
+  {
+    bytes_transfered = client->io_function (client, client->header,
+					    header_size);
+    if (bytes_transfered < header_size) 
+    {
+      multilog (log, LOG_ERR, "Error transfering header: %s\n", 
+		strerror(errno));
+      return -1;
+    }
   }
 
   if (client->direction == dada_client_writer) {
 
 #ifdef _DEBUG
-fprintf (stderr, "dada_client_writer HEADER START\n%sHEADER END\n", client->header);
+    fprintf (stderr, "dada_client_writer HEADER START\n%sHEADER END\n", client->header);
 #endif
 
     header_size = ipcbuf_get_bufsz (client->header_block);
