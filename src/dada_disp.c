@@ -520,7 +520,7 @@ int main (int argc, char **argv)
 
   memset(disp.data, 0, sizeof(disp.data));
 
-  while (!quit) {
+  while (!client->quit) {
 
     if (dada_client_read (client) < 0)
       multilog (log, LOG_ERR, "Error during transfer\n");
