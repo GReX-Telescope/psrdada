@@ -23,6 +23,7 @@ bin_PROGRAMS = dada_db dada_write_test dada_dbdisk dada_diskdb	 \
 	dada_dbnull dada_dbmonitor dada_dbxferinfo dada_dbmetric \
 	dada_header
 
+bin_SCRIPTS = ipcrme
 
 check_PROGRAMS = test_multilog test_ipcbuf loop_ipcio	\
 	test_command_parser test_multilog_server telnecho		\
