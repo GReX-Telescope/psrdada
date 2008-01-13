@@ -752,27 +752,58 @@ char *ipcbuf_get_next_readable (ipcbuf_t* id, uint64_t* bytes)
 
   if (ipcbuf_is_reader (id)) {
 
+#ifdef _DEBUG          
+    fprintf (stderr, "ipcbuf_get_next_read: decrement FULL=%d\n",
+                     semctl (id->semid, IPCBUF_FULL, GETVAL));
+#endif
+
     /* decrement the buffers written semaphore */
     if (ipc_semop (id->semid, IPCBUF_FULL, -1, SEM_UNDO) < 0) {
       fprintf (stderr, "ipcbuf_get_next_read: error decrement FULL\n");
       return NULL;
     }
 
-    /* the writer may reset the ring buffer between transfers */
-    id->xfer = sync->r_xfer % IPCBUF_XFERS;
+    if (id->state == IPCBUF_READER) {
+    
+      id->xfer = sync->r_xfer % IPCBUF_XFERS;
 
-    bufnum = sync->s_buf[id->xfer];
-    start_byte = sync->s_byte[id->xfer];
+#ifdef _DEBUG
+      fprintf (stderr, "ipcbuf_get_next_read: xfer=%"PRIu64
+                       " start buf=%"PRIu64" byte=%"PRIu64"\n", sync->r_xfer,
+                       sync->s_buf[id->xfer],
+                       sync->s_byte[id->xfer]);
+#endif
 
-    bufnum %= sync->nbufs;
+      id->state = IPCBUF_READING;
+      id->sync->r_state = IPCBUF_READING;
+
+      sync->r_buf = sync->s_buf[id->xfer];
+      start_byte = sync->s_byte[id->xfer];
+
+#ifdef _DEBUG
+    fprintf (stderr, "ipcbuf_get_next_read: increment SODACK=%d\n",
+                     semctl (id->semid, IPCBUF_SODACK, GETVAL));
+#endif
+
+      /* increment the start-of-data acknowlegement semaphore */
+      if (ipc_semop (id->semid, IPCBUF_SODACK, 1, SEM_UNDO) < 0) {
+        fprintf (stderr, "ipcbuf_get_next_read: error increment SODACK\n");
+        return NULL;
+      }
+
+    }
+
+    bufnum = sync->r_buf;
 
   }
 
- if (bytes) {
+  bufnum %= sync->nbufs;
+                                                                                                                                                        
+  if (bytes) {
     if (sync->eod[id->xfer] && sync->r_buf == sync->e_buf[id->xfer]) {
-#ifdef _DEBUG            
+#ifdef _DEBUG
       fprintf (stderr, "ipcbuf_get_next_read xfer=%d EOD=true and r_buf="
-                       "%"PRIu64" == e_buf=%"PRIu64"\n", (int)id->xfer, 
+                       "%"PRIu64" == e_buf=%"PRIu64"\n", (int)id->xfer,
                        sync->r_buf, sync->e_buf[id->xfer]);
 #endif
       *bytes = sync->e_byte[id->xfer] - start_byte;
