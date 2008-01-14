@@ -371,6 +371,8 @@ int ipcbuf_lock_write (ipcbuf_t* id)
   else
     id->state = IPCBUF_WRITING;
 
+  id->xfer = id->sync->w_xfer % IPCBUF_XFERS;
+
   return 0;
 }
 
@@ -708,6 +710,8 @@ int ipcbuf_lock_read (ipcbuf_t* id)
   else
     id->state = IPCBUF_READING;
 
+  id->xfer = id->sync->r_xfer % IPCBUF_XFERS;
+
   return 0;
 }
 
@@ -912,6 +916,12 @@ char* ipcbuf_get_next_read (ipcbuf_t* id, uint64_t* bytes)
 uint64_t ipcbuf_tell (ipcbuf_t* id, uint64_t bufnum)
 {
   ipcsync_t* sync = id->sync;
+
+#ifdef _DEBUG
+  fprintf (stderr, 
+           "ipcbuf_tell: bufnum=%"PRIu64" s_buf=%"PRIu64" s_buf=%"PRIu64"\n",
+           bufnum, sync->s_buf[id->xfer], sync->s_byte[id->xfer]);
+#endif
 
   if (bufnum <= sync->s_buf[id->xfer])
     return 0;
