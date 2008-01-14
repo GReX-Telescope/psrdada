@@ -379,7 +379,7 @@ ssize_t ipcio_read (ipcio_t* ipc, char* ptr, size_t bytes)
   size_t toread = bytes;
 
   if (ipc -> rdwrt != 'r' && ipc -> rdwrt != 'R') {
-    fprintf (stderr, "ipcio_read: invalid ipcio_t\n");
+    fprintf (stderr, "ipcio_read: invalid ipcio_t (rdwrt=%c)\n", ipc->rdwrt);
     return -1;
   }
 
@@ -465,6 +465,11 @@ int64_t ipcio_seek (ipcio_t* ipc, int64_t offset, int whence)
 
   ipc->bytes = ipc->curbufsz;
   current = ipcio_tell (ipc);
+
+#ifdef _DEBUG
+  fprintf (stderr, "ipcio_seek: offset=%"PRIi64" tell=%"PRIu64"\n", 
+           offset, current);
+#endif
 
   /* can seek forward until end of data */
 
