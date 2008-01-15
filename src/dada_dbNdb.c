@@ -57,17 +57,22 @@ int dbNdb_add_hdu (dada_dbNdb_t* queue, key_t key, multilog_t* log)
   dada_hdu_t* hdu = dada_hdu_create (log);
   dada_hdu_set_key (hdu, key);
 
+  fprintf (stderr, "dbNdb_add_hdu: connecting with key=%x\n", key);
+
   if (dada_hdu_connect (hdu) < 0)
   {
     fprintf (stderr, "cannot connect to DADA HDU key=%x\n", key);
     return -1;
   }
 
+  fprintf (stderr, "dbNdb_add_hdu: adding to queue\n");
+
   queue->hdu = realloc( queue->hdu, (queue->nhdu+1) * sizeof(dada_hduq_t) );
   queue->hdu[queue->nhdu].hdu = hdu;
   queue->hdu[queue->nhdu].key = key;
   queue->nhdu ++;
 
+  return 0;
 }
 
 
@@ -177,7 +182,9 @@ int hdu_close_function (dada_client_t* client, uint64_t bytes_written)
   log = client->log;
   assert (log != 0);
 
-  if (dada_hdu_lock_write (hdu->hdu) < 0)
+  fprintf (stderr, "unlocking writer status\n");
+
+  if (dada_hdu_unlock_write (hdu->hdu) < 0)
   {
     multilog (log, LOG_ERR, "cannot unlock DADA HDU (key=%x)\n", hdu->key);
     return -1;
@@ -205,6 +212,8 @@ int64_t hdu_write_function (dada_client_t* client,
   assert (queue->ihdu < queue->nhdu);
 
   hdu = queue->hdu + queue->ihdu;
+
+  /* fprintf (stderr, "writing %"PRIu64" bytes\n", data_size); */
 
   return ipcio_write (hdu->hdu->data_block, data, data_size);
 }
@@ -257,6 +266,7 @@ int main (int argc, char **argv)
 	return -1;
       }
 
+      fprintf (stderr, "dada_dbNdb: HDU (key=%x) added\n", dada_key);
       break;
 
     case 'v':
@@ -277,10 +287,14 @@ int main (int argc, char **argv)
   else
     multilog_add (log, stderr);
 
+  fprintf (stderr, "dada_dbNdb: creating structures\n");
+
   hdu = dada_hdu_create (log);
 
   if (dada_hdu_connect (hdu) < 0)
     return EXIT_FAILURE;
+
+  fprintf (stderr, "dada_dbNdb: lock read key=%x\n", hdu->data_block_key);
 
   if (dada_hdu_lock_read (hdu) < 0)
     return EXIT_FAILURE;
@@ -298,6 +312,8 @@ int main (int argc, char **argv)
   client->direction      = dada_client_reader;
 
   client->context = &queue;
+
+  fprintf (stderr, "dada_dbNdb: entering loop\n");
 
   while (!client->quit) {
 
