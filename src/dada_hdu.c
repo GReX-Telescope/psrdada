@@ -206,22 +206,6 @@ int dada_hdu_unlock_write (dada_hdu_t* hdu)
     return -1;
   }
 
-#if 0
-
-  // An end-of-data need no longer be written to the header block
-
-  if (ipcbuf_mark_filled (hdu->header_block, 0) < 0)  {
-    multilog (hdu->log, LOG_ERR, "Could not write EOD to Header Block\n");
-    return -1;
-  }
-
-  if (ipcbuf_reset (hdu->header_block) < 0)  {
-    multilog (hdu->log, LOG_ERR, "Could not reset Header Block\n");
-    return -1;
-  }
-
-#endif
-
   if (ipcbuf_unlock_write (hdu->header_block) < 0) {
     multilog (hdu->log, LOG_ERR, "Could not unlock Header Block write\n");
     return -1;
