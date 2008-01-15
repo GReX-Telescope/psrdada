@@ -60,10 +60,8 @@ int64_t dada_client_io_loop (dada_client_t* client)
   int64_t bytes = 0;
 
   multilog_t* log = 0;
-  int fd = -1;
 
   assert (client != 0);
-
   log = client->log;
   assert (log != 0);
 
@@ -77,9 +75,6 @@ int64_t dada_client_io_loop (dada_client_t* client)
 #endif
 
   }
-
-  fd = client->fd;
-  assert (fd >= 0);
 
   assert (client->direction==dada_client_reader ||
           client->direction==dada_client_writer);
@@ -227,6 +222,9 @@ int64_t dada_client_transfer (dada_client_t* client)
       return EXIT_FAILURE;
     }
   }
+
+  if (!client->optimal_bytes)
+    client->optimal_bytes = DADA_DEFAULT_BLOCK_SIZE;
 
   multilog (log, LOG_INFO, "Transfering %"PRIu64" bytes in %"PRIu64
             " byte blocks\n", client->transfer_bytes, client->optimal_bytes);
