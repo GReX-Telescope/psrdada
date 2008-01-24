@@ -29,12 +29,16 @@ struct in_addr *atoaddr(char *address);
 void signal_handler(int signalValue);
 void usage();
 void quit();
-void generate_triwave(char *tri_data, int tri_datasize, int tri_nbits);
-void print_triwave(char *tri_data, int tri_datasize, int tri_nbits);
+void generate_triwave(char *tri_data, int tri_datasize, int nbit, int ndim,
+                      int npol, int produce_noise);
+void print_triwave(char *tri_data, int tri_datasize, int nbits);
 void displayBits(unsigned int value);
 void displayCharBits(char value);
 int encode_tri_data(char * udp_data, int size_of_frame, char * tri_data,
-                    int tri_datasize, int tri_counter);
+                    int tri_datasize, int tri_counter, int npol);
+char two_bit_convert(int value);
+char four_bit_convert(int value);
+
 
 /* UDP file descriptor */
 int sockDatagramFd;
@@ -63,8 +67,8 @@ int main(int argc, char *argv[])
   /* total time to transmit for */ 
   uint64_t transmission_time = 5;   
 
-  /* Desired data rate in MB per second */
-  double data_rate = 64.0;       
+  /* Desired data rate in Bytes per second */
+  unsigned int data_rate = 64000000;       
 
   /* be a daemon? */
   int daemon = 0;
@@ -74,6 +78,12 @@ int main(int argc, char *argv[])
 
   /* NBIT header value */
   int nbit = 8;
+
+  /* NPOL header value */
+  int npol = 1;
+
+  /* NDIM header value */
+  int ndim = 1;
 
   /* NCHANNEL header value */
   int nchannel = 1;
@@ -94,15 +104,35 @@ int main(int argc, char *argv[])
   uint64_t tri_datasize = 512;
 
   /* number of bits in the triangular wave */
-  int tri_nbits = 8;
-  
-  /* number of bits in the triangular wave */
   uint64_t udp_data_size = DEFAULT_UDPDATASIZE;
+
+  /* produce noise */
+  int produce_noise = 0;
 
   opterr = 0;
   int c;
-  while ((c = getopt(argc, argv, "ds:p:n:l:r:v")) != EOF) {
+  while ((c = getopt(argc, argv, "b:k:jds:p:n:l:r:v")) != EOF) {
     switch(c) {
+
+      case 'b':      
+        nbit = atoi(optarg);
+        if (!((nbit == 2) || (nbit == 4) || (nbit == 8))) {
+          fprintf(stderr,"only 2, 4 or 8 nbit are supported\n");
+          return  EXIT_FAILURE;
+        }
+        break;
+
+      case 'k':
+        npol = atoi(optarg);
+        if (!((npol == 1) || (npol == 2))) {
+          fprintf(stderr,"only 1 or 2 polarisations are supported\n");
+          return  EXIT_FAILURE;
+        }
+        break;
+
+      case 'j':
+        produce_noise = 1;
+        break;
 
       case 's':
         size_of_frame = atoi(optarg);
@@ -136,7 +166,7 @@ int main(int argc, char *argv[])
         break;
 
       case 'r':
-        data_rate = atof(optarg);
+        data_rate = atoi(optarg);
         break;
 
       default:
@@ -202,6 +232,7 @@ int main(int argc, char *argv[])
   header.source = (char) 3;     /* This is not used by udpdb */
   header.sequence = 0;
   header.bits = nbit;
+  header.pollength = (int) (udp_data_size / npol);
   header.channels = nchannel;
   header.bands = nband;    
   header.bandID[0] = 1;         /* This is not used by udpdb */
@@ -215,17 +246,16 @@ int main(int argc, char *argv[])
   /* If we have a desired data rate, then we need to adjust our sleep time
    * accordingly */
   if (data_rate > 0) {
-    double packets_per_second = (((double)data_rate)*(1024*1024)) /
-                                 ((double)udp_data_size);
+    double packets_per_second = ((double) data_rate) / ((double)udp_data_size);
     sleep_time = (1.0/packets_per_second)*1000000.0;
   }
 
   /* Create and allocate the triangular data array */
   tri_data = malloc(sizeof(char) * tri_datasize);
-  generate_triwave(tri_data, tri_datasize, tri_nbits);
+  generate_triwave(tri_data, tri_datasize, nbit, ndim, npol, produce_noise);
 
   if ((verbose) && (!daemon)) {
-    print_triwave(tri_data, tri_datasize, tri_nbits);
+    print_triwave(tri_data, tri_datasize, nbit);
     print_header(&header);
   }
 
@@ -296,13 +326,16 @@ int main(int argc, char *argv[])
   end_time = start_time+transmission_time;
   strftime (buffer, bufsize, DADA_TIMESTR, (struct tm*) localtime(&end_time));
   multilog(log,LOG_INFO,"udp data will end at %s\n",buffer);
+
+  uint64_t bytes_to_send = data_rate * transmission_time;
   
   time_t current_time = time(0);
   time_t prev_time = time(0);
 
-  multilog(log,LOG_INFO,"Wire Rate\tUseful Rate\tPacket\tSleep Time\n");
+  multilog(log,LOG_INFO,"Wire Rate\t\tUseful Rate\tPacket\tSleep Time\n");
 
-  while (current_time <= end_time) {
+  //while (current_time <= end_time) {
+  while (bytes_sent <= bytes_to_send) {
 
     if (daemon)  {
       while (current_time >= start_time) {
@@ -316,9 +349,12 @@ int main(int argc, char *argv[])
     header.sequence++;
     encode_header(udp_data, &header);
     
-    tri_counter = encode_tri_data(udp_data+UDPHEADERSIZE,
-                                  (size_of_frame-UDPHEADERSIZE), tri_data,
-                                  tri_datasize, tri_counter);
+    tri_counter = encode_tri_data(udp_data+UDPHEADERSIZE, udp_data_size, 
+                                  tri_data, tri_datasize, tri_counter, npol);
+
+    if ((header.sequence == 1) && verbose){
+      print_triwave(udp_data+UDPHEADERSIZE, udp_data_size, nbit);
+    }
 
     bytes_sent_thistime = sendPacket(udpfd, dagram_socket, udp_data, 
                                      size_of_frame);
@@ -351,13 +387,15 @@ int main(int argc, char *argv[])
       double wire_rate = rate * wire_ratio;
       double useful_rate = rate * useful_ratio;
              
-      multilog(log,LOG_INFO,"%5.2f MB/s\t%5.2f MB/s\t%"PRIu64"\t%5.2f\n",
-                            wire_rate, useful_rate,data_counter,sleep_time);
+      multilog(log,LOG_INFO,"%5.2f MB/s\t%5.2f MB/s\t%"PRIu64"\t%5.2f, %"PRIu64"\n",
+                            wire_rate, useful_rate,data_counter,sleep_time,bytes_sent);
     }
 
     StopWatch_Delay(&wait_sw, sleep_time);
 
   }
+
+  multilog(log, LOG_INFO, "Sent %"PRIu64" bytes\n",bytes_sent);
 
   close(udpfd);
   return 0;
@@ -385,11 +423,14 @@ int sendPacket(int sockfd, struct sockaddr_in their_addr, char *udp_data, int si
 void usage() {
   fprintf(stdout,
     "test_apsr_triwave [options] dest_host\n"
-    "\t-s n          send frames of size n bytes* [default %d]\n"
+    "\t-b n          number of bits per sample: 2,4 or 8 [default 8]\n"
+    "\t-k n          number of polarisations: 1 or 2 [default 1]\n"
+    "\t-j            produce 2bit noise [default off]\n"
+    "\t-s n          send frames of size n bytes [default %d]\n"
     "\t-p n          udp port to send packets to [default %d]\n"
     "\t-n n          number of seconds to transmit [default 5]\n"
     "\t-l n          period (in bytes) of triangular wave [default 512]\n"
-    "\t-r n          data rate (MB/s) not including headers [default 64]\n"
+    "\t-r n          data rate (Bytes/s) not including headers [default 64000000]\n"
     "\t-v            verbose output\n"
     "\t-d            daemon mode. expects TCP/IP control\n"
     "\n\tudpdb_client is the hostname of a machine running dada_udpdb\n\n"
@@ -426,21 +467,32 @@ void encode_data(char * udp_data, int size_of_frame, int value) {
 
 
 int encode_tri_data(char * udp_data, int size_of_frame, char * tri_data, 
-                    int tri_datasize, int tri_counter) {
+                    int tri_datasize, int tri_counter, int npol) {
 
   int i = 0;
   int j = tri_counter;
 
-  for (i=0; i < size_of_frame; i++) {
+  /* If we have 2 polarisations, the first half of the packet is the first
+   * polarsation, and the second half is the second polarisation */
+  
+  int data_length = (size_of_frame / npol);
+
+  for (i=0; i < data_length; i++) {
 
     /* If we have reached the end of the tri array */
     if (j == tri_datasize) {
       j = 0;
     }
 
-   udp_data[i] = tri_data[j]; 
+    /* First polarisation */
+    udp_data[i] = tri_data[j];
+  
+    /* second polarisation */ 
+    if (npol == 2) {
+      udp_data[data_length + i] = tri_data[j];
+    }        
 
-   j++;
+    j++;
   }
 
   return j;
@@ -449,36 +501,216 @@ int encode_tri_data(char * udp_data, int size_of_frame, char * tri_data,
 
 
 
-void generate_triwave(char *array, int array_size, int nbits) {
-
+void generate_triwave(char *array, int array_size, int nbits, int ndim, 
+                      int npol, int produce_noise) {
+ 
   // The triangle wave will fill the array, and the mid value
   // will be 2*nbits -  (i.e. for 8 bit 0 > 255) 
 
-  // assume 8 bits for the moment
-        
-  int i = 0;
+  // Number of samples in the array 
+  int nsamples = (int) (((float)array_size) * (8.0/ ((float) nbits)));
 
+  // The maximum value is determined by nbits 
   float max_value = powf(2.0,(float) nbits) - 1.0;
-  float mid_point = ((float) array_size) / 2.0;
- 
-  //printf("max_value = %f\n",max_value);
-  //printf("mid_point = %f\n",mid_point);
-  //printf("array_size = %d\n",array_size);
- 
+
+  // mid value of the array 
+  float mid_point = ((float) nsamples) / 2.0;
+
+  /*
+  printf("max_value = %f\n",max_value);
+  printf("mid_point = %f\n",mid_point);
+  printf("array_size = %d\n",array_size);
+  printf("nsamples = %d\n",nsamples);
+  printf("nbits  = %d\n",nbits);
+  */
   unsigned int val;
+
+  // Array bytes index
+  int i = 0;
    
-  for (i=0; i <= mid_point; i++) {
+  // Sample index
+  int j = 0;
+
+  int state0 = 0;
+  int state1 = 0;
+  int state2 = 0;
+  int state3 = 0;
+  int states0[4] = {0,0,0,0};
+  int states1[4] = {0,0,0,0};
+  int states2[4] = {0,0,0,0};
+  int states3[4] = {0,0,0,0};
+
+  /* Init random number generator */
+  srand ( time(NULL) );
    
-    val = (unsigned int) (max_value * (((float) i) / mid_point));  
-    array[i] = val;
-    array[array_size-i] = array[i];
+  for (i=0; i <= (array_size/2); i++) {
+
+    if (nbits == 8) {
+
+      if (produce_noise) 
+        val = 1 + (int) (max_value * (rand() / (RAND_MAX + 1.0)));
+      else
+        val = (unsigned int) (max_value * (((float) j) / mid_point));  
+
+      array[i] = val;
+      array[array_size-i] = array[i];
+      j++;
+
+    } else if (nbits == 4) {
+
+      // Process 2 values since 4bit
+      int k=0;
+      for (k=0;k<2;k++) {
+
+        if (produce_noise) 
+          val = 1 + (int) (max_value * (rand() / (RAND_MAX + 1.0)));
+        else 
+          val = (unsigned int) (max_value * (((float) j) / mid_point)); 
+
+        char four_bit_value = four_bit_convert(val);
+
+        if (k == 0) 
+          array[i] = four_bit_value << 4;
+        else
+          array[i] |= four_bit_value;
+
+        // Increment sample count
+        j++;
+      }
+      array[array_size-i] = array[i];
+
+    } else if (nbits == 2) {
+
+      // Process 4 values since 2 bits
+      array[i] = 0x00000000;
+      int k=0;
+      for (k=0;k<4;k++) {
+
+        if (produce_noise) {
+          /* produce 2bit values, but states 1,2 MUST have a summed average of 0.666 */
+
+           /* Choose high/low state */
+
+           int rnd = 1 + (int) (1000.0 * (rand() / (RAND_MAX + 1.0)));
+           if ((rnd >= 0) && (rnd < 333)) {
+             val = 1;
+             state1++;
+             states1[k]++;
+           } else if ((rnd >= 333) && (rnd < 666)) {
+             val = 2;
+             state2++;
+             states2[k]++;
+           } else if ((rnd >= 666) && (rnd < 833)) {
+             val = 0;
+             state0++;
+             states0[k]++;
+           } else {
+             val = 3;
+             state3++;
+             states3[k]++;
+           }
+        } else {
+          val = (unsigned int) (max_value * (((float) j) / mid_point));
+        }
+        char two_bit_value = two_bit_convert(val);
+        //printf("i = %d, val = %d, ",i, val);
+        //displayCharBits(two_bit_value);
+
+        if (k == 0) {
+          array[i] = two_bit_value << 6;
+        }
+        if (k == 1) {
+          array[i] |= two_bit_value << 4;
+        }
+        if (k == 2) {
+          array[i] |= two_bit_value << 2;
+        }
+        if (k == 3) {
+          array[i] |= two_bit_value;
+        }
+
+        // Increment sample count 
+        j++;
+      }
+      //displayCharBits(array[i]);
+      array[array_size-i] = array[i];
+
+    } else {
+      fprintf(stderr,"Only support 2, 4 or 8 bit encoding\n");
+    }
+
     
     //displayBits(val);
     //printf("%d: [%u] [%u]\n",i,val,array[i]);
     //displayCharBits(array[i]);
   }
 
+  state0 *= 2;
+  state1 *= 2;
+  state2 *= 2;
+  state3 *= 2;
+
+  //printf("%d, %d, %d, %d : %d\n",state0,state1,state2,state3,nsamples);
+  //printf("%f, %f, %f, %f,\n",((float) state0 / (float)nsamples),((float) state1 / (float)nsamples),((float) state2 / (float)nsamples),((float) state3 / (float)nsamples));
+
+  //for (j=0;j<4;j++) {
+  // printf("%d: %d,%d,%d,%d\n",j,states0[j],states1[j],states2[j],states3[j]);
+  // }
+
+
 }
+
+
+/* Convert an integer value into its 2 bit representation */
+char two_bit_convert(int val) {
+
+  if (val == 0) 
+    return 0x00;
+  if (val == 1) 
+    return 0x01;
+  if (val == 2) 
+    return 0x02;
+  else 
+    return 0x03;
+}
+
+char four_bit_convert(int val) {
+
+  if (val == 0)
+    return 0x00;
+  if (val == 1)
+    return 0x01;
+  if (val == 2)
+    return 0x02;
+  if (val == 3)
+    return 0x03;
+  if (val == 4)
+    return 0x04;
+  if (val == 5)
+    return 0x05;
+  if (val == 6)
+    return 0x06;
+  if (val == 7)
+    return 0x07;
+  if (val == 8)
+    return 0x08;
+  if (val == 9)
+    return 0x09;
+  if (val == 10)
+    return 0x10;
+  if (val == 11)
+    return 0x11;
+  if (val == 12)
+    return 0x12;
+  if (val == 13)
+    return 0x13;
+  if (val == 14)
+    return 0x14;
+  else
+    return 0x15;
+}
+
+
 
 
 void print_triwave(char *array, int array_size, int nbits) {
@@ -518,10 +750,11 @@ void displayBits(unsigned int value) {
 void displayCharBits(char value) {
   char c, displayMask = 1 << 7;
                                                                                 
-  printf("    %c = ", value);
+  //printf("    %c = ", value);
                                                                                 
   for (c=1; c<= 8; c++) {
     putchar(value & displayMask ? '1' : '0');
+    //if (c%2 == 0) printf(" ");
     value <<= 1;
                                                                                 
   }
