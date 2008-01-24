@@ -120,7 +120,7 @@ time_t udpdb_start_function (dada_pwc_main_t* pwcm, time_t start_utc)
   }
   
   /* setup the data buffer for NUMUDPACKETS udp packets */
-  udpdb->datasize = 64 * 1024 * 1024;
+  udpdb->datasize = 32 * 1024 * 1024;
   udpdb->curr_buffer = (char *) malloc(sizeof(char) * udpdb->datasize);
   assert(udpdb->curr_buffer != 0);
   udpdb->next_buffer = (char *) malloc(sizeof(char) * udpdb->datasize);
@@ -174,6 +174,9 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
 
   /* Flag to drop out of for loop */
   int quit = 0;
+
+  /* Flag for timeout */
+  int timeout_ocurred = 0;
 
   /* How much data has actaully been received */
   uint64_t data_received = 0;
@@ -237,6 +240,7 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
         }
         quit = 1;
         udpdb->received = 0;
+        timeout_ocurred = 1;
 
       } else {
 
@@ -254,6 +258,11 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
 
       /* When we have received the first packet */      
       if ((udpdb->expected_sequence_no == 1) && (data_received == 0)) {
+
+        if (header.sequence != 1) {
+          multilog (log, LOG_WARNING, "First packet received was had sequence "
+                                  "number %d\n",header.sequence);
+        }
 
         /* If the UDP packet thinks its header is different to the prescribed
          * size, give up */
@@ -280,9 +289,14 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
         *size = buffer_capacity * udpdb->packet_length;
 
         /* We define the polarization length to be the number of bytes
-           in the packet, and set the RESOLUTION header parameter accordingly */
-        header.pollength = udpdb->packet_length;
-                                                                                
+           in the packet, and set RESOLUTION header parameter accordingly */
+        int npol = 2;
+        if ( ascii_header_get (pwcm->header, "NPOL", "%d", &npol) < 1) {
+          multilog (log, LOG_WARNING, "Could not get NPOL header parameter");
+        }
+
+        header.pollength = udpdb->packet_length / npol;
+
         /* Set the resoultion header variable */
         if ( ascii_header_set (pwcm->header, "RESOLUTION", "%d",
                                header.pollength) < 0)
@@ -372,6 +386,7 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
 
       /* If we have filled the current buffer, then we can stop */
       if (udpdb->curr_buffer_count == buffer_capacity) {
+        multilog (log, LOG_INFO, "Normal buffer filled :)\n");
         quit = 1;
       } else {
         assert(udpdb->curr_buffer_count < buffer_capacity);
@@ -388,10 +403,22 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
   if (data_received) {
 
     /* If we have not received all the packets we expected */
-    if (udpdb->curr_buffer_count < buffer_capacity) {
-      udpdb->packets_dropped++;
-      udpdb->packets_dropped_this_run++;
+    if ((udpdb->curr_buffer_count < buffer_capacity) && (!timeout_ocurred)) {
+
+      multilog (log, LOG_WARNING, "Dropped %"PRIu64" packets this buffer "
+               "function\n",(buffer_capacity - udpdb->curr_buffer_count));
+
+      udpdb->packets_dropped += buffer_capacity - udpdb->curr_buffer_count;
+      udpdb->packets_dropped_this_run += buffer_capacity 
+                                         - udpdb->curr_buffer_count;
     }
+
+    /* If the timeout ocurred, this is most likely due to end of data */
+    if (timeout_ocurred) {
+      multilog (log, LOG_WARNING, "Suspected EOD received\n");
+      *size = udpdb->curr_buffer_count * udpdb->packet_length;
+    }
+
 
     udpdb->expected_sequence_no += buffer_capacity;
 
@@ -420,10 +447,12 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
   
   if (udpdb->prev_time != udpdb->current_time) {
 
-    packets_dropped_this_second  = udpdb->packets_dropped - udpdb->packets_dropped_last_sec;
+    packets_dropped_this_second  = udpdb->packets_dropped - 
+                                   udpdb->packets_dropped_last_sec;
     udpdb->packets_dropped_last_sec = udpdb->packets_dropped;
 
-    multilog(udpdb->statslog, LOG_INFO,"%"PRIu64"\n",packets_dropped_this_second);
+    multilog(udpdb->statslog, LOG_INFO,"%"PRIu64"\n",
+             packets_dropped_this_second);
   
   }
 
