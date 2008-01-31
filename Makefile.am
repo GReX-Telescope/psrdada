@@ -1,3 +1,3 @@
 
-SUBDIRS	= 3rdparty src apsr/src
+SUBDIRS	= Management 3rdparty src apsr/src
 

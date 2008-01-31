@@ -64,10 +64,13 @@ AC_CHECK_FUNCS([gethostbyname gethostname gettimeofday inet_ntoa memset select s
 
 AM_CONFIG_HEADER([config.h])
 AC_CONFIG_FILES([Makefile
+		Management/Makefile
+		Management/psrdada_ldflags
+		Management/psrdada_cflags
 		src/Makefile
 		apsr/src/Makefile
 		puma2/Makefile
-    3rdparty/Makefile])
+		3rdparty/Makefile])
 
 AC_OUTPUT
 
