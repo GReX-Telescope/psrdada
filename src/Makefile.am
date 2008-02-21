@@ -30,7 +30,7 @@ check_PROGRAMS = test_multilog test_ipcbuf loop_ipcio	\
 	test_command_parse_server test_dada_nexus			\
 	dada_writer dada_reader $(TESTS)
 
-TESTS = test_uint64_t test_disk_array test_ipcio
+TESTS = test_uint64_t test_disk_array test_ipcio test_ascii_header
 
 LDADD = libdada.la 
 
