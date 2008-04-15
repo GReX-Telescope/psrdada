@@ -2,6 +2,7 @@
 #define __DADA_DEF_H
 
 #include <unistd.h>
+#include <inttypes.h>
 
 /* ************************************************************************
 
