@@ -803,8 +803,10 @@ char *ipcbuf_get_next_readable (ipcbuf_t* id, uint64_t* bytes)
 
   bufnum %= sync->nbufs;
                                                                                                                                                         
-  if (bytes) {
-    if (sync->eod[id->xfer] && sync->r_buf == sync->e_buf[id->xfer]) {
+  if (bytes)
+  {
+    if (sync->eod[id->xfer] && sync->r_buf == sync->e_buf[id->xfer])
+    {
 #ifdef _DEBUG
       fprintf (stderr, "ipcbuf_get_next_read xfer=%d EOD=true and r_buf="
                        "%"PRIu64" == e_buf=%"PRIu64"\n", (int)id->xfer,
@@ -831,7 +833,8 @@ char* ipcbuf_get_next_read (ipcbuf_t* id, uint64_t* bytes)
 
   sync = id->sync;
 
-  if (ipcbuf_is_reader (id)) {
+  if (ipcbuf_is_reader (id))
+  {
 
 #ifdef _DEBUG
     fprintf (stderr, "ipcbuf_get_next_read: decrement FULL=%d\n", 
@@ -877,10 +880,12 @@ char* ipcbuf_get_next_read (ipcbuf_t* id, uint64_t* bytes)
     bufnum = sync->r_buf;
 
   }
-  else {
+  else
+  {
+    id->xfer = sync->r_xfer % IPCBUF_XFERS;
 
     /* KLUDGE!  wait until w_buf is incremented without sem operations */
-    while (sync->w_buf <= id->viewbuf)
+    while (sync->w_buf <= id->viewbuf && ! ipcbuf_eod(id))
       fsleep (0.1);
 
     if (id->viewbuf + sync->nbufs < sync->w_buf)
@@ -891,13 +896,14 @@ char* ipcbuf_get_next_read (ipcbuf_t* id, uint64_t* bytes)
 #ifdef _DEBUG
     fprintf(stderr,"ipcbuf_get_next_read(bufnum = %"PRIu64"\n",bufnum);
 #endif
-
   }
 
   bufnum %= sync->nbufs;
 
-  if (bytes) {
-    if (sync->eod[id->xfer] && sync->r_buf == sync->e_buf[id->xfer]) {
+  if (bytes)
+  {
+    if (sync->eod[id->xfer] && sync->r_buf == sync->e_buf[id->xfer])
+    {
 #ifdef _DEBUG
       fprintf (stderr, "ipcbuf_get_next_read xfer=%d EOD=true and r_buf="
                        "%"PRIu64" == e_buf=%"PRIu64"\n", (int)id->xfer, 
@@ -947,10 +953,10 @@ int64_t ipcbuf_tell_read (ipcbuf_t* id)
   if (ipcbuf_eod (id))
     return -1;
 
-  if (!ipcbuf_is_reader (id))
-    return -1;
-
-  return ipcbuf_tell (id, id->sync->r_buf);
+  if (ipcbuf_is_reader (id))
+    return ipcbuf_tell (id, id->sync->r_buf);
+  else
+    return ipcbuf_tell (id, id->viewbuf);
 }
 
 
@@ -1181,7 +1187,22 @@ int ipcbuf_unlock (ipcbuf_t* id)
 
 int ipcbuf_eod (ipcbuf_t* id)
 {
-  return id->state == IPCBUF_RSTOP;
+  ipcsync_t* sync = 0;
+
+  if (!id)  {
+    fprintf (stderr, "ipcbuf_eod: invalid ipcbuf_t*\n");
+    return -1;
+  }
+
+  if (id->state == IPCBUF_RSTOP)
+    return 1;
+
+  sync = id -> sync;
+
+  if (sync->eod[id->xfer] && sync->r_buf == sync->e_buf[id->xfer])
+    return 1;
+
+  return 0;
 }
 
 
