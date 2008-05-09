@@ -28,7 +28,6 @@ int main (int argc, char **argv)
   char verbose = 0;
 
   /* command string to be parsed into key=val pair */
-  char* command = 0;
   char* key = 0;
   char* val = 0;
 
@@ -53,19 +52,14 @@ int main (int argc, char **argv)
     switch (arg)
     {      
     case 'c':
-      command = optarg;
-      key = strdup (command);
+      key = strdup (optarg);
       val = strchr (key, '=');
-      if (!val)
+      if (val)
       {
-	fprintf (stderr, "dada_edit could not parse key=value from '%s'\n",
-		 optarg);
-	return -1;
+        /* terminate the key and advance to the value */
+        *val = '\0';
+        val ++;
       }
-
-      /* terminate the key and advance to the value */
-      *val = '\0';
-      val ++;
 
       break;
 
@@ -84,9 +78,13 @@ int main (int argc, char **argv)
       
     }
 
+  char* mode = "r";
+  if (val || install)
+    mode = "r+";
+
   for (arg = optind; arg < argc; arg++)
   {
-    current_file = fopen (argv[arg], "r+");
+    current_file = fopen (argv[arg], mode);
     if (!current_file)
     {
       fprintf (stderr, "dada_edit: could not open '%s': %s\n",
@@ -120,17 +118,29 @@ int main (int argc, char **argv)
     }
     while (hdr_size > current_header_size);
 
-    if (command && ascii_header_set (current_header, key, val) != 0)
+    if (val && ascii_header_set (current_header, key, val) != 0)
     {
       fprintf (stderr, "dada_edit: could not set %s = %s\n", key, val);
       return -1;
+    }
+
+    if (key && !val)
+    {
+      char value[1024];
+      if (ascii_header_get (current_header, key, "%s", value) == 1)
+      {
+        if (optind + 1 == argc)
+          printf ("%s\n", value);
+        else
+          printf ("%s %s\n", argv[arg], value);
+      }
     }
 
     if (install)
     {
     }
 
-    if (command || install)
+    if (val || install)
     {
       rewind (current_file);
 
@@ -143,7 +153,7 @@ int main (int argc, char **argv)
       }
     }
 
-    else
+    else if (!key)
     {
       fprintf (stdout, current_header);
     }
