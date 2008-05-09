@@ -163,6 +163,9 @@ extern "C" {
     ipcbuf_lock_read */
   int ipcbuf_mark_cleared (ipcbuf_t*);
 
+  /*! Return true if process is the data reader */
+  char ipcbuf_is_reader (ipcbuf_t* id);
+
   /*! Return the state of the start-of-data flag */
   int ipcbuf_sod (ipcbuf_t*);
 
