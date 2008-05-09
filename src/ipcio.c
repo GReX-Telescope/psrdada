@@ -438,15 +438,16 @@ ssize_t ipcio_read (ipcio_t* ipc, char* ptr, size_t bytes)
 
 uint64_t ipcio_tell (ipcio_t* ipc)
 {
-  int64_t current = 0;
+  int64_t current = -1;
 
   if (ipc -> rdwrt == 'R' || ipc -> rdwrt == 'r')
     current = ipcbuf_tell_read ((ipcbuf_t*)ipc);
   else if (ipc -> rdwrt == 'W' || ipc -> rdwrt == 'w')
     current = ipcbuf_tell_write ((ipcbuf_t*)ipc);
 
-  if (current < 0) {
-    fprintf (stderr, "ipcio_tell: failed ipcbuf_tell\n");
+  if (current < 0)
+  {
+    fprintf (stderr, "ipcio_tell: failed ipcbuf_tell mode=%c current=%"PRIi64"\n", ipc->rdwrt, current);
     return 0;
   }
 
@@ -473,21 +474,21 @@ int64_t ipcio_seek (ipcio_t* ipc, int64_t offset, int whence)
 
   /* can seek forward until end of data */
 
-  while (current < offset && ! ipcbuf_eod((ipcbuf_t*)ipc)) {
-
+  while (current < offset && ! ipcbuf_eod((ipcbuf_t*)ipc))
+  {
     ipc->curbuf = ipcbuf_get_next_read ((ipcbuf_t*)ipc, &(ipc->curbufsz));
-    if (!ipc->curbuf) {
+    if (!ipc->curbuf)
+    {
       fprintf (stderr, "ipcio_seek: error ipcbuf_next_read\n");
       return -1;
     }
 
     ipc->bytes = ipc->curbufsz;
     current = ipcio_tell (ipc);
-
   }
 
-  if (offset < current) {
-
+  if (offset < current)
+  {
     /* can only go back to the beginning of the current buffer ... */
     offset = current - offset;
     if (offset > ipc->bytes)
@@ -497,7 +498,6 @@ int64_t ipcio_seek (ipcio_t* ipc, int64_t offset, int whence)
       return -1;
     }
     ipc->bytes -= offset;
-
   }
 
   return ipcio_tell (ipc);
