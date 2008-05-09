@@ -70,6 +70,12 @@ extern "C" {
   /*! Lock DADA Header plus Data Unit designated writer */
   int dada_hdu_lock_write_spec (dada_hdu_t* hdu, char writemode);
 
+  /*! Open the DADA Header plus Data Unit for passive viewing */
+  int dada_hdu_open_view (dada_hdu_t* hdu);
+
+  /*! Close the DADA Header pluse Data Unit passive viewing mode */
+  int dada_hdu_close_view (dada_hdu_t* hdu);
+
   /*! Read the next header from the struct */
   int dada_hdu_open (dada_hdu_t* hdu);
 

@@ -28,7 +28,6 @@ void dada_hdu_set_key (dada_hdu_t* hdu, key_t key)
 {
   hdu -> data_block_key = key;
   hdu -> header_block_key = key + 1;
-
 }
 
 /*! Destroy a DADA primary write client main loop */
@@ -64,7 +63,8 @@ int dada_hdu_connect (dada_hdu_t* hdu)
   *(hdu->data_block) = ipcio_init;
 
   /* connect to the shared memory */
-  if (ipcbuf_connect (hdu->header_block, hdu->header_block_key) < 0) {
+  if (ipcbuf_connect (hdu->header_block, hdu->header_block_key) < 0)
+  {
     multilog (hdu->log, LOG_ERR, "Failed to connect to Header Block\n");
     free (hdu->header_block);
     hdu->header_block = 0;
@@ -73,7 +73,8 @@ int dada_hdu_connect (dada_hdu_t* hdu)
     return -1;
   }
 
-  if (ipcio_connect (hdu->data_block, hdu->data_block_key) < 0) {
+  if (ipcio_connect (hdu->data_block, hdu->data_block_key) < 0)
+  {
     multilog (hdu->log, LOG_ERR, "Failed to connect to Data Block\n");
     free (hdu->header_block);
     hdu->header_block = 0;
@@ -144,14 +145,24 @@ int dada_hdu_unlock_read (dada_hdu_t* hdu)
 {
   assert (hdu != 0);
 
-  if (!hdu->data_block) {
+  if (!hdu->data_block)
+  {
     fprintf (stderr, "dada_hdu_disconnect: not connected\n");
     return -1;
   }
 
-  if (ipcio_close (hdu->data_block) < 0) {
+  if (ipcio_close (hdu->data_block) < 0)
+  {
     multilog (hdu->log, LOG_ERR, "Could not unlock Data Block read\n");
     return -1;
+  }
+
+  if (hdu->header)
+  {
+    free (hdu->header);
+    hdu->header = 0;
+    if (ipcbuf_is_reader (hdu->header_block))
+      ipcbuf_mark_cleared (hdu->header_block);
   }
 
   if (ipcbuf_unlock_read (hdu->header_block) < 0) {
@@ -214,6 +225,51 @@ int dada_hdu_unlock_write (dada_hdu_t* hdu)
   return 0;
 }
 
+/*! Lock DADA Header plus Data Unit designated reader */
+int dada_hdu_open_view (dada_hdu_t* hdu)
+{
+  assert (hdu != 0);
+
+  if (!hdu->data_block)
+  {
+    fprintf (stderr, "dada_hdu_open_view: not connected\n");
+    return -1;
+  }
+
+  if (ipcio_open (hdu->data_block, 'r') < 0)
+  {
+    multilog (hdu->log, LOG_ERR, "Could not open Data Block for viewing\n");
+    return -1;
+  }
+
+  return 0;
+}
+
+/*! Unlock DADA Header plus Data Unit designated reader */
+int dada_hdu_close_view (dada_hdu_t* hdu)
+{
+  assert (hdu != 0);
+
+  if (!hdu->data_block)
+  {
+    fprintf (stderr, "dada_hdu_close_view: not connected\n");
+    return -1;
+  }
+
+  if (ipcio_close (hdu->data_block) < 0)
+  {
+    multilog (hdu->log, LOG_ERR, "Could not close Data Block view\n");
+    return -1;
+  }
+
+  return 0;
+}
+
+
+
+
+
+
 int dada_hdu_open (dada_hdu_t* hdu)
 {
   /* pointer to the status and error logging facility */
@@ -227,11 +283,12 @@ int dada_hdu_open (dada_hdu_t* hdu)
   uint64_t hdr_size = 0;
 
   assert (hdu != 0);
+  assert (hdu->header == 0);
 
   log = hdu->log;
 
-  while (!header_size) {
-
+  while (!header_size)
+  {
     /* Wait for the next valid header sub-block */
     header = ipcbuf_get_next_read (hdu->header_block, &header_size);
 
@@ -240,21 +297,23 @@ int dada_hdu_open (dada_hdu_t* hdu)
       return -1;
     }
 
-    if (!header_size) {
+    if (!header_size)
+    {
+      if (ipcbuf_is_reader (hdu->header_block))
+	ipcbuf_mark_cleared (hdu->header_block);
 
-      ipcbuf_mark_cleared (hdu->header_block);
-
-      if (ipcbuf_eod (hdu->header_block)) {
+      if (ipcbuf_eod (hdu->header_block))
+      {
 	multilog (log, LOG_INFO, "End of data on header block\n");
-	ipcbuf_reset (hdu->header_block);
+	if (ipcbuf_is_reader (hdu->header_block))
+	  ipcbuf_reset (hdu->header_block);
       }
-      else {
+      else
+      {
 	multilog (log, LOG_ERR, "Empty header block\n");
 	return -1;
       }
-
     }
-
   }
 
   header_size = ipcbuf_get_bufsz (hdu->header_block);
@@ -281,14 +340,13 @@ int dada_hdu_open (dada_hdu_t* hdu)
   }
 
   /* Duplicate the header */
-  if (header_size > hdu->header_size) {
+  if (header_size > hdu->header_size)
+  {
     hdu->header = realloc (hdu->header, header_size);
     assert (hdu->header != 0);
     hdu->header_size = header_size;
   }
+
   memcpy (hdu->header, header, header_size);
-
-  ipcbuf_mark_cleared (hdu->header_block);
-
   return 0;
 }
