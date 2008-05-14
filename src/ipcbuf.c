@@ -80,17 +80,17 @@ int ipcsync_get (ipcbuf_t* id, key_t key, uint64_t nbufs, int flag)
   }
 
   if (nbufs == 0)
-    nbufs = id -> sync -> nbufs;
+    nbufs = id->sync->nbufs;
 
-  id -> count = (char*) (id->sync + 1);
+  id->count = (char*) (id->sync + 1);
 
 #ifdef _DEBUG
   fprintf (stderr, "SYNC=%p COUNT=%p\n", id->sync, id->count);
 #endif
 
-  id -> shmkey = (key_t*) (id->count + nbufs);
-  id -> state = 0;
-  id -> viewbuf = 0;
+  id->shmkey = (key_t*) (id->count + nbufs);
+  id->state = 0;
+  id->viewbuf = 0;
 
   return 0;
 }
@@ -106,7 +106,7 @@ int ipcbuf_get (ipcbuf_t* id, int flag)
     return -1;
   }
 
-  sync = id -> sync;
+  sync = id->sync;
 
 #ifdef _DEBUG
   fprintf (stderr, "ipcbuf_get: semkey=0x%x shmkey=0x%x\n",
@@ -177,40 +177,40 @@ int ipcbuf_create (ipcbuf_t* id, key_t key, uint64_t nbufs, uint64_t bufsz)
     return -1;
   }
 
-  id -> sync -> nbufs  = nbufs;
-  id -> sync -> bufsz  = bufsz;
+  id->sync->nbufs  = nbufs;
+  id->sync->bufsz  = bufsz;
 
   for (ibuf = 0; ibuf < IPCBUF_XFERS; ibuf++)
   {
-    id -> sync -> s_buf  [ibuf] = 0;
-    id -> sync -> s_byte [ibuf] = 0;
-    id -> sync -> e_buf  [ibuf] = 0;
-    id -> sync -> e_byte [ibuf] = 0;
-    id -> sync -> eod    [ibuf] = 1;
+    id->sync->s_buf  [ibuf] = 0;
+    id->sync->s_byte [ibuf] = 0;
+    id->sync->e_buf  [ibuf] = 0;
+    id->sync->e_byte [ibuf] = 0;
+    id->sync->eod    [ibuf] = 1;
   }
 
   key += key_increment;
-  id -> sync -> semkey = key;
+  id->sync->semkey = key;
 
   for (ibuf = 0; ibuf < nbufs; ibuf++)
   {
-    id -> count[ibuf] = 0;
+    id->count[ibuf] = 0;
     key += key_increment;
-    id -> shmkey[ibuf] = key;
+    id->shmkey[ibuf] = key;
   }
 
-  id -> sync -> r_buf = 0;
-  id -> sync -> w_buf = 0;
-  id -> sync -> r_xfer = 0;
-  id -> sync -> w_xfer = 0;
+  id->sync->r_buf = 0;
+  id->sync->w_buf = 0;
+  id->sync->r_xfer = 0;
+  id->sync->w_xfer = 0;
 
-  id -> sync -> r_state = 0;
-  id -> sync -> w_state = 0;
+  id->sync->r_state = 0;
+  id->sync->w_state = 0;
 
-  id -> buffer      = 0;
-  id -> viewbuf     = 0;
-  id -> xfer        = 0;
-  id -> soclock_buf = 0;
+  id->buffer      = 0;
+  id->viewbuf     = 0;
+  id->xfer        = 0;
+  id->soclock_buf = 0;
 
   if (ipcbuf_get (id, flag) < 0) {
     fprintf (stderr, "ipcbuf_create: ipcbuf_get error\n");
@@ -260,7 +260,7 @@ int ipcbuf_connect (ipcbuf_t* id, key_t key)
                     key, id->sync->nbufs, id->sync->bufsz);
 #endif
 
-  id -> buffer = 0;
+  id->buffer = 0;
 
   if (ipcbuf_get (id, flag) < 0) {
     fprintf (stderr, "ipcbuf_connect: ipcbuf_get error\n");
@@ -272,7 +272,7 @@ int ipcbuf_connect (ipcbuf_t* id, key_t key)
                    id->syncid, id->semid);
 #endif
 
-  id -> state = IPCBUF_VIEWER;
+  id->state = IPCBUF_VIEWER;
   return 0;
 }
 
@@ -437,7 +437,7 @@ int ipcbuf_disable_sod (ipcbuf_t* id)
 
 uint64_t ipcbuf_get_sod_minbuf (ipcbuf_t* id)
 {
-  ipcsync_t* sync = id -> sync;
+  ipcsync_t* sync = id->sync;
 
   /* Since we may have multiple transfers, the minimum sod will be relative
    * to the first buffer we clocked data onto */
@@ -456,7 +456,7 @@ uint64_t ipcbuf_get_sod_minbuf (ipcbuf_t* id)
 
 int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
 {
-  ipcsync_t* sync = id -> sync;
+  ipcsync_t* sync = id->sync;
   uint64_t new_bufs = 0;
   uint64_t bufnum = 0;
 
@@ -566,7 +566,7 @@ char ipcbuf_is_writer (ipcbuf_t* id)
 char* ipcbuf_get_next_write (ipcbuf_t* id)
 {
   uint64_t bufnum = 0;
-  ipcsync_t* sync = id -> sync;
+  ipcsync_t* sync = id->sync;
 
   /* must be the designated writer */
   if (!ipcbuf_is_writer(id))  {
@@ -651,9 +651,9 @@ int ipcbuf_mark_filled (ipcbuf_t* id, uint64_t nbytes)
       return -1;
     }
 
-    sync -> e_buf  [id->xfer] = sync->w_buf;
-    sync -> e_byte [id->xfer] = nbytes;
-    sync -> eod    [id->xfer] = 1;
+    sync->e_buf  [id->xfer] = sync->w_buf;
+    sync->e_byte [id->xfer] = nbytes;
+    sync->eod    [id->xfer] = 1;
 
 #ifdef _DEBUG
       fprintf (stderr, "ipcbuf_mark_filled:"
@@ -661,7 +661,7 @@ int ipcbuf_mark_filled (ipcbuf_t* id, uint64_t nbytes)
                        sync->e_buf[id->xfer], sync->e_byte[id->xfer]);
 #endif
 
-    sync -> w_xfer++;
+    sync->w_xfer++;
     id->xfer = sync->w_xfer % IPCBUF_XFERS;
 
     id->state = IPCBUF_WRITER;
@@ -718,6 +718,12 @@ int ipcbuf_lock_read (ipcbuf_t* id)
     id->state = IPCBUF_READING;
 
   id->xfer = id->sync->r_xfer % IPCBUF_XFERS;
+
+#ifdef _DEBUG
+  fprintf (stderr, "ipcbuf_lock_read: xfer=%"PRIu64
+           " start buf=%"PRIu64" byte=%"PRIu64"\n", id->sync->r_xfer,
+           id->sync->s_buf[id->xfer], id->sync->s_byte[id->xfer]);
+#endif
 
   return 0;
 }
@@ -977,10 +983,12 @@ int64_t ipcbuf_tell_read (ipcbuf_t* id)
   if (ipcbuf_eod (id))
     return -1;
 
-  if (ipcbuf_is_reader (id))
+  if (id->state == IPCBUF_READING)
     return ipcbuf_tell (id, id->sync->r_buf);
-  else
+  else if (id->state == IPCBUF_VIEWING)
     return ipcbuf_tell (id, id->viewbuf);
+  else
+    return 0;
 }
 
 
@@ -1039,11 +1047,12 @@ int ipcbuf_reset (ipcbuf_t* id)
 {
   uint64_t ibuf = 0;
   uint64_t nbufs = ipcbuf_get_nbufs (id);
-  ipcsync_t* sync = id -> sync;
+  ipcsync_t* sync = id->sync;
   unsigned ix = 0;
 
   /* if the reader has reached end of data, reset the state */
-  if (id->state == IPCBUF_RSTOP) {
+  if (id->state == IPCBUF_RSTOP)
+  {
     id->state = IPCBUF_READER;
     return 0;
   }
@@ -1120,7 +1129,7 @@ int ipcbuf_reset (ipcbuf_t* id)
 /* reset the buffer count and end of data flags, without prejudice */
 int ipcbuf_hard_reset (ipcbuf_t* id)
 {
-  ipcsync_t* sync = id -> sync;
+  ipcsync_t* sync = id->sync;
   unsigned ix = 0;
   int val = 0;
 
@@ -1227,22 +1236,22 @@ int ipcbuf_sod (ipcbuf_t* id)
 
 uint64_t ipcbuf_get_write_count (ipcbuf_t* id)
 {
-  return id -> sync -> w_buf;
+  return id->sync->w_buf;
 }
 
 uint64_t ipcbuf_get_read_count (ipcbuf_t* id)
 {
-  return id -> sync -> r_buf;
+  return id->sync->r_buf;
 }
 
 uint64_t ipcbuf_get_nbufs (ipcbuf_t* id)
 {
-  return id -> sync -> nbufs;
+  return id->sync->nbufs;
 }
 
 uint64_t ipcbuf_get_bufsz (ipcbuf_t* id)
 {
-  return id -> sync -> bufsz;
+  return id->sync->bufsz;
 }
 
 uint64_t ipcbuf_get_nfull (ipcbuf_t* id) 
