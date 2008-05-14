@@ -378,15 +378,16 @@ ssize_t ipcio_read (ipcio_t* ipc, char* ptr, size_t bytes)
   size_t space = 0;
   size_t toread = bytes;
 
-  if (ipc -> rdwrt != 'r' && ipc -> rdwrt != 'R') {
+  if (ipc -> rdwrt != 'r' && ipc -> rdwrt != 'R')
+  {
     fprintf (stderr, "ipcio_read: invalid ipcio_t (rdwrt=%c)\n", ipc->rdwrt);
     return -1;
   }
 
-  while (!ipcbuf_eod((ipcbuf_t*)ipc)) {
-
-    if (!ipc->curbuf) {
-
+  while (!ipcbuf_eod((ipcbuf_t*)ipc))
+  {
+    if (!ipc->curbuf)
+    {
       ipc->curbuf = ipcbuf_get_next_read ((ipcbuf_t*)ipc, &(ipc->curbufsz));
 
 #ifdef _DEBUG
@@ -394,43 +395,44 @@ ssize_t ipcio_read (ipcio_t* ipc, char* ptr, size_t bytes)
                ipc->buf.sync->r_buf, ipc->curbufsz, ipc->curbuf[0]);
 #endif
 
-      if (!ipc->curbuf) {
+      if (!ipc->curbuf)
+      {
         fprintf (stderr, "ipcio_read: error ipcbuf_next_read\n");
         return -1;
       }
 
       ipc->bytes = 0;
-
     }
 
-    if (bytes)  {
-
+    if (bytes)
+    {
       space = ipc->curbufsz - ipc->bytes;
       if (space > bytes)
         space = bytes;
 
-      memcpy (ptr, ipc->curbuf + ipc->bytes, space);
-      
-      ipc->bytes += space;
-      ptr += space;
-      bytes -= space;
+      if (ptr)
+      {
+        memcpy (ptr, ipc->curbuf + ipc->bytes, space);
+        ptr += space;
+      }
 
+      ipc->bytes += space;
+      bytes -= space;
     }
 
-    if (ipc->bytes == ipc->curbufsz) {
-
-      if (ipc -> rdwrt == 'R' && ipcbuf_mark_cleared ((ipcbuf_t*)ipc) < 0) {
+    if (ipc->bytes == ipc->curbufsz)
+    {
+      if (ipc -> rdwrt == 'R' && ipcbuf_mark_cleared ((ipcbuf_t*)ipc) < 0)
+      {
         fprintf (stderr, "ipcio_write: error ipcbuf_mark_filled\n");
         return -1;
       }
 
       ipc->curbuf = 0;
       ipc->bytes = 0;
-
     }
     else if (!bytes)
       break;
-
   }
 
   return toread - bytes;
@@ -447,7 +449,8 @@ uint64_t ipcio_tell (ipcio_t* ipc)
 
   if (current < 0)
   {
-    fprintf (stderr, "ipcio_tell: failed ipcbuf_tell mode=%c current=%"PRIi64"\n", ipc->rdwrt, current);
+    fprintf (stderr, "ipcio_tell: failed ipcbuf_tell"
+             " mode=%c current=%"PRIi64"\n", ipc->rdwrt, current);
     return 0;
   }
 
@@ -459,35 +462,29 @@ uint64_t ipcio_tell (ipcio_t* ipc)
 int64_t ipcio_seek (ipcio_t* ipc, int64_t offset, int whence)
 {
   /* the absolute value of the offset */
-  uint64_t current = 0;
+  uint64_t current = ipcio_tell (ipc);
+
+#ifdef _DEBUG
+  fprintf (stderr, "ipcio_seek: offset=%"PRIi64" tell=%"PRIu64"\n",
+           offset, current);
+#endif
 
   if (whence == SEEK_CUR)
     offset += ipcio_tell (ipc);
 
-  ipc->bytes = ipc->curbufsz;
-  current = ipcio_tell (ipc);
-
-#ifdef _DEBUG
-  fprintf (stderr, "ipcio_seek: offset=%"PRIi64" tell=%"PRIu64"\n", 
-           offset, current);
-#endif
-
-  /* can seek forward until end of data */
-
-  while (current < offset && ! ipcbuf_eod((ipcbuf_t*)ipc))
+  if (current < offset)
   {
-    ipc->curbuf = ipcbuf_get_next_read ((ipcbuf_t*)ipc, &(ipc->curbufsz));
-    if (!ipc->curbuf)
+    /* seeking forward is just like reading without the memcpy */
+    if (ipcio_read (ipc, 0, offset - current) < 0)
     {
-      fprintf (stderr, "ipcio_seek: error ipcbuf_next_read\n");
+      fprintf (stderr, "ipcio_seek: empty read %"PRIi64" bytes error\n",
+               offset-current);
       return -1;
     }
 
-    ipc->bytes = ipc->curbufsz;
-    current = ipcio_tell (ipc);
   }
 
-  if (offset < current)
+  else if (offset < current)
   {
     /* can only go back to the beginning of the current buffer ... */
     offset = current - offset;
@@ -504,8 +501,8 @@ int64_t ipcio_seek (ipcio_t* ipc, int64_t offset, int whence)
 }
 
 /* Returns the number of bytes available in the ring buffer */
-int64_t ipcio_space_left(ipcio_t* ipc) {
-
+int64_t ipcio_space_left(ipcio_t* ipc)
+{
   uint64_t bufsz = ipcbuf_get_bufsz ((ipcbuf_t *)ipc);
   uint64_t nbufs = ipcbuf_get_nbufs ((ipcbuf_t *)ipc);
   uint64_t full_bufs = ipcbuf_get_nfull((ipcbuf_t*) ipc);
