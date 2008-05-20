@@ -1,0 +1,109 @@
+# Instrument this configuration is valid for
+INSTRUMENT              bpsr
+
+# Primary Write Client Controller
+PWCC_HOST               srv0.apsr.edu.au
+PWCC_PORT               12345
+
+# Owner of data files produced
+USER                    bpsr
+SCRIPTS_DIR             @PSRDADA_INSTALL@/bin
+CONFIG_DIR              @PSRDADA_INSTALL@/share
+WEB_DIR                 @PSRDADA_INSTALL@/web
+
+###############################################################################
+# DFB3 Configuration. For gain level control
+#
+DFB3_HOST               apsr16
+DFB3_PORT               40235
+
+###############################################################################
+# Server directory configuration
+#
+
+SERVER_HOST             srv0.apsr.edu.au
+SERVER_ALIASES          apsr-srv0.atnf.csiro.au srv0.apsr.edu.au
+SERVER_RESULTS_DIR      /export/results/bpsr
+SERVER_ARCHIVE_DIR      /export/archives/bpsr
+SERVER_LOG_DIR          /export/logs/bpsr
+SERVER_CONTROL_DIR      /tmp/bpsr/control
+SERVER_RESULTS_NFS_MNT  /nfs/results/bpsr
+SERVER_ARCHIVE_NFS_MNT  /nfs/archives/bpsr
+SERVER_DAEMONS          pwc_monitor src_monitor sys_monitor bpsr_tcs_interface
+
+# TCS Interface configuration. Note on different interface to server
+TCS_INTERFACE_HOST      apsr-srv0.atnf.csiro.au
+TCS_INTERFACE_PORT      59000
+
+# For information on current state of the syste_ii__Cm
+TCS_STATE_INFO_PORT     59001
+
+# For clients to log system messages
+SERVER_SRC_LOG_PORT     57004
+SERVER_SYS_LOG_PORT     57005
+SERVER_PWCC_LOG_PORT    56028
+SERVER_GAIN_CONTROL_PORT 57008
+
+SERVER_AUX_CLIENT_PORT  57009
+SERVER_AUX_ASSIST_PORT  57010
+
+
+###############################################################################
+# DFB Simluator configuration
+#
+USE_DFB_SIMULATOR       1         # 1 means tcs_interface will launch dfb sim
+DFB_SIM_BINARY          apsr_udpgenerator
+DFB_SIM_HOST            apsr16
+DFB_SIM_PORT            57003     # control of dfb simulator
+DFB_SIM_DEST_PORT       10002	    # SHOULD mactch CLIENT_UDPDB_PORT below
+
+
+###############################################################################
+# Client directory configuration
+#
+CLIENT_LOCAL_DIR        /lfs/data0/bpsr/
+CLIENT_CONTROL_DIR      /lfs/data0/bpsr/control
+CLIENT_LOG_DIR          /lfs/data0/bpsr/logs
+CLIENT_ARCHIVE_DIR      /lfs/data0/bpsr/archives
+CLIENT_RECORDING_DIR    /lfs/data0/bpsr/rawdata
+CLIENT_SCRATCH_DIR      /lfs/data0/scratch
+
+CLIENT_DAEMONS          observation_manager processing_manager spectra_manager monitor
+
+CLIENT_UDPDB_PORT       10002     # udp packets arrive on this port
+CLIENT_MASTER_PORT      57001     # client master script listens on this port
+CLIENT_PROC_LOAD_PORT   57006     # reports load information
+CLIENT_BG_PROC_PORT     57007     # reports observation current active
+CLIENT_NUM_CORES        8         # total number of processing cores
+CLIENT_UDPDB_STATS_PORT 56060     # udpdb reports stats on this port
+
+################################################################################
+# Data block definitions
+# 
+DATA_BLOCKS             DADA
+PROCESSING_DATA_BLOCK   DADA
+                                                                                                             
+DADA_BLOCK_NBUFS        2000      # dada_dbNdb data block
+DADA_BLOCK_BUFSZ        4194304
+                                                                                                             
+
+# Primary Write Client (PWC) configuration
+PWC_BINARY              bpsr_udpdb
+NUM_PWC                 13
+PWC_0                   apsr00
+PWC_1                   apsr01
+PWC_2                   apsr02
+PWC_3                   apsr03
+PWC_4                   apsr04
+PWC_5                   apsr05
+PWC_6                   apsr06
+PWC_7                   apsr07
+PWC_8                   apsr08
+PWC_9                   apsr09
+PWC_10                  apsr10
+PWC_11                  apsr11
+PWC_12                  apsr12
+DFB_0	                  apsr16
+
+
+
