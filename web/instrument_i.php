@@ -1,0 +1,3 @@
+<?PHP
+define(INSTRUMENT,"apsr");
+?>
