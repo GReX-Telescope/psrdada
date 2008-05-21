@@ -74,8 +74,10 @@ int bat_to_ut_str( char *str, int len, long long bat )
   }
   else {
     
-    if( ( pch = getenv( "DUTC" ) ) == NULL ) return( -2 );
-    if( sscanf( pch, "%lld", &lldutc ) != 1 ) return( -3 );
+    if( ( pch = getenv( "DUTC" ) ) == NULL ) 
+      lldutc = 33;
+    else if( sscanf( pch, "%lld", &lldutc ) != 1 )
+      return -3;
 
     li = ( bat / 1000000LL );
     xs = (double) ( (long long)( bat - li * 1000000LL ) ) / 1000000.0;
@@ -100,18 +102,11 @@ int bat_to_ut_str( char *str, int len, long long bat )
   }
   else {
     
-    n += strftime( l_str, STR_LEN, "%Y-%m-%d %H:%M:%S", gmtime( &tt ) );
+    n += strftime( l_str, STR_LEN, "%Y-%m-%d-%H:%M:%S", gmtime( &tt ) );
     if( n < len ) strcat( str, l_str );
     else return( -4 );
     
   }
-  
-  
-  /* String long enough for fraction ? */
-  if( ( n + 4 ) >= len ) return( -5 );
-  
-  sprintf( l_str, "%5.3f", xs );
-  strcat( str, &l_str[1] );
   
   return( strlen( str ) );
   
@@ -139,8 +134,8 @@ int main (int argc, char** argv)
     return -1;
   }
 
-  sscanf (argv[1], "%lx", &bat0);
-  sscanf (argv[2], "%lx", &bat1);
+  sscanf (argv[2], "%lu", &bat0);
+  sscanf (argv[1], "%lu", &bat1);
 
   bat = bat0;
   bat <<= 32;
@@ -148,7 +143,7 @@ int main (int argc, char** argv)
 
   if (bat_to_ut_str( utc, STR_LEN, bat ) < 0)
   {
-    fprintf (stderr, "bat_to_utc: failed to parse %lx %lx\n", bat0, bat1);
+    fprintf (stderr, "bat_to_utc: failed to parse %lu %lu\n", bat0, bat1);
     return -1;
   }
 

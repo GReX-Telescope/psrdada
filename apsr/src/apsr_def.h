@@ -19,5 +19,8 @@
 /* default port to connect to test_triwaveudp command interface */
 #define APSR_TEST_TRIWAVEUDP_COMMAND 57003
 
+/* default port for udpdisk udp packets */
+#define APSR_DEFAULT_UDPDISK_PORT 59500
+
 #endif
 

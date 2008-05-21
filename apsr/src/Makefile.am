@@ -1,6 +1,7 @@
 
 bin_PROGRAMS = apsr_udpdb apsr_dbtriwave apsr_test_triwave apsr_dbudp \
-	test_boardudp apsr_dbtriripple bat_to_utc
+	test_boardudp apsr_dbtriripple bat_to_utc apsr_udpdisk apsr_udpheader \
+  apsr_udpgenerator byte_interleave_test
 
 LDADD = ../../src/libdada.la ../../3rdparty/libtimers.la
 
