@@ -44,6 +44,9 @@ extern "C" {
   /*! Start another thread to receive log socket connections */
   int multilog_serve (multilog_t* m, int port);
 
+  /*! Print just to a stream in the multilog format */
+  int multilog_fprintf(FILE* stream, int priority, const char* format, ...);
+
 #ifdef __cplusplus
 	   }
 #endif

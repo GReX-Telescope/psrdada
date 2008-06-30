@@ -118,3 +118,33 @@ int multilog (multilog_t* m, int priority, const char* format, ...)
 
   return 0;
 }
+
+int multilog_fprintf(FILE* stream, int priority, const char* format, ...)
+{
+
+  va_list arguments;
+
+  if (!stream)
+    return -1;
+
+  va_start(arguments, format);
+
+  unsigned buffer_size = DADA_TIMESTR_LENGTH;
+  static char* buffer = 0;
+  if (!buffer)
+    buffer = malloc (buffer_size);
+  assert (buffer != 0);
+  time_t now = time(0);
+  strftime (buffer, buffer_size, DADA_TIMESTR, (struct tm*) localtime(&now));
+  fprintf(stream,"[%s] ",buffer);
+
+  if (priority == LOG_ERR) fprintf(stream, "ERR: ");
+  if (priority == LOG_WARNING) fprintf(stream, "WARN: ");
+  if (vfprintf (stream, format, arguments) < 0) 
+     error ("multilog: error vfprintf");
+
+  va_end(arguments);
+
+  return 0;
+
+}
