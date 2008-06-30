@@ -16,7 +16,7 @@ echo Running ssh $5 \'$4\' on $1$2-\>$3
 set n = $2
 while ( $n <= $3 )
 	set nn = `echo $n | awk '{printf ("%02d", $1)}'`
-	ssh -f $5 $1$nn /bin/csh -c "echo; $4"
+	ssh -x -f $5 $1$nn /bin/csh -c "echo; $4"
 	@ n = $n + 1
 end
 
