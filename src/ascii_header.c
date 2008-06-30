@@ -27,7 +27,7 @@ char* ascii_header_find (const char* header, const char* keyword)
     // fprintf (stderr, "found=%s", key);
 
     // if preceded by a new line, return the found key
-    if (*(key-1) == '\n')
+    if ((*(key-1) == '\n') || (*(key-1) == '\\'))
       break;
 
     // otherwise, search again, starting one byte later
