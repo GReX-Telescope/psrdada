@@ -1,8 +1,10 @@
 webdir = $(prefix)/web
 
 # scripts distributed as is (installed in bin/)
-dist_web_SCRIPTS =  banner.php \
+dist_web_SCRIPTS =  annotate_obs.php \ 
+                    banner.php \
                     client_status.php \
+                    commandeer.php \
                     controlwindow.php \
                     definitions_i.php \
                     footer_i.php \
@@ -11,7 +13,6 @@ dist_web_SCRIPTS =  banner.php \
                     index.php \
                     infoupdate.php \
                     infowindow.php \
-                    instrument_i.php \
                     instrument.php \
                     logheader.php \
                     logwindow.php \
@@ -19,11 +20,13 @@ dist_web_SCRIPTS =  banner.php \
                     plotwindow.php \
                     result.php \
                     results.php \
+                    secure_i.php \
                     statebanner.php \
                     stateupdate.php \
                     statusupdate.php \
                     statuswindow.php \
                     style.css \
+                    style_viewer.css \
                     style_log.css
 
 # data file (config) distributed as is

@@ -30,7 +30,7 @@ TABLE {
 TD {
   font-family: arial,helvetica,sans-serif,times;
   font-size: 10pt;
-  vertical-align: top;
+  /*vertical-align: top; */
 }
 
 SELECT {
@@ -212,7 +212,7 @@ div.btns a.btn{
 div.btns a.btn:hover span{
 
   opacity:0.6;
-  filter:alpha(opacity:80);
+  /*filter:alpha(opacity:80);*/
 }
 
 div.btns a.btn span

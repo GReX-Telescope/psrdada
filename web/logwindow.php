@@ -9,9 +9,18 @@ header("Expires: Mon, 26 Jul 1997 05:00:00 GMT");   // Date in the past
 
 /* Get the name of the log we want */
 $machine = $_GET["machine"];
-$logtype = $_GET["logtype"];
+$daemon = $_GET["daemon"];
+$auto_scroll = $_GET["autoscroll"];
+$filter = $_GET["filter"];
 
-//print_r($_GET);
+$server_daemon_names = getServerDaemonNames();
+$server_daemon_types = getServerDaemonTypes();
+$client_daemon_names = getClientDaemonNames();
+$client_daemon_types = getClientDaemonTypes();
+$client_daemon_tags = getClientDaemonTags();
+
+$pwc_config = getConfigFile(SYS_CONFIG);
+# print_r($_GET);
 
 if (isset($_GET["loglength"])) {
   if ($_GET["loglength"] == "all") {
@@ -23,73 +32,48 @@ if (isset($_GET["loglength"])) {
   $loglength = LOG_FILE_SCROLLBACK_SECS;
 }
 
+
+/* 
+ * log_type -> sys, pwc, src or srv
+ * daemon   -> name of the daemon that produced the log
+ *
+
 /* Determine what type and sub type of logs we will display */
 $log_type = "pwc";
-$sub_log_type = "*";
+$log_tag = "*";
 
-if (isset($_GET["logtype"])) {
+/* Server Logs */
+if ($machine == "nexus") {
 
-  $log_type = $_GET["logtype"];
-  
-  if ($log_type == "src_proc_mngr") {
-    $log_type = "src";
-    $sub_log_type = "proc mngr";
+  if (array_key_exists($daemon, $server_daemon_types)) {
+    $log_type = $server_daemon_types[$daemon];
+    $log_tag = "*";
+    $logfile = $pwc_config["SERVER_LOG_DIR"]."/".$log_type.".log";
+  } else {
+
+    if (array_key_exists($daemon, $client_daemon_types)) {
+      $log_type = $client_daemon_types[$daemon];
+      $log_tag  = $client_daemon_tags[$daemon];
+    } else {
+      $log_type = $daemon;
+      $log_tag = "*";
+    }
+    $logfile = $pwc_config["SERVER_LOG_DIR"]."/nexus.".$log_type.".log";
   }
 
-  if ($log_type == "src_dspsr") {
-    $log_type = "src";
-    $sub_log_type = "dspsr";
+
+/* Client specific log */
+} else {
+
+  if (array_key_exists($daemon, $client_daemon_types)) {
+    $log_type = $client_daemon_types[$daemon];
+    $log_tag  = $client_daemon_tags[$daemon];
+  } else {
+    $log_type = $daemon;
+    $log_tag = "*";
   }
 
-  if ($log_type == "sys_obs_mngr") {
-    $log_type = "sys";
-    $sub_log_type = "obs mngr";
-  }
-
-  if ($log_type == "sys_arch_mngr") {
-    $log_type = "sys";
-    $sub_log_type = "arch mngr";
-  }
-
-  if ($log_type == "sys_aux_mngr") {
-    $log_type = "sys";
-    $sub_log_type = "aux mngr";
-  }
-
-  if ($log_type == "sys_bg_mngr") {
-    $log_type = "sys";
-    $sub_log_type = "bg mngr";
-  }
-
-  if ($log_type == "sys_monitor") {
-    $log_type = "sys";
-    $sub_log_type = "monitor";
-  }
-
-  if ($log_type == "srv_apsr_tcs_interface") {
-    $log_type = "srv";
-    $sub_log_type = "apsr_tcs_interface";
-  }
-
-  if ($log_type == "srv_dada_pwc") {
-    $log_type = "srv";
-    $sub_log_type = "dada_pwc_command";
-  }
-
-  if ($log_type == "srv_results") {
-    $log_type = "srv";
-    $sub_log_type = "results_manager";
-  }
-
-  if ($log_type == "srv_gain") {
-    $log_type = "srv";
-    $sub_log_type = "gain_controller";
-  }
-
-  if ($log_type == "srv_aux") {
-    $log_type = "srv";
-    $sub_log_type = "aux_manager";
-  }
+  $logfile = $pwc_config["SERVER_LOG_DIR"]."/".$machine.".".$log_type.".log";
 
 }
 
@@ -98,15 +82,8 @@ if (isset($_GET["loglevel"])) {
   $loglevel = $_GET["loglevel"];
 }
 
-$pwc_config = getConfigFile(SYS_CONFIG);
-
-if ($log_type == "srv") {
-  $logfile = $pwc_config["SERVER_LOG_DIR"]."/".$sub_log_type.".log";
-} else {
-  $logfile = $pwc_config["SERVER_LOG_DIR"]."/".$machine.".".$log_type.".log";
-}
-
-// echo $logfile."<BR>\n";
+# echo "file: ".$logfile."<BR>\n";
+# echo "grep: ".$log_tag."<BR>\n";
 
 ob_start();
 
@@ -118,8 +95,10 @@ ob_start();
   <link rel="STYLESHEET" type="text/css" href="./style_log.css">
   <script type="text/javascript">
 
-    Select_Value_Set(parent.logheader.document.getElementById("logtype"), "<?echo $logtype?>");
+    Select_Value_Set(parent.logheader.document.getElementById("daemon"), "<?echo $daemon?>");
     Select_Value_Set(parent.logheader.document.getElementById("loglevel"), "<?echo $loglevel?>");
+
+    var auto_scroll = <?echo $auto_scroll?>;
   
     function Select_Value_Set(SelectObject, Value) {
       for(index = 0; index < SelectObject.length; index++) {
@@ -128,11 +107,25 @@ ob_start();
        }
     }
 
+    function looper() {
+      scrollDown();
+      setTimeout('looper()',250)
+    }
+
+    function scrollDown() {
+
+      if (auto_scroll) {
+        self.scrollByLines(1000);
+      }
+    }
+
   </script>
   <!--<meta http-equiv="Refresh" content="0">-->
 </head>
 
-<body><pre>
+<body>
+<script type="text/javascript">looper()</script>
+<pre>
 <p>
 <?
 
@@ -143,7 +136,7 @@ clearstatcache();
 if (!($fp = @fopen($fname, 'r'))) {
     // We couldn't open the file, error!
     echo "ERROR: The $logtype file for $machine did not exist or was not readable: \n$fname\n";
-    ob_end_flush();
+    # ob_end_flush();
     exit();
 }
 
@@ -196,7 +189,7 @@ while ($still_searching) {
     $a = split('[-:]',$timestr);
     $timeunix = mktime($a[3],$a[4],$a[5],$a[1],$a[2],$a[0]);
   }
-  // echo $current_time_string." <=> ".$timestr."\n";
+  # echo $current_time_string." <=> ".$timestr."\n";
 
   # If the time is less that we require
   if ($timeunix < $time_to_find) {
@@ -208,6 +201,8 @@ while ($still_searching) {
     $max_size = $mid_size;
     $mid_size = $min_size + (($mid_size - $min_size)/2); 
   }
+
+  # echo "SIZES: $min_size -> $mid_size -> $max_size\n";
   
   if ($timeunix == $time_to_find) {
     $still_searching = 0;
@@ -225,6 +220,7 @@ while ($still_searching) {
 
 }
 
+$lines_to_flush = 500;
 
 // Keep looping forever
 while ($max_time_limit > 0) {
@@ -238,8 +234,12 @@ while ($max_time_limit > 0) {
       $cleanline = chop($line);
 
       /* Check the sub log type */ 
-      if (($sub_log_type != "*") && ($log_type != "srv")) {
-        if (strpos($cleanline, "] ".$sub_log_type.": ") === FALSE) {
+      if (($log_tag != "*")  && (strpos($cleanline, "] ".$log_tag.": ") === FALSE)) {
+        $showline = false;
+      }
+
+      if (($filter != "*") && ($filter != "")) {
+        if (preg_match("/".$filter."/",$cleanline) == 0) {
           $showline = false;
         }
       }
@@ -257,27 +257,37 @@ while ($max_time_limit > 0) {
 
       if ($showline) {
 
-          $haveSomeLogs = "true";
-  
-          if (($loglevel == "warn") && (strstr($line,"WARN:")))
-            echo $cleanline."\n";
-          else if (($loglevel == "error") && (strstr($line,"ERROR:")))
-            echo $cleanline."\n";
-          else if ($loglevel == "all") 
-            echo $cleanline."\n";
-          else
-            ;
-        }   
-
-        // Automatically scroll down a bit
-        if ($atEOF == "true") { ?>
-<script type="text/javascript">self.scrollBy(0,100);</script><?
+        if ($atEOF == "false") {
+          $lines_to_flush--;
+          if ($lines_to_flush <= 0) {
+            $lines_to_flush = 500;
+            ob_end_flush();
+            ob_start();
+            //echo "<script type=\"text/javascript\">self.scrollBy(0,500);</script>\n";
+          }
         }
-      }
-    
+
+        $haveSomeLogs = "true";
+
+        if (($loglevel == "warn") && (strstr($line,"WARN:")))
+          echo $cleanline."\n";
+        else if (($loglevel == "error") && (strstr($line,"ERROR:")))
+          echo $cleanline."\n";
+        else if ($loglevel == "all") 
+          echo $cleanline."\n";
+        else
+          ;
+      }   
+
+      // Automatically scroll down a bit
+      //if (($auto_scroll) && ($atEOF == "true")) { 
+      //  echo "<script type=\"text/javascript\">self.scrollLines(1);</script>\n";
+      //}
+    }
   }
 
   if ($atEOF == "false") { 
+    $atEOF = "true";
     if ($haveSomeLogs == "false") {
       echo "No logs recorded for the last ".($loglength/3600)." hours<BR>\n";
     }
@@ -285,7 +295,6 @@ while ($max_time_limit > 0) {
 <script type="text/javascript">self.scrollBy(0,1000000);</script> 
 <?
     ob_end_flush();
-    $atEOF = "true";
   }
 
   // Ok, we hit the end of the file, there are a few odds-n-ends we need:

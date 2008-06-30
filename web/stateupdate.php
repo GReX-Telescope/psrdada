@@ -19,7 +19,12 @@ if (!(isset($_GET["port"])) || (!(isset($_GET["host"])))) {
   } else {
     $string = "TCS INTERFACE STOPPED<BR>\n";
   }
+
+  $control_info = "";
+  if (file_exists(CONTROL_FILE)) {
+    $control_info = "<BR>Host: ".file_get_contents(CONTROL_FILE);
+  }
 }
-echo $string;
+echo $string.$control_info;
 flush();
 

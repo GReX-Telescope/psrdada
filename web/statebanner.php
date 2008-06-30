@@ -47,7 +47,7 @@ $port = $config["TCS_STATE_INFO_PORT"];
 <table cellspacing=0 cellpadding=0 border=0 width="100%">
   <tr>
     <td width=480px height=60px><img src="<?echo BANNER_IMAGE?>" width=480 height=60></td>
-    <td width="100%" background="<?echo BANNER_IMAGE_REPEAT?>" class="largetext"><span id="globalstatus" class="largetext"></span></td>
+    <td width="100%" height=60px background="<?echo BANNER_IMAGE_REPEAT?>" class="largetext"><span id="globalstatus" class="largetext"></span></td>
   </tr>
 </table>
 </BODY>

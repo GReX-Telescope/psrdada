@@ -1,14 +1,12 @@
 <?PHP
-$title = "APSR | Controls";
 include("../definitions_i.php");
 include("../functions_i.php");
-include("../header_i.php");
 
 ?>
 
 <HTML>
 <HEAD>
-  <TITLE>APSR | Controls</TITLE>
+  <TITLE><?echo strtoupper(INSTRUMENT)?> | Controls</TITLE>
 </HEAD>
 <FRAMESET COLS="1" ROWS="480px,*" border=1 bordercolor="black">
   <FRAME name="control" src="control.php" frameborder=0 marginheight=0 marginwidth=0></FRAME>

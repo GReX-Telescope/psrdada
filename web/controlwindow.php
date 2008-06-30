@@ -1,7 +1,7 @@
 <?PHP
 
-include("functions_i.php");
 include("definitions_i.php");
+include("functions_i.php");
 
 if (isset($_GET["newproject"])) {
   changeProject($_GET["newproject"]);
@@ -31,7 +31,11 @@ function popUp(URL) {
 function popWindow(URL,width,height) {
 
   var width = width || "1024";
-  var heighti = height || "768";
+  var height = height || "768";
+
+  if (URL == "annotate_obs.php") {
+    URL = URL+"?observation="+parent.infowindow.document.getElementById("UTC_START").innerHTML
+  }
 
   day = new Date();
   id = day.getTime();
@@ -60,14 +64,16 @@ $groups = getProjects($config["DADA_USER"]);
 
     <div class="btns">
 
+      <a href="javascript:popWindow('annotate_obs.php', 800, 600)" class="btn" > <span>Annotate Obs</span> </a>
       <a href="javascript:popUp('client_status.php')"  class="btn" > <span>Client Status</span> </a>
 
       <a target="_ganglia" href="http://<?echo $_SERVER["SERVER_NAME"].":".$_SERVER["SERVER_PORT"]?>/ganglia/" class="btn" > <span>Ganglia</span> </a>
 
-      <a href="javascript:popWindow('results.php', 1060, 800)" class="btn" > <span>Results</span> </a>
+      <a href="javascript:popWindow('<?echo INSTRUMENT?>/results.php', 1060, 800)" class="btn" > <span>Results</span> </a>
 
       <a href="javascript:popWindow('control/', 1024, 800)" class="btn" > <span>Controls</span> </a>
       <a href="javascript:popWindow('<?echo INSTRUMENT?>/testing/', 1024, 800)" class="btn" > <span>Test System</span> </a>
+      <a href="javascript:popWindow('commandeer.php', 800, 480)" class="btn" > <span>Commandeer</span> </a>
 
     </div>
 

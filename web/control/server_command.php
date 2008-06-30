@@ -44,15 +44,6 @@ if ($cmd == "start_daemons") {
     flush();
   }
 
-/*
-  $return_val += startDaemon("PWC Monitor", "pwc_monitor");
-  $return_val += startDaemon("SYS Monitor", "sys_monitor");
-  $return_val += startDaemon("SRC Monitor", "src_monitor");
-  $return_val += startDaemon("Results Manager", "results_manager");
-  $return_val += startDaemon("Aux Manager", "aux_manager");
-  $return_val += startDaemon("Gain Controller", "gain_controller");
-  $return_val += startDaemon("TCS Interface", "tcs_interface");
-*/
 ?>
 
 </table>
@@ -73,22 +64,6 @@ if ($cmd == "start_daemons") {
     $return_val += waitForDaemon($server_names[$i], $server_daemons[$i], $control_dir);
     flush();
   }
-/*
-  $return_val += waitForDaemon("PWC Monitor", "pwc_monitor", $control_dir);
-  flush();
-  $return_val += waitForDaemon("SYS Monitor", "sys_monitor", $control_dir);
-  flush();
-  $return_val += waitForDaemon("SRC Monitor", "src_monitor", $control_dir);
-  flush();
-  $return_val += waitForDaemon("Results Manager", "results_manager", $control_dir);
-  flush();
-  $return_val += waitForDaemon("Aux Manager", "aux_manager", $control_dir);
-  flush();
-  $return_val += waitForDaemon("Gain Controller", "gain_controller", $control_dir);
-  flush();
-  $return_val += waitForDaemon("TCS Interface", "tcs_interface", $control_dir);
-  flush();
- */
 
   unlink($control_dir."/quitdaemons");
 
@@ -133,7 +108,7 @@ if ($cmd == "start_daemons") {
 <?
   flush();
 
-  $script_name = "dada_reconfigure.pl -e apsr";
+  $script_name = "dada_reconfigure.pl -e ".$config["INSTRUMENT"];
   echo "  <tr style=\"background: white;\">\n";
   echo "    <td align=\"left\">\n";
   $script = "source /home/apsr/.bashrc; ".$script_name." 2>&1";

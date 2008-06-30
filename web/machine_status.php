@@ -1,12 +1,11 @@
 <?PHP
 
-include("functions_i.php");
 include("definitions_i.php");
+include("functions_i.php");
 
 $config = getConfigFile(SYS_CONFIG);
 $machine = $_GET["machine"];
 $machines = array();
-
 
 $gang_network = "http://".$_SERVER["HTTP_HOST"]."/ganglia/graph.php?g=network_report&z=medium&c=APSR%20Clients&m=&r=hour&s=descending&hc=4";
 $gang_load = "http://".$_SERVER["HTTP_HOST"]."/ganglia/graph.php?g=load_report&z=medium&c=APSR%20Clients&m=&r=hour&s=descending&hc=4";

@@ -9,7 +9,8 @@ clearstatcache();
 
 $results_dir = $_GET["results_dir"];
 
-$cmd = "ls -trA ".$results_dir." | tail -n 1";
+# $cmd = "ls -trA ".$results_dir." | tail -n 1";
+$cmd = "ls -1 ".$results_dir." | tail -n 1";
 $result = exec($cmd, $return_var);
 
 $obs_info = $results_dir."/".$result."/obs.info";

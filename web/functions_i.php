@@ -1,7 +1,5 @@
 <?PHP
 
-# include("definitions_i.php");
-
 function getConfigFile($fname, $quiet=FALSE) {
 
   $fptr = @fopen($fname,"r");
@@ -397,6 +395,91 @@ function getIntergrationLength($archive) {
   }
 }
 
+function getServerDaemonNames() {
 
+  $arr = array();
+  $arr["apsr_tcs_interface"] = "TCS Interface";
+  $arr["bpsr_tcs_interface"] = "TCS Interface";
+  $arr["pwc_monitor"] = "PWC Monitor";
+  $arr["sys_monitor"] = "SYS Monitor";
+  $arr["src_monitor"] = "SRC Monitor";
+  $arr["results_manager"] = "Results Manager";
+  $arr["bpsr_results_manager"] = "Results Manager";
+  $arr["gain_manager"] = "Gain Manager";
+  $arr["aux_manager"] = "Aux Manager";
+  return $arr;
+}
+
+function getClientDaemonNames() {
+
+  $arr = array();
+
+  $arr["master_control"] = "Master Control";
+  $arr["observation_manager"] = "Obs. Manager";
+  $arr["bpsr_observation_manager"] = "Obs. Manager";
+  $arr["processing_manager"] = "Proc. Manager";
+  $arr["processor"] = "Processor";
+  $arr["archive_manager"] = "Archive Manager";
+  $arr["spectra_manager"] = "Spectra Manager";
+  $arr["background_processor"] = "BG Processor";
+  $arr["aux_manager"] = "Aux Manager";
+  $arr["monitor"] = "Monitor";
+  $arr["gain_controller"] = "Gain Controller";
+
+  return $arr;
+
+}
+
+function getClientDaemonTypes() {
+  $arr = array();
+
+  $arr["master_control"] = "none";
+  $arr["observation_manager"] = "sys";
+  $arr["bpsr_observation_manager"] = "sys";
+  $arr["processing_manager"] = "src";
+  $arr["processor"] = "src";
+  $arr["archive_manager"] = "sys";
+  $arr["spectra_manager"] = "sys";
+  $arr["background_processor"] = "sys";
+  $arr["aux_manager"] = "sys";
+  $arr["monitor"] = "sys";
+  $arr["gain_controller"] = "sys";
+  return $arr;
+}
+
+function getClientDaemonTags() {
+
+  $arr = array();
+
+  $arr["master_control"] = "none";
+  $arr["observation_manager"] = "obs mngr";
+  $arr["bpsr_observation_manager"] = "obs mngr";
+  $arr["processing_manager"] = "proc mngr";
+  $arr["processor"] = "proc";
+  $arr["archive_manager"] = "arch mngr";
+  $arr["spectra_manager"] = "spectra mngr";
+  $arr["background_processor"] = "bg mngr";
+  $arr["aux_manager"] = "aux mngr";
+  $arr["monitor"] = "monitor";
+  $arr["gain_controller"] = "gain ctrl";
+  return $arr;
+}
+
+function getServerDaemonTypes() {
+                                                                               
+  $arr = array();
+  $arr["apsr_tcs_interface"] = "apsr_tcs_interface";
+  $arr["bpsr_tcs_interface"] = "bpsr_tcs_interface";
+  $arr["pwc_monitor"] = "nexus.pwc";
+  $arr["sys_monitor"] = "nexus.sys";
+  $arr["src_monitor"] = "nexus.src";
+  $arr["results_manager"] = "results_manager";
+  $arr["bpsr_results_manager"] = "bpsr_results_manager";
+  $arr["gain_manager"] = "gain_manager";
+  $arr["aux_manager"] = "aux_manager";
+  $arr["dada_pwc_command"] = "dada_pwc_command";
+
+  return $arr;
+}
 
 ?>

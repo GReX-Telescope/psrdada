@@ -8,38 +8,67 @@ include("header_i.php");
 $pwc_config = getConfigFile(SYS_CONFIG);
 $num_pwc = $pwc_config["NUM_PWC"];
 
+$server_daemons = split(" ",$pwc_config["SERVER_DAEMONS"]);
+$server_daemons_to_exclude = array("pwc_monitor", "sys_monitor", "src_monitor");
+$server_daemon_names = getServerDaemonNames();
+
+$client_daemons = split(" ",$pwc_config["CLIENT_DAEMONS"]);
+if ($pwc_config["INSTRUMENT"] == "APSR") {
+  array_push($client_daemons, "gain_controller");
+}
+$client_daemon_names = getClientDaemonNames();
+$client_daemon_types = getClientDaemonTypes();
+
+$server_daemons_count = count($server_daemons);
+for ($i=0; $i<$server_daemons_count;$i++) {
+  if (in_array($server_daemons[$i], $server_daemons_to_exclude)) {
+    array_splice($server_daemons, $i,1);
+    $i--;
+    $server_daemons_count = count($server_daemons);
+  } 
+}
 
 ?>
 <body>
   <script type="text/javascript">
 
+    function autoScroll() {
+      var scroll
+      scroll = document.getElementById("auto_scroll").checked
+      parent.logwindow.auto_scroll = scroll
+    }
 
     function changeLogWindow() {
 
       var i
       var length    // Length of the logs
-      var type      // Type of log messages (all, warnings, errors)
+      var daemon    // The daemon/log
       var machine   // Machine in question
+      var scroll
+      var filter
 
       i = document.getElementById("active_machine").selectedIndex
       machine = document.getElementById("active_machine").options[i].value
 
+      scroll = document.getElementById("auto_scroll").checked
+      filter = document.getElementById("filter").value
+
       if (machine == "nexus") {
-        Select_Value_Enable(document.getElementById("logtype"), "srv_apsr_tcs_interface", false);
-        //Select_Value_Enable(document.getElementById("logtype"), "srv_dada_pwc", false);
-        Select_Value_Enable(document.getElementById("logtype"), "srv_results", false);
-        Select_Value_Enable(document.getElementById("logtype"), "srv_gain", false);
-        Select_Value_Enable(document.getElementById("logtype"), "srv_aux", false);
+<?
+        for ($i=0; $i<count($server_daemons); $i++) {
+          echo "Select_Value_Enable(document.getElementById(\"daemon\"), \"".$server_daemons[$i]."\", false);\n";
+        }
+?>
       } else {
-        Select_Value_Enable(document.getElementById("logtype"), "srv_apsr_tcs_interface", true);
-        //Select_Value_Enable(document.getElementById("logtype"), "srv_dada_pwc", true);
-        Select_Value_Enable(document.getElementById("logtype"), "srv_results", true);
-        Select_Value_Enable(document.getElementById("logtype"), "srv_gain", true);
-        Select_Value_Enable(document.getElementById("logtype"), "srv_aux", true);
+<?
+        for ($i=0; $i<count($server_daemons); $i++) {
+          echo "Select_Value_Enable(document.getElementById(\"daemon\"), \"".$server_daemons[$i]."\", true);\n";
+        }
+?>
       }
 
-      i = document.getElementById("logtype").selectedIndex
-      type  = document.getElementById("logtype").options[i].value
+      i = document.getElementById("daemon").selectedIndex
+      daemon  = document.getElementById("daemon").options[i].value
 
       i = document.getElementById("loglevel").selectedIndex
       level  = document.getElementById("loglevel").options[i].value
@@ -47,11 +76,10 @@ $num_pwc = $pwc_config["NUM_PWC"];
       i = document.getElementById("loglength").selectedIndex
       length = document.getElementById("loglength").options[i].value
 
-      var newurl= "logwindow.php?machine="+machine+"&logtype="+type+"&loglength="+length+"&loglevel="+level
+      var newurl= "logwindow.php?machine="+machine+"&daemon="+daemon+"&loglength="+length+"&loglevel="+level+"&autoscroll="+scroll+"&filter="+filter;
       parent.logwindow.document.location = newurl
   
     }
-
 
     function Select_Value_Enable(SelectObject, Value, State) {
       for (index = 0; index < SelectObject.length; index++) {
@@ -66,7 +94,7 @@ $num_pwc = $pwc_config["NUM_PWC"];
 
   <table border=0 width="100%" height="100%" cellpadding=3 cellspacing=0>
     <tr valign="center">
-      <td align="center">
+      <td align="center" colspan=3>
       <!-- Select Node -->
        Node: <select id="active_machine" class="smalltext" onchange="changeLogWindow()">
                <option value="nexus">nexus</option>
@@ -78,22 +106,31 @@ for ($i=0;$i<$num_pwc;$i++) {
              </select>&nbsp;&nbsp;&nbsp;&nbsp;
 
       <!-- Select log type -->
-      <span id="log_type_span" style="visibility: visible;">Log: <select id="logtype" class="smalltext" onchange="changeLogWindow()">
+      <span id="daemon_span" style="visibility: visible;">Log: <select id="daemon" class="smalltext" onchange="changeLogWindow()">
         <option value="pwc">PWC</option>
         <option value="src">SRC</option>
-        <option value="src_proc_mngr">&nbsp;&nbsp;&nbsp;&nbsp;Proc. Mngr</option>
-        <option value="src_dspsr">&nbsp;&nbsp;&nbsp;&nbsp;Dspsr</option>
+        <option value="processor">&nbsp;&nbsp;&nbsp;&nbsp;Processor</option>
+<?
+        for ($i=0; $i<count($client_daemons); $i++) {
+          if ($client_daemon_types[$client_daemons[$i]] == "src") 
+            echo "        <option value=\"".$client_daemons[$i]."\">&nbsp;&nbsp;&nbsp;&nbsp;".$client_daemon_names[$client_daemons[$i]]."</option>\n";
+        }
+?>
         <option value="sys">SYS</option>
-        <option value="sys_obs_mngr">&nbsp;&nbsp;&nbsp;&nbsp;Obs Mngr</option>
-        <option value="sys_arch_mngr">&nbsp;&nbsp;&nbsp;&nbsp;Archive Mngr</option>
-        <option value="sys_aux_mngr">&nbsp;&nbsp;&nbsp;&nbsp;Aux. Mngr</option>
-        <option value="sys_bg_mngr">&nbsp;&nbsp;&nbsp;&nbsp;BG Mngr</option>
-        <option value="sys_monitor">&nbsp;&nbsp;&nbsp;&nbsp;Monitor</option>
-        <option value="srv_apsr_tcs_interface">TCS Interface</option>
-        <!--<option value="srv_dada_pwc">DADA PWC</option>-->
-        <option value="srv_results">Server Results</option>
-        <option value="srv_gain">Gain Controller</option>
-        <option value="srv_aux">Auxiliary Manager</option>
+<?
+        for ($i=0; $i<count($client_daemons); $i++) {
+          if ($client_daemon_types[$client_daemons[$i]] == "sys")
+            echo "        <option value=\"".$client_daemons[$i]."\">&nbsp;&nbsp;&nbsp;&nbsp;".$client_daemon_names[$client_daemons[$i]]."</option>\n";
+        }
+
+?>
+        <option value="srv" disabled=true visible=true>SERVER ONLY</option>
+<?
+        for ($i=0; $i<count($server_daemons); $i++) {
+          echo "        <option value=\"".$server_daemons[$i]."\">&nbsp;&nbsp;&nbsp;&nbsp;".$server_daemon_names[$server_daemons[$i]]."</option>\n";
+        }
+?>
+
       </select></span>&nbsp;&nbsp;&nbsp;&nbsp;
 
       <!-- Select log level -->
@@ -114,12 +151,14 @@ for ($i=0;$i<$num_pwc;$i++) {
         <option value=334>14 days</option>
         <option value=all>Ever</option>
       </select></span>
-      </td>
+    </td>
       
-    </tr>
+  </tr>
 
-    <tr>
-      <td align="center" width=100%>
+  <tr>
+    <td class="smalltext" valign="middle"><input type="checkbox" id="auto_scroll" onchange="autoScroll()">Auto scroll?</input></td>
+    <td class="smalltext" valign="middle">Filter: <input type="text" id="filter" onchange="changeLogWindow()"></input></td>
+    <td align="center">
         <table cellpadding=0 cellspacing=0><tr><td>
         <div class="btns" align="center">
           <a href="javascript:changeLogWindow()"  class="btn" > <span>Reload Logs</span> </a>

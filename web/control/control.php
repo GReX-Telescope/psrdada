@@ -1,5 +1,4 @@
 <?PHP
-$title = "APSR | Controls";
 
 include("../definitions_i.php");
 include("../functions_i.php");
@@ -7,11 +6,16 @@ include("../functions_i.php");
 <html>
 <?
 include("../header_i.php");
-$text = "APSR Controls";
+$text = strtoupper(INSTRUMENT)." Controls";
 include("../banner.php");
 
 $config = getConfigFile(SYS_CONFIG);
+$server_daemons = split(" ",$config["SERVER_DAEMONS"]);
 $server_daemon_status = getServerStatus($config);
+
+$server_daemons_names = getServerDaemonNames();
+$client_daemons_names = getClientDaemonNames();
+$client_daemons_name[""] = "";
 
 ?>
 <body>
@@ -31,13 +35,16 @@ function popUp(URL) {
 
   <table border=0 class="datatable">
   <tr><th colspan=2>Server Daemons</th></tr>
-  <tr> <td>TCS Interface</td><td><? echo statusLight($server_daemon_status["apsr_tcs_interface"]) ?></td> </tr>
-  <tr> <td>PWC Monitor</td><td><? echo statusLight($server_daemon_status["pwc_monitor"]) ?></td> </tr>
-  <tr> <td>SYS Monitor</td><td><? echo statusLight($server_daemon_status["sys_monitor"]) ?></td> </tr>
-  <tr> <td>SRC Monitor</td><td><? echo statusLight($server_daemon_status["src_monitor"]) ?></td> </tr>
-  <tr> <td>Results Manager</td><td><? echo statusLight($server_daemon_status["results_manager"]) ?></td> </tr>
-  <tr> <td>Gain Controller</td><td><? echo statusLight($server_daemon_status["gain_controller"]) ?></td> </tr>
-  <tr> <td>Aux Manager</td><td><? echo statusLight($server_daemon_status["aux_manager"]) ?></td> </tr>
+<?
+
+  for ($i=0; $i < count($server_daemons); $i++) {
+    $d = $server_daemons[$i];
+    echo "  <tr> <td>".$server_daemons_names[$d]."</td><td>".statusLight($server_daemon_status[$d])."</td></tr>\n";
+  }
+
+
+?>
+
   <tr>
     <td align="center" colspan=2> 
       <div class="btns">
@@ -151,7 +158,7 @@ printClientStatus($config);
 
 function getServerStatus($config) {
 
-  $daemons = array("pwc_monitor","sys_monitor","src_monitor","apsr_tcs_interface","results_manager","aux_manager","gain_controller");
+  $daemons = split(" ",$config["SERVER_DAEMONS"]);
   $control_dir = $config["SERVER_CONTROL_DIR"];
   $results = array();
 
@@ -178,38 +185,45 @@ function printClientStatus($config) {
 
   $machines = "";
   $helpers = "";
+  $cds = split(" ",$config["CLIENT_DAEMONS"]);
 
-  $mc = array();
-  $om = array();
-  $am = array();
-  $pm = array();
-  $bp = array();
-  $m  = array();
+  $client_daemons = array();
+  $client_daemons_name["master_control"] = "Master Control";
+  $client_daemons_name["observation_manager"] = "Obs. Manager";
+  $client_daemons_name["bpsr_observation_manager"] = "Obs. Manager";
+  $client_daemons_name["processing_manager"] = "Proc. Manager";
+  $client_daemons_name["archive_manager"] = "Archive Manager";
+  $client_daemons_name["background_processor"] = "BG Processor";
+  $client_daemons_name["auxiliary_manager"] = "Aux Manager";
+  $client_daemons_name["monitor"] = "Monitor";
+  $client_daemons_name["spectra_manager"] = "Spectra Manager";
+
+  $results = array();
 
   echo "<tr><td align=right></td>";
   for ($i=0; $i<$config["NUM_PWC"]; $i++) {
 
-    $machines .= $config["PWC_".$i]." ";
-    echo "<td align=center>".sprintf("%2d",$i)."</td>";
+    $m = $config["PWC_".$i];
+    $results[$m] = array();
+    for ($j=0; $j<count($cds); $j++) {
+      $results[$m][$cds[$i]] = 0;
+    }
+    $machines .= $m." ";
 
-    $mc[$config["PWC_".$i]] = 0;
-    $om[$config["PWC_".$i]] = 0;
-    $am[$config["PWC_".$i]] = 0;
-    $pm[$config["PWC_".$i]] = 0;
-    $bp[$config["PWC_".$i]] = 0;
-    $m[$config["PWC_".$i]] = 0;
+    echo "<td align=center>".sprintf("%2d",$i)."</td>";
 
   }
 
   for ($i=0; $i<$config["NUM_HELP"]; $i++) {
-    $machines .= $config["HELP_".$i]." ";
+
+    $m = $config["HELP_".$i];
+    $machines .= $m." ";
     echo "<td align=center>".sprintf("%2d",$i)."</td>";
-    $mc[$config["HELP_".$i]] = 0;
-    $om[$config["HELP_".$i]] = 0;
-    $am[$config["HELP_".$i]] = 0;
-    $pm[$config["HELP_".$i]] = 0;
-    $bp[$config["HELP_".$i]] = 0;
-     $m[$config["HELP_".$i]] = 0;
+
+    for ($j=0; $j<count($cds); $j++) {
+      $results[$m][$cds[$i]] = 0;
+    }
+
   }
 
   echo "</tr>";
@@ -228,87 +242,36 @@ function printClientStatus($config) {
       $string = $array[2];
 
       if ( (strpos($string, "Could not connect to machine")) !== FALSE) {
-	# We could not contact the master control script
+	      # We could not contact the master control script
       } else {
-         $mc[$machine] = 2;
+        $results[$machine]["master_control"] = 2;
         $daemon_results = split(",",$string);
+
         for ($j=0; $j<count($daemon_results); $j++) {
           $arr = split(" ",$daemon_results[$j]);
-          if ($arr[0] == "observation_manager")  { $om[$machine] = $arr[1]; }
-          if ($arr[0] == "archive_manager")      { $am[$machine] = $arr[1]; }
-          if ($arr[0] == "processing_manager")   { $pm[$machine] = $arr[1]; }
-          if ($arr[0] == "background_processor") { $bp[$machine] = $arr[1]; }
-          if ($arr[0] == "auxiliary_manager")    { $ap[$machine] = $arr[1]; }
-          if ($arr[0] == "monitor")              { $m[$machine] = $arr[1]; }
+          $results[$machine][$arr[0]] = $arr[1];
         }
       }
     }
   }
 
-  echo "<tr><td align=right>Master control</td>";
-  for ($i=0; $i<$config["NUM_PWC"]; $i++) {
-    echo "<td width=17 bgcolor=white>".statusLight($mc[$config["PWC_".$i]])."</td>";
-  }
-  for ($i=0; $i<$config["NUM_HELP"]; $i++) {
-    echo "<td width=17 bgcolor=white>".statusLight($mc[$config["HELP_".$i]])."</td>";
-  }
-
-  echo "</tr>\n";
-
-  echo "<tr><td align=right>Obs. manager</td>";
-  for ($i=0; $i<$config["NUM_PWC"]; $i++) {
-    echo "<td bgcolor=white>".statusLight($om[$config["PWC_".$i]])."</td>";
-  }
-  for ($i=0; $i<$config["NUM_HELP"]; $i++) {
-    echo "<td width=17 bgcolor=white></td>";
+  echo "<tr>\n";
+  echo "  <td align=right>".$client_daemons_name["master_control"]."</td>\n";
+  for ($j=0; $j<$config["NUM_PWC"]; $j++) {
+    echo "  <td width=17 bgcolor=white>".statusLight($results[$config["PWC_".$j]]["master_control"])."</td>\n";
   }
   echo "</tr>\n";
+                                                                                                                    
+  for ($i=0; $i<count($cds); $i++) {
 
-  echo "<tr><td align=right>Proc. manager</td>";
-  for ($i=0; $i<$config["NUM_PWC"]; $i++) {
-    echo "<td bgcolor=white>".statusLight($pm[$config["PWC_".$i]])."</td>";
-  }
-  for ($i=0; $i<$config["NUM_HELP"]; $i++) {
-    echo "<td bgcolor=white>".statusLight($pm[$config["HELP_".$i]])."</td>";
-  }
-  echo "</tr>\n";
+    echo "<tr>\n";
+      echo "  <td align=right>".$client_daemons_name[$cds[$i]]."</td>\n";
+      for ($j=0; $j<$config["NUM_PWC"]; $j++) {
+        echo "  <td width=17 bgcolor=white>".statusLight($results[$config["PWC_".$j]][$cds[$i]])."</td>\n";
+      }    
+    echo "</tr>\n";
 
-  echo "<tr><td align=right>Archive mananger</td>";
-  for ($i=0; $i<$config["NUM_PWC"]; $i++) {
-    echo "<td bgcolor=white>".statusLight($am[$config["PWC_".$i]])."</td>";
   }
-  for ($i=0; $i<$config["NUM_HELP"]; $i++) {
-    echo "<td bgcolor=white>".statusLight($am[$config["HELP_".$i]])."</td>";
-  }
-  echo "</tr>\n";
-
-  echo "<tr><td align=right>Background Processor</td>";
-  for ($i=0; $i<$config["NUM_PWC"]; $i++) {
-    echo "<td bgcolor=white>".statusLight($bp[$config["PWC_".$i]])."</td>";
-  }
-  for ($i=0; $i<$config["NUM_HELP"]; $i++) {
-    echo "<td width=17 bgcolor=white></td>";
-  }
-  echo "</tr>\n";
-
-  echo "<tr><td align=right>Aux. Manager</td>";
-  for ($i=0; $i<$config["NUM_PWC"]; $i++) {
-    echo "<td bgcolor=white>".statusLight($ap[$config["PWC_".$i]])."</td>";
-  }
-  for ($i=0; $i<$config["NUM_HELP"]; $i++) {
-    echo "<td width=17 bgcolor=white></td>";
-  }
-
-  echo "</tr>\n";
-  
-  echo "<tr><td align=right>Monitor</td>";
-  for ($i=0; $i<$config["NUM_PWC"]; $i++) {
-    echo "<td bgcolor=white>".statusLight($m[$config["PWC_".$i]])."</td>";
-  }
-  for ($i=0; $i<$config["NUM_HELP"]; $i++) {
-    echo "<td width=17 bgcolor=white></td>";
-  }
-  echo "</tr>\n";
 
 }
 
