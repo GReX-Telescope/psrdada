@@ -23,8 +23,10 @@ void usage()
 {
   fprintf (stdout,
 	   "dada_diskdb [options]\n"
-	   " -f   file to write to the ring buffer \n"
-	   " -d   run as daemon\n");
+     " -k   hexadecimal shared memory key  [default: %x]\n"
+     " -f   file to write to the ring buffer \n"
+     " -s   single file then exit\n"
+     " -d   run as daemon\n", DADA_DEFAULT_BLOCK_KEY);
 }
 
 typedef struct {
@@ -32,8 +34,11 @@ typedef struct {
   /* the set of disks from which data files will be read */
   disk_array_t* array;
 
-  /* current observation id, as defined by OBS_ID attribute */
-  char obs_id [DADA_OBS_ID_MAXLEN];
+  /* current utc start, as defined by UTC_START attribute */
+  char utc_start[64];
+
+  /* current observation offset, as defined by OBS_OFFSET attribute */
+  uint64_t obs_offset;
 
   /* current filename */
   char filename [FILENAME_MAX];
@@ -46,7 +51,7 @@ typedef struct {
 
 } dada_diskdb_t;
 
-#define DADA_DISKDB_INIT { 0, "", "", 0, 0 }
+#define DADA_DISKDB_INIT { 0, "", 0, "", 0, 0 }
 
 /* Flag set when one file is specified */
 static char one_file = 0;
@@ -92,8 +97,11 @@ int file_open_function (dada_client_t* client)
   /* status and error logging facility */
   multilog_t* log;
 
-  /* observation id, as defined by OBS_ID attribute */
-  char obs_id [DADA_OBS_ID_MAXLEN] = "";
+  /* utc start, as defined by UTC_START attribute */
+  char utc_start [64] = "";
+
+  /* observation offset, as defined by OBS_OFFSET attribute */
+  uint64_t obs_offset = 0;
 
   /* size of each file to be written in bytes, as determined by FILE_SIZE */
   uint64_t file_size = 0;
@@ -182,13 +190,21 @@ fprintf (stderr, "read HEADER START\n%sHEADER END\n", client->header);
   client->transfer_bytes = file_size;
 
   /* Get the observation ID */
-  if (ascii_header_get (client->header, "OBS_ID", "%s", obs_id) != 1) {
-    multilog (log, LOG_WARNING, "Header with no OBS_ID\n");
-    strcpy (obs_id, "UNKNOWN");
+  if (ascii_header_get (client->header, "UTC_START", "%s", utc_start) != 1) {
+    multilog (log, LOG_WARNING, "Header with no UTC_START\n");
+    strcpy (utc_start, "UNKNOWN");
+  }
+
+  /* Get the observation offset */
+  if (ascii_header_get (client->header, "OBS_OFFSET", "%"PRIu64, &obs_offset) 
+      != 1) {
+    multilog (log, LOG_WARNING, "Header with no OBS_OFFSET\n");
+    obs_offset = 0;
   }
 
   /* set the current observation id */
-  strcpy (diskdb->obs_id, obs_id);
+  strcpy (diskdb->utc_start, utc_start);
+  diskdb->obs_offset = obs_offset;
 
 #ifdef _DEBUG
   fprintf (stderr, "file_open_function returns\n");
@@ -222,12 +238,22 @@ int main (int argc, char **argv)
   /* Quit flag */
   char quit = 0;
 
+  /* hexadecimal shared memory key */
+  key_t dada_key = DADA_DEFAULT_BLOCK_KEY;
+
   int arg = 0;
 
   diskdb.array = disk_array_create ();
 
-  while ((arg=getopt(argc,argv,"df:v")) != -1)
+  while ((arg=getopt(argc,argv,"k:df:vs")) != -1)
     switch (arg) {
+
+    case 'k':
+      if (sscanf (optarg, "%x", &dada_key) != 1) {
+        fprintf (stderr,"dada_dbmonitor: could not parse key from %s\n",optarg);
+        return -1;
+      }
+      break;
       
     case 'd':
       daemon=1;
@@ -242,6 +268,10 @@ int main (int argc, char **argv)
       verbose=1;
       break;
       
+    case 's':
+      quit=1;
+      break;
+
     default:
       usage ();
       return 0;
@@ -258,6 +288,8 @@ int main (int argc, char **argv)
     multilog_add (log, stderr);
 
   hdu = dada_hdu_create (log);
+
+  dada_hdu_set_key(hdu, dada_key);
 
   if (dada_hdu_connect (hdu) < 0)
     return EXIT_FAILURE;
@@ -286,14 +318,16 @@ int main (int argc, char **argv)
       return -1;
     }
 
+    if (quit)
+      client->quit = 1;
+
   }
 
   /* AJ: commented out since an unlock_write will cause the header block 
    * header block to be marked as filled, which confuses a persistent reader 
-   *
-  if (dada_hdu_unlock_write (hdu) < 0)
-    return EXIT_FAILURE;
-  */
+   */
+  //if (dada_hdu_unlock_write (hdu) < 0)
+  //  return EXIT_FAILURE;
 
   if (dada_hdu_disconnect (hdu) < 0)
     return EXIT_FAILURE;
