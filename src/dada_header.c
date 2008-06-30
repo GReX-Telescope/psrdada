@@ -24,10 +24,9 @@ void usage()
 {
 fprintf (stdout,
      "dada_header [options]\n"
-     " -v         be verbose\n"
-     " -a         print all next headers\n");
+     " -k         hexadecimal shared memory key  [default: %x]\n"
+     " -v         be verbose\n",DADA_DEFAULT_BLOCK_KEY);
 }
-
 
 int main (int argc, char **argv)
 {
@@ -41,16 +40,26 @@ int main (int argc, char **argv)
   /* Flag set in verbose mode */
   char verbose = 0;
 
+ /* dada key for SHM */
+  key_t dada_key = DADA_DEFAULT_BLOCK_KEY;
+
   int arg = 0;
 
   /* TODO the amount to conduct a busy sleep inbetween clearing each sub
    * block */
 
-  while ((arg=getopt(argc,argv,"v")) != -1)
+  while ((arg=getopt(argc,argv,"vk:")) != -1)
     switch (arg) {
 
     case 'v':
       verbose=1;
+      break;
+
+    case 'k':
+      if (sscanf (optarg, "%x", &dada_key) != 1) {
+        fprintf (stderr, "dada_header: could not parse key from %s\n", optarg);
+        return -1;
+      }
       break;
 
     default:
@@ -62,6 +71,9 @@ int main (int argc, char **argv)
   log = multilog_open ("dada_header", 0);
   multilog_add (log, stderr);
   hdu = dada_hdu_create (log);
+
+  /* Set the particular dada key */
+  dada_hdu_set_key(hdu, dada_key);
 
   if (verbose) 
     fprintf(stderr,"Connecting to header block\n");
