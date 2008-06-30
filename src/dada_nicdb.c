@@ -20,9 +20,12 @@
 void usage()
 {
   fprintf (stdout,
-	   "dada_nicdb [options]\n"
-	   " -p   port on which to listen\n"
-	   " -d   run as daemon\n");
+     "dada_nicdb [options]\n"
+     " -k <key>    hexadecimal shared memory key  [default: %x]\n"
+     " -p <port>   port on which to listen [default: %d]\n"
+     " -s          single transfer only\n"
+     " -d          run as daemon\n",DADA_DEFAULT_BLOCK_KEY,
+     DADA_DEFAULT_NICDB_PORT);
 }
 
 int64_t sock_recv (int fd, char* buffer, uint64_t size, int flags)
@@ -143,7 +146,7 @@ int sock_open_function (dada_client_t* client)
     multilog (client->log, LOG_ERR, "Error accepting connection: %s\n",
               strerror(errno));
     return -1;
-  } 
+  }
 
   ret = sock_recv (client->fd, client->header, client->header_size, MSG_PEEK);
 
@@ -213,10 +216,20 @@ int main (int argc, char **argv)
   /* Quit flag */
   char quit = 0;
 
+  /* hexadecimal shared memory key */
+  key_t dada_key = DADA_DEFAULT_BLOCK_KEY;
+
   int arg = 0;
 
-  while ((arg=getopt(argc,argv,"dp:v")) != -1)
+  while ((arg=getopt(argc,argv,"k:dp:sv")) != -1)
     switch (arg) {
+
+    case 'k':
+      if (sscanf (optarg, "%x", &dada_key) != 1) {
+        fprintf (stderr,"dada_nicdb: could not parse key from %s\n",optarg);
+        return -1;
+      }
+      break;
       
     case 'd':
       daemon=1;
@@ -224,6 +237,10 @@ int main (int argc, char **argv)
 
     case 'p':
       port = atoi (optarg);
+      break;
+
+    case 's':
+      quit = 1;
       break;
 
     case 'v':
@@ -246,6 +263,8 @@ int main (int argc, char **argv)
     multilog_add (log, stderr);
 
   hdu = dada_hdu_create (log);
+
+  dada_hdu_set_key(hdu, dada_key);
 
   if (dada_hdu_connect (hdu) < 0)
     return EXIT_FAILURE;
@@ -273,15 +292,19 @@ int main (int argc, char **argv)
     return EXIT_FAILURE;
   }
 
-  while (!quit) {
+  while (!client->quit) {
 
     if (dada_client_write (client) < 0)
       multilog (log, LOG_ERR, "Error during transfer\n");
 
+    if (quit) {
+      client->quit = 1;
+    }
+
   }
 
-  if (dada_hdu_unlock_write (hdu) < 0)
-    return EXIT_FAILURE;
+  //if (dada_hdu_unlock_write (hdu) < 0)
+  //  return EXIT_FAILURE;
 
   if (dada_hdu_disconnect (hdu) < 0)
     return EXIT_FAILURE;
