@@ -15,7 +15,7 @@ include_HEADERS = ascii_header.h multilog.h sock.h monitor.h	  \
 	command_parse.h command_parse_server.h string_array.h	  \
 	diff_time.h nexus.h futils.h tmutil.h daemon.h dada_def.h \
 	dada_hdu.h dada_pwc.h dada_pwc_nexus.h dada_ni.h	  \
-	dada_pwc_main.h dada_client.h
+	dada_pwc_main.h dada_client.h udp.h
 
 bin_PROGRAMS = dada_db dada_write_test dada_dbdisk dada_diskdb	 \
 	dada_dbnic dada_nicdb dada_dbNdb			 \

@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <assert.h>
 
+/* #define _DEBUG 1 */
+
 int dada_pwc_specify_header (char keep, const char* filter,
 			     char* header, FILE* fptr)
 {
@@ -86,16 +88,16 @@ int dada_pwc_specify_header (char keep, const char* filter,
       param = param_name;
 
       if (match)
-	param += filter_length;
+        param += filter_length;
 
 #ifdef _DEBUG
-      fprintf (stderr, "set name=%s value=%s\n", param, param_value);
+      fprintf (stderr, "%s: set name=%s value=%s\n", filter, param, param_value);
 #endif
 
       if (ascii_header_set (header, param, "%s", param_value) < 0) {
-	fprintf (stderr, "dada_pwc_specify_header ERROR setting %s=%s\n",
-	       param, param_value);
-	return -1;
+	      fprintf (stderr, "dada_pwc_specify_header ERROR setting %s=%s\n",
+         param, param_value);
+	      return -1;
       }
 
     }

@@ -150,11 +150,15 @@ int nexus_parse (nexus_t* n, const char* buffer)
   } else {
 
     if (n->mirror) {
-         
+       
+      /*  
       n->mirror->logfile_dir = malloc(strlen(getenv("DADA_ROOT")) + 1 + 
                                strlen(logfile_dir));
-
+     
       sprintf(n->mirror->logfile_dir,"%s/%s",getenv("DADA_ROOT"),logfile_dir);
+      */
+      n->mirror->logfile_dir = malloc(strlen(logfile_dir));
+      sprintf(n->mirror->logfile_dir,"%s",logfile_dir);
 
       struct stat st;
       stat(n->mirror->logfile_dir,&st); 
