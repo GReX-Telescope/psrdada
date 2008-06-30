@@ -17,13 +17,17 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+/* #define _DEBUG 1 */
+
 void usage()
 {
   fprintf (stdout,
-	   "dada_dbdisk [options]\n"
-	   " -D <path>  add a disk to which data will be written\n"
-	   " -W         over-write exisiting files\n"
-	   " -d         run as daemon\n");
+           "dada_dbdisk [options]\n"
+           " -k         hexadecimal shared memory key  [default: %x]\n"
+           " -D <path>  add a disk to which data will be written\n"
+           " -W         over-write exisiting files\n"
+           " -s         single transfer only\n"
+           " -d         run as daemon\n", DADA_DEFAULT_BLOCK_KEY);
 }
 
 typedef struct {
@@ -31,8 +35,10 @@ typedef struct {
   /* the set of disks to which data may be written */
   disk_array_t* array;
 
-  /* current observation id, as defined by OBS_ID attribute */
-  char obs_id [DADA_OBS_ID_MAXLEN];
+  /* current utc start, as defined by UTC_START attribute */
+  char utc_start[64];
+
+  uint64_t obs_offset;
 
   /* current filename */
   char file_name [FILENAME_MAX];
@@ -42,7 +48,7 @@ typedef struct {
 
 } dada_dbdisk_t;
 
-#define DADA_DBDISK_INIT { 0, "", "", 0 }
+#define DADA_DBDISK_INIT { 0, "", 0, "", 0 }
 
 /*! Function that opens the data transfer target */
 int file_open_function (dada_client_t* client)
@@ -56,8 +62,8 @@ int file_open_function (dada_client_t* client)
   /* the header */
   char* header = 0;
 
-  /* observation id, as defined by OBS_ID attribute */
-  char obs_id [DADA_OBS_ID_MAXLEN] = "";
+  /* utc start, as defined by UTC_START attribute */
+  char utc_start[64] = "";
 
   /* size of each file to be written in bytes, as determined by FILE_SIZE */
   uint64_t file_size = 0;
@@ -67,6 +73,9 @@ int file_open_function (dada_client_t* client)
 
   /* the open file descriptor */
   int fd = -1;
+
+  /* observation offset from the UTC_START */
+  uint64_t obs_offset = 0;
 
   assert (client != 0);
 
@@ -80,21 +89,30 @@ int file_open_function (dada_client_t* client)
   header = client->header;
   assert (header != 0);
 
-  /* Get the observation ID */
-  if (ascii_header_get (client->header, "OBS_ID", "%s", obs_id) != 1) {
-    multilog (log, LOG_WARNING, "Header with no OBS_ID\n");
-    strcpy (obs_id, "UNKNOWN");
+  /* Get the UTC_START */
+  if (ascii_header_get (client->header, "UTC_START", "%s", utc_start) != 1) {
+    multilog (log, LOG_WARNING, "Header with no UTC_START\n");
+    strcpy (utc_start, "UNKNOWN");
+  }
+
+  /* Get the OBS_OFFSET */
+  if (ascii_header_get (client->header, "OBS_OFFSET", "%"PRIu64, &obs_offset) 
+      != 1) {
+    multilog (log, LOG_WARNING, "Header with no OBS_OFFSET\n");
+    obs_offset = 0;
   }
 
   /* check to see if we are still working with the same observation */
-  if (strcmp (obs_id, dbdisk->obs_id) != 0) {
+  if ((strcmp (utc_start, dbdisk->utc_start) != 0) || 
+      (obs_offset != dbdisk->obs_offset)) {
     dbdisk->file_number = 0;
-    multilog (log, LOG_INFO, "New OBS_ID=%s -> file number=0\n", obs_id);
+    multilog (log, LOG_INFO, "New UTC_START=%s, OBS_OFFSET=%"PRIu64" -> "
+              "file number=0\n", utc_start, obs_offset);
   }
   else {
     dbdisk->file_number++;
-    multilog (log, LOG_INFO, "Continue OBS_ID=%s -> file number=%lu\n",
-	      obs_id, dbdisk->file_number);
+    multilog (log, LOG_INFO, "Continue UTC_START=%s, OBS_OFFSET=%"PRIu64" -> "
+              "file number=%lu\n", utc_start, obs_offset, dbdisk->file_number);
   }
 
   /* Set the file number to be written to the header */
@@ -104,24 +122,39 @@ int file_open_function (dada_client_t* client)
   }
 
 #ifdef _DEBUG
-  fprintf (stderr, "dbdisk: copy the obs id\n");
+  fprintf (stderr, "dbdisk: copy the utc_start and obs_offset\n");
 #endif
 
   /* set the current observation id */
-  strcpy (dbdisk->obs_id, obs_id);
+  strcpy (dbdisk->utc_start, utc_start);
+  dbdisk->obs_offset = obs_offset;
 
 #ifdef _DEBUG
   fprintf (stderr, "dbdisk: create the file name\n");
 #endif
 
   /* create the current file name */
-  snprintf (dbdisk->file_name, FILENAME_MAX,
-	    "%s.%06u.dada", obs_id, dbdisk->file_number);
+  snprintf (dbdisk->file_name, FILENAME_MAX, "%s_%"PRIu64".%06u.dada", 
+            utc_start, obs_offset, dbdisk->file_number);
 
   /* Get the file size */
   if (ascii_header_get (header, "FILE_SIZE", "%"PRIu64, &file_size) != 1) {
     multilog (log, LOG_WARNING, "Header with no FILE_SIZE\n");
     file_size = DADA_DEFAULT_FILESIZE;
+  }
+
+  /* Get the resolution */
+  uint64_t resolution;
+  if (ascii_header_get (header, "RESOLUTION", "%"PRIu64, &resolution) != 1) {
+    multilog (log, LOG_WARNING, "Header with no RESOLUTION\n");
+    resolution = 0;
+  }
+
+  /* If the data stream is packed with RESOLUTION */
+  if (resolution > 0) {
+    uint64_t prev_res = (file_size / resolution) * resolution;
+    multilog (log, LOG_INFO, "FILESIZE = %"PRIu64", RESOLUTION = %"PRIu64", END BYTE = %"PRIu64"\n",file_size,resolution,(prev_res + resolution));
+    file_size = prev_res + resolution;
   }
 
 #ifdef _DEBUG
@@ -130,7 +163,7 @@ int file_open_function (dada_client_t* client)
 
   /* Open the file */
   fd = disk_array_open (dbdisk->array, dbdisk->file_name,
-			file_size, &optimal_bytes);
+        		file_size, &optimal_bytes);
 
   if (fd < 0) {
     multilog (log, LOG_ERR, "Error opening %s: %s\n", dbdisk->file_name,
@@ -139,7 +172,7 @@ int file_open_function (dada_client_t* client)
   }
 
   multilog (log, LOG_INFO, "%s opened for writing %"PRIu64" bytes\n",
-	    dbdisk->file_name, file_size);
+            dbdisk->file_name, file_size);
 
   client->fd = fd;
   client->transfer_bytes = file_size;
@@ -167,7 +200,7 @@ int file_close_function (dada_client_t* client, uint64_t bytes_written)
 
   if (close (client->fd) < 0)
     multilog (log, LOG_ERR, "Error closing %s: %s\n", 
-	      dbdisk->file_name, strerror(errno));
+              dbdisk->file_name, strerror(errno));
 
   if (!bytes_written)  {
 
@@ -175,11 +208,11 @@ int file_close_function (dada_client_t* client, uint64_t bytes_written)
 
     if (chmod (dbdisk->file_name, S_IRWXU) < 0)
       multilog (log, LOG_ERR, "Error chmod (%s, rwx): %s\n", 
-		dbdisk->file_name, strerror(errno));
+        	dbdisk->file_name, strerror(errno));
     
     if (remove (dbdisk->file_name) < 0)
       multilog (log, LOG_ERR, "Error remove (%s): %s\n", 
-		dbdisk->file_name, strerror(errno));
+        	dbdisk->file_name, strerror(errno));
     
   }
 
@@ -188,7 +221,7 @@ int file_close_function (dada_client_t* client, uint64_t bytes_written)
 
 /*! Pointer to the function that transfers data to/from the target */
 int64_t file_write_function (dada_client_t* client, 
-			     void* data, uint64_t data_size)
+        		     void* data, uint64_t data_size)
 {
   return write (client->fd, data, data_size);
 }
@@ -217,21 +250,31 @@ int main (int argc, char **argv)
   /* Quit flag */
   char quit = 0;
 
+  /* hexadecimal shared memory key */
+  key_t dada_key = DADA_DEFAULT_BLOCK_KEY;
+
   int arg = 0;
 
   dbdisk.array = disk_array_create ();
 
-  while ((arg=getopt(argc,argv,"dD:vW")) != -1)
+  while ((arg=getopt(argc,argv,"k:dD:vWs")) != -1)
     switch (arg) {
-      
+
+    case 'k':
+      if (sscanf (optarg, "%x", &dada_key) != 1) {
+        fprintf (stderr,"dada_dbdisk: could not parse key from %s\n",optarg);
+        return -1;
+      }
+      break;
+
     case 'd':
       daemon=1;
       break;
       
     case 'D':
       if (disk_array_add (dbdisk.array, optarg) < 0) {
-	fprintf (stderr, "Could not add '%s' to disk array\n", optarg);
-	return EXIT_FAILURE;
+        fprintf (stderr, "Could not add '%s' to disk array\n", optarg);
+        return EXIT_FAILURE;
       }
       break;
       
@@ -241,6 +284,10 @@ int main (int argc, char **argv)
       
     case 'W':
       disk_array_set_overwrite (dbdisk.array, 1);
+      break;
+
+    case 's':
+      quit = 1;
       break;
 
     default:
@@ -259,6 +306,8 @@ int main (int argc, char **argv)
     multilog_add (log, stderr);
 
   hdu = dada_hdu_create (log);
+
+  dada_hdu_set_key(hdu, dada_key);
 
   if (dada_hdu_connect (hdu) < 0)
     return EXIT_FAILURE;
@@ -284,6 +333,10 @@ int main (int argc, char **argv)
 
     if (dada_client_read (client) < 0)
       multilog (log, LOG_ERR, "Error during transfer\n");
+
+    if (quit) {
+      client->quit = 1;
+    }
 
   }
 
