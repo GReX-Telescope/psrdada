@@ -1,10 +1,10 @@
-#include "apsr_def.h"
-#include "apsr_udpdb.h"
 #include "ascii_header.h"
-#include "udp.h"
 #include "sock.h"
 #include "daemon.h"
 #include "multilog.h"
+#include "apsr_def.h"
+#include "apsr_udpdb.h"
+#include "apsr_udp.h"
 
 #include <stdlib.h> 
 #include <stdio.h> 
@@ -16,7 +16,7 @@
 #include <sys/socket.h> 
 #include <sys/wait.h> 
 #include <sys/timeb.h> 
-#include <arpa/inet.h>
+//#include <arpa/inet.h>
 #include <math.h>
 #include <pthread.h>
 
@@ -37,7 +37,7 @@ void quit();
 void generate_signal(char *signal, int signal_length, int nbit, int ndim,
                       int npol, int produce_noise, int gain);
 void generate_2bit(char *array, int array_size, int produce_noise, int gain);
-void generate_4bit(char *array, int array_size, int produce_noise);
+void generate_4bit(char *array, int array_size, int produce_noise, int gain);
 void generate_8bit(char *array, int array_size, int produce_noise);
 void print_triwave(char *tri_data, int tri_datasize, int nbits);
 void displayBits(unsigned int value);
@@ -308,29 +308,18 @@ int main(int argc, char *argv[])
   signal_size = (int) (((float) ndim) * ((float) npol) * (((float) nbit) /8.0) * (1.0 / (float) calfreq) * (1000000.0/tsamp));
 
   fprintf(stderr,"signal bytes = %d\n",signal_size);
-  /* Create and allocate the triangular data array */
-  //signal_array = malloc(sizeof(char) * signal_size);
 
   int i=0;
-  int n_signals;
+  int n_signals = 101;
 
-  //if (nbit == 2) {
-    n_signals = 101;
-  //} else {
-  //  n_signals = 1;
-  //  current_gain = 0;
-  //  new_gain_value = 0;
-  //}
-
+  /* Thread to respond to external gain setting requests */
   pthread_t gain_thread;
-
   if (allow_gain_control) {  
 
     if (pthread_create (&gain_thread, 0, (void *) gain_monitor, 0) < 0) {
       perror ("nexus_connect: Error creating new thread");
       return -1;
     }
-
     pthread_detach(gain_thread);
   }
 
@@ -677,12 +666,11 @@ void generate_2bit(char *array, int array_size, int noise, int gain) {
 
     val = 0;
     rnd = 1 + (int) (1000.0 * (rand() / (RAND_MAX + 1.0)));
- 
 
     /* If we a generating a CAL signal */
     if (!noise) {
  
-      if (i < (nsamples/2)) {
+      if ((i < (nsamples*0.25)) || (i > (nsamples*0.75))) {
         d = (diff/2);
       } else {
         d = -(diff/2);
@@ -708,7 +696,7 @@ void generate_2bit(char *array, int array_size, int noise, int gain) {
     if (rnd >= l + _l + h)                  
       val = 1;
 
-    if ((i < nsamples/2) || (noise)) {
+    if (((i < (nsamples*0.25)) || (i > (nsamples*0.75))) || (noise)) {
       if (val == 0) state0++;
       if (val == 1) state1++;
       if (val == 2) state2++;
@@ -755,12 +743,13 @@ void generate_2bit(char *array, int array_size, int noise, int gain) {
 
 }
 
-void generate_4bit(char *array, int array_size, int noise) {
+void generate_4bit(char *array, int array_size, int noise, int gain) {
 
   unsigned int val = 0;
   int rnd, i, j;
   int nstates = 16;
-  
+ 
+  int state_starts[nstates]; 
   int states[nstates];
   int low_states[nstates];
   int high_states[nstates];
@@ -769,68 +758,108 @@ void generate_4bit(char *array, int array_size, int noise) {
     states[i] = 0;
     low_states[i] = 0;
     high_states[i] = 0;
+    state_starts[i] = 1000*i;
   }
+
+  int convert[nstates];
+  convert[0] = 0; 
+  convert[1] = 1;
+  convert[2] = 2;
+  convert[3] = 3;
+  convert[4] = 12;
+  convert[5] = 13;
+  convert[6] = 14;
+  convert[7] = 15;
+  convert[8] = 8;
+  convert[9] = 9;
+  convert[10] = 10;
+  convert[11] = 11;
+  convert[12] = 4;
+  convert[13] = 5;
+  convert[14] = 6;
+  convert[15] = 7;
 
   int nsamples = array_size * 2;
   char samples_array[nsamples];
+  float gain_multiplier = ((float) gain) / 1000;
+  int gain_multi_int = (int) (gain_multiplier * 8);
+
+  /* 0->8 if off */
+  /* 9->15 is on */
 
   /* 0 -> 3 cal off */
   /* 4 -> 7 cal on */
   /* 8 -> 11 cal off */
   /* 12 -> 15 cal on */
 
+  // If gain is 500 -> then 
+
   for (i=0; i < nsamples; i++) {
 
     float rnd = (float) rand() / (float) RAND_MAX;
 
+    /* A number between 0 and 15 */
     val = (int) ((float) nstates * rnd);
+
     //fprintf(stderr, "rnd = %5.2f, val = %d\n",rnd, val);
 
     /* If we a generating a CAL signal */
     if (!noise) {
 
-      if (i < (nsamples/2)) {
-        if (val == 4) val = 0; 
-        if (val == 5) val = 1; 
-        if (val == 6) val = 2; 
-        if (val == 7) val = 3; 
-        if (val == 8) val = 12; 
-        if (val == 9) val = 13; 
-        if (val == 10) val = 14; 
-        if (val == 11) val = 15; 
+      /* Cal OFF */
+      if ((i < (nsamples*0.25)) || (i > (nsamples*0.75) )) {
+
+        val = (val > 7) ? (val - 8) : val;
+
+        // We need to increase the number of high states in the off pulse
+        if (gain > 500) 
+          val += gain_multi_int;
+
         low_states[val]++;
 
+      /* Cal ON */
       } else {
-        if (val == 0) val = 4; 
-        if (val == 1) val = 5; 
-        if (val == 2) val = 6; 
-        if (val == 3) val = 7; 
-        if (val == 12) val = 8; 
-        if (val == 13) val = 9; 
-        if (val == 14) val = 10; 
-        if (val == 15) val = 11; 
+
+        val = (val < 8) ? (val + 8) : val;
+
+        // We need to decrease the number of high states 
+        if (gain < 500) 
+          val -= (8-gain_multi_int);
+
         high_states[val]++;
       }
+
+      /* change numeric value into the approriate value */
+      states[val]++;
+      val = convert[val];
+
+    } else {
+
+      if (gain > 500) 
+        val += gain_multi_int;
+      else
+        val -= (8-gain_multi_int);
+
+      val = (val < 0) ? 0 : val;
+      val = (val > 15) ? 15 : val;
+
+      val = convert[val];
+      states[val]++;
+
     }
     //fprintf(stderr, "endval = %d\n",val);
 
-    states[val]++;
     samples_array[i] = val;
 
   }
 
-  fprintf(stderr, "OVERALL:\n");
+  /*
+  fprintf(stderr, "Nsamples = %d, gain = %d\n",nsamples, gain);
   for(i=0;i<nstates;i++) {
-    fprintf(stderr, "state %d: %d of %d [%5.4f]\n",i, states[i],nsamples,(float)states[i] / (float)nsamples);
-  }
-  fprintf(stderr, "LOW:\n");
-  for(i=0;i<nstates;i++) {
-    fprintf(stderr, "state %d: %d of %d [%5.4f]\n",i, low_states[i],nsamples,(float)low_states[i] / (float)nsamples);
-  }
-  fprintf(stderr, "HIGH:\n");
-  for(i=0;i<nstates;i++) {
-    fprintf(stderr, "state %d: %d of %d [%5.4f]\n",i, high_states[i],nsamples,(float)high_states[i] / (float)nsamples);
-  }
+    fprintf(stderr, "%d:\t%d [%3.2f]\t%d [%3.2f]\t%d [%3.2f]\n",i, states[i], ((float)states[i] / (float)nsamples)*100, 
+                    low_states[i], ((float)low_states[i] / (float)nsamples)*100,
+                    high_states[i], ((float)high_states[i] / (float)nsamples)*100);
+  }*/
 
   for (i=0; i<array_size; i++) {
     for (j=0; j < 2; j++) {
@@ -858,7 +887,7 @@ void generate_signal(char *array, int array_size, int nbits, int ndim,
   if (nbits == 2)
     generate_2bit(array, array_size, noise, gain);
   else if (nbits == 4) 
-    generate_4bit(array, array_size, noise);
+    generate_4bit(array, array_size, noise, gain);
   else
     generate_8bit(array, array_size, noise);
 
@@ -1265,8 +1294,13 @@ time_t wait_for_start(int daemon, multilog_t* log) {
       buffer[strlen(buffer)-1] = '\0';
     }
                                                                                                                                     
-    /* we will start in +1 seconds of the current time */
+    /* we will start on a 10 second boundary */
     start_time = time(0) + 1;
+    time_t remainder = start_time % 10;
+    sleep((int) (10-remainder));
+
+    start_time = start_time + (10 - remainder);
+
     strftime (buffer, bufsize, DADA_TIMESTR,
               (struct tm*) gmtime(&start_time));
     fprintf(sockout,"%s\n",buffer);
