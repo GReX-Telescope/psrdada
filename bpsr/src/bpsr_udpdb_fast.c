@@ -1,21 +1,23 @@
 /*
  * bpsr_udpdb
  *
+ * 
+ *
  */
 
-
-#define _DEBUG 1
+#define ULTRA_PERFORMANCE 1
 
 #include "bpsr_def.h"
-#include "bpsr_udpdb.h"
+#include "bpsr_udpdb_fast.h"
 #include <math.h>
 
 void usage()
 {
   fprintf (stdout,
-	   "bpsr_udpdb [options]\n"
+	   "bpsr_udpdb_fast [options]\n"
      " -h             print help text\n"
-     " -i interface   ip/interface for inc. UDP packets [default all]\n"
+	   " -i interface   ip address to accept udp packets from [default %s]\n"
+     " -a acc_len     accumulation length of the iBob board [default %d]\n"
 	   " -p             port on which to listen [default %d]\n"
 	   " -d             run as daemon\n"
      " -m mode        1 for independent mode, 2 for controlled mode\n"
@@ -24,7 +26,7 @@ void usage()
      " -H filename    ascii header information in file\n"
      " -c             don't verify udp headers against header block\n"
      " -S num         file size in bytes\n", 
-     BPSR_DEFAULT_ACC_LEN, BPSR_DEFAULT_UDPDB_PORT);
+     BPSR_UDP_INTERFACE, BPSR_DEFAULT_ACC_LEN, BPSR_DEFAULT_UDPDB_PORT);
 }
 
 
@@ -45,35 +47,9 @@ int udpdb_header_valid_function (dada_pwc_main_t* pwcm) {
   if (strcmp(utc_buffer,"UNKNOWN") == 0)
     valid = 0;
 
-  multilog(pwcm->log, LOG_INFO, "Checking if header is valid: %d\n", valid);
-
   return valid;
 
 }
-
-/*
- * Error function
- */
-int udpdb_error_function (dada_pwc_main_t* pwcm) {
-
-  udpdb_t *udpdb = (udpdb_t*)pwcm->context;
-
-  /* If we are still waiting for that first packet, we don't
-   * really have an error state :), but the buffer function
-   * will return 0 bytes */
-  if (udpdb->expected_sequence_no > 0) {
-    //sleep(1);
-    udpdb->error_seconds--;
-    multilog (pwcm->log, LOG_WARNING, "Error Function has %"PRIu64" error "
-              "seconds remaining\n",udpdb->error_seconds);
-  }
-
-  if (udpdb->error_seconds <= 0)
-    return 2;
-  else
-    return 1;
-}
-
 
 
 time_t udpdb_start_function (dada_pwc_main_t* pwcm, time_t start_utc)
@@ -101,6 +77,10 @@ time_t udpdb_start_function (dada_pwc_main_t* pwcm, time_t start_utc)
   udpdb->current_time = udpdb->prev_time;
   udpdb->curr_buffer_count = 0;
   udpdb->next_buffer_count = 0;
+
+  udpdb->sequence_incr = 512 * udpdb->acc_len;
+  udpdb->spectra_per_second = (BPSR_IBOB_CLOCK * 1000000 / udpdb->acc_len ) / BPSR_IBOB_NCHANNELS;
+  udpdb->bytes_per_second = udpdb->spectra_per_second * BPSR_UDP_DATASIZE_BYTES;
   
   /* Create a udp socket */
   udpdb->fd = bpsr_create_udp_socket(log, udpdb->interface, udpdb->port, udpdb->verbose);
@@ -108,18 +88,6 @@ time_t udpdb_start_function (dada_pwc_main_t* pwcm, time_t start_utc)
     multilog (log, LOG_ERR, "Error, Failed to create udp socket\n");
     return 0; // n.b. this is an error value 
   }
-
-  /* Get the accumulation length from the header */
-  if (ascii_header_get (pwcm->header, "ACC_LEN", "%d", &(udpdb->acc_len)) != 1) {
-    multilog (log, LOG_WARNING, "Warning. ACC_LEN not set in header, Using "
-              "%d as default\n", BPSR_DEFAULT_ACC_LEN);
-    ascii_header_set (pwcm->header, "ACC_LEN", "%d", BPSR_DEFAULT_ACC_LEN);
-    udpdb->acc_len = BPSR_DEFAULT_ACC_LEN;
-  }
-
-  udpdb->sequence_incr = 512 * udpdb->acc_len;
-  udpdb->spectra_per_second = (BPSR_IBOB_CLOCK * 1000000 / udpdb->acc_len ) / BPSR_IBOB_NCHANNELS;
-  udpdb->bytes_per_second = udpdb->spectra_per_second * BPSR_UDP_DATASIZE_BYTES;
 
   /* Check the whether the requried header fields have been set via the 
    * control interface. This is required when receiving data from the DFB3
@@ -137,6 +105,7 @@ time_t udpdb_start_function (dada_pwc_main_t* pwcm, time_t start_utc)
   udpdb->next_buffer = (char *) malloc(sizeof(char) * udpdb->datasize);
   assert(udpdb->next_buffer != 0);
 
+
   /* 0 both the curr and next buffers */
   char zerodchar = 'c';
   memset(&zerodchar,0,sizeof(zerodchar));
@@ -150,28 +119,9 @@ time_t udpdb_start_function (dada_pwc_main_t* pwcm, time_t start_utc)
   /* setup the expected sequence no to the initial value */
   udpdb->expected_sequence_no = 0;
 
-  /* Run the script to startup the ibob */
-  char command[1024];
-
-  sprintf(command, "client_ibob_level_setter.pl -s -a %d %s", 
-          udpdb->acc_len, myhostname);
-
-  if (udpdb->verbose) 
-    multilog(log, LOG_INFO, "Running coarse gain control \"%s\"\n",command);
-
-  long int utc_unix;
-  FILE * fptr = popen(command, "r");
-  fscanf(fptr, "%ld", &utc_unix);
-  pclose(fptr);
-
-  time_t utc = 0;
-  if (utc_unix > 0) 
-    utc = (time_t) utc_unix;
-
-  if (udpdb->verbose) 
-    multilog(log, LOG_INFO, "start function returning UTC_START = %ld\n", utc);
-
-  return utc;
+  /* Since udpdb cannot know the time sample of the first 
+   * packet we always return 0 */
+  return 0;
 }
 
 void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
@@ -184,8 +134,8 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
   multilog_t* log = pwcm->log;
 
   // A char with all bits set to 0
-   char zerodchar = 'c'; 
-   memset(&zerodchar,0,sizeof(zerodchar));
+  // char zerodchar = 'c'; 
+  // memset(&zerodchar,0,sizeof(zerodchar));
 
   /* Flag to drop out of for loop */
   int quit = 0;
@@ -197,6 +147,8 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
   uint64_t data_received = 0;
 
   /* Sequence number of current packet */
+  //uint64_t sequence_no = 0;
+  //uint64_t raw_sequence_no = 0;
   int ignore_packet = 0;
 
   /* For select polling */
@@ -215,6 +167,7 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
   udpdb->curr_buffer_count = udpdb->next_buffer_count;
   udpdb->next_buffer_count = 0;
 
+
   /* 0 the next buffer */
   // memset(udpdb->next_buffer, zerodchar, udpdb->datasize);
 
@@ -223,19 +176,19 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
   udpdb->mid_sequence = udpdb->min_sequence + BPSR_NUM_UDP_PACKETS;
   udpdb->max_sequence = udpdb->mid_sequence + BPSR_NUM_UDP_PACKETS;
 
-  //multilog(log, LOG_INFO, "[%"PRIu64" <-> %"PRIu64" <-> %"PRIu64"]\n",
-  //         udpdb->min_sequence,udpdb->mid_sequence,udpdb->max_sequence);
+#ifdef _DEBUG
+  multilog(log, LOG_INFO, "[%"PRIu64" <-> %"PRIu64" <-> %"PRIu64"]\n",
+           udpdb->min_sequence,udpdb->mid_sequence,udpdb->max_sequence);
+#endif
 
   /* Assume we will be able to return a full buffer */
   *size = udpdb->datasize;
   int64_t max_ignore = udpdb->datasize;
 
-  //multilog (log, LOG_INFO, "Before while\n");
-
   /* Continue to receive packets */
   while (!quit) {
 
-    /* If we had a packet in the socket)buffer a previous call to the 
+    /* If we had a packet in the socket_buffer a previous call to the 
      * buffer function*/
     if (udpdb->packet_in_buffer) {
 
@@ -246,27 +199,24 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
       
       /* 0.1 second timeout for select() */            
       timeout.tv_sec=0;
-      timeout.tv_usec=1000000;
+      timeout.tv_usec=100000;
 
       FD_ZERO (&readset);
       FD_SET (udpdb->fd, &readset);
       rdsp = &readset;
 
       if ( select((udpdb->fd+1),rdsp,NULL,NULL,&timeout) == 0 ) {
-    
-        //multilog(log, LOG_INFO, "Select timeout\n");
   
-        /*if ((pwcm->pwc->state == dada_pwc_recording) &&
+        if ((pwcm->pwc->state == dada_pwc_recording) &&
             (udpdb->expected_sequence_no != 0)) {
           multilog (log, LOG_WARNING, "UDP packet timeout: no packet "
                                       "received for 1 second\n");
-        }*/
+        }
         quit = 1;
         udpdb->received = 0;
         timeout_ocurred = 1;
 
       } else {
-        //multilog(log, LOG_INFO, "Getting packet\n");
 
         /* Get a packet from the socket */
         udpdb->received = sock_recv (udpdb->fd, udpdb->socket_buffer, BPSR_UDP_PAYLOAD_BYTES, 0);
@@ -275,8 +225,6 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
       }
     }
 
-    //multilog(log, LOG_INFO, "After packet\n");
-
     /* If we did get a packet within the timeout, or one was in the buffer */
     if (!quit) {
 
@@ -284,32 +232,18 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
       udpdb->curr_sequence_no = decode_header(udpdb->socket_buffer) / udpdb->sequence_incr;
 
       /* If we are waiting for the "first" packet */
-      if ((udpdb->expected_sequence_no == 0) && (data_received == 0)) {
- 
-        /* Accept a "restart" which occurs within a 1 second window */ 
-        if (udpdb->curr_sequence_no < (udpdb->spectra_per_second*5)) {
+      if (udpdb->expected_sequence_no == 0) {
+  
+        if (udpdb->curr_sequence_no < (10 * udpdb->spectra_per_second)) {
 
           multilog (log, LOG_INFO, "Start detected on packet %"PRIu64"\n",udpdb->curr_sequence_no);
-          //udpdb->expected_sequence_no = udpdb->curr_sequence_no + 1;
-
-          /* Increment the buffer counts with the missed packets */
-          if (udpdb->curr_sequence_no < udpdb->mid_sequence)
-            udpdb->curr_buffer_count += udpdb->curr_sequence_no;
-          else {
-            udpdb->curr_buffer_count += BPSR_NUM_UDP_PACKETS;
-            udpdb->next_buffer_count += udpdb->curr_sequence_no - udpdb->mid_sequence;
-          }
+          udpdb->expected_sequence_no = udpdb->curr_sequence_no + 1;
+          fprintf(stderr, "Buffer size = %"PRIu64" bytes\n", udpdb->datasize);
 
         } else {
-
           ignore_packet = 1;
         }
 
-        if (udpdb->received != BPSR_UDP_PAYLOAD_BYTES) {
-          multilog (log, LOG_ERR, "UDP packet size was incorrect\n");
-          *size = DADA_ERROR_HARD;
-          break;
-        }
       }
 
       /* If we are still waiting dor the start of data */
@@ -321,42 +255,20 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
 
       } else {
 
-        /* If the packet we received was too small, pad it */
-        if (udpdb->received < BPSR_UDP_PAYLOAD_BYTES) {
-        
-          uint64_t amount_to_pad = BPSR_UDP_PAYLOAD_BYTES - udpdb->received;
-          char * buffer_pos = (udpdb->socket_buffer) + udpdb->received;
- 
-          /* 0 the next buffer */
-          memset(buffer_pos, zerodchar, amount_to_pad);
-
-          multilog (log, LOG_WARNING, "Short packet received, padded %"PRIu64
-                                      " bytes\n", amount_to_pad);
-        } 
-
-        /* If the packet we received was too long, warn about it */
-        if (udpdb->received > BPSR_UDP_PAYLOAD_BYTES) {
-
-          multilog (log, LOG_WARNING, "Long packet received, truncated to %"PRIu64
-                                      " bytes\n", BPSR_UDP_DATASIZE_BYTES);
-        }
-
         /* Now try to slot the packet into the appropraite buffer */
         data_received += BPSR_UDP_DATASIZE_BYTES;
 
         /* Increment statistics */
-        udpdb->packets->received++;
-        udpdb->packets->received_per_sec++;
-        udpdb->bytes->received += BPSR_UDP_DATASIZE_BYTES;
-        udpdb->bytes->received_per_sec += BPSR_UDP_DATASIZE_BYTES;
+        //udpdb->packets->received++;
+        //udpdb->packets->received_per_sec++;
+        //udpdb->bytes->received += BPSR_UDP_DATASIZE_BYTES;
+        //udpdb->bytes->received_per_sec += BPSR_UDP_DATASIZE_BYTES;
 
         /* If the packet belongs in the curr_buffer */
         if ((udpdb->curr_sequence_no >= udpdb->min_sequence) && 
             (udpdb->curr_sequence_no <  udpdb->mid_sequence)) {
 
-          uint64_t buf_offset = (udpdb->curr_sequence_no - udpdb->min_sequence) * BPSR_UDP_DATASIZE_BYTES;
-
-          memcpy( (udpdb->curr_buffer)+buf_offset, 
+          memcpy( (udpdb->curr_buffer)+((udpdb->curr_sequence_no - udpdb->min_sequence) * BPSR_UDP_DATASIZE_BYTES), 
                   (udpdb->socket_buffer)+BPSR_UDP_COUNTER_BYTES,
                   BPSR_UDP_DATASIZE_BYTES);
 
@@ -365,19 +277,11 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
         } else if ((udpdb->curr_sequence_no >= udpdb->mid_sequence) && 
                    (udpdb->curr_sequence_no <  udpdb->max_sequence)) {
 
-          uint64_t buf_offset = (udpdb->curr_sequence_no - udpdb->mid_sequence) * BPSR_UDP_DATASIZE_BYTES;
-
-          memcpy( (udpdb->curr_buffer)+buf_offset, 
+          memcpy( (udpdb->curr_buffer)+((udpdb->curr_sequence_no - udpdb->mid_sequence) * BPSR_UDP_DATASIZE_BYTES), 
                   (udpdb->socket_buffer)+BPSR_UDP_COUNTER_BYTES,
                   BPSR_UDP_DATASIZE_BYTES);
 
           udpdb->next_buffer_count++;
-
-        /* If this packet has arrived too late, it has already missed out */
-        } else if (udpdb->curr_sequence_no < udpdb->min_sequence) {
- 
-          multilog (log, LOG_WARNING, "Packet arrived too soon, %"PRIu64" < %"PRIu64"\n",
-                    udpdb->curr_sequence_no, udpdb->min_sequence);
 
         /* If a packet has arrived too soon, then we give up trying to fill the 
            curr_buffer and return what we do have */
@@ -385,7 +289,6 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
 
           float curr_percent = ((float) udpdb->curr_buffer_count / (float) BPSR_NUM_UDP_PACKETS)*100;
           float next_percent = ((float) udpdb->next_buffer_count / (float) BPSR_NUM_UDP_PACKETS)*100;
-          multilog (log, LOG_WARNING, "%"PRIu64" > %"PRIu64"\n",udpdb->curr_sequence_no,udpdb->max_sequence);
   
           multilog (log, LOG_WARNING, "Not keeping up. curr_buffer %5.2f%, next_buffer %5.2f%\n",
                                       curr_percent, next_percent);
@@ -394,23 +297,15 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
           quit = 1;
 
         } else {
-
-          fprintf (stderr,"Sequence number invalid\n");
-
+          fprintf (stderr,"Should never happen\n");
         }
-
 
         /* If we have filled the current buffer, then we can stop */
-        if (udpdb->curr_buffer_count == BPSR_NUM_UDP_PACKETS) {
+        if ((udpdb->curr_buffer_count == BPSR_NUM_UDP_PACKETS) ||
+           (udpdb->next_buffer_count > (BPSR_NUM_UDP_PACKETS / 2))) {
           quit = 1;
-        } else {
-          assert(udpdb->curr_buffer_count < BPSR_NUM_UDP_PACKETS);
         }
 
-        /* If the next buffer is at least half full */
-        if (udpdb->next_buffer_count > (BPSR_NUM_UDP_PACKETS / 2)) {
-          quit = 1;
-        }
       }
     } 
   }
@@ -420,23 +315,9 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
   /* If we have received a packet during this function call */
   if (data_received) {
 
-    /* If we have not received all the packets we expected */
-    if ((udpdb->curr_buffer_count < BPSR_NUM_UDP_PACKETS) && (!timeout_ocurred)) {
-
-      multilog (log, LOG_WARNING, "Dropped %"PRIu64" packets\n",
-               (BPSR_NUM_UDP_PACKETS - udpdb->curr_buffer_count));
-
-      udpdb->packets->dropped += BPSR_NUM_UDP_PACKETS - udpdb->curr_buffer_count;
-      udpdb->packets->dropped_per_sec += BPSR_NUM_UDP_PACKETS - udpdb->curr_buffer_count;
-
-    }
-
     /* If the timeout ocurred, this is most likely due to end of data */
-    if (timeout_ocurred) {
+    if (timeout_ocurred) 
       *size = udpdb->curr_buffer_count * BPSR_UDP_DATASIZE_BYTES;
-      multilog (log, LOG_WARNING, "Suspected EOD received, returning "
-                     "%"PRIu64" bytes\n",*size);
-    }
 
     udpdb->expected_sequence_no += BPSR_NUM_UDP_PACKETS;
 
@@ -447,39 +328,6 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
 
   }
 
-  udpdb->prev_time = udpdb->current_time;
-  udpdb->current_time = time(0);
-  
-  if (udpdb->prev_time != udpdb->current_time) {
-
-    if (udpdb->verbose) {
-
-      if (ignore_packet) {
-
-        multilog(log, LOG_INFO, "Ignoring out of range sequence no: %"PRIu64" > %"PRIu64"\n",udpdb->curr_sequence_no, (10 * udpdb->spectra_per_second));
-
-      } else {
-
-        multilog(log, LOG_INFO, "Packets [%"PRIu64",%"PRIu64"] [%"PRIu64",%"PRIu64"]\n",
-                 udpdb->packets->dropped_per_sec,udpdb->packets->dropped,
-                 udpdb->packets->received_per_sec,udpdb->packets->received);
-
-        multilog(log, LOG_INFO, "Bytes   [%"PRIu64",%"PRIu64"] [%"PRIu64",%"PRIu64"]\n",
-                 udpdb->bytes->dropped_per_sec,udpdb->bytes->dropped,
-                 udpdb->bytes->received_per_sec,udpdb->bytes->received);
-      }
-
-    } 
-
-    udpdb->packets->received_per_sec = 0;
-    udpdb->packets->dropped_per_sec = 0;
-    udpdb->bytes->received_per_sec = 0;
-    udpdb->bytes->dropped_per_sec = 0;
-
-  }
-
-  assert(udpdb->curr_buffer != 0);
-  
   return (void *) udpdb->curr_buffer;
 
 }
@@ -526,10 +374,13 @@ int main (int argc, char **argv)
   multilog_t* log = 0;
   
   /* Interface on which to listen for udp packets */
-  char * interface = "any";
+  char * interface = BPSR_UDP_INTERFACE;
 
   /* port on which to listen for udp packets */
   int port = BPSR_DEFAULT_UDPDB_PORT;
+
+  /* accumulation length of the iBob board */
+  int acc_len = BPSR_DEFAULT_ACC_LEN; 
 
   /* Flag set in daemon mode */
   char daemon = 0;
@@ -562,7 +413,7 @@ int main (int argc, char **argv)
   static char* buffer = 0;
   char *src;
 
-  while ((arg=getopt(argc,argv,"di:p:vm:S:H:n:1h")) != -1) {
+  while ((arg=getopt(argc,argv,"di:p:a:vm:S:H:n:1h")) != -1) {
     switch (arg) {
       
     case 'd':
@@ -570,12 +421,16 @@ int main (int argc, char **argv)
       break;
 
     case 'i':
-      if (optarg)
+      if (optarg) 
         interface = optarg;
       break;
 
     case 'p':
       port = atoi (optarg);
+      break;
+
+    case 'a':
+      acc_len = atoi (optarg);
       break;
 
     case '1':
@@ -636,9 +491,7 @@ int main (int argc, char **argv)
 
   multilog_serve (log, DADA_DEFAULT_PWC_LOG);
   
-  if (verbose) 
-    fprintf (stderr, "Creating dada pwc main\n");
-
+  if (verbose) fprintf (stderr, "Creating dada pwc main\n");
   pwcm = dada_pwc_main_create();
 
   /* Setup the global pointer to point to pwcm for the signal handler to
@@ -649,7 +502,6 @@ int main (int argc, char **argv)
   pwcm->start_function  = udpdb_start_function;
   pwcm->buffer_function = udpdb_buffer_function;
   pwcm->stop_function   = udpdb_stop_function;
-  pwcm->error_function  = udpdb_error_function;
   pwcm->header_valid_function  = udpdb_header_valid_function;
   pwcm->verbose = verbose;
 
@@ -657,7 +509,7 @@ int main (int argc, char **argv)
   udpdb.verbose = verbose;
   udpdb.interface = strdup(interface);
   udpdb.port = port;
-  udpdb.acc_len = BPSR_DEFAULT_ACC_LEN;   // 25
+  udpdb.acc_len = acc_len;
 
   /* init stats structs */
   stats_t packets = {0,0,0,0};
@@ -735,7 +587,7 @@ int main (int argc, char **argv)
 
     if (utc == -1 ) {
       multilog(pwcm->log, LOG_ERR, "Could not run start function\n");
-    } else 
+    }
 
     strftime (buffer, buffer_size, DADA_TIMESTR, gmtime(&utc));
 
@@ -745,15 +597,11 @@ int main (int argc, char **argv)
       return -1;
     }
 
-    multilog (pwcm->log, LOG_INFO, "UTC_START %s written to header\n", buffer);
-
     /* donot set header parameters anymore - acqn. doesn't start */
     if (ipcbuf_mark_filled (hdu->header_block, header_size) < 0)  {
       multilog (pwcm->log, LOG_ERR, "Could not mark filled header block\n");
       return EXIT_FAILURE;
     }
-
-    multilog (pwcm->log, LOG_INFO, "header marked filled\n");
 
     while (1) {
 

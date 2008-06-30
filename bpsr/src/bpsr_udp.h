@@ -4,31 +4,38 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include "udp.h"
 
 
-/* total BPSR UDP payload size */
-#define BPSR_UDP_PAYLOAD_BYTES 2056
+#define BPSR_UDP_COUNTER_BYTES  8          // size of header/sequence number
+#define BPSR_UDP_DATASIZE_BYTES 2048       // obs bytes per packet
+#define BPSR_UDP_PAYLOAD_BYTES  2056       // counter + datasize
+#define BPSR_UDP_INTERFACE      "10.0.0.4" // default interface
 
-/* number of bytes in BPSR counter */
-#define BPSR_UDP_COUNTER_BYTES 8 
-
-/* Number of data bytes in a bpsr packet*/
-#define BPSR_UDP_DATASIZE_BYTES 2048 
+#define BPSR_IBOB_CLOCK         400        // MHz
+#define BPSR_IBOB_NCHANNELS     1024
 
 /* Temp constants for the conversion function */
 # define LITTLE 0
 # define BIG 1
 
+int      bpsr_create_udp_socket(multilog_t* log, const char* interface, int port, int verbose);
 uint64_t decode_header (char *buffer);
 void     encode_header (char *buffer, uint64_t counter);
 void     uint64ToByteArray (uint64_t num, size_t bytes, unsigned char *arr, int type);
 uint64_t byteArrayToUInt64 (unsigned char *arr, size_t bytes, int type);
 
 
+/* Creates a UDP socket */
+int bpsr_create_udp_socket(multilog_t* log, const char* interface, int port, int verbose) {
+  return dada_create_udp_socket(log, interface, port, verbose);
+}
+
+
 /* Encode the counter into the first8 bytes of the buffer array */ 
 void encode_header (char *buffer, uint64_t counter) {
 
-  uint64ToByteArray (counter, (size_t) BPSR_UDP_COUNTER_BYTES, buffer, (int) LITTLE);
+  uint64ToByteArray (counter, (size_t) BPSR_UDP_COUNTER_BYTES, buffer, (int) BIG);
   
 }
 
