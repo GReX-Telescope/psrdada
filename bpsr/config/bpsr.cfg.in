@@ -10,12 +10,13 @@ USER                    bpsr
 SCRIPTS_DIR             @PSRDADA_INSTALL@/bin
 CONFIG_DIR              @PSRDADA_INSTALL@/share
 WEB_DIR                 @PSRDADA_INSTALL@/web
+STATUS_DIR              @PSRDADA_INSTALL@/web/status
 
 ###############################################################################
-# DFB3 Configuration. For gain level control
+# BOB Configuration. For gain level control
 #
 DFB3_HOST               apsr16
-DFB3_PORT               40235
+DFB3_PORT               57003
 
 ###############################################################################
 # Server directory configuration
@@ -29,7 +30,7 @@ SERVER_LOG_DIR          /export/logs/bpsr
 SERVER_CONTROL_DIR      /tmp/bpsr/control
 SERVER_RESULTS_NFS_MNT  /nfs/results/bpsr
 SERVER_ARCHIVE_NFS_MNT  /nfs/archives/bpsr
-SERVER_DAEMONS          pwc_monitor src_monitor sys_monitor bpsr_tcs_interface
+SERVER_DAEMONS          pwc_monitor src_monitor sys_monitor bpsr_tcs_interface bpsr_results_manager
 
 # TCS Interface configuration. Note on different interface to server
 TCS_INTERFACE_HOST      apsr-srv0.atnf.csiro.au
@@ -47,16 +48,20 @@ SERVER_GAIN_CONTROL_PORT 57008
 SERVER_AUX_CLIENT_PORT  57009
 SERVER_AUX_ASSIST_PORT  57010
 
+SERVER_PWC_RESPONSE_PORT 57011
+
 
 ###############################################################################
 # DFB Simluator configuration
 #
 USE_DFB_SIMULATOR       1         # 1 means tcs_interface will launch dfb sim
-DFB_SIM_BINARY          apsr_udpgenerator
-DFB_SIM_HOST            apsr16
-DFB_SIM_PORT            57003     # control of dfb simulator
-DFB_SIM_DEST_PORT       10002	    # SHOULD mactch CLIENT_UDPDB_PORT below
-
+DFB_SIM_BINARY          bpsr_udpgenerator
+DFB_SIM_HOST            apsr16    # host which runs DFB_SIM_BINARY
+DFB_SIM_PORT            57003     # port to connect/configure DFB_DIM_BINARY
+DFB_SIM_DEST_PORT       4001      # SHOULD mactch CLIENT_UDPDB_PORT below
+IBOB_SIM_HOST           srv0      # host masquerading as ibob for the PWC's
+IBOB_SIM_PORT           49802     # port for PWC's to connect to is simulating
+                                                                                                     
 
 ###############################################################################
 # Client directory configuration
@@ -68,9 +73,9 @@ CLIENT_ARCHIVE_DIR      /lfs/data0/bpsr/archives
 CLIENT_RECORDING_DIR    /lfs/data0/bpsr/rawdata
 CLIENT_SCRATCH_DIR      /lfs/data0/scratch
 
-CLIENT_DAEMONS          observation_manager processing_manager spectra_manager monitor
+CLIENT_DAEMONS          bpsr_observation_manager spectra_manager monitor
 
-CLIENT_UDPDB_PORT       10002     # udp packets arrive on this port
+CLIENT_UDPDB_PORT       4001     # udp packets arrive on this port
 CLIENT_MASTER_PORT      57001     # client master script listens on this port
 CLIENT_PROC_LOAD_PORT   57006     # reports load information
 CLIENT_BG_PROC_PORT     57007     # reports observation current active
@@ -86,7 +91,6 @@ PROCESSING_DATA_BLOCK   DADA
 DADA_BLOCK_NBUFS        2000      # dada_dbNdb data block
 DADA_BLOCK_BUFSZ        4194304
                                                                                                              
-
 # Primary Write Client (PWC) configuration
 PWC_BINARY              bpsr_udpdb
 NUM_PWC                 13
@@ -103,7 +107,49 @@ PWC_9                   apsr09
 PWC_10                  apsr10
 PWC_11                  apsr11
 PWC_12                  apsr12
-DFB_0	                  apsr16
 
+# Beam assignment
+BEAM_0                  01
+BEAM_1                  02
+BEAM_2                  03
+BEAM_3                  04
+BEAM_4                  05
+BEAM_5                  06
+BEAM_6                  07
+BEAM_7                  08
+BEAM_8                  09
+BEAM_9                  10
+BEAM_10                 11
+BEAM_11                 12
+BEAM_12                 13
 
+IBOB_HOST_0             apsr16
+IBOB_PORT_0             52000
+IBOB_HOST_1             apsr16
+IBOB_PORT_1             52001
+IBOB_HOST_2             apsr16
+IBOB_PORT_2             52002
+IBOB_HOST_3             apsr16
+IBOB_PORT_3             52003
+IBOB_HOST_4             apsr16
+IBOB_PORT_4             52004
+IBOB_HOST_5             apsr16
+IBOB_PORT_5             52005
+IBOB_HOST_6             apsr16
+IBOB_PORT_6             52006
+IBOB_HOST_7             apsr16
+IBOB_PORT_7             52007
+IBOB_HOST_8             apsr16
+IBOB_PORT_8             52008
+IBOB_HOST_9             apsr16
+IBOB_PORT_9             52009
+IBOB_HOST_10            apsr16
+IBOB_PORT_10            52010
+IBOB_HOST_11            apsr16
+IBOB_PORT_11            52011
+IBOB_HOST_12            apsr16
+IBOB_PORT_12            52012
+
+# Machine that runs the iBOB udp simulator
+DFB_0                   apsr16
 

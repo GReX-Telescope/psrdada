@@ -2,5 +2,8 @@
 # scripts distributed as is (installed in share/)
 dist_data_DATA = bpsr.cfg \
                  bpsr.info \
-                 bpsr.viewer
+                 bpsr.viewer \
+                 ibob_default.cfg
 
+nobase_dist_data_DATA = testing/BPSR_CAL.spec \
+                        testing/BPSR.spec
