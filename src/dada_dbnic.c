@@ -21,8 +21,12 @@ void usage()
 {
   fprintf (stdout,
 	   "dada_dbnic [options]\n"
-	   " -N <name>  add a node to which data will be written\n"
-	   " -d         run as daemon\n");
+	   " -N <name>[:port]  add a node to which data will be written [default port: %d]\n"
+     " -k <key>          hexadecimal shared memory key  [default: %x]\n"
+     " -s                single transfer only\n"
+	   " -d                run as daemon\n" 
+     " -h                print help text\n", DADA_DEFAULT_NICDB_PORT, 
+     DADA_DEFAULT_BLOCK_KEY);
 }
 
 typedef struct {
@@ -60,8 +64,13 @@ int setup_nodes (dada_client_t* client)
   /* the header */
   char* header = 0;
 
+  /* the destination, host[:port] */
+  char* dest = 0;
+
   /* the host name */
   char* name = 0;
+
+  int port = DADA_DEFAULT_NICDB_PORT;
 
   /* target nodes, as defined by TARGET_NODES attribute */
   char target_nodes [256];
@@ -130,13 +139,36 @@ int setup_nodes (dada_client_t* client)
 
   /* open the connections that are not already open */
   for (inode=0; inode < string_array_size (hosts); inode++) {
-    name = string_array_get (hosts, inode);
+    dest = string_array_get (hosts, inode);
+
+    /* if a port was optionally specified, extract it */
+
+    char * pch = strtok(dest, ":");
+
+    if (pch != NULL) {
+    
+      name = (char *) malloc((strlen(pch)+1) * sizeof(char));
+      strcpy(name, pch);
+
+      pch = strtok(NULL, ":");
+      if (pch != NULL) {
+        port = atoi(pch);
+      } else {
+        multilog (log, LOG_ERR, "Could not parse port correctly\n");
+        port = DADA_DEFAULT_NICDB_PORT;
+      }
+
+    } else {
+      multilog (log, LOG_ERR, "Could not parse name/port correctly\n");
+      name = dest;
+      port = DADA_DEFAULT_NICDB_PORT;
+    }
+
     if (!node_array_search (array, name)) {
-      multilog (log, LOG_INFO, "Opening %s\n", name);
-      if (node_array_add (array, name, DADA_DEFAULT_NICDB_PORT) < 0) {
-	multilog (log, LOG_ERR, "Could not add (%s,%d) to node array\n",
-		  name, DADA_DEFAULT_NICDB_PORT);
-	return -1;
+      if (node_array_add (array, name, port) < 0) {
+        multilog (log, LOG_ERR, "Could not add (%s,%d) to node array\n",
+		              name, DADA_DEFAULT_NICDB_PORT);
+	      return -1;
       }
     }
   }
@@ -357,11 +389,17 @@ int main (int argc, char **argv)
   /* Quit flag */
   char quit = 0;
 
+  /* Destination port */
+  int port = DADA_DEFAULT_NICDB_PORT;
+
+  /* hexadecimal shared memory key */
+  key_t dada_key = DADA_DEFAULT_BLOCK_KEY;
+
   int arg = 0;
 
   dbnic.array = node_array_create ();
 
-  while ((arg=getopt(argc,argv,"dN:v")) != -1)
+  while ((arg=getopt(argc,argv,"dN:k:svh")) != -1)
     switch (arg) {
       
     case 'd':
@@ -370,13 +408,33 @@ int main (int argc, char **argv)
       
     case 'N':
       if (!dbnic.usr_node_names)
-	dbnic.usr_node_names = string_array_create ();
+	      dbnic.usr_node_names = string_array_create ();
       string_array_append (dbnic.usr_node_names, optarg);
       break;
+
+    case 'p':
+      port = atoi (optarg);
+      break;
+
+    case 'k':
+      if (sscanf (optarg, "%x", &dada_key) != 1) {
+        fprintf (stderr,"dada_dbnic: could not parse key from %s\n",optarg);
+        return -1;
+      }
+      break;
+
+    case 's':
+      quit = 1;
+      break;
+
       
     case 'v':
       verbose=1;
       break;
+
+    case 'h':
+      usage ();
+      return 0;
       
     default:
       usage ();
@@ -394,6 +452,8 @@ int main (int argc, char **argv)
     multilog_add (log, stderr);
 
   hdu = dada_hdu_create (log);
+
+  dada_hdu_set_key(hdu, dada_key);
 
   if (dada_hdu_connect (hdu) < 0)
     return EXIT_FAILURE;
@@ -415,10 +475,13 @@ int main (int argc, char **argv)
 
   client->context = &dbnic;
 
-  while (!quit) {
+  while (!client->quit) {
     
     if (dada_client_read (client) < 0)
       multilog (log, LOG_ERR, "Error during transfer\n");
+
+    if (quit) 
+      client->quit = 1;
 
   }
 
