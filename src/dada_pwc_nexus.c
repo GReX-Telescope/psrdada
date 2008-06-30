@@ -16,7 +16,7 @@ void dada_pwc_node_init (dada_pwc_node_t* node)
 
   node -> header = 0;
   node -> header_size = 0;
-  node -> state = dada_pwc_undefined;
+  node -> state = dada_pwc_pending;
 }
 
 /*! Return pointer to a newly allocated and initialized dada_node_t struct */
@@ -385,7 +385,12 @@ int dada_pwc_nexus_send (dada_pwc_nexus_t* nexus, dada_pwc_command_t command)
               nexus->convert_to_tm (&command.utc));
     return nexus_send ((nexus_t*)nexus, buffer);
           
+  case dada_pwc_reset:
+
+    return nexus_send((nexus_t*)nexus, "reset");
+
   }
+  
 
   return -1;
 }
