@@ -26,8 +26,9 @@ void usage()
 {
 fprintf (stdout,
      "dada_dbmonitor [options]\n"
+     " -k         hexadecimal shared memory key  [default: %x]\n"
      " -v         be verbose\n"
-     " -d         run as daemon\n");
+     " -d         run as daemon\n", DADA_DEFAULT_BLOCK_KEY);
 }
 
 
@@ -49,12 +50,16 @@ int main (int argc, char **argv)
   /* Quit flag */
   char quit = 0;
 
+  /* hexadecimal shared memory key */
+  key_t dada_key = DADA_DEFAULT_BLOCK_KEY;
+
+
   int arg = 0;
 
   /* TODO the amount to conduct a busy sleep inbetween clearing each sub
    * block */
 
-  while ((arg=getopt(argc,argv,"dv")) != -1)
+  while ((arg=getopt(argc,argv,"dvk:")) != -1)
     switch (arg) {
 
     case 'd':
@@ -65,6 +70,13 @@ int main (int argc, char **argv)
       verbose=1;
       break;
 
+    case 'k':
+      if (sscanf (optarg, "%x", &dada_key) != 1) {
+        fprintf (stderr,"dada_dbmonitor: could not parse key from %s\n",optarg);
+        return -1;
+      }
+      break;
+      
     default:
       usage ();
       return 0;
@@ -82,6 +94,8 @@ int main (int argc, char **argv)
 
   hdu = dada_hdu_create (log);
 
+  dada_hdu_set_key(hdu, dada_key);
+  
   printf("connecting\n");
   if (dada_hdu_connect (hdu) < 0)
     return EXIT_FAILURE;
