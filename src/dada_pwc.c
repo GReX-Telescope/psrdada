@@ -13,6 +13,8 @@
 /*! Parse a string and return the state */
 dada_pwc_state_t dada_pwc_string_to_state (const char* key)
 {
+  if (!strcasecmp (key, "pending"))
+    return dada_pwc_pending;
   if (!strcasecmp (key, "idle"))
     return dada_pwc_idle;
   if (!strcasecmp (key, "prepared"))
@@ -35,6 +37,9 @@ dada_pwc_state_t dada_pwc_string_to_state (const char* key)
 const char* dada_pwc_state_to_string (dada_pwc_state_t state)
 {
   switch (state) {
+
+  case dada_pwc_pending:
+    return "pending";
 
   case dada_pwc_idle:
     return "idle";
@@ -228,6 +233,7 @@ int dada_pwc_parse_bytes_per_second (dada_pwc_t* primary,
   unsigned npol;  /* number of polarizations */
   unsigned nbit;  /* nubmer of bits per sample */
   unsigned ndim;  /* number of dimensions */
+  unsigned nchan;  /* number of dimensions */
 
   uint64_t bits_per_second = 0;
 
@@ -248,6 +254,11 @@ int dada_pwc_parse_bytes_per_second (dada_pwc_t* primary,
     ndim = 1;
   }
 
+  if (ascii_header_get (header, "NCHAN", "%d", &nchan) < 0) {
+    fprintf (fptr, "failed to parse NCHAN - assuming 1\n");
+    nchan = 1;
+  }
+
   primary->bits_per_sample = nbit * npol * ndim;
 
   if (ascii_header_get (header, "TSAMP", "%lf", &sampling_interval) < 0) {
@@ -257,7 +268,7 @@ int dada_pwc_parse_bytes_per_second (dada_pwc_t* primary,
   }
 
   /* IMPORTANT: TSAMP is the sampling period in microseconds */
-  bits_per_second = nbit * npol * ndim * ((uint64_t)(1e6/sampling_interval));
+  bits_per_second = primary->bits_per_sample * nchan * ((uint64_t)(1e6/sampling_interval));
 
   primary->bytes_per_second = bits_per_second / 8;
 

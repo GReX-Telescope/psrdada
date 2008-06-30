@@ -24,6 +24,9 @@ extern "C" {
     /*! undefined: the primary write client is in an undefined state */
     dada_pwc_undefined,
 
+    /*! pending: the state of the primary write client is TBD */
+    dada_pwc_pending,
+
     /*! idle: no data is being recorded */
     dada_pwc_idle,
 
