@@ -27,9 +27,11 @@ AM_PROG_CC_C_O
 AC_PROG_INSTALL
 AC_PROG_LIBTOOL
 
+SWIN_LIB_PGPLOT
+
 AC_CHECK_LIB([m], [sin])
 
-CFLAGS="-O2 -pthread -Wall"
+# CFLAGS="-O2 -pthread -Wall"
 
 #
 # Checks for header files.
@@ -62,13 +64,36 @@ AC_FUNC_STRFTIME
 AC_FUNC_VPRINTF
 AC_CHECK_FUNCS([gethostbyname gethostname gettimeofday inet_ntoa memset select socket strchr strcspn strdup strerror strstr])
 
+if test "x$prefix" != xNONE; then
+  PSRDADA_INSTALL=$prefix
+else
+  PSRDADA_INSTALL=$ac_default_prefix
+fi
+
+AC_SUBST(PSRDADA_INSTALL)
+
 AM_CONFIG_HEADER([config.h])
 AC_CONFIG_FILES([Makefile
 		Management/Makefile
 		Management/psrdada_ldflags
 		Management/psrdada_cflags
 		src/Makefile
+		scripts/Makefile
+    web/Makefile
+    web/definitions_i.php
+    config/Makefile
+    apsr/Makefile
 		apsr/src/Makefile
+		apsr/scripts/Makefile
+		apsr/web/Makefile
+		apsr/config/Makefile
+		apsr/config/apsr.cfg
+    bpsr/Makefile
+		bpsr/src/Makefile
+		bpsr/scripts/Makefile
+		bpsr/web/Makefile
+		bpsr/config/Makefile
+		bpsr/config/bpsr.cfg
 		puma2/Makefile
 		3rdparty/Makefile])
 
