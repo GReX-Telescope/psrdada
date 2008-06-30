@@ -6,12 +6,7 @@ dist_data_DATA = apsr.info \
                  apsr.viewer \
                  dspsr.cal \
                  dspsr.default \
-                 dspsr.optimal \
-                 pdfb3_1024_1024_2048 \
-                 pdfb3_1024_256_2048 \
-                 pdfb3_2048_512_2048 \
-                 pdfb3_512_512_2048 \
-                 pdfb3_256_256_2048
+                 dspsr.optimal 
 
 nobase_dist_data_DATA = testing/CAL.spec \
                         testing/J0437_1405MHz.spec \

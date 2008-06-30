@@ -10,6 +10,7 @@ USER                    apsr
 SCRIPTS_DIR             @PSRDADA_INSTALL@/bin
 CONFIG_DIR              @PSRDADA_INSTALL@/share
 WEB_DIR                 @PSRDADA_INSTALL@/web
+STATUS_DIR              @PSRDADA_INSTALL@/web/status
 PROCESSING_DB_KEY       @PSRDADA_INSTALL@/share/dada.info
 VIEWING_DB_KEY          @PSRDADA_INSTALL@/share/dada.viewer
 
@@ -32,7 +33,7 @@ SERVER_LOG_DIR          /export/logs/apsr
 SERVER_CONTROL_DIR      /tmp/apsr/control
 SERVER_RESULTS_NFS_MNT  /nfs/results/apsr
 SERVER_ARCHIVE_NFS_MNT  /nfs/archives/apsr
-SERVER_DAEMONS          aux_manager pwc_monitor results_manager src_monitor sys_monitor apsr_tcs_interface
+SERVER_DAEMONS          aux_manager pwc_monitor results_manager src_monitor sys_monitor apsr_tcs_interface gain_manager
 
 # TCS Interface configuration. Note on different interface to server
 TCS_INTERFACE_HOST      apsr-srv0.atnf.csiro.au
