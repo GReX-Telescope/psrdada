@@ -40,7 +40,7 @@ int main (int argc, char **argv)
   /* configuration file name */
   char* dada_config = "config/default_config.txt";
 
-  fprintf (stderr, "Creating DADA PWC nexus\n");
+ multilog_fprintf (stderr, LOG_INFO, "Creating DADA PWC nexus\n");
   nexus = dada_pwc_nexus_create ();
 
   while ((arg=getopt(argc,argv,"dp:vc:")) != -1)
@@ -52,7 +52,7 @@ int main (int argc, char **argv)
       
     case 'p':
       nexus->pwc->port = atoi(optarg);
-      fprintf (stderr, "DADA PWC nexus port set to %d\n", nexus->pwc->port);
+     multilog_fprintf (stderr, LOG_INFO, "DADA PWC nexus port set to %d\n", nexus->pwc->port);
       break;
 
     case 'v':
@@ -70,7 +70,7 @@ int main (int argc, char **argv)
     }
 
   if (!dada_root) {
-    fprintf (stderr, "Please define the DADA_ROOT environment variable\n");
+    multilog_fprintf (stderr, LOG_ERR, "Please define the DADA_ROOT environment variable\n");
     return -1;
   }
 
@@ -83,23 +83,22 @@ int main (int argc, char **argv)
   else
     multilog_add (log, stderr);
 
- 
   char dada_config_file[strlen(dada_root)+strlen(dada_config)];
   sprintf(dada_config_file,"%s/%s",dada_root,dada_config);
-
-  fprintf (stderr, "Configuring DADA PWC nexus\n");
+  
+  multilog_fprintf (stderr, LOG_INFO, "Configuring DADA PWC nexus\n");
   if (dada_pwc_nexus_configure (nexus, dada_config) < 0) {
-    fprintf (stderr, "Error while configuring the DADA nexus\n");
+   multilog_fprintf (stderr, LOG_ERR, "Error while configuring the DADA nexus\n");
     return -1;
   }
 
-  fprintf (stderr, "Running the DADA PWC nexus server\n");
+  multilog_fprintf (stderr, LOG_INFO, "Running the DADA PWC nexus server\n");
   if (dada_pwc_nexus_serve (nexus) < 0) {
-    fprintf (stderr, "Error while running the DADA PWC nexus server\n");
+   multilog_fprintf (stderr, LOG_ERR, "Error while running the DADA PWC nexus server\n");
     return -1;
   }
 
-  fprintf (stderr, "Destroying nexus\n");
+  multilog_fprintf (stderr, LOG_INFO, "Destroying nexus\n");
   dada_pwc_nexus_destroy (nexus);
 
   return EXIT_SUCCESS;
