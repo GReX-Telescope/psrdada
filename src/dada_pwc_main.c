@@ -25,11 +25,13 @@ dada_pwc_main_t* dada_pwc_main_create ()
   pwcm -> buffer_function = 0;
   pwcm -> stop_function = 0;
   pwcm -> error_function = 0;
+  pwcm -> header_valid_function = 0;
 
   pwcm -> context = 0;
   pwcm -> header = 0;
   pwcm -> header_size = 0;
   pwcm -> verbose = 1;
+  pwcm -> header_valid = 0;
 
   return pwcm;
 }
@@ -154,9 +156,7 @@ int dada_pwc_main_prepare (dada_pwc_main_t* pwcm)
     pwcm->command = dada_pwc_command_get (pwcm->pwc);
 
     if (pwcm->command.code == dada_pwc_reset) {
-
       dada_pwc_set_state (pwcm->pwc, dada_pwc_idle, 0);
-
     }
     
     else if (pwcm->command.code == dada_pwc_header)  {
@@ -175,7 +175,7 @@ int dada_pwc_main_prepare (dada_pwc_main_t* pwcm)
 
     else if (pwcm->command.code == dada_pwc_clock)  {
 
-      multilog (pwcm->log, LOG_INFO, "Start clocking data\n");
+      /* multilog (pwcm->log, LOG_INFO, "Start clocking data\n"); */
 
       if (pwcm->command.byte_count) {
         multilog (pwcm->log, LOG_ERR, "dada_pwc_main_idle internal error.  "
@@ -269,19 +269,46 @@ int dada_pwc_main_start_transfer (dada_pwc_main_t* pwcm)
       return DADA_ERROR_SOFT;
     }
 
-    /* only mark header block as filled if we know the UTC_START */
+    /* Set the primary UTC_START in the pwc if we have it */
     if (utc > 0) {
+
+      /* Set the base utc from which all commands are calculated */
+      pwcm->pwc->utc_start = utc;
+      multilog(pwcm->log, LOG_INFO, "Setting pwcm->pwc->utc_start = %d\n",pwcm->pwc->utc_start);
+
+    }
+
+    /* We can only mark the header filled if we have a start command */
+    if (pwcm->command.code == dada_pwc_start) {
+
+      /* only mark header block filled if header is valid */
+      if (pwcm->header_valid_function)
+        pwcm->header_valid = pwcm->header_valid_function(pwcm);
+      else 
+        pwcm->header_valid = 1;
+
+      if (pwcm->header_valid) {
+        multilog(pwcm->log, LOG_INFO, "dada_pwc_main_start_transfer: Marking header filled\n");
+        if ( ipcbuf_mark_filled (pwcm->header_block, pwcm->header_size) < 0)  {
+          multilog (pwcm->log, LOG_ERR, "Could not marked header filled or command.code != start\n");
+          return DADA_ERROR_HARD;
+        }
+      }
+    }
+ 
+    /* only mark header block as filled if we know the UTC_START */
+    //if (utc > 0) {
 #ifdef _DEBUG
-      fprintf (stderr, "dada_pwc_main_start_transfer: mark filled header\n");
+      //fprintf (stderr, "dada_pwc_main_start_transfer: mark filled header\n");
 #endif
 
       /* If we are entering the recording state from the idle state ...*/
-      if (pwcm->command.code == dada_pwc_start &&
-          ipcbuf_mark_filled (pwcm->header_block, pwcm->header_size) < 0)  {
-        multilog (pwcm->log, LOG_ERR, "Could not mark filled header block\n");
-        return DADA_ERROR_SOFT;
-      }
-    }
+      //if (pwcm->command.code == dada_pwc_start &&
+      //    ipcbuf_mark_filled (pwcm->header_block, pwcm->header_size) < 0)  {
+      //  multilog (pwcm->log, LOG_ERR, "Could not mark filled header block\n");
+      //  return DADA_ERROR_SOFT;
+      //}
+    //}
   } 
 
 #ifdef _DEBUG
@@ -328,14 +355,14 @@ int dada_pwc_main_record_start (dada_pwc_main_t* pwcm)
    * offset */
   utc_start_byte = ipcio_get_soclock_byte(pwcm->data_block);
 
+  // multilog(pwcm->log, LOG_INFO, "utc_start_byte = %"PRIu64"\n",utc_start_byte);
+
   /* The actual byte this command corresponds to */
   command_start_byte = utc_start_byte + pwcm->command.byte_count;
 
-  /*
-  multilog (pwcm->log, LOG_INFO, "minimum_record_start=%"PRIu64"\n",
-            minimum_record_start);
-  */
-            
+  // multilog (pwcm->log, LOG_INFO, "minimum_record_start=%"PRIu64"\n",
+  //           minimum_record_start);
+
   /* If the command is scheduled to occur earlier than is possible, then
    * we must delay that command to the earliest time */
   if (command_start_byte < minimum_record_start) {
@@ -350,6 +377,10 @@ int dada_pwc_main_record_start (dada_pwc_main_t* pwcm)
     pwcm->command.byte_count = minimum_record_start - utc_start_byte;
   }
 
+  multilog (pwcm->log, LOG_INFO, "REC_START\n");
+  multilog (pwcm->log, LOG_INFO, "pwcm->command.utc = %d\n",pwcm->command.utc);
+  multilog (pwcm->log, LOG_INFO, "pwcm->pwc->utc_start = %d\n",pwcm->pwc->utc_start);
+
   /* Special case for rec_stop/rec_start toggling */
   header = ipcbuf_get_next_write (pwcm->header_block);
   if (header != pwcm->header) {
@@ -358,12 +389,37 @@ int dada_pwc_main_record_start (dada_pwc_main_t* pwcm)
     pwcm->header = header;
   }
 
-  /* write OBS_OFFSET to the header */
-  if (ascii_header_set (pwcm->header, "OBS_OFFSET", "%"PRIu64,
-                        pwcm->command.byte_count) < 0) {
+  /* a UTC_START may be different for multiple PWC's, but the REC_START will 
+   * be uniform, so on a REC_START we will change the UTC_START in the outgoing 
+   * header to be UTC_START + OBS_OFFSET, to ensure uniformity across PWCs */
+
+  time_t utc = pwcm->command.utc;
+  int buffer_size = 64;
+  char buffer[buffer_size];
+  strftime (buffer, buffer_size, DADA_TIMESTR, gmtime (&utc));
+
+  multilog (pwcm->log, LOG_INFO, "dada_pwc_main_record_start: UTC_START reset to REC_START = %s\n", buffer);
+
+  if (ascii_header_set (pwcm->header, "UTC_START", "%s", buffer) < 0) {
+    multilog (pwcm->log, LOG_ERR, "fail ascii_header_set UTC_START\n");
+    return DADA_ERROR_HARD;
+  }
+
+  multilog (pwcm->log, LOG_INFO, "dada_pwc_main_record_start: OBS_OFFSET = 0\n");
+  if (ascii_header_set (pwcm->header, "OBS_OFFSET", "%"PRIu64, 0) < 0) {
     multilog (pwcm->log, LOG_ERR, "fail ascii_header_set OBS_OFFSET\n");
     return DADA_ERROR_HARD;
   }
+
+  /* write OBS_OFFSET to the header */
+  //if (ascii_header_set (pwcm->header, "OBS_OFFSET", "%"PRIu64,
+  //                      pwcm->command.byte_count) < 0) {
+  //  multilog (pwcm->log, LOG_ERR, "fail ascii_header_set OBS_OFFSET\n");
+  //  return DADA_ERROR_HARD;
+  // 
+  //multilog (pwcm->log, LOG_INFO, "dada_pwc_main_record_start: Writing OBS_OFFSET = %"PRIu64"\n",
+  //                      pwcm->command.byte_count);
+
 
   multilog (pwcm->log, LOG_INFO,"command_start_byte = %"PRIu64", command.byte_"
             "count = %"PRIu64"\n",command_start_byte,pwcm->command.byte_count);
@@ -374,29 +430,32 @@ int dada_pwc_main_record_start (dada_pwc_main_t* pwcm)
               " at %"PRIu64"\n", command_start_byte);
     return DADA_ERROR_HARD;
   }
- 
-  int utc_size = 1024;
-  char utc[utc_size];
 
-  if (ascii_header_get (pwcm->header, "UTC_START","%s",utc) < 0) {
-    multilog (pwcm->log, LOG_ERR, "Header with no UTC_START\n");
-    return DADA_ERROR_HARD;
-  }
+  /* If the header has not yet been made valid */
+  if (!(pwcm->header_valid)) {
 
-  /* If UTC_START is unknown, then we have an error. N.B. it is possible to
-   * go directly to the recording state from idle, but not from clocking */
-  if (strcmp(utc,"UNKNOWN") == 0) {
-    multilog (pwcm->log, LOG_ERR, "Cannot transit from clocking to recoding "
-              "if the UTC_START is 'UNKNOWN'\n");;
-    return DADA_ERROR_HARD;
-  } else {
-    if (ipcbuf_mark_filled (pwcm->header_block, pwcm->header_size) < 0)  {
-      multilog (pwcm->log, LOG_ERR, "Could not mark filled header\n");
+    if (pwcm->header_valid_function) 
+      pwcm->header_valid = pwcm->header_valid_function(pwcm);
+    else
+      pwcm->header_valid = 1;
+
+    if (pwcm->header_valid) {
+
+      multilog(pwcm->log, LOG_INFO, "dada_pwc_main_record_start: Marking header filled\n");
+
+      if (ipcbuf_mark_filled (pwcm->header_block, pwcm->header_size) < 0)  {
+        multilog (pwcm->log, LOG_ERR, "Could not mark filled header\n");
+        return DADA_ERROR_HARD;
+      }
+    } else {
+      multilog (pwcm->log, LOG_ERR, "Cannot transit from clocking to recoding "
+                "if when header is invalid\n");;
       return DADA_ERROR_HARD;
     }
   }
 
   return 0;
+
 }
 
 /*! The clocking and recording states of the DADA PWC main loop */
@@ -433,6 +492,8 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
   int utc_size = 1024;
   char utc_buffer[utc_size];
 
+  /* flags for whether the header block has been cleared */
+
   /* Check if the UTC_START is valid */
   if (ascii_header_get (pwcm->header, "UTC_START", "%s", utc_buffer) < 0) {
     multilog (pwcm->log, LOG_ERR, "Could not read UTC_START from header\n");
@@ -461,6 +522,9 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
 
       pwcm->command = dada_pwc_command_get (pwcm->pwc);
 
+      // multilog (pwcm->log, LOG_INFO, "pwcm->command.utc = %d\n",pwcm->command.utc);
+      // multilog (pwcm->log, LOG_INFO, "pwcm->pwc->utc_start = %d\n",pwcm->pwc->utc_start);
+
       /* special case for set_utc_start */
       if (pwcm->command.code == dada_pwc_set_utc_start) {
 
@@ -472,7 +536,7 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
         } else {
 
           strftime (utc_buffer, utc_size, DADA_TIMESTR, 
-                    (struct tm*) gmtime(&(pwcm->command.utc)));
+                    (struct tm*) localtime(&(pwcm->command.utc)));
 
 #ifdef _DEBUG
           fprintf (stderr,"dada_pwc_main_transfer_data: set UTC_START in "
@@ -495,9 +559,20 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
           fprintf (stderr,"dada_pwc_main_transfer_data: header block filled\n");
 #endif
           if (pwcm->pwc->state == dada_pwc_recording) {
-            if (ipcbuf_mark_filled (pwcm->header_block,pwcm->header_size) < 0) {
-              multilog (pwcm->log, LOG_ERR, "Could not mark filled header\n");
-              return DADA_ERROR_HARD;
+
+            if (pwcm->header_valid_function) 
+              pwcm->header_valid = pwcm->header_valid_function(pwcm);
+            else
+              pwcm->header_valid = 1;
+
+            if (pwcm->header_valid) {
+
+              //multilog (pwcm->log, LOG_INFO, "dada_pwc_main_transfer_data: marking header valid\n");
+
+              if (ipcbuf_mark_filled (pwcm->header_block,pwcm->header_size) < 0) {
+                multilog (pwcm->log, LOG_ERR, "Could not mark filled header\n");
+                return DADA_ERROR_HARD;
+              }
             }
           }
       
@@ -626,17 +701,33 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
         if ((data_transfer_error_state == 1) && total_bytes_written){
           multilog (pwcm->log, LOG_WARNING, "Warning: pwc buffer function "
                     "returned 0 bytes. Trying to continue\n");
+          multilog (pwcm->log, LOG_WARNING, "total_bytes_written = %"PRIu64", bytes_to_write = %"PRIu64", transit_byte = %"PRIu64"\n",total_bytes_written, bytes_to_write, transit_byte);
         }
 
       }
-      
-      
       
       if (!buffer) {
         multilog (pwcm->log, LOG_ERR, "buffer function error\n");
         return DADA_ERROR_HARD;   
         //TODO CHECK WHAT buffer_function actually returns...
       }
+
+      /* Check if we need to mark the header as valid after this - not possible
+       * if we are clocking */
+      if ((!pwcm->header_valid) && (pwcm->pwc->state == dada_pwc_recording)) {
+        pwcm->header_valid = pwcm->header_valid_function(pwcm);
+      
+        /* If the header is NOW valid, flag the header as filled */  
+        if (pwcm->header_valid) {
+          multilog (pwcm->log, LOG_INFO,"dada_pwc_main_transfer_data: marking header filled\n");
+          if (ipcbuf_mark_filled (pwcm->header_block,pwcm->header_size) < 0) {
+            multilog (pwcm->log, LOG_ERR, "Could not mark filled header\n");
+            return DADA_ERROR_HARD;
+          }
+        }
+      }
+
+
 
       /* If the transit_byte is set, do not write more than the requested
          amount of data to the Data Block */
@@ -808,6 +899,9 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
 /*! The transit to idle/prepared state */
 int dada_pwc_main_stop_transfer (dada_pwc_main_t* pwcm)
 {
+
+  /* Reset the header so that it is not valid anymore */
+  pwcm->header_valid = 0;
         
   if (pwcm->stop_function (pwcm) < 0)  {
     multilog (pwcm->log, LOG_ERR, "dada_pwc_main_stop_transfer"

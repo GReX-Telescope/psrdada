@@ -42,6 +42,9 @@ extern "C" {
     /*! Pointer to the function that handles data transfer error*/
     int (*error_function) (struct dada_pwc_main*);
 
+    /*! Pointer to the function that checks header validity */
+    int (*header_valid_function) (struct dada_pwc_main*);
+
     /*! Additional context information */
     void* context;
 
@@ -56,6 +59,9 @@ extern "C" {
 
     /*! verbosity level */
     int verbose;
+
+    /*! flag to determine if we have a valid header */
+    int header_valid;
 
   } dada_pwc_main_t;
 
