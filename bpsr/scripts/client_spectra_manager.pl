@@ -102,7 +102,7 @@ while (!($quit_daemon)) {
 
   @lines = ();
 
-  $cmd = "find . -name \"20*.spectra\" | sort";
+  $cmd = "find . -name \"*.pol?\" | sort";
   $find_result = `$cmd`;
 
   @lines = split(/\n/,$find_result);
@@ -133,12 +133,12 @@ sub processArchive($) {
 
   (my $file) = @_;
 
-  my $cmd = "find ".$file." -type f -name \"*.spectra\" -printf \"%h\\n\"";
+  my $cmd = "find ".$file." -type f -name \"*.pol?\" -printf \"%h\\n\"";
   logMessage(2, "INFO", $cmd);
   my $remote_dir = `$cmd`;
   chomp $remote_dir;
 
-  sendToServerViaNFS($file, $cfg{"SERVER_ARCHIVE_NFS_MNT"}, $remote_dir);
+  sendToServerViaNFS($file, $cfg{"SERVER_RESULTS_NFS_MNT"}, $remote_dir);
   unlink($file);
 
 }
