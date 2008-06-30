@@ -1,6 +1,6 @@
 <?PHP
-include("functions_i.php");
-include("definitions_i.php");
+include("../definitions_i.php");
+include("../functions_i.php");
 
 # Get the system configuration (dada.cfg)
 $cfg = getConfigFile(SYS_CONFIG);
@@ -30,7 +30,7 @@ $archive_ext = $_GET["archive_ext"];
 <body>
 <? 
 
-include("banner.php");
+include("../banner.php");
 
 $obs_dir = $basedir."/".$observation;
 $cfg = getConfigFile(SYS_CONFIG, TRUE);
@@ -206,15 +206,15 @@ function printActions($data, $locked) {
     <tr><th class="results">ACTIONS</th></tr>
     <tr>
       <td align="center">
-        <input type="button" onclick="popWindow('apsr/processresult.php?observation=<?echo $data["UTC_START"]?>&action=plot')" value="Create Plots"<?echo $locked?>>&nbsp;&nbsp;&nbsp;
-        <input type="button" onclick="popWindow('apsr/processresult.php?observation=<?echo $data["UTC_START"]?>&action=reprocess')" value="Reprocess Results"<?echo $locked?>>&nbsp;&nbsp;&nbsp;
-        <input type="button" onclick="popWindow('apsr/processresult.php?observation=<?echo $data["UTC_START"]?>&action=process_hi')" value="Process Archives"<?echo $locked?>>
+        <input type="button" onclick="popWindow('/apsr/processresult.php?observation=<?echo $data["UTC_START"]?>&action=plot')" value="Create Plots"<?echo $locked?>>&nbsp;&nbsp;&nbsp;
+        <input type="button" onclick="popWindow('/apsr/processresult.php?observation=<?echo $data["UTC_START"]?>&action=reprocess')" value="Reprocess Results"<?echo $locked?>>&nbsp;&nbsp;&nbsp;
+        <input type="button" onclick="popWindow('/apsr/processresult.php?observation=<?echo $data["UTC_START"]?>&action=process_hi')" value="Process Archives"<?echo $locked?>>
       </td>
     </tr>
     <tr>
       <td align="center">
-        <input type="button" onclick="popWindow('apsr/processresult.php?observation=<?echo $data["UTC_START"]?>&action=annotate')" value="Annotate Obs.">&nbsp;&nbsp;&nbsp;
-        <input type="button" onclick="popWindow('apsr/processresult.php?observation=<?echo $data["UTC_START"]?>&action=delete_obs')" value="Delete Observation"<?echo $locked?>>
+        <input type="button" onclick="popWindow('/apsr/processresult.php?observation=<?echo $data["UTC_START"]?>&action=annotate')" value="Annotate Obs.">&nbsp;&nbsp;&nbsp;
+        <input type="button" onclick="popWindow('/apsr/processresult.php?observation=<?echo $data["UTC_START"]?>&action=delete_obs')" value="Delete Observation"<?echo $locked?>>
       </td>
     </tr>
   </table>

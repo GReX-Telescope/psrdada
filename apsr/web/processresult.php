@@ -32,7 +32,7 @@ if ($action == "delete_obs") $action_string = "Delete results &amp; archives";
 
     function finishParent() {
 
-      window.opener.location.href = "/results.php";
+      window.opener.location.href = "/apsr/results.php";
       window.opener.opener.focus();
       window.close();
     }

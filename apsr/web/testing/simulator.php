@@ -199,26 +199,26 @@ if ($sys_config["USE_DFB_SIMULATOR"] == 0) {
 }
 
 # Now run for the duration of the observation
-$have_set_duration = 0;
+#$have_set_duration = 0;
 for ($i=0;$i<$duration;$i++) {
   sleep(1);
   # Every 15 seconds, set the time limit of the script back to 30 seconds
   if ($i % 15 == 0) {
     set_time_limit(30);
 
-    if (!$have_set_duration) {
-      $cmd = "DURATION ".$duration."\r\n";
-      socketWrite($tcs_interface_socket,$cmd);
-      $result = rtrim(socketRead($tcs_interface_socket));
+    #if (!$have_set_duration) {
+    #  $cmd = "DURATION ".$duration."\r\n";
+    #  socketWrite($tcs_interface_socket,$cmd);
+    #  $result = rtrim(socketRead($tcs_interface_socket));
 
-      if ($result != "ok") {
-        printTR($cmd, $result);
-        printTR("STOPPING","");
-        exit(-1);
-      }
-      printTR($cmd, $result);
-      $have_set_duration = 1;
-    }
+    #  if ($result != "ok") {
+    #    printTR($cmd, $result);
+    #    printTR("STOPPING","");
+    #    exit(-1);
+    #  }
+    #  printTR($cmd, $result);
+    #  $have_set_duration = 1;
+    #}
   }
   if ($i % 60 == 0) {
     printTR("Recording: ".(($duration - $i)/60)." minutes remaining","");
@@ -227,7 +227,7 @@ for ($i=0;$i<$duration;$i++) {
 
 
 # 10 extra seconds to ensure things have stopped!
-sleep(10);
+# sleep(10);
 
 # Issue the STOP command 
 $cmd = "STOP\r\n";

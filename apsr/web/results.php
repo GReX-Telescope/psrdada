@@ -1,6 +1,6 @@
 <?PHP
-include("functions_i.php");
-include("definitions_i.php");
+include("../definitions_i.php");
+include("../functions_i.php");
 
 define(RESULTS_PER_PAGE,20);
 define(PAGE_REFRESH_SECONDS,20);
@@ -70,7 +70,7 @@ $num_results = count($keys);
 
 $title = "APSR | Recent Results";
 $refresh = PAGE_REFRESH_SECONDS;
-include("header_i.php");
+include("../header_i.php");
 
 ?>
 
@@ -79,7 +79,7 @@ include("header_i.php");
   <script type="text/javascript" src="/js/wz_tooltip.js"></script>
 <? 
 $text = "Recent Results";
-include("banner.php");
+include("../banner.php");
 
 ?>
 <div align=right>
@@ -128,6 +128,7 @@ include("banner.php");
   <th>CFREQ</th>
   <th>BW</th>
   <th>Int</th>
+  <th>NCHAN</th>
   <th class="trunc">Annotation</th>
 </tr>
 
@@ -147,13 +148,12 @@ for ($i=0; $i < count($keys); $i++) {
   }
 
   $freq_keys = array_keys($results[$keys[$i]]);
-  $url = "/result.php?basedir=".$basedir."&observation=".$keys[$i]."&archive_ext=".$archive_ext;
+  $url = "/apsr/result.php?basedir=".$basedir."&observation=".$keys[$i]."&archive_ext=".$archive_ext;
   $mousein = "onmouseover=\"Tip('<img src=\'/results/".$keys[$i]."/".$data["phase_vs_flux"]."\' width=241 height=181>')\"";
   $mouseout = "onmouseout=\"UnTip()\"";
 
   /* If archives have been finalised and its not a brand new obs */
-  if ( (count($results[$keys[$i]][$freq_keys[0]]) === 0) && 
-       ($data["phase_vs_flux"] != "../../images/blankimage.gif") ) {
+  if ( $results[$keys[$i]]["finalized"] === 1) {
     echo "  <tr bgcolor=\"#cae2ff\">\n";
   } else {
     echo "  <tr class=\"new\" bgcolor=\"white\">\n";
@@ -176,6 +176,9 @@ for ($i=0; $i < count($keys); $i++) {
   /* INTERGRATION LENGTH */
   echo "    <td>".getIntergrationLength($results[$keys[$i]]["tres_archive"])."</td>\n";
 
+  /* NCHAN */
+  echo "    <td>".$results[$keys[$i]]["nchan"]."</td>\n";
+
   /* ANNOTATION */
   echo "    <td class=\"trunc\"><div>".$results[$keys[$i]]["annotation"]."</div></td>\n";
 
@@ -192,6 +195,8 @@ for ($i=0; $i < count($keys); $i++) {
  <tr><td class="smalltext">CFREQ</td><td width=20></td><td class="smalltext">Centre frequency of the observation [MHz]</td></tr>
  <tr><td class="smalltext">BW</td><td width=20></td><td class="smalltext">Total bandwidth [MHz]</td></tr>
  <tr><td class="smalltext">Int</td><td width=20></td><td class="smalltext">Total intergration received [seconds]</td></tr>
+ <tr><td class="smalltext">NCHAN</td><td width=20></td><td class="smalltext">Number of hosts
+that recieved data</td></tr>
  <tr><td class="smalltext">White</td><td width=20></td><td class="smalltext">Newer results, may still be updated</td></tr>
  <tr><td class="smalltext">Blue</td><td width=20></td><td class="smalltext">Finalised results, no new archives received for 24 hours</td></tr>
 </table> 
@@ -247,6 +252,7 @@ function getResultsArray($results_dir, $archive_ext, $offset=0, $length=0) {
     if (count($freq_channels) == 0) {
       $all_results[$observations[$i]]["obs_start"] = "unset";
     }
+    $all_results[$observations[$i]]["nchan"] = count($freq_channels);
   } 
 
   for ($i=0; $i<count($observations); $i++) {
@@ -260,10 +266,18 @@ function getResultsArray($results_dir, $archive_ext, $offset=0, $length=0) {
     $all_results[$observations[$i]]["tres_archive"] = $tres_archive;
 
     if (file_exists($dir."/obs.txt")) {
-      $all_results[$observations[$i]]["annotation"] = exec("cat ".$dir."/obs.txt");
+      $all_results[$observations[$i]]["annotation"] = file_get_contents("cat ".$dir."/obs.txt");
     } else {
       $all_results[$observations[$i]]["annotation"] = "";
     }
+  
+    if (file_exists($dir."/obs.finalized")) {
+      $all_results[$observations[$i]]["finalized"] = 1;
+    } else {
+      $all_results[$observations[$i]]["finalized"] = 0;
+    }
+    
+
   }
 
   return $all_results;

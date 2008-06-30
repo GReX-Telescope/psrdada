@@ -9,7 +9,7 @@ $img3 = "../../images/blankimage.gif";
 $img4 = "../../images/blankimage.gif";
 
 $results_dir = $_GET["results_dir"];
-$cmd = "ls -trA ".$results_dir." | tail -n 1";
+$cmd = "ls -1 ".$results_dir." | tail -n 1";
 $result = exec($cmd);
 
 $dir = $results_dir."/".$result;
