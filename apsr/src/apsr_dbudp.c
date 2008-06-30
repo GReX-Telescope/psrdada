@@ -2,7 +2,7 @@
 #include "dada_hdu.h"
 #include "apsr_def.h"
 #include "dada_def.h"
-#include "udp.h"
+#include "apsr_udp.h"
 #include "sock.h"
 
 #include "node_array.h"
@@ -20,7 +20,6 @@
 
 #include <netinet/in.h>
 #include <netdb.h> 
-#include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 
