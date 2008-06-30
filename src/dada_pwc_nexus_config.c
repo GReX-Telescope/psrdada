@@ -27,8 +27,11 @@ int dada_pwc_nexus_cmd_config (void* context, FILE* output, char* args)
 
   int error = 0;
 
-  if (nexus->pwc->state != dada_pwc_idle) {
-    fprintf (output, "Cannot config when not IDLE\n");
+  if (nexus->pwc->state != dada_pwc_idle && 
+      nexus->pwc->state != dada_pwc_pending)
+  {
+    fprintf (output, "Cannot config when not IDLE or PENDING; state=%s\n",
+             dada_pwc_state_to_string(nexus->pwc->state));
     return -1;
   }
 
