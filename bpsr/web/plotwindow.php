@@ -8,6 +8,8 @@ $config = getConfigFile(SYS_CONFIG);
 $conf = getConfigFile(DADA_CONFIG,TRUE);
 $spec = getConfigFile(DADA_SPECIFICATION, TRUE);
 
+$nbeam = $config["NUM_PWC"];
+
 ?>
 <html>
 <head>
@@ -19,7 +21,7 @@ $spec = getConfigFile(DADA_SPECIFICATION, TRUE);
 
     /* Creates a pop up window */
     function popWindow(URL,width,height) {
-                                                                                                                                      
+
       var width = width || "1024";
       var height = height || "768";
 
@@ -34,6 +36,39 @@ $spec = getConfigFile(DADA_SPECIFICATION, TRUE);
     function looper() {
       request()
       setTimeout('looper()',5000)
+    }
+
+    /* Parses the HTTP response and makes changes to images
+     * as requried */
+    function handle_data(http_request) {
+
+      if (http_request.readyState == 4) {
+        var response = String(http_request.responseText)
+        var lines = response.split(";;;")
+
+<?
+        for ($i=0; $i<$config["NUM_PWC"]; $i++) {
+          echo "        var img".$i."_line = lines[".$i."].split(\":::\")\n";
+        }
+
+        for ($i=0; $i<$config["NUM_PWC"]; $i++) {
+          echo "        var img".$i."_hires = img".$i."_line[1]\n";
+          echo "        var img".$i."_lowres = img".$i."_line[2]\n";
+          echo "        var img".$i." = document.getElementById(\"beam".($i+1)."\")\n";
+        }
+
+        for ($i=0; $i<$config["NUM_PWC"]; $i++) {
+
+          echo "        if (img".$i.".src != img".$i."_lowres) {\n";
+          echo "          img".$i.".src = img".$i."_lowres\n";
+          //echo "          img".$i.".onmouseover = \"Tip('<img src=\"+img".$i."_hires+\" width=241 height=181>')\"\n";
+          echo "        }\n";
+        }
+        
+        echo "       var utc_start = lines[".$config["NUM_PWC"]."]\n";
+?>
+        document.getElementById("utc_start").value = utc_start;
+      }
     }
 
     /* Gets the data from the URL */
@@ -57,6 +92,14 @@ $spec = getConfigFile(DADA_SPECIFICATION, TRUE);
         type = "dm0timeseries";
       }
 
+      if (document.imageform.imagetype[2].checked == true) {
+        type = "powerspectrum";
+      }
+
+      if (document.imageform.imagetype[3].checked == true) {
+        type = "digitizer";
+      }
+
       /* This URL will return the names of the 5 current */
       var url = "bpsr/plotupdate.php?results_dir=<?echo $config["SERVER_RESULTS_DIR"]?>&type="+type;
 
@@ -64,54 +107,27 @@ $spec = getConfigFile(DADA_SPECIFICATION, TRUE);
       http_request.send(null)
     }
 
-    /* Parses the HTTP response and makes changes to images
-     * as requried */
-    function handle_data(http_request) {
-      if (http_request.readyState == 4) {
-        var response = String(http_request.responseText)
-        var lines = response.split(";;;")
-
-<?
-        for ($i=0; $i<$config["NUM_PWC"]; $i++) {
-          echo "        var img".$i."_line = lines[".$i."].split(\":::\")\n";
-        }
-
-        for ($i=0; $i<$config["NUM_PWC"]; $i++) {
-          echo "        var img".$i." = img".$i."_line[1]\n";
-        }
-
-        for ($i=0; $i<$config["NUM_PWC"]; $i++) {
-
-          echo "        if (document.getElementById(\"beam".($i+1)."\").src != img".$i.") {\n";
-          echo "          document.getElementById(\"beam".($i+1)."\").src = img".$i."\n";
-          echo "        }\n";
-        }
-        
-        echo "       var utc_start = lines[".$config["NUM_PWC"]."]\n";
-?>
-        document.getElementById("utc_start").value = utc_start;
-      }
-    }
 
   </script>
 
 </head>
 <body onload="looper()">
+<script type="text/javascript" src="/js/wz_tooltip.js"></script>
+<input id="utc_start" type="hidden" value="">
 <center>
-<table width=100%>
-<input id="utc_start" type="hidden" value=""></input>
+<table border=0 cellspacing=5 cellpadding=5 width=100%>
 
-<tr>
-
-<td>Show:</td>
-    <td>
-      <form name="imageform">
+  <tr>
+    <td rowspan=3 valign="top">
+      <form name="imageform" class="smalltext">
       <input type="radio" name="imagetype" id="imagetype" value="bandpass" checked onClick="request()">Bandpass<br>
       <input type="radio" name="imagetype" id="imagetype" value="dm0timeseries" onClick="request()">Time Series<br>
+      <input type="radio" name="imagetype" id="imagetype" value="powerspectrum" onClick="request()">Fluct. Power Spectrum<br>
+      <input type="radio" name="imagetype" id="imagetype" value="digitizer" onClick="request()">Digitizer Stats<br>
       </form>
     </td>
-  <td width=20>&nbsp;&nbsp;</td>
-<td valign=bottom>Beam: </td><td>
+    <td colspan=4>
+
 <div class="btns">
 <?
 for ($i=0; $i<$config["NUM_PWC"]; $i++) {
@@ -121,52 +137,50 @@ for ($i=0; $i<$config["NUM_PWC"]; $i++) {
 }
 ?>
 </div>
-</td></tr></table>
-</center>
 
-<center>
-<table border=0 cellspacing=5 cellpadding=5>
+    </td>
+  </tr>
 
   <tr height=42>
+    <?//echoBlank()?>
+    <?echoBeam(13, $nbeam)?>
     <?echoBlank()?>
-    <?echoBeam(13)?>
-    <?echoBlank()?>
-    <?echoBeam(12)?>
+    <?echoBeam(12, $nbeam)?>
     <?echoBlank()?> 
   </tr>
   <tr height=42>
-    <?echoBlank()?>
-    <?echoBeam(6)?>
+    <?//echoBlank()?>
+    <?echoBeam(6, $nbeam)?>
     <?echoBlank()?>
   </tr>
   <tr height=42>
     <?echoBlank()?>
-    <?echoBeam(7)?>
-    <?echoBeam(5)?>
+    <?echoBeam(7, $nbeam)?>
+    <?echoBeam(5, $nbeam)?>
     <?echoBlank()?> 
   </tr>
 
   <tr height=42>
-    <?echoBeam(8)?>
-    <?echoBeam(1)?>
-    <?echoBeam(11)?>
+    <?echoBeam(8, $nbeam)?>
+    <?echoBeam(1, $nbeam)?>
+    <?echoBeam(11, $nbeam)?>
   </tr>
 
   <tr height=42>
-    <?echoBeam(2)?>
-    <?echoBeam(4)?>
-  </tr>
-
-  <tr height=42>
-    <?echoBlank()?>
-    <?echoBeam(3)?>
-    <?echoBlank()?>
+    <?echoBeam(2, $nbeam)?>
+    <?echoBeam(4, $nbeam)?>
   </tr>
 
   <tr height=42>
     <?echoBlank()?>
-    <?echoBeam(9)?>
-    <?echoBeam(10)?>
+    <?echoBeam(3, $nbeam)?>
+    <?echoBlank()?>
+  </tr>
+
+  <tr height=42>
+    <?echoBlank()?>
+    <?echoBeam(9, $nbeam)?>
+    <?echoBeam(10, $nbeam)?>
     <?echoBlank()?>
   </tr>
   
@@ -190,12 +204,20 @@ function echoBlank() {
   echo "<td ></td>\n";
 }
 
-function echoBeam($beam_no) {
+function echoBeam($beam_no, $num_beams) {
 
-  echo "<td rowspan=2>";
-  echo "<a href=\"javascript:popWindow('bpsr/beamwindow.php?beamid=".$beam_no."')\">";
-  echo "<img src=\"/images/blankimage.gif\" width=112 height=84 id=\"beam".$beam_no."\" TITLE=\"Beam ".$beam_no."\" alt=\"Beam ".$beam_no."\">\n";
-  echo "</a></td>\n";
+  if ($beam_no <= $num_beams) {
+    //$mousein = "onmouseover=\"Tip('<img src=/images/blankimage.gif width=241 height=181>')\"";
+    //$mouseout = "onmouseout=\"UnTip()\"";
+
+    echo "<td rowspan=2 align=right>";
+    echo "<a href=\"javascript:popWindow('bpsr/beamwindow.php?beamid=".$beam_no."')\">";
+
+    echo "<img src=\"/images/blankimage.gif\" width=112 height=84 id=\"beam".$beam_no."\" TITLE=\"Beam ".$beam_no."\" alt=\"Beam ".$beam_no."\" ".$mousein." ".$mouseout.">\n";
+    echo "</a></td>\n";
+  } else {
+    echo "<td rowspan=2></td>\n";
+  }
 
 }
 
