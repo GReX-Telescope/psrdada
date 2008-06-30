@@ -81,11 +81,13 @@ int64_t dada_client_io_loop (dada_client_t* client)
 
   while (!client->transfer_bytes || bytes_transfered < client->transfer_bytes)
   {
+          
     if (!client->transfer_bytes)
       bytes = buffer_size;
     else
     {
       bytes_to_transfer = client->transfer_bytes - bytes_transfered;
+      //fprintf(stderr,"transfer_bytes = %"PRIu64", bytes_transfered = %"PRIu64", bytes_to_transfer = %"PRIu64"\n",client->transfer_bytes,bytes_transfered,bytes_to_transfer);
 
       if (buffer_size > bytes_to_transfer)
 	bytes = bytes_to_transfer;
@@ -359,6 +361,8 @@ int dada_client_read (dada_client_t* client)
 
     obs_offset += bytes_written;
 
+    /* fprintf(stderr,"wrote %"PRIu64" bytes obs_offset = %"PRIu64"\n",bytes_written, obs_offset); */
+
   }
 
   ipcbuf_reset ((ipcbuf_t*)client->data_block);
@@ -388,7 +392,7 @@ int dada_client_write (dada_client_t* client)
   header_size = ipcbuf_get_bufsz (client->header_block);
   multilog (log, LOG_INFO, "header block size = %"PRIu64"\n", header_size);
 
-  while (header_size) {
+  if (header_size) {
   
     header = ipcbuf_get_next_write (client->header_block);
     if (!header)  {
@@ -409,14 +413,6 @@ int dada_client_write (dada_client_t* client)
     // signal end of data on Data Block
     if (ipcio_close (client->data_block) < 0)  {
       multilog (log, LOG_ERR, "Could not close Data Block\n");
-      return -1;
-    }
-
-    if (client->quit)
-      break;
-
-    if (ipcio_open (client->data_block, 'W') < 0) {
-      multilog (log, LOG_ERR, "Could not re-open Data Block for writing\n");
       return -1;
     }
 
