@@ -187,8 +187,6 @@ sub processing_thread($$) {
 
     copyUTC_STARTfile($utc_start, $centre_freq, $obs_start_file);
 
-    #$my $utc_start_thread = threads->new(\&sendUTC_START, $processing_dir."/".$utc_start, $obs_start_file);
-
     # So that the background manager knows we are processing
     $currently_processing = 1;
 
@@ -197,6 +195,9 @@ sub processing_thread($$) {
     $time_str = Dada->getCurrentDadaTime();
 
     $processing_dir .= "/".$utc_start."/".$centre_freq;
+
+    logMessage(1, "INFO", "Starting level setting thread: NBAND = ".$current_header{"NBAND"});
+    my $level_setting_thread_id = threads->new(\&level_setting_thread, $bindir."/digimon", 1);
 
     logMessage(1, "INFO", "START ".$proc_cmd);
 
@@ -222,8 +223,13 @@ sub processing_thread($$) {
     chdir "../../";
     logMessage(1, "INFO", "END ".$proc_cmd);;
 
+    $cmd = "killall digimon";
+    system($cmd);
+    logMessage(0, "INFO", "Waiting for level setting thread to join");
+    my $level_setting_return_val = $level_setting_thread_id->join();
+    logMessage(0, "INFO", "Waiting for level setting has joined: ".$level_setting_return_val);
+
     # dada_dbNdb will have written an obs.end file with the expected filenames
-    # $utc_start_thread->join();
 
     return ($utc_start, $obs_offset);
 
@@ -601,4 +607,22 @@ sub sendUTC_START($$) {
 }
 
 
+sub level_setting_thread($$) {
+
+  my ($cmd, $nchan) = @_;
+
+  # Add the data block key
+  $cmd .= " ".$cfg{"VIEWING_DB_KEY"};
+  # $cmd .= " | ".$cfg{"SCRIPTS_DIR"}."/client_gain_controller.pl ". $nchan;
+  $cmd .= " | ".$cfg{"SCRIPTS_DIR"}."/client_gain_controller.pl 1";
+  logMessage(0, "INFO", "Running digimon: $cmd");
+
+  my $returnVal = system($cmd);
+
+  if ($returnVal != 0) {
+    logMessage(0, "WARN", "Level setting command failed: ".$cmd." ".$returnVal);
+  }
+
+  return $returnVal;
+}
 

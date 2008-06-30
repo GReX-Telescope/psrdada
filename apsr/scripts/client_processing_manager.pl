@@ -197,13 +197,11 @@ sub processing_thread($$) {
     }
 
     # Create an obs.start file in the processing dir:
-    logMessage(1, "INFO","START $proc_cmd");
+    logMessage(1, "INFO", "START ".$proc_cmd);
 
     chdir $processing_dir;
     $dspsr_start_time = time;
     logMessage(2, "INFO", "Setting dspsr_start_time = ".$dspsr_start_time);
-
-    #my $level_setting_thread_id = threads->new(\&level_setting_thread, $bindir."/digimon", $current_header{"NCHANNEL"});
 
     $cmd = $bindir."/".$proc_cmd;
     $cmd .= " 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/client_src_logger.pl";
@@ -216,14 +214,8 @@ sub processing_thread($$) {
       logMessage(0, "WARN", "Processing command dspsr failed: ".$?." ".$returnVal);
     }
     $time_str = Dada->getCurrentDadaTime();
-    logMessage(1, "INFO", "END $proc_cmd");
+    logMessage(1, "INFO", "END ".$proc_cmd);
 
-    #$cmd = "killall digimon";
-    #system($cmd);
-    #logMessage(0, "INFO", "Waiting for level setting thread to join");
-    #my $level_setting_return_val = $level_setting_thread_id->join();
-    #logMessage(0, "INFO", "Waiting for level setting has joined: ".$level_setting_return_val);
-    
     $dspsr_start_time = 0;
     logMessage(2, "INFO", "Setting dspsr_start_time = ".$dspsr_start_time);
 
@@ -238,27 +230,6 @@ sub processing_thread($$) {
 
   }
 }
-
-
-sub level_setting_thread($$) {
-
-  my ($cmd, $nchan) = @_;
-
-  # Add the data block key
-  $cmd .= " ".$cfg{"VIEWING_DB_KEY"};
-  $cmd .= " | ".$cfg{"SCRIPTS_DIR"}."/client_gain_controller.pl ". $nchan;
-  logMessage(0, "INFO", "Running digimon: $cmd");
-
-  my $returnVal = system($cmd);
-
-  if ($returnVal != 0) {
-    logMessage(0, "WARN", "Level setting command failed: ".$cmd." ".$returnVal);
-  }
-
-  return $returnVal;
-
-}
-
 
 sub daemon_control_thread($) {
 

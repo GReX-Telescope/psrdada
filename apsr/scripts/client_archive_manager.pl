@@ -122,10 +122,10 @@ while (!($quit_daemon)) {
 # Rejoin our daemon control thread
 $daemon_control_thread->join();
 
+logMessage(0, "INFO", "STOPPING SCRIPT");
+
 # Close the nexus logging connection
 Dada->nexusLogClose($log_socket);
-
-logMessage(0, "INFO", "STOPPING SCRIPT");
 
 exit (0);
 

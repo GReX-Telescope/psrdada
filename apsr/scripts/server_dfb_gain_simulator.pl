@@ -70,7 +70,6 @@ if ($ENV{'HOSTNAME'} ne $dfb3_host) {
   exit(1);
 }
 
-
 $server_socket = new IO::Socket::INET (
     LocalHost => $dfb3_host,
     LocalPort => $dfb3_port,
@@ -111,6 +110,7 @@ for ($i=0; $i<$nchan; $i++) {
 
 my $curr_time = time();
 my $prev_time = $curr_time;
+my $last_avg = -1;
 
 while (!$quit_daemon) {
 
@@ -134,18 +134,26 @@ while (!$quit_daemon) {
     $avg /= ($nchan*2);
     my $int_avg = int($avg);
 
-    debugMessage(0, "Average gain is ".$avg.", intavg = ".$int_avg);
+    if ($last_avg != $int_avg) {
 
-    my $handle = Dada->connectToMachine($dfb_sim_host, $dfb_sim_port);
-    if ($handle) {
-      print "APSRGAIN ".$int_avg."\n";
-      print $handle "APSRGAIN ".$int_avg."\r\n";
-      my $line = Dada->getLine($handle);
-      debugMessage(0, "Reply from DFB3 simulator: ".$line);
-      close($handle);
+      debugMessage(2, "Average gain is ".$avg.", intavg = ".$int_avg);
 
-    } else {
-      debugMessage(2, "Couldn't connect to the dfb3 simulator");
+      my $handle = Dada->connectToMachine($dfb_sim_host, $dfb_sim_port);
+      if ($handle) {
+        debugMessage(1, "DFB <- APSRGAIN ".$int_avg);
+        print $handle "APSRGAIN ".$int_avg."\r\n";
+        my $line = Dada->getLine($handle);
+        debugMessage(0, "Reply from DFB3 simulator: ".$line);
+        close($handle);
+        $last_avg = $int_avg;
+
+      } else {
+        debugMessage(0, "Couldn't connect to the dfb3 simulator");
+        for ($i=0; $i<$nchan; $i++) {
+          @pol0_gains[$i] = 33;
+          @pol1_gains[$i] = 33;
+        }
+      }
     }
     $prev_time = $curr_time;
   }
@@ -192,7 +200,7 @@ while (!$quit_daemon) {
         if ( $string =~ m/^APSRGAIN (\d+) (0|1)$/) {
 
           my ($ignore, $chan, $pol) = split(/ /, $string);
-          debugMessage(2, $machine." -> ".$string." [get]");
+          debugMessage(2, $machine." -> ".$string);
 
           if (($chan >= 0) && ($chan < $nchan)) {
 
@@ -209,9 +217,9 @@ while (!$quit_daemon) {
 
           debugMessage(2, $machine." <- ".$response);
 
-        } elsif ($string =~ m/^APSRGAIN (\d+) (0|1) (\d)+$/) {
+        } elsif ($string =~ m/^APSRGAIN (\d+) (0|1) (\d+)$/) {
 
-          debugMessage(2, $machine." -> ".$string." [set]");
+          debugMessage(2, $machine." -> ".$string);
 
           my ($ignore, $chan, $pol, $val) = split(/ /, $string);
 

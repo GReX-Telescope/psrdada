@@ -38,7 +38,7 @@ use strict;         # strict mode (like -Wall)
 # Constants
 #
 
-use constant DEBUG_LEVEL        => 2;         # 0 None, 1 Minimal, 2 Verbose
+use constant DEBUG_LEVEL        => 1;         # 0 None, 1 Minimal, 2 Verbose
 use constant PIDFILE            => "apsr_tcs_interface.pid";
 use constant LOGFILE            => "apsr_tcs_interface.log";
 use constant PWCC_LOGFILE       => "dada_pwc_command.log";
@@ -231,7 +231,6 @@ while (!$quit_threads) {
 
         logMessage(1, "TCS -> ".$key."\t".$val);
 
-
                                                                                                                                                                               
 ################################################################################
 #
@@ -309,9 +308,9 @@ while (!$quit_threads) {
                   logMessage(1, "set_utc_start: ".$result.":".$response);
 
                 }
+                %tcs_cmds = ();
               }
 
-              %tcs_cmds = ();
             }
           }
 
@@ -334,7 +333,7 @@ while (!$quit_threads) {
   
           chomp $utc_start;
 
-          ($result, $response) = set_utc_start(ltrim($utc_start));
+          ($result, $response) = set_utc_start(ltrim($utc_start), \%tcs_cmds);
 
           # After the utc has been set, we can reset the tcs_cmds
           %tcs_cmds = ();
@@ -345,7 +344,7 @@ while (!$quit_threads) {
 
           $utc_start = $val;
 
-          ($result, $response) = set_utc_start(ltrim($utc_start));
+          ($result, $response) = set_utc_start(ltrim($utc_start), \%tcs_cmds);
 
           # After the utc has been set, we can reset the tcs_cmds
           %tcs_cmds = ();
@@ -640,7 +639,7 @@ sub start($\%) {
   }
 
   # Connect to dada_pwc_command
-  my $handle = Dada->connectToMachine($pwcc_host, $pwcc_port);
+  my $handle = Dada->connectToMachine($pwcc_host, $pwcc_port, 5);
 
   if (!$handle) {
     return ("fail", "Could not connect to dada_pwc_command ".$pwcc_host.":".$pwcc_port);
@@ -752,8 +751,9 @@ sub set_utc_start($\%) {
   system($cmd);
 
   my $fname = $results_dir."/obs.info";
-  open FH, ">$fname" or return ("fail","Could not create writeable file: ".$fname);
+  logMessage(2,"set_utc_start: creating obs.info \"".$fname."\"");
 
+  open FH, ">$fname" or return ("fail","Could not create writeable file: ".$fname);
   print FH "# Observation Summary created by: ".$0."\n";
   print FH "# Created: ".Dada->getCurrentDadaTime()."\n\n";
   print FH Dada->headerFormat("SOURCE",$tcs_cmds{"SOURCE"})."\n";
@@ -930,7 +930,7 @@ sub createDFBSimulator(\%) {
 
   logMessage(2,"createDFBSimulator: $host, $dest_port, $nbit, $npol, $ndim, $tsamp, $calfreq, $duration");
 
-  my $args = "$dest_port $nbit $npol $ndim $tsamp $calfreq $drate $duration $dest";
+  my $args = "-y $dest_port $nbit $npol $ndim $tsamp $calfreq $drate $duration $dest";
 
   my $result = "";
   my $response = "";
@@ -1144,7 +1144,7 @@ sub addHostCommands(\%\%) {
   # Determine the BW & FREQ for each channel
   my $cf = int($tcs_cmds{"CFREQ"});         # centre frequency
   my $tbw = int($tcs_cmds{"BANDWIDTH"});    # total bandwidth
-  my $bw = $tbw / int(NHOST);               # bandwidth per channel
+  my $bw = -1 * ($tbw / int(NHOST));        # bandwidth per channel
 
   my $i=0;
   for ($i=0; $i<NHOST; $i++) {

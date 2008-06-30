@@ -30,6 +30,7 @@ use constant MAX_GAIN      => 65535;
 # Global Variable Declarations
 #
 our %cfg = Dada->getDadaConfig();      # dada.cfg in a hash
+our $log_socket;
 our $socket;
 our $log_fh;
 
@@ -81,6 +82,12 @@ for ($i=0; $i < $nchan; $i++) {
   @pol1_gains[$i] = 0;
 }
 
+# Open a connection to the nexus logging facility
+$log_socket = Dada->nexusLogOpen($cfg{"SERVER_HOST"},$cfg{"SERVER_SYS_LOG_PORT"});
+if (!$log_socket) {
+  print "Could not open a connection to the nexus SYS log: $log_socket\n";
+}
+
 open $log_fh,">>$logfile" or die "Could not open logfile \"".$logfile."\" for appending\n";
 
 # Open a connection to the nexus logging facility
@@ -94,13 +101,13 @@ if (!$socket) {
 } else {
   
   $cmd = "CHANNEL_BASE";
-  logMessage(1, "srv0 <- ".$cmd);
+  logMessage(1, "INFO", "srv0 <- ".$cmd);
   print $socket $cmd."\r\n";
   $channel_base = Dada->getLine($socket);
-  logMessage(1, "srv0 -> ".$channel_base);
+  logMessage(1, "INFO", "srv0 -> ".$channel_base);
 
 
-  logMessage(1, "Asking for initial gains");
+  logMessage(2, "INFO", "Asking for initial gains");
   my $abs_chan = 0;
   my $result = "";
 
@@ -114,12 +121,16 @@ if (!$socket) {
 
   }
 
-  logMessage(1, "Received initial gains");
+  logMessage(2, "INFO", "Received initial gains");
+
+  my $last_val = 0;
+
+  my $got_both = 0;
 
   while (defined($line = <STDIN>)) {
 
     chomp $line;
-    logMessage(1, "STDIN : ".$line);
+    logMessage(2, "INFO", "STDIN : ".$line);
 
     # Check that we got a gain string from STDIN
     if ($line =~ /^GAIN (\d) (0|1) (0|1) (\d|\.)+$/) {
@@ -128,53 +139,76 @@ if (!$socket) {
 
       $abs_chan = ($nchan * $channel_base) + $chan;
 
+      # if (($requested_val > $last_val + 5) || ($requested_val < $last_val -5)) {
+      #   print $socket "BIG CHANGE: ".$last_val." => ".$requested_val."\r\n";
+      # }
+      # $last_val = $requested_val;
+
       if ($pol eq 0) {
         $current_gain = $pol0_gains[$chan];
       } else {
         $current_gain = $pol1_gains[$chan];
       }
-      logMessage(2, "Current Gain = ".$current_gain);
-
-      logMessage(2, "CHAN=".$chan.", ABS_CHAN=".$abs_chan.", POL=".$pol.", DIM=".$dim.", VAL=".$requested_val);
+      logMessage(2, "INFO", "Current Gain = ".$current_gain);
+      logMessage(2, "INFO", "CHAN=".$chan.", ABS_CHAN=".$abs_chan.", POL=".$pol.", DIM=".$dim.", VAL=".$requested_val);
 
       $new_gain = int($current_gain * $requested_val);
-      logMessage(2, "New Gain = ".$new_gain);
+      $new_gain = int((($pol0_gains[$chan] + $pol1_gains[$chan])/2.0) * $requested_val);
+      logMessage(2, "INFO", "New Gain = ".$new_gain);
 
+      $got_both += 1;
 
       if ($new_gain > MAX_GAIN) {
-        logMessage(0, "WARN: Attemping to set gain greater than ".MAX_GAIN.", clamping");
         $new_gain = MAX_GAIN;
       }
 
       if ($new_gain < MIN_GAIN) {
-        logMessage(0, "WARN: Attemping to set gain lower than MIN");
         $new_gain = MIN_GAIN;
       }
 
-      logMessage(2, $line." % changes gain from ".$current_gain." to ".$new_gain);
+      # Only forward message if gain is different and we have both pols
+      if (($new_gain != $current_gain) && ($got_both == 2)) {
 
-      $cmd = "APSRGAIN ".$abs_chan." ".$pol." ".$new_gain;
-      logMessage(1, "srv0 <- ".$cmd);
+        if ($new_gain >= MAX_GAIN) {
+          logMessage(0, "WARN", "Gain is set to Max ".MAX_GAIN);
+        }
 
-      #$result = set_dfb_gain($socket, $abs_chan, $pol, $current_gain, $new_gain);  
+        if ($new_gain <= MIN_GAIN) {
+          logMessage(0, "WARN", "Gain is set to Min ".MIN_GAIN);
+        }
 
-      #logMessage(1, "srv0 -> ".$result);
+        logMessage(2, "INFO", $line." % changes gain from ".$current_gain." to ".$new_gain);
 
-      #if ($pol eq 0) {
-      #  @pol0_gains[$chan] = $result;
-      #} else {
-      #  @pol1_gains[$chan] = $result;
-      #}
+        $cmd = "APSRGAIN ".$abs_chan." ".$pol." ".$new_gain;
+        logMessage(1, "INFO", "srv0 <- ".$cmd);
+
+        $result = set_dfb_gain($socket, $abs_chan, $pol, $current_gain, $new_gain);  
+
+        logMessage(1, "INFO", "srv0 -> ".$result);
+
+        if ($pol eq 0) {
+          @pol0_gains[$chan] = $result;
+        } else {
+          @pol1_gains[$chan] = $result;
+        }
+    
+        $got_both = 0;
+      }
+    
+    } elsif ($line =~ /^LEVEL (\d) (0|1) (0|1) (\d|\.)+$/) {
+
+      # Ignore LEVEL commands - only relevant to CPSR/2
 
     } else {
 
-      logMessage(0, "Error: \"$line\" was not a sensible gain input");
+      logMessage(0, "WARN", "STDIN: \"$line\" was not a sensible gain input");
 
     }
   }
 }
 
 close $log_fh;
+close $log_socket;
 
 exit 0;
 
@@ -182,10 +216,16 @@ exit 0;
 #
 # Logs a message to the Nexus
 #
-sub logMessage($$) {
-  (my $level, my $message) = @_;
+sub logMessage($$$) {
+  my ($level, $type, $message) = @_;
   if ($level <= DEBUG_LEVEL) {
     my $time = Dada->getCurrentDadaTime();
+    if (!($log_socket)) {
+      $log_socket = Dada->nexusLogOpen($cfg{"SERVER_HOST"},$cfg{"SERVER_SYS_LOG_PORT"});
+    }
+    if ($log_socket) {
+      Dada->nexusLogMessage($log_socket, $time, "sys", $type, "gain ctrl", $message);
+    }
     $| = 1;
     print $log_fh "[".$time."] ".$message."\n";
   }
@@ -199,6 +239,9 @@ sub sigHandle($) {
   if ($socket) {
     close($socket);
   }
+  if ($log_socket) {
+    close($log_socket);
+  }
 
   print STDERR basename($0)." : Exiting\n";
 
@@ -210,8 +253,12 @@ sub sigPipeHandle($) {
 
   my $sigName = shift;
   print STDERR basename($0)." : Received SIG".$sigName."\n";
+  close($socket);
+  close($log_socket);
   $socket = 0;
+  $log_socket = 0;
   $socket = Dada->connectToMachine($cfg{"SERVER_HOST"},$cfg{"SERVER_GAIN_CONTROL_PORT"}, 1);
+  $log_socket = Dada->nexusLogOpen($cfg{"SERVER_HOST"},$cfg{"SERVER_SYS_LOG_PORT"});
 
 }
 
@@ -230,33 +277,33 @@ sub get_dfb3_gain($$$) {
 
   my $cmd = "APSRGAIN ".$chan." ".$pol;
 
-  logMessage(1, "srv0 <- ".$cmd);
+  logMessage(2, "INFO", "srv0 <- ".$cmd);
 
   print $socket $cmd."\r\n";
-                                                                                                                                           
+
   # The DFB3 should return a string along the lines of
   # OK <chan> <pol> <value>
-                                                                                                                                           
+
   my $dfb_response = Dada->getLine($socket);
 
-  logMessage(1, "srv0 -> ".$dfb_response);
-                                                                                                                                           
+  logMessage(2, "INFO", "srv0 -> ".$dfb_response);
+
   my ($result, $dfb_chan, $dfb_pol, $dfb_gain) = split(/ /,$dfb_response);
 
   if ($result ne "OK") {
 
-    logMessage(0, "DFB3 returned an error: \"".$dfb_response);
+    logMessage(0, "WARN", "DFB3 returned an error: \"".$dfb_response."\"");
     return ("fail", 0);
 
   }
 
   if ($dfb_chan ne $chan) {
-    logMessage(0, "DFB3 returned an channel mismatch: requested ".$chan.", received ".$dfb_chan);
+    logMessage(0, "WARN", "DFB3 returned an channel mismatch: requested ".$chan.", received ".$dfb_chan);
     return ("fail", 0);
   }
 
   if ($dfb_pol ne $pol) {
-    logMessage(0, "DFB3 returned an pol mismatch: requested ".$pol.", received ".$dfb_pol);
+    logMessage(0, "WARN", "DFB3 returned an pol mismatch: requested ".$pol.", received ".$dfb_pol);
     return ("fail", 0);
   }
 
@@ -267,23 +314,23 @@ sub get_dfb3_gain($$$) {
 sub set_dfb_gain($$$$$) {
 
   my ($socket, $chan, $pol, $curr_val, $val) = @_;
-                                                                                                                                           
+
   my $cmd = "APSRGAIN ".$chan." ".$pol." ".$val;
-                                                                                                                                           
-  logMessage(2, "srv0 <- ".$cmd);
-                                                                                                                                           
+
+  logMessage(2, "INFO", "srv0 <- ".$cmd);
+  
   print $socket $cmd."\r\n";
-                                                                                                                                           
+ 
   # The DFB3 should return a string along the lines of
   # OK 
-                                                                                                                                           
+
   my $dfb_response = Dada->getLine($socket);
-                                                                                                                                           
-  logMessage(2, "srv0 -> ".$dfb_response);
+
+  logMessage(2, "INFO", "srv0 -> ".$dfb_response);
 
   if ($dfb_response ne "OK") {
 
-    logMessage(0, "DFB3 returned an error: \"".$dfb_response);
+    logMessage(0, "WARN", "DFB3 returned an error: \"".$dfb_response);
     return $curr_val;
 
   } else {

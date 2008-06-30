@@ -9,7 +9,7 @@ dist_bin_SCRIPTS = client_archive_manager.pl \
                    server_aux_manager.pl \
                    server_create_plots.pl \
                    server_dfb_gain_simulator.pl \
-                   server_gain_controller.pl \
+                   server_gain_manager.pl \
                    server_process_result.pl \
                    server_results_manager.pl \
                    web_style.txt \
