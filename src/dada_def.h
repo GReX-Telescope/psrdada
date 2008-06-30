@@ -55,8 +55,8 @@
 /* default port to connect to dbnic logging interface */
 #define DADA_DEFAULT_DBNDB_LOG  56071
 
-/* default file size of 1 GB */
-#define DADA_DEFAULT_FILESIZE 1073741824
+/* default file size of 640 Million bytes */
+#define DADA_DEFAULT_FILESIZE 640000000
 
 #define DADA_DEFAULT_XFERSIZE DADA_DEFAULT_FILESIZE
 
@@ -65,6 +65,9 @@
 
 /* the format of the UTC_START string used in call to strftime */
 #define DADA_TIMESTR "%Y-%m-%d-%H:%M:%S"
+
+/* Length of the DADA_TIMESTR */
+#define DADA_TIMESTR_LENGTH 19
 
 #define DADA_ERROR_SOFT  -1
 #define DADA_ERROR_HARD  -2
