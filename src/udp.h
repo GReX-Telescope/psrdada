@@ -1,89 +1,153 @@
 #ifndef __DADA_UDP_H
 #define __DADA_UDP_H
 
+/*
+ * Generic functions for udp sockets
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
-#include <time.h>
+#include <errno.h>
+#include <string.h>
 
-/* Maximum size of a UDP packet */
-#define UDPBUFFSIZE 16384
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
 
-/* Size of header component of the data packet */
-#define UDPHEADERSIZE 14
 
-/* Size of data component of the data packet */
-#define DEFAULT_UDPDATASIZE 1458
+#include "multilog.h"
 
-/* header struct for UDP packet from board */ 
-typedef struct {
-  unsigned char length;
-  unsigned char source;
-  unsigned int sequence;
-  unsigned char bits;
-  unsigned char channels;
-  unsigned char bands;
-  unsigned char bandID[4];
-  unsigned int pollength;
-} header_struct;
+#define KERNEL_BUFFER_SIZE_MAX     67108864
+#define KERNEL_BUFFER_SIZE_DEFAULT 131071
+#define STATS_INIT = {0, 0, 0, 0}
 
-void decode_header(char *buffer, header_struct *header);
-void encode_header(char *buffer, header_struct *header);
-void print_header(header_struct *header);
+typedef struct{
+  uint64_t received;
+  uint64_t dropped;
+  uint64_t received_per_sec;
+  uint64_t dropped_per_sec;
+}stats_t;
 
-void encode_header(char *buffer, header_struct *header) {
-
-  if (header->bits == 0) header->bits = 8;
-        
-  buffer[0] = header->length;
-  buffer[1] = header->source;
-  int temp = header->sequence;
-  buffer[5] = temp & 0xff;
-  buffer[4] = (temp >> 8) & 0xff;
-  buffer[3] = (temp >> 16) & 0xff;
-  buffer[2] = (temp >> 24) & 0xff;
-  buffer[6] = header->bits;
-  buffer[8] = header->channels;
-  buffer[9] = header->bands;
-  buffer[10] = header->bandID[0];
-  buffer[11] = header->bandID[1];
-  buffer[12] = header->bandID[2];
-  buffer[13] = header->bandID[3];
-
+int64_t sock_recv (int fd, char* buffer, uint64_t size, int flags)
+{
+  int64_t received = 0;
+  received = recvfrom (fd, buffer, size, 0, NULL, NULL);
+                                                                                                        
+  if (received < 0) {
+    perror ("sock_recv recvfrom");
+    return -1;
+  }
+  if (received == 0) {
+    fprintf (stderr, "sock_recv received zero bytes\n");
+  }
+                                                                                                        
+  return received;
 }
 
-void decode_header(char *buffer, header_struct *header) {
-    
-  int temp;
+/*
+ * Creates a UDP socket with the following parameters:
+ *
+ *   log        multilog to print messages to
+ *   interface  interface to open socket on
+ *   port       port to listen on
+ *
+ *   set the buffer size to 64MB
+ *   prints output errors to log
+ *   return a fd of the opened socket
+ */
+int dada_create_udp_socket(multilog_t* log, const char* interface, int port, int verbose) {
 
-  /* header decode */
-  header->length    = buffer[0];
-  header->source    = buffer[1];
-  header->sequence  = buffer[2]; 
-  header->sequence  <<= 24;
-  temp              = buffer[3];
-  header->sequence  |= ((temp << 16) & 0xff0000);
-  temp              = buffer[4];
-  header->sequence  |= (temp << 8) & 0xff00;
-  header->sequence  |=  (buffer[5] & 0xff);
-                                                                
-  header->bits      = buffer[6];    
-  header->channels  = buffer[8];
-  header->bands     = buffer[9];
-                                                 
-  header->bandID[0] = buffer[10];
-  header->bandID[1] = buffer[11];
-  header->bandID[2] = buffer[12];
-  header->bandID[3] = buffer[13];
-                      
+  const int std_buffer_size = KERNEL_BUFFER_SIZE_DEFAULT;
+  const int pref_buffer_size = KERNEL_BUFFER_SIZE_MAX;
+
+  int fd = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP);
+
+  if (fd < 0) {
+    multilog(log, LOG_ERR, "Could not created UDP socket: %s\n",
+             strerror(errno));
+    return -1;
+  }
+
+  if (verbose) 
+    multilog(log, LOG_INFO, "Created UDP socket\n");
+
+  struct sockaddr_in udp_sock;
+  bzero(&(udp_sock.sin_zero), 8);                     // clear the struct
+  udp_sock.sin_family = AF_INET;                      // internet/IP
+  udp_sock.sin_port = htons(port);                    // set the port number
+  if (strcmp(interface,"any") == 0) {
+    udp_sock.sin_addr.s_addr = htonl(INADDR_ANY);     // from any interface
+  } else {
+    udp_sock.sin_addr.s_addr = inet_addr(interface);  // from a specific IP address
+  }
+
+  if (bind(fd, (struct sockaddr *)&udp_sock, sizeof(udp_sock)) == -1) {
+    multilog (log, LOG_ERR, "Error binding UDP socket: %s\n", strerror(errno));
+    return -1;
+  }
+
+  if (verbose) 
+    multilog(log, LOG_INFO, "UDP socket bound to %s:%d\n", interface, port);
+
+  // try setting the buffer to the maximum, warn if we cant
+  int len = 0;
+  int value = pref_buffer_size;
+  int retval = 0;
+  len = sizeof(value);
+  retval = setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &value, len);
+  if (retval != 0) {
+    perror("setsockopt SO_RCVBUF");
+    return -1;
+  }
+
+  // now check if it worked....
+  len = sizeof(value);
+  value = 0;
+  retval = getsockopt(fd, SOL_SOCKET, SO_RCVBUF, &value, (socklen_t *) &len);
+  if (retval != 0) {
+    perror("getsockopt SO_RCVBUF");
+    return -1;
+  }
+
+  // If we could not set the buffer to the desired size, warn...
+  if (value/2 != pref_buffer_size) {
+    multilog (log, LOG_WARNING, "Warning. Failed to set udp socket's "
+              "buffer size to: %d, falling back to default size: %d\n",
+              pref_buffer_size, std_buffer_size);
+
+    len = sizeof(value);
+    value = std_buffer_size;
+    retval = setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &value, len);
+    if (retval != 0) {
+      perror("setsockopt SO_RCVBUF");
+      return -1;
+    }
+
+    // Now double check that the buffer size is at least correct here
+    len = sizeof(value);
+    value = 0;
+    retval = getsockopt(fd, SOL_SOCKET, SO_RCVBUF, &value,
+                        (socklen_t *) &len);
+    if (retval != 0) {
+      perror("getsockopt SO_RCVBUF");
+      return -1;
+    }
+
+
+    // If we could not set the buffer to the desired size, warn...
+    if (value/2 != std_buffer_size) {
+      multilog (log, LOG_WARNING, "Warning. Failed to set udp socket's "
+                "buffer size to: %d\n", std_buffer_size);
+    }
+
+  } else {
+
+    if (verbose)
+      multilog(log, LOG_INFO, "UDP socket buffer size set to %d\n", pref_buffer_size);
+
+  }
+
+  return fd;
 }
 
-void print_header(header_struct *header) {
-  fprintf(stderr,"length = %d\n",header->length);
-  fprintf(stderr,"source = %d\n",header->source);
-  fprintf(stderr,"sequence= %d\n",header->sequence);
-  fprintf(stderr,"bits = %d\n",header->bits);
-  fprintf(stderr,"channels = %d\n",header->channels);
-  fprintf(stderr,"bands = %d\n",header->bands);
-}
-
-#endif /* UDP_H */
+#endif /* __DADA_UDP_H */
