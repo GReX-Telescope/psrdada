@@ -80,6 +80,9 @@ extern "C" {
   /*! tell how many bytes can be written into the ring buffer before its full */
   int64_t ipcio_space_left (ipcio_t* ipc);
 
+  /*! tell how many bytes can be written into the ring buffer before its full */
+  float ipcio_percent_full(ipcio_t* ipc);
+
   uint64_t ipcio_get_soclock_byte(ipcio_t* ipc);
 
 #ifdef __cplusplus

@@ -519,6 +519,16 @@ int64_t ipcio_space_left(ipcio_t* ipc)
 
 }
 
+/* Returns the percentage of space left in the ring buffer */
+float ipcio_percent_full(ipcio_t* ipc) {
+
+  uint64_t nbufs = ipcbuf_get_nbufs ((ipcbuf_t *)ipc);
+  uint64_t full_bufs = ipcbuf_get_nfull((ipcbuf_t*) ipc);
+  return ((float)full_bufs) / ((float)nbufs);
+
+}
+
+
 /* Returns the byte corresponding the start of data clocking/recording */
 uint64_t ipcio_get_soclock_byte(ipcio_t* ipc) {
   uint64_t bufsz = ipcbuf_get_bufsz ((ipcbuf_t *)ipc);
