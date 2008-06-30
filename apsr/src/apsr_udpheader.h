@@ -1,9 +1,9 @@
 /* dada, ipc stuff */
 
 #include "dada_hdu.h"
-#include "udp.h"
-#include "apsr_def.h"
 #include "dada_def.h"
+#include "apsr_def.h"
+#include "apsr_udp.h"
 
 #include "futils.h"
 

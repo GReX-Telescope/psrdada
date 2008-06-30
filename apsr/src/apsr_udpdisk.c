@@ -1,11 +1,6 @@
+#include <math.h>
 #include "apsr_udpdisk.h"
 
-#include <math.h>
-
-typedef struct {
-  signed char r;
-  signed char i;
-} complex_char;
 
 void usage()
 {
@@ -19,22 +14,6 @@ void usage()
      " header_file    file containing ascii header\n",APSR_DEFAULT_UDPDISK_PORT);
 }
 
-
-int64_t sock_recv (int fd, char* buffer, uint64_t size, int flags)
-{
-  int64_t received = 0;
-  received = recvfrom (fd, buffer, size, 0, NULL, NULL);
-
-  if (received < 0) {
-    perror ("sock_recv recvfrom");
-    return -1;
-  }
-  if (received == 0) {
-    fprintf (stderr, "sock_recv received zero bytes\n");
-  }
-
-  return received;
-}
 
 time_t udpdisk_start_function (udpdisk_t* udpdisk, time_t start_utc)
 {

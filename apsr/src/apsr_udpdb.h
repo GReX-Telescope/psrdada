@@ -3,7 +3,7 @@
 #include "dada_hdu.h"
 #include "dada_def.h"
 #include "dada_pwc_main.h"
-#include "udp.h"
+#include "apsr_udp.h"
 
 #include "ipcio.h"
 #include "multilog.h"

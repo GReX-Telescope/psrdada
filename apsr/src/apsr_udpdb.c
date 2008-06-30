@@ -1,12 +1,7 @@
-#include "apsr_def.h"
-#include "apsr_udpdb.h"
-
 #include <math.h>
 
-typedef struct {
-  signed char r;
-  signed char i;
-} complex_char;
+#include "apsr_def.h"
+#include "apsr_udpdb.h"
 
 void usage()
 {
@@ -24,22 +19,9 @@ void usage()
 }
 
 
-int64_t sock_recv (int fd, char* buffer, uint64_t size, int flags)
-{
-  int64_t received = 0;
-  received = recvfrom (fd, buffer, size, 0, NULL, NULL);
-
-  if (received < 0) {
-    perror ("sock_recv recvfrom");
-    return -1;
-  }
-  if (received == 0) {
-    fprintf (stderr, "sock_recv received zero bytes\n");
-  }
-
-  return received;
-}
-
+/*
+ * Error function
+ */
 int udpdb_error_function (dada_pwc_main_t* pwcm) {
 
   udpdb_t *udpdb = (udpdb_t*)pwcm->context;
@@ -337,7 +319,7 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
         /* Set the number of packets a buffer can hold */
         buffer_capacity = udpdb->datasize / udpdb->packet_length;
 
-	      multilog(log, LOG_INFO, "packet_length = %"PRIu64" bytes, udpdb->datasize = %"PRIu64", buffer_capacity = %"PRIu64"\n",udpdb->packet_length, udpdb->datasize, buffer_capacity);
+	      //multilog(log, LOG_INFO, "packet_length = %"PRIu64" bytes, udpdb->datasize = %"PRIu64", buffer_capacity = %"PRIu64"\n",udpdb->packet_length, udpdb->datasize, buffer_capacity);
 
         /* Adjust sequence numbers, now that we know packet_length*/
         min_sequence = udpdb->expected_sequence_no;

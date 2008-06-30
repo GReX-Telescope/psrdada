@@ -6,14 +6,8 @@
  *
  */
 
-#include "apsr_udpheader.h"
-
 #include <math.h>
-
-typedef struct {
-  signed char r;
-  signed char i;
-} complex_char;
+#include "apsr_udpheader.h"
 
 void usage()
 {
@@ -25,22 +19,6 @@ void usage()
      " -V             very verbose messages\n", APSR_DEFAULT_UDPDB_PORT);
 }
 
-
-int64_t sock_recv (int fd, char* buffer, uint64_t size, int flags)
-{
-  int64_t received = 0;
-  received = recvfrom (fd, buffer, size, 0, NULL, NULL);
-
-  if (received < 0) {
-    perror ("sock_recv recvfrom");
-    return -1;
-  }
-  if (received == 0) {
-    fprintf (stderr, "sock_recv received zero bytes\n");
-  }
-
-  return received;
-}
 
 time_t udpheader_start_function (udpheader_t* udpheader, time_t start_utc)
 {
