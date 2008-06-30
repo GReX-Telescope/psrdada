@@ -22,6 +22,7 @@ void usage()
   fprintf (stdout,
      "dada_dbnull [options]\n"
      " -b n       number of milliseconds to load the cpu for each sublock\n"
+     " -k key     connect to key data block\n"
      " -v         be verbose\n"
      " -d         run as daemon\n");
 }
@@ -112,13 +113,16 @@ int main (int argc, char **argv)
   /* Quit flag */
   char quit = 0;
 
+  /* dada key for SHM */
+  key_t dada_key = DADA_DEFAULT_BLOCK_KEY;
+
   int arg = 0;
 
   /* TODO the amount to conduct a busy sleep inbetween clearing each sub
    * block */
   int busy_sleep = 0;
 
-  while ((arg=getopt(argc,argv,"dN:v")) != -1)
+  while ((arg=getopt(argc,argv,"dN:vk:")) != -1)
     switch (arg) {
       
     case 'd':
@@ -132,6 +136,14 @@ int main (int argc, char **argv)
     case 'v':
       verbose=1;
       break;
+
+    case 'k':
+      if (sscanf (optarg, "%x", &dada_key) != 1) {
+        fprintf (stderr, "dada_db: could not parse key from %s\n", optarg);
+        return -1;
+      }
+      break;
+                                                                                
       
     default:
       usage ();
@@ -149,6 +161,8 @@ int main (int argc, char **argv)
     multilog_add (log, stderr);
 
   hdu = dada_hdu_create (log);
+
+  dada_hdu_set_key(hdu, dada_key);
 
   if (dada_hdu_connect (hdu) < 0)
     return EXIT_FAILURE;

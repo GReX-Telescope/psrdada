@@ -24,9 +24,10 @@
 void usage()
 {
   fprintf (stdout,
-     "dada_dbmonitor [options]\n"
+     "dada_dbxferinfo [options]\n"
+     " -k         hexadecimal shared memory key  [default: %x]\n"
      " -v         be verbose\n"
-     " -d         run as daemon\n");
+     " -d         run as daemon\n", DADA_DEFAULT_BLOCK_KEY);
 }
 
 
@@ -45,14 +46,25 @@ int main (int argc, char **argv)
   /* Flag set in verbose mode */
   char verbose = 0;
 
+  /* hexadecimal shared memory key */
+  key_t dada_key = DADA_DEFAULT_BLOCK_KEY;
+
   int arg = 0;
 
   /* TODO the amount to conduct a busy sleep inbetween clearing each sub
    * block */
 
-  while ((arg=getopt(argc,argv,"dv")) != -1)
+  while ((arg=getopt(argc,argv,"k:dv")) != -1)
     switch (arg) {
-      
+     
+    case 'k':
+      if (sscanf (optarg, "%x", &dada_key) != 1) {
+        fprintf (stderr,"dada_dbxferinfo: could not parse key from %s\n",
+                         optarg);
+        return -1;
+      }
+      break;
+
     case 'd':
       daemon=1;
       break;
@@ -77,6 +89,8 @@ int main (int argc, char **argv)
   multilog_serve (log, DADA_DEFAULT_DBMONITOR_LOG);
 
   hdu = dada_hdu_create (log);
+
+  dada_hdu_set_key(hdu, dada_key);
 
   if (verbose)
     printf("Connecting to data block\n");
@@ -112,9 +126,10 @@ int main (int argc, char **argv)
   }
 
   int i=0;
+  if (verbose) 
+    fprintf(stderr,"Data Block Xfers:\n");
   for (i=0;i<IPCBUF_XFERS;i++) {
     if (verbose) {
-      fprintf(stderr,"Data Block Xfers:\n");
       fprintf(stderr,"[%"PRIu64",%"PRIu64"]=>[%"PRIu64",%"PRIu64"] %d\n", 
                       db->sync->s_buf[i],db->sync->s_byte[i],
                       db->sync->e_buf[i],db->sync->e_byte[i],db->sync->eod[i]);
