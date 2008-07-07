@@ -125,8 +125,6 @@ if (!$socket) {
 
   my $last_val = 0;
 
-  my $got_both = 0;
-
   while (defined($line = <STDIN>)) {
 
     chomp $line;
@@ -139,24 +137,22 @@ if (!$socket) {
 
       $abs_chan = ($nchan * $channel_base) + $chan;
 
-      # if (($requested_val > $last_val + 5) || ($requested_val < $last_val -5)) {
-      #   print $socket "BIG CHANGE: ".$last_val." => ".$requested_val."\r\n";
-      # }
-      # $last_val = $requested_val;
+      if (($requested_val > $last_val + 5) || ($requested_val < $last_val -5)) {
+        print $socket "BIG CHANGE: pol".$pol." ".$last_val." => ".$requested_val."\r\n";
+      }
+      $last_val = $requested_val;
 
       if ($pol eq 0) {
         $current_gain = $pol0_gains[$chan];
       } else {
         $current_gain = $pol1_gains[$chan];
       }
+
       logMessage(2, "INFO", "Current Gain = ".$current_gain);
       logMessage(2, "INFO", "CHAN=".$chan.", ABS_CHAN=".$abs_chan.", POL=".$pol.", DIM=".$dim.", VAL=".$requested_val);
 
       $new_gain = int($current_gain * $requested_val);
-      $new_gain = int((($pol0_gains[$chan] + $pol1_gains[$chan])/2.0) * $requested_val);
       logMessage(2, "INFO", "New Gain = ".$new_gain);
-
-      $got_both += 1;
 
       if ($new_gain > MAX_GAIN) {
         $new_gain = MAX_GAIN;
@@ -167,7 +163,7 @@ if (!$socket) {
       }
 
       # Only forward message if gain is different and we have both pols
-      if (($new_gain != $current_gain) && ($got_both == 2)) {
+      if ($new_gain != $current_gain) {
 
         if ($new_gain >= MAX_GAIN) {
           logMessage(0, "WARN", "Gain is set to Max ".MAX_GAIN);
@@ -192,10 +188,9 @@ if (!$socket) {
           @pol1_gains[$chan] = $result;
         }
     
-        $got_both = 0;
       }
     
-    } elsif ($line =~ /^LEVEL (\d) (0|1) (0|1) (\d|\.)+$/) {
+    } elsif ($line =~ /^LEVEL (\d) (0|1) (0|1) (-|\d|\.)+$/) {
 
       # Ignore LEVEL commands - only relevant to CPSR/2
 
