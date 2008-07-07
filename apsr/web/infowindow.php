@@ -45,7 +45,9 @@ $config = getConfigFile(SYS_CONFIG, TRUE);
 
         var values = lines[i].split(":::")
         if (values[0]) {
-          document.getElementById(values[0]).innerHTML = values[1]
+          if (document.getElementById(values[0])) {
+            document.getElementById(values[0]).innerHTML = values[1]
+          }
         }
       }
     }
@@ -113,9 +115,9 @@ $config = getConfigFile(SYS_CONFIG, TRUE);
           <td align="left" class="smalltext"><span class="smalltext" id ="NBIT"><?echo $spec["NBIT"]?></span></td>
         </tr>
         <tr>
-          <td align="right" class="smalltext"><b>Ndim</b></td>
+          <td align="right" class="smalltext"><b>Project ID</b></td>
           <td width=10>&nbsp;</td>
-          <td align="left" class="smalltext"><span class="smalltext" id ="NDIM"><?echo $spec["NDIM"]?></span></td>
+          <td align="left" class="smalltext"><span class="smalltext" id ="PID"><?echo $spec["PID"]?></span></td>
         </tr>
       </table>
     </td>
@@ -123,17 +125,12 @@ $config = getConfigFile(SYS_CONFIG, TRUE);
     <td>
       <table cellpadding=0 cellspacing=0 border=0>
         <tr>
-          <td align="right" class="smalltext"><b>Project ID</b></td>
-          <td width=10>&nbsp;</td>
-          <td align="left" class="smalltext"><span class="smalltext" id ="PID"><?echo $spec["PID"]?></span></td>
-        </tr>
-        <tr>
           <td align="right" class="smalltext"><b>UTC START</b></td>
           <td width=10>&nbsp;</td>
           <td align="left" class="smalltext"><span class="smalltext" id ="UTC_START"><?echo $spec["UTC_START"]?></span></td>
         </tr>
         <tr>
-          <td align="right" class="smalltext"><b>Intergrated</b></td>
+          <td align="right" class="smalltext"><b>Integrated</b></td>
           <td width=10>&nbsp;</td>
           <td align="left" class="smalltext"><span class="smalltext" id ="INTEGRATED"><?echo $spec["INTEGRATED"]?></span></td>
         </tr>
