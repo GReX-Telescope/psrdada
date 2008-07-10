@@ -30,7 +30,8 @@ use constant LOGFILE     => "gain_manager.log";
 # Global Variables
 #
 our %cfg = Dada->getDadaConfig();      # dada.cfg
-our $quit_daemon : shared  = 0;
+our $quit_daemon : shared = 0;
+our $dfb3_socket = 0;
 
 
 # Autoflush output
@@ -40,6 +41,7 @@ $| = 1;
 # Signal Handler
 $SIG{INT} = \&sigHandle;
 $SIG{TERM} = \&sigHandle;
+$SIG{PIPE} = \&sigPipeHandle;
 
 
 #
@@ -104,41 +106,42 @@ die "Could not create listening socket: $!\n" unless $server_socket;
 # Redirect standard output and error
 Dada->daemonize($logfile, $pidfile);
 
-debugMessage(2, "Trying to connect to DFB3 host: ".$dfb3_host.":".$dfb3_port);
-my $dfb3_socket = Dada->connectToMachine($dfb3_host, $dfb3_port);
-my $dfb3_gain = 0;
-if (!$dfb3_socket) {
-  debugMessage(0, "Could not connect to DFB3 Machine ".$dfb3_host.":".$dfb3_port);
-  $dfb3_socket = 0;
-} else {
-  debugMessage(0, "Connected to DFB3 Machine ".$dfb3_host.":".$dfb3_port);
-}
-
-
+# Start the daemon control thread
+$daemon_control_thread = threads->new(\&daemonControlThread);
 
 debugMessage(0, "STARTING SCRIPT");
 
-# Start the daemon control thread
-$daemon_control_thread = threads->new(\&daemonControlThread);
+debugMessage(1, "Trying to connect to pdfb3 ".$dfb3_host.":".$dfb3_port);
+$dfb3_socket = Dada->connectToMachine($dfb3_host, $dfb3_port);
+my $dfb3_gain = 0;
+if (!$dfb3_socket) {
+  debugMessage(0, "Could not connect to pdfb3, will continue to poll for a connection");
+  $dfb3_socket = 0;
+} else {
+  debugMessage(1, "Connection to pdfb establised");
+}
+
 
 my $read_set = new IO::Select();  # create handle set for reading
 $read_set->add($server_socket);   # add the main socket to the set
 
-debugMessage(2, "Waiting for connection on ".$cfg{"SERVER_HOST"}.":".$cfg{"SERVER_GAIN_CONTROL_PORT"});
+debugMessage(1, "PWC gain socket opened ".$cfg{"SERVER_HOST"}.":".$cfg{"SERVER_GAIN_CONTROL_PORT"});
 
 while (!$quit_daemon) {
 
   # If we haven't got a DFB3 connection, try to open it
   if (!$dfb3_socket) {
 
-    debugMessage(1, "Trying to connect to the DFB3 ".$dfb3_host.":".$dfb3_port);
+    debugMessage(1, "Trying to connect to pdfb3 ".$dfb3_host.":".$dfb3_port);
+    $dfb3_socket = Dada->connectToMachine($dfb3_host, $dfb3_port, 1);
 
-    $dfb3_socket = Dada->connectToMachine($dfb3_host, $dfb3_port, 10);
     if ($dfb3_socket) {
-      debugMessage(0, "Connected to DFB3 Machine ".$dfb3_host.":".$dfb3_port);
+
+      debugMessage(0, "Connection to to pdfb3 re-established");
       $read_set->add($dfb3_socket);
+
     } else {
-      debugMessage(0, "Failed to connect to DFB Machine ".$dfb3_host.":".$dfb3_port);
+      debugMessage(1, "Failed to connect to pdfb3");
       $dfb3_socket = 0;
     }
   }
@@ -157,22 +160,21 @@ while (!$quit_daemon) {
       my $hostinfo = gethostbyaddr($handle->peeraddr);
       my $hostname = $hostinfo->name;
 
-      debugMessage(2, "Accepting connection from ".$hostname);
+      debugMessage(1, "Accepting connection from ".$hostname);
 
       # Add this read handle to the set
       $read_set->add($handle); 
 
     } elsif ($rh == $dfb3_socket) {
 
-      debugMessage(0, "Unexpected message from the DFB3 socket");
       $string = Dada->getLine($rh);
       if (! defined $string) {
-        debugMessage(2, "Lost connection from DFB3 ".$dfb3_host.":".$dfb3_port.", closing socket");
+        debugMessage(0, "Lost pdfb3 connection, closing socket, attempting re-connect...");
         $read_set->remove($rh);
         close($rh);
         $dfb3_socket = 0;
       } else {
-        debugMessage(0, "Received \"".$string."\" from the DFB3, ignoring");
+        debugMessage(0, "Received \"".$string."\" from the pdfb3, ignoring");
       }
 
     } else {
@@ -186,8 +188,8 @@ while (!$quit_daemon) {
       # If the string is not defined, then we have lost the connection.
       # remove it from the read_set
       if (! defined $string) {
-        debugMessage(1, "Lost connection from ".$hostname.", closing socket");
 
+        debugMessage(1, "Lost connection from ".$hostname.", closing socket");
         $read_set->remove($rh);
         close($rh);
 
@@ -213,7 +215,7 @@ while (!$quit_daemon) {
 
           my ($ignore, $chan, $pol) = split(/ /, $string);
           my $dfb3_string = "APSRGAIN ".$chan." ".$pol;
-          debugMessage(1, $machine." -> ".$dfb3_string);
+          debugMessage(2, $machine." -> ".$dfb3_string);
 
           my $dfb3_gain = 0;
           my $dfb3_response = "FAIL";
@@ -227,11 +229,11 @@ while (!$quit_daemon) {
 
           print $rh $dfb3_response."\r\n";
 
-          debugMessage(1, $machine." <- ".$dfb3_response);
+          debugMessage(2, $machine." <- ".$dfb3_response);
 
         } elsif ($string =~ m/^APSRGAIN (\d+) (0|1) (\d)+$/) {
 
-          debugMessage(1, $machine." -> ".$string);
+          debugMessage(2, $machine." -> ".$string);
 
           my ($ignore, $chan, $pol, $val) = split(/ /, $string);
           my $dfb3_string = "APSRGAIN ".$chan." ".$pol." ".$val;
@@ -248,11 +250,11 @@ while (!$quit_daemon) {
           }
 
           print $rh $dfb3_response."\r\n";
-          debugMessage(1, $machine." <- ".$dfb3_response);
+          debugMessage(2, $machine." <- ".$dfb3_response);
 
         } elsif ($string =~ m/^APSRGAINHACK (\d+) (0|1) (\d)+$/) {
                                                                                       
-          debugMessage(1, $machine." -> ".$string);
+          debugMessage(2, $machine." -> ".$string);
                                                                                       
           my ($ignore, $chan, $pol, $val) = split(/ /, $string);
           my $dfb3_string = "APSRGAIN ".$chan." ".$pol." ".$val;
@@ -269,7 +271,7 @@ while (!$quit_daemon) {
           }
                                                                                       
           print $rh $dfb3_response."\r\n";
-          debugMessage(1, $machine." <- ".$dfb3_response);
+          debugMessage(2, $machine." <- ".$dfb3_response);
                                                                                       
 
 
@@ -328,7 +330,7 @@ sub debugMessage($$) {
   (my $level, my $message) = @_;
   if ($level <= DEBUG_LEVEL) {
     my $time = Dada->getCurrentDadaTime();
-    print "[".$time."] ".$message."\n";
+    print STDERR "[".$time."] ".$message."\n";
   }
 }
 
@@ -345,3 +347,14 @@ sub sigHandle($) {
   exit(1);
                                                                                 
 }
+
+sub sigPipeHandle($) {
+
+  my $sigName = shift;
+  print STDERR basename($0)." : Received SIG".$sigName."\n";
+  print STDERR basename($0)." : Closing dfb3_socket\n";
+  close($dfb3_socket);
+  $dfb3_socket = 0;
+
+}
+
