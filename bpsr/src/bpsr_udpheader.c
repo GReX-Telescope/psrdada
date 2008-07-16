@@ -9,6 +9,7 @@
 #include "bpsr_udpheader.h"
 
 #include <sys/socket.h>
+#include "sock.h"
 #include <math.h>
 
 void usage()
@@ -74,7 +75,7 @@ time_t udpheader_start_function (udpheader_t* udpheader, time_t start_utc)
   assert(udpheader->next_buffer != 0);
 
   if (udpheader->verbose == 2) 
-    fprintf(stderr, "udpheader_start_function: setting internal buffers to %"PRIu64" bytes\n",
+    fprintf(stderr, "udpheader_start_function: setting internal buffers to %d bytes\n",
                     udpheader->datasize);
 
   /* 0 both the curr and next buffers */
@@ -98,9 +99,6 @@ time_t udpheader_start_function (udpheader_t* udpheader, time_t start_utc)
 
 void* udpheader_read_function (udpheader_t* udpheader, uint64_t* size)
 {
- 
-  multilog_t* log = udpheader->log;
-
   // A char with all bits set to 0
   char zerodchar = 'c'; 
   memset(&zerodchar,0,sizeof(zerodchar));
@@ -242,15 +240,13 @@ int udpheader_stop_function (udpheader_t* udpheader)
 {
 
   /* get our context, contains all required params */
-  int verbose = udpheader->verbose; /* saves some typing */
-
   float percent_dropped = 0;
 
   if (udpheader->expected_sequence_no) {
     percent_dropped = (float) ((double)udpheader->packets->dropped / (double)udpheader->expected_sequence_no);
   }
 
-  fprintf(stderr, "Packets dropped %"PRIu64" / %"PRIu64" = %10.8f %\n",
+  fprintf(stderr, "Packets dropped %"PRIu64" / %"PRIu64" = %10.8f %%\n",
           udpheader->packets->dropped, udpheader->expected_sequence_no, 
           percent_dropped);
   
@@ -275,9 +271,6 @@ int main (int argc, char **argv)
 
   /* accumulation length of the iBob board */
   int acc_len = BPSR_DEFAULT_ACC_LEN;
-
-  /* Flag set in daemon mode */
-  char daemon = 0;
 
   /* Flag set in verbose mode */
   char verbose = 0;
@@ -364,7 +357,6 @@ int main (int argc, char **argv)
   }
 
   int quit = 0;
-  int header_written = 0;
 
   while (!quit) {
 

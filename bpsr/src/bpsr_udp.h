@@ -35,7 +35,8 @@ int bpsr_create_udp_socket(multilog_t* log, const char* interface, int port, int
 /* Encode the counter into the first8 bytes of the buffer array */ 
 void encode_header (char *buffer, uint64_t counter) {
 
-  uint64ToByteArray (counter, (size_t) BPSR_UDP_COUNTER_BYTES, buffer, (int) BIG);
+  uint64ToByteArray (counter, (size_t) BPSR_UDP_COUNTER_BYTES, 
+                     (unsigned char*) buffer, (int) BIG);
   
 }
 
@@ -43,7 +44,9 @@ void encode_header (char *buffer, uint64_t counter) {
  * a 64 bit interger */
 uint64_t decode_header(char *buffer) {
 
-  uint64_t counter = byteArrayToUInt64 (buffer, (size_t) BPSR_UDP_COUNTER_BYTES, (int) BIG);
+  uint64_t counter = byteArrayToUInt64 ((unsigned char*) buffer,
+                                        (size_t) BPSR_UDP_COUNTER_BYTES,
+                                        (int) BIG);
   return counter;
 }
 

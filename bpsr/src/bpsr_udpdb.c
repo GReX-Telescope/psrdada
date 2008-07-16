@@ -8,6 +8,8 @@
 
 #include "bpsr_def.h"
 #include "bpsr_udpdb.h"
+
+#include "sock.h"
 #include <math.h>
 
 void usage()
@@ -24,7 +26,7 @@ void usage()
      " -H filename    ascii header information in file\n"
      " -c             don't verify udp headers against header block\n"
      " -S num         file size in bytes\n", 
-     BPSR_DEFAULT_ACC_LEN, BPSR_DEFAULT_UDPDB_PORT);
+     BPSR_DEFAULT_UDPDB_PORT);
 }
 
 
@@ -33,7 +35,6 @@ int udpdb_header_valid_function (dada_pwc_main_t* pwcm) {
 
   int utc_size = 1024;
   char utc_buffer[utc_size];
-  int resolution;
   int valid = 1;
 
   /* Check if the UTC_START is set in the header*/
@@ -153,7 +154,7 @@ time_t udpdb_start_function (dada_pwc_main_t* pwcm, time_t start_utc)
   /* Run the script to startup the ibob */
   char command[1024];
 
-  sprintf(command, "client_ibob_level_setter.pl -s -a %d %s", 
+  sprintf(command, "client_ibob_level_setter.pl -s -a %"PRIu64" %s", 
           udpdb->acc_len, myhostname);
 
   if (udpdb->verbose) 
@@ -203,9 +204,6 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
   struct timeval timeout;
   fd_set *rdsp = NULL;
   fd_set readset;
-
-  int i = 0;
-  int k = 0;
 
   /* Switch the next and current buffers and their respective counters */
   char *tmp;
@@ -712,9 +710,6 @@ int main (int argc, char **argv)
                   header_file);
         return EXIT_FAILURE;
       }
-
-      /* get our context, contains all required params */
-      udpdb_t* udpdb = (udpdb_t*)pwcm->context;
 
       if (verbose) fprintf(stderr,"Retrieved header information\n");
       
