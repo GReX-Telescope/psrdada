@@ -18,6 +18,7 @@ void usage()
 	   "\n"
 	   "WHERE options are:\n"
 	   " -c KEY=VAL     set KEY to VAL \n"
+           " -s size        set HDR_SIZE size in old headers \n"
 	   " -i header.txt  over-write header with text in specified file\n");
 }
 
@@ -44,10 +45,11 @@ int main (int argc, char **argv)
 
   /* header size read from current file */
   unsigned hdr_size = DADA_DEFAULT_HEADER_SIZE;
+  unsigned set_hdr_size = 0;
 
   int arg = 0;
 
-  while ((arg=getopt(argc,argv,"c:i:hv")) != -1)
+  while ((arg=getopt(argc,argv,"c:i:hs:v")) != -1)
 
     switch (arg)
     {      
@@ -67,6 +69,11 @@ int main (int argc, char **argv)
       install = optarg;
       break;
 
+    case 's':
+      hdr_size = set_hdr_size = atoi (optarg);
+      fprintf (stderr, "dada_edit: will set header size to %u\n", hdr_size);
+      break;
+
     case 'v':
       verbose=1;
       break;
@@ -79,7 +86,7 @@ int main (int argc, char **argv)
     }
 
   char* mode = "r";
-  if (val || install)
+  if (val || install || set_hdr_size)
     mode = "r+";
 
   for (arg = optind; arg < argc; arg++)
@@ -107,8 +114,18 @@ int main (int argc, char **argv)
 	return -1;
       }
 
+      if (set_hdr_size)
+      {
+        /* Set the header size */
+        if (ascii_header_set (current_header, "HDR_SIZE", "%u", hdr_size) != 0)
+        {
+          fprintf (stderr, "dada_edit: could not set HDR_SIZE\n");
+          return -1;
+        }
+      }
+
       /* Get the header size */
-      if (ascii_header_get (current_header, "HDR_SIZE", "%u", &hdr_size) != 1)
+      else if (ascii_header_get (current_header, "HDR_SIZE", "%u", &hdr_size) != 1)
       {
 	fprintf (stderr, "dada_edit: could not parse HDR_SIZE\n");
 	return -1;
@@ -140,7 +157,7 @@ int main (int argc, char **argv)
     {
     }
 
-    if (val || install)
+    if (val || install || set_hdr_size)
     {
       rewind (current_file);
 
