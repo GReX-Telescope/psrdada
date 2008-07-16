@@ -9,6 +9,8 @@
 
 #include "bpsr_def.h"
 #include "bpsr_udpdb_fast.h"
+#include "sock.h"
+
 #include <math.h>
 
 void usage()

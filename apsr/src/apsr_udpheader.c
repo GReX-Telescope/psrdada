@@ -7,6 +7,9 @@
  */
 
 #include <math.h>
+#include <stdlib.h>
+#include "sock.h"
+
 #include "apsr_udpheader.h"
 
 void usage()

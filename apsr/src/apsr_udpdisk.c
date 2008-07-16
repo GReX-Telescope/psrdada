@@ -1,4 +1,8 @@
+
+#include <stdlib.h>
+#include "sock.h"
 #include <math.h>
+
 #include "apsr_udpdisk.h"
 
 

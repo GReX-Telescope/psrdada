@@ -1,4 +1,5 @@
 #include "bpsr_udpdisk.h"
+#include "sock.h"
 
 #include <math.h>
 

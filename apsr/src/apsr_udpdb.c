@@ -1,3 +1,6 @@
+
+#include "sock.h"
+#include <unistd.h>
 #include <math.h>
 
 #include "apsr_def.h"
@@ -130,7 +133,7 @@ time_t udpdb_start_function (dada_pwc_main_t* pwcm, time_t start_utc)
   }
 
   /* Set the current machines name in the header block as RECV_HOST */
-  char myhostname[HOST_NAME_MAX] = "unknown";;
+  char myhostname[HOST_NAME_MAX] = "unknown";
   gethostname(myhostname,HOST_NAME_MAX); 
   ascii_header_set (pwcm->header, "RECV_HOST", "%s", myhostname);
   
