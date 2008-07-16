@@ -2,6 +2,12 @@
 #define __DADA_SOCK_H
 
 #include <sys/types.h>
+#include <unistd.h>
+
+#ifndef HOST_NAME_MAX
+#include <limits.h>
+#define HOST_NAME_MAX _POSIX_HOST_NAME_MAX
+#endif
 
 #ifdef __cplusplus
 extern "C" {
