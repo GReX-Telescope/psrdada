@@ -1,12 +1,24 @@
 
-bin_PROGRAMS = apsr_udpdb apsr_dbtriwave apsr_dbudp \
-	test_boardudp apsr_dbtriripple bat_to_utc apsr_udpdisk apsr_udpheader \
-  apsr_udpgenerator
+bin_PROGRAMS = apsr_udpdb apsr_dbtriwave \
+	apsr_dbtriripple bat_to_utc apsr_udpdisk apsr_udpheader
 
-LDADD = ../../src/libdada.la ../../3rdparty/libtimers.la
+LDADD = ../../src/libpsrdada.la
 
-INCLUDES = -I../../3rdparty -I../../src
+INCLUDES = -I../../src
 
-ARCH = @ARCH@
+#############################################################################
+#
+# Depends on 3rdparty code
+#
+#############################################################################
 
+if COMPILE_THIRD
+
+bin_PROGRAMS += apsr_dbudp test_boardudp apsr_udpgenerator
+
+LDADD += ../../3rdparty/libtimers.la
+INCLUDES += -I../../3rdparty
 AM_CFLAGS = -D$(ARCH)
+
+endif
+

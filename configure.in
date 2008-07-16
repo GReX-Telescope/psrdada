@@ -8,17 +8,17 @@ AC_CONFIG_SRCDIR([src/dada_def.h])
 AM_INIT_AUTOMAKE([foreign subdir-objects])
 AC_DISABLE_SHARED
 
-
 AC_CANONICAL_HOST
 case $host in
   i?86-*-linux-*) ARCH=IA32;;
   ia64-*-linux-*) ARCH=IA64;;
   x86_64-*-linux-*) ARCH=AMD64;;
-  *) AC_MSG_ERROR([system is not supported]);;
+  *) ARCH=unsupported;
+     AC_MSG_WARN([architecture is not supported by third party software]);;
 esac
+
 AC_SUBST(ARCH)
-
-
+AM_CONDITIONAL(COMPILE_THIRD, [test x"$ARCH" != xunsupported])
 
 # Checks for programs.
 AC_PROG_CC
@@ -30,8 +30,6 @@ AC_PROG_LIBTOOL
 SWIN_LIB_PGPLOT
 
 AC_CHECK_LIB([m], [sin])
-
-# CFLAGS="-O2 -pthread -Wall"
 
 #
 # Checks for header files.
@@ -73,6 +71,7 @@ fi
 AC_SUBST(PSRDADA_INSTALL)
 
 AM_CONFIG_HEADER([config.h])
+
 AC_CONFIG_FILES([Makefile
 		Management/Makefile
 		Management/psrdada_ldflags
@@ -98,5 +97,4 @@ AC_CONFIG_FILES([Makefile
 		3rdparty/Makefile])
 
 AC_OUTPUT
-
 
