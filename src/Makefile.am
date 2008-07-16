@@ -1,7 +1,7 @@
 
-lib_LTLIBRARIES = libdada.la
+lib_LTLIBRARIES = libpsrdada.la
 
-libdada_la_SOURCES = ascii_header.c multilog.c sock.c monitor.c		\
+libpsrdada_la_SOURCES = ascii_header.c multilog.c sock.c monitor.c		\
 	ipcutil.c ipcbuf.c ipcio.c disk_array.c node_array.c		\
 	command_parse.c command_parse_server.c string_array.c		\
 	diff_time.c nexus.c filesize.c fileread.c tmutil.c daemon.c	\
@@ -32,5 +32,5 @@ check_PROGRAMS = test_multilog test_ipcbuf loop_ipcio	\
 
 TESTS = test_uint64_t test_disk_array test_ipcio test_ascii_header
 
-LDADD = libdada.la 
+LDADD = libpsrdada.la 
 
