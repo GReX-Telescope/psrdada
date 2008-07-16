@@ -15,7 +15,9 @@ if COMPILE_THIRD
 
 bin_PROGRAMS += bpsr_dbavg bpsr_udpgenerator
 
-LDADD += ../../3rdparty/libtimers.la
+bpsr_dbavg_LDADD = $(LDADD) ../../3rdparty/libtimers.la 
+bpsr_udpgenerator_LDADD = $(LDADD) ../../3rdparty/libtimers.la 
+
 INCLUDES += -I../../3rdparty
 AM_CFLAGS = -D$(ARCH)
 
@@ -30,6 +32,9 @@ endif
 if HAVE_PGPLOT
 
 bin_PROGRAMS += bpsr_dbplot bpsr_diskplot
+AM_CPPFLAGS = @PGPLOT_CFLAGS@
+bpsr_dbplot_LDADD = $(LDADD) @PGPLOT_LIBS@
+bpsr_diskplot_LDADD = $(LDADD) @PGPLOT_LIBS@
 
 endif
 
