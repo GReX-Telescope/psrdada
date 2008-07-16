@@ -90,7 +90,7 @@ int sock_create (port)
 {
   struct sockaddr_in server;
   int fd;
-  int length;
+  socklen_t length;
   int on = 1; 
   
   if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)  {
