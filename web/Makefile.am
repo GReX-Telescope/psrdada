@@ -1,7 +1,7 @@
 webdir = $(prefix)/web
 
 # scripts distributed as is (installed in bin/)
-dist_web_SCRIPTS =  annotate_obs.php \ 
+dist_web_SCRIPTS =  annotate_obs.php \
                     banner.php \
                     client_status.php \
                     commandeer.php \
