@@ -1,10 +1,13 @@
+
 #include "multilog.h"
 #include "dada_def.h"
 
 #include <stdlib.h>
-#include <stdarg.h>
 #include <string.h>
+#include <stdlib.h>
+#include <stdarg.h>
 #include <assert.h>
+#include <stdio.h>
 
 // #define _DEBUG 1
 
@@ -141,7 +144,7 @@ int multilog_fprintf(FILE* stream, int priority, const char* format, ...)
   if (priority == LOG_ERR) fprintf(stream, "ERR: ");
   if (priority == LOG_WARNING) fprintf(stream, "WARN: ");
   if (vfprintf (stream, format, arguments) < 0) 
-     error ("multilog: error vfprintf");
+    perror ("multilog: error vfprintf");
 
   va_end(arguments);
 
