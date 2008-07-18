@@ -1,6 +1,7 @@
 #include "dada_client.h"
 #include "dada_hdu.h"
 #include "dada_def.h"
+#include "dada_msg.h"
 
 #include "node_array.h"
 #include "string_array.h"
@@ -13,9 +14,6 @@
 #include <string.h>
 #include <errno.h>
 #include <assert.h>
-
-#include <sys/types.h>
-#include <sys/socket.h>
 
 void usage()
 {
@@ -330,7 +328,7 @@ int sock_close_function (dada_client_t* client, uint64_t bytes_written)
 
   /* receive the acknowledgement header from the target node */
   if (recv (client->fd, header, client->header_size, 
-	    MSG_NOSIGNAL | MSG_WAITALL) < client->header_size)
+	    DADA_MSG_FLAGS) < client->header_size)
     {
       multilog (log, LOG_ERR, "Could not recv acknowledgement Header: %s\n",
 		strerror(errno));
@@ -362,7 +360,7 @@ int64_t sock_send_function (dada_client_t* client,
 #ifdef _DEBUG
   fprintf (stderr, "sock_send_function %p %"PRIu64"\n", data, data_size);
 #endif
-  return send (client->fd, data, data_size, MSG_NOSIGNAL);
+  return send (client->fd, data, data_size, 0);
 }
 
 
@@ -475,14 +473,13 @@ int main (int argc, char **argv)
 
   client->context = &dbnic;
 
-  while (!client->quit) {
-    
+  while (!client->quit)
+  {
     if (dada_client_read (client) < 0)
       multilog (log, LOG_ERR, "Error during transfer\n");
 
     if (quit) 
       client->quit = 1;
-
   }
 
   if (dada_hdu_unlock_read (hdu) < 0)
