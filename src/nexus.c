@@ -1,4 +1,6 @@
 #include "dada_def.h"
+#include "dada_msg.h"
+
 #include "nexus.h"
 #include "ascii_header.h"
 #include "futils.h"
@@ -36,7 +38,7 @@ void nexus_init (nexus_t* nexus)
 {
   pthread_mutexattr_t attr;
   pthread_mutexattr_init (&attr);
-  pthread_mutexattr_settype (&attr, PTHREAD_MUTEX_RECURSIVE_NP);
+  pthread_mutexattr_settype (&attr, DADA_MUTEX_RECURSIVE);
   pthread_mutex_init(&(nexus->mutex), &attr);
 
   /* no nodes */
