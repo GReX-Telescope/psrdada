@@ -1,9 +1,27 @@
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
 #include "disk_array.h"
+
+#ifdef HAVE_SYS_STATVFS_H
+#include <sys/statvfs.h>
+#endif
+
+#ifdef HAVE_SYS_VFS_H
+#include <sys/vfs.h>
+#endif
+
+#ifdef HAVE_SYS_MOUNT_H
+#include <sys/param.h>
+#include <sys/mount.h>
+#endif
 
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <fcntl.h>
 
+#include <fcntl.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -67,10 +85,17 @@ int disk_array_add (disk_array_t* array, char* path)
   /* used while ensuring that two disks are different */
   int diff;
 
+#ifdef HAVE_SYS_STATVFS_H
+  struct statvfs info;
+  int error = statvfs (path, &info);
+#else
   struct statfs info;
+  int error = statfs (path, &info);
+#endif
+
   struct stat buf;
 
-  if (statfs (path, &info) < 0) {
+  if (error < 0) {
     fprintf (stderr, "disk_array_add error statfs(%s)", path);
     perror ("");
     return -1;
@@ -118,7 +143,7 @@ int disk_array_add (disk_array_t* array, char* path)
   new_disk = array->disks + array->ndisk;
   array->ndisk ++;
 
-  new_disk->info = info;
+  new_disk->f_bsize = info.f_bsize;
   new_disk->device = buf.st_dev;
   new_disk->path = strdup (path);
   assert (new_disk->path != 0);
@@ -193,10 +218,11 @@ int disk_array_open (disk_array_t* array, char* filename, uint64_t filesize,
   pthread_mutex_lock (&(array->mutex));
 
   for (idisk = 0; idisk < array->ndisk; idisk++)
-    if (get_available (array->disks[idisk].path) > filesize) {
-
+    if (get_available (array->disks[idisk].path) > filesize)
+    {
       if (!fullname)
 	fullname = malloc (FILENAME_MAX);
+
       assert (fullname != 0);
 
       strcpy (fullname, array->disks[idisk].path);
@@ -207,7 +233,7 @@ int disk_array_open (disk_array_t* array, char* filename, uint64_t filesize,
       fd = open (fullname, flags, perms);
 
       if (optimal_buffer_size)
-	*optimal_buffer_size = array->disks[idisk].info.f_bsize;
+	*optimal_buffer_size = array->disks[idisk].f_bsize;
 
       break;
     }

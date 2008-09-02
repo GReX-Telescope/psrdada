@@ -6,7 +6,6 @@
    ************************************************************************ */
 
 #include <pthread.h>
-#include <sys/vfs.h>
 #include <sys/types.h>
 #include <inttypes.h>
 
@@ -16,10 +15,9 @@ extern "C" {
 
   typedef struct {
 
-    struct statfs info;
     dev_t device;
-
     char*  path;
+    unsigned long f_bsize;    /* file system block size */
 
   } disk_t;
 
