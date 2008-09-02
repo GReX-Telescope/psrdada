@@ -1,6 +1,7 @@
 #include "dada_client.h"
 #include "dada_hdu.h"
 #include "dada_def.h"
+#include "dada_msg.h"
 
 #include "sock.h"
 #include "ascii_header.h"
@@ -37,7 +38,7 @@ int64_t sock_recv (int fd, char* buffer, uint64_t size, int flags)
 
   while (size) {
 
-    received = recv (fd, buffer, size, MSG_NOSIGNAL | MSG_WAITALL | flags);
+    received = recv (fd, buffer, size, DADA_MSG_FLAGS | flags);
     if (received < 0) {
       perror ("sock_recv recv");
       return -1;
@@ -114,7 +115,7 @@ int sock_close_function (dada_client_t* client, uint64_t bytes_written)
   total_received = 0;
 
   if (send (client->fd, client->header, client->header_size, 
-	    MSG_NOSIGNAL | MSG_WAITALL) < client->header_size) {
+	    DADA_MSG_FLAGS) < client->header_size) {
     multilog (client->log, LOG_ERR, 
 	      "Could not send acknowledgment Header: %s\n", strerror(errno));
     return -1;
@@ -150,7 +151,8 @@ int sock_open_function (dada_client_t* client)
 
   ret = sock_recv (client->fd, client->header, client->header_size, MSG_PEEK);
 
-  if (ret < client->header_size) {
+  if (ret < client->header_size)
+  {
     multilog (client->log, LOG_ERR, 
 	      "recv %d out of %d peek at the Header: %s\n", 
 	      ret, client->header_size, strerror(errno));
