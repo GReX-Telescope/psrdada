@@ -8,6 +8,10 @@
 /* the variable STD_DEVICE in plot4mon.h) for monitoring the BPSR data     */
 /* taking. Usage is reported on-line with plot4mon -h                      */
 /*                                                                         */
+/* Ver 2.0 RB 04 Oct 2008
+   modified for new file format and to overplot bandpass and time series for 
+   both pol0 and pol1, labels and title based on file extension, default dev
+   png                                                                     */ 								
 /* DRAFT VERSION                                                           */
 /* (REFINEMENTS IN GRAPHICS, INTERACTIVE SETTING OF PARAMETERS, ADDTIONAL  */
 /*  PLOTS... ETC... ARE IN PROGRESS)                                       */ 
