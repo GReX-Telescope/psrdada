@@ -135,11 +135,14 @@ int main (int argc, char** argv)
     return -1;
   }
 
-  if (dada_hdu_unlock_write (hdu) < 0)
-    return -1;
+  if (connect_hdu)
+  {
+    if (dada_hdu_unlock_write (hdu) < 0)
+      return -1;
 
-  if (dada_hdu_disconnect (hdu) < 0)
-    return -1;
+    if (dada_hdu_disconnect (hdu) < 0)
+      return -1;
+  }
 
   fprintf (stderr, "Destroying pwc\n");
   dada_pwc_destroy (pwcm->pwc);
