@@ -76,6 +76,7 @@ int dada_pwc_specify_header (char keep, const char* filter,
              filter, param_name, param_value);
 #endif
 
+
     match = strncmp( param_name, filter, filter_length ) == 0;
 
 #ifdef _DEBUG
@@ -95,9 +96,9 @@ int dada_pwc_specify_header (char keep, const char* filter,
 #endif
 
       if (ascii_header_set (header, param, "%s", param_value) < 0) {
-	      fprintf (stderr, "dada_pwc_specify_header ERROR setting %s=%s\n",
-         param, param_value);
-	      return -1;
+	fprintf (stderr, "dada_pwc_specify_header ERROR setting %s=%s\n",
+		 param, param_value);
+	return -1;
       }
 
     }
