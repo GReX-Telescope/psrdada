@@ -22,7 +22,7 @@
 
 int main (int argc, char *argv[])
 {
-  int plotnum=0,dolog=0;
+  int plotnum=0,dolog=0,ndata=156250;
   char inpfile[80],inpdev[80],outputfile[80];
   char inpfile0[80],inpfile1[80];
   char xlabel[80],ylabel[80],plottitle[80];
@@ -30,22 +30,24 @@ int main (int argc, char *argv[])
   long totvaluesread,totvalues4plot;
   int nchan,ndim,firstdump_line,work_flag,nbin_x,nsub_y;
   float yscale,tsamp;
-  float x_read[MAXNUMPOINTS];
-  float y_read[MAXNUMPOINTS];
-  float y_read1[MAXNUMPOINTS];
-  float y_new[MAXNUMPOINTS];
-  float y_new1[MAXNUMPOINTS];
+  float *x_read, *y_read, *y_read1, *y_new, *y_new1;
 
   /* reading the command line   */
   //get_commandline(argc,argv,inpfile,inpdev,outputfile);
   get_commandline(argc,argv,inpfile0,inpfile1,inpdev,outputfile,&dolog);
 
-  fprintf(stderr,"log bandpass %d \n",dolog);
+  //fprintf(stderr,"log bandpass %d \n",dolog);
 
   /* determining the relevant parameters of the data and plot */
   read_params(inpfile1,&nchan,&tsamp,
 	      &ndim,&yscale,&firstdump_line,
 	      &work_flag,add_work);
+
+  x_read=(float *) malloc(ndata*sizeof(float));
+  y_read=(float *) malloc(ndata*sizeof(float));
+  y_read1=(float *) malloc(ndata*sizeof(float));
+  y_new=(float *) malloc(ndata*sizeof(float));
+  y_new1=(float *) malloc(ndata*sizeof(float));
 
   // if time series also fft and plot
   if (strstr(inpfile1,"ts") != NULL) {
@@ -56,8 +58,8 @@ int main (int argc, char *argv[])
     strcpy(add_work,"null"); }
 
   /* reading the data and filling the y array with them */
-  read_stream(inpfile0,&y_read[0],&totvaluesread);
-  read_stream(inpfile1,&y_read1[0],&totvaluesread);
+  read_stream(ndata,inpfile0,&y_read[0],&totvaluesread);
+  read_stream(ndata,inpfile1,&y_read1[0],&totvaluesread);
 
 
   /* enter the loop on the plots to be produced with the data in inpfile1 */

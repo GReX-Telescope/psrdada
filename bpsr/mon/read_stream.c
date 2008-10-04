@@ -4,11 +4,15 @@
 /*                                                                         */
 /* it reads from a stream                                                  */
 /*                                                                         */
+/* Ver 2.0	RB 04 Sept 2008
+		no longer needs large stacks (malloc replaces MAXNUMPOINTS) 
+*/
+/*                                                                         */
 /***************************************************************************/
 
 #include "plot4mon.h"
 
-void read_stream(char inpfile[],float *readstream,long *totvaluesread)
+void read_stream(int ndata,char inpfile[],float *readstream,long *totvaluesread)
 {
 int i,nread;
 long totnread;
@@ -25,18 +29,15 @@ FILE *pn2file;
 
 /* "i" runs on the location of the values in the array readstream */
   totnread=0;
-  for (i=0;i<=MAXNUMPOINTS+10;i++) 
+  for (i=0;i<ndata;i++) 
   {      
      nread = fread(&readstream[blksz*i],1,blksz*sizeof(float),pn2file);
      totnread=totnread+(long)nread;
      if (feof(pn2file)) break;
   } 
-  if (totnread > MAXNUMPOINTS*sizeof(float)) 
+  if (totnread > ndata*sizeof(float)) 
   {
-     printf(" Error! Overflow in the array of plotted values \n");
-     printf("        %ld values to be plotted wrt a max of %d values \n",
-             totnread/sizeof(float), MAXNUMPOINTS);
-     printf("        Redefine MAXNUMPOINTS in the code include file \n");
+     printf(" Data overflow error! \n");
      exit(-1);
   }
   fclose(pn2file);
