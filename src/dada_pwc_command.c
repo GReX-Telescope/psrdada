@@ -34,9 +34,6 @@ int main (int argc, char **argv)
 
   int arg = 0;
 
-  /* dada root runtime directory */
-  char* dada_root = getenv ("DADA_ROOT");
-
   /* configuration file name */
   char* dada_config = "config/default_config.txt";
 
@@ -70,25 +67,16 @@ int main (int argc, char **argv)
       
     }
 
-  if (!dada_root)
-  {
-    multilog_fprintf (stderr, LOG_ERR, 
-		      "Please define the DADA_ROOT environment variable\n");
-    return -1;
-  }
-
   log = multilog_open ("dada_nexus", daemon);
 
-  if (daemon) {
+  if (daemon)
+  {
     be_a_daemon ();
     multilog_serve (log, 123);
   }
   else
     multilog_add (log, stderr);
 
-  char dada_config_file[strlen(dada_root)+strlen(dada_config)];
-  sprintf(dada_config_file,"%s/%s",dada_root,dada_config);
-  
   multilog_fprintf (stderr, LOG_INFO, "Configuring DADA PWC nexus\n");
   if (dada_pwc_nexus_configure (nexus, dada_config) < 0)
   {
@@ -110,3 +98,4 @@ int main (int argc, char **argv)
 
   return EXIT_SUCCESS;
 }
+
