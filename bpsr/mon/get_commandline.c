@@ -40,7 +40,7 @@ void get_commandline(int argc, char *argv[], char *inpfile0,
         nfiles++;
         i++;
   }
-  printf("no of files %d, files: %s %s  \n",nfiles,inpfile0,inpfile1); 
+  printf("Data files: %s %s \n",inpfile0,inpfile1); 
   if (!nfiles) {
   printf("An input file must be the FIRST argument in the command line!"); 
   printf(" Exiting...\n");
@@ -59,8 +59,10 @@ void get_commandline(int argc, char *argv[], char *inpfile0,
 	}
         strcpy(inpdev,argv[++i]);
         strncpy(checkchar,inpdev,1);
-	if (!(strings_compare(checkchar,"/"))) {
+	//if (!(strings_compare(checkchar[0],"/"))) {
+	if (checkchar[0] == "/") {
     	 printf("Unknown argument %s given for <device>. Exiting...\n",inpdev);
+         //strcpy(inpdev,"/png");
          exit(-1);
         }  
 	device_selected=1;
