@@ -16,18 +16,25 @@ void create_outputname( char inpfile[], char inpdev[], char outputfile[],
   char *pn2extens;
   char newfile[80];
   char newinp[80];
+  char ext[10];
 
   if (plotnum==0)
     {
       if (!( (strings_compare(inpdev,"/xs")) || (strings_compare(inpdev,"/XS"))
         ||(strings_compare(inpdev,"/xw")) || (strings_compare(inpdev,"/XW")) ))
        {
+         if (strstr(inpfile, "bps") != NULL) strcpy(ext,".bps");
+         else if (strstr(inpfile, "bp") != NULL) strcpy(ext,".bp");
+         else if (strstr(inpfile, "ts") != NULL) strcpy(ext,".ts");
+         else strcpy(ext,"");
+
          strcpy(newinp,inpfile);
          dot_position=strcspn(inpfile,".");
          newinp[dot_position]='\0';
          strcpy(newfile,newinp);
 	 strcpy(extens,inpdev);
 	 while((pn2extens=strpbrk(extens,"/"))!=NULL) *pn2extens='.';
+	 strcat(newfile,ext);
 	 strcat(newfile,extens);
 	 printf(" The output file will be %s \n",newfile);
 	 strcat(newfile,inpdev);
