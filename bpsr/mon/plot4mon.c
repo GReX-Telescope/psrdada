@@ -120,6 +120,13 @@ int main (int argc, char *argv[])
   plotnum++; 
   } // closing the loop
 
+  /* free up memory */
+  free(x_read);  
+  free(y_read);
+  free(y_read1);
+  free(y_new);
+  free(y_new1);
+
   /* finishing the program */
   exit(0);
 }
