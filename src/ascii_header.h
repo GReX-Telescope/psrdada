@@ -37,9 +37,11 @@
 extern "C" {
 #endif
 
+/* returns zero if no error occurs, -1 on error */
 int ascii_header_set (char* header, const char* keyword,
 		      const char* code, ...);
 
+/* returns number of elements parsed if no error occurs, -1 on error */
 int ascii_header_get (const char* header, const char* keyword,
 		      const char* code, ...);
 
