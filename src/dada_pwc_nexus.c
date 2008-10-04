@@ -28,6 +28,8 @@ node_t* dada_pwc_node_create ()
   return (node_t*) node;
 }
 
+int dada_pwc_nexus_update_state (dada_pwc_nexus_t* nexus);
+
 /*! Pointer to function that initializes a new connection with a node */
 int dada_pwc_nexus_node_init (nexus_t* nexus, node_t* node)
 {
@@ -129,7 +131,8 @@ int dada_pwc_nexus_update_state (dada_pwc_nexus_t* nexus)
   /* the nexus will always be in the same state as its PWC's. The only
    * exception to this is if nodes are in an error state. */
   
-  for (inode = 0; inode < nnode; inode++) {
+  for (inode = 0; inode < nnode; inode++)
+  {
     node = base->nodes[inode];
 
     if (node->state == dada_pwc_soft_error)
@@ -138,10 +141,13 @@ int dada_pwc_nexus_update_state (dada_pwc_nexus_t* nexus)
       nhard_err++;
     else if (node->state == dada_pwc_fatal_error)
       nfatal_err++;
-    else if (inode == (nsoft_err+nhard_err+nfatal_err)) {
+    else if (inode == (nsoft_err+nhard_err+nfatal_err))
+    {
       /* set state of the first non error node */
       state = node->state;
-    } else if (state != node->state) {
+    }
+    else if (state != node->state)
+    {
       state = dada_pwc_undefined;
       break;
     }
@@ -155,7 +161,8 @@ int dada_pwc_nexus_update_state (dada_pwc_nexus_t* nexus)
   }
 
   /* If we don't have any clients that are non erroneous */
-  if ((nsoft_err+nhard_err+nfatal_err) == nnode) {
+  if ((nsoft_err+nhard_err+nfatal_err) == nnode)
+  {
     /* set state to the strongest error */
     if (nsoft_err) state = dada_pwc_soft_error;
     if (nhard_err) state = dada_pwc_hard_error;
@@ -177,7 +184,8 @@ int dada_pwc_nexus_handle_message (void* me, unsigned inode, const char* msg)
 
   char* state_change = strstr (msg, "STATE = ");
 
-  if (state_change) {
+  if (state_change)
+  {
     sscanf (state_change, "STATE = %s", state_string);
     node->state = dada_pwc_string_to_state (state_string);
     dada_pwc_nexus_update_state (nexus);
@@ -390,7 +398,6 @@ int dada_pwc_nexus_send (dada_pwc_nexus_t* nexus, dada_pwc_command_t command)
     return nexus_send((nexus_t*)nexus, "reset");
 
   }
-  
 
   return -1;
 }
@@ -407,16 +414,15 @@ int dada_pwc_nexus_serve (dada_pwc_nexus_t* nexus)
 
   monitor_launch (nexus->monitor);
 
-  while (!dada_pwc_quit (nexus->pwc)) {
-
+  while (!dada_pwc_quit (nexus->pwc))
+  {
     command = dada_pwc_command_get (nexus->pwc);
 
-    if ((command.code != dada_pwc_exit) &&
-        (dada_pwc_nexus_send (nexus, command) < 0)) {
+    if (command.code == dada_pwc_exit)
+      nexus->pwc->quit = 1;
+
+    else if (dada_pwc_nexus_send (nexus, command) < 0)
       fprintf (stderr, "error issuing command = %d\n", command.code);
-
-    }
-
   }
 
   return 0;
