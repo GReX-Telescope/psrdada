@@ -100,13 +100,18 @@ int dada_pwc_main (dada_pwc_main_t* pwcm)
    */
   int rval = 0;
 
-  while (!dada_pwc_quit (pwcm->pwc)) {
-
+  while (!dada_pwc_quit (pwcm->pwc))
+  {
     /* Enter the idle/prepared state. */
     rval = dada_pwc_main_prepare (pwcm);
-    if (rval < 0) dada_pwc_main_process_error (pwcm, rval);
-    else {
-            
+
+    if (dada_pwc_quit (pwcm->pwc))
+      break;
+
+    if (rval < 0)
+      dada_pwc_main_process_error (pwcm, rval);
+    else
+    {
       /* Start the data transfer. */
       rval = dada_pwc_main_start_transfer (pwcm);
       if (rval < 0) dada_pwc_main_process_error (pwcm, rval);
@@ -151,16 +156,20 @@ int dada_pwc_main_prepare (dada_pwc_main_t* pwcm)
     return DADA_ERROR_HARD;
   }
 
-  while (!dada_pwc_quit (pwcm->pwc)) {
-
+  while (!dada_pwc_quit (pwcm->pwc))
+  {
     pwcm->command = dada_pwc_command_get (pwcm->pwc);
 
-    if (pwcm->command.code == dada_pwc_reset) {
+    if (dada_pwc_quit (pwcm->pwc))
+      break;
+
+    if (pwcm->command.code == dada_pwc_reset)
+    {
       dada_pwc_set_state (pwcm->pwc, dada_pwc_idle, 0);
     }
     
-    else if (pwcm->command.code == dada_pwc_header)  {
-   
+    else if (pwcm->command.code == dada_pwc_header)
+    {
 #ifdef _DEBUG 
       multilog (pwcm->log, LOG_INFO, 
                 "HEADER START\n%s\nHEADER END\n", pwcm->command.header);
@@ -170,11 +179,10 @@ int dada_pwc_main_prepare (dada_pwc_main_t* pwcm)
         strncpy (pwcm->header, pwcm->command.header, pwcm->header_size);
 
       dada_pwc_set_state (pwcm->pwc, dada_pwc_prepared, 0);
-
     }
 
-    else if (pwcm->command.code == dada_pwc_clock)  {
-
+    else if (pwcm->command.code == dada_pwc_clock)
+    {
       /* multilog (pwcm->log, LOG_INFO, "Start clocking data\n"); */
 
       if (pwcm->command.byte_count) {
@@ -193,9 +201,8 @@ int dada_pwc_main_prepare (dada_pwc_main_t* pwcm)
       return 0;
         
     }
-
-    else if (pwcm->command.code == dada_pwc_start)  {
-
+    else if (pwcm->command.code == dada_pwc_start)
+    {
       multilog (pwcm->log, LOG_INFO, "Start recording data\n");
 
       if (pwcm->command.byte_count)
@@ -210,9 +217,9 @@ int dada_pwc_main_prepare (dada_pwc_main_t* pwcm)
       
       /* leave the idle state loop */
       return 0;
-
     }
-    else {
+    else
+    {
       multilog (pwcm->log, LOG_ERR, "dada_pwc_main_prepare internal error = "
                "unexpected command code %d\n", pwcm->command.code);
       return DADA_ERROR_HARD;
