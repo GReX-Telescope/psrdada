@@ -40,7 +40,7 @@ void get_commandline(int argc, char *argv[], char *inpfile0,
         nfiles++;
         i++;
   }
-  printf("Data files: %s %s \n",inpfile0,inpfile1); 
+  printf("\nData files: %s %s \n",inpfile0,inpfile1); 
   if (!nfiles) {
   printf("An input file must be the FIRST argument in the command line!"); 
   printf(" Exiting...\n");
@@ -74,8 +74,8 @@ void get_commandline(int argc, char *argv[], char *inpfile0,
 	display_help(argv[0]);
       } else {
         /* unknown argument passed down - stop! */
-        printf("Unknown argument %s passed to plot4mon.",argv[i]);
-        printf(" Exiting... \n");
+    	printf("\nArgument for display device should be -g <device> ");
+        printf(" Exiting... \n\n");
 	exit(-1);
       }
       i++;
