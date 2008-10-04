@@ -155,6 +155,29 @@ int main (int argc, char **argv)
 
     if (install)
     {
+      install_file = fopen (install, "r");
+      if (!install_file)
+      {
+        fprintf (stderr, "dada_edit: could not open '%s': %s\n", install,
+                 strerror(errno));
+        return -1;
+      }
+
+      size_t r = fread (current_header, 1, current_header_size, install_file);
+      if (r == 0)
+      {
+        fprintf (stderr, "dada_edit: could not read %u bytes: %s\n",
+                 current_header_size, strerror(errno));
+        return -1;
+      }
+      if (!feof(install_file))
+      {
+        fprintf (stderr, "dada_edit: %s contains more than %u bytes\n",
+                 install, current_header_size);
+        return -1;
+      }
+      if (r < current_header_size)
+        memset (current_header + r, 0, current_header_size - r);
     }
 
     if (val || install || set_hdr_size)
