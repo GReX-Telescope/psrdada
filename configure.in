@@ -89,6 +89,7 @@ AC_CONFIG_FILES([Makefile
 		apsr/config/apsr.cfg
     bpsr/Makefile
 		bpsr/src/Makefile
+		bpsr/mon/Makefile
 		bpsr/scripts/Makefile
 		bpsr/web/Makefile
 		bpsr/config/Makefile
