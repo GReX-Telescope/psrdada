@@ -12,7 +12,8 @@
 #include <string.h>
 #include "cpgplot.h"
 #define BPSRMON_VERSION 1.0 
-#define STD_DEVICE "/ps"
+//#define STD_DEVICE "/ps"
+#define STD_DEVICE "/png"
 //#define MAXNUMPOINTS 10000000 /* max number of points to be plotted  */
 #define MAXNUMPOINTS 1000000 /* max number of points to be plotted  */
 #define MAX_PERIOD 5.0 /* max period to look at in FFT in sec */
