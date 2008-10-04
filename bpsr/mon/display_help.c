@@ -15,10 +15,12 @@ void display_help(char *program)
            program, BPSRMON_VERSION);
   printf("         it produces various plots for monitoring BPSR activity\n");
   puts("");
-  puts("usage: plot4mon [filename] {-h, -g, ...}");
-  puts("filename    -  the binary file containing the data");
+  puts("Usage: plot4mon [filename0] [filename1] {-h, -g, ...}");
+  puts("");
+  puts("filename0   -  data file [bandpass/time series] for polarisation 0");
+  puts("filename1   -  data file [bandpass/time series] for polarisation 1");
   puts("-h          -  print this help page");
   puts("-log        -  plot bandpass on log scale ");
-  printf("-g <device> -  graphics device e.g. /vps      (def=%s) \n",
-        STD_DEVICE);
+  printf("-g <device> -  display device for plot e.g. /xs  (def=%s) \n", STD_DEVICE);
+  puts("");
 }
