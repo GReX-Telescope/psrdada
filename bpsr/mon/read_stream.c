@@ -16,7 +16,7 @@ long blksz=1;   // to be adjusted later, if required
 FILE *pn2file; 
 
 /* it opens the input binary files, testing for the successful completion */
-  if ((pn2file = fopen(inpfile, "r+")) == NULL ) 
+  if ((pn2file = fopen(inpfile, "rb")) == NULL ) 
   { 
      printf(" Error opening %s for reading  \n",inpfile); 
      exit(-1); 
