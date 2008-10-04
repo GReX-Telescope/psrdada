@@ -46,9 +46,14 @@ int main (int argc, char *argv[])
   read_params(inpfile1,&nchan,&tsamp,
 	      &ndim,&yscale,&firstdump_line,
 	      &work_flag,add_work);
-  /* ignore this for the moment to keep things simple */
-  work_flag=0;
-  strcpy(add_work,"null");
+
+  // if time series also fft and plot
+  if (strstr(inpfile1,"ts") != NULL) {
+    work_flag=1;
+    strcpy(add_work,"fft"); } 
+  else {
+    work_flag=0;
+    strcpy(add_work,"null"); }
 
   /* reading the data and filling the y array with them */
   read_stream(inpfile0,&y_read[0],&totvaluesread);
@@ -70,7 +75,7 @@ int main (int argc, char *argv[])
   /* assigning the labels of the plot */
   //create_labels(inpfile1,plotnum,xlabel,ylabel,plottitle);
 
-  // labels and title
+  // labels and title - make this new create_labels (todo)
   if (strstr(inpfile1, "bps") != NULL) {
     strcpy(xlabel," Frequency channel ");
     strcpy(ylabel," Power level ");
@@ -80,9 +85,15 @@ int main (int argc, char *argv[])
     strcpy(ylabel," Power level ");
     strcpy(plottitle," Mean Bandpass ");
   } else if (strstr(inpfile1,"ts") != NULL) {
-    strcpy(xlabel," Time sample ");
-    strcpy(ylabel," Power level ");
-    strcpy(plottitle," Zero DM Time Series");
+    if (plotnum == 1) {
+      strcpy(xlabel," Frequency (units) ");
+      strcpy(ylabel," Power ");
+      strcpy(plottitle," Zero DM FFT ");
+    } else { 
+      strcpy(xlabel," Time sample ");
+      strcpy(ylabel," Power level ");
+      strcpy(plottitle," Zero DM Time Series");
+    }
   }
 
   /* plotting the data */
