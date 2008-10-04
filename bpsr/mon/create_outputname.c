@@ -4,7 +4,7 @@
 /*                                                                         */
 /* it creates the name for the outputfile according to the selected device */
 /*                                                                         */
-/* RB 04 Sept 08: add an appropriate middle extention to the output file   */
+/* RB 04 Sept 08: appropriate extentions to the output png files           */
 /*                                                                         */
 /***************************************************************************/
 
@@ -54,20 +54,14 @@ void create_outputname( char inpfile[], char inpdev[], char outputfile[],
       if (!( (strings_compare(inpdev,"/xs")) || (strings_compare(inpdev,"/XS"))
         ||(strings_compare(inpdev,"/xw")) || (strings_compare(inpdev,"/XW")) ))
        {
-         if (strstr(inpfile, "bps") != NULL) strcpy(ext,".bps");
-         else if (strstr(inpfile, "bp") != NULL) strcpy(ext,".bp");
-         else if (strstr(inpfile, "ts") != NULL) strcpy(ext,".ts");
-         else strcpy(ext,"");
-
          strcpy(newinp,inpfile);
          dot_position=strcspn(inpfile,".");
          newinp[dot_position]='\0';
 	 strcpy(newfile,newinp);
-	 strcat(newfile,"_");
+	 strcat(newfile,".");
 	 strcat(newfile,add_work);
 	 strcpy(extens,inpdev);
 	 while((pn2extens=strpbrk(extens,"/"))!=NULL) *pn2extens='.';
-	 strcat(newfile,ext);
 	 strcat(newfile,extens);
 	 printf(" The output file will be %s \n",newfile);
 	 strcat(newfile,inpdev);
