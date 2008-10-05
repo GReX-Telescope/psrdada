@@ -12,10 +12,12 @@
 #include "sock.h"
 #include <math.h>
 
+int from_ibob(int fd, char *response); 
+
 void usage()
 {
   fprintf (stdout,
-	   "bpsr_udpdb [options]\n"
+	   "bpsr_udpdb [options] ibob_host ibob_port\n"
      " -h             print help text\n"
      " -i interface   ip/interface for inc. UDP packets [default all]\n"
 	   " -p             port on which to listen [default %d]\n"
@@ -150,27 +152,34 @@ time_t udpdb_start_function (dada_pwc_main_t* pwcm, time_t start_utc)
 
   /* setup the expected sequence no to the initial value */
   udpdb->expected_sequence_no = 0;
+  udpdb->prev_seq = 0;
 
   /* Run the script to startup the ibob */
   char command[1024];
 
-  sprintf(command, "client_ibob_level_setter.pl -s -a %"PRIu64" %s", 
-          udpdb->acc_len, myhostname);
+  multilog(log, LOG_INFO, "Running new supa function!\n");
+  time_t utc = set_ibob_levels(pwcm);
 
-  if (udpdb->verbose) 
-    multilog(log, LOG_INFO, "Running coarse gain control \"%s\"\n",command);
+  //if (udpdb->mode == 1) {
+    //sprintf(command, "client_ibob_level_setter.pl -a %d %s", 
+    //      udpdb->acc_len, myhostname);
+  //} else {
+    //sprintf(command, "client_ibob_level_setter.pl -s -a %d %s", 
+    //      udpdb->acc_len, myhostname);
+  //}
 
-  long int utc_unix;
-  FILE * fptr = popen(command, "r");
-  fscanf(fptr, "%ld", &utc_unix);
-  pclose(fptr);
+  //if (udpdb->verbose) 
 
-  time_t utc = 0;
-  if (utc_unix > 0) 
-    utc = (time_t) utc_unix;
+  //long int utc_unix;
+  //FILE * fptr = popen(command, "r");
+  //fscanf(fptr, "%ld", &utc_unix);
+  //pclose(fptr);
 
-  if (udpdb->verbose) 
-    multilog(log, LOG_INFO, "start function returning UTC_START = %ld\n", utc);
+  //time_t utc = 0;
+  //if (utc_unix > 0) 
+  //  utc = (time_t) utc_unix;
+
+  multilog(log, LOG_INFO, "start function returning UTC_START = %ld\n", utc);
 
   return utc;
 }
@@ -204,6 +213,8 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
   struct timeval timeout;
   fd_set *rdsp = NULL;
   fd_set readset;
+
+  uint64_t prevnum = udpdb->curr_sequence_no;
 
   /* Switch the next and current buffers and their respective counters */
   char *tmp;
@@ -281,8 +292,18 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
       /* Decode the packets apsr specific header */
       udpdb->curr_sequence_no = decode_header(udpdb->socket_buffer) / udpdb->sequence_incr;
 
+      //if (udpdb->curr_sequence_no != prevnum + 1) {
+      //  multilog(log, LOG_WARNING, "%"PRIu64" != %"PRIu64" !!!\n", udpdb->curr_sequence_no, (prevnum + 1));
+      //}
+      //prevnum = udpdb->curr_sequence_no;
+
       /* If we are waiting for the "first" packet */
       if ((udpdb->expected_sequence_no == 0) && (data_received == 0)) {
+
+        if ((udpdb->curr_sequence_no < (udpdb->prev_seq - 10)) && (udpdb->prev_seq != 0)) {
+          multilog(log, LOG_INFO, "packet num reset from %"PRIu64" to %"PRIu64"\n", udpdb->prev_seq, udpdb->curr_sequence_no);
+        }
+        udpdb->prev_seq = udpdb->curr_sequence_no;
  
         /* Accept a "restart" which occurs within a 1 second window */ 
         if (udpdb->curr_sequence_no < (udpdb->spectra_per_second*5)) {
@@ -304,7 +325,7 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
         }
 
         if (udpdb->received != BPSR_UDP_PAYLOAD_BYTES) {
-          multilog (log, LOG_ERR, "UDP packet size was incorrect\n");
+          multilog (log, LOG_ERR, "UDP packet size was incorrect (%"PRIu64" != %d)\n", udpdb->received, BPSR_UDP_PAYLOAD_BYTES);
           *size = DADA_ERROR_HARD;
           break;
         }
@@ -383,7 +404,7 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
 
           float curr_percent = ((float) udpdb->curr_buffer_count / (float) BPSR_NUM_UDP_PACKETS)*100;
           float next_percent = ((float) udpdb->next_buffer_count / (float) BPSR_NUM_UDP_PACKETS)*100;
-          multilog (log, LOG_WARNING, "%"PRIu64" > %"PRIu64"\n",udpdb->curr_sequence_no,udpdb->max_sequence);
+          //multilog (log, LOG_WARNING, "%"PRIu64" > %"PRIu64"\n",udpdb->curr_sequence_no,udpdb->max_sequence);
   
           multilog (log, LOG_WARNING, "Not keeping up. curr_buffer %5.2f%, next_buffer %5.2f%\n",
                                       curr_percent, next_percent);
@@ -407,6 +428,10 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
 
         /* If the next buffer is at least half full */
         if (udpdb->next_buffer_count > (BPSR_NUM_UDP_PACKETS / 2)) {
+          float curr_percent = ((float) udpdb->curr_buffer_count / (float) BPSR_NUM_UDP_PACKETS)*100;
+          float next_percent = ((float) udpdb->next_buffer_count / (float) BPSR_NUM_UDP_PACKETS)*100;
+
+          multilog(log, LOG_WARNING, "Bailing curr_buf %5.2f%, next_buffer %5.2f%\n",curr_percent,next_percent);
           quit = 1;
         }
       }
@@ -424,8 +449,10 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
       multilog (log, LOG_WARNING, "Dropped %"PRIu64" packets\n",
                (BPSR_NUM_UDP_PACKETS - udpdb->curr_buffer_count));
 
-      udpdb->packets->dropped += BPSR_NUM_UDP_PACKETS - udpdb->curr_buffer_count;
-      udpdb->packets->dropped_per_sec += BPSR_NUM_UDP_PACKETS - udpdb->curr_buffer_count;
+      udpdb->packets->dropped += (BPSR_NUM_UDP_PACKETS - udpdb->curr_buffer_count);
+      udpdb->packets->dropped_per_sec += (BPSR_NUM_UDP_PACKETS - udpdb->curr_buffer_count);
+      udpdb->bytes->dropped += (BPSR_UDP_DATASIZE_BYTES * (BPSR_NUM_UDP_PACKETS - udpdb->curr_buffer_count));
+      udpdb->bytes->dropped_per_sec += (BPSR_UDP_DATASIZE_BYTES * (BPSR_NUM_UDP_PACKETS - udpdb->curr_buffer_count));
 
     }
 
@@ -467,7 +494,14 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
                  udpdb->bytes->received_per_sec,udpdb->bytes->received);
       }
 
-    } 
+    } else {
+      /*
+      multilog(log, LOG_INFO, "Packet loss %5.3f % / %5.3f %, Data loss %5.3f %\n", 
+               (100 * ((float) udpdb->packets->dropped / (float) udpdb->packets->received)), 
+               (100 * ((float) udpdb->packets->dropped_per_sec / (float) udpdb->packets->received_per_sec)), 
+               (100 * ((float) udpdb->bytes->dropped / (float) udpdb->bytes->received)));
+       */
+    }
 
     udpdb->packets->received_per_sec = 0;
     udpdb->packets->dropped_per_sec = 0;
@@ -560,6 +594,9 @@ int main (int argc, char **argv)
   static char* buffer = 0;
   char *src;
 
+  char * ibob_host;
+  int    ibob_port;
+
   while ((arg=getopt(argc,argv,"di:p:vm:S:H:n:1h")) != -1) {
     switch (arg) {
       
@@ -625,6 +662,15 @@ int main (int argc, char **argv)
     }
   }
 
+  if ((argc - optind) != 2) {
+    fprintf(stderr, "Error: host and port must be specified\n");
+    usage();
+    return EXIT_FAILURE;
+  } else {
+    ibob_host = argv[optind];
+    ibob_port = atoi(argv[(optind+1)]);
+  }
+
   log = multilog_open ("bpsr_udpdb", 0);
 
   if (daemon) 
@@ -656,6 +702,9 @@ int main (int argc, char **argv)
   udpdb.interface = strdup(interface);
   udpdb.port = port;
   udpdb.acc_len = BPSR_DEFAULT_ACC_LEN;   // 25
+  udpdb.mode = mode;
+  udpdb.ibob_host = strdup(ibob_host);
+  udpdb.ibob_port = ibob_port;
 
   /* init stats structs */
   stats_t packets = {0,0,0,0};
@@ -726,6 +775,8 @@ int main (int argc, char **argv)
       buffer = malloc (buffer_size);
     assert (buffer != 0);
 
+    if (verbose) 
+      fprintf(stderr, "running start function\n");
     time_t utc = udpdb_start_function(pwcm,0);
 
     if (utc == -1 ) {
@@ -808,4 +859,432 @@ int main (int argc, char **argv)
   return EXIT_SUCCESS;
 
 }
+
+/* 
+ * The following code handles ibob communication
+ */
+
+time_t set_ibob_levels(dada_pwc_main_t* pwcm) {
+
+  udpdb_t* udpdb  = (udpdb_t*)pwcm->context;
+  
+  multilog_t* log = pwcm->log;
+
+  int verbose = udpdb->verbose;
+  verbose = 1;
+  int init_scale = 131072;
+  int n_attempts = 3;
+  int arg = 0;
+  
+  char command[128];
+  char lilreply[128];
+  int fd = 0;
+  int bpsr_interface_fd = 0;
+  int n_atttempts = 3;
+  int rval = 0;
+
+
+  /* Not sure if this helps, but try to spread the access to ibobs out a little */
+  sprintf(command, "/home/apsr/linux_64/bin/ibob_level_setter -n 0 %s %d\n",udpdb->ibob_host, udpdb->ibob_port);
+  system(command);
+
+  // Rearm the ibob
+  srand ( udpdb->ibob_port );
+  double randtime = (rand() / (RAND_MAX + 1.0) ) * 1000000;
+  double notsorandtime = (udpdb->ibob_port - 2000) * 100000;
+
+  struct timeval timeout;
+  if (notsorandtime > 1000000) {
+    timeout.tv_sec=1;
+    timeout.tv_usec=(int) (notsorandtime-1000000);
+  } else {
+    timeout.tv_sec=0;
+    timeout.tv_usec=(int) notsorandtime;
+  }
+  //timeout.tv_usec=(int) randtime;
+  select(0,NULL,NULL,NULL,&timeout);
+
+  /*
+  fd = sock_open(udpdb->ibob_host, udpdb->ibob_port);
+  if (fd) {
+    sprintf(command, "regread reg_coeff_pol1\r\n");
+    rval = sock_write(fd, command, strlen(command)-1);
+    if (rval == 0) {
+       multilog(log, LOG_ERR, "ibob write command failed %s\n",command);
+       sock_close(fd);
+    } else {
+      // Try to clear the fucking thing 
+      rval = from_ibob(fd, lilreply);
+      multilog(log, LOG_INFO, "Read %s from ibob after initial test command\n", lilreply);
+      sock_close(fd);
+    }
+  }*/
+
+  
+  while (n_attempts)
+  {
+    fd = sock_open(udpdb->ibob_host, udpdb->ibob_port);
+    if (fd < 0)
+    {
+      multilog(log, LOG_WARNING, "Could not connect to ibob on %s:%d\n",
+                       udpdb->ibob_host, udpdb->ibob_port); 
+      n_attempts--;
+      sleep(1);
+    }
+    else
+    {
+      multilog(log, LOG_INFO, "Connected to ibob on %s:%d\n",
+                      udpdb->ibob_host, udpdb->ibob_port);
+      n_attempts = 0;
+    }
+  }
+
+  if ((!fd) && (!n_attempts))
+    return -1;
+
+  if (udpdb->mode != 1)
+  {
+    n_attempts = 3;
+
+    while (n_attempts)
+    {
+      bpsr_interface_fd = sock_open("srv0", 57011);
+      if (bpsr_interface_fd < 0) {
+        multilog(log, LOG_WARNING, "Could not connect to bpsr_interface on\n",
+                         "srv0", 57011); 
+        n_attempts--;    
+        sleep(1);
+      
+      } else {
+        multilog(log, LOG_INFO, "Connected to tcs interface on srv0:%d\n",57011);
+        n_attempts = 0;
+      }                 
+    } 
+  }
+
+  //sprintf(command, "/home/apsr/linux_64/bin/ibob_level_setter -n 2 %s %d",udpdb->ibob_host, udpdb->ibob_port);
+  //system(command);
+
+  // Write the initial coefficients
+  long pol1_coeff = init_scale;
+  long pol2_coeff = init_scale;
+  rval = 0;
+
+  char *pol1_bram = malloc(sizeof(char) * 163842);
+  char *pol2_bram = malloc(sizeof(char) * 163842);
+
+  long *pol1_vals = malloc(sizeof(long) * 512);
+  long *pol2_vals = malloc(sizeof(long) * 512);
+
+  long pol1_max_value;
+  long pol2_max_value;
+
+  int i=0;
+  int bytes_read = 0;
+  int bit_window = 0;
+  n_attempts = 3;
+
+  // Try to clear the fucking thing 
+  rval = from_ibob(fd, pol1_bram);
+  multilog(log, LOG_INFO, "Ibob had %s on the line before beginning\n", pol1_bram);
+
+  while (n_attempts)
+  {
+    sprintf(command, "regwrite reg_coeff_pol1 %d\r\n",pol1_coeff);
+    if (verbose) 
+      multilog(log, LOG_INFO, "regwrite reg_coeff_pol1 %d\n",pol1_coeff);
+
+    if (rval = sock_write(fd, command, strlen(command)-1) < 0 )
+    {
+      multilog(log, LOG_ERR, "ibob write command failed %s\n",command);
+      sock_close(fd);
+      return(-1);
+    }
+
+    sprintf(command, "regwrite reg_coeff_pol2 %d\r\n",pol2_coeff);
+    if (verbose) 
+        multilog(log, LOG_INFO, "regwrite reg_coeff_pol2 %d\n",pol2_coeff);
+
+    if (rval = sock_write(fd, command, strlen(command)-1) < 0 )
+    {
+      multilog(log, LOG_ERR, "ibob write command failed %s\n",command);
+      sock_close(fd);
+      return(-1);
+    }
+    
+    strcpy(command, "bramdump scope_output1/bram\r\n");
+    if (verbose) 
+      multilog(log, LOG_INFO, "bramdump scope_output1/bram\n");
+
+    rval = sock_write(fd, command, strlen(command) -1);
+    bytes_read = 0;
+    rval = 1;
+    while ((rval > 0) && (bytes_read < 163841))
+    {
+      rval = sock_tm_read(fd, (void *) (pol1_bram + bytes_read), 4096, 1.0);
+      bytes_read += rval;
+      //multilog(log, LOG_INFO, "read %d bytes, %d total\n",rval, bytes_read);
+    }
+    pol1_bram[163841] = '\0';
+
+    strcpy(command, "bramdump scope_output3/bram\r\n");
+    if (verbose) 
+      multilog(log, LOG_INFO, "bramdump scope_output3/bram\n");
+
+    rval = sock_write(fd, command, strlen(command) -1);
+    bytes_read = 0;
+    rval = 1;
+    while ((rval > 0) && (bytes_read < 163841))
+    {
+      rval = sock_tm_read(fd, (void *) pol2_bram + bytes_read, 4096, 1.0);
+      bytes_read += rval;
+      //multilog(log, LOG_INFO, "read %d bytes, %d total\n",rval, bytes_read);
+    }
+    pol2_bram[163841] = '\0';
+
+    if (verbose)
+       multilog(log, LOG_INFO, "extracting counts\n");
+
+    if (bytes_read)
+    {
+      extract_counts(pol1_bram, pol1_vals);
+      extract_counts(pol2_bram, pol2_vals);
+
+      if (verbose)
+        multilog(log, LOG_INFO, "calculating maxes\n");
+
+      pol1_max_value = calculate_max(pol1_vals, 8);
+      pol2_max_value = calculate_max(pol2_vals, 8);
+
+      if (verbose)
+        multilog(log, LOG_INFO, "max vals = %d,%d\n",pol1_max_value, pol2_max_value);
+    
+      bit_window = find_bit_window(pol1_max_value, pol2_max_value, &pol1_coeff, &pol2_coeff);
+
+      if (verbose) 
+        multilog(log, LOG_INFO, "bit window %d, new scale factors %d,%d\n", bit_window,pol1_coeff, pol2_coeff);
+
+      break;
+    }
+    else
+    {
+      n_attempts --;
+      multilog(log, LOG_INFO, "Fail at setting levels... remaining attempts:%d\n", n_attempts);
+    }
+  }
+
+  // Write the bit window choice to the ibob
+  sprintf(command,"regwrite reg_output_bitselect %d\r\n",bit_window);
+  if (verbose)
+    multilog(log, LOG_INFO, "regwrite reg_output_bitselect %d\n",bit_window);
+
+  rval = sock_write(fd, command, strlen(command) -1);
+
+  // Tell the BPSR TCS interface script that we are ready
+  if (udpdb->mode != 1) {
+    sprintf(command, "READY\r\n");
+    rval = sock_write(bpsr_interface_fd, command, strlen(command) -1);
+    sock_close(bpsr_interface_fd);
+  }
+
+  timeout.tv_sec=0;
+  timeout.tv_usec=400000;
+
+  time_t curr = time(0);
+  time_t prev = curr;
+
+  while (curr== prev) {
+    curr = time(0);
+  }
+
+  select(0,NULL,NULL,NULL,&timeout);
+
+  if (verbose)
+    multilog(log, LOG_INFO, "regwrite reg_arm 0\n");
+
+  sprintf(command, "regwrite reg_arm 0\r\n");
+  rval = sock_write(fd, command, strlen(command) -1);
+
+  if (verbose)
+    multilog(log, LOG_INFO, "regwrite reg_arm 1\n");
+
+  sprintf(command, "regwrite reg_arm 1\r\n");
+  rval = sock_write(fd, command, strlen(command) -1);
+
+  if (verbose) 
+    multilog(log, LOG_INFO, "closing ibob socket\n");
+
+  sock_close(fd);
+  
+  return (curr + 1);
+
+  /*sprintf(command, "/home/apsr/linux_64/bin/ibob_rearm_trigger %s %d",udpdb->ibob_host, udpdb->ibob_port);
+  long int utc_unix;
+  FILE * fptr = popen(command, "r");
+  fscanf(fptr, "%ld", &utc_unix);
+  pclose(fptr);
+  return utc_unix;*/
+
+}
+
+void extract_counts(char * bram, long * vals) {
+
+  const char *sep = "\r\n";
+  char *line;
+  char value[11];
+  int i=0;
+
+  line = strtok(bram, sep);
+  strncpy(value, line+69, 11);
+  vals[i] = atol(value);
+
+  for (i=1; i<512; i++) {
+    line = strtok(NULL, sep);
+    strncpy(value, line+69, 11); 
+    vals[i] = atol(value);
+  }
+
+}
+
+long calculate_max(long * vals, long birdie_factor) {
+
+  sort(vals,0,511);
+  long median  = vals[255];
+  long birdie_cutoff = birdie_factor * median;
+  long max_value = 0;
+
+  int i=0;
+  int n_sum=0;
+  double sum = 0;
+  double sum_mean = 0;
+
+  for (i=0; i<512; i++) {
+    if (vals[i] < birdie_cutoff) {
+      sum += (double) vals[i]; 
+      n_sum++;
+      if (vals[i] > max_value)
+        max_value = vals[i];
+    }
+  }
+  
+  long mean_value = (long) ( sum / (double) n_sum);
+  //fprintf(stderr, "max = %d, mean = %d\n",max_value, mean_value);
+
+  return max_value;
+}
+
+void swap(long *a, long *b)
+{
+  long t=*a; *a=*b; *b=t;
+}
+
+void sort(long arr[], long beg, long end)
+{
+  if (end > beg + 1)
+  {
+    long piv = arr[beg], l = beg + 1, r = end;
+    while (l < r)
+    {
+      if (arr[l] <= piv)
+        l++;
+      else
+        swap(&arr[l], &arr[--r]);
+    }
+    swap(&arr[--l], &arr[beg]);
+    sort(arr, beg, l);
+    sort(arr, r, end);
+  }
+}
+
+int find_bit_window(long pol1val, long pol2val, long *gain1, long* gain2) {
+
+  long bitsel_min[4] = {0, 256, 65535, 16777216 };
+  long bitsel_mid[4] = {64, 8192, 2097152, 536870912};
+  long bitsel_max[4] = {255, 65535, 16777215, 4294967295};
+
+  long val = ((long) (((double) pol1val + (double) pol2val) / 2.0));
+
+  //Find which bit selection window we are currently sitting in
+  int i=0;
+  int current_window = 0;
+  int desired_window = 0;
+
+  for (i=0; i<4; i++) {
+
+    //If average (max) value is in the lower half
+    if ((val > bitsel_min[i]) && (val <= bitsel_mid[i])) {
+      current_window = i;
+
+      if (i == 0) {
+        desired_window = 0;
+
+      } else {
+        desired_window = i-1;
+      }
+    }
+
+    // If average (max)n value is in the upper half, simply raise to
+    // the top of this window
+    if ((val > bitsel_mid[i]) && (val <= bitsel_max[i])) {
+      current_window = i;
+      desired_window = i;
+    }
+  }
+
+  if (desired_window == 3) {
+    desired_window = 2;
+  }
+
+  if ((pol1val == 0) || (pol2val == 0)) {
+    pol1val = 1;
+    pol2val = 1;
+  }
+
+  long desired_val =  ((bitsel_max[desired_window]+1) / 2);
+
+  //printf("desired val = %d\n",desired_val);
+  
+  double gain_factor1 = (double) desired_val / (double) pol1val;
+  double gain_factor2 = (double) desired_val / (double) pol2val;
+
+  gain_factor1 = sqrt(gain_factor1);
+  gain_factor2 = sqrt(gain_factor2);
+
+  gain_factor1 *= *gain1;
+  gain_factor2 *= *gain2;
+
+  *gain1 = (long) floor(gain_factor1);
+  *gain2 = (long) floor(gain_factor2);
+
+  if (*gain1 > 200000) {
+    *gain1 = 200000;
+  }
+  if (*gain2 > 200000) {
+    *gain2 = 200000;
+  }
+  return desired_window;
+}
+
+int from_ibob(int fd, char *response) {
+
+  int bytes_read = 0;
+  int rval = 1;
+  while (rval > 0) {
+    rval = sock_tm_read(fd, (void *) (response + bytes_read), 4096, 0.1);
+    bytes_read += rval;
+  }
+
+  int i=0;
+  for (i=0; i<bytes_read; i++) {
+    if (response[i] == '\r')
+       response[i] = ' ';
+    if (response[i] == '\n')
+       response[i] = ',';
+  }
+
+  response[bytes_read] = '\0';
+
+  return bytes_read;
+}
+
 
