@@ -180,12 +180,7 @@ int dada_pwc_command_set (dada_pwc_t* primary, FILE* output,
     break;
 
   case dada_pwc_stop:
-    if (primary->state != dada_pwc_clocking &&
-        primary->state != dada_pwc_recording) {
-      fprintf (output, "Cannot stop when not CLOCKING or RECORDING"
-               " (state=%s)\n", dada_pwc_state_to_string (primary->state));
-      ret = -1;
-    }
+    // always allow stop ... WvS - 6 Oct 2008
     break;
 
   case dada_pwc_set_utc_start:
