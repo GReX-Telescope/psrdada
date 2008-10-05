@@ -16,8 +16,8 @@
 #include "plot4mon.h"
 #include <string.h>
 
-void read_params(char inpfile[], int *nchan, float *tsamp, 
-                 int *ndim, float *yscale, 
+void read_params(char inpfile[], int *nchan, float *tsamp, float *fch1,
+                 float *chbw, int *ndim, float *yscale, 
 		 int *firstdump_line, int *work_flag, char add_work[])
 {
   printf(" Reading the parameters of the file %s \n",inpfile);
@@ -126,6 +126,8 @@ void read_params(char inpfile[], int *nchan, float *tsamp,
   {
     printf(" Not a recognized file name!");
     printf(" Applying nchan=1024 and tsamp=64 us to the data \n");
+    *fch1=1582.0;
+    *chbw=0.390625;
     *nchan=1024;
     *tsamp=64e-6;
     *ndim=1;

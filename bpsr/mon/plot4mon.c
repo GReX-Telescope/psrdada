@@ -29,7 +29,7 @@ int main (int argc, char *argv[])
   char add_work[8];
   long totvaluesread,totvalues4plot;
   int nchan,ndim,firstdump_line,work_flag,nbin_x,nsub_y;
-  float yscale,tsamp;
+  float xscale=1.0,yscale, tsamp, fch1, chbw;
   float *x_read, *y_read, *y_read1, *y_new, *y_new1;
 
   /* reading the command line   */
@@ -39,7 +39,7 @@ int main (int argc, char *argv[])
   //fprintf(stderr,"log bandpass %d \n",dolog);
 
   /* determining the relevant parameters of the data and plot */
-  read_params(inpfile1,&nchan,&tsamp,
+  read_params(inpfile1,&nchan,&tsamp,&fch1,&chbw,
 	      &ndim,&yscale,&firstdump_line,
 	      &work_flag,add_work);
 
@@ -65,10 +65,15 @@ int main (int argc, char *argv[])
   /* enter the loop on the plots to be produced with the data in inpfile1 */
   while (plotnum <= work_flag) { 
    
-  /* perform additional work (fft,averaging,etc...) on the data if required */ 
-  work_on_data(inpfile0,&y_read[0],&y_new[0],totvaluesread,
+
+    // if time series scale x axis by tsamp
+
+    if (strstr(inpfile1,"ts") && (plotnum==0)) xscale=tsamp;
+
+    /* perform additional work (fft,averaging,etc...) on the data if required */ 
+    work_on_data(inpfile0,&y_read[0],&y_new[0],totvaluesread,
 	       &totvalues4plot,tsamp,yscale,plotnum,add_work,dolog);
-  work_on_data(inpfile1,&y_read1[0],&y_new1[0],totvaluesread,
+    work_on_data(inpfile1,&y_read1[0],&y_new1[0],totvaluesread,
 	       &totvalues4plot,tsamp,yscale,plotnum,add_work,dolog);
 
   /* creating the name for the output pgplot file */ 
@@ -79,20 +84,20 @@ int main (int argc, char *argv[])
 
   // labels and title - make this new create_labels (todo)
   if (strstr(inpfile1, "bps") != NULL) {
-    strcpy(xlabel," Frequency channel ");
+    strcpy(xlabel," Frequency (MHz) ");
     strcpy(ylabel," Power level ");
     strcpy(plottitle," RMS Bandpass ");
   } else if (strstr(inpfile1,"bp") != NULL) {
-    strcpy(xlabel," Frequency channel ");
+    strcpy(xlabel," Frequency (MHz) ");
     strcpy(ylabel," Power level ");
     strcpy(plottitle," Mean Bandpass ");
   } else if (strstr(inpfile1,"ts") != NULL) {
     if (plotnum == 1) {
-      strcpy(xlabel," Frequency (units) ");
+      strcpy(xlabel," Frequency (Hz) ");
       strcpy(ylabel," Power ");
       strcpy(plottitle," Zero DM FFT ");
     } else { 
-      strcpy(xlabel," Time sample ");
+      strcpy(xlabel," Time (seconds) ");
       strcpy(ylabel," Power level ");
       strcpy(plottitle," Zero DM Time Series");
     }
@@ -102,8 +107,9 @@ int main (int argc, char *argv[])
   if (ndim==1) 
   {
     /* filling the x array with suitable indexes */
+
     create_xaxis(inpfile1,plotnum,totvaluesread,totvalues4plot,
-                 nchan,tsamp,&x_read[0]);  
+                 fch1,chbw,xscale,nchan,tsamp,&x_read[0]);  
     /* creating a 1-D plot with pgplot */
     //plot_stream_1D(&x_read[0],&y_new[0],totvalues4plot,
 		//outputfile,xlabel,ylabel,plottitle);
