@@ -11,7 +11,10 @@
 /* Ver 2.0 RB 04 Oct 2008
    modified for new file format and to overplot bandpass and time series for 
    both pol0 and pol1, labels and title based on file extension, default dev
-   png                                                                     */ 								
+   png                                                                     */ 		
+/* 
+   RB 05 Sept 2008: plots with x axes in proper units (e.g. MHz, secs,...) */
+/*                                                                         */
 /* DRAFT VERSION                                                           */
 /* (REFINEMENTS IN GRAPHICS, INTERACTIVE SETTING OF PARAMETERS, ADDTIONAL  */
 /*  PLOTS... ETC... ARE IN PROGRESS)                                       */ 

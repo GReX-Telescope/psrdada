@@ -11,6 +11,8 @@
 /* Now it also determines the blocksize for reading the data (the latter   */
 /* will be fixed at the best value after some experience of using the code)*/
 /*                                                                         */
+/* RB 05 Sept 2008: X axes in proper units (e.g. MHz, secs, Hz)            */
+/*                                                                         */
 /***************************************************************************/
 
 #include "plot4mon.h"

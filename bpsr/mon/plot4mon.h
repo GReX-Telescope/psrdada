@@ -7,6 +7,8 @@
 /* Ver 2.0        RB 04 Sept 2008
                   default plot device: png 
                   no longer need to set large stack sizes (use of malloc)  */
+/*                RB 05 Sept 2008
+		  plots with x axes in proper units (e.g. MHz, secs, Hz)   */
 /*                                                                         */
 /***************************************************************************/
 
