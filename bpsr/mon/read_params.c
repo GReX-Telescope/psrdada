@@ -11,7 +11,7 @@
 /* Now it also determines the blocksize for reading the data (the latter   */
 /* will be fixed at the best value after some experience of using the code)*/
 /*                                                                         */
-/* RB 05 Sept 2008: X axes in proper units (e.g. MHz, secs, Hz)            */
+/* RB 05 Oct 2008: X axes in proper units (e.g. MHz, secs, Hz)            */
 /*                                                                         */
 /***************************************************************************/
 
@@ -24,8 +24,11 @@ void read_params(char inpfile[], int *nchan, float *tsamp, float *fch1,
 {
   printf(" Reading the parameters of the file %s \n",inpfile);
 
-  if (strings_compare(inpfile,"bpm0.dat")) 
+  //if (strings_compare(inpfile,"bpm0.dat")) 
+  if ((strstr(inpfile,"bp")) != NULL)
   {
+    *fch1=1582.0;
+    *chbw=0.390625;
     *nchan=1024;
     *tsamp=64e-6;
     *ndim=1;
@@ -34,57 +37,8 @@ void read_params(char inpfile[], int *nchan, float *tsamp, float *fch1,
     *work_flag=0;
     strcpy(add_work,"null");
   }
-  else if (strings_compare(inpfile,"bpm1.dat")) 
-  {
-    *nchan=1024;
-    *tsamp=64e-6;
-    *ndim=1;
-    *yscale=1.0;
-    *firstdump_line=1;
-    *work_flag=0;
-    strcpy(add_work,"null");
-  }
-  else if (strings_compare(inpfile,"bp0.dat")) 
-  {
-    *nchan=1024;
-    *tsamp=64e-6;
-    *ndim=2;
-    *yscale=1.0;
-    *firstdump_line=1;
-    *work_flag=0;
-    strcpy(add_work,"null");
-  }
-  else if (strings_compare(inpfile,"bp1.dat")) 
-  {
-    *nchan=1024;
-    *tsamp=64e-6;
-    *ndim=2;
-    *yscale=1.0;
-    *firstdump_line=1;
-    *work_flag=0;
-    strcpy(add_work,"null");
-  }
-  else if (strings_compare(inpfile,"bp0rms.dat")) 
-  {
-    *nchan=1024;
-    *tsamp=64e-6;
-    *ndim=2;
-    *yscale=1.0;
-    *firstdump_line=1;
-    *work_flag=0;
-    strcpy(add_work,"null");
-  }
-  else if (strings_compare(inpfile,"bp1rms.dat")) 
-  {
-    *nchan=1024;
-    *tsamp=64e-6;
-    *ndim=2;
-    *yscale=1.0;
-    *firstdump_line=1;
-    *work_flag=0;
-    strcpy(add_work,"null");
-  }
-  else if (strings_compare(inpfile,"time0.dat")) 
+  //else if (strings_compare(inpfile,"time0.dat")) 
+  else if ((strstr(inpfile,"ts")) != NULL)
   {
     *nchan=1024;
     *tsamp=64e-6;
@@ -94,27 +48,8 @@ void read_params(char inpfile[], int *nchan, float *tsamp, float *fch1,
     *work_flag=1;
     strcpy(add_work,"fft");
   }
-  else if (strings_compare(inpfile,"time1.dat")) 
-  {
-    *nchan=1024;
-    *tsamp=64e-6;
-    *ndim=1;
-    *yscale=*nchan;
-    *firstdump_line=1;
-    *work_flag=1;
-    strcpy(add_work,"fft");
-  }
-  else if (strings_compare(inpfile,"rawstat0.dat")) 
-  {
-    *nchan=1024;
-    *tsamp=64e-6;
-    *ndim=1;
-    *yscale=1;
-    *firstdump_line=1;
-    *work_flag=1;
-    strcpy(add_work,"fft");
-  }
-  else if (strings_compare(inpfile,"rawstat1.dat")) 
+  //else if (strings_compare(inpfile,"rawstat0.dat")) 
+  else if ((strstr(inpfile,"stat")) != NULL)
   {
     *nchan=1024;
     *tsamp=64e-6;
@@ -138,10 +73,14 @@ void read_params(char inpfile[], int *nchan, float *tsamp, float *fch1,
     *work_flag=0;
     strcpy(add_work,"null");
   }
-  printf(" The number of channels = %d \n",*nchan);
-  printf(" The sampling time is = %f us \n",*tsamp*1e6);
-  printf(" The dimension of the plot = %d \n",*ndim);
-  printf(" The Y-scaling factor of the plot = %f \n",*yscale);
-  printf(" The first dump is plotted [yes=1,no=0] = %d \n",*firstdump_line);
-  printf(" Number of plots produced from the data = %d \n",*work_flag+1);
+  printf(" \n");
+  printf(" Number of channels  = %d \n",*nchan);
+  printf(" Frequency channel 1 = %f MHz \n",*fch1);
+  printf(" Channel bandwidth   = %f MHz \n",*chbw);
+  printf(" Sampling time       = %f us \n",*tsamp*1e6);
+  printf(" Dimension of plot   = %d \n",*ndim);
+  printf(" Y scaling factor    = %f \n",*yscale);
+  printf(" First dump plotted [yes=1,no=0] = %d \n",*firstdump_line);
+  printf(" Number of plots produced        = %d \n",*work_flag+1);
+  printf(" \n");
 }
