@@ -4,7 +4,7 @@
 /*                                                                         */
 /* it creates the name for the outputfile according to the selected device */
 /*                                                                         */
-/* RB 04 Sept 08: appropriate extentions to the output png files           */
+/* RB 04 Oct 08: appropriate extentions to the output png files           */
 /*                                                                         */
 /***************************************************************************/
 
