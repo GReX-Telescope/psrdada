@@ -1,6 +1,7 @@
 
 #include "sock.h"
 
+#include <ctype.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -87,12 +88,24 @@ int main (int argc, char** argv)
 
   // set the socket output to be line-buffered
   setvbuf (sockout, 0, _IOLBF, 0);
-  setvbuf (sockin, 0, _IOLBF, 0);
-
-  fprintf (stderr, "sending bramdump request\n");
+  // setvbuf (sockin, 0, _IOLBF, 0);
 
   fprintf (sockout, fake_telnet);
-  fprintf (sockout, "bramdump scope_output1/bram\r\n");
+
+  const char* cmd = "bramdump scope_output1/bram";
+
+  fprintf (stderr, "sending bramdump request\n");
+  fprintf (sockout, "%s\r\n", cmd);
+
+  char buffer [128];
+  char* rgot = 0;
+  do 
+  {
+    rgot = fgets (buffer, 128, sockin);
+  }
+  while (rgot && !strstr(rgot, "IBOB"));
+
+  fprintf (stderr, "reading response\n");
 
   unsigned i=0;
   for (i=0; i<2048; i++)
