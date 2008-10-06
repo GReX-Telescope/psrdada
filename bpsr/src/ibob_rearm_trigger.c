@@ -112,6 +112,11 @@ int main (int argc, char** argv)
 	if (fptr)
 	  log_bad_open (fptr, hostname, port);
       }
+      
+      if (verbose) 
+	printf ("opened socket to %s on port %d [fd %d]\n",
+		hostname, port, fds[ifd]);
+
     }
   }
   else
@@ -230,8 +235,6 @@ int main (int argc, char** argv)
 
   if (fptr)
     fprintf (fptr, "[%s] returing time %d [%s]\n", buffer, (current), buffer2);
-
-  if (verbose) printf("closing socket\n");
 
   if (fptr)
     fclose (fptr);
