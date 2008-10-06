@@ -4,7 +4,7 @@
 /*                                                                         */
 /* it fills the xaxis array with suitable values for 1-D plots             */
 /*                                                                         */
-/* RB 05 Sept 2008: X axis in proper units (e.g. MHz, sec, Hz)             */
+/* RB 05 Oct 2008: X axis in proper units (e.g. MHz, sec, Hz)             */
 /*                                                                         */
 /***************************************************************************/
 
