@@ -4,7 +4,7 @@
 /*                                                                         */
 /* it reads from a stream                                                  */
 /*                                                                         */
-/* Ver 2.0	RB 04 Sept 2008
+/* Ver 2.0	RB 04 Oct 2008
 		no longer needs large stacks (malloc replaces MAXNUMPOINTS) 
 */
 /*                                                                         */
