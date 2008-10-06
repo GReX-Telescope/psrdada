@@ -4,16 +4,27 @@
 /*                                                                         */
 /* it reads the input values from the command line                         */
 /*                                                                         */
+/* Ver 2.0 RB 06 Oct 2008                                                  */
+/* 		modified to take in options for resolution (pixel dimension)
+		mode, plot bandpass on log, omit labels or box		   */
+/*                                                                         */
 /***************************************************************************/
 
 #include "plot4mon.h"
 
-void get_commandline(int argc, char *argv[], char *inpfile0, 
-		char *inpfile1, char *inpdev, char *outputfile, int *dolog)
+void get_commandline(int argc, char *argv[], char *inpfile0, char *inpfile1, 
+			char *inpdev, char *outputfile, int *dolog, int *dolabel,
+			int *dobox, unsigned *width_pixels, unsigned *height_pixels)
 {
   int i,j,nfiles;
   int device_selected=0; 
   char checkchar[2];
+  
+  // plot dimensions in pixels
+  unsigned width = 0, height = 0;
+
+  // any character, e.g. 'x' in 640x480
+  char c = 0, optarg[10];
 
   /* check number of command-line arguments and print help if requested */
   if (argc<2) {
@@ -66,9 +77,27 @@ void get_commandline(int argc, char *argv[], char *inpfile0,
          exit(-1);
         }  
 	device_selected=1;
-      } else if (strings_compare(argv[i],"-l")) {
-        dolog = 1;
-        printf(" log band pass set to 1 \n");
+      } else if (strings_compare(argv[i],"-G")) {
+        strcpy(optarg,argv[++i]);
+        if (sscanf(optarg, "%u%c%u", &width, &c, &height) != 3)
+          {
+            fprintf (stderr, "could not parse dimensions from %s\n", optarg);
+            return -1;
+          } else {
+            *width_pixels = width; 
+            *height_pixels = height;
+            fprintf (stderr, "Pixel dimensions: %d x %d \n", width, height);
+          }
+      } else if (strings_compare(argv[i],"-nolabel")) {
+        *dolabel = 0;
+        //printf("command: dolabel set to %d \n",*dolabel);
+        printf("Plot mode: thumbnail \n");
+      } else if (strings_compare(argv[i],"-nobox")) {
+        *dobox = 0;
+        printf("Plot mode: No box \n");
+      } else if (strings_compare(argv[i],"-log")) {
+        *dolog = 1;
+        printf("dolog set to %d \n",*dolog);
       } else if (strings_compare(argv[i],"-h")) {
         /* print the help on line */
 	display_help(argv[0]);
