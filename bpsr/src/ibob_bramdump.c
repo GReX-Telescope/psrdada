@@ -19,6 +19,20 @@ void usage() {
     " -h          print help text\n");
 }
 
+char fake_telnet[] = { 255, 251, 37,
+		       255, 253, 38,
+		       255, 251, 38,
+		       255, 253, 3,
+		       255, 251, 24,
+		       255, 251, 31,
+		       255, 251, 32,
+		       255, 251, 33,
+		       255, 251, 34,
+		       255, 251, 39,
+		       255, 253, 5,
+		       255, 251, 35,
+		       0 };
+
 int main (int argc, char** argv)
 {
   char * hostname;
@@ -76,6 +90,8 @@ int main (int argc, char** argv)
   setvbuf (sockin, 0, _IOLBF, 0);
 
   fprintf (stderr, "sending bramdump request\n");
+
+  fprintf (sockout, fake_telnet);
   fprintf (sockout, "bramdump scope_output1/bram\r\n");
 
   unsigned i=0;
