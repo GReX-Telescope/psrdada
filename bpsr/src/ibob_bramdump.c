@@ -52,6 +52,11 @@ int main (int argc, char** argv)
     port = atoi(argv[(optind+1)]);
   }
 
+  unsigned retries = 33;
+
+  while (retries)
+  {
+
   int fd = sock_open(hostname, port);
   if (fd < 0)  {
     fprintf(stderr, "Error creating socket\n");
@@ -85,18 +90,23 @@ int main (int argc, char** argv)
     {
       if (feof (sockin))
         fprintf (stderr, "Socket connection terminated.\n");
-
-      else if (!rgot) {
-        if (ferror (sockin))
-          perror ("ferror after fgets");
-        else
-          perror ("fgets");
-      }
+      if (ferror (sockin))
+        perror ("ferror after fgets");
+      else
+        perror ("fgets");
       break;
     }
   }
 
-  fclose (sockout);
+  sock_close (fd);
+  if (i == 2048)
+    break;
+
+    retries --;
+    fprintf (stderr, "Failed to read 2048 lines; retries=%d\n", retries);
+    sleep (1);
+  }
+ 
   return 0;
 }
 
