@@ -13,7 +13,9 @@
    both pol0 and pol1, labels and title based on file extension, default dev
    png                                                                     */ 		
 /* 
-   RB 05 Sept 2008: plots with x axes in proper units (e.g. MHz, secs,...) */
+   RB 05 Oct 2008: plots with x axes in proper units (e.g. MHz, secs,...)  */
+/*                                                                         */
+/* RB 06 Oct 2008: implemented the resolution (pixel dimension) mode       */
 /*                                                                         */
 /* DRAFT VERSION                                                           */
 /* (REFINEMENTS IN GRAPHICS, INTERACTIVE SETTING OF PARAMETERS, ADDTIONAL  */
@@ -25,27 +27,33 @@
 
 int main (int argc, char *argv[])
 {
-  int plotnum=0,dolog=0,ndata=156250;
+  int  plotnum=0,dolog=0,dolabel=1,dobox=1,ndata=156250;
   char inpfile[80],inpdev[80],outputfile[80];
   char inpfile0[80],inpfile1[80];
   char xlabel[80],ylabel[80],plottitle[80];
   char add_work[8];
   long totvaluesread,totvalues4plot;
-  int nchan,ndim,firstdump_line,work_flag,nbin_x,nsub_y;
+  int  nchan,ndim,firstdump_line,work_flag,nbin_x,nsub_y;
   float xscale=1.0,yscale, tsamp, fch1, chbw;
   float *x_read, *y_read, *y_read1, *y_new, *y_new1;
 
+  // plot dimensions in pixels
+  unsigned width_pixels = 0, height_pixels = 0;
+
+
   /* reading the command line   */
   //get_commandline(argc,argv,inpfile,inpdev,outputfile);
-  get_commandline(argc,argv,inpfile0,inpfile1,inpdev,outputfile,&dolog);
+  get_commandline(argc,argv,inpfile0,inpfile1,inpdev,outputfile,&dolog,&dolabel,
+	 		&dobox, &width_pixels, &height_pixels);
 
-  //fprintf(stderr,"log bandpass %d \n",dolog);
+  fprintf (stderr, "Pixel dimensions: %d x %d \n",width_pixels,height_pixels);
 
   /* determining the relevant parameters of the data and plot */
   read_params(inpfile1,&nchan,&tsamp,&fch1,&chbw,
 	      &ndim,&yscale,&firstdump_line,
 	      &work_flag,add_work);
 
+  // make these dynamic once ascii header is implemented
   x_read=(float *) malloc(ndata*sizeof(float));
   y_read=(float *) malloc(ndata*sizeof(float));
   y_read1=(float *) malloc(ndata*sizeof(float));
@@ -76,6 +84,7 @@ int main (int argc, char *argv[])
     /* perform additional work (fft,averaging,etc...) on the data if required */ 
     work_on_data(inpfile0,&y_read[0],&y_new[0],totvaluesread,
 	       &totvalues4plot,tsamp,yscale,plotnum,add_work,dolog);
+
     work_on_data(inpfile1,&y_read1[0],&y_new1[0],totvaluesread,
 	       &totvalues4plot,tsamp,yscale,plotnum,add_work,dolog);
 
@@ -110,14 +119,13 @@ int main (int argc, char *argv[])
   if (ndim==1) 
   {
     /* filling the x array with suitable indexes */
-
     create_xaxis(inpfile1,plotnum,totvaluesread,totvalues4plot,
                  fch1,chbw,xscale,nchan,tsamp,&x_read[0]);  
+
     /* creating a 1-D plot with pgplot */
-    //plot_stream_1D(&x_read[0],&y_new[0],totvalues4plot,
-		//outputfile,xlabel,ylabel,plottitle);
-    plot_stream_1D(&x_read[0],&y_new[0],&y_new1[0],totvalues4plot,
-		outputfile,xlabel,ylabel,plottitle);
+    plot_stream_1D(&x_read[0], &y_new[0], &y_new1[0], totvalues4plot,
+		outputfile, xlabel, ylabel, plottitle, dolabel,
+		dobox, width_pixels, height_pixels);
   } 
   else if (ndim==2) 
   {

@@ -2,18 +2,29 @@
 /*                                                                         */
 /* function plot_stream_1D                                                 */
 /*                                                                         */
+/* Ver 2.0 RB 06 Oct 2008                                                  */
+/*              Implemented resolution (pixel dimension) mode,             */
+/*              option to plot band pass on logarthmic scale,              */
+/*		option to omit labels, option to omit plot box             */
+/*                                                                         */
 /*                                                                         */
 /***************************************************************************/
 
 #include "plot4mon.h"
 
-int plot_stream_1D(float x[], float y[], float y1[], long nvalues,
-               char inpdev[], char xlabel[], char ylabel[], char plottitle[])
+int plot_stream_1D(float x[], float y[], float y1[], long nvalues, char inpdev[], 
+		char xlabel[], char ylabel[], char plottitle[], int dolabel,
+		int dobox, unsigned width_pixels, unsigned height_pixels)
 {
   long kk=0;
   float max_x, min_x, max_y, min_y, max_y1, min_y1; 
   float marg_x, marg_y;
+  char xopt[10],yopt[10];
+  float xtick=0.0, ytick=0.0;
+  int nxsub=0, nysub=0;
  
+  //fprintf (stderr, " Plot: Pixel dimensions: %d x %d \n",width_pixels,height_pixels);
+
   /*
    *  Compute the minimum and maximum value of the input array(s)
    */
@@ -39,44 +50,41 @@ int plot_stream_1D(float x[], float y[], float y1[], long nvalues,
   printf(" Margins : Xmargin = %f \n",marg_x); 
   printf(" Margins : Ymargin = %f \n",marg_y); 
 
-  //debug lines
-  //int i; 
-  //for (i=1; i<nvalues; i++) { fprintf(stderr," %f %f %f \n", x[i], y[i], y1[i]); }
-
-  /*
-   * Call cpgbeg to initiate PGPLOT and open the output device; 
-   */
+  // initiate plot if display device selected 
   if(cpgbeg(0, inpdev, 1, 1) != 1) return -2;
-  /*
-   * Call cpgenv to specify the range of the axes and to draw a box, and
-   * cpglab to label it, with line size given by cpslw (default 1)
-   * and text height given by cpsch (default 1.0) 
-   */
-  cpgenv(min_x, max_x+marg_x, min_y, max_y+marg_y, 0, 0);
-  cpgslw(4);
-  cpgsch(1.2);
-  cpglab(xlabel,ylabel,plottitle);
-  /*
-   * If needed call cpgpt to mark the points using symbol number -1 (a dot)
-   */
-      //  cpgpt((int)nvalues, x, y, -1);
-  /*
-   * Call cpgline to join the points with a line
-   */
 
+  // set resolution if pixels dimens selected
+  if (width_pixels && height_pixels)
+   set_dimensions (width_pixels, height_pixels);
+
+  // omit box totally if -nobox option selected
+  if(!dobox){
+    strcpy(xopt," ");
+    strcpy(yopt," ");
+    float xleft=0.1, xright=0.9, ybot=0.1, ytop=0.9;
+    cpgsvp(xleft, xright, ybot, ytop);
+    cpgswin(min_x, max_x+marg_x, min_y, max_y+marg_y);
+    cpgbox(xopt, xtick, nxsub, yopt, ytick, nysub);
+  } else cpgenv(min_x, max_x+marg_x, min_y, max_y+marg_y, 0, 0);
+
+  // omit labels and title if -nolabel option selected 
+  if(dolabel) cpglab(xlabel,ylabel,plottitle);
+
+  cpgsch(1.2);
   cpgslw(2);
-  printf(" Plotting pol0 \n");
+
+  // plot pol0 
   cpgsci(2);
   cpgline((int)nvalues-1, x, y);
-  printf(" Plotting pol1 \n");
+
+  // plot pol1
   cpgsci(10);
   cpgline((int)nvalues-1, x, y1);
+
   cpgsci(1);
-  /*
-   * Finally, call cpgend to terminate things properly.
-   */
   cpgend();
-  printf(" Plotting completed \n");
+  //printf(" Plotting completed \n");
+
   return 0;
 }
 

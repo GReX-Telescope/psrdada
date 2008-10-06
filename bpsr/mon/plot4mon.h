@@ -4,11 +4,16 @@
 /*                                                                         */
 /* Ver 1.0        AP 30 Sept 2008                                          */
 /*                                                                         */
-/* Ver 2.0        RB 04 Sept 2008
+/* Ver 2.0        
+	RB 04 Oct 2008
                   default plot device: png 
                   no longer need to set large stack sizes (use of malloc)  */
-/*                RB 05 Sept 2008
+
+/*	RB 05 Oct 2008
 		  plots with x axes in proper units (e.g. MHz, secs, Hz)   */
+
+/*      RB 06 Oct 2008
+		  added set_dimensions for high resolution mode            */
 /*                                                                         */
 /***************************************************************************/
 
@@ -24,8 +29,7 @@
 #define MAX_PERIOD 5.0 /* max period to look at in FFT in sec */
 #define MIN_PERIOD 0.001 /* min period to look at in FFT in sec */
 
-
-void get_commandline(int , char *argv[], char *, char *, char *, char *, int *);
+void get_commandline(int , char *argv[], char *, char *, char *, char *, int *, int *, int *, unsigned *, unsigned *);
 void display_help(char *);
 void compute_extremes(float *, long, float *, float *);
 void compute_margin(long, float, float, float *);
@@ -43,6 +47,9 @@ float selectmed(unsigned long, unsigned long, float *);
 int check_file_exists(char *);
 int strings_compare(char *, char *); 
 int plot_stream_1D(float *, float *, float *, long, 
-                char *, char*, char *, char *);
+                char *, char*, char *, char *, int, int, unsigned, unsigned);
 int plot_stream_2D(float *, int, int, float, int,
                 char *, char*, char *, char *);
+void set_dimensions (unsigned, unsigned);
+
+/***************************************************************************/
