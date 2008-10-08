@@ -17,7 +17,7 @@ int from_ibob(int fd, char *response);
 void usage()
 {
   fprintf (stdout,
-	   "bpsr_udpdb [options] ibob_host ibob_port\n"
+	   "bpsr_udpdb [options]\n"
      " -h             print help text\n"
      " -i interface   ip/interface for inc. UDP packets [default all]\n"
 	   " -p             port on which to listen [default %d]\n"
@@ -48,7 +48,7 @@ int udpdb_header_valid_function (dada_pwc_main_t* pwcm) {
   if (strcmp(utc_buffer,"UNKNOWN") == 0)
     valid = 0;
 
-  multilog(pwcm->log, LOG_INFO, "Checking if header is valid: %d\n", valid);
+  // multilog(pwcm->log, LOG_INFO, "Checking if header is valid: %d\n", valid);
 
   return valid;
 
@@ -155,10 +155,10 @@ time_t udpdb_start_function (dada_pwc_main_t* pwcm, time_t start_utc)
   udpdb->prev_seq = 0;
 
   /* Run the script to startup the ibob */
-  char command[1024];
-
-  multilog(log, LOG_INFO, "Running new supa function!\n");
-  time_t utc = set_ibob_levels(pwcm);
+  //char command[1024];
+  //multilog(log, LOG_INFO, "Running new supa function!\n");
+  //time_t utc = set_ibob_levels(pwcm);
+  time_t utc = 0;
 
   //if (udpdb->mode == 1) {
     //sprintf(command, "client_ibob_level_setter.pl -a %d %s", 
@@ -179,7 +179,7 @@ time_t udpdb_start_function (dada_pwc_main_t* pwcm, time_t start_utc)
   //if (utc_unix > 0) 
   //  utc = (time_t) utc_unix;
 
-  multilog(log, LOG_INFO, "start function returning UTC_START = %ld\n", utc);
+  //multilog(log, LOG_INFO, "start function returning UTC_START = %ld\n", utc);
 
   return utc;
 }
@@ -594,8 +594,8 @@ int main (int argc, char **argv)
   static char* buffer = 0;
   char *src;
 
-  char * ibob_host;
-  int    ibob_port;
+  //char * ibob_host;
+  //int    ibob_port;
 
   while ((arg=getopt(argc,argv,"di:p:vm:S:H:n:1h")) != -1) {
     switch (arg) {
@@ -662,15 +662,6 @@ int main (int argc, char **argv)
     }
   }
 
-  if ((argc - optind) != 2) {
-    fprintf(stderr, "Error: host and port must be specified\n");
-    usage();
-    return EXIT_FAILURE;
-  } else {
-    ibob_host = argv[optind];
-    ibob_port = atoi(argv[(optind+1)]);
-  }
-
   log = multilog_open ("bpsr_udpdb", 0);
 
   if (daemon) 
@@ -703,8 +694,8 @@ int main (int argc, char **argv)
   udpdb.port = port;
   udpdb.acc_len = BPSR_DEFAULT_ACC_LEN;   // 25
   udpdb.mode = mode;
-  udpdb.ibob_host = strdup(ibob_host);
-  udpdb.ibob_port = ibob_port;
+  udpdb.ibob_host = NULL;
+  udpdb.ibob_port = 0;
 
   /* init stats structs */
   stats_t packets = {0,0,0,0};
@@ -886,7 +877,11 @@ time_t set_ibob_levels(dada_pwc_main_t* pwcm) {
 
   /* Not sure if this helps, but try to spread the access to ibobs out a little */
   sprintf(command, "/home/apsr/linux_64/bin/ibob_level_setter -n 0 %s %d\n",udpdb->ibob_host, udpdb->ibob_port);
-  system(command);
+
+  // system(command);
+
+  multilog(log, LOG_INFO, "NO LONGER RUNNING %s\n", command);
+
 
   // Rearm the ibob
   srand ( udpdb->ibob_port );
