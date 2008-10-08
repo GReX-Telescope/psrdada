@@ -21,6 +21,11 @@ if (isset($_GET["offset"])) {
   $offset = $_GET["offset"];
 } 
 
+$hide_CAL = 0;
+if (isset($_GET["hidecal"])) {
+  $hide_CAL = $_GET["hidecal"];
+}
+
 $basedir = $cfg["SERVER_RESULTS_DIR"];
 $archive_ext = ".lowres";
 $total_num_results = exec("ls -1 -I web_style.txt ".$basedir." | wc -l");
@@ -85,6 +90,7 @@ include("../banner.php");
 <div align=right>
 <table>
  <tr>
+  <!--<td width=50%><input type="checkbox" value="hide_cal">Hide CAL Observations</input></td>-->
 <?
   if ($newest_offset !== "unset") {
     echo "<td><a href=/apsr/results.php?offset=".$newest_offset."&length=".$newest_length.">&#171; Newest</a></td>\n";
@@ -152,37 +158,41 @@ for ($i=0; $i < count($keys); $i++) {
   $mousein = "onmouseover=\"Tip('<img src=\'/results/".$keys[$i]."/".$data["phase_vs_flux"]."\' width=241 height=181>')\"";
   $mouseout = "onmouseout=\"UnTip()\"";
 
+  $bg_style = "";
   /* If archives have been finalised and its not a brand new obs */
   if ( $results[$keys[$i]]["finalized"] === 1) {
-    echo "  <tr bgcolor=\"#cae2ff\">\n";
+    $bg_style = "style=\"background-color: #cae2ff;\"";
+    echo "  <tr>\n";
   } else {
-    echo "  <tr class=\"new\" bgcolor=\"white\">\n";
+    $bg_style = "style=\"background-color: white;\"";
+    echo "  <tr class=\"new\">\n";
   }
 
   /* SOURCE */
-  echo "    <td>\n";
+  echo "    <td ".$bg_style.">\n";
 
   echo "      <a href=\"".$url."\" ".$mousein." ".$mouseout.">".$header["SOURCE"]."</a></td>\n";
 
   /* UTC_START */
-  echo "    <td>".$keys[$i]."</td>\n";
+  echo "    <td ".$bg_style.">".$keys[$i]."</td>\n";
 
   /* CFREQ */
-  echo "    <td>".$header["CFREQ"]."</td>\n";
+  echo "    <td ".$bg_style.">".$header["CFREQ"]."</td>\n";
 
   /* BW */
-  echo "    <td>".$header["BW"]."</td>\n";
+  echo "    <td ".$bg_style.">".$header["BW"]."</td>\n";
 
   /* INTERGRATION LENGTH */
-  echo "    <td>".getIntergrationLength($results[$keys[$i]]["tres_archive"])."</td>\n";
+  echo "    <td ".$bg_style.">".getIntergrationLength($results[$keys[$i]]["tres_archive"])."</td>\n";
 
   /* NCHAN */
-  echo "    <td>".$results[$keys[$i]]["nchan"]."</td>\n";
+  echo "    <td ".$bg_style.">".$results[$keys[$i]]["nchan"]."</td>\n";
 
   /* ANNOTATION */
-  echo "    <td class=\"trunc\"><div>".$results[$keys[$i]]["annotation"]."</div></td>\n";
+  echo "    <td ".$bg_style." class=\"trunc\"><div>".$results[$keys[$i]]["annotation"]."</div></td>\n";
 
   echo "  </tr>\n";
+
 
 }
 ?>
@@ -198,7 +208,7 @@ for ($i=0; $i < count($keys); $i++) {
  <tr><td class="smalltext">NCHAN</td><td width=20></td><td class="smalltext">Number of hosts
 that recieved data</td></tr>
  <tr><td class="smalltext">White</td><td width=20></td><td class="smalltext">Newer results, may still be updated</td></tr>
- <tr><td class="smalltext">Blue</td><td width=20></td><td class="smalltext">Finalised results, no new archives received for 24 hours</td></tr>
+ <tr><td class="smalltext">Blue</td><td width=20></td><td class="smalltext">Finalised results, no new archives received for 5 minutes</td></tr>
 </table> 
 
 </body>
@@ -266,7 +276,7 @@ function getResultsArray($results_dir, $archive_ext, $offset=0, $length=0) {
     $all_results[$observations[$i]]["tres_archive"] = $tres_archive;
 
     if (file_exists($dir."/obs.txt")) {
-      $all_results[$observations[$i]]["annotation"] = file_get_contents("cat ".$dir."/obs.txt");
+      $all_results[$observations[$i]]["annotation"] = file_get_contents($dir."/obs.txt");
     } else {
       $all_results[$observations[$i]]["annotation"] = "";
     }

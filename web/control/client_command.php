@@ -1,6 +1,35 @@
 <?PHP
-include("../functions_i.php");
 include("../definitions_i.php");
+include("../functions_i.php");
+
+$cmd = $_GET["cmd"];
+$readonly_commands = array("get_disk_info","get_db_info", "get_alldb_info", "get_db_xfer_info", "get_load_info", "get_all_status");
+if (in_array($cmd, $readonly_commands))
+
+if ((!IN_CONTROL) && (!(in_array($cmd, $readonly_commands))) ) {
+
+  $hostname = strtolower(gethostbyaddr($_SERVER["REMOTE_ADDR"]));
+  $controlling_hostname = strtolower(rtrim(file_get_contents(CONTROL_FILE)));
+
+  echo "<html>\n";
+  include("../header_i.php");
+  ?>
+  <br>
+  <h3><font color="red">You cannot make any changes to the instrument if your host is not in control.</font></h3>
+
+  <p>Controlling host: <?echo $controlling_hostname?>
+     Your host: <?echo $hostname?></p>
+
+  <!-- Force reload to prevent additional control attempts -->
+  <script type="text/javascript">
+  parent.control.location.href=parent.control.location.href;
+  </script>
+
+  </body>
+  </html>
+<?
+  exit(0);
+} 
 
 $command_dests = array();
 

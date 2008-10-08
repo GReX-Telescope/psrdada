@@ -13,8 +13,8 @@ function hasControl() {
 
 function validate($user, $password) {
 
-  $db["ajameson"] = "\$1\$wVQraJ5l\$m53BFYC6wCl6wxYc09gn2.";
-  $db["wstraten"] = "";
+  # $db["ajameson"] = "\$1\$wVQraJ5l\$m53BFYC6wCl6wxYc09gn2.";
+  # $db["wstraten"] = "";
   $db["apsr"] = "\$1\$wVQraJ5l\$m53BFYC6wCl6wxYc09gn2.";
 
   if (crypt($password, $db[$user]) == $db[$user]) {
@@ -37,7 +37,7 @@ function isTrustedUsers($user) {
 
 function isTrustedHost($host) {
   
-  $trusted_hosts = array( "perseus.atnf.csiro.au", "pavo.atnf.csiro.au", "pegasus.atnf.csiro.au");
+  $trusted_hosts = array( "perseus.atnf.csiro.au", "pavo.atnf.csiro.au" );
 
   if (in_array(strtolower($host), $trusted_hosts) ) {
     return true;

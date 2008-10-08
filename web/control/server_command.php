@@ -1,6 +1,33 @@
 <?PHP
-include("../functions_i.php");
 include("../definitions_i.php");
+include("../functions_i.php");
+
+if (!IN_CONTROL) {
+
+  $hostname = strtolower(gethostbyaddr($_SERVER["REMOTE_ADDR"]));
+  $controlling_hostname = strtolower(rtrim(file_get_contents(CONTROL_FILE)));
+                                                                                                                                          
+  echo "<html>\n";
+  include("../header_i.php");
+  ?>
+  <br>
+  <h3><font color="red">You cannot make any changes to the instrument if your host is not in control.</font></h3>
+                                                                                                                                          
+  <p>Controlling host: <?echo $controlling_hostname?>
+     Your host: <?echo $hostname?></p>
+                                                                                                                                          
+  <!-- Force reload to prevent additional control attempts -->
+  <script type="text/javascript">
+  parent.control.location.href=parent.control.location.href;
+  </script>
+                                                                                                                                          
+  </body>
+  </html>
+<?
+  exit(0);
+
+}
+
 ?>
 <html>
 <?
@@ -37,7 +64,7 @@ if ($cmd == "start_daemons") {
 
 <table class="datatable">
   <tr><th colspan=3>Starting Server Daemons</th></tr>
-  <tr><th>Daemon</th><th>Result</th><th>Messages</th></tr>
+  <tr><th width="20%">Daemon</th><th width="10%">Result</th><th width="70%">Messages</th></tr>
 <?
   for ($i=0; $i<count($server_daemons); $i++) {
     $return_val += startDaemon($server_names[$i], $server_daemons[$i]);
@@ -119,6 +146,36 @@ if ($cmd == "start_daemons") {
   echo "    </td>\n";
   echo "  </tr>\n";
   echo "</table>\n";
+
+} else if ($cmd == "get_gains") {
+
+  echo "Opening socket<BR>\n";
+  list($socket, $result) = openSocket($config["SERVER_HOST"], $config["SERVER_GAIN_REPORT_PORT"], 10);
+
+  if ($result != "ok") {
+
+    echo "Could not open socket<BR>\n";
+
+  } else {
+  
+    socketWrite($socket, "REPORT GAINS\r\n");
+    echo "Wrote \"REPORT GAINS\"<BR>\n";
+    flush();
+
+    echo "Reading Reponse...\n";
+    flush();
+    $response = rtrim(socketRead($socket));
+    echo "Read\"".$response."\"<BR>\n";
+    flush();
+
+    echo "Closing socket<BR>\n";
+    flush();
+    socket_close($socket);
+
+    echo "Closed socket<BR>\n";
+  }
+
+  flush();
 
 } else {
 

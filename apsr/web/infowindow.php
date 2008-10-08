@@ -11,7 +11,7 @@ $config = getConfigFile(SYS_CONFIG, TRUE);
 
 <script type="text/javascript">
 
-  var url="infoupdate.php?results_dir=<?echo $config["SERVER_RESULTS_DIR"]?>"
+  var url="/apsr/infoupdate.php?results_dir=<?echo $config["SERVER_RESULTS_DIR"]?>"
 
   function looper() {
 
@@ -79,15 +79,25 @@ $config = getConfigFile(SYS_CONFIG, TRUE);
           <td width=10>&nbsp;</td>
           <td align="left" class="smalltext"><span class="smalltext" id ="DEC"><?echo $spec["DEC"]?></span></td>
         </tr>
+        <tr>
+          <td align="right" class="smalltext"><b>CFREQ</b></td>
+          <td width=10>&nbsp;</td>
+          <td align="left" class="smalltext"><span class="smalltext" id ="CFREQ"><?echo $spec["CFREQ"]?></span> MHz</td>
+        </tr>
       </table>
     </td>
     <td width=20>&nbsp;</td>
     <td>
       <table cellpadding=0 cellspacing=0 border=0>
         <tr>
-          <td align="right" class="smalltext"><b>CFREQ</b></td>
+          <td align="right" class="smalltext"><b>Period</b></td>
           <td width=10>&nbsp;</td>
-          <td align="left" class="smalltext"><span class="smalltext" id ="CFREQ"><?echo $spec["CFREQ"]?></span> MHz</td>
+          <td align="left" class="smalltext"><span class="smalltext" id ="P0"><?echo $spec["P0"]?></span> ms</td>
+        </tr>
+        <tr>
+          <td align="right" class="smalltext"><b>DM</b></td>
+          <td width=10>&nbsp;</td>
+          <td align="left" class="smalltext"><span class="smalltext" id ="DM"><?echo $spec["DM"]?></span></td>
         </tr>
         <tr>
           <td align="right" class="smalltext"><b>Bandwith</b></td>
@@ -95,15 +105,25 @@ $config = getConfigFile(SYS_CONFIG, TRUE);
           <td align="left" class="smalltext"><span class="smalltext" id ="BANDWIDTH"><?echo $spec["BANDWITH"]?></span> MHz</td>
         </tr>
         <tr>
-          <td align="right" class="smalltext"><b>Num PWCs</b></td>
+          <td align="right" class="smalltext"><b>UTC START</b></td>
           <td width=10>&nbsp;</td>
-          <td align="left" class="smalltext"><span class="smalltext" id ="NUM_PWC"><?echo $conf["NUM_PWC"]?></span></td>
+          <td align="left" class="smalltext"><span class="smalltext" id ="UTC_START"><?echo $spec["UTC_START"]?></span></td>
         </tr>
       </table>
     </td>
     <td width=20>&nbsp;</td>
     <td>
       <table cellpadding=0 cellspacing=0 border=0>
+        <tr>
+          <td align="right" class="smalltext"><b>Num PWCs</b></td>
+          <td width=10>&nbsp;</td>
+          <td align="left" class="smalltext"><span class="smalltext" id ="NUM_PWC"><?echo $conf["NUM_PWC"]?></span></td>
+        </tr>
+        <tr>
+          <td align="right" class="smalltext"><b>Project ID</b></td>
+          <td width=10>&nbsp;</td>
+          <td align="left" class="smalltext"><span class="smalltext" id ="PID"><?echo $spec["PID"]?></span></td>
+        </tr>
         <tr>
           <td align="right" class="smalltext"><b>Npol</b></td>
           <td width=10>&nbsp;</td>
@@ -114,21 +134,11 @@ $config = getConfigFile(SYS_CONFIG, TRUE);
           <td width=10>&nbsp;</td>
           <td align="left" class="smalltext"><span class="smalltext" id ="NBIT"><?echo $spec["NBIT"]?></span></td>
         </tr>
-        <tr>
-          <td align="right" class="smalltext"><b>Project ID</b></td>
-          <td width=10>&nbsp;</td>
-          <td align="left" class="smalltext"><span class="smalltext" id ="PID"><?echo $spec["PID"]?></span></td>
-        </tr>
       </table>
     </td>
     <td width=20>&nbsp;</td>
-    <td>
+    <td valign=top>
       <table cellpadding=0 cellspacing=0 border=0>
-        <tr>
-          <td align="right" class="smalltext"><b>UTC START</b></td>
-          <td width=10>&nbsp;</td>
-          <td align="left" class="smalltext"><span class="smalltext" id ="UTC_START"><?echo $spec["UTC_START"]?></span></td>
-        </tr>
         <tr>
           <td align="right" class="smalltext"><b>Integrated</b></td>
           <td width=10>&nbsp;</td>

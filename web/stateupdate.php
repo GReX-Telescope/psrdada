@@ -17,7 +17,7 @@ if (!(isset($_GET["port"])) || (!(isset($_GET["host"])))) {
     $bytes_written = socketWrite($socket, "state\r\n");
     $string = "State: ".socketRead($socket);
   } else {
-    $string = "TCS INTERFACE STOPPED<BR>\n";
+    $string = "TCS INTERFACE STOPPED\n";
   }
 
   $control_info = "";

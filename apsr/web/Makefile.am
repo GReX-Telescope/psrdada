@@ -8,6 +8,9 @@ nobase_dist_web_SCRIPTS = definitions_i.php \
                           result.php \
                           results.php \
                           infowindow.php \
+                          infoupdate.php \
+                          gain_reporter.php \
+                          gain_update.php \
                           testing/configuration.php \
                           testing/display_text_file.php \
                           testing/index.php \

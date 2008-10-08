@@ -11,9 +11,9 @@ dist_web_SCRIPTS =  annotate_obs.php \
                     functions_i.php \
                     header_i.php \
                     index.php \
-                    infoupdate.php \
                     infowindow.php \
                     instrument.php \
+                    instrument_update.php \
                     logheader.php \
                     logwindow.php \
                     machine_status.php \
@@ -43,6 +43,7 @@ nobase_dist_web_SCRIPTS = control/client_command.php \
                           images/border.gif \
                           images/bpsr_logo_1x60.png \
                           images/bpsr_logo_480x60.png \
+                          images/favicon.ico \
                           images/gb_left.png \
                           images/gb.png \
                           images/gb_pressed.jpg \
@@ -51,6 +52,7 @@ nobase_dist_web_SCRIPTS = control/client_command.php \
                           images/gb_right.png \
                           images/green_light.png \
                           images/red_light.png \
+                          images/spacer.gif \
                           images/yellow_light.png \
                           images/jsprogress/custom1_bar.gif \
                           images/jsprogress/custom1_box.gif \

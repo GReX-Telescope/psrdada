@@ -1,6 +1,6 @@
 <?PHP
-include("../../functions_i.php");
 include("../../definitions_i.php");
+include("../../functions_i.php");
 ?>
 
 <html> 
@@ -9,6 +9,15 @@ include("../../definitions_i.php");
 
 $title = "DADA | APSR | TCS Simulator";
 include("../../header_i.php");
+
+if (!IN_CONTROL) { ?>
+<h3><font color=red>Test system disabled as your host is not in control of the instrument</font></h3>
+</body>
+</html>
+<?
+  exit(0);
+}
+
 ?>
 
 <body>
@@ -127,7 +136,9 @@ $cmd = "CONFIG ".$dfb3_config_file."\r\n";
 socketWrite($tcs_interface_socket,$cmd);
 $result = rtrim(socketRead($tcs_interface_socket));
 printTR($cmd,$result);
+
 if ($result != "ok") {
+  stopCommand($tcs_interface_socket);
   exit(-1);
 }
 
@@ -138,7 +149,10 @@ for ($i=0;$i<count($specification);$i++) {
   socketWrite($tcs_interface_socket,$cmd);
   $result = rtrim(socketRead($tcs_interface_socket));
   printTR($cmd,$result);
+
   if ($result != "ok") {
+    printTR($cmd, $result);
+    stopCommand($tcs_interface_socket);
     exit(-1);
   }
 }
@@ -148,8 +162,8 @@ $cmd = "START\r\n";
 socketWrite($tcs_interface_socket,$cmd);
 $result = rtrim(socketRead($tcs_interface_socket));
 if ($result != "ok") {
-  printTR("START command failed on nexus ", $result);
-  printTR(rtrim(socketRead($tcs_interface_socket)),"");
+  printTR("START command failed on nexus ", $result.": ".rtrim(socketRead($tcs_interface_socket)));
+  stopCommand($tcs_interface_socket);
   exit(-1);
 } else {
   printTR("Send START to nexus", "ok");
@@ -187,6 +201,7 @@ if ($sys_config["USE_DFB_SIMULATOR"] == 0) {
     $result .= "<BR>\n".rtrim(socketRead($tcs_interface_socket));
     printTR("SET_UTC_START failed: ", $result);
     printTR(rtrim(socketRead($tcs_interface_socket)),"");
+    stopCommand($tcs_interface_socket);
     exit(-1);
   } else {
     printTR("Sent \"SET_UTC_START ".$utc_start."\" to nexus","ok");
@@ -229,17 +244,8 @@ for ($i=0;$i<$duration;$i++) {
 # 10 extra seconds to ensure things have stopped!
 # sleep(10);
 
-# Issue the STOP command 
-$cmd = "STOP\r\n";
-socketWrite($tcs_interface_socket,$cmd);
-$result = rtrim(socketRead($tcs_interface_socket));
-if ($result != "ok") {
-  printTR("\"$cmd\" failed",$result);
-  printTR("",rtrim(socketRead($tcs_interface_socket)));
-  exit(-1);
-} else {
-  printTR("Sent \"".$cmd."\" to nexus","ok");
-}
+
+stopCommand($tcs_interface_socket);
 
 printTF();
 printFooter();
@@ -289,4 +295,21 @@ function killDFBSimulators($config, $dfbs) {
   }
 
 }
+
+
+# Issue the STOP command
+function stopCommand($socket) {
+
+  $cmd = "STOP\r\n";
+  socketWrite($socket,$cmd);
+
+  $result = rtrim(socketRead($socket));
+  if ($result != "ok") {
+    printTR("\"$cmd\" failed",$result.": ".rtrim(socketRead($socket)));
+  } else {
+    printTR("Sent \"".$cmd."\" to nexus","ok");
+  }
+  return $result;
+}
+
 ?>

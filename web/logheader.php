@@ -13,7 +13,7 @@ $server_daemons_to_exclude = array("pwc_monitor", "sys_monitor", "src_monitor");
 $server_daemon_names = getServerDaemonNames();
 
 $client_daemons = split(" ",$pwc_config["CLIENT_DAEMONS"]);
-if ($pwc_config["INSTRUMENT"] == "APSR") {
+if ($pwc_config["INSTRUMENT"] == "apsr") {
   array_push($client_daemons, "gain_controller");
 }
 $client_daemon_names = getClientDaemonNames();

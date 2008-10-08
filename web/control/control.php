@@ -45,27 +45,32 @@ function popUp(URL) {
 
 ?>
 
+<? if (IN_CONTROL) { ?>
   <tr>
     <td align="center" colspan=2> 
       <div class="btns">
         <a href="javascript:popUp('server_command.php?cmd=start_daemons')"  class="btn" > <span>Start</span> </a>
         <a href="javascript:popUp('server_command.php?cmd=stop_daemons')"  class="btn" > <span>Stop</span> </a>
       </div>
-<!--
-       <a href="javascript:popUp('server_command.php?cmd=start_daemons')" class="button" ><span></span><i>Start</i><b></b></a>
-       <a href="javascript:popUp('server_command.php?cmd=stop_daemons')" class="button" ><span></span><i>Stop</i><b></b></a>
--->
     </td>
   </tr>
+<? } ?>
   </table>
 
 </td><td>
 
 <table border=0 cellspacing=2  class="datatable">
-<tr><th colspan=<?echo ($config{"NUM_PWC"}+1)?>>Client Daemons</th><th colspan="<?echo $config["NUM_HELP"]?>">Helpers</th></tr>
+<tr>
+  <th colspan=<?echo ($config{"NUM_PWC"}+1)?>>Client Daemons</th>
+<? if ( (array_key_exists("NUM_HELP", $config)) && ($config["NUM_HELP"] > 0) ) { ?>
+  <th colspan="<?echo $config["NUM_HELP"]?>">Helpers</th>
+<? } ?>
+</tr>
 
 <?
 printClientStatus($config);
+
+if (IN_CONTROL) { 
 ?>
 
 <tr><td></td><td colspan=<?echo ($config{"NUM_PWC"}+1)?> align=center>
@@ -75,14 +80,15 @@ printClientStatus($config);
     <a href="javascript:popUp('client_command.php?cmd=start_master_script&autoclose=1')"  class="btn" > <span>Start Master</span> </a>
     <a href="javascript:popUp('client_command.php?cmd=stop_master_script&autoclose=1')"  class="btn" > <span>Stop Master</span> </a>
   </div>
-
 </td></tr>
+<? } ?>
 
 </table>
 
 </td></tr>
 </table>
 
+<? if  (IN_CONTROL) { ?>
 <table border=0 cellpadding=10>
 
 <tr><td>
@@ -139,7 +145,7 @@ printClientStatus($config);
 
     <div class="btns">
       <a href="javascript:popUp('client_command.php?cmd=get_load_info')"  class="btn" > <span>Load Info</span> </a>
-      <a href="javascript:popUp('client_status.php')"  class="btn" > <span>Client Status</span> </a>
+      <a href="javascript:popUp('../client_status.php')"  class="btn" > <span>Client Status</span> </a>
       <a href="javascript:popUp('client_command.php?cmd=get_bin_dir')"  class="btn" > <span>Get Bin Dir</span> </a>
       <a href="javascript:popUp('client_command.php?cmd=daemon_info')"  class="btn" > <span>Daemon Info</span> </a>
     </div>
@@ -150,6 +156,8 @@ printClientStatus($config);
 
 </td></tr>
 </table>
+
+<? } ?>
 
 </body>
 </html>
@@ -191,6 +199,7 @@ function printClientStatus($config) {
   $client_daemons_name["master_control"] = "Master Control";
   $client_daemons_name["observation_manager"] = "Obs. Manager";
   $client_daemons_name["bpsr_observation_manager"] = "Obs. Manager";
+  $client_daemons_name["bpsr_results_monitor"] = "Results Monitor";
   $client_daemons_name["processing_manager"] = "Proc. Manager";
   $client_daemons_name["archive_manager"] = "Archive Manager";
   $client_daemons_name["background_processor"] = "BG Processor";
@@ -258,7 +267,7 @@ function printClientStatus($config) {
   echo "<tr>\n";
   echo "  <td align=right>".$client_daemons_name["master_control"]."</td>\n";
   for ($j=0; $j<$config["NUM_PWC"]; $j++) {
-    echo "  <td width=17 bgcolor=white>".statusLight($results[$config["PWC_".$j]]["master_control"])."</td>\n";
+    echo "  <td width=17>".statusLight($results[$config["PWC_".$j]]["master_control"])."</td>\n";
   }
   echo "</tr>\n";
                                                                                                                     
@@ -267,7 +276,7 @@ function printClientStatus($config) {
     echo "<tr>\n";
       echo "  <td align=right>".$client_daemons_name[$cds[$i]]."</td>\n";
       for ($j=0; $j<$config["NUM_PWC"]; $j++) {
-        echo "  <td width=17 bgcolor=white>".statusLight($results[$config["PWC_".$j]][$cds[$i]])."</td>\n";
+        echo "  <td width=17>".statusLight($results[$config["PWC_".$j]][$cds[$i]])."</td>\n";
       }    
     echo "</tr>\n";
 

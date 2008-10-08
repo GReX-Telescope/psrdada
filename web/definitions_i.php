@@ -1,8 +1,5 @@
 <?PHP
 
-if (!$_DEFINITIONS_I_PHP) {
-  $_DEFINITIONS_I_PHP= 1;
-
 /* Determine the current intsrument */
 include("instrument_i.php");
 include(INSTRUMENT."/definitions_i.php");
@@ -13,7 +10,6 @@ define(DADA_ROOT,  "/home/apsr/linux_64");
 define(WEB_BASE,   DADA_ROOT."/web");
 
 define(CHANGE_INSTRUMENT_FILE, "/tmp/".INSTRUMENT."/control/change_instrument");
-define(CONTROL_FILE, "/tmp/".INSTRUMENT."/control/secure_control");
 
 define(STATUS_FILE_DIR, WEB_BASE."/status");
 define(PLOT_DIR,        WEB_BASE."/plots");
@@ -40,17 +36,8 @@ define(LOG_FILE_SCROLLBACK_SECS,LOG_FILE_SCROLLBACK_HOURS*60*60);
 define(TCS_CONTROL_PORT, "59000");
 define(TCS_CONTROL_HOST, "srv0.apsr.edu.au");
 
-# Do a quick check to see if we are "in control"
-include("secure_i.php");
-define(IN_CONTROL, hasControl());
-
-if (IN_CONTROL) {
-  define(STYLESHEET_HTML,     "<link rel=\"STYLESHEET\" type=\"text/css\" href=\"/style.css\">");
-} else {
-  define(STYLESHEET_HTML,     "<link rel=\"STYLESHEET\" type=\"text/css\" href=\"/style_viewer.css\">");
-}
+define(STYLESHEET_HTML,     "<link rel=\"STYLESHEET\" type=\"text/css\" href=\"/style.css\">");
 define(STYLESHEET_LOG_HTML, "<link rel=\"STYLESHEET\" type=\"text/css\" href=\"/style.css\">");
 define(FAVICO_HTML,         "<link rel=\"shortcut icon\" href=\"/images/favicon.ico\"/>");
 
-}
 ?>

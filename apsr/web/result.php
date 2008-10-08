@@ -56,7 +56,18 @@ if ($results_data["most_recent"] < 120) {
 
 <table border=0>
   <tr>
-    <td align="left"> <?printSummary($results_dir, $results_data, $archive_dir, $archive_data, $cfg)?><br><?printActions($results_data, $locked)?></td>
+    <td align="left" valign="top"> 
+<?
+    printSummary($results_dir, $results_data, $archive_dir, $archive_data, $cfg);
+  
+    echo "<br>\n";
+    printSourceInfo($header);
+
+    if (IN_CONTROL) {
+      echo "<br>\n";
+      printActions($results_data, $locked);
+    }
+?></td>
     <td align="right"> <?printHeader($header);?> </td>
   </tr>
   <tr>
@@ -184,9 +195,9 @@ function printSummary($obs_dir, $results_data, $archive_dir, $archive_data, $cfg
   $max_num_results = $results_data["max_num_archives"] * $num_channels;
 
 ?>
-  <table class="results" width=100%>
+  <table class="results" width=100% border=0>
     <tr><th colspan=2 class="results">OBSERVATION SUMMARY</th></tr>
-    <tr><td align="right" class="results">UTC Start</td><td class="results" width=50%><?echo $results_data["UTC_START"]?></td></tr>
+    <tr><td align="right" class="results" width="50%">UTC Start</td><td class="results" width=50%><?echo $results_data["UTC_START"]?></td></tr>
     <tr><td align="right" class="results">Local Time Start</td><td class="results"><?echo localTimeFromGmTime($results_data["UTC_START"])?></td></tr>
     <tr><td align="right" class="results">Time Since Last Result</td><td class="results"><?echo makeTimeString($results_data["most_recent"])?></td></tr>
     <tr><td align="right" class="results">Total Intergrated</td><td class="results"><?echo getIntergrationLength($obs_dir."/".$results_data["tres_archive"])." seconds"?></td></tr>
@@ -206,9 +217,12 @@ function printActions($data, $locked) {
     <tr><th class="results">ACTIONS</th></tr>
     <tr>
       <td align="center">
-        <input type="button" onclick="popWindow('/apsr/processresult.php?observation=<?echo $data["UTC_START"]?>&action=plot')" value="Create Plots"<?echo $locked?>>&nbsp;&nbsp;&nbsp;
-        <input type="button" onclick="popWindow('/apsr/processresult.php?observation=<?echo $data["UTC_START"]?>&action=reprocess')" value="Reprocess Results"<?echo $locked?>>&nbsp;&nbsp;&nbsp;
-        <input type="button" onclick="popWindow('/apsr/processresult.php?observation=<?echo $data["UTC_START"]?>&action=process_hi')" value="Process Archives"<?echo $locked?>>
+        <input type="button" onclick="popWindow('/apsr/processresult.php?observation=<?echo $data["UTC_START"]?>&action=plot')" value="Create Plots"<?echo $locked?>></td>
+    </tr>
+    <tr>
+      <td align="center">
+        <input type="button" onclick="popWindow('/apsr/processresult.php?observation=<?echo $data["UTC_START"]?>&action=reprocess_low')" value="Process low-res Archives"<?echo $locked?>>&nbsp;&nbsp;&nbsp;
+        <input type="button" onclick="popWindow('/apsr/processresult.php?observation=<?echo $data["UTC_START"]?>&action=reprocess_hi')" value="Process hi-res Archives *"<?echo $locked?>>
       </td>
     </tr>
     <tr>
@@ -217,6 +231,7 @@ function printActions($data, $locked) {
         <input type="button" onclick="popWindow('/apsr/processresult.php?observation=<?echo $data["UTC_START"]?>&action=delete_obs')" value="Delete Observation"<?echo $locked?>>
       </td>
     </tr>
+    <tr><td align=center class="smalltext">* This may take a long time to complete</td></tr>
   </table>
 
 <?
@@ -301,6 +316,38 @@ function printPlotRow($cfg, $utc_start, $image, $image_hires) {
   }
 
   echo "    </td>\n";
+
+}
+
+function printSourceInfo($header) {
+
+  $bin_dir = DADA_ROOT."/bin";
+
+  # Determine the Period (P0)
+  $cmd = $bin_dir."/psrcat -x -c \"P0\" ".$header["SOURCE"]." | awk '{print \$1}'";
+  $P0 = rtrim(exec($cmd, $resturn_var));
+  if ($P0 == "Warning:") {
+    $P0 = "N/A";
+  }
+                                                                                                           
+  # And the DM
+  $cmd = $bin_dir."/psrcat -x -c \"DM\" ".$header["SOURCE"]." | awk '{print \$1}'";
+  $DM = rtrim(`$cmd`);
+  if ($DM == "Warning:") {
+    $DM = "N/A";
+  }
+
+?>
+  <table class="results" width="100%" border=0>
+    <tr><th colspan=2 class="results">SOURCE SUMMARY</th></tr>
+<?
+  echo "    <tr><td align=right class=results>Source</td><td class=results>".$header["SOURCE"]."</td></tr>\n";
+  echo "    <tr><td align=right class=results>DM</td><td class=results>".$DM."</td></tr>\n";
+  echo "    <tr><td align=right class=results>P0</td><td class=results>".sprintf("%5.4f",$P0)."</td></tr>\n";
+?>
+    </tr>
+  </table>
+<?
 
 }
 

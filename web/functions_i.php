@@ -106,6 +106,7 @@ function getSingleStatusMessage($fname) {
   if (!$fptr) {
     echo "Could not open status file: $fname<BR>\n";
   } else {
+    #echo "Opening $fname<BR>\n";
     $j = 0;
     while (!(feof($fptr))) {
       $string = rtrim(fgets($fptr));
@@ -400,13 +401,15 @@ function getServerDaemonNames() {
   $arr = array();
   $arr["apsr_tcs_interface"] = "TCS Interface";
   $arr["bpsr_tcs_interface"] = "TCS Interface";
-  $arr["pwc_monitor"] = "PWC Monitor";
-  $arr["sys_monitor"] = "SYS Monitor";
-  $arr["src_monitor"] = "SRC Monitor";
-  $arr["results_manager"] = "Results Manager";
-  $arr["bpsr_results_manager"] = "Results Manager";
-  $arr["gain_manager"] = "Gain Manager";
-  $arr["aux_manager"] = "Aux Manager";
+  $arr["pwc_monitor"] = "PWC Mon";
+  $arr["sys_monitor"] = "SYS Mon";
+  $arr["src_monitor"] = "SRC Mon";
+  $arr["results_manager"] = "Results Mngr";
+  $arr["bpsr_results_manager"] = "Results Mngr";
+  $arr["gain_manager"] = "Gain Mngr";
+  $arr["aux_manager"] = "Aux Mngr";
+  $arr["ibob_simulator"] = "IBOB Sim.";
+  $arr["ibob_connection_manager"] = "IBOB conn.";
   return $arr;
 }
 
@@ -414,17 +417,18 @@ function getClientDaemonNames() {
 
   $arr = array();
 
-  $arr["master_control"] = "Master Control";
-  $arr["observation_manager"] = "Obs. Manager";
-  $arr["bpsr_observation_manager"] = "Obs. Manager";
-  $arr["processing_manager"] = "Proc. Manager";
+  $arr["master_control"] = "Master Ctrl";
+  $arr["observation_manager"] = "Obs Mngr";
+  $arr["bpsr_observation_manager"] = "Obs. Mngr";
+  $arr["bpsr_results_monitor"] = "Results Monitor";
+  $arr["processing_manager"] = "Proc. Mngr";
   $arr["processor"] = "Processor";
-  $arr["archive_manager"] = "Archive Manager";
-  $arr["spectra_manager"] = "Spectra Manager";
-  $arr["background_processor"] = "BG Processor";
-  $arr["aux_manager"] = "Aux Manager";
+  $arr["archive_manager"] = "Archive Mngr";
+  $arr["spectra_manager"] = "Spectra Mngr";
+  $arr["background_processor"] = "BG Proc";
+  $arr["aux_manager"] = "Aux Mngr";
   $arr["monitor"] = "Monitor";
-  $arr["gain_controller"] = "Gain Controller";
+  $arr["gain_controller"] = "Gain Ctrl";
 
   return $arr;
 
@@ -436,6 +440,7 @@ function getClientDaemonTypes() {
   $arr["master_control"] = "none";
   $arr["observation_manager"] = "sys";
   $arr["bpsr_observation_manager"] = "sys";
+  $arr["bpsr_results_monitor"] = "sys";
   $arr["processing_manager"] = "src";
   $arr["processor"] = "src";
   $arr["archive_manager"] = "sys";
@@ -454,6 +459,7 @@ function getClientDaemonTags() {
   $arr["master_control"] = "none";
   $arr["observation_manager"] = "obs mngr";
   $arr["bpsr_observation_manager"] = "obs mngr";
+  $arr["bpsr_results_monitor"] = "results mon";
   $arr["processing_manager"] = "proc mngr";
   $arr["processor"] = "proc";
   $arr["archive_manager"] = "arch mngr";
@@ -478,7 +484,8 @@ function getServerDaemonTypes() {
   $arr["gain_manager"] = "gain_manager";
   $arr["aux_manager"] = "aux_manager";
   $arr["dada_pwc_command"] = "dada_pwc_command";
-
+  $arr["ibob_simulator"] = "ibob_simulator";
+  $arr["ibob_connection_manager"] = "ibob_connection_manager";
   return $arr;
 }
 

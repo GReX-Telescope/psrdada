@@ -134,6 +134,15 @@ table.datatable {
   /* text-overflow: ellipsis; */
 } 
 
+TD.multibeam {
+  text-align: center;
+  vertical-align: middle;
+}
+
+a.multibeam {
+  text-decoration: none;
+}
+
 a.gmail {
   text-decoration: none;
 }

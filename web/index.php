@@ -11,7 +11,7 @@ include("header_i.php");
 ?>
 
 <FRAMESET ROWS="1" COLS="800px,*" frameborder=1>
-  <FRAMESET COLS=1 ROWS="0px,60px,110px,60px,90px,*" border=1>
+  <FRAMESET COLS=1 ROWS="0px,60px,110px,60px,110px,*" border=0>
     <FRAME name="instrument" src="instrument.php" frameborder=0 marginheight=0 marginwidth=0>
     <FRAME name="banner" src="statebanner.php" frameborder=0 marginheight=0 marginwidth=0>
     <FRAME name="statuswindow" src="statuswindow.php">

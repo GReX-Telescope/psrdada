@@ -96,7 +96,6 @@ function loadDefaults() {
 </head>
 
 <?
-# include("../header_i.php");
 
 if (isset($_GET["type"])) {
   $actiontype = $_GET["type"];
@@ -121,6 +120,15 @@ for ($i=0;$i<count($specfiles);$i++) {
 
 ?>
 <body onload="loadDefaults()">
+
+<? if (!IN_CONTROL) { ?>
+<h3><font color=red>Test system disabled as your host is not in control of the instrument</font></h3>
+</body>
+</html>
+<? 
+exit(0);
+} ?>
+
 <table border=0 cellpadding=0 cellspacing=0 width=100%>
   <tr>
     <td style="vertical-align: middle">

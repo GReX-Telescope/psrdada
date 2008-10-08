@@ -114,6 +114,7 @@ table.datatable {
   font-size: 8pt;
   vertical-align:top;
   white-space: nowrap;
+  background-color: #AAAAAA;
 } 
 
 .datatable .new {

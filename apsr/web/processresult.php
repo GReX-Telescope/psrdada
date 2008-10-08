@@ -9,12 +9,39 @@ $cfg = getConfigFile(SYS_CONFIG, TRUE);
 $observation = $_GET["observation"];
 $action_string = "No Action";
 
-if ($action == "reprocess") $action_string = "Re-processing results";
+if ($action == "reprocess_low") $action_string = "Re-processing low-res results";
+if ($action == "reprocess_hi") $action_string = "Re-processing hi-res results";
 if ($action == "plot") $action_string = "Creating plots from results";
 if ($action == "annotate") $action_string = "Create/Edit annotation";
 if ($action == "write_annotation") $action_string = "Writing Annotation to file";
 if ($action == "delete_results") $action_string = "Delete results only";
 if ($action == "delete_obs") $action_string = "Delete results &amp; archives";
+
+if (!IN_CONTROL) {
+
+  $hostname = strtolower(gethostbyaddr($_SERVER["REMOTE_ADDR"]));
+  $controlling_hostname = strtolower(rtrim(file_get_contents(CONTROL_FILE)));
+                                                                                                                                          
+  echo "<html>\n";
+  include("../header_i.php");
+  ?>
+  <br>
+  <h3><font color="red">You cannot make any changes to the instrument if your host is not in control.</font></h3>
+                                                                                                                                          
+  <p>Controlling host: <?echo $controlling_hostname?>
+     Your host: <?echo $hostname?></p>
+                                                                                                                                          
+  <!-- Force reload to prevent additional control attempts -->
+  <script type="text/javascript">
+  parent.control.location.href=parent.control.location.href;
+  </script>
+                                                                                                                                          
+  </body>
+  </html>
+<?
+  exit(0);
+
+}
 
 ?>
 <html>
@@ -55,11 +82,11 @@ flush();
 # dont do anything if result is no action
 if ($action_string == "No Action") {
 
-} else if ($action == "reprocess") {
+} else if ($action == "reprocess_low") {
 
   chdir($cfg["SCRIPTS_DIR"]);
   $obs_dir = $cfg["SERVER_RESULTS_NFS_MNT"]."/".$observation;
-  $script = "./server_process_result.pl ".$observation;
+  $script = "./server_process_result.pl ".$observation." ".$obs_dir." lowres";
   $cmd = "/bin/csh -c 'setenv HOME /home/apsr; source \$HOME/.cshrc; ".$script."'";
   $string = exec($cmd, $array, $return_val);
 
@@ -67,7 +94,25 @@ if ($action_string == "No Action") {
     echo "<BR>\nserver_process_results.pl returned a non zero exit value: ". $return_var."\n";
     flush();
   } else {
-    echo "Results reprocessed<BR>\n";
+    echo "Low-res results reprocessed<BR>\n";
+    flush();
+    sleep(1);
+    echo "<script type=\"text/javascript\"> finish(); </script>\n";
+  }
+
+} else if ($action == "reprocess_hi") {
+
+  chdir($cfg["SCRIPTS_DIR"]);
+  $obs_dir = $cfg["SERVER_ARCHIVE_NFS_MNT"]."/".$observation;
+  $script = "./server_process_result.pl ".$observation." ".$obs_dir." ar";
+  $cmd = "/bin/csh -c 'setenv HOME /home/apsr; source \$HOME/.cshrc; ".$script."'";
+  $string = exec($cmd, $array, $return_val);
+
+  if ($return_val != 0) {
+    echo "<BR>\nserver_process_results.pl returned a non zero exit value: ". $return_var."\n";
+    flush();
+  } else {
+    echo "Hi-res results processed<BR>\n";
     flush();
     sleep(1);
     echo "<script type=\"text/javascript\"> finish(); </script>\n";
