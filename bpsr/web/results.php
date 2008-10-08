@@ -157,7 +157,7 @@ for ($i=0; $i < count($keys); $i++) {
        ($data["bandpass"] != "../../images/blankimage.gif") ) {
     echo "  <tr bgcolor=\"#cae2ff\">\n";
   } else {
-    echo "  <tr class=\"new\" bgcolor=\"white\">\n";
+    echo "  <tr class=\"new\">\n";
   }
 
   /* SOURCE */

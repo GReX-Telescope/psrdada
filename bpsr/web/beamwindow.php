@@ -67,27 +67,35 @@ if (! (file_exists($base_dir))) {
 
 ?>
 
-  <table border=0>
-    <tr valign=middle><th>Beam</th>
+<center>
+<table border=0>
+  <tr valign=middle>
+    <td>Beam</td>
 <?
 
   for ($i=1; $i <= $nbeams; $i++) {
     if ($i != $_GET["beamid"]) {
-      echo "<td width=40><div class=\"btns\">\n";
-      echo "<a href=\"/bpsr/beamwindow.php?beamid=".$i."&obsid=".$obsid."\" class=\"btn\" > <span>".sprintf("%02d",$i)."</span></a>";
-      echo "</div></td>";
+      echo "    <td width=40><div class=\"btns\">\n";
+      echo "      <a href=\"/bpsr/beamwindow.php?beamid=".$i."&obsid=".$obsid."\" class=\"btn\" > <span>".sprintf("%02d",$i)."</span></a>";
+      echo "    </div></td>";
     } else {
-      echo "<td width=40 align=center><b>".sprintf("%02d",$i)."</b></td>";
+      echo "    <td width=40 align=center><b>".sprintf("%02d",$i)."</b></td>";
     }
   }
 ?>
-  </tr></table>
+  </tr>
+</table>
+
+<hr>
+
+</center>
+
 
 <table cellpadding=5>
 <tr><td valign=top>
 
 <table class="datatable" style="width:300px">
-<tr><th>Param</th><th>Value</th></tr>
+<tr><th colspan=2>Beam / Obs Info</th></tr>
 <tr><td>Source</td><td align=left><?echo $header["SOURCE"]?></td></tr>
 <tr><td>UTC_START</td><td align=left><?echo $obsid?></td></tr>
 <tr><td>ACC_LEN</td><td align=left><?echo $header["ACC_LEN"]?></td></tr>
@@ -104,23 +112,23 @@ if (! (file_exists($base_dir))) {
 <tr>
   <td align=center>
     Bandpass<br>
-<?  echo imageWithRollover($data["bandpass_mid"], 240,180,$data["bandpass_mid"], 400, 300); ?>
+<?  echo imageWithRollover($data["bp_mid"], 240,180,$data["bp_hi"], 400, 300); ?>
 
   </td>
   <td align=center>
     DM0 Timeseries<br>
-<?  echo imageWithRollover($data["timeseries_mid"], 240,180,$data["timeseries_mid"], 400, 300); ?>
+<?  echo imageWithRollover($data["ts_mid"], 240,180,$data["ts_hi"], 400, 300); ?>
   </td>
 </tr>
 
 <tr>
   <td align=center>
     Fluctuation Power Spectrum<br>
-<?  echo imageWithRollover($data["powerspectrum_mid"], 240,180,$data["powerspectrum_mid"], 400, 300); ?>
+<?  echo imageWithRollover($data["fft_mid"], 240,180,$data["fft_hi"], 400, 300); ?>
   </td>
   <td align=center>
     Digitizer Statistics<br>
-<?  echo imageWithRollover($data["digitizer_mid"], 240,180,$data["digitizer_mid"], 400, 300); ?>
+<?  echo imageWithRollover($data["dts_mid"], 240,180,$data["dts_hi"], 400, 300); ?>
   </td>
 </tr>
 
@@ -142,7 +150,7 @@ function getImages($dir, $img_base) {
   $data = array();
 
   /* Find the latest files in the plot file directory */
-  $types = array("bandpass", "timeseries", "powerspectrum", "digitizer");
+  $types = array("bp", "ts", "fft", "dts");
 
   for ($i=0; $i<count($types); $i++) {
     $data[$types[$i]."_low"] = "/images/blankimage.gif";
@@ -156,21 +164,21 @@ function getImages($dir, $img_base) {
 
   for ($i=0; $i<count($types); $i++) {
     /* Find the hi res images */
-    $cmd = "find . -name \"".$types[$i]."_*_1024x768.png\" -printf \"%P\"";
+    $cmd = "find . -name \"*.".$types[$i]."_1024x768.png\" -printf \"%P\n\" | sort | tail -n 1";
     $find_result = exec($cmd, $array, $return_val);
     if (($return_val == 0) && (strlen($find_result) > 1)) {
       $data[$types[$i]."_hi"] = $img_base.$find_result;
     }
 
-    /* Find the low res images */
-    $cmd = "find . -name \"".$types[$i]."_*_400x300.png\" -printf \"%P\"";
+    /* Find the mid res images */
+    $cmd = "find . -name \"*.".$types[$i]."_400x300.png\" -printf \"%P\n\" | sort | tail -n 1";
     $find_result = exec($cmd, $array, $return_val);
     if (($return_val == 0) && (strlen($find_result) > 1))  {
       $data[$types[$i]."_mid"] = $img_base.$find_result;
     }
 
     /* Find the low res images */
-    $cmd = "find . -name \"".$types[$i]."_*_112x84.png\" -printf \"%P\"";
+    $cmd = "find . -name \"*.".$types[$i]."_112x84.png\" -printf \"%P\n\" | sort | tail -n 1";
     $find_result = exec($cmd, $array, $return_val);
     if (($return_val == 0) && (strlen($find_result) > 1))  {
       $data[$types[$i]."_low"] = $img_base.$find_result;

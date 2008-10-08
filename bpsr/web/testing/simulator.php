@@ -9,7 +9,15 @@ include("../../definitions_i.php");
 
 $title = "DADA | BPSR | TCS Simulator";
 include("../../header_i.php");
-?>
+
+if (!IN_CONTROL) { ?>
+<h3><font color=red>Test system disabled as your host is not in control of the instrument</font></h3>
+</body>
+</html>
+<?
+  exit(0);
+} ?>
+
 
 <body>
 <table width=90% border=0 cellpadding=0 cellspacing=0 class="datatable">

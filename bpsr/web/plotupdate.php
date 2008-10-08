@@ -30,21 +30,21 @@ if ($handle = opendir($dir)) {
         $beamid = (int) $file;
 
         /* Find the hi res images */
-        $cmd = "find ".$file." -name \"".$imgtype."_*_1024x768.png\"";
+        $cmd = "find ".$file." -name \"*.".$imgtype."_1024x768.png\"";
         $find_result = exec($cmd, $array, $return_val);
         if (($return_val == 0) && (strlen($find_result) > 1)) {
           $hires_imgs[($beamid-1)] = $find_result;
         }
 
         /* Find the mid res images */
-        $cmd = "find ".$file." -name \"".$imgtype."_*_400x300.png\"";
+        $cmd = "find ".$file." -name \"*.".$imgtype."_400x300.png\"";
         $find_result = exec($cmd, $array, $return_val);
         if (($return_val == 0) && (strlen($find_result) > 1)) {
           $midres_imgs[($beamid-1)] = $find_result;
         }
 
         /* Find the low res images */
-        $cmd = "find ".$file." -name \"".$imgtype."_*_112x84.png\"";
+        $cmd = "find ".$file." -name \"*.".$imgtype."_112x84.png\"";
         $find_result = exec($cmd, $array, $return_val);
         if (($return_val == 0) && (strlen($find_result) > 1))  {
           $lowres_imgs[($beamid-1)] = $find_result;

@@ -82,22 +82,22 @@ $nbeam = $config["NUM_PWC"];
         handle_data(http_request)
       }
 
-      var type = "bandpass";
+      var type = "bp";
 
       if (document.imageform.imagetype[0].checked == true) {
-        type = "bandpass";
+        type = "bp";
       }
 
       if (document.imageform.imagetype[1].checked == true) {
-        type = "dm0timeseries";
+        type = "ts";
       }
 
       if (document.imageform.imagetype[2].checked == true) {
-        type = "powerspectrum";
+        type = "fft";
       }
 
       if (document.imageform.imagetype[3].checked == true) {
-        type = "digitizer";
+        type = "dts";
       }
 
       /* This URL will return the names of the 5 current */
@@ -115,20 +115,20 @@ $nbeam = $config["NUM_PWC"];
 <script type="text/javascript" src="/js/wz_tooltip.js"></script>
 <input id="utc_start" type="hidden" value="">
 <center>
-<table border=0 cellspacing=5 cellpadding=5 width=100%>
+<table border=0 cellspacing=0 cellpadding=0 width=100%>
 
   <tr>
     <td rowspan=3 valign="top">
       <form name="imageform" class="smalltext">
-      <input type="radio" name="imagetype" id="imagetype" value="bandpass" checked onClick="request()">Bandpass<br>
-      <input type="radio" name="imagetype" id="imagetype" value="dm0timeseries" onClick="request()">Time Series<br>
-      <input type="radio" name="imagetype" id="imagetype" value="powerspectrum" onClick="request()">Fluct. Power Spectrum<br>
-      <input type="radio" name="imagetype" id="imagetype" value="digitizer" onClick="request()">Digitizer Stats<br>
+      <input type="radio" name="imagetype" id="imagetype" value="bp" checked onClick="request()">Bandpass<br>
+      <input type="radio" name="imagetype" id="imagetype" value="ts" onClick="request()">Time Series<br>
+      <input type="radio" name="imagetype" id="imagetype" value="fft" onClick="request()">Fluct. Power Spectrum<br>
+      <input type="radio" name="imagetype" id="imagetype" value="dts" onClick="request()">Digitizer Stats<br>
       </form>
     </td>
     <td colspan=4>
 
-<div class="btns">
+<!--<div class="btns">
 <?
 for ($i=0; $i<$config["NUM_PWC"]; $i++) {
 ?>
@@ -136,7 +136,7 @@ for ($i=0; $i<$config["NUM_PWC"]; $i++) {
 <?
 }
 ?>
-</div>
+</div>-->
 
     </td>
   </tr>
