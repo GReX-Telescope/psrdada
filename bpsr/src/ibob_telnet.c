@@ -2,6 +2,7 @@
 #include "sock.h"
 #include "ibob.h"
 
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,6 +18,18 @@ void usage()
 	  " port        on which the ibob interace is accessible \n"
 	  " -n N        connect to %sN port %d \n"
 	  " -v          verbose\n", IBOB_VLAN_BASE, IBOB_PORT );
+}
+
+void filter (const char* out)
+{
+  if (!out)
+    return;
+
+  for (; *out != '\0'; out++)
+    if (!isprint(*out) && *out != '\n' && *out != '\r')
+      printf ("telnet code: %d received\n", (unsigned)(*out));
+    else
+      putchar (*out);
 }
 
 int main (int argc, char** argv)
@@ -68,6 +81,9 @@ int main (int argc, char** argv)
     port = atoi(argv[(optind+1)]);
   }
 
+  if (verbose)
+    printf ("ibob_telnet: opening %s %d\n", hostname, port);
+
   int fd = sock_open (hostname, port);
   if ( fd < 0 )
   {
@@ -76,21 +92,51 @@ int main (int argc, char** argv)
     return -1;
   }
 
+#define BUFFER 128
+  char buffer [BUFFER];
+
+  int emulate_length = strlen (emulate_telnet_msg1);
+  if (write (fd, emulate_telnet_msg1, emulate_length) < emulate_length)
+  {
+    fprintf (stderr, "could not send emulate telnet 1: %s\n",
+             strerror(errno));
+    sock_close (fd);
+    return -1;
+  }
+
+  if (read (fd, buffer, 6) < 6)
+  {
+    fprintf (stderr, "could not read telnet response\n");
+    sock_close (fd);
+    return -1;
+  }
+
+  emulate_length = strlen (emulate_telnet_msg2);
+  if (write (fd, emulate_telnet_msg2, emulate_length) < emulate_length)
+  {
+    fprintf (stderr, "could not send emulate telnet 2: %s\n",
+             strerror(errno));
+    sock_close (fd);
+    return -1;
+  }
+
+
   FILE* sockin = 0;
   FILE* sockout = 0;
 
   sockin = fdopen (fd, "r");
   sockout = fdopen (fd, "w");
 
-  fprintf (sockout, fake_telnet);
+  // set the socket I/O to be unbuffered
+  setvbuf (sockout, 0, _IONBF, 0);
+  setvbuf (sockin, 0, _IONBF, 0);
 
-#define BUFFER 128
-  char buffer [BUFFER];
   char* rgot = 0;
 
   do 
   {
     rgot = fgets (buffer, BUFFER, sockin);
+    filter (rgot);
   }
   while (rgot && !strstr(rgot, "IBOB"));
 
