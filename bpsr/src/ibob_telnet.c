@@ -81,8 +81,8 @@ int main (int argc, char** argv)
     port = atoi(argv[(optind+1)]);
   }
 
-  if (verbose)
-    printf ("ibob_telnet: opening %s %d\n", hostname, port);
+  printf ("ibob_telnet: opening %s %d\n", hostname, port);
+  printf ("ibob_telnet: type 'quit' to exit gracefully\n");
 
   int fd = sock_open (hostname, port);
   if ( fd < 0 )
@@ -148,7 +148,7 @@ int main (int argc, char** argv)
     write (fd, buffer, length);
   }
 
-  fprintf (stderr, "Closing connection\n");
+  fprintf (stderr, "ibob_telnet: closing connection\n");
   sock_close (fd);
   return 0;
 }
