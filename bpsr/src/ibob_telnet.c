@@ -120,26 +120,35 @@ int main (int argc, char** argv)
     return -1;
   }
 
-
-  FILE* sockin = 0;
-  FILE* sockout = 0;
-
-  sockin = fdopen (fd, "r");
-  sockout = fdopen (fd, "w");
-
-  // set the socket I/O to be unbuffered
-  setvbuf (sockout, 0, _IONBF, 0);
-  setvbuf (sockin, 0, _IONBF, 0);
-
-  char* rgot = 0;
-
-  do 
+  while (1)
   {
-    rgot = fgets (buffer, BUFFER, sockin);
-    filter (rgot);
-  }
-  while (rgot && !strstr(rgot, "IBOB"));
+    do 
+    {
+      int got = read (fd, buffer, BUFFER);
+      if (got < 0)
+      {
+        perror ("error while reading from iBoB socket");
+        break;
+      }
+      buffer[got] = '\0';
+      printf ("%s", buffer);
+    }
+    while (!strstr(buffer, ibob_prompt));
 
+    fgets (buffer, BUFFER, stdin);
+
+    if (strstr (buffer, "quit"))
+      break;
+
+    char* newline = strchr (buffer, '\n');
+    if (newline)
+      *newline = '\r';
+
+    int length = strlen (buffer);
+    write (fd, buffer, length);
+  }
+
+  fprintf (stderr, "Closing connection\n");
   sock_close (fd);
   return 0;
 }
