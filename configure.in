@@ -90,6 +90,8 @@ AC_CONFIG_FILES([Makefile
     bpsr/Makefile
 		bpsr/src/Makefile
 		bpsr/mon/Makefile
+		bpsr/swinproc/Makefile
+		bpsr/swinproc/dedisp/Makefile
 		bpsr/scripts/Makefile
 		bpsr/web/Makefile
 		bpsr/config/Makefile
