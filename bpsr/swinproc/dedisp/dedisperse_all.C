@@ -146,7 +146,6 @@ int main (int argc, char *argv[])
   int ngulp; //max number of samples at a time
   int gulping = 0;
   int ngulpsize;
-  int nsampleft; 
   char * killfile;
   int killing=0;
 
@@ -303,7 +302,6 @@ int main (int argc, char *argv[])
   }
   // skip either 0 or nskip samples
   fseek(input, nskip*nchans*nbits/8, SEEK_CUR);
-  nsampleft-=nskip;
 
   float * DMtable;
   double ti = 40.0;
