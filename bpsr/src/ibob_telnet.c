@@ -103,16 +103,15 @@ int main (int argc, char** argv)
 
     ibob_send (ibob, buffer);
 
-    char more_to_get = 1;
+    ssize_t got = 0;
 
-    while (more_to_get)
+    do 
     {
-      ssize_t got = ibob_recv (ibob, buffer, BUFFER);
-      if (got < BUFFER)
-        more_to_get = 0;
-
+      got = ibob_recv (ibob, buffer, BUFFER);
       fwrite (buffer, 1, got, stderr);
     }
+    while (got == BUFFER);
+
   }
 
   fprintf (stderr, "ibob_telnet: closing connection\n");
