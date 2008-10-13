@@ -1,0 +1,98 @@
+/***************************************************************************
+ *
+ *   Copyright (C) 2008 by Willem van Straten
+ *   Licensed under the Academic Free License version 2.1
+ *
+ ***************************************************************************/
+
+/* $Source$
+   $Revision$
+   $Date$
+   $Author$ */
+
+#ifndef __DADA_MULTIBOB_H
+#define __DADA_MULTIBOB_H
+
+#include "ibob.h"
+#include "command_parse.h"
+
+/* ************************************************************************
+
+   multibob_t - a struct and associated routines for creating and
+   managing, as well as reading and writing to and from multiple iBoBs
+   in a multi-threaded application.
+
+   ************************************************************************ */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+  typedef struct {
+
+    /*! An ibob */
+    ibob_t* ibob;
+
+    /*! for synchronization between command and monitor threads */
+    pthread_mutex_t mutex;
+    pthread_cond_t cond;
+
+    /*! update bramdump log; otherwise just ping */
+    char bramdump;
+
+    /*! quit flag */
+    char quit;
+
+  } ibob_thread_t;
+
+
+  typedef struct {
+
+    /*! one thread for each iBoB */
+    ibob_thread_t* threads;
+    unsigned nthread;
+
+    /*! and a command parser */
+    command_parse_t* parser;
+
+  } multibob_t;
+
+
+  /*! allocate and initialize a new ibob_t struct */
+  multibob_t* multibob_construct (unsigned nibob);
+
+  /*! free all resources reserved for ibob communications */
+  int multibob_destroy (multibob_t* bob);
+
+  /*! mutex lock all of the ibob interfaces */
+  void multibob_lock (multibob_t* bob);
+
+  /*! mutex unlock all of the ibob interfaces */
+  void multibob_lock (multibob_t* bob);
+
+  /*! get the state of the instrument */
+  int multibob_cmd_state (void* context, FILE* fptr, char* args);
+
+  /*! set the host and port number of the specified ibob */
+  int multibob_cmd_hostport (void* context, FILE* fptr, char* args);
+
+  /*! set the target MAC address of the specified ibob */
+  int multibob_cmd_mac (void* context, FILE* fptr, char* args);
+
+  /*! open the command connections to all of the ibobs */
+  int multibob_cmd_open (void* context, FILE* fptr, char* args);
+
+  /*! close the command connections to all of the ibobs */
+  int multibob_cmd_close (void* context, FILE* fptr, char* args);
+
+  /*! reset packet counter on next UTC second, returned */
+  int multibob_cmd_arm (void* context, FILE* fptr, char* args);
+
+  /*! quit */
+  int multibob_cmd_quit (void* context, FILE* fptr, char* args);
+
+#ifdef __cplusplus
+	   }
+#endif
+
+#endif
