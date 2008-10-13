@@ -34,9 +34,7 @@ void filter (const char* out)
 
 int main (int argc, char** argv)
 {
-  char* hostname = 0;
-  int port = 0;
-  int ibob = 0;
+  int ibob_number = 0;
 
   int verbose = 0;
   int arg = 0;
@@ -46,7 +44,7 @@ int main (int argc, char** argv)
     switch (arg) {
 
     case 'n':
-      ibob = atoi (optarg);
+      ibob_number = atoi (optarg);
       break;
 
     case 'v':
@@ -63,12 +61,10 @@ int main (int argc, char** argv)
     }
   }
 
-  if (ibob > 0)
-  {
-    hostname = strdup (IBOB_VLAN_BASE"XXXXXXX");
-    sprintf (hostname, IBOB_VLAN_BASE"%d", ibob);
-    port = IBOB_PORT;
-  }
+  ibob_t* ibob = ibob_construct ();
+
+  if (ibob_number > 0)
+    ibob_set_number (ibob, ibob_number);
   else
   {
     if ((argc - optind) != 2)
@@ -77,64 +73,24 @@ int main (int argc, char** argv)
       usage();
       return EXIT_FAILURE;
     }
-    hostname = argv[optind];
-    port = atoi(argv[(optind+1)]);
+    ibob_set_host (ibob, argv[optind], atoi(argv[optind+1]));
   }
 
-  printf ("ibob_telnet: opening %s %d\n", hostname, port);
+  printf ("ibob_telnet: opening %s %d\n", ibob->host, ibob->port);
   printf ("ibob_telnet: type 'quit' to exit gracefully\n");
 
-  int fd = sock_open (hostname, port);
-  if ( fd < 0 )
+  if ( ibob_open (ibob) < 0 )
   {
     fprintf (stderr, "could not open %s %d: %s\n",
-	     hostname, port, strerror(errno));
+	     ibob->host, ibob->port, strerror(errno));
     return -1;
   }
 
-#define BUFFER 128
+#define BUFFER 4096
   char buffer [BUFFER];
-
-  int emulate_length = strlen (emulate_telnet_msg1);
-  if (write (fd, emulate_telnet_msg1, emulate_length) < emulate_length)
-  {
-    fprintf (stderr, "could not send emulate telnet 1: %s\n",
-             strerror(errno));
-    sock_close (fd);
-    return -1;
-  }
-
-  if (read (fd, buffer, 6) < 6)
-  {
-    fprintf (stderr, "could not read telnet response\n");
-    sock_close (fd);
-    return -1;
-  }
-
-  emulate_length = strlen (emulate_telnet_msg2);
-  if (write (fd, emulate_telnet_msg2, emulate_length) < emulate_length)
-  {
-    fprintf (stderr, "could not send emulate telnet 2: %s\n",
-             strerror(errno));
-    sock_close (fd);
-    return -1;
-  }
 
   while (1)
   {
-    do 
-    {
-      int got = read (fd, buffer, BUFFER);
-      if (got < 0)
-      {
-        perror ("error while reading from iBoB socket");
-        break;
-      }
-      buffer[got] = '\0';
-      printf ("%s", buffer);
-    }
-    while (!strstr(buffer, ibob_prompt));
-
     fgets (buffer, BUFFER, stdin);
 
     if (strstr (buffer, "quit"))
@@ -142,14 +98,17 @@ int main (int argc, char** argv)
 
     char* newline = strchr (buffer, '\n');
     if (newline)
-      *newline = '\r';
+      *newline = '\0';
 
-    int length = strlen (buffer);
-    write (fd, buffer, length);
+    ibob_send (ibob, buffer);
+
+    ibob_recv (ibob, buffer, BUFFER);
+
+    fprintf (stderr, buffer);
   }
 
   fprintf (stderr, "ibob_telnet: closing connection\n");
-  sock_close (fd);
+  ibob_close (ibob);
   return 0;
 }
 
