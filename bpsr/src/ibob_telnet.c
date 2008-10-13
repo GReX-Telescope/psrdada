@@ -86,11 +86,12 @@ int main (int argc, char** argv)
     return -1;
   }
 
-#define BUFFER 4096
+#define BUFFER 1024
   char buffer [BUFFER];
 
   while (1)
   {
+    fprintf (stderr, "MYBOB %% ");
     fgets (buffer, BUFFER, stdin);
 
     if (strstr (buffer, "quit"))
@@ -102,9 +103,16 @@ int main (int argc, char** argv)
 
     ibob_send (ibob, buffer);
 
-    ibob_recv (ibob, buffer, BUFFER);
+    char more_to_get = 1;
 
-    fprintf (stderr, buffer);
+    while (more_to_get)
+    {
+      ssize_t got = ibob_recv (ibob, buffer, BUFFER);
+      if (got < BUFFER)
+        more_to_get = 0;
+
+      fwrite (buffer, 1, got, stderr);
+    }
   }
 
   fprintf (stderr, "ibob_telnet: closing connection\n");
