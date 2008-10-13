@@ -10,8 +10,8 @@ extern "C" {
 //#include "gtools.h"
 
 void inline_dedisperse_all_help(){
-  fprintf(stderr,"dedisperse_all_16bit help\n");
-  fprintf(stderr,"Usage: dedisperse_all_16bit filename [options]\n");
+  fprintf(stderr,"dedisperse_all help\n");
+  fprintf(stderr,"Usage: dedisperse_all filename [options]\n");
   fprintf(stderr,"-k killfilename    kill all channels in killfilename\n");
   fprintf(stderr,"-d st_DM end_DM    dedisperse from st_DM to end_DM\n");
   fprintf(stderr,"-g gulpsize        number of samples to dedisp at once\n");
@@ -20,7 +20,7 @@ void inline_dedisperse_all_help(){
   fprintf(stderr,"-s Nsamps          Skip Nsamp samples before starting\n");
   fprintf(stderr,"-l                 Create logfile of exact DMs used\n");
   fprintf(stderr," \n");
-  fprintf(stderr,"dedisperse_all_16bit uses OpenMP and 16 bit words to\n");
+  fprintf(stderr,"dedisperse_all uses OpenMP and 16 bit words to\n");
   fprintf(stderr,"create many dedispersed files at once in a highly\n");
   fprintf(stderr,"parallel manner. It is for use on 64 bit machines\n");
   fprintf(stderr,"but still works on 32 bit machines.\n");
