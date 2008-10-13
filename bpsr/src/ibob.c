@@ -309,17 +309,26 @@ ssize_t ibob_send (ibob_t* bob, const char* message)
 
   int length = strlen (message);
 
-  if (length+1 > bob->buffer_size)
+  if (length+2 > bob->buffer_size)
   {
     bob->buffer_size = length * 2;
     bob->buffer = realloc (bob->buffer, bob->buffer_size);
   }
 
   snprintf (bob->buffer, bob->buffer_size, "%s\r", message);
+  length ++;
 
-  int wrote = sock_write (bob->fd, bob->buffer, length + 1);
-  if (wrote < length+1)
+  int wrote = sock_write (bob->fd, bob->buffer, length);
+  if (wrote < length)
     return -1;
+
+  if (bob->emulate_telnet)
+  {
+    /* read the echoed characters */
+    int echo = ibob_recv (bob, bob->buffer, length);
+    if (echo < length)
+      return -1;
+  }
 
   return 0;
 }
