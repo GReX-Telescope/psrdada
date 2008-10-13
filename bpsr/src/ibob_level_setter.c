@@ -83,11 +83,7 @@ int main (int argc, char** argv)
   char command[100];
 
   int fd;
-  if (verbose) 
-    fd = sock_open(hostname, port);
-  else
-    fd = sock_open_quiet(hostname, port);
-            
+  fd = sock_open(hostname, port);
 
   if (fd < 0)  {
     fprintf(stderr, "Error creating socket\n");
