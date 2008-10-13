@@ -5,4 +5,4 @@ libswinproc_la_SOURCES = nsamples.c read_header.c send_stuff.c strings_equal.c s
 
 include_HEADERS = swinproc.h swinheader.h wapp_header.h key.h 
 
-#SUBDIRS = dedisp
+SUBDIRS = . dedisp
