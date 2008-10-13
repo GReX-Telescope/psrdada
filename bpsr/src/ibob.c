@@ -6,11 +6,13 @@
  ***************************************************************************/
 
 #include "ibob.h"
+#include "sock.h"
 
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#include <ctype.h>
 
 ibob_t* ibob_construct ()
 {
@@ -37,6 +39,8 @@ int ibob_destroy (ibob_t* bob)
     free (bob->buffer);
 
   free (bob);
+
+  return 0;
 }
 
 /*! set the host and port number of the ibob */
@@ -202,7 +206,7 @@ int ibob_is_open (ibob_t* bob)
 /*! reset packet counter on next UTC second, returned */
 time_t ibob_arm (ibob_t* bob)
 {
-
+  return 0;
 }
 
 int ibob_ignore (ibob_t* bob)
@@ -342,7 +346,7 @@ ssize_t ibob_recv (ibob_t* bob, char* ptr, size_t bytes)
       if (prompt)
       {
 	*prompt = '\0';
-	break;
+	return strlen(ptr);
       }
     }
     else
@@ -351,7 +355,7 @@ ssize_t ibob_recv (ibob_t* bob, char* ptr, size_t bytes)
       if (got == 0)
       {
 	ptr[total_got] = '\0';
-	break;
+	return total_got;
       }
     }
 
@@ -365,5 +369,6 @@ ssize_t ibob_recv (ibob_t* bob, char* ptr, size_t bytes)
     bytes -= got;
   }
 
-  return 0;
+  return total_got;
 }
+
