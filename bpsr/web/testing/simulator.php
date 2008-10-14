@@ -1,6 +1,6 @@
 <?PHP
-include("../../functions_i.php");
-include("../../definitions_i.php");
+include("../definitions_i.php");
+include("../functions_i.php");
 ?>
 
 <html> 
@@ -8,7 +8,7 @@ include("../../definitions_i.php");
 <?
 
 $title = "DADA | BPSR | TCS Simulator";
-include("../../header_i.php");
+include("../header_i.php");
 
 if (!IN_CONTROL) { ?>
 <h3><font color=red>Test system disabled as your host is not in control of the instrument</font></h3>

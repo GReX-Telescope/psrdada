@@ -1,6 +1,6 @@
 <?PHP
-include("../../definitions_i.php");
-include("../../functions_i.php");
+include("../definitions_i.php");
+include("../functions_i.php");
 
 ?>
 <html>
@@ -85,7 +85,6 @@ function loadDefaults() {
 </head>
 
 <?
-# include("../header_i.php");
 
 if (isset($_GET["type"])) {
   $actiontype = $_GET["type"];

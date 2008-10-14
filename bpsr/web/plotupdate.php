@@ -1,14 +1,14 @@
 <?PHP 
-include("../definitions_i.php");
-include("../functions_i.php");
+include("definitions_i.php");
+include("functions_i.php");
 $config = getConfigFile(SYS_CONFIG);
 $imgtype = $_GET["type"];
 
 /* Find the latest files in the plot file directory */
 for ($i=0; $i<$config["NUM_PWC"]; $i++) {
-  $lowres_imgs[$i] = "../../images/blankimage.gif";
-  $midres_imgs[$i] = "../../images/blankimage.gif";
-  $hires_imgs[$i] = "../../images/blankimage.gif";
+  $lowres_imgs[$i] = "/images/blankimage.gif";
+  $midres_imgs[$i] = "/images/blankimage.gif";
+  $hires_imgs[$i] = "/images/blankimage.gif";
 }
 
 /* Determine the most recent result */
@@ -33,21 +33,21 @@ if ($handle = opendir($dir)) {
         $cmd = "find ".$file." -name \"*.".$imgtype."_1024x768.png\"";
         $find_result = exec($cmd, $array, $return_val);
         if (($return_val == 0) && (strlen($find_result) > 1)) {
-          $hires_imgs[($beamid-1)] = $find_result;
+          $hires_imgs[($beamid-1)] = "/bpsr/results/".$result."/".$find_result;
         }
 
         /* Find the mid res images */
         $cmd = "find ".$file." -name \"*.".$imgtype."_400x300.png\"";
         $find_result = exec($cmd, $array, $return_val);
         if (($return_val == 0) && (strlen($find_result) > 1)) {
-          $midres_imgs[($beamid-1)] = $find_result;
+          $midres_imgs[($beamid-1)] = "/bpsr/results/".$result."/".$find_result;
         }
 
         /* Find the low res images */
         $cmd = "find ".$file." -name \"*.".$imgtype."_112x84.png\"";
         $find_result = exec($cmd, $array, $return_val);
         if (($return_val == 0) && (strlen($find_result) > 1))  {
-          $lowres_imgs[($beamid-1)] = $find_result;
+          $lowres_imgs[($beamid-1)] = "/bpsr/results/".$result."/".$find_result;
         }
 
       }
@@ -58,11 +58,9 @@ if ($handle = opendir($dir)) {
   echo "Could not open plot directory: ".$dir."<BR>\n";
 }
 
-$url = "http://".$_SERVER["SERVER_NAME"].":".$_SERVER["SERVER_PORT"]."/results/".$result."/";
-
+$url = "http://".$_SERVER["SERVER_NAME"].":".$_SERVER["SERVER_PORT"];
 
 for ($i=0; $i<$config["NUM_PWC"]; $i++) {
   echo "img".$i.":::".$url.$midres_imgs[$i].":::".$url.$lowres_imgs[$i].";;;";
-  #$imgs[$i] = "../../images/blankimage.gif";
 }
 echo $result.";;;";

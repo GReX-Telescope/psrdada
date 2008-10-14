@@ -1,7 +1,7 @@
 <?PHP
 
-include("../definitions_i.php");
-include("../functions_i.php");
+include("definitions_i.php");
+include("functions_i.php");
 include("bpsr_functions_i.php");
 
 $config = getConfigFile(SYS_CONFIG);
@@ -22,6 +22,8 @@ if (! isset($_GET["brief"])) {
 }
 
 $data = getResultsInfo($utc_start, $config["SERVER_RESULTS_DIR"]);
+$images = getBPSRResults($config["SERVER_RESULTS_DIR"], $utc_start, "all", array("400x300","112x84"));
+
 $nbeam = $data["nbeams"];
 $header = getConfigFile($data["obs_start"], TRUE);
 
@@ -34,7 +36,7 @@ $obs_info = getConfigFile($obs_info_file);
 
 <?
 $title = "BPSR | Observation ".$utc_start;
-include("../header_i.php"); 
+include("header_i.php"); 
 ?>
 
 <body>
@@ -43,7 +45,7 @@ include("../header_i.php");
 
   function changeImage(type) {
 <?
-    $patterns = array("/&imagetype=bandpass/", "/&imagetype=timeseries/", "/&imagetype=powerspectrum/", "/&imagetype=digitizer/");
+    $patterns = array("/&imagetype=bp/", "/&imagetype=ts/", "/&imagetype=fft/", "/&imagetype=dts/");
     $replacements= array("", "", "", "");
     $cleaned_uri = preg_replace($patterns, $replacements, $_SERVER["REQUEST_URI"]);
     echo "var newurl = \"".$cleaned_uri."&imagetype=\"+type\n";
@@ -55,7 +57,7 @@ include("../header_i.php");
 </script>
 <? 
 $text = "Observation ".$utc_start;
-include("../banner.php"); 
+include("banner.php"); 
 ?>
 
 <center>
@@ -91,54 +93,54 @@ include("../banner.php");
     <td rowspan=3>
       <form name="imageform" class="smalltext">
 <?
-      echoRadio("imagetype","bandpass", "Bandpass", $imagetype); 
+      echoRadio("imagetype","bp", "Bandpass", $imagetype); 
       echo "<br>\n";
-      echoRadio("imagetype","timeseries", "Time Series", $imagetype); 
+      echoRadio("imagetype","ts", "Time Series", $imagetype); 
       echo "<br>\n";
-      echoRadio("imagetype","powerspectrum", "Power Spectrum", $imagetype); 
+      echoRadio("imagetype","fft", "Power Spectrum", $imagetype); 
       echo "<br>\n";
-      echoRadio("imagetype","digitizer", "Digitizer Statistics", $imagetype);
+      echoRadio("imagetype","dts", "Digitizer Statistics", $imagetype);
   ?>
       </form>
     
-    <?echoBeam(13, $nbeam, $imagetype, $data)?>
+    <?echoBeam(13, $nbeam, $imagetype, $data, $images, $utc_start)?>
     <?echoBlank()?>
-    <?echoBeam(12, $nbeam, $imagetype, $data)?>
+    <?echoBeam(12, $nbeam, $imagetype, $data, $images, $utc_start)?>
     <?echoBlank()?> 
   </tr>
   <tr>
    
-    <?echoBeam(6, $nbeam, $imagetype, $data)?>
+    <?echoBeam(6, $nbeam, $imagetype, $data, $images, $utc_start)?>
     <?echoBlank()?>
   </tr>
   <tr>
   
-    <?echoBeam(7, $nbeam, $imagetype, $data)?>
-    <?echoBeam(5, $nbeam, $imagetype, $data)?>
+    <?echoBeam(7, $nbeam, $imagetype, $data, $images, $utc_start)?>
+    <?echoBeam(5, $nbeam, $imagetype, $data, $images, $utc_start)?>
     <?echoBlank()?> 
   </tr>
 
   <tr>
-    <?echoBeam(8, $nbeam, $imagetype, $data)?>
-    <?echoBeam(1, $nbeam, $imagetype, $data)?>
-    <?echoBeam(11, $nbeam, $imagetype, $data)?>
+    <?echoBeam(8, $nbeam, $imagetype, $data, $images, $utc_start)?>
+    <?echoBeam(1, $nbeam, $imagetype, $data, $images, $utc_start)?>
+    <?echoBeam(11, $nbeam, $imagetype, $data, $images, $utc_start)?>
   </tr>
 
   <tr>
-    <?echoBeam(2, $nbeam, $imagetype, $data)?>
-    <?echoBeam(4, $nbeam, $imagetype, $data)?>
-  </tr>
-
-  <tr>
-    <?echoBlank()?>
-    <?echoBeam(3, $nbeam, $imagetype, $data)?>
-    <?echoBlank()?>
+    <?echoBeam(2, $nbeam, $imagetype, $data, $images, $utc_start)?>
+    <?echoBeam(4, $nbeam, $imagetype, $data, $images, $utc_start)?>
   </tr>
 
   <tr>
     <?echoBlank()?>
-    <?echoBeam(9, $nbeam, $imagetype, $data)?>
-    <?echoBeam(10, $nbeam, $imagetype, $data)?>
+    <?echoBeam(3, $nbeam, $imagetype, $data, $images, $utc_start)?>
+    <?echoBlank()?>
+  </tr>
+
+  <tr>
+    <?echoBlank()?>
+    <?echoBeam(9, $nbeam, $imagetype, $data, $images, $utc_start)?>
+    <?echoBeam(10, $nbeam, $imagetype, $data, $images, $utc_start)?>
     <?echoBlank()?>
   </tr>
   
@@ -172,17 +174,20 @@ function echoBlank() {
   echo "<td><img src=\"/images/spacer.gif\" width=113 height=45></td>\n";
 }
 
-function echoBeam($beam_no, $num_beams, $imagetype, $data) {
+function echoBeam($beam_no, $num_beams, $imagetype, $data, $images, $utc_start) {
 
   if ($beam_no <= $num_beams) {
 
-    $mousein = "onmouseover=\"Tip('<img src=".$data[($beam_no-1)]["dir"]."/".$data[($beam_no-1)][$imagetype."_med"]." width=400 height=300>')\"";
+    $img_med = $images[$utc_start][($beam_no-1)][$imagetype."_400x300"];
+    $img_low = $images[$utc_start][($beam_no-1)][$imagetype."_112x84"];
+
+    $mousein = "onmouseover=\"Tip('<img src=".$img_med." width=400 height=300>')\"";
     $mouseout = "onmouseout=\"UnTip()\"";
 
     echo "<td rowspan=2 class=\"multibeam\" height=84>";
     echo "<a class=\"multibeam\" href=\"javascript:popWindow('bpsr/beamwindow.php?beamid=".$beam_no."')\">";
 
-    echo "<img src=\"".$data[($beam_no-1)]["dir"]."/".$data[($beam_no-1)][$imagetype."_low"]."\" width=112 height=84 id=\"beam".$beam_no."\" border=0 TITLE=\"Beam ".$beam_no."\" alt=\"Beam ".$beam_no."\" ".$mousein." ".$mouseout.">\n";
+    echo "<img src=\"".$img_low."\" width=112 height=84 id=\"beam".$beam_no."\" border=0 TITLE=\"Beam ".$beam_no."\" alt=\"Beam ".$beam_no."\" ".$mousein." ".$mouseout.">\n";
 
     echo "</a>";
     echo "</td>\n";

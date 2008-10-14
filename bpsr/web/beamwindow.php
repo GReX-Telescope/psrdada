@@ -1,7 +1,7 @@
 <?PHP
 
-include("../definitions_i.php");
-include("../functions_i.php");
+include("definitions_i.php");
+include("functions_i.php");
 
 $obsid = $_GET["obsid"];    // UTC Start
 $beam_id = sprintf("%02d", $_GET["beamid"]); // Beam number [1-13]
@@ -16,12 +16,14 @@ $base_dir = $config["SERVER_RESULTS_DIR"]."/".$obsid."/".$beam_id;
 if (file_exists($base_dir)) {
   $nbeams = exec("find ".$config["SERVER_RESULTS_DIR"]."/".$obsid."/* -type d | wc -l");
                                                                                                                                                 
-  $img_base = "/results/".$obsid."/".$beam_id."/";
+  $img_base = "/bpsr/results/".$obsid."/".$beam_id."/";
                                                                                                                                                 
   $obs_info =  $config["SERVER_RESULTS_DIR"]."/".$obsid."/obs.info";
   $obs_start = $base_dir."/obs.start";
                                                                                                                                                 
   $data = getImages($base_dir, $img_base);
+
+
   if ( file_exists($obs_start) ) {
     $header = getConfigFile($obs_start);
     $text = "Beam ".$beam_id." for ".$header["SOURCE"];
@@ -48,7 +50,7 @@ if (file_exists($base_dir)) {
 
 <? 
 
-include("../banner.php"); 
+include("banner.php"); 
 
 if (! (file_exists($base_dir))) {
 

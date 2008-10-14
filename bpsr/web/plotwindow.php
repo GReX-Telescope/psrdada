@@ -101,7 +101,7 @@ $nbeam = $config["NUM_PWC"];
       }
 
       /* This URL will return the names of the 5 current */
-      var url = "bpsr/plotupdate.php?results_dir=<?echo $config["SERVER_RESULTS_DIR"]?>&type="+type;
+      var url = "plotupdate.php?results_dir=<?echo $config["SERVER_RESULTS_DIR"]?>&type="+type;
 
       http_request.open("GET", url, true)
       http_request.send(null)
@@ -132,7 +132,7 @@ $nbeam = $config["NUM_PWC"];
 <?
 for ($i=0; $i<$config["NUM_PWC"]; $i++) {
 ?>
-  <a href="javascript:popWindow('bpsr/beamwindow.php?beamid=<?echo ($i+1)?>', 1024, 800)" class="btn" > <span><?echo ($i+1)?></span> </a>
+  <a href="javascript:popWindow('beamwindow.php?beamid=<?echo ($i+1)?>', 1024, 800)" class="btn" > <span><?echo ($i+1)?></span> </a>
 <?
 }
 ?>
@@ -211,7 +211,7 @@ function echoBeam($beam_no, $num_beams) {
     //$mouseout = "onmouseout=\"UnTip()\"";
 
     echo "<td rowspan=2 align=right>";
-    echo "<a href=\"javascript:popWindow('bpsr/beamwindow.php?beamid=".$beam_no."')\">";
+    echo "<a href=\"javascript:popWindow('beamwindow.php?beamid=".$beam_no."')\">";
 
     echo "<img src=\"/images/blankimage.gif\" width=112 height=84 id=\"beam".$beam_no."\" TITLE=\"Beam ".$beam_no."\" alt=\"Beam ".$beam_no."\" ".$mousein." ".$mouseout.">\n";
     echo "</a></td>\n";
