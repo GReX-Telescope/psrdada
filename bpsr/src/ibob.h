@@ -73,6 +73,9 @@ extern "C" {
   /*! return true if already open */
   int ibob_is_open (ibob_t* bob);
 
+  /*! return true if iBoB is alive */
+  int ibob_ping (ibob_t* bob);
+
   /*! reset packet counter on next UTC second, returned */
   time_t ibob_arm (ibob_t* bob);
 
