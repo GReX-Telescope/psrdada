@@ -17,7 +17,7 @@
 #
 # Include Modules
 #
-use Dada;            # DADA Module for configuration options
+use Apsr;            # APSR/DADA Module for configuration options
 use strict;          # strict mode (like -Wall)
 use threads;         # standard perl threads
 use threads::shared; # standard perl threads
@@ -33,8 +33,8 @@ use File::Basename;
 use constant DEBUG_LEVEL        => 1;
 use constant DADA_HEADER_BINARY => "dada_header -k dada";
 use constant RSYNC_OPTS         => "-ag --rsh=/usr/bin/rsh";
-use constant PIDFILE            => "observation_manager.pid";
-use constant LOGFILE            => "observation_manager.log";
+use constant PIDFILE            => "apsr_observation_manager.pid";
+use constant LOGFILE            => "apsr_observation_manager.log";
 
 
 #
@@ -43,7 +43,7 @@ use constant LOGFILE            => "observation_manager.log";
 our $log_socket;
 our $currently_processing : shared = 0;
 our $quit_daemon : shared = 0;
-our %cfg : shared = Dada->getDadaConfig();	# dada.cfg in a hash
+our %cfg : shared = Apsr->getApsrConfig();	# Apsr.cfg in a hash
 
 
 #
@@ -205,7 +205,7 @@ sub processing_thread($$) {
     chdir $processing_dir;
 
     $cmd = $bindir."/".$proc_cmd;
-    $cmd .= " 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/client_apsr_sys_logger.pl";
+    $cmd .= " 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/client_sys_logger.pl";
 
     logMessage(2, "INFO", "cmd = $cmd");
 
@@ -614,7 +614,7 @@ sub level_setting_thread($$) {
   # Add the data block key
   $cmd .= " ".$cfg{"VIEWING_DB_KEY"};
   # $cmd .= " | ".$cfg{"SCRIPTS_DIR"}."/client_gain_controller.pl ". $nchan;
-  $cmd .= " | ".$cfg{"SCRIPTS_DIR"}."/client_gain_controller.pl 1";
+  $cmd .= " | ".$cfg{"SCRIPTS_DIR"}."/client_apsr_gain_controller.pl 1";
   logMessage(0, "INFO", "Running digimon: $cmd");
 
   my $returnVal = system($cmd);

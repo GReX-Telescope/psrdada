@@ -25,11 +25,13 @@
 # Include Modules
 #
 
+use lib $ENV{"DADA_ROOT"}."/bin";
+
 use IO::Socket;     # Standard perl socket library
 use IO::Select;     
 use Net::hostent;
 use File::Basename;
-use Dada;           # DADA Module for configuration options
+use Apsr;           # DADA Module for configuration options
 use threads;        # Perl threads module
 use threads::shared; 
 use strict;         # strict mode (like -Wall)
@@ -52,7 +54,7 @@ use constant NHOST              => 16;        # This is constant re DFB3
 our $current_state : shared = "Idle";
 our $pwcc_running : shared  = 0;
 our $quit_threads : shared  = 0;
-our %cfg : shared           = Dada->getDadaConfig();
+our %cfg : shared           = Apsr->getApsrConfig();
 our $use_dfb_simulator      = $cfg{"USE_DFB_SIMULATOR"};
 our $dfb_sim_host           = $cfg{"DFB_SIM_HOST"};
 our $dfb_sim_port           = $cfg{"DFB_SIM_PORT"};
@@ -60,6 +62,8 @@ our $dfb_sim_dest_port      = $cfg{"DFB_SIM_DEST_PORT"};
 our $pwcc_host              = $cfg{"PWCC_HOST"};
 our $pwcc_port              = $cfg{"PWCC_PORT"};
 our $client_master_port     = $cfg{"CLIENT_MASTER_PORT"};
+our $pwcc_file              = $cfg{"CONFIG_DIR"}."/apsr_tcs.cfg";
+
 
 #
 # Variable Declarations
@@ -141,10 +145,9 @@ foreach $key (keys (%site_cfg)) {
 # if the CONFIG command is received
 
 my $pwcc_logfile = $server_logdir."/dada_pwc_command.log";
-my $pwcc_file = $config_dir."/tcs.cfg";
 my $utc_start = "";
 
-$pwcc_thread = threads->new(\&pwcc_thread, $pwcc_file);
+$pwcc_thread = threads->new(\&pwcc_thread);
 logMessage(2, "dada_pwc_command thread started");
 
 # This thread will simply report the current state of the PWCC_CONTROLLER
@@ -272,14 +275,14 @@ while (!$quit_threads) {
             %tcs_cmds = addHostCommands(\%tcs_cmds, \%site_cfg);
 
             # Create the tcs.cfg file to launch dada_pwc_command
-            ($result, $response) = generateConfigFile($cfg{"CONFIG_DIR"}."/tcs.cfg", \%tcs_cmds);
+            ($result, $response) = generateConfigFile($cfg{"CONFIG_DIR"}."/apsr_tcs.cfg", \%tcs_cmds);
             logMessage(0, "generateConfigFile: ".$result.":".$response); 
 
             # rejoin the pwcc command thread
             $pwcc_thread->join();
 
             # Now that we have a successful header. Launch dada_pwc_command in
-            $pwcc_thread = threads->new(\&pwcc_thread, $cfg{"CONFIG_DIR"}."/tcs.cfg");
+            $pwcc_thread = threads->new(\&pwcc_thread);
 
             # Create the tcs.spec file to launch dada_pwc_command
             ($result, $response) = generateSpecificationFile($cfg{"CONFIG_DIR"}."/tcs.spec", \%tcs_cmds);
@@ -466,17 +469,15 @@ exit 0;
 # Runs dada_pwc_command in non daemon mode. All ouput should be logged to
 # the log file specified
 #
-sub pwcc_thread($) {
-
-  (my $fname) = @_;
+sub pwcc_thread() {
 
   my $logfile = $cfg{"SERVER_LOG_DIR"}."/".PWCC_LOGFILE;
   my $port    = $cfg{"PWCC_PORT"};
   my $bindir = Dada->getCurrentBinaryVersion();
 
-  my $cmd = $bindir."/dada_pwc_command -p ".$port." -c ".$fname." >> ".$logfile." 2>&1";
+  my $cmd = $bindir."/dada_pwc_command ".$pwcc_file." >> ".$logfile." 2>&1";
 
-  logMessage(2, "pwcc_thread: running dada_pwc_command -p ".$port);
+  logMessage(2, "pwcc_thread: running dada_pwc_command ".$pwcc_file);
 
   $pwcc_running = 1;
   my $returnVal = system($cmd);
@@ -580,7 +581,7 @@ sub quit_pwc_command() {
     # try to kill the process manually
     my $result = "";
     my $response = "";
-    ($result, $response) = Dada->killProcess("dada_pwc_command");
+    ($result, $response) = Dada->killProcess("dada_pwc_command ".$pwcc_file);
 
     return ($result, $response);
 
@@ -603,7 +604,7 @@ sub quit_pwc_command() {
     }
     if ($pwcc_running) {
        logMessage(0, "Was forced to kill dada_pwc_command");
-      ($result, $response) = Dada->killProcess("dada_pwc_command");
+      ($result, $response) = Dada->killProcess("dada_pwc_command ".$pwcc_file);
     }
 
     return ("ok","");
@@ -771,6 +772,13 @@ sub set_utc_start($\%) {
 
   $cmd = "cp ".$fname." ".$archive_dir;
   system($cmd);
+
+  $cmd = "sudo -b chown -R apsr ".$results_dir;
+  system($cmd);
+                                                                              
+  $cmd = "sudo -b chown -R apsr ".$archive_dir;
+  system($cmd);
+
 
   # connect to nexus
   my $handle = Dada->connectToMachine($cfg{"PWCC_HOST"}, $cfg{"PWCC_PORT"});
@@ -1137,8 +1145,6 @@ sub addHostCommands(\%\%) {
   my %site_cfg = %$site_cfg_ref;
 
   $tcs_cmds{"NUM_PWC"}     = NHOST;
-  $tcs_cmds{"PWC_PORT"}    = 56026;
-  $tcs_cmds{"LOGFILE_DIR"} = $cfg{"SERVER_LOG_DIR"};
   $tcs_cmds{"HDR_SIZE"}    = $site_cfg{"HDR_SIZE"};
 
   # Determine the BW & FREQ for each channel
@@ -1180,6 +1186,8 @@ sub addHostCommands(\%\%) {
 sub generateConfigFile($\%) {
 
   my ($fname, $tcs_cmds_ref) = @_;
+
+  my $string = "";
                                                                                                                                                                               
   my %tcs_cmds = %$tcs_cmds_ref;
   open FH, ">".$fname or return ("fail", "Could not write to ".$fname);
@@ -1187,18 +1195,37 @@ sub generateConfigFile($\%) {
   print FH "# Header file created by ".$0."\n";
   print FH "# Created: ".Dada->getCurrentDadaTime()."\n\n";
   print FH  Dada->headerFormat("NUM_PWC",$tcs_cmds{"NUM_PWC"})."\n";
-  logMessage(2, "tcs.cfg: ".Dada->headerFormat("NUM_PWC",$tcs_cmds{"NUM_PWC"}));
-  print FH  Dada->headerFormat("PWC_PORT",$tcs_cmds{"PWC_PORT"})."\n";
-  logMessage(2, "tcs.cfg: ".Dada->headerFormat("PWC_PORT",$tcs_cmds{"PWC_PORT"}));
-  print FH  Dada->headerFormat("LOGFILE_DIR",$tcs_cmds{"LOGFILE_DIR"})."\n";
-  logMessage(2, "tcs.cfg: ". Dada->headerFormat("LOGFILE_DIR",$tcs_cmds{"LOGFILE_DIR"}));
-  print FH  Dada->headerFormat("HDR_SIZE",$tcs_cmds{"HDR_SIZE"})."\n";
-  logMessage(2, "tcs.cfg: ".Dada->headerFormat("HDR_SIZE",$tcs_cmds{"HDR_SIZE"}));
+  logMessage(2, "apsr_tcs.cfg: ".Dada->headerFormat("NUM_PWC",$tcs_cmds{"NUM_PWC"}));
+
+  # Port information for dada_pwc_command
+  $string = Dada->headerFormat("PWC_PORT",$cfg{"PWC_PORT"});
+  print FH $string."\n";
+  logMessage(2, "apsr_tcs.cfg: ".$string);
+                                                                                                                                   
+  $string = Dada->headerFormat("PWC_LOGPORT",$cfg{"PWC_LOGPORT"});
+  print FH $string."\n";
+  logMessage(2, "apsr_tcs.cfg: ".$string);
+                                                                                                                                   
+  $string = Dada->headerFormat("PWCC_PORT",$cfg{"PWCC_PORT"});
+  print FH $string."\n";
+  logMessage(2, "apsr_tcs.cfg: ".$string);
+                                                                                                                                   
+  $string = Dada->headerFormat("PWCC_LOGPORT",$cfg{"PWCC_LOGPORT"});
+  print FH $string."\n";
+  logMessage(2, "apsr_tcs.cfg: ".$string);
+                                                                                                                                   
+  $string = Dada->headerFormat("LOGFILE_DIR",$cfg{"SERVER_LOG_DIR"});
+  print FH $string."\n";
+  logMessage(2, "apsr_tcs.cfg: ".$string);
+
+  $string = Dada->headerFormat("HDR_SIZE",$tcs_cmds{"HDR_SIZE"});
+  print FH $string."\n";
+  logMessage(2, "apsr_tcs.cfg: ".$string);
 
   my $i=0;
   for($i=0; $i<$cfg{"NUM_PWC"}; $i++) {
     print FH Dada->headerFormat("PWC_".$i,$cfg{"PWC_".$i})."\n";
-    logMessage(2, "tcs.cfg: ".Dada->headerFormat("PWC_".$i,$cfg{"PWC_".$i}));
+    logMessage(2, "apsr_tcs.cfg: ".Dada->headerFormat("PWC_".$i,$cfg{"PWC_".$i}));
   }
   close FH;
 
@@ -1219,8 +1246,6 @@ sub generateSpecificationFile($\%) {
 
   my %ignore = ();
   $ignore{"NUM_PWC"} = "yes";
-  $ignore{"PWC_PORT"} = "yes";
-  $ignore{"LOGFILE_DIR"} = "yes";
   my $i=0;
   for ($i=0; $i<$tcs_cmds{"NUM_PWC"}; $i++) {
     $ignore{"PWC_".$i} = "yes";

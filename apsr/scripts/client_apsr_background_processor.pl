@@ -13,11 +13,11 @@
 #
 # Include Modules
 #
-use Dada;           # DADA Module for configuration options
 use strict;         # strict mode (like -Wall)
 use threads;        # standard perl threads
 use threads::shared;
 use File::Basename;
+use Apsr;           # APSR/DADA Module for configuration options
 
 
 
@@ -25,14 +25,14 @@ use File::Basename;
 # Constants
 #
 use constant DEBUG_LEVEL   => 1;
-use constant PIDFILE       => "background_processor.pid";
-use constant LOGFILE       => "background_processor.log";
+use constant PIDFILE       => "apsr_background_processor.pid";
+use constant LOGFILE       => "apsr_background_processor.log";
 
 
 #
 # Global Variable Declarations
 #
-our %cfg : shared = Dada->getDadaConfig();      # dada.cfg in a hash
+our %cfg : shared = Apsr->getApsrConfig();      # Apsr.cfg in a hash
 our $log_socket;
 our $proc_pid : shared = 0;
 our $quit_daemon : shared = 0;
