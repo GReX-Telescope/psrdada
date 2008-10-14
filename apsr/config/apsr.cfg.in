@@ -11,8 +11,8 @@ SCRIPTS_DIR             @PSRDADA_INSTALL@/bin
 CONFIG_DIR              @PSRDADA_INSTALL@/share
 WEB_DIR                 @PSRDADA_INSTALL@/web
 STATUS_DIR              @PSRDADA_INSTALL@/web/status
-PROCESSING_DB_KEY       @PSRDADA_INSTALL@/share/dada.info
-VIEWING_DB_KEY          @PSRDADA_INSTALL@/share/dada.viewer
+PROCESSING_DB_KEY       @PSRDADA_INSTALL@/share/apsr.info
+VIEWING_DB_KEY          @PSRDADA_INSTALL@/share/apsr.viewer
 
 ###############################################################################
 # DFB3 Configuration. For gain level control
@@ -33,23 +33,30 @@ SERVER_LOG_DIR          /export/logs/apsr
 SERVER_CONTROL_DIR      /tmp/apsr/control
 SERVER_RESULTS_NFS_MNT  /nfs/results/apsr
 SERVER_ARCHIVE_NFS_MNT  /nfs/archives/apsr
-SERVER_DAEMONS          aux_manager pwc_monitor results_manager src_monitor sys_monitor apsr_tcs_interface gain_manager
+SERVER_DAEMONS          apsr_aux_manager apsr_pwc_monitor apsr_results_manager apsr_src_monitor apsr_sys_monitor apsr_tcs_interface apsr_gain_manager
 
 # TCS Interface configuration. Note on different interface to server
 TCS_INTERFACE_HOST      apsr-srv0.atnf.csiro.au
-TCS_INTERFACE_PORT      59000
+TCS_INTERFACE_PORT      59000       # TCS connects here
+TCS_STATE_INFO_PORT     52001       # Web interface state information
 
-# For information on current state of the syste_ii__Cm
-TCS_STATE_INFO_PORT     59001
+# PWCC -> PWC configuration
+PWCC_HOST               srv0.apsr.edu.au
+PWCC_PORT               52020
+PWCC_LOGPORT            52021
+PWC_PORT                52022
+PWC_LOGPORT             52023
+
 
 # For clients to log system messages
-SERVER_SRC_LOG_PORT     57004
-SERVER_SYS_LOG_PORT     57005
-SERVER_PWCC_LOG_PORT    56028
-SERVER_GAIN_CONTROL_PORT 57008
+SERVER_SRC_LOG_PORT       52002
+SERVER_SYS_LOG_PORT       52003
+SERVER_PWCC_LOG_PORT      52004
+SERVER_GAIN_CONTROL_PORT  52005
+SERVER_GAIN_REPORT_PORT   52008
 
-SERVER_AUX_CLIENT_PORT  57009
-SERVER_AUX_ASSIST_PORT  57010
+SERVER_AUX_CLIENT_PORT    52006
+SERVER_AUX_ASSIST_PORT    52007
 
 
 ###############################################################################
@@ -58,7 +65,8 @@ SERVER_AUX_ASSIST_PORT  57010
 USE_DFB_SIMULATOR       0         # 1 means tcs_interface will launch dfb sim
 DFB_SIM_BINARY          apsr_udpgenerator
 DFB_SIM_HOST            apsr16
-DFB_SIM_PORT            57003     # control of dfb simulator
+DFB_SIM_PORT            52014     # control of dfb simulator
+DFB_SIM_GAIN_PORT       52015     # control of dfb simulator
 DFB_SIM_DEST_PORT       10002	    # SHOULD mactch CLIENT_UDPDB_PORT below
 
 
@@ -72,20 +80,20 @@ CLIENT_RECORDING_DIR    /lfs/data0/apsr/rawdata
 CLIENT_SCRATCH_DIR      /lfs/data0/apsr/scratch
 CLIENT_ARCHIVE_DIR      /lfs/data0/apsr/archives
 
-CLIENT_DAEMONS          observation_manager archive_manager processing_manager background_processor auxiliary_manager monitor
+CLIENT_DAEMONS          apsr_observation_manager apsr_archive_manager apsr_processing_manager apsr_background_processor apsr_aux_manager
 
 # Port on which apsr_udpdb will listen for udp packets
-CLIENT_UDPDB_PORT       10002 
+CLIENT_UDPDB_PORT       10002     
 # Port for client_master_control.pl
-CLIENT_MASTER_PORT      57001
+CLIENT_MASTER_PORT      52009
 # Returns load information for the background processor
-CLIENT_PROC_LOAD_PORT   57006
+CLIENT_PROC_LOAD_PORT   52010
 # Returns information on whether an obsevation is active
-CLIENT_BG_PROC_PORT     57007
+CLIENT_BG_PROC_PORT     52011
 # Number of cores/processors available for processing
 CLIENT_NUM_CORES        8
 # Number of cores/processors available for processing
-CLIENT_UDPDB_STATS_PORT 56060
+CLIENT_UDPDB_STATS_PORT 52012
 
 ################################################################################
 # Data block definitions
@@ -95,7 +103,7 @@ PROCESSING_DATA_BLOCK   EADA
 DADA_BLOCK_NBUFS        250         # dada_dbNdb data block
 DADA_BLOCK_BUFSZ        4194304
 
-EADA_BLOCK_NBUFS        2000         # dspsr data block
+EADA_BLOCK_NBUFS        1000         # dspsr data block
 EADA_BLOCK_BUFSZ        4194304
 
 FADA_BLOCK_NBUFS        250          # auxilliary data block
@@ -127,5 +135,4 @@ DFB_0	                  apsr16
 HELPER_DAEMONS          archive_manager auxiliary_processor 
 NUM_HELP                1
 HELP_0                  apsr17
-
 
