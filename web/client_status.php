@@ -11,7 +11,6 @@ include("header_i.php");
 
   # Get machines from the dada.cfg file
   $config = getConfigFile(SYS_CONFIG);
-  $spec = getConfigFile(DADA_SPECIFICATION);
 
   $nmachines = $config["NUM_PWC"];
   $machines = "";

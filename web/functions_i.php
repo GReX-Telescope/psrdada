@@ -153,11 +153,15 @@ function openSocket($host, $port, $timeout=2) {
 
 function socketRead($socket) {
 
-  $string = socket_read ($socket, 4096, PHP_NORMAL_READ);
-  if ($string == FALSE) {
-    $string = "Error on socketRead()\n";
+  if ($socket) {
+    $string = socket_read ($socket, 4096, PHP_NORMAL_READ);
+    if ($string == FALSE) {
+      $string = "Error on socketRead()\n";
+    }
+    return $string;
+  } else {
+    return "socket closed before read\n";
   }
-  return $string;
 }
 
 function socketWrite($socket, $string) {
@@ -294,12 +298,23 @@ function localTimeFromGmTime($time_string) {
 }
 
 function gmTimeFromLocalTime($time_string) {
-                                                                                                                                            
   $a = split('[-:]',$time_string);
   $time_unix = mktime($a[3],$a[4],$a[5],$a[1],$a[2],$a[0]);
   $new_time_string = gmdate(DADA_TIME_FORMAT, $time_unix);
   return $new_time_string;
-                                                                                                                                            
+}
+
+function unixTimeFromLocalTime($time_string) {
+
+  $a = split('[-:]',$time_string);
+  $time_unix = mktime($a[3],$a[4],$a[5],$a[1],$a[2],$a[0]);
+  return $time_unix;
+}
+
+function unixTimeFromGMTime($time_string) {
+  $a = split('[-:]',$time_string);
+  $time_unix = gmmktime($a[3],$a[4],$a[5],$a[1],$a[2],$a[0]);
+  return $time_unix;
 }
                                                                                                                                             
 
@@ -394,99 +409,6 @@ function getIntergrationLength($archive) {
     return "0";
 
   }
-}
-
-function getServerDaemonNames() {
-
-  $arr = array();
-  $arr["apsr_tcs_interface"] = "TCS Interface";
-  $arr["bpsr_tcs_interface"] = "TCS Interface";
-  $arr["pwc_monitor"] = "PWC Mon";
-  $arr["sys_monitor"] = "SYS Mon";
-  $arr["src_monitor"] = "SRC Mon";
-  $arr["results_manager"] = "Results Mngr";
-  $arr["bpsr_results_manager"] = "Results Mngr";
-  $arr["gain_manager"] = "Gain Mngr";
-  $arr["aux_manager"] = "Aux Mngr";
-  $arr["ibob_simulator"] = "IBOB Sim.";
-  $arr["ibob_connection_manager"] = "IBOB conn.";
-  return $arr;
-}
-
-function getClientDaemonNames() {
-
-  $arr = array();
-
-  $arr["master_control"] = "Master Ctrl";
-  $arr["observation_manager"] = "Obs Mngr";
-  $arr["bpsr_observation_manager"] = "Obs. Mngr";
-  $arr["bpsr_results_monitor"] = "Results Monitor";
-  $arr["processing_manager"] = "Proc. Mngr";
-  $arr["processor"] = "Processor";
-  $arr["archive_manager"] = "Archive Mngr";
-  $arr["spectra_manager"] = "Spectra Mngr";
-  $arr["background_processor"] = "BG Proc";
-  $arr["aux_manager"] = "Aux Mngr";
-  $arr["monitor"] = "Monitor";
-  $arr["gain_controller"] = "Gain Ctrl";
-
-  return $arr;
-
-}
-
-function getClientDaemonTypes() {
-  $arr = array();
-
-  $arr["master_control"] = "none";
-  $arr["observation_manager"] = "sys";
-  $arr["bpsr_observation_manager"] = "sys";
-  $arr["bpsr_results_monitor"] = "sys";
-  $arr["processing_manager"] = "src";
-  $arr["processor"] = "src";
-  $arr["archive_manager"] = "sys";
-  $arr["spectra_manager"] = "sys";
-  $arr["background_processor"] = "sys";
-  $arr["aux_manager"] = "sys";
-  $arr["monitor"] = "sys";
-  $arr["gain_controller"] = "sys";
-  return $arr;
-}
-
-function getClientDaemonTags() {
-
-  $arr = array();
-
-  $arr["master_control"] = "none";
-  $arr["observation_manager"] = "obs mngr";
-  $arr["bpsr_observation_manager"] = "obs mngr";
-  $arr["bpsr_results_monitor"] = "results mon";
-  $arr["processing_manager"] = "proc mngr";
-  $arr["processor"] = "proc";
-  $arr["archive_manager"] = "arch mngr";
-  $arr["spectra_manager"] = "spectra mngr";
-  $arr["background_processor"] = "bg mngr";
-  $arr["aux_manager"] = "aux mngr";
-  $arr["monitor"] = "monitor";
-  $arr["gain_controller"] = "gain ctrl";
-  return $arr;
-}
-
-function getServerDaemonTypes() {
-                                                                               
-  $arr = array();
-  $arr["apsr_tcs_interface"] = "apsr_tcs_interface";
-  $arr["bpsr_tcs_interface"] = "bpsr_tcs_interface";
-  $arr["pwc_monitor"] = "nexus.pwc";
-  $arr["sys_monitor"] = "nexus.sys";
-  $arr["src_monitor"] = "nexus.src";
-  $arr["results_manager"] = "results_manager";
-  $arr["bpsr_results_manager"] = "bpsr_results_manager";
-  $arr["gain_manager"] = "gain_manager";
-  $arr["aux_manager"] = "aux_manager";
-  $arr["dada_pwc_command"] = "dada_pwc_command";
-  $arr["ibob_simulator"] = "ibob_simulator";
-  $arr["ibob_connection_manager"] = "ibob_connection_manager";
-  return $arr;
 }
 
 ?>

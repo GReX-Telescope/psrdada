@@ -69,10 +69,10 @@ $groups = getProjects($config["DADA_USER"]);
 
       <a target="_ganglia" href="http://<?echo $_SERVER["SERVER_NAME"].":".$_SERVER["SERVER_PORT"]?>/ganglia/" class="btn" > <span>Ganglia</span> </a>
 
-      <a href="javascript:popWindow('<?echo INSTRUMENT?>/results.php', 1060, 800)" class="btn" > <span>Results</span> </a>
+      <a href="javascript:popWindow('results.php', 1060, 800)" class="btn" > <span>Results</span> </a>
 
       <a href="javascript:popWindow('control/', 1024, 800)" class="btn" > <span>Controls</span> </a>
-      <a href="javascript:popWindow('<?echo INSTRUMENT?>/testing/', 1024, 800)" class="btn" > <span>Test</span> </a>
+      <a href="javascript:popWindow('testing/', 1024, 800)" class="btn" > <span>Test</span> </a>
       <a href="javascript:popWindow('commandeer.php', 800, 480)" class="btn" > <span>Commandeer</span> </a>
 
     </div>

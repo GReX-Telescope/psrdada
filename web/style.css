@@ -210,7 +210,7 @@ div.btns:after
 
 div.btns a.btn{
   float:left;
-  background:buttonface url(images/border-2.gif) no-repeat;cursor:pointer;font-size:0;text-align:center;
+  background:buttonface url(/images/border-2.gif) no-repeat;cursor:pointer;font-size:0;text-align:center;
   text-align:center;
   display:block;
   min-width:30px;
@@ -233,7 +233,7 @@ div.btns a.btn span
   left:1px;top:1px;
   display:block;
   text-decoration:none;
-  background:url(images/border.gif) right bottom no-repeat;
+  background:url(/images/border.gif) right bottom no-repeat;
   font:small/1 Verdana;
   color:#222;
 
@@ -281,26 +281,26 @@ a.button i {
 a.button:link span,
 a.button:focus span,
 a.button:visited span {
-  background-image: url(images/gb_left.png);
+  background-image: url(/images/gb_left.png);
   }
 a.button:link i,
 a.button:focus i,
 a.button:visited i {
-  background-image: url(images/gb.png);
+  background-image: url(/images/gb.png);
   }
 a.button:link b,
 a.button:focus b,
 a.button:visited b {
-  background-image: url(images/gb_right.png);
+  background-image: url(/images/gb_right.png);
   }
 a.button:active span {
-  background-image: url(images/gb_pressed_left.jpg);
+  background-image: url(/images/gb_pressed_left.jpg);
   }
 a.button:active i {
-  background-image: url(images/gb_pressed.jpg);
+  background-image: url(/images/gb_pressed.jpg);
   }
 a.button:active b {
-  background-image: url(images/gb_pressed_right.jpg);
+  background-image: url(/images/gb_pressed_right.jpg);
   }
 
 

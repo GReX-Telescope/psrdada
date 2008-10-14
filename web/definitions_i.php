@@ -6,7 +6,7 @@ include(INSTRUMENT."/definitions_i.php");
 
 /* Directory configuration */
 
-define(DADA_ROOT,  "/home/apsr/linux_64");
+define(DADA_ROOT,  "/home/dada/linux_64");
 define(WEB_BASE,   DADA_ROOT."/web");
 
 define(CHANGE_INSTRUMENT_FILE, "/tmp/".INSTRUMENT."/control/change_instrument");

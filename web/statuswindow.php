@@ -71,59 +71,59 @@ include("functions_i.php");
 
         if (pwc_status == <?echo STATUS_OK?>) {
           /* Update the image */
-          document.getElementById("img_"+pwc_name+"_pwc").src = "images/green_light.png"
+          document.getElementById("img_"+pwc_name+"_pwc").src = "/images/green_light.png"
           document.getElementById("img_"+pwc_name+"_pwc").title = "";
-          document.getElementById("a_"+pwc_name+"_pwc").href = "logwindow.php?machine="+pwc_name+"&loglevel=all&loglength="+loglength+"&logtype=pwc"
+          document.getElementById("a_"+pwc_name+"_pwc").href = "logwindow.php?machine="+pwc_name+"&loglevel=all&loglength="+loglength+"&daemon=pwc"
         }
         if (pwc_status == <?echo STATUS_WARN?>) {
           /* Update the image */
-          document.getElementById("img_"+pwc_name+"_pwc").src = "images/yellow_light.png"
+          document.getElementById("img_"+pwc_name+"_pwc").src = "/images/yellow_light.png"
           document.getElementById("img_"+pwc_name+"_pwc").title = pwc_message
-          document.getElementById("a_"+pwc_name+"_pwc").href = "logwindow.php?machine="+pwc_name+"&loglevel=warn&loglength="+loglength+"&logtype=pwc"
+          document.getElementById("a_"+pwc_name+"_pwc").href = "logwindow.php?machine="+pwc_name+"&loglevel=warn&loglength="+loglength+"&daemon=pwc"
         }
         if (pwc_status == <?echo STATUS_ERROR?>) {
           /* Update the image */
-          document.getElementById("img_"+pwc_name+"_pwc").src = "images/red_light.png"
+          document.getElementById("img_"+pwc_name+"_pwc").src = "/images/red_light.png"
           document.getElementById("img_"+pwc_name+"_pwc").title = pwc_message
-          document.getElementById("a_"+pwc_name+"_pwc").href = "logwindow.php?machine="+pwc_name+"&loglevel=error&loglength="+loglength+"logtype=pwc"
+          document.getElementById("a_"+pwc_name+"_pwc").href = "logwindow.php?machine="+pwc_name+"&loglevel=error&loglength="+loglength+"daemon=pwc"
         }
 
         if (src_status == <?echo STATUS_OK?>) {
           /* Update the image */
-          document.getElementById("img_"+pwc_name+"_src").src = "images/green_light.png"
+          document.getElementById("img_"+pwc_name+"_src").src = "/images/green_light.png"
           document.getElementById("img_"+pwc_name+"_src").title = "";
-          document.getElementById("a_"+pwc_name+"_src").href = "logwindow.php?machine="+pwc_name+"&loglevel=all&loglength="+loglength+"&logtype=src"
+          document.getElementById("a_"+pwc_name+"_src").href = "logwindow.php?machine="+pwc_name+"&loglevel=all&loglength="+loglength+"&daemon=src"
         }
         if (src_status == <?echo STATUS_WARN?>) {
           /* Update the image */
-          document.getElementById("img_"+pwc_name+"_src").src = "images/yellow_light.png"
+          document.getElementById("img_"+pwc_name+"_src").src = "/images/yellow_light.png"
           document.getElementById("img_"+pwc_name+"_src").title = src_message
-          document.getElementById("a_"+pwc_name+"_src").href = "logwindow.php?machine="+pwc_name+"&loglevel=warn&loglength="+loglength+"&logtype=src"
+          document.getElementById("a_"+pwc_name+"_src").href = "logwindow.php?machine="+pwc_name+"&loglevel=warn&loglength="+loglength+"&daemon=src"
         }
         if (src_status == <?echo STATUS_ERROR?>) {
           /* Update the image */
-          document.getElementById("img_"+pwc_name+"_src").src = "images/red_light.png"
+          document.getElementById("img_"+pwc_name+"_src").src = "/images/red_light.png"
           document.getElementById("img_"+pwc_name+"_src").title = src_message
-          document.getElementById("a_"+pwc_name+"_src").href = "logwindow.php?machine="+pwc_name+"&loglevel=error&loglength="+loglength+"&logtype=src"
+          document.getElementById("a_"+pwc_name+"_src").href = "logwindow.php?machine="+pwc_name+"&loglevel=error&loglength="+loglength+"&daemon=src"
         }
 
         if (sys_status == <?echo STATUS_OK?>) {
           /* Update the image */
-          document.getElementById("img_"+pwc_name+"_sys").src = "images/green_light.png"
+          document.getElementById("img_"+pwc_name+"_sys").src = "/images/green_light.png"
           document.getElementById("img_"+pwc_name+"_sys").title = "";
-          document.getElementById("a_"+pwc_name+"_sys").href = "logwindow.php?machine="+pwc_name+"&loglevel=all&loglength="+loglength+"&logtype=sys"
+          document.getElementById("a_"+pwc_name+"_sys").href = "logwindow.php?machine="+pwc_name+"&loglevel=all&loglength="+loglength+"&daemon=sys"
         }
         if (sys_status == <?echo STATUS_WARN?>) {
           /* Update the image */
-          document.getElementById("img_"+pwc_name+"_sys").src = "images/yellow_light.png"
+          document.getElementById("img_"+pwc_name+"_sys").src = "/images/yellow_light.png"
           document.getElementById("img_"+pwc_name+"_sys").title = sys_message
-          document.getElementById("a_"+pwc_name+"_sys").href = "logwindow.php?machine="+pwc_name+"&loglevel=warn&loglength="+loglength+"&logtype=sys"
+          document.getElementById("a_"+pwc_name+"_sys").href = "logwindow.php?machine="+pwc_name+"&loglevel=warn&loglength="+loglength+"&daemon=sys"
         }
         if (sys_status == <?echo STATUS_ERROR?>) {
           /* Update the image */
-          document.getElementById("img_"+pwc_name+"_sys").src = "images/red_light.png"
+          document.getElementById("img_"+pwc_name+"_sys").src = "/images/red_light.png"
           document.getElementById("img_"+pwc_name+"_sys").title = sys_message
-          document.getElementById("a_"+pwc_name+"_sys").href = "logwindow.php?machine="+pwc_name+"&loglevel=error&loglength="+loglength+"&logtype=sys"
+          document.getElementById("a_"+pwc_name+"_sys").href = "logwindow.php?machine="+pwc_name+"&loglevel=error&loglength="+loglength+"&daemon=sys"
         }
       }
     }
@@ -283,18 +283,29 @@ function statusLink($machine, $linktext) {
 
 function statusLight($status, $message, $machine, $linkid, $imgid) {
 
+  $daemon = "";
+  if (strstr($linkid, "nexus_pwc") !== FALSE) {
+    $daemon = "&daemon=pwc";
+  }
+  if (strstr($linkid, "nexus_src") !== FALSE) {
+    $daemon = "&daemon=src";
+  }
+  if (strstr($linkid, "nexus_sys") !== FALSE) {
+    $daemon = "&daemon=sys";
+  }
+
   if ($status == STATUS_OK) {
     //$url = "machine_status.php?machine=".$machine;
-    $url = "logwindow.php?machine=".$machine."&loglevel=all";
+    $url = "logwindow.php?machine=".$machine."&loglevel=all".$daemon;
     $title = "OK: ".$machine;
   } else if ($status == STATUS_WARN) {
-    $url = "logwindow.php?machine=".$machine."&loglevel=warn";
+    $url = "logwindow.php?machine=".$machine."&loglevel=warn".$daemon;
     $title = "Warning: ".$machine;
   } else if ($status == STATUS_ERROR) {
-    $url = "logwindow.php?machine=".$machine."&loglevel=error";
+    $url = "logwindow.php?machine=".$machine."&loglevel=error".$daemon;
     $title = "Error: ".$machine;
   } else {
-    $url = "logwindow.php?machine=".$machine."&loglevel=all";
+    $url = "logwindow.php?machine=".$machine."&loglevel=all".$daemon;
     $title = "Message";
   }
                                                                                    
@@ -307,7 +318,7 @@ function statusLight($status, $message, $machine, $linkid, $imgid) {
   #            'cssbody=[ttbody] cssheader=[ttheader]">';
 
   $string .= '
-       <img id="'.$imgid.'" border="none" width="15px" height="15px" src="images/';
+       <img id="'.$imgid.'" border="none" width="15px" height="15px" src="/images/';
                                                                                    
   if ($status == STATUS_OK) {
     return $string."green_light.png\" alt=\"OK\">\n      </a>\n";

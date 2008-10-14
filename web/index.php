@@ -6,13 +6,12 @@ include("functions_i.php");
 ?>
 <HTML>
 <?
-$title = strtoupper(INSTRUMENT).": ATNF Parkes Swinburne Recorder";
+$title = "APSR : ATNF Parkes Swinburne Recorder";
 include("header_i.php");
 ?>
 
 <FRAMESET ROWS="1" COLS="800px,*" frameborder=1>
-  <FRAMESET COLS=1 ROWS="0px,60px,110px,60px,110px,*" border=0>
-    <FRAME name="instrument" src="instrument.php" frameborder=0 marginheight=0 marginwidth=0>
+  <FRAMESET COLS=1 ROWS="60px,110px,60px,110px,*" border=0>
     <FRAME name="banner" src="statebanner.php" frameborder=0 marginheight=0 marginwidth=0>
     <FRAME name="statuswindow" src="statuswindow.php">
     <FRAME name="controlwindow" src="controlwindow.php">

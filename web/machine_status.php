@@ -33,15 +33,15 @@ header("Expires: Mon, 26 Jul 1997 05:00:00 GMT"); // Date in the past
   "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
-  <link rel="STYLESHEET" type="text/css" href="./style_log.css">
+  <link rel="STYLESHEET" type="text/css" href="style_log.css">
   <!-- jsProgressBarHandler prerequisites : prototype.js -->
-  <script type="text/javascript" src="js/prototype.js"></script>
+  <script type="text/javascript" src="/js/prototype.js"></script>
   <!-- jsProgressBarHandler core -->
-  <script type="text/javascript" src="js/jsProgressBarHandler.js"></script>
+  <script type="text/javascript" src="/js/jsProgressBarHandler.js"></script>
 
   <script type="text/javascript">
 
-  var url = "http://<?echo $_SERVER["HTTP_HOST"]?>/control/client_command.php?cmd=get_status&raw=1<?echo $single_machine?>"
+  var url = "<?echo $_SERVER["HTTP_REFERER"]?>control/client_command.php?cmd=get_status&raw=1<?echo $single_machine?>"
 
   function looper() {
     request()
@@ -130,20 +130,19 @@ for ($i=0; $i<count($machines); $i++) {
 for ($i=0; $i<count($machines); $i++) {
 
   echo $machines[$i]."_db = new JS_BRAMUS.jsProgressBar($('".$machines[$i]."_db_progress_bar'), 0, ";
-  echo " { width : 80, showText : false, barImage : Array( 'images/jsprogress/percentImage_back1_80.png', 'images/jsprogress/percentImage_back2_80.png', 'images/jsprogress/percentImage_back3_80.png', 'images/jsprogress/percentImage_back4_80.png') } );\n";
+  echo " { width : 80, showText : false, barImage : Array( '/images/jsprogress/percentImage_back1_80.png', '/images/jsprogress/percentImage_back2_80.png', '/images/jsprogress/percentImage_back3_80.png', '/images/jsprogress/percentImage_back4_80.png') } );\n";
 
   echo $machines[$i]."_disk = new JS_BRAMUS.jsProgressBar($('".$machines[$i]."_disk_progress_bar'), 0, ";
-  echo " { width : 80, showText : false, barImage : Array( 'images/jsprogress/percentImage_back1_80.png', 'images/jsprogress/percentImage_back2_80.png', 'images/jsprogress/percentImage_back3_80.png', 'images/jsprogress/percentImage_back4_80.png') } );\n";
+  echo " { width : 80, showText : false, barImage : Array( '/images/jsprogress/percentImage_back1_80.png', '/images/jsprogress/percentImage_back2_80.png', '/images/jsprogress/percentImage_back3_80.png', '/images/jsprogress/percentImage_back4_80.png') } );\n";
 
   echo $machines[$i]."_load = new JS_BRAMUS.jsProgressBar($('".$machines[$i]."_load_progress_bar'), 0, ";
-  echo " { width : 80, showText : false, barImage  : Array( 'images/jsprogress/percentImage_back1_80.png', 'images/jsprogress/percentImage_back2_80.png', 'images/jsprogress/percentImage_back3_80.png', 'images/jsprogress/percentImage_back4_80.png') } );\n";
+  echo " { width : 80, showText : false, barImage  : Array( '/images/jsprogress/percentImage_back1_80.png', '/images/jsprogress/percentImage_back2_80.png', '/images/jsprogress/percentImage_back3_80.png', '/images/jsprogress/percentImage_back4_80.png') } );\n";
 
 }
 
 ?>
   }, false);
   </script>
-
 
 <table cellpadding=0 border=0 width=100%>
 <tr>
