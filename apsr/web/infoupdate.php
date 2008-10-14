@@ -22,7 +22,7 @@ if (file_exists($obs_info)) {
   $header = getConfigFile($obs_info);
 
   # Determine the Period (P0)
-  $cmd = $bin_dir."/psrcat -x -c \"P0\" ".$header["SOURCE"]." | awk '{print \$1}'";
+  $cmd = "source /home/dada/.bashrc; ".$bin_dir."/psrcat -x -c \"P0\" ".$header["SOURCE"]." | awk '{print \$1}'";
   $P0 = rtrim(`$cmd`);
   if ($P0 == "WARNING:") {
     $P0 = "N/A";
@@ -31,7 +31,7 @@ if (file_exists($obs_info)) {
   }
 
   # And the DM
-  $cmd = $bin_dir."/psrcat -x -c \"DM\" ".$header["SOURCE"]." | awk '{print \$1}'";
+  $cmd = "source /home/dada/.bashrc; ".$bin_dir."/psrcat -x -c \"DM\" ".$header["SOURCE"]." | awk '{print \$1}'";
   $DM = rtrim(`$cmd`);
   if ($DM == "WARNING:") {
     $DM = "N/A";
