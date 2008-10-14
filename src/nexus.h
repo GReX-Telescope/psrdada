@@ -89,7 +89,10 @@ extern "C" {
 
     /* The base directory for multilog messages */
     char* logfile_dir;
-    
+                                                                                                                                                                              
+    /* Port on which multilog messages are available (only for mirror) */
+    int multilog_port;
+
   } nexus_t;
 
 #define NEXUS_DEFAULT_RECV_BUFSZ 1024

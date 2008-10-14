@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <sys/stat.h>
+
 
 /* #define _DEBUG 1 */
 
@@ -86,6 +88,7 @@ int dada_pwc_nexus_node_init (nexus_t* nexus, node_t* node)
 /*! Parse DADA PWC nexus configuration parameters from the config buffer */
 int dada_pwc_nexus_parse (nexus_t* n, const char* config)
 {
+
   /* the nexus is actually a DADA PWC nexus */
   dada_pwc_nexus_t* nexus = (dada_pwc_nexus_t*) n;
 
@@ -95,15 +98,88 @@ int dada_pwc_nexus_parse (nexus_t* n, const char* config)
   /* the status returned by sub-routines */
   int status = 0;
 
+  /* get the heaer size */
+  if (ascii_header_get (config, "HDR_SIZE", "%u", &hdr_size) < 0)
+   multilog_fprintf (stderr, LOG_WARNING, "dada_pwc_nexus_parse: using default HDR_SIZE\n");
+  else
+    dada_pwc_set_header_size (nexus->pwc, hdr_size);
+
+  // Get the PWCC control port from the config file
+  char node_name [16];
+  sprintf (node_name, "%sC_PORT", n->node_prefix);
+  if (ascii_header_get (config, node_name, "%d", &(nexus->pwc->port)) < 0) {
+   multilog_fprintf (stderr, LOG_WARNING, "nexus_parse: %s not specified.\n", node_name);
+    nexus->pwc->port = DADA_DEFAULT_PWCC_PORT;
+    if (nexus->pwc->port)
+     multilog_fprintf (stderr, LOG_WARNING, "using default=%d\n", nexus->pwc->port);
+    else {
+     multilog_fprintf (stderr, LOG_ERR, "no default available\n");
+      return -1;
+    }
+  }
+
+  char logfile_dir [256];
+  n->mirror->logfile_dir = NULL;
+
+  /* If this is the mirror nexus, then setup the log file */
+  if (ascii_header_get (config,"LOGFILE_DIR", "%s", &logfile_dir) < 0) {
+
+   multilog_fprintf (stderr, LOG_WARNING, "nexus_parse: LOGFILE_DIR not specified, not logging\n");
+                                                                                                                                                                              
+  } else {
+                                                                                                                                                                              
+    // Get the PWC multilog port from the config file
+    sprintf (node_name, "%s_LOGPORT", n->node_prefix);
+    if (ascii_header_get (config, node_name, "%d", &(n->mirror->node_port)) < 0) {
+      multilog_fprintf (stderr, LOG_WARNING, "nexus_parse: %s not specified.", node_name);
+      n->mirror->node_port = DADA_DEFAULT_PWC_LOG;
+      if (n->mirror->node_port)
+       multilog_fprintf (stderr, LOG_WARNING, " using default=%d\n", n->mirror->node_port);
+      else {
+       multilog_fprintf (stderr, LOG_ERR, " no default available\n");
+        return -1;
+      }
+    }
+                                                                                                                                                                              
+    // Get the PWCC multilog port from the config file
+    sprintf (node_name, "%sC_LOGPORT", n->node_prefix);
+    if (ascii_header_get (config, node_name, "%d", &(n->mirror->multilog_port)) < 0) {
+     multilog_fprintf (stderr, LOG_WARNING, "nexus_parse: %s not specified.", node_name);
+      n->mirror->multilog_port = DADA_DEFAULT_PWCC_LOGPORT;
+      if (n->mirror->multilog_port)
+       multilog_fprintf (stderr, LOG_WARNING, " using default=%d\n", n->mirror->multilog_port);
+      else {
+       multilog_fprintf (stderr, LOG_ERR, " no default available\n");
+        return -1;
+      }
+    }
+                                                                                                                                                                              
+    n->mirror->logfile_dir = malloc(strlen(logfile_dir));
+    sprintf(n->mirror->logfile_dir,"%s",logfile_dir);
+                                                                                                                                                                              
+    struct stat st;
+    stat(n->mirror->logfile_dir,&st);
+                                                                                                                                                                              
+    /* check the dir:  is dir     write      execute  permissions */
+    if (!(S_ISDIR(st.st_mode))) {
+     multilog_fprintf (stderr, LOG_WARNING, "nexus_parse: logfile directory %s did not exist\n",
+                                            n->mirror->logfile_dir);
+      n->mirror->logfile_dir = NULL;
+      return -1;
+    }
+                                                                                                                                                                              
+    if (!((st.st_mode & S_IWUSR) && (st.st_mode & S_IXUSR) &&
+                                    (st.st_mode & S_IRUSR))) {
+     multilog_fprintf (stderr, LOG_ERR, "nexus_parse: logfile directory %s was not writeable\n",
+                      n->mirror->logfile_dir);
+      n->logfile_dir = NULL;
+      return -1;
+    }
+  }
+
   /* call the base class configuration parser */
   if (nexus_parse (n, config) < 0)
     return -1;
-
-  /* get the heaer size */
-  if (ascii_header_get (config, "HDR_SIZE", "%u", &hdr_size) < 0)
-    fprintf (stderr, "dada_pwc_nexus_parse: using default HDR_SIZE\n");
-  else
-    dada_pwc_set_header_size (nexus->pwc, hdr_size);
 
   return status;
 }
@@ -408,7 +484,7 @@ int dada_pwc_nexus_serve (dada_pwc_nexus_t* nexus)
   dada_pwc_command_t command = DADA_PWC_COMMAND_INIT;
 
   if (dada_pwc_serve (nexus->pwc) < 0) {
-    fprintf (stderr, "dada_pwc_nexus_serve: could not start PWC server\n");
+   multilog_fprintf (stderr, LOG_ERR, "dada_pwc_nexus_serve: could not start PWC server\n");
     return -1;
   }
 
@@ -422,7 +498,7 @@ int dada_pwc_nexus_serve (dada_pwc_nexus_t* nexus)
       nexus->pwc->quit = 1;
 
     else if (dada_pwc_nexus_send (nexus, command) < 0)
-      fprintf (stderr, "error issuing command = %d\n", command.code);
+     multilog_fprintf (stderr, LOG_ERR, "error issuing command = %d\n", command.code);
   }
 
   return 0;

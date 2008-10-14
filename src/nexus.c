@@ -5,6 +5,7 @@
 #include "ascii_header.h"
 #include "futils.h"
 #include "sock.h"
+#include "multilog.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -73,6 +74,7 @@ void nexus_init (nexus_t* nexus)
 
   /* no file logging be default */
   nexus -> logfile_dir = 0;
+  nexus -> multilog_port = 0;
   
 }
 
@@ -121,14 +123,16 @@ unsigned nexus_get_nnode (nexus_t* nexus)
   return nexus->nnode;
 }
 
+
+/* Parses the supplied config file to extract required params */
 int nexus_parse (nexus_t* n, const char* buffer)
 {
   char node_name [16];
   char host_name [64];
-  char logfile_dir [256];
 
   unsigned inode, nnode = 0;
 
+  // Get the PWC control port from the config file
   sprintf (node_name, "%s_PORT", n->node_prefix);
   if (ascii_header_get (buffer, node_name, "%d", &(n->node_port)) < 0) {
     fprintf (stderr, "nexus_parse: %s not specified.", node_name);
@@ -141,46 +145,8 @@ int nexus_parse (nexus_t* n, const char* buffer)
   }
 
   if (ascii_header_get (buffer, "COM_POLL", "%d", &(n->polling_interval)) <0) {
-    fprintf (stderr, "nexus_parse: using default COM_POLL\n");
+    multilog_fprintf (stderr, LOG_WARNING, "nexus_parse: using default COM_POLL\n");
     n->polling_interval = 10;
-  }
-
-  n->logfile_dir = NULL;
-  /* If this is the mirror nexus, then setup the log file */
-  if (ascii_header_get (buffer,"LOGFILE_DIR", "%s", &logfile_dir) < 0) {
-    fprintf (stderr,"nexus_parse: LOGFILE_DIR not specified, not logging\n");
-  } else {
-
-    if (n->mirror) {
-       
-      /*  
-      n->mirror->logfile_dir = malloc(strlen(getenv("DADA_ROOT")) + 1 + 
-                               strlen(logfile_dir));
-     
-      sprintf(n->mirror->logfile_dir,"%s/%s",getenv("DADA_ROOT"),logfile_dir);
-      */
-      n->mirror->logfile_dir = malloc(strlen(logfile_dir));
-      sprintf(n->mirror->logfile_dir,"%s",logfile_dir);
-
-      struct stat st;
-      stat(n->mirror->logfile_dir,&st); 
-    
-      /* check the dir:  is dir     write      execute  permissions */
-      if (!(S_ISDIR(st.st_mode))) {
-        fprintf (stderr,"nexus_parse: logfile directory %s did not exist\n",
-                                              n->mirror->logfile_dir);
-        n->mirror->logfile_dir = NULL;
-        return -1;
-      }
-
-      if (!((st.st_mode & S_IWUSR) && (st.st_mode & S_IXUSR) && 
-                                      (st.st_mode & S_IRUSR))) {
-        fprintf (stderr,"nexus_parse: logfile directory %s was not writeable\n",
-                        n->mirror->logfile_dir);
-        n->logfile_dir = NULL;
-        return -1;
-      }
-    }
   }
 
   sprintf (node_name, "NUM_%s", n->node_prefix);
@@ -313,7 +279,7 @@ void* node_open_thread (void* context)
 
 
   /* If we are the mirror and have a logfile_dir */
-  if ((nexus->node_port == DADA_DEFAULT_PWC_LOG) && (nexus->logfile_dir)) {
+  if ((nexus->node_port != 0) && (nexus->logfile_dir)) {
 
     char *buffer = 0;
     int buffer_size = strlen(nexus->logfile_dir) + 1 + strlen(host_name) + 5;

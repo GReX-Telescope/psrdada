@@ -10,12 +10,10 @@
 void usage()
 {
   fprintf (stdout,
-	   "dada_pwc_command [options]\n"
+	   "dada_pwc_command [options] config_file\n"
+     " -h         print help text\n"
 	   " -d         run as daemon\n"
-	   " -p         port to listen\n"
-	   " -v         verbose messages\n"
-	   " -c file    use config file [default config/default_config.txt]\n"
-     "            relative to $DADA_ROOT/\n");
+	   " -v         verbose messages\n");
 }
 
 int main (int argc, char **argv)
@@ -35,37 +33,39 @@ int main (int argc, char **argv)
   int arg = 0;
 
   /* configuration file name */
-  char* dada_config = "config/default_config.txt";
+  char* dada_config;
 
   multilog_fprintf (stderr, LOG_INFO, "Creating DADA PWC nexus\n");
   nexus = dada_pwc_nexus_create ();
 
-  while ((arg=getopt(argc,argv,"dp:vc:")) != -1)
+  while ((arg=getopt(argc,argv,"d:vh")) != -1)
     switch (arg) {
       
     case 'd':
       daemon=1;
-      break;
-      
-    case 'p':
-      nexus->pwc->port = atoi(optarg);
-      multilog_fprintf (stderr, LOG_INFO,
-			"DADA PWC nexus port set to %d\n", nexus->pwc->port);
       break;
 
     case 'v':
       verbose=1;
       break;
       
-    case 'c':
-      dada_config = optarg;
-      break;
+    case 'h':
+      usage();
+      return 0;
 
     default:
       usage ();
       return 0;
       
     }
+
+  if ((argc - optind) != 1) {
+    fprintf(stderr, "Error: config_file must be specified\n\n");
+    usage();
+    return EXIT_FAILURE;
+  } else {
+    dada_config = argv[optind];
+  }
 
   log = multilog_open ("dada_nexus", daemon);
 

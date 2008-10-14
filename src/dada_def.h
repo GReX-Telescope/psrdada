@@ -22,14 +22,18 @@
 /* default size of block in Header Block */
 #define DADA_DEFAULT_HEADER_SIZE ((uint64_t) sysconf (_SC_PAGE_SIZE))
 
-/* default port to connect to primary write client command interface */
+/* default port to connect to pwc command interface */
 #define DADA_DEFAULT_PWC_PORT   56026
+
+/* default port to connect to pwcc command interface */
+#define DADA_DEFAULT_PWCC_PORT   56030
 
 /* default port to connect to primary write client logging interface */
 #define DADA_DEFAULT_PWC_LOG    56027
 
 /* default port to connect to dada_pwc_command combined logging interface */
 #define DADA_DEFAULT_PWC_MONITOR_LOG 56028
+#define DADA_DEFAULT_PWCC_LOGPORT 56028
 
 /* default port to connect to dbdisk logging interface */
 #define DADA_DEFAULT_DBDISK_LOG 56037
@@ -67,7 +71,7 @@
 #define DADA_TIMESTR "%Y-%m-%d-%H:%M:%S"
 
 /* Length of the DADA_TIMESTR */
-#define DADA_TIMESTR_LENGTH 19
+#define DADA_TIMESTR_LENGTH 21
 
 #define DADA_ERROR_SOFT  -1
 #define DADA_ERROR_HARD  -2
