@@ -4,8 +4,11 @@
 /* default port to connect to udpdb command interface */
 #define BPSR_DEFAULT_UDPDB_PORT 4001
 
+#define BPSR_DEFAULT_PWC_PORT     51022
+#define BPSR_DEFAULT_PWC_LOGPORT  51023
+
 /* default port to connect to udpdb statistics interface */
-#define BPSR_DEFAULT_UDPDB_STATS  56060
+#define BPSR_DEFAULT_UDPDB_STATS  51012
 
 /* default port to connect to udpdb statistics interface */
 #define BPSR_DEFAULT_DBAVG_LOG 40001
