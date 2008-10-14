@@ -1,6 +1,6 @@
 <?PHP 
-include("../definitions_i.php");
-include("../functions_i.php");
+include("definitions_i.php");
+include("functions_i.php");
 
 /* Need to clear PHP's internal cache */
 clearstatcache();

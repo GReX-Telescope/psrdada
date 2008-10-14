@@ -1,11 +1,13 @@
 <?PHP 
-include("../definitions_i.php");
-include("../functions_i.php");
+include("definitions_i.php");
+include("functions_i.php");
 
 /* Find the latest files in the plot file directory */
+
+
 define(DEBUG,0);
 define(HOST,"srv0.apsr.edu.au");
-define(PORT,"57011");
+define(PORT,"52008");
 
 
 if (DEBUG > 0) 
@@ -14,7 +16,7 @@ if (DEBUG > 0)
 list($socket, $result) = openSocket(HOST,PORT, 10);
                                                                                                                  
 if ($result != "ok") {
-  echo "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 ";
+  echo "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 ";
   if (DEBUG > 0) {
     echo $result."<BR>\n";
     flush();

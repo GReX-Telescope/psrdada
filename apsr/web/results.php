@@ -1,6 +1,6 @@
 <?PHP
-include("../definitions_i.php");
-include("../functions_i.php");
+include("definitions_i.php");
+include("functions_i.php");
 
 define(RESULTS_PER_PAGE,20);
 define(PAGE_REFRESH_SECONDS,20);
@@ -75,7 +75,7 @@ $num_results = count($keys);
 
 $title = "APSR | Recent Results";
 $refresh = PAGE_REFRESH_SECONDS;
-include("../header_i.php");
+include("header_i.php");
 
 ?>
 
@@ -84,7 +84,7 @@ include("../header_i.php");
   <script type="text/javascript" src="/js/wz_tooltip.js"></script>
 <? 
 $text = "Recent Results";
-include("../banner.php");
+include("banner.php");
 
 ?>
 <div align=right>
@@ -155,7 +155,7 @@ for ($i=0; $i < count($keys); $i++) {
 
   $freq_keys = array_keys($results[$keys[$i]]);
   $url = "/apsr/result.php?basedir=".$basedir."&observation=".$keys[$i]."&archive_ext=".$archive_ext;
-  $mousein = "onmouseover=\"Tip('<img src=\'/results/".$keys[$i]."/".$data["phase_vs_flux"]."\' width=241 height=181>')\"";
+  $mousein = "onmouseover=\"Tip('<img src=\'/apsr/results/".$keys[$i]."/".$data["phase_vs_flux"]."\' width=241 height=181>')\"";
   $mouseout = "onmouseout=\"UnTip()\"";
 
   $bg_style = "";

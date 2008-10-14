@@ -86,12 +86,12 @@ if ($action_string == "No Action") {
 
   chdir($cfg["SCRIPTS_DIR"]);
   $obs_dir = $cfg["SERVER_RESULTS_NFS_MNT"]."/".$observation;
-  $script = "./server_process_result.pl ".$observation." ".$obs_dir." lowres";
+  $script = "./server_apsr_process_result.pl ".$observation." ".$obs_dir." lowres";
   $cmd = "/bin/csh -c 'setenv HOME /home/apsr; source \$HOME/.cshrc; ".$script."'";
   $string = exec($cmd, $array, $return_val);
 
   if ($return_val != 0) {
-    echo "<BR>\nserver_process_results.pl returned a non zero exit value: ". $return_var."\n";
+    echo "<BR>\nserver_apsr_process_results.pl returned a non zero exit value: ". $return_var."\n";
     flush();
   } else {
     echo "Low-res results reprocessed<BR>\n";
@@ -104,12 +104,12 @@ if ($action_string == "No Action") {
 
   chdir($cfg["SCRIPTS_DIR"]);
   $obs_dir = $cfg["SERVER_ARCHIVE_NFS_MNT"]."/".$observation;
-  $script = "./server_process_result.pl ".$observation." ".$obs_dir." ar";
+  $script = "./server_apsr_process_result.pl ".$observation." ".$obs_dir." ar";
   $cmd = "/bin/csh -c 'setenv HOME /home/apsr; source \$HOME/.cshrc; ".$script."'";
   $string = exec($cmd, $array, $return_val);
 
   if ($return_val != 0) {
-    echo "<BR>\nserver_process_results.pl returned a non zero exit value: ". $return_var."\n";
+    echo "<BR>\nserver_apsr_process_results.pl returned a non zero exit value: ". $return_var."\n";
     flush();
   } else {
     echo "Hi-res results processed<BR>\n";
@@ -122,16 +122,16 @@ if ($action_string == "No Action") {
 
   chdir($cfg["SCRIPTS_DIR"]);
   $obs_dir = $cfg["SERVER_RESULTS_NFS_MNT"]."/".$observation;
-  $script = "./server_create_plots.pl ".$obs_dir." 1024x768";
+  $script = "./server_apsr_create_plots.pl ".$obs_dir." 1024x768";
   $cmd = "/bin/csh -c 'setenv HOME /home/apsr; source \$HOME/.cshrc; ".$script."'";
   $string = exec($cmd, $array, $return_val);
 
-  $script = "./server_create_plots.pl ".$obs_dir." 240x180";
+  $script = "./server_apsr_create_plots.pl ".$obs_dir." 240x180";
   $cmd = "/bin/csh -c 'setenv HOME /home/apsr; source \$HOME/.cshrc; ".$script."'";
   $string = exec($cmd, $array, $return_val);
 
   if ($return_val != 0) {
-    echo "<BR>\nserver_create_plots.pl returned a non zero exit value: ". $return_var."\n";
+    echo "<BR>\nserver_apsr_create_plots.pl returned a non zero exit value: ". $return_var."\n";
     flush();
   } else {
     echo "Plots created<BR>\n";

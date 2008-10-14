@@ -1,11 +1,11 @@
 <?PHP
-include("../../definitions_i.php");
-include("../../functions_i.php");
+include("../definitions_i.php");
+include("../functions_i.php");
 
 ?>
 <html>
 <head>
-  <title>APSR</title>
+  <title>APSR | Test System</title>
   <?echo STYLESHEET_HTML?>
   <?echo FAVICO_HTML?>
 

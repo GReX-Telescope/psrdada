@@ -1,7 +1,7 @@
 <?PHP
 
-include("../definitions_i.php");
-include("../functions_i.php");
+include("definitions_i.php");
+include("functions_i.php");
 
 $config = getConfigFile(SYS_CONFIG);
 $machine = $_GET["machine"];

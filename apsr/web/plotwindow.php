@@ -14,7 +14,7 @@ $spec = getConfigFile(DADA_SPECIFICATION, TRUE);
   <script type="text/javascript">
 
   // This URL will return the names of the 5 current timestamped images();
-  var url = "apsr/plotupdate.php?results_dir=<?echo $config["SERVER_RESULTS_DIR"]?>";
+  var url = "plotupdate.php?results_dir=<?echo $config["SERVER_RESULTS_DIR"]?>";
 
   function looper() {
     request()

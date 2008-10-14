@@ -1,6 +1,6 @@
 <?PHP
-include("../definitions_i.php");
-include("../functions_i.php");
+include("definitions_i.php");
+include("functions_i.php");
 
 # Get the system configuration (dada.cfg)
 $cfg = getConfigFile(SYS_CONFIG);
@@ -30,7 +30,7 @@ $archive_ext = $_GET["archive_ext"];
 <body>
 <? 
 
-include("../banner.php");
+include("banner.php");
 
 $obs_dir = $basedir."/".$observation;
 $cfg = getConfigFile(SYS_CONFIG, TRUE);
@@ -305,10 +305,10 @@ function printPlotRow($cfg, $utc_start, $image, $image_hires) {
   echo "    <td class=\"results\" align=\"center\">\n";
 
   if ($have_hires) {
-    echo "      <a href=\"/results/".$utc_start."/".$image_hires."\">";
+    echo "      <a href=\"/apsr/results/".$utc_start."/".$image_hires."\">";
   }
 
-  echo "      <img src=\"/results/".$utc_start."/".$image."\">";
+  echo "      <img src=\"/apsr/results/".$utc_start."/".$image."\">";
 
   if ($have_hires) {
     echo "    </a><br>\n";

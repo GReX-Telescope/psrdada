@@ -1,14 +1,14 @@
 <?PHP
-include("../../definitions_i.php");
-include("../../functions_i.php");
+include("../definitions_i.php");
+include("../functions_i.php");
 ?>
 
 <html> 
 
 <?
 
-$title = "DADA | APSR | TCS Simulator";
-include("../../header_i.php");
+$title = "APSR | TCS Simulator";
+include("../header_i.php");
 
 if (!IN_CONTROL) { ?>
 <h3><font color=red>Test system disabled as your host is not in control of the instrument</font></h3>
@@ -271,29 +271,6 @@ function printTR($tcs_simulator,$tcs_interface) {
 
 function printTF() {
   echo "</table>\n";
-}
-
-function killDFBSimulators($config, $dfbs) {
-
-  $host = $dfbs["DFB_0"];
-
-  list ($sock,$message) = openSocket($host,57001,2);
-  if ($sock) {
-
-    $cmd = "kill_process apsr_test_triwave";
-    printTR("Writing \"".$cmd."\" to host ".$host, "");
-
-    socketWrite($sock,$cmd."\r\n");
-
-    $result = rtrim(socketRead($sock));
-
-    printTR("Killing DFB simluator on ".$host,$result);
-
-    socket_close($sock);
-  } else {
-    printTR("Could not open socket to $host",$message);
-  }
-
 }
 
 
