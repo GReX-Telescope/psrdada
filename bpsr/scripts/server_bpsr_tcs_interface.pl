@@ -20,6 +20,7 @@
 # considered key=>value parameters and form the header for the
 # following observation
 
+use lib $ENV{"DADA_ROOT"}."/bin";
 
 #
 # Include Modules
@@ -29,9 +30,10 @@ use IO::Socket;     # Standard perl socket library
 use IO::Select;     
 use Net::hostent;
 use File::Basename;
-use Dada;           # DADA Module for configuration options
 use threads;        # Perl threads module
 use threads::shared; 
+use Dada;           # DADA Module for configuration options
+use Bpsr;           # Bpsr Module for configuration options
 use strict;         # strict mode (like -Wall)
 
 #
@@ -49,10 +51,11 @@ use constant NHOST              => 13;        # This is constant re DFB3
 #
 # Global Variables
 #
+
 our $current_state : shared = "Idle";
 our $pwcc_running : shared  = 0;
 our $quit_threads : shared  = 0;
-our %cfg : shared           = Dada->getDadaConfig();
+our %cfg : shared           = Bpsr->getBpsrConfig();
 our $use_dfb_simulator      = $cfg{"USE_DFB_SIMULATOR"};
 our $dfb_sim_host           = $cfg{"DFB_SIM_HOST"};
 our $dfb_sim_port           = $cfg{"DFB_SIM_PORT"};
@@ -140,7 +143,7 @@ foreach $key (keys (%site_cfg)) {
 # if the CONFIG command is received
 
 my $pwcc_logfile = $server_logdir."/dada_pwc_command.log";
-my $pwcc_file = $config_dir."/tcs.cfg";
+my $pwcc_file = $config_dir."/bpsr_tcs.cfg";
 my $utc_start = "";
 
 $pwcc_thread = threads->new(\&pwcc_thread, $pwcc_file);
@@ -267,18 +270,25 @@ while (!$quit_threads) {
             # quit/kill the current daemon
             quit_pwc_command();
 
+            # Clear the status files
+            my $cmd = "rm -f ".$cfg{"STATUS_DIR"}."/*";
+            ($result, $response) = Dada->mySystem($cmd);
+            if ($result ne "ok") {
+              logMessage(0, "Could not delete status files: $response");
+            }
+
             # Add the extra commands/config for each PWC
             %tcs_cmds = addHostCommands(\%tcs_cmds, \%site_cfg);
 
             # Create the tcs.cfg file to launch dada_pwc_command
-            ($result, $response) = generateConfigFile($cfg{"CONFIG_DIR"}."/tcs.cfg", \%tcs_cmds);
+            ($result, $response) = generateConfigFile($cfg{"CONFIG_DIR"}."/bpsr_tcs.cfg", \%tcs_cmds);
             logMessage(0, "generateConfigFile: ".$result.":".$response); 
 
             # rejoin the pwcc command thread
             $pwcc_thread->join();
 
             # Now that we have a successful header. Launch dada_pwc_command in
-            $pwcc_thread = threads->new(\&pwcc_thread, $cfg{"CONFIG_DIR"}."/tcs.cfg");
+            $pwcc_thread = threads->new(\&pwcc_thread, $cfg{"CONFIG_DIR"}."/bpsr_tcs.cfg");
 
             # Create the tcs.spec file to launch dada_pwc_command
             ($result, $response) = generateSpecificationFile($cfg{"CONFIG_DIR"}."/tcs.spec", \%tcs_cmds);
@@ -420,12 +430,11 @@ sub pwcc_thread($) {
   (my $fname) = @_;
 
   my $logfile = $cfg{"SERVER_LOG_DIR"}."/".PWCC_LOGFILE;
-  my $port    = $cfg{"PWCC_PORT"};
   my $bindir = Dada->getCurrentBinaryVersion();
 
-  my $cmd = $bindir."/dada_pwc_command -p ".$port." -c ".$fname." >> ".$logfile." 2>&1";
+  my $cmd = $bindir."/dada_pwc_command ".$fname." >> ".$logfile." 2>&1";
 
-  logMessage(2, "pwcc_thread: running dada_pwc_command -p ".$port);
+  logMessage(2, "pwcc_thread: running dada_pwc_command ".$fname);
 
   $pwcc_running = 1;
   my $returnVal = system($cmd);
@@ -622,59 +631,64 @@ sub start($\%) {
     }
     logMessage(2, "Nexus now in PREPARED state");
 
-    my $pwc_response_thread = threads->new(\&wait_for_pwc_responses);
-
-    # Send start command 
-    $cmd = "clock";
-
-    ($result,$response) = Dada->sendTelnetCommand($handle,$cmd);
-    logMessage(1,"Sent \"".$cmd."\", Received \"".$result." ".$response."\"");
-
-    if ($result ne "ok") { 
-      logMessage(1, "clock command failed: (".$result.", ".$response.")");
-      return ("fail", "clock command failed on nexus: \"".$response."\"");
-    }
-
-    # Wait for the prepared state
-    if (Dada->waitForState("clocking",$handle,20) != 0) {
-      return ("fail", "Nexus did not enter CLOCKING state after \"clock\" command");
-    }
-
-    logMessage(2, "Nexus now in \"CLOCKING\" state");
-
-    ($result, $response) = $pwc_response_thread->join();
-
-    # Start in 2 seconds time
-    my $utc_unix = time + 2;
-    my $utc_to_start = Dada->printTime($utc_unix, "utc");
-    my $local_to_start = Dada->printTime($utc_unix, "local");
-    
-    logMessage(1, "REC_START in 2 seconds (".$local_to_start.")");
-
-    ($result, $response) = set_rec_start(ltrim($utc_to_start), \%tcs_cmds);
-
     # Send start command
-    $cmd = "rec_start ".$local_to_start;
+    $cmd = "start";
 
     ($result,$response) = Dada->sendTelnetCommand($handle,$cmd);
     logMessage(1,"Sent \"".$cmd."\", Received \"".$result." ".$response."\"");
 
     if ($result ne "ok") {
-      logMessage(1, "rec_start command failed: (".$result.", ".$response.")");
-      return ("fail", "rec_start command failed on nexus: \"".$response."\"");
+      logMessage(1, "start command failed: (".$result.", ".$response.")");
+      return ("fail", "start command failed on nexus: \"".$response."\"");
+    }
+
+    my $ibob_mngr = Dada->connectToMachine("apsr17","1999");
+    if (!$ibob_mngr) {
+
+      logMessage(1, "Could not connect to ibob manager");
+      return ("fail", "utc_known");
+
     } else {
-      $response = $local_to_start;
+
+      # Run the level setting script on ibob manager
+      logMessage(1, "Running \"set_levels\" on ibob mananger");
+      print $ibob_mngr "set_levels\r\n";
+      $response = Dada->getLine($ibob_mngr);
+      logMessage(1, "Result was ".$response);
+
+      # Run the rearming script on ibob manager
+      logMessage(1, "Running \"rearm\" on ibob mananger");
+      print $ibob_mngr "rearm\r\n";
+      my $utc_start_unix = Dada->getLine($ibob_mngr);
+      if ($utc_start_unix == 0) {
+        logMessage(1, "ERROR: 0 UTC received from ibob manager, guessing at current time");
+        $utc_start_unix = time;
+      }
+
+      my $utc_start = Dada->printTime($utc_start_unix, "utc");
+      my $utc_start_localtime = Dada->printTime($utc_start_unix, "local");
+
+      # Setup the server output directories before telling the clients to begin
+      ($result, $response) = set_utc_start(ltrim($utc_start), \%tcs_cmds);
+
+      # Now we should have a UTC_START!
+      $cmd = "set_utc_start ".$utc_start;
+      ($result, $response) = Dada->sendTelnetCommand($handle, $cmd);
+      logMessage(1,"Sent \"".$cmd."\", Received \"".$result." ".$response."\"");
+
+      # Wait for the prepared state
+      if (Dada->waitForState("recording",$handle,30) != 0) {
+        return ("fail", "Nexus did not enter RECORDING state after \"clock\" command");
+      }
+
+      logMessage(2, "Nexus now in \"RECORDING\" state");
+
+      # Close nexus connection
+      $handle->close();
+
+      return ($result, $utc_start);
+
     }
-
-    # Wait for the prepared state
-    if (Dada->waitForState("recording", $handle, 10) != 0) {
-      return ("fail", "Nexus did not enter RECORDING state after \"start\" command");
-    }
-
-    # Close nexus connection
-    $handle->close();
-
-    return ($result, $response);
   }
 }
 
@@ -682,40 +696,48 @@ sub start($\%) {
 #
 # Sends a UTC_START command to the pwcc
 #
-sub set_rec_start($\%) {
+sub set_utc_start($\%) {
 
-  my ($rec_start, $tcs_cmds_ref) = @_;
+  my ($utc_start, $tcs_cmds_ref) = @_;
 
   my %tcs_cmds = %$tcs_cmds_ref;
 
-  logMessage(1,"set_rec_start(".$rec_start.")");
+  logMessage(1,"set_utc_start(".$utc_start.")");
 
   my $ignore = "";
   my $result = "ok";
   my $response = "";
   my $cmd = "";
 
-  # Now that we know the REC_START, create the required results and archive 
+  # Now that we know the UTC_START, create the required results and archive
   # directories and put the observation summary file there...
 
-  my $results_dir = $cfg{"SERVER_RESULTS_DIR"}."/".$rec_start;
-  my $archive_dir = $cfg{"SERVER_ARCHIVE_DIR"}."/".$rec_start;
+  my $results_dir = $cfg{"SERVER_RESULTS_DIR"}."/".$utc_start;
+  my $archive_dir = $cfg{"SERVER_ARCHIVE_DIR"}."/".$utc_start;
   my $proj_id     = $tcs_cmds{"PID"};
 
+  my $dir = $cfg{"SERVER_ARCHIVE_DIR"};
   # Ensure each directory is automounted
-  if (!( -d $archive_dir)) {
-    `ls $archive_dir >& /dev/null`;
+  if (!( -d $dir)) {
+    `ls $dir >& /dev/null`;
   }
 
-  if (!( -d $results_dir)) {
-    `ls $results_dir >& /dev/null`;
+  $dir = $cfg{"SERVER_RESULTS_DIR"};
+  if (!( -d $dir)) {
+    `ls $dir >& /dev/null`;
   }
 
   $cmd = "mkdir -p ".$results_dir;
-  system($cmd);
+  my ($resu, $resp) = Dada->mySystem($cmd,0);
+  if ($resu != "ok") {
+    logMessage(0, "Failed to create the server results directory (".$results_dir.") \"".$resp."\"");
+  }
 
   $cmd = "mkdir -p ".$archive_dir;
-  system($cmd);
+  my ($resu, $resp) = Dada->mySystem($cmd,0);
+  if ($resu != "ok") {
+    logMessage(0, "Failed to create the server archive directory (".$archive_dir.") \"".$resp."\"");
+  }
 
   $cmd = "chgrp -R ".$proj_id." ".$results_dir;
   system($cmd);
@@ -723,10 +745,10 @@ sub set_rec_start($\%) {
   $cmd = "chgrp -R ".$proj_id." ".$archive_dir;
   system($cmd);
 
-  $cmd = "chmod -R g+s ".$results_dir;
+  $cmd = "chmod -R g+sw ".$results_dir;
   system($cmd);
 
-  $cmd = "chmod -R g+s ".$archive_dir;
+  $cmd = "chmod -R g+sw ".$archive_dir;
   system($cmd);
 
   my $fname = $results_dir."/obs.info";
@@ -742,7 +764,7 @@ sub set_rec_start($\%) {
   print FH Dada->headerFormat("PID",$tcs_cmds{"PID"})."\n";
   print FH Dada->headerFormat("BANDWIDTH",$tcs_cmds{"BANDWIDTH"})."\n";
   print FH Dada->headerFormat("ACC_LEN",$tcs_cmds{"ACC_LEN"})."\n";
-  print FH Dada->headerFormat("UTC_START",$rec_start)."\n";
+  print FH Dada->headerFormat("UTC_START",$utc_start)."\n";
   print FH "\n";
   print FH Dada->headerFormat("NUM_PWC",$tcs_cmds{"NUM_PWC"})."\n";
   print FH Dada->headerFormat("NBIT",$tcs_cmds{"NBIT"})."\n";
@@ -752,6 +774,12 @@ sub set_rec_start($\%) {
   close FH;
 
   $cmd = "cp ".$fname." ".$archive_dir;
+  system($cmd);
+
+  $cmd = "sudo -b chown -R bpsr ".$results_dir;
+  system($cmd);
+                                                                                                                   
+  $cmd = "sudo -b chown -R bpsr ".$archive_dir;
   system($cmd);
 
   return ($result, $response);
@@ -1068,8 +1096,6 @@ sub addHostCommands(\%\%) {
   my %site_cfg = %$site_cfg_ref;
 
   $tcs_cmds{"NUM_PWC"}     = NHOST;
-  $tcs_cmds{"PWC_PORT"}    = 56026;
-  $tcs_cmds{"LOGFILE_DIR"} = $cfg{"SERVER_LOG_DIR"};
   $tcs_cmds{"HDR_SIZE"}    = $site_cfg{"HDR_SIZE"};
 
   # Determine the BW & FREQ for each channel
@@ -1106,24 +1132,47 @@ sub generateConfigFile($\%) {
   my ($fname, $tcs_cmds_ref) = @_;
                                                                                                                                                                               
   my %tcs_cmds = %$tcs_cmds_ref;
+  my $string = "";
+
   open FH, ">".$fname or return ("fail", "Could not write to ".$fname);
 
   print FH "# Header file created by ".$0."\n";
   print FH "# Created: ".Dada->getCurrentDadaTime()."\n\n";
   print FH  Dada->headerFormat("NUM_PWC",$tcs_cmds{"NUM_PWC"})."\n";
-  logMessage(2, "tcs.cfg: ".Dada->headerFormat("NUM_PWC",$tcs_cmds{"NUM_PWC"}));
-  print FH  Dada->headerFormat("PWC_PORT",$tcs_cmds{"PWC_PORT"})."\n";
-  logMessage(2, "tcs.cfg: ".Dada->headerFormat("PWC_PORT",$tcs_cmds{"PWC_PORT"}));
-  print FH  Dada->headerFormat("LOGFILE_DIR",$tcs_cmds{"LOGFILE_DIR"})."\n";
-  logMessage(2, "tcs.cfg: ". Dada->headerFormat("LOGFILE_DIR",$tcs_cmds{"LOGFILE_DIR"}));
-  print FH  Dada->headerFormat("HDR_SIZE",$tcs_cmds{"HDR_SIZE"})."\n";
-  logMessage(2, "tcs.cfg: ".Dada->headerFormat("HDR_SIZE",$tcs_cmds{"HDR_SIZE"}));
+  logMessage(2, "bpsr_tcs.cfg: ".Dada->headerFormat("NUM_PWC",$cfg{"NUM_PWC"}));
+
+  # Port information for dada_pwc_command
+  $string = Dada->headerFormat("PWC_PORT",$cfg{"PWC_PORT"});
+  print FH $string."\n";    
+  logMessage(2, "bpsr_tcs.cfg: ".$string);
+ 
+  $string = Dada->headerFormat("PWC_LOGPORT",$cfg{"PWC_LOGPORT"});
+  print FH $string."\n";    
+  logMessage(2, "bpsr_tcs.cfg: ".$string);
+
+  $string = Dada->headerFormat("PWCC_PORT",$cfg{"PWCC_PORT"});
+  print FH $string."\n";    
+  logMessage(2, "bpsr_tcs.cfg: ".$string);
+
+  $string = Dada->headerFormat("PWCC_LOGPORT",$cfg{"PWCC_LOGPORT"});
+  print FH $string."\n";    
+  logMessage(2, "bpsr_tcs.cfg: ".$string);
+
+  $string = Dada->headerFormat("LOGFILE_DIR",$cfg{"SERVER_LOG_DIR"});
+  print FH $string."\n";    
+  logMessage(2, "bpsr_tcs.cfg: ".$string);
+ 
+  $string = Dada->headerFormat("HDR_SIZE",$tcs_cmds{"HDR_SIZE"});
+  print FH $string."\n";
+  logMessage(2, "bpsr_tcs.cfg: ".$string);
 
   my $i=0;
   for($i=0; $i<$cfg{"NUM_PWC"}; $i++) {
-    print FH Dada->headerFormat("PWC_".$i,$cfg{"PWC_".$i})."\n";
-    logMessage(2, "tcs.cfg: ".Dada->headerFormat("PWC_".$i,$cfg{"PWC_".$i}));
+    $string = Dada->headerFormat("PWC_".$i,$cfg{"PWC_".$i});
+    print FH $string."\n";
+    logMessage(2, "bpsr_tcs.cfg: ".$string);
   }
+
   close FH;
 
   return ("ok", "");
@@ -1143,8 +1192,6 @@ sub generateSpecificationFile($\%) {
 
   my %ignore = ();
   $ignore{"NUM_PWC"} = "yes";
-  $ignore{"PWC_PORT"} = "yes";
-  $ignore{"LOGFILE_DIR"} = "yes";
   my $i=0;
   for ($i=0; $i<$tcs_cmds{"NUM_PWC"}; $i++) {
     $ignore{"PWC_".$i} = "yes";

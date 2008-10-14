@@ -10,6 +10,7 @@ use vars qw($VERSION @ISA @EXPORT @EXPORT_OK);
 use Sys::Hostname;
 use Time::Local;
 use POSIX qw(setsid);
+use Dada;
 
 require Exporter;
 require AutoLoader;
@@ -17,14 +18,29 @@ require AutoLoader;
 @ISA = qw(Exporter AutoLoader);
 
 @EXPORT_OK = qw(
+  &getBpsrConfig
+  &getBpsrConfigFile
   &set_ibob_levels
   &start_ibob
 );
 
 $VERSION = '0.01';
 
+my $DADA_ROOT = $ENV{'DADA_ROOT'};
+
 use constant MAX_VALUE        => 1;
 use constant AVG_VALUES       => 2;
+
+
+sub getBpsrConfig() {
+  my $config_file = getBpsrCFGFile();
+  my %config = Dada->readCFGFileIntoHash($config_file, 0);
+  return %config;
+}
+
+sub getBpsrCFGFile() {
+  return $DADA_ROOT."/share/bpsr.cfg";
+}
 
 #
 # Sets ACC_LEN, adjusts iBOB levels and selects best bits

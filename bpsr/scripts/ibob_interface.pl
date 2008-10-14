@@ -21,6 +21,7 @@ use File::Basename;
 use Math::BigInt;
 use Math::BigFloat;
 use Dada;             # DADA Module for configuration options
+use Bpsr;             # BPSR Module for configuration options
 
 #
 # Constants

@@ -19,7 +19,7 @@ use IO::Select;
 use File::Basename;
 use Getopt::Std;
 use Dada;             # DADA Module for configuration options
-use Bpsr;
+use Bpsr;             # BPSR Module for configuration options
 
 
 #
@@ -34,7 +34,7 @@ use constant AVG_VALUES       => 2;
 #
 # Global Variable Declarations
 #
-our %cfg = Dada->getDadaConfig();      # dada.cfg in a hash
+our %cfg = Bpsr->getBpsrConfig();      # dada.cfg in a hash
 our $handle = 0;
 our $eol = "\r";
 

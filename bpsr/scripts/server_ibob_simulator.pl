@@ -11,7 +11,6 @@ use IO::Socket;     # Standard perl socket library
 use IO::Select;     # Allows select polling on a socket
 use Net::hostent;
 use File::Basename;
-use Dada;           # DADA Module for configuration options
 use Bpsr;           # BPSR Module 
 use strict;         # strict mode (like -Wall)
 use threads;
@@ -29,7 +28,7 @@ use constant LOGFILE     => "ibob_simulator.log";
 #
 # Global Variables
 #
-our %cfg = Dada->getDadaConfig();      # dada.cfg
+our %cfg = Bpsr->getBpsrConfig();      # Bpsr.cfg
 our $quit_daemon : shared  = 0;
 
 
@@ -91,7 +90,7 @@ $pwc_socket = new IO::Socket::INET (
 die "Could not create listening socket: $!\n" unless $pwc_socket;
 
 # Redirect standard output and error
-# Dada->daemonize($logfile, $pidfile);
+Dada->daemonize($logfile, $pidfile);
 
 debugMessage(0, "STARTING SCRIPT");
 

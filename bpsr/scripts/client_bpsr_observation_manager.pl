@@ -14,10 +14,12 @@
 # 4.  Rinse, Lather, Repeat.
 
 
+use lib $ENV{"DADA_ROOT"}."/bin";
+
 #
 # Include Modules
 #
-use Dada;            # DADA Module for configuration options
+use Bpsr;            # DADA Module for configuration options
 use strict;          # strict mode (like -Wall)
 use threads;         # standard perl threads
 use threads::shared; # standard perl threads
@@ -31,7 +33,7 @@ use File::Basename;
 # Constants
 #
 use constant DEBUG_LEVEL        => 2;
-use constant DADA_HEADER_BINARY => "dada_header -k dada";
+use constant DADA_HEADER_BINARY => "dada_header -k deda";
 use constant RSYNC_OPTS         => "-ag --rsh=/usr/bin/rsh";
 use constant PIDFILE            => "bpsr_observation_manager.pid";
 use constant LOGFILE            => "bpsr_observation_manager.log";
@@ -43,7 +45,7 @@ use constant LOGFILE            => "bpsr_observation_manager.log";
 our $log_socket;
 our $currently_processing : shared = 0;
 our $quit_daemon : shared = 0;
-our %cfg : shared = Dada->getDadaConfig();	# dada.cfg in a hash
+our %cfg : shared = Bpsr->getBpsrConfig();	# dada.cfg in a hash
 
 
 #
@@ -125,6 +127,7 @@ sub processing_thread($$) {
   my $acc_len = "";
   my $obs_offset = "";
   my $proc_cmd = "";
+  my $proc_cmd_file = "";
   my $proj_id = "";
   my $beam = "";
 
@@ -163,11 +166,12 @@ sub processing_thread($$) {
       }
     }
 
-    $utc_start   = $current_header{"UTC_START"};
-    $acc_len     = $current_header{"ACC_LEN"};
-    $obs_offset  = $current_header{"OBS_OFFSET"};
-    $proj_id     = $current_header{"PID"};
-    $beam        = $current_header{"BEAM"};
+    $utc_start     = $current_header{"UTC_START"};
+    $acc_len       = $current_header{"ACC_LEN"};
+    $obs_offset    = $current_header{"OBS_OFFSET"};
+    $proj_id       = $current_header{"PID"};
+    $beam          = $current_header{"BEAM"};
+    $proc_cmd_file = $current_header{"PROC_FILE"};
 
     if (length($utc_start) < 5) {
       logMessage(0, "ERROR", "UTC_START was malformed or non existent");
@@ -178,42 +182,48 @@ sub processing_thread($$) {
 
     if (($utc_start eq $prev_utc_start) && ($obs_offset eq $prev_obs_offset)) {
       logMessage(0, "ERROR", "The UTC_START and OBS_OFFSET has been repeated");
+      sleep(5);
     }
 
-    # Now we need to do the level setting
-    my $return_value = 0;
-    logMessage(0, "INFO", "Placeholder for fine level gain control...");
-                                                                                                                  
-    if ($return_value != 0) {
-      logMessage(0, "ERROR", "gain control script failed: ".$?." ".$return_value);
+    if (length($proc_cmd_file) < 1) {
+      logMessage(0, "ERROR", "PROC_CMD_FILE was malformed or non existent");
     }
 
     my $obs_start_file = createLocalDirectories($utc_start, $beam, $proj_id, $raw_header);
+
     createRemoteDirectories($utc_start, $beam, $proj_id);
+
     copyUTC_STARTfile($utc_start, $beam, $obs_start_file);
 
     # So that the background manager knows we are processing
     $currently_processing = 1;
 
     $time_str = Dada->getCurrentDadaTime();
+
     $processing_dir .= "/".$utc_start."/".$beam;
 
-    $proc_cmd = "bpsr_dbmon -D ".$processing_dir." -s";
-    # $proc_cmd = "dada_dbdisk -D /lfs/data0/bpsr/scratch -s";
+    # Add the dada header file to the proc_cmd
+    $proc_cmd_file = $cfg{"CONFIG_DIR"}."/".$proc_cmd_file;
+    my %proc_cmd_hash = Dada->readCFGFile($proc_cmd_file);
+    my $proc_cmd = $proc_cmd_hash{"PROC_CMD"};
+      
+    if ($proc_cmd =~ m/the_decimator/) {
+      $proc_cmd .= " -o ".$utc_start;
+      $proc_cmd .= " ".$cfg{"PROCESSING_DB_KEY"};
+    }
 
     logMessage(1, "INFO", "START ".$proc_cmd);
     logMessage(2, "INFO", "Changing dir to $processing_dir");
     chdir $processing_dir;
 
     $cmd = $bindir."/".$proc_cmd;
-    $cmd .= " 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/client_src_logger.pl";
 
     logMessage(2, "INFO", "cmd = $cmd");
 
     my $return_value = system($cmd);
    
     if ($return_value != 0) {
-      logMessage(0, "ERROR", "dbpsr_dbmon failed: ".$?." ".$return_value);
+      logMessage(0, "ERROR", $proc_cmd_hash{"PROC_CMD"}." failed: ".$?." ".$return_value);
     }
 
     $time_str = Dada->getCurrentDadaTime();
@@ -316,11 +326,14 @@ sub sigPipeHandle($) {
 sub createRemoteDirectories($$$) {
 
   my ($utc_start, $beam, $proj_id) = @_;
-
+  
+  my $localhost = Dada->getHostMachineName();
   my $remote_archive_dir = $cfg{"SERVER_ARCHIVE_NFS_MNT"};
   my $remote_results_dir = $cfg{"SERVER_RESULTS_NFS_MNT"};
   my $cmd = "";
   my $dir = "";
+
+  # Wait for remote results directory to be created...
 
   # Ensure each directory is automounted
   if (!( -d  $remote_archive_dir)) {
@@ -330,34 +343,16 @@ sub createRemoteDirectories($$$) {
     `ls $remote_results_dir >& /dev/null`;
   }
 
-  # create the directories 
-  $cmd = "mkdir -p ".$remote_archive_dir."/".$utc_start."/".$beam;
+  # Create the nfs soft link to the local archives directory 
+  chdir $remote_archive_dir."/".$utc_start;
+  $cmd = "ln -s /nfs/".$localhost."/bpsr/archives/".$utc_start."/".$beam." .";
   logMessage(2, "INFO", $cmd);
   system($cmd);
   
+  # Create the remote nfs directory
   $cmd = "mkdir -p ".$remote_results_dir."/".$utc_start."/".$beam;
   logMessage(2, "INFO", $cmd);
   system($cmd);
-
-
-  # Adjust permission on remote archive directory
-  $dir = $remote_archive_dir."/".$utc_start;
-  $cmd = "chgrp -R ".$proj_id." ".$dir;
-  logMessage(2, "INFO", $cmd);
-  `$cmd`;
-  if ($? != 0) {
-    logMessage(0, "WARN", "Failed to chgrp remote archive dir \"".
-               $dir."\" to \"".$proj_id."\"");
-  }
-
-  $cmd = "chmod -R g+s ".$dir;
-  logMessage(2, "INFO", $cmd);
-  `$cmd`;
-  if ($? != 0) {
-    logMessage(0, "WARN", "Failed to chmod remote archive dir \"".
-               $dir."\" to \"".$proj_id."\"");
-  }
-
 
   # Adjust permission on remote results directory
   $dir = $remote_results_dir."/".$utc_start;
@@ -399,6 +394,12 @@ sub createLocalDirectories($$$$) {
                $dir."\"");
   }
 
+  $dir .= "/aux";
+  `mkdir -p $dir`;
+  if ($? != 0) {
+    logMessage(0, "WARN", "Failed to create local aux dir \"".$dir."\"");
+  }
+
   # Set GID on local archive dir
   $dir = $local_archive_dir."/".$utc_start;
   `chgrp -R $proj_id $dir`;
@@ -413,6 +414,7 @@ sub createLocalDirectories($$$$) {
     logMessage(0, "WARN", "Failed to set sticky bit on local archive dir \"".
                $dir."\"");
   }
+
   
   # Create an obs.start file in the processing dir:
   logMessage(2, "INFO", "Creating obs.start");
@@ -437,22 +439,22 @@ sub copyUTC_STARTfile($$$) {
   my ($utc_start, $beam, $obs_start_file) = @_;
 
   # nfs mounts
-  my $archive_dir = $cfg{"SERVER_ARCHIVE_NFS_MNT"};
+  #my $archive_dir = $cfg{"SERVER_ARCHIVE_NFS_MNT"};
   my $results_dir = $cfg{"SERVER_RESULTS_NFS_MNT"};
   my $cmd = ""; 
   my $result = "";
   my $response = "";
 
   # Ensure each directory is automounted
-  if (!( -d  $archive_dir)) {
-    `ls $archive_dir >& /dev/null`;
-  }
+  #if (!( -d  $archive_dir)) {
+  #  `ls $archive_dir >& /dev/null`;
+  #}
   if (!( -d  $results_dir)) {
     `ls $results_dir >& /dev/null`;
   }
 
   # Create the full nfs destinations
-  $archive_dir .= "/".$utc_start."/".$beam;
+  #$archive_dir .= "/".$utc_start."/".$beam;
   $results_dir .= "/".$utc_start."/".$beam;
 
   $cmd = "cp ".$obs_start_file." ".$results_dir;
@@ -469,82 +471,25 @@ sub copyUTC_STARTfile($$$) {
     }
   }
 
-  $cmd = "cp ".$obs_start_file." ".$archive_dir;
-  logMessage(2, "INFO", "NFS copy \"".$cmd."\"");
-  ($result, $response) = Dada->mySystem($cmd,0);
-  if ($result ne "ok") {
-                                                                                                                                                                     
-    logMessage(0, "ERROR", "Failed to nfs copy \"".$obs_start_file."\" to \"".$archive_dir."\": response: \"".$response."\"");
-    logMessage(0, "ERROR", "Command was: \"".$cmd."\"");
-    if (-f $obs_start_file) {
-      logMessage(0, "ERROR", "File existed locally");
-    } else {
-      logMessage(0, "ERROR", "File did not exist locally");
-    }
-  }
+  #$cmd = "cp ".$obs_start_file." ".$archive_dir;
+  #logMessage(2, "INFO", "NFS copy \"".$cmd."\"");
+  #($result, $response) = Dada->mySystem($cmd,0);
+  #if ($result ne "ok") {
+  #  logMessage(0, "ERROR", "Failed to nfs copy \"".$obs_start_file."\" to \"".$archive_dir."\": response: \"".$response."\"");
+  #  logMessage(0, "ERROR", "Command was: \"".$cmd."\"");
+  #  if (-f $obs_start_file) {
+  #    logMessage(0, "ERROR", "File existed locally");
+  #  } else {
+  #    logMessage(0, "ERROR", "File did not exist locally");
+  #  }
+  #}
 
   # Since the header has been transferred, unlink it
-  unlink($obs_start_file);
-  if ($? != 0) {
-    logMessage(0, "WARN", "Failed to unlink \"".$obs_start_file."\" file \"".$response."\"");
-  }
+  #unlink($obs_start_file);
+  #if ($? != 0) {
+  #  logMessage(0, "WARN", "Failed to unlink \"".$obs_start_file."\" file \"".$response."\"");
+  #}
   logMessage(2, "INFO", "Server directories perpared");
 
 }
-
-#
-# Sends the UTC start to the server
-#
-
-sub sendUTC_START($$) {
-
-  (my $utc_start, my $obs_start_file) = @_;
-
-  logMessage(2, "INFO", "sendUTC_START(".$utc_start.", ".$obs_start_file.")");
-
-  my $user = $cfg{"USER"};
-  my $host = $cfg{"SERVER_HOST"};
-  my $archive_dir = $cfg{"SERVER_ARCHIVE_DIR"};
-  my $results_dir = $cfg{"SERVER_RESULTS_DIR"};
-
-  my $server_archive_url = Dada->constructRsyncURL($user, $host, $archive_dir);
-  my $server_results_url = Dada->constructRsyncURL($user, $host, $results_dir);
-
-  my $cmd = "";
-  my $result = "";
-  my $response = "";
-
-  # simply rsync the entire folder
-
-  # send the obs.start header file to each server dir
-  $cmd = "rsync ".RSYNC_OPTS." ".$utc_start." ".$server_archive_url."/";
-  logMessage(2, "INFO", $cmd);
-  ($result, $response) = Dada->mySystem($cmd,0);
-  if ($result ne "ok") {
-    logMessage(0, "ERROR", "Failed to rsync obs.start file to server archive ".
-                           "dir \"".$response."\"");
-    return "fail";
-  }
-                                                                                
-  # send the obs.start header file to each server dir
-  $cmd = "rsync ".RSYNC_OPTS." ".$utc_start." ".$server_results_url."/";
-  logMessage(2, "INFO", $cmd);
-  ($result, $response) = Dada->mySystem($cmd,0);
-  if ($result ne "ok") {
-    logMessage(0, "ERROR", "Failed to rsync obs.start file to server results ".
-                           "dir \"".$response."\"");
-    return "fail";
-  }
-
-  # Since the header has been transferred, unlink it
-  unlink($obs_start_file);
-  if ($? != 0) {
-    logMessage(0, "WARN", "Failed to unlink \"".$obs_start_file."\" file \"".$response."\"");
-  }
-  logMessage(2, "INFO", "Server directories perpared");
-                                                                                
-  return 0;
-}
-
-
 

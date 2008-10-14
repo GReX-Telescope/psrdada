@@ -8,12 +8,14 @@
 # This daemons runs continuously produces feedback plots of the
 # current observation
 
+use lib $ENV{"DADA_ROOT"}."/bin";
 
-require "Dada.pm";        # DADA Module for configuration options
+
 use strict;               # strict mode (like -Wall)
 use File::Basename;
 use threads;
 use threads::shared;
+use Bpsr;
 
 
 
@@ -29,7 +31,7 @@ use constant LOGFILE             => "bpsr_results_manager.log";
 #
 # Global Variable Declarations
 #
-our %cfg = Dada->getDadaConfig();
+our %cfg = Bpsr->getBpsrConfig();
 our $quit_daemon : shared = 0;
 
 
@@ -83,7 +85,7 @@ my @beamdirs;
 my $beamdir;
 
 my @keys;
-my @processed;
+my %processed;
 my $i;
 my $j;
 
@@ -112,7 +114,7 @@ chdir $obs_results_dir;
 #
 # Main Loop
 #
-@processed = ();
+%processed = ();
 
 while (!$quit_daemon) {
 
@@ -139,7 +141,7 @@ while (!$quit_daemon) {
     # If this observation has not been finalized 
     if (! -f $dir."/obs.finalized") { 
 
-      my $most_recent_result = getMostRecentResult($dir, "png");
+      my $most_recent_result = getMostRecentResult($dir);
       debugMessage(2, $dir." recent result = ".$most_recent_result);
 
       # If the data directory is more than 5 minutes old, but no
@@ -148,14 +150,13 @@ while (!$quit_daemon) {
       if ($most_recent_result == -1) {
 
         # Sanity check for archives too
-        chdir $obs_archive_dir;
-        $most_recent_result = getMostRecentResult($dir, "png");
-        chdir $obs_results_dir;
+        #chdir $obs_archive_dir;
+        #$most_recent_result = getMostRecentResult($dir);
+        #chdir $obs_results_dir;
 
         if ($most_recent_result == -1) {
-          deleteObservation($obs_results_dir."/".$dir);
-          deleteObservation($obs_archive_dir."/".$dir);
-          debugMessage(1, "Deleted empty observation: $dir");
+          # deleteObservation($obs_results_dir."/".$dir);
+          #debugMessage(1, "Deleted empty observation: $dir");
         }
 
       # If the most recent result is more han 5 minutes old, consider
@@ -164,6 +165,7 @@ while (!$quit_daemon) {
 
         debugMessage(1, "Finalised observation: ".$dir);
         system("touch ".$obs_results_dir."/".$dir."/obs.finalized");
+        # TODO remove all extra image files
 
       # Else this is an active observation, try to process the .pol
       # files that may exist in each beam
@@ -183,11 +185,9 @@ while (!$quit_daemon) {
           # Gets files for which both .pol0 and .pol1 exist
           %unprocessed = getUnprocessedFiles($beamdir);
 
-          # Sort the files into time order.
           @keys = sort (keys %unprocessed);
-          $current_key = 0;
-      
-          for ($j=0;$j<=$#keys;$j++) {
+
+          for ($j=0; $j<=$#keys; $j++) {
             debugMessage(2, "file = ".$keys[$j]);
             processResult($beamdir, $keys[$j]);
           }
@@ -224,55 +224,120 @@ exit(0);
 #
 sub processResult($$) {
 
-  (my $dir, my $file) = @_;
+  my ($dir, $file) = @_;
 
   debugMessage(2, "processResult(".$dir.", ".$file.")");
 
   chdir $dir;
+  my $filetype = "";
+  my $filebase = "";
 
   my $bindir =      Dada->getCurrentBinaryVersion();
   my $results_dir = $cfg{"SERVER_RESULTS_DIR"};
 
-  my $pol0_file = $file.".pol0";
-  my $pol1_file = $file.".pol1";
-
   # Delete any old images in this directory
-  my $cmd = "rm -f *.png";
-  my $response = `$cmd`;
+  my $response;
 
-  debugMessage(1, "bpsr_diskplot on $file");
+  if ($file =~ m/bp$/) {
+    $filetype = "bandpass";
+    $filebase = substr $file, 0, -3;
 
-  $cmd = $bindir."/bpsr_diskplot -g 1024x768 -D bandpass_".$file."_1024x768.png/png ".$pol0_file." ".$pol1_file;
-  debugMessage(2, "Processing cmd \"".$cmd."\"");
+  } elsif ($file =~ m/bps$/) {
+    $filetype = "bandpass_rms";
+    $filebase = substr $file, 0, -4;
 
-  $response = `$cmd`;
-  if ($? != 0) {
-    debugMessage(0, "processing failed: \"".$response."\"");
+  } elsif ($file =~ m/ts$/) {
+    $filetype = "timeseries";
+    $filebase = substr $file, 0, -3;
+
+  } else {
+    $filetype = "unknown";
+    $filebase = "";
   }
+    
+  # .bp? -> meanbandpass pol ?
+  # .ts? -> time series pol ?
 
-  $cmd = $bindir."/bpsr_diskplot -g 400x300 -D bandpass_".$file."_400x300.png/png ".$pol0_file." ".$pol1_file;
-  debugMessage(2, "Processing cmd \"".$cmd."\"");
+  if ($filetype eq "unknown") {
+    # skip the file
 
-  $response = `$cmd`;
-  if ($? != 0) {
-    debugMessage(0, "processing failed: \"".$response."\"");
+  } else {
+   
+    # Create the low resolution file
+    $cmd = $bindir."/plot4mon ".$file."0 ".$file."1 -G 112x84 -nobox -nolabel -g /png ";
+    debugMessage(2, "Ploting with \"".$cmd."\"");
+    $response = `$cmd 2>&1`;
+    if ($? != 0) {
+      debugMessage(0, "Plotting cmd \"".$cmd."\" failed with message \"".$response."\"");
+    } else {
+      $cmd  = "mv .N=?".$file.".png ".$file."_112x84.png";
+      $response = `$cmd 2>&1`;
+      if ($? != 0) { 
+        chomp $response;
+        debugMessage(0, "Plot file rename \"".$cmd."\" failed: ".$response); 
+      }
+      if ($filetype eq "timeseries") {
+        $cmd = "mv ".$filebase.".fft.png ".$filebase.".fft_112x84.png";
+        $response = `$cmd 2>&1`;
+        if ($? != 0) {
+          chomp $response;
+          debugMessage(0, "Plot file rename \"".$cmd."\" failed: ".$response);
+        }
+      }
+    }
+
+    # Create the mid resolution file
+    $cmd = $bindir."/plot4mon ".$file."0 ".$file."1 -G 400x300 -g /png";
+    debugMessage(2, "Ploting with \"".$cmd."\"");
+    $response = `$cmd 2>&1`;
+    if ($? != 0) {
+      debugMessage(0, "Plotting cmd \"".$cmd."\" failed with message \"".$response."\"");
+    } else {
+      $cmd  = "mv .N=?".$file.".png ".$file."_400x300.png";
+      $response = `$cmd 2>&1`;
+      if ($? != 0) { 
+        chomp $response;
+        debugMessage(0, "Plot file rename \"".$cmd."\" failed: ".$response); 
+      }
+      if ($filetype eq "timeseries") {
+        $cmd = "mv ".$filebase.".fft.png ".$filebase.".fft_400x300.png";
+        $response = `$cmd 2>&1`;
+        if ($? != 0) {
+          chomp $response;
+          debugMessage(0, "Plot file rename \"".$cmd."\" failed: ".$response);
+        }
+      }
+    }
+
+    # Create the high resolution file
+    $cmd = $bindir."/plot4mon ".$file."0 ".$file."1 -G 1024x768 -g /png";
+    debugMessage(2, "Ploting with \"".$cmd."\"");
+    $response = `$cmd 2>&1`;
+    if ($? != 0) {
+      debugMessage(0, "Plotting cmd \"".$cmd."\" failed with message \"".$response."\"");
+    } else {
+      $cmd  = "mv .N=?".$file.".png ".$file."_1024x768.png";
+      $response = `$cmd 2>&1`;
+      if ($? != 0) {
+        chomp $response;
+        debugMessage(0, "Plot file rename \"".$cmd."\" failed: ".$response);
+      }
+      if ($filetype eq "timeseries") {
+        $cmd = "mv ".$filebase.".fft.png ".$filebase.".fft_1024x768.png";
+        $response = `$cmd 2>&1`;
+        if ($? != 0) {
+          chomp $response;
+          debugMessage(0, "Plot file rename \"".$cmd."\" failed: ".$response);
+        }
+      }
+    }
+
   }
+  # Delete the data file
+  unlink($file."0");
+  unlink($file."1");
 
-  $cmd = $bindir."/bpsr_diskplot -p -g 112x84 -D bandpass_".$file."_112x84.png/png ".$pol0_file." ".$pol1_file;
-  debugMessage(2, "Processing cmd \"".$cmd."\"");
-                                                                                                                                          
-  $response = `$cmd`;
-  if ($? != 0) {
-    debugMessage(0, "processing failed: \"".$response."\"");
-  }
-
-
-
-  # Delete the data files
-  unlink($pol0_file);
-  debugMessage(2, "unlinking $pol0_file");
-  unlink($pol1_file);
-  debugMessage(2, "unlinking $pol1_file");
+  debugMessage(2, "unlinking ".$file);
 
   chdir "../../";
 
@@ -281,7 +346,7 @@ sub processResult($$) {
 }
 
 #
-# Counts the numbers of *.lowres archives in total received
+# Counts the numbers of data files received
 #
 sub getUnprocessedFiles($) {
 
@@ -290,8 +355,8 @@ sub getUnprocessedFiles($) {
   debugMessage(3, "chdir $dir");
   chdir $dir;
 
-  my $cmd = "find . -name \"*.pol?\" -printf \"%P\n\"";
-  debugMessage(3, "find . -name \"*.pol?\" -printf \"\%P\"");
+  my $cmd = "find . -regex \".*[ts|bp|bps][0|1]\" -printf \"%P\n\"";
+  debugMessage(3, "find . -regex \".*[ts|bp|bps][0|1]\" -printf \"\%P\"");
   my $find_result = `$cmd`;
 
   my %archives = ();
@@ -305,7 +370,7 @@ sub getUnprocessedFiles($) {
   foreach $file (@files) {
     debugMessage(2, "  $file");
     # strip suffix
-    my $basename = substr $file, 0, -5;
+    my $basename = substr $file, 0, -1;
     if (! exists ($archives{$basename})) {
       $archives{$basename} = 1;
     } else {
@@ -400,9 +465,9 @@ sub daemonControlThread() {
 
 }
 
-sub getMostRecentResult($$) {
+sub getMostRecentResult($) {
 
-  my ($dir, $ext) = @_;
+  my ($dir) = @_;
 
   my $age = -1;
 
@@ -415,18 +480,19 @@ sub getMostRecentResult($$) {
 
   if ($num_dirs > 0) {
 
-    $cmd = "find ".$dir."/*/ -name \"*.".$ext."\" -printf \"%T@\\n\" | sort | tail -n 1";
+    $cmd  = "find ".$dir."/*/ -regex '.*[bp|ts|bps][0|1]' -printf \"%T@\\n\" | sort | tail -n 1";
+
     my $unix_time_of_most_recent_result = `$cmd`;
     chomp($unix_time_of_most_recent_result);
 
     if ($unix_time_of_most_recent_result) {
 
       $age = $current_unix_time - $unix_time_of_most_recent_result;
-      debugMessage(2, "getMostRecentResult: most recent *.".$ext." was ".$age." seconds old");
+      debugMessage(2, "getMostRecentResult: most recent mon file was ".$age." seconds old");
 
     } else {
 
-      debugMessage(2, "getMostRecentResult: no .".$ext." files found in $dir");
+      debugMessage(2, "getMostRecentResult: no mon files found in $dir");
 
       # Check the age of the directories - if > 5 minutes then likely a dud obs.
 

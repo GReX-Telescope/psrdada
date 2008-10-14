@@ -2,16 +2,18 @@
 
 ###############################################################################
 #
-# client_spectra_manager.pl 
+# client_bpsr_results_monitor.pl 
 #
-# This script transfers data from a directory on the pwc, to a directory on the
-# nexus machine
+# This script transfers the output of the_decimator to the results directory
+# on the server
+
+use lib $ENV{"DADA_ROOT"}."/bin";
 
 use IO::Socket;
 use Getopt::Std;
 use File::Basename;
-use Bpsr;           # BPSR Module for configuration options
-use strict;         # strict mode (like -Wall)
+use Bpsr;               # BPSR/DADA Module for configuration options
+use strict;             # strict mode (like -Wall)
 use threads;
 use threads::shared;
 
@@ -19,10 +21,10 @@ use threads::shared;
 #
 # Constants
 #
-use constant  DEBUG_LEVEL => 1;
+use constant  DEBUG_LEVEL => 2;
 use constant  SLEEPTIME   => 1;
-use constant  PIDFILE     => "spectra_manager.pid";
-use constant  LOGFILE     => "spectra_manager.log";
+use constant  PIDFILE     => "bpsr_results_monitor.pid";
+use constant  LOGFILE     => "bpsr_results_monitor.log";
 
 
 #
@@ -95,21 +97,52 @@ my $daemon_control_thread = threads->new(\&daemonControlThread);
 my @lines;
 my $line;
 my $find_result;
-
+my $result;
+my $response;
 
 # Loop until daemon control thread asks us to quit
 while (!($quit_daemon)) {
 
   @lines = ();
 
-  $cmd = "find . -name \"*.pol?\" | sort";
+  #TODO new code
+  $cmd = "find . -maxdepth 3 -regex \".*[ts|bp|bps][0|1]\" | sort";
   $find_result = `$cmd`;
 
   @lines = split(/\n/,$find_result);
+
   foreach $line (@lines) {
+
     $line = substr($line,2);
-    logMessage(1, "INFO", "Processing spectra \"".$line."\"");
-    processArchive($line);
+
+    logMessage(1, "INFO", "Processing decimator mon file \"".$line."\"");
+
+    my ($utc, $beam, $file) = split( /\//, $line);
+
+    my $file_dir = $utc."/".$beam;
+
+    ($result, $response) = sendToServerViaNFS($file_dir."/".$file, $cfg{"SERVER_RESULTS_NFS_MNT"}, $file_dir);
+
+    if ($result ne "ok") {
+      logMessage(0, "ERROR", "NFS Copy Failed: ".$response);
+      unlink($file_dir."/".$file);
+
+    } else {
+
+      my $aux_dir = $file_dir."/aux";
+
+      if (! -d $aux_dir) {
+        logMessage(0, "WARN", "Aux file dir for ".$utc.", beam ".$beam." did not exist, creating...");
+        `mkdir -p $aux_dir`;
+      }
+
+      my $cmd  = "mv ".$file_dir."/".$file." ".$file_dir."/aux/";
+      ($result, $response) = Dada->mySystem($cmd,0);
+      if ($result ne "ok") {
+        logMessage(0, "ERROR", "Could not move file ($file) to aux dir \"".$response."\"");
+        unlink($file_dir."/".$file);
+      } 
+    }
   }
 
   if ($#lines == -1) {
@@ -121,27 +154,17 @@ while (!($quit_daemon)) {
 # Rejoin our daemon control thread
 $daemon_control_thread->join();
 
+logMessage(0, "INFO", "STOPPING SCRIPT");
+
 # Close the nexus logging connection
 Dada->nexusLogClose($log_socket);
 
-logMessage(0, "INFO", "STOPPING SCRIPT");
 
 exit (0);
 
-
-sub processArchive($) {
-
-  (my $file) = @_;
-
-  my $cmd = "find ".$file." -type f -name \"*.pol?\" -printf \"%h\\n\"";
-  logMessage(2, "INFO", $cmd);
-  my $remote_dir = `$cmd`;
-  chomp $remote_dir;
-
-  sendToServerViaNFS($file, $cfg{"SERVER_RESULTS_NFS_MNT"}, $remote_dir);
-  unlink($file);
-
-}
+#
+# Functions
+#
 
 sub sendToServerViaNFS($$$) {
 
@@ -159,17 +182,7 @@ sub sendToServerViaNFS($$$) {
   logMessage(2, "INFO", "NFS copy \"".$cmd."\"");
   ($result, $response) = Dada->mySystem($cmd,0);
   if ($result ne "ok") {
-
-    logMessage(0, "ERROR", "Failed to nfs copy \"".$file."\" to nfs dir\"".$nfsdir."/".$dir."\": response: \"".$response."\"");
-    logMessage(0, "ERROR", "Command was: \"".$cmd."\"");
-    if (-f $file) {
-      logMessage(0, "ERROR", "File existed locally");
-    } else {
-      logMessage(0, "ERROR", "File did not!");
-    }
-
-    return "fail";
-
+    return ("fail", "Command was \"".$cmd."\" and response was \"".$response."\"");
   } else {
     return "ok";
   }
@@ -222,7 +235,7 @@ sub logMessage($$$) {
       $log_socket =  Dada->nexusLogOpen($cfg{"SERVER_HOST"},$cfg{"SERVER_SYS_LOG_PORT"});
     }
     if ($log_socket) {
-      Dada->nexusLogMessage($log_socket, $time, "sys", $type, "spectra mngr", $message);
+      Dada->nexusLogMessage($log_socket, $time, "sys", $type, "results mon", $message);
     }
     print "[".$time."] ".$message."\n";
   }
