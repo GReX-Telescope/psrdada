@@ -1,13 +1,5 @@
 
 # scripts distributed as is (installed in bin/)
-dist_bin_SCRIPTS = client_auxiliary_manager.pl \
-                   client_auxiliary_processor.pl \
-                   client_master_control.pl \
-                   client_sys_logger.pl \
-                   Dada.pm \
-                   dada_reconfigure.pl \
+dist_bin_SCRIPTS = Dada.pm \
                    gain_hacker.pl \
-                   machine_status.pl \
-                   server_pwc_monitor.pl \
-                   server_src_monitor.pl \
-                   server_sys_monitor.pl
+                   machine_status.pl 
