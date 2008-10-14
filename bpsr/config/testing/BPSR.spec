@@ -9,8 +9,8 @@ DEC                 20:20:01
 FA                  23
 BW                  -400
 ACC_LEN             25
-PID                 P140
-PROC_FILE           dspsr.cal
+PID                 P630
+PROC_FILE           THEDECIMATOR
 NBIT                8
 NPOL                2
 NDIM                1
