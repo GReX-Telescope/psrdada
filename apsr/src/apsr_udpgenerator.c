@@ -243,10 +243,10 @@ int main(int argc, char *argv[])
 
   if (daemon) {
     be_a_daemon();
+    multilog_serve (log, APSR_UDPGENERATOR_LOG);
   } else {
     multilog_add(log, stderr);
   }
-  multilog_serve (log, APSR_TEST_TRIWAVEUDP_LOG);
 
   udpdb_client = (char *) argv[optind];
 
@@ -1106,7 +1106,7 @@ void gain_monitor(void) {
   FILE *sockout = 0;
                                                                                                                    
   /* Port for control from tcs simulator */
-  int port = 40235;
+  int port = APSR_UDPGENERATOR_GAIN_PORT;
 
   int listen_fd;
   int fd;
@@ -1265,7 +1265,7 @@ time_t wait_for_start(int daemon, multilog_t* log) {
     FILE *sockout = 0;
 
     /* Port for control from tcs simulator */
-    int port = APSR_TEST_TRIWAVEUDP_COMMAND;
+    int port = APSR_UDPGENERATOR_CTRL_PORT;
 
     /* create a socket on which to listen */
     int listen_fd = sock_create (&port);

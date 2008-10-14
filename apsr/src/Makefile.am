@@ -1,6 +1,5 @@
 
-bin_PROGRAMS = apsr_udpdb apsr_dbtriwave \
-	apsr_dbtriripple bat_to_utc apsr_udpdisk apsr_udpheader
+bin_PROGRAMS = apsr_udpdb bat_to_utc apsr_udpdisk apsr_udpheader
 
 LDADD = ../../src/libpsrdada.la
 

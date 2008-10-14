@@ -8,7 +8,6 @@
 #include "node_array.h"
 #include "string_array.h"
 #include "ascii_header.h"
-#include "daemon.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -61,7 +60,6 @@ void usage()
      "dada_dbudp [options] desthost\n"
      " -v         be verbose\n"
      " -p num     port to send udp data to [default %d]\n"
-     " -d         run as daemon\n\n"
      " -1         1 transfer only\n\n"
      " desthost   udp packets sent to this hostname\n\n",
     APSR_DEFAULT_UDPDB_PORT);
@@ -334,9 +332,6 @@ int main (int argc, char **argv)
   /* DADA Logger */
   multilog_t* log = 0;
 
-  /* Flag set in daemon mode */
-  char daemon = 0;
-
   /* Flag set in verbose mode */
   char verbose = 0;
 
@@ -357,13 +352,9 @@ int main (int argc, char **argv)
   /* actual struct with info */
   dbudp_t dbudp;
 
-  while ((arg=getopt(argc,argv,"d:p:v1")) != -1)
+  while ((arg=getopt(argc,argv,"p:v1")) != -1)
     switch (arg) {
       
-    case 'd':
-      daemon=1;
-      break;
-
     case 'p':
       port=atoi(optarg);
       break;
@@ -390,15 +381,9 @@ int main (int argc, char **argv)
           
   dbudp.hostname = (char *) argv[optind];
 
-  log = multilog_open ("dada_dbudp", daemon);
+  log = multilog_open ("dada_dbudp", 0);
 
-  if (daemon) {
-    be_a_daemon ();
-    multilog_serve (log, APSR_DEFAULT_DBUDP_LOG);
-  }
-  else
-    multilog_add (log, stderr);
-
+  multilog_add (log, stderr);
 
   hdu = dada_hdu_create (log);
 

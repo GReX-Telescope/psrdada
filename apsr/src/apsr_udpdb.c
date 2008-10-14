@@ -11,14 +11,18 @@ void usage()
   fprintf (stdout,
 	   "apsr_udpdb [options]\n"
      " -h             print help text\n"
-	   " -p             port on which to listen [default %d]\n"
+	   " -p             port for UDP packets [default %d]\n"
 	   " -d             run as daemon\n"
      " -m mode        1 for independent mode, 2 for controlled mode\n"
+     " -k             hexidecimal shared memor key [default %x]\n"
      " -v             verbose messages\n"
      " -1             one time only mode, exit after EOD is written\n"
      " -H filename    ascii header information in file\n"
-     " -c             don't verify udp headers against header block\n"
-     " -S num         file size in bytes\n",APSR_DEFAULT_UDPDB_PORT);
+     " -l port        multilog port to write logging output to [default %d]\n"
+     " -c port        port to received pwcc commands on [default %d]\n"
+     " -S num         file size in bytes\n",APSR_DEFAULT_UDPDB_PORT,
+                      DADA_DEFAULT_BLOCK_KEY, APSR_DEFAULT_PWC_LOGPORT, 
+                      APSR_DEFAULT_PWC_PORT);
 }
 
 
@@ -624,6 +628,15 @@ int main (int argc, char **argv)
   /* size of the header buffer */
   uint64_t header_size = 0;
 
+  /* pwcc command port */
+  int c_port = APSR_DEFAULT_PWC_PORT;
+
+  /* multilog output port */
+  int l_port = APSR_DEFAULT_PWC_LOGPORT;
+
+  /* hexadecimal shared memory key */
+  key_t dada_key = DADA_DEFAULT_BLOCK_KEY;
+
   /* actual struct with info */
   udpdb_t udpdb;
 
@@ -635,8 +648,16 @@ int main (int argc, char **argv)
   static char* buffer = 0;
   char *src;
 
-  while ((arg=getopt(argc,argv,"dp:vm:S:H:n:1h")) != -1) {
+  while ((arg=getopt(argc,argv,"k:dp:vm:S:H:n:1hl:c:")) != -1) {
     switch (arg) {
+
+    case 'k':
+      if (sscanf (optarg, "%x", &dada_key) != 1) {
+        fprintf (stderr,"apsr_udpdb: could not parse key from %s\n",optarg);
+        return -1;
+      }
+      break;
+
       
     case 'd':
       daemon = 1;
@@ -684,6 +705,24 @@ int main (int argc, char **argv)
       }
       break;
 
+    case 'c':
+      if (optarg) {
+        c_port = atoi(optarg);
+        break;
+      } else {
+        usage();
+        return EXIT_FAILURE;
+      }
+
+    case 'l':
+      if (optarg) {
+        l_port = atoi(optarg);
+        break;
+      } else {
+        usage();
+        return EXIT_FAILURE;
+      }
+
     case 'h':
       usage();
       return 0;
@@ -702,7 +741,7 @@ int main (int argc, char **argv)
   else
     multilog_add (log, stderr);
 
-  multilog_serve (log, DADA_DEFAULT_PWC_LOG);
+  multilog_serve (log, l_port);
   
   if (verbose) fprintf (stderr, "Creating dada pwc main\n");
   pwcm = dada_pwc_main_create();
@@ -742,6 +781,10 @@ int main (int argc, char **argv)
     
   /* Connect to shared memory */
   hdu = dada_hdu_create (pwcm->log);
+
+  /* Set the data block shared memory key */
+  dada_hdu_set_key(hdu, dada_key);
+
 
   if (dada_hdu_connect (hdu) < 0)
     return EXIT_FAILURE;
@@ -868,6 +911,9 @@ int main (int argc, char **argv)
 
     if (verbose) fprintf (stderr, "Creating dada pwc control interface\n");
     pwcm->pwc = dada_pwc_create();
+
+    /* Set the port on which control commands may be issued */
+    pwcm->pwc->port = c_port;
 
     if (verbose) fprintf (stderr, "Creating dada server\n");
     if (dada_pwc_serve (pwcm->pwc) < 0) {
