@@ -61,7 +61,7 @@ int plot_stream_1D(float x[], float y[], float y1[], long nvalues, char inpdev[]
   if(!dobox){
     strcpy(xopt," ");
     strcpy(yopt," ");
-    float xleft=0.1, xright=0.9, ybot=0.1, ytop=0.9;
+    float xleft=0.0, xright=1.0, ybot=0.0, ytop=1.0;
     cpgsvp(xleft, xright, ybot, ytop);
     cpgswin(min_x, max_x+marg_x, min_y, max_y+marg_y);
     cpgbox(xopt, xtick, nxsub, yopt, ytick, nysub);
