@@ -214,7 +214,7 @@ int multibob_cmd_state (void* context, FILE* fptr, char* args)
   for (ibob = 0; ibob < multibob->nthread; ibob++)
   {
     ibob_thread_t* thread = multibob->threads + ibob;
-    fprintf (fptr, "IBOB%2d %s:%d ", ibob+1, 
+    fprintf (fptr, "IBOB%02d %s:%d ", ibob+1, 
 	     thread->ibob->host, thread->ibob->port);
 
     if (thread->quit)
@@ -225,6 +225,8 @@ int multibob_cmd_state (void* context, FILE* fptr, char* args)
 
     else
       fprintf (fptr, "dead");
+
+    fprintf (fptr, "\n");
   }
 }
 
