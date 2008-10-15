@@ -71,7 +71,7 @@ multibob_t* multibob_construct (unsigned nibob)
 }
 
 /*! free all resources reserved for ibob communications */
-int multibob_destroy (multibob_t* bob)
+int multibob_destroy (multibob_t* multibob)
 {
 }
 
@@ -233,6 +233,9 @@ int multibob_cmd_state (void* context, FILE* fptr, char* args)
 /*! set the host and port number of the specified ibob */
 int multibob_cmd_hostport (void* context, FILE* fptr, char* args)
 {
+  unsigned ibob = 0;
+  multibob_t* multibob = context;
+
 }
 
 /*! set the target MAC address of the specified ibob */
@@ -243,6 +246,12 @@ int multibob_cmd_mac (void* context, FILE* fptr, char* args)
 /*! reset packet counter on next UTC second, returned */
 int multibob_cmd_arm (void* context, FILE* fptr, char* args)
 {
+  unsigned ibob = 0;
+  multibob_t* multibob = context;
+
+  multibob_lock (multibob);
+
+  multibob_unlock (multibob);
 }
 
 /*! reset packet counter on next UTC second, returned */
@@ -250,40 +259,82 @@ int multibob_cmd_quit (void* context, FILE* fptr, char* args)
 {
 }
 
-/*! mutex lock all of the ibob interfaces */
-void multibob_lock (multibob_t* bob)
+void* lock_thread (void* context)
 {
+  if (!context)
+    return 0;
+
+  ibob_thread_t* thread = context;
+  if (pthread_mutex_lock (&(thread->mutex)) != 0)
+    return 0;
+
+  return context;
+}
+
+/*! mutex lock all of the ibob interfaces */
+void multibob_lock (multibob_t* multibob)
+{
+  unsigned ibob = 0;
+
+  /* quickly grab all locks at once */
+  for (ibob = 0; ibob < multibob->nthread; ibob++)
+  {
+    ibob_thread_t* thread = multibob->threads + ibob;
+    errno = pthread_create (&(thread->lock), 0, lock_thread, thread);
+    if (errno)
+      fprintf (stderr, "multibob_lock: error starting lock_thread %d - %s\n",
+	       ibob, strerror (errno));
+  }
+
+  /* wait for the locks to be made */
+  for (ibob = 0; ibob < multibob->nthread; ibob++)
+  {
+    ibob_thread_t* thread = multibob->threads + ibob;
+
+    void* result = 0;
+    pthread_join (thread->lock, &result);
+    if (result != thread)
+      fprintf (stderr, "multibob_lock: error in lock_thread\n");
+  }
 }
 
 /*! mutex unlock all of the ibob interfaces */
-void multibob_unlock (multibob_t* bob)
+void multibob_unlock (multibob_t* multibob)
 {
+  unsigned ibob = 0;
+
+  /* quickly grab all locks at once */
+  for (ibob = 0; ibob < multibob->nthread; ibob++)
+  {
+    ibob_thread_t* thread = multibob->threads + ibob;
+    pthread_mutex_unlock (&(thread->mutex));
+  }
 }
 
 /*! */
-int multibob_serve (multibob_t* bob)
+int multibob_serve (multibob_t* multibob)
 {
-  if (!bob)
+  if (!multibob)
     return -1;
 
-  if (bob->port)
+  if (multibob->port)
   {
-    if (bob->server)
+    if (multibob->server)
     {
       fprintf (stderr, "multibob_serve: server already launched \n");
       return -1;
     }
 
-    bob -> server = command_parse_server_create (bob -> parser);
+    multibob -> server = command_parse_server_create (multibob -> parser);
 
-    command_parse_server_set_welcome (bob -> server,
+    command_parse_server_set_welcome (multibob -> server,
 				      "multibob command");
 
     /* open the command/control port */
-    command_parse_serve (bob->server, bob->port);
+    command_parse_serve (multibob->server, multibob->port);
 
     void* result = 0;
-    pthread_join (bob->server->thread, &result);
+    pthread_join (multibob->server->thread, &result);
   }
   else
   {

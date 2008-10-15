@@ -47,6 +47,9 @@ extern "C" {
     /*! time of last contact with iBoB */
     time_t alive;
 
+    /*! lock thread used by main thread */
+    pthread_t lock;
+
   } ibob_thread_t;
 
 
