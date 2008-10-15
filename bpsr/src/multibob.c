@@ -7,14 +7,16 @@
 
 #include "multibob.h"
 
+#include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
 
-void ibob_thread_init (ibob_thread_t* ibob)
+void ibob_thread_init (ibob_thread_t* ibob, int number)
 {
   ibob->ibob = ibob_construct ();
+  ibob_set_number (ibob->ibob, number);
 
   pthread_mutex_init(&(ibob->mutex), NULL);
   pthread_cond_init (&(ibob->cond), NULL);
@@ -34,10 +36,7 @@ multibob_t* multibob_construct (unsigned nibob)
   unsigned ibob = 0;
 
   for (ibob = 0; ibob < nibob; ibob++)
-  {
-    ibob_thread_init (multibob->threads + ibob);
-    ibob_set_number (multibob->threads->ibob, ibob + 1);
-  }
+    ibob_thread_init (multibob->threads + ibob, ibob + 1);
 
   multibob->parser = command_parse_create ();
   multibob->server = 0;
@@ -97,9 +96,12 @@ void* multibob_monitor (void* context)
   {
     pthread_mutex_lock (&(thread->mutex));
 
+    fprintf (stderr, "multibob_monitor: opening %s:%d\n",
+             ibob->host, ibob->port);
+
     if ( ibob_open (ibob) < 0 )
     {
-      fprintf (stderr, "multibob_monitor: could not open %s %d: %s\n",
+      fprintf (stderr, "multibob_monitor: could not open %s:%d - %s\n",
 	       ibob->host, ibob->port, strerror(errno));
 
       pthread_mutex_unlock (&(thread->mutex));
@@ -108,11 +110,16 @@ void* multibob_monitor (void* context)
       continue;
     }
 
+    pthread_mutex_unlock (&(thread->mutex));
+
     while (!thread->quit)
     {
       int retval = 0;
 
       pthread_mutex_lock (&(thread->mutex));
+
+      fprintf (stderr, "multibob_monitor: ping %s:%d\n",
+               ibob->host, ibob->port);
 
       if (thread->bramdump)
 	retval = bramdump (ibob);
@@ -121,11 +128,23 @@ void* multibob_monitor (void* context)
 
       pthread_mutex_unlock (&(thread->mutex));
 
-      if (retval < 0 || thread->quit)
+      if (retval < 0)
+      {
+        fprintf (stderr, "multibob_monitor: communicaton failure on %s:%d\n",
+                 ibob->host, ibob->port);
 	break;
+      }
+
+      if (thread->quit)
+        break;
 
       sleep (1);
     }
+
+    fprintf (stderr, "multibob_monitor: closing connection with %s:%d\n",
+             ibob->host, ibob->port);
+
+    ibob_close (ibob);
   }
 
   return 0;
