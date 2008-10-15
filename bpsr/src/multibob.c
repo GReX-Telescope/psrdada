@@ -40,6 +40,8 @@ multibob_t* multibob_construct (unsigned nibob)
   }
 
   multibob->parser = command_parse_create ();
+  multibob->server = 0;
+  multibob->port = 0;
 
   command_parse_add (multibob->parser, multibob_cmd_state, multibob,
                      "state", "get the current state", NULL);
@@ -185,3 +187,33 @@ void multibob_lock (multibob_t* bob);
 
 /*! mutex unlock all of the ibob interfaces */
 void multibob_lock (multibob_t* bob);
+
+/*! */
+int multibob_serve (multibob_t* bob)
+{
+  if (!bob)
+    return -1;
+
+  if (bob->port)
+  {
+    if (bob->server)
+    {
+      fprintf (stderr, "multibob_serve: server already launched");
+      return -1;
+    }
+
+    bob -> server = command_parse_server_create (bob -> parser);
+
+    command_parse_server_set_welcome (bob -> server,
+				      "multibob command");
+
+    /* open the command/control port */
+    command_parse_serve (bob->server, bob->port);
+
+    void* result = 0;
+    thread_join (bob->server->thread, &result);
+  }
+  else
+  {
+  }
+}

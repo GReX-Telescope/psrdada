@@ -14,7 +14,7 @@
 #define __DADA_MULTIBOB_H
 
 #include "ibob.h"
-#include "command_parse.h"
+#include "command_parse_server.h"
 
 /* ************************************************************************
 
@@ -53,8 +53,12 @@ extern "C" {
     ibob_thread_t* threads;
     unsigned nthread;
 
-    /*! and a command parser */
+    /*! command parser and server */
     command_parse_t* parser;
+    command_parse_server_t* server;
+
+    /*! port number on which to listen for incoming connections */
+    int port;
 
   } multibob_t;
 
