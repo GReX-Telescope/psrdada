@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#include <time.h>
 
 void ibob_thread_init (ibob_thread_t* ibob, int number)
 {
@@ -20,9 +21,12 @@ void ibob_thread_init (ibob_thread_t* ibob, int number)
 
   pthread_mutex_init(&(ibob->mutex), NULL);
   pthread_cond_init (&(ibob->cond), NULL);
+
   ibob->id = 0;
   ibob->bramdump = 0;
-  ibob->quit = 0;
+  ibob->alive = 0;
+
+  ibob->quit = 1;
 }
 
 /*! allocate and initialize a new ibob_t struct */
@@ -121,9 +125,6 @@ void* multibob_monitor (void* context)
 
       pthread_mutex_lock (&(thread->mutex));
 
-      fprintf (stderr, "multibob_monitor: ping %s:%d\n",
-               ibob->host, ibob->port);
-
       if (thread->bramdump)
 	retval = bramdump (ibob);
       else
@@ -137,6 +138,8 @@ void* multibob_monitor (void* context)
                  ibob->host, ibob->port);
 	break;
       }
+
+      thread->alive = time(0);
 
       if (thread->quit)
         break;
@@ -166,15 +169,24 @@ int multibob_cmd_open (void* context, FILE* fptr, char* args)
   {
     ibob_thread_t* thread = multibob->threads + ibob;
 
-    if (thread->id == 0)
-    {
-      thread->quit = 0;
+    // if thread is currently running, then connection is open
+    if (!thread->quit)
+      continue;
 
-      errno = pthread_create (&(thread->id), 0, multibob_monitor, thread);
-      if (errno)
-	fprintf (stderr, "multibob_cmd_open: error starting thread %d - %s\n",
-		 ibob, strerror (errno));
+    // if thread has been spawned but is not running, clean up its resources
+    if (thread->id)
+    {
+      void* result = 0;
+      pthread_join (thread->id, &result);
     }
+
+    thread->id = 0;
+    thread->quit = 0;
+
+    errno = pthread_create (&(thread->id), 0, multibob_monitor, thread);
+    if (errno)
+      fprintf (stderr, "multibob_cmd_open: error starting thread %d - %s\n",
+	       ibob, strerror (errno));
   }
 }
 
@@ -184,30 +196,36 @@ int multibob_cmd_close (void* context, FILE* fptr, char* args)
   if (!context)
     return -1;
 
+  unsigned ibob = 0;
   multibob_t* multibob = context;
 
-  unsigned ibob = 0;
   for (ibob = 0; ibob < multibob->nthread; ibob++)
-  {
-    ibob_thread_t* thread = multibob->threads + ibob;
-    thread -> quit = 1;
-  }
-
-  for (ibob = 0; ibob < multibob->nthread; ibob++)
-  {
-    ibob_thread_t* thread = multibob->threads + ibob;
-    if (thread->id)
-    {
-      void* result = 0;
-      pthread_join (thread->id, &result);
-      thread->id = 0;
-    }
-  }
+    multibob->threads[ibob].quit = 1;
 }
 
 /*! reset packet counter on next UTC second, returned */
 int multibob_cmd_state (void* context, FILE* fptr, char* args)
 {
+  unsigned ibob = 0;
+  multibob_t* multibob = context;
+
+  time_t current = time(0);
+
+  for (ibob = 0; ibob < multibob->nthread; ibob++)
+  {
+    ibob_thread_t* thread = multibob->threads + ibob;
+    fprintf (fptr, "IBOB%2d %s:%d ", ibob+1, 
+	     thread->ibob->host, thread->ibob->port);
+
+    if (thread->quit)
+      fprintf (fptr, "closed");
+
+    else if (current - thread->alive < 5)
+      fprintf (fptr, "alive");
+
+    else
+      fprintf (fptr, "dead");
+  }
 }
 
 /*! set the host and port number of the specified ibob */
