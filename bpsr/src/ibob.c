@@ -203,6 +203,15 @@ int ibob_is_open (ibob_t* bob)
   return bob && (bob->fd != -1);
 }
 
+/*! return true if iBoB is alive */
+int ibob_ping (ibob_t* bob)
+{
+  if (ibob_send (bob, "\r") < 0)
+    return -1;
+
+  return ibob_ignore (bob);
+}
+
 /*! reset packet counter on next UTC second, returned */
 time_t ibob_arm (ibob_t* bob)
 {
