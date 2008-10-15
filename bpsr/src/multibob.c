@@ -68,13 +68,9 @@ multibob_t* multibob_construct (unsigned nibob)
 }
 
 /*! free all resources reserved for ibob communications */
-int multibob_destroy (multibob_t* bob);
-
-/*! set the host and port number of the specified ibob */
-int multibob_cmd_hostport (void* context, FILE* fptr, char* args);
-
-/*! set the target MAC address of the specified ibob */
-int multibob_cmd_mac (void* context, FILE* fptr, char* args);
+int multibob_destroy (multibob_t* bob)
+{
+}
 
 /*!
   The monitor thread simply sits in a loop, opening the connection
@@ -82,6 +78,12 @@ int multibob_cmd_mac (void* context, FILE* fptr, char* args);
   can be either a simple ping or a bramdump.  On failure, the
   connection is closed and re-opened ad infinitum every five seconds.
 */
+
+int bramdump (ibob_t* ibob)
+{
+  fprintf (stderr, "bramdump not implemented\n");
+  return 0;
+}
 
 void* multibob_monitor (void* context)
 {
@@ -180,13 +182,39 @@ int multibob_cmd_close (void* context, FILE* fptr, char* args)
 }
 
 /*! reset packet counter on next UTC second, returned */
-int multibob_cmd_arm (void* context, FILE* fptr, char* args);
+int multibob_cmd_state (void* context, FILE* fptr, char* args)
+{
+}
+
+/*! set the host and port number of the specified ibob */
+int multibob_cmd_hostport (void* context, FILE* fptr, char* args)
+{
+}
+
+/*! set the target MAC address of the specified ibob */
+int multibob_cmd_mac (void* context, FILE* fptr, char* args)
+{
+}
+
+/*! reset packet counter on next UTC second, returned */
+int multibob_cmd_arm (void* context, FILE* fptr, char* args)
+{
+}
+
+/*! reset packet counter on next UTC second, returned */
+int multibob_cmd_quit (void* context, FILE* fptr, char* args)
+{
+}
 
 /*! mutex lock all of the ibob interfaces */
-void multibob_lock (multibob_t* bob);
+void multibob_lock (multibob_t* bob)
+{
+}
 
 /*! mutex unlock all of the ibob interfaces */
-void multibob_lock (multibob_t* bob);
+void multibob_unlock (multibob_t* bob)
+{
+}
 
 /*! */
 int multibob_serve (multibob_t* bob)
@@ -198,7 +226,7 @@ int multibob_serve (multibob_t* bob)
   {
     if (bob->server)
     {
-      fprintf (stderr, "multibob_serve: server already launched");
+      fprintf (stderr, "multibob_serve: server already launched \n");
       return -1;
     }
 
@@ -211,9 +239,11 @@ int multibob_serve (multibob_t* bob)
     command_parse_serve (bob->server, bob->port);
 
     void* result = 0;
-    thread_join (bob->server->thread, &result);
+    pthread_join (bob->server->thread, &result);
   }
   else
   {
+    fprintf (stderr, "multibob_serve: stdin/out interface not implemented \n");
+    return -1;
   }
 }
