@@ -44,6 +44,9 @@ extern "C" {
     /*! quit flag */
     char quit;
 
+    /*! time of last contact with iBoB */
+    time_t alive;
+
   } ibob_thread_t;
 
 
