@@ -4,7 +4,7 @@ lib_LTLIBRARIES = libbpsr.la
 libbpsr_la_SOURCES = ibob.h ibob.c multibob.h multibob.c
 
 bin_PROGRAMS = bpsr_udpheader bpsr_udpdb bpsr_dbdisk bpsr_udpdisk \
-	bpsr_udpdb_fast bpsr_dbmon ibob_telnet
+	bpsr_udpdb_fast bpsr_dbmon ibob_telnet multibob_server
 
 LDADD = libbpsr.la ../../src/libpsrdada.la
 
