@@ -106,6 +106,9 @@ void* multibob_monitor (void* context)
 
       pthread_mutex_unlock (&(thread->mutex));
 
+      if (thread->quit)
+        break;
+
       sleep (5);
       continue;
     }
@@ -165,6 +168,8 @@ int multibob_cmd_open (void* context, FILE* fptr, char* args)
 
     if (thread->id == 0)
     {
+      thread->quit = 0;
+
       errno = pthread_create (&(thread->id), 0, multibob_monitor, thread);
       if (errno)
 	fprintf (stderr, "multibob_cmd_open: error starting thread %d - %s\n",
