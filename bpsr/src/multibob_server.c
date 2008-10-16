@@ -8,6 +8,7 @@
 #include "multibob.h"
 
 #include <unistd.h>
+#include <ctype.h>
 
 void usage()
 {
