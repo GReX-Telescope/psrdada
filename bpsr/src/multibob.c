@@ -6,6 +6,7 @@
  ***************************************************************************/
 
 #include "multibob.h"
+#include "dada_def.h"
 
 #include <unistd.h>
 #include <stdlib.h>
@@ -243,6 +244,41 @@ int multibob_cmd_mac (void* context, FILE* fptr, char* args)
 {
 }
 
+int multibob_send (multibob_t* multibob, const char* message)
+{
+  ssize_t length = 0;
+
+  unsigned ibob = 0;
+  for (ibob = 0; ibob < multibob->nthread; ibob++)
+  {
+    ibob_thread_t* thread = multibob->threads + ibob;
+    if (ibob_is_open (thread->ibob))
+      length = ibob_send_async (thread->ibob, message);
+  }
+
+  for (ibob = 0; ibob < multibob->nthread; ibob++)
+  {
+    ibob_thread_t* thread = multibob->threads + ibob;
+    if (ibob_is_open (thread->ibob))
+      ibob_recv_echo (thread->ibob, length);
+  }
+}
+
+int multibob_arm (void* context)
+{
+  multibob_t* multibob = context;
+  multibob_send (multibob, "regwrite reg_arm 0");
+
+  // pause for 10 milliseconds
+  struct timeval pause;
+  pause.tv_sec=0;
+  pause.tv_usec=10000;
+  select(0,NULL,NULL,NULL,&pause);
+
+  multibob_send (multibob, "regwrite reg_arm 1");
+}
+
+
 /*! reset packet counter on next UTC second, returned */
 int multibob_cmd_arm (void* context, FILE* fptr, char* args)
 {
@@ -251,7 +287,14 @@ int multibob_cmd_arm (void* context, FILE* fptr, char* args)
 
   multibob_lock (multibob);
 
+  time_t utc = start_observation (multibob_arm, context);
+
   multibob_unlock (multibob);
+
+  char date[64];
+  strftime (date, 64, DADA_TIMESTR, gmtime(&utc));
+
+  fprintf (fptr, "%s\n", date);
 }
 
 /*! reset packet counter on next UTC second, returned */

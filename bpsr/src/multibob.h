@@ -79,7 +79,7 @@ extern "C" {
   void multibob_lock (multibob_t* bob);
 
   /*! mutex unlock all of the ibob interfaces */
-  void multibob_lock (multibob_t* bob);
+  void multibob_unlock (multibob_t* bob);
 
   /*! get the state of the instrument */
   int multibob_cmd_state (void* context, FILE* fptr, char* args);
