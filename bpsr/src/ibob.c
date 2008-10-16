@@ -16,66 +16,66 @@
 
 ibob_t* ibob_construct ()
 {
-  ibob_t* bob = malloc (sizeof(ibob_t));
+  ibob_t* ibob = malloc (sizeof(ibob_t));
 
-  bob->fd = -1;
-  bob->buffer_size = 0;
-  bob->buffer = 0;
-  bob->emulate_telnet = 1;
+  ibob->fd = -1;
+  ibob->buffer_size = 0;
+  ibob->buffer = 0;
+  ibob->emulate_telnet = 1;
 
-  return bob;
+  return ibob;
 }
 
 /*! free all resources reserved for ibob communications */
-int ibob_destroy (ibob_t* bob)
+int ibob_destroy (ibob_t* ibob)
 {
-  if (!bob)
+  if (!ibob)
     return -1;
 
-  if (bob->fd != -1)
-    sock_close (bob->fd);
+  if (ibob->fd != -1)
+    sock_close (ibob->fd);
 
-  if (bob->buffer)
-    free (bob->buffer);
+  if (ibob->buffer)
+    free (ibob->buffer);
 
-  free (bob);
+  free (ibob);
 
   return 0;
 }
 
 /*! set the host and port number of the ibob */
-int ibob_set_host (ibob_t* bob, const char* host, int port)
+int ibob_set_host (ibob_t* ibob, const char* host, int port)
 {
-  if (!bob)
+  if (!ibob)
     return -1;
 
-  if (bob->host)
-    free (bob->host);
+  if (ibob->host)
+    free (ibob->host);
 
-  bob->host = strdup (host);
-  bob->port = port;
+  ibob->host = strdup (host);
+  ibob->port = port;
 
   return 0;
 }
 
 /*! set the ibob number (use default IP base and port) */
-int ibob_set_number (ibob_t* bob, unsigned number)
+int ibob_set_number (ibob_t* ibob, unsigned number)
 {
-  if (!bob)
+  if (!ibob)
     return -1;
 
-  if (bob->host)
-    free (bob->host);
+  if (ibob->host)
+    free (ibob->host);
 
-  bob->host = strdup (IBOB_VLAN_BASE"XXXXXX");
-  sprintf (bob->host, IBOB_VLAN_BASE"%u", number);
+  ibob->host = strdup (IBOB_VLAN_BASE"XXXXXX");
+  sprintf (ibob->host, IBOB_VLAN_BASE"%u", number);
 
-  bob->port = IBOB_PORT;
+  ibob->port = IBOB_PORT;
 
   return 0;
 }
 
-int ibob_emulate_telnet (ibob_t* bob)
+int ibob_emulate_telnet (ibob_t* ibob)
 {
   const char message1[] = { 255, 251, 37,
 			    255, 253, 38,
@@ -100,15 +100,15 @@ int ibob_emulate_telnet (ibob_t* bob)
 
   int message_length = 0;
 
-  if (!bob)
+  if (!ibob)
     return -1;
 
-  if (bob->fd == -1)
+  if (ibob->fd == -1)
     return -1;
 
   message_length = strlen (message1);
 
-  if (sock_write (bob->fd, message1, message_length) < message_length)
+  if (sock_write (ibob->fd, message1, message_length) < message_length)
   {
     fprintf (stderr, "ibob_emulate_telnet: could not send message 1 - %s\n",
              strerror(errno));
@@ -117,16 +117,24 @@ int ibob_emulate_telnet (ibob_t* bob)
 
   message_length = strlen (expected_response);
 
-  if (sock_read (bob->fd, bob->buffer, message_length) < message_length)
+  if (sock_read (ibob->fd, ibob->buffer, message_length) < message_length)
   {
-    fprintf (stderr, "ibob_emulate_telnet: could not receive response - %s\n",
-	     strerror(errno));
-    return -1;
+    sock_close (ibob->fd);
+
+    ibob->fd = sock_open (ibob->host, ibob->port);
+    if ( ibob->fd < 0 )
+    {
+      fprintf (stderr, "ibob_emulate_telnet: could not reopen %s %d - %s\n",
+               ibob->host, ibob->port, strerror(errno));
+      return -1;
+    }
+
+    return ibob_emulate_telnet (ibob);
   }
 
   message_length = strlen (message2);
 
-  if (sock_write (bob->fd, message2, message_length) < message_length)
+  if (sock_write (ibob->fd, message2, message_length) < message_length)
   {
     fprintf (stderr, "ibob_emulate_telnet: could not send message 2 - %s\n",
              strerror(errno));
@@ -134,102 +142,102 @@ int ibob_emulate_telnet (ibob_t* bob)
   }
 
   // read the welcome message up to the iBoB prompt
-  return ibob_recv (bob, bob->buffer, bob->buffer_size);
+  return ibob_recv (ibob, ibob->buffer, ibob->buffer_size);
 }
 
 static const char ibob_prompt[] = "IBOB % ";
 
 /*! start reading from/writing to an ibob */
-int ibob_open (ibob_t* bob)
+int ibob_open (ibob_t* ibob)
 {
-  if (!bob)
+  if (!ibob)
     return -1;
 
-  if (bob->fd != -1)
+  if (ibob->fd != -1)
   {
     fprintf (stderr, "ibob_open: already open\n");
     return -1;
   }
 
-  if (bob->host == 0)
+  if (ibob->host == 0)
   {
     fprintf (stderr, "ibob_open: host name not set\n");
     return -1;
   }
 
-  if (bob->port == 0)
+  if (ibob->port == 0)
   {
     fprintf (stderr, "ibob_open: port not set\n");
     return -1;
   }
 
-  bob->fd = sock_open (bob->host, bob->port);
-  if ( bob->fd < 0 )
+  ibob->fd = sock_open (ibob->host, ibob->port);
+  if ( ibob->fd < 0 )
   {
     fprintf (stderr, "ibob_open: could not open %s %d - %s\n",
-	     bob->host, bob->port, strerror(errno));
+	     ibob->host, ibob->port, strerror(errno));
     return -1;
   }
 
-  if (!bob->buffer_size)
-    bob->buffer_size = 1024;
+  if (!ibob->buffer_size)
+    ibob->buffer_size = 1024;
 
-  bob->buffer = realloc (bob->buffer, bob->buffer_size);
+  ibob->buffer = realloc (ibob->buffer, ibob->buffer_size);
 
-  if (bob->emulate_telnet)
-    return ibob_emulate_telnet (bob);
+  if (ibob->emulate_telnet)
+    return ibob_emulate_telnet (ibob);
 
   return 0;
 }
 
 /*! stop reading from/writing to an ibob */
-int ibob_close (ibob_t* bob)
+int ibob_close (ibob_t* ibob)
 {
-  if (!bob)
+  if (!ibob)
     return -1;
 
-  if (bob->fd == -1)
+  if (ibob->fd == -1)
     return -1;
 
-  int fd = bob->fd;
-  bob->fd = -1;
+  int fd = ibob->fd;
+  ibob->fd = -1;
 
   return sock_close (fd);
 }
 
 /*! return true if already open */
-int ibob_is_open (ibob_t* bob)
+int ibob_is_open (ibob_t* ibob)
 {
-  return bob && (bob->fd != -1);
+  return ibob && (ibob->fd != -1);
 }
 
 /*! return true if iBoB is alive */
-int ibob_ping (ibob_t* bob)
+int ibob_ping (ibob_t* ibob)
 {
-  if (ibob_send (bob, "\r") < 0)
+  if (ibob_send (ibob, "\r") < 0)
     return -1;
 
-  return ibob_ignore (bob);
+  return ibob_ignore (ibob);
 }
 
 /*! reset packet counter on next UTC second, returned */
-time_t ibob_arm (ibob_t* bob)
+time_t ibob_arm (ibob_t* ibob)
 {
   return 0;
 }
 
-int ibob_ignore (ibob_t* bob)
+int ibob_ignore (ibob_t* ibob)
 {
-  return ibob_recv (bob, bob->buffer, bob->buffer_size);
+  return ibob_recv (ibob, ibob->buffer, ibob->buffer_size);
 }
 
 /*! configure the ibob */
-int ibob_configure (ibob_t* bob, const char* mac_address)
+int ibob_configure (ibob_t* ibob, const char* mac_address)
 {
-  if (!bob)
+  if (!ibob)
     return -1;
 
-  if (bob->fd == -1)
+  if (ibob->fd == -1)
     return -1;
 
   int length = strlen (mac_address);
@@ -257,101 +265,101 @@ int ibob_configure (ibob_t* bob, const char* mac_address)
 
   free (maclow);
 
-  ibob_send (bob, "regwrite reg_ip 0x0a000004");
-  ibob_ignore (bob);
+  ibob_send (ibob, "regwrite reg_ip 0x0a000004");
+  ibob_ignore (ibob);
 
-  ibob_send (bob, "regwrite reg_10GbE_destport0 4001");
-  ibob_ignore (bob);
+  ibob_send (ibob, "regwrite reg_10GbE_destport0 4001");
+  ibob_ignore (ibob);
 
-  ibob_send (bob, "write l xd0000000 xffffffff");
-  ibob_ignore (bob);
+  ibob_send (ibob, "write l xd0000000 xffffffff");
+  ibob_ignore (ibob);
 
-  ibob_send (bob, "setb x40000000");
-  ibob_ignore (bob);
+  ibob_send (ibob, "setb x40000000");
+  ibob_ignore (ibob);
 
-  ibob_send (bob, "writeb l 0 x00000060");
-  ibob_ignore (bob);
+  ibob_send (ibob, "writeb l 0 x00000060");
+  ibob_ignore (ibob);
 
-  ibob_send (bob, "writeb l 4 xdd47e301");
-  ibob_ignore (bob);
+  ibob_send (ibob, "writeb l 4 xdd47e301");
+  ibob_ignore (ibob);
 
-  ibob_send (bob, "writeb l 8 x00000000");
-  ibob_ignore (bob);
+  ibob_send (ibob, "writeb l 8 x00000000");
+  ibob_ignore (ibob);
 
-  ibob_send (bob, "writeb l 12 x0a000001");
-  ibob_ignore (bob);
+  ibob_send (ibob, "writeb l 12 x0a000001");
+  ibob_ignore (ibob);
 
-  ibob_send (bob, "writeb b x16 x0f");
-  ibob_ignore (bob);
+  ibob_send (ibob, "writeb b x16 x0f");
+  ibob_ignore (ibob);
 
-  ibob_send (bob, "writeb b x17 xa0");
-  ibob_ignore (bob);
+  ibob_send (ibob, "writeb b x17 xa0");
+  ibob_ignore (ibob);
 
   char command [64];
   sprintf(command, "writeb l x3020 %s", macone);
-  ibob_send (bob, command);
-  ibob_ignore (bob);
+  ibob_send (ibob, command);
+  ibob_ignore (ibob);
   free (macone);
 
   sprintf(command, "writeb l x3024 %s", mactwo);
-  ibob_send (bob, command);
-  ibob_ignore (bob);
+  ibob_send (ibob, command);
+  ibob_ignore (ibob);
   free (mactwo);
 
-  ibob_send (bob, "writeb b x15 xff");
-  ibob_ignore (bob);
+  ibob_send (ibob, "writeb b x15 xff");
+  ibob_ignore (ibob);
 
-  ibob_send (bob, "write l xd0000000 x0");
-  ibob_ignore (bob);
+  ibob_send (ibob, "write l xd0000000 x0");
+  ibob_ignore (ibob);
 
   return 0;
 }
 
 /*! write bytes to ibob */
-ssize_t ibob_send (ibob_t* bob, const char* message)
+ssize_t ibob_send (ibob_t* ibob, const char* message)
 {
-  ssize_t wrote = ibob_send_async (bob, message);
+  ssize_t wrote = ibob_send_async (ibob, message);
 
   if (wrote < 0)
     return -1;
 
-  if (ibob_recv_echo (bob, wrote) < 0)
+  if (ibob_recv_echo (ibob, wrote) < 0)
     return -1;
 
   return wrote;
 }
 
 /*! write bytes to ibob */
-ssize_t ibob_send_async (ibob_t* bob, const char* message)
+ssize_t ibob_send_async (ibob_t* ibob, const char* message)
 {
-  if (!bob)
+  if (!ibob)
     return -1;
 
-  if (bob->fd == -1)
+  if (ibob->fd == -1)
     return -1;
 
   int length = strlen (message);
 
-  if (length+2 > bob->buffer_size)
+  if (length+2 > ibob->buffer_size)
   {
-    bob->buffer_size = length * 2;
-    bob->buffer = realloc (bob->buffer, bob->buffer_size);
+    ibob->buffer_size = length * 2;
+    ibob->buffer = realloc (ibob->buffer, ibob->buffer_size);
   }
 
-  snprintf (bob->buffer, bob->buffer_size, "%s\r", message);
+  snprintf (ibob->buffer, ibob->buffer_size, "%s\r", message);
   length ++;
 
-  return sock_write (bob->fd, bob->buffer, length);
+  return sock_write (ibob->fd, ibob->buffer, length);
 }
 
 /*! if emulating telnet, receive echoed characters */
-int ibob_recv_echo (ibob_t* bob, size_t length)
+int ibob_recv_echo (ibob_t* ibob, size_t length)
 {
-  if (!bob->emulate_telnet)
+  if (!ibob->emulate_telnet)
     return length;
 
   /* read the echoed characters */
-  ssize_t echo = ibob_recv (bob, bob->buffer, length);
+  ssize_t echo = ibob_recv (ibob, ibob->buffer, length);
   if (echo < length)
     return -1;
 
@@ -359,12 +367,12 @@ int ibob_recv_echo (ibob_t* bob, size_t length)
 }
 
 /*! read bytes from ibob */
-ssize_t ibob_recv (ibob_t* bob, char* ptr, size_t bytes)
+ssize_t ibob_recv (ibob_t* ibob, char* ptr, size_t bytes)
 {
-  if (!bob)
+  if (!ibob)
     return -1;
 
-  if (bob->fd == -1)
+  if (ibob->fd == -1)
     return -1;
 
   size_t total_got = 0;
@@ -373,9 +381,9 @@ ssize_t ibob_recv (ibob_t* bob, char* ptr, size_t bytes)
   while (bytes)
   {
     // do not time-out while emulating telnet (end-of-data = prompt reception)
-    if (bob->emulate_telnet)
+    if (ibob->emulate_telnet)
     {
-      got = sock_read (bob->fd, ptr+total_got, bytes);
+      got = sock_read (ibob->fd, ptr+total_got, bytes);
       char* prompt = strstr (ptr, ibob_prompt);
       if (prompt)
       {
@@ -385,7 +393,7 @@ ssize_t ibob_recv (ibob_t* bob, char* ptr, size_t bytes)
     }
     else
     {
-      got = sock_tm_read (bob->fd, ptr+total_got, bytes, 0.1);
+      got = sock_tm_read (ibob->fd, ptr+total_got, bytes, 0.1);
       if (got == 0)
       {
 	ptr[total_got] = '\0';
