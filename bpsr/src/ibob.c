@@ -310,6 +310,20 @@ int ibob_configure (ibob_t* bob, const char* mac_address)
 /*! write bytes to ibob */
 ssize_t ibob_send (ibob_t* bob, const char* message)
 {
+  ssize_t wrote = ibob_send_async (bob, message);
+
+  if (wrote < 0)
+    return -1;
+
+  if (ibob_recv_echo (bob, wrote) < 0)
+    return -1;
+
+  return wrote;
+}
+
+/*! write bytes to ibob */
+ssize_t ibob_send_async (ibob_t* bob, const char* message)
+{
   if (!bob)
     return -1;
 
@@ -327,19 +341,21 @@ ssize_t ibob_send (ibob_t* bob, const char* message)
   snprintf (bob->buffer, bob->buffer_size, "%s\r", message);
   length ++;
 
-  int wrote = sock_write (bob->fd, bob->buffer, length);
-  if (wrote < length)
+  return sock_write (bob->fd, bob->buffer, length);
+}
+
+/*! if emulating telnet, receive echoed characters */
+int ibob_recv_echo (ibob_t* bob, size_t length)
+{
+  if (!bob->emulate_telnet)
+    return length;
+
+  /* read the echoed characters */
+  ssize_t echo = ibob_recv (bob, bob->buffer, length);
+  if (echo < length)
     return -1;
 
-  if (bob->emulate_telnet)
-  {
-    /* read the echoed characters */
-    int echo = ibob_recv (bob, bob->buffer, length);
-    if (echo < length)
-      return -1;
-  }
-
-  return 0;
+  return echo;
 }
 
 /*! read bytes from ibob */

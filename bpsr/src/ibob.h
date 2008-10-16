@@ -88,6 +88,12 @@ extern "C" {
   /*! receive response from ibob, up to bytes characters */
   ssize_t ibob_recv (ibob_t* bob, char* response, size_t bytes);
 
+  /*! write bytes to ibob */
+  ssize_t ibob_send_async (ibob_t* bob, const char* message);
+
+  /*! if emulating telnet, receive echoed characters */
+  int ibob_recv_echo (ibob_t* bob, size_t bytes);
+
 #ifdef __cplusplus
 	   }
 #endif
