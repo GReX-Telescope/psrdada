@@ -17,5 +17,5 @@
 time_t start_observation( int(*start_routine)(void*), void* arg )
 {
   start_routine (arg);
-  return 0;
+  return time(0);
 }
