@@ -104,7 +104,7 @@ void* multibob_monitor (void* context)
     fprintf (stderr, "multibob_monitor: opening %s:%d\n",
              ibob->host, ibob->port);
 
-    if ( ibob_open (ibob) < 0 )
+    if ( !ibob_is_open(ibob) && ibob_open (ibob) < 0 )
     {
       fprintf (stderr, "multibob_monitor: could not open %s:%d - %s\n",
 	       ibob->host, ibob->port, strerror(errno));
@@ -184,10 +184,10 @@ int multibob_cmd_open (void* context, FILE* fptr, char* args)
     thread->id = 0;
     thread->quit = 0;
 
-    errno = pthread_create (&(thread->id), 0, multibob_monitor, thread);
-    if (errno)
+    int err = pthread_create (&(thread->id), 0, multibob_monitor, thread);
+    if (err)
       fprintf (stderr, "multibob_cmd_open: error starting thread %d - %s\n",
-	       ibob, strerror (errno));
+	       ibob, strerror (err));
   }
 }
 
@@ -248,16 +248,32 @@ int multibob_send (multibob_t* multibob, const char* message)
 {
   ssize_t length = 0;
 
+#ifdef _DEBUG
+  fprintf (stderr, "async send\n");
+#endif
+
   unsigned ibob = 0;
   for (ibob = 0; ibob < multibob->nthread; ibob++)
   {
     ibob_thread_t* thread = multibob->threads + ibob;
     if (ibob_is_open (thread->ibob))
       length = ibob_send_async (thread->ibob, message);
+
+#ifdef _DEBUG
+    fprintf (stderr, "sent %d len=%u\n", ibob, length);
+#endif
   }
+
+#ifdef _DEBUG
+  fprintf (stderr, "receive echo length %u\n", length);
+#endif
 
   for (ibob = 0; ibob < multibob->nthread; ibob++)
   {
+#ifdef _DEBUG
+    fprintf (stderr, "recv %d: %u\n", ibob, length);
+#endif
+
     ibob_thread_t* thread = multibob->threads + ibob;
     if (ibob_is_open (thread->ibob))
       ibob_recv_echo (thread->ibob, length);
@@ -266,8 +282,16 @@ int multibob_send (multibob_t* multibob, const char* message)
 
 int multibob_arm (void* context)
 {
+#ifdef _DEBUG
+  fprintf (stderr, "regwrite reg_arm 0\n");
+#endif
+
   multibob_t* multibob = context;
   multibob_send (multibob, "regwrite reg_arm 0");
+
+#ifdef _DEBUG
+  fprintf (stderr, "pause\n");
+#endif
 
   // pause for 10 milliseconds
   struct timeval pause;
@@ -275,9 +299,14 @@ int multibob_arm (void* context)
   pause.tv_usec=10000;
   select(0,NULL,NULL,NULL,&pause);
 
+#ifdef _DEBUG
+  fprintf (stderr, "regwrite reg_arm 1\n");
+#endif
   multibob_send (multibob, "regwrite reg_arm 1");
 }
 
+/* defined in start_observation.c */
+time_t start_observation( int(*start_routine)(void*), void* arg );
 
 /*! reset packet counter on next UTC second, returned */
 int multibob_cmd_arm (void* context, FILE* fptr, char* args)
@@ -285,11 +314,26 @@ int multibob_cmd_arm (void* context, FILE* fptr, char* args)
   unsigned ibob = 0;
   multibob_t* multibob = context;
 
+#ifdef _DEBUG
+fprintf (stderr, "locking\n");
+#endif
+
   multibob_lock (multibob);
+
+#ifdef _DEBUG
+fprintf (stderr, "locked\n");
+#endif
 
   time_t utc = start_observation (multibob_arm, context);
 
+#ifdef _DEBUG
+fprintf (stderr, "started\n");
+#endif
   multibob_unlock (multibob);
+
+#ifdef _DEBUG
+fprintf (stderr, "unlocked\n");
+#endif
 
   char date[64];
   strftime (date, 64, DADA_TIMESTR, gmtime(&utc));
@@ -322,17 +366,25 @@ void multibob_lock (multibob_t* multibob)
   /* quickly grab all locks at once */
   for (ibob = 0; ibob < multibob->nthread; ibob++)
   {
+#ifdef _DEBUG
+    fprintf (stderr, "multibob_lock: launch lock_thread %u\n", ibob);
+#endif
+
     ibob_thread_t* thread = multibob->threads + ibob;
-    errno = pthread_create (&(thread->lock), 0, lock_thread, thread);
-    if (errno)
+    int err = pthread_create (&(thread->lock), 0, lock_thread, thread);
+    if (err)
       fprintf (stderr, "multibob_lock: error starting lock_thread %d - %s\n",
-	       ibob, strerror (errno));
+	       ibob, strerror (err));
   }
 
   /* wait for the locks to be made */
   for (ibob = 0; ibob < multibob->nthread; ibob++)
   {
     ibob_thread_t* thread = multibob->threads + ibob;
+
+#ifdef _DEBUG
+    fprintf (stderr, "multibob_lock: join lock_thread %u\n", ibob);
+#endif
 
     void* result = 0;
     pthread_join (thread->lock, &result);
