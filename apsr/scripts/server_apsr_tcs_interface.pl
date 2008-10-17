@@ -1150,11 +1150,12 @@ sub addHostCommands(\%\%) {
   # Determine the BW & FREQ for each channel
   my $cf = int($tcs_cmds{"CFREQ"});         # centre frequency
   my $tbw = int($tcs_cmds{"BANDWIDTH"});    # total bandwidth
-  my $bw = -1 * ($tbw / int(NHOST));        # bandwidth per channel
+  my $bw = $tbw / int(NHOST);                # bandwidth per channel
 
   my $i=0;
-  for ($i=0; $i<NHOST; $i++) {
-    $tcs_cmds{"Band".$i."_BW"} = $bw;
+  for ($i=0; $i<NHOST; $i++)
+  {
+    $tcs_cmds{"Band".$i."_BW"} = -1 * $bw;
     $tcs_cmds{"Band".$i."_FREQ"} = $cf - ($tbw/2) + ($bw/2) + ($bw*$i);
   }
 
