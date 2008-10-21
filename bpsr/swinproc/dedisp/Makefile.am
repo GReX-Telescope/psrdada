@@ -13,4 +13,5 @@ dedisperse_all_LDADD = $(LDADD)
 
 INCLUDES = -I../
 
-AM_CXXFLAGS = -fopenmp
+AM_CXXFLAGS = @OPENMP_CFLAGS@
+
