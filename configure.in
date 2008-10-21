@@ -43,6 +43,7 @@ else
   fi
 fi
 
+AX_OPENMP
 SWIN_LIB_PGPLOT
 
 AC_CHECK_LIB([m], [sin])
