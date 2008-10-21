@@ -24,6 +24,7 @@ void usage()
      " -b n       number of milliseconds to load the cpu for each sublock\n"
      " -k key     connect to key data block\n"
      " -v         be verbose\n"
+     " -s         quit at end of data\n"
      " -d         run as daemon\n");
 }
 
@@ -122,7 +123,7 @@ int main (int argc, char **argv)
    * block */
   int busy_sleep = 0;
 
-  while ((arg=getopt(argc,argv,"dN:vk:")) != -1)
+  while ((arg=getopt(argc,argv,"dN:vk:s")) != -1)
     switch (arg) {
       
     case 'd':
@@ -143,8 +144,11 @@ int main (int argc, char **argv)
         return -1;
       }
       break;
-                                                                                
-      
+
+    case 's':
+      quit = 1;
+      break;
+
     default:
       usage ();
       return 0;
@@ -188,6 +192,9 @@ int main (int argc, char **argv)
     
     if (dada_client_read (client) < 0)
       multilog (log, LOG_ERR, "Error during transfer\n");
+
+    if (quit)
+      client->quit = 1;
 
   }
 
