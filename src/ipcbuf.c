@@ -790,88 +790,7 @@ int ipcbuf_unlock_read (ipcbuf_t* id)
   return 0;
 }
 
-char *ipcbuf_get_next_readable (ipcbuf_t* id, uint64_t* bytes) 
-{
-  uint64_t bufnum = 0;
-  uint64_t start_byte = 0;
-  ipcsync_t* sync = 0;
-
-  if (ipcbuf_eod (id))
-    return NULL;
-
-  sync = id->sync;
-
-  if (ipcbuf_is_reader (id))
-  {
-#ifdef _DEBUG          
-    fprintf (stderr, "ipcbuf_get_next_read: decrement FULL=%d\n",
-                     semctl (id->semid, IPCBUF_FULL, GETVAL));
-#endif
-
-    /* decrement the buffers written semaphore */
-    if (ipc_semop (id->semid, IPCBUF_FULL, -1, SEM_UNDO) < 0)
-    {
-      fprintf (stderr, "ipcbuf_get_next_read: error decrement FULL\n");
-      return NULL;
-    }
-
-    if (id->state == IPCBUF_READER)
-    {
-      id->xfer = sync->r_xfer % IPCBUF_XFERS;
-
-#ifdef _DEBUG
-      fprintf (stderr, "ipcbuf_get_next_read: xfer=%"PRIu64
-                       " start buf=%"PRIu64" byte=%"PRIu64"\n", sync->r_xfer,
-                       sync->s_buf[id->xfer],
-                       sync->s_byte[id->xfer]);
-#endif
-
-      id->state = IPCBUF_READING;
-      id->sync->r_state = IPCBUF_READING;
-
-      sync->r_buf = sync->s_buf[id->xfer];
-      start_byte = sync->s_byte[id->xfer];
-
-#ifdef _DEBUG
-    fprintf (stderr, "ipcbuf_get_next_read: increment SODACK=%d\n",
-                     semctl (id->semid, IPCBUF_SODACK, GETVAL));
-#endif
-
-      /* increment the start-of-data acknowlegement semaphore */
-      if (ipc_semop (id->semid, IPCBUF_SODACK, 1, SEM_UNDO) < 0)
-      {
-        fprintf (stderr, "ipcbuf_get_next_read: error increment SODACK\n");
-        return NULL;
-      }
-
-    }
-
-    bufnum = sync->r_buf;
-
-  }
-
-  bufnum %= sync->nbufs;
-                                                                                                                                                        
-  if (bytes)
-  {
-    if (sync->eod[id->xfer] && sync->r_buf == sync->e_buf[id->xfer])
-    {
-#ifdef _DEBUG
-      fprintf (stderr, "ipcbuf_get_next_read xfer=%d EOD=true and r_buf="
-                       "%"PRIu64" == e_buf=%"PRIu64"\n", (int)id->xfer,
-                       sync->r_buf, sync->e_buf[id->xfer]);
-#endif
-      *bytes = sync->e_byte[id->xfer] - start_byte;
-    }
-    else
-      *bytes = sync->bufsz - start_byte;
-  }
-
-  return id->buffer[bufnum] + start_byte;
-
-}
-
-char* ipcbuf_get_next_read (ipcbuf_t* id, uint64_t* bytes)
+char* ipcbuf_get_next_read_work (ipcbuf_t* id, uint64_t* bytes, int flag)
 {
   uint64_t bufnum;
   uint64_t start_byte = 0;
@@ -891,7 +810,7 @@ char* ipcbuf_get_next_read (ipcbuf_t* id, uint64_t* bytes)
 #endif
 
     /* decrement the buffers written semaphore */
-    if (ipc_semop (id->semid, IPCBUF_FULL, -1, 0) < 0) {
+    if (ipc_semop (id->semid, IPCBUF_FULL, -1, flag) < 0) {
       fprintf (stderr, "ipcbuf_get_next_read: error decrement FULL\n");
       return NULL;
     }
@@ -902,9 +821,9 @@ char* ipcbuf_get_next_read (ipcbuf_t* id, uint64_t* bytes)
 
 #ifdef _DEBUG
       fprintf (stderr, "ipcbuf_get_next_read: xfer=%"PRIu64
-	                     " start buf=%"PRIu64" byte=%"PRIu64"\n", sync->r_xfer,
-	                     sync->s_buf[id->xfer], 
-	                     sync->s_byte[id->xfer]);
+	       " start buf=%"PRIu64" byte=%"PRIu64"\n", sync->r_xfer,
+	       sync->s_buf[id->xfer], 
+	       sync->s_byte[id->xfer]);
 #endif
 
       id->state = IPCBUF_READING;
@@ -919,7 +838,7 @@ char* ipcbuf_get_next_read (ipcbuf_t* id, uint64_t* bytes)
 #endif
 
       /* increment the start-of-data acknowlegement semaphore */
-      if (ipc_semop (id->semid, IPCBUF_SODACK, 1, 0) < 0) {
+      if (ipc_semop (id->semid, IPCBUF_SODACK, 1, flag) < 0) {
         fprintf (stderr, "ipcbuf_get_next_read: error increment SODACK\n");
         return NULL;
       }
@@ -1015,6 +934,16 @@ char* ipcbuf_get_next_read (ipcbuf_t* id, uint64_t* bytes)
 }
 
 
+char* ipcbuf_get_next_read (ipcbuf_t* id, uint64_t* bytes)
+{
+  return ipcbuf_get_next_read_work (id, bytes, 0);
+}
+
+char* ipcbuf_get_next_readable (ipcbuf_t* id, uint64_t* bytes)
+{
+  return ipcbuf_get_next_read_work (id, bytes, SEM_UNDO);
+}
+
 uint64_t ipcbuf_tell (ipcbuf_t* id, uint64_t bufnum)
 {
   ipcsync_t* sync = id->sync;
@@ -1056,8 +985,6 @@ int64_t ipcbuf_tell_read (ipcbuf_t* id)
   else
     return 0;
 }
-
-
 
 int ipcbuf_mark_cleared (ipcbuf_t* id)
 {
