@@ -5,8 +5,10 @@
  *
  ***************************************************************************/
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 static int less_than (const void* aptr, const void* bptr)
 {
@@ -124,4 +126,7 @@ static int median_smooth_zap (unsigned ndat, TEMPLATE_TYPE* data,
       }
     }
   }
+
+  fprintf (stderr, "zapped %u spikes in %u iterations\n", total_zapped, round);
+  free (copy);
 }
