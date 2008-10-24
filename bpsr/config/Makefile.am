@@ -5,7 +5,7 @@ dist_data_DATA = bpsr.cfg \
                  bpsr.viewer \
                  ibob_default.cfg \
                  THEDECIMATOR \
-                 dbdisk.scratch
+                 bpsr.scratch
 
 nobase_dist_data_DATA = testing/BPSR_CAL.spec \
                         testing/BPSR.spec
