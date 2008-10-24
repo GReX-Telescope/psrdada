@@ -90,33 +90,38 @@ int file_open_function (dada_client_t* client)
   assert (header != 0);
 
   /* Get the UTC_START */
-  if (ascii_header_get (client->header, "UTC_START", "%s", utc_start) != 1) {
+  if (ascii_header_get (client->header, "UTC_START", "%s", utc_start) != 1)
+  {
     multilog (log, LOG_WARNING, "Header with no UTC_START\n");
     strcpy (utc_start, "UNKNOWN");
   }
 
   /* Get the OBS_OFFSET */
   if (ascii_header_get (client->header, "OBS_OFFSET", "%"PRIu64, &obs_offset) 
-      != 1) {
+      != 1)
+  {
     multilog (log, LOG_WARNING, "Header with no OBS_OFFSET\n");
     obs_offset = 0;
   }
 
   /* check to see if we are still working with the same observation */
   if ((strcmp (utc_start, dbdisk->utc_start) != 0) || 
-      (obs_offset != dbdisk->obs_offset)) {
+      (obs_offset != dbdisk->obs_offset))
+  {
     dbdisk->file_number = 0;
     multilog (log, LOG_INFO, "New UTC_START=%s, OBS_OFFSET=%"PRIu64" -> "
               "file number=0\n", utc_start, obs_offset);
   }
-  else {
+  else
+  {
     dbdisk->file_number++;
     multilog (log, LOG_INFO, "Continue UTC_START=%s, OBS_OFFSET=%"PRIu64" -> "
               "file number=%lu\n", utc_start, obs_offset, dbdisk->file_number);
   }
 
   /* Set the file number to be written to the header */
-  if (ascii_header_set (header, "FILE_NUMBER", "%u", dbdisk->file_number)<0) {
+  if (ascii_header_set (header, "FILE_NUMBER", "%u", dbdisk->file_number) < 0)
+  {
     multilog (log, LOG_ERR, "Error writing FILE_NUMBER\n");
     return -1;
   }
@@ -134,26 +139,31 @@ int file_open_function (dada_client_t* client)
 #endif
 
   /* create the current file name */
-  snprintf (dbdisk->file_name, FILENAME_MAX, "%s_%"PRIu64".%06u.dada", 
+  snprintf (dbdisk->file_name, FILENAME_MAX, "%s_%016"PRIu64".%06u.dada", 
             utc_start, obs_offset, dbdisk->file_number);
 
   /* Get the file size */
-  if (ascii_header_get (header, "FILE_SIZE", "%"PRIu64, &file_size) != 1) {
+  if (ascii_header_get (header, "FILE_SIZE", "%"PRIu64, &file_size) != 1)
+  {
     multilog (log, LOG_WARNING, "Header with no FILE_SIZE\n");
     file_size = DADA_DEFAULT_FILESIZE;
   }
 
   /* Get the resolution */
   uint64_t resolution;
-  if (ascii_header_get (header, "RESOLUTION", "%"PRIu64, &resolution) != 1) {
+  if (ascii_header_get (header, "RESOLUTION", "%"PRIu64, &resolution) != 1)
+  {
     multilog (log, LOG_WARNING, "Header with no RESOLUTION\n");
     resolution = 0;
   }
 
   /* If the data stream is packed with RESOLUTION */
-  if (resolution > 0) {
+  if (resolution > 0)
+  {
     uint64_t prev_res = (file_size / resolution) * resolution;
-    multilog (log, LOG_INFO, "FILESIZE = %"PRIu64", RESOLUTION = %"PRIu64", END BYTE = %"PRIu64"\n",file_size,resolution,(prev_res + resolution));
+    multilog (log, LOG_INFO, "FILESIZE = %"PRIu64", RESOLUTION = %"PRIu64","
+	      " END BYTE = %"PRIu64"\n",
+	      file_size,resolution,(prev_res + resolution));
     file_size = prev_res + resolution;
   }
 
@@ -165,7 +175,8 @@ int file_open_function (dada_client_t* client)
   fd = disk_array_open (dbdisk->array, dbdisk->file_name,
         		file_size, &optimal_bytes);
 
-  if (fd < 0) {
+  if (fd < 0)
+  {
     multilog (log, LOG_ERR, "Error opening %s: %s\n", dbdisk->file_name,
               strerror (errno));
     return -1;
@@ -202,8 +213,8 @@ int file_close_function (dada_client_t* client, uint64_t bytes_written)
     multilog (log, LOG_ERR, "Error closing %s: %s\n", 
               dbdisk->file_name, strerror(errno));
 
-  if (!bytes_written)  {
-
+  if (!bytes_written)
+  {
     multilog (log, LOG_ERR, "Removing empty file: %s\n", dbdisk->file_name);
 
     if (chmod (dbdisk->file_name, S_IRWXU) < 0)
@@ -213,7 +224,6 @@ int file_close_function (dada_client_t* client, uint64_t bytes_written)
     if (remove (dbdisk->file_name) < 0)
       multilog (log, LOG_ERR, "Error remove (%s): %s\n", 
         	dbdisk->file_name, strerror(errno));
-    
   }
 
   return 0;
