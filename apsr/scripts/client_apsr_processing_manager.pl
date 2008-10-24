@@ -13,6 +13,7 @@
 # 3.  Runs the PROCESSING_CMD in a system call, waiting for it to terminate
 # 4.  Rinse, Lather, Repeat.
 
+use lib $ENV{"DADA_ROOT"}."/bin";
 
 #
 # Include Modules
@@ -51,8 +52,7 @@ our $quit_daemon : shared  = 0;
 #
 my $logfile = $cfg{"CLIENT_LOG_DIR"}."/".LOGFILE;
 my $pidfile = $cfg{"CLIENT_CONTROL_DIR"}."/".PIDFILE;
-my $prev_utc_start = "";
-my $prev_obs_offset = "";
+my $prev_header = "";
 my $quit = 0;
 my $daemon_quit_file = Dada->getDaemonControlFile($cfg{"CLIENT_CONTROL_DIR"});
 my $daemon_control_thread = "";
@@ -85,15 +85,13 @@ if (!(-f $daemon_quit_file)) {
 
   # This thread will monitor for our daemon quit file
   $daemon_control_thread = threads->new(\&daemon_control_thread, "dada_header");
-  #$daemon_control_thread->detach();
-
-  $load_control_thread = threads->new(\&load_control_thread);
+  $load_control_thread   = threads->new(\&load_control_thread);
 
   # Main Loop
   while( (!($quit)) && (!(-f $daemon_quit_file)) ) {
 
     # Run the processing thread once
-    ($quit, $prev_utc_start, $prev_obs_offset) = processing_thread($prev_utc_start, $prev_obs_offset);
+    ($quit, $prev_header) = processing_thread($prev_header);
 
   }
 
@@ -104,28 +102,25 @@ if (!(-f $daemon_quit_file)) {
   exit(0);
 
 } else {
+
   logMessage(0,"INFO", "STOPPING SCRIPT");
   Dada->nexusLogClose($log_socket);
 
-  exit(-1);
+  exit(1);
+
 }
 
 
-sub processing_thread($$) {
+sub processing_thread($) {
 
-  (my $prev_utc_start, my $prev_obs_offset) = @_;
+  (my $prev_header) = @_;
 
   my $bindir = Dada->getCurrentBinaryVersion();
   my $dada_header_cmd = $bindir."/".DADA_HEADER_BINARY;
   my $proc_log = $cfg{"CLIENT_LOGS_DIR"}."/dspsr.log";
   my $processing_dir = $cfg{"CLIENT_ARCHIVE_DIR"};
-  my $utc_start = "";
-  my $obs_offset = "";
-  my $proc_cmd_file = "";
-  my $proj_id = "";
-  my $centre_freq = "";
 
-  my %current_header = ();
+  my %h = ();
   my @lines = ();
   my $line = "";
   my $key = "";
@@ -143,57 +138,93 @@ sub processing_thread($$) {
   # signal to dada_header_cmd, we should check the return value
   if ($? == 0) {
 
+    my $proc_cmd = "";
+
     @lines = split(/\n/,$raw_header);
     foreach $line (@lines) {
       ($key,$val) = split(/ +/,$line,2);
       if ((length($key) > 1) && (length($val) > 1)) {
         # Remove trailing whitespace
         $val =~ s/\s*$//g;
-        $current_header{$key} = $val;
+        $h{$key} = $val;
       }
     }
 
-    $utc_start     = $current_header{"UTC_START"};
-    $obs_offset    = $current_header{"OBS_OFFSET"};
-    $proc_cmd_file = $current_header{"PROC_FILE"};
-    $centre_freq   = $current_header{"FREQ"};
-    $proj_id       = $current_header{"PID"};
+    my $header_ok = 1;
 
-    if (length($utc_start) < 5) {
+    if (length($h{"UTC_START"}) < 5) {
       logMessage(0, "ERROR", "UTC_START was malformed or non existent");
+      $header_ok = 0;
     }
-    if (length($obs_offset) < 1) {
+    if (length($h{"OBS_OFFSET"}) < 1) {
       logMessage(0, "ERROR", "Error: OBS_OFFSET was malformed or non existent");
+      $header_ok = 0;
     }
-    if (length($proc_cmd_file) < 1) {
-      logMessage(0, "ERROR", "PROC_CMD_FILE was malformed or non existent");
+    if (length($h{"PROC_FILE"}) < 1) {
+      logMessage(0, "ERROR", "PROC_FILE was malformed or non existent");
+      $header_ok = 0;
     }
 
-    if (($utc_start eq $prev_utc_start) && ($obs_offset eq $prev_obs_offset)) {
-      logMessage(0, "ERROR", "The UTC_START and OBS_OFFSET has been repeated");
+    # test if the source is in the catalogue
+    $cmd = "psrcat -x -c DM ".$h{"SOURCE"};
+    my $str = `$cmd`;
+    chomp $str;
+                                                                                                                                          
+    # Check to see if the source is in the catalogue
+    if ($str =~ m/not in catalogue/) {
+      logMessage(0, "ERROR", $h{"SOURCE"}." was not in psrcat's catalogue");
+      $header_ok = 0;
     }
-                                                                                                                
-    $time_str = Dada->getCurrentDadaTime();
 
-    $processing_dir .= "/".$utc_start."/".$centre_freq;
+    if ($raw_header eq $prev_header) {
 
-    # This should not be requried as the observation manager should be creating
-    # this directory for us
-    if (! -d ($processing_dir)) {
-      logMessage(0, "WARN", "The archive directory was not created by the ".
+      logMessage(0, "ERROR", "DADA header repeated, likely cause failed PROC_CMD, jettesioning xfer");
+      $proc_cmd = "dada_dbnull -s -k ".lc($cfg{"PROCESSING_DATA_BLOCK"});
+
+    } elsif (! $header_ok) {
+
+      logMessage(0, "ERROR", "DADA header malformed, jettesioning xfer");
+      $proc_cmd = "dada_dbnull -s -k ".lc($cfg{"PROCESSING_DATA_BLOCK"});
+
+    } else {
+
+      $time_str = Dada->getCurrentDadaTime();
+      
+      $processing_dir .= "/".$h{"UTC_START"}."/".$h{"FREQ"};
+
+      # This should not be requried as the observation manager should be creating
+      # this directory for us
+      if (! -d ($processing_dir)) {
+        logMessage(0, "WARN", "The archive directory was not created by the ".
                  "observation manager: \"".$processing_dir."\"");
-      `mkdir -p $processing_dir`;
-      `chmod g+s $processing_dir`;
-      `chgrp -R $proj_id $processing_dir`;
-    }
+        system("mkdir -p ".$processing_dir);
+        system("chmod g+s ".$processing_dir);
+        system("chgrp -R ".$h{"PID"}." ".$processing_dir);
+      }
 
-    # Add the dada header file to the proc_cmd
-    $proc_cmd_file = $cfg{"CONFIG_DIR"}."/".$proc_cmd_file;
-    my %proc_cmd_hash = Dada->readCFGFile($proc_cmd_file);
-    my $proc_cmd = $proc_cmd_hash{"PROC_CMD"};
+      # Add the dada header file to the proc_cmd
+      my $proc_cmd_file = $cfg{"CONFIG_DIR"}."/".$h{"PROC_FILE"};
+      my %proc_cmd_hash = Dada->readCFGFile($proc_cmd_file);
+      $proc_cmd = $proc_cmd_hash{"PROC_CMD"};
 
-    if ($proc_cmd =~ m/dspsr/) {
-      $proc_cmd .= " ".$cfg{"PROCESSING_DB_KEY"};
+      if ($proc_cmd =~ m/SELECT/) {
+
+        logMessage(0, "INFO", "dspsr option SELECT detected");
+        my $dspsr_cmd = "dspsr_command_line.pl ".$h{"SOURCE"}." ".$h{"BW"}.
+                        " ".$h{"FREQ"}." ".$h{"MODE"};
+  
+        logMessage(0, "INFO", "determining command line: ".$dspsr_cmd);
+        my $dspsr_options = `$dspsr_cmd`;
+        chomp $dspsr_options;
+        logMessage(0, "INFO", "result was : ".$dspsr_options);
+
+        $proc_cmd =~ s/SELECT/$dspsr_options/;
+        logMessage(0, "INFO", "new proc_cmd : ".$proc_cmd);
+      }
+
+      if ($proc_cmd =~ m/dspsr/) {
+        $proc_cmd .= " ".$cfg{"PROCESSING_DB_KEY"};
+      }
     }
 
     # Create an obs.start file in the processing dir:
@@ -211,7 +242,7 @@ sub processing_thread($$) {
     my $returnVal = system($cmd);
 
     if ($returnVal != 0) {
-      logMessage(0, "WARN", "Processing command dspsr failed: ".$?." ".$returnVal);
+      logMessage(0, "WARN", "Processing command failed: ".$?." ".$returnVal);
     }
     $time_str = Dada->getCurrentDadaTime();
     logMessage(1, "INFO", "END ".$proc_cmd);
@@ -219,14 +250,13 @@ sub processing_thread($$) {
     $dspsr_start_time = 0;
     logMessage(2, "INFO", "Setting dspsr_start_time = ".$dspsr_start_time);
 
-
-    (return 0, $utc_start, $obs_offset);
+    return (0, $raw_header);
 
   } else {
 
     logMessage(2, "INFO", "dada_header_cmd failed!, rval = ".$?);
     sleep 1;
-    return (0,$utc_start, $obs_offset);
+    return (0, "");
 
   }
 }

@@ -12,7 +12,7 @@
 
 use lib $ENV{"DADA_ROOT"}."/bin";
 
-use Dada;           # DADA Module for configuration options
+use Apsr;           # DADA Module for configuration options
 use strict;         # strict mode (like -Wall)
 use File::Basename;
 
@@ -29,7 +29,7 @@ use constant DEFAULT_GAIN  => 2000;
 #
 # Global Variable Declarations
 #
-our %cfg = Dada->getDadaConfig();      # dada.cfg in a hash
+our %cfg = Apsr->getApsrConfig();      # dada.cfg in a hash
 our $socket;
 our $log_fh;
 
@@ -76,7 +76,8 @@ if (!$socket) {
  
   if ($chan eq "all") {
 
-    for ($i=0; $i<$cfg{"NUM_PWC"};$i++) {
+    #for ($i=0; $i<$cfg{"NUM_PWC"};$i++) {
+    for ($i=0; $i<16;$i++) {
      print "GAIN: [$i,0] = ".set_dfb3_gain($socket, $i, $pol, $gain)."\n";
     }
 

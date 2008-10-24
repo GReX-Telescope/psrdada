@@ -5,8 +5,9 @@
 # Created:  29 Feb, 2008
 #
 # This script produces the 3 standard plots used by the web 
-#front end
-# current observation
+# front end
+
+use lib $ENV{"DADA_ROOT"}."/bin";
 
 
 use strict;               # strict mode (like -Wall)

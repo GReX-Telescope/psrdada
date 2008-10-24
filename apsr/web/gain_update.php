@@ -16,7 +16,7 @@ if (DEBUG > 0)
 list($socket, $result) = openSocket(HOST,PORT, 10);
                                                                                                                  
 if ($result != "ok") {
-  echo "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 ";
+  echo "50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 ";
   if (DEBUG > 0) {
     echo $result."<BR>\n";
     flush();

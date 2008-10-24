@@ -1,5 +1,7 @@
 #!/usr/bin/env perl
 
+use lib $ENV{"DADA_ROOT"}."/bin";
+
 use IO::Socket;     # Standard perl socket library
 use Net::hostent;
 use Apsr;           # APSR/DADA Module for configuration options

@@ -4,6 +4,7 @@
 
 define(DADA_ROOT,  "/home/dada/linux_64");
 define(WEB_BASE,   DADA_ROOT."/web/apsr");
+define(INSTRUMENT, "apsr");
 
 define(STATUS_FILE_DIR, WEB_BASE."/status");
 define(PLOT_DIR,        WEB_BASE."/plots");

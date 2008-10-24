@@ -25,7 +25,7 @@ use threads::shared;
 # Constants
 #
 use constant DEBUG_LEVEL  => 1;
-use constant INITIAL_GAIN => 2000;
+use constant INITIAL_GAIN => 50;
 use constant PIDFILE      => "apsr_gain_manager.pid";
 use constant LOGFILE      => "apsr_gain_manager.log";
 
@@ -95,8 +95,8 @@ $channel_mappings[10] = 10;
 $channel_mappings[11] = 11;
 $channel_mappings[12] = 12;
 $channel_mappings[13] = 13;
-$channel_mappings[14] = 14;
-$channel_mappings[15] = 15;
+$channel_mappings[14] = 15;
+$channel_mappings[15] = 14;
 
 
 
@@ -198,7 +198,7 @@ while (!$quit_daemon) {
       my $hostinfo = gethostbyaddr($handle->peeraddr);
       my $hostname = $hostinfo->name;
 
-      debugMessage(1, "Accepting connection from ".$hostname);
+      debugMessage(2, "Accepting gain request connection from ".$hostname);
 
       # Add this read handle to the set
       $read_set->add($handle);
@@ -232,7 +232,7 @@ while (!$quit_daemon) {
       # remove it from the read_set
       if (! defined $string) {
 
-        debugMessage(1, "Lost connection from ".$hostname.", closing socket");
+        debugMessage(2, "Lost connection from ".$hostname.", closing socket");
         $read_set->remove($rh);
         close($rh);
 
@@ -294,6 +294,8 @@ while (!$quit_daemon) {
 
           print $rh $dfb3_response."\r\n";
           debugMessage(2, $machine." <- ".$dfb3_response);
+
+          debugMessage(1, $machine." -> ".$string."... ".$dfb3_response);
 
           if ($pol == 0) {
             @pol0_gains[$chan] = $val;

@@ -1,0 +1,26 @@
+#!/bin/tcsh
+perl -c Apsr.pm
+perl -c apsr_reconfigure.pl
+perl -c client_apsr_archive_manager.pl
+perl -c client_apsr_aux_manager.pl
+perl -c client_apsr_background_processor.pl
+perl -c client_apsr_command.pl
+perl -c client_apsr_gain_controller.pl
+perl -c client_apsr_master_control.pl
+perl -c client_apsr_monitor.pl
+perl -c client_apsr_observation_manager.pl
+perl -c client_apsr_processing_manager.pl
+perl -c client_apsr_src_logger.pl
+perl -c client_apsr_sys_logger.pl
+perl -c dspsr_command_line.pl
+perl -c gain_hacker.pl
+perl -c server_apsr_aux_manager.pl
+perl -c server_apsr_create_plots.pl
+perl -c server_apsr_dfb_gain_simulator.pl
+perl -c server_apsr_gain_manager.pl
+perl -c server_apsr_process_result.pl
+perl -c server_apsr_pwc_monitor.pl
+perl -c server_apsr_results_manager.pl
+perl -c server_apsr_src_monitor.pl
+perl -c server_apsr_sys_monitor.pl
+perl -c server_apsr_tcs_interface.pl

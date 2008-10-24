@@ -68,8 +68,9 @@ if ($machine == "nexus") {
     # We are looking at one of the nexus.???.log files, need to replace nexus with the
     # machine name
 
+    $trans = array("nexus" => $machine);
     $logfile = $pwc_config["SERVER_LOG_DIR"]."/".strtr($server_daemons[$daemon]["logfile"],$trans);
-    $log_tag = $client_daemons[$daemon]["tag"];
+    $log_tag = "*";
 
   }
 

@@ -8,6 +8,9 @@
 # to files on the server. Messages conatin a severity and a text string. 
 #
 
+use lib $ENV{"DADA_ROOT"}."/bin";
+
+
 use IO::Socket;     # Standard perl socket library
 use IO::Select;     # Allows select polling on a socket
 use Net::hostent;

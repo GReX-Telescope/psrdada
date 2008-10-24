@@ -9,6 +9,8 @@
 # statistics to ganglia
 #
 
+use lib $ENV{"DADA_ROOT"}."/bin";
+
 #
 # Include Modules
 #

@@ -21,20 +21,26 @@ if (file_exists($obs_info)) {
 
   $header = getConfigFile($obs_info);
 
-  # Determine the Period (P0)
-  $cmd = "source /home/dada/.bashrc; ".$bin_dir."/psrcat -x -c \"P0\" ".$header["SOURCE"]." | awk '{print \$1}'";
-  $P0 = rtrim(`$cmd`);
-  if ($P0 == "WARNING:") {
-    $P0 = "N/A";
-  } else {
-    $P0 *= 1000;
-  }
+  $P0 = "N/A";
+  $DM = "N/A";
 
-  # And the DM
-  $cmd = "source /home/dada/.bashrc; ".$bin_dir."/psrcat -x -c \"DM\" ".$header["SOURCE"]." | awk '{print \$1}'";
-  $DM = rtrim(`$cmd`);
-  if ($DM == "WARNING:") {
-    $DM = "N/A";
+  if (count($header["SOURCE"]) > 0) {
+  
+  # Determine the Period (P0)
+    $cmd = "source /home/dada/.bashrc; ".$bin_dir."/psrcat -x -c \"P0\" ".$header["SOURCE"]." | awk '{print \$1}'";
+    $P0 = rtrim(`$cmd`);
+    if ($P0 == "WARNING:") {
+      $P0 = "N/A";
+    } else {
+      $P0 *= 1000;
+    }
+
+    # And the DM
+    $cmd = "source /home/dada/.bashrc; ".$bin_dir."/psrcat -x -c \"DM\" ".$header["SOURCE"]." | awk '{print \$1}'";
+    $DM = rtrim(`$cmd`);
+    if ($DM == "WARNING:") {
+      $DM = "N/A";
+    }
   }
 
   echo "SOURCE:::".$header["SOURCE"].";;;";

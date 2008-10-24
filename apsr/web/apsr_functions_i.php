@@ -24,7 +24,7 @@ function getClientLogInformation() {
   $arr["apsr_archive_manager"]      = array("logfile" => "nexus.sys.log", "name" => "Archive Mngr", "tag" => "arch mngr");
   $arr["apsr_background_processor"] = array("logfile" => "nexus.sys.log", "name" => "BG Processor", "tag" => "bg mngr");
   $arr["apsr_gain_monitor"]         = array("logfile" => "nexus.sys.log", "name" => "Gain Mon", "tag" => "gain mon");
-  $arr["apsr_aux_manager"]          = array("logfile" => "nexus.sys.log", "name" => "Aux Mngr", "tag" => "aux mngr");
+  $arr["apsr_aux_monitor"]          = array("logfile" => "nexus.sys.log", "name" => "Aux Mon", "tag" => "aux mngr");
   $arr["apsr_processing_manager"]   = array("logfile" => "nexus.src.log", "name" => "Proc Mngr", "tag" => "proc mngr");
   $arr["processor"]                 = array("logfile" => "nexus.src.log", "name" => "Processor", "tag" => "proc");
 

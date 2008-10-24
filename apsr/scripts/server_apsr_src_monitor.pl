@@ -1,5 +1,8 @@
 #!/usr/bin/env perl
 
+use lib $ENV{"DADA_ROOT"}."/bin";
+
+
 ###############################################################################
 #
 # server_src_monitor.pl

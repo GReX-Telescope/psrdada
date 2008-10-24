@@ -9,6 +9,9 @@
 # assistive processing for primary nodes
 #
 
+use lib $ENV{"DADA_ROOT"}."/bin";
+
+
 use IO::Socket;     # Standard perl socket library
 use IO::Select;     # Allows select polling on a socket
 use Net::hostent;

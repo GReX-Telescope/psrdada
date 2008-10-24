@@ -9,6 +9,8 @@
 # have been written to disk. It will process 1 file at a time only use CPU
 # such that there is always 1 core left spare
 
+use lib $ENV{"DADA_ROOT"}."/bin";
+
 
 #
 # Include Modules
@@ -127,6 +129,8 @@ if (!(-f $daemon_quit_file)) {
         my $utc_start = "unknown";
         my $centre_freq = "unknown";
         my $mode = "PSR";
+        my $source = "unknown";
+        my $bw = 0;
 
         @lines = split(/\n/,$raw_header);
 
@@ -144,17 +148,17 @@ if (!(-f $daemon_quit_file)) {
             if ($key eq "FREQ") {
               $centre_freq = $val;
             }
-
             if ($key eq "MODE") {
               $mode = $val;
             }
+            if ($key eq "SOURCE") {
+              $source = $val;
+            }
+            if ($key eq "BW") {
+              $bw = $val;
+            }
           }
         }
-
-        # If running a CAL do it on 1 thread only.
-        #if ($mode eq "CAL") {
-        #  $num_cores_available = 1;
-        #}
 
         # Add the dada header file to the proc_cmd
         $proc_file = $cfg{"CONFIG_DIR"}."/".$proc_file;
@@ -173,6 +177,20 @@ if (!(-f $daemon_quit_file)) {
         } else {
           $proc_cmd .= " -t ".$num_cores_available;
         }
+ 
+        if ($proc_cmd =~ m/SELECT/) {
+          logMessage(0, "INFO", "dspsr option SELECT detected");
+          my $dspsr_cmd = "dspsr_command_line.pl ".$source." ".$bw." ".$centre_freq." ".$mode;
+
+          logMessage(0, "INFO", "determining command line: ".$dspsr_cmd);
+          my $dspsr_options = `$dspsr_cmd`;
+          chomp $dspsr_options;
+          logMessage(0, "INFO", "result was : ".$dspsr_options);
+
+          $proc_cmd =~ s/SELECT/$dspsr_options/;
+          logMessage(0, "INFO", "new proc_cmd : ".$proc_cmd);
+
+        }
 
         $proc_cmd .= " ".$file_to_process;
 
@@ -189,12 +207,11 @@ if (!(-f $daemon_quit_file)) {
         chdir $archive_dir;
   
         if ($result eq "ok") {
-          logMessage(0, "INFO", $file_to_process." successfully processed");
-
-          #my $cmd = "mv ".$file_to_process." ".$cfg{"CLIENT_SCRATCH_DIR"};
-          #`$cmd`;
-          unlink($file_to_process);
+          logMessage(1, "INFO", "Processed file: ".$file_to_process);
+        } else {
+          logMessage(0, "ERROR", "Failed to process file, deleting ".$file_to_process);
         }
+        unlink($file_to_process);
 
       } else {
         logMessage(2, "INFO", "File awaiting processing: ".$file_to_process);
@@ -265,6 +282,8 @@ sub processOneFile($$) {
 
     if ($? == 0) {
       $result = "ok";
+    } else {
+      $result = "fail";
     }
     
     # Reset the processing pid to 0

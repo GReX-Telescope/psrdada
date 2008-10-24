@@ -1,1 +1,1 @@
-PROC_CMD dspsr -q -t 8 -F128:128 -x 128 -U 1.125 -L 10
+PROC_CMD dspsr -Q -t 8 SELECT -2c100 -L 10

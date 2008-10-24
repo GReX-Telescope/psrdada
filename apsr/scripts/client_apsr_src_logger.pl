@@ -63,16 +63,16 @@ if (!$log_socket) {
   print "Could not open a connection to the nexus SRC log: $log_socket\n";
 }
 
-open $log_fh, ">>".$logfile;
+#open $log_fh, ">>".$logfile;
 
 while (defined($line = <STDIN>)) {
 
   chomp $line;
-  logMessage(0,$type,$line);
+  logMessage(0,$type,$line, $logfile);
 
 }
 
-close $log_fh;
+#close $log_fh;
 
 exit 0;
 
@@ -80,8 +80,8 @@ exit 0;
 #
 # Logs a message to the Nexus
 #
-sub logMessage($$$) {
-  (my $level, my $type, my $message) = @_;
+sub logMessage($$$$) {
+  (my $level, my $type, my $message, my $logfile) = @_;
   if ($level <= DEBUG_LEVEL) {
     my $time = Dada->getCurrentDadaTime();
     if (!($log_socket)) {
@@ -90,7 +90,9 @@ sub logMessage($$$) {
     if ($log_socket) {
       Dada->nexusLogMessage($log_socket, $time, "src", $type, "proc", $message);
     }
+    open $log_fh, ">>".$logfile;
     print $log_fh "[".$time."] ".$message."\n";
+    close $log_fh
   }
 }
 

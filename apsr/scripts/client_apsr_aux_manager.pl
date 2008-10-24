@@ -48,8 +48,7 @@ our $quit_daemon : shared = 0;
 #
 my $logfile = $cfg{"CLIENT_LOG_DIR"}."/".LOGFILE;
 my $pidfile = $cfg{"CLIENT_CONTROL_DIR"}."/".PIDFILE;
-my $prev_utc_start = "";
-my $prev_obs_offset = "";
+my $prev_header = "";
 my $daemon_quit_file = Dada->getDaemonControlFile($cfg{"CLIENT_CONTROL_DIR"});
 my $daemon_control_thread = "";
 my $proc_thread = "";
@@ -77,13 +76,12 @@ if (!(-f $daemon_quit_file)) {
 
   # This thread will monitor for our daemon quit file
   $daemon_control_thread = threads->new(\&daemon_control_thread, "dada_header");
-  #$daemon_control_thread->detach();
 
   # Main Loop
   while(!$quit_daemon) {
 
     # Run the processing thread once
-    ($prev_utc_start, $prev_obs_offset) = processing_thread($prev_utc_start, $prev_obs_offset);
+    $prev_header = processing_thread($prev_header);
     sleep(1);
 
   }
@@ -103,26 +101,26 @@ if (!(-f $daemon_quit_file)) {
 }
 
 
-sub processing_thread($$) {
+sub processing_thread($) {
 
-  (my $prev_utc_start, my $prev_obs_offset) = @_;
+  (my $prev_header) = @_;
 
   my $bindir = Dada->getCurrentBinaryVersion();
   my $dada_header_cmd = $bindir."/".DADA_HEADER_BINARY;
   my $processing_dir = $cfg{"CLIENT_ARCHIVE_DIR"};
   my $raw_data_dir = $cfg{"CLIENT_RECORDING_DIR"};
-  my $utc_start = "";
-  my $obs_offset = "";
-  my $proc_cmd = "";
-  my $proj_id = "";
 
-  my %current_header = ();
+  my %h = ();
   my @lines = ();
   my $line = "";
   my $key = "";
   my $val = "";
   my $raw_header = "";
   my $cmd = "";
+
+  # Get the projects/groups that apsr is a member of
+  my $unix_groups = `groups`;
+  chomp $unix_groups;
 
   # Get the next filled header on the data block. Note that this may very
   # well hang for a long time - until the next header is written...
@@ -133,68 +131,82 @@ sub processing_thread($$) {
   # signal to dada_header_cmd, we should check the return value
   if ($? == 0) {
 
+    my $proc_cmd = "";
+
     @lines = split(/\n/,$raw_header);
     foreach $line (@lines) {
       ($key,$val) = split(/ +/,$line,2);
       if ((length($key) > 1) && (length($val) > 1)) {
         # Remove trailing whitespace
         $val =~ s/\s*$//g;
-        $current_header{$key} = $val;
+        $h{$key} = $val;
       }
     }
 
-    $utc_start  = $current_header{"UTC_START"};
-    $obs_offset = $current_header{"OBS_OFFSET"};
-    $proj_id    = $current_header{"PID"};
-
-    if (length($utc_start) < 5) {
+    my $header_ok = 1;
+    if (length($h{"UTC_START"}) < 5) {
       logMessage(0, "ERROR", "UTC_START was malformed or non existent");
+      $header_ok = 0;
     }
-    if (length($obs_offset) < 1) {
+    if (length($h{"OBS_OFFSET"}) < 1) {
       logMessage(0, "ERROR", "Error: OBS_OFFSET was malformed or non existent");
+      $header_ok = 0;
+    }
+    if ($unix_groups =~ m/$h{"PID"}/) {
+      logMessage(0, "ERROR", "Error: APSR user was not a member of ".$h{"PID"}." group");
+      $header_ok = 0;
     }
 
-    if (($utc_start eq $prev_utc_start) && ($obs_offset eq $prev_obs_offset)) {
-      logMessage(0, "ERROR", "The UTC_START and OBS_OFFSET has been repeated");
-    }
-
-
-    logMessage(2, "INFO", "asking for aux nodes");
-    # Check if any auxiliary nodes are available for processing 
-    my $node = auxiliaryNodesAvailable();
-    logMessage(2, "INFO", "response was ".$node);
-
-    # We got a free node, run dbnic on the xfer
-    if ($node =~ /apsr(\d\d):(\d+)/) {
-
-      logMessage(2, "INFO", "Sending data to ".$node);
-      $proc_cmd = $bindir."/dada_dbnic -k fada -s -N ".$node;
-
-    # If no nodes are available, run dbdisk on the xfer
+    if ($raw_header eq $prev_header) {
+                                                                                                                 
+      logMessage(0, "ERROR", "DADA header repeated, likely cause failed PROC_CMD, jettesioning xfer");
+      $proc_cmd = "dada_dbnull -s -k ".lc($cfg{"PROCESSING_DATA_BLOCK"});
+                                                                                                                 
+    } elsif (! $header_ok) {
+                                                                                                                 
+      logMessage(0, "ERROR", "DADA header malformed, jettesioning xfer");
+      $proc_cmd = "dada_dbnull -s -k ".lc($cfg{"PROCESSING_DATA_BLOCK"});
+                                                                                                                 
     } else {
 
-      $proc_cmd = $bindir."/dada_dbdisk -k fada -s -D ".$raw_data_dir;
+      logMessage(2, "INFO", "asking for aux nodes");
+      # Check if any auxiliary nodes are available for processing 
+      my $node = auxiliaryNodesAvailable();
+      logMessage(2, "INFO", "response was ".$node);
 
-    }
+      # We got a free node, run dbnic on the xfer
+      if ($node =~ /apsr(\d\d):(\d+)/) {
 
-    # Create an obs.start file in the processing dir:
-    logMessage(0, "INFO", "START $proc_cmd");
+        logMessage(2, "INFO", "Sending data to ".$node);
+        $proc_cmd = $bindir."/dada_dbnic -k fada -s -N ".$node;
 
-    my $response = `$proc_cmd`;
+      # If no nodes are available, run dbdisk on the xfer
+      } else {
+
+        $proc_cmd = $bindir."/dada_dbdisk -k fada -s -D ".$raw_data_dir;
+
+      }
+
+      # Create an obs.start file in the processing dir:
+      logMessage(0, "INFO", "START $proc_cmd");
+
+      my $response = `$proc_cmd`;
     
-    if ($? != 0) {
-      logMessage(0, "ERROR", "Aux cmd \"".$proc_cmd."\" failed \"".$response."\"");
+      if ($? != 0) {
+        logMessage(0, "ERROR", "Aux cmd \"".$proc_cmd."\" failed \"".$response."\"");
+      }
+
+      logMessage(0, "INFO", "END ".$proc_cmd);
+
     }
 
-    logMessage(0, "INFO", "END ".$proc_cmd);
-
-    return ($utc_start, $obs_offset);
+    return ($raw_header);
 
   } else {
 
     logMessage(2, "WARN", "dada_header_cmd failed - probably no data block");
     sleep 1;
-    return ($utc_start, $obs_offset);
+    return ("");
 
   }
 }

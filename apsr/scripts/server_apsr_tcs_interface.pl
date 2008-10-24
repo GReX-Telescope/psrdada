@@ -46,7 +46,7 @@ use constant LOGFILE            => "apsr_tcs_interface.log";
 use constant PWCC_LOGFILE       => "dada_pwc_command.log";
 use constant DFBSIM_DURATION    => "3600";    # Simulator runs for 1 hour
 use constant TERMINATOR         => "\r";
-use constant NHOST              => 16;        # This is constant re DFB3
+use constant NHOST              => 15;        # This is constant re DFB3
 
 #
 # Global Variables
@@ -271,6 +271,13 @@ while (!$quit_threads) {
             # quit/kill the current daemon
             quit_pwc_command();
 
+            # Clear the /apsr/status files
+            my $cmd = "rm -f ".$cfg{"STATUS_DIR"}."/*";
+            ($result, $response) = Dada->mySystem($cmd);
+            if ($result ne "ok") {
+              logMessage(0, "Could not delete status files: $response");
+            }
+
             # Add the extra commands/config for each PWC
             %tcs_cmds = addHostCommands(\%tcs_cmds, \%site_cfg);
 
@@ -278,18 +285,18 @@ while (!$quit_threads) {
             ($result, $response) = generateConfigFile($cfg{"CONFIG_DIR"}."/apsr_tcs.cfg", \%tcs_cmds);
             logMessage(0, "generateConfigFile: ".$result.":".$response); 
 
-            # rejoin the pwcc command thread
+            # pwcc should have exite by now, rejoin thread
             $pwcc_thread->join();
 
             # Now that we have a successful header. Launch dada_pwc_command in
             $pwcc_thread = threads->new(\&pwcc_thread);
 
-            # Create the tcs.spec file to launch dada_pwc_command
-            ($result, $response) = generateSpecificationFile($cfg{"CONFIG_DIR"}."/tcs.spec", \%tcs_cmds);
+            # Create the apsr_tcs.spec file to launch dada_pwc_command
+            ($result, $response) = generateSpecificationFile($cfg{"CONFIG_DIR"}."/apsr_tcs.spec", \%tcs_cmds);
             logMessage(0, "generateSpecFile: ".$result.":".$response);
   
             # Issue the start command itself
-            ($result, $response) = start($cfg{"CONFIG_DIR"}."/tcs.spec", \%tcs_cmds);
+            ($result, $response) = start($cfg{"CONFIG_DIR"}."/apsr_tcs.spec", \%tcs_cmds);
             logMessage(0, "start: ".$result.":".$response);
 
             if ($result eq "fail") {
@@ -635,7 +642,7 @@ sub start($\%) {
     ($result, $response) = createDFBSimulator(\%tcs_cmds);
 
     # Give it half a chance to startup
-    sleep(1);
+    sleep(2);
 
   }
 
@@ -655,7 +662,7 @@ sub start($\%) {
       return ("fail", "Nexus was not in IDLE state");
     }
 
-    # Send CONFIG command
+    # Send CONFIG command with apsr_tcs.spec
     $cmd = "config ".$file;
     ($result,$response) = Dada->sendTelnetCommand($handle,$cmd);
     logMessage(1, "Sent \"".$cmd."\", Received \"".$result." ".$response."\"");
@@ -905,8 +912,8 @@ sub createDFBSimulator(\%) {
   my $ndim      = "-g ".$tcs_cmds{"NDIM"};
   my $tsamp     = "-t ".$tcs_cmds{"TSAMP"};
 
-  # By default set the "period" of the signal to 64000 bytes;
-  my $calfreq   = "-c 64000";
+  # By default set the "period" of the signal to 6400 bytes;
+  my $calfreq   = "-c 6400";
 
   if ($tcs_cmds{"MODE"} eq "CAL") {
 
@@ -1112,8 +1119,14 @@ sub parseTCSCommands(\%) {
   my $result = "ok";
   my $response = "";
 
-  my @cmds = qw(CONFIG SOURCE RA DEC RECEIVER CFREQ PID NBIT NDIM NPOL BANDWIDTH PROC_FILE MODE CALFREQ);
+  my @cmds = qw(CONFIG SOURCE RA DEC RECEIVER CFREQ PID NBIT NDIM NPOL BANDWIDTH PROC_FILE MODE);
   my $cmd;
+
+  if (exists $tcs_cmds{"MODE"}) {
+    if ($tcs_cmds{"MODE"} eq "CAL") {
+      push(@cmds, "CALFREQ");
+    }
+  }
 
   foreach $cmd (@cmds) {
     if (!(exists $tcs_cmds{$cmd})) {
@@ -1150,13 +1163,18 @@ sub addHostCommands(\%\%) {
   # Determine the BW & FREQ for each channel
   my $cf = int($tcs_cmds{"CFREQ"});         # centre frequency
   my $tbw = int($tcs_cmds{"BANDWIDTH"});    # total bandwidth
-  my $bw = $tbw / int(NHOST);                # bandwidth per channel
+  #my $bw = -1 * ($tbw / int(NHOST));       # bandwidth per channel
+  my $bw = $tbw / 16;                       # bandwidth per channel
 
   my $i=0;
   for ($i=0; $i<NHOST; $i++)
   {
+    my $ius = $i;
+    if ($i > 13) {
+      $ius = $i+1;
+    }
     $tcs_cmds{"Band".$i."_BW"} = -1 * $bw;
-    $tcs_cmds{"Band".$i."_FREQ"} = $cf - ($tbw/2) + ($bw/2) + ($bw*$i);
+    $tcs_cmds{"Band".$i."_FREQ"} = $cf - ($tbw/2) + ($bw/2) + ($bw*$ius);
   }
 
   # Add the site configuration to tcs_cmds
@@ -1169,9 +1187,10 @@ sub addHostCommands(\%\%) {
 
   # Setup the number of channels per node
   if (!(exists $tcs_cmds{"NBAND"})) {
-    $tcs_cmds{"NBAND"} = NHOST;
+    $tcs_cmds{"NBAND"} = 16;#NHOST;
   }
-  $tcs_cmds{"NCHAN"} = $tcs_cmds{"NBAND"} / NHOST;
+  #$tcs_cmds{"NCHAN"} = $tcs_cmds{"NBAND"} / NHOST;
+  $tcs_cmds{"NCHAN"} = $tcs_cmds{"NBAND"} / 16;
   
   # Set the instrument
   $tcs_cmds{"INSTRUMENT"} = uc($cfg{"INSTRUMENT"});
@@ -1259,7 +1278,7 @@ sub generateSpecificationFile($\%) {
   foreach $line (@sorted) {
     if (!(exists $ignore{$line})) {
       print FH Dada->headerFormat($line, $tcs_cmds{$line})."\n";
-      logMessage(2, "tcs.spec: ".Dada->headerFormat($line, $tcs_cmds{$line}));
+      logMessage(2, "apsr_tcs.spec: ".Dada->headerFormat($line, $tcs_cmds{$line}));
     }
   }
 

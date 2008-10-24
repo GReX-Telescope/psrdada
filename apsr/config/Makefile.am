@@ -6,8 +6,9 @@ dist_data_DATA = apsr.info \
                  apsr.viewer \
                  dspsr.cal \
                  dspsr.default \
+                 dspsr.select \
                  dspsr.optimal \
-                 dbdisk.scratch \
+                 apsr.scratch \
                  pdfb3_1024_1024_2048 \
                  pdfb3_1024_256_2048 \
                  pdfb3_2048_512_2048 \

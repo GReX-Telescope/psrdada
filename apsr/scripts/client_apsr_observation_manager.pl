@@ -13,6 +13,8 @@
 # 3.  Runs the PROCESSING_CMD in a system call, waiting for it to terminate
 # 4.  Rinse, Lather, Repeat.
 
+use lib $ENV{"DADA_ROOT"}."/bin";
+
 
 #
 # Include Modules
@@ -205,7 +207,7 @@ sub processing_thread($$) {
     chdir $processing_dir;
 
     $cmd = $bindir."/".$proc_cmd;
-    $cmd .= " 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/client_sys_logger.pl";
+    $cmd .= " 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/client_apsr_sys_logger.pl";
 
     logMessage(2, "INFO", "cmd = $cmd");
 
@@ -225,9 +227,9 @@ sub processing_thread($$) {
 
     $cmd = "killall digimon";
     system($cmd);
-    logMessage(0, "INFO", "Waiting for level setting thread to join");
+    logMessage(2, "INFO", "Waiting for level setting thread to join");
     my $level_setting_return_val = $level_setting_thread_id->join();
-    logMessage(0, "INFO", "Waiting for level setting has joined: ".$level_setting_return_val);
+    logMessage(2, "INFO", "Waiting for level setting has joined: ".$level_setting_return_val);
 
     # dada_dbNdb will have written an obs.end file with the expected filenames
 
@@ -618,6 +620,7 @@ sub level_setting_thread($$) {
   logMessage(0, "INFO", "Running digimon: $cmd");
 
   my $returnVal = system($cmd);
+  #my $returnVal = 0;
 
   if ($returnVal != 0) {
     logMessage(0, "WARN", "Level setting command failed: ".$cmd." ".$returnVal);

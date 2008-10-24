@@ -23,7 +23,6 @@ use File::Basename;
 use constant DEBUG_LEVEL   => 1;
 use constant LOGFILE       => "apsr_gain_controller.log";
 use constant MIN_GAIN      => 1;
-use constant MAX_GAIN      => 65535;
 
 
 #
@@ -45,6 +44,13 @@ my $current_gain = 0;
 my $new_gain = 0;
 my $gain_step = 0;
 my $cmd = "";
+
+my $max_gain = 0;
+if ($cfg{"USE_DFB_SIMULATOR"} == 1) {
+  $max_gain = 100;
+} else {
+  $max_gain = 65535;
+}
 
 #
 # Register Signal handlers
@@ -154,19 +160,19 @@ if (!$socket) {
       $new_gain = int($current_gain * $requested_val);
       logMessage(2, "INFO", "New Gain = ".$new_gain);
 
-      if ($new_gain > MAX_GAIN) {
-        $new_gain = MAX_GAIN;
+      if ($new_gain > $max_gain) {
+        $new_gain = $max_gain;
       }
 
       if ($new_gain < MIN_GAIN) {
         $new_gain = MIN_GAIN;
       }
 
-      # Only forward message if gain is different and we have both pols
+      # Only forward message if gain is different
       if ($new_gain != $current_gain) {
 
-        if ($new_gain >= MAX_GAIN) {
-          logMessage(0, "WARN", "Gain is set to Max ".MAX_GAIN);
+        if ($new_gain >= $max_gain) {
+          logMessage(0, "WARN", "Gain is set to Max ".$max_gain);
         }
 
         if ($new_gain <= MIN_GAIN) {
@@ -176,18 +182,19 @@ if (!$socket) {
         logMessage(2, "INFO", $line." % changes gain from ".$current_gain." to ".$new_gain);
 
         $cmd = "APSRGAIN ".$abs_chan." ".$pol." ".$new_gain;
-        logMessage(1, "INFO", "srv0 <- ".$cmd);
+        logMessage(2, "INFO", "srv0 <- ".$cmd);
 
         $result = set_dfb_gain($socket, $abs_chan, $pol, $current_gain, $new_gain);  
 
-        logMessage(1, "INFO", "srv0 -> ".$result);
+        logMessage(2, "INFO", "srv0 -> ".$result);
 
-        if ($pol eq 0) {
-          @pol0_gains[$chan] = $result;
-        } else {
-          @pol1_gains[$chan] = $result;
-        }
-    
+        #if ($cfg{"USE_DFB_SIMULATOR"} == 0) {
+          if ($pol eq 0) {
+            @pol0_gains[$chan] = $result;
+          } else {
+            @pol1_gains[$chan] = $result;
+          }
+        #}
       }
     
     } elsif ($line =~ /^LEVEL (\d) (0|1) (0|1) (-|\d|\.)+$/) {
@@ -312,7 +319,7 @@ sub set_dfb_gain($$$$$) {
 
   my $cmd = "APSRGAIN ".$chan." ".$pol." ".$val;
 
-  logMessage(2, "INFO", "srv0 <- ".$cmd);
+  # logMessage(2, "INFO", "srv0 <- ".$cmd);
   
   print $socket $cmd."\r\n";
  
@@ -321,7 +328,7 @@ sub set_dfb_gain($$$$$) {
 
   my $dfb_response = Dada->getLine($socket);
 
-  logMessage(2, "INFO", "srv0 -> ".$dfb_response);
+  # logMessage(2, "INFO", "srv0 -> ".$dfb_response);
 
   if ($dfb_response ne "OK") {
 
@@ -334,7 +341,4 @@ sub set_dfb_gain($$$$$) {
   }
 
 }
-
-                                                                                                                                                                                 
-
 

@@ -38,7 +38,7 @@ void generate_signal(char *signal, int signal_length, int nbit, int ndim,
                       int npol, int produce_noise, int gain);
 void generate_2bit(char *array, int array_size, int produce_noise, int gain);
 void generate_4bit(char *array, int array_size, int produce_noise, int gain);
-void generate_8bit(char *array, int array_size, int produce_noise);
+void generate_8bit(char *array, int array_size, int produce_noise, int gain);
 void print_triwave(char *tri_data, int tri_datasize, int nbits);
 void displayBits(unsigned int value);
 void displayCharBits(char value);
@@ -55,6 +55,8 @@ void reverse_array(char *array, int array_size);
 void create_udpout_socket(int *fd, struct sockaddr_in * dagram_socket,
                        char *client, int port, int broadcast);
 time_t wait_for_start(int daemon, multilog_t* log);
+float gasdev(long *idum);
+double rand_normal(double mean, double stddev);
 
 /* UDP socket */
 struct sockaddr_in dagram_socket;
@@ -386,6 +388,8 @@ int main(int argc, char *argv[])
 
   current_gain = new_gain_value;
 
+  int actual_gain = 0;
+
   while (total_bytes_sent < total_bytes_to_send) {
          
    // multilog(log,LOG_INFO, "while(%"PRIu64" <= %"PRIu64")\n",bytes_sent,bytes_to_send); 
@@ -413,12 +417,22 @@ int main(int argc, char *argv[])
         fprintf(stderr, "Changing gain from %d to %d\n",current_gain, new_gain_value);
         current_gain = new_gain_value;
       }
+
+      // Jiggle it a little bit (6 nearest gains)
+      actual_gain = (int) (6 * (rand() / (RAND_MAX + 1.0)));
+      actual_gain += current_gain - 3;
+      if (actual_gain > n_signals) 
+        actual_gain = n_signals -1;
+      if (actual_gain < 0)
+        actual_gain = 0;
+      
     } else {
       current_gain = (int) (n_signals * (rand() / (RAND_MAX + 1.0)));
+      actual_gain = current_gain;
     }
 
     tri_counter = encode_tri_data(udp_data+UDPHEADERSIZE, udp_data_size,
-                                signal_arrays[current_gain], signal_size, tri_counter, npol, 0);
+                                signal_arrays[actual_gain], signal_size, tri_counter, npol, 0);
 
     if ((header.sequence == 1) && verbose){
       //fprintf(stderr,"UDP Packet:\n");
@@ -499,7 +513,7 @@ int sendPacket(int sockfd, struct sockaddr_in their_addr, char *udp_data, int si
 
 void usage() {
   fprintf(stdout,
-    "test_apsr_triwave [options] dest_host\n"
+    "apsr_udpgenerator [options] dest_host\n"
     "\t-a            broadcast packets to 192.168.1.255\n"
     "\t-b n          number of bits per sample: 2,4 or 8 [default 8]\n"
     "\t-k n          number of polarisations: 1 or 2 [default 1]\n"
@@ -889,7 +903,7 @@ void generate_signal(char *array, int array_size, int nbits, int ndim,
   else if (nbits == 4) 
     generate_4bit(array, array_size, noise, gain);
   else
-    generate_8bit(array, array_size, noise);
+    generate_8bit(array, array_size, noise, gain);
 
   /* Invert the bits in each byte */
   //print_triwave(array, array_size, nbits);
@@ -899,33 +913,135 @@ void generate_signal(char *array, int array_size, int nbits, int ndim,
 }
 
 
-void generate_8bit(char *array, int array_size, int produce_noise) {
+void generate_8bit(char *array, int array_size, int produce_noise, int gain) {
 
   float max_value = 255;
   int samples_per_byte = 1;
   float mid_point = ((float) array_size) / 2.0;
 
-  unsigned int val;
+  int val;
+  int twos;
   int i, j;
-  srand ( time(NULL) );
+  
+  float y2, y1=1;
+
+  //gain = 500;
+
+  // 100 since we never want to up near 255
+  float centre = 255 * ((float) (gain-500) / 1000);
+  float off = centre / 1.3;
+  float on = centre * 1.3;
+  float div = 4.0;
+
+  unsigned int mask = 0x000000ff;
+
+  //fprintf(stderr, "array_size = %d, gain = %d, centre = %f, stddev = %f\n", array_size, gain, centre, 255/div);
 
   for (i=0; i < array_size; i++) {
                                                                                                                     
     if (produce_noise) {
 
-      val = 1 + (int) (max_value * (rand() / (RAND_MAX + 1.0)));
+      val = 0;
+
+      y2 = (float) rand_normal(centre, 255/div);
+
+      if ((y2 < -128) || (y2 > 128)) {
+        y2 = y1;
+      } else {
+        y1 = y2;
+      }
+
+      val = (int) floor(y2);
+
+      //fprintf(stdout, "%d, twos_complement: ", val);
+      //displayCharBits((char)val);
+      //fprintf(stdout, " full int : ");
+      //displayBits(val);
+      //fprintf(stdout,"\n");
+      
+      /* determine the twos complement equivalent */
+      twos = ~val;
+      twos = twos + 1;
+      twos &= mask;
+
+      //fprintf(stdout, "%d, offset_binary: ", twos);
+      //displayCharBits((char) twos);
+      //fprintf(stdout, " full int : ");
+      //displayBits(twos);
+      //fprintf(stdout,"\n");
+
+      val &= mask;
+
+      array[i] = (char) val;
+
+      //if ((y2 >= 255) || (y2 == 0)) 
+      //fprintf(stdout, "%f -> %d -> %d -> ", y2, val, twos);
+      //displayCharBits(array[i]);
+      //fprintf(stdout,"\n");
+
 
     /* else produce a triangular wave */
+
     } else {
 
-      float pos = ((float) i) / ((float) array_size);
-      float y = 2 * (0.5 - fabs(pos - 0.5));
-      val = (unsigned int) (max_value * (y+0.5/max_value));
+      if ((i < (array_size*0.25)) || (i > (array_size*0.75) )) {
+        y2 = (float) rand_normal(off, 255/div);
+      } else {
+        y2 = (float) rand_normal(on, 255/div);
+      }
+
+      if ((y2 < -128) || (y2 > 128)) {
+        y2 = y1;
+      } else {
+        y1 = y2;
+      }
+
+      val = (int) floor(y2);
+
+      //twos = ~val;
+      //twos = twos + 1;
+      //twos &= mask;
+      
+      val &= mask;
+      array[i] = (char) val;
+
+      //float pos = ((float) i) / ((float) array_size);
+      //float y = 2 * (0.5 - fabs(pos - 0.5));
+      //val = (unsigned int) (max_value * (y+0.5/max_value));
+      //array[i] = val;
                                                                                                                     
     }
     
-    array[i] = val;
   }
+
+  /*
+  int counts[256];
+  int intval = 0;
+
+  for (i=0; i < 256; i++) {
+    counts[i] = 0; 
+  }
+  for (i=0; i < array_size; i++) {
+    intval = (int) array[i];
+    //fprintf(stdout, "intval: %d -> ",intval);
+    intval += 128;
+    //fprintf(stdout, "%d\n",intval);
+    counts[intval] += 1;
+  }
+
+  for (i=0; i<256; i++) {
+    //printf("%d : %d\n",(i-128),counts[i]);
+    displayCharBits((i-128));
+    printf(": ",(i-128));
+    int fac = (int) ( ((float) counts[i]) / (((float) array_size)/ 10000));
+    for (j=0; j<fac; j++) {
+      printf("#");
+    }
+    printf("\n");
+  }
+
+  exit(0);
+  */
 
 }
 
@@ -1073,7 +1189,7 @@ void print_triwave(char *array, int array_size, int nbits) {
 void displayBits(unsigned int value) {
   unsigned int c, displayMask = 1 << 31;
 
-  printf("%7u = ", value);
+  //printf("%7u = ", value);
 
   for (c=1; c<= 32; c++) {
     putchar(value & displayMask ? '1' : '0');
@@ -1082,7 +1198,7 @@ void displayBits(unsigned int value) {
     if (c% 8 == 0)
       putchar(' ');
   }    
-  putchar('\n');
+  //putchar('\n');
 }
 
 
@@ -1157,7 +1273,7 @@ void gain_monitor(void) {
 
       if (strstr(buffer,"APSRGAIN ") != NULL) {
 
-        if ( sscanf( buffer, "APSRGAIN %d", &gain) != 2 ) 
+        if ( sscanf( buffer, "APSRGAIN %d", &gain) != 1 ) 
           fprintf(stderr, "Could not extract gain from the command\n");
         else
           fprintf(stderr,"GAIN = %d\n",gain);
@@ -1318,6 +1434,70 @@ time_t wait_for_start(int daemon, multilog_t* log) {
   return start_time;
 
 
+}
+
+
+float gasdev (long *idum) {
+
+  //float ran1(long*idum); 
+  static int iset=0; 
+  static float gset; 
+  float fac,rsq,v1,v2; 
+  if (iset==0) {
+    do {
+      //v1 = 2.0 * ran1(idum) - 1.0;
+      //v2 = 2.0 * ran1(idum) - 1.0;
+      v1 = 2.0 * (((double)rand()) / ((double) RAND_MAX)) - 1.0;
+      v2 = 2.0 * (((double)rand()) / ((double) RAND_MAX)) - 1.0;
+      rsq = v1 * v1 + v2 * v2;
+    } while (rsq >= 1.0 || rsq == 0.0);
+
+    fac=sqrt(-2.0*log(rsq)/rsq); 
+
+    // Now make th eBox-Muller transformation to get two normal deviates. Return one and save the other for next time. 
+
+    gset = v1 * fac; 
+    iset = 1;           // Set flag. 
+
+    return v2 * fac; 
+  } else {
+    iset = 0;
+    return gset; 
+  }
+}
+
+double rand_normal(double mean, double stddev) {
+
+  static double n2 = 0.0;
+  static int n2_cached = 0;
+  
+  if (!n2_cached) {
+     // Choose a point x,y in the unit circle uniformaly at random
+     double x, y, r;
+     do {
+      // scale two random integers to doubles between -1 and 1
+       x = 2.0*rand()/RAND_MAX - 1;
+       y = 2.0*rand()/RAND_MAX - 1;
+
+       r = x*x + y*y;
+     } while (r == 0.0 || r > 1.0);
+
+     {
+       // Apply Box-Muller transform on x,y
+       double d = sqrt(-2.0*log(r)/r);
+       double n1 = x*d;
+       n2 = y*d;
+
+       // Scale and translate to get desired mean and standard deviation
+       double result = n1*stddev + mean;
+
+       n2_cached = 1;
+       return result;
+     }
+   } else {
+     n2_cached = 0;
+    return n2*stddev + mean;
+   }
 }
 
 

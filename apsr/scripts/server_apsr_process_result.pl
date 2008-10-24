@@ -8,10 +8,12 @@
 # This daemons runs continuously produces feedback plots of the
 # current observation
 
+use lib $ENV{"DADA_ROOT"}."/bin";
+
 
 use strict;               # strict mode (like -Wall)
 use File::Basename;
-use Apsr;                 # APSR/DADA Module for configuration options
+use Apsr;
 
 
 #
@@ -28,7 +30,6 @@ use constant TOTAL_T_RES         => "total_t_res.ar";
 # Global Variable Declarations
 #
 our %cfg = Apsr->getApsrConfig();
-our $ext = "ar";
 
 
 #
@@ -60,60 +61,61 @@ if (index($cfg{"SERVER_ALIASES"}, $ENV{'HOSTNAME'}) < 0 ) {
 
 
 # Get command line
-if ($#ARGV!=0) {
+if ($#ARGV!=2) {
     usage();
     exit 1;
 }
 
-(my $utc_start) = @ARGV;
+my ($utc_start, $dir, $ext) = @ARGV;
 
 my $results_dir = $cfg{"SERVER_RESULTS_DIR"}."/".$utc_start;
-my $archive_dir = $cfg{"SERVER_ARCHIVE_DIR"}."/".$utc_start;
 
+
+#
+# Parse input
+#
+if (! (-d $dir)) {
+  debugMessage(0, "Error: Directory \"".$dir."\" did not exist");
+  exit 1;
+}
 
 if (! (-d $results_dir)) {
   debugMessage(0, "Error: Results directory \"".$results_dir."\" did not exist");
   exit 1;
 }
 
-
-if (! (-d $archive_dir)) {
-  debugMessage(0, "Error: Archive directory \"".$archive_dir."\" did not exist");
+if (! (($ext == "lowres") || ($ext == "ar")) ) {
+  debugMessage(0, "Error: extension must be lowres or ar");
   exit 1;
 }
 
+debugMessage(1, "Processing obs ".$utc_start." in dir ".$dir." with extension .".$ext);
 
 #
 # Main
 #
 
-my $dir      = $archive_dir;
 my $plot_dir = $results_dir;
 
-
 # TODO check that directories are correctly sorted by UTC_START time
-debugMessage(2,"Looking obs.start files in ".$results_dir);
+debugMessage(2,"Looking obs.start files in ".$dir);
 
 # The number of results expected should be the number of obs.start files
-$num_results = countObsStart($results_dir);
-
+$num_results = countObsStart($dir);
 
 if ($num_results > 0) {
 
   # Get rid of the current processed.txt file from this directory
-  deleteProcessed($archive_dir);
+  deleteProcessed($dir);
 
-  debugMessage(1,"Finalising observation: ".$archive_dir);
-  ($fres, $tres) = processAllArchives($archive_dir);
+  debugMessage(1,"Processing all ".$ext." archives in ".$dir);
+  ($fres, $tres) = processAllArchives($dir, $ext);
 
-  debugMessage(1,"Making final low res archives for ".$archive_dir);
-  Dada->makePlotsFromArchives($results_dir, "/tmp", $fres, $tres, "240x180");
-  debugMessage(1,"Making final hi res archives for ".$archive_dir);
-  Dada->makePlotsFromArchives($results_dir, "/tmp", $fres, $tres, "1024x768");
+  debugMessage(1,"Making final low res plots");
+  Apsr->makePlotsFromArchives($results_dir, "/tmp", $fres, $tres, "240x180");
 
-  # debugMessage(1,"Deleting source lowres archives for ".$obs_results_dir);
-  # my $cmd = "rm -f ".$obs_results_dir."/*/*.lowres";
-  # system($cmd);
+  debugMessage(1,"Making final hi res plots");
+  Apsr->makePlotsFromArchives($results_dir, "/tmp", $fres, $tres, "1024x768");
 
 }
 
@@ -129,9 +131,9 @@ exit(0);
 # For the given utc_start ($dir), and archive (file) add the archive to the 
 # summed archive for the observation
 #
-sub processArchive($$) {
+sub processArchive($$$) {
 
-  (my $dir, my $file) = @_;
+  my ($dir, $file, $ext) = @_;
 
   debugMessage(2, "processArchive(".$dir.", ".$file.")");
 
@@ -213,6 +215,7 @@ sub processArchive($$) {
 
   # combine all thr frequency channels
   $cmd = $bindir."/psradd -R -f ".$current_archive." ".$dir."/*/".$file;
+  debugMessage(1, $cmd);
   $output = `$cmd`;
   debugMessage(2, $output);
 
@@ -239,7 +242,7 @@ sub processArchive($$) {
   } else {
 
     my $temp_ar = $dir."/temp.ar";
-                                                                                                                 
+
     # Fres Operations
     $cmd = $bindir."/psradd -s -f ".$temp_ar." ".$total_f_res." ".$current_archive;
     debugMessage(2, $cmd);
@@ -278,9 +281,9 @@ sub processArchive($$) {
 #
 # Counts the numbers of *.ext archives in total received
 #
-sub countArchives($$) {
+sub countArchives($$$) {
 
-  my ($dir, $skip_existing_archives) = @_;
+  my ($dir, $ext, $skip_existing_archives) = @_;
 
   my @processed = getProcessedFiles($dir);
   my $i = 0;
@@ -351,7 +354,7 @@ sub countObsStart($) {
 
   my $cmd = "find ".$dir." -name \"obs.start\" | wc -l";
   my $find_result = `$cmd`;
-  chomp($find_result);
+  chomp ($find_result);
   return $find_result;
 
 }
@@ -388,34 +391,34 @@ sub debugMessage($$) {
   }
 }
 
-sub processAllArchives($) {
+sub processAllArchives($$) {
 
-  (my $dir) = @_;
+  my ($dir, $ext) = @_;
 
-  debugMessage(1, "processAllArchives(".$dir.")");
+  debugMessage(1, "processAllArchives(".$dir.",".$ext.")");
 
-   # Delete the existing fres and tres files
-   unlink($dir."/".TOTAL_T_RES);
-   unlink($dir."/".TOTAL_F_RES);
+  # Delete the existing fres and tres files
+  unlink($dir."/".TOTAL_T_RES);
+  unlink($dir."/".TOTAL_F_RES);
   
-   # Get ALL archives in the observation dir
-   my %unprocessed = countArchives($dir,0);
+  # Get ALL archives in the observation dir
+  my %unprocessed = countArchives($dir,$ext,0);
 
-   # Sort the files into time order.
-   my @keys = sort (keys %unprocessed);
+  # Sort the files into time order.
+  my @keys = sort (keys %unprocessed);
  
-   my $i=0;
-   my $current_archive = "";
+  my $i=0;
+  my $current_archive = "";
     
-   for ($i=0; $i<=$#keys; $i++) {
+  for ($i=0; $i<=$#keys; $i++) {
 
-     debugMessage(1, "Finalising archive ".$dir."/*/".$keys[$i]);
-     # process the archive and summ it into the results archive for observation
-     ($current_archive, $fres, $tres) = processArchive($dir, $keys[$i]);
+    debugMessage(1, "Finalising archive ".$dir."/*/".$keys[$i]);
+    # process the archive and summ it into the results archive for observation
+    ($current_archive, $fres, $tres) = processArchive($dir, $keys[$i], $ext);
 
-   }
+  }
 
-   return ($fres, $tres);
+  return ($fres, $tres);
 
 }
 
@@ -432,8 +435,10 @@ sub sigHandle($) {
 }
 
 sub usage() {
-  print "Usage: ".basename($0)." utc_start\n";
+  print "Usage: ".basename($0)." utc_start dir ext\n";
   print "  utc_start  utc_start of the observation\n";
+  print "  dir        full path to the directory containing the archives\n";
+  print "  ext        extension of the archive (.lowres or .ar)\n";  
 }
 
                                                                                 

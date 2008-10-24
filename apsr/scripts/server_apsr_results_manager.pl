@@ -1,5 +1,8 @@
 #!/usr/bin/env perl 
 
+use lib $ENV{"DADA_ROOT"}."/bin";
+
+
 #
 # Author:   Andrew Jameson
 # Created:  6 Dec, 2007
@@ -186,7 +189,7 @@ while (!$quit_daemon) {
         # If we have at least 1 result 
         if ($#keys > -1)  {
 
-          debugMessage(1, "Found ".($#keys+1)." results in ".$dir);
+          debugMessage(2, "Found ".($#keys+1)." results in ".$dir);
   
           for ($i=0;$i<=$#keys;$i++) {
             debugMessage(2, "file = ".$keys[$i].": ".$unprocessed{$keys[$i]}." / ".$num_results);
@@ -308,6 +311,7 @@ sub processArchive($$) {
   my $output = "";
   my $real_archives = "";
   my $subdir = "";
+  my $plottable_archives = "";
 
   if ($#archives < $#sub_dirs) {
 
@@ -315,7 +319,7 @@ sub processArchive($$) {
 
      debugMessage(2, "subdir = ".$subdir.", file = ".$file); 
      # If the archive does not exist in the frequency dir
-      if (!(-f ($subdir."/".$file))) { 
+      if (!(-f ($subdir."/".$file))) {
 
         debugMessage(1, "archive ".$subdir."/".$file." was not present");
 
@@ -326,15 +330,15 @@ sub processArchive($$) {
         my $tmp_file = $input_file;
         $tmp_file =~ s/\.lowres$/\.tmp/;
 
-        $cmd = $bindir."/pam -o ".$band_frequency." -e tmp ".$input_file;
+        $cmd = $bindir."/pam -o ".$band_frequency." -e tmp ".$input_file." 2>&1";
         debugMessage(2, $cmd);
         $output = `$cmd`;
         debugMessage(2, $output);
 
-        $cmd = "mv -f ".$tmp_file." ".$output_file;
+        $cmd = "mv -f ".$tmp_file." ".$output_file." 2>&1";
         $output = `$cmd`;
 
-        $cmd = $bindir."/paz -w 0 -m ".$output_file;
+        $cmd = $bindir."/paz -w 0 -m ".$output_file." 2>&1";
         debugMessage(2, $cmd);
         $output = `$cmd`;
         debugMessage(2, $output);
@@ -342,9 +346,12 @@ sub processArchive($$) {
         debugMessage(2, "Deleting tmp file ".$tmp_file);
         unlink($tmp_file);
 
+        $plottable_archives .= " ".$output_file;
+
       } else {
         my ($filename, $directories, $suffix) = fileparse($subdir);
         $real_archives .= " ".$filename;
+        $plottable_archives .= " ".$subdir."/".$file;
       }
     }
 
@@ -352,6 +359,7 @@ sub processArchive($$) {
     foreach $subdir (@sub_dirs) {
       my ($filename, $directories, $suffix) = fileparse($subdir);
       $real_archives .= " ".$filename;
+      $plottable_archives .= " ".$subdir."/".$file;
     } 
   }
 
@@ -359,7 +367,7 @@ sub processArchive($$) {
   my $current_archive = $dir."/".$file;
 
   # combine all thr frequency channels
-  $cmd = $bindir."/psradd -R -f ".$current_archive." ".$dir."/*/*".$file;
+  $cmd = $bindir."/psradd -R -f ".$current_archive." ".$plottable_archives;
   debugMessage(2, $cmd);
   $output = `$cmd`;
 

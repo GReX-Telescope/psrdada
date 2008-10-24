@@ -1,7 +1,7 @@
 <?PHP
 
-include("../definitions_i.php");
-include("../functions_i.php");
+include("definitions_i.php");
+include("functions_i.php");
 
 # Get the system configuration (dada.cfg)
 $action = $_GET["action"];
@@ -23,7 +23,7 @@ if (!IN_CONTROL) {
   $controlling_hostname = strtolower(rtrim(file_get_contents(CONTROL_FILE)));
                                                                                                                                           
   echo "<html>\n";
-  include("../header_i.php");
+  include("header_i.php");
   ?>
   <br>
   <h3><font color="red">You cannot make any changes to the instrument if your host is not in control.</font></h3>
@@ -69,7 +69,7 @@ if (!IN_CONTROL) {
 <body>
 <? 
 
-include("../banner.php");
+include("banner.php");
 
 ?>
 <h3>Observation: <?echo $observation?></h3>
@@ -87,7 +87,7 @@ if ($action_string == "No Action") {
   chdir($cfg["SCRIPTS_DIR"]);
   $obs_dir = $cfg["SERVER_RESULTS_NFS_MNT"]."/".$observation;
   $script = "./server_apsr_process_result.pl ".$observation." ".$obs_dir." lowres";
-  $cmd = "/bin/csh -c 'setenv HOME /home/apsr; source \$HOME/.cshrc; ".$script."'";
+  $cmd = "/bin/csh -c 'setenv HOME /home/dada; source \$HOME/.cshrc; ".$script."'";
   $string = exec($cmd, $array, $return_val);
 
   if ($return_val != 0) {
@@ -105,11 +105,15 @@ if ($action_string == "No Action") {
   chdir($cfg["SCRIPTS_DIR"]);
   $obs_dir = $cfg["SERVER_ARCHIVE_NFS_MNT"]."/".$observation;
   $script = "./server_apsr_process_result.pl ".$observation." ".$obs_dir." ar";
-  $cmd = "/bin/csh -c 'setenv HOME /home/apsr; source \$HOME/.cshrc; ".$script."'";
+  $cmd = "/bin/csh -c 'setenv HOME /home/dada; source \$HOME/.cshrc; ".$script."'";
   $string = exec($cmd, $array, $return_val);
 
   if ($return_val != 0) {
+    echo $cmd."<BR>\n";
     echo "<BR>\nserver_apsr_process_results.pl returned a non zero exit value: ". $return_var."\n";
+    echo $string."<BR>\n";
+    print_r($array);
+    
     flush();
   } else {
     echo "Hi-res results processed<BR>\n";
@@ -123,11 +127,11 @@ if ($action_string == "No Action") {
   chdir($cfg["SCRIPTS_DIR"]);
   $obs_dir = $cfg["SERVER_RESULTS_NFS_MNT"]."/".$observation;
   $script = "./server_apsr_create_plots.pl ".$obs_dir." 1024x768";
-  $cmd = "/bin/csh -c 'setenv HOME /home/apsr; source \$HOME/.cshrc; ".$script."'";
+  $cmd = "/bin/csh -c 'setenv HOME /home/dada; source \$HOME/.cshrc; ".$script."'";
   $string = exec($cmd, $array, $return_val);
 
   $script = "./server_apsr_create_plots.pl ".$obs_dir." 240x180";
-  $cmd = "/bin/csh -c 'setenv HOME /home/apsr; source \$HOME/.cshrc; ".$script."'";
+  $cmd = "/bin/csh -c 'setenv HOME /home/dada; source \$HOME/.cshrc; ".$script."'";
   $string = exec($cmd, $array, $return_val);
 
   if ($return_val != 0) {

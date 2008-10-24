@@ -7,6 +7,8 @@
 # This script transfers data from a directory on the pwc, to a directory on the
 # nexus machine
 
+use lib $ENV{"DADA_ROOT"}."/bin";
+
 use IO::Socket;
 use Getopt::Std;
 use File::Basename;

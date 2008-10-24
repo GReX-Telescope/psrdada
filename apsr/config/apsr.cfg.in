@@ -10,7 +10,7 @@ USER                    apsr
 SCRIPTS_DIR             @PSRDADA_INSTALL@/bin
 CONFIG_DIR              @PSRDADA_INSTALL@/share
 WEB_DIR                 @PSRDADA_INSTALL@/web
-STATUS_DIR              @PSRDADA_INSTALL@/web/status
+STATUS_DIR              @PSRDADA_INSTALL@/web/apsr/status
 PROCESSING_DB_KEY       @PSRDADA_INSTALL@/share/apsr.info
 VIEWING_DB_KEY          @PSRDADA_INSTALL@/share/apsr.viewer
 
@@ -112,7 +112,7 @@ FADA_BLOCK_BUFSZ        4194304
 
 # Primary Write Client (PWC) configuration
 PWC_BINARY              apsr_udpdb
-NUM_PWC                 16
+NUM_PWC                 15
 PWC_0                   apsr00
 PWC_1                   apsr01
 PWC_2                   apsr02
@@ -127,12 +127,12 @@ PWC_10                  apsr10
 PWC_11                  apsr11
 PWC_12                  apsr12
 PWC_13                  apsr13
-PWC_14                  apsr14
-PWC_15                  apsr15
+PWC_14                  apsr15
+
 DFB_0	                  apsr16
 
 # defines the number of helping nodes
 HELPER_DAEMONS          archive_manager auxiliary_processor 
-NUM_HELP                1
+NUM_HELP                0
 HELP_0                  apsr17
 

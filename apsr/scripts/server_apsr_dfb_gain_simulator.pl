@@ -123,17 +123,21 @@ while (!$quit_daemon) {
   if ($curr_time > $prev_time) {
 
     my $avg = 0;
+    my $str = "";
 
     # Calculate the average gain.
     for ($i=0; $i<$nchan; $i++) {
 
       $avg += $pol0_gains[$i];
-      $avg += $pol1_gains[$i]
+      $avg += $pol1_gains[$i];
+      $str .= $pol0_gains[$i]." ".$pol1_gains[$i]." ";
 
     }
 
     $avg /= ($nchan*2);
     my $int_avg = int($avg);
+    $str .= "=> average of ".$int_avg;
+    debugMessage(2, $str);
 
     if ($last_avg != $int_avg) {
 
@@ -149,7 +153,22 @@ while (!$quit_daemon) {
         $last_avg = $int_avg;
 
       } else {
-        debugMessage(0, "Couldn't connect to the dfb3 simulator");
+        debugMessage(2, "Couldn't connect to the dfb3 simulator");
+        for ($i=0; $i<$nchan; $i++) {
+          @pol0_gains[$i] = 33;
+          @pol1_gains[$i] = 33;
+        }
+      }
+    } else {
+      my $handle = Dada->connectToMachine($dfb_sim_host, $dfb_sim_port);
+      if ($handle) {
+        print $handle "APSRGAIN\r\n";
+        my $line = Dada->getLine($handle);
+        debugMessage(2, "Current Gain: ".$line);
+        close($handle);
+        $last_avg = int($avg);
+      } else {
+        debugMessage(2, "dfb3 simulator not running, gain set to 33");
         for ($i=0; $i<$nchan; $i++) {
           @pol0_gains[$i] = 33;
           @pol1_gains[$i] = 33;

@@ -23,5 +23,6 @@ dist_bin_SCRIPTS = Apsr.pm \
                    server_apsr_src_monitor.pl \
                    server_apsr_sys_monitor.pl \
                    apsr_reconfigure.pl \
+                   dspsr_command_line.pl \
                    web_style.txt \
                    gain_hacker.pl

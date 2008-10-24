@@ -19,7 +19,7 @@ header("Expires: Mon, 26 Jul 1997 05:00:00 GMT"); // Date in the past
   "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
-  <link rel="STYLESHEET" type="text/css" href="/style.css">
+  <link rel="STYLESHEET" type="text/css" href="style_log.css">
   <!-- jsProgressBarHandler prerequisites : prototype.js -->
   <script type="text/javascript" src="/js/prototype.js"></script>
   <!-- jsProgressBarHandler core -->
@@ -84,10 +84,10 @@ header("Expires: Mon, 26 Jul 1997 05:00:00 GMT"); // Date in the past
 for ($i=0; $i<count($machines); $i++) {
 
   echo $machines[$i]."_pol0 = new JS_BRAMUS.jsProgressBar($('".$machines[$i]."_pol0_bar'), 0, ";
-  echo " { width : 80, showText : false, barImage : Array( 'images/jsprogress/percentImage_back1_80.png', 'images/jsprogress/percentImage_back2_80.png', 'images/jsprogress/percentImage_back3_80.png', 'images/jsprogress/percentImage_back4_80.png') } );\n";
+  echo " { width : 80, showText : false, barImage : Array( '/images/jsprogress/percentImage_back1_80.png', '/images/jsprogress/percentImage_back2_80.png', '/images/jsprogress/percentImage_back3_80.png', '/images/jsprogress/percentImage_back4_80.png') } );\n";
  
   echo $machines[$i]."_pol1 = new JS_BRAMUS.jsProgressBar($('".$machines[$i]."_pol1_bar'), 0, ";
-  echo " { width : 80, showText : false, barImage : Array( 'images/jsprogress/percentImage_back1_80.png', 'images/jsprogress/percentImage_back2_80.png', 'images/jsprogress/percentImage_back3_80.png', 'images/jsprogress/percentImage_back4_80.png') } );\n";
+  echo " { width : 80, showText : false, barImage : Array( '/images/jsprogress/percentImage_back1_80.png', '/images/jsprogress/percentImage_back2_80.png', '/images/jsprogress/percentImage_back3_80.png', '/images/jsprogress/percentImage_back4_80.png') } );\n";
 
 }
 
@@ -95,12 +95,13 @@ for ($i=0; $i<count($machines); $i++) {
   }, false);
   </script>
 
-
-<table cellpadding=2 border=0>
+<center>
+<table cellpadding=0 border=0 marginwidth=0 marginheight=0>
 <tr>
-  <th>Gains</th>
-  <th colspan=2>Pol 0</th>
-  <th colspan=2>Pol 1</th>
+  <th></th>
+  <th colspan=2 align=center>Pol 0 Gain</th>
+  <th></th>
+  <th colspan=2 align=center>Pol 1 Gain</th>
 </tr>
 
 <?
@@ -117,6 +118,8 @@ for ($i=0; $i<count($machines); $i++) {
   <? echo "<span id=\"".$machines[$i]."_pol0_value\"></span>\n"; ?>
   </td>
 
+  <td width=100px></td>
+
   <td width="80px">
   <? echo "<span id=\"".$machines[$i]."_pol1_bar\">[  Loading Progress Bar ]</span></td>\n"; ?>
   </td>
@@ -128,6 +131,7 @@ for ($i=0; $i<count($machines); $i++) {
 </tr>
 <? } ?>
 </table>
+</center>
 
 </body>
 </table>
