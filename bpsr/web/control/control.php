@@ -197,7 +197,7 @@ function printClientStatus($config, $control) {
 
   # Get the status of all the daemons
   chdir($config["SCRIPTS_DIR"]);
-  $script = "source /home/dada/.bashrc; ./client_command.pl \"daemon_info\" ".$machines;
+  $script = "source /home/dada/.bashrc; ./client_bpsr_command.pl \"daemon_info\" ".$machines;
   $string = exec($script, $output, $return_var);
 
   if ($return_var == 0) {

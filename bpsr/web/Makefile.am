@@ -5,6 +5,7 @@ nobase_dist_web_SCRIPTS = definitions_i.php \
                           bpsr_functions_i.php \
                           plotupdate.php \
                           plotwindow.php \
+                          plotwindow_large.php \
                           beamwindow.php \
                           result.php \
                           results.php \

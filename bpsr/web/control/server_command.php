@@ -135,10 +135,10 @@ if ($cmd == "start_daemons") {
 <?
   flush();
 
-  $script_name = "dada_reconfigure.pl -e ".$config["INSTRUMENT"];
+  $script_name = "bpsr_reconfigure.pl";
   echo "  <tr style=\"background: white;\">\n";
   echo "    <td align=\"left\">\n";
-  $script = "source /home/apsr/.bashrc; ".$script_name." 2>&1";
+  $script = "source /home/dada/.bashrc; ".$script_name." 2>&1";
   $string = exec($script, $output, $return_var);
   for ($i=0; $i<count($output); $i++) {
     echo $output[$i]."<BR>";

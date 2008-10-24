@@ -35,7 +35,7 @@ $nbeam = $config["NUM_PWC"];
     /* Looping function to try and refresh the images */
     function looper() {
       request()
-      setTimeout('looper()',5000)
+      setTimeout('looper()',3000)
     }
 
     /* Parses the HTTP response and makes changes to images
@@ -59,9 +59,9 @@ $nbeam = $config["NUM_PWC"];
 
         for ($i=0; $i<$config["NUM_PWC"]; $i++) {
 
-          echo "        if (img".$i.".src != img".$i."_lowres) {\n";
-          echo "          img".$i.".src = img".$i."_lowres\n";
-          echo "        }\n";
+          //echo "        if (img".$i.".src != img".$i."_hires) {\n";
+          echo "          img".$i.".src = img".$i."_hires\n";
+          //echo "        }\n";
         }
 ?>
         if (document.imageform.imagetype[4].checked != true) {
@@ -148,50 +148,50 @@ for ($i=0; $i<$config["NUM_PWC"]; $i++) {
     </td>
   </tr>
 
-  <tr height=42>
+  <tr height=120>
     <?//echoBlank()?>
     <?echoBeam(13, $nbeam)?>
     <?echoBlank()?>
     <?echoBeam(12, $nbeam)?>
     <?echoBlank()?> 
   </tr>
-  <tr height=42>
+  <tr height=120>
     <?//echoBlank()?>
     <?echoBeam(6, $nbeam)?>
     <?echoBlank()?>
   </tr>
-  <tr height=42>
+  <tr height=120>
     <?echoBlank()?>
     <?echoBeam(7, $nbeam)?>
     <?echoBeam(5, $nbeam)?>
     <?echoBlank()?> 
   </tr>
 
-  <tr height=42>
+  <tr height=120>
     <?echoBeam(8, $nbeam)?>
     <?echoBeam(1, $nbeam)?>
     <?echoBeam(11, $nbeam)?>
   </tr>
 
-  <tr height=42>
+  <tr height=120>
     <?echoBeam(2, $nbeam)?>
     <?echoBeam(4, $nbeam)?>
   </tr>
 
-  <tr height=42>
+  <tr height=120>
     <?echoBlank()?>
     <?echoBeam(3, $nbeam)?>
     <?echoBlank()?>
   </tr>
 
-  <tr height=42>
+  <tr height=120>
     <?echoBlank()?>
     <?echoBeam(9, $nbeam)?>
     <?echoBeam(10, $nbeam)?>
     <?echoBlank()?>
   </tr>
   
-  <tr height=42>
+  <tr height=120>
     <?echoBlank()?>
     <?echoBlank()?>
     <?echoBlank()?>
@@ -220,7 +220,7 @@ function echoBeam($beam_no, $num_beams) {
     echo "<td rowspan=2 align=right>";
     echo "<a href=\"javascript:popWindow('beamwindow.php?beamid=".$beam_no."')\">";
 
-    echo "<img src=\"/images/blankimage.gif\" width=112 height=84 id=\"beam".$beam_no."\" TITLE=\"Beam ".$beam_no."\" alt=\"Beam ".$beam_no."\" ".$mousein." ".$mouseout.">\n";
+    echo "<img src=\"/images/blankimage.gif\" width=320 height=240 id=\"beam".$beam_no."\" TITLE=\"Beam ".$beam_no."\" alt=\"Beam ".$beam_no."\" ".$mousein." ".$mouseout.">\n";
     echo "</a></td>\n";
   } else {
     echo "<td rowspan=2></td>\n";

@@ -135,7 +135,7 @@ for ($i=0;$i<count($machines);$i++) {
 
 chdir($sys_config["SCRIPTS_DIR"]);
 
-$script = "export DADA_ROOT=".DADA_ROOT."; ./client_command.pl \"".$cmd."\" ".$all_machines;
+$script = "export DADA_ROOT=".DADA_ROOT."; ./client_bpsr_command.pl \"".$cmd."\" ".$all_machines;
 
 $string = exec($script, $output, $return_var);
 
