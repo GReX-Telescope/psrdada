@@ -2,7 +2,6 @@
 
 use IO::Socket;     # Standard perl socket library
 use Net::hostent;
-use Dada;           # DADA Module for configuration options
 use Bpsr;           # BPSR Module for configuration options
 use threads;
 use threads::shared;

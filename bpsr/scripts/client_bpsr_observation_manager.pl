@@ -32,7 +32,7 @@ use File::Basename;
 #
 # Constants
 #
-use constant DEBUG_LEVEL        => 2;
+use constant DEBUG_LEVEL        => 1;
 use constant DADA_HEADER_BINARY => "dada_header -k deda";
 use constant RSYNC_OPTS         => "-ag --rsh=/usr/bin/rsh";
 use constant PIDFILE            => "bpsr_observation_manager.pid";

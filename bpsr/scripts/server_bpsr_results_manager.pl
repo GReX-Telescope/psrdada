@@ -125,7 +125,7 @@ while (!$quit_daemon) {
   debugMessage(2,"Main While Loop, looking for data in ".$obs_results_dir);
 
   opendir(DIR,$obs_results_dir);
-  @subdirs = sort grep { !/^\./ && -d $obs_results_dir."/".$_ } readdir(DIR);
+  @subdirs = sort grep { !/^\./ && !/^stats/ && -d $obs_results_dir."/".$_ } readdir(DIR);
   closedir DIR;
 
   my $h=0;

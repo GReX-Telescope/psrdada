@@ -21,7 +21,7 @@ use threads::shared;
 #
 # Constants
 #
-use constant  DEBUG_LEVEL => 2;
+use constant  DEBUG_LEVEL => 1;
 use constant  SLEEPTIME   => 1;
 use constant  PIDFILE     => "bpsr_results_monitor.pid";
 use constant  LOGFILE     => "bpsr_results_monitor.log";

@@ -20,9 +20,10 @@ use threads::shared;
 #
 # Constants
 #
-use constant DEBUG_LEVEL => 2;
-use constant PIDFILE     => "ibob_manager.pid";
-use constant LOGFILE     => "ibob_manager.log";
+use constant DEBUG_LEVEL  => 2;
+use constant PIDFILE      => "ibob_manager.pid";
+use constant LOGFILE      => "ibob_manager.log";
+use constant MULTIBOB_BIN => "multibob_server";
 
 
 #
@@ -44,13 +45,15 @@ $SIG{TERM} = \&sigHandle;
 #
 # Local Varaibles
 #
-my $logfile =         $cfg{"CLIENT_LOG_DIR"}."/".LOGFILE;
-my $pidfile =         $cfg{"CLIENT_CONTROL_DIR"}."/".PIDFILE;
+my $logfile = $cfg{"SERVER_LOG_DIR"}."/".LOGFILE;
+my $pidfile = $cfg{"SERVER_CONTROL_DIR"}."/".PIDFILE;
 
 my $daemon_control_thread = 0;
-my @threads = ();
-my @results = ();
-my @responses = ();
+
+my $uname = $cfg{"IBOB_GATEWAY_USERNAME"};
+my $host  = $cfg{"IBOB_GATEWAY"};
+my $port  = $cfg{"IBOB_MANAGER_PORT"};
+my $npwc  = $cfg{"NUM_PWC"};
 
 my $i;
 my $result;
@@ -61,149 +64,21 @@ my $command = "config";
 # Main
 #
 
-# Dada->daemonize($logfile, $pidfile);
+Dada->daemonize($logfile, $pidfile);
 
 logMessage(0, "STARTING SCRIPT");
 
 # Start the daemon control thread
 $daemon_control_thread = threads->new(\&daemonControlThread);
 
-
-my $server_socket = new IO::Socket::INET (
-    LocalHost => "apsr17",
-    LocalPort => "1999",
-    Proto => 'tcp',
-    Listen => 1,
-    Reuse => 1,
-);
-
-die "Could not create listening socket: $!\n" unless $server_socket;
-
-my $rh;
-my $read_set = new IO::Select();  # create handle set for reading
-$read_set->add($server_socket);   # add the main socket to the set
-
-while (!$quit_daemon) {
-
-# Get all the readable handles from the server
-my ($readable_handles) = IO::Select->select($read_set, undef, undef, 1.0);
-
-foreach $rh (@$readable_handles) {
-
-  # if it is the main socket then we have an incoming connection and
-  # we should accept() it and then add the new socket to the $Read_Handles_Object
-  if ($rh == $server_socket) {
-
-    my $handle = $rh->accept();
-    $handle->autoflush();
-    my $hostinfo = gethostbyaddr($handle->peeraddr);
-    my $hostname = $hostinfo->name;
-
-    logMessage(2, "Accepting connection from ".$hostname);
-
-    # Add this read handle to the set
-    $read_set->add($handle);
-
-  } else {
-
-    my $command = Dada->getLine($rh);
-
-    # If the string is not defined, then we have lost the connection.
-    # remove it from the read_set
-    if (! defined $command) {
-      logMessage(1, "Lost connection, closing socket");
-
-      $read_set->remove($rh);
-      close($rh);
-
-    # We have a request
-    } else {
-
-      if ($command eq "set_levels") {
-
-        # Spawn the communication threads
-        for ($i=0; $i<$cfg{"NUM_PWC"}; $i++) {
-      
-          my $pwc = $cfg{"PWC_".$i};
-          my $dhost = $cfg{"IBOB_DEST_".$i};
-
-          logMessage(2, "Calling runLevelSetter($dhost, 23)");
-          @threads[$i] = threads->new(\&runLevelSetter, $dhost, "23");
-
-        }
-
-        @results = ();
-        @responses = (); 
-        $result = "ok";
-
-        logMessage(2, "Waiting for threads to return");
-        # Wait for the replies
-        for ($i=0; $i<$cfg{"NUM_PWC"}; $i++) {
-
-          logMessage(3, "Waiting for thread $i");
-          (@results[$i],@responses[$i]) = $threads[$i]->join;
-
-          if ($results[$i] ne "ok") {
-            $result = "fail";
-            logMessage(0, "Thread for ".$cfg{"PWC_".$i}." failed with ".$responses[$i]);
-          } else {
-            logMessage(3, "Thread for ".$cfg{"PWC_".$i}." returned ok");
-          }
-        }
-        print $rh "$result\r\n";
-    
-      } elsif ($command eq "config") {
-
-        # Spawn the communication threads
-        for ($i=0; $i<$cfg{"NUM_PWC"}; $i++) {
-
-          my $pwc = $cfg{"PWC_".$i};
-          my $dhost = $cfg{"IBOB_DEST_".$i};
-          my $mac = $cfg{"IBOB_LOCAL_MAC_ADDR_".$i};
-
-          logMessage(2, "Calling runConfigurator($dhost, 23, $mac)");
-          @threads[$i] = threads->new(\&runConfigurator, $dhost, "23", $mac);
-
-        }
-
-        @results = ();
-        @responses = ();
-        $result = "ok";
-
-        logMessage(2, "Waiting for threads to return");
-        # Wait for the replies
-        for ($i=0; $i<$cfg{"NUM_PWC"}; $i++) {
-
-          logMessage(3, "Waiting for thread $i");
-          (@results[$i],@responses[$i]) = $threads[$i]->join;
-
-          if ($results[$i] ne "ok") {
-            $result = "fail";
-            logMessage(0, "Thread for ".$cfg{"PWC_".$i}." failed with ".$responses[$i]);
-          } else {
-            logMessage(3, "Thread for ".$cfg{"PWC_".$i}." returned ok");
-          }
-        }
-        print $rh "$result\r\n";
-
-      } elsif ($command eq "rearm") {
-
-        my ($result, $response) = rearmAll();
-        
-        if ($result eq "ok") {
-          print $rh $response."\r\n";
-        } else {
-          print $rh "rearm failed\r\n";
-        }
-
-      } else {
-        print "ignoring commmand\r\n";
-      }
-    }
-  }
-}
-}
-
+my $cmd = "ssh -n -l ".$uname." ".$host." \"".MULTIBOB_BIN." -n ".$npwc." -p ".$port."\" 2>&1";
+logMessage(1, $cmd);
+system($cmd);
+#my $result = `$cmd`;
+logMessage(1, "ssh cmd returned");
+$quit_daemon = 1;
+#chomp $result;
+#logMessage(1, $result);
 
 # rejoin threads
 $daemon_control_thread->join();
@@ -218,77 +93,6 @@ exit 0;
 #
 # Functions
 #
-
-#
-# Manages the connection to the ibob as specified.
-#
-
-sub runLevelSetter($$) {
-
-  my ($l_host, $l_port) = @_;
-
-  my $result = "";
-  my $response = "";
-
-  # Check if an existing SSH tunnel exists
-  my $cmd = "/home/apsr/linux_64/bin/ibob_level_setter  -n 1 ".$l_host." ".$l_port;
-  logMessage(1, $cmd);
-
-  $response = `$cmd 2>&1`;
-  my $rval = $?;
-  #system($cmd." 2>&1");
-
-  if ($rval == 0) {
-    return ("ok", $response);
-  } else {
-    return ("fail", $rval.":".$response );
-  }
-
-}
-
-sub runConfigurator($$$) {
-
-  my ($host, $port, $mac) = @_;
-  
-  my $result = "";
-  my $response = "";
-
-  my $newmac = "";
-  my $i=0;
-  for ($i=0; $i<6; $i++) {
-    $newmac .= substr($mac,$i*3,2);
-  }
-  logMessage(1, $mac." -> ".$newmac);
-
-  my $cmd = "/home/apsr/linux_64/bin/ibob_configurator ".$host." ".$port." ".$newmac;
-  logMessage(1, $cmd);
-
-  $response = `$cmd 2>&1`;
-  my $rval = $?;
-
-  if ($rval == 0) {
-    return ("ok", $response);
-  } else {
-    return ("fail", $rval.":".$response );
-  }
-
-}
-
-sub rearmAll() {
-
-  my $cmd = "/home/apsr/linux_64/bin/ibob_rearm_trigger -M";
-  logMessage(1, $cmd);
-
-  my $response = `$cmd 2>&1`;
-  my $rval = $?;
-
-    if ($rval == 0) {
-    return ("ok", $response);
-  } else {
-    return ("fail", $rval.":".$response );
-  }
-
-}
 
 
 #
@@ -309,7 +113,14 @@ sub daemonControlThread() {
   }
 
   # set the global variable to quit the daemon
-  $quit_daemon = 1;
+  my $handle = Dada->connectToMachine($cfg{"IBOB_GATEWAY"}, $cfg{"IBOB_MANAGER_PORT"},1);
+  if (!$handle) {
+    logMessage(0, "daemon_control: could not connect to ".MULTIBOB_BIN);
+  } else {
+    my ($result, $response) = Dada->sendTelnetCommand($handle, "quit");
+    logMessage(0, "daemon_control: ".$result.":".$response);
+    close($handle);
+  }
 
   logMessage(2, "daemon_control: Unlinking PID file ".$pidfile);
   unlink($pidfile);

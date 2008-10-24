@@ -121,6 +121,17 @@ if ($cfg{"NUM_PWC"} != NHOST) {
 
 # Redirect standard output and error
 Dada->daemonize($logfile, $pidfile);
+
+logMessage(0, "STARTING SCRIPT: ".Dada->getCurrentDadaTime(0));
+
+logMessage(0, "Configuring Multibob");
+($result, $response) = configureMultibobServer();
+if ($result ne "ok") {
+  logMessage(0, "Failed to configure multibob server \"".$response."\"");
+} else {
+  logMessage(0, "Multibob ready");
+}
+
 logMessage(1, "Opening socket for control commands on ".$tcs_host.":".$tcs_port);
 
 my $tcs_socket = new IO::Socket::INET (
@@ -132,8 +143,6 @@ my $tcs_socket = new IO::Socket::INET (
 );
 
 die "Could not create socket: $!\n" unless $tcs_socket;
-
-logMessage(0, "STARTING SCRIPT: ".Dada->getCurrentDadaTime(0));
 
 foreach $key (keys (%site_cfg)) {
   logMessage(2, "site_cfg: ".$key." => ".$site_cfg{$key});
@@ -253,6 +262,8 @@ while (!$quit_threads) {
         if ($lckey eq "start") {
 
           logMessage(2, "Processing START command"); 
+
+          %tcs_cmds = fixTCSCommands(\%tcs_cmds);
 
           # Check that %tcs_cmds has all the required parameters in it
           ($result, $response) = parseTCSCommands(\%tcs_cmds);
@@ -642,8 +653,9 @@ sub start($\%) {
       return ("fail", "start command failed on nexus: \"".$response."\"");
     }
 
-    my $ibob_mngr = Dada->connectToMachine("apsr17","1999");
-    if (!$ibob_mngr) {
+    my $multibob = Dada->connectToMachine($cfg{"IBOB_GATEWAY"},$cfg{"IBOB_MANAGER_PORT"});
+
+    if (!$multibob) {
 
       logMessage(1, "Could not connect to ibob manager");
       return ("fail", "utc_known");
@@ -651,22 +663,29 @@ sub start($\%) {
     } else {
 
       # Run the level setting script on ibob manager
-      logMessage(1, "Running \"set_levels\" on ibob mananger");
-      print $ibob_mngr "set_levels\r\n";
-      $response = Dada->getLine($ibob_mngr);
-      logMessage(1, "Result was ".$response);
+      $cmd = "acclen ".$tcs_cmds{"ACC_LEN"};
+      logMessage(1, "multibob <- ".$cmd);
+      ($result,$response) = Dada->sendTelnetCommand($multibob,$cmd);
+      logMessage(1, "multibob -> ".$result." ".$response);
+
+      # Run the level setting script on ibob manager
+      $cmd = "levels";
+      logMessage(1, "multibob <- ".$cmd);
+      ($result,$response) = Dada->sendTelnetCommand($multibob,$cmd);
+      logMessage(1, "mulibob -> ".$result." ".$response);
 
       # Run the rearming script on ibob manager
-      logMessage(1, "Running \"rearm\" on ibob mananger");
-      print $ibob_mngr "rearm\r\n";
-      my $utc_start_unix = Dada->getLine($ibob_mngr);
-      if ($utc_start_unix == 0) {
-        logMessage(1, "ERROR: 0 UTC received from ibob manager, guessing at current time");
-        $utc_start_unix = time;
-      }
+      $cmd = "arm";
+      logMessage(1, "multibob <- ".$cmd);
+      ($result,$response) = Dada->sendTelnetCommand($multibob,$cmd);
+      logMessage(1, "multibob -> ".$result." ".$response);
 
-      my $utc_start = Dada->printTime($utc_start_unix, "utc");
-      my $utc_start_localtime = Dada->printTime($utc_start_unix, "local");
+      my $utc_start = $response;
+
+      $cmd = "exit";
+      logMessage(1, "multibob <- ".$cmd);
+      print $multibob $cmd."\r\n";
+      close($multibob);
 
       # Setup the server output directories before telling the clients to begin
       ($result, $response) = set_utc_start(ltrim($utc_start), \%tcs_cmds);
@@ -727,6 +746,9 @@ sub set_utc_start($\%) {
     `ls $dir >& /dev/null`;
   }
 
+  logMessage(0, "Setting up results dir: ".$results_dir);
+  logMessage(0, "Setting up archives dir: ".$archive_dir);
+
   $cmd = "mkdir -p ".$results_dir;
   my ($resu, $resp) = Dada->mySystem($cmd,0);
   if ($resu != "ok") {
@@ -734,22 +756,34 @@ sub set_utc_start($\%) {
   }
 
   $cmd = "mkdir -p ".$archive_dir;
-  my ($resu, $resp) = Dada->mySystem($cmd,0);
+  ($resu, $resp) = Dada->mySystem($cmd,0);
   if ($resu != "ok") {
     logMessage(0, "Failed to create the server archive directory (".$archive_dir.") \"".$resp."\"");
   }
 
   $cmd = "chgrp -R ".$proj_id." ".$results_dir;
-  system($cmd);
+  ($resu, $resp) = Dada->mySystem($cmd,0);
+  if ($resu != "ok") {
+    logMessage(0, "cmd ".$cmd." failed: ".$resp);
+  }
 
   $cmd = "chgrp -R ".$proj_id." ".$archive_dir;
-  system($cmd);
+  ($resu, $resp) = Dada->mySystem($cmd,0);
+  if ($resu != "ok") {
+    logMessage(0, "cmd ".$cmd." failed: ".$resp);
+  }
 
   $cmd = "chmod -R g+sw ".$results_dir;
-  system($cmd);
+  ($resu, $resp) = Dada->mySystem($cmd,0);
+  if ($resu != "ok") {
+    logMessage(0, "cmd ".$cmd." failed: ".$resp);
+  }
 
   $cmd = "chmod -R g+sw ".$archive_dir;
-  system($cmd);
+  ($resu, $resp) = Dada->mySystem($cmd,0);
+  if ($resu != "ok") {
+    logMessage(0, "cmd ".$cmd." failed: ".$resp);
+  }
 
   my $fname = $results_dir."/obs.info";
   open FH, ">$fname" or return ("fail","Could not create writeable file: ".$fname);
@@ -774,13 +808,22 @@ sub set_utc_start($\%) {
   close FH;
 
   $cmd = "cp ".$fname." ".$archive_dir;
-  system($cmd);
+  ($resu, $resp) = Dada->mySystem($cmd,0);
+  if ($resu != "ok") {
+    logMessage(0, "cmd ".$cmd." failed: ".$resp);
+  }
 
   $cmd = "sudo -b chown -R bpsr ".$results_dir;
-  system($cmd);
-                                                                                                                   
+  ($resu, $resp) = Dada->mySystem($cmd,0);
+  if ($resu != "ok") {
+    logMessage(0, "cmd ".$cmd." failed: ".$resp);
+  }
+
   $cmd = "sudo -b chown -R bpsr ".$archive_dir;
-  system($cmd);
+  ($resu, $resp) = Dada->mySystem($cmd,0);
+  if ($resu != "ok") {
+    logMessage(0, "cmd ".$cmd." failed: ".$resp);
+  }
 
   return ($result, $response);
 
@@ -1063,7 +1106,7 @@ sub parseTCSCommands(\%) {
   my $result = "ok";
   my $response = "";
 
-  my @cmds = qw(CONFIG ACC_LEN SOURCE RA DEC FA BW RECEIVER CFREQ PID PROC_FILE MODE);
+  my @cmds = qw(ACC_LEN SOURCE RA DEC FA BW RECEIVER CFREQ PID PROC_FILE MODE);
   my $cmd;
 
   foreach $cmd (@cmds) {
@@ -1079,6 +1122,61 @@ sub parseTCSCommands(\%) {
   return ($result, $response);
 
 } 
+
+
+sub fixTCSCommands(\%) {
+
+  my ($tcs_cmds_ref) = @_;
+
+  my %tcs_cmds = %$tcs_cmds_ref;
+
+  my %fix = ();
+  $fix{"src"} = "SOURCE";
+  $fix{"ra"} = "RA";
+  $fix{"dec"} = "DEC";
+  $fix{"band"} = "BW";
+  $fix{"freq"} = "FREQ";
+  $fix{"receiver"} = "RECEIVER";
+  $fix{"acclen"} = "ACC_LEN";
+  $fix{"procfil"} = "PROC_FILE";
+  $fix{"nbit"} = "NDECI_BIT";
+  $fix{"tconst"} = "T_CONST";
+  $fix{"chanav"} = "CHAN_AV";
+  $fix{"nprod"} = "N_PROD";
+  $fix{"ftmax"} = "FT_MAX";
+
+  my %add = ();
+  $add{"STATE"} = "PPQQ";
+  $add{"MODE"} = "PSR";
+  $add{"FA"} = "23";
+  $add{"NCHAN"} = "1024";
+  $add{"NBIT"} = "8";
+  $add{"NPOL"} = "2";
+  $add{"NDIM"} = "1";
+  $add{"PID"} = "P630";
+  $add{"CFREQ"} = "1382";
+  $add{"RECEIVER"} = "MULTI";
+
+  my %new_cmds = ();
+
+  foreach $key (keys (%tcs_cmds)) {
+
+    if (exists $fix{$key}) {
+      $new_cmds{$fix{$key}} = $tcs_cmds{$key};
+    } else {
+      $new_cmds{$key} = $tcs_cmds{$key};
+    }
+  }
+
+  foreach $key (keys (%add)) {
+    if (!(exists $new_cmds{$key})) {
+      $new_cmds{$key} = $add{$key};
+    }
+  }
+
+  return %new_cmds;
+}
+
 
 #
 # Addds the required keys,values to the TCS commands based
@@ -1326,4 +1424,123 @@ sub commThread($$$) {
 
 }
 
+sub configureMultibobServer() {
+
+  my $host = $cfg{"IBOB_GATEWAY"};
+  my $port = $cfg{"IBOB_MANAGER_PORT"};
+
+  my $result;
+  my $response;
+
+  my $handle = Dada->connectToMachine($host, $port, 10);
+
+  if (!$handle) {
+    return ("fail", "Could not connect to multibob_server ".$host.":".$port);
+  }
+
+  # ignore welcome message
+  $response = <$handle>;
+
+  logMessage(1, "multibob <- close");
+  ($result, $response) = Dada->sendTelnetCommand($handle, "close");
+  if ($result ne "ok") {
+    logMessage(0, "multibob close command failed");
+    return ($result, $response);
+  } else {
+    logMessage(1, "multibob -> ".$result." ".$response);
+  }
+
+  # get the current hostports configuration
+
+  ($result, $response) = Bpsr->waitForMultibobState("closed", $handle, 10);
+  if ($result ne "ok") {
+    logMessage(0, "multibob did not close successfully");
+    return ($result, $response);
+  }
+
+  # get the current hostports configuration
+  logMessage(1, "multibob <- hostports");
+  ($result, $response) = Dada->sendTelnetCommand($handle, "hostports");
+  if ($result ne "ok") {
+    logMessage(0, "multibob hostports command failed");
+    return ($result, $response);
+  } else {
+    logMessage(1, "multibob -> ".$result." ".$response);
+  }
+
+  # setup the IBOB host/port mappings
+  my $cmd = $cfg{"NUM_PWC"};
+  my $i=0;
+  for ($i=0; $i<$cfg{"NUM_PWC"}; $i++) {
+    $cmd .= " ".$i." ".$cfg{"IBOB_DEST_".$i}." 23";
+  }
+
+  # if the hostports config on the ibob isn't what we require
+  if ($cmd ne $response) {
+    $cmd = "hostports ".$cmd;
+
+    logMessage(1, "multibob <- ".$cmd);
+    ($result, $response) = Dada->sendTelnetCommand($handle, $cmd);
+    if ($result ne "ok") {
+      logMessage(0, "multibob hostports command failed");
+      return ($result, $response);
+    }
+
+  # just issue the open command
+  } else {
+
+    logMessage(1, "multibob <- open");
+    ($result, $response) = Dada->sendTelnetCommand($handle, "open");
+    if ($result ne "ok") {
+      logMessage(0, "multibob open command failed");
+      return ($result, $response);
+    } else {
+      logMessage(1, "multibob -> ".$result." ".$response);
+    }
+  }
+
+  ($result, $response) = Bpsr->waitForMultibobState("alive", $handle, 60);
+  if ($result ne "ok") {
+    logMessage(0, "multibob threads did not come alive after 60 seconds");
+    return ($result, $response);
+  } else {
+    logMessage(0, "multibob threads now alive");
+  }
+
+  # setup the IBOB mac addresses
+  $cmd = "macs ".$cfg{"NUM_PWC"};
+  my $mac = "";
+  for ($i=0; $i<$cfg{"NUM_PWC"}; $i++) {
+    $mac = $cfg{"IBOB_LOCAL_MAC_ADDR_".$i};
+    $mac =~ s/://g;
+    $cmd .= " ".$i." ".$mac;
+  }
+
+  logMessage(1, "multibob <- ".$cmd);
+  ($result, $response) = Dada->sendTelnetCommand($handle, $cmd);
+  if ($result ne "ok") {
+    logMessage(0, "multibob macs command failed");
+    return ($result, $response);
+  } else {
+    logMessage(1, "multibob -> ".$result." ".$response);
+  }
+
+  $cmd = "acclen 25";
+  logMessage(1, "multibob <- ".$cmd);
+  ($result, $response) = Dada->sendTelnetCommand($handle, $cmd);
+  if ($result ne "ok") {
+    logMessage(0, "multibob acclen command failed");
+    return ($result, $response);
+  } else {
+    logMessage(1, "multibob -> ".$result." ".$response);
+  }
+
+  $cmd = "exit";
+  logMessage(1, "multibob <- ".$cmd);
+  print $handle $cmd."\r\n";
+
+  close($handle);
+
+  return ("ok", "");
+}
 
