@@ -38,8 +38,14 @@ extern "C" {
     pthread_cond_t cond;
     pthread_t id;
 
+    /*! to co-orindate pgplot plotting */
+    pthread_mutex_t *plotmutex;
+
     /*! update bramdump log; otherwise just ping */
     char bramdump;
+
+    /*! update bramdump log; otherwise just ping */
+    char bramplot;
 
     /*! quit flag */
     char quit;
@@ -58,6 +64,7 @@ extern "C" {
     /*! one thread for each iBoB */
     ibob_thread_t* threads;
     unsigned nthread;
+    pthread_mutex_t plotmutex;
 
     /*! command parser and server */
     command_parse_t* parser;
@@ -87,8 +94,14 @@ extern "C" {
   /*! set the host and port number of the specified ibob */
   int multibob_cmd_hostport (void* context, FILE* fptr, char* args);
 
+  /*! set the host and port number of the specified ibob */
+  int multibob_cmd_hostports (void* context, FILE* fptr, char* args);
+
   /*! set the target MAC address of the specified ibob */
   int multibob_cmd_mac (void* context, FILE* fptr, char* args);
+
+  /*! set the target MAC address of the specified ibob */
+  int multibob_cmd_macs (void* context, FILE* fptr, char* args);
 
   /*! open the command connections to all of the ibobs */
   int multibob_cmd_open (void* context, FILE* fptr, char* args);
@@ -101,6 +114,15 @@ extern "C" {
 
   /*! quit */
   int multibob_cmd_quit (void* context, FILE* fptr, char* args);
+
+  /*! set accumultion length on all ibobs */
+  int multibob_cmd_acclen (void* context, FILE* fptr, char* args);
+
+  /*! set bit levels on all ibobs*/
+  int multibob_cmd_levels (void* context, FILE* fptr, char* args);
+
+  void get_scale (int from, int to, float* width, float* height);
+  void set_dimensions (unsigned width_pixels, unsigned height_pixels);
 
 #ifdef __cplusplus
 	   }
