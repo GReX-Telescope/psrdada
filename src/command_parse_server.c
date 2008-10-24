@@ -34,6 +34,8 @@ command_parse_server_create (command_parse_t* parser)
 
   server -> port = 0;
 
+  server -> quit = 0;
+
   pthread_mutex_init(&(server->mutex), NULL);
   
   return server;
@@ -100,7 +102,7 @@ static void* command_parser (void * arg)
     fprintf (parser->output, "%s\n", server->welcome);
   }
 
-  while (!feof (parser->output)) {
+  while ((!feof (parser->output)) && (!server->quit)) {
 
     if (server->prompt)
       fprintf (parser->output, server->prompt);
@@ -125,6 +127,10 @@ static void* command_parser (void * arg)
   fprintf (stderr, "command_parser: closing\n");
 #endif
 
+  /* if the server has been asked to quit, kludgily close the socket */
+  if (server->quit) 
+    sock_close(server->listen_fd);
+
   fclose (parser->input);
   fclose (parser->output);
 
@@ -138,7 +144,7 @@ static void* command_parse_server (void * arg)
   command_parse_server_t* server = (command_parse_server_t*) arg;
   command_parse_thread_t* parser;
 
-  int listen_fd = 0;
+  server->listen_fd = 0;
   int comm_fd = 0;
   int port = server->port;
   FILE* fptr = 0;
@@ -150,30 +156,31 @@ static void* command_parse_server (void * arg)
   fprintf (stderr, "command_parse_server: sock_create (port=%d)\n", port);
 #endif
 
-  listen_fd = sock_create (&port);
+  server->listen_fd = sock_create (&port);
 
-  if (listen_fd < 0 && errno == EADDRINUSE) {
+  if (server->listen_fd < 0 && errno == EADDRINUSE) {
     port = 0;
-    listen_fd = sock_create (&port);
-    if (listen_fd > -1)
+    server->listen_fd = sock_create (&port);
+    if (server->listen_fd > -1)
       fprintf (stderr, "command_parse_server: port=%d\n", port);
   }
 
-  if (listen_fd < 0)  {
+  if (server->listen_fd < 0)  {
     perror ("command_parse_server: Error creating socket");
     return 0;
   }
 
-  while (port) {
+  while (!server->quit) {
 
 #ifdef _DEBUG
-    fprintf (stderr, "command_parse_server: sock_accept (fd=%d)\n", listen_fd);
+    fprintf (stderr, "command_parse_server: sock_accept (fd=%d)\n", server->listen_fd);
 #endif
 
-    comm_fd = sock_accept (listen_fd);
+    comm_fd = sock_accept (server->listen_fd);
 
     if (comm_fd < 0)  {
-      perror ("command_parse_server: Error accepting connection");
+      if (!server->quit)
+        perror ("command_parse_server: Error accepting connection");
       return 0;
     }
 

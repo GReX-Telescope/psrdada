@@ -30,6 +30,12 @@ typedef struct {
   /* the port on which command_parse_server is listening */
   int port;
 
+  /* socket on which connections are made */
+  int listen_fd;
+
+  /* flag to control graceful exit of the server */
+  int quit;
+
 } command_parse_server_t;
 
 /* create a new command parse server */
