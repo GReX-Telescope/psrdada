@@ -51,11 +51,11 @@ function getBPSRResults($results_dir, $utc_start="latest", $type="all", $size="a
   if (is_array($utc_start)) {
     $utc_starts = $utc_start;
   } else if ($utc_start == "all") {
-    $cmd = "ls -1 ".$results_dir;
+    $cmd = "ls -1 -I stats ".$results_dir;
     $str = exec($cmd);
     $utc_starts = split("\n", rtrim($str));
   } else if ($utc_start == "latest") {
-    $cmd = "ls -1 ".$results_dir." | tail -n 1";
+    $cmd = "ls -1 -I stats ".$results_dir." | tail -n 1";
     $utc_starts = array(exec($cmd));
   } else {
     $utc_starts = array($utc_start);
@@ -86,10 +86,10 @@ function getBPSRResults($results_dir, $utc_start="latest", $type="all", $size="a
       while (false !== ($file = readdir($handle))) {
 
         if ($file != "." && $file != "..") {
-                                                                                                             
+
           /* If this is a beam?? subdirectory */
           if ( (is_dir($dir."/".$file)) && (ereg("^([0-9][0-9])$", $file)) ) {
-                                                                                                             
+
             /* Get into a relative dir... */
             chdir($dir);
             $beamid = (int) $file;
@@ -130,6 +130,7 @@ function getServerLogInformation() {
   $arr["bpsr_results_manager"] = array("logfile" => "bpsr_results_manager.log", "name" => "Results Mngr", "tag" => "server");
   $arr["dada_pwc_command"] =     array("logfile" => "dada_pwc_command.log", "name" => "dada_pwc_command", "tag" => "server");
   $arr["ibob_simulator"] =       array("logfile" => "ibob_simualtor.log", "name" => "IBOB Sim", "tag" => "server");
+  $arr["ibob_manager"] =       array("logfile" => "ibob_manager.log", "name" => "Multibob", "tag" => "server");
   $arr["bpsr_pwc_monitor"] =     array("logfile" => "nexus.pwc.log", "name" => "PWC", "tag" => "pwc");
   $arr["bpsr_sys_monitor"] =     array("logfile" => "nexus.sys.log", "name" => "SYS", "tag" => "sys");
   $arr["bpsr_src_monitor"] =     array("logfile" => "nexus.src.log", "name" => "SRC", "tag" => "src");
