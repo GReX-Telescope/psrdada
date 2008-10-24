@@ -5,10 +5,17 @@
  *
  ***************************************************************************/
 
+#ifndef _psrdada_median_smooth_zap_h
+#define _psrdada_median_smooth_zap_h
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+
+#ifndef TEMPLATE_TYPE
+#error TEMPLATE_TYPE must be defined before including median_smooth_zap.h
+#endif
 
 static int less_than (const void* aptr, const void* bptr)
 {
@@ -130,3 +137,5 @@ static int median_smooth_zap (unsigned ndat, TEMPLATE_TYPE* data,
   fprintf (stderr, "zapped %u spikes in %u iterations\n", total_zapped, round);
   free (copy);
 }
+
+#endif
