@@ -28,6 +28,7 @@ if ($machine != "nexus") {
 // Don't allow this page to be cached, since it should always be fresh.
 header("Cache-Control: no-cache, must-revalidate"); // HTTP/1.1
 header("Expires: Mon, 26 Jul 1997 05:00:00 GMT"); // Date in the past
+
 ?>
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
   "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
@@ -41,7 +42,7 @@ header("Expires: Mon, 26 Jul 1997 05:00:00 GMT"); // Date in the past
 
   <script type="text/javascript">
 
-  var url = "<?echo $_SERVER["HTTP_REFERER"]?>control/client_command.php?cmd=get_status&raw=1<?echo $single_machine?>"
+  var url = "http://<?echo $_SERVER["HTTP_HOST"]?>/<?echo INSTRUMENT?>/control/client_command.php?cmd=get_status&raw=1<?echo $single_machine?>"
 
   function looper() {
     request()

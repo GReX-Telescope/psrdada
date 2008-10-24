@@ -289,6 +289,10 @@ sub sendTelnetCommand($$$) {
 
   while ($endofmessage eq "false") {
     $line = <$handle>;
+
+    # remove a leading "> " if it exists
+    $line =~ s/^> //;
+
     $/ = "\n";
     chomp $line;
     $/ = "\r";

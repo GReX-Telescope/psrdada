@@ -73,57 +73,57 @@ include("functions_i.php");
           /* Update the image */
           document.getElementById("img_"+pwc_name+"_pwc").src = "/images/green_light.png"
           document.getElementById("img_"+pwc_name+"_pwc").title = "";
-          document.getElementById("a_"+pwc_name+"_pwc").href = "logwindow.php?machine="+pwc_name+"&loglevel=all&loglength="+loglength+"&daemon=pwc"
+          document.getElementById("a_"+pwc_name+"_pwc").href = "logwindow.php?machine="+pwc_name+"&loglevel=all&loglength="+loglength+"&daemon=<?echo INSTRUMENT?>_pwc_monitor&autoscroll=true"
         }
         if (pwc_status == <?echo STATUS_WARN?>) {
           /* Update the image */
           document.getElementById("img_"+pwc_name+"_pwc").src = "/images/yellow_light.png"
           document.getElementById("img_"+pwc_name+"_pwc").title = pwc_message
-          document.getElementById("a_"+pwc_name+"_pwc").href = "logwindow.php?machine="+pwc_name+"&loglevel=warn&loglength="+loglength+"&daemon=pwc"
+          document.getElementById("a_"+pwc_name+"_pwc").href = "logwindow.php?machine="+pwc_name+"&loglevel=warn&loglength="+loglength+"&daemon=<?echo INSTRUMENT?>_pwc_monitor&autoscroll=true"
         }
         if (pwc_status == <?echo STATUS_ERROR?>) {
           /* Update the image */
           document.getElementById("img_"+pwc_name+"_pwc").src = "/images/red_light.png"
           document.getElementById("img_"+pwc_name+"_pwc").title = pwc_message
-          document.getElementById("a_"+pwc_name+"_pwc").href = "logwindow.php?machine="+pwc_name+"&loglevel=error&loglength="+loglength+"daemon=pwc"
+          document.getElementById("a_"+pwc_name+"_pwc").href = "logwindow.php?machine="+pwc_name+"&loglevel=error&loglength="+loglength+"daemon=<?echo INSTRUMENT?>_pwc_monitor&autoscroll=true"
         }
 
         if (src_status == <?echo STATUS_OK?>) {
           /* Update the image */
           document.getElementById("img_"+pwc_name+"_src").src = "/images/green_light.png"
           document.getElementById("img_"+pwc_name+"_src").title = "";
-          document.getElementById("a_"+pwc_name+"_src").href = "logwindow.php?machine="+pwc_name+"&loglevel=all&loglength="+loglength+"&daemon=src"
+          document.getElementById("a_"+pwc_name+"_src").href = "logwindow.php?machine="+pwc_name+"&loglevel=all&loglength="+loglength+"&daemon=<?echo INSTRUMENT?>_src_monitor&autoscroll=true"
         }
         if (src_status == <?echo STATUS_WARN?>) {
           /* Update the image */
           document.getElementById("img_"+pwc_name+"_src").src = "/images/yellow_light.png"
           document.getElementById("img_"+pwc_name+"_src").title = src_message
-          document.getElementById("a_"+pwc_name+"_src").href = "logwindow.php?machine="+pwc_name+"&loglevel=warn&loglength="+loglength+"&daemon=src"
+          document.getElementById("a_"+pwc_name+"_src").href = "logwindow.php?machine="+pwc_name+"&loglevel=warn&loglength="+loglength+"&daemon=<?echo INSTRUMENT?>_src_monitor&autoscroll=true"
         }
         if (src_status == <?echo STATUS_ERROR?>) {
           /* Update the image */
           document.getElementById("img_"+pwc_name+"_src").src = "/images/red_light.png"
           document.getElementById("img_"+pwc_name+"_src").title = src_message
-          document.getElementById("a_"+pwc_name+"_src").href = "logwindow.php?machine="+pwc_name+"&loglevel=error&loglength="+loglength+"&daemon=src"
+          document.getElementById("a_"+pwc_name+"_src").href = "logwindow.php?machine="+pwc_name+"&loglevel=error&loglength="+loglength+"&daemon=<?echo INSTRUMENT?>_src_monitor&autoscroll=true"
         }
 
         if (sys_status == <?echo STATUS_OK?>) {
           /* Update the image */
           document.getElementById("img_"+pwc_name+"_sys").src = "/images/green_light.png"
           document.getElementById("img_"+pwc_name+"_sys").title = "";
-          document.getElementById("a_"+pwc_name+"_sys").href = "logwindow.php?machine="+pwc_name+"&loglevel=all&loglength="+loglength+"&daemon=sys"
+          document.getElementById("a_"+pwc_name+"_sys").href = "logwindow.php?machine="+pwc_name+"&loglevel=all&loglength="+loglength+"&daemon=<?echo INSTRUMENT?>_sys_monitor&autoscroll=true"
         }
         if (sys_status == <?echo STATUS_WARN?>) {
           /* Update the image */
           document.getElementById("img_"+pwc_name+"_sys").src = "/images/yellow_light.png"
           document.getElementById("img_"+pwc_name+"_sys").title = sys_message
-          document.getElementById("a_"+pwc_name+"_sys").href = "logwindow.php?machine="+pwc_name+"&loglevel=warn&loglength="+loglength+"&daemon=sys"
+          document.getElementById("a_"+pwc_name+"_sys").href = "logwindow.php?machine="+pwc_name+"&loglevel=warn&loglength="+loglength+"&daemon=<?echo INSTRUMENT?>_sys_monitor&autoscroll=true"
         }
         if (sys_status == <?echo STATUS_ERROR?>) {
           /* Update the image */
           document.getElementById("img_"+pwc_name+"_sys").src = "/images/red_light.png"
           document.getElementById("img_"+pwc_name+"_sys").title = sys_message
-          document.getElementById("a_"+pwc_name+"_sys").href = "logwindow.php?machine="+pwc_name+"&loglevel=error&loglength="+loglength+"&daemon=sys"
+          document.getElementById("a_"+pwc_name+"_sys").href = "logwindow.php?machine="+pwc_name+"&loglevel=error&loglength="+loglength+"&daemon=<?echo INSTRUMENT?>_sys_monitor&autoscroll=true"
         }
       }
     }

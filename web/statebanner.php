@@ -15,7 +15,7 @@ $port = $config["TCS_STATE_INFO_PORT"];
 
 
   // This URL will return the names of the 5 current timestamped images();
-  var url = "<?echo $_SERVER["HTTP_REFERER"]?>stateupdate.php?host=<?echo $host?>&port=<?echo $port?>";
+  var url ="http://<?echo $_SERVER["HTTP_HOST"]?>/<?echo INSTRUMENT?>/stateupdate.php?host=<?echo $host?>&port=<?echo $port?>";
   function looper() {
     request()
     setTimeout('looper()',5000)

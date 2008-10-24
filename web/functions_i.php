@@ -102,7 +102,18 @@ function getAllStatuses($pwc_config) {
 
 function getSingleStatusMessage($fname) {
 
-  $fptr = fopen($fname,"r");
+  $result = "";
+
+  if (file_exists($fname)) {
+
+    $cmd = "tail -n 1 $fname";
+    $result = rtrim(`$cmd`);
+    
+  } 
+
+  return $result;
+
+  /*$fptr = fopen($fname,"r");
   if (!$fptr) {
     echo "Could not open status file: $fname<BR>\n";
   } else {
@@ -119,7 +130,7 @@ function getSingleStatusMessage($fname) {
     // Roll back the j counter
     $j--;
   }
-  return $array[$j];
+  return $array[$j];*/
 }
 
 
@@ -366,7 +377,8 @@ function getSubDirs($dir, $offset=0, $length=0, $reverse=0) {
   if (is_dir($dir)) {
     if ($dh = opendir($dir)) {
       while (($file = readdir($dh)) !== false) {
-        if (($file != ".") && ($file != "..") && (is_dir($dir."/".$file))) {
+        if (($file != ".") && ($file != "..") && ($file != "stats") &&
+            (is_dir($dir."/".$file))) {
           array_push($subdirs, $file);
         }
       }

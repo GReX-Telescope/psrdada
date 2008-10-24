@@ -133,8 +133,9 @@ static int median_smooth_zap (unsigned ndat, TEMPLATE_TYPE* data,
       }
     }
   }
-
+#ifdef _DEBUG
   fprintf (stderr, "zapped %u spikes in %u iterations\n", total_zapped, round);
+#endif
   free (copy);
 }
 
