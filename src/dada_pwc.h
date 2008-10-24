@@ -135,6 +135,9 @@ extern "C" {
     /*! Used to convert samples to bytes */
     unsigned bits_per_sample;
 
+    /*! The byte resolution associated with the data */
+    unsigned byte_resolution;
+
     /*! The UTC of first time sample in ring buffer */
     time_t utc_start;
 

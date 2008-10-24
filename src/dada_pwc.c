@@ -79,7 +79,8 @@ int dada_pwc_command_set_byte_count (dada_pwc_t* primary, FILE* output,
                                      dada_pwc_command_t* command)
 {
 
-  if (!primary->convert_to_bytes) {
+  if (!primary->convert_to_bytes)
+  {
 #ifdef _DEBUG
     fprintf (stderr, "dada_pwc_command_set_byte_count not converting\n");
 #endif
@@ -87,7 +88,8 @@ int dada_pwc_command_set_byte_count (dada_pwc_t* primary, FILE* output,
     return 0;
   }
 
-  if (!command->utc) {
+  if (!command->utc)
+  {
 #ifdef _DEBUG
     fprintf (stderr, "dada_pwc_command_set_byte_count no UTC\n");
 #endif
@@ -95,16 +97,20 @@ int dada_pwc_command_set_byte_count (dada_pwc_t* primary, FILE* output,
     return 0;
   }
 
-  if (!primary->utc_start) {
+  if (!primary->utc_start)
+  {
     fprintf (output, "UTC of first time sample unknown\n");
     return -1;
   }
-  if (!primary->bytes_per_second) {
+
+  if (!primary->bytes_per_second)
+  {
     fprintf (output, "bytes per second not known\n");
     return -1;
   }
 
-  if (command->utc < primary->utc_start) {
+  if (command->utc < primary->utc_start)
+  {
 #ifdef _DEBUG
     fprintf (stderr, "requested UTC precedes UTC of first time sample\n");
 #endif
@@ -119,6 +125,19 @@ int dada_pwc_command_set_byte_count (dada_pwc_t* primary, FILE* output,
 
   /* the byte count at which to execute the command */
   command->byte_count *= primary->bytes_per_second;
+
+  /* round the byte_count to the nearest resolution boundary */
+  if (primary->byte_resolution > 1)
+  {
+    /* round down to the start of the packet by default */
+    uint64_t packets = command->byte_count / primary->byte_resolution;
+    command->byte_count = packets * primary->byte_resolution;
+
+    /* round to the end of the packet if stopping */
+    if (command->code == dada_pwc_record_stop ||
+	command->code == dada_pwc_stop)
+      command->byte_count += primary->byte_resolution;
+  }
 
   return 0;
 }
@@ -231,32 +250,46 @@ int dada_pwc_parse_bytes_per_second (dada_pwc_t* primary,
   unsigned nchan;  /* number of dimensions */
 
   uint64_t bits_per_second = 0;
+  int resolution = 1;
 
   double sampling_interval;
 
-  if (ascii_header_get (header, "NPOL", "%d", &npol) < 0) {
+  if (ascii_header_get (header, "NPOL", "%d", &npol) < 0)
+  {
     fprintf (fptr, "failed to parse NPOL - assuming 2\n");
     npol = 2;
   }
 
-  if (ascii_header_get (header, "NBIT", "%d", &nbit) < 0) {
+  if (ascii_header_get (header, "NBIT", "%d", &nbit) < 0)
+  {
     fprintf (fptr, "failed to parse NBIT - assuming 8\n");
     nbit = 8;
   }
 
-  if (ascii_header_get (header, "NDIM", "%d", &ndim) < 0) {
+  if (ascii_header_get (header, "NDIM", "%d", &ndim) < 0)
+  {
     fprintf (fptr, "failed to parse NDIM - assuming 1\n");
     ndim = 1;
   }
 
-  if (ascii_header_get (header, "NCHAN", "%d", &nchan) < 0) {
+  if (ascii_header_get (header, "NCHAN", "%d", &nchan) < 0)
+  {
     fprintf (fptr, "failed to parse NCHAN - assuming 1\n");
     nchan = 1;
   }
 
+  if (ascii_header_get (header, "RESOLUTION", "%d", &resolution) < 0)
+  {
+    fprintf (fptr, "failed to parse RESOLUTION - assuming 1\n");
+    resolution = 1;
+  }
+
+  primary->byte_resolution = resolution;
+
   primary->bits_per_sample = nbit * npol * ndim;
 
-  if (ascii_header_get (header, "TSAMP", "%lf", &sampling_interval) < 0) {
+  if (ascii_header_get (header, "TSAMP", "%lf", &sampling_interval) < 0)
+  {
     fprintf (fptr, "failed to parse TSAMP\n");
     primary->bytes_per_second = 0;
     return -1;
@@ -556,6 +589,7 @@ dada_pwc_t* dada_pwc_create ()
 
   primary -> bytes_per_second = 0;
   primary -> bits_per_sample = 0;
+  primary -> byte_resolution = 0;
   primary -> utc_start = 0;
 
   /* default header size */
@@ -722,7 +756,8 @@ int dada_pwc_set_state (dada_pwc_t* primary, int new_state, time_t utc)
     break;
 
   case dada_pwc_prepared:
-    if (new_state != dada_pwc_clocking &&
+    if (new_state != dada_pwc_idle &&
+	new_state != dada_pwc_clocking &&
         new_state != dada_pwc_recording &&
         new_state != dada_pwc_soft_error &&
         new_state != dada_pwc_hard_error &&
