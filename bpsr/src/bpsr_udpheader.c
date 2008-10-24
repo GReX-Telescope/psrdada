@@ -33,6 +33,7 @@ time_t udpheader_start_function (udpheader_t* udpheader, time_t start_utc)
 
   /* Initialise variables */
 
+  udpheader->select_sleep= 0;
   udpheader->packets->received = 0;
   udpheader->packets->dropped = 0;
   udpheader->packets->received_per_sec = 0;
@@ -131,6 +132,7 @@ void* udpheader_read_function (udpheader_t* udpheader, uint64_t* size)
   /* Determine the sequence number boundaries for curr and next buffers */
   uint64_t raw_sequence_no = 0;
   uint64_t sequence_no = 0;
+  uint64_t prevnum = 0;
 
   /* Assume we will be able to return a full buffer */
   *size = udpheader->datasize;
@@ -138,10 +140,9 @@ void* udpheader_read_function (udpheader_t* udpheader, uint64_t* size)
   /* Continue to receive packets */
   while (!quit) {
 
-    /* select to see if data has arrive. If recording, allow a 1 second
-     * timeout, else 0.1 seconds to ensure buffer function is responsive */
-    timeout.tv_sec=1;
-    timeout.tv_usec=0;
+    /* select to see if data has arrive. */
+    timeout.tv_sec=0;
+    timeout.tv_usec=500000;
 
     FD_ZERO (&readset);
     FD_SET (udpheader->udpfd, &readset);
@@ -159,6 +160,12 @@ void* udpheader_read_function (udpheader_t* udpheader, uint64_t* size)
 
     } else {
 
+      /* Timeout must have a number in it */
+      if (timeout.tv_usec != 500000) {
+        udpheader->select_sleep += (500000 - timeout.tv_usec);
+        //fprintf(stderr, "timeout.tv_sec = %d, timeout_tv.usec = %d\n", timeout.tv_sec, timeout.tv_usec);
+      }
+
       /* Get a packet from the socket */
       udpheader->received = sock_recv (udpheader->udpfd, 
                                        udpheader->socket_buffer,
@@ -172,14 +179,15 @@ void* udpheader_read_function (udpheader_t* udpheader, uint64_t* size)
       raw_sequence_no = decode_header(udpheader->socket_buffer);
       sequence_no = raw_sequence_no / udpheader->sequence_incr;
 
-      if (udpheader->verbose >= 2) {
-        fprintf(stderr, "%"PRIu64" = > %"PRIu64"\n",raw_sequence_no, sequence_no);
+      if ((sequence_no != (prevnum + 1)) && (prevnum != 0)){
+        fprintf(stderr, "%"PRIu64" = > %"PRIu64", prev+1 = %"PRIu64"\n",raw_sequence_no, sequence_no, (prevnum+1));
       }
+      prevnum = sequence_no;
 
       /* When we have received the first packet */      
       if ((udpheader->expected_sequence_no == 0) && (data_received == 0)) {
 
-        fprintf(stderr,"START : received packet %"PRIu64"\n", sequence_no);
+        //fprintf(stderr,"START : received packet %"PRIu64"\n", sequence_no);
         udpheader->expected_sequence_no = sequence_no;
 
 
@@ -218,9 +226,10 @@ void* udpheader_read_function (udpheader_t* udpheader, uint64_t* size)
   
   if (udpheader->prev_time != udpheader->current_time) {
 
-    fprintf(stderr, "pack / sec = %"PRIu64", Bytes / sec = %"PRIu64"\n",
-                    udpheader->packets->received_per_sec, 
-                    udpheader->bytes->received_per_sec);
+    //fprintf(stderr, "slept %5.2f msec, pack / sec = %"PRIu64", Bytes / sec = %"PRIu64"\n",
+    //                ((float) udpheader->select_sleep) / 1000, 
+    //                udpheader->packets->received_per_sec, 
+    //                udpheader->bytes->received_per_sec);
     udpheader->packets->received_per_sec = 0;
     udpheader->bytes->received_per_sec = 0;
 

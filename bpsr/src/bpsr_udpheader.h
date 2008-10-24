@@ -71,6 +71,8 @@ typedef struct{
   /* optimal number of bytes to transfer in 1 write call */
   uint64_t optimal_bytes;
 
+  uint64_t select_sleep;
+
 }udpheader_t;
 
 /* Re-implemented functinos from dada_pwc */
