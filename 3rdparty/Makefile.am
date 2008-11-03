@@ -1,3 +1,4 @@
+bin_PROGRAMS = vsib_proxy vsib_recv vsib_send
 
 lib_LTLIBRARIES = libtimers.la
 
