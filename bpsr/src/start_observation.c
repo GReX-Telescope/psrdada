@@ -9,7 +9,7 @@
 #include <time.h>
 #include <stdio.h>
 
-#define _DEBUG 1
+// #define _DEBUG 1
 
 /*! Starts an observation on the next UTC second, returned as time_t
 

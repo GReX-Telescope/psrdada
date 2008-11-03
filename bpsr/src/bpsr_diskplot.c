@@ -20,7 +20,7 @@ void get_scale (int from, int to, float* width, float * height);
 void usage()
 {
   fprintf (stdout,
-     "bpsr_diskplot [options] files\n"
+     "bpsr_diskplot [options] [files]+ \n"
      " files       pol0 and pol1 files\n"
      " -D device   pgplot device name [default ?]\n"
      " -p          plain image only, no axes, labels etc\n"
@@ -53,6 +53,9 @@ int main (int argc, char **argv)
 
   /* unsigned int array for reading data files */
   unsigned int * input;
+
+  /* unsigned int array for reading data files */
+  float * input2;
 
   /* dimensions of plot */
   unsigned int width_pixels = 0;
@@ -104,7 +107,11 @@ int main (int argc, char **argv)
   fds    = (int *) malloc(sizeof(int) * nfiles);
   fnames = (char **) malloc(sizeof(char *) * nfiles);
   data   = (float **) malloc(sizeof(float *) * nfiles);
-  input  = (unsigned int *) malloc(sizeof(unsigned int *) * BPSR_IBOB_NCHANNELS);
+  //input  = (unsigned int *) malloc(sizeof(unsigned int *) * BPSR_IBOB_NCHANNELS);
+  input2  = (float *) malloc(sizeof(float *) * BPSR_IBOB_NCHANNELS);
+
+  if (verbose)
+    fprintf(stderr, "mallocd data\n");
 
   for (i=0; i < nfiles; i++) {
 
@@ -119,18 +126,23 @@ int main (int argc, char **argv)
     }
 
   }
+  if (verbose)
+    fprintf(stderr, "opened files\n");
 
   /* Read the data from each file into the array */
   for (i=0; i < nfiles; i++) {
 
-    read(fds[i], input, (size_t) (BPSR_IBOB_NCHANNELS*sizeof(unsigned int)));
+    //read(fds[i], input, (size_t) (BPSR_IBOB_NCHANNELS*sizeof(unsigned int)));
+    read(fds[i], input2, (size_t) (BPSR_IBOB_NCHANNELS*sizeof(float)));
     data[i] = malloc (sizeof(unsigned int ) * BPSR_IBOB_NCHANNELS);
 
     for (j=0; j<BPSR_IBOB_NCHANNELS; j++) {
-      data[i][j] = (float) input[j];
+      data[i][j] = input2[j];
     }
 
   }
+  if (verbose)
+    fprintf(stderr, "read data\n");
 
   /* Open pgplot device window */
   if (cpgopen(device) != 1) {
@@ -176,32 +188,48 @@ int main (int argc, char **argv)
       if (data[j][i] > ymax) ymax = data[j][i];
     }
   }
-                                                                                                         
-  cpgbbuf();
 
-  if (plainplot)
-    cpgenv(0, 1024, 0, (1.1*ymax), 0, -2);
-  else {
-    cpgenv(0, 1024, 0, (1.1*ymax), 0, 0);
-    cpglab("Frequency Channel", "Intensity", "Intensity vs Frequency Channel");
+  cpgask(0);
+
+  for (i=0; i < nfiles/2; i++) {
+
+    if (verbose)
+      fprintf(stderr, "processing files %d & %d\n",(2*i), (2*i)+1);
+
+    cpgbbuf();
+    cpgeras();
+
+    cpgsci(1);
+    if (plainplot)
+      cpgenv(0, 1024, 0, (1.1*ymax), 0, -2);
+    else {
+      cpgenv(0, 1024, 0, (1.1*ymax), 0, 0);
+      cpglab("Frequency Channel", "Intensity", "Intensity vs Frequency Channel");
+    }
+                                                                                                         
+    cpgsci(1);
+                                                                                                         
+    float x = 0;
+    float y = 0;
+    
+    fprintf(stderr, "plotting %s & %s\n", fnames[(2*i)], fnames[(2*i)+1]);
+
+    cpgsci(1);
+    cpgmtxt("T", 0.5, 0.0, 0.0, fnames[(2*i)]);
+
+    cpgsci(2);
+    cpgline(1024, x_points, data[2*i]);
+
+    cpgsci(1);
+    cpgmtxt("T", 1.5, 0.0, 0.0, fnames[(2*i)+1]);
+    cpgsci(3);
+
+    cpgline(1024, x_points, data[(2*i)+1]);
+
+    cpgebuf();
+
+    ibob_pause(150);
   }
-                                                                                                         
-  cpgsci(1);
-                                                                                                         
-  float x = 0;
-  float y = 0;
-                                                                                                         
-  /* Red for Pol 0 */
-  for (j=0; j < nfiles; j++) {
-
-    cpgsci(2+j);
-    if (!plainplot)
-      cpgmtxt("T", (((float)j) + 0.5), 0.0, 0.0, fnames[j]);
-    cpgline(1024, x_points, data[j]);
-
-  }
-                                                                                                         
-  cpgebuf();
 
   cpgclos();
 

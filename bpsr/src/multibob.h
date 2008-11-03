@@ -38,14 +38,11 @@ extern "C" {
     pthread_cond_t cond;
     pthread_t id;
 
-    /*! to co-orindate pgplot plotting */
-    pthread_mutex_t *plotmutex;
-
     /*! update bramdump log; otherwise just ping */
     char bramdump;
 
     /*! update bramdump log; otherwise just ping */
-    char bramplot;
+    char bramdisk;
 
     /*! quit flag */
     char quit;
@@ -64,7 +61,6 @@ extern "C" {
     /*! one thread for each iBoB */
     ibob_thread_t* threads;
     unsigned nthread;
-    pthread_mutex_t plotmutex;
 
     /*! command parser and server */
     command_parse_t* parser;
@@ -121,8 +117,8 @@ extern "C" {
   /*! set bit levels on all ibobs*/
   int multibob_cmd_levels (void* context, FILE* fptr, char* args);
 
-  void get_scale (int from, int to, float* width, float* height);
-  void set_dimensions (unsigned width_pixels, unsigned height_pixels);
+  /*! dump accumulated bramdumps to disk */
+  int bramdisk(ibob_t* thread);
 
 #ifdef __cplusplus
 	   }

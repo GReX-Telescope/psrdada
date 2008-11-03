@@ -82,10 +82,4 @@ typedef struct{
 
 void quit(dada_pwc_main_t* pwcm);
 void signal_handler(int signalValue); 
-void extract_counts(char * bram, long * vals);
-long calculate_max(long * vals, long birdie_factor);
-void swap(long *a, long *b);
-void sort(long arr[], long beg, long end);
-int find_bit_window(long pol1val, long pol2val, long *new_gain1, long* new_gain2);
-time_t set_ibob_levels(dada_pwc_main_t* pwcm);
 

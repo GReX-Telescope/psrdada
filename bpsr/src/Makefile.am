@@ -36,10 +36,10 @@ endif
 
 if HAVE_PGPLOT
 
-bin_PROGRAMS += bpsr_dbplot bpsr_diskplot multibob_server
+bin_PROGRAMS += bpsr_dbplot bpsr_diskplot bpsr_bramplot
 AM_CPPFLAGS = @PGPLOT_CFLAGS@
 bpsr_dbplot_LDADD = $(LDADD) @PGPLOT_LIBS@
 bpsr_diskplot_LDADD = $(LDADD) @PGPLOT_LIBS@
-multibob_server_LDADD = $(LDADD) @PGPLOT_LIBS@
+bpsr_bramplot_LDADD = $(LDADD) @PGPLOT_LIBS@
 endif
 

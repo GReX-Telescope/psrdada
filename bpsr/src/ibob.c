@@ -6,6 +6,7 @@
  ***************************************************************************/
 
 #include "ibob.h"
+#include "dada_def.h"
 #include "sock.h"
 
 #define TEMPLATE_TYPE long
@@ -19,6 +20,9 @@
 #include <time.h>
 #include <math.h>
 #include <assert.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 //#define _DEBUG 1
 
@@ -31,6 +35,8 @@ ibob_t* ibob_construct ()
   ibob->buffer = 0;
   ibob->emulate_telnet = 1;
 
+  ibob->host = 0;
+
   ibob->bit_window = 0;
 
   /* 2^12, unity scale factor */
@@ -39,7 +45,7 @@ ibob_t* ibob_construct ()
 
   ibob->pol1_bram = 0;
   ibob->pol2_bram = 0;
-  ibob->bram_max = 8.8;
+  ibob->bram_max = 8.8;   // log2(2^8) * 1.1
   ibob->n_brams = 0;
 
   return ibob;
@@ -62,6 +68,9 @@ int ibob_destroy (ibob_t* ibob)
 
   if (ibob->pol2_bram)
     free (ibob->pol2_bram);
+
+  if (ibob->host)
+    free (ibob->host);
 
   free (ibob);
 
@@ -520,6 +529,121 @@ void ibob_bramdump_reset(ibob_t * ibob)
   ibob->n_brams = 0;
 
 }
+
+/* writes the accumulated bramdumps to disk */
+int ibob_bramdisk(ibob_t * ibob)
+{
+
+  int fd = 0;
+  int flags = O_CREAT | O_WRONLY | O_TRUNC;
+  int perms = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH;
+
+  char fname[128];
+  char time_str[64];
+
+  time_t now = time(0);
+  strftime (time_str, 64, DADA_TIMESTR, localtime(&now));
+
+  sprintf(fname, "/lfs/data0/bpsr/stats/%s_%s.bramdump", time_str, ibob->host);
+
+  fd = open(fname, flags, perms);
+  if (fd < 0)
+  {
+    fprintf (stderr, "Error opening bramdump file: %s\n", fname);
+    return -1;
+  }
+
+  /* floating point arrays for bramdump */
+  float * pol1 = (float *) malloc(sizeof(float) * IBOB_BRAM_CHANNELS);
+  float * pol2 = (float *) malloc(sizeof(float) * IBOB_BRAM_CHANNELS);
+  if (!pol1 || !pol2)
+  {
+    fprintf(stderr, "ibob_bramdisk: could not malloc, oh dear me\n");
+    return -1;
+  }
+
+  /* determine the average */
+  unsigned i=0;
+  for (i=0; i<IBOB_BRAM_CHANNELS; i++)
+  {
+    pol1[i] = ((float) ibob->pol1_bram[i]) / ((float) ibob->n_brams);
+    pol2[i] = ((float) ibob->pol2_bram[i]) / ((float) ibob->n_brams);
+  }
+
+  write(fd, &ibob->bit_window, sizeof(unsigned));
+  write(fd, pol1, sizeof(float) * IBOB_BRAM_CHANNELS);
+  write(fd, pol2, sizeof(float) * IBOB_BRAM_CHANNELS);
+
+  close(fd);
+
+  free(pol1);
+  free(pol2);
+
+  /* reset the averages since we have modified the arrays */
+  ibob_bramdump_reset(ibob);
+
+  /* now NFS copy the file to the server */
+  char nfs_fname[256];
+
+  sprintf(nfs_fname, "/nfs/results/bpsr/stats/%s_%s.bramdump", 
+                     time_str, ibob->host);
+
+  /* Sometimes it takes a while for the file to appear, wait for it */
+  flags =  R_OK | W_OK;
+  int max_wait = 10;
+                                                                                                               
+  while (access(fname, flags) != 0)
+  {
+    fprintf(stderr, "ibob_bramdisk: %s waiting 500ms for bramdump files\n", 
+                     ibob->host);
+    ibob_pause(500);
+    max_wait--;
+
+    if (max_wait == 0)
+    {
+      fprintf(stderr, "ibob_bramdisk: file not on disk after 5 sec\n");
+      break;
+    }
+  }
+
+  if (max_wait) 
+  {
+  
+    /* ensure the NFS mount is mounted */
+    int rval = system("ls /nfs/results > /dev/null");
+    if (rval != 0) 
+    {
+      fprintf(stderr, "%s: NFS ls failed: %d\n", ibob->host, rval);
+      unlink (fname);
+      return -1;
+    }
+
+    char command[256];
+    sprintf(command, "cp -f %s %s", fname, nfs_fname);
+    rval = system(command);
+    if (rval != 0)
+    {
+      fprintf(stderr, "%s: NFS copy failed: %d\n", ibob->host, rval);
+      unlink (fname);
+      return -1;
+    }
+
+    rval = unlink (fname);
+    if (rval != 0)
+    {
+      fprintf(stderr, "%s Unlink failed: %s\n", ibob->host, strerror(errno));
+      return -1;
+    }
+    else
+      return 0;
+  }
+  else
+    return -1;
+
+
+}
+
+
 
 void * ibob_level_setter(void * context) 
 {
