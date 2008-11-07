@@ -17,11 +17,12 @@ SERVER_HOST             srv0.apsr.edu.au
 SERVER_ALIASES          apsr-srv0.atnf.csiro.au srv0.apsr.edu.au
 SERVER_RESULTS_DIR      /export/results/bpsr
 SERVER_ARCHIVE_DIR      /export/archives/bpsr
+SERVER_STATS_DIR        /export/results/bpsr/stats
 SERVER_LOG_DIR          /export/logs/bpsr
 SERVER_CONTROL_DIR      /tmp/bpsr/control
 SERVER_RESULTS_NFS_MNT  /nfs/results/bpsr
 SERVER_ARCHIVE_NFS_MNT  /nfs/archives/bpsr
-SERVER_DAEMONS          bpsr_pwc_monitor bpsr_src_monitor bpsr_sys_monitor bpsr_tcs_interface bpsr_results_manager ibob_simulator ibob_manager
+SERVER_DAEMONS          bpsr_pwc_monitor bpsr_src_monitor bpsr_sys_monitor bpsr_tcs_interface bpsr_results_manager bpsr_multibob_manager
 
 ###############################################################################
 #
@@ -60,6 +61,18 @@ DFB_SIM_DEST_PORT         4001      # SHOULD mactch CLIENT_UDPDB_PORT below
 IBOB_SIM_HOST             srv0      # host masquerading as ibob for the PWC's
 IBOB_SIM_PORT             51008     # port for PWC's to connect to is simulating
                                                                                                      
+
+###############################################################################
+# Tape Archive Locations
+# 
+NUM_SWIN_DIRS           2
+SWIN_DIR_0              pulsar:shrek210:/lfs/data0/bpsr/from_parkes
+SWIN_DIR_1              pulsar:shrek211:/lfs/data0/bpsr/from_parkes
+SWIN_S4_DEVICE          /dev/nst0
+
+NUM_PARKES_DIRS         1
+PARKES_DIR_0            bpsr:apsr16:/lfs/data0/bpsr/from_parkes
+PARKES_S4_DEVICE        /dev/nst1
 
 ###############################################################################
 # Client directory configuration
