@@ -60,19 +60,26 @@ DFB_SIM_PORT              51007     # port to connect/configure DFB_DIM_BINARY
 DFB_SIM_DEST_PORT         4001      # SHOULD mactch CLIENT_UDPDB_PORT below
 IBOB_SIM_HOST             srv0      # host masquerading as ibob for the PWC's
 IBOB_SIM_PORT             51008     # port for PWC's to connect to is simulating
-                                                                                                     
+
 
 ###############################################################################
 # Tape Archive Locations
 # 
 NUM_SWIN_DIRS           2
-SWIN_DIR_0              pulsar:shrek210:/lfs/data0/bpsr/from_parkes
-SWIN_DIR_1              pulsar:shrek211:/lfs/data0/bpsr/from_parkes
+SWIN_DIR_0              pulsar:shrek210:/nfs/cluster/shrek210a/from_parkes
+SWIN_DIR_1              pulsar:shrek210:/nfs/cluster/shrek210b/from_parkes
+SWIN_DIR_2              pulsar:shrek211:/nfs/cluster/shrek211a/from_parkes
+SWIN_DIR_3              pulsar:shrek211:/nfs/cluster/shrek211b/from_parkes
 SWIN_S4_DEVICE          /dev/nst0
+SWIN_DB_DIR             /home/ssi/pulsar/database
 
-NUM_PARKES_DIRS         1
-PARKES_DIR_0            bpsr:apsr16:/lfs/data0/bpsr/from_parkes
-PARKES_S4_DEVICE        /dev/nst1
+NUM_PARKES_DIRS         4
+PARKES_DIR_0            bpsr:apsr14:/lfs/data0/bpsr/from_parkes
+PARKES_DIR_1            bpsr:apsr15:/lfs/data0/bpsr/from_parkes
+PARKES_DIR_2            bpsr:apsr16:/lfs/data0/bpsr/from_parkes
+PARKES_DIR_3            bpsr:apsr17:/lfs/data0/bpsr/from_parkes
+PARKES_S4_DEVICE        /dev/nst0
+SWIN_DB_DIR             /home/pulsar/database
 
 ###############################################################################
 # Client directory configuration
