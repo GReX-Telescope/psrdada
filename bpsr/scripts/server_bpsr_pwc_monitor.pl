@@ -78,15 +78,15 @@ while (!$quit_daemon) {
   # If we have lost the connection, try to reconnect to the PWCC (nexus)
   while (!$handle && !$quit_daemon) {
 
-    logMessage(2, "Attemping connection to PWCC: ".$cfg{"SERVER_HOST"}.":".$cfg{"SERVER_PWCC_LOGPORT"});
+    logMessage(2, "Attemping connection to PWCC: ".$cfg{"SERVER_HOST"}.":".$cfg{"PWCC_LOGPORT"});
 
-    $handle = Dada->connectToMachine($cfg{"SERVER_HOST"},$cfg{"SERVER_PWCC_LOGPORT"});
+    $handle = Dada->connectToMachine($cfg{"SERVER_HOST"},$cfg{"PWCC_LOGPORT"});
 
     if (!$handle)  {
-      sleep(1);
-      logMessage(2,"Could not connect to dada_pwc_command on ".$cfg{"SERVER_HOST"}.":".$cfg{"SERVER_PWCC_LOGPORT"});
+      logMessage(0, "Could not connect to dada_pwc_command on ".$cfg{"SERVER_HOST"}.":".$cfg{"PWCC_LOGPORT"});
+      sleep(5);
     } else {
-      logMessage(1, "Connected to PWCC: ".$cfg{"SERVER_HOST"}.":".$cfg{"SERVER_PWCC_LOGPORT"});
+      logMessage(1, "Connected to PWCC: ".$cfg{"SERVER_HOST"}.":".$cfg{"PWCC_LOGPORT"});
 
     }
   }
@@ -141,6 +141,9 @@ while (!$quit_daemon) {
           open(FH,">>".$statusfile);
         } else {
           open(FH,">".$statusfile);
+        }
+        if ($? != 0) {
+          logMessage(0, "Could not open statusfile: ".$statusfile);
         }
         print FH $msg."\n";
         close FH;
