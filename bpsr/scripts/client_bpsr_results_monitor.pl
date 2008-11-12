@@ -131,17 +131,38 @@ while (!($quit_daemon)) {
 
       my $aux_dir = $file_dir."/aux";
 
+      my $aux_tar = $file_dir."/aux.tar";
+
       if (! -d $aux_dir) {
         logMessage(0, "WARN", "Aux file dir for ".$utc.", beam ".$beam." did not exist, creating...");
         `mkdir -p $aux_dir`;
       }
 
-      my $cmd  = "mv ".$file_dir."/".$file." ".$file_dir."/aux/";
+      $cmd  = "mv ".$file_dir."/".$file." ".$file_dir."/aux/";
       ($result, $response) = Dada->mySystem($cmd,0);
       if ($result ne "ok") {
+
         logMessage(0, "ERROR", "Could not move file ($file) to aux dir \"".$response."\"");
         unlink($file_dir."/".$file);
-      } 
+
+      } else {
+
+        # add the mon file to the .tar archive
+        chdir $file_dir ;
+
+        if (! -f $aux_tar) {
+          $cmd = "tar -cf ./".$aux_tar." aux/".$file;
+        } else {
+          $cmd = "tar -rf ./".$aux_tar." aux/".$file;
+        }
+
+        ($result, $response) = Dada->mySystem($cmd,0);
+        if ($result ne "ok") {
+          logMessage(0, "ERROR", "Could not add file ($file) to aux.tar \"".$response."\"");
+        }
+
+        chdir $client_archive_dir;
+      }
     }
   }
 
