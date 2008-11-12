@@ -165,6 +165,7 @@ while (!$quit_daemon) {
 
         debugMessage(1, "Finalised observation: ".$dir);
         system("touch ".$obs_results_dir."/".$dir."/obs.finalized");
+        system("touch ".$obs_archive_dir."/".$dir."/obs.finalized");
         # TODO remove all extra image files
 
       # Else this is an active observation, try to process the .pol
@@ -490,14 +491,15 @@ sub getMostRecentResult($) {
       $age = $current_unix_time - $unix_time_of_most_recent_result;
       debugMessage(2, "getMostRecentResult: most recent mon file was ".$age." seconds old");
 
+    # The mon files have all have been processed
     } else {
 
       debugMessage(2, "getMostRecentResult: no mon files found in $dir");
 
-      # Check the age of the directories - if > 5 minutes then likely a dud obs.
-
+      # Check the age of the sub directories - if > 5 minutes then likely a dud obs.
       $cmd = "find ".$dir."/* -type d -printf \"%T@\\n\" | sort | tail -n 1";
       $unix_time_of_most_recent_result = `$cmd`;
+
       chomp($unix_time_of_most_recent_result);
 
       if ($unix_time_of_most_recent_result) {
@@ -507,9 +509,9 @@ sub getMostRecentResult($) {
 
         # If the obs.start is more than 5 minutes old, but we have no
         # archives, then this observation is considered a dud
-        if ($age > 5*60) {
-          $age = -1;
-        }
+        #if ($age > 5*60) {
+        #  $age = -1;
+        #}
 
       } else {
         $age = -1;
