@@ -38,16 +38,39 @@ my @clients = ();
 my @helpers = ();
 my @clients_n_helpers = ();
 my $i=0;
+my $start=1;
+my $stop=1;
+
 
 my %opts;
-getopts('h', \%opts);
+getopts('his', \%opts);
 
 if ($opts{h}) {
   usage();
   exit(0);
 }
 
-debugMessage(0, "Restarting BPSR");
+if ($opts{i}) {
+  $start = 1;
+  $stop = 0;
+} 
+
+if ($opts{s}) {
+  $stop = 1;
+  $start = 0;
+}
+
+if (($start == 1) && ($stop == 1)) {
+  debugMessage(0, "Restarting BPSR");
+} elsif ($start == 0) {
+  debugMessage(0, "Stopping BPSR");
+} elsif ($stop == 0) {
+  debugMessage(0, "Starting BPSR");
+} else {
+  debugMessage(0, "Unsure of command");
+  usage();
+  exit(1);
+}
 
 # Setup directories should they not exist
 my $control_dir = $cfg{"SERVER_CONTROL_DIR"};
@@ -62,72 +85,88 @@ for ($i=0; $i < $cfg{"NUM_PWC"}; $i++) {
   push(@clients_n_helpers, $cfg{"PWC_".$i});
 }
 
-# Stop PWC's
-debugMessage(0, "Stopping PWCs");
-if (!(issueTelnetCommand("stop_pwcs",\@clients))) {
-  debugMessage(0, "stop_pwcs failed");
+if ($stop == 1) {
+
+  # Stop PWC's
+  debugMessage(0, "Stopping PWCs");
+  if (!(issueTelnetCommand("stop_pwcs",\@clients))) {
+    debugMessage(0, "stop_pwcs failed");
+  }
+
+  # Stop client scripts
+  debugMessage(0, "Stopping client scripts");
+  if (!(issueTelnetCommand("stop_daemons",\@clients_n_helpers))) {
+    debugMessage(0,"stop_daemons failed");
+  }
+
+  # Destroy DB's
+  debugMessage(0, "Destroying Data blocks");
+  if (!(issueTelnetCommand("destroy_db",\@clients_n_helpers))) {
+    debugMessage(0,"destroy_db failed");
+  }
+
+  # Stop server scripts
+  debugMessage(0, "Stopping server scripts");
+  ($result, $response) = stopDaemons();
+  if ($result ne "ok") {
+    debugMessage(0, "Could not stop server daemons: ".$response);
+  }
+
+  # Stop client mastser script
+  debugMessage(0, "Stopping client master script");
+  if (!(issueTelnetCommand("stop_master_script",\@clients_n_helpers))) {
+    debugMessage(0,"stop_master_script failed");
+  }
 }
 
-# Stop client scripts
-debugMessage(0, "Stopping client scripts");
-if (!(issueTelnetCommand("stop_daemons",\@clients_n_helpers))) {
-  debugMessage(0,"stop_daemons failed");
+if ($start == 1) {
+  # Start client master script
+  debugMessage(0, "Starting client master script");
+  if (!(issueTelnetCommand("start_master_script",\@clients_n_helpers))) {
+    debugMessage(0,"start_master_script failed");
+  }
+
+  sleep(1);
+
+  # initalize DB's
+  debugMessage(1, "Initializing Data blocks");
+  if (!(issueTelnetCommand("init_db",\@clients_n_helpers))) {
+    debugMessage(0, "init_db failed");
+  }
+
+  sleep(1);
+
+  # Start PWC's
+  debugMessage(1, "Starting PWCs");
+  if (!(issueTelnetCommand("start_pwcs",\@clients))) {
+    debugMessage(0,"start_pwcs failed");
+  }
+
+  # Start server scripts
+  debugMessage(0, "Starting server scripts");
+  ($result, $response) = startDaemons();
+  if ($result ne "ok") {
+    debugMessage(0, "Could not start server daemons: ".$response);
+  }
+
+  # Start client scripts
+  debugMessage(0, "Starting client scripts");
+  if (!(issueTelnetCommand("start_daemons",\@clients))) {
+    debugMessage(0,"start_daemons failed");
+  }
 }
 
-# Destroy DB's
-debugMessage(0, "Destroying Data blocks");
-if (!(issueTelnetCommand("destroy_db",\@clients_n_helpers))) {
-  debugMessage(0,"destroy_db failed");
+# Clear the web interface status directory
+my $dir = $cfg{"STATUS_DIR"};
+if (-d $dir) {
+  my $cmd = "rm -f ".$dir."/*.error";
+  debugMessage(0, "clearing .error from status_dir"); 
+  ($result, $response) = Dada->mySystem($cmd);
+
+  my $cmd = "rm -f ".$dir."/*.warn";
+  debugMessage(0, "clearing .warn from status_dir"); 
+  ($result, $response) = Dada->mySystem($cmd);
 }
-
-# Stop server scripts
-debugMessage(0, "Stopping server scripts");
-($result, $response) = stopDaemons();
-if ($result ne "ok") {
-  debugMessage(0, "Could not stop server daemons: ".$response);
-}
-
-# Stop client mastser script
-debugMessage(0, "Stopping client master script");
-if (!(issueTelnetCommand("stop_master_script",\@clients_n_helpers))) {
-  debugMessage(0,"stop_master_script failed");
-}
-
-# Start client master script
-debugMessage(0, "Starting client master script");
-if (!(issueTelnetCommand("start_master_script",\@clients_n_helpers))) {
-  debugMessage(0,"start_master_script failed");
-}
-
-sleep(1);
-
-# initalize DB's
-debugMessage(1, "Initializing Data blocks");
-if (!(issueTelnetCommand("init_db",\@clients_n_helpers))) {
-  debugMessage(0, "init_db failed");
-}
-
-sleep(1);
-
-# Start PWC's
-debugMessage(1, "Starting PWCs");
-if (!(issueTelnetCommand("start_pwcs",\@clients))) {
-  debugMessage(0,"start_pwcs failed");
-}
-
-# Start server scripts
-debugMessage(0, "Starting server scripts");
-($result, $response) = startDaemons();
-if ($result ne "ok") {
-  debugMessage(0, "Could not start server daemons: ".$response);
-}
-
-# Start client scripts
-debugMessage(0, "Starting client scripts");
-if (!(issueTelnetCommand("start_daemons",\@clients))) {
-  debugMessage(0,"start_daemons failed");
-}
-
 
 exit 0;
 
@@ -172,7 +211,9 @@ sub commThread($$) {
 
 sub usage() {
   print "Usage: ".$0." [options]\n";
-  print "   -h               print help text\n";
+  print "   -i      start the bpsr instrument\n";
+  print "   -s      stop the bpsr instrument\n";
+  print "   -h      print help text\n";
 }
 
 sub debugMessage($$) {
