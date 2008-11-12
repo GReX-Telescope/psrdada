@@ -9,6 +9,7 @@ dist_bin_SCRIPTS = Bpsr.pm \
                    server_bpsr_pwc_monitor.pl \
                    server_bpsr_src_monitor.pl \
                    server_bpsr_sys_monitor.pl \
+                   server_bpsr_tape_archiver.pl \
                    client_bpsr_master_control.pl \
                    client_bpsr_command.pl \
                    client_bpsr_observation_manager.pl \
