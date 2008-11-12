@@ -24,8 +24,8 @@ require AutoLoader;
   &getBpsrConfigFile
   &waitForMultibobState
   &getMultibobState
-  &set_ibob_levels
-  &start_ibob
+  &configureMultibobServer
+  &clientCommand
 );
 
 $VERSION = '0.01';
@@ -88,7 +88,7 @@ sub waitForMultibobState($$$$) {
   }
 
   if (($counter+1) != $Twait) {
-    if (DEBUG_LEVEL >= 0) { print STDERR "\n"; }
+    if (DEBUG_LEVEL >= 1) { print STDERR "\n"; }
   }
 
   if ($myready eq "yes") {
@@ -133,5 +133,159 @@ sub getMultibobState($$) {
 
 }
 
+
+sub configureMultibobServer() {
+
+  my %cfg = getBpsrConfig();
+
+  my $host = $cfg{"IBOB_GATEWAY"};
+  my $port = $cfg{"IBOB_MANAGER_PORT"};
+
+  my $result;
+  my $response;
+
+  my $handle = Dada->connectToMachine($host, $port, 10);
+
+  if (!$handle) {
+    return ("fail", "Could not connect to multibob_server ".$host.":".$port);
+  }
+
+  # ignore welcome message
+  $response = <$handle>;
+
+  logMessage("Bpsr",1, "multibob <- close");
+  ($result, $response) = Dada->sendTelnetCommand($handle, "close");
+  if ($result ne "ok") {
+    logMessage("Bpsr",0, "multibob close command failed");
+    return ($result, $response);
+  } else {
+    logMessage("Bpsr",1, "multibob -> ".$result." ".$response);
+  }
+
+  # get the current hostports configuration
+
+  ($result, $response) = Bpsr->waitForMultibobState("closed", $handle, 10);
+  if ($result ne "ok") {
+    logMessage("Bpsr",0, "multibob did not close successfully");
+    return ($result, $response);
+  }
+
+  # get the current hostports configuration
+  logMessage("Bpsr",1, "multibob <- hostports");
+  ($result, $response) = Dada->sendTelnetCommand($handle, "hostports");
+  if ($result ne "ok") {
+    logMessage("Bpsr",0, "multibob hostports command failed");
+    return ($result, $response);
+  } else {
+    logMessage("Bpsr",1, "multibob -> ".$result." ".$response);
+  }
+
+  # setup the IBOB host/port mappings
+  my $cmd = $cfg{"NUM_PWC"};
+  my $i=0;
+  for ($i=0; $i<$cfg{"NUM_PWC"}; $i++) {
+    $cmd .= " ".$i." ".$cfg{"IBOB_DEST_".$i}." 23";
+  }
+
+  # if the hostports config on the ibob isn't what we require
+  if ($cmd ne $response) {
+    $cmd = "hostports ".$cmd;
+
+    logMessage("Bpsr",1, "multibob <- ".$cmd);
+    ($result, $response) = Dada->sendTelnetCommand($handle, $cmd);
+    if ($result ne "ok") {
+      logMessage("Bpsr",0, "multibob hostports command failed");
+      return ($result, $response);
+    }
+
+  # just issue the open command
+  } else {
+
+    logMessage("Bpsr",1, "multibob <- open");
+    ($result, $response) = Dada->sendTelnetCommand($handle, "open");
+    if ($result ne "ok") {
+      logMessage("Bpsr",0, "multibob open command failed");
+      return ($result, $response);
+    } else {
+      logMessage("Bpsr",1, "multibob -> ".$result." ".$response);
+    }
+  }
+
+  ($result, $response) = Bpsr->waitForMultibobState("alive", $handle, 60);
+  if ($result ne "ok") {
+    logMessage("Bpsr",0, "multibob threads did not come alive after 60 seconds");
+    return ($result, $response);
+  } else {
+    logMessage("Bpsr",0, "multibob threads now alive");
+  }
+
+  # setup the IBOB mac addresses
+  $cmd = "macs ".$cfg{"NUM_PWC"};
+  my $mac = "";
+  for ($i=0; $i<$cfg{"NUM_PWC"}; $i++) {
+    $mac = $cfg{"IBOB_LOCAL_MAC_ADDR_".$i};
+    $mac =~ s/://g;
+    $cmd .= " ".$i." ".$mac;
+  }
+
+  logMessage("Bpsr",1, "multibob <- ".$cmd);
+  ($result, $response) = Dada->sendTelnetCommand($handle, $cmd);
+  if ($result ne "ok") {
+    logMessage("Bpsr",0, "multibob macs command failed");
+    return ($result, $response);
+  } else {
+    logMessage("Bpsr",1, "multibob -> ".$result." ".$response);
+  }
+
+  $cmd = "acclen 25";
+  logMessage("Bpsr",1, "multibob <- ".$cmd);
+  ($result, $response) = Dada->sendTelnetCommand($handle, $cmd);
+  if ($result ne "ok") {
+    logMessage("Bpsr",0, "multibob acclen command failed");
+    return ($result, $response);
+  } else {
+    logMessage("Bpsr",1, "multibob -> ".$result." ".$response);
+  }
+
+  $cmd = "exit";
+  logMessage("Bpsr",1, "multibob <- ".$cmd);
+  print $handle $cmd."\r\n";
+
+  close($handle);
+
+  return ("ok", "");
+}
+
+sub logMessage($$$) {
+  
+  my ($module, $level, $msg) = @_;
+
+  if ($level <= 2) {
+     print "[".Dada->getCurrentDadaTime(0)."] ".$msg."\n";
+  }
+
+}
+
+sub clientCommand($$$) {
+
+  my ($module, $command, $machine) = @_;
+
+  my %cfg = getBpsrConfig();
+  my $result = "fail";
+  my $response = "Failure Message";
+
+  my $handle = Dada->connectToMachine($machine, $cfg{"CLIENT_MASTER_PORT"}, 0);
+  # ensure our file handle is valid
+  if (!$handle) {
+    return ("fail","Could not connect to machine ".$machine.":".$cfg{"CLIENT_MASTER_PORT"});
+  }
+
+  ($result, $response) = Dada->sendTelnetCommand($handle,$command);
+
+  $handle->close();
+
+  return ($result, $response);
+
+}
 
 __END__
