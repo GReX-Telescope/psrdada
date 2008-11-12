@@ -217,6 +217,7 @@ sub processing_thread($$) {
     chdir $processing_dir;
 
     $cmd = $bindir."/".$proc_cmd;
+    $cmd .= " 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/client_bpsr_src_logger.pl";
 
     logMessage(2, "INFO", "cmd = $cmd");
 
