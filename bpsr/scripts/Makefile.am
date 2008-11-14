@@ -17,4 +17,5 @@ dist_bin_SCRIPTS = Bpsr.pm \
                    client_bpsr_results_monitor.pl \
                    client_ibob_level_setter.pl \
                    client_bpsr_src_logger.pl \
-                   ibob_interface.pl
+                   ibob_interface.pl \
+                   web_style.txt
