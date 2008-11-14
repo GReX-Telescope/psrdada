@@ -5,10 +5,8 @@
 # server_bpsr_tape_archiver.pl
 #
 
-use lib $ENV{"DADA_ROOT"}."/bin";
+use lib $ENV{"DADA_ROOT"}."/newbin";
 
-use IO::Socket;     # Standard perl socket library
-use IO::Select;     # Allows select polling on a socket
 use Net::hostent;
 use File::Basename;
 use Bpsr;           # BPSR Module 
@@ -41,6 +39,9 @@ our $indent = "";                      # log message indenting
 our $db_dir = "";
 
 
+my $uc_type = "";
+
+
 # Autoflush output
 $| = 1;
 
@@ -70,6 +71,18 @@ if ($#ARGV != 0) {
 
 }
 
+# set the pattern tape id pattern for each location
+if (($type eq "swin") || ($type eq "robot_init")) {
+        $tape_id_pattern = "HRA[0-9][0-9][0-9]S4";
+        $robot = 1;
+        $uc_type = "SWIN";
+}
+if ($type eq "parkes") {
+        $tape_id_pattern = "HRE[0-9][0-9][0-9]S4";
+        $uc_type = "PARKES";
+}
+
+
 #
 # Local Varaibles
 #
@@ -80,7 +93,6 @@ my $daemon_control_thread = 0;
 
 my $i=0;
 my @dirs  = ();
-my $uc_type = "";
 
 my $user;
 my $host;
@@ -94,17 +106,6 @@ for ($i=0; $i<$cfg{"NUM_".$uc_type."_DIRS"}; $i++) {
 
 # location of DB files
 $db_dir = $cfg{$uc_type."_DB_DIR"};
-
-# set the pattern tape id pattern for each location
-if (($type eq "swin") || ($type eq "robot_init")) {
-  $tape_id_pattern = "HRA[0-9][0-9][0-9]S4";
-  $robot = 1;
-  $uc_type = "SWIN";
-} 
-if ($type eq "parkes") {
-  $tape_id_pattern = "HRE[0-9][0-9][0-9]S4";
-  $uc_type = "PARKES";
-}
 
 # set global variable for the S4 device name
 $dev = $cfg{$uc_type."_S4_DEVICE"};
@@ -149,7 +150,11 @@ logMessage(1, "main: checking current tape");
 
 if ($result ne "ok") {
   logMessage(0, "main: getCurrentTape() failed: ".$response);
-  exit_script(1);
+  ($result, $response) = newTape();
+  if ($result ne "ok") {
+    logMessage(0, "main: getNewTape() failed: ".$response);
+    exit_script(1);
+  }
 }
 
 $current_tape = $response;
@@ -1322,14 +1327,17 @@ sub manualInsertTape($) {
   my $user = "dada";
   my $host = "shrek211";
   my $port = 31001;
-  my $dir = "/nfs/control/bpsr/";
+  my $dir = "/mnt/apsr/control/bpsr/";
   my $opts = "HostKeyAlias=srv0 -o StrictHostKeyChecking=no -o Loglevel=QUIET";
 
   my $to_file = $type.".state";
   my $from_file = $type.".response";
 
   # Delete the existing command and response files
-  $cmd = "ssh -l ".$user." -p ".$port." -o ".$opts." ".$host." 'cd ".$dir."; rm -f ".$to_file." ".$from_file."'";
+  # 'Old' test mode of contacting user
+  #$cmd = "ssh -l ".$user." -p ".$port." -o ".$opts." ".$host." 'cd ".$dir."; rm -f ".$to_file." ".$from_file."'";
+  
+  $cmd="rm -f $dir/$to_file $dir/$from_file";
   logMessage(2, "manualInsertTape: ".$cmd);
   ($result, $response) = Dada->mySystem($cmd);
   logMessage(2, "manualInsertTape: ".$result." ".$response);
@@ -1341,7 +1349,8 @@ sub manualInsertTape($) {
   }
 
   # Send the "Insert Tape" command
-  $cmd = "ssh -l ".$user." -p ".$port." -o ".$opts." ".$host." 'cd ".$dir."; echo \"Insert Tape:::".$tape."\" > ".$to_file."'";
+  #$cmd = "ssh -l ".$user." -p ".$port." -o ".$opts." ".$host." 'cd ".$dir."; echo \"Insert Tape:::".$tape."\" > ".$to_file."'";
+  $cmd = "echo \"Insert Tape:::$tape\" > $dir/$to_file";
   logMessage(2, "manualInsertTape: ".$cmd);
   ($result, $response) = Dada->mySystem($cmd);
   logMessage(2, "manualInsertTape: ".$result." ".$response);
@@ -1351,7 +1360,8 @@ sub manualInsertTape($) {
   while ((!$have_response) && (!$quit_daemon)) {
 
     # Wait for a response to appear from the user
-    $cmd = "ssh -l ".$user." -p ".$port." -o ".$opts." ".$host." 'cd ".$dir."; cat ".$from_file."'";
+    #$cmd = "ssh -l ".$user." -p ".$port." -o ".$opts." ".$host." 'cd ".$dir."; cat ".$from_file."'";
+    $cmd = "cat $dir/$from_file";
     logMessage(2, "manualInsertTape: ".$cmd);
     ($result, $response) = Dada->mySystem($cmd);
     logMessage(2, "manualInsertTape: ".$result." ".$response);
@@ -1371,7 +1381,8 @@ sub manualInsertTape($) {
     my $new_tape = $response;
 
     # Remove the insert tape command 
-    $cmd = "ssh -l ".$user." -p ".$port." -o ".$opts." ".$host." 'cd ".$dir."; rm -f ".$to_file."; echo \"Writing to tape ".$tape."\" > ".$to_file."'";
+    #$cmd = "ssh -l ".$user." -p ".$port." -o ".$opts." ".$host." 'cd ".$dir."; rm -f ".$to_file."; echo \"Writing to tape ".$tape."\" > ".$to_file."'";
+    $cmd = "rm -f $dir/$to_file; echo \"Writing to tape $tape\" > $dir/$to_file";
     logMessage(2, "manualInsertTape: ".$cmd);
     ($result, $response) = Dada->mySystem($cmd);
     logMessage(2, "manualInsertTape: ".$result." ".$response);
