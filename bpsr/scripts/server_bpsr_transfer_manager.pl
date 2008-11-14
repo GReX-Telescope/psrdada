@@ -20,13 +20,13 @@ use threads::shared;
 #
 # Constants
 #
-use constant DEBUG_LEVEL  => 2;
+use constant DEBUG_LEVEL  => 1;
 use constant PIDFILE      => "bpsr_transfer_manager.pid";
 use constant LOGFILE      => "bpsr_transfer_manager.log";
 use constant DATA_RATE    => 46;
 use constant TCP_WINDOW   => 1700;
 use constant VSIB_PORT    => 41000;
-use constant SSH_OPTS     => "-o BatchMode=yes";
+use constant SSH_OPTS     => "-x -o BatchMode=yes";
 
 
 #
@@ -80,7 +80,7 @@ my $response;
 # Main
 #
 
-# Dada->daemonize($logfile, $pidfile);
+Dada->daemonize($logfile, $pidfile);
 
 logMessage(0, "STARTING SCRIPT");
 
@@ -92,7 +92,7 @@ my @swin_recv_threads = ();
 my @swin_recv_results = ();
 my @swin_recv_responses = ();
 
-my $parkes_from_host = "srv1";
+my $parkes_from_host = "srv0";
 my @parkes_recv_threads = ();
 my @parkes_recv_results = ();
 my @parkes_recv_responses = ();
@@ -140,48 +140,52 @@ while (!$quit_daemon) {
       logMessage(1, "Processing Observation: ".$obs);
 
       # Launch vsib_sends on the server (running in server mode)
+      logMessage(1, "vsib_send ".$obs." to ".$s_host.", ".$p_host);
       for ($i=0; $i<=$#keys; $i++) {
         $key = $keys[$i];
-        logMessage(1, "run_vsib_send(".$s_host.", ".$p_host.", ".$obs.", ".$i.")");
+        logMessage(2, "run_vsib_send(".$s_host.", ".$p_host.", ".$obs.", ".$i.")");
         @send_threads[$i] = threads->new(\&run_vsib_send, $s_host, $p_host, $files{$key}, $i);
       }
 
       # Launch vib_recv clients on parkes and swin hosts
       sleep(1);
 
+      logMessage(1, "vsib_recv ".$obs." on ".$s_host.", ".$p_host);
       for ($i=0; $i<=$#keys; $i++) {
         $key = $keys[$i];
 
         if ($s_host ne "none") {
-          logMessage(1, "run_vsib_recv(".$s_user.", ".$s_host.", ".$s_dir.", ".$swin_from_host.", ".$i.")");
+          logMessage(2, "run_vsib_recv(".$s_user.", ".$s_host.", ".$s_dir.", ".$swin_from_host.", ".$i.")");
           @swin_recv_threads[$i] = threads->new(\&run_vsib_recv, $s_user, $s_host, $s_dir, $swin_from_host, $key, $i);
         }
 
         if ($p_host ne "none") {
-          logMessage(1, "run_vsib_recv(".$p_user.", ".$p_host.", ".$p_dir.", ".$parkes_from_host.", ".$i.")");
+          logMessage(2, "run_vsib_recv(".$p_user.", ".$p_host.", ".$p_dir.", ".$parkes_from_host.", ".$i.")");
           @parkes_recv_threads[$i] = threads->new(\&run_vsib_recv, $p_user, $p_host, $p_dir, $parkes_from_host, $key, $i);
         }
       }
 
       # Threads are all running now. join them all
-      logMessage(1, "Threads launch, waiting for completion");
+      logMessage(1, "Threads launched, waiting for completion");
 
       for ($i=0; $i<=$#keys; $i++) {
         $key = $keys[$i];
 
         ($send_results[$i], $send_responses[$i]) = $send_threads[$i]->join;
-        logMessage(1, "run_vsib_send: ".$send_results[$i].":".$send_responses[$i]);
+        logMessage(2, "run_vsib_send: ".$send_results[$i].":".$send_responses[$i]);
 
         if ($s_host ne "none") {
           ($swin_recv_results[$i], $swin_recv_responses[$i]) = $swin_recv_threads[$i]->join;
-          logMessage(1, "run_vsib_recv: ".$swin_recv_results[$i].":".$swin_recv_responses[$i]);
+          logMessage(2, "run_vsib_recv: ".$swin_recv_results[$i].":".$swin_recv_responses[$i]);
         }
 
         if ($p_host ne "none") {
           ($parkes_recv_results[$i], $parkes_recv_responses[$i]) = $parkes_recv_threads[$i]->join;
-          logMessage(1, "run_vsib_recv: ".$parkes_recv_results[$i].":".$parkes_recv_responses[$i]);
+          logMessage(2, "run_vsib_recv: ".$parkes_recv_results[$i].":".$parkes_recv_responses[$i]);
         }
       }
+
+      logMessage(1, "Threads joined, checking transfer");
 
       # Now test the results to ensure the data was transferred correctly
       if ($p_host ne "none") {
@@ -211,10 +215,9 @@ while (!$quit_daemon) {
     }
 
   }
-
-  $quit_daemon = 1;
-
-  sleep(2);
+  
+  logMessage(2, "Sleeping 5 seconds");
+  sleep(5);
 
 }
 
@@ -240,23 +243,20 @@ sub checkRemoteArchive($$$$) {
 
   my ($user, $host, $dir, $obs) = @_;
 
-  my $cmd = "find -L ".$obs." \\( ! -iname \"sent.to.*\" \\) | sort";
-  logMessage(1, $cmd);
+  my $cmd = "find -L ".$obs." -maxdepth 2 \\( ! -iname 'sent.to.*' ! -iname 'aux' ! -iname 'obs.*' \\) | sort";
+  logMessage(2, $cmd);
   my $local_list = `$cmd`;
   if ($? != 0) {
     logMessage(0, "find command failed: ".$local_list);
   }
 
-  $cmd = "ssh ".SSH_OPTS." -l ".$user." ".$host." \"cd ".$dir."; tar -tf ./".$obs.".tar\" | sort";
-  logMessage(1, $cmd);
+  $cmd = "ssh ".SSH_OPTS." -l ".$user." ".$host." \"cd ".$dir."; find -L ".$obs." \\( ! -iname 'sent.to.*' \\)\" | sort";
+  logMessage(2, $cmd);
   my $remote_list = `$cmd`;
 
   if ($? != 0) {
     logMessage(0, "ssh command failed: ".$remote_list);
   }
-
-  # strip trailing slashes on directories
-  $remote_list =~ s/\/\n/\n/g;
 
   if ($local_list eq $remote_list) {
     return ("ok", "");
@@ -383,6 +383,8 @@ sub findHoldingArea(\@) {
 #
 sub getObsToSend() {
 
+  logMessage(2, "getObsToSend()");
+
   my $archives_dir = $cfg{"SERVER_ARCHIVE_NFS_MNT"};
 
   # produce a "unixtime filename" list of all the obs.finalized
@@ -399,6 +401,9 @@ sub getObsToSend() {
   my $obs_finalized = 0;
   my $sent_to_swin = 0;
   my $sent_to_parkes = 0;
+  my $fil_count = 0;
+  my $tar_count = 0;
+  my $obs_start_count = 0;
 
   my $dir = "";
   my $candidate = "none";
@@ -429,14 +434,30 @@ sub getObsToSend() {
     if (-f $dir."/sent.to.parkes") {
       $sent_to_parkes = 1;
     }
+  
+    $cmd = "find -L ".$dir." -maxdepth 2 -name 'aux.tar' | wc | awk '{print \$1}'";
+    $tar_count = `$cmd`;
+    chomp $tar_count;
 
-    logMessage(2, "dir ".$dir.", obs ".$obs.",  finalized ".$obs_finalized.", swin ".$sent_to_swin.", parkes ".$sent_to_parkes);
+    $cmd = "find -L ".$dir." -maxdepth 2 -name '*.fil' | wc | awk '{print \$1}'";
+    $fil_count = `$cmd`;
+    chomp $fil_count;
+
+    $cmd = "find -L ".$dir." -maxdepth 2 -name 'obs.start' | wc | awk '{print \$1}'";
+    $obs_start_count = `$cmd`;
+    chomp $obs_start_count;
+
+    logMessage(3, "dir ".$dir.", obs ".$obs.",  finalized ".$obs_finalized.", swin ".$sent_to_swin.", parkes ".$sent_to_parkes." [$tar_count,$fil_count,$obs_start_count]");
 
     # If this is a valid candidate for swin XFER
-    if (($obs_finalized) && (($sent_to_swin == 0) || ($sent_to_parkes == 0)) && ($candidate eq "none")) {
+    if ( ($obs_finalized) && (($sent_to_swin == 0) || ($sent_to_parkes == 0)) &&
+         ($candidate eq "none") && ($tar_count == $cfg{"NUM_PWC"}) && 
+         ($fil_count == $cfg{"NUM_PWC"}) && ($obs_start_count = $cfg{"NUM_PWC"}) ) {
+
       $candidate = $obs;
     }
   }
+  logMessage(2, "getObsToSend: ".$candidate.", ".$sent_to_swin." ",$sent_to_parkes);
 
   return ($candidate, $sent_to_swin, $sent_to_parkes);
 
@@ -447,13 +468,13 @@ sub run_vsib_recv($$$$$$) {
 
   my ($s_user, $s_host, $s_dir, $f_host, $obs_dir, $index) = @_;
 
-  my $remote_cmd = "vsib_recv -memory -w ".TCP_WINDOW." -p ".(VSIB_PORT + $index)." -H ".$f_host." >>& transfer.log".$index;
-
+  my $remote_cmd = "vsib_recv -w ".TCP_WINDOW." -p ".(VSIB_PORT + $index)." -H ".$f_host." >>& transfer.log".$index;
   my $cmd =  "ssh ".SSH_OPTS." -l ".$s_user." ".$s_host." \"cd ".$s_dir."; mkdir -p ".$obs_dir."; ".$remote_cmd."\"";
 
-  logMessage(1, "starting vsib_recv: ".$cmd);
+  logMessage(2, $cmd);
   my ($result, $response) = Dada->mySystem($cmd);
-  logMessage(1, "vsib_recv terminated. ".$result.":".$response);
+  logMessage(3, "vsib_recv: ".$result." ".$response);
+
   if ($result ne "ok") {
     logMessage(0, "vsib_recv returned a non zero exit value");
   }
@@ -486,12 +507,12 @@ sub run_vsib_send($$$$) {
   my $cmd = "vsib_send -s -q -w ".TCP_WINDOW." -p ".(VSIB_PORT+$index)." -H ".$vsi_hosts.
             " -z ".DATA_RATE." ".$files;
 
+  logMessage(2, $cmd);
+
   $cmd .= " 2>&1";
 
   my $result = "";
   my $response = "";
-
-  logMessage(1, "start vsib_send: ".$cmd);
 
   system($cmd);
 
