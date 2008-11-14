@@ -649,7 +649,8 @@ sub start($\%) {
       return ("fail", "start command failed on nexus: ".$response);
     } 
 
-    my $multibob = Dada->connectToMachine($cfg{"IBOB_GATEWAY"},$cfg{"IBOB_MANAGER_PORT"});
+    my $multibob_host = Dada->getHostMachineName();
+    my $multibob = Dada->connectToMachine($multibob_host,$cfg{"IBOB_MANAGER_PORT"});
 
     if (!$multibob) {
 
@@ -1430,7 +1431,7 @@ sub calcTsampFromAccLen($) {
 
 sub waitForMultibobBoot() {
 
-  my $host = $cfg{"IBOB_GATEWAY"};
+  my $host = Dada->getHostMachineName();
   my $port = $cfg{"IBOB_MANAGER_PORT"};
 
   my $result;

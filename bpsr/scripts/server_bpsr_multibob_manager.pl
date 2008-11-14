@@ -49,11 +49,9 @@ my $logfile = $cfg{"SERVER_LOG_DIR"}."/".LOGFILE;
 my $pidfile = $cfg{"SERVER_CONTROL_DIR"}."/".PIDFILE;
 
 my $daemon_control_thread = 0;
-my $multibob_ssh_thread = 0;
+my $multibob_thread = 0;
 my $multibob_plot_thread = 0;
 
-my $uname = $cfg{"IBOB_GATEWAY_USERNAME"};
-my $host  = $cfg{"IBOB_GATEWAY"};
 my $port  = $cfg{"IBOB_MANAGER_PORT"};
 my $npwc  = $cfg{"NUM_PWC"};
 
@@ -73,11 +71,11 @@ logMessage(0, "STARTING SCRIPT");
 # Start the daemon control thread
 $daemon_control_thread = threads->new(\&daemonControlThread);
 
-# Start the ibob SSH thread
-$multibob_ssh_thread = threads->new(\&multiBobSshThread);
+# Start the multibob_server thread
+$multibob_thread = threads->new(\&multibobThread);
 
 # Start the multibob plotting thread
-$multibob_plot_thread = threads->new(\&multiBobPlotThread);
+$multibob_plot_thread = threads->new(\&multibobPlotThread);
 
 # Wait for threads to return
 while (!$quit_daemon) {
@@ -86,7 +84,7 @@ while (!$quit_daemon) {
 
 # rejoin threads
 $daemon_control_thread->join();
-$multibob_ssh_thread->join();
+$multibob_thread->join();
 $multibob_plot_thread->join();
 
 logMessage(0, "STOPPING SCRIPT");
@@ -100,21 +98,23 @@ exit 0;
 # Functions
 #
 
-sub multiBobSshThread() 
-{
 
-  my $runtime_dir = "/lfs/data0/bpsr/stats";
+#
+# Runs the multibob_server on localhost. If the server fails, then 
+# try to relaunch it
+#
+sub multibobThread() {
+
+  my $runtime_dir  = $cfg{"SERVER_STATS_DIR"};
+  my $port         = $cfg{"IBOB_MANAGER_PORT"};
   my $multibob_bin = MULTIBOB_BIN;
-  my $uname = $cfg{"IBOB_GATEWAY_USERNAME"};
-  my $host  = $cfg{"IBOB_GATEWAY"};
-  my $port  = $cfg{"IBOB_MANAGER_PORT"};
+
   my $rval  = 0;
   my $cmd   = "";
 
-  checkExistingMultibobServer($uname, $host, $port, $multibob_bin);
+  checkMultibobServer($port, $multibob_bin);
 
-  $cmd =  "ssh -n -l ".$uname." ".$host." \"cd ".$runtime_dir."; ".
-          $multibob_bin." -n ".$npwc." -p ".$port."\" 2>&1";
+  $cmd =  "cd ".$runtime_dir."; ".$multibob_bin." -n ".$npwc." -p ".$port." 2>&1";
 
   my $multibob_config_thread = 0;
 
@@ -124,9 +124,9 @@ sub multiBobSshThread()
     $multibob_config_thread->detach();
 
     # This command should "hang" until the multibob_server command has terminated
-    logMessage(1, "multiBobSshThread: ".$cmd);
+    logMessage(1, "multiBobThread: ".$cmd);
     system($cmd);
-    logMessage(1, "multiBobSshThread: ssh cmd returned");
+    logMessage(1, "multiBobThread: cmd returned");
 
     if (!$quit_daemon) {
       logMessage(0, "ERROR: multibob_server returned unexpectedly");
@@ -135,6 +135,7 @@ sub multiBobSshThread()
     sleep(1);
 
   }
+
 }
 
 sub configureMultibobServerWrapper() 
@@ -152,10 +153,10 @@ sub configureMultibobServerWrapper()
 # Monitors the /nfs/results/bpsr/stats directory creating the PD Bandpass plots
 # as requried
 #
-sub multiBobPlotThread()
+sub multibobPlotThread()
 {
 
-  logMessage(2, "multiBobPlotThread: thread starting");
+  logMessage(2, "multibobPlotThread: thread starting");
 
   my $bindir    = Dada->getCurrentBinaryVersion();
   my $stats_dir = $cfg{"SERVER_STATS_DIR"};
@@ -171,7 +172,7 @@ sub multiBobPlotThread()
 
   while (!$quit_daemon) {
    
-    logMessage(2, "multiBobPlotThread: looking for bramdump files in ".$stats_dir);
+    logMessage(2, "multibobPlotThread: looking for bramdump files in ".$stats_dir);
  
     # look for plot files
     opendir(DIR,$stats_dir);
@@ -179,7 +180,7 @@ sub multiBobPlotThread()
     closedir DIR;
 
     if ($#bramfiles == -1) {
-      logMessage(2, "multiBobPlotThread: no files, sleeping");
+      logMessage(2, "multibobPlotThread: no files, sleeping");
     }
 
     # plot any existing bramplot files
@@ -216,7 +217,7 @@ sub multiBobPlotThread()
 
   }
 
-  logMessage(2, "multiBobPlotThread: thread exiting");
+  logMessage(2, "multibobPlotThread: thread exiting");
 
 }
 
@@ -241,8 +242,10 @@ sub daemonControlThread() {
   # signal threads to exit
   $quit_daemon = 1;
 
+  my $localhost = Dada->getHostMachineName();
+
   # set the global variable to quit the daemon
-  my $handle = Dada->connectToMachine($cfg{"IBOB_GATEWAY"}, $cfg{"IBOB_MANAGER_PORT"},1);
+  my $handle = Dada->connectToMachine($localhost, $cfg{"IBOB_MANAGER_PORT"},1);
   if (!$handle) {
     logMessage(0, "daemon_control: could not connect to ".MULTIBOB_BIN);
   } else {
@@ -324,30 +327,36 @@ sub removeOldPngs($$$) {
   }
 }
 
-sub checkExistingMultibobServer($$$$) {
+sub checkMultibobServer($$) {
 
-  my ($uname, $host, $port, $command) = @_;
+  my ($port, $process_name) = @_;
+
+  my $localhost = Dada->getHostMachineName();
 
   # Check if the binary is running
-  my $cmd = "ssh -l ".$uname." ".$host." \"ps aux | grep ".$command." | grep -v grep > /dev/null\"";
-  logMessage(1, $cmd);
+  my $cmd = "ps aux | grep ".$command." | grep -v grep > /dev/null";
+  logMessage(1, "checkMultibobServer: ".$cmd);
   my $rval = system($cmd);
-
+                                                                                                          
   if ($rval == 0) {
-
-    logMessage(0, "checkExistingMultibobServer: a multibob_server was running on ".$host);
-
+                                                                                                          
+    logMessage(0, "checkMultibobServer: a multibob_server was running");
+                                                                                                          
     # set the global variable to quit the daemon
-    my $handle = Dada->connectToMachine($host, $port, 1);
+    my $handle = Dada->connectToMachine($localhost, $port, 1);
     if (!$handle) {
-      logMessage(0, "checkExistingMultibobServer: could not connect to ".MULTIBOB_BIN);
+      logMessage(0, "checkMultibobServer: could not connect to ".MULTIBOB_BIN);
+
     } else {
+
+      # ignore welcome message
       $response = <$handle>;
-
+                                                                                                          
+      logMessage(0, "checkMultibobServer: multibob <- close");
       ($result, $response) = Dada->sendTelnetCommand($handle, "close");
-      logMessage(0, "checkExistingMultibobServer: close -> multibob -> ".$result.":".$response);
-
-      logMessage(0, "checkExistingMultibobServer: multibob_server <- quit");
+      logMessage(0, "checkMultibobServer: multibob -> ".$result.":".$response);
+                                                                                                          
+      logMessage(0, "checkMultibobServer: multibob_server <- quit");
       print $handle "quit\r\n";
       close($handle);
     }
@@ -355,19 +364,17 @@ sub checkExistingMultibobServer($$$$) {
     sleep(1);
 
     # try again to ensure it exited
-    logMessage(1, $cmd);
+    logMessage(1, "checkMultibobServer: ".$cmd);
     $rval = system($cmd);
 
     if ($rval == 0) {
 
-      logMessage(0, "checkExistingMultibobServer: multibob_server still running on ".$host." refused to exit gracefully, killing...");
-      $cmd = "ssh -l ".$uname." ".$host." \"killall -KILL multibob_server\"";
+      logMessage(0, "checkMultibobServer: multibob_server, refused to exit gracefully, killing...");
+      $cmd = "killall -KILL multibob_server";
       $rval = system($cmd);
 
     }
   }
-
+                                                                                                          
   sleep(1);
-
 }
-

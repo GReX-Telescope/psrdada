@@ -138,7 +138,8 @@ sub configureMultibobServer() {
 
   my %cfg = getBpsrConfig();
 
-  my $host = $cfg{"IBOB_GATEWAY"};
+  # multibob_server runs on localhost
+  my $host = Dada->getHostMachineName();
   my $port = $cfg{"IBOB_MANAGER_PORT"};
 
   my $result;
