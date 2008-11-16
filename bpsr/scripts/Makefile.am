@@ -18,4 +18,5 @@ dist_bin_SCRIPTS = Bpsr.pm \
                    client_ibob_level_setter.pl \
                    client_bpsr_src_logger.pl \
                    ibob_interface.pl \
-                   web_style.txt
+                   web_style.txt merge_tcs_logs.csh
+
