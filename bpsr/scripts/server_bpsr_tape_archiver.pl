@@ -220,14 +220,20 @@ while (!$quit_daemon) {
     ($result, $response) = tarObs($dir, $obs);
     logMessage(2, "main: tarObs() ".$result." ".$response);
  
-  }
+  } 
 
+  $i++;
   # reset the dirs counter
   if ($i >= ($#dirs+1)) {
-    $i = 0;
+          $i = 0;
+          if ($obs eq "none") {
+                  # Wait 10 secs if we didn't find a file
+                  sleep (10);
+          }
   }
 
-  $quit_daemon = 1;
+  # Loop indefinitely
+  #$quit_daemon = 1;
 }
 
 # rejoin threads
@@ -258,26 +264,29 @@ sub getObsToTar($) {
   my $obs = "none";
   my $subdir = "";
   my @subdirs = ();
+  if ( -f $dir."/WRITING" ){
+          logMessage(2, "getObsToTar: ignoring dir ".$dir." as this is being written to");
+  } else {
 
-  # find all subdirectories with an xfer.complete file in them
-  opendir(DIR,$dir);
-  @subdirs = sort grep { !/^\./ && -f $dir."/".$_."/xfer.complete" } readdir(DIR);
-  closedir DIR;
+# find all subdirectories with an xfer.complete file in them
+          opendir(DIR,$dir);
+          @subdirs = sort grep { !/^\./ && -f $dir."/".$_."/xfer.complete" } readdir(DIR);
+          closedir DIR;
 
-  # now select the best one to tar
-  foreach $subdir (@subdirs) {
+# now select the best one to tar
+          foreach $subdir (@subdirs) {
 
-    if (-f $dir."/".$subdir."/sent.to.tape") {
-      # ignore if this has already been sent to tape
-      logMessage(2, "getObsToTar: ignoring obs ".$subdir);
+                  if (-f $dir."/".$subdir."/sent.to.tape") {
+# ignore if this has already been sent to tape
+                          logMessage(2, "getObsToTar: ignoring obs ".$subdir);
 
-    } else {
+                  } else {
 
-      logMessage(2, "getObsToTar: found obs ".$subdir);
-      $obs = $subdir;
-    }    
+                          logMessage(2, "getObsToTar: found obs ".$subdir);
+                          $obs = $subdir;
+                  }    
+          }
   }
-
   logMessage(2, "getObsToTar: returning ".$obs);
 
   unindent();
@@ -300,6 +309,8 @@ sub tarObs($$) {
   my @subdirs = ();
   my $beam_problem = 0;
 
+  system("touch $dir/READING");
+
   opendir(DIR,$dir."/".$obs);
   @subdirs = sort grep { !/^\./ && -d $dir."/".$obs."/".$_ } readdir(DIR);
   closedir DIR;
@@ -318,6 +329,7 @@ sub tarObs($$) {
       if ($result ne "ok") {
         logMessage(0, "tarObs: checkIfArchived failed: ".$response);
         unindent();
+        system("rm -f $dir/READING");
         return ("fail", "checkIfArchived() failed: ".$response);
       } 
   
@@ -343,11 +355,13 @@ sub tarObs($$) {
   if ($beam_problem) {
     logMessage(0, "tarObs: problem archiving a beam");
     unindent();
+    system("rm -f $dir/READING");
     return ("fail", "problem occurred during archival of a beam");
   }  
 
   logMessage(1, "tarObs: finished observation: ".$obs);
 
+  system("rm -f $dir/READING");
   unindent();
   return ("ok", "");
 }
@@ -453,10 +467,11 @@ sub tarBeam($$$) {
 
   # now we have a tape with enough space to fit this archive
   chdir $dir;
-  $cmd = "tar -cf ".$dev." ".$obs."/".$beam;
+  $cmd = "time tar -c ".$obs."/".$beam." | dd of=$dev bs=64K";
   logMessage(0, "tarBeam: ".$cmd);
 
   ($result, $response) = Dada->mySystem($cmd);
+  print $response;
 
   if ($result ne "ok") {
     logMessage(0, "tarBeam: failed to write archive to tape: ".$response);
@@ -491,7 +506,8 @@ sub tarBeam($$$) {
     unindent();
     return("fail", "error ocurred when updating filesDB: ".$response);
   }
-
+  # we are ok, so mark as sent to tape
+  system("touch $obs/$beam/sent.to.tape");
   unindent();
   return ("ok",""); 
 
