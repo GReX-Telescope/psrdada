@@ -1,8 +1,10 @@
 /*
   dedisperse  - dedisperses raw filterbank data or folded pulse profiles
 */
+#define LONG64BIT unsigned long long
 #include <stdlib.h>
 #include "string.h"
+#include <libgen.h>
 extern "C" {
 #include "dedisperse_all.h"
 };
@@ -18,6 +20,7 @@ void inline_dedisperse_all_help(){
   fprintf(stderr,"-b                 debird mode, create 1 timfile per freq channel\n");
   fprintf(stderr,"-n Nsamptotal      Only do Nsamptotal samples\n");
   fprintf(stderr,"-s Nsamps          Skip Nsamp samples before starting\n");
+  fprintf(stderr,"-m Nsub            Create files with Nsub subbands\n");
   fprintf(stderr,"-l                 Create logfile of exact DMs used\n");
   fprintf(stderr," \n");
   fprintf(stderr,"dedisperse_all uses OpenMP and 16 bit words to\n");
@@ -25,11 +28,16 @@ void inline_dedisperse_all_help(){
   fprintf(stderr,"parallel manner. It is for use on 64 bit machines\n");
   fprintf(stderr,"but still works on 32 bit machines.\n");
   fprintf(stderr,"Currently tested on 96x1bit files, 512x1bit files, 1024x2bit files.\n");
-  fprintf(stderr,"Link against OpenMP (-fopenmp with GNU on linux)\n");
+#ifdef HAVE_OPENMP
+  fprintf(stderr,"Compiled with OpenMP: Multi-threading enabled\n");
+#else
+  fprintf(stderr,"**SINGLE THREADED MODE**\nLink against OpenMP (-fopenmp with GNU on gcc > 4.2 for multi-threaded)\n");
+#endif
 }
 
 FILE *input, *output, *outfileptr, *dmlogfileptr;
 char  inpfile[80], outfile[80], ignfile[80], dmlogfilename[180];
+char outfile_root[80];
 
 /* global variables describing the operating mode */
 int ascii, asciipol, stream, swapout, headerless, nbands, userbins, usrdm, baseline, clipping, sumifs, profnum1, profnum2, nobits, wapp_inv, wapp_off;
@@ -124,8 +132,8 @@ int main (int argc, char *argv[])
   int nbytesraw;
   int ibyte,j,k;
   unsigned char abyte;
-  unsigned short int * times;
-  unsigned long int * casted_times, * casted_unpacked;
+  unsigned short int ** times;
+  LONG64BIT * casted_times, * casted_unpacked;
   int idelay;
   int nread;
   float DM_trial;
@@ -146,8 +154,13 @@ int main (int argc, char *argv[])
   int ngulp; //max number of samples at a time
   int gulping = 0;
   int ngulpsize;
+  int nsampleft; 
   char * killfile;
   int killing=0;
+
+  if(sizeof(LONG64BIT) != 8 ){
+	  fprintf(stderr,"ERROR: sofware has been compiled with LONG64BIT as a datatype of %d bytes, needs to be 8\n",sizeof(LONG64BIT));
+  }
 
   /* check number of command-line arguments and print help if necessary */
   if (argc<2) {
@@ -211,6 +224,10 @@ int main (int argc, char *argv[])
 	/* skip first X samples */
 	nskip=atoi(argv[++i]);
 	skip=1;
+      }
+      else if (!strcmp(argv[i],"-m")) {
+	      /* sub-band */
+	      nbands=atoi(argv[++i]);
       }
       else if (!strcmp(argv[i],"-g")) {
 	ngulpsize=atoi(argv[++i]);
@@ -302,14 +319,22 @@ int main (int argc, char *argv[])
   }
   // skip either 0 or nskip samples
   fseek(input, nskip*nchans*nbits/8, SEEK_CUR);
+  nsampleft-=nskip;
 
   float * DMtable;
   double ti = 40.0;
   double tol = 1.25;
-  
-  getDMtable(end_DM, tsamp*1e6, ti, foff, (fch1+(nchans/2-0.5)*foff)/1000,
-	     nchans, tol, &ndm, DMtable);
+ // a hack for less files when subbanding... M.Keith
+  getDMtable(0.0,end_DM, tsamp*1e6, ti, foff, (fch1+(nchans/2-0.5)*foff)/1000,
+	     nchans/nbands, tol, &ndm, DMtable);
 
+
+  fprintf(stderr,"%d subbands from %d chans\n",nbands,nchans);
+  if(nchans % nbands){
+	fprintf(stderr,"invalid number of subbands selected!\n");
+	exit(1);
+  }
+  int chans_per_band=(int)(nchans/nbands);
   int nwholegulps = (numsamps - maxdelay)/ngulpsize;
   int nleft = numsamps - ngulpsize * nwholegulps;
   int ngulps = nwholegulps + 1;
@@ -322,23 +347,40 @@ int main (int argc, char *argv[])
 	      (int)(nchans*ntoload*sizeof(unsigned short int)));
       exit(-2);
     }
-    times = (unsigned short int *) 
-      malloc(sizeof(unsigned short int)*ntodedisp); 
+    times = (unsigned short int **) 
+      malloc(sizeof(unsigned short int*)*nbands); 
+    for(int band=0; band < nbands; band++){
+	times[band] = (unsigned short int *)
+		      malloc(sizeof(unsigned short int)*ntodedisp);
+    }
     if (times==NULL){
       fprintf(stderr,"Error allocating times array\n");
       exit(-1);
     }
-    casted_times = (unsigned long int *) times;
-    casted_unpacked = (unsigned long int *) unpacked;
+    casted_times = (LONG64BIT *) times;
+    casted_unpacked = (LONG64BIT *) unpacked;
   }
 
   int * killdata = new int[nchans];
   if (killing) int loaded = load_killdata(killdata,nchans,killfile);
 
+  int rotate = 0;
+  while(nchans*(pow(2,nbits)-1)/(float)nbands/(float)(pow(2,rotate)) > 255){
+	  rotate++;
+  }
+  printf("Dividing output by %d to scale to 1 byte per sample per subband\n",(int)(pow(2,rotate)));
+
   // Start of main loop
   for (int igulp=0; igulp<ngulps;igulp++){
 
-    if (igulp!=0) fseek(input,-1*maxdelay*nbits*nchans/8,SEEK_CUR);
+    if (igulp!=0){
+	    fprintf(stderr,"Skipping back %d bytes\n",maxdelay*nbits*nchans/8);
+	    int ret = fseek(input,-1*maxdelay*nbits*nchans/8,SEEK_CUR);
+	    if(ret){
+		    fprintf(stderr,"Could not skip backwards!\n");
+		    exit(1);
+	    }
+    }
     if (igulp==nwholegulps) {
       ntoload = nleft;
       nbytesraw = ntoload*nbits*nchans/8;
@@ -353,13 +395,19 @@ int main (int argc, char *argv[])
       exit(-1);
     }
   
+    char tmp[80];
+    char *tmp2;
+    strcpy(tmp,inpfile); // These few lines strip the input file's
+    tmp2 = basename(tmp);// name from it's directory tag.
+    strcpy(outfile_root,tmp2);
+
     if (debird){
       refdm=0;
       nobits=8;
       float orig_fch1 = fch1;
       int orig_nchans = nchans;
       for (int ichan=0;ichan<nchans;ichan++){
-	sprintf(outfile,"%s.%4.4d.tim", inpfile, ichan);
+	sprintf(outfile,"%s.%4.4d.tim", outfile_root, ichan);
 	if (igulp==0) outfileptr=fopen(outfile,"w");
 	if (igulp!=0) outfileptr=fopen(outfile,"a");
 	output=outfileptr;
@@ -435,7 +483,7 @@ int main (int argc, char *argv[])
     /* Start with zero DM */
     if (!usrdm) end_DM=1e3;
     if (dmlogfile){
-      sprintf(dmlogfilename,"%s.dmlog",inpfile);
+      sprintf(dmlogfilename,"%s.dmlog",outfile_root);
       dmlogfileptr=fopen(dmlogfilename,"w");
       if (dmlogfileptr==NULL) {
 	fprintf(stderr,"Error opening file %s\n",dmlogfilename);
@@ -452,10 +500,44 @@ int main (int argc, char *argv[])
 	  if (dmlogfile) fprintf(dmlogfileptr,"%f %07.2f\n",DM_trial,
 				 DM_trial);
 	  // Name output file, dmlog file
-	  sprintf(outfile,"%s.%07.2f.tim",inpfile,DM_trial);
+	  if(nbands==1)sprintf(outfile,"%s.%07.2f.tim",outfile_root,DM_trial);
+	  else sprintf(outfile,"%s.%07.2f.sub",outfile_root,DM_trial);
 	  // open it
 	  if (appendable) outfileptr=fopen(outfile,"a");
-	  if (!appendable) outfileptr=fopen(outfile,"w");
+	  if (!appendable){
+		  outfileptr=fopen(outfile,"w");
+		  // create a log of the 'sub' dms to dedisperse at
+		  // These DMs are chosen fairly arbitraraly, rather than
+		  // based on any ridgid mathematics.
+		  if(nbands > 1){
+			  float* DMtable_sub;
+			  int ndm_sub;
+			  float sub_start_DM=0;
+			  float sub_end_DM=end_DM;
+			  if (idm > 0){
+				  sub_start_DM =  (DMtable[idm]+ DMtable[idm-1])/2.0;
+			  }
+			  if (idm < ndm-1){
+				  sub_end_DM =  (DMtable[idm]+ DMtable[idm+1])/2.0;
+			  }
+			  // make the dm table for the sub-banded data...
+			  getDMtable(sub_start_DM,sub_end_DM, tsamp*1e6, ti, foff, (fch1+(nchans/2-0.5)*foff)/1000,
+					  nchans, tol, &ndm_sub, DMtable_sub);
+			  char subdm_filename[80];
+			  sprintf(subdm_filename,"%s.valid_dms",outfile);
+			  FILE* subdm_fileptr = fopen(subdm_filename,"w");
+			  if(subdm_fileptr == NULL){
+				  printf("Error: could not open file %s for writing\n",subdm_filename);
+				exit(2);
+			  }
+			  for(int ix = 0; ix < ndm_sub; ix++){
+				double sub_dm_trial = DMtable_sub[ix];
+				fprintf(subdm_fileptr,"%f\n",sub_dm_trial);
+			  }
+			  delete[] DMtable_sub;
+			  fclose(subdm_fileptr);
+		  }
+	  }
 	  output=outfileptr;
 	  // write header variables into globals
 	  refdm = DM_trial;
@@ -463,13 +545,19 @@ int main (int argc, char *argv[])
 	  // write header
 	  if (!appendable) dedisperse_header();
 	  // ntodedisp and numsamps??
-	  for (j=0;j<(ntodedisp)/4;j++)casted_times[j]=0;
-	  for (k=0;k<nchans;k++){
-	    idelay = DM_shift(DM_trial,k,tsamp,fch1,foff);
+	  for(int iband=0; iband<nbands; iband++){
+		  casted_times = (LONG64BIT *) times[iband];
+		  int start_chan = iband*chans_per_band;
+		  int end_chan = (iband+1)*chans_per_band;
+		  double fch1_subband = fch1 + foff*start_chan; // offset to the start of the subband
+		  for (j=0;j<(ntodedisp)/4;j++)casted_times[j]=0;
+		  for (k=start_chan;k<end_chan;k++){
+			  idelay = DM_shift(DM_trial,k-start_chan,tsamp,fch1_subband,foff);
 #pragma omp parallel for private(j)    
-	    for (j=0;j<(ntodedisp)/4;j++){
-	      casted_times[j]+=*((unsigned long int *) (unpacked+(j*4+k*ntoload+idelay)));
-	    }	    
+			  for (j=0;j<(ntodedisp)/4;j++){
+				  casted_times[j]+=*((LONG64BIT *) (unpacked+(j*4+k*ntoload+idelay)));
+			  }	    
+		  }
 	  }
 	  
 	  // Gsearch!
@@ -477,19 +565,17 @@ int main (int argc, char *argv[])
 	  //allgiants.insert(allgiants.end(),giant.begin(),giant.end());
 	  //printf("Giant count now %d DM is %f\n",allgiants.size(),DM_trial);
 	  // write data
-	  int rotate = 1;
-	  if (nchans==1024 && nbits==2) rotate = 4; // max 3072/16=192
-	  if (nchans==512 && nbits==1) rotate = 2;  // max 128
-	  if (nchans==96) rotate = 0;               // max 96
 	  for (int d=0;d<ntodedisp;d++){
-	    unsigned short int twobytes = times[d]>>rotate;
+	    for(int iband=0; iband<nbands; iband++){
+	    unsigned short int twobytes = times[iband][d]>>rotate;
 	    unsigned char onebyte = twobytes;
 	    fwrite(&onebyte,1,1,outfileptr);
+	    }
 	  }
 	  // close file
 	  fclose(outfileptr);
-	  if (verbose) fprintf(stderr,"%d bytes to file %s\n", ntodedisp, outfile);
-	  total_MBytes+= ntodedisp/1.0e6;
+	  if (verbose) fprintf(stderr,"%d bytes to file %s\n", ntodedisp*nbands, outfile);
+	  total_MBytes+= (ntodedisp*nbands)/1.0e6;
 	} // if DM is in range
       } // DM for loop
     if (verbose) fprintf(stderr,"Wrote a total of %6.1f MB to disk\n",total_MBytes);
