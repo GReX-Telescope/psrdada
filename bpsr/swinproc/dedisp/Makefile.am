@@ -1,7 +1,7 @@
 
 lib_LTLIBRARIES = libdedisp.la
 
-libdedisp_la_SOURCES = getDMtable.C
+libdedisp_la_SOURCES = getDMtable.C gtools.C
 
 bin_PROGRAMS = dedisperse_all
 
