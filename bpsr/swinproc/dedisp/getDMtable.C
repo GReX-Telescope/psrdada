@@ -9,12 +9,10 @@
 
 using namespace std;
 
-
-
-void   getDMtable(float DMmax, double tsamp, double ti, double bw, double cfreq, int Nchan, double tol,int* Ndms,float* &DMtable){
+void   getDMtable(float DMstart, float DMmax, double tsamp, double ti, double bw, double cfreq, int Nchan, double tol,int* Ndms,float* &DMtable){
         
         *Ndms = 0;
-        float DM = 0.0;
+        float DM = DMstart;
 	int j;
 	
 /*	cout << "DM is " << DM << " DMmax is " << DMmax << " Ndms is " << *Ndms << endl;
@@ -44,7 +42,7 @@ void   getDMtable(float DMmax, double tsamp, double ti, double bw, double cfreq,
 
 	DMtable = new float[*Ndms];
 	*Ndms = 0;
-	DM = 0.0;
+	DM = DMstart;
 	while(DM<=DMmax){
 	    DMtable[*Ndms]=DM;
 	    double oldDM = DM;
@@ -97,3 +95,8 @@ void getacctable(float DM, double amax, double tsamp, double ti, double tint, do
  
 
 
+
+
+void   getDMtable(float DMmax, double tsamp, double ti, double bw, double cfreq, int Nchan, double tol,int* Ndms,float* &DMtable){
+    getDMtable(0.0,DMmax,tsamp,ti,bw,cfreq,Nchan,tol,Ndms,DMtable);
+}
