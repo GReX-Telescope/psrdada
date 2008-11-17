@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include "string.h"
 #include <libgen.h>
+#include "gtools.h"
 extern "C" {
 #include "dedisperse_all.h"
 };
@@ -22,6 +23,13 @@ void inline_dedisperse_all_help(){
   fprintf(stderr,"-s Nsamps          Skip Nsamp samples before starting\n");
   fprintf(stderr,"-m Nsub            Create files with Nsub subbands\n");
   fprintf(stderr,"-l                 Create logfile of exact DMs used\n");
+  fprintf(stderr,"-G                 Do giant burst search.\n");
+  fprintf(stderr,"Gburst suboptions:\n");
+  fprintf(stderr,"    -wid N [d: 30] allow N bin tolerance between discrete bursts\n");
+  fprintf(stderr,"    -sig N [d: 6] search N-sigma threshold\n");
+  fprintf(stderr,"    -dec N [d: 256] search up to a N=2^? bin matched filter\n");
+  fprintf(stderr,"    -cut N [d: 3] RFI filter: DMs below which to disregard\n");
+  fprintf(stderr,"                  low-DM-peaking pulse candidates\n");
   fprintf(stderr," \n");
   fprintf(stderr,"dedisperse_all uses OpenMP and 16 bit words to\n");
   fprintf(stderr,"create many dedispersed files at once in a highly\n");
@@ -157,6 +165,12 @@ int main (int argc, char *argv[])
   int nsampleft; 
   char * killfile;
   int killing=0;
+  bool doGsearch = 0;
+  int Gwidtol = 30;
+  float Gthresh = 6;
+  float Gscrnch = 256;
+  float Girrel = 3;
+  float flo,fhi;
 
   if(sizeof(LONG64BIT) != 8 ){
 	  fprintf(stderr,"ERROR: sofware has been compiled with LONG64BIT as a datatype of %d bytes, needs to be 8\n",sizeof(LONG64BIT));
@@ -241,6 +255,21 @@ int main (int argc, char *argv[])
 	killfile = (char *) malloc(strlen(argv[++i])+1);
 	strcpy(killfile,argv[i]);
       }
+      else if (!strcmp(argv[i],"-G")) {
+          doGsearch = 1;
+      }
+      else if (!strcmp(argv[i],"-wid")) {
+          Gwidtol = atoi(argv[++i]);
+      }
+      else if (!strcmp(argv[i],"-sig")) {
+          Gthresh = atof(argv[++i]);
+      }
+      else if (!strcmp(argv[i],"-dec")) {
+          Gscrnch = atof(argv[++i]);
+      }
+      else if (!strcmp(argv[i],"-cut")){
+	  Girrel = atof(argv[++i]);
+      }
       else {
 	/* unknown argument passed down - stop! */
 	inline_dedisperse_all_help();
@@ -253,6 +282,16 @@ int main (int argc, char *argv[])
 
   if (usrdm && debird){
     fprintf(stderr,"Cannot dedisperse and debird simultaneously!\n");
+    exit(-1);
+  }
+
+  if (doGsearch && debird){
+    fprintf(stderr,"Can't gsearch and debird simultaneously!\n");
+    exit(-1);
+  }
+
+  if (doGsearch && nbands>1){
+    fprintf(stderr,"Can't do gsearch while running in subband mode!\n");
     exit(-1);
   }
 
@@ -286,11 +325,21 @@ int main (int argc, char *argv[])
   if (!sigproc) {
     fprintf(stderr,"Not sigproc data\n");
     exit(-1);
-  }    
+  }
   if (foff > 0.0) {
     fprintf(stderr,"dedisperse can't handle low->high frequency ordering!");
     exit(1);
   }
+
+  // But in case low->high frequency ordering ever gets implemented...
+  if (foff < 0){
+    flo = (float)fch1 + (nchans*(float)foff);
+    fhi = (float)fch1;
+  } else {
+    flo = (float)fch1;
+    fhi = (float)fch1 + (nchans*(float)foff);
+  }
+
   if (fileidx == 1) {
     /* this is filterbank data */
     if (output!=stdout) output=fopen(outfile,"wb");
@@ -369,6 +418,13 @@ int main (int argc, char *argv[])
 	  rotate++;
   }
   printf("Dividing output by %d to scale to 1 byte per sample per subband\n",(int)(pow(2,rotate)));
+
+
+
+  // Set up gpulse control variables
+  GPulseState Gholder(ndm); // Giant pulse state to hold trans-DM detections
+  int Gndet;           // Integer number of detections
+  int *Gresults;       // Integer array of results: contained as N*(start bin, end bin)
 
   // Start of main loop
   for (int igulp=0; igulp<ngulps;igulp++){
@@ -560,10 +616,11 @@ int main (int argc, char *argv[])
 		  }
 	  }
 	  
-	  // Gsearch!
-	  //giant=findgiants(numsamps-idm,times,6,30,256);
-	  //allgiants.insert(allgiants.end(),giant.begin(),giant.end());
-	  //printf("Giant count now %d DM is %f\n",allgiants.size(),DM_trial);
+	  // Do the Gsearch for this DM trial
+	  if (doGsearch){
+	    Gholder.searchforgiants(idm,ntodedisp,times[0],Gthresh,Gwidtol,Gscrnch,refdm,1);
+	  }
+
 	  // write data
 	  for (int d=0;d<ntodedisp;d++){
 	    for(int iband=0; iband<nbands; iband++){
@@ -582,6 +639,16 @@ int main (int argc, char *argv[])
     /* close log files if on last input file */
     if (dmlogfile) fclose(dmlogfileptr);
   }
+  
+  // After gulp's done, pump out the Gsearch results for that gulp
+  if (doGsearch){
+      Gresults = Gholder.givetimes(&Gndet,tsamp,flo,fhi,Girrel);
+//      fprintf(stderr,"GRESULTS:\n");
+//      for (int i=0;i<Gndet;i+=2){
+//	  fprintf (stderr,"Detection %d: %d\t%d\n",i,Gresults[i],Gresults[i+1]);
+//      }
+  }
+  
   }
   return(0); // exit normally
 } // main
