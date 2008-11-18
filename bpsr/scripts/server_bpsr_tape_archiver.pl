@@ -37,9 +37,9 @@ our $type = "";
 our $tape_id_pattern = "";
 our $indent = "";                      # log message indenting
 our $db_dir = "";
-
-
-my $uc_type = "";
+our $use_bk = 0;                       # define if bookkeeping is enabled
+our $bkid = "";                        # ID of current bookkeepr tape
+our $uc_type = "";
 
 
 # Autoflush output
@@ -57,7 +57,7 @@ if ($#ARGV != 0) {
   $type = @ARGV[0];
 
   if (($type eq "swin") || ($type eq "parkes")) {
-    logMessage(1, "Running ".$type." Tape archiver");
+    # OK :) 
   } else {
 
     if ($type eq "robot_init") {
@@ -82,7 +82,6 @@ if ($type eq "parkes") {
         $uc_type = "PARKES";
 }
 
-
 #
 # Local Varaibles
 #
@@ -93,6 +92,7 @@ my $daemon_control_thread = 0;
 
 my $i=0;
 my @dirs  = ();
+my @hosts=();
 
 my $user;
 my $host;
@@ -102,6 +102,7 @@ my $path;
 for ($i=0; $i<$cfg{"NUM_".$uc_type."_DIRS"}; $i++) {
   ($user, $host, $path) = split(/:/,$cfg{$uc_type."_DIR_".$i},3);
   push (@dirs, $path);
+  push (@hosts,$host);
 }
 
 # location of DB files
@@ -110,12 +111,18 @@ $db_dir = $cfg{$uc_type."_DB_DIR"};
 # set global variable for the S4 device name
 $dev = $cfg{$uc_type."_S4_DEVICE"};
 
+# setup the bookkeeper ID
+my $bookkeepr = $cfg{$uc_type."_BOOKKEEPR"};
+
 my $result;
 my $response;
 
 #
 # Main
 #
+
+logMessage(1, "Running ".$type." Tape archiver");
+
 
 if ($type eq "robot_init") {
 
@@ -143,7 +150,6 @@ logMessage(0, "STARTING SCRIPT");
 # Start the daemon control thread
 $daemon_control_thread = threads->new(\&daemonControlThread);
 
-
 # Force a re-read of the current tape. This rewinds the tape
 logMessage(1, "main: checking current tape");
 ($result, $response) = getCurrentTape();
@@ -159,6 +165,8 @@ if ($result ne "ok") {
 
 $current_tape = $response;
 logMessage(1, "main: current tape = ".$current_tape);
+
+setStatus("Current tape: ".$current_tape);
 
 # Get the tape information from the tape database
 ($result, $response) = getTapeInfo($current_tape);
@@ -207,17 +215,18 @@ while (!$quit_daemon) {
 
   # look for a file sequentially in each of the @dirs
   $dir = $dirs[$i];
-  logMessage(2, "main: getObsToTar(".$dir.")");
+  $host=$hosts[$i];
+  logMessage(2, "main: getObsToTar(".$dir.",".$host.")");
 
   # Look for files in the @dirs
-  $obs = getObsToTar($dir);
+  $obs = getObsToTar($dir,$host);
   logMessage(2, "main: getObsToTar() ".$obs);
 
   # If we have one, write to tape
   if ($obs ne "none") {
 
-    logMessage(2, "main: tarObs(".$dir.", ".$obs.")");
-    ($result, $response) = tarObs($dir, $obs);
+    logMessage(2, "main: tarObs(".$dir.", ".$obs.",".$host.")");
+    ($result, $response) = tarObs($dir, $obs,$host);
     logMessage(2, "main: tarObs() ".$result." ".$response);
  
   } 
@@ -254,11 +263,11 @@ exit 0;
 #
 # try and find an observation to tar
 #
-sub getObsToTar($) {
+sub getObsToTar($$) {
 
   indent();
 
-  (my $dir) = @_;
+  (my $dir, my $host) = @_;
   logMessage(2, "getObsToTar: ".$dir);
 
   my $obs = "none";
@@ -268,24 +277,35 @@ sub getObsToTar($) {
           logMessage(2, "getObsToTar: ignoring dir ".$dir." as this is being written to");
   } else {
 
-# find all subdirectories with an xfer.complete file in them
-          opendir(DIR,$dir);
-          @subdirs = sort grep { !/^\./ && -f $dir."/".$_."/xfer.complete" } readdir(DIR);
-          closedir DIR;
+    # find all subdirectories with an xfer.complete file in them
+    opendir(DIR,$dir);
+    @subdirs = sort grep { !/^\./ && -f $dir."/".$_."/xfer.complete" } readdir(DIR);
+    closedir DIR;
 
-# now select the best one to tar
-          foreach $subdir (@subdirs) {
+    # now select the best one to tar
+    foreach $subdir (@subdirs) {
 
-                  if (-f $dir."/".$subdir."/sent.to.tape") {
-# ignore if this has already been sent to tape
-                          logMessage(2, "getObsToTar: ignoring obs ".$subdir);
+      if (-f $dir."/".$subdir."/sent.to.tape") {
+        # ignore if this has already been sent to tape
+        logMessage(2, "getObsToTar: Found tarred obs ".$subdir.", moving...");
+        chdir $dir;
+#        my $cmd = "mv ".$subdir." ../on_tape";
+# M.Keith 2008 : This is a HACK and a BOTCH. It will fix a problem on JURA, but break everything else!
+# This should be replaced with a proper, configurable system as soon as possible
+        my $cmd = "ssh -x -o BatchMode=yes -l dada $host \"cd /lfs/data0/bpsr/from_parkes/ ; mv ".$subdir." ../on_tape \"";
+        logMessage(1, "getObsToTar: ".$cmd);
+        my ($result, $response) = Dada->mySystem($cmd);
+        if ($result ne "ok") {
+          logMessage(0, "getObsToTar: failed to move $subdir to on_tape dir");
+        }
 
-                  } else {
-
-                          logMessage(2, "getObsToTar: found obs ".$subdir);
-                          $obs = $subdir;
-                  }    
-          }
+      } elsif ($obs eq "none") {
+        logMessage(2, "getObsToTar: found obs ".$subdir);
+        $obs = $subdir;
+      } else {
+        # do nothing as we have found an obs or this is incomplete xfer
+      }
+    }
   }
   logMessage(2, "getObsToTar: returning ".$obs);
 
@@ -297,9 +317,9 @@ sub getObsToTar($) {
 #
 # tars the observation to the tape drive
 #
-sub tarObs($$) {
+sub tarObs($$$) {
 
-  my ($dir, $obs) = @_;
+  my ($dir, $obs,$host) = @_;
   indent();
 
   logMessage(2, "tarObs: (".$dir.", ".$obs.")");
@@ -342,7 +362,7 @@ sub tarObs($$) {
       } else {
   
         logMessage(2, "tarObs: tarBeam(".$dir.", ".$obs.", ".$subdir.")");
-        ($result, $response) = tarBeam($dir, $obs, $subdir);
+        ($result, $response) = tarBeam($dir, $obs, $subdir,$host);
 
         if ($result ne "ok") {
           logMessage(0, "tarObs: tarBeam(".$dir.", ".$obs.", ".$subdir.") failed: ".$response);
@@ -357,7 +377,11 @@ sub tarObs($$) {
     unindent();
     system("rm -f $dir/READING");
     return ("fail", "problem occurred during archival of a beam");
-  }  
+
+  # Mark this entire pointing as successfully processed
+  } else {
+    system("touch ".$dir."/".$obs."/sent.to.tape");
+  }
 
   logMessage(1, "tarObs: finished observation: ".$obs);
 
@@ -369,9 +393,9 @@ sub tarObs($$) {
 #
 # tars the beam to the tape drive
 #
-sub tarBeam($$$) {
+sub tarBeam($$$$) {
 
-  my ($dir, $obs, $beam) = @_;
+  my ($dir, $obs, $beam,$host) = @_;
 
   indent();
   logMessage(2, "tarBeam: (".$dir.", ".$obs.", ".$beam.")");
@@ -416,7 +440,7 @@ sub tarBeam($$$) {
   } 
 
   # get the upper limit on the archive size
-  my $size_est_bytes = tarSizeEst(3, int($response));
+  my $size_est_bytes = tarSizeEst(4, int($response));
   my $size_est_gbytes = $size_est_bytes / (1024*1024*1024);
 
   # check if this beam will fit on the tape
@@ -466,18 +490,49 @@ sub tarBeam($$$) {
 
 
   # now we have a tape with enough space to fit this archive
-  chdir $dir;
-  $cmd = "time tar -c ".$obs."/".$beam." | dd of=$dev bs=64K";
-  logMessage(0, "tarBeam: ".$cmd);
+#  chdir $dir;
+#  $cmd = "time tar -b 128 -cf ".$dev." ".$obs."/".$beam;
 
+  setStatus("Archving  ".$obs."/".$beam);
+
+# M.Keith 2008: This is a HACK and a BOTCH. Calls a bash script to ssh to a machine and start the nc listen daemon
+# Probably can replace the shell script if someone who understands perl does it.
+# This should be fixed as soon as possible.
+  $cmd="/data/JURA_1/hitrun/software/sshwrap.sh $host $obs $beam";
+#  $cmd="ssh dada@".$host." -f -x -o BatchMode=yes \"cd /lfs/data0/bpsr/from_parkes; tar -b 128 -c "
+ # .$obs."/".$beam." | nc -l 12345 \"";
+
+  logMessage(0, "tarBeam: ".$cmd);
   ($result, $response) = Dada->mySystem($cmd);
   print $response;
-
   if ($result ne "ok") {
     logMessage(0, "tarBeam: failed to write archive to tape: ".$response);
     unindent();
     return ("fail", "Archiving failed");
   }
+  my $tries=10;
+  while($tries gt 0 ){
+          sleep(2);
+          $cmd='nc '.$host.' 12345 | dd of='.$dev.' bs=64K';
+
+          logMessage(0, "tarBeam: ".$cmd);
+          ($result, $response) = Dada->mySystem($cmd);
+          print $response;
+          if ($result ne "ok") {
+                  logMessage(0, "tarBeam: failed to write archive to tape: ".$response);
+                  $tries--;
+          } else {
+                  last;
+          }
+  }
+  if ($result ne "ok") {
+          logMessage(0, "tarBeam: failed to write archive to tape: ".$response);
+          unindent();
+
+          return ("fail","Archiving failed");
+  }
+
+
 
   # Else we wrote 3 files to the TAPE in 1 archive and need to update the database files
   $used += $size_est_gbytes;
@@ -487,6 +542,19 @@ sub tarBeam($$$) {
   # If less than 100 MB left, mark tape as full
   if ($free < 0.1) {
     $full = 1;
+  }
+
+  # Log to the bookkeeper if defined
+  if ($use_bk) {
+    logMessage(2, "tarBeam: updateBookKeepr(".$obs."/".$beam."/".$obs."/.psrxml");
+    ($result, $response) = updateBookKeepr($obs."/".$beam."/".$obs."/.psrxml",$bookkeepr,$id,$uc_type,($nfiles-1));
+    logMessage(2, "tarBeam: updateBookKeepr(): ".$result." ".$response);
+
+    if ($result ne "ok") {
+      logMessage(0, "tarBeam: updateBookKeepr() failed: ".$response);
+      unindent();
+      return("fail", "error ocurred when updating BookKeepr: ".$response);
+    }
   }
 
   logMessage(2, "tarBeam: updatesTapesDB($id, $size, $used, $free, $nfiles, $full)");
@@ -506,8 +574,9 @@ sub tarBeam($$$) {
     unindent();
     return("fail", "error ocurred when updating filesDB: ".$response);
   }
+
   # we are ok, so mark as sent to tape
-  system("touch $obs/$beam/sent.to.tape");
+  system("touch ".$dir."/".$obs."/".$beam."/sent.to.tape");
   unindent();
   return ("ok",""); 
 
@@ -522,20 +591,66 @@ sub getCurrentTape() {
   indent(); 
   logMessage(2, "getCurrentTape()"); 
 
-  logMessage(2, "getCurrentTape: tapeGetID()");
-  ($result, $response) = tapeGetID();
-  logMessage(2, "getCurrentTape: tapeGetID() ".$result." ".$response);
+  my $result = "";
+  my $response = "";
+  my $tape_id = "";
+
+  # First we need to check whether a tape exists in the robot
+  logMessage(2, "getCurrentTape: tapeIsLoaded()");
+  ($result, $response) = tapeIsLoaded();
+  logMessage(2, "getCurrentTape: tapeIsLoaded ".$result." ".$response);
 
   if ($result ne "ok") {
-
-    logMessage(0, "getCurrentTape: tapeGetID failed: ".$response);
+    logMessage(0, "getCurrentTape: tapeIsLoaded failed: ".$response);
     unindent();
-    return ("fail", "bad binary label on current tape");
+    return ("fail", "could not determine if tape is loaded in drive");
 
   }
 
-  # we either have a good ID or no ID
-  my $tape_id = $response;
+  # If there is a tape in the drive...
+  if ($response eq 1) {
+    logMessage(2, "getCurrentTape: tapeGetID()");
+    ($result, $response) = tapeGetID();
+    logMessage(2, "getCurrentTape: tapeGetID() ".$result." ".$response);
+
+    if ($result ne "ok") {
+      logMessage(0, "getCurrentTape: tapeGetID failed: ".$response);
+      unindent();
+      return ("fail", "bad binary label on current tape");
+    }
+
+    # we either have a good ID or no ID
+    $tape_id = $response;
+
+  # no tape is loaded in the drive
+  } else {
+
+    # get the expected tape to be loaded
+    logMessage(2, "getCurrentTape: getExpectedTape()");
+    ($result, $response) = getExpectedTape();
+    logMessage(2, "getCurrentTape: getExpectedTape() ".$result." ".$response);
+
+    if ($result ne "ok") {
+      logMessage(0, "getCurrentTape: getExpectedTape() failed: ".$response);
+      unindent();
+      return ("fail", "could not determine the tape to be loaded");
+    }
+
+    my $expected_tape = $response;
+    logMessage(2, "getCurrentTape: loadTape(".$expected_tape.")");
+    ($result, $response) = loadTape($expected_tape);
+    logMessage(2, "getCurrentTape: loadTape() ".$result." ".$response);
+
+    if ($result ne "ok") {
+      logMessage(0, "getCurrentTape: loadTape() failed: ".$response);
+      unindent();
+      return ("fail", "could not load the expected tape");
+    }
+
+    logMessage(2, "getCurrentTape: expected tape now loaded");
+    $tape_id = $expected_tape;
+  }
+
 
   # Robot / Swinburne
   if ($robot) {
@@ -680,13 +795,17 @@ sub loadTape($) {
 
       logMessage(2, "loadTape: tape ".$tape." in slot ".$slot);
 
-      # unload the current tape
-      logMessage(2, "loadTape: robotUnloadCurrentTape()");
-      ($result, $response) = robotUnloadCurrentTape();
-      if ($result ne "ok") {
-        logMessage(0, "loadTape: robotUnloadCurrentTape failed: ".$response);
-        unindent();
-        return ("fail", "Could not unload current robot tape: ".$response);
+      # if a tape was actually loaded
+      if ($status{"transfer"} ne "Empty") {
+
+        # unload the current tape
+        logMessage(2, "loadTape: robotUnloadCurrentTape()");
+        ($result, $response) = robotUnloadCurrentTape();
+        if ($result ne "ok") {
+          logMessage(0, "loadTape: robotUnloadCurrentTape failed: ".$response);
+          unindent();
+          return ("fail", "Could not unload current robot tape: ".$response);
+        }
       }
 
       # load the tape in the specified slot
@@ -780,6 +899,8 @@ sub getExpectedTape() {
   indent();
   my $fname = $db_dir."/".TAPES_DB;
   my $expected_tape = "none";
+  my $newbkid;
+  $bkid="";
 
   logMessage(2, "getExpectedTape: ()");
 
@@ -800,7 +921,7 @@ sub getExpectedTape() {
       logMessage(3, "getExpectedTape: testing ".$line);
 
       if ($expected_tape eq "none") {
-        my ($id, $size, $used, $free, $nfiles, $full) = split(/ +/,$line);
+        my ($id, $size, $used, $free, $nfiles, $full, $newbkid) = split(/ +/,$line);
      
         if (int($full) == 1) {
           logMessage(2, "getExpectedTape: skipping tape ".$id.", marked full");
@@ -808,6 +929,7 @@ sub getExpectedTape() {
           logMessage(1, "getExpectedTape: skipping tape ".$id." only ".$free." MB left");
         } else {
           $expected_tape = $id;
+          $bkid=$newbkid;
         }
       }
     }
@@ -860,7 +982,35 @@ sub newTape() {
 
 }
 
+sub updateBookKeepr($$){
+  my ($psrxmlfile,$bookkeepr,$number) = @_;
+  my $cmd="";
+  my $result="";
+  my $response="";
+  my $psrxmlid="";
+  if ($bkid=="0"){
+    $cmd="book_create_tape $bookkeepr $id $uc_type | & sed -e 's:.*<id>\\([^>]*\\)</id>.*:\\1:p' -e 'd'";
+    ($result,$response) = Dada->mySystem($cmd);
+    if($result ne "ok"){
+      return ($result,$response);
+    }
+    $bkid=$response
+  }
+  $psrxmlid=`sed -e 's:.*<id>\\([^>]*\\)</id>.*:\\1:p' -e 'd' $psrxmlfile`;
+  if($psrxmlid==""){
+    return ("fail","<id> not set in the psrxml file");
+  }
+  $cmd="book_write_to_tape $bookkeepr $psrxmlid $bkid $number";
+  ($result,$response) = Dada->mySystem($cmd);
+  if($result ne "ok"){
+          return ($result,$response);
+  }
 
+}
+
+#
+# Update the tapes database with the specified information
+#
 sub updateTapesDB($$$$$$) {
 
   my ($id, $size, $used, $free, $nfiles, $full) = @_;
@@ -883,7 +1033,7 @@ sub updateTapesDB($$$$$$) {
   $newline .= floatPad($free, 3, 2)."  ";
   $newline .= sprintf("%06d",$nfiles)."  ";
   $newline .= $full;
-
+  $newline .= "    $bkid";
 
   #my $newline = $id."  ".sprintf("%05.2f",$size)."  ".sprintf("%05.2f",$used).
   #              "  ".sprintf("%05.2f",$free)."  ".$nfiles."       ".$full."\n";
@@ -1314,6 +1464,54 @@ sub robotInitializeAllTapes() {
   
 }
 
+sub robotSetStatus($) {
+
+  (my $string) = @_;
+
+  indent();
+  logMessage(2, "robotSetStatus(".$string.")");
+
+  my $gw_user = "pulsar";
+  my $gw_host = "shrek211";
+
+  my $user = "dada";
+  my $host = "apsr-evlbi.atnf.csiro.au";
+
+  my $dir = "/nfs/control/bpsr";
+  my $file = $type.".state";
+  my $result = "";
+  my $response = "";
+
+  my $remote_cmd = "";
+  my $gw_cmd = "";
+
+  # Delete the existing state file
+
+  $remote_cmd = "rm -f ".$dir."/".$file;
+  $gw_cmd = "ssh -l ".$gw_user." ".$gw_host." 'ssh -l ".$user." ".$host." \"".$remote_cmd."\"'";
+  logMessage(2, "robotSetStatus: ".$gw_cmd);
+  ($result, $response) = Dada->mySystem($gw_cmd);
+  logMessage(2, "robotSetStatus: ".$result." ".$response);
+
+  if ($result ne "ok") {
+    logMessage(0, "robotSetStatus: could not delete the existing state file ".$file.": ".$response);
+    unindent();
+    return ("fail", "could not remove state file: ".$file);
+  }
+
+  # Write the new file
+  $remote_cmd = "echo '".$string."' > ".$dir."/".$file;
+  $gw_cmd = "ssh -l ".$gw_user." ".$gw_host." 'ssh -l ".$user." ".$host." \"".$remote_cmd."\"'";
+  
+  logMessage(2, "manualSetStatus: ".$gw_cmd);
+  ($result, $response) = Dada->mySystem($gw_cmd);
+  logMessage(2, "manualSetStatus: ".$result." ".$response);
+
+  unindent();
+  return ("ok", "");
+
+}
+
 ##
 ## ROBOT FUNCTIONS
 ##
@@ -1340,68 +1538,55 @@ sub manualInsertTape($) {
 
   my $cmd = "";
 
-  my $user = "dada";
-  my $host = "shrek211";
-  my $port = 31001;
-  my $dir = "/mnt/apsr/control/bpsr/";
-  my $opts = "HostKeyAlias=srv0 -o StrictHostKeyChecking=no -o Loglevel=QUIET";
-
-  my $to_file = $type.".state";
-  my $from_file = $type.".response";
-
-  # Delete the existing command and response files
-  # 'Old' test mode of contacting user
-  #$cmd = "ssh -l ".$user." -p ".$port." -o ".$opts." ".$host." 'cd ".$dir."; rm -f ".$to_file." ".$from_file."'";
-  
-  $cmd="rm -f $dir/$to_file $dir/$from_file";
-  logMessage(2, "manualInsertTape: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
-  logMessage(2, "manualInsertTape: ".$result." ".$response);
-
+  logMessage(2, "manualInsertTape: manualClearResponse()");
+  ($result, $response) = manualClearResponse();
+                                                                                                                   
   if ($result ne "ok") {
-    logMessage(0, "manualInsertTape: could not delete the existing command and response files");
+    logMessage(0, "manualInsertTape: manualClearResponse() failed: ".$response);
     unindent();
-    return ("fail", "could not remove command and response files");
+    return ("fail", "could not clear response file in web interface");
   }
 
-  # Send the "Insert Tape" command
-  #$cmd = "ssh -l ".$user." -p ".$port." -o ".$opts." ".$host." 'cd ".$dir."; echo \"Insert Tape:::".$tape."\" > ".$to_file."'";
-  $cmd = "echo \"Insert Tape:::$tape\" > $dir/$to_file";
-  logMessage(2, "manualInsertTape: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
-  logMessage(2, "manualInsertTape: ".$result." ".$response);
+  my $string = "Insert Tape:::".$tape;
+  logMessage(2, "manualInsertTape: manualSetStatus(".$string.")");
+  ($result, $response) = manualSetStatus($string);
+  logMessage(2, "manualInsertTape: manualSetStatus() ".$result." ".$response);
+
+  if ($result ne "ok") {
+    logMessage(0, "manualInsertTape: manualSetStatus() failed: ".$response);
+    unindent();
+    return ("fail", "could not set status on web interface");
+  }
 
   my $have_response = 0;
-  my $n_tries = 10;
+  my $n_tries = 100;
   while ((!$have_response) && (!$quit_daemon)) {
 
-    # Wait for a response to appear from the user
-    #$cmd = "ssh -l ".$user." -p ".$port." -o ".$opts." ".$host." 'cd ".$dir."; cat ".$from_file."'";
-    $cmd = "cat $dir/$from_file";
-    logMessage(2, "manualInsertTape: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
-    logMessage(2, "manualInsertTape: ".$result." ".$response);
+    ($result, $response) = manualGetResponse();
 
     if ($result eq "ok") {
       $have_response = 1;
     } else {
-      logMessage(2, "manualInsertTape: sleeping 10 seconds whilst waiting for reply");
-      sleep(10);
+      logMessage(2, "manualInsertTape: sleeping 1 second whilst waiting for reply");
+      sleep(1);
       $n_tries--;
     }
-
   } 
 
   if ($have_response) {
 
     my $new_tape = $response;
 
-    # Remove the insert tape command 
-    #$cmd = "ssh -l ".$user." -p ".$port." -o ".$opts." ".$host." 'cd ".$dir."; rm -f ".$to_file."; echo \"Writing to tape ".$tape."\" > ".$to_file."'";
-    $cmd = "rm -f $dir/$to_file; echo \"Writing to tape $tape\" > $dir/$to_file";
-    logMessage(2, "manualInsertTape: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
-    logMessage(2, "manualInsertTape: ".$result." ".$response);
+    $string = "Current Tape: ".$new_tape;
+    logMessage(2, "manualInsertTape: manualSetStatus(".$string.")");
+    ($result, $response) = manualSetStatus($string);
+    logMessage(2, "manualInsertTape: manualSetStatus() ".$result." ".$response);
+  
+    if ($result ne "ok") {
+      logMessage(0, "manualInsertTape: manualSetStatus() failed: ".$response);
+      unindent();
+      return ("fail", "could not set status on web interface");
+    }
 
     unindent();
     return ("ok", $new_tape);
@@ -1411,6 +1596,102 @@ sub manualInsertTape($) {
     return ("fail", "did not received a response in 100 seconds");
   }
 
+}
+
+
+#
+# write the current action in to the .state file for the web interface
+#
+sub manualSetStatus($) {
+
+  (my $string) = @_;
+    
+  indent();
+  logMessage(2, "manualSetStatus(".$string.")");
+
+  my $dir = "/mnt/apsr/control/bpsr/";
+  my $file = $type.".state";
+  my $result = "";
+  my $response = "";
+
+  # Delete the existing state file
+  my $cmd = "rm -f ".$dir."/".$file;
+
+  logMessage(2, "manualSetStatus: ".$cmd);
+  ($result, $response) = Dada->mySystem($cmd);
+  logMessage(2, "manualSetStatus: ".$result." ".$response);
+                                                                                                                   
+  if ($result ne "ok") {
+    logMessage(0, "manualSetStatus: could not delete the existing state file ".$file.": ".$response);
+    unindent();
+    return ("fail", "could not remove state file: ".$file);
+  }
+
+  # Write the new file
+  $cmd = "echo \"".$string."\" > ".$dir."/".$file;
+  logMessage(2, "manualSetStatus: ".$cmd);
+  ($result, $response) = Dada->mySystem($cmd);
+  logMessage(2, "manualSetStatus: ".$result." ".$response);
+                                                                                                                   
+  unindent();
+  return ("ok", "");
+
+}
+
+#
+# get the .response file from the web interface
+#
+sub manualGetResponse() {
+
+  indent();
+  logMessage(2, "manualGetResponse()");
+
+  my $result = "";
+  my $response = "";
+  my $dir = "/mnt/apsr/control/bpsr/";
+  my $file = $type.".response";
+
+  # Wait for a response to appear from the user
+  my $cmd = "cat ".$dir."/".$file;
+  logMessage(2, "manualGetResponse: ".$cmd);
+  ($result, $response) = Dada->mySystem($cmd);
+  logMessage(2, "manualGetResponse: ".$result." ".$response);
+
+  if ($result ne "ok") {
+    unindent();
+    return ("fail", "could not read file: ".$file);
+  }
+
+  return ($result, $response);
+
+}
+
+#
+# delete the .response file from the web interface
+#
+sub manualClearResponse() {
+
+  indent();
+  logMessage(2, "manualClearResponse()"); 
+
+  my $result = ""; 
+  my $response = "";
+  my $dir = "/mnt/apsr/control/bpsr/";
+  my $file = $type.".response";
+
+  # Wait for a response to appear from the user
+  my $cmd = "rm -f ".$dir."/".$file;
+  logMessage(2, "manualClearResponse: ".$cmd);
+  ($result, $response) = Dada->mySystem($cmd);
+  logMessage(2, "manualClearResponse: ".$result." ".$response);
+
+  if ($result ne "ok") {
+    logMessage(0, "manualSetStatus: could not delete the existing state file ".$file.": ".$response);
+    unindent();
+    return ("fail", "could not remove state file: ".$file);
+  }
+
+  return ("ok", "");
 }
 
 
@@ -1452,6 +1733,34 @@ sub tapeFSF($) {
   return ("ok", "");
 
 } 
+
+
+#
+# checks to see if the tape drive thinks it has a tape in it
+#
+sub tapeIsLoaded() {
+
+  indent();
+  logMessage(2, "tapeIsLoaded()");
+
+  my $is_loaded = 0;
+
+  my $cmd = "mt -f ".$dev." status | grep ' ONLINE ' > /dev/null";
+
+  logMessage(2, "tapeIsLoaded: ".$cmd);
+  `$cmd`;
+  if ($? == 0) {
+    $is_loaded = 1;
+  } else {
+    $is_loaded = 0;
+  }
+
+  logMessage(2, "tapeIsLoaded: returning ".$is_loaded);
+
+  unindent();
+  return ("ok", $is_loaded);
+
+}
 
 
 #
@@ -1653,6 +1962,7 @@ sub logMessage($$) {
   if ($level <= DEBUG_LEVEL) {
     my $time = Dada->getCurrentDadaTime();
     print "[".$time."] ".$indent.$message."\n";
+    system("echo '[".$time."] ".$indent.$message."' >> ".$db_dir."/bpsr_tape_archiver.log");
   }
 }
 sub indent() {
@@ -1730,3 +2040,23 @@ sub tarSizeEst($$) {
 
 }
 
+#
+# sets status on web interface
+#
+
+sub setStatus($) {
+
+  (my $string) = @_;
+
+  my $result = "";
+  my $response = "";
+  
+  if ($type eq "swin") {
+    ($result, $response) = robotSetStatus($string);
+  } else {
+    ($result, $response) = manualSetStatus($string);
+  }
+
+  return ($result, $response);
+}
+    
