@@ -81,7 +81,6 @@ if (($type eq "swin") || ($type eq "robot_init")) {
         $required_host = "shrek201.ssi.swin.edu.au";
 }
 
-}
 if ($type eq "parkes") {
         $tape_id_pattern = "HRE[0-9][0-9][0-9]S4";
         $uc_type = "PARKES";
@@ -92,7 +91,7 @@ if ($type eq "parkes") {
 # sanity check the hostname
 if ($ENV{'HOSTNAME'} ne $required_host) {
   print STDERR "ERROR: Cannot run this script on ".$ENV{'HOSTNAME'}."\n";
-  print STDERR "       Must be run on ".$required_host."\n"
+  print STDERR "       Must be run on ".$required_host."\n";
   exit(1);
 }
 
@@ -529,6 +528,37 @@ sub tarBeam($$$$) {
   }
 
   setStatus("Archving  ".$obs."/".$beam);
+
+  ($result, my $filenum, my $blocknum) = getTapeStatus();
+  if ($result ne "ok") {
+          logMessage(0, "TarBeam: getTapeStatus() failed.");
+          unindent();
+          return ("fail", "getTapeStatus() failed");
+  }
+  my $ntries=3;
+  while ($filenum ne $nfiles || $blocknum ne 0){
+# we are not at 0 block of the next file!
+          logMessage(0, "TarBeam: WARNING: Tape out of position! (f=$filenum, b=$blocknum) Attempt to get to right place.");
+          $cmd="mt -f ".$dev." rewind; mt -f ".$dev." fsf $nfiles";
+          ($result, $response) = Dada->mySystem($cmd);
+          if ($result ne "ok") {
+                  logMessage(0, "TarBeam: tape re-wind/skip failed: ".$response);
+                  unindent();
+                  return ("fail", "tape re-wind/skip failed: ".$response);
+          }
+
+          ($result, $filenum, $blocknum) = getTapeStatus();
+          if ($result ne "ok") { 
+                  logMessage(0, "TarBeam: getTapeStatus() failed.");
+                  unindent();
+                  return ("fail", "getTapeStatus() failed");
+          }
+          if($ntries < 1){
+                  return ("fail", "TarBeam: Could not get to correct place on tape!");
+          }
+          $ntries--;
+  }
+
 
   # now we have a tape with enough space to fit this archive
   if ($robot) {
@@ -1901,9 +1931,38 @@ sub tapeGetID() {
   }
 
   logMessage(2, "tapeGetID: ID = ".$response);
+  my $tape_label = $response;
+
+  ($result, my $filenum, my $blocknum) = getTapeStatus();
+  if ($result ne "ok") { 
+          logMessage(0, "tapeGetID: getTapeStatus() failed.");
+          unindent();
+          return ("fail", "getTapeStatus() failed");
+  }
+
+  while ($filenum ne 1 || $blocknum ne 0){
+    # we are not at 0 block of file 1...
+          logMessage(1, "tapeGetID: Tape out of position (f=$filenum, b=$blocknum), rewinding and skipping to start of data");
+          $cmd="mt -f ".$dev." rewind; mt -f ".$dev." fsf 1";
+          ($result, $response) = Dada->mySystem($cmd);
+          if ($result ne "ok") {
+                  logMessage(0, "tapeGetID: tape re-wind/skip failed: ".$response);
+                  unindent();
+                  return ("fail", "tape re-wind/skip failed: ".$response);
+          }
+
+          ($result, $filenum, $blocknum) = getTapeStatus();
+          if ($result ne "ok") { 
+                  logMessage(0, "tapeGetID: getTapeStatus() failed.");
+                  unindent();
+                  return ("fail", "getTapeStatus() failed");
+          }
+  }
+  # The tape MUST now be in the right place to start
+
   unindent();
 
-  return ("ok", $response);
+  return ("ok", $tape_label);
 }
 
 #
@@ -2109,4 +2168,37 @@ sub setStatus($) {
   }
 
   return ($result, $response);
+}
+
+
+sub getTapeStatus(){
+  my $cmd="";
+  my $filenum;
+  my $blocknum;
+
+  $cmd="mt -f ".$dev." status | grep -e 'file number' | awk '{print \$4}'";
+  logMessage(3, "getTapeStatus: cmd= $cmd");
+
+
+
+  my ($result,$response) = Dada->mySystem($cmd);
+
+
+  if ($result ne "ok") {
+          logMessage(0, "getTapeStatus: Failed $response");
+          $filenum=-1;
+          $blocknum=-1;
+  } else {
+          $filenum=$response;
+          $cmd="mt -f ".$dev." status | grep -e 'block number' | awk '{print \$4}'";
+          my ($result,$response) = Dada->mySystem($cmd);
+          if ($result ne "ok") {
+                  logMessage(0, "getTapeStatus: Failed $response");
+                  $filenum=-1;
+                  $blocknum=-1;
+          } else {
+                  $blocknum=$response;
+          }
+  }
+  return ($result,$filenum,$blocknum);
 }
