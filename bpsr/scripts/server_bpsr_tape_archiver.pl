@@ -5,7 +5,7 @@
 # server_bpsr_tape_archiver.pl
 #
 
-use lib $ENV{"DADA_ROOT"}."/newbin";
+use lib $ENV{"DADA_ROOT"}."/bin";
 
 use Net::hostent;
 use File::Basename;
@@ -71,16 +71,31 @@ if ($#ARGV != 0) {
 
 }
 
+my $required_host = "";
+
 # set the pattern tape id pattern for each location
 if (($type eq "swin") || ($type eq "robot_init")) {
         $tape_id_pattern = "HRA[0-9][0-9][0-9]S4";
         $robot = 1;
         $uc_type = "SWIN";
+        $required_host = "shrek201.ssi.swin.edu.au";
+}
+
 }
 if ($type eq "parkes") {
         $tape_id_pattern = "HRE[0-9][0-9][0-9]S4";
         $uc_type = "PARKES";
+        $required_host = "jura";
+  
 }
+
+# sanity check the hostname
+if ($ENV{'HOSTNAME'} ne $required_host) {
+  print STDERR "ERROR: Cannot run this script on ".$ENV{'HOSTNAME'}."\n";
+  print STDERR "       Must be run on ".$required_host."\n"
+  exit(1);
+}
+
 
 #
 # Local Varaibles
@@ -216,11 +231,11 @@ while (!$quit_daemon) {
   # look for a file sequentially in each of the @dirs
   $dir = $dirs[$i];
   $host=$hosts[$i];
-  logMessage(2, "main: getObsToTar(".$dir.",".$host.")");
+  logMessage(3, "main: getObsToTar(".$dir.",".$host.")");
 
   # Look for files in the @dirs
   $obs = getObsToTar($dir,$host);
-  logMessage(2, "main: getObsToTar() ".$obs);
+  logMessage(3, "main: getObsToTar() ".$obs);
 
   # If we have one, write to tape
   if ($obs ne "none") {
@@ -268,14 +283,16 @@ sub getObsToTar($$) {
   indent();
 
   (my $dir, my $host) = @_;
-  logMessage(2, "getObsToTar: ".$dir);
+  logMessage(3, "getObsToTar: ".$dir);
 
   my $obs = "none";
   my $subdir = "";
   my @subdirs = ();
-  if ( -f $dir."/WRITING" ){
-          logMessage(2, "getObsToTar: ignoring dir ".$dir." as this is being written to");
-  } else {
+
+  # Temporarily disabling the "WRITING" check
+  #if ( -f $dir."/WRITING" ){
+  #        logMessage(2, "getObsToTar: ignoring dir ".$dir." as this is being written to");
+  #} else {
 
     # find all subdirectories with an xfer.complete file in them
     opendir(DIR,$dir);
@@ -289,10 +306,13 @@ sub getObsToTar($$) {
         # ignore if this has already been sent to tape
         logMessage(2, "getObsToTar: Found tarred obs ".$subdir.", moving...");
         chdir $dir;
-#        my $cmd = "mv ".$subdir." ../on_tape";
-# M.Keith 2008 : This is a HACK and a BOTCH. It will fix a problem on JURA, but break everything else!
-# This should be replaced with a proper, configurable system as soon as possible
-        my $cmd = "ssh -x -o BatchMode=yes -l dada $host \"cd /lfs/data0/bpsr/from_parkes/ ; mv ".$subdir." ../on_tape \"";
+
+        my $cmd = "";
+        if ($robot) {
+          $cmd = "mv ".$subdir." ../on_tape";
+        } else {
+          $cmd = "ssh -x -o BatchMode=yes -l dada $host \"cd /lfs/data0/bpsr/from_parkes/ ; mv ".$subdir." ../on_tape \"";
+        }
         logMessage(1, "getObsToTar: ".$cmd);
         my ($result, $response) = Dada->mySystem($cmd);
         if ($result ne "ok") {
@@ -306,8 +326,8 @@ sub getObsToTar($$) {
         # do nothing as we have found an obs or this is incomplete xfer
       }
     }
-  }
-  logMessage(2, "getObsToTar: returning ".$obs);
+  #}
+  logMessage(3, "getObsToTar: returning ".$obs);
 
   unindent();
   return $obs;
@@ -329,7 +349,7 @@ sub tarObs($$$) {
   my @subdirs = ();
   my $beam_problem = 0;
 
-  system("touch $dir/READING");
+  # system("touch $dir/READING");
 
   opendir(DIR,$dir."/".$obs);
   @subdirs = sort grep { !/^\./ && -d $dir."/".$obs."/".$_ } readdir(DIR);
@@ -349,7 +369,7 @@ sub tarObs($$$) {
       if ($result ne "ok") {
         logMessage(0, "tarObs: checkIfArchived failed: ".$response);
         unindent();
-        system("rm -f $dir/READING");
+        # system("rm -f $dir/READING");
         return ("fail", "checkIfArchived() failed: ".$response);
       } 
   
@@ -375,7 +395,7 @@ sub tarObs($$$) {
   if ($beam_problem) {
     logMessage(0, "tarObs: problem archiving a beam");
     unindent();
-    system("rm -f $dir/READING");
+    #system("rm -f $dir/READING");
     return ("fail", "problem occurred during archival of a beam");
 
   # Mark this entire pointing as successfully processed
@@ -385,7 +405,7 @@ sub tarObs($$$) {
 
   logMessage(1, "tarObs: finished observation: ".$obs);
 
-  system("rm -f $dir/READING");
+  #system("rm -f $dir/READING");
   unindent();
   return ("ok", "");
 }
@@ -450,7 +470,7 @@ sub tarBeam($$$$) {
   if ($result ne "ok") {
     logMessage(0, "tarBeam: getTapeInfo() failed: ".$response);
     unindent();
-    return ("fail", "could not determine space left on tape");
+    return ("fail", "could not determine tape information from database");
   } 
 
   my ($id, $size, $used, $free, $nfiles, $full) = split(/:/,$response);
@@ -463,76 +483,101 @@ sub tarBeam($$$$) {
 
     logMessage(0, "tarBeam: tape ".$tape." full. (".$free." < ".$size_est_gbytes.")");
 
-    logMessage(0, "tarBeam: marking tape full");
-    # Mark the current tape as full and load a new tape;$a
-    ($result, $response) = markTapeFull($tape);
+    # Mark the current tape as full and load a new tape;
+    logMessage(2, "tarBeam: updateTapesDB(".$id.", ".$size.", ".$used.", ".$free.", ".$nfiles);
+    ($result, $response) = updateTapesDB($id, $size, $used, $free, $nfiles, 1);
+    logMessage(2, "tarBeam: updateTapesDB() ".$result." ".$response);
 
     if ($result ne "ok") {
-      logMessage(0, "tarBeam: markTapeFull() failed: ".$response);
+      logMessage(0, "tarBeam: updateTapesDB() failed: ".$response);
       unindent();
       return ("fail", "could not mark tape full");
     }
 
     # Get the next expected tape
+    logMessage(1, "tarBeam: getExpectedTape()");
     my $new_tape = getExpectedTape();
-    logMessage(0, "tarBeam: new tape is ".$new_tape);
+    logMessage(1, "tarBeam: getExpectedTape(): ".$new_tape);
 
+    logMessage(1, "tarBeam: loadTape(".$new_tape.")");
     ($result, $response) = loadTape($new_tape);
+    logMessage(1, "tarBeam: loadTape() ".$result." ".$response);
+
     if ($result ne "ok") {
       logMessage(0, "tarBeam: newTape() failed: ".$response);
       unindent();
       return ("fail", "New tape was not loaded");
     }
 
-    $tape = $response; 
+    $tape = $new_tape; 
     $current_tape = $tape;
+
+    # check if this beam will fit on the tape
+    logMessage(2, "tarBeam: getTapeInfo(".$tape.")");
+    ($result, $response) = getTapeInfo($tape);
+    logMessage(2, "tarBeam: getTapeInfo() ".$result." ".$response);
+
+    if ($result ne "ok") {
+      logMessage(0, "tarBeam: getTapeInfo() failed: ".$response);
+      unindent();
+      return ("fail", "could not determine tape information from database");
+    }
+
+    # Setup the ID information for the new tape    
+    ($id, $size, $used, $free, $nfiles, $full) = split(/:/,$response);
+
   }
-
-
-  # now we have a tape with enough space to fit this archive
-#  chdir $dir;
-#  $cmd = "time tar -b 128 -cf ".$dev." ".$obs."/".$beam;
 
   setStatus("Archving  ".$obs."/".$beam);
 
-# M.Keith 2008: This is a HACK and a BOTCH. Calls a bash script to ssh to a machine and start the nc listen daemon
-# Probably can replace the shell script if someone who understands perl does it.
-# This should be fixed as soon as possible.
-  $cmd="/data/JURA_1/hitrun/software/sshwrap.sh $host $obs $beam";
-#  $cmd="ssh dada@".$host." -f -x -o BatchMode=yes \"cd /lfs/data0/bpsr/from_parkes; tar -b 128 -c "
- # .$obs."/".$beam." | nc -l 12345 \"";
+  # now we have a tape with enough space to fit this archive
+  if ($robot) {
 
-  logMessage(0, "tarBeam: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
-  print $response;
-  if ($result ne "ok") {
-    logMessage(0, "tarBeam: failed to write archive to tape: ".$response);
-    unindent();
-    return ("fail", "Archiving failed");
-  }
-  my $tries=10;
-  while($tries gt 0 ){
-          sleep(2);
-          $cmd='nc '.$host.' 12345 | dd of='.$dev.' bs=64K';
+    chdir $dir;
+    $cmd = "tar -b 128 -cf ".$dev." ".$obs."/".$beam;
+  
+    logMessage(0, "tarBeam: ".$cmd);
+    ($result, $response) = Dada->mySystem($cmd);
+    logMessage(2, "tarBeam: ".$result." ".$response);
 
-          logMessage(0, "tarBeam: ".$cmd);
-          ($result, $response) = Dada->mySystem($cmd);
-          print $response;
-          if ($result ne "ok") {
-                  logMessage(0, "tarBeam: failed to write archive to tape: ".$response);
-                  $tries--;
-          } else {
-                  last;
-          }
-  }
-  if ($result ne "ok") {
+    if ($result ne "ok") {
+      logMessage(0, "tarBeam: failed to write archive to tape: ".$response);
+      unindent();
+      return ("fail", "Archiving failed");
+    }
+
+  } else {
+
+    # M.Keith 2008: This is a HACK and a BOTCH. Calls a bash script to ssh to a machine and start the nc listen daemon
+    # Probably can replace the shell script if someone who understands perl does it.
+    # This should be fixed as soon as possible.
+    $cmd = "/data/JURA_1/hitrun/software/sshwrap.sh ".$host." ".$obs." ".$beam;
+    #  $cmd="ssh dada@".$host." -f -x -o BatchMode=yes \"cd /lfs/data0/bpsr/from_parkes; tar -b 128 -c "
+    # .$obs."/".$beam." | nc -l 12345 \"";
+
+    if ($robot == 0) {
+      my $tries=10;
+      while($tries gt 0 ){
+        sleep(2);
+        $cmd='nc '.$host.' 12345 | dd of='.$dev.' bs=64K';
+
+        logMessage(0, "tarBeam: ".$cmd);
+        ($result, $response) = Dada->mySystem($cmd);
+        print $response;
+        if ($result ne "ok") {
           logMessage(0, "tarBeam: failed to write archive to tape: ".$response);
-          unindent();
-
-          return ("fail","Archiving failed");
+          $tries--;
+        } else {
+          last;
+        }
+      }
+      if ($result ne "ok") {
+        logMessage(0, "tarBeam: failed to write archive to tape: ".$response);
+        unindent();
+        return ("fail","Archiving failed");
+      }
+    }
   }
-
-
 
   # Else we wrote 3 files to the TAPE in 1 archive and need to update the database files
   $used += $size_est_gbytes;
@@ -604,7 +649,6 @@ sub getCurrentTape() {
     logMessage(0, "getCurrentTape: tapeIsLoaded failed: ".$response);
     unindent();
     return ("fail", "could not determine if tape is loaded in drive");
-
   }
 
   # If there is a tape in the drive...
@@ -650,7 +694,6 @@ sub getCurrentTape() {
     logMessage(2, "getCurrentTape: expected tape now loaded");
     $tape_id = $expected_tape;
   }
-
 
   # Robot / Swinburne
   if ($robot) {
@@ -1503,9 +1546,9 @@ sub robotSetStatus($) {
   $remote_cmd = "echo '".$string."' > ".$dir."/".$file;
   $gw_cmd = "ssh -l ".$gw_user." ".$gw_host." 'ssh -l ".$user." ".$host." \"".$remote_cmd."\"'";
   
-  logMessage(2, "manualSetStatus: ".$gw_cmd);
+  logMessage(2, "robotSetStatus: ".$gw_cmd);
   ($result, $response) = Dada->mySystem($gw_cmd);
-  logMessage(2, "manualSetStatus: ".$result." ".$response);
+  logMessage(2, "robotSetStatus: ".$result." ".$response);
 
   unindent();
   return ("ok", "");
@@ -1981,6 +2024,14 @@ sub sigHandle($) {
   my $sigName = shift;
   print STDERR basename($0)." : Received SIG".$sigName."\n";
   $quit_daemon = 1;
+  my $dir;
+
+  # force an unlink of any READING control files on exit
+  # foreach $dir (@dirs) {
+  #   if (-f $dir."/READING") {
+  #     unlink ($dir."/READING");
+  #   }
+  # }
   sleep(3);
   print STDERR basename($0)." : Exiting: ".Dada->getCurrentDadaTime(0)."\n";
 
@@ -2059,4 +2110,3 @@ sub setStatus($) {
 
   return ($result, $response);
 }
-    
