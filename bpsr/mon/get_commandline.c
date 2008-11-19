@@ -45,18 +45,26 @@ void get_commandline(int argc, char *argv[], char *inpfile0, char *inpfile1,
   /* work out how many files are on the command line */
   i=1;
   nfiles=0;
-  while(check_file_exists(argv[i])) {
-        if (nfiles == 0) strcpy(inpfile0,argv[i]);
-        if (nfiles == 1) strcpy(inpfile1,argv[i]);
-        nfiles++;
-        i++;
+  for (i=1; i < argc; i++)
+  {
+    if (check_file_exists(argv[i]))
+    {
+      if (nfiles == 0) strcpy(inpfile0,argv[i]);
+      if (nfiles == 1) strcpy(inpfile1,argv[i]);
+      nfiles++;
+    }
+    else
+      printf("'%s' not found\n", argv[i]);
   }
+
+  if (!nfiles)
+  {
+    printf("An input file must be the FIRST argument in the command line!"); 
+    printf(" Exiting...\n");
+    exit(-1);
+  }
+
   printf("\nData files: %s %s \n",inpfile0,inpfile1); 
-  if (!nfiles) {
-  printf("An input file must be the FIRST argument in the command line!"); 
-  printf(" Exiting...\n");
-  exit(-1);
-  }
 
   /* now parse any remaining command line parameters */
   if (argc>nfiles) {
