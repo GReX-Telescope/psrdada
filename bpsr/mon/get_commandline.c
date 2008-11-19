@@ -54,7 +54,7 @@ void get_commandline(int argc, char *argv[], char *inpfile0, char *inpfile1,
       nfiles++;
     }
     else
-      printf("'%s' not found\n", argv[i]);
+      break;
   }
 
   if (!nfiles)
