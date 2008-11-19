@@ -71,7 +71,7 @@ void get_commandline(int argc, char *argv[], char *inpfile0, char *inpfile1,
         strcpy(inpdev,argv[++i]);
         strncpy(checkchar,inpdev,1);
 	//if (!(strings_compare(checkchar[0],"/"))) {
-	if (checkchar[0] == '/') {
+	if (checkchar[0] != '/') {
     	 printf("Unknown argument %s given for <device>. Exiting...\n",inpdev);
          //strcpy(inpdev,"/png");
          exit(-1);
