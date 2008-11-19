@@ -150,9 +150,10 @@ while (!$quit_daemon) {
       # If obs_age is -1 then this is a dud observation, delete it
       if ($age == -1) {
 
-        debugMessage(1, "Deleting empty: observation: $dir");
-        deleteObservation($obs_results_dir."/".$dir);
-        deleteObservation($obs_archive_dir."/".$dir);
+        debugMessage(1, "WVS FIX: no longer deleting empty observation: $dir");
+	### YIKES! plot4mon is failing and directories appear empty!
+        ### deleteObservation($obs_results_dir."/".$dir);
+        ### deleteObservation($obs_archive_dir."/".$dir);
 
       # If the obs age is over 60 seconds, then we consider it finalized
       } elsif ($age > 60) {
