@@ -22,7 +22,7 @@ SERVER_LOG_DIR          /export/logs/bpsr
 SERVER_CONTROL_DIR      /tmp/bpsr/control
 SERVER_RESULTS_NFS_MNT  /nfs/results/bpsr
 SERVER_ARCHIVE_NFS_MNT  /nfs/archives/bpsr
-SERVER_DAEMONS          bpsr_pwc_monitor bpsr_src_monitor bpsr_sys_monitor bpsr_tcs_interface bpsr_results_manager bpsr_multibob_manager
+SERVER_DAEMONS          bpsr_pwc_monitor bpsr_src_monitor bpsr_sys_monitor bpsr_tcs_interface bpsr_results_manager bpsr_multibob_manager bpsr_transfer_manager
 
 ###############################################################################
 #
@@ -30,7 +30,7 @@ SERVER_DAEMONS          bpsr_pwc_monitor bpsr_src_monitor bpsr_sys_monitor bpsr_
 #
 # TCS Interface configuration. Note on different interface to server
 TCS_INTERFACE_HOST        apsr-srv0.atnf.csiro.au
-TCS_INTERFACE_PORT        59000      # TCS connects here
+TCS_INTERFACE_PORT        59010      # TCS connects here
 TCS_STATE_INFO_PORT       51001      # Web interface state information 
 
 
@@ -65,13 +65,12 @@ IBOB_SIM_PORT             51008     # port for PWC's to connect to is simulating
 ###############################################################################
 # Tape Archive Locations
 # 
-NUM_SWIN_DIRS           2
-SWIN_DIR_0              pulsar:shrek210:/nfs/cluster/shrek210a/from_parkes
-SWIN_DIR_1              pulsar:shrek210:/nfs/cluster/shrek210b/from_parkes
-SWIN_DIR_2              pulsar:shrek211:/nfs/cluster/shrek211a/from_parkes
-SWIN_DIR_3              pulsar:shrek211:/nfs/cluster/shrek211b/from_parkes
+NUM_SWIN_DIRS           0
+SWIN_DIR_0              pulsar:shrek211:/nfs/cluster/shrek211a/from_parkes
 SWIN_S4_DEVICE          /dev/nst0
 SWIN_DB_DIR             /home/ssi/pulsar/database
+NUM_SWIN_FOLD_DIRS      1
+SWIN_FOLD_DIR_0         pulsar:shrek211:/nfs/cluster/shrek210a/from_parkes_pulsars
 
 NUM_PARKES_DIRS         4
 PARKES_DIR_0            bpsr:apsr14:/lfs/data0/bpsr/from_parkes
@@ -79,7 +78,9 @@ PARKES_DIR_1            bpsr:apsr15:/lfs/data0/bpsr/from_parkes
 PARKES_DIR_2            bpsr:apsr16:/lfs/data0/bpsr/from_parkes
 PARKES_DIR_3            bpsr:apsr17:/lfs/data0/bpsr/from_parkes
 PARKES_S4_DEVICE        /dev/nst0
-SWIN_DB_DIR             /home/pulsar/database
+PARKES_DB_DIR           /home/pulsar/database
+NUM_PARKES_FOLD_DIRS    1
+PARKES_FOLD_DIR_0       bpsr:apsr00:/nfs/apsr00/bpsr/from_parkes_pulsars
 
 ###############################################################################
 # Client directory configuration
@@ -174,9 +175,7 @@ IBOB_PORT_12            52012
 # The config/startup script will connect to the IBOB_HOST_i:IBOB_PORT_i
 # to IBOB_DEST_i:23 via the IBOB_GATEWAY using a ssh tunnel with a 
 # passphraseless SSH key.
-IBOB_GATEWAY            apsr17
-IBOB_GATEWAY_USERNAME   bpsr
-IBOB_MANAGER_PORT       12345
+IBOB_MANAGER_PORT       520013
 
 IBOB_DEST_0             169.254.128.1
 IBOB_DEST_1             169.254.128.2
