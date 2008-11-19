@@ -121,9 +121,13 @@ int main (int argc, char *argv[])
   /* plotting the data */
   if (ndim==1) 
   {
+    float mmm_scale = tsamp;
+    if (dommm && plotnum == 0)
+      mmm_scale *= MMM_REDUCTION;
+
     /* filling the x array with suitable indexes */
     create_xaxis(inpfile1,plotnum,totvaluesread,totvalues4plot,
-                 fch1,chbw,xscale,nchan,tsamp,&x_read[0]);  
+                 fch1,chbw,xscale,nchan,mmm_scale,&x_read[0]);  
 
     /* creating a 1-D plot with pgplot */
     plot_stream_1D(&x_read[0], &y_new[0], &y_new1[0], totvalues4plot,

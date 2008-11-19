@@ -28,6 +28,7 @@
 //#define MAXNUMPOINTS 10000000 /* max number of points to be plotted  */
 #define MAX_PERIOD 5.0 /* max period to look at in FFT in sec */
 #define MIN_PERIOD 0.001 /* min period to look at in FFT in sec */
+#define MMM_REDUCTION 512
 
 void get_commandline(int , char *argv[], char *, char *, char *, char *, int *, int *, int *, int *, unsigned *, unsigned *);
 void display_help(char *);
