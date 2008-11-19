@@ -274,13 +274,17 @@ sub processResult($$) {
   } else {
    
     # Create the low resolution file
-    $cmd = $bindir."/plot4mon ".$file."0 ".$file."1 -G 112x84 -nobox -nolabel -g /png ";
+    $cmd = $bindir."/plot4mon ".$file."0 ".$file."1 -G 112x84 -nobox -nolabel -g /png";
+    if ($filetype eq "timeseries") {
+      $cmd = $cmd." -log -mmm";
+    }
+
     debugMessage(2, "Ploting with \"".$cmd."\"");
     $response = `$cmd 2>&1`;
     if ($? != 0) {
       debugMessage(0, "Plotting cmd \"".$cmd."\" failed with message \"".$response."\"");
     } else {
-      $cmd  = "mv .N=?".$file.".png ".$file."_112x84.png";
+      $cmd  = "mv ".$file.".png ".$file."_112x84.png";
       $response = `$cmd 2>&1`;
       if ($? != 0) { 
         chomp $response;
@@ -298,12 +302,16 @@ sub processResult($$) {
 
     # Create the mid resolution file
     $cmd = $bindir."/plot4mon ".$file."0 ".$file."1 -G 400x300 -g /png";
+    if ($filetype eq "timeseries") {
+      $cmd = $cmd." -log -mmm";
+    }
+
     debugMessage(2, "Ploting with \"".$cmd."\"");
     $response = `$cmd 2>&1`;
     if ($? != 0) {
       debugMessage(0, "Plotting cmd \"".$cmd."\" failed with message \"".$response."\"");
     } else {
-      $cmd  = "mv .N=?".$file.".png ".$file."_400x300.png";
+      $cmd  = "mv ".$file.".png ".$file."_400x300.png";
       $response = `$cmd 2>&1`;
       if ($? != 0) { 
         chomp $response;
@@ -321,12 +329,16 @@ sub processResult($$) {
 
     # Create the high resolution file
     $cmd = $bindir."/plot4mon ".$file."0 ".$file."1 -G 1024x768 -g /png";
+    if ($filetype eq "timeseries") {
+      $cmd = $cmd." -log -mmm";
+    }
+
     debugMessage(2, "Ploting with \"".$cmd."\"");
     $response = `$cmd 2>&1`;
     if ($? != 0) {
       debugMessage(0, "Plotting cmd \"".$cmd."\" failed with message \"".$response."\"");
     } else {
-      $cmd  = "mv .N=?".$file.".png ".$file."_1024x768.png";
+      $cmd  = "mv ".$file.".png ".$file."_1024x768.png";
       $response = `$cmd 2>&1`;
       if ($? != 0) {
         chomp $response;
