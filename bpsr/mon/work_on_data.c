@@ -11,7 +11,8 @@
 
 void work_on_data(char inpfile[], float *readstream, float *newstream, 
 		  long totvaluesread, long *totvalues4plot, float tsamp,
-		  float yscale, int plotnum, char add_work[], int dolog)
+		  float yscale, int plotnum, char add_work[], 
+		  int dolog, int dommm)
 {
   long jj;
 
@@ -24,10 +25,21 @@ void work_on_data(char inpfile[], float *readstream, float *newstream,
    }
 
   if (plotnum==0)
-   {
-     for (jj=0; jj<=totvaluesread-1; jj++) newstream[jj]=readstream[jj]/yscale;
-     *totvalues4plot=totvaluesread;
-   }
+  {
+    if (dommm && (strstr(inpfile,"ts") != NULL))
+    {
+         printf(" \n Doing the max min ...\n");
+	 do_mmm (readstream,newstream,
+		    totvaluesread,totvalues4plot,tsamp);
+    }
+
+    else
+      {
+	for (jj=0; jj<=totvaluesread-1; jj++) 
+	  newstream[jj]=readstream[jj]/yscale;
+	*totvalues4plot=totvaluesread;
+      }
+  }
   else if (plotnum==1) 
    {
       if (strings_compare(add_work,"fft"))
@@ -35,6 +47,20 @@ void work_on_data(char inpfile[], float *readstream, float *newstream,
          printf(" \n Doing the power spectrum...\n");
 	 do_powerspec(&readstream[0],&newstream[0],
 		      totvaluesread,totvalues4plot,tsamp);
+
+	 if (dolog == 1)
+	   {
+	     printf(" \n taking log of fluctuation power spectrum \n");
+	     for (jj=0; jj<*totvalues4plot; jj++) { 
+	       if ( newstream[jj] > 1.0 )
+		 {
+		   newstream[jj]=log(newstream[jj])/log(10.0);
+		 }
+	       else
+		 newstream[jj]=0;
+	     }
+	   }
+
 	 printf(" Obtained a power spectrum with %ld bins \n",*totvalues4plot);
        } 
       else

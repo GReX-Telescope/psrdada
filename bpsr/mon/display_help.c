@@ -25,6 +25,8 @@ void display_help(char *program)
   puts("-nolabel     -  omit plot labels and title ");
   puts("-nobox       -  omit plot box ");
   puts("-log         -  plot bandpass on log scale ");
+  puts("-mmm         -  plot time series min, mean, and max ");
+
   printf("-g <device>  -  display device for plot e.g. /xs  (def=%s) \n", STD_DEVICE);
   printf("-G <AAAxBBB> -  display resolution for plot e.g. -G 240x200 \n");
   puts("");

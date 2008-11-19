@@ -27,7 +27,7 @@
 
 int main (int argc, char *argv[])
 {
-  int  plotnum=0,dolog=0,dolabel=1,dobox=1,ndata=156250;
+  int  plotnum=0,dolog=0,dolabel=1,dobox=1,dommm=0,ndata=156250;
   char inpfile[80],inpdev[80],outputfile[80];
   char inpfile0[80],inpfile1[80];
   char xlabel[80],ylabel[80],plottitle[80];
@@ -44,7 +44,7 @@ int main (int argc, char *argv[])
   /* reading the command line   */
   //get_commandline(argc,argv,inpfile,inpdev,outputfile);
   get_commandline(argc,argv,inpfile0,inpfile1,inpdev,outputfile,&dolog,&dolabel,
-	 		&dobox, &width_pixels, &height_pixels);
+		  &dobox, &dommm, &width_pixels, &height_pixels);
 
   fprintf (stderr, "Pixel dimensions: %d x %d \n",width_pixels,height_pixels);
 
@@ -83,13 +83,13 @@ int main (int argc, char *argv[])
 
     /* perform additional work (fft,averaging,etc...) on the data if required */ 
     work_on_data(inpfile0,&y_read[0],&y_new[0],totvaluesread,
-	       &totvalues4plot,tsamp,yscale,plotnum,add_work,dolog);
+		 &totvalues4plot,tsamp,yscale,plotnum,add_work,dolog,dommm);
 
     work_on_data(inpfile1,&y_read1[0],&y_new1[0],totvaluesread,
-	       &totvalues4plot,tsamp,yscale,plotnum,add_work,dolog);
+		 &totvalues4plot,tsamp,yscale,plotnum,add_work,dolog,dommm);
 
-  /* creating the name for the output pgplot file */ 
-  create_outputname(inpfile1,inpdev,outputfile,plotnum,add_work);
+    /* creating the name for the output pgplot file */ 
+    create_outputname(inpfile1,inpdev,outputfile,plotnum,add_work);
 
   /* assigning the labels of the plot */
   //create_labels(inpfile1,plotnum,xlabel,ylabel,plottitle);
@@ -106,7 +106,10 @@ int main (int argc, char *argv[])
   } else if (strstr(inpfile1,"ts") != NULL) {
     if (plotnum == 1) {
       strcpy(xlabel," Frequency (Hz) ");
-      strcpy(ylabel," Power ");
+      if (dolog)
+	strcpy(ylabel," Log(Power) ");
+      else
+	strcpy(ylabel," Power ");
       strcpy(plottitle," Zero DM FFT ");
     } else { 
       strcpy(xlabel," Time (seconds) ");
@@ -124,8 +127,8 @@ int main (int argc, char *argv[])
 
     /* creating a 1-D plot with pgplot */
     plot_stream_1D(&x_read[0], &y_new[0], &y_new1[0], totvalues4plot,
-		outputfile, xlabel, ylabel, plottitle, dolabel,
-		dobox, width_pixels, height_pixels);
+		   outputfile, xlabel, ylabel, plottitle, dolabel,
+		   dobox, dommm && (plotnum==0), width_pixels, height_pixels);
   } 
   else if (ndim==2) 
   {

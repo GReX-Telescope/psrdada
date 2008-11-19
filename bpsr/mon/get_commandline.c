@@ -14,7 +14,7 @@
 
 void get_commandline(int argc, char *argv[], char *inpfile0, char *inpfile1, 
 			char *inpdev, char *outputfile, int *dolog, int *dolabel,
-			int *dobox, unsigned *width_pixels, unsigned *height_pixels)
+		     int *dobox, int *dommm, unsigned *width_pixels, unsigned *height_pixels)
 {
   int i,j,nfiles;
   int device_selected=0; 
@@ -98,6 +98,9 @@ void get_commandline(int argc, char *argv[], char *inpfile0, char *inpfile1,
       } else if (strings_compare(argv[i],"-log")) {
         *dolog = 1;
         printf("dolog set to %d \n",*dolog);
+      } else if (strings_compare(argv[i],"-mmm")) {
+        *dommm = 1;
+        printf("dommm set to %d \n",*dommm);
       } else if (strings_compare(argv[i],"-h")) {
         /* print the help on line */
 	display_help(argv[0]);
