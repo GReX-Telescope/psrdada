@@ -10,13 +10,11 @@
 
 use lib $ENV{"DADA_ROOT"}."/bin";
 
-
 use strict;               # strict mode (like -Wall)
 use File::Basename;
 use threads;
 use threads::shared;
 use Bpsr;
-
 
 
 #
@@ -130,6 +128,9 @@ while (!$quit_daemon) {
 
   my $h=0;
 
+  my $age = 0;
+  my $nfiles = 0;
+
   # For each observation
   for ($h=0; (($h<=$#subdirs) && (!$quit_daemon)); $h++) {
 
@@ -139,62 +140,70 @@ while (!$quit_daemon) {
     $dir = $subdirs[$h];
 
     # If this observation has not been finalized 
-    if (! -f $dir."/obs.finalized") { 
+    if (! -f $dir."/obs.finalized") {
 
-      my $most_recent_result = getMostRecentResult($dir);
-      debugMessage(2, $dir." recent result = ".$most_recent_result);
+      # determine the age of the observation and number of files that can be processed in it
+      debugMessage(2, "main: getObsInfo(".$dir.")");
+      ($age, $nfiles) = getObsInfo($dir); 
+      debugMessage(2, "main: getObsInfo() ".$age." ".$nfiles);
 
-      # If the data directory is more than 5 minutes old, but no
-      # data files have been produced, we consider this observation
-      # erroneous and delete the output directory
-      if ($most_recent_result == -1) {
+      # If obs_age is -1 then this is a dud observation, delete it
+      if ($age == -1) {
 
-        # Sanity check for archives too
-        #chdir $obs_archive_dir;
-        #$most_recent_result = getMostRecentResult($dir);
-        #chdir $obs_results_dir;
+        debugMessage(1, "Deleting empty: observation: $dir");
+        deleteObservation($obs_results_dir."/".$dir);
+        deleteObservation($obs_archive_dir."/".$dir);
 
-        if ($most_recent_result == -1) {
-          # deleteObservation($obs_results_dir."/".$dir);
-          #debugMessage(1, "Deleted empty observation: $dir");
-        }
+      # If the obs age is over 60 seconds, then we consider it finalized
+      } elsif ($age > 60) {
 
-      # If the most recent result is more han 5 minutes old, consider
-      # this observation finalized
-      } elsif ($most_recent_result > 5*60) {
+        debugMessage(1, "Finalising observation: ".$dir);
 
-        debugMessage(1, "Finalised observation: ".$dir);
+        # we need to patch the TCS logs into the file!
+        patchInTcsLogs($obs_archive_dir,$dir);
+
+        # remove any old files in the archive dir
+        cleanUpObs($obs_results_dir);
+
+        # mark the observation as finalised
         system("touch ".$obs_results_dir."/".$dir."/obs.finalized");
         system("touch ".$obs_archive_dir."/".$dir."/obs.finalized");
-        # TODO remove all extra image files
 
       # Else this is an active observation, try to process the .pol
       # files that may exist in each beam
       } else {
 
-        # Get the list of beams
-        opendir(SUBDIR, $dir);
-        @beamdirs = sort grep { !/^\./ && -d $dir."/".$_ } readdir(SUBDIR);
-        closedir SUBDIR;
+        debugMessage(2, "Active Obs: ".$dir.", nfiles = ".$nfiles);
 
-        # Foreach beam dir, check for unprocessed files
-        for ($i=0; (($i<=$#beamdirs) && (!$quit_daemon)); $i++) {
+        if ($nfiles > 0) {
 
-          $beamdir = $dir."/".$beamdirs[$i];
-          debugMessage(3, "  ".$beamdir);
+          # Get the list of beams
+          opendir(SUBDIR, $dir);
+          @beamdirs = sort grep { !/^\./ && -d $dir."/".$_ } readdir(SUBDIR);
+          closedir SUBDIR;
 
-          # Gets files for which both .pol0 and .pol1 exist
-          %unprocessed = getUnprocessedFiles($beamdir);
+          # Foreach beam dir, check for unprocessed files
+          for ($i=0; (($i<=$#beamdirs) && (!$quit_daemon)); $i++) {
 
-          @keys = sort (keys %unprocessed);
+            $beamdir = $dir."/".$beamdirs[$i];
+            debugMessage(3, "  ".$beamdir);
 
-          for ($j=0; $j<=$#keys; $j++) {
-            debugMessage(2, "file = ".$keys[$j]);
-            processResult($beamdir, $keys[$j]);
+            # search for unprocessed files in the beam directory 
+            %unprocessed = getUnprocessedFiles($beamdir);
+
+            @keys = sort (keys %unprocessed);
+
+            for ($j=0; $j<=$#keys; $j++) {
+              debugMessage(2, "main: processResult(".$beamdir.", ".$keys[$j]);
+              processResult($beamdir, $keys[$j]);
+            }
           }
+
+          # Now delete all old png files
+          removeAllOldPngs($dir);
         }
       }
-    }
+    } 
   }
 
   # If we have been asked to exit, dont sleep
@@ -335,10 +344,10 @@ sub processResult($$) {
 
   }
   # Delete the data file
+  debugMessage(3, "unlinking mon files ".$file."0 and ".$file."1");
+
   unlink($file."0");
   unlink($file."1");
-
-  debugMessage(2, "unlinking ".$file);
 
   chdir "../../";
 
@@ -380,10 +389,63 @@ sub getUnprocessedFiles($) {
   }
 
   # Strip basenames with only 1 polaristion
-  foreach $key (keys (%archives)) {
+  my @keys = keys (%archives);
+  foreach $key (@keys) {
     if ($archives{$key} == 1) {
       delete($archives{$key});
     }
+  }
+
+  my $ts_file = "";
+  my $bp_file = "";
+  my $bps_file = "";
+
+  # reverse sort the files
+  my @r_sort_keys = sort {$b cmp $a} @keys;
+  # only keep the mon file for each type of file
+
+  foreach $key (@r_sort_keys) {
+    # .ts files
+    if ($key =~ m/.ts$/) {
+      if ($ts_file eq "") {
+        $ts_file = $key;
+      } else {
+        debugMessage(2, "getUnprocessedFiles: deleting ".$key);
+        unlink $ts_file."0";
+        unlink $ts_file."1";
+        delete($archives{$key});
+      }
+    }
+
+    # .bp files
+    if ($key =~ m/.bp$/) {
+      if ($bp_file eq "") {
+        $bp_file = $key;
+      } else {
+        debugMessage(2, "getUnprocessedFiles: deleting ".$key);
+        unlink $bp_file."0";
+        unlink $bp_file."1";
+        delete($archives{$key});
+      }
+    } 
+
+    # .bps files
+    if ($key =~ m/.bps$/) {
+      if ($bps_file eq "") {
+        $bps_file = $key;
+      } else {
+        debugMessage(2, "getUnprocessedFiles: deleting ".$key);
+        unlink $bps_file."0";
+        unlink $bps_file."1";
+        delete($archives{$key});
+      }
+    }
+  }
+
+  # Strip basenames with only 1 polaristion
+  @keys = keys (%archives);
+  foreach $key (@keys) {
+    debugMessage(2, "getUnprocessedFiles: returning ".$key);
   }
 
   chdir "../../";
@@ -466,90 +528,258 @@ sub daemonControlThread() {
 
 }
 
-sub getMostRecentResult($) {
 
-  my ($dir) = @_;
+#
+# Finds the age of the observation and number of files
+#
+sub getObsInfo($) {
 
-  my $age = -1;
+  (my $dir) = @_;
+  debugMessage(3, "getObsInfo(".$dir.")");
 
-  # Check if any directories exist yet...
-  my $cmd = "find ".$dir."/* -type d | wc -l";
-  my $num_dirs = `$cmd`;
-  chomp($num_dirs);
-  debugMessage(2, "getMostRecentResult: num beam dirs = ".$num_dirs);
-  my $current_unix_time = time;
+  my $obs_age = -1;
+  my $n_files = 0;
+  my $cmd = "";
+  my $num_dirs = 0;
 
+  # Current time
+  my $time_curr = time;
+
+  # Determine how many beam subdirectories exist
+  $cmd = "find ".$dir."/* -type d | wc -l";
+  $num_dirs = `$cmd`;
+  chomp $num_dirs;
+  debugMessage(3, "getObsInfo: num_dirs = ".$num_dirs);
+
+  # If the clients have created the beam directories
   if ($num_dirs > 0) {
 
-    $cmd  = "find ".$dir."/*/ -regex '.*[bp|ts|bps][0|1]' -printf \"%T@\\n\" | sort | tail -n 1";
+    # Get the number of mon files 
+    $cmd = "find ".$dir."/*/ -regex '.*[bp|ts|bps][0|1]' -printf \"%f\\n\" | wc | awk '{print \$1}'";
+    $n_files = `$cmd`;
+    chomp $n_files;
 
-    my $unix_time_of_most_recent_result = `$cmd`;
-    chomp($unix_time_of_most_recent_result);
+    # If we have any mon files
+    if ($n_files > 0) {
+  
+      # Get the time of the most recently created file, in any beam
+      $cmd  = "find ".$dir."/*/ -regex '.*[bp|ts|bps][0|1]' -printf \"%T@\\n\" | sort | tail -n 1";
+      my $time_newest_file = `$cmd`;
+      chomp $time_newest_file;
 
-    if ($unix_time_of_most_recent_result) {
+      $obs_age = $time_curr - $time_newest_file;
+      debugMessage(3, "getObsInfo: newest mon file was ".$obs_age);
 
-      $age = $current_unix_time - $unix_time_of_most_recent_result;
-      debugMessage(2, "getMostRecentResult: most recent mon file was ".$age." seconds old");
-
-    # The mon files have all have been processed
+    # either all processed or non yet here
     } else {
 
-      debugMessage(2, "getMostRecentResult: no mon files found in $dir");
+      $n_files = 0;
 
-      # Check the age of the sub directories - if > 5 minutes then likely a dud obs.
+      # If the subdirs are more than 5 mins old, then a dud obs.
+      # (this should have been "finalized" after 1 minute)
       $cmd = "find ".$dir."/* -type d -printf \"%T@\\n\" | sort | tail -n 1";
-      $unix_time_of_most_recent_result = `$cmd`;
+      my $time_dir= `$cmd`;
+      chomp $time_dir;
 
-      chomp($unix_time_of_most_recent_result);
+      if ($time_dir) {
 
-      if ($unix_time_of_most_recent_result) {
-
-        $age = $current_unix_time - $unix_time_of_most_recent_result;
-        debugMessage(2, "Dir $dir is ".$age." seconds old");
+        $obs_age = $time_curr - $time_dir;
+        debugMessage(3, "getObsInfo: newest beam dir was ".$obs_age." old");
 
         # If the obs.start is more than 5 minutes old, but we have no
-        # archives, then this observation is considered a dud
-        #if ($age > 5*60) {
-        #  $age = -1;
-        #}
+        if ($obs_age > 5*60) {
+          debugMessage(0, "getObsInfo: newest beam dir was more than 300 seconds old, dud");
+          $obs_age = -1;
+        }
 
       } else {
-        $age = -1;
+        debugMessage(0, "getObsInfo: could not determine age of subdirs, dud obs");
+        $obs_age = -1;
       }
     }
+
+
+  # no directories yet
   } else {
 
-    $cmd = "find ".$dir." -type d -printf \"%T@\\n\"";
-    my $unix_time_of_dir = `$cmd`;
+    $n_files = 0;
 
-    if ($unix_time_of_dir) {
-      $age = $current_unix_time - $unix_time_of_dir;
-      debugMessage(2, "$dir age = ".$age);
-      if ($age > 5*60) {
-        $age = -1;
-      } else {
-        $age = 0;
-      }
+    # get the age of the current directory
+    $cmd = "find ".$dir." -maxdepth 0 -type d -printf \"%T@\\n\"";
+    my $time_dir = `$cmd`;
+    chomp $time_dir;
+
+    $obs_age = $time_curr - $time_dir;
+
+    debugMessage(3, "getObsInfo: no beam subdirs in ".$dir." age = ".$obs_age);
+
+    # If the directory was more than 5 minutes old, it must be erroneous 
+    if ($obs_age > 5*60) {
+      debugMessage(0, "getObsInfo: no beam subdirs in ".$dir." and more than 300 seconds old: ".$obs_age);
+      $obs_age = -1;
+
+    # Its probably a brand new directory, and the beam dirs haven't been created yet
     } else {
-      $age = 0;
+      debugMessage(3, "getObsInfo: no beam subdirs, assuming brand new obs");
+      $obs_age = 0;
     }
+
   }
+  
+  debugMessage(3, "getObsInfo: returning ".$obs_age.", ".$n_files);
 
-  debugMessage(2, "Observation: ".$dir.", age: ".$age." seconds");
-
-  return $age;
+  return ($obs_age, $n_files);
 
 }
+
 
 sub deleteObservation($) {
 
   (my $dir) = @_;
-  debugMessage(1, "Deleting observation: ".$dir);
-  $cmd = "rm -rf $dir";
-  `$cmd`;
-  return $?;
+
+  if (-d $dir) {
+
+    debugMessage(1, "Deleting observation: ".$dir);
+    $cmd = "rm -rf $dir";
+    `$cmd`;
+    return $?;
+  } else {
+    return 1;
+  }
+
+}
+
+#
+# Cleans up an observation, removing all old files, but leaves 1 set of image files
+#
+sub cleanUpObs($) {
+
+  (my $dir) = @_;
+
+  my $file = "";
+  my @files = ();
+  my $cmd = "";
+
+  debugMessage(2, "cleanUpObs(".$dir.")");
+
+  # Clean up all the mon files that may have been produced
+  debugMessage(2, "cleanUpObs: removing any ts, bp or bps files");
+  my $cmd = "find ".$dir." -regex \".*[ts|bp|bps][0|1]\" -printf \"%P\n\"";
+  debugMessage(3, "find ".$dir." -regex \".*[ts|bp|bps][0|1]\" -printf \"\%P\"");
+  my $find_result = `$cmd`;
+
+  @files = split(/\n/,$find_result);
+  foreach $file (@files) {
+    debugMessage(3, "unlinking $dir."/".$file");
+    unlink($dir."/".$file);
+  }
+
+  # Clean up all the old png files, except for the final ones
+  debugMessage(2, "cleanUpObs: removing any old png files");
+  removeAllOldPngs($dir);
 
 }
 
 
 
+
+#
+# Remove all old images in the sub directories
+#
+sub removeAllOldPngs($) {
+
+  (my $dir) = @_;
+
+  debugMessage(2, "removeAllOldPngs(".$dir.")");
+
+  my $beamdir = "";
+  my @beamdirs = ();
+  my $i=0;
+
+  # Get the list of beams
+  opendir(DIR, $dir);
+  @beamdirs = sort grep { !/^\./ && -d $dir."/".$_ } readdir(DIR);
+  closedir DIR;
+                                                                                                                                            
+  # Foreach beam dir, delete any old pngs
+  for ($i=0; (($i<=$#beamdirs) && (!$quit_daemon)); $i++) {
+
+    $beamdir = $dir."/".$beamdirs[$i];
+    debugMessage(2, "removeAllOldPngs: clearing out ".$beamdir);
+
+    removeOldPngs($beamdir, "fft", "1024x768");
+    removeOldPngs($beamdir, "fft", "400x300");
+    removeOldPngs($beamdir, "fft", "112x84");
+
+    removeOldPngs($beamdir, "bp", "1024x768");
+    removeOldPngs($beamdir, "bp", "400x300");
+    removeOldPngs($beamdir, "bp", "112x84");
+
+    removeOldPngs($beamdir, "bps", "1024x768");
+    removeOldPngs($beamdir, "bps", "400x300");
+    removeOldPngs($beamdir, "bps", "112x84");
+
+    removeOldPngs($beamdir, "ts", "1024x768");
+    removeOldPngs($beamdir, "ts", "400x300");
+    removeOldPngs($beamdir, "ts", "112x84");
+
+    removeOldPngs($beamdir, "pvf", "1024x768");
+    removeOldPngs($beamdir, "pvf", "400x300");
+    removeOldPngs($beamdir, "pvf", "112x84");
+
+  }
+}
+
+sub removeOldPngs($$$) {
+
+  my ($dir, $type, $res) = @_;
+
+  # remove any existing plot files that are more than 20 seconds old
+  my $cmd  = "find ".$dir." -name '*".$type."_".$res.".png' -printf \"%T@ %f\\n\" | sort -n -r";
+  my $result = `$cmd`;
+  my @array = split(/\n/,$result);
+
+  my $time = 0;
+  my $file = "";
+  my $line = "";
+
+  # if there is more than one result in this category and its > 20 seconds old, delete it
+  for ($i=1; $i<=$#array; $i++) {
+
+    $line = $array[$i];
+    ($time, $file) = split(/ /,$line,2);
+
+    if (($time+30) < time)
+    {
+      $file = $dir."/".$file;
+      debugMessage(3, "unlinking old png file ".$file);
+      unlink($file);
+    }
+  }
+}
+
+
+
+sub patchInTcsLogs($$){
+  my ($obs_dir, $utcname) = @_;
+
+  my $tcs_logfile = $utcname."_bpsr.log";
+  my $cmd = "scp -p pulsar\@jura.atnf.csiro.au:/psr1/tcs/logs/$tcs_logfile $obs_dir/$utcname/";
+  debugMessage(1, "Getting TCS log file via: ".$cmd);
+  my ($result,$response) = Dada->mySystem($cmd);
+  if ($result!="ok"){
+    debugMessage(0, "ERROR: Could not get the TCS log file, msg was: ".$response);
+    return ($result,$response);
+  }
+  my $cmd = "merge_tcs_logs.csh $obs_dir/$utcname $tcs_logfile";
+  debugMessage(1, "Merging TCS log file via: ".$cmd);
+  my ($result,$response) = Dada->mySystem($cmd);
+
+  if ($result!="ok"){
+          debugMessage(0, "ERROR: Could not merge the TCS log file, msg was: ".$response);
+  }
+
+  return ($result,$response);
+
+  
+}
