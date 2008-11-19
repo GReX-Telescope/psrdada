@@ -71,7 +71,7 @@ void get_commandline(int argc, char *argv[], char *inpfile0, char *inpfile1,
         strcpy(inpdev,argv[++i]);
         strncpy(checkchar,inpdev,1);
 	//if (!(strings_compare(checkchar[0],"/"))) {
-	if (checkchar[0] == "/") {
+	if (checkchar[0] == '/') {
     	 printf("Unknown argument %s given for <device>. Exiting...\n",inpdev);
          //strcpy(inpdev,"/png");
          exit(-1);
@@ -82,7 +82,7 @@ void get_commandline(int argc, char *argv[], char *inpfile0, char *inpfile1,
         if (sscanf(optarg, "%u%c%u", &width, &c, &height) != 3)
           {
             fprintf (stderr, "could not parse dimensions from %s\n", optarg);
-            return -1;
+            return;
           } else {
             *width_pixels = width; 
             *height_pixels = height;
