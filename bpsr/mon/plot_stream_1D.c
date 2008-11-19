@@ -12,9 +12,30 @@
 
 #include "plot4mon.h"
 
+void plotdat (float* x, float* y, long nvalues, int dommm)
+{
+  if (!dommm)
+  {
+    cpgline(nvalues, x, y);
+  }
+  else
+  {
+    unsigned i,j;
+    // do three lines!
+    for (i=0; i<3; i++)
+      {
+	float* y3 = y + i;
+	cpgmove (x[0],y3[0]);
+	for (j=1; j<nvalues; j++)
+	  cpgdraw(x[j], y3[j*3]);
+      }
+  }
+}
+
 int plot_stream_1D(float x[], float y[], float y1[], long nvalues, char inpdev[], 
-		char xlabel[], char ylabel[], char plottitle[], int dolabel,
-		int dobox, unsigned width_pixels, unsigned height_pixels)
+		   char xlabel[], char ylabel[], char plottitle[], 
+		   int dolabel, int dobox, int dommm,
+		   unsigned width_pixels, unsigned height_pixels)
 {
   long kk=0;
   float max_x, min_x, max_y, min_y, max_y1, min_y1; 
@@ -75,11 +96,11 @@ int plot_stream_1D(float x[], float y[], float y1[], long nvalues, char inpdev[]
 
   // plot pol0 
   cpgsci(2);
-  cpgline((int)nvalues-1, x, y);
+  plotdat (x, y, nvalues, dommm);
 
   // plot pol1
   cpgsci(10);
-  cpgline((int)nvalues-1, x, y1);
+  plotdat (x, y1, nvalues, dommm);
 
   cpgsci(1);
   cpgend();
