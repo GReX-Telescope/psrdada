@@ -1,28 +1,66 @@
 #!/bin/csh
 
+#
+# beam-o-vision-collect.csh
+#
+# It looks for pulsar-mode observations only (rejecting the survey ones) 
+# for which png files of "frequency vs phase" have been produced. Then
+# it waits for completion of the observation and then copies the 
+# relevant png's into a new dir (prefixed with BEAM-O-VISION)
+# in the "results" dir. When the source is looked at in different
+# beams, it collects all the png files in the same aforementioned
+# directory, so to produce a simultaneous 13-beam plot of the source
+# 
+# AP 20 nov 2008  ver 1.0  
+#
+# next2do: to include copying of pulse profile png files
+#
+
 # grabbing the commandline input
 set nargs = `echo $argv | wc | awk '{print $2}'`
-if ($nargs != 2) then
- echo Usage: beam-o-vision_collect archive-dir png-dir
+if ($nargs != 3) then
+ echo Usage: beam-o-vision_collect archive-dir png-dir killflag
  exit
 endif
 set archivedir = $1
-set pngdir = $2
+set pngdir = $2# It also checks for the number of "BEAM-O-VISION"-kind of dirs in 
+# the dir "Results" and remove all but the most recent 10 dirs
+set killflag = $3
 
 # setting some variables
+set startdir = `pwd`
 set debug = 0
 set timesleep = 5
+set timewait = 20
 unalias cp
+
+# check if the script must not be run
+if ( (-e $startdir"/"$killflag) ) then
+  rm $startdir"/"$killflag
+  echo "beam-o-vision-collect: existing before entering the loop..."
+  exit
+endif
+
 if ( $debug != 0 ) then
-    echo "archivedir =" $archivedir
+    echo "beam-o-vision-collect: entering the loop..."
+    echo "startdir = " $startdir
+    echo "archivedir = " $archivedir
     echo "pngdir =" $pngdir
+    echo "kill flagfile = " $killflag
 endif
 
 #
 # starting the neverending loop
 #
-
 LoopOnObs: 
+
+# check if the scri# It also checks for the number of "BEAM-O-VISION"-kind of dirs in 
+# the dir "Results" and remove all but the most recent 10 dirspt must be exited
+if ( (-e $startdir"/"$killflag) ) then
+  rm $startdir"/"$killflag
+  echo "beam-o-vision-collect: now existing..."
+  exit
+endif
 
 # search for the presence of useful observations
 cd $archivedir
@@ -56,8 +94,15 @@ if ( $pvfcheck != 0 ) then
   goto LoopOnObs
 endif 
 
+# now it has to wait for the presence of the obs.finalized file 
+# in the relevant directory before going on 
+while ( !(-e $rootplotdir"obs.finalized") ) 
+  echo "beam-o-vision-collect: Waiting for completion of obs in "$goodplotdir
+  sleep $timewait
+end
+
 # checking if a Beam-o-vision directory already exist for this source,
-# and, if notm, it creates that and the subdirs structure
+# and, if not, it creates that and the subdirs structure
 set collectdir = $pngdir"/BEAM-O-VISION_"$sourcename
 if ( !(-d $collectdir) ) then
   mkdir $collectdir
