@@ -154,6 +154,19 @@ if (!(issueTelnetCommand("start_helper_daemons",\@helpers))) {
 }
 
 
+# Clear the web interface status directory
+my $dir = $cfg{"STATUS_DIR"};
+if (-d $dir) {
+  my $cmd = "rm -f ".$dir."/*.error";
+  debugMessage(0, "clearing .error from status_dir");
+  ($result, $response) = Dada->mySystem($cmd);
+                                                                                                                                                                          
+  my $cmd = "rm -f ".$dir."/*.warn";
+  debugMessage(0, "clearing .warn from status_dir");
+  ($result, $response) = Dada->mySystem($cmd);
+}
+
+
 exit 0;
 
 
