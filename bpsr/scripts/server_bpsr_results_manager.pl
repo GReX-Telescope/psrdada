@@ -154,29 +154,43 @@ while (!$quit_daemon) {
 	### YIKES! plot4mon is failing and directories appear empty!
         ### deleteObservation($obs_results_dir."/".$dir);
         ### deleteObservation($obs_archive_dir."/".$dir);
+        # Clear obs.processing
+        if (-f $obs_results_dir."/".$dir."/obs.processing") {
+          unlink $obs_results_dir."/".$dir."/obs.processing";
+        }
 
-      # If the obs age is over 60 seconds, then we consider it finalized
+      # If the obs age is over five minutes, then we consider it finalized
       } elsif ($age > 60) {
 
+  ### YIKES! results manager is not producing plots!
         debugMessage(1, "Finalising observation: ".$dir);
 
         # we need to patch the TCS logs into the file!
         patchInTcsLogs($obs_archive_dir,$dir);
 
         # remove any old files in the archive dir
-        cleanUpObs($obs_results_dir);
+        cleanUpObs($obs_results_dir."/".$dir);
+
+        # Clear obs.processing
+        if (-f $obs_results_dir."/".$dir."/obs.processing") {
+          unlink $obs_results_dir."/".$dir."/obs.processing";
+        }
 
         # mark the observation as finalised
         system("touch ".$obs_results_dir."/".$dir."/obs.finalized");
         system("touch ".$obs_archive_dir."/".$dir."/obs.finalized");
 
+
       # Else this is an active observation, try to process the .pol
       # files that may exist in each beam
       } else {
 
-        debugMessage(2, "Active Obs: ".$dir.", nfiles = ".$nfiles);
-
         if ($nfiles > 0) {
+
+          debugMessage(1, "Processing ".$nfiles." mon files for ".$dir);
+
+          # Mark this as processing
+          system("touch ".$obs_results_dir."/".$dir."/obs.processing");
 
           # Get the list of beams
           opendir(SUBDIR, $dir);
@@ -283,20 +297,20 @@ sub processResult($$) {
     debugMessage(2, "Ploting with \"".$cmd."\"");
     $response = `$cmd 2>&1`;
     if ($? != 0) {
-      debugMessage(0, "Plotting cmd \"".$cmd."\" failed with message \"".$response."\"");
+      debugMessage(2, "Plotting cmd \"".$cmd."\" failed with message \"".$response."\"");
     } else {
       $cmd  = "mv ".$file.".png ".$file."_112x84.png";
       $response = `$cmd 2>&1`;
       if ($? != 0) { 
         chomp $response;
-        debugMessage(0, "Plot file rename \"".$cmd."\" failed: ".$response); 
+        debugMessage(2, "Plot file rename \"".$cmd."\" failed: ".$response); 
       }
       if ($filetype eq "timeseries") {
         $cmd = "mv ".$filebase.".fft.png ".$filebase.".fft_112x84.png";
         $response = `$cmd 2>&1`;
         if ($? != 0) {
           chomp $response;
-          debugMessage(0, "Plot file rename \"".$cmd."\" failed: ".$response);
+          debugMessage(2, "Plot file rename \"".$cmd."\" failed: ".$response);
         }
       }
     }
@@ -310,20 +324,20 @@ sub processResult($$) {
     debugMessage(2, "Ploting with \"".$cmd."\"");
     $response = `$cmd 2>&1`;
     if ($? != 0) {
-      debugMessage(0, "Plotting cmd \"".$cmd."\" failed with message \"".$response."\"");
+      debugMessage(2, "Plotting cmd \"".$cmd."\" failed with message \"".$response."\"");
     } else {
       $cmd  = "mv ".$file.".png ".$file."_400x300.png";
       $response = `$cmd 2>&1`;
       if ($? != 0) { 
         chomp $response;
-        debugMessage(0, "Plot file rename \"".$cmd."\" failed: ".$response); 
+        debugMessage(2, "Plot file rename \"".$cmd."\" failed: ".$response); 
       }
       if ($filetype eq "timeseries") {
         $cmd = "mv ".$filebase.".fft.png ".$filebase.".fft_400x300.png";
         $response = `$cmd 2>&1`;
         if ($? != 0) {
           chomp $response;
-          debugMessage(0, "Plot file rename \"".$cmd."\" failed: ".$response);
+          debugMessage(2, "Plot file rename \"".$cmd."\" failed: ".$response);
         }
       }
     }
@@ -337,20 +351,20 @@ sub processResult($$) {
     debugMessage(2, "Ploting with \"".$cmd."\"");
     $response = `$cmd 2>&1`;
     if ($? != 0) {
-      debugMessage(0, "Plotting cmd \"".$cmd."\" failed with message \"".$response."\"");
+      debugMessage(2, "Plotting cmd \"".$cmd."\" failed with message \"".$response."\"");
     } else {
       $cmd  = "mv ".$file.".png ".$file."_1024x768.png";
       $response = `$cmd 2>&1`;
       if ($? != 0) {
         chomp $response;
-        debugMessage(0, "Plot file rename \"".$cmd."\" failed: ".$response);
+        debugMessage(2, "Plot file rename \"".$cmd."\" failed: ".$response);
       }
       if ($filetype eq "timeseries") {
         $cmd = "mv ".$filebase.".fft.png ".$filebase.".fft_1024x768.png";
         $response = `$cmd 2>&1`;
         if ($? != 0) {
           chomp $response;
-          debugMessage(0, "Plot file rename \"".$cmd."\" failed: ".$response);
+          debugMessage(2, "Plot file rename \"".$cmd."\" failed: ".$response);
         }
       }
     }
@@ -387,11 +401,11 @@ sub getUnprocessedFiles($) {
   my @files = split(/\n/,$find_result);
   my $file = "";
 
-  debugMessage(2, "$dir: ");
+  debugMessage(3, "$dir: ");
 
   # Add the results to the hash
   foreach $file (@files) {
-    debugMessage(2, "  $file");
+    debugMessage(3, "  $file");
     # strip suffix
     my $basename = substr $file, 0, -1;
     if (! exists ($archives{$basename})) {
@@ -423,9 +437,9 @@ sub getUnprocessedFiles($) {
       if ($ts_file eq "") {
         $ts_file = $key;
       } else {
-        debugMessage(2, "getUnprocessedFiles: deleting ".$key);
-        unlink $ts_file."0";
-        unlink $ts_file."1";
+        debugMessage(3, "getUnprocessedFiles: discarding ".$key."?");
+        unlink $key."0";
+        unlink $key."1";
         delete($archives{$key});
       }
     }
@@ -435,9 +449,9 @@ sub getUnprocessedFiles($) {
       if ($bp_file eq "") {
         $bp_file = $key;
       } else {
-        debugMessage(2, "getUnprocessedFiles: deleting ".$key);
-        unlink $bp_file."0";
-        unlink $bp_file."1";
+        debugMessage(3, "getUnprocessedFiles: discarding ".$key."?");
+        unlink $key."0";
+        unlink $key."1";
         delete($archives{$key});
       }
     } 
@@ -447,22 +461,24 @@ sub getUnprocessedFiles($) {
       if ($bps_file eq "") {
         $bps_file = $key;
       } else {
-        debugMessage(2, "getUnprocessedFiles: deleting ".$key);
-        unlink $bps_file."0";
-        unlink $bps_file."1";
+        debugMessage(3, "getUnprocessedFiles: discarding ".$key."?");
+        unlink $key."0";
+        unlink $key."1";
         delete($archives{$key});
       }
     }
   }
 
   # Strip basenames with only 1 polaristion
+  my $files_to_return = "";
   @keys = keys (%archives);
   foreach $key (@keys) {
-    debugMessage(2, "getUnprocessedFiles: returning ".$key);
+    $files_to_return .= $key." ";
   }
 
   chdir "../../";
 
+  debugMessage(2, "getUnprocessedFiles: returning ".$files_to_return);
   return %archives;
 
 }
@@ -550,7 +566,7 @@ sub getObsInfo($) {
   (my $dir) = @_;
   debugMessage(3, "getObsInfo(".$dir.")");
 
-  my $obs_age = -1;
+  my $obs_age = 0;
   my $n_files = 0;
   my $cmd = "";
   my $num_dirs = 0;
@@ -583,26 +599,50 @@ sub getObsInfo($) {
       $obs_age = $time_curr - $time_newest_file;
       debugMessage(3, "getObsInfo: newest mon file was ".$obs_age);
 
+      # Sometimes this reports negative!
+      if ($obs_age < 0) {
+        $obs_age = 0;
+      }
+
+      if (($obs_age >= 0) && ($obs_age < 300)) {
+        # Normal
+      } else {
+        debugMessage(0, "getObsInfo: had mon files, but weird age: ".$obs_age);
+        
+      }
+
     # either all processed or non yet here
     } else {
 
       $n_files = 0;
 
-      # If the subdirs are more than 5 mins old, then a dud obs.
-      # (this should have been "finalized" after 1 minute)
+      # Determine the "age" of the beam subdirs
       $cmd = "find ".$dir."/* -type d -printf \"%T@\\n\" | sort | tail -n 1";
       my $time_dir= `$cmd`;
       chomp $time_dir;
 
       if ($time_dir) {
-
+      
         $obs_age = $time_curr - $time_dir;
+
         debugMessage(3, "getObsInfo: newest beam dir was ".$obs_age." old");
 
-        # If the obs.start is more than 5 minutes old, but we have no
-        if ($obs_age > 5*60) {
-          debugMessage(0, "getObsInfo: newest beam dir was more than 300 seconds old, dud");
-          $obs_age = -1;
+        # If the obs.processing exists
+        if (-f $dir."/obs.processing") {
+        
+          debugMessage(0, "getObsInfo: current processing ".$dir.", but no mon files, age: ". $obs_age);
+          if ($obs_age < 0) {
+            $obs_age = 0;
+          }
+
+        } else {
+
+          # If the obs.start is more than 5 minutes old, but we have no
+          if ($obs_age > 5*60) {
+            debugMessage(0, "getObsInfo: beam dir age (".$obs_age.") was more than 300, and no obs.processing ");
+            $obs_age = -1;
+          }
+
         }
 
       } else {
@@ -787,12 +827,12 @@ sub patchInTcsLogs($$){
   my $cmd = "merge_tcs_logs.csh $obs_dir/$utcname $tcs_logfile";
   debugMessage(1, "Merging TCS log file via: ".$cmd);
   my ($result,$response) = Dada->mySystem($cmd);
+  debugMessage(3, "Merging TCS log: ".$result." ".$response);
 
   if ($result!="ok"){
-          debugMessage(0, "ERROR: Could not merge the TCS log file, msg was: ".$response);
+    debugMessage(0, "ERROR: Could not merge the TCS log file, msg was: ".$response);
   }
 
   return ($result,$response);
 
-  
 }
