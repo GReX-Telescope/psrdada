@@ -20,6 +20,8 @@ void inline_dedisperse_all_help(){
   fprintf(stderr,"Usage: dedisperse_all filename [options]\n");
   fprintf(stderr,"-k killfilename    kill all channels in killfilename\n");
   fprintf(stderr,"-d st_DM end_DM    dedisperse from st_DM to end_DM\n");
+  fprintf(stderr,"-i [40] psr width  intrinsic pulse width in us\n");
+  fprintf(stderr,"-tol [1.25]        smear tolerance, e.g. 25% = 1.25\n");
   fprintf(stderr,"-g gulpsize        number of samples to dedisp at once\n");
   fprintf(stderr,"-b                 debird mode, create 1 timfile per freq channel\n");
   fprintf(stderr,"-n Nsamptotal      Only do Nsamptotal samples\n");
@@ -149,6 +151,8 @@ int main (int argc, char *argv[])
   int nread;
   float DM_trial;
   int ndm=0;
+  double ti = 40.0;
+  double tol = 1.25;
   float total_MBytes = 0;
   float start_DM=0.0, end_DM;
   int counts;
@@ -225,6 +229,14 @@ int main (int argc, char *argv[])
       else if (!strcmp(argv[i],"-l")) {
 	/* Create a log file of the DMs */
 	dmlogfile=1;
+      }
+      else if (!strcmp(argv[i],"-i")) {
+	/* set intrinsic width */
+	ti=atof(argv[++i]);
+      }
+      else if (!strcmp(argv[i],"-tol")) {
+	/* set tolerance level (e.g. 25% = 1.25)*/
+	tol=atof(argv[++i]);
       }
       else if (!strcmp(argv[i],"-v")) {
 	verbose=1;
@@ -374,8 +386,8 @@ int main (int argc, char *argv[])
   nsampleft-=nskip;
 
   float * DMtable;
-  double ti = 40.0;
-  double tol = 1.25;
+  //double ti = 40.0;
+  //double tol = 1.25;
  // a hack for less files when subbanding... M.Keith
   getDMtable(0.0,end_DM, tsamp*1e6, ti, foff, (fch1+(nchans/2-0.5)*foff)/1000,
 	     nchans/nbands, tol, &ndm, DMtable);
