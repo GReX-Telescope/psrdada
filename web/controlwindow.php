@@ -75,6 +75,8 @@ $groups = getProjects($config["DADA_USER"]);
       <a href="javascript:popWindow('testing/', 1024, 800)" class="btn" > <span>Test</span> </a>
       <a href="javascript:popWindow('commandeer.php', 800, 480)" class="btn" > <span>Commandeer</span> </a>
 
+      <a href="javascript:popWindow('http://psrdada.sourceforge.net/support.shtml', 800, 480)" class="btn" > <span>Support</span> </a>
+
     </div>
 
     <!--
