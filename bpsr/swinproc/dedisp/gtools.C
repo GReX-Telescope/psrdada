@@ -81,6 +81,8 @@ int* GPulseState::givetimes(int* ndetected, float sampletime, float flo,float fh
 	float delayinms;
 	vector<Gpulse> suspectvectorstorage;
 	Gpulse gpulsestorage;
+	FILE* resultsfile;
+	resultsfile = fopen("Gresults.txt","w");
 
 	for (int i=0; i<NDMtrials-1; i++) {
 		suspectvectorstorage.insert(suspectvectorstorage.end(),
@@ -89,7 +91,9 @@ int* GPulseState::givetimes(int* ndetected, float sampletime, float flo,float fh
 	vector<Gpulse>* suspectarraystorage = assoc_giants(suspectvectorstorage,&nsinglebeamcands,irrel);
 //	fprintf(stderr,"sampletime: %f flo:%f fhi:%f\n",sampletime,flo,fhi);
 	fprintf(stderr,"\n\nN candidates in this block before associating: %d\n",suspectvectorstorage.size());
-	fprintf(stderr,"N candidates in this block after associating: %d\n",nsinglebeamcands);
+	fprintf(stderr,"N candidates in this block after associating: %d\n\n",nsinglebeamcands);
+	fprintf(resultsfile,"\n\nN candidates in this block before associating: %d\n",suspectvectorstorage.size());
+	fprintf(resultsfile,"N candidates in this block after associating: %d\n\n",nsinglebeamcands);
 	int* timestamps = new int[nsinglebeamcands*2];
 	if (beamID<0){
 	    for (int i=0; i<(nsinglebeamcands*2); i+=2) {
@@ -100,6 +104,7 @@ int* GPulseState::givetimes(int* ndetected, float sampletime, float flo,float fh
 		    delayinms = gpulsestorage.dm * 4.15 * (pow(fhi/1000, -2) - pow(flo/1000, -2));
 		delayinsamples = (int)(delayinms/(sampletime*1000))+1;
 		fprintf(stderr,"Candidate %4d: DM %5.2f SNR %5.2f SCR %d\n",i/2,gpulsestorage.dm,gpulsestorage.SNR,gpulsestorage.tscrfac);
+		fprintf(resultsfile,"Candidate %4d: DM %5.2f SNR %5.2f SCR %4d STARTBIN %13d PEAK %13d\n",i/2,gpulsestorage.dm,gpulsestorage.SNR,gpulsestorage.tscrfac,gpulsestorage.start,gpulsestorage.loc);
 		totdelay = delayinsamples+gpulsestorage.width;
 		if (gpulsestorage.start-(totdelay)<0)
 		    timestamps[i] = 0;
@@ -109,10 +114,13 @@ int* GPulseState::givetimes(int* ndetected, float sampletime, float flo,float fh
 	    }
 	    *ndetected = nsinglebeamcands;
 	    suspectvectorstorage.clear();
+	    fclose(resultsfile);
 	    return (timestamps);
 	} else {
 	    //do something
 	}
+	fclose(resultsfile);
+	return(0);
 }
 
 /* WHAT ABOUT MULTIBEAM?!?!?
@@ -558,8 +566,8 @@ THE NODE 14 SOFTWARE WILL DO THE FOLLOWING:
    - Save candidate database to disk
  */
 
-/*
-vector<Gpulse>* beamassoc_giants(vector<Gpulse> *beams, int nbeams, int *nmultibeamcands) {
+
+/*vector<Gpulse>* beamassoc_giants(vector<Gpulse> *beams, int nbeams, int *nmultibeamcands) {
 	vector<Gpulse> *cands;
 	cands = beamassoc_giants(beams, nbeams, nmultibeamcands, 5.0); //DEFAULT IRREL DM = 5.0
 	return (cands);
@@ -651,4 +659,5 @@ vector<Gpulse>* beamassoc_giants(vector<Gpulse> *beams, int nbeams, int *nmultib
 	*nmultibeamcands = ncandidates;
 	return (candidates);
 }
+
 */

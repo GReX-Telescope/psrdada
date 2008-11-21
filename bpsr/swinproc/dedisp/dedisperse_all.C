@@ -175,7 +175,7 @@ int main (int argc, char *argv[])
   bool doGsearch = 0;
   int Gwidtol = 30;
   float Gthresh = 6;
-  float Gscrnch = 256;
+  int Gscrnch = 256;
   float Girrel = 3;
   float flo,fhi;
 
@@ -280,7 +280,7 @@ int main (int argc, char *argv[])
           Gthresh = atof(argv[++i]);
       }
       else if (!strcmp(argv[i],"-dec")) {
-          Gscrnch = atof(argv[++i]);
+          Gscrnch = atoi(argv[++i]);
       }
       else if (!strcmp(argv[i],"-cut")){
 	  Girrel = atof(argv[++i]);
