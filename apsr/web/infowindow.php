@@ -100,7 +100,7 @@ $config = getConfigFile(SYS_CONFIG, TRUE);
           <td align="left" class="smalltext"><span class="smalltext" id ="DM"><?echo $spec["DM"]?></span></td>
         </tr>
         <tr>
-          <td align="right" class="smalltext"><b>Bandwith</b></td>
+          <td align="right" class="smalltext"><b>Bandwidth</b></td>
           <td width=10>&nbsp;</td>
           <td align="left" class="smalltext"><span class="smalltext" id ="BANDWIDTH"><?echo $spec["BANDWITH"]?></span> MHz</td>
         </tr>
