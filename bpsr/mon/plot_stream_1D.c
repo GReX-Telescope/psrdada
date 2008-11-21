@@ -32,8 +32,9 @@ void plotdat (float* x, float* y, long nvalues, int dommm)
   }
 }
 
-int plot_stream_1D(float x[], float y[], float y1[], long nvalues, char inpdev[], 
-		   char xlabel[], char ylabel[], char plottitle[], 
+int plot_stream_1D(float x[], float y[], float y1[], 
+		   long nvalues,long inivalue, long endvalue,
+		   char inpdev[],char xlabel[],char ylabel[],char plottitle[], 
 		   int dolabel, int dobox, int dommm,
 		   unsigned width_pixels, unsigned height_pixels)
 {
@@ -43,15 +44,14 @@ int plot_stream_1D(float x[], float y[], float y1[], long nvalues, char inpdev[]
   char xopt[10],yopt[10];
   float xtick=0.0, ytick=0.0;
   int nxsub=0, nysub=0;
- 
-  //fprintf (stderr, " Plot: Pixel dimensions: %d x %d \n",width_pixels,height_pixels);
 
   /*
-   *  Compute the minimum and maximum value of the input array(s)
+   *  Compute the min and max values of the plotted part of input array(s)
    */
-  compute_extremes(x,nvalues,&max_x,&min_x);
-  compute_extremes(y,nvalues,&max_y,&min_y);
-  compute_extremes(y1,nvalues,&max_y1,&min_y1);
+  nvalues=endvalue-inivalue;
+  compute_extremes(x,endvalue,inivalue,&max_x,&min_x);
+  compute_extremes(y,endvalue,inivalue,&max_y,&min_y);
+  compute_extremes(y1,endvalue,inivalue,&max_y1,&min_y1);
 
   // fix y range good for both y and y1
   if (max_y1 > max_y) max_y = max_y1;
@@ -96,11 +96,11 @@ int plot_stream_1D(float x[], float y[], float y1[], long nvalues, char inpdev[]
 
   // plot pol0 
   cpgsci(2);
-  plotdat (x, y, nvalues, dommm);
+  plotdat (x, y, endvalue, dommm);
 
   // plot pol1
   cpgsci(10);
-  plotdat (x, y1, nvalues, dommm);
+  plotdat (x, y1, endvalue, dommm);
 
   cpgsci(1);
   cpgend();

@@ -12,7 +12,7 @@ int plot_stream_2D(float plotarray[], int nbin_x, int nsub_y, float yscale,
                char inpdev[], char xlabel[], char ylabel[], char plottitle[])
 {
   long kk=0;
-  long nvalues;
+  long nvalues,inivalue;
   float min_value,max_value,cutoff;
   float trf[6] = {-0.5, 1.0, 0.0, 
                   -0.5, 0.0, 1.0};
@@ -30,7 +30,8 @@ int plot_stream_2D(float plotarray[], int nbin_x, int nsub_y, float yscale,
   /*
    *  Compute the minimum and maximum value of the input array
    */
-  compute_extremes(plotarray,nvalues,&max_value,&min_value);
+  inivalue=0;
+  compute_extremes(plotarray,nvalues,inivalue,&max_value,&min_value);
   cutoff=0.5;
   /*
    * Reporting number of values and extremes of the plot

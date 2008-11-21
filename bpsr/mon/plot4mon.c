@@ -1,27 +1,24 @@
-/***************************************************************************/
-/*                                                                         */
-/* main module for plot4mon                                                */
-/*                                                                         */
-/* Ver 1.0        AP 20 Sept 2008                                          */
-/*                                                                         */
-/* code for generating various  1-D or 2-D plots (standard device set by   */
-/* the variable STD_DEVICE in plot4mon.h) for monitoring the BPSR data     */
-/* taking. Usage is reported on-line with plot4mon -h                      */
-/*                                                                         */
-/* Ver 2.0 RB 04 Oct 2008
-   modified for new file format and to overplot bandpass and time series for 
-   both pol0 and pol1, labels and title based on file extension, default dev
-   png                                                                     */ 		
-/* 
-   RB 05 Oct 2008: plots with x axes in proper units (e.g. MHz, secs,...)  */
-/*                                                                         */
-/* RB 06 Oct 2008: implemented the resolution (pixel dimension) mode       */
-/*                                                                         */
-/* DRAFT VERSION                                                           */
-/* (REFINEMENTS IN GRAPHICS, INTERACTIVE SETTING OF PARAMETERS, ADDTIONAL  */
-/*  PLOTS... ETC... ARE IN PROGRESS)                                       */ 
-/*                                                                         */ 
-/***************************************************************************/
+/*****************************************************************************/
+/*                                                                           */
+/* main module for plot4mon                                                  */
+/*                                                                           */
+/* Ver 1.0 AP 20 Sept 2008                                                   */
+/*                                                                           */
+/* code for generating various  1-D or 2-D plots (standard device set by     */
+/* the variable STD_DEVICE in plot4mon.h) for monitoring the BPSR data       */
+/* taking. Usage is reported on-line with plot4mon -h                        */
+/*                                                                           */
+/* Ver 2.0 RB 04 Oct 2008                                                    */
+/* modified for new file format and to overplot bandpass and time series for */ /* both pol0 and pol1, labels and title based on file extension, default dev */
+/* png                                                                       */
+/*                                                                           */
+/* RB 05 Oct 2008: plots with x axes in proper units (e.g. MHz, secs,...)    */
+/* RB 06 Oct 2008: implemented the resolution (pixel dimension) mode         */
+/* WV 19 Nov 2008: plotting min mean and max of time series                  */
+/*                                                                           */
+/* Ver 3.0 AP 21 Nov 2008: added zooming capabilities                        */
+/*                                                                           */
+/*****************************************************************************/
 
 #include "plot4mon.h"
 
@@ -33,20 +30,24 @@ int main (int argc, char *argv[])
   char xlabel[80],ylabel[80],plottitle[80];
   char add_work[8];
   long totvaluesread,totvalues4plot;
+  long inivalue4plot=0,endvalue4plot=156250;
   int  nchan,ndim,firstdump_line,work_flag,nbin_x,nsub_y;
   float xscale=1.0,yscale, tsamp, fch1, chbw;
   float *x_read, *y_read, *y_read1, *y_new, *y_new1;
 
   // plot dimensions in pixels
   unsigned width_pixels = 0, height_pixels = 0;
-
+  //  initialize zoom interval
+  float zoomf_begin=-1.0;   // Hz
+  float zoomf_end=10000.0;   // Hz
+  float zoomt_begin=-1.0;     // sec
+  float zoomt_end =10000.0;    // sec
 
   /* reading the command line   */
   //get_commandline(argc,argv,inpfile,inpdev,outputfile);
-  get_commandline(argc,argv,inpfile0,inpfile1,inpdev,outputfile,&dolog,&dolabel,
-		  &dobox, &dommm, &width_pixels, &height_pixels);
-
-  fprintf (stderr, "Pixel dimensions: %d x %d \n",width_pixels,height_pixels);
+  get_commandline(argc,argv,inpfile0,inpfile1,inpdev,outputfile,
+                  &zoomt_begin,&zoomt_end,&zoomf_begin,&zoomf_end,
+                  &dolog,&dolabel,&dobox,&dommm,&width_pixels,&height_pixels);
 
   /* determining the relevant parameters of the data and plot */
   read_params(inpfile1,&nchan,&tsamp,&fch1,&chbw,
@@ -125,14 +126,17 @@ int main (int argc, char *argv[])
     if (dommm && plotnum == 0)
       mmm_scale *= MMM_REDUCTION;
 
-    /* filling the x array with suitable indexes */
+    /* filling the x array with suitable indexes and determining zooming params*/
     create_xaxis(inpfile1,plotnum,totvaluesread,totvalues4plot,
-                 fch1,chbw,xscale,nchan,mmm_scale,&x_read[0]);  
+		 &inivalue4plot,&endvalue4plot,
+  	         zoomt_begin,zoomt_end,zoomf_begin,zoomf_end,
+		 fch1,chbw,xscale,nchan,mmm_scale,&x_read[0]);
 
     /* creating a 1-D plot with pgplot */
-    plot_stream_1D(&x_read[0], &y_new[0], &y_new1[0], totvalues4plot,
+    plot_stream_1D(&x_read[0], &y_new[0], &y_new1[0],totvalues4plot,
+                   inivalue4plot,endvalue4plot,
 		   outputfile, xlabel, ylabel, plottitle, dolabel,
-		   dobox, dommm && (plotnum==0), width_pixels, height_pixels);
+	 	   dobox, dommm && (plotnum==0), width_pixels, height_pixels);
   } 
   else if (ndim==2) 
   {

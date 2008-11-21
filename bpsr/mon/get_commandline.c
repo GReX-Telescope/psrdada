@@ -13,8 +13,9 @@
 #include "plot4mon.h"
 
 void get_commandline(int argc, char *argv[], char *inpfile0, char *inpfile1, 
-			char *inpdev, char *outputfile, int *dolog, int *dolabel,
-		     int *dobox, int *dommm, unsigned *width_pixels, unsigned *height_pixels)
+    char *inpdev, char *outputfile,
+    float *zoomt_begin, float *zoomt_end,float *zoomf_begin, float *zoomf_end,
+    int *dolog, int *dolabel,int *dobox, int *dommm, unsigned *width_pixels, unsigned *height_pixels)
 {
   int i,j,nfiles;
   int device_selected=0; 
@@ -22,9 +23,11 @@ void get_commandline(int argc, char *argv[], char *inpfile0, char *inpfile1,
   
   // plot dimensions in pixels
   unsigned width = 0, height = 0;
-
+  // plot zoomed interval
+  float zbegin = 0.0;
+  float zend = 1000000.0;
   // any character, e.g. 'x' in 640x480
-  char c = 0, optarg[10];
+  char c = 0, optarg[20];
 
   /* check number of command-line arguments and print help if requested */
   if (argc<2) {
@@ -89,16 +92,45 @@ void get_commandline(int argc, char *argv[], char *inpfile0, char *inpfile1,
         strcpy(optarg,argv[++i]);
         if (sscanf(optarg, "%u%c%u", &width, &c, &height) != 3)
           {
-            fprintf (stderr, "could not parse dimensions from %s\n", optarg);
-            return;
+            fprintf (stderr, "Could not parse dimensions from %s\n", optarg);
+            exit(-1);
           } else {
             *width_pixels = width; 
             *height_pixels = height;
             fprintf (stderr, "Pixel dimensions: %d x %d \n", width, height);
           }
+      } else if (strings_compare(argv[i],"-zt")) {
+        strcpy(optarg,argv[++i]);
+        if (sscanf(optarg, "%f%c%f", &zbegin, &c, &zend) != 3)
+          {
+            fprintf (stderr, "Could not parse zoomed time interval from %s\n", optarg);
+            exit(-1);
+          } else {
+            *zoomt_begin = zbegin; 
+            *zoomt_end = zend;
+            fprintf (stderr, "Zoomed time interval: %f --> %f sec \n", *zoomt_begin, *zoomt_end);
+            if (zbegin>=zend){
+               fprintf(stderr, "Final time smaller than inital time! \n");
+	       exit(-2);
+	    }
+          }
+      } else if (strings_compare(argv[i],"-zf")) {
+        strcpy(optarg,argv[++i]);
+        if (sscanf(optarg, "%f%c%f", &zbegin, &c, &zend) != 3)
+          {
+            fprintf (stderr, "Could not parse zoomed freq interval from %s\n", optarg);
+            exit(-1);
+          } else {
+            *zoomf_begin = zbegin; 
+            *zoomf_end = zend;
+            fprintf (stderr, "Zoomed freq interval: %f --> %f Hz \n", *zoomf_begin, *zoomf_end);
+            if (zbegin>=zend){
+               fprintf(stderr, "Upper freq smaller than lower freq! \n");
+	       exit(-2);
+	    }
+          }
       } else if (strings_compare(argv[i],"-nolabel")) {
         *dolabel = 0;
-        //printf("command: dolabel set to %d \n",*dolabel);
         printf("Plot mode: thumbnail \n");
       } else if (strings_compare(argv[i],"-nobox")) {
         *dobox = 0;
