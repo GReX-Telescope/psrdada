@@ -15,8 +15,8 @@ void   getDMtable(float DMstart, float DMmax, double tsamp, double ti, double bw
         float DM = DMstart;
 	int j;
 	
-/*	cout << "DM is " << DM << " DMmax is " << DMmax << " Ndms is " << *Ndms << endl;
-	
+/*	cout << "DMstart is " << DMstart << " DMmax is " << DMmax << " Ndms is " << *Ndms << endl;
+
 	cout << "tsamp is " << tsamp << endl;
 	cout << "ti is " << ti << endl;
 	cout << "bw is " << bw << endl;
@@ -34,11 +34,11 @@ void   getDMtable(float DMstart, float DMmax, double tsamp, double ti, double bw
 	    double newDM = (b*b*DM + sqrt(-a*a*b*b*DM*DM + a*a*c + b*b*c))/(a*a+b*b);
 	    //DM = oldDM + 2.0*(newDM-oldDM);
 	    DM = newDM;
-            //cout << "DM is " << DM << endl;
+            cout << "DM is " << DM << endl;
 	    (*Ndms)++;
 	    }
 
-	//cout << "Ndms is " << *Ndms << endl;
+	//cout << "Ndms before new is " << *Ndms << endl;
 
 	DMtable = new float[*Ndms];
 	*Ndms = 0;

@@ -393,9 +393,10 @@ int main (int argc, char *argv[])
   //double ti = 40.0;
   //double tol = 1.25;
  // a hack for less files when subbanding... M.Keith
-  getDMtable(0.0,end_DM, tsamp*1e6, ti, foff, (fch1+(nchans/2-0.5)*foff)/1000,
-	     nchans/nbands, tol, &ndm, DMtable);
-
+  if (nbands==1)
+  getDMtable(start_DM,end_DM, tsamp*1e6, ti, foff, (fch1+(nchans/2-0.5)*foff)/1000,nchans/nbands, tol, &ndm, DMtable);
+else
+  getDMtable(0.0,end_DM, tsamp*1e6, ti, foff, (fch1+(nchans/2-0.5)*foff)/1000,nchans/nbands, tol, &ndm, DMtable);
 
   fprintf(stderr,"%d subbands from %d chans\n",nbands,nchans);
   if(nchans % nbands){
