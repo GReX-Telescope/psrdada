@@ -82,7 +82,7 @@ int* GPulseState::givetimes(int* ndetected, float sampletime, float flo,float fh
 	vector<Gpulse> suspectvectorstorage;
 	Gpulse gpulsestorage;
 	FILE* resultsfile;
-	resultsfile = fopen("Gresults.txt","w");
+	resultsfile = fopen("Gresults.txt","a");
 
 	for (int i=0; i<NDMtrials-1; i++) {
 		suspectvectorstorage.insert(suspectvectorstorage.end(),
