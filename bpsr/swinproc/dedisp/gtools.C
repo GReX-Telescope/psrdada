@@ -72,7 +72,11 @@ int* GPulseState::givetimes(int* ndetected, float sampletime, float flo,float fh
     return(intarray);
 }
 
-int* GPulseState::givetimes(int* ndetected, float sampletime, float flo,float fhi,float irrel,int beamID) {
+int* GPulseState::givetimes(int* ndetected, float sampletime, float flo, float fhi, float irrel, int beamID){
+    return(givetimes(ndetected, sampletime, flo, fhi, irrel,beamID,"GResults.txt"));
+}
+
+	int* GPulseState::givetimes(int* ndetected, float sampletime, float flo, float fhi, float irrel, int beamID, char* resultsfilename) {
 	//look for giants and return array of data to save. or specifications
 	//about data to save
         // The BEAM ID should ONLY be specified if wanting to do A MULTIBEAM SEARCH.
@@ -81,8 +85,7 @@ int* GPulseState::givetimes(int* ndetected, float sampletime, float flo,float fh
 	float delayinms;
 	vector<Gpulse> suspectvectorstorage;
 	Gpulse gpulsestorage;
-	FILE* resultsfile;
-	resultsfile = fopen("Gresults.txt","a");
+	FILE* resultsfile = fopen(resultsfilename,"a");
 
 	for (int i=0; i<NDMtrials-1; i++) {
 		suspectvectorstorage.insert(suspectvectorstorage.end(),

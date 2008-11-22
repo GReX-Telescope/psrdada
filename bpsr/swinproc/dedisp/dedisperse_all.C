@@ -35,6 +35,7 @@ void inline_dedisperse_all_help(){
   fprintf(stderr,"    -dec N [d: 256] search up to a N=2^? bin matched filter\n");
   fprintf(stderr,"    -cut N [d: 3] RFI filter: DMs below which to disregard\n");
   fprintf(stderr,"                  low-DM-peaking pulse candidates\n");
+  fprintf(stderr,"    -file NAME [d: ./GResults.txt] file to write Gsearch results to\n");
   fprintf(stderr," \n");
   fprintf(stderr,"dedisperse_all uses OpenMP and 16 bit words to\n");
   fprintf(stderr,"create many dedispersed files at once in a highly\n");
@@ -177,6 +178,7 @@ int main (int argc, char *argv[])
   float Gthresh = 6;
   int Gscrnch = 256;
   float Girrel = 3;
+  char * Gfilename = "GResults.txt";
   float flo,fhi;
 
   if(sizeof(LONG64BIT) != 8 ){
@@ -284,6 +286,9 @@ int main (int argc, char *argv[])
       }
       else if (!strcmp(argv[i],"-cut")){
 	  Girrel = atof(argv[++i]);
+      }
+      else if (!strcmp(argv[i],"-file")){
+	  Gfilename = (argv[++i]);
       }
       else {
 	/* unknown argument passed down - stop! */
@@ -657,7 +662,7 @@ int main (int argc, char *argv[])
   
   // After gulp's done, pump out the Gsearch results for that gulp
   if (doGsearch){
-      Gresults = Gholder.givetimes(&Gndet,tsamp,flo,fhi,Girrel);
+      Gresults = Gholder.givetimes(&Gndet,tsamp,flo,fhi,Girrel,-1,Gfilename);
 //      fprintf(stderr,"GRESULTS:\n");
 //      for (int i=0;i<Gndet;i+=2){
 //	  fprintf (stderr,"Detection %d: %d\t%d\n",i,Gresults[i],Gresults[i+1]);

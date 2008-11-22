@@ -51,6 +51,7 @@ class GPulseState{
     void searchforgiants(int itrial, int numbersamples, unsigned short int * data, float nsigma, float bintol, int usertscrfac, float dm,int starttscrfac);
     int* givetimes(int* ndetected, float sampletime, float flo, float fhi, float irrel);
     int* givetimes(int* ndetected, float sampletime, float flo, float fhi, float irrel, int beamID);
+    int* givetimes(int* ndetected, float sampletime, float flo, float fhi, float irrel, int beamID, char* resultsfilename);
 };
 void normalise(float *data, int arraysize);          //normalize data
 double normalise(int n,float * d, double * dataaverage);//normalize and return RMS; provide dataaverage
