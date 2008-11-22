@@ -18,6 +18,7 @@ extern "C" {
 void inline_dedisperse_all_help(){
   fprintf(stderr,"dedisperse_all help\n");
   fprintf(stderr,"Usage: dedisperse_all filename [options]\n");
+  fprintf(stderr,"-v                 verbose mode (prints status every DM trial)\n");
   fprintf(stderr,"-k killfilename    kill all channels in killfilename\n");
   fprintf(stderr,"-d st_DM end_DM    dedisperse from st_DM to end_DM\n");
   fprintf(stderr,"-i [40] psr width  intrinsic pulse width in us\n");
@@ -315,8 +316,6 @@ int main (int argc, char *argv[])
     exit(-1);
   }
 
-  verbose=1;
-  
   if (!useroutput) {
     /* no output file selected, use standard output */
     output=stdout;
@@ -658,7 +657,7 @@ int main (int argc, char *argv[])
     if (verbose) fprintf(stderr,"Wrote a total of %6.1f MB to disk\n",total_MBytes);
     /* close log files if on last input file */
     if (dmlogfile) fclose(dmlogfileptr);
-  }
+  } //if (!debird)
   
   // After gulp's done, pump out the Gsearch results for that gulp
   if (doGsearch){
