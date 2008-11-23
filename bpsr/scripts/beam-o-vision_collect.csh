@@ -55,8 +55,7 @@ endif
 #
 LoopOnObs: 
 
-# check if the scri# It also checks for the number of "BEAM-O-VISION"-kind of dirs in 
-# the dir "Results" and remove all but the most recent 10 dirspt must be exited
+# check if the script must be exited
 if ( (-e $startdir"/"$killflag) ) then
   rm $startdir"/"$killflag
   echo "beam-o-vision-collect: now existing..."
