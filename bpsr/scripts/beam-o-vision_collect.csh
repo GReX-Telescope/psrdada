@@ -14,6 +14,8 @@
 # AP 20 nov 2008  ver 1.0  
 #
 # next2do: to include copying of pulse profile png files
+#          to check for the number of "BEAM-O-VISION"-kind of dirs in 
+# the dir "Results" and remove all but the most recent 10 dirs
 #
 
 # grabbing the commandline input
@@ -23,8 +25,7 @@ if ($nargs != 3) then
  exit
 endif
 set archivedir = $1
-set pngdir = $2# It also checks for the number of "BEAM-O-VISION"-kind of dirs in 
-# the dir "Results" and remove all but the most recent 10 dirs
+set pngdir = $2  
 set killflag = $3
 
 # setting some variables
