@@ -663,6 +663,7 @@ else
   // After gulp's done, pump out the Gsearch results for that gulp
   if (doGsearch){
       Gresults = Gholder.givetimes(&Gndet,tsamp,flo,fhi,Girrel,-1,Gfilename);
+      for (i=0;i<ndm;i++) Gholder.DMtrials[i].erase(Gholder.DMtrials[i].begin(),Gholder.DMtrials[i].end());
 //      fprintf(stderr,"GRESULTS:\n");
 //      for (int i=0;i<Gndet;i+=2){
 //	  fprintf (stderr,"Detection %d: %d\t%d\n",i,Gresults[i],Gresults[i+1]);

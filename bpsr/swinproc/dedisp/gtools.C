@@ -51,9 +51,10 @@ void Gpulse::put_pulse(float a, float s, int b, int l, int w, int t, float d, in
 
 //state stuff
 GPulseState::GPulseState(int ndms) {
-	DMtrials = new vector<Gpulse>[ndms];
-	NDMtrials = ndms;
+    DMtrials = new vector<Gpulse>[ndms]; //!!!!!!!I THINK THIS IS WHERE THE MEMORY LEAK IS.
+    NDMtrials = ndms;
 }
+
 //NOTE: searchforgiants works fine; it preserves previous runs of dmtrials.
 void GPulseState::searchforgiants(int itrial, int numbersamples, float * data, float nsigma, float bintol, int usertscrfac, float dm,int starttscrfac) {
     DMtrials[itrial] = findgiants(numbersamples, data, nsigma, bintol, usertscrfac, dm,starttscrfac);
@@ -68,62 +69,62 @@ void GPulseState::searchforgiants(int itrial, int numbersamples, unsigned short 
 
 
 int* GPulseState::givetimes(int* ndetected, float sampletime, float flo,float fhi,float irrel) {
-    int* intarray=givetimes(ndetected,sampletime,flo,fhi,irrel,-1);
-    return(intarray);
+    return(givetimes(ndetected,sampletime,flo,fhi,irrel,-1));
 }
 
 int* GPulseState::givetimes(int* ndetected, float sampletime, float flo, float fhi, float irrel, int beamID){
     return(givetimes(ndetected, sampletime, flo, fhi, irrel,beamID,"GResults.txt"));
 }
 
-	int* GPulseState::givetimes(int* ndetected, float sampletime, float flo, float fhi, float irrel, int beamID, char* resultsfilename) {
-	//look for giants and return array of data to save. or specifications
-	//about data to save
-        // The BEAM ID should ONLY be specified if wanting to do A MULTIBEAM SEARCH.
-	//---------------------------------------------
-	int nsinglebeamcands, delayinsamples, totdelay;
-	float delayinms;
-	vector<Gpulse> suspectvectorstorage;
-	Gpulse gpulsestorage;
-	FILE* resultsfile = fopen(resultsfilename,"a");
-
-	for (int i=0; i<NDMtrials-1; i++) {
-		suspectvectorstorage.insert(suspectvectorstorage.end(),
-				DMtrials[i].begin(), DMtrials[i].end());
-	}
-	vector<Gpulse>* suspectarraystorage = assoc_giants(suspectvectorstorage,&nsinglebeamcands,irrel);
+int* GPulseState::givetimes(int* ndetected, float sampletime, float flo, float fhi, float irrel, int beamID, char* resultsfilename) {
+    //look for giants and return array of data to save. or specifications
+    //about data to save
+    // The BEAM ID should ONLY be specified if wanting to do A MULTIBEAM SEARCH.
+    //---------------------------------------------
+    int nsinglebeamcands, delayinsamples, totdelay;
+    float delayinms;
+    vector<Gpulse> suspectvectorstorage;
+    Gpulse gpulsestorage;
+    FILE* resultsfile = fopen(resultsfilename,"a");
+    
+    for (int i=0; i<NDMtrials-1; i++) {
+	suspectvectorstorage.insert(suspectvectorstorage.end(),
+				    DMtrials[i].begin(), DMtrials[i].end());
+    }
+    vector<Gpulse>* suspectarraystorage = assoc_giants(suspectvectorstorage,&nsinglebeamcands,irrel);
 //	fprintf(stderr,"sampletime: %f flo:%f fhi:%f\n",sampletime,flo,fhi);
-	fprintf(stderr,"\n\nN candidates in this block before associating: %d\n",suspectvectorstorage.size());
-	fprintf(stderr,"N candidates in this block after associating: %d\n\n",nsinglebeamcands);
-	fprintf(resultsfile,"\n\nN candidates in this block before associating: %d\n",suspectvectorstorage.size());
-	fprintf(resultsfile,"N candidates in this block after associating: %d\n\n",nsinglebeamcands);
-	int* timestamps = new int[nsinglebeamcands*2];
-	if (beamID<0){
-	    for (int i=0; i<(nsinglebeamcands*2); i+=2) {
-		gpulsestorage = suspectarraystorage[i/2].at(0);
-		if (flo<fhi)
-		    delayinms = gpulsestorage.dm * 4.15 * (pow(flo/1000, -2) - pow(fhi/1000, -2));
-		if (fhi<flo)
-		    delayinms = gpulsestorage.dm * 4.15 * (pow(fhi/1000, -2) - pow(flo/1000, -2));
-		delayinsamples = (int)(delayinms/(sampletime*1000))+1;
-		fprintf(stderr,"Candidate %4d: DM %5.2f SNR %5.2f SCR %d\n",i/2,gpulsestorage.dm,gpulsestorage.SNR,gpulsestorage.tscrfac);
-		fprintf(resultsfile,"Candidate %4d: DM %5.2f SNR %5.2f SCR %4d STARTBIN %13d PEAK %13d\n",i/2,gpulsestorage.dm,gpulsestorage.SNR,gpulsestorage.tscrfac,gpulsestorage.start,gpulsestorage.loc);
-		totdelay = delayinsamples+gpulsestorage.width;
-		if (gpulsestorage.start-(totdelay)<0)
-		    timestamps[i] = 0;
-		else
-		    timestamps[i] = gpulsestorage.start-(totdelay);
-		timestamps[i+1] = 3*(totdelay);
-	    }
-	    *ndetected = nsinglebeamcands;
-	    suspectvectorstorage.clear();
-	    fclose(resultsfile);
-	    return (timestamps);
-	} else {
-	    //do something
+    fprintf(stderr,"\n\nN candidates in this block before associating: %d\n",suspectvectorstorage.size());
+    fprintf(stderr,"N candidates in this block after associating: %d\n\n",nsinglebeamcands);
+    fprintf(resultsfile,"\n\nN candidates in this block before associating: %d\n",suspectvectorstorage.size());
+    fprintf(resultsfile,"N candidates in this block after associating: %d\n\n",nsinglebeamcands);
+    int* timestamps = new int[nsinglebeamcands*2];
+    if (beamID<0){
+	for (int i=0; i<(nsinglebeamcands*2); i+=2) {
+	    gpulsestorage = suspectarraystorage[i/2].at(0);
+	    if (flo<fhi)
+		delayinms = gpulsestorage.dm * 4.15 * (pow(flo/1000, -2) - pow(fhi/1000, -2));
+	    if (fhi<flo)
+		delayinms = gpulsestorage.dm * 4.15 * (pow(fhi/1000, -2) - pow(flo/1000, -2));
+	    delayinsamples = (int)(delayinms/(sampletime*1000))+1;
+	    fprintf(stderr,"Candidate %4d: DM %5.2f SNR %5.2f SCR %d\n",i/2,gpulsestorage.dm,gpulsestorage.SNR,gpulsestorage.tscrfac);
+	    fprintf(resultsfile,"Candidate %4d: DM %5.2f SNR %5.2f SCR %4d STARTBIN %13d PEAK %13d\n",i/2,gpulsestorage.dm,gpulsestorage.SNR,gpulsestorage.tscrfac,gpulsestorage.start,gpulsestorage.loc);
+	    totdelay = delayinsamples+gpulsestorage.width;
+	    if (gpulsestorage.start-(totdelay)<0)
+		timestamps[i] = 0;
+	    else
+		timestamps[i] = gpulsestorage.start-(totdelay);
+	    timestamps[i+1] = 3*(totdelay);
 	}
+	*ndetected = nsinglebeamcands;
+	suspectvectorstorage.clear();
 	fclose(resultsfile);
-	return(0);
+	
+	return (timestamps);
+    } else {
+	//do something
+    }
+    fclose(resultsfile);
+    return(0);
 }
 
 /* WHAT ABOUT MULTIBEAM?!?!?
@@ -232,6 +233,7 @@ vector<Gpulse> findgiants(int npts, unsigned short int * data, float nsigma, flo
 	}
 	mybigvector = findgiants(npts, convertedarray, nsigma, bintol, usertscrfac,
 			dm);
+	free(convertedarray);
 	return (mybigvector);
 }
 
@@ -246,6 +248,7 @@ vector<Gpulse> findgiants(int npts, double * data, float nsigma, float bintol,
 	}
 	mybigvector = findgiants(npts, convertedarray, nsigma, bintol, usertscrfac,
 			dm);
+	free(convertedarray);
 	return (mybigvector);
 }
 
@@ -260,6 +263,7 @@ vector<Gpulse> findgiants(int npts, int * data, float nsigma, float bintol,
 	}
 	mybigvector = findgiants(npts, convertedarray, nsigma, bintol, usertscrfac,
 			dm);
+	free(convertedarray);
 	return (mybigvector);
 }
 
@@ -274,6 +278,7 @@ vector<Gpulse> findgiants(int npts, unsigned char * data, float nsigma,
 	}
 	mybigvector = findgiants(npts, convertedarray, nsigma, bintol, usertscrfac,
 			dm);
+	free(convertedarray);
 	return (mybigvector);
 }
 
