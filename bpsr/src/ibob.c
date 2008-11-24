@@ -544,7 +544,7 @@ int ibob_bramdisk(ibob_t * ibob)
   time_t now = time(0);
   strftime (time_str, 64, DADA_TIMESTR, localtime(&now));
 
-  sprintf(fname, "/lfs/data0/bpsr/stats/%s_%s.bramdump", time_str, ibob->host);
+  sprintf(fname, "%s_%s.bramdump.tmp", time_str, ibob->host);
 
   fd = open(fname, flags, perms);
   if (fd < 0)
@@ -582,11 +582,10 @@ int ibob_bramdisk(ibob_t * ibob)
   /* reset the averages since we have modified the arrays */
   ibob_bramdump_reset(ibob);
 
-  /* now NFS copy the file to the server */
-  char nfs_fname[256];
+  /* rename the tmp bramdump file to the correct name */
+  char real_fname[128];
 
-  sprintf(nfs_fname, "/nfs/results/bpsr/stats/%s_%s.bramdump", 
-                     time_str, ibob->host);
+  sprintf(real_fname, "%s_%s.bramdump", time_str, ibob->host);
 
   /* Sometimes it takes a while for the file to appear, wait for it */
   flags =  R_OK | W_OK;
@@ -609,33 +608,18 @@ int ibob_bramdisk(ibob_t * ibob)
   if (max_wait) 
   {
   
-    /* ensure the NFS mount is mounted */
-    int rval = system("ls /nfs/results > /dev/null");
-    if (rval != 0) 
-    {
-      fprintf(stderr, "%s: NFS ls failed: %d\n", ibob->host, rval);
-      unlink (fname);
-      return -1;
-    }
-
     char command[256];
-    sprintf(command, "cp -f %s %s", fname, nfs_fname);
-    rval = system(command);
+    int rval = rename(fname, real_fname);
+
     if (rval != 0)
     {
-      fprintf(stderr, "%s: NFS copy failed: %d\n", ibob->host, rval);
+      fprintf(stderr, "%s: rename failed: %d\n", ibob->host, rval);
       unlink (fname);
       return -1;
     }
 
-    rval = unlink (fname);
-    if (rval != 0)
-    {
-      fprintf(stderr, "%s Unlink failed: %s\n", ibob->host, strerror(errno));
-      return -1;
-    }
-    else
-      return 0;
+    return 0;
+
   }
   else
     return -1;
