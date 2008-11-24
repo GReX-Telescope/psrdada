@@ -110,13 +110,6 @@ int multibob_destroy (multibob_t* multibob)
   free(multibob);
 }
 
-/*!
-  The monitor thread simply sits in a loop, opening the connection
-  as necessary, and polling the connection every second.  Polling
-  can be either a simple ping or a bramdump.  On failure, the
-  connection is closed and re-opened ad infinitum every five seconds.
-*/
-
 /* contact the iBoB and accumulate a bramdump */
 int bramdump (ibob_t* ibob)
 {
@@ -128,6 +121,13 @@ int bramdisk(ibob_t* ibob)
 {
   return ibob_bramdisk(ibob);
 }
+
+/*!
+  The monitor thread simply sits in a loop, opening the connection
+  as necessary, and polling the connection every second.  Polling
+  can be either a simple ping or a bramdump.  On failure, the
+  connection is closed and re-opened ad infinitum every five seconds.
+*/
 
 void* multibob_monitor (void* context)
 {
@@ -157,9 +157,11 @@ void* multibob_monitor (void* context)
       sleep (5);
       continue;
     }
+
     pthread_mutex_unlock (&(thread->mutex));
 
-    unsigned n_dump = 32;
+    double disk_interval = 10.0;  // 10 seconds between disk dumps
+    unsigned n_dump = 32;         // number of bram dumps per disk dump
 
 #ifdef _DEBUG
     fprintf (stderr, "multibob_monitor: %s ibob alive\n", ibob->host);
@@ -168,6 +170,9 @@ void* multibob_monitor (void* context)
     while (!thread->quit)
     {
       int retval = 0;
+
+      struct timeval time1;
+      gettimeofday (&time1, 0);
 
       pthread_mutex_lock (&(thread->mutex));
 
@@ -182,6 +187,9 @@ void* multibob_monitor (void* context)
 
       pthread_mutex_unlock (&(thread->mutex));
 
+      struct timeval time2;
+      gettimeofday (&time2, 0);
+
       if (retval < 0)
       {
         fprintf (stderr, "multibob_monitor: communicaton failure on %s:%d\n",
@@ -194,7 +202,19 @@ void* multibob_monitor (void* context)
       if (thread->quit)
         break;
 
-      ibob_pause(10);
+      // the time required to do the bramdump
+      double time_taken = diff_time (time1, time2);
+
+      // no memory -> assume all dumps take as long as last one
+      double sleep_in_sec = disk_interval / n_dump - time_taken;
+
+      // sleep at least 10 milliseconds
+      double ten_ms = 0.01;
+      if (sleep_in_sec < ten_ms)
+	sleep_in_sec = ten_ms;
+
+      // ibob_pause accepts sleep in milliseconds
+      ibob_pause( (int)(sleep_in_sec * 1e3) );
     }
 
     fprintf (stderr, "multibob_monitor: closing connection with %s:%d\n",
