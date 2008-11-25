@@ -23,7 +23,7 @@ use Bpsr;           # BPSR Module for configuration options, includes Dada.pm
 # Constants
 #
 use constant RUN_SYS_COMMANDS => "true";
-use constant DEBUG_LEVEL      => 2;              # 0 == no debug
+use constant DEBUG_LEVEL      => 1;              # 0 == no debug
 use constant PIDFILE          => "bpsr_master_control.pid";
 use constant LOGFILE          => "bpsr_master_control.log";
 
@@ -99,15 +99,14 @@ while (!$quit) {
     logMessage(0, "command: ".$command);
     logMessage(0, "result: ".$result.", response: ".$response);
   } else {
-    if ($command =~ m/get_status/) {
-    } else {
+    if (!($command =~ m/get_status/)) {
       logMessage(1, $command." -> ".$result.":".$response);
     }
   }
 
   sendReplyToServer($result,$response,$handler,$hostinfo->name);
   
-  logMessage(2, "Closing Connectionn"); 
+  logMessage(2, "Closing Connection"); 
 
   $handler->close;
 
@@ -418,9 +417,10 @@ sub handleCommand($) {
   }
 
   elsif($commands[0] eq "get_status") {
+
     my $subresult = "";
     my $subresponse = "";
-                                                                                                                                                               
+
     ($result,$subresponse) = Dada->getRawDisk($cfg{"CLIENT_RECORDING_DIR"});
     $response = $subresponse.";;;";
 
