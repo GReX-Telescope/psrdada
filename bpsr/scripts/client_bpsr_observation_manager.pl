@@ -54,13 +54,12 @@ our %cfg : shared = Bpsr->getBpsrConfig();	# dada.cfg in a hash
 my $logfile = $cfg{"CLIENT_LOG_DIR"}."/".LOGFILE;
 my $pidfile = $cfg{"CLIENT_CONTROL_DIR"}."/".PIDFILE;
 my $daemon_quit_file = Dada->getDaemonControlFile($cfg{"CLIENT_CONTROL_DIR"});
-my $prev_utc_start = "";
-my $prev_obs_offset = "";
+my $prev_header = "";
 my $quit = 0;
 my $daemon_control_thread = "";
 my $allow_background_processing_thread = "";
 my $proc_thread = "";
-
+my $quit = 0;
 
 #
 # Register Signal handlers
@@ -83,18 +82,18 @@ if (!$log_socket) {
 
 logMessage(1,"INFO", "STARTING SCRIPT");
 
-if (!(-f $daemon_quit_file)) {
+if (! -f $daemon_quit_file ) {
+
 
   # This thread will monitor for our daemon quit file
   $daemon_control_thread = threads->new(\&daemon_control_thread, "dada_header");
 
   # Main Loop
-  while( (!($quit_daemon) ) ) {
+  
+  while ((!$quit) && (! -f $daemon_quit_file) ) {
 
     # Run the processing thread once
-    ($prev_utc_start, $prev_obs_offset) = processing_thread($prev_utc_start, $prev_obs_offset);
-
-    sleep(1);
+    ($quit, $prev_header) = processing_thread($prev_header);
 
   }
 
@@ -102,11 +101,14 @@ if (!(-f $daemon_quit_file)) {
   Dada->nexusLogClose($log_socket);
   $daemon_control_thread->join();
   exit(0);
+
 } else {
+
   logMessage(0,"INFO", "STOPPING SCRIPT");
   Dada->nexusLogClose($log_socket);
   $daemon_control_thread->join();
-  exit(-1);
+  exit(1);
+
 }
 
 
@@ -115,10 +117,9 @@ if (!(-f $daemon_quit_file)) {
 #
 # Creates the required directories for the output data on the server, and generates the obs.start file
 #
+sub processing_thread($) {
 
-sub processing_thread($$) {
-
-  (my $prev_utc_start, my $prev_obs_offset) = @_;
+  (my $prev_header) = @_;
 
   my $bindir = Dada->getCurrentBinaryVersion();
   my $dada_header_cmd = $bindir."/".DADA_HEADER_BINARY;
@@ -131,7 +132,7 @@ sub processing_thread($$) {
   my $proj_id = "";
   my $beam = "";
 
-  my %current_header = ();
+  my %h = ();
   my @lines = ();
   my $line = "";
   my $key = "";
@@ -146,15 +147,10 @@ sub processing_thread($$) {
   # well hang for a long time - until the next header is written...
   logMessage(2, "INFO", "Running cmd \"".$dada_header_cmd."\"");
   my $raw_header = `$dada_header_cmd 2>&1`;
-  logMessage(2, "INFO", $dada_header_cmd." returned");
 
   # since the only way to currently stop this daemon is to send a kill
   # signal to dada_header_cmd, we should check the return value
   if ($? == 0) {
-
-    if (DEBUG_LEVEL >= 2) {
-      print $raw_header;
-    }
 
     @lines = split(/\n/,$raw_header);
     foreach $line (@lines) {
@@ -162,54 +158,72 @@ sub processing_thread($$) {
       if ((length($key) > 1) && (length($val) > 1)) {
         # Remove trailing whitespace
         $val =~ s/\s*$//g;
-        $current_header{$key} = $val;
+        $h{$key} = $val;
       }
     }
 
-    $utc_start     = $current_header{"UTC_START"};
-    $acc_len       = $current_header{"ACC_LEN"};
-    $obs_offset    = $current_header{"OBS_OFFSET"};
-    $proj_id       = $current_header{"PID"};
-    $beam          = $current_header{"BEAM"};
-    $proc_cmd_file = $current_header{"PROC_FILE"};
+    my $header_ok = 1;
 
-    if (length($utc_start) < 5) {
+    if (length($h{"UTC_START"}) < 5) {
       logMessage(0, "ERROR", "UTC_START was malformed or non existent");
+      $header_ok = 0;
     }
-    if (length($obs_offset) < 1) {
+    if (length($h{"OBS_OFFSET"}) < 1) {
       logMessage(0, "ERROR", "Error: OBS_OFFSET was malformed or non existent");
+      $header_ok = 0;
+    }
+    if (length($h{"PROC_FILE"}) < 1) {
+      logMessage(0, "ERROR", "PROC_FILE was malformed or non existent");
+      $header_ok = 0;
     }
 
-    if (($utc_start eq $prev_utc_start) && ($obs_offset eq $prev_obs_offset)) {
-      logMessage(0, "ERROR", "The UTC_START and OBS_OFFSET has been repeated");
-      sleep(5);
-    }
+    # command line that will be run
+    my $proc_cmd = "";
 
-    if (length($proc_cmd_file) < 1) {
-      logMessage(0, "ERROR", "PROC_CMD_FILE was malformed or non existent");
-    }
+    # Test for a repeated header
+    if ($raw_header eq $prev_header) {
+      logMessage(0, "ERROR", "DADA header repeated, likely cause failed PROC_CMD, jettesioning xfer");
+      $proc_cmd = "dada_dbnull -s -k ".lc($cfg{"PROCESSING_DATA_BLOCK"});
 
-    my $obs_start_file = createLocalDirectories($utc_start, $beam, $proj_id, $raw_header);
+    # Or if malformed
+    } elsif (! $header_ok) {
+      logMessage(0, "ERROR", "DADA header malformed, jettesioning xfer");
+      $proc_cmd = "dada_dbnull -s -k ".lc($cfg{"PROCESSING_DATA_BLOCK"});
 
-    createRemoteDirectories($utc_start, $beam, $proj_id);
+    } else {
 
-    copyUTC_STARTfile($utc_start, $beam, $obs_start_file);
+      my $obs_start_file = createLocalDirectories($h{"UTC_START"}, $h{"BEAM"}, $h{"PID"}, $raw_header);
 
-    # So that the background manager knows we are processing
-    $currently_processing = 1;
+      createRemoteDirectories($h{"UTC_START"}, $h{"BEAM"}, $h{"PID"});
 
-    $time_str = Dada->getCurrentDadaTime();
+      copyUTC_STARTfile($h{"UTC_START"}, $h{"BEAM"}, $obs_start_file);
 
-    $processing_dir .= "/".$utc_start."/".$beam;
+      # So that the background manager knows we are processing
+      $currently_processing = 1;
 
-    # Add the dada header file to the proc_cmd
-    $proc_cmd_file = $cfg{"CONFIG_DIR"}."/".$proc_cmd_file;
-    my %proc_cmd_hash = Dada->readCFGFile($proc_cmd_file);
-    my $proc_cmd = $proc_cmd_hash{"PROC_CMD"};
-      
-    if ($proc_cmd =~ m/the_decimator/) {
-      $proc_cmd .= " -o ".$utc_start;
-      $proc_cmd .= " ".$cfg{"PROCESSING_DB_KEY"};
+      $time_str = Dada->getCurrentDadaTime();
+
+      $processing_dir .= "/".$h{"UTC_START"}."/".$h{"BEAM"};
+
+      # Add the dada header file to the proc_cmd
+      my $proc_cmd_file = $cfg{"CONFIG_DIR"}."/".$h{"PROC_FILE"};
+      my %proc_cmd_hash = Dada->readCFGFile($proc_cmd_file);
+      $proc_cmd = $proc_cmd_hash{"PROC_CMD"};
+
+      logMessage(2, "INFO", "Initial PROC_CMD: ".$proc_cmd);
+
+      # Normal processing via the_decimator
+      if ($proc_cmd =~ m/the_decimator/) {
+        $proc_cmd .= " -o ".$h{"UTC_START"};
+        $proc_cmd .= " ".$cfg{"PROCESSING_DB_KEY"};
+      }
+
+      # Special case for folding beam01 only
+      if ($proc_cmd =~ m/dspsr/) {
+        $proc_cmd .= " ".$cfg{"PROCESSING_DB_KEY"};
+      }
+
+      logMessage(2, "INFO", "Final PROC_CMD: ".$proc_cmd);
     }
 
     logMessage(1, "INFO", "START ".$proc_cmd);
@@ -224,7 +238,7 @@ sub processing_thread($$) {
     my $return_value = system($cmd);
    
     if ($return_value != 0) {
-      logMessage(0, "ERROR", $proc_cmd_hash{"PROC_CMD"}." failed: ".$?." ".$return_value);
+      logMessage(0, "ERROR", $proc_cmd." failed: ".$?." ".$return_value);
     }
 
     $time_str = Dada->getCurrentDadaTime();
@@ -235,12 +249,14 @@ sub processing_thread($$) {
     chdir "../../";
     logMessage(1, "INFO", "END ".$proc_cmd);;
 
-    return ($utc_start, $obs_offset);
+    return (0, $raw_header);
 
   } else {
+
     logMessage(2, "WARN", "dada_header_cmd failed - probably no data block");
     sleep 1;
-    return ($utc_start, $obs_offset);
+    return (0, "");
+
   }
 }
 
