@@ -2,7 +2,30 @@
 include("../definitions_i.php");
 include("../functions_i.php");
 
+$cmd = "";
+$raw = 0;
+$flush = 0;
+$arg = "";
+$servers_too = 0;
+
+# Get GET HTTP arguments
 $cmd = $_GET["cmd"];
+
+if (isset($_GET["raw"])) {
+  $raw = 1;
+}
+if (isset($_GET["arg"])) {
+  $arg = $_GET["arg"];
+}
+if (isset($_GET["autoclose"])) {
+  $flush = 1;
+}
+if ($cmd == "get_status") {
+  $servers_too = 1;
+}
+
+
+
 $readonly_commands = array("get_disk_info","get_db_info", "get_alldb_info", "get_db_xfer_info", "get_load_info", "get_all_status");
 if (in_array($cmd, $readonly_commands))
 
@@ -61,11 +84,6 @@ $command_dests["get_all_status"]       = array("pwc");
 
 $command_dests["default"]              = array("pwc");
 
-$raw = 0;
-if (isset($_GET["raw"])) {
-  $raw = 1;
-}
-
 if (!$raw) {
   ?>
   <html>
@@ -117,16 +135,7 @@ if (isset($_GET["singlemachine"])) {
 
 }   
 
-if (isset($_GET["arg"])) {
-  $cmd .= " ".$_GET["arg"];
-}
-
-if (isset($_GET["autoclose"])) {
-  $flush = 1;
-} else {
-  $flush = 0;
-}
-
+$cmd .= " ".$arg;
 
 $all_machines = "";
 for ($i=0;$i<count($machines);$i++) { 
@@ -134,10 +143,42 @@ for ($i=0;$i<count($machines);$i++) {
 }
 
 chdir($sys_config["SCRIPTS_DIR"]);
-
 $script = "export DADA_ROOT=".DADA_ROOT."; ./client_bpsr_command.pl \"".$cmd."\" ".$all_machines;
-
 $string = exec($script, $output, $return_var);
+
+// The command is get_status and we want the server status also
+if ($servers_too) {
+
+  $servers = array("srv0", "srv1");
+  $dbs = "0 0 ";
+  $ssh_cmd = "";
+  $cmd = "";
+
+
+  for($i=0; $i<count($servers); $i++) {
+
+    $cmd = "ssh ".$servers[$i]." \"uptime\" | awk '{print \$10,\$11,\$12}'";
+    if ($servers[$i] == "srv0") {
+      $cmd = "uptime | awk '{print \$10,\$11,\$12}'";
+    }
+    $out = array();
+    $string = exec($cmd, $out, $return_var);
+    $loads = rtrim($out[0]);
+    $loads = str_replace(" ", "", $loads);
+
+    $cmd = "ssh ".$servers[$i]." \"df /lfs/data0 -B 1048576\" | tail -n 1 |  awk '{print \$2,\$3,\$4}'";
+    if ($servers[$i] == "srv0") {
+      $cmd = "df /lfs/data0 -B 1048576 | tail -n 1 |  awk '{print \$2,\$3,\$4}'";
+    }
+
+    $out = array();
+    $string = exec($cmd, $out, $return_var);
+    $disks = rtrim($out[0]);
+
+    array_push($output, $servers[$i].":ok:".$disks.";;;".$dbs.";;;".$loads.";;;1");
+  }
+}
+
 
 if ($raw) {
 

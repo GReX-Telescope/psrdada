@@ -8,7 +8,8 @@ $config = getConfigFile(SYS_CONFIG);
 $conf = getConfigFile(DADA_CONFIG,TRUE);
 $spec = getConfigFile(DADA_SPECIFICATION, TRUE);
 
-$nbeam = $config["NUM_PWC"];
+#$nbeam = $config["NUM_PWC"];
+$nbeam = 13;
 
 ?>
 <html>
@@ -22,8 +23,8 @@ $nbeam = $config["NUM_PWC"];
     /* Creates a pop up window */
     function popWindow(URL,width,height) {
 
-      var width = width || "1024";
-      var height = height || "768";
+      var width = "1300";
+      var height = "820";
 
       URL = URL + "&obsid=" + document.getElementById("utc_start").value;
 
@@ -54,7 +55,7 @@ $nbeam = $config["NUM_PWC"];
         for ($i=0; $i<$config["NUM_PWC"]; $i++) {
           echo "        var img".$i."_hires = img".$i."_line[1]\n";
           echo "        var img".$i."_lowres = img".$i."_line[2]\n";
-          echo "        var img".$i." = document.getElementById(\"beam".($i+1)."\")\n";
+          echo "        var img".$i." = document.getElementById(\"beam".$config["BEAM_".$i]."\")\n";
         }
 
         for ($i=0; $i<$config["NUM_PWC"]; $i++) {
@@ -106,6 +107,10 @@ $nbeam = $config["NUM_PWC"];
         type = "pdbp";
       }
 
+      if (document.imageform.imagetype[5].checked == true) {
+        type = "pvf";
+      }
+
       /* This URL will return the names of the 5 current */
       var url = "plotupdate.php?results_dir=<?echo $config["SERVER_RESULTS_DIR"]?>&type="+type;
 
@@ -121,34 +126,20 @@ $nbeam = $config["NUM_PWC"];
 <script type="text/javascript" src="/js/wz_tooltip.js"></script>
 <input id="utc_start" type="hidden" value="">
 <center>
-<table border=0 cellspacing=0 cellpadding=0 width=100%>
+<table border=0 cellspacing=0 cellpadding=5>
 
   <tr>
     <td rowspan=3 valign="top">
       <form name="imageform" class="smalltext">
       <input type="radio" name="imagetype" id="imagetype" value="bp" checked onClick="request()">Bandpass<br>
       <input type="radio" name="imagetype" id="imagetype" value="ts" onClick="request()">Time Series<br>
-      <input type="radio" name="imagetype" id="imagetype" value="fft" onClick="request()">Fluct. Power Spectrum<br>
+      <input type="radio" name="imagetype" id="imagetype" value="fft" onClick="request()">Fluct. PS<br>
       <input type="radio" name="imagetype" id="imagetype" value="dts" onClick="request()">Digitizer Stats<br>
       <input type="radio" name="imagetype" id="imagetype" value="pdbp" onClick="request()">PD Bandpass<br>
+      <input type="radio" name="imagetype" id="imagetype" value="pvf" onClick="request()">Phase v Freq<br>
       </form>
     </td>
-    <td colspan=4>
 
-<!--<div class="btns">
-<?
-for ($i=0; $i<$config["NUM_PWC"]; $i++) {
-?>
-  <a href="javascript:popWindow('beamwindow.php?beamid=<?echo ($i+1)?>', 1024, 800)" class="btn" > <span><?echo ($i+1)?></span> </a>
-<?
-}
-?>
-</div>-->
-
-    </td>
-  </tr>
-
-  <tr height=42>
     <?//echoBlank()?>
     <?echoBeam(13, $nbeam)?>
     <?echoBlank()?>
@@ -161,7 +152,7 @@ for ($i=0; $i<$config["NUM_PWC"]; $i++) {
     <?echoBlank()?>
   </tr>
   <tr height=42>
-    <?echoBlank()?>
+    <?//echoBlank()?>
     <?echoBeam(7, $nbeam)?>
     <?echoBeam(5, $nbeam)?>
     <?echoBlank()?> 
@@ -217,10 +208,12 @@ function echoBeam($beam_no, $num_beams) {
     //$mousein = "onmouseover=\"Tip('<img src=/images/blankimage.gif width=241 height=181>')\"";
     //$mouseout = "onmouseout=\"UnTip()\"";
 
-    echo "<td rowspan=2 align=right>";
-    echo "<a href=\"javascript:popWindow('beamwindow.php?beamid=".$beam_no."')\">";
+    $beam_str = sprintf("%02d", $beam_no);
 
-    echo "<img src=\"/images/blankimage.gif\" width=112 height=84 id=\"beam".$beam_no."\" TITLE=\"Beam ".$beam_no."\" alt=\"Beam ".$beam_no."\" ".$mousein." ".$mouseout.">\n";
+    echo "<td rowspan=2 align=right>";
+    echo "<a border=0px href=\"javascript:popWindow('beamwindow.php?beamid=".$beam_no."')\">";
+
+    echo "<img src=\"/images/blankimage.gif\" border=0 width=112 height=84 id=\"beam".$beam_str."\" TITLE=\"Beam ".$beam_str."\" alt=\"Beam ".$beam_no."\" ".$mousein." ".$mouseout.">\n";
     echo "</a></td>\n";
   } else {
     echo "<td rowspan=2></td>\n";

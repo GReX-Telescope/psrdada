@@ -1,94 +1,115 @@
 <?PHP 
 include("definitions_i.php");
 include("functions_i.php");
+include("bpsr_functions_i.php");
 $config = getConfigFile(SYS_CONFIG);
-$imgtype = $_GET["type"];
+
+
+/* We may want all the current images for just one beam
+   or we may want all the latest images of one type for
+   all beams */
+$type = "all";
+$beam = "all";
+$ibob = "all";
+$obs  = "latest";
+
+$n_results = $config["NUM_PWC"];
+$i_result  = 0;
+$url = "http://".$_SERVER["SERVER_NAME"].":".$_SERVER["SERVER_PORT"];
+
+if (isset($_GET["type"])) 
+  $type = $_GET["type"];
+
+if (isset($_GET["beam"]))
+  $beam = $_GET["beam"];
+
+if (isset($_GET["obs"]))
+  $obs = $_GET["obs"];
+
+/* if we just want images for 1 beam */
+if ($beam != "all") {
+  for ($j=0; $j<$config["NUM_PWC"]; $j++) {
+    if ($config["BEAM_".$j] == $beam) 
+      $i_result = $j;
+  }
+
+  $ibob = $config["IBOB_DEST_".$i_result];
+  $n_results = 1;
+
+} 
 
 /* Find the latest files in the plot file directory */
-for ($i=0; $i<$config["NUM_PWC"]; $i++) {
+for ($i=0; $i<$n_results; $i++) {
   $lowres_imgs[$i] = "/images/blankimage.gif";
   $midres_imgs[$i] = "/images/blankimage.gif";
   $hires_imgs[$i] = "/images/blankimage.gif";
 }
 
-if ($imgtype == "pdbp") {
+$result = "";
+$results_dir = $_GET["results_dir"];
 
-  $results_dir = $_GET["results_dir"];
-  $dir = $results_dir."/stats";
-
-  /* now find the 13 files requested */
-  if ($handle = opendir($dir)) {
-    while (false !== ($file = readdir($handle))) {
-      if ( ($file != ".") && ($file != "..") ) {
-        for ($i=0; $i<$config["NUM_PWC"]; $i++) {
-          $pos = strpos($file, $config["IBOB_DEST_".$i]."_114x82.png");
-          if ($pos !== FALSE) {
-            $lowres_imgs[$i] = "/bpsr/results/stats/".$file;
-          }
-          $pos = strpos($file, $config["IBOB_DEST_".$i]."_320x240.png");
-          if ($pos !== FALSE) {
-            $midres_imgs[$i] = "/bpsr/results/stats/".$file;
-          }
-        }        
-      }
-    }
-    closedir($handle);
-  } else {
-     echo "Could not open plot directory: ".$dir."<BR>\n";
-  }
-
-} else {
-  /* Determine the most recent result */
-  $results_dir = $_GET["results_dir"];
-  $cmd = "ls -1 ".$results_dir." -I stats | tail -n 1";
+if ($obs == "latest") {
+  $cmd = "ls -I stats -1 ".$results_dir." | tail -n 1";
   $result = exec($cmd);
-  $dir = $results_dir."/".$result;
+} else {
+  $result = $obs;
+}
 
-  /* now find the 13 files requested */
-  if ($handle = opendir($dir)) {
-    while (false !== ($file = readdir($handle))) {
-      if ($file != "." && $file != "..") {
+/* If we want all image types for one beam only (beamwindow.php) */
+if ($type == "all") {
 
-        /* If this is a beam?? subdirectory */
-        if ( (is_dir($dir."/".$file)) && (ereg("^([0-9][0-9])$", $file)) ) {
+  $obs_results = getBPSRResults($results_dir, $obs, "all", "all", $beam);
 
-          /* Get into a relative dir... */
-          chdir($dir);
-          $beamid = (int) $file;
+  $actual_obs_results = array_pop(array_pop($obs_results));
 
-          /* Find the hi res images */
-          $cmd = "find ".$file." -name \"*.".$imgtype."_1024x768.png\"";
-          $find_result = exec($cmd, $array, $return_val);
-          if (($return_val == 0) && (strlen($find_result) > 1)) {
-            $hires_imgs[($beamid-1)] = "/bpsr/results/".$result."/".$find_result;
-          }
+  $stats_results = getBPSRStatsResults($results_dir, $ibob);  
 
-          /* Find the mid res images */
-          $cmd = "find ".$file." -name \"*.".$imgtype."_400x300.png\"";
-          $find_result = exec($cmd, $array, $return_val);
-          if (($return_val == 0) && (strlen($find_result) > 1)) {
-            $midres_imgs[($beamid-1)] = "/bpsr/results/".$result."/".$find_result;
-          }
+  $actual_stats_results = array_pop($stats_results);
 
-          /* Find the low res images */
-          $cmd = "find ".$file." -name \"*.".$imgtype."_112x84.png\"";
-          $find_result = exec($cmd, $array, $return_val);
-          if (($return_val == 0) && (strlen($find_result) > 1))  {
-            $lowres_imgs[($beamid-1)] = "/bpsr/results/".$result."/".$find_result;
-          }
+  $results = array_merge($actual_obs_results, $actual_stats_results);
 
-        }
-      }
+  $types = array("bp","ts","fft","dts","pdbp","pvf");
+  $sizes = array("112x84", "400x300", "1024x768");
+
+  for ($i=0; $i<count($types); $i++) {
+    for ($j=0; $j<count($sizes); $j++) {
+      $key = $types[$i]."_".$sizes[$j];
+      echo ":::".$key.":::".$results[$key];
     }
-    closedir($handle);
-  } else {
-    echo "Could not open plot directory: ".$dir."<BR>\n";
+    echo ";;;";
   }
+
+/* We want all beams, but just one type of image (otherstuff.php) */
+} else {
+
+  $results = array();
+
+  if ($type == "pdbp") {
+    $results = getBPSRStatsResults($results_dir, "all");
+    for ($i=0; $i<$config["NUM_PWC"]; $i++) {
+      $ibob = $config["IBOB_DEST_".$i];
+      echo "img".$i.":::".$url.$results[$ibob][$type."_400x300"].":::".$url.$results[$ibob][$type."_112x84"].";;;";
+    }
+  } else {
+    $results = array_pop(getBPSRResults($results_dir, "latest", $type, "all", "all"));
+    for ($i=0; $i<$config["NUM_PWC"]; $i++) {
+      echo "img".$i;
+
+      if ($results[$i][$type."_400x300"] != "" ) {
+        echo ":::".$url.$results[$i][$type."_400x300"];
+      } else {
+        echo ":::".$url."/images/blankimage.gif";
+      }
+
+      if ($results[$i][$type."_112x84"] != "") {
+        echo ":::".$url.$results[$i][$type."_112x84"];
+      } else {
+        echo ":::".$url."/images/blankimage.gif";
+      }
+      echo ";;;";
+    }
+  }
+  echo $result.";;;";
 }
 
-$url = "http://".$_SERVER["SERVER_NAME"].":".$_SERVER["SERVER_PORT"];
 
-for ($i=0; $i<$config["NUM_PWC"]; $i++) {
-  echo "img".$i.":::".$url.$midres_imgs[$i].":::".$url.$lowres_imgs[$i].";;;";
-}
-echo $result.";;;";

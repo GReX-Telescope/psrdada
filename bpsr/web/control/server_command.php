@@ -130,12 +130,55 @@ if ($cmd == "start_daemons") {
 
 ?>
 <table class="datatable" width=60%>
-  <tr><th colspan=1>Restarting Instrument: <?echo $config["INSTRUMENT"]?></th></tr>
+  <tr><th colspan=1>Restarting BPSR</th></tr>
 
 <?
   flush();
 
   $script_name = "bpsr_reconfigure.pl";
+  echo "  <tr style=\"background: white;\">\n";
+  echo "    <td align=\"left\">\n";
+  $script = "source /home/dada/.bashrc; ".$script_name." 2>&1";
+  $string = exec($script, $output, $return_var);
+  for ($i=0; $i<count($output); $i++) {
+    echo $output[$i]."<BR>";
+  }
+  echo "    </td>\n";
+  echo "  </tr>\n";
+  echo "</table>\n";
+
+} else if ($cmd == "stop_bpsr") {
+                                                                                                                                                                                                
+?>
+<table class="datatable" width=60%>
+  <tr><th colspan=1>Stopping BPSR</th></tr>
+                                                                                                                                                                                                
+<?
+  flush();
+                                                                                                                                                                                                
+  $script_name = "bpsr_reconfigure.pl -s";
+  echo "  <tr style=\"background: white;\">\n";
+  echo "    <td align=\"left\">\n";
+  $script = "source /home/dada/.bashrc; ".$script_name." 2>&1";
+  $string = exec($script, $output, $return_var);
+  for ($i=0; $i<count($output); $i++) {
+    echo $output[$i]."<BR>";
+  }
+  echo "    </td>\n";
+  echo "  </tr>\n";
+  echo "</table>\n";
+
+
+} else if ($cmd == "start_bpsr") {
+                                                                                                                                                                                                
+?>
+<table class="datatable" width=60%>
+  <tr><th colspan=1>Starting BPSR</th></tr>
+                                                                                                                                                                                                
+<?
+  flush();
+                                                                                                                                                                                                
+  $script_name = "bpsr_reconfigure.pl -i";
   echo "  <tr style=\"background: white;\">\n";
   echo "    <td align=\"left\">\n";
   $script = "source /home/dada/.bashrc; ".$script_name." 2>&1";

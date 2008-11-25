@@ -22,7 +22,7 @@ if (! isset($_GET["brief"])) {
 }
 
 $data = getResultsInfo($utc_start, $config["SERVER_RESULTS_DIR"]);
-$images = getBPSRResults($config["SERVER_RESULTS_DIR"], $utc_start, "all", array("400x300","112x84"));
+$images = getBPSRResults($config["SERVER_RESULTS_DIR"], $utc_start, "all", array("400x300","112x84"), "all");
 
 $nbeam = $data["nbeams"];
 $header = getConfigFile($data["obs_start"], TRUE);
@@ -45,7 +45,7 @@ include("header_i.php");
 
   function changeImage(type) {
 <?
-    $patterns = array("/&imagetype=bp/", "/&imagetype=ts/", "/&imagetype=fft/", "/&imagetype=dts/");
+    $patterns = array("/&imagetype=bp/", "/&imagetype=ts/", "/&imagetype=fft/", "/&imagetype=dts/", "/&imagetype=pvf/");
     $replacements= array("", "", "", "");
     $cleaned_uri = preg_replace($patterns, $replacements, $_SERVER["REQUEST_URI"]);
     echo "var newurl = \"".$cleaned_uri."&imagetype=\"+type\n";
@@ -100,6 +100,8 @@ include("banner.php");
       echoRadio("imagetype","fft", "Power Spectrum", $imagetype); 
       echo "<br>\n";
       echoRadio("imagetype","dts", "Digitizer Statistics", $imagetype);
+      echo "<br>\n";
+      echoRadio("imagetype","pvf", "Phase v Freq", $imagetype);
   ?>
       </form>
     

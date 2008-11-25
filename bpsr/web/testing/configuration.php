@@ -68,7 +68,6 @@ function popUp(URL) {
     alert ("Please input a running time")
   } else {
     var new_url = URL + "&cfg="+cfg+"&spec="+spec+"&duration="+duration+"&acc_len="+acc_len
-    //alert(new_url);
     parent.simulator.document.location = new_url
   }
 }
@@ -126,7 +125,7 @@ if (!IN_CONTROL) { ?>
     <td>
       <div class="btns">
         <a href="javascript:popUp('simulator.php?cmd=start')"  class="btn" > <span>Start</span> </a>
-        <a href="javascript:popUp('simulator.php?cmd=start')"  class="btn" > <span>Stop</span> </a>
+        <a href="javascript:popUp('simulator.php?cmd=stop')"  class="btn" > <span>Stop</span> </a>
       </div>
     </td>
 

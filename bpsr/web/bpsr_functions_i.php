@@ -41,12 +41,13 @@ function getResultsInfo($utc_start, $results_dir) {
  * Gets the most recent image/results files from a BPSR observation
  */
 
-function getBPSRResults($results_dir, $utc_start="latest", $type="all", $size="all") {
+function getBPSRResults($results_dir, $utc_start="latest", $type="all", $size="all", $beam="all") {
 
   $utc_starts = array();
   $types = array();
   $sizes = array();
   $results = array();
+  $beams = array();
 
   if (is_array($utc_start)) {
     $utc_starts = $utc_start;
@@ -64,7 +65,7 @@ function getBPSRResults($results_dir, $utc_start="latest", $type="all", $size="a
   if (is_array($type)) {
     $types = $type;
   } else if ($type == "all") {
-    $types = array("bp", "ts", "fft", "dts");
+    $types = array("bp", "ts", "fft", "dts","pvf");
   } else {
     $types = array($type);
   }
@@ -75,6 +76,17 @@ function getBPSRResults($results_dir, $utc_start="latest", $type="all", $size="a
     $sizes = array("1024x768", "400x300", "112x84");
   } else {
     $sizes = array($size);
+  }
+
+  if (is_array($beam)) {
+    $beams = $beam;
+  } else if ($beam == "all") {
+    $config = getConfigFile(SYS_CONFIG);
+    for ($i=0; $i<$config["NUM_PWC"]; $i++) {
+      array_push($beams, $config["BEAM_".$i]);
+    }
+  } else {
+    $beams = array($beam);
   }
 
   foreach ($utc_starts as $u) {
@@ -94,19 +106,22 @@ function getBPSRResults($results_dir, $utc_start="latest", $type="all", $size="a
             chdir($dir);
             $beamid = (int) $file;
 
-            # Foreach image type
-            foreach ($types as $t) {
+            if (in_array($beamid, $beams)) {
 
-              foreach ($sizes as $s) {
+              # Foreach image type
+              foreach ($types as $t) {
+
+                foreach ($sizes as $s) {
     
-                $img = "/images/blankimage.gif";
-                /* Find the hi res images */
-                $cmd = "find ".$file." -name \"*.".$t."_".$s.".png\" | sort -n";
-                $find_result = exec($cmd, $array, $return_val);
-                if (($return_val == 0) && (strlen($find_result) > 1)) {
-                  $img = "/bpsr/results/".$u."/".$find_result;
+                  $img = "/images/blankimage.gif";
+                  /* Find the hi res images */
+                  $cmd = "find ".$file." -name \"*.".$t."_".$s.".png\" | sort -n";
+                  $find_result = exec($cmd, $array, $return_val);
+                  if (($return_val == 0) && (strlen($find_result) > 1)) {
+                    $img = "/bpsr/results/".$u."/".$find_result;
+                  }
+                  $results[$u][($beamid-1)][$t."_".$s] = $img;
                 }
-                $results[$u][($beamid-1)][$t."_".$s] = $img;
               }
             }
           }
@@ -122,18 +137,79 @@ function getBPSRResults($results_dir, $utc_start="latest", $type="all", $size="a
 }
 
 
+function getBPSRStatsResults($results_dir, $ibobs){
+
+  $dir = $results_dir."/stats";
+  $config = getConfigFile(SYS_CONFIG);
+
+  $results = array();
+  if ($ibobs == "all") {
+    for ($i=0; $i<$config["NUM_PWC"]; $i++) {
+      $results[$config["IBOB_DEST_".$i]] = array();
+    }
+  } else {
+    $results[$ibobs] = array();
+  }
+
+  /* now find the 13 files requested */
+  if ($handle = opendir($dir)) {
+
+    $files = array();
+
+    # read all the files
+    while ($file = readdir($handle)) {
+      if ( ($file != ".") && ($file != "..") ) {
+        array_push($files, $file);
+      }
+    }
+
+    closedir($handle);
+    rsort($files);
+
+    # Now ensure we have only the most recent files in the array
+    foreach ($results as $key => $value) {
+      $ibob = $key;
+      $have_low = 0;
+      $have_mid = 0;
+      $have_hi = 0;
+
+      for ($j=0; $j<count($files); $j++) {
+        if ((strpos($files[$j], $ibob."_112x84") !== FALSE) && (!$have_low) ){
+          $have_low = 1;
+          $value["pdbp_112x84"] = "/bpsr/results/stats/".$files[$j];
+        }
+        if ((strpos($files[$j], $ibob."_400x300") !== FALSE) && (!$have_mid) ){
+          $have_mid = 1;
+          $value["pdbp_400x300"] = "/bpsr/results/stats/".$files[$j];
+        }
+        if ((strpos($files[$j], $ibob."_1024x768") != FALSE) && (!$have_hi) ){
+          $have_hi = 1;
+          $value["pdbp_1024x768"] = "/bpsr/results/stats/".$files[$j];
+        }
+      }        
+      $results[$key] = $value;
+    }
+
+  } else {
+     echo "Could not open plot directory: ".$dir."<BR>\n";
+  }
+
+  return $results;
+
+}
+
 
 function getServerLogInformation() {
 
   $arr = array();
-  $arr["bpsr_tcs_interface"] =   array("logfile" => "bpsr_tcs_interface.log", "name" => "TCS Interface", "tag" => "server");
-  $arr["bpsr_results_manager"] = array("logfile" => "bpsr_results_manager.log", "name" => "Results Mngr", "tag" => "server");
-  $arr["dada_pwc_command"] =     array("logfile" => "dada_pwc_command.log", "name" => "dada_pwc_command", "tag" => "server");
-  $arr["ibob_simulator"] =       array("logfile" => "ibob_simualtor.log", "name" => "IBOB Sim", "tag" => "server");
-  $arr["ibob_manager"] =       array("logfile" => "ibob_manager.log", "name" => "Multibob", "tag" => "server");
-  $arr["bpsr_pwc_monitor"] =     array("logfile" => "nexus.pwc.log", "name" => "PWC", "tag" => "pwc");
-  $arr["bpsr_sys_monitor"] =     array("logfile" => "nexus.sys.log", "name" => "SYS", "tag" => "sys");
-  $arr["bpsr_src_monitor"] =     array("logfile" => "nexus.src.log", "name" => "SRC", "tag" => "src");
+  $arr["bpsr_tcs_interface"] =    array("logfile" => "bpsr_tcs_interface.log", "name" => "TCS Interface", "tag" => "server", "shortname" => "TCS");
+  $arr["bpsr_results_manager"] =  array("logfile" => "bpsr_results_manager.log", "name" => "Results Mngr", "tag" => "server", "shortname" => "Results");
+  $arr["dada_pwc_command"] =      array("logfile" => "dada_pwc_command.log", "name" => "dada_pwc_command", "tag" => "server", "shortname" => "PWCC");
+  $arr["bpsr_multibob_manager"] = array("logfile" => "bpsr_multibob_manager.log", "name" => "Multibob", "tag" => "server", "shortname" => "Multibob");
+  $arr["bpsr_transfer_manager"] = array("logfile" => "bpsr_transfer_manager.log", "name" => "Transfer Mngr", "tag" => "server", "shortname" =>"Xfer");
+  $arr["bpsr_pwc_monitor"] =      array("logfile" => "nexus.pwc.log", "name" => "PWC", "tag" => "pwc", "shortname" => "PWC");
+  $arr["bpsr_sys_monitor"] =      array("logfile" => "nexus.sys.log", "name" => "SYS", "tag" => "sys", "shortname" => "SYS");
+  $arr["bpsr_src_monitor"] =      array("logfile" => "nexus.src.log", "name" => "SRC", "tag" => "src", "shortname" => "SRC");
   return $arr;
 
 }

@@ -7,11 +7,11 @@ include("../functions_i.php");
 
 <?
 
-$title = "DADA | BPSR | TCS Simulator";
+$title = "BPSR | TCS Simulator";
 include("../header_i.php");
 
 if (!IN_CONTROL) { ?>
-<h3><font color=red>Test system disabled as your host is not in control of the instrument</font></h3>
+<h3><font color=red>BPSR TCS Simulator disabled. Your host is not in control of the instrument</font></h3>
 </body>
 </html>
 <?
@@ -33,9 +33,7 @@ $sys_config = getConfigFile(SYS_CONFIG);
 $ibob_config_file = "";
 $spec_file = "";
 $duration = 30;
-
-/* Client master control sockets */
-$cmc_sockets = array(); 
+$cmd = "";
 
 if (isset($_GET["cfg"])) {
   $ibob_config_file = $_GET["cfg"];
@@ -43,6 +41,7 @@ if (isset($_GET["cfg"])) {
 if (isset($_GET["spec"])) {
   $spec_file = $sys_config["CONFIG_DIR"]."/".$_GET["spec"];
 }
+
 if (isset($_GET["duration"])) {
   $duration = $_GET["duration"];
 } else {
@@ -52,126 +51,183 @@ if (isset($_GET["duration"])) {
   exit(-1);
 }
 
-
-if (!(file_exists($sys_config["CONFIG_DIR"]."/".$ibob_config_file))) {
-  printTR("Error: ibob Configuration File \"".$_GET["cfg"]."\" did not exist","");
-  printTF();
-  printFooter();
-  exit(-1);
+if (isset($_GET["cmd"])) {
+  $cmd = $_GET["cmd"];
 } else {
-  
-}
-
-if (!(file_exists($spec_file))) {
-  printTR("Error: Specification File \"".$_GET["spec"]."\" did not exist","");
+  printTR("Error: cmd not specified in _GET parameters","");
   printTF();
   printFooter();
   exit(-1);
 }
 
-$specification = getRawTextFile($spec_file);
-$spec = getConfigFile($spec_file);
+if ($cmd == "start") {
+
+  if (!(file_exists($sys_config["CONFIG_DIR"]."/".$ibob_config_file))) {
+    printTR("Error: ibob Configuration File \"".$_GET["cfg"]."\" did not exist","");
+    printTF();
+    printFooter();
+    exit(-1);
+  }
+
+  if (!(file_exists($spec_file))) {
+    printTR("Error: Specification File \"".$_GET["spec"]."\" did not exist","");
+    printTF();
+    printFooter();
+    exit(-1);
+  }
+
+  $specification = getRawTextFile($spec_file);
+  $spec = getConfigFile($spec_file);
+
+} else if ($cmd == "stop")  {
+
+
+} else {
+
+  printTR("Error: Unrecognised cmd in _GET parameters: ".$_GET["cmd"],"");
+  printTF();
+  printFooter();
+  exit(-1);
+
+}
 
 /* Open a connection to the TCS interface script */
 $host = $sys_config["TCS_INTERFACE_HOST"];
 $port = $sys_config["TCS_INTERFACE_PORT"];
-
 $tcs_interface_socket = 0;
 
 list ($tcs_interface_socket,$message) = openSocket($host,$port,2);
 if (!($tcs_interface_socket)) {
-  printTR("Error: opening socket to TCS interface script \"".$message."\"","");
+  printTR("Error: opening socket to TCS interface script",$message);
   printTF();
   printFooter();
   exit(-1);
 } 
 
-# Send the ibob Configuration File to the tcs_interface socket
-$cmd = "CONFIG ".$ibob_config_file."\r\n";
-socketWrite($tcs_interface_socket,$cmd);
-$result = rtrim(socketRead($tcs_interface_socket));
-printTR($cmd,$result);
-if ($result != "ok") {
-  exit(-1);
+if ($cmd == "start") {
+
+  $utc_start = tcs_start($tcs_interface_socket, $ibob_config_file, $specification);
+
+  if ($duration > 0) {
+    tcs_wait($duration);
+    tcs_stop($tcs_interface_socket);
+  }
+
+  tcs_close($tcs_interface_socket);
+
+} else {
+
+  tcs_stop($tcs_interface_socket);
+  tcs_close($tcs_interface_socket);
+
 }
 
+exit(0);
 
-# Send each header parameter to TCS interface
-for ($i=0;$i<count($specification);$i++) {
-  $cmd = $specification[$i]."\r\n";
-  socketWrite($tcs_interface_socket,$cmd);
-  $result = rtrim(socketRead($tcs_interface_socket));
+
+/* ****************************************************************************
+ *
+ * Functions
+ *
+ */
+
+
+/* 
+ * Starts the TCS interface script
+ */
+function tcs_start($sock, $ibob_cfg, $spec) {
+
+  # Send the ibob Configuration File to the tcs_interface socket
+  $cmd = "CONFIG ".$ibob_cfg."\r\n";
+  socketWrite($sock,$cmd);
+  $result = rtrim(socketRead($sock));
   printTR($cmd,$result);
   if ($result != "ok") {
     exit(-1);
   }
-}
 
-# Issue START command to server_tcs_interface 
-$cmd = "START\r\n";
-socketWrite($tcs_interface_socket,$cmd);
-$result = rtrim(socketRead($tcs_interface_socket));
-if ($result != "ok") {
-  printTR("START command failed on nexus ", $result);
-  printTR(rtrim(socketRead($tcs_interface_socket)),"");
-  exit(-1);
-} else {
-  printTR("Send START to nexus", "ok");
-}
-
-printTR("Sleeping for 10 seconds","");
-sleep(10);
-
-
-# Now run for the duration of the observation
-$have_set_duration = 0;
-for ($i=0;$i<$duration;$i++) {
-
-  sleep(1);
-  # Every 15 seconds, set the time limit of the script back to 30 seconds
-  if ($i % 15 == 0) {
-    set_time_limit(30);
-
-    if (!$have_set_duration) {
-      $cmd = "DURATION ".$duration."\r\n";
-      socketWrite($tcs_interface_socket,$cmd);
-      $result = rtrim(socketRead($tcs_interface_socket));
-
-      if ($result != "ok") {
-        printTR($cmd, $result);
-        printTR("STOPPING","");
-        exit(-1);
-      }
-      printTR($cmd, $result);
-      $have_set_duration = 1;
+  # Send each header parameter to TCS interface
+  for ($i=0;$i<count($spec);$i++) {
+    $cmd = $spec[$i]."\r\n";
+    socketWrite($sock,$cmd);
+    $result = rtrim(socketRead($sock));
+    printTR($cmd,$result);
+    if ($result != "ok") {
+      exit(-1);
     }
   }
-  if ($i % 60 == 0) {
-    printTR("Recording: ".(($duration - $i)/60)." minutes remaining","");
+
+  # Issue START command to server_tcs_interface 
+  $cmd = "START\r\n";
+  socketWrite($sock,$cmd);
+  $result = rtrim(socketRead($sock));
+  if ($result != "ok") {
+    printTR("START command failed on nexus ", $result);
+    printTR(rtrim(socketRead($sock)),"");
+    exit(-1);
+  } else {
+    printTR("Send START to nexus", "ok");
+  }
+
+  printTR("Waiting for start_utc response","");
+  sleep(5);
+                                                                                                                                                                                                                      
+  $start_utc_string = rtrim(socketRead($sock));
+  printTR("",$start_utc_string);
+  sscanf($start_utc_string, "start_utc %s", $utc_string);
+
+  return $utc_string;
+
+}
+
+
+/* 
+ * Waits for the specified time
+ */
+function tcs_wait($duration) {
+
+  # Now run for the duration of the observation
+  for ($i=0;$i<$duration;$i++) {
+
+    sleep(1);
+    # Every 15 seconds, set the time limit of the script back to 30 seconds
+    if ($i % 15 == 0) {
+      set_time_limit(30);
+    }
+    if ($i % 60 == 0) {
+      printTR("Recording: ".(($duration - $i)/60)." minutes remaining","");
+    }
+  }
+
+}
+
+function tcs_stop($sock) {
+
+  # Issue the STOP command 
+  $cmd = "STOP\r\n";
+  socketWrite($sock,$cmd);
+  $result = rtrim(socketRead($sock));
+
+  if ($result != "ok") {
+    printTR("\"$cmd\" failed",$result);
+    printTR("",rtrim(socketRead($sock)));
+    exit(-1);
+  } else {
+    printTR("Sent \"".$cmd."\" to nexus","ok");
   }
 }
 
+function tcs_close($sock) {
 
-# 10 extra seconds to ensure things have stopped!
-sleep(10);
+  printTF();
+  printFooter();
+  flush();
+  sleep(2);
+  socket_close($sock);
 
-# Issue the STOP command 
-$cmd = "STOP\r\n";
-socketWrite($tcs_interface_socket,$cmd);
-$result = rtrim(socketRead($tcs_interface_socket));
-if ($result != "ok") {
-  printTR("\"$cmd\" failed",$result);
-  printTR("",rtrim(socketRead($tcs_interface_socket)));
-  exit(-1);
-} else {
-  printTR("Sent \"".$cmd."\" to nexus","ok");
 }
 
-printTF();
-printFooter();
-flush();
-sleep(2);
-socket_close($tcs_interface_socket);
+
 exit(0);
 
 function printFooter() {
@@ -193,26 +249,4 @@ function printTF() {
   echo "</table>\n";
 }
 
-function killDFBSimulators($config, $dfbs) {
-
-  $host = $dfbs["DFB_0"];
-
-  list ($sock,$message) = openSocket($host,57001,2);
-  if ($sock) {
-
-    $cmd = "kill_process apsr_test_triwave";
-    printTR("Writing \"".$cmd."\" to host ".$host, "");
-
-    socketWrite($sock,$cmd."\r\n");
-
-    $result = rtrim(socketRead($sock));
-
-    printTR("Killing DFB simluator on ".$host,$result);
-
-    socket_close($sock);
-  } else {
-    printTR("Could not open socket to $host",$message);
-  }
-
-}
 ?>

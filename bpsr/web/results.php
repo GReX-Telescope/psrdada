@@ -63,7 +63,8 @@ $results = getResultsArray($basedir, $offset, $length);
 $keys = array_keys($results);
 $num_results = count($keys);
 
-$images = getBPSRResults($basedir, $keys, "bp", "400x300");
+$types = array("bp", "pvf");
+$images = getBPSRResults($basedir, $keys, $types, "400x300", "1");
 
 ?>
 
@@ -152,7 +153,13 @@ for ($i=0; $i < count($keys); $i++) {
 
   $freq_keys = array_keys($results[$keys[$i]]);
   $url = "/bpsr/result.php?utc_start=".$keys[$i]."&imagetype=bp";
-  $mousein = "onmouseover=\"Tip('<img src=\'".$images[$keys[$i]][1]["bp_400x300"]."\' width=400 height=300>')\"";
+  $pos = strpos($images[$keys[$i]][0]["bp_400x300"], "blankimage");
+  if ($pos !== FALSE) {
+    $img = $images[$keys[$i]][0]["pvf_400x300"];
+  } else {
+    $img = $images[$keys[$i]][0]["bp_400x300"];
+  }
+  $mousein = "onmouseover=\"Tip('<img src=\'".$img."\' width=400 height=300>')\"";
   $mouseout = "onmouseout=\"UnTip()\"";
 
   /* If archives have been finalised and its not a brand new obs */
@@ -175,7 +182,7 @@ for ($i=0; $i < count($keys); $i++) {
   echo "    <td>".$header["CFREQ"]."</td>\n";
 
   /* INTERGRATION LENGTH */
-  echo "    <td>".getRecordingLength($images[$keys[$i]][1]["bp_400x300"])."</td>\n";
+  echo "    <td>".getRecordingLength($img)."</td>\n";
 
   /* ANNOTATION */
   echo "    <td class=\"trunc\"><div>".$results[$keys[$i]]["annotation"]."</div></td>\n";
@@ -255,9 +262,14 @@ function getRecordingLength($image_name) {
     $image_basename = $array[5];
     $array = split("\.",$image_basename);
     $image_utc = $array[0];
-   
+
+    $offset = 0;
+    if (strpos($image_basename, "pvf") !== FALSE) {
+      $offset = (11*60*60);
+    }
+
     # add ten as the 10 second image file has a UTC referring to the first byte of the file 
-    $length = (unixTimeFromGMTime($image_utc)+10) - unixTimeFromGMTime($utc_start);
+    $length = (unixTimeFromGMTime($image_utc)+(10-$offset)) - unixTimeFromGMTime($utc_start);
 
     return $length; 
 

@@ -82,6 +82,10 @@ printClientStatus($config, IN_CONTROL);
 <table border=0 cellpadding=2>
   <tr><td>
     <div class="btns">
+      <a href="javascript:popUp('server_command.php?cmd=start_bpsr')"  class="btn" > <span>Start BPSR</span> </a>
+      <a href="javascript:popUp('server_command.php?cmd=stop_bpsr')"  class="btn" > <span>Stop BPSR</span> </a>
+    </div>
+    <div class="btns">
       <a href="javascript:popUp('client_command.php?cmd=stop_pwc&arg=dspsr')"  class="btn" > <span>Kill Dspsr</span> </a>
       <a href="javascript:popUp('client_command.php?cmd=stop_dfbs')"  class="btn" > <span>Stop DFB Sim</span> </a>
     </div>
