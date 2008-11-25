@@ -104,7 +104,6 @@ my $dspsr_files_processed = 0;
 while (!($quit_daemon)) {
 
   $mon_files_processed = process_mon_files();
-
   $dspsr_files_processed = process_dspsr_files();
 
   # If nothing is happening, have a snooze
@@ -139,6 +138,8 @@ sub process_mon_files() {
   my $cmd = "find . -maxdepth 3 -regex \".*[ts|bp|bps][0|1]\" | sort";
   my $find_result = `$cmd`;
 
+  logMessage(2, "INFO", "process_mon_files: find result = ".$find_result);
+
   my @lines = split(/\n/,$find_result);
   my $line = "";
 
@@ -149,7 +150,7 @@ sub process_mon_files() {
 
     $line = substr($line,2);
 
-    logMessage(1, "INFO", "Processing decimator mon file \"".$line."\"");
+    logMessage(2, "INFO", "Processing decimator mon file \"".$line."\"");
 
     my ($utc, $beam, $file) = split( /\//, $line);
 
@@ -173,6 +174,7 @@ sub process_mon_files() {
 
       $cmd  = "mv ".$file_dir."/".$file." ".$file_dir."/aux/";
       ($result, $response) = Dada->mySystem($cmd,0);
+
       if ($result ne "ok") {
 
         logMessage(0, "ERROR", "Could not move file ($file) to aux dir \"".$response."\"");
@@ -196,6 +198,7 @@ sub process_mon_files() {
 
          chdir $cfg{"CLIENT_ARCHIVE_DIR"};
       }
+      logMessage(2, "INFO", "Decimator mon file processed: ".$line);
     }
   }
 
@@ -330,13 +333,26 @@ sub sendToServerViaNFS($$$) {
     `ls $nfsdir >& /dev/null`;
   }
 
-  my $cmd = "cp ".$file." ".$nfsdir."/".$dir."/";
+  if (! -d $nfsdir."/".$dir) {
+    `mkdir -p $nfsdir/$dir`;
+  }
+
+  my $tmp_file = $file.".tmp";
+
+  my $cmd = "cp ".$file." ".$nfsdir."/".$tmp_file;
   logMessage(2, "INFO", "NFS copy \"".$cmd."\"");
   ($result, $response) = Dada->mySystem($cmd,0);
   if ($result ne "ok") {
     return ("fail", "Command was \"".$cmd."\" and response was \"".$response."\"");
   } else {
-    return ("ok", "");
+    $cmd = "mv ".$nfsdir."/".$tmp_file." ".$nfsdir."/".$file;
+    logMessage(2, "INFO", $cmd);
+    ($result, $response) = Dada->mySystem($cmd,0);
+    if ($result ne "ok") {
+      return ("fail", "Command was \"".$cmd."\" and response was \"".$response."\"");
+    } else {
+      return ("ok", "");
+    }
   }
 
 }
