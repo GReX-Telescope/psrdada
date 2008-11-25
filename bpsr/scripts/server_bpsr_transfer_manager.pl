@@ -128,21 +128,22 @@ killLocal();
 
 while (!$quit_daemon) {
 
-# See if we can write to either place...
-# This is important otherwise we can get stuck in a loop waiting for one place.
+  # See if we can write to either place...
+  # This is important otherwise we can get stuck in a loop waiting for one place.
   ($s_user, $s_host, $s_dir) = findHoldingArea(\@swin_disks,$swin_start_disk);
- # $s_host="none"; # MJK TEST
-    ($p_user, $p_host, $p_dir) = findHoldingArea(\@parkes_disks,$parkes_start_disk);
+  # $s_host="none"; # MJK TEST
+
+  ($p_user, $p_host, $p_dir) = findHoldingArea(\@parkes_disks,$parkes_start_disk);
   logMessage(3, "Suitible hosts: $s_host, $p_host");
 
-# Look for and observation (archives dir) that is ready to send.
+  # Look for and observation (archives dir) that is ready to send.
   ($obs, $sent_to_swin, $sent_to_parkes) = getObsToSend($s_host ne "none", $p_host ne "none");
   if ($obs eq "none"){
-#Try again, not requiring a swin send
+    #Try again, not requiring a swin send
     ($obs, $sent_to_swin, $sent_to_parkes) = getObsToSend(0, $p_host ne "none");
   }
   if ($obs eq "none"){
-#Try again, not requiring a parkes send
+    #Try again, not requiring a parkes send
     ($obs, $sent_to_swin, $sent_to_parkes) = getObsToSend($s_host ne "none",0);
   }
 
@@ -150,25 +151,33 @@ while (!$quit_daemon) {
 
   if ($obs ne "none") {
 
-# If we have an observation to send, determine the swin and parkes
-# holding areas to use
+    # If we have an observation to send, determine the swin and parkes
+    # holding areas to use
     logMessage(3, "Trying to send: $obs s:$sent_to_swin p:$sent_to_parkes");   
 
-# Test to see if observation is not a survey pointing
+    # Test to see if observation is not a survey pointing
     my $is_fold = checkIfFold($obs);
 
-      $sent_to_swin=-1; #WVS disable sending to Swinburne
-      if ($sent_to_swin == 0) {
-        if ($is_fold){
-#change this if disk 0 fails
-          ($s_user, $s_host, $s_dir) = findHoldingArea(\@swin_fold_disks,0);
-        } else { 
-          ($s_user, $s_host, $s_dir) = findHoldingArea(\@swin_disks,$swin_start_disk);
-          $swin_start_disk = ($swin_start_disk + 1) % ($#swin_disks+1);
-        }
-      } else {
-        ($s_user, $s_host, $s_dir) = ("none", "none", "none");
-      } 
+    if ($cfg{"NUM_SWIN_DISKS"} eq 0) {
+      $sent_to_swin=-1; 
+    }
+
+    if ($sent_to_swin == 0) {
+
+      if ($is_fold){
+       # change this if disk 0 fails
+        ($s_user, $s_host, $s_dir) = findHoldingArea(\@swin_fold_disks, 0);
+      } else { 
+        ($s_user, $s_host, $s_dir) = findHoldingArea(\@swin_disks, $swin_start_disk);
+        $swin_start_disk = ($swin_start_disk + 1) % ($#swin_disks+1);
+      }
+    } else {
+      ($s_user, $s_host, $s_dir) = ("none", "none", "none");
+    } 
+
+    if ($cfg{"NUM_PARKES_DISKS"} eq 0) {
+      $sent_to_parkes=-1;
+    }
     if ($sent_to_parkes == 0) {
       logMessage(3, "Trying to send to Parkes: ".$obs);
       if ($is_fold){
@@ -181,7 +190,7 @@ while (!$quit_daemon) {
       ($p_user, $p_host, $p_dir) =  ("none", "none", "none");
     }
 
-# If at least one destination is available
+    # If at least one destination is available
     if (($p_host ne "none") || ($s_host ne "none")) {
 
       my %files = getFiles($obs);
@@ -194,7 +203,7 @@ while (!$quit_daemon) {
 
       logMessage(1, "Processing Observation: ".$obs);
 
-# Launch vsib_sends on the server (running in server mode)
+      # Launch vsib_sends on the server (running in server mode)
       logMessage(1, "vsib_send ".$obs." to ".$s_host.", ".$p_host);
       for ($i=0; $i<=$#keys; $i++) {
         $key = $keys[$i];
@@ -202,7 +211,7 @@ while (!$quit_daemon) {
         @send_threads[$i] = threads->new(\&run_vsib_send, $s_host, $p_host, $files{$key}, $i);
       }
 
-# Launch vib_recv clients on parkes and swin hosts
+      # Launch vib_recv clients on parkes and swin hosts
       sleep(1);
 
       logMessage(1, "vsib_recv ".$obs." on ".$s_host.", ".$p_host);
@@ -306,8 +315,7 @@ sub checkRemoteArchive($$$$) {
 
   my ($user, $host, $dir, $obs) = @_;
 
-
-#find -L -maxdepth 2 \( ! -iname 'error.to*' ! -iname 'sent.to.*' ! -iname 'aux' ! -iname 'obs.*' -type f -printf '%p %s\n' \) | sort
+  #find -L -maxdepth 2 \( ! -iname 'error.to*' ! -iname 'sent.to.*' ! -iname 'aux' ! -iname 'obs.*' -type f -printf '%p %s\n' \) | sort
   my $cmd = "find -L ".$obs." -maxdepth 2 \\(  ! -name '*.log' ! -iname 'error.to.*' ! -iname 'sent.to.*' ! -iname 'obs.finalized' ! -iname 'obs.info' ! -iname 'aux' -type f -printf '\%p \%s\\n' \\) | sort";
 
   logMessage(2, $cmd);
@@ -484,8 +492,9 @@ sub getObsToSend($$) {
 
   my $archives_dir = $cfg{"SERVER_ARCHIVE_NFS_MNT"};
 
-# produce a "unixtime filename" list of all the obs.finalized
-  my $cmd = "find ".$archives_dir." -name \"obs.finalized\" -printf \"%T@ %f\\n\" | sort -r";
+  # produce a "unixtime filename" list of all the obs.finalized
+  # Added maxdepth 2 to ensure find doesn't check the remote NFS dirs for obs.finalized
+  my $cmd = "find ".$archives_dir." -maxdepth 2 -name \"obs.finalized\" -printf \"%T@ %f\\n\" | sort -r";
 
   my $subdir = "";
   my @subdirs = ();
