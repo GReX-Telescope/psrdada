@@ -56,6 +56,7 @@ int setup_net(int isserver, char *hostname, int port, int window_size, int *sock
 void *netread(void *arg);
 void save_summary(disktime times[], char *filename, char *sumpath, 
                   int ntime);
+void usage(void);
 
 #define PRINTSPEED(k, file) { \
   speed = times[k].size/(times[k].time-times[k-1].time)/1000/1000; /* MB/s */\
@@ -105,6 +106,8 @@ int main (int argc, char * const argv[]) {
   int port = 8000;    
   int window_size = -1;        
   char hostname[MAXSTR+1] = ""; /* Host name to send data to */
+  int one_transfer = 0;
+  int quiet = 0;
   
   struct option options[] = {
     {"memory", 0, 0, 'm'},
@@ -126,10 +129,7 @@ int main (int argc, char * const argv[]) {
   write_failure = 0;
 
   /* Read command line options */
-  while (1) {
-    opt = getopt_long_only(argc, argv, "DhH:", 
-                           options, NULL);
-    if (opt==EOF) break;
+  while ((opt=getopt(argc,argv,"b:w:p:t:H:Dsmqh1")) != -1) {
 
     switch (opt) {
       
@@ -186,18 +186,18 @@ int main (int argc, char * const argv[]) {
     case 'm':
       dodisk = 0;
       break;
+
+    case 'q':
+      quiet = 1;
+      break;
+
+    case '1': 
+      one_transfer = 1;
+      break;
       
     case 'h':
-      printf("Usage: vsib_recv [options]\n");
-      printf("  -p/-port <PORT   >    Port number for transfer\n");
-      printf("  -b/-blocksize <SIZE>  Read/write block size\n");
-      printf("  -w/-window <SIZE>     Network window size (kB)\n");
-      printf("  -t/-time              Number of blocks (-b) to average timing statistics\n");
-      printf("  -H/-host              Act as client and connect to remove server\n");
-      printf("  -s/summary            Save a summary of network statistics\n");
-      printf("  -memory               Don't write data to disk\n");
-      printf("  -h/-help              This list\n");
-      return(1);
+      usage();
+      return(0);
     break;
     
     case '?':
@@ -205,6 +205,9 @@ int main (int argc, char * const argv[]) {
       break;
     }
   }
+
+
+
 
   nupdate = timeupdate/(bufsize/1e6);
   if (nupdate==0) nupdate = 1;
@@ -275,7 +278,7 @@ int main (int argc, char * const argv[]) {
     jbuf = NBUF-1;
     j = 0;
 
-    // Lock the last mutex
+    //i Lock the last mutex
     DEBUG(printf("MAIN:   Locked %d for thread\n", jbuf));
     pthread_mutex_lock( &bufmutex[jbuf] );
     
@@ -445,7 +448,11 @@ int main (int argc, char * const argv[]) {
       perror("Error closing socket");
     }
 
-    printf("Re-enabling signal\n");
+    if (one_transfer) 
+      time_to_quit = 1;
+    else
+      printf("Re-enabling signal\n");
+
     signal (SIGINT, SIG_DFL);
     if (time_to_quit) {
       raise (sig_received);
@@ -604,7 +611,7 @@ void kill_signal (int sig) {
   sig_received = sig;
 
   signal (sig, kill_signal); /* Re-install ourselves to disable double signals */
-}  
+}
 
 void *netread (void *arg) {
   short fnamesize=0;
@@ -811,3 +818,18 @@ void save_summary(disktime times[], char *filename, char *sumpath,
     }
   }
 }
+
+void usage(void) {
+  printf("Usage: vsib_recv [options]\n");
+  printf("  -p <PORT>     Port number for transfer\n");
+  printf("  -b <SIZE>     Read/write block size\n");
+  printf("  -w <SIZE>     Network window size (kB)\n");
+  printf("  -t <TIME>     Number of blocks (-b) to average timing statistics\n");
+  printf("  -H <HOST>     Act as client and connect to remove server\n");
+  printf("  -s            Save a summary of network statistics\n");
+  printf("  -m            Don't write data to disk\n");
+  printf("  -q            Quest mode, less output\n");
+  printf("  -1            Receive 1 transfer then exit\n");
+  printf("  -h            This list\n");
+}
+
