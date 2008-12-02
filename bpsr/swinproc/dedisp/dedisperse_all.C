@@ -140,7 +140,7 @@ int main (int argc, char *argv[])
 {
   /* local variables */
   char string[80];
-  int i,useroutput=0,nfiles,fileidx,sigproc,scan_number,subscan=0;
+  int i,useroutput=0,nfiles=0,fileidx,sigproc,scan_number,subscan=0;
   int numsamps=0;
   unsigned char * rawdata;
   unsigned short int * unpacked; //, * times;
@@ -197,13 +197,6 @@ int main (int argc, char *argv[])
     inline_dedisperse_all_help();
     exit(0);
   }
-  /* work out how many files are on the command line */
-  i=1;
-  nfiles=0;
-  while(fopen(argv[i],"rb")!=NULL) {
-    nfiles++;
-    i++;
-  }
   
   /* set up default globals */
   userbins=usrdm=asciipol=stream=clipping=swapout=headerless=0;
@@ -219,88 +212,101 @@ int main (int argc, char *argv[])
   output=NULL;
   strcpy(ignfile,"");
 
-  /* now parse any remaining command line parameters */
-  if (argc>nfiles) {
-    i=nfiles+1;
-    while (i<argc) {
-      if (!strcmp(argv[i],"-d")) {
-	/* get DM from the user */
-	start_DM=atof(argv[++i]);
-	end_DM=atof(argv[++i]);
-	usrdm=1;
+  // **************************************
+  //          PARSE COMMAND LINE
+  // **************************************
+  i = 1;
+  while (i<argc) {
+    if (fopen(argv[i],"rb")!=NULL){
+      strcpy(inpfile,argv[i]);
+      input=fopen(inpfile,"rb");
+      if (input==NULL){
+        fprintf(stderr,"Error opening file %s\n",inpfile);
+        exit(-1);
       }
-      else if (!strcmp(argv[i],"-l")) {
-	/* Create a log file of the DMs */
-	dmlogfile=1;
-      }
-      else if (!strcmp(argv[i],"-i")) {
-	/* set intrinsic width */
-	ti=atof(argv[++i]);
-      }
-      else if (!strcmp(argv[i],"-tol")) {
-	/* set tolerance level (e.g. 25% = 1.25)*/
-	tol=atof(argv[++i]);
-      }
-      else if (!strcmp(argv[i],"-v")) {
-	verbose=1;
-      }
-      else if (!strcmp(argv[i],"-b")) {
-	debird=1;
-      }
-      else if (!strcmp(argv[i],"-n")) {
-	/* read only X samples */
-	ntodedisp=atoi(argv[++i]);
-	readsamp=1;
-      }
-      else if (!strcmp(argv[i],"-s")) {
-	/* skip first X samples */
-	nskip=atoi(argv[++i]);
-	skip=1;
-      }
-      else if (!strcmp(argv[i],"-m")) {
-	      /* sub-band */
-	      nbands=atoi(argv[++i]);
-      }
-      else if (!strcmp(argv[i],"-g")) {
-	ngulpsize=atoi(argv[++i]);
-	gulping=1;
-      }
-      else if (!strcmp(argv[i],"-a")) {
-	appendable=1;
-      }
-      else if (!strcmp(argv[i],"-k")) {
-	killing = 1;
-	killfile = (char *) malloc(strlen(argv[++i])+1);
-	strcpy(killfile,argv[i]);
-      }
-      else if (!strcmp(argv[i],"-G")) {
-          doGsearch = 1;
-      }
-      else if (!strcmp(argv[i],"-wid")) {
-          Gwidtol = atoi(argv[++i]);
-      }
-      else if (!strcmp(argv[i],"-sig")) {
-          Gthresh = atof(argv[++i]);
-      }
-      else if (!strcmp(argv[i],"-dec")) {
-          Gscrnch = atoi(argv[++i]);
-      }
-      else if (!strcmp(argv[i],"-cut")){
-	  Girrel = atof(argv[++i]);
-      }
-      else if (!strcmp(argv[i],"-file")){
-	  Gfilename = (argv[++i]);
-      }
-      else {
-	/* unknown argument passed down - stop! */
-	inline_dedisperse_all_help();
-	fprintf(stderr,"unknown argument (%s) passed to %s",argv[i],argv[0]);
-	exit(1);
-      }
-      i++;
+      nfiles++;
     }
+    else if (!strcmp(argv[i],"-d")) {
+      /* get DM from the user */
+      start_DM=atof(argv[++i]);
+      end_DM=atof(argv[++i]);
+      usrdm=1;
+    }
+    else if (!strcmp(argv[i],"-l")) {
+      /* Create a log file of the DMs */
+      dmlogfile=1;
+    }
+    else if (!strcmp(argv[i],"-i")) {
+      /* set intrinsic width */
+      ti=atof(argv[++i]);
+    }
+    else if (!strcmp(argv[i],"-tol")) {
+      /* set tolerance level (e.g. 25% = 1.25)*/
+      tol=atof(argv[++i]);
+    }
+    else if (!strcmp(argv[i],"-v")) {
+      verbose=1;
+    }
+    else if (!strcmp(argv[i],"-b")) {
+      debird=1;
+    }
+    else if (!strcmp(argv[i],"-n")) {
+      /* read only X samples */
+      ntodedisp=atoi(argv[++i]);
+      readsamp=1;
+    }
+    else if (!strcmp(argv[i],"-s")) {
+      /* skip first X samples */
+      nskip=atoi(argv[++i]);
+      skip=1;
+    }
+    else if (!strcmp(argv[i],"-m")) {
+      /* sub-band */
+      nbands=atoi(argv[++i]);
+    }
+    else if (!strcmp(argv[i],"-g")) {
+      ngulpsize=atoi(argv[++i]);
+      gulping=1;
+    }
+    else if (!strcmp(argv[i],"-a")) {
+      appendable=1;
+    }
+    else if (!strcmp(argv[i],"-k")) {
+      killing = 1;
+      killfile = (char *) malloc(strlen(argv[++i])+1);
+      strcpy(killfile,argv[i]);
+    }
+    else if (!strcmp(argv[i],"-G")) {
+      doGsearch = 1;
+    }
+    else if (!strcmp(argv[i],"-wid")) {
+      Gwidtol = atoi(argv[++i]);
+    }
+    else if (!strcmp(argv[i],"-sig")) {
+      Gthresh = atof(argv[++i]);
+    }
+    else if (!strcmp(argv[i],"-dec")) {
+      Gscrnch = atoi(argv[++i]);
+    }
+    else if (!strcmp(argv[i],"-cut")){
+      Girrel = atof(argv[++i]);
+    }
+    else if (!strcmp(argv[i],"-file")){
+      Gfilename = (argv[++i]);
+    }
+    else {
+      /* unknown argument passed down - stop! */
+      inline_dedisperse_all_help();
+      fprintf(stderr,"unknown argument (%s) passed to %s\n\n",argv[i],argv[0]);
+      exit(1);
+    }
+    i++;
   }
 
+
+  // **************************************
+  //            ERROR TESTING
+  // **************************************
   if (usrdm && debird){
     fprintf(stderr,"Cannot dedisperse and debird simultaneously!\n");
     exit(-1);
@@ -323,7 +329,13 @@ int main (int argc, char *argv[])
   }
 
   if (!nfiles) {
+    fprintf(stderr,"File not supplied on command line; please supply filename here: ");
     strcpy(inpfile,"stdin");
+    input=fopen(inpfile,"rb");
+    if (input==NULL){
+      fprintf(stderr,"Error opening file %s\n",inpfile);
+      exit(-1);
+    }
     nfiles=1;
   }
   fileidx=1;
@@ -331,14 +343,16 @@ int main (int argc, char *argv[])
     fprintf(stderr,"Multi file mode not supported yet!\n");
     exit(-1);
   }
-  
-  /* open input datafile and get type of file from the input data */
-  strcpy(inpfile,argv[fileidx]);
-  input=fopen(inpfile,"rb");
-  if (input==NULL){
-    fprintf(stderr,"Error opening file %s\n",inpfile);
-    exit(-1);
-  }
+  char tmp[80];
+  char *tmp2;
+  strcpy(tmp,inpfile); // These few lines strip the input file's
+  tmp2 = basename(tmp);// name from it's directory tag.
+  strcpy(outfile_root,tmp2);
+
+
+  // **************************************
+  //         VALUE PRECALCULATION
+  // **************************************  
   /* read in the header to establish what the input data are... */
   sigproc=read_header(input);
   if (!sigproc) {
@@ -389,15 +403,16 @@ int main (int argc, char *argv[])
   fseek(input, nskip*nchans*nbits/8, SEEK_CUR);
   nsampleft-=nskip;
 
+  // **************************************
+  //      SET UP DMTABLE AND SUBBANDS
+  // **************************************  
   float * DMtable;
-  //double ti = 40.0;
-  //double tol = 1.25;
- // a hack for less files when subbanding... M.Keith
+  // a hack for less files when subbanding... M.Keith
   if (nbands==1)
-  getDMtable(start_DM,end_DM, tsamp*1e6, ti, foff, (fch1+(nchans/2-0.5)*foff)/1000,nchans/nbands, tol, &ndm, DMtable);
-else
-  getDMtable(0.0,end_DM, tsamp*1e6, ti, foff, (fch1+(nchans/2-0.5)*foff)/1000,nchans/nbands, tol, &ndm, DMtable);
-
+    getDMtable(start_DM,end_DM, tsamp*1e6, ti, foff, (fch1+(nchans/2-0.5)*foff)/1000,nchans/nbands, tol, &ndm, DMtable);
+  else
+    getDMtable(0.0,end_DM, tsamp*1e6, ti, foff, (fch1+(nchans/2-0.5)*foff)/1000,nchans/nbands, tol, &ndm, DMtable);
+  
   fprintf(stderr,"%d subbands from %d chans\n",nbands,nchans);
   if(nchans % nbands){
 	fprintf(stderr,"invalid number of subbands selected!\n");
@@ -434,9 +449,9 @@ else
   if (killing) int loaded = load_killdata(killdata,nchans,killfile);
 
   int rotate = 0;
-  while(nchans*(pow(2,nbits)-1)/(float)nbands/(float)(pow(2,rotate)) > 255){
-	  rotate++;
-  }
+  while(nchans*(pow(2,nbits)-1)/(float)nbands/(float)(pow(2,rotate)) > 255)
+    rotate++;
+  
   printf("Dividing output by %d to scale to 1 byte per sample per subband\n",(int)(pow(2,rotate)));
 
 
@@ -471,12 +486,7 @@ else
       exit(-1);
     }
   
-    char tmp[80];
-    char *tmp2;
-    strcpy(tmp,inpfile); // These few lines strip the input file's
-    tmp2 = basename(tmp);// name from it's directory tag.
-    strcpy(outfile_root,tmp2);
-
+    
     if (debird){
       refdm=0;
       nobits=8;
@@ -492,184 +502,175 @@ else
 	if (igulp==0) dedisperse_header();
 	fch1=orig_fch1;
 	nchans=orig_nchans;
-	
-	if (nbits==1){
-	  ibyte=ichan/8;
-	  for (j=0;j<ntoload;j++){
-	    abyte = rawdata[ibyte+j*nchans/8];
-	    k=ichan-ibyte*8;
-	    unsigned char databyte = (unsigned char)((abyte>>k)&1);
-	    fwrite(&databyte,1,1,outfileptr);
-	  }
-	}
-	if (nbits==2){
-	  ibyte=ichan/4;
-	  for (j=0;j<ntoload;j++){
-	    abyte = rawdata[ibyte+j*nchans/4];
-	    k=ichan-ibyte*4;
-	    unsigned char databyte = (unsigned char)((abyte>>k)&3);
-	    fwrite(&databyte,1,1,outfileptr);
-	  }
+
+	int sampperbyte = (int)(8/nbits);
+	int andvalue = pow(2,nbits)-1;
+	ibyte=ichan/sampperbyte;
+	for (j=0;j<ntoload;j++){
+	  abyte = rawdata[ibyte+j*nchans/sampperbyte];
+	  k=ichan-ibyte*sampperbyte;
+	  unsigned char databyte = (unsigned char)((abyte>>k)&andvalue);
+	  fwrite(&databyte,1,1,outfileptr);
 	}
 	fclose(outfileptr);
       }
-    }
+    }// if (debird)
     
-  /* Unpack it if dedispersing */
-  
-  if (!debird){
-    if (verbose) fprintf(stderr,"Reordering data\n");
-    // all time samples for a given freq channel in order in RAM
-    if (nbits==1){
-      for (ibyte=0;ibyte<nchans/8;ibyte++)
+    /* Unpack it if dedispersing */
+    
+    if (!debird){
+      if (verbose) fprintf(stderr,"Reordering data\n");
+      // all time samples for a given freq channel in order in RAM
+      if (nbits==1){
+	for (ibyte=0;ibyte<nchans/8;ibyte++)
 #pragma omp parallel for private (abyte,k,j)
-	for (j=0;j<ntoload;j++){
-	  abyte = rawdata[ibyte+j*nchans/8];
-	  for (k=0;k<8;k++)
-	    unpacked[j+(ibyte*8+k)*ntoload]=(unsigned short int)((abyte>>k)&1);
-	}
-    }
-    
-    if (nbits==2){
-      for (ibyte=0;ibyte<nchans/4;ibyte++)
+	  for (j=0;j<ntoload;j++){
+	    abyte = rawdata[ibyte+j*nchans/8];
+	    for (k=0;k<8;k++)
+	      unpacked[j+(ibyte*8+k)*ntoload]=(unsigned short int)((abyte>>k)&1);
+	  }
+      }
+      
+      if (nbits==2){
+	for (ibyte=0;ibyte<nchans/4;ibyte++)
 #pragma omp parallel for private (abyte,k,j)
-	for (j=0;j<ntoload;j++){
-	  abyte = rawdata[ibyte+j*nchans/4];
-	  for (k=0;k<8;k+=2)
-	    unpacked[j+(ibyte*4+k/2)*ntoload]=(unsigned short int)((abyte>>k)&3);
-	}
-    }
-    
-    if (killing){
-      for (int i=0;i<nchans;i++){
-	if (!killdata[i]){
-	  cout << i << " " ;
+	  for (j=0;j<ntoload;j++){
+	    abyte = rawdata[ibyte+j*nchans/4];
+	    for (k=0;k<8;k+=2)
+	      unpacked[j+(ibyte*4+k/2)*ntoload]=(unsigned short int)((abyte>>k)&3);
+	  }
+      }
+      
+      if (killing){
+	for (int i=0;i<nchans;i++){
+	  if (!killdata[i]){
+	    cout << i << " " ;
 #pragma omp parallel for private(j)	  
-	  for (int j=0;j<ntoload;j++)
-	    unpacked[j+i*ntoload]=0;
+	    for (int j=0;j<ntoload;j++)
+	      unpacked[j+i*ntoload]=0;
+	  }
 	}
       }
-    }
-
-    cout << endl;
-    //vector <Gpulse> giant;
-    //vector <Gpulse> allgiants;
-    
-    /* for each DM dedisperse it */
-    /* Start with zero DM */
-    if (!usrdm) end_DM=1e3;
-    if (dmlogfile){
-      sprintf(dmlogfilename,"%s.dmlog",outfile_root);
-      dmlogfileptr=fopen(dmlogfilename,"w");
-      if (dmlogfileptr==NULL) {
-	fprintf(stderr,"Error opening file %s\n",dmlogfilename);
-	exit(-3);
+      
+      cout << endl;
+      //vector <Gpulse> giant;
+      //vector <Gpulse> allgiants;
+      
+      /* for each DM dedisperse it */
+      /* Start with zero DM */
+      if (!usrdm) end_DM=1e3;
+      if (dmlogfile){
+	sprintf(dmlogfilename,"%s.dmlog",outfile_root);
+	dmlogfileptr=fopen(dmlogfilename,"w");
+	if (dmlogfileptr==NULL) {
+	  fprintf(stderr,"Error opening file %s\n",dmlogfilename);
+	  exit(-3);
+	}
       }
-    }
-    if (igulp==0) appendable=0; else appendable=1;
-    for (int idm=0;idm<ndm;idm++)
-      {
-	//DM_trial = get_DM(idm,nchans,tsamp,fch1,foff);
-	DM_trial = DMtable[idm];
-	if (DM_trial>=start_DM && DM_trial<=end_DM){
-	  if (verbose) fprintf(stderr,"DM trial #%d at  DM=%f ",idm,DM_trial);
-	  if (dmlogfile) fprintf(dmlogfileptr,"%f %07.2f\n",DM_trial,
-				 DM_trial);
-	  // Name output file, dmlog file
-	  if(nbands==1)sprintf(outfile,"%s.%07.2f.tim",outfile_root,DM_trial);
-	  else sprintf(outfile,"%s.%07.2f.sub",outfile_root,DM_trial);
-	  // open it
-	  if (appendable) outfileptr=fopen(outfile,"a");
-	  if (!appendable){
-		  outfileptr=fopen(outfile,"w");
-		  // create a log of the 'sub' dms to dedisperse at
-		  // These DMs are chosen fairly arbitraraly, rather than
-		  // based on any ridgid mathematics.
-		  if(nbands > 1){
-			  float* DMtable_sub;
-			  int ndm_sub;
-			  float sub_start_DM=0;
-			  float sub_end_DM=end_DM;
-			  if (idm > 0){
-				  sub_start_DM =  (DMtable[idm]+ DMtable[idm-1])/2.0;
-			  }
-			  if (idm < ndm-1){
-				  sub_end_DM =  (DMtable[idm]+ DMtable[idm+1])/2.0;
-			  }
-			  // make the dm table for the sub-banded data...
-			  getDMtable(sub_start_DM,sub_end_DM, tsamp*1e6, ti, foff, (fch1+(nchans/2-0.5)*foff)/1000,
-					  nchans, tol, &ndm_sub, DMtable_sub);
-			  char subdm_filename[80];
-			  sprintf(subdm_filename,"%s.valid_dms",outfile);
-			  FILE* subdm_fileptr = fopen(subdm_filename,"w");
-			  if(subdm_fileptr == NULL){
-				  printf("Error: could not open file %s for writing\n",subdm_filename);
-				exit(2);
-			  }
-			  for(int ix = 0; ix < ndm_sub; ix++){
-				double sub_dm_trial = DMtable_sub[ix];
-				fprintf(subdm_fileptr,"%f\n",sub_dm_trial);
-			  }
-			  delete[] DMtable_sub;
-			  fclose(subdm_fileptr);
-		  }
-	  }
-	  output=outfileptr;
-	  // write header variables into globals
-	  refdm = DM_trial;
-	  nobits = 8;
-	  // write header
-	  if (!appendable) dedisperse_header();
-	  // ntodedisp and numsamps??
-	  for(int iband=0; iband<nbands; iband++){
-		  casted_times = (LONG64BIT *) times[iband];
-		  int start_chan = iband*chans_per_band;
-		  int end_chan = (iband+1)*chans_per_band;
-		  double fch1_subband = fch1 + foff*start_chan; // offset to the start of the subband
-		  for (j=0;j<(ntodedisp)/4;j++)casted_times[j]=0;
-		  for (k=start_chan;k<end_chan;k++){
-			  idelay = DM_shift(DM_trial,k-start_chan,tsamp,fch1_subband,foff);
-#pragma omp parallel for private(j)    
-			  for (j=0;j<(ntodedisp)/4;j++){
-				  casted_times[j]+=*((LONG64BIT *) (unpacked+(j*4+k*ntoload+idelay)));
-			  }	    
-		  }
-	  }
-	  
-	  // Do the Gsearch for this DM trial
-	  if (doGsearch){
-	    Gholder.searchforgiants(idm,ntodedisp,times[0],Gthresh,Gwidtol,Gscrnch,refdm,1);
-	  }
-
-	  // write data
-	  for (int d=0;d<ntodedisp;d++){
-	    for(int iband=0; iband<nbands; iband++){
-	    unsigned short int twobytes = times[iband][d]>>rotate;
-	    unsigned char onebyte = twobytes;
-	    fwrite(&onebyte,1,1,outfileptr);
+      if (igulp==0) appendable=0; else appendable=1;
+      for (int idm=0;idm<ndm;idm++)
+	{
+	  //DM_trial = get_DM(idm,nchans,tsamp,fch1,foff);
+	  DM_trial = DMtable[idm];
+	  if (DM_trial>=start_DM && DM_trial<=end_DM){
+	    if (verbose) fprintf(stderr,"DM trial #%d at  DM=%f ",idm,DM_trial);
+	    if (dmlogfile) fprintf(dmlogfileptr,"%f %07.2f\n",DM_trial,
+				   DM_trial);
+	    // Name output file, dmlog file
+	    if(nbands==1)sprintf(outfile,"%s.%07.2f.tim",outfile_root,DM_trial);
+	    else sprintf(outfile,"%s.%07.2f.sub",outfile_root,DM_trial);
+	    // open it
+	    if (appendable) outfileptr=fopen(outfile,"a");
+	    if (!appendable){
+	      outfileptr=fopen(outfile,"w");
+	      // create a log of the 'sub' dms to dedisperse at
+	      // These DMs are chosen fairly arbitraraly, rather than
+	      // based on any ridgid mathematics.
+	      if(nbands > 1){
+		float* DMtable_sub;
+		int ndm_sub;
+		float sub_start_DM=0;
+		float sub_end_DM=end_DM;
+		if (idm > 0){
+		  sub_start_DM =  (DMtable[idm]+ DMtable[idm-1])/2.0;
+		}
+		if (idm < ndm-1){
+		  sub_end_DM =  (DMtable[idm]+ DMtable[idm+1])/2.0;
+		}
+		// make the dm table for the sub-banded data...
+		getDMtable(sub_start_DM,sub_end_DM, tsamp*1e6, ti, foff, (fch1+(nchans/2-0.5)*foff)/1000,
+			   nchans, tol, &ndm_sub, DMtable_sub);
+		char subdm_filename[80];
+		sprintf(subdm_filename,"%s.valid_dms",outfile);
+		FILE* subdm_fileptr = fopen(subdm_filename,"w");
+		if(subdm_fileptr == NULL){
+		  printf("Error: could not open file %s for writing\n",subdm_filename);
+		  exit(2);
+		}
+		for(int ix = 0; ix < ndm_sub; ix++){
+		  double sub_dm_trial = DMtable_sub[ix];
+		  fprintf(subdm_fileptr,"%f\n",sub_dm_trial);
+		}
+		delete[] DMtable_sub;
+		fclose(subdm_fileptr);
+	      }
 	    }
-	  }
-	  // close file
-	  fclose(outfileptr);
-	  if (verbose) fprintf(stderr,"%d bytes to file %s\n", ntodedisp*nbands, outfile);
-	  total_MBytes+= (ntodedisp*nbands)/1.0e6;
-	} // if DM is in range
-      } // DM for loop
-    if (verbose) fprintf(stderr,"Wrote a total of %6.1f MB to disk\n",total_MBytes);
-    /* close log files if on last input file */
-    if (dmlogfile) fclose(dmlogfileptr);
-  } //if (!debird)
-  
-  // After gulp's done, pump out the Gsearch results for that gulp
-  if (doGsearch){
+	    output=outfileptr;
+	    // write header variables into globals
+	    refdm = DM_trial;
+	    nobits = 8;
+	    // write header
+	    if (!appendable) dedisperse_header();
+	    // ntodedisp and numsamps??
+	    for(int iband=0; iband<nbands; iband++){
+	      casted_times = (LONG64BIT *) times[iband];
+	      int start_chan = iband*chans_per_band;
+	      int end_chan = (iband+1)*chans_per_band;
+	      double fch1_subband = fch1 + foff*start_chan; // offset to the start of the subband
+	      for (j=0;j<(ntodedisp)/4;j++)casted_times[j]=0;
+	      for (k=start_chan;k<end_chan;k++){
+		idelay = DM_shift(DM_trial,k-start_chan,tsamp,fch1_subband,foff);
+#pragma omp parallel for private(j)    
+		for (j=0;j<(ntodedisp)/4;j++){
+		  casted_times[j]+=*((LONG64BIT *) (unpacked+(j*4+k*ntoload+idelay)));
+		}	    
+	      }
+	    }
+	    
+	    // Do the Gsearch for this DM trial
+	    if (doGsearch){
+	      Gholder.searchforgiants(idm,ntodedisp,times[0],Gthresh,Gwidtol,Gscrnch,DM_trial,1);
+	    }
+	    
+	    // write data
+	    for (int d=0;d<ntodedisp;d++){
+	      for(int iband=0; iband<nbands; iband++){
+		unsigned short int twobytes = times[iband][d]>>rotate;
+		unsigned char onebyte = twobytes;
+		fwrite(&onebyte,1,1,outfileptr);
+	      }
+	    }
+	    // close file
+	    fclose(outfileptr);
+	    if (verbose) fprintf(stderr,"%d bytes to file %s\n", ntodedisp*nbands, outfile);
+	    total_MBytes+= (ntodedisp*nbands)/1.0e6;
+	  } // if DM is in range
+	} // DM for loop
+      if (verbose) fprintf(stderr,"Wrote a total of %6.1f MB to disk\n",total_MBytes);
+      /* close log files if on last input file */
+      if (dmlogfile) fclose(dmlogfileptr);
+    } //if (!debird)
+    
+    // After gulp's done, pump out the Gsearch results for that gulp
+    if (doGsearch){
       Gresults = Gholder.givetimes(&Gndet,tsamp,flo,fhi,Girrel,-1,Gfilename);
       for (i=0;i<ndm;i++) Gholder.DMtrials[i].erase(Gholder.DMtrials[i].begin(),Gholder.DMtrials[i].end());
 //      fprintf(stderr,"GRESULTS:\n");
 //      for (int i=0;i<Gndet;i+=2){
 //	  fprintf (stderr,"Detection %d: %d\t%d\n",i,Gresults[i],Gresults[i+1]);
 //      }
-  }
-  
+    }
+
   }
   return(0); // exit normally
 } // main
