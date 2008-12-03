@@ -136,6 +136,30 @@ int DM_shift(float DM, int nchan, double tsamp, double f0, double df){
   return ((int) (shift/tsamp+0.5));
 }
 
+
+// does the dedispersion for one gulp, one DM trial.                                               
+void do_dedispersion(unsigned short int ** storage, unsigned short int * unpackeddata, int nbands, int ntodedisp, int ntoload, float DMtrial){
+    int idelay,start_chan,end_chan;
+    LONG64BIT * casted_times;
+    int chans_per_band = (int)(nchans/nbands);
+    
+    for (int iband=0;iband<nbands;iband++){
+	casted_times = (LONG64BIT*) storage[iband];
+	start_chan = iband*chans_per_band;
+	end_chan = (iband+1)*chans_per_band;
+	double fch1_subband = fch1 + foff*start_chan; // offset to the start of the subband              
+	for (int j=0;j<(ntodedisp)/4;j++)casted_times[j]=0;
+	for (int k=start_chan;k<end_chan;k++){
+	    idelay = DM_shift(DMtrial,k-start_chan,tsamp,fch1_subband,foff);
+#pragma omp parallel for private(j)
+	    for (int j=0;j<ntodedisp/4;j++){
+		casted_times[j]+=*((LONG64BIT*) (unpackeddata+(j*4+k*ntoload+idelay)));
+	    }
+	}
+    }
+}
+
+
 int main (int argc, char *argv[])
 {
   /* local variables */
@@ -148,8 +172,6 @@ int main (int argc, char *argv[])
   int ibyte,j,k;
   unsigned char abyte;
   unsigned short int ** times;
-  LONG64BIT * casted_times, * casted_unpacked;
-  int idelay;
   int nread;
   float DM_trial;
   int ndm=0;
@@ -391,7 +413,11 @@ int main (int argc, char *argv[])
   if (gulping) {
     if (ngulpsize>numsamps) ngulpsize = numsamps-maxdelay;
     ntodedisp=ngulpsize;
+  } else {
+    ntodedisp=numsamps-maxdelay;
+    ngulpsize=ntodedisp;
   }
+
   ntoload = ntodedisp + maxdelay; 
   
   nbytesraw = nchans * ntoload * nbits/8;
@@ -402,6 +428,10 @@ int main (int argc, char *argv[])
   // skip either 0 or nskip samples
   fseek(input, nskip*nchans*nbits/8, SEEK_CUR);
   nsampleft-=nskip;
+  // some values used for unpacking
+  int sampperbyte = (int)(8/nbits);
+  int andvalue = (int)pow(2,nbits)-1;
+
 
   // **************************************
   //      SET UP DMTABLE AND SUBBANDS
@@ -414,14 +444,16 @@ int main (int argc, char *argv[])
     getDMtable(0.0,end_DM, tsamp*1e6, ti, foff, (fch1+(nchans/2-0.5)*foff)/1000,nchans/nbands, tol, &ndm, DMtable);
   
   fprintf(stderr,"%d subbands from %d chans\n",nbands,nchans);
+
   if(nchans % nbands){
 	fprintf(stderr,"invalid number of subbands selected!\n");
 	exit(1);
   }
-  int chans_per_band=(int)(nchans/nbands);
+
   int nwholegulps = (numsamps - maxdelay)/ngulpsize;
   int nleft = numsamps - ngulpsize * nwholegulps;
   int ngulps = nwholegulps + 1;
+
 
   if (!debird){
     unpacked = (unsigned short int *) malloc(nchans*ntoload*
@@ -441,9 +473,8 @@ int main (int argc, char *argv[])
       fprintf(stderr,"Error allocating times array\n");
       exit(-1);
     }
-    casted_times = (LONG64BIT *) times;
-    casted_unpacked = (LONG64BIT *) unpacked;
   }
+
 
   int * killdata = new int[nchans];
   if (killing) int loaded = load_killdata(killdata,nchans,killfile);
@@ -458,12 +489,13 @@ int main (int argc, char *argv[])
 
   // Set up gpulse control variables
   GPulseState Gholder(ndm); // Giant pulse state to hold trans-DM detections
-  int Gndet;           // Integer number of detections
-  int *Gresults;       // Integer array of results: contained as N*(start bin, end bin)
+  int Gndet;                // Integer number of detections in this beam
+  int *Gresults;            // Integer array of results: contained as cand1.start.bin cand1.end.bin cand2.start.bin cand2.end.bin...... etc)
 
   // Start of main loop
   for (int igulp=0; igulp<ngulps;igulp++){
 
+//rewind a few samples if not at first gulp
     if (igulp!=0){
 	    fprintf(stderr,"Skipping back %d bytes\n",maxdelay*nbits*nchans/8);
 	    int ret = fseek(input,-1*maxdelay*nbits*nchans/8,SEEK_CUR);
@@ -478,6 +510,7 @@ int main (int argc, char *argv[])
       ntodedisp = nleft - maxdelay;
     }
 
+//read gulp from file
     fprintf(stderr,"Gulp %d Loading %d samples, i. e. %d bytes of Raw Data\n",igulp, ntoload, nbytesraw);
     nread = fread(rawdata,nbytesraw,1,input);
     
@@ -486,7 +519,7 @@ int main (int argc, char *argv[])
       exit(-1);
     }
   
-    
+//debird and end program if debird requested    
     if (debird){
       refdm=0;
       nobits=8;
@@ -503,8 +536,6 @@ int main (int argc, char *argv[])
 	fch1=orig_fch1;
 	nchans=orig_nchans;
 
-	int sampperbyte = (int)(8/nbits);
-	int andvalue = pow(2,nbits)-1;
 	ibyte=ichan/sampperbyte;
 	for (j=0;j<ntoload;j++){
 	  abyte = rawdata[ibyte+j*nchans/sampperbyte];
@@ -514,30 +545,21 @@ int main (int argc, char *argv[])
 	}
 	fclose(outfileptr);
       }
-    }// if (debird)
+      return(0);
+    }
     
     /* Unpack it if dedispersing */
     
     if (!debird){
       if (verbose) fprintf(stderr,"Reordering data\n");
       // all time samples for a given freq channel in order in RAM
-      if (nbits==1){
-	for (ibyte=0;ibyte<nchans/8;ibyte++)
+
+      for (ibyte=0;ibyte<nchans/sampperbyte;ibyte++){
 #pragma omp parallel for private (abyte,k,j)
-	  for (j=0;j<ntoload;j++){
-	    abyte = rawdata[ibyte+j*nchans/8];
-	    for (k=0;k<8;k++)
-	      unpacked[j+(ibyte*8+k)*ntoload]=(unsigned short int)((abyte>>k)&1);
-	  }
-      }
-      
-      if (nbits==2){
-	for (ibyte=0;ibyte<nchans/4;ibyte++)
-#pragma omp parallel for private (abyte,k,j)
-	  for (j=0;j<ntoload;j++){
-	    abyte = rawdata[ibyte+j*nchans/4];
-	    for (k=0;k<8;k+=2)
-	      unpacked[j+(ibyte*4+k/2)*ntoload]=(unsigned short int)((abyte>>k)&3);
+        for (j=0;j<ntoload;j++){
+          abyte = rawdata[ibyte+j*nchans/sampperbyte];
+	  for (k=0;k<8;k++)
+            unpacked[j+((ibyte*8+k)/(int)nbits)*ntoload]=(unsigned short int)((abyte>>k)&andvalue);
 	  }
       }
       
@@ -552,9 +574,7 @@ int main (int argc, char *argv[])
 	}
       }
       
-      cout << endl;
-      //vector <Gpulse> giant;
-      //vector <Gpulse> allgiants;
+      cout << endl; // flush the buffer
       
       /* for each DM dedisperse it */
       /* Start with zero DM */
@@ -621,21 +641,8 @@ int main (int argc, char *argv[])
 	    nobits = 8;
 	    // write header
 	    if (!appendable) dedisperse_header();
-	    // ntodedisp and numsamps??
-	    for(int iband=0; iband<nbands; iband++){
-	      casted_times = (LONG64BIT *) times[iband];
-	      int start_chan = iband*chans_per_band;
-	      int end_chan = (iband+1)*chans_per_band;
-	      double fch1_subband = fch1 + foff*start_chan; // offset to the start of the subband
-	      for (j=0;j<(ntodedisp)/4;j++)casted_times[j]=0;
-	      for (k=start_chan;k<end_chan;k++){
-		idelay = DM_shift(DM_trial,k-start_chan,tsamp,fch1_subband,foff);
-#pragma omp parallel for private(j)    
-		for (j=0;j<(ntodedisp)/4;j++){
-		  casted_times[j]+=*((LONG64BIT *) (unpacked+(j*4+k*ntoload+idelay)));
-		}	    
-	      }
-	    }
+	    // do the dedispersion
+	    do_dedispersion(times, unpacked, nbands, ntodedisp, ntoload, DM_trial);
 	    
 	    // Do the Gsearch for this DM trial
 	    if (doGsearch){
