@@ -79,12 +79,12 @@ int main (int argc, char * const argv[]) {
   pthread_t netthread;
 
   int debug = 0;  
-  float timeupdate = 50; /* Time every 50 MiB by default */
-  int portserver = 8000;    /* Port to listen on */
-  int portclient = 8000;    /* Port to connect to */
+  float timeupdate = 50;        /* Time every 50 MiB by default */
+  int portserver = 8000;        /* Port to listen on */
+  int portclient = 8000;        /* Port to connect to */
   int window_size1 = -1;        /* 256 kilobytes */
   int window_size2 = -1;        /* 256 kilobytes */
-  float datarate = 0; /* Limit read/write to this data rate */
+  float datarate = 0;           /* Limit read/write to this data rate */
   char hostname[MAXSTR+1] = ""; /* Host name to send data to */
   struct hostent     *hostptr;
   int one_transfer = 0;
@@ -346,8 +346,10 @@ int main (int argc, char * const argv[]) {
 
         speed = bwrote/(t2-t1)/1e6*8; /* MB/s */
 
-        printf("%8.1f %7.1f %7.2f Mbps ( %d %7.3f )\n", 
-           (double)totalsize/1.0e6, t2-firsttime, speed, bwrote, t2-t1); 
+        if (!quiet) {
+          printf("vsib_proxy: %8.1f %7.1f %7.2f Mbps ( %d %7.3f )\n", 
+             (double)totalsize/1.0e6, t2-firsttime, speed, bwrote, t2-t1); 
+        }
         t1 = t2;
         
         bwrote = 0;
@@ -369,7 +371,12 @@ int main (int argc, char * const argv[]) {
 
     status = close(serversock);
     if (status!=0) {
-      perror("Error closing socket");
+      perror("Error closing server socket");
+    }
+
+    status = close(listensock);
+    if (status!=0) {
+      perror("Error closing listening socket");
     }
 
     for (i=0; i<socks.nsocks; i++) {
@@ -380,8 +387,11 @@ int main (int argc, char * const argv[]) {
 
     t2 = tim();
     speed = totalsize/(t2-firsttime)/1e6*8;
-    printf("  \nRate = %.2f Mbps/s (%.1f sec)\n\n", speed, 
-           t2-firsttime);
+
+    if (quiet) 
+      printf("Rate = %.2f Mbps/s (%.1f sec)\n", speed, t2-firsttime);
+    else 
+      printf("\n  Rate = %.2f Mbps/s (%.1f sec)\n\n", speed, t2-firsttime);
     
     DEBUG(printf("MAIN:   Release lock %d\n", ibuf));
     pthread_mutex_unlock(&bufmutex[ibuf]);
@@ -465,6 +475,8 @@ int setup_net(int port, int window_size, int *listensock, int quiet) {
 
   status = bind(*listensock, (struct sockaddr *)&server, sizeof(server));
   if (status!=0) {
+    fprintf(stderr, "error binding to port %d\n", port);
+    system("ps aux | grep vsib_proxy");
     perror("Error binding socket");
     close(*listensock);
     return(1);
@@ -474,7 +486,7 @@ int setup_net(int port, int window_size, int *listensock, int quiet) {
      back log of 1 */
   status = listen(*listensock,1);
   if (status!=0) {
-    perror("Error binding socket");
+    perror("Error listening on socket");
     close(*listensock);
     return(1);
   }
@@ -588,11 +600,26 @@ int waitconnection (int window_size, int port, int listensock,
     /* assign this socket */
     socks->socks[i] = ssock;
 
-    /* open the connection */
-    status = connect(socks->socks[i], (struct sockaddr *) &server, sizeof(server));
+    /* allow 5 seconds to attempt to make the connection */
+    int my_timeout = 5;
+    int connected = 0;
 
-    if (status!=0) {
-      perror("Failed to connect to destination");
+    while (!connected && (my_timeout >= 0)) { 
+
+      /* open the connection */
+      status = connect(socks->socks[i], (struct sockaddr *) &server, sizeof(server));
+
+      if (status != 0) {
+        my_timeout--; 
+        fprintf(stderr, "Could not connect to destination, %5d timeouts remaining\n", my_timeout);
+        sleep(1);
+      } else {
+        connected = 1;
+      }
+    }
+
+    if (!connected) {
+      perror("Failed to connect to destination, no timeouts remaining");
       close(socks->socks[i]);
       return(1);
     }
@@ -627,7 +654,7 @@ void throttle_rate (double firsttime, float datarate,
     if ((abs(twait-*tbehind)>1)) { 
       /* More than a second difference */ 
       *tbehind = twait;
-      printf(" Dropping behind %.1f seconds\n", twait);
+      fprintf(stderr, " Dropping behind %.1f seconds\n", twait);
     }
   }
   return;

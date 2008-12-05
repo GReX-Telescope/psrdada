@@ -61,10 +61,11 @@ int setup_net(int isserver, int port, int window_size, writesocks *socks, int qu
 void *netwrite(void *arg);
 void throttle_rate (double firsttime, float datarate,
                     unsigned long long totalsize, double *tbehind);
+void usage(void);
 
 #define PRINTSPEED(k, file) { \
   speed = times[k].size/(times[k].time-times[k-1].time)/1000/1000; /* MB/s */\
-  fprintf(file, "%6d  %4lld  %9.3f   %6.2f Mbps ( %ld  %6.3f )\n", \
+  fprintf(file, "vsib_send: %6d  %4lld  %9.3f   %6.2f Mbps ( %ld  %6.3f )\n", \
            k, totalsize/1000/1000, times[k].time-firsttime, \
            speed*8, times[k].size, (times[k].time-times[k-1].time)); \
 }
@@ -124,7 +125,7 @@ int main (int argc, char * const argv[]) {
 
   /* Read command line options */
 
-  while ((opt=getopt(argc,argv,"b:w:p:t:H:z:Dsq")) != -1) {
+  while ((opt=getopt(argc,argv,"b:w:p:t:H:hz:Dsq")) != -1) {
 
     switch (opt) {
 
@@ -203,23 +204,20 @@ int main (int argc, char * const argv[]) {
       break;
 
     case 'h':
-      printf("Usage: vsib_send [options] files\n");
-      printf("  -p <PORT>   Port number for transfer\n");
-      printf("  -H <HOST>   Remote host to connect to\n");
-      printf("  -w <SIZE>   TCP network window size (kB)\n");
-      printf("  -t          Number of blocks (-b) to average timing statistics\n");
-      printf("  -s          Run as server, not client (ie wait for remote connection)\n");
-      printf("  -b <SIZE>   Read/write block size\n");
-      printf("  -r <RATE>   Fixed data rate (Mbps) to use (default as fast as possible)\n");
-      printf("  -q          Only print errors or slowdowns\n");
-      printf("  -h          This list\n");
-      return(1);
+      usage();
+      return(0);
     break;
 
     case '?':
     default:
       break;
     }
+  }
+
+  if (argc - optind < 1) {
+    fprintf(stderr, "ERROR: no files specified on command line\n");
+    usage();
+    exit(1);
   }
 
   if (strlen(hostname) == 0) {
@@ -261,7 +259,6 @@ int main (int argc, char * const argv[]) {
   accum = 0;
 
   status = setup_net(server, port, window_size, &socks, quiet);
-
 
   if (status) {
     //free(mem);
@@ -487,10 +484,16 @@ int main (int argc, char * const argv[]) {
   /* A signal told us to quit. Raise this signal with the default
      handling */
 
+  int rval = 0;
+  if (sig_received == SIGINT) {
+    fprintf(stderr, "SIGINT received, early termination\n");
+    rval = 1;
+  }
+
   signal (sig_received, SIG_DFL);
   if (time_to_quit) raise (sig_received);
 
-  return(0);
+  return(rval);
 }
 
 double tim(void) {
@@ -682,6 +685,7 @@ void kill_signal (int sig) {
     fprintf(stderr, "kill_signal called second time\n");
     return;
   }
+  fprintf(stderr, "received signal %d\n", sig);
   time_to_quit = 1;
   sig_received = sig;
 
@@ -789,8 +793,22 @@ void throttle_rate (double firsttime, float datarate,
     if ((abs(twait-*tbehind)>1)) {
       /* More than a second difference */
       *tbehind = twait;
-      printf(" Dropping behind %.1f seconds\n", twait);
+      fprintf(stderr, " Dropping behind %.1f seconds\n", twait);
     }
   }
   return;
 }
+
+void usage(void) {
+  printf("Usage: vsib_send [options] files\n");
+  printf("  -p <PORT>   Port number for transfer\n");
+  printf("  -H <HOST>   Remote host to connect to\n");
+  printf("  -w <SIZE>   TCP network window size (kB)\n");
+  printf("  -t          Number of blocks (-b) to average timing statistics\n");
+  printf("  -s          Run as server, not client (ie wait for remote connection)\n");
+  printf("  -b <SIZE>   Read/write block size\n");
+  printf("  -r <RATE>   Fixed data rate (Mbps) to use (default as fast as possible)\n");
+  printf("  -q          Only print errors or slowdowns\n");
+  printf("  -h          This list\n");
+}
+
