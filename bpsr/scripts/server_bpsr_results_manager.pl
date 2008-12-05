@@ -16,14 +16,20 @@ use threads;
 use threads::shared;
 use Bpsr;
 
+#
+# Sanity check to prevent multiple copies of this daemon running
+#
+Dada->preventDuplicateDaemon(basename($0));
+
 
 #
 # Constants
 #
-use constant DEBUG_LEVEL         => 1;
-use constant IMAGE_TYPE          => ".png";
-use constant PIDFILE             => "bpsr_results_manager.pid";
-use constant LOGFILE             => "bpsr_results_manager.log";
+use constant DL           => 2;
+use constant IMAGE_TYPE   => ".png";
+use constant PIDFILE      => "bpsr_results_manager.pid";
+use constant LOGFILE      => "bpsr_results_manager.log";
+use constant QUITFILE     => "bpsr_results_manager.quit";
 
 
 #
@@ -31,6 +37,8 @@ use constant LOGFILE             => "bpsr_results_manager.log";
 #
 our %cfg = Bpsr->getBpsrConfig();
 our $quit_daemon : shared = 0;
+our $error = $cfg{"STATUS_DIR"}."/bpsr_results_manager.error";
+our $warn  = $cfg{"STATUS_DIR"}."/bpsr_results_manager.warn";
 
 
 #
@@ -101,7 +109,7 @@ if (index($cfg{"SERVER_ALIASES"}, $ENV{'HOSTNAME'}) < 0 ) {
 # Redirect standard output and error
 Dada->daemonize($logfile, $pidfile);
 
-debugMessage(0, "STARTING SCRIPT: ".Dada->getCurrentDadaTime(0));
+Dada->logMsg(0, DL, "STARTING SCRIPT: ".Dada->getCurrentDadaTime(0));
 
 # Start the daemon control thread
 $daemon_control_thread = threads->new(\&daemonControlThread);
@@ -120,7 +128,7 @@ while (!$quit_daemon) {
   @subdirs = ();
 
   # TODO check that directories are correctly sorted by UTC_START time
-  debugMessage(2,"Main While Loop, looking for data in ".$obs_results_dir);
+  Dada->logMsg(2, DL, "Main While Loop, looking for data in ".$obs_results_dir);
 
   opendir(DIR,$obs_results_dir);
   @subdirs = sort grep { !/^\./ && !/^stats/ && -d $obs_results_dir."/".$_ } readdir(DIR);
@@ -143,14 +151,14 @@ while (!$quit_daemon) {
     if (! -f $dir."/obs.finalized") {
 
       # determine the age of the observation and number of files that can be processed in it
-      debugMessage(2, "main: getObsInfo(".$dir.")");
+      Dada->logMsg(2, DL, "main: getObsInfo(".$dir.")");
       ($age, $nfiles) = getObsInfo($dir); 
-      debugMessage(2, "main: getObsInfo() ".$age." ".$nfiles);
+      Dada->logMsg(2, DL, "main: getObsInfo() ".$age." ".$nfiles);
 
       # If obs_age is -1 then this is a dud observation, delete it
       if ($age == -1) {
 
-        debugMessage(1, "WVS FIX: no longer deleting empty observation: $dir");
+        Dada->logMsg(1, DL, "WVS FIX: no longer deleting empty observation: $dir");
 	### YIKES! plot4mon is failing and directories appear empty!
         ### deleteObservation($obs_results_dir."/".$dir);
         ### deleteObservation($obs_archive_dir."/".$dir);
@@ -163,7 +171,7 @@ while (!$quit_daemon) {
       } elsif ($age > 60) {
 
   ### YIKES! results manager is not producing plots!
-        debugMessage(1, "Finalising observation: ".$dir);
+        Dada->logMsg(1, DL, "Finalising observation: ".$dir);
 
         # we need to patch the TCS logs into the file!
         patchInTcsLogs($obs_archive_dir,$dir);
@@ -187,7 +195,7 @@ while (!$quit_daemon) {
 
         if ($nfiles > 0) {
 
-          debugMessage(1, "Processing ".$nfiles." mon files for ".$dir);
+          Dada->logMsg(1, DL, "Processing ".$nfiles." mon files for ".$dir);
 
           # Mark this as processing
           system("touch ".$obs_results_dir."/".$dir."/obs.processing");
@@ -201,7 +209,7 @@ while (!$quit_daemon) {
           for ($i=0; (($i<=$#beamdirs) && (!$quit_daemon)); $i++) {
 
             $beamdir = $dir."/".$beamdirs[$i];
-            debugMessage(3, "  ".$beamdir);
+            Dada->logMsg(3, DL, "  ".$beamdir);
 
             # search for unprocessed files in the beam directory 
             %unprocessed = getUnprocessedFiles($beamdir);
@@ -209,7 +217,7 @@ while (!$quit_daemon) {
             @keys = sort (keys %unprocessed);
 
             for ($j=0; $j<=$#keys; $j++) {
-              debugMessage(2, "main: processResult(".$beamdir.", ".$keys[$j]);
+              Dada->logMsg(2, DL, "main: processResult(".$beamdir.", ".$keys[$j]);
               processResult($beamdir, $keys[$j]);
             }
           }
@@ -218,6 +226,7 @@ while (!$quit_daemon) {
           removeAllOldPngs($dir);
         }
       }
+      
     } 
   }
 
@@ -231,7 +240,7 @@ while (!$quit_daemon) {
 # Rejoin our daemon control thread
 $daemon_control_thread->join();
                                                                                 
-debugMessage(0, "STOPPING SCRIPT: ".Dada->getCurrentDadaTime(0));
+Dada->logMsg(0, DL, "STOPPING SCRIPT: ".Dada->getCurrentDadaTime(0));
                                                                                 
 
 
@@ -251,7 +260,7 @@ sub processResult($$) {
 
   my ($dir, $file) = @_;
 
-  debugMessage(2, "processResult(".$dir.", ".$file.")");
+  Dada->logMsg(2, DL, "processResult(".$dir.", ".$file.")");
 
   chdir $dir;
   my $filetype = "";
@@ -294,23 +303,23 @@ sub processResult($$) {
       $cmd = $cmd." -log -mmm";
     }
 
-    debugMessage(2, "Ploting with \"".$cmd."\"");
+    Dada->logMsg(2, DL, "Ploting with \"".$cmd."\"");
     $response = `$cmd 2>&1`;
     if ($? != 0) {
-      debugMessage(2, "Plotting cmd \"".$cmd."\" failed with message \"".$response."\"");
+      Dada->logMsg(2, DL, "Plotting cmd \"".$cmd."\" failed with message \"".$response."\"");
     } else {
       $cmd  = "mv ".$file.".png ".$file."_112x84.png";
       $response = `$cmd 2>&1`;
       if ($? != 0) { 
         chomp $response;
-        debugMessage(2, "Plot file rename \"".$cmd."\" failed: ".$response); 
+        Dada->logMsg(2, DL, "Plot file rename \"".$cmd."\" failed: ".$response); 
       }
       if ($filetype eq "timeseries") {
         $cmd = "mv ".$filebase.".fft.png ".$filebase.".fft_112x84.png";
         $response = `$cmd 2>&1`;
         if ($? != 0) {
           chomp $response;
-          debugMessage(2, "Plot file rename \"".$cmd."\" failed: ".$response);
+          Dada->logMsg(2, DL, "Plot file rename \"".$cmd."\" failed: ".$response);
         }
       }
     }
@@ -321,23 +330,23 @@ sub processResult($$) {
       $cmd = $cmd." -log -mmm";
     }
 
-    debugMessage(2, "Ploting with \"".$cmd."\"");
+    Dada->logMsg(2, DL, "Ploting with \"".$cmd."\"");
     $response = `$cmd 2>&1`;
     if ($? != 0) {
-      debugMessage(2, "Plotting cmd \"".$cmd."\" failed with message \"".$response."\"");
+      Dada->logMsg(2, DL, "Plotting cmd \"".$cmd."\" failed with message \"".$response."\"");
     } else {
       $cmd  = "mv ".$file.".png ".$file."_400x300.png";
       $response = `$cmd 2>&1`;
       if ($? != 0) { 
         chomp $response;
-        debugMessage(2, "Plot file rename \"".$cmd."\" failed: ".$response); 
+        Dada->logMsg(2, DL, "Plot file rename \"".$cmd."\" failed: ".$response); 
       }
       if ($filetype eq "timeseries") {
         $cmd = "mv ".$filebase.".fft.png ".$filebase.".fft_400x300.png";
         $response = `$cmd 2>&1`;
         if ($? != 0) {
           chomp $response;
-          debugMessage(2, "Plot file rename \"".$cmd."\" failed: ".$response);
+          Dada->logMsg(2, DL, "Plot file rename \"".$cmd."\" failed: ".$response);
         }
       }
     }
@@ -348,30 +357,30 @@ sub processResult($$) {
       $cmd = $cmd." -log -mmm";
     }
 
-    debugMessage(2, "Ploting with \"".$cmd."\"");
+    Dada->logMsg(2, DL, "Ploting with \"".$cmd."\"");
     $response = `$cmd 2>&1`;
     if ($? != 0) {
-      debugMessage(2, "Plotting cmd \"".$cmd."\" failed with message \"".$response."\"");
+      Dada->logMsg(2, DL, "Plotting cmd \"".$cmd."\" failed with message \"".$response."\"");
     } else {
       $cmd  = "mv ".$file.".png ".$file."_1024x768.png";
       $response = `$cmd 2>&1`;
       if ($? != 0) {
         chomp $response;
-        debugMessage(2, "Plot file rename \"".$cmd."\" failed: ".$response);
+        Dada->logMsg(2, DL, "Plot file rename \"".$cmd."\" failed: ".$response);
       }
       if ($filetype eq "timeseries") {
         $cmd = "mv ".$filebase.".fft.png ".$filebase.".fft_1024x768.png";
         $response = `$cmd 2>&1`;
         if ($? != 0) {
           chomp $response;
-          debugMessage(2, "Plot file rename \"".$cmd."\" failed: ".$response);
+          Dada->logMsg(2, DL, "Plot file rename \"".$cmd."\" failed: ".$response);
         }
       }
     }
 
   }
   # Delete the data file
-  debugMessage(3, "unlinking mon files ".$file."0 and ".$file."1");
+  Dada->logMsg(3, DL, "unlinking mon files ".$file."0 and ".$file."1");
 
   unlink($file."0");
   unlink($file."1");
@@ -389,11 +398,11 @@ sub getUnprocessedFiles($) {
 
   my ($dir) = @_;
 
-  debugMessage(3, "chdir $dir");
+  Dada->logMsg(3, DL, "chdir $dir");
   chdir $dir;
 
   my $cmd = "find . -regex \".*[ts|bp|bps][0|1]\" -printf \"%P\n\"";
-  debugMessage(3, "find . -regex \".*[ts|bp|bps][0|1]\" -printf \"\%P\"");
+  Dada->logMsg(3, DL, "find . -regex \".*[ts|bp|bps][0|1]\" -printf \"\%P\"");
   my $find_result = `$cmd`;
 
   my %archives = ();
@@ -401,11 +410,11 @@ sub getUnprocessedFiles($) {
   my @files = split(/\n/,$find_result);
   my $file = "";
 
-  debugMessage(3, "$dir: ");
+  Dada->logMsg(3, DL, "$dir: ");
 
   # Add the results to the hash
   foreach $file (@files) {
-    debugMessage(3, "  $file");
+    Dada->logMsg(3, DL, "  $file");
     # strip suffix
     my $basename = substr $file, 0, -1;
     if (! exists ($archives{$basename})) {
@@ -437,7 +446,7 @@ sub getUnprocessedFiles($) {
       if ($ts_file eq "") {
         $ts_file = $key;
       } else {
-        debugMessage(3, "getUnprocessedFiles: discarding ".$key."?");
+        Dada->logMsg(3, DL, "getUnprocessedFiles: discarding ".$key."?");
         unlink $key."0";
         unlink $key."1";
         delete($archives{$key});
@@ -449,7 +458,7 @@ sub getUnprocessedFiles($) {
       if ($bp_file eq "") {
         $bp_file = $key;
       } else {
-        debugMessage(3, "getUnprocessedFiles: discarding ".$key."?");
+        Dada->logMsg(3, DL, "getUnprocessedFiles: discarding ".$key."?");
         unlink $key."0";
         unlink $key."1";
         delete($archives{$key});
@@ -461,7 +470,7 @@ sub getUnprocessedFiles($) {
       if ($bps_file eq "") {
         $bps_file = $key;
       } else {
-        debugMessage(3, "getUnprocessedFiles: discarding ".$key."?");
+        Dada->logMsg(3, DL, "getUnprocessedFiles: discarding ".$key."?");
         unlink $key."0";
         unlink $key."1";
         delete($archives{$key});
@@ -478,7 +487,7 @@ sub getUnprocessedFiles($) {
 
   chdir "../../";
 
-  debugMessage(2, "getUnprocessedFiles: returning ".$files_to_return);
+  Dada->logMsg(2, DL, "getUnprocessedFiles: returning ".$files_to_return);
   return %archives;
 
 }
@@ -500,23 +509,14 @@ sub deleteArchives($$) {
   (my $dir, my $archive) = @_;
 
   my $cmd = "rm -f ".$dir."/*/".$archive;
-  debugMessage(2, "Deleting processed archives ".$cmd);
+  Dada->logMsg(2, DL, "Deleting processed archives ".$cmd);
   my $response = `$cmd`;
   if ($? != 0) {
-    debugMessage(0, "rm failed: \"".$response."\"");
+    Dada->logMsgWarn($warn, "rm failed: \"".$response."\"");
   }
 
   return 0;
 
-}
-
-
-sub debugMessage($$) {
-  (my $level, my $message) = @_;
-  if ($level <= DEBUG_LEVEL) {
-    my $time = Dada->getCurrentDadaTime();
-    print "[".$time."] ".$message."\n";
-  }
 }
 
 
@@ -536,11 +536,10 @@ sub sigHandle($) {
                                                                                 
 sub daemonControlThread() {
 
-  debugMessage(2, "Daemon control thread starting");
+  Dada->logMsg(2, DL, "Daemon control thread starting");
 
   my $pidfile = $cfg{"SERVER_CONTROL_DIR"}."/".PIDFILE;
-
-  my $daemon_quit_file = Dada->getDaemonControlFile($cfg{"SERVER_CONTROL_DIR"});
+  my $daemon_quit_file = $cfg{"SERVER_CONTROL_DIR"}."/".QUITFILE;
 
   # Poll for the existence of the control file
   while ((!-f $daemon_quit_file) && (!$quit_daemon)) {
@@ -550,10 +549,10 @@ sub daemonControlThread() {
   # set the global variable to quit the daemon
   $quit_daemon = 1;
 
-  debugMessage(2, "Unlinking PID file: ".$pidfile);
+  Dada->logMsg(2, DL, "Unlinking PID file: ".$pidfile);
   unlink($pidfile);
 
-  debugMessage(2, "Daemon control thread ending");
+  Dada->logMsg(2, DL, "Daemon control thread ending");
 
 }
 
@@ -564,7 +563,7 @@ sub daemonControlThread() {
 sub getObsInfo($) {
 
   (my $dir) = @_;
-  debugMessage(3, "getObsInfo(".$dir.")");
+  Dada->logMsg(3, DL, "getObsInfo(".$dir.")");
 
   my $obs_age = 0;
   my $n_files = 0;
@@ -578,7 +577,7 @@ sub getObsInfo($) {
   $cmd = "find ".$dir."/* -type d | wc -l";
   $num_dirs = `$cmd`;
   chomp $num_dirs;
-  debugMessage(3, "getObsInfo: num_dirs = ".$num_dirs);
+  Dada->logMsg(3, DL, "getObsInfo: num_dirs = ".$num_dirs);
 
   # If the clients have created the beam directories
   if ($num_dirs > 0) {
@@ -597,7 +596,7 @@ sub getObsInfo($) {
       chomp $time_newest_file;
 
       $obs_age = $time_curr - $time_newest_file;
-      debugMessage(3, "getObsInfo: newest mon file was ".$obs_age);
+      Dada->logMsg(3, DL, "getObsInfo: newest mon file was ".$obs_age);
 
       # Sometimes this reports negative!
       if ($obs_age < 0) {
@@ -607,7 +606,7 @@ sub getObsInfo($) {
       if (($obs_age >= 0) && ($obs_age < 300)) {
         # Normal
       } else {
-        debugMessage(0, "getObsInfo: had mon files, but weird age: ".$obs_age);
+        Dada->logMsgWarn($warn, "getObsInfo: had mon files, but weird age: ".$obs_age);
         
       }
 
@@ -625,12 +624,12 @@ sub getObsInfo($) {
       
         $obs_age = $time_curr - $time_dir;
 
-        debugMessage(3, "getObsInfo: newest beam dir was ".$obs_age." old");
+        Dada->logMsg(3, DL, "getObsInfo: newest beam dir was ".$obs_age." old");
 
         # If the obs.processing exists
         if (-f $dir."/obs.processing") {
         
-          debugMessage(0, "getObsInfo: current processing ".$dir.", but no mon files, age: ". $obs_age);
+          Dada->logMsgWarn($warn, "getObsInfo: current processing ".$dir.", but no mon files, age: ". $obs_age);
           if ($obs_age < 0) {
             $obs_age = 0;
           }
@@ -639,14 +638,14 @@ sub getObsInfo($) {
 
           # If the obs.start is more than 5 minutes old, but we have no
           if ($obs_age > 5*60) {
-            debugMessage(0, "getObsInfo: beam dir age (".$obs_age.") was more than 300, and no obs.processing ");
+            Dada->logMsgWarn($warn, "getObsInfo: beam dir age (".$obs_age.") was more than 300, and no obs.processing ");
             $obs_age = -1;
           }
 
         }
 
       } else {
-        debugMessage(0, "getObsInfo: could not determine age of subdirs, dud obs");
+        Dada->logMsgWarn($warn, "getObsInfo: could not determine age of subdirs, dud obs");
         $obs_age = -1;
       }
     }
@@ -664,22 +663,22 @@ sub getObsInfo($) {
 
     $obs_age = $time_curr - $time_dir;
 
-    debugMessage(3, "getObsInfo: no beam subdirs in ".$dir." age = ".$obs_age);
+    Dada->logMsg(3, DL, "getObsInfo: no beam subdirs in ".$dir." age = ".$obs_age);
 
     # If the directory was more than 5 minutes old, it must be erroneous 
     if ($obs_age > 5*60) {
-      debugMessage(0, "getObsInfo: no beam subdirs in ".$dir." and more than 300 seconds old: ".$obs_age);
+      Dada->logMsgWarn($warn, "getObsInfo: no beam subdirs in ".$dir." and more than 300 seconds old: ".$obs_age);
       $obs_age = -1;
 
     # Its probably a brand new directory, and the beam dirs haven't been created yet
     } else {
-      debugMessage(3, "getObsInfo: no beam subdirs, assuming brand new obs");
+      Dada->logMsg(3, DL, "getObsInfo: no beam subdirs, assuming brand new obs");
       $obs_age = 0;
     }
 
   }
   
-  debugMessage(3, "getObsInfo: returning ".$obs_age.", ".$n_files);
+  Dada->logMsg(3, DL, "getObsInfo: returning ".$obs_age.", ".$n_files);
 
   return ($obs_age, $n_files);
 
@@ -692,7 +691,7 @@ sub deleteObservation($) {
 
   if (-d $dir) {
 
-    debugMessage(1, "Deleting observation: ".$dir);
+    Dada->logMsg(1, DL, "Deleting observation: ".$dir);
     $cmd = "rm -rf $dir";
     `$cmd`;
     return $?;
@@ -713,22 +712,22 @@ sub cleanUpObs($) {
   my @files = ();
   my $cmd = "";
 
-  debugMessage(2, "cleanUpObs(".$dir.")");
+  Dada->logMsg(2, DL, "cleanUpObs(".$dir.")");
 
   # Clean up all the mon files that may have been produced
-  debugMessage(2, "cleanUpObs: removing any ts, bp or bps files");
+  Dada->logMsg(2, DL, "cleanUpObs: removing any ts, bp or bps files");
   my $cmd = "find ".$dir." -regex \".*[ts|bp|bps][0|1]\" -printf \"%P\n\"";
-  debugMessage(3, "find ".$dir." -regex \".*[ts|bp|bps][0|1]\" -printf \"\%P\"");
+  Dada->logMsg(3, DL, "find ".$dir." -regex \".*[ts|bp|bps][0|1]\" -printf \"\%P\"");
   my $find_result = `$cmd`;
 
   @files = split(/\n/,$find_result);
   foreach $file (@files) {
-    debugMessage(3, "unlinking $dir."/".$file");
+    Dada->logMsg(3, DL, "unlinking $dir."/".$file");
     unlink($dir."/".$file);
   }
 
   # Clean up all the old png files, except for the final ones
-  debugMessage(2, "cleanUpObs: removing any old png files");
+  Dada->logMsg(2, DL, "cleanUpObs: removing any old png files");
   removeAllOldPngs($dir);
 
 }
@@ -743,7 +742,7 @@ sub removeAllOldPngs($) {
 
   (my $dir) = @_;
 
-  debugMessage(2, "removeAllOldPngs(".$dir.")");
+  Dada->logMsg(2, DL, "removeAllOldPngs(".$dir.")");
 
   my $beamdir = "";
   my @beamdirs = ();
@@ -758,7 +757,7 @@ sub removeAllOldPngs($) {
   for ($i=0; (($i<=$#beamdirs) && (!$quit_daemon)); $i++) {
 
     $beamdir = $dir."/".$beamdirs[$i];
-    debugMessage(2, "removeAllOldPngs: clearing out ".$beamdir);
+    Dada->logMsg(2, DL, "removeAllOldPngs: clearing out ".$beamdir);
 
     removeOldPngs($beamdir, "fft", "1024x768");
     removeOldPngs($beamdir, "fft", "400x300");
@@ -805,7 +804,7 @@ sub removeOldPngs($$$) {
     if (($time+30) < time)
     {
       $file = $dir."/".$file;
-      debugMessage(3, "unlinking old png file ".$file);
+      Dada->logMsg(3, DL, "unlinking old png file ".$file);
       unlink($file);
     }
   }
@@ -818,19 +817,19 @@ sub patchInTcsLogs($$){
 
   my $tcs_logfile = $utcname."_bpsr.log";
   my $cmd = "scp -p pulsar\@jura.atnf.csiro.au:/psr1/tcs/logs/$tcs_logfile $obs_dir/$utcname/";
-  debugMessage(1, "Getting TCS log file via: ".$cmd);
+  Dada->logMsg(1, DL, "Getting TCS log file via: ".$cmd);
   my ($result,$response) = Dada->mySystem($cmd);
   if ($result!="ok"){
-    debugMessage(0, "ERROR: Could not get the TCS log file, msg was: ".$response);
+    Dada->logMsgWarn($error, "Could not get the TCS log file, msg was: ".$response);
     return ($result,$response);
   }
   my $cmd = "merge_tcs_logs.csh $obs_dir/$utcname $tcs_logfile";
-  debugMessage(1, "Merging TCS log file via: ".$cmd);
+  Dada->logMsg(1, DL, "Merging TCS log file via: ".$cmd);
   my ($result,$response) = Dada->mySystem($cmd);
-  debugMessage(3, "Merging TCS log: ".$result." ".$response);
+  Dada->logMsg(3, DL, "Merging TCS log: ".$result." ".$response);
 
   if ($result!="ok"){
-    debugMessage(0, "ERROR: Could not merge the TCS log file, msg was: ".$response);
+    Dada->logMsgWarn($error, "Could not merge the TCS log file, msg was: ".$response);
   }
 
   return ($result,$response);
