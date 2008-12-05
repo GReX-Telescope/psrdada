@@ -60,7 +60,7 @@ void usage(void);
 
 #define PRINTSPEED(k, file) { \
   speed = times[k].size/(times[k].time-times[k-1].time)/1000/1000; /* MB/s */\
-  fprintf(file, "%6d  %4lld  %9.3f   %6.2f Mbps ( %ld  %6.3f )\n", \
+  fprintf(file, "vsib_recv: %6d  %4lld  %9.3f   %6.2f Mbps ( %ld  %6.3f )\n", \
            k, totalsize/1000/1000, times[k].time-firsttime, \
            speed*8, times[k].size, (times[k].time-times[k-1].time)); \
 }
@@ -405,7 +405,8 @@ int main (int argc, char * const argv[]) {
         if (!((i+1) % nupdate)) {
           gettime(&times, bwrote, &ntime, &maxtimes);
           bwrote = 0;
-          PRINTSPEED(ntime-1, stderr);
+          if (!quiet) 
+            PRINTSPEED(ntime-1, stderr);
         }
         
         DEBUG(printf("MAIN: ibuf++\n"));
@@ -424,7 +425,8 @@ int main (int argc, char * const argv[]) {
       if (bwrote>0) {
         gettime(&times, bwrote, &ntime, &maxtimes);
         bwrote = 0;
-        PRINTSPEED(ntime-1, stderr);
+        if (!quiet) 
+          PRINTSPEED(ntime-1, stderr);
       }
       
       if (dodisk) {
@@ -462,8 +464,12 @@ int main (int argc, char * const argv[]) {
   }
 
   speed = totalsize/(times[ntime-1].time-firsttime)/1000/1000;
-  printf("  \nRate = %.2f Mbps/s (%.1f sec)\n\n", speed*8, 
-         times[ntime-1].time-firsttime);
+  if (quiet) 
+    fprintf(stderr, "Rate = %.2f Mbps/s (%.1f sec)\n", speed*8, 
+           times[ntime-1].time-firsttime);
+  else
+    printf("  \nRate = %.2f Mbps/s (%.1f sec)\n\n", speed*8, 
+           times[ntime-1].time-firsttime);
   
   if (summary)
     save_summary(times, "transfer.summary", "", ntime);
@@ -526,6 +532,17 @@ int setup_net(int isserver, char *hostname, int port, int window_size,
   }
 
   if (window_size>0) {
+
+    /* ensure the socket can be reused */
+    int value = 1;
+    status = setsockopt(*sock, SOL_SOCKET, SO_REUSEADDR,
+                        &value, sizeof(value));
+    if (status!=0) {
+      perror("Error setting socket reuse flag");
+      close(*sock);
+      return(1);
+    }
+
     status = setsockopt(*sock, SOL_SOCKET, SO_SNDBUF,
                         (char *) &window_size, sizeof(window_size));
     if (status!=0) {
@@ -562,7 +579,7 @@ int setup_net(int isserver, char *hostname, int port, int window_size,
   
     status = bind(*sock, (struct sockaddr *)&server, sizeof(server));
     if (status!=0) {
-      perror("Error binding socket");
+      perror("vsib: Error binding socket");
       close(*sock);
       return(1);
     } 
@@ -571,7 +588,7 @@ int setup_net(int isserver, char *hostname, int port, int window_size,
        back log of 1 */
     status = listen(*sock,1);
     if (status!=0) {
-      perror("Error binding socket");
+      perror("Error listening on socket");
       close(*sock);
       return(1);
     }
