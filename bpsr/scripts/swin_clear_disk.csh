@@ -1,7 +1,7 @@
 #!/bin/csh
 
 #
-# Usage: $0 /export/shrek21??
+# Usage: $0 shrek21??
 #
 
 if ( $1 == "" ) then
@@ -14,7 +14,7 @@ if ($2 == "delete") then
   echo "Actually Deleting files"
   set deletethem = 1
 else 
-  echo "Not deleting files, add 'delete' arguement to delete files"
+  echo "Not deleting files, add 'delete' argument to delete files"
   set deletethem = 0
 endif
 
@@ -24,22 +24,27 @@ set n_delete = 0
 set n_skip = 0
 set n_nodelete = 0
 
-unlink /tmp/hitrun_delete_$1
-touch /tmp/hitrun_delete_$1
-
 cd /nfs/cluster/pulsar/hitrun
 
-# list all files processed by both llevin and sbates
+# list all files processed by llevin
+find . -name "*llevin*" | awk -F. '{print $1"/"$2}' > /tmp/llevin.done
 
-set samlist = `find . -name "*llevin*" -printf "%f\n" | sort | sed -e 's/llevin/sbates/'`
+# list all files processed by sbates
+find . -name "*sbates*" | awk -F. '{print $1"/"$2}' > /tmp/sbates.done
 
-foreach file ($samlist) 
+# list all files processed by both
+cd /tmp; cat llevin.done sbates.done | sort | uniq -d > both.done
 
-  # If the same file exists, then add it to the merged list
-  if ( -f $file ) then
+foreach processed ( both llevin sbates recent )
 
-    set obsdir = `echo "$file" | awk -F. '{print $1}'`
-    set beamdir = `echo "$file" | awk -F. '{print $1"/"$2}'`
+  echo "Clearing data that have been processed by $processed"
+
+  unlink /tmp/hitrun_delete_$1
+  touch /tmp/hitrun_delete_$1
+
+  foreach beamdir ( `cat /tmp/${processed}.done` ) 
+
+    set obsdir = `dirname $beamdir`
 
     # If the observation dir exists on this disk
     if ( -d $basedir/$obsdir ) then
@@ -73,36 +78,35 @@ foreach file ($samlist)
     else 
       @ n_skip = $n_skip + 1
     endif
-  else 
-    @ n_nodelete = $n_nodelete + 1
+
+  end
+
+  echo "Found $n_delete eligble for deletion on $1"
+  echo "Found $n_skip eligble, but not on disk $1"
+  echo "Found $n_nodelete ineligble for deletion $1"
+
+  if ($deletethem == 1) then
+
+    echo To be deleted: `wc -l /tmp/hitrun_delete_$1`
+
+    cd $basedir
+
+    foreach deleteable ( `cat /tmp/hitrun_delete_$1` )
+  
+      if ( -d $deleteable ) then
+
+        date
+        echo Deleting $deleteable
+        time rm -rf $deleteable
+
+        echo Sleeping 3 seconds
+        sleep 3 
+
+      endif
+
+    end
+
   endif 
 
 end
 
-echo "Found $n_delete eligble for deletion on $1"
-echo "Found $n_skip eligble, but not on disk $1"
-echo "Found $n_nodelete ineligble for deletion $1"
-
-if ($deletethem == 1) then
-
-  echo To be deleted: `wc -l /tmp/hitrun_delete_$1`
-
-  cd $basedir
-
-  foreach deleteable ( `cat /tmp/hitrun_delete_$1` )
-  
-    if ( -d $deleteable ) then
-
-      date
-      echo Deleting $deleteable
-      time rm -rf $deleteable
-
-      echo Sleeping 3 seconds
-      sleep 3 
-
-    endif
-
-  end
-endif 
-
-exit 0
