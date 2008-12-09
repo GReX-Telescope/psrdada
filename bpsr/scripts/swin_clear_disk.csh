@@ -27,15 +27,15 @@ set n_nodelete = 0
 cd /nfs/cluster/pulsar/hitrun
 
 # list all files processed by llevin
-find . -name "*llevin*" | awk -F. '{print $1"/"$2}' > /tmp/llevin.done
 
-# list all files processed by sbates
-find . -name "*sbates*" | awk -F. '{print $1"/"$2}' > /tmp/sbates.done
+foreach student ( llevin sbates )
+  find . -name "*${student}*" -printf "%f\n" | awk -F. '{print $1"/"$2}' \
+	> /tmp/${student}.done
+end
 
-# list all files processed by both
 cd /tmp; cat llevin.done sbates.done | sort | uniq -d > both.done
 
-foreach processed ( both llevin sbates recent )
+foreach processed ( both llevin sbates )
 
   echo "Clearing data that have been processed by $processed"
 
@@ -83,7 +83,6 @@ foreach processed ( both llevin sbates recent )
 
   echo "Found $n_delete eligble for deletion on $1"
   echo "Found $n_skip eligble, but not on disk $1"
-  echo "Found $n_nodelete ineligble for deletion $1"
 
   if ($deletethem == 1) then
 
@@ -105,6 +104,10 @@ foreach processed ( both llevin sbates recent )
       endif
 
     end
+
+    set percent_used = `df -k . | grep $1 | awk '{print $5}' | sed -e 's/%//'`
+    echo "Percent used: $percent_used"
+    if ( $percent_used < 95 ) exit 0
 
   endif 
 
