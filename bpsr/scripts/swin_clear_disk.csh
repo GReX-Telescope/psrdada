@@ -30,10 +30,10 @@ cd /nfs/cluster/pulsar/hitrun
 
 foreach student ( llevin sbates )
   find . -name "*${student}*" -printf "%f\n" | awk -F. '{print $1"/"$2}' \
-	> /tmp/${student}.done
+	> /tmp/${student}.done_$1
 end
 
-cd /tmp; cat llevin.done sbates.done | sort | uniq -d > both.done
+cd /tmp; cat llevin.done_$1 sbates.done_$1 | sort | uniq -d > both.done_$1
 
 foreach processed ( both llevin sbates )
 
@@ -42,7 +42,7 @@ foreach processed ( both llevin sbates )
   unlink /tmp/hitrun_delete_$1
   touch /tmp/hitrun_delete_$1
 
-  foreach beamdir ( `cat /tmp/${processed}.done` ) 
+  foreach beamdir ( `cat /tmp/${processed}.done_$1` ) 
 
     set obsdir = `dirname $beamdir`
 
