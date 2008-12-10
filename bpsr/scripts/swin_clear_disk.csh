@@ -35,6 +35,9 @@ end
 
 cd /tmp; cat llevin.done_$1 sbates.done_$1 | sort | uniq -d > both.done_$1
 
+# do not check minimum space requirement when clearing files processed by both
+set check_percent = 0
+
 foreach processed ( both llevin sbates )
 
   echo "Clearing data that have been processed by $processed"
@@ -98,18 +101,22 @@ foreach processed ( both llevin sbates )
         echo Deleting $deleteable
         time rm -rf $deleteable
 
+        if ( $check_percent ) then
+          set used = `df -k . | grep $1 | awk '{print $5}' | sed -e 's/%//'`
+          echo "Percent used: $used"
+          if ( $percent_used < 90 ) exit 0
+        endif
+
         echo Sleeping 3 seconds
-        sleep 3 
+        sleep 3
 
       endif
 
     end
 
-    set percent_used = `df -k . | grep $1 | awk '{print $5}' | sed -e 's/%//'`
-    echo "Percent used: $percent_used"
-    if ( $percent_used < 95 ) exit 0
-
   endif 
+
+  set check_percent = 1
 
 end
 
