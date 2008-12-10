@@ -1,8 +1,16 @@
 #!/bin/csh
 
+# example use in crontab
 #
-# Usage: $0 shrek21??
-#
+# PATH=/home/ssi/pulsar/linux_64/bin:${PATH}
+# 
+# 00 * * * * swin_clear_disk.csh shrek211a delete
+# 20 * * * * swin_clear_disk.csh shrek211a delete
+# 40 * * * * swin_clear_disk.csh shrek211a delete
+# 
+# 10 * * * * swin_clear_disk.csh shrek211b delete
+# 30 * * * * swin_clear_disk.csh shrek211b delete
+# 50 * * * * swin_clear_disk.csh shrek211b delete
 
 if ( $1 == "" ) then
   echo "Error: must provide an argument"
@@ -104,7 +112,7 @@ foreach processed ( both llevin sbates )
         if ( $check_percent ) then
           set used = `df -k . | grep $1 | awk '{print $5}' | sed -e 's/%//'`
           echo "Percent used: $used"
-          if ( $percent_used < 90 ) exit 0
+          if ( $used < 90 ) exit 0
         endif
 
         echo Sleeping 3 seconds
