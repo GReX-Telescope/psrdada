@@ -18,7 +18,7 @@ use threads::shared;
 #
 # Constants
 #
-use constant DEBUG_LEVEL  => 2;
+use constant DEBUG_LEVEL  => 1;
 use constant PIDFILE      => "bpsr_transfer_manager.pid";
 use constant LOGFILE      => "bpsr_transfer_manager.log";
 use constant TAPES_DB     => "tapes.db";
@@ -61,7 +61,12 @@ if ($#ARGV != 0) {
   } else {
 
     if ($type eq "robot_init") {
-      logMessage(1, "WARNING: Initializing ALL tapes in robot in 15 seconds. Press CTRL+C to abort this.");
+      $db_dir = $cfg{"SWIN_DB_DIR"};
+      print STDERR "WARNING: Initializing ALL tapes in robot in 15 seconds. Press CTRL+C to abort this\n";
+      sleep(15);
+    } elsif ($type eq "robot_verify") {
+      $db_dir = $cfg{"SWIN_DB_DIR"};
+      print STDERR "WARNING: Verifying ALL tapes in robot in 15 seconds. Press CTRL+C to abort this\n";
       sleep(15);
     } else {
       usage();
@@ -74,18 +79,17 @@ if ($#ARGV != 0) {
 my $required_host = "";
 
 # set the pattern tape id pattern for each location
-if (($type eq "swin") || ($type eq "robot_init")) {
-        $tape_id_pattern = "HRA[0-9][0-9][0-9]S4";
-        $robot = 1;
-        $uc_type = "SWIN";
-        $required_host = "shrek201.ssi.swin.edu.au";
+if (($type eq "swin") || ($type eq "robot_init") || ($type eq "robot_verify")) {
+  $tape_id_pattern = "HRA[0-9][0-9][0-9]S4";
+  $robot = 1;
+  $uc_type = "SWIN";
+  $required_host = "shrek201.ssi.swin.edu.au";
 }
 
 if ($type eq "parkes") {
-        $tape_id_pattern = "HRE[0-9][0-9][0-9]S4";
-        $uc_type = "PARKES";
-        $required_host = "jura";
-  
+  $tape_id_pattern = "HRE[0-9][0-9][0-9]S4";
+  $uc_type = "PARKES";
+  $required_host = "jura";
 }
 
 # sanity check the hostname
@@ -96,11 +100,12 @@ if ($ENV{'HOSTNAME'} ne $required_host) {
 }
 
 
+
 #
 # Local Varaibles
 #
-my $logfile = $cfg{"SERVER_LOG_DIR"}."/".LOGFILE;
-my $pidfile = $cfg{"SERVER_CONTROL_DIR"}."/".PIDFILE;
+# my $logfile = $cfg{"SERVER_LOG_DIR"}."/".LOGFILE;
+# my $pidfile = $cfg{"SERVER_CONTROL_DIR"}."/".PIDFILE;
 
 my $daemon_control_thread = 0;
 
@@ -135,31 +140,39 @@ my $response;
 # Main
 #
 
+my $logfile = $db_dir."/bpsr_tape_archiver.log";
+my $pidfile = $db_dir."/".PIDFILE;
+
 logMessage(1, "Running ".$type." Tape archiver");
 
-
 if ($type eq "robot_init") {
-
   if (!$quit_daemon) {
-
-    logMessage(0, "STARTING ROBOT INITIALISATION");
+    print STDERR "STARTING ROBOT INITIALISATION\n";
     robotInitializeAllTapes();
-    logMessage(0, "FINISHED ROBOT INITIALISATION");
-
+    print STDERR "FINISHED ROBOT INITIALISATION\n";
   } else {
-
-    logMessage(0, "ABORTED ROBOT INITIALISATION");
-
+    print STDERR "ABORTED ROBOT INITIALISATION\n";
   }
+  exit_script(0);
+}
 
-  exit(0);
-
+if ($type eq "robot_verify") {
+  if (!$quit_daemon) {
+    print STDERR "STARTING ROBOT VERIFICATION\n";
+    ($result, $response) = robotVerifyAllTapes();
+    print STDERR "FINISHED ROBOT VERIFICATION: ".$result." ".$response."\n";
+  } else {
+    print STDERR "ABORTED ROBOT VERIFICATION\n";
+  }
+  exit_script(0);
 }
 
 
-# Dada->daemonize($logfile, $pidfile);
+Dada->daemonize($logfile, $pidfile);
 
 logMessage(0, "STARTING SCRIPT");
+
+setStatus("Scripting starting");
 
 # Start the daemon control thread
 $daemon_control_thread = threads->new(\&daemonControlThread);
@@ -210,12 +223,15 @@ if (int($full) == 1) {
   
 } else {
 
-  # Since getCurrentTape will have read the first "file"
+  # Move forward to be ready to write on the next available file number
+  # the getTapeID function will have placed us on fsf 1, as the
+  # binary label is on fsf 0, so we *do* need to increment by n-1
   logMessage(2, "main: tapeFSF(".($nfiles-1).")");
   ($result, $response) = tapeFSF(($nfiles-1));
+  logMessage(2, "main: tapeFSF() ".$result." ".$response);
 
   if ($result ne "ok") {
-    logMessage(0, "main : ".$response);
+    logMessage(0, "main : tapeFSF failed: ".$response);
     exit_script(1);
   }
 }
@@ -225,6 +241,8 @@ my $obs = "";
 my $dir = "";
 
 $i = 0;
+my $waiting = 0;
+
 while (!$quit_daemon) {
 
   # look for a file sequentially in each of the @dirs
@@ -242,17 +260,33 @@ while (!$quit_daemon) {
     logMessage(2, "main: tarObs(".$dir.", ".$obs.",".$host.")");
     ($result, $response) = tarObs($dir, $obs,$host);
     logMessage(2, "main: tarObs() ".$result." ".$response);
- 
-  } 
+    $waiting = 0;
+
+  } else {
+
+    # Just log that we are in the main loop waiting for data
+    if (!$waiting) {
+      logMessage(1, "main: waiting for obs to transfer");
+      setStatus("Waiting for new");
+      $waiting = 1;
+    }
+
+  }
+
+  if ($result ne "ok") {
+    setStatus("Error: ".$response);
+    logMessage(0, "main: tarObs() failed: ".$response);
+    exit_script(1);
+  }
 
   $i++;
   # reset the dirs counter
   if ($i >= ($#dirs+1)) {
-          $i = 0;
-          if ($obs eq "none") {
-                  # Wait 10 secs if we didn't find a file
-                  sleep (10);
-          }
+    $i = 0;
+    if ($obs eq "none") {
+      # Wait 10 secs if we didn't find a file
+      sleep (10);
+    }
   }
 
   # Loop indefinitely
@@ -261,6 +295,8 @@ while (!$quit_daemon) {
 
 # rejoin threads
 $daemon_control_thread->join();
+
+setStatus("Script stopped");
 
 logMessage(0, "STOPPING SCRIPT");
 
@@ -289,9 +325,9 @@ sub getObsToTar($$) {
   my @subdirs = ();
 
   # Temporarily disabling the "WRITING" check
-  #if ( -f $dir."/WRITING" ){
-  #        logMessage(2, "getObsToTar: ignoring dir ".$dir." as this is being written to");
-  #} else {
+  if ( -f $dir."/WRITING" ) {
+    logMessage(2, "getObsToTar: ignoring dir ".$dir." as this is being written to");
+  } else {
 
     # find all subdirectories with an xfer.complete file in them
     opendir(DIR,$dir);
@@ -301,6 +337,7 @@ sub getObsToTar($$) {
     # now select the best one to tar
     foreach $subdir (@subdirs) {
 
+      # If this is a previously archived observation, move to the on_tape dir
       if (-f $dir."/".$subdir."/sent.to.tape") {
         # ignore if this has already been sent to tape
         logMessage(2, "getObsToTar: Found tarred obs ".$subdir.", moving...");
@@ -315,7 +352,7 @@ sub getObsToTar($$) {
         logMessage(1, "getObsToTar: ".$cmd);
         my ($result, $response) = Dada->mySystem($cmd);
         if ($result ne "ok") {
-          logMessage(0, "getObsToTar: failed to move $subdir to on_tape dir");
+          logMessage(0, "getObsToTar: failed to move $subdir to on_tape dir: ".$response);
         }
 
       } elsif ($obs eq "none") {
@@ -325,7 +362,7 @@ sub getObsToTar($$) {
         # do nothing as we have found an obs or this is incomplete xfer
       }
     }
-  #}
+  }
   logMessage(3, "getObsToTar: returning ".$obs);
 
   unindent();
@@ -348,7 +385,7 @@ sub tarObs($$$) {
   my @subdirs = ();
   my $beam_problem = 0;
 
-  # system("touch $dir/READING");
+  system("touch $dir/READING");
 
   opendir(DIR,$dir."/".$obs);
   @subdirs = sort grep { !/^\./ && -d $dir."/".$obs."/".$_ } readdir(DIR);
@@ -359,7 +396,7 @@ sub tarObs($$$) {
 
   foreach $subdir (@subdirs) {
 
-    if (! $beam_problem) {
+    if ((! $beam_problem) && (!$quit_daemon) ) {
 
       logMessage(2, "tarObs: checkIfArchived(".$dir.", ".$obs.", ".$subdir.")");
       ($result, $response) = checkIfArchived($dir, $obs, $subdir);
@@ -368,7 +405,7 @@ sub tarObs($$$) {
       if ($result ne "ok") {
         logMessage(0, "tarObs: checkIfArchived failed: ".$response);
         unindent();
-        # system("rm -f $dir/READING");
+        system("rm -f $dir/READING");
         return ("fail", "checkIfArchived() failed: ".$response);
       } 
   
@@ -380,7 +417,9 @@ sub tarObs($$$) {
       # Archive the beam 
       } else {
   
-        logMessage(2, "tarObs: tarBeam(".$dir.", ".$obs.", ".$subdir.")");
+        setStatus("Archiving  ".$obs." ".$subdir);
+
+        logMessage(2, "tarObs: tarBeam(".$dir.", ".$obs.", ".$subdir.", ".$host.")");
         ($result, $response) = tarBeam($dir, $obs, $subdir,$host);
 
         if ($result ne "ok") {
@@ -388,23 +427,32 @@ sub tarObs($$$) {
           $beam_problem = 1;
         }
       }
+
+    } else {
+      logMessage(2, "tarObs: skipping ".$subdir." due to previous beam problem, or quit flag");
     }
   }
-  
+
   if ($beam_problem) {
+
     logMessage(0, "tarObs: problem archiving a beam");
     unindent();
-    #system("rm -f $dir/READING");
+    system("rm -f $dir/READING");
     return ("fail", "problem occurred during archival of a beam");
+
+  } elsif ($quit_daemon) {
+
+    logMessage(0, "tarObs: not marking sent.to.tape for ".$obs." due to quit flag being raised");
 
   # Mark this entire pointing as successfully processed
   } else {
+
     system("touch ".$dir."/".$obs."/sent.to.tape");
   }
 
   logMessage(1, "tarObs: finished observation: ".$obs);
 
-  #system("rm -f $dir/READING");
+  system("rm -f $dir/READING");
   unindent();
   return ("ok", "");
 }
@@ -417,7 +465,7 @@ sub tarBeam($$$$) {
   my ($dir, $obs, $beam,$host) = @_;
 
   indent();
-  logMessage(2, "tarBeam: (".$dir.", ".$obs.", ".$beam.")");
+  logMessage(2, "tarBeam: (".$dir.", ".$obs.", ".$beam.", ".$host.")");
 
   logMessage(1, "tarBeam: archiving ".$obs.", beam ".$beam);
 
@@ -445,6 +493,14 @@ sub tarBeam($$$$) {
   }
 
   my $tape = $expected_tape;
+
+  # remove the xfer.complete in the beam fir if it exists
+  if (-f $dir."/".$obs."/".$beam."/xfer.complete") {
+    my $cnt = unlink $dir."/".$obs."/".$beam."/xfer.complete";
+    if ($cnt != 1) {
+      logMessage(2, "tarBeam: couldnt unlink ".$obs."/".$beam."/xfer.complete");
+    }
+  }
 
   # Find the combined file size in bytes
   $cmd  = "du -sLb ".$dir."/".$obs."/".$beam;
@@ -476,7 +532,6 @@ sub tarBeam($$$$) {
 
   logMessage(2, "tarBeam: ".$free." GB left on tape");
   logMessage(2, "tarBeam: size of this beam is estimated at ".$size_est_gbytes." GB");
-
 
   if ($free < $size_est_gbytes) {
 
@@ -525,55 +580,179 @@ sub tarBeam($$$$) {
     # Setup the ID information for the new tape    
     ($id, $size, $used, $free, $nfiles, $full) = split(/:/,$response);
 
-  }
+    # If for some reason, this tape has files on it, forward seek
+    if ($nfiles > 1) {
 
-  setStatus("Archving  ".$obs."/".$beam);
+      logMessage(2, "tarBeam: tapeFSF(".($nfiles-1).")");
+      ($result, $response) = tapeFSF(($nfiles-1));
+      logMessage(2, "tarBeam: tapeFSF() ".$result." ".$response);
+                                                                                                                                                                           
+      if ($result ne "ok") {
+        logMessage(0, "tarBeam: tapeFSF failed: ".$response);
+        return ("fail", "could not FSF seek to correct place on tape");
+      }
+    }
+
+  }
 
   ($result, my $filenum, my $blocknum) = getTapeStatus();
   if ($result ne "ok") {
-          logMessage(0, "TarBeam: getTapeStatus() failed.");
-          unindent();
-          return ("fail", "getTapeStatus() failed");
-  }
-  my $ntries=3;
-  while ($filenum ne $nfiles || $blocknum ne 0){
-# we are not at 0 block of the next file!
-          logMessage(0, "TarBeam: WARNING: Tape out of position! (f=$filenum, b=$blocknum) Attempt to get to right place.");
-          $cmd="mt -f ".$dev." rewind; mt -f ".$dev." fsf $nfiles";
-          ($result, $response) = Dada->mySystem($cmd);
-          if ($result ne "ok") {
-                  logMessage(0, "TarBeam: tape re-wind/skip failed: ".$response);
-                  unindent();
-                  return ("fail", "tape re-wind/skip failed: ".$response);
-          }
-
-          ($result, $filenum, $blocknum) = getTapeStatus();
-          if ($result ne "ok") { 
-                  logMessage(0, "TarBeam: getTapeStatus() failed.");
-                  unindent();
-                  return ("fail", "getTapeStatus() failed");
-          }
-          if($ntries < 1){
-                  return ("fail", "TarBeam: Could not get to correct place on tape!");
-          }
-          $ntries--;
+    logMessage(0, "TarBeam: getTapeStatus() failed.");
+    unindent();
+    return ("fail", "getTapeStatus() failed");
   }
 
+  my $ntries = 3;
+  while (($filenum ne $nfiles) || ($blocknum ne 0)) {
+
+    # we are not at 0 block of the next file!
+    logMessage(0, "TarBeam: WARNING: Tape out of position! (f=$filenum, b=$blocknum) Attempt to get to right place.");
+
+    $cmd = "mt -f ".$dev." rewind; mt -f ".$dev." fsf $nfiles";
+    ($result, $response) = Dada->mySystem($cmd);
+    if ($result ne "ok") {
+      logMessage(0, "TarBeam: tape re-wind/skip failed: ".$response);
+      unindent();
+      return ("fail", "tape re-wind/skip failed: ".$response);
+    }
+
+    ($result, $filenum, $blocknum) = getTapeStatus();
+    if ($result ne "ok") { 
+      logMessage(0, "TarBeam: getTapeStatus() failed.");
+      unindent();
+      return ("fail", "getTapeStatus() failed");
+    }
+
+    if ($ntries < 1) {
+      return ("fail", "TarBeam: Could not get to correct place on tape!");
+    }
+
+    $ntries--;
+  }
 
   # now we have a tape with enough space to fit this archive
   if ($robot) {
 
-    chdir $dir;
-    $cmd = "tar -b 128 -cf ".$dev." ".$obs."/".$beam;
+    #chdir $dir;
+    #$cmd = "tar -b 128 -cf ".$dev." ".$obs."/".$beam;
   
-    logMessage(0, "tarBeam: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
-    logMessage(2, "tarBeam: ".$result." ".$response);
+    #logMessage(0, "tarBeam: ".$cmd);
+    #($result, $response) = Dada->mySystem($cmd);
+    #logMessage(2, "tarBeam: ".$result." ".$response);
+
+    #if ($result ne "ok") {
+    #  logMessage(0, "tarBeam: failed to write archive to tape: ".$response);
+    #  unindent();
+    #  return ("fail", "Archiving failed");
+    #}
+
+    # Try to ensure that no nc is running on the port we want to use
+    my $nc_ready = 0;
+    my $tries = 5;
+    my $port = 25128;
+
+    while ( (!$nc_ready)  && ($tries > 0) && (!$quit_daemon) ) {
+
+      # This tries to connect to any type of service on specified port
+      logMessage(2, "tarBeam: testing nc on ".$host.":".$port);
+      $cmd = "nc -zd ".$host." ".$port." > /dev/null";
+      ($result, $response) = Dada->mySystem($cmd);
+
+      if ($result eq "ok") {
+        # This is an error condition!
+
+        logMessage(0, "tarBeam: something running on the NC port ".$port);
+
+        if ($tries < 5) {
+          logMessage(0, "tarBeam: trying to increment port number");
+          $port += 1;
+        } else {
+          logMessage(0, "tarBeam: trying again, now that we have tested once");
+        }
+        $tries--;
+        sleep(1);
+
+      # the command failed, meaning there is nothing on that port
+      } else {
+        logMessage(2, "tarBeam: nc will be available on ".$host.":".$port);
+        $nc_ready = 1;
+
+      }
+    }
+
+    my $remote_nc_thread = threads->new(\&nc_thread, $host, $dir, $obs, $beam, $port);
+
+    # Allow some time for this thread to start-up, ssh and launch tar + nc
+    sleep(5);
+
+    my $localhost = Dada->getHostMachineName();
+
+    $tries=5;
+    while ($tries > 0) {
+
+      $cmd = "nc -d ".$host." ".$port." | dd of=".$dev." obs=64k";
+      logMessage(2, "tarBeam: ".$cmd);
+      ($result, $response) = Dada->mySystem($cmd);
+      if ($result ne "ok") {
+        logMessage(2, "tarBeam: ".$result." ".$response);
+        logMessage(0, "tarBeam: failed to write archive to tape: ".$response);
+        $tries--;
+
+      } else {
+        # Just the last line of the DD command is relvant:
+        my @temp = split(/\n/, $response);
+        logMessage(1, "tarBeam: ".$result." ".$temp[2]);
+        my @vals = split(/ /, $temp[2]);
+        my $bytes_written = int($vals[0]);
+        my $bytes_gb = $bytes_written / (1024*1024*1024);
+
+        # If we didn't write anything, its due to the nc client connecting 
+        # before the nc server was ready to provide the data, simply try to reconnect
+        if ($bytes_gb == 0) {
+          logMessage(0, "tarBeam: nc server not ready, sleeping 2 seconds");
+          $tries--;
+          sleep(2);
+
+        # If we did write something, but it didn't match bail!
+        } elsif ( ($size_est_gbytes - $bytes_gb) > 0.01) {
+          $result = "fail";
+          $response = "not enough data received by nc: ".$size_est_gbytes.
+                      " - ".$bytes_gb." = ".($size_est_gbytes - $bytes_gb);
+          logMessage(0, "tarBeam: ".$result." ".$response);
+          $tries = -1;
+
+        } else {
+
+          logMessage(2, "tarBeam: est_size ".sprintf("%7.4f GB", $size_est_gbytes).
+                        ", size = ".sprintf("%7.4f GB", $bytes_gb));
+          $tries = 0;
+        }
+      }
+    }
 
     if ($result ne "ok") {
+
       logMessage(0, "tarBeam: failed to write archive to tape: ".$response);
+      logMessage(0, "tarBeam: attempting to clear the current nc server command");
+
+      $cmd = "nc -zd ".$host." ".$port." > /dev/null";
+      logMessage(0, "tarBeam: ".$cmd);
+      ($result, $response) = Dada->mySystem($cmd);
+      logMessage(0, "tarBeam: ".$result." ".$response);
+
+      $remote_nc_thread->detach();
       unindent();
-      return ("fail", "Archiving failed");
+      return ("fail","Archiving failed");
+    }
+  
+    logMessage(2, "tarBeam: joining nc_thread()");
+    ($result, $response) = $remote_nc_thread->join();
+    logMessage(2, "tarBeam: nc_thread() ".$result." ".$response);
+
+    if ($result ne "ok") {
+      logMessage(0, "tarBeam: remote tar/nc thread failed: ".$response);
+      unindent();
+      return ("fail","Archiving failed");
     }
 
   } else {
@@ -1055,6 +1234,15 @@ sub newTape() {
 
 }
 
+################################################################################
+##
+## DATABASE FUNCTIONS
+##
+
+
+#
+# Not sure what this does!
+#
 sub updateBookKeepr($$){
   my ($psrxmlfile,$bookkeepr,$number) = @_;
   my $cmd="";
@@ -1080,6 +1268,54 @@ sub updateBookKeepr($$){
   }
 
 }
+
+#
+# Get a hash of the Tapes DB
+#
+sub readTapesDB() {
+
+  indent();
+
+  logMessage(2, "readTapesDB()");
+
+  my $fname = $db_dir."/".TAPES_DB;
+
+  open FH, "<".$fname or return ("fail", "Could not read tapes db ".$fname);
+  my @lines = <FH>;
+  close FH;
+
+  my $id = "";
+  my $size = "";
+  my $used = "";
+  my $free = "";
+  my $nfiles = "";
+  my $full = "";
+  my $line;
+
+  my @db = ();
+  my $i = 0;
+
+  foreach $line (@lines) {
+
+    logMessage(3, "readTapesDB: processing line: ".$line);
+    ($id, $size, $used, $free, $nfiles, $full) = split(/ +/,$line);
+
+    $db[$i] = {
+      id => $id,
+      size => $size,
+      used => $used,
+      free => $free,
+      nfiles => int($nfiles),
+      full => $full,
+    };
+    $i++
+
+  }
+
+  return @db;
+
+}
+
 
 #
 # Update the tapes database with the specified information
@@ -1537,6 +1773,261 @@ sub robotInitializeAllTapes() {
   
 }
 
+
+#
+# Verify all the tapes in the robot, untarring each and every observation and
+# checking the file size vs the files.da
+#
+sub robotVerifyAllTapes() {
+
+  indent();
+  logMessage(1, "robotVerifyAllTapes()");
+
+  # verifyLog("TAPE FILE OBSERVATION RESULT TAPE_SIZE FILES.DBSISZE AUX_TAR_MD5SUM");
+
+  my $result = "";
+  my $response = "";
+  my $local_dir = "/lfs/data0/pulsar/tape_verify";
+  my $cmd = "";
+  
+  if (! -d $local_dir) {
+    $cmd = "mkdir -p ".$local_dir;
+    logMessage(1, "robotVerifyAllTapes: ".$cmd);
+    ($result, $response) = Dada->mySystem($cmd);
+
+    if ($result ne "ok") {
+      logMessage(0, "robotVerifyAllTapes: could not create tape verification dir");
+      unindent();
+      return ("fail", "could not create local temp dir");
+    }
+  }
+
+  chdir $local_dir;
+  if ($? != 0) {
+    logMessage(0, "robotVerifyAllTapes: could not chdir to local tape verifcation dir");
+    unindent();
+    return ("fail", "could not chdir to ".$local_dir);
+  }
+
+  # TODO Check for enough local disk space...
+  # 20 GB should be enough
+
+  my $i = 0;
+  my $curr_tape = "none";
+  my $nfiles = 0;
+  my $ifile  = 0;
+
+  # get the full tapes.db listing to determine the tapes to check
+  my @tapes_db = readTapesDB();
+
+  # foreach tape
+  TAPES: for ($i=0; (($i<$#tapes_db) && (!$quit_daemon)); $i++) {
+
+    $curr_tape = $tapes_db[$i]{"id"};
+    $nfiles = $tapes_db[$i]{"nfiles"};
+
+    # If this tape has files on it
+    if ($tapes_db[$i]{"nfiles"} > 1) {
+
+      # load the tape
+      logMessage(2, "robotVerifyAllTapes: loadTape(".$curr_tape.")");
+      ($result, $response) = loadTape($curr_tape);
+      logMessage(2, "robotVerifyAllTapes:loadTape() ".$result." ".$response);
+
+      if ($result ne "ok") {
+        logMessage(0, "robotVerifyAllTapes: loadTape failed: ".$response);
+        unindent();
+        return ("fail", "could not load tape ".$curr_tape);
+      }
+
+      # ensure tape is rewinded
+      logMessage(2, "robotVerifyAllTapes: tapeGetID()");
+      ($result, $response) = tapeGetID();
+      logMessage(2, "robotVerifyAllTapes: tapeGetID() ".$result." ".$response);
+      
+      # We have our tape loaded and a ready to go through each file checking
+      # with the database
+
+      # foreach FSF
+      my $skipper = 0;
+      FILES: for ($ifile=1; (($ifile<$nfiles) && (!$quit_daemon)); $ifile++) {
+
+        logMessage(1, "robotVerifyAllTapes: ".$curr_tape.": file no ".$ifile);
+
+        # If we have already verified this, skip
+        $cmd = "grep \"".$curr_tape." ".$ifile." \" ".$db_dir."/verify.log | grep \" OK \"";
+        logMessage(3, "robotVerifyAllTapes: ".$cmd);
+        ($result, $response) = Dada->mySystem($cmd);
+        logMessage(3, "robotVerifyAllTapes: ".$result." ".$response);
+
+        if ($result eq "ok") {
+          $skipper++;
+          logMessage(1, "robotVerifyAllTapes: skipping ".$curr_tape." ".$ifile.", previously verified");
+          next FILES;
+        }
+
+        logMessage(2, "robotVerifyAllTapes: tapeFSF(".$skipper.")");
+        ($result, $response) = tapeFSF($skipper);
+        logMessage(2, "robotVerifyAllTapes: tapeFSF(".$skipper.")");
+        
+        # Something is wrong with the file count on the tape, move to the next tape
+        if ($result ne "ok") {
+          logMessage(0, "robotVerifyAllTapes: tapeFSF(".$skipper.") failed: ".$response);
+          verifyLog($curr_tape." ".$ifile." FSF(".$skipper.") failed");
+          next TAPES;
+        }
+
+        $skipper = 1;
+
+        # check ifile vs mt's tape identifier
+        logMessage(2, "robotVerifyAllTapes: ".$cmd);
+        $cmd =  "mt -f /dev/nst0 status | grep 'File number' | awk -F, '{print \$1}' | awk -F= '{print \$2}'";
+         ($result, $response) = Dada->mySystem($cmd);
+        logMessage(2, "robotVerifyAllTapes: ".$result." ".$response);
+
+        if ($result ne "ok") {
+          logMessage(0, "robotVerifyAllTapes: could not extract file number from mt status command");
+          unindent();
+          return ("fail", "could not extract file number from mt status command");
+        }
+
+        chomp $response;
+        my $mt_file_no = $response;
+
+        if ($mt_file_no != $ifile) {
+          logMessage(0, "robotVerifyAllTapes: File number mismatch tape_file_no=".$mt_file_no.", ifile=".$ifile);
+          verifyLog($curr_tape." ".$ifile." tape file_no ".$mt_file_no." did not match ifile ".$ifile);
+          next FILES;
+        }
+
+        # ensure there is nothing in the localdir
+        $cmd = "rm -rf ".$local_dir."/*";
+        logMessage(2, "robotVerifyAllTapes: ".$cmd);
+        ($result, $response) = Dada->mySystem($cmd);
+        logMessage(2, "robotVerifyAllTapes: ".$result." ".$response);
+
+
+        # extract the tar archive on tape
+        $cmd = "tar -b 128 -xvf ".$dev; 
+        logMessage(2, "robotVerifyAllTapes: ".$cmd);
+        ($result, $response) = Dada->mySystem($cmd);
+        logMessage(2, "robotVerifyAllTapes: ".$result." ".$response);
+
+        if ($result ne "ok") {
+          logMessage(0, "robotVerifyAllTapes: untar failed: ".$response);
+          verifyLog($curr_tape." ".$ifile." untar command failed");
+          next FILES;
+        }
+
+        # determine what was on the archive
+        my @tarred_files = split(/\n/, $response);
+      
+        # the first file should be the <UTC_START>/<BEAM>
+        my $utc_beam = $tarred_files[0];
+
+        # remove the preceeding ./ if possible
+        if ($utc_beam =~ /^\.\//) {
+          logMessage(2, "robotVerifyAllTapes: removing preceeding ./");
+          $utc_beam = substr($utc_beam, 2);
+        }
+        
+        # remove the trailing slash if possible
+        if ($utc_beam =~ /\/$/) {
+          logMessage(2, "robotVerifyAllTapes: removing trailing slash");
+          chop $utc_beam;
+        }
+
+        # check it exists
+        if (! -d $utc_beam) {
+          logMessage(0, "robotVerifyAllTapes: untar failed as expected dir did not exist after tar command");
+          verifyLog($curr_tape." ".$ifile." untar failed unexpected dir");
+          next FILES;
+        } 
+
+        # it exists, check the size
+        $cmd = "du -sLb ./".$utc_beam." | awk '{print \$1}'";
+        logMessage(2, "robotVerifyAllTapes: ".$cmd);
+        ($result, $response) = Dada->mySystem($cmd);
+        logMessage(2, "robotVerifyAllTapes: ".$result." ".$response);
+
+        if ($result ne "ok") {
+          logMessage(0, "robotVerifyAllTapes: du command failed: ".$response);
+          unindent();
+          return ("fail", "could not determine size of the untarred dir");
+        }
+
+        chomp $response;
+        my $tape_size_gbytes = int($response) / (1024*1024*1024);
+
+        # now compared to the size in the files.db
+        $cmd = "grep '".$utc_beam."' ".$db_dir."/".FILES_DB;
+        logMessage(2, "robotVerifyAllTapes: ".$cmd);
+        ($result, $response) = Dada->mySystem($cmd);
+        logMessage(2, "robotVerifyAllTapes: ".$result." ".$response);
+
+        if ($result ne "ok") {
+          logMessage(0, "robotVerifyAllTapes: grep command failed: ".$response);
+          verifyLog($curr_tape." ".$ifile." ".$utc_beam." dir did not exist in files.db");
+          next FILES;
+        }
+
+        my $grep_result = $response;
+        chomp $grep_result;
+
+        my ($obs, $tape, $date, $size, $fileno) = split(" ", $grep_result);
+        logMessage(2, "robotVerifyAllTapes: files.db result: obs=".$obs.", tape=".$tape.", date=".$date.", size=".$size.", fileno=".$fileno);
+
+        my $size_gbytes = $size;
+
+        # If the size difference is greater than 100 MB
+        if (abs($size_gbytes - $tape_size_gbytes) > 0.1) {
+          logMessage(0, "robotVerifyAllTapes: size mismatch: tape=".$tape_size_gbytes.", files.db=".$size_gbytes);
+          verifyLog($curr_tape." ".$ifile." ".$utc_beam." size mismatch (tape=".$tape_size_gbytes.", files.db=".$size_gbytes.")");
+          next FILES;
+        }
+
+        my $md5sum_result = "";
+
+        # Do a md5sum on the aux.tar file
+        if (-f ($utc_beam."/aux.tar")) {
+          $cmd = "md5sum ./".$utc_beam."/aux.tar | awk '{print \$1}'";
+          logMessage(2, "robotVerifyAllTapes: ".$cmd);
+          ($result, $response) = Dada->mySystem($cmd);
+          logMessage(2, "robotVerifyAllTapes: ".$result." ".$response);
+
+          if ($result ne "ok") {
+            logMessage(0, "robotVerifyAllTapes: md5sum failed: ".$response);
+            verifyLog($curr_tape." ".$ifile." ".$utc_beam." md5sum failed on ".$utc_beam."/aux.tar");
+            next FILES;
+          }
+
+        }
+      
+        my $md5sum_result = $response; 
+        chomp($md5sum_result);
+
+        verifyLog($curr_tape." ".$ifile." ".$utc_beam." OK ".sprintf("%6.4f",$tape_size_gbytes)." ".sprintf("%6.4f",$size_gbytes)." ".$md5sum_result);
+
+      }
+    }
+  }
+}
+
+sub verifyLog($) {
+
+  (my $string) = @_;
+  indent();
+  
+  my $cmd = "echo '".$string."' >> ".$db_dir."/verify.log";
+  logMessage(2, "verifyLog: ".$cmd);
+  ($result, $response) = Dada->mySystem($cmd);
+  logMessage(2, "verifyLog: ".$result." ".$response);
+
+  unindent();
+
+
+}
+
 sub robotSetStatus($) {
 
   (my $string) = @_;
@@ -1805,7 +2296,7 @@ sub tapeFSF($) {
   unindent();
   return ("ok", "");
 
-} 
+}
 
 
 #
@@ -1881,7 +2372,6 @@ sub tapeInit($) {
   return ("ok", $id);
 
 }
-  
 
  
 #
@@ -1898,8 +2388,8 @@ sub tapeGetID() {
 
   my $cmd = "mt -f ".$dev." rewind";
   logMessage(2, "tapeGetID: ".$cmd);
-
   ($result, $response) = Dada->mySystem($cmd);
+  logMessage(2, "tapeGetID: ".$result." ".$response);
 
   if ($result ne "ok") {
     logMessage(0, "tapeGetID: ".$cmd." failed: ".$response);
@@ -1910,6 +2400,7 @@ sub tapeGetID() {
   $cmd = "tar -tf ".$dev;
   logMessage(2, "tapeGetID: ".$cmd);
   ($result, $response) = Dada->mySystem($cmd);
+  logMessage(2, "tapeGetID: ".$result." ".$response);
 
   if ($result ne "ok") {
 
@@ -1935,31 +2426,31 @@ sub tapeGetID() {
 
   ($result, my $filenum, my $blocknum) = getTapeStatus();
   if ($result ne "ok") { 
-          logMessage(0, "tapeGetID: getTapeStatus() failed.");
-          unindent();
-          return ("fail", "getTapeStatus() failed");
+    logMessage(0, "tapeGetID: getTapeStatus() failed.");
+    unindent();
+    return ("fail", "getTapeStatus() failed");
   }
 
   while ($filenum ne 1 || $blocknum ne 0){
     # we are not at 0 block of file 1...
-          logMessage(1, "tapeGetID: Tape out of position (f=$filenum, b=$blocknum), rewinding and skipping to start of data");
-          $cmd="mt -f ".$dev." rewind; mt -f ".$dev." fsf 1";
-          ($result, $response) = Dada->mySystem($cmd);
-          if ($result ne "ok") {
-                  logMessage(0, "tapeGetID: tape re-wind/skip failed: ".$response);
-                  unindent();
-                  return ("fail", "tape re-wind/skip failed: ".$response);
-          }
+    logMessage(1, "tapeGetID: Tape out of position (f=$filenum, b=$blocknum), rewinding and skipping to start of data");
+    $cmd="mt -f ".$dev." rewind; mt -f ".$dev." fsf 1";
+    ($result, $response) = Dada->mySystem($cmd);
+    if ($result ne "ok") {
+      logMessage(0, "tapeGetID: tape re-wind/skip failed: ".$response);
+      unindent();
+      return ("fail", "tape re-wind/skip failed: ".$response);
+    }
 
-          ($result, $filenum, $blocknum) = getTapeStatus();
-          if ($result ne "ok") { 
-                  logMessage(0, "tapeGetID: getTapeStatus() failed.");
-                  unindent();
-                  return ("fail", "getTapeStatus() failed");
-          }
+    ($result, $filenum, $blocknum) = getTapeStatus();
+    if ($result ne "ok") { 
+      logMessage(0, "tapeGetID: getTapeStatus() failed.");
+      unindent();
+      return ("fail", "getTapeStatus() failed");
+    }
   }
   # The tape MUST now be in the right place to start
-
+  logMessage(2, "tapeGetID: ID = ".$tape_label);
   unindent();
 
   return ("ok", $tape_label);
@@ -1981,8 +2472,8 @@ sub tapeWriteID($) {
 
   my $cmd = "mt -f ".$dev." rewind";
   logMessage(2, "tapeWriteID: ".$cmd);
-
   ($result, $response) = Dada->mySystem($cmd);
+  logMessage(2, "tapeWriteID: ".$result." ".$response);
 
   if ($result ne "ok") {
     logMessage(0, "tapeWriteID: ".$cmd." failed: ".$response);
@@ -1994,6 +2485,7 @@ sub tapeWriteID($) {
   $cmd = "touch ".$tape_id;
   logMessage(2, "tapeWriteID: ".$cmd);
   ($result, $response) = Dada->mySystem($cmd);
+  logMessage(2, "tapeWriteID: ".$result." ".$response);
   if ($result ne "ok") {
     logMessage(0, "tapeWriteID: ".$cmd." failed: ".$response);
     unindent();
@@ -2004,6 +2496,7 @@ sub tapeWriteID($) {
   $cmd = "tar -cf ".$dev." ".$tape_id;
   logMessage(2, "tapeWriteID: ".$cmd);
   ($result, $response) = Dada->mySystem($cmd);
+  logMessage(2, "tapeWriteID: ".$result." ".$response);
 
   unlink($tape_id);
 
@@ -2012,6 +2505,12 @@ sub tapeWriteID($) {
     unindent();
     return ("fail", "could not write ID to tape: ".$response);
   } 
+
+  # write the EOF marker
+  $cmd = "mt -f ".$dev." weof";
+  logMessage(2, "tapeWriteID: ".$cmd);
+  ($result, $response) = Dada->mySystem($cmd);
+  logMessage(2, "tapeWriteID: ".$result." ".$response);
 
   # Initialisze the tapes DB record also
   logMessage(2, "tapeWriteID: updatesTapesDB(".$tape_id.", ".TAPE_SIZE.", 0, ".TAPE_SIZE.", 1, 0)");
@@ -2064,7 +2563,7 @@ sub logMessage($$) {
   if ($level <= DEBUG_LEVEL) {
     my $time = Dada->getCurrentDadaTime();
     print "[".$time."] ".$indent.$message."\n";
-    system("echo '[".$time."] ".$indent.$message."' >> ".$db_dir."/bpsr_tape_archiver.log");
+    # system("echo '[".$time."] ".$indent.$message."' >> ".$db_dir."/bpsr_tape_archiver.log");
   }
 }
 sub indent() {
@@ -2086,11 +2585,11 @@ sub sigHandle($) {
   my $dir;
 
   # force an unlink of any READING control files on exit
-  # foreach $dir (@dirs) {
-  #   if (-f $dir."/READING") {
-  #     unlink ($dir."/READING");
-  #   }
-  # }
+  #foreach $dir (@dirs) {
+  #  if (-f $dir."/READING") {
+  #    unlink ($dir."/READING");
+  #  }
+  #}
   sleep(3);
   print STDERR basename($0)." : Exiting: ".Dada->getCurrentDadaTime(0)."\n";
 
@@ -2146,6 +2645,9 @@ sub tarSizeEst($$) {
   # upper limit on archive size in bytes
   my $size_est = $files_size + $tar_overhead_files + $tar_overhead_archive;
 
+  # Add 1 MB for good measure
+  $size_est += (1024*1024);
+
   return $size_est;
 
 }
@@ -2170,6 +2672,38 @@ sub setStatus($) {
   return ($result, $response);
 }
 
+#
+# Launches NC on the remote end
+#
+sub nc_thread($$$$$) {
+
+  my ($host, $dir, $obs, $beam, $port) = @_;
+
+  # Firstly, try to ensure that no NC is running on the port we want to use
+
+  my $result = "";
+  my $response = "";
+
+  my $cmd = "ssh -o BatchMode=yes pulsar@".$host." \"ls ".$dir." > /dev/null\"";
+  logMessage(2, "nc_thread: ".$cmd);
+  ($result, $response) = Dada->mySystem($cmd);
+  logMessage(2, "nc_thread: ".$result." ".$response);
+
+  if ($result ne "ok") {
+    logMessage(2, "nc_thread: could not automount the /nfs/cluster/shrek??? raid disk");
+  }
+
+  $cmd = "ssh ".$host." \"cd ".$dir."; tar -b 128 -c ./".$obs."/".$beam." | nc -l ".$port."\"";
+  logMessage(2, "nc_thread: ".$cmd);
+  ($result, $response) = Dada->mySystem($cmd);
+  logMessage(2, "nc_thread: ".$result." ".$response);
+
+  if ($result ne "ok") {
+    logMessage(0, "nc_thread: cmd \"".$cmd."\" failed: ".$response);
+    return ("fail");
+  }
+  return ("ok");
+}
 
 sub getTapeStatus(){
   my $cmd="";
@@ -2179,26 +2713,23 @@ sub getTapeStatus(){
   $cmd="mt -f ".$dev." status | grep -e 'file number' | awk '{print \$4}'";
   logMessage(3, "getTapeStatus: cmd= $cmd");
 
-
-
   my ($result,$response) = Dada->mySystem($cmd);
 
-
   if ($result ne "ok") {
-          logMessage(0, "getTapeStatus: Failed $response");
-          $filenum=-1;
-          $blocknum=-1;
+    logMessage(0, "getTapeStatus: Failed $response");
+    $filenum=-1;
+    $blocknum=-1;
   } else {
-          $filenum=$response;
-          $cmd="mt -f ".$dev." status | grep -e 'block number' | awk '{print \$4}'";
-          my ($result,$response) = Dada->mySystem($cmd);
-          if ($result ne "ok") {
-                  logMessage(0, "getTapeStatus: Failed $response");
-                  $filenum=-1;
-                  $blocknum=-1;
-          } else {
-                  $blocknum=$response;
-          }
+    $filenum=$response;
+    $cmd="mt -f ".$dev." status | grep -e 'block number' | awk '{print \$4}'";
+    my ($result,$response) = Dada->mySystem($cmd);
+    if ($result ne "ok") {
+      logMessage(0, "getTapeStatus: Failed $response");
+      $filenum=-1;
+      $blocknum=-1;
+    } else {
+      $blocknum=$response;
+    }
   }
   return ($result,$filenum,$blocknum);
 }
