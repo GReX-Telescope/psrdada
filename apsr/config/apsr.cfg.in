@@ -33,7 +33,7 @@ SERVER_LOG_DIR          /export/logs/apsr
 SERVER_CONTROL_DIR      /tmp/apsr/control
 SERVER_RESULTS_NFS_MNT  /nfs/results/apsr
 SERVER_ARCHIVE_NFS_MNT  /nfs/archives/apsr
-SERVER_DAEMONS          apsr_aux_manager apsr_pwc_monitor apsr_results_manager apsr_src_monitor apsr_sys_monitor apsr_tcs_interface apsr_gain_manager
+SERVER_DAEMONS          apsr_aux_manager apsr_pwc_monitor apsr_results_manager apsr_src_monitor apsr_sys_monitor apsr_tcs_interface apsr_gain_manager apsr_web_monitor
 
 # TCS Interface configuration. Note on different interface to server
 TCS_INTERFACE_HOST      apsr-srv0.atnf.csiro.au
@@ -46,6 +46,8 @@ PWCC_PORT               52020
 PWCC_LOGPORT            52021
 PWC_PORT                52022
 PWC_LOGPORT             52023
+
+SERVER_WEB_MONITOR_PORT   52024
 
 
 # For clients to log system messages
@@ -112,7 +114,7 @@ FADA_BLOCK_BUFSZ        4194304
 
 # Primary Write Client (PWC) configuration
 PWC_BINARY              apsr_udpdb
-NUM_PWC                 15
+NUM_PWC                 16
 PWC_0                   apsr00
 PWC_1                   apsr01
 PWC_2                   apsr02
@@ -127,7 +129,8 @@ PWC_10                  apsr10
 PWC_11                  apsr11
 PWC_12                  apsr12
 PWC_13                  apsr13
-PWC_14                  apsr15
+PWC_14                  apsr14
+PWC_15                  apsr15
 
 DFB_0	                  apsr16
 
