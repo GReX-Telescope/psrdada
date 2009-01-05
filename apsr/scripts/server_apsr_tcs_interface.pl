@@ -43,10 +43,11 @@ use strict;         # strict mode (like -Wall)
 use constant DEBUG_LEVEL        => 1;         # 0 None, 1 Minimal, 2 Verbose
 use constant PIDFILE            => "apsr_tcs_interface.pid";
 use constant LOGFILE            => "apsr_tcs_interface.log";
+use constant QUITFILE           => "apsr_tcs_interface.quit";
 use constant PWCC_LOGFILE       => "dada_pwc_command.log";
 use constant DFBSIM_DURATION    => "3600";    # Simulator runs for 1 hour
 use constant TERMINATOR         => "\r";
-use constant NHOST              => 15;        # This is constant re DFB3
+use constant NHOST              => 16;        # This is constant re DFB3
 
 #
 # Global Variables
@@ -746,6 +747,15 @@ sub set_utc_start($\%) {
   $cmd = "mkdir -p ".$archive_dir;
   system($cmd);
 
+  my $apsr_groups = `groups`;
+  chomp $apsr_groups;
+  if ($apsr_groups =~ m/$proj_id/) {
+    # Do nothing
+  } else {
+    logMessage(0, "set_utc_start: PID ".$proj_id." invalid, using apsr instead");
+    $proj_id = "apsr";
+  }
+
   $cmd = "chgrp -R ".$proj_id." ".$results_dir;
   system($cmd);
 
@@ -1083,8 +1093,7 @@ sub daemonControlThread() {
   logMessage(2, "daemon_control: thread starting");
 
   my $pidfile = $cfg{"SERVER_CONTROL_DIR"}."/".PIDFILE;
-
-  my $daemon_quit_file = Dada->getDaemonControlFile($cfg{"SERVER_CONTROL_DIR"});
+  my $daemon_quit_file = $cfg{"SERVER_CONTROL_DIR"}."/".QUITFILE;
 
   # Poll for the existence of the control file
   while ((!-f $daemon_quit_file) && (!$quit_threads)) {
@@ -1169,12 +1178,8 @@ sub addHostCommands(\%\%) {
   my $i=0;
   for ($i=0; $i<NHOST; $i++)
   {
-    my $ius = $i;
-    if ($i > 13) {
-      $ius = $i+1;
-    }
     $tcs_cmds{"Band".$i."_BW"} = -1 * $bw;
-    $tcs_cmds{"Band".$i."_FREQ"} = $cf - ($tbw/2) + ($bw/2) + ($bw*$ius);
+    $tcs_cmds{"Band".$i."_FREQ"} = $cf - ($tbw/2) + ($bw/2) + ($bw*$i);
   }
 
   # Add the site configuration to tcs_cmds
