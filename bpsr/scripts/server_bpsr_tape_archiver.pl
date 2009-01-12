@@ -37,10 +37,12 @@ our $type = "";
 our $tape_id_pattern = "";
 our $indent = "";                      # log message indenting
 our $db_dir = "";
+our $db_user = "";
+our $db_host = "";
 our $use_bk = 0;                       # define if bookkeeping is enabled
 our $bkid = "";                        # ID of current bookkeepr tape
 our $uc_type = "";
-
+our $ssh_opts : shared = "-o BatchMode=yes"; # Gloabl ssh options to be shared by threads
 
 # Autoflush output
 $| = 1;
@@ -61,11 +63,11 @@ if ($#ARGV != 0) {
   } else {
 
     if ($type eq "robot_init") {
-      $db_dir = $cfg{"SWIN_DB_DIR"};
+      ($db_user, $db_host, $db_dir) = split(/:/, $cfg{"SWIN_DB_DIR"});
       print STDERR "WARNING: Initializing ALL tapes in robot in 15 seconds. Press CTRL+C to abort this\n";
       sleep(15);
     } elsif ($type eq "robot_verify") {
-      $db_dir = $cfg{"SWIN_DB_DIR"};
+      ($db_user, $db_host, $db_dir) = split(/:/, $cfg{"SWIN_DB_DIR"});
       print STDERR "WARNING: Verifying ALL tapes in robot in 15 seconds. Press CTRL+C to abort this\n";
       sleep(15);
     } else {
@@ -93,8 +95,8 @@ if ($type eq "parkes") {
 }
 
 # sanity check the hostname
-if ($ENV{'HOSTNAME'} ne $required_host) {
-  print STDERR "ERROR: Cannot run this script on ".$ENV{'HOSTNAME'}."\n";
+if ($ENV{'HOST'} ne $required_host) {
+  print STDERR "ERROR: Cannot run this script on ".$ENV{'HOST'}."\n";
   print STDERR "       Must be run on ".$required_host."\n";
   exit(1);
 }
@@ -104,14 +106,13 @@ if ($ENV{'HOSTNAME'} ne $required_host) {
 #
 # Local Varaibles
 #
-# my $logfile = $cfg{"SERVER_LOG_DIR"}."/".LOGFILE;
-# my $pidfile = $cfg{"SERVER_CONTROL_DIR"}."/".PIDFILE;
 
 my $daemon_control_thread = 0;
 
 my $i=0;
 my @dirs  = ();
-my @hosts=();
+my @hosts = ();
+my @users = ();
 
 my $user;
 my $host;
@@ -121,11 +122,12 @@ my $path;
 for ($i=0; $i<$cfg{"NUM_".$uc_type."_DIRS"}; $i++) {
   ($user, $host, $path) = split(/:/,$cfg{$uc_type."_DIR_".$i},3);
   push (@dirs, $path);
-  push (@hosts,$host);
+  push (@hosts, $host);
+  push (@users, $user);
 }
 
 # location of DB files
-$db_dir = $cfg{$uc_type."_DB_DIR"};
+($db_user, $db_host, $db_dir) = split(/:/, $cfg{$uc_type."_DB_DIR"});
 
 # set global variable for the S4 device name
 $dev = $cfg{$uc_type."_S4_DEVICE"};
@@ -247,20 +249,35 @@ while (!$quit_daemon) {
 
   # look for a file sequentially in each of the @dirs
   $dir = $dirs[$i];
-  $host=$hosts[$i];
-  logMessage(3, "main: getObsToTar(".$dir.",".$host.")");
+  $host = $hosts[$i];
+  $user = $users[$i];
 
   # Look for files in the @dirs
-  $obs = getObsToTar($dir,$host);
-  logMessage(3, "main: getObsToTar() ".$obs);
+  logMessage(2, "main: getObsToTar(".$dir.",".$host.", ".$user.")");
+  $obs = getObsToTar($dir, $host, $user);
+  logMessage(2, "main: getObsToTar() ".$obs);
 
   # If we have one, write to tape
   if ($obs ne "none") {
-
-    logMessage(2, "main: tarObs(".$dir.", ".$obs.",".$host.")");
-    ($result, $response) = tarObs($dir, $obs,$host);
+    logMessage(2, "main: tarObs(".$dir.", ".$obs.",".$host.", ".$user.")");
+    ($result, $response) = tarObs($dir, $obs, $host, $user);
     logMessage(2, "main: tarObs() ".$result." ".$response);
     $waiting = 0;
+
+    if ($result eq "ok") {
+
+      ($result, $response) = moveCompletedObs($user,$host,$dir,$obs);
+      if ($result ne "ok") {
+        logMessage(0, "main: moveCompletedObs() failed: ".$response);
+        setStatus("Error: could not move obs");
+        exit_script(1);
+      }
+
+    } else {
+      setStatus("Error: ".$response);
+      logMessage(0, "main: tarObs() failed: ".$response);
+      exit_script(1);
+    }
 
   } else {
 
@@ -273,12 +290,6 @@ while (!$quit_daemon) {
 
   }
 
-  if ($result ne "ok") {
-    setStatus("Error: ".$response);
-    logMessage(0, "main: tarObs() failed: ".$response);
-    exit_script(1);
-  }
-
   $i++;
   # reset the dirs counter
   if ($i >= ($#dirs+1)) {
@@ -289,9 +300,7 @@ while (!$quit_daemon) {
     }
   }
 
-  # Loop indefinitely
-  #$quit_daemon = 1;
-}
+} # main loop
 
 # rejoin threads
 $daemon_control_thread->join();
@@ -313,54 +322,55 @@ exit 0;
 #
 # try and find an observation to tar
 #
-sub getObsToTar($$) {
+sub getObsToTar($$$) {
 
   indent();
 
-  (my $dir, my $host) = @_;
-  logMessage(3, "getObsToTar: ".$dir);
+  my ($dir, $host, $user) = @_;
+  logMessage(2, "getObsToTar (".$dir.", ".$host.", ".$user.")");
 
   my $obs = "none";
   my $subdir = "";
   my @subdirs = ();
+  my $cmd = "";
+  my $ssh_prefix = "ssh -x ".$ssh_opts." -l ".$user." ".$host;
 
-  # Temporarily disabling the "WRITING" check
-  if ( -f $dir."/WRITING" ) {
+  $cmd = $ssh_prefix." \"ls -1 ".$dir."/WRITING\"";
+  logMessage(2, "getObsToTar: ".$cmd);
+  ($result, $response) = Dada->mySystem($cmd);
+  logMessage(2, "getObsToTar: ".$result." ".$response);
+
+  # If the file existed
+  if ($result eq "ok") {
     logMessage(2, "getObsToTar: ignoring dir ".$dir." as this is being written to");
+
   } else {
 
     # find all subdirectories with an xfer.complete file in them
-    opendir(DIR,$dir);
-    @subdirs = sort grep { !/^\./ && -f $dir."/".$_."/xfer.complete" } readdir(DIR);
-    closedir DIR;
+    $cmd = $ssh_prefix." \"cd ".$dir."; find . -name 'xfer.complete' -maxdepth 2 -printf '\%h\\n' | sort | head -n 1\"";
+    logMessage(2, "getObsToTar: ".$cmd);
+    ($result, $response) = Dada->mySystem($cmd);
+    logMessage(2, "getObsToTar: ".$result." ".$response);
 
-    # now select the best one to tar
-    foreach $subdir (@subdirs) {
+    # if the ssh command failed
+    if ($result ne "ok") {
+      logMessage(0, "getObsToTar: ssh cmd failed: ".$cmd);
 
-      # If this is a previously archived observation, move to the on_tape dir
-      if (-f $dir."/".$subdir."/sent.to.tape") {
-        # ignore if this has already been sent to tape
-        logMessage(2, "getObsToTar: Found tarred obs ".$subdir.", moving...");
-        chdir $dir;
+    # ssh worked
+    } else {
 
-        my $cmd = "";
-        if ($robot) {
-          $cmd = "mv ".$subdir." ../on_tape";
-        } else {
-          $cmd = "ssh -x -o BatchMode=yes -l dada $host \"cd /lfs/data0/bpsr/from_parkes/ ; mv ".$subdir." ../on_tape \"";
-        }
-        logMessage(1, "getObsToTar: ".$cmd);
-        my ($result, $response) = Dada->mySystem($cmd);
-        if ($result ne "ok") {
-          logMessage(0, "getObsToTar: failed to move $subdir to on_tape dir: ".$response);
-        }
+      # find worked
+      if ($response ne "") {
+        chomp $response;
+        # remove the leading ./ if it exists
+        $response =~ s/^\.\///;
+        $obs = $response;
 
-      } elsif ($obs eq "none") {
-        logMessage(2, "getObsToTar: found obs ".$subdir);
-        $obs = $subdir;
+      # find failed
       } else {
-        # do nothing as we have found an obs or this is incomplete xfer
-      }
+        logMessage(2, "getObsToTar: could not find any xfer.complete's");
+      } 
+
     }
   }
   logMessage(3, "getObsToTar: returning ".$obs);
@@ -373,45 +383,66 @@ sub getObsToTar($$) {
 #
 # tars the observation to the tape drive
 #
-sub tarObs($$$) {
+sub tarObs($$$$) {
 
-  my ($dir, $obs,$host) = @_;
+  my ($dir, $obs, $host, $user) = @_;
   indent();
 
-  logMessage(2, "tarObs: (".$dir.", ".$obs.")");
+  logMessage(2, "tarObs: (".$dir.", ".$obs.", ".$host.", ".$user.")");
   logMessage(1, "tarObs: archiving observation: ".$obs);
 
   my $subdir = "";
   my @subdirs = ();
   my $beam_problem = 0;
-
-  system("touch $dir/READING");
-
-  opendir(DIR,$dir."/".$obs);
-  @subdirs = sort grep { !/^\./ && -d $dir."/".$obs."/".$_ } readdir(DIR);
-  closedir DIR;
-
-  my $result = "ok";
+  my $cmd = "";
+  my $result = "";
   my $response = "";
+
+  # Touch the reading flag in the dir to be processed
+  $cmd = "ssh -x ".$ssh_opts." -l ".$user." ".$host." \"touch ".$dir."/READING\"";
+  logMessage(2, "tarObs: ".$cmd);
+  ($result, $response) = Dada->mySystem($cmd);
+  logMessage(2, "tarObs: ".$result." ".$response);
+  if ($result ne "ok") {
+    logMessage(0, "tarObs: could not touch READING flag in ".$dir.": ".$response);
+    unindent();
+    return ("fail", "could not touch READING flag");
+  }
+
+  # get the beam subdirectories
+  $cmd = "ssh -x ".$ssh_opts." -l ".$user." ".$host." \"cd ".$dir."/".$obs."; ls -1d ??\"";
+  logMessage(2, "tarObs: ".$cmd);
+  ($result, $response) = Dada->mySystem($cmd);
+  logMessage(2, "tarObs: ".$result." ".$response);
+  if ($result ne "ok") {
+    logMessage(0, "tarObs: could get beam directories in ".$dir."/".$obs.": ".$response);
+    unindent();
+    return ("fail", "could not get beam directories");
+  }
+  chomp $response;
+  @subdirs = split("\n",$response);
+  # opendir(DIR,$dir."/".$obs);
+  # @subdirs = sort grep { !/^\./ && -d $dir."/".$obs."/".$_ } readdir(DIR);
+  # closedir DIR;
 
   foreach $subdir (@subdirs) {
 
     if ((! $beam_problem) && (!$quit_daemon) ) {
 
-      logMessage(2, "tarObs: checkIfArchived(".$dir.", ".$obs.", ".$subdir.")");
-      ($result, $response) = checkIfArchived($dir, $obs, $subdir);
+      logMessage(2, "tarObs: checkIfArchived(".$user.", ".$host.", ".$dir.", ".$obs.", ".$subdir.")");
+      ($result, $response) = checkIfArchived($user, $host, $dir, $obs, $subdir);
       logMessage(2, "tarObs: checkIfArchived() ".$result." ".$response);
 
       if ($result ne "ok") {
         logMessage(0, "tarObs: checkIfArchived failed: ".$response);
         unindent();
-        system("rm -f $dir/READING");
+        $cmd = "ssh -x ".$ssh_opts." -l ".$user." ".$host." \"rm -f ".$dir."/READING\"";
+        system($cmd);
         return ("fail", "checkIfArchived() failed: ".$response);
       } 
   
       # If this beam has been archived, skip it 
       if ($response eq "archived") {
-
         logMessage(1, "Skipping archival of ".$obs."/".$subdir.", already archived to tape");
 
       # Archive the beam 
@@ -419,8 +450,8 @@ sub tarObs($$$) {
   
         setStatus("Archiving  ".$obs." ".$subdir);
 
-        logMessage(2, "tarObs: tarBeam(".$dir.", ".$obs.", ".$subdir.", ".$host.")");
-        ($result, $response) = tarBeam($dir, $obs, $subdir,$host);
+        logMessage(2, "tarObs: tarBeam(".$dir.", ".$obs.", ".$subdir.", ".$host.", ".$user.")");
+        ($result, $response) = tarBeam($dir, $obs, $subdir, $host, $user);
 
         if ($result ne "ok") {
           logMessage(0, "tarObs: tarBeam(".$dir.", ".$obs.", ".$subdir.") failed: ".$response);
@@ -437,7 +468,8 @@ sub tarObs($$$) {
 
     logMessage(0, "tarObs: problem archiving a beam");
     unindent();
-    system("rm -f $dir/READING");
+    $cmd = "ssh -x ".$ssh_opts." -l ".$user." ".$host." \"rm -f ".$dir."/READING\"";
+    system($cmd);
     return ("fail", "problem occurred during archival of a beam");
 
   } elsif ($quit_daemon) {
@@ -446,13 +478,14 @@ sub tarObs($$$) {
 
   # Mark this entire pointing as successfully processed
   } else {
-
-    system("touch ".$dir."/".$obs."/sent.to.tape");
+    $cmd = "ssh -x ".$ssh_opts." -l ".$user." ".$host." \"touch ".$dir."/".$obs."/sent.to.tape\"";
+    system($cmd);
   }
 
   logMessage(1, "tarObs: finished observation: ".$obs);
 
-  system("rm -f $dir/READING");
+  $cmd = "ssh -x ".$ssh_opts." -l ".$user." ".$host." \"rm -f ".$dir."/READING\"";
+  system($cmd);
   unindent();
   return ("ok", "");
 }
@@ -460,9 +493,9 @@ sub tarObs($$$) {
 #
 # tars the beam to the tape drive
 #
-sub tarBeam($$$$) {
+sub tarBeam($$$$$) {
 
-  my ($dir, $obs, $beam,$host) = @_;
+  my ($dir, $obs, $beam, $host, $user) = @_;
 
   indent();
   logMessage(2, "tarBeam: (".$dir.", ".$obs.", ".$beam.", ".$host.")");
@@ -494,20 +527,15 @@ sub tarBeam($$$$) {
 
   my $tape = $expected_tape;
 
-  # remove the xfer.complete in the beam fir if it exists
-  if (-f $dir."/".$obs."/".$beam."/xfer.complete") {
-    my $cnt = unlink $dir."/".$obs."/".$beam."/xfer.complete";
-    if ($cnt != 1) {
-      logMessage(2, "tarBeam: couldnt unlink ".$obs."/".$beam."/xfer.complete");
-    }
-  }
+  # remove the xfer.complete in the beam if it exists
+  $cmd = "ssh -x ".$ssh_opts." -l ".$user." ".$host." \"rm -f ".$dir."/".$obs."/".$beam."/xfer.complete\"";
+  system($cmd);
 
   # Find the combined file size in bytes
-  $cmd  = "du -sLb ".$dir."/".$obs."/".$beam;
+  $cmd  = "ssh -x ".$ssh_opts." -l ".$user." ".$host." \"du -sLb ".$dir."/".$obs."/".$beam."\"";
   logMessage(2, "tarBeam: ".$cmd);
-
   ($result, $response) = Dada->mySystem($cmd);
-
+  logMessage(2, "tarBeam: ".$result." ".$response);
   if ($result ne "ok") {
     logMessage(0, "tarBeam: ".$cmd. "failed: ".$response);
     unindent();
@@ -589,6 +617,7 @@ sub tarBeam($$$$) {
                                                                                                                                                                            
       if ($result ne "ok") {
         logMessage(0, "tarBeam: tapeFSF failed: ".$response);
+        unindent();
         return ("fail", "could not FSF seek to correct place on tape");
       }
     }
@@ -606,7 +635,7 @@ sub tarBeam($$$$) {
   while (($filenum ne $nfiles) || ($blocknum ne 0)) {
 
     # we are not at 0 block of the next file!
-    logMessage(0, "TarBeam: WARNING: Tape out of position! (f=$filenum, b=$blocknum) Attempt to get to right place.");
+    logMessage(0, "tarBeam: WARNING: Tape out of position! (f=$filenum, b=$blocknum) Attempt to get to right place.");
 
     $cmd = "mt -f ".$dev." rewind; mt -f ".$dev." fsf $nfiles";
     ($result, $response) = Dada->mySystem($cmd);
@@ -624,168 +653,141 @@ sub tarBeam($$$$) {
     }
 
     if ($ntries < 1) {
+      unindent();
       return ("fail", "TarBeam: Could not get to correct place on tape!");
     }
 
     $ntries--;
   }
 
-  # now we have a tape with enough space to fit this archive
-  if ($robot) {
 
-    #chdir $dir;
-    #$cmd = "tar -b 128 -cf ".$dev." ".$obs."/".$beam;
-  
-    #logMessage(0, "tarBeam: ".$cmd);
-    #($result, $response) = Dada->mySystem($cmd);
-    #logMessage(2, "tarBeam: ".$result." ".$response);
+  # Try to ensure that no nc is running on the port we want to use
+  my $nc_ready = 0;
+  my $tries = 5;
+  my $port = 25128;
 
-    #if ($result ne "ok") {
-    #  logMessage(0, "tarBeam: failed to write archive to tape: ".$response);
-    #  unindent();
-    #  return ("fail", "Archiving failed");
-    #}
+  while ( (!$nc_ready)  && ($tries > 0) && (!$quit_daemon) ) {
 
-    # Try to ensure that no nc is running on the port we want to use
-    my $nc_ready = 0;
-    my $tries = 5;
-    my $port = 25128;
-
-    while ( (!$nc_ready)  && ($tries > 0) && (!$quit_daemon) ) {
-
-      # This tries to connect to any type of service on specified port
-      logMessage(2, "tarBeam: testing nc on ".$host.":".$port);
+    # This tries to connect to any type of service on specified port
+    logMessage(2, "tarBeam: testing nc on ".$host.":".$port);
+    if ($robot eq 0) {
+      $cmd = "nc -z ".$host." ".$port." > /dev/null";
+    } else {
       $cmd = "nc -zd ".$host." ".$port." > /dev/null";
-      ($result, $response) = Dada->mySystem($cmd);
-
-      if ($result eq "ok") {
-        # This is an error condition!
-
-        logMessage(0, "tarBeam: something running on the NC port ".$port);
-
-        if ($tries < 5) {
-          logMessage(0, "tarBeam: trying to increment port number");
-          $port += 1;
-        } else {
-          logMessage(0, "tarBeam: trying again, now that we have tested once");
-        }
-        $tries--;
-        sleep(1);
-
-      # the command failed, meaning there is nothing on that port
-      } else {
-        logMessage(2, "tarBeam: nc will be available on ".$host.":".$port);
-        $nc_ready = 1;
-
-      }
     }
+    ($result, $response) = Dada->mySystem($cmd);
 
-    my $remote_nc_thread = threads->new(\&nc_thread, $host, $dir, $obs, $beam, $port);
+    if ($result eq "ok") {
+      # This is an error condition!
 
-    # Allow some time for this thread to start-up, ssh and launch tar + nc
-    sleep(5);
+      logMessage(0, "tarBeam: something running on the NC port ".$port);
 
-    my $localhost = Dada->getHostMachineName();
+      if ($tries < 5) {
+        logMessage(0, "tarBeam: trying to increment port number");
+        $port += 1;
+      } else {
+        logMessage(0, "tarBeam: trying again, now that we have tested once");
+      }
+      $tries--;
+      sleep(1);
 
-    $tries=5;
-    while ($tries > 0) {
+    # the command failed, meaning there is nothing on that port
+    } else {
+      logMessage(2, "tarBeam: nc will be available on ".$host.":".$port);
+      $nc_ready = 1;
 
+    }
+  }
+
+  logMessage(2, "tarBeam: nc_thread(".$user.", ".$host.", ".$dir.", ".$obs.", ".$beam.", ".$port.")");
+  my $remote_nc_thread = threads->new(\&nc_thread, $user, $host, $dir, $obs, $beam, $port);
+
+  # Allow some time for this thread to start-up, ssh and launch tar + nc
+  sleep(10);
+
+  my $localhost = Dada->getHostMachineName();
+
+  $tries=10;
+  while ($tries > 0) {
+
+    # For historical reasons, HRE(robot==0) tapes are written with a slight 
+    # different command to HRA (robot==1) tapes
+    #
+    if ($robot eq 0) {
+      $cmd = "nc ".$host." ".$port." | dd of=".$dev." bs=64K";
+    } else {
       $cmd = "nc -d ".$host." ".$port." | dd of=".$dev." obs=64k";
-      logMessage(2, "tarBeam: ".$cmd);
-      ($result, $response) = Dada->mySystem($cmd);
-      if ($result ne "ok") {
-        logMessage(2, "tarBeam: ".$result." ".$response);
-        logMessage(0, "tarBeam: failed to write archive to tape: ".$response);
+    }
+      
+    logMessage(2, "tarBeam: ".$cmd);
+    ($result, $response) = Dada->mySystem($cmd);
+    if (($result ne "ok") || ($response =~ m/refused/) || ($response =~ m/0\+0/)) {
+      logMessage(2, "tarBeam: ".$result." ".$response);
+      logMessage(0, "tarBeam: failed to write archive to tape: ".$response);
+      $tries--;
+      $result = "fail";
+      $response = "failed attempt at writing archive";
+      sleep(1);
+
+    } else {
+      # Just the last line of the DD command is relvant:
+      my @temp = split(/\n/, $response);
+      logMessage(1, "tarBeam: ".$result." ".$temp[2]);
+      my @vals = split(/ /, $temp[2]);
+      my $bytes_written = int($vals[0]);
+      my $bytes_gb = $bytes_written / (1024*1024*1024);
+
+      # If we didn't write anything, its due to the nc client connecting 
+      # before the nc server was ready to provide the data, simply try to reconnect
+      if ($bytes_gb == 0) {
+        logMessage(0, "tarBeam: nc server not ready, sleeping 2 seconds");
         $tries--;
+        sleep(2);
+
+      # If we did write something, but it didn't match bail!
+      } elsif ( ($size_est_gbytes - $bytes_gb) > 0.01) {
+        $result = "fail";
+        $response = "not enough data received by nc: ".$size_est_gbytes.
+                    " - ".$bytes_gb." = ".($size_est_gbytes - $bytes_gb);
+        logMessage(0, "tarBeam: ".$result." ".$response);
+        $tries = -1;
 
       } else {
-        # Just the last line of the DD command is relvant:
-        my @temp = split(/\n/, $response);
-        logMessage(1, "tarBeam: ".$result." ".$temp[2]);
-        my @vals = split(/ /, $temp[2]);
-        my $bytes_written = int($vals[0]);
-        my $bytes_gb = $bytes_written / (1024*1024*1024);
 
-        # If we didn't write anything, its due to the nc client connecting 
-        # before the nc server was ready to provide the data, simply try to reconnect
-        if ($bytes_gb == 0) {
-          logMessage(0, "tarBeam: nc server not ready, sleeping 2 seconds");
-          $tries--;
-          sleep(2);
-
-        # If we did write something, but it didn't match bail!
-        } elsif ( ($size_est_gbytes - $bytes_gb) > 0.01) {
-          $result = "fail";
-          $response = "not enough data received by nc: ".$size_est_gbytes.
-                      " - ".$bytes_gb." = ".($size_est_gbytes - $bytes_gb);
-          logMessage(0, "tarBeam: ".$result." ".$response);
-          $tries = -1;
-
-        } else {
-
-          logMessage(2, "tarBeam: est_size ".sprintf("%7.4f GB", $size_est_gbytes).
-                        ", size = ".sprintf("%7.4f GB", $bytes_gb));
-          $tries = 0;
-        }
+        logMessage(2, "tarBeam: est_size ".sprintf("%7.4f GB", $size_est_gbytes).
+                      ", size = ".sprintf("%7.4f GB", $bytes_gb));
+        $tries = 0;
       }
     }
+  }
 
-    if ($result ne "ok") {
+  if ($result ne "ok") {
 
-      logMessage(0, "tarBeam: failed to write archive to tape: ".$response);
-      logMessage(0, "tarBeam: attempting to clear the current nc server command");
+    logMessage(0, "tarBeam: failed to write archive to tape: ".$response);
+    logMessage(0, "tarBeam: attempting to clear the current nc server command");
 
+    if ($robot eq 0) {
+      $cmd = "nc -z ".$host." ".$port." > /dev/null";
+    } else {
       $cmd = "nc -zd ".$host." ".$port." > /dev/null";
-      logMessage(0, "tarBeam: ".$cmd);
-      ($result, $response) = Dada->mySystem($cmd);
-      logMessage(0, "tarBeam: ".$result." ".$response);
-
-      $remote_nc_thread->detach();
-      unindent();
-      return ("fail","Archiving failed");
     }
+    logMessage(0, "tarBeam: ".$cmd);
+    ($result, $response) = Dada->mySystem($cmd);
+    logMessage(0, "tarBeam: ".$result." ".$response);
+
+    $remote_nc_thread->detach();
+    unindent();
+    return ("fail","Archiving failed");
+  }
   
-    logMessage(2, "tarBeam: joining nc_thread()");
-    ($result, $response) = $remote_nc_thread->join();
-    logMessage(2, "tarBeam: nc_thread() ".$result." ".$response);
+  logMessage(2, "tarBeam: joining nc_thread()");
+  ($result, $response) = $remote_nc_thread->join();
+  logMessage(2, "tarBeam: nc_thread() ".$result." ".$response);
 
-    if ($result ne "ok") {
-      logMessage(0, "tarBeam: remote tar/nc thread failed: ".$response);
-      unindent();
-      return ("fail","Archiving failed");
-    }
-
-  } else {
-
-    # M.Keith 2008: This is a HACK and a BOTCH. Calls a bash script to ssh to a machine and start the nc listen daemon
-    # Probably can replace the shell script if someone who understands perl does it.
-    # This should be fixed as soon as possible.
-    $cmd = "/data/JURA_1/hitrun/software/sshwrap.sh ".$host." ".$obs." ".$beam;
-    #  $cmd="ssh dada@".$host." -f -x -o BatchMode=yes \"cd /lfs/data0/bpsr/from_parkes; tar -b 128 -c "
-    # .$obs."/".$beam." | nc -l 12345 \"";
-
-    if ($robot == 0) {
-      my $tries=10;
-      while($tries gt 0 ){
-        sleep(2);
-        $cmd='nc '.$host.' 12345 | dd of='.$dev.' bs=64K';
-
-        logMessage(0, "tarBeam: ".$cmd);
-        ($result, $response) = Dada->mySystem($cmd);
-        print $response;
-        if ($result ne "ok") {
-          logMessage(0, "tarBeam: failed to write archive to tape: ".$response);
-          $tries--;
-        } else {
-          last;
-        }
-      }
-      if ($result ne "ok") {
-        logMessage(0, "tarBeam: failed to write archive to tape: ".$response);
-        unindent();
-        return ("fail","Archiving failed");
-      }
-    }
+  if ($result ne "ok") {
+    logMessage(0, "tarBeam: remote tar/nc thread failed: ".$response);
+    unindent();
+    return ("fail","Archiving failed");
   }
 
   # Else we wrote 3 files to the TAPE in 1 archive and need to update the database files
@@ -830,9 +832,38 @@ sub tarBeam($$$$) {
   }
 
   # we are ok, so mark as sent to tape
-  system("touch ".$dir."/".$obs."/".$beam."/sent.to.tape");
+  $cmd = "ssh -x ".$ssh_opts." -l ".$user." ".$host." \"touch ".$dir."/".$obs."/".$beam."/sent.to.tape\"";
+  system($cmd);
   unindent();
   return ("ok",""); 
+
+}
+
+
+#
+# move a completed obs on the remote dir to the on_tape directory
+#
+sub moveCompletedObs($$$$) {
+
+  my ($user, $host, $dir, $obs) = @_;
+  indent();
+  logMessage(2, "moveCompletedObs(".$user.", ".$host.", ".$dir.", ".$obs.")");
+
+  my $result = "";
+  my $response = "";
+
+  my $cmd = "ssh -x ".$ssh_opts." -l ".$user." ".$host." \"cd ".$dir."; mv ".$obs." ../on_tape\"";
+
+  logMessage(1, "moveCompletedObs: ".$cmd);
+  my ($result, $response) = Dada->mySystem($cmd);
+  logMessage(2, "moveCompletedObs: ".$result." ".$response);
+
+  if ($result ne "ok") {
+    logMessage(0, "getObsToTar: failed to move ".$obs." to on_tape dir: ".$response);
+  }
+
+  unindent();
+  return ($result, $response);
 
 }
 
@@ -941,6 +972,7 @@ sub getCurrentTape() {
         # tape was successfully initialized
         } else {
           logMessage(1, "getCurrentTape: successfully intialized tape: ".$response);
+          unindent();
           return ("ok", $response);
         }
 
@@ -1312,6 +1344,7 @@ sub readTapesDB() {
 
   }
 
+  unindent();
   return @db;
 
 }
@@ -1481,16 +1514,16 @@ sub getCurrentRobotTape() {
 # and also checks the files.db to check if it has been recorded as
 # archived. Returns an error on mismatch.
 #
-sub checkIfArchived($$$) {
+sub checkIfArchived($$$$$) {
 
-  my ($dir, $obs, $beam) = @_;
+  my ($user, $host, $dir, $obs, $beam) = @_;
   indent();
   logMessage(2, "checkIfArchived(".$dir.", ".$obs.", ".$beam.")");
 
   my $cmd = "";
 
   my $archived_db = 0;    # If the obs/beam is recorded in FILES_DB
-  my $archived_disk = 0;  # If the obs/beam has been marked with sent.to.tape file 
+  my $archived_disk = 0;  # If the obs/beam has been marked with shent.to.tape file 
 
   # Check the files.db to see if the beam is recorded there
   $cmd = "grep '".$obs."/".$beam."' ".$db_dir."/".FILES_DB;
@@ -1518,12 +1551,16 @@ sub checkIfArchived($$$) {
 
   }
 
-  # Check the directory for a sent.to.tape file
-  if (-f $dir."/".$obs."/".$beam."/sent.to.tape") {
+  $cmd = "ssh -x ".$ssh_opts." -l ".$user." ".$host." \"ls -1 ".$dir."/".$obs."/".$beam."/sent.to.tape\"";
+  logMessage(2, "checkIfArchived: ".$cmd);
+  ($result, $response) = Dada->mySystem($cmd);
+  logMessage(2, "checkIfArchived: ".$result." ".$response);
+
+  if ($result eq "ok") {
     $archived_disk = 1;
-    logMessage(2, "checkIfArchived: ".$dir."/".$obs."/".$beam."/sent.to.tape existed");
+    logMessage(2, "checkIfArchived: ".$user."@".$host.":".$dir."/".$obs."/".$beam."/sent.to.tape existed");
   } else {
-    logMessage(2, "checkIfArchived: ".$dir."/".$obs."/".$beam."/sent.to.tape did not exist");
+    logMessage(2, "checkIfArchived: ".$user."@".$host.":".$dir."/".$obs."/".$beam."/sent.to.tape did not exist");
     $archived_disk = 0;
   }
 
@@ -1765,6 +1802,7 @@ sub robotInitializeAllTapes() {
     }
   }
 
+  unindent();
   if ($init_error) {
     return ("fail", $response);
   } else {
@@ -2173,13 +2211,15 @@ sub manualSetStatus($) {
   indent();
   logMessage(2, "manualSetStatus(".$string.")");
 
-  my $dir = "/mnt/apsr/control/bpsr/";
+  my $host = "apsr-srv0.atnf.csiro.au";
+  my $user = "dada";
+  my $dir = "/nfs/control/bpsr/";
   my $file = $type.".state";
   my $result = "";
   my $response = "";
 
   # Delete the existing state file
-  my $cmd = "rm -f ".$dir."/".$file;
+  my $cmd = "ssh -x -l ".$user." ".$host." \"rm -f ".$dir."/".$file."\"";
 
   logMessage(2, "manualSetStatus: ".$cmd);
   ($result, $response) = Dada->mySystem($cmd);
@@ -2192,7 +2232,7 @@ sub manualSetStatus($) {
   }
 
   # Write the new file
-  $cmd = "echo \"".$string."\" > ".$dir."/".$file;
+  $cmd = "ssh -x -l ".$user." ".$host." \"echo '".$string."' > ".$dir."/".$file."\"";
   logMessage(2, "manualSetStatus: ".$cmd);
   ($result, $response) = Dada->mySystem($cmd);
   logMessage(2, "manualSetStatus: ".$result." ".$response);
@@ -2212,17 +2252,19 @@ sub manualGetResponse() {
 
   my $result = "";
   my $response = "";
-  my $dir = "/mnt/apsr/control/bpsr/";
+  my $user = "dada";
+  my $host = "apsr-srv0.atnf.csiro.au";
+  my $dir = "/nfs/control/bpsr/";
   my $file = $type.".response";
 
   # Wait for a response to appear from the user
-  my $cmd = "cat ".$dir."/".$file;
+  my $cmd = "ssh -x -l ".$user." ".$host." \"cat ".$dir."/".$file."\"";
   logMessage(2, "manualGetResponse: ".$cmd);
   ($result, $response) = Dada->mySystem($cmd);
   logMessage(2, "manualGetResponse: ".$result." ".$response);
 
+  unindent();
   if ($result ne "ok") {
-    unindent();
     return ("fail", "could not read file: ".$file);
   }
 
@@ -2240,11 +2282,13 @@ sub manualClearResponse() {
 
   my $result = ""; 
   my $response = "";
-  my $dir = "/mnt/apsr/control/bpsr/";
+  my $user = "dada";
+  my $host = "apsr-srv0.atnf.csiro.au";
+  my $dir = "/nfs/control/bpsr/";
   my $file = $type.".response";
 
   # Wait for a response to appear from the user
-  my $cmd = "rm -f ".$dir."/".$file;
+  my $cmd = "ssh -x -l ".$user." ".$host." \"rm -f ".$dir."/".$file."\"";
   logMessage(2, "manualClearResponse: ".$cmd);
   ($result, $response) = Dada->mySystem($cmd);
   logMessage(2, "manualClearResponse: ".$result." ".$response);
@@ -2255,6 +2299,7 @@ sub manualClearResponse() {
     return ("fail", "could not remove state file: ".$file);
   }
 
+  unindent();
   return ("ok", "");
 }
 
@@ -2675,25 +2720,27 @@ sub setStatus($) {
 #
 # Launches NC on the remote end
 #
-sub nc_thread($$$$$) {
+sub nc_thread($$$$$$) {
 
-  my ($host, $dir, $obs, $beam, $port) = @_;
+  my ($user, $host, $dir, $obs, $beam, $port) = @_;
 
   # Firstly, try to ensure that no NC is running on the port we want to use
 
   my $result = "";
   my $response = "";
 
-  my $cmd = "ssh -o BatchMode=yes pulsar@".$host." \"ls ".$dir." > /dev/null\"";
+  my $cmd = "ssh ".$ssh_opts." -l ".$user." ".$host." \"ls ".$dir." > /dev/null\"";
   logMessage(2, "nc_thread: ".$cmd);
   ($result, $response) = Dada->mySystem($cmd);
   logMessage(2, "nc_thread: ".$result." ".$response);
 
   if ($result ne "ok") {
-    logMessage(2, "nc_thread: could not automount the /nfs/cluster/shrek??? raid disk");
+    logMessage(0, "nc_thread: could not automount the /nfs/cluster/shrek??? raid disk");
   }
 
-  $cmd = "ssh ".$host." \"cd ".$dir."; tar -b 128 -c ./".$obs."/".$beam." | nc -l ".$port."\"";
+  $cmd = "ssh ".$ssh_opts." -l ".$user." ".$host." \"cd ".$dir."; ".
+         "tar -b 128 -c ".$obs."/".$beam." | nc -l ".$port."\"";
+
   logMessage(2, "nc_thread: ".$cmd);
   ($result, $response) = Dada->mySystem($cmd);
   logMessage(2, "nc_thread: ".$result." ".$response);
