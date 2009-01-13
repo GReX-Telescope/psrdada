@@ -42,7 +42,13 @@ our $db_host = "";
 our $use_bk = 0;                       # define if bookkeeping is enabled
 our $bkid = "";                        # ID of current bookkeepr tape
 our $uc_type = "";
-our $ssh_opts : shared = "-o BatchMode=yes"; # Gloabl ssh options to be shared by threads
+our $ssh_opts : shared = "-o BatchMode=yes";
+our $apsr_ssh_prefix : shared = "";       # ssh prefix command to connect to apsr
+our $apsr_ssh_suffix : shared = "";       # ssh suffix command to connect to apsr
+our $apsr_user : shared = "";          # name of host to connect to talk to apsr
+our $apsr_host : shared = "";
+our $gw_user : shared = "";
+our $gw_host : shared = "";
 
 # Autoflush output
 $| = 1;
@@ -85,13 +91,17 @@ if (($type eq "swin") || ($type eq "robot_init") || ($type eq "robot_verify")) {
   $tape_id_pattern = "HRA[0-9][0-9][0-9]S4";
   $robot = 1;
   $uc_type = "SWIN";
-  $required_host = "shrek201.ssi.swin.edu.au";
+  $required_host = "shrek202.ssi.swin.edu.au";
+  $apsr_ssh_prefix = "ssh -l pulsar shrek210 'ssh -l dada apsr-evlbi.atnf.csiro.au \"";
+  $apsr_ssh_suffix = "\"'";
 }
 
 if ($type eq "parkes") {
   $tape_id_pattern = "HRE[0-9][0-9][0-9]S4";
   $uc_type = "PARKES";
   $required_host = "jura";
+  $apsr_ssh_prefix = "ssh -l dada apsr-srv0 \"";
+  $apsr_ssh_suffix = "\"";
 }
 
 # sanity check the hostname
@@ -145,7 +155,7 @@ my $response;
 my $logfile = $db_dir."/bpsr_tape_archiver.log";
 my $pidfile = $db_dir."/".PIDFILE;
 
-logMessage(1, "Running ".$type." Tape archiver");
+print "Running ".$type." Tape archiver\n";
 
 if ($type eq "robot_init") {
   if (!$quit_daemon) {
@@ -253,20 +263,23 @@ while (!$quit_daemon) {
   $user = $users[$i];
 
   # Look for files in the @dirs
-  logMessage(2, "main: getObsToTar(".$dir.",".$host.", ".$user.")");
-  $obs = getObsToTar($dir, $host, $user);
+  logMessage(2, "main: getObsToTar(".$user.", ".$host.", ".$dir.")");
+  $obs = getObsToTar($user, $host, $dir);
   logMessage(2, "main: getObsToTar() ".$obs);
 
   # If we have one, write to tape
   if ($obs ne "none") {
-    logMessage(2, "main: tarObs(".$dir.", ".$obs.",".$host.", ".$user.")");
-    ($result, $response) = tarObs($dir, $obs, $host, $user);
+
+    logMessage(2, "main: tarObs(".$user.", ".$host.", ".$dir.", ".$obs.")");
+    ($result, $response) = tarObs($user, $host, $dir, $obs);
     logMessage(2, "main: tarObs() ".$result." ".$response);
     $waiting = 0;
 
     if ($result eq "ok") {
 
-      ($result, $response) = moveCompletedObs($user,$host,$dir,$obs);
+      logMessage(2, "main: moveCompeltedObs(".$user.", ".$host.", ".$dir.", ".$obs.")");
+      ($result, $response) = moveCompletedObs($user, $host, $dir, $obs);
+      logMessage(2, "main: moveCompeltedObs() ".$result." ".$response);
       if ($result ne "ok") {
         logMessage(0, "main: moveCompletedObs() failed: ".$response);
         setStatus("Error: could not move obs");
@@ -326,19 +339,20 @@ sub getObsToTar($$$) {
 
   indent();
 
-  my ($dir, $host, $user) = @_;
-  logMessage(2, "getObsToTar (".$dir.", ".$host.", ".$user.")");
+  my ($user, $host, $dir) = @_;
+  logMessage(2, "getObsToTar(".$user.", ".$host.", ".$dir.")");
 
   my $obs = "none";
   my $subdir = "";
   my @subdirs = ();
+  my $result = "";
+  my $response = "";
   my $cmd = "";
-  my $ssh_prefix = "ssh -x ".$ssh_opts." -l ".$user." ".$host;
 
-  $cmd = $ssh_prefix." \"ls -1 ".$dir."/WRITING\"";
-  logMessage(2, "getObsToTar: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
-  logMessage(2, "getObsToTar: ".$result." ".$response);
+  $cmd = "ls -1 ".$dir."/WRITING";
+  logMessage(2, "getObsToTar: localSshCommand(".$user.", ".$host.", ".$cmd);
+  ($result, $response) = localSshCommand($user, $host, $cmd);
+  logMessage(2, "getObsToTar: localSshCommand() ".$result." ".$response);
 
   # If the file existed
   if ($result eq "ok") {
@@ -346,11 +360,10 @@ sub getObsToTar($$$) {
 
   } else {
 
-    # find all subdirectories with an xfer.complete file in them
-    $cmd = $ssh_prefix." \"cd ".$dir."; find . -name 'xfer.complete' -maxdepth 2 -printf '\%h\\n' | sort | head -n 1\"";
-    logMessage(2, "getObsToTar: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
-    logMessage(2, "getObsToTar: ".$result." ".$response);
+    $cmd = "cd ".$dir."; find . -name 'xfer.complete' -maxdepth 2 -printf '\%h\\n' | sort | head -n 1";
+    logMessage(2, "getObsToTar: localSshCommand(".$user.", ".$host.", ".$cmd.")");
+    ($result, $response) = localSshCommand($user, $host, $cmd);
+    logMessage(2, "getObsToTar: localSshCommand() ".$result." ".$response);
 
     # if the ssh command failed
     if ($result ne "ok") {
@@ -359,13 +372,13 @@ sub getObsToTar($$$) {
     # ssh worked
     } else {
 
-      # find worked
+      # find worked 
       if ($response ne "") {
         chomp $response;
         # remove the leading ./ if it exists
         $response =~ s/^\.\///;
         $obs = $response;
-
+    
       # find failed
       } else {
         logMessage(2, "getObsToTar: could not find any xfer.complete's");
@@ -385,10 +398,10 @@ sub getObsToTar($$$) {
 #
 sub tarObs($$$$) {
 
-  my ($dir, $obs, $host, $user) = @_;
+  my ($user, $host, $dir, $obs) = @_;
   indent();
 
-  logMessage(2, "tarObs: (".$dir.", ".$obs.", ".$host.", ".$user.")");
+  logMessage(2, "tarObs: (".$user.", ".$host.", ".$dir.", ".$obs.")");
   logMessage(1, "tarObs: archiving observation: ".$obs);
 
   my $subdir = "";
@@ -398,11 +411,11 @@ sub tarObs($$$$) {
   my $result = "";
   my $response = "";
 
-  # Touch the reading flag in the dir to be processed
-  $cmd = "ssh -x ".$ssh_opts." -l ".$user." ".$host." \"touch ".$dir."/READING\"";
-  logMessage(2, "tarObs: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
-  logMessage(2, "tarObs: ".$result." ".$response);
+  $cmd = "touch ".$dir."/READING";
+  logMessage(2, "tarObs: localSshCommand(".$user.", ".$host.", ".$cmd.")");
+  ($result, $response) = localSshCommand($user, $host, $cmd);
+  logMessage(2, "tarObs: localSshCommand() ".$result." ".$response);
+
   if ($result ne "ok") {
     logMessage(0, "tarObs: could not touch READING flag in ".$dir.": ".$response);
     unindent();
@@ -419,11 +432,9 @@ sub tarObs($$$$) {
     unindent();
     return ("fail", "could not get beam directories");
   }
+
   chomp $response;
   @subdirs = split("\n",$response);
-  # opendir(DIR,$dir."/".$obs);
-  # @subdirs = sort grep { !/^\./ && -d $dir."/".$obs."/".$_ } readdir(DIR);
-  # closedir DIR;
 
   foreach $subdir (@subdirs) {
 
@@ -435,10 +446,14 @@ sub tarObs($$$$) {
 
       if ($result ne "ok") {
         logMessage(0, "tarObs: checkIfArchived failed: ".$response);
+      
+        $cmd = "rm -f ".$dir."/READING";
+        logMessage(2, "getObsToTar: localSshCommand(".$user.", ".$host.", ".$cmd.")");
+        ($result, $response) = localSshCommand($user, $host, $cmd);
+        logMessage(2, "getObsToTar: localSshCommand() ".$result." ".$response);
+
         unindent();
-        $cmd = "ssh -x ".$ssh_opts." -l ".$user." ".$host." \"rm -f ".$dir."/READING\"";
-        system($cmd);
-        return ("fail", "checkIfArchived() failed: ".$response);
+        return ("fail", "checkIfArchived failed: ".$response);
       } 
   
       # If this beam has been archived, skip it 
@@ -450,11 +465,11 @@ sub tarObs($$$$) {
   
         setStatus("Archiving  ".$obs." ".$subdir);
 
-        logMessage(2, "tarObs: tarBeam(".$dir.", ".$obs.", ".$subdir.", ".$host.", ".$user.")");
-        ($result, $response) = tarBeam($dir, $obs, $subdir, $host, $user);
+        logMessage(2, "tarObs: tarBeam(".$user.", ".$host.", ".$dir.", ".$obs.", ".$subdir.")");
+        ($result, $response) = tarBeam($user, $host, $dir, $obs, $subdir);
 
         if ($result ne "ok") {
-          logMessage(0, "tarObs: tarBeam(".$dir.", ".$obs.", ".$subdir.") failed: ".$response);
+          logMessage(0, "tarObs: tarBeam() failed: ".$response);
           $beam_problem = 1;
         }
       }
@@ -467,25 +482,33 @@ sub tarObs($$$$) {
   if ($beam_problem) {
 
     logMessage(0, "tarObs: problem archiving a beam");
+    $cmd = "rm -f ".$dir."/READING";
+    logMessage(2, "getObsToTar: localSshCommand(".$user.", ".$host.", ".$cmd.")");
+    ($result, $response) = localSshCommand($user, $host, $cmd);
+    logMessage(2, "getObsToTar: localSshCommand() ".$result." ".$response);
+
     unindent();
-    $cmd = "ssh -x ".$ssh_opts." -l ".$user." ".$host." \"rm -f ".$dir."/READING\"";
-    system($cmd);
     return ("fail", "problem occurred during archival of a beam");
 
   } elsif ($quit_daemon) {
 
-    logMessage(0, "tarObs: not marking sent.to.tape for ".$obs." due to quit flag being raised");
+    logMessage(0, "tarObs: not marking on.tape.".$type." for ".$obs." due to quit flag being raised");
 
   # Mark this entire pointing as successfully processed
   } else {
-    $cmd = "ssh -x ".$ssh_opts." -l ".$user." ".$host." \"touch ".$dir."/".$obs."/sent.to.tape\"";
-    system($cmd);
+
+    logMessage(2, "getObsToTar: markSentToTape(".$user.", ".$host.", ".$dir.", ".$obs.", \"\"");
+    ($result, $response) = markSentToTape($user, $host, $dir, $obs, "");
+    logMessage(2, "getObsToTar: markSentToTape() ".$result." ".$response);
+
   }
 
-  logMessage(1, "tarObs: finished observation: ".$obs);
+  $cmd = "rm -f ".$dir."/READING";
+  logMessage(2, "getObsToTar: localSshCommand(".$user.", ".$host.", ".$cmd.")");
+  ($result, $response) = localSshCommand($user, $host, $cmd);
+  logMessage(2, "getObsToTar: localSshCommand() ".$result." ".$response);
 
-  $cmd = "ssh -x ".$ssh_opts." -l ".$user." ".$host." \"rm -f ".$dir."/READING\"";
-  system($cmd);
+  logMessage(1, "tarObs: finished observation: ".$obs);
   unindent();
   return ("ok", "");
 }
@@ -495,11 +518,10 @@ sub tarObs($$$$) {
 #
 sub tarBeam($$$$$) {
 
-  my ($dir, $obs, $beam, $host, $user) = @_;
+  my ($user, $host, $dir, $obs, $beam) = @_;
 
   indent();
-  logMessage(2, "tarBeam: (".$dir.", ".$obs.", ".$beam.", ".$host.")");
-
+  logMessage(2, "tarBeam: (".$user." , ".$host.", ".$dir.", ".$obs.", ".$beam.")");
   logMessage(1, "tarBeam: archiving ".$obs.", beam ".$beam);
 
   my $cmd = "";
@@ -527,15 +549,28 @@ sub tarBeam($$$$$) {
 
   my $tape = $expected_tape;
 
-  # remove the xfer.complete in the beam if it exists
-  $cmd = "ssh -x ".$ssh_opts." -l ".$user." ".$host." \"rm -f ".$dir."/".$obs."/".$beam."/xfer.complete\"";
-  system($cmd);
+  # remove the xfer.complete in the beam fir if it exists
+  $cmd = "ls -1 ".$dir."/".$obs."/".$beam."/xfer.complete";
+  logMessage(2, "tarBeam: localSshCommand(".$user.", ".$host.", ".$cmd.")");
+  ($result, $response) = localSshCommand($user, $host, $cmd);
+  logMessage(2, "tarBeam: localSshCommand() ".$result." ".$response);
+
+  if ($result eq "ok") {
+    $cmd = "rm -f ".$dir."/".$obs."/".$beam."/xfer.complete";
+    logMessage(2, "tarBeam: localSshCommand(".$user.", ".$host.", ".$cmd.")");
+    ($result, $response) = localSshCommand($user, $host, $cmd);
+    logMessage(2, "tarBeam: localSshCommand() ".$result." ".$response);
+    if ($result ne "ok") {
+      logMessage(2, "tarBeam: couldnt unlink ".$obs."/".$beam."/xfer.complete");
+    }
+  }
 
   # Find the combined file size in bytes
-  $cmd  = "ssh -x ".$ssh_opts." -l ".$user." ".$host." \"du -sLb ".$dir."/".$obs."/".$beam."\"";
-  logMessage(2, "tarBeam: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
-  logMessage(2, "tarBeam: ".$result." ".$response);
+  $cmd = "du -sLb ".$dir."/".$obs."/".$beam;
+  logMessage(2, "tarBeam: localSshCommand(".$user.", ".$host.", ".$cmd.")");
+  ($result, $response) = localSshCommand($user, $host, $cmd);
+  logMessage(2, "tarBeam: localSshCommand() ".$result." ".$response);
+
   if ($result ne "ok") {
     logMessage(0, "tarBeam: ".$cmd. "failed: ".$response);
     unindent();
@@ -624,7 +659,9 @@ sub tarBeam($$$$$) {
 
   }
 
-  ($result, my $filenum, my $blocknum) = getTapeStatus();
+  my $filenum = -1;
+  my $blocknum = -1;
+  ($result, $filenum, $blocknum) = getTapeStatus();
   if ($result ne "ok") {
     logMessage(0, "TarBeam: getTapeStatus() failed.");
     unindent();
@@ -663,7 +700,7 @@ sub tarBeam($$$$$) {
 
   # Try to ensure that no nc is running on the port we want to use
   my $nc_ready = 0;
-  my $tries = 5;
+  my $tries = 10;
   my $port = 25128;
 
   while ( (!$nc_ready)  && ($tries > 0) && (!$quit_daemon) ) {
@@ -721,13 +758,13 @@ sub tarBeam($$$$$) {
       
     logMessage(2, "tarBeam: ".$cmd);
     ($result, $response) = Dada->mySystem($cmd);
-    if (($result ne "ok") || ($response =~ m/refused/) || ($response =~ m/0\+0/)) {
+    if (($result ne "ok") || ($response =~ m/refused/) || ($response =~ m/^0\+0 records in/)) {
       logMessage(2, "tarBeam: ".$result." ".$response);
       logMessage(0, "tarBeam: failed to write archive to tape: ".$response);
       $tries--;
       $result = "fail";
       $response = "failed attempt at writing archive";
-      sleep(1);
+      sleep(2);
 
     } else {
       # Just the last line of the DD command is relvant:
@@ -831,9 +868,13 @@ sub tarBeam($$$$$) {
     return("fail", "error ocurred when updating filesDB: ".$response);
   }
 
-  # we are ok, so mark as sent to tape
-  $cmd = "ssh -x ".$ssh_opts." -l ".$user." ".$host." \"touch ".$dir."/".$obs."/".$beam."/sent.to.tape\"";
-  system($cmd);
+  logMessage(2, "tarBeam: markSentToTape(".$user.", ".$host.", ".$dir.", ".$obs.", ".$beam.")");
+  ($result, $response) = markSentToTape($user, $host, $dir, $obs, $beam);
+  logMessage(2, "tarBeam: markSentToTape(): ".$result." ".$response);
+  if ($result ne "ok") {
+    logMessage(0, "tarBeam: markSentToTape failed: ".$response);
+  }
+
   unindent();
   return ("ok",""); 
 
@@ -851,12 +892,12 @@ sub moveCompletedObs($$$$) {
 
   my $result = "";
   my $response = "";
+  my $cmd = "";
 
-  my $cmd = "ssh -x ".$ssh_opts." -l ".$user." ".$host." \"cd ".$dir."; mv ".$obs." ../on_tape\"";
-
-  logMessage(1, "moveCompletedObs: ".$cmd);
-  my ($result, $response) = Dada->mySystem($cmd);
-  logMessage(2, "moveCompletedObs: ".$result." ".$response);
+  $cmd = "cd ".$dir."; mv ".$obs." ../on_tape/";
+  logMessage(2, "moveCompletedObs: localSshCommand(".$user.", ".$host.", ".$cmd.")");
+  ($result, $response) = localSshCommand($user, $host, $cmd);
+  logMessage(2, "moveCompletedObs: localSshCommand() ".$result." ".$response);
 
   if ($result ne "ok") {
     logMessage(0, "getObsToTar: failed to move ".$obs." to on_tape dir: ".$response);
@@ -1518,7 +1559,7 @@ sub checkIfArchived($$$$$) {
 
   my ($user, $host, $dir, $obs, $beam) = @_;
   indent();
-  logMessage(2, "checkIfArchived(".$dir.", ".$obs.", ".$beam.")");
+  logMessage(2, "checkIfArchived(".$user.", ".$host.", ".$dir.", ".$obs.", ".$beam.")");
 
   my $cmd = "";
 
@@ -1551,20 +1592,22 @@ sub checkIfArchived($$$$$) {
 
   }
 
-  $cmd = "ssh -x ".$ssh_opts." -l ".$user." ".$host." \"ls -1 ".$dir."/".$obs."/".$beam."/sent.to.tape\"";
-  logMessage(2, "checkIfArchived: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
-  logMessage(2, "checkIfArchived: ".$result." ".$response);
+  # Check the directory for a on.tape.type file
+  $cmd = "ls -1 ".$dir."/".$obs."/".$beam."/on.tape.".$type;
+  logMessage(2, "getObsToTar: localSshCommand(".$user.", ".$host.", ".$cmd);
+  ($result, $response) = localSshCommand($user, $host, $cmd);
+  logMessage(2, "getObsToTar: localSshCommand() ".$result." ".$response);
 
   if ($result eq "ok") {
     $archived_disk = 1;
-    logMessage(2, "checkIfArchived: ".$user."@".$host.":".$dir."/".$obs."/".$beam."/sent.to.tape existed");
+    logMessage(2, "checkIfArchived: ".$user."@".$host.":".$dir."/".$obs."/".$beam."/on.tape.".$type." existed");
   } else {
-    logMessage(2, "checkIfArchived: ".$user."@".$host.":".$dir."/".$obs."/".$beam."/sent.to.tape did not exist");
+    logMessage(2, "checkIfArchived: ".$user."@".$host.":".$dir."/".$obs."/".$beam."/on.tape.".$type." did not exist");
     $archived_disk = 0;
   }
 
   unindent();
+
   if (($archived_disk == 0) && ($archived_db == 0)) {
     return ("ok", "not archived");
   } elsif (($archived_disk == 1) && ($archived_db == 1)) {
@@ -2066,53 +2109,6 @@ sub verifyLog($) {
 
 }
 
-sub robotSetStatus($) {
-
-  (my $string) = @_;
-
-  indent();
-  logMessage(2, "robotSetStatus(".$string.")");
-
-  my $gw_user = "pulsar";
-  my $gw_host = "shrek211";
-
-  my $user = "dada";
-  my $host = "apsr-evlbi.atnf.csiro.au";
-
-  my $dir = "/nfs/control/bpsr";
-  my $file = $type.".state";
-  my $result = "";
-  my $response = "";
-
-  my $remote_cmd = "";
-  my $gw_cmd = "";
-
-  # Delete the existing state file
-
-  $remote_cmd = "rm -f ".$dir."/".$file;
-  $gw_cmd = "ssh -l ".$gw_user." ".$gw_host." 'ssh -l ".$user." ".$host." \"".$remote_cmd."\"'";
-  logMessage(2, "robotSetStatus: ".$gw_cmd);
-  ($result, $response) = Dada->mySystem($gw_cmd);
-  logMessage(2, "robotSetStatus: ".$result." ".$response);
-
-  if ($result ne "ok") {
-    logMessage(0, "robotSetStatus: could not delete the existing state file ".$file.": ".$response);
-    unindent();
-    return ("fail", "could not remove state file: ".$file);
-  }
-
-  # Write the new file
-  $remote_cmd = "echo '".$string."' > ".$dir."/".$file;
-  $gw_cmd = "ssh -l ".$gw_user." ".$gw_host." 'ssh -l ".$user." ".$host." \"".$remote_cmd."\"'";
-  
-  logMessage(2, "robotSetStatus: ".$gw_cmd);
-  ($result, $response) = Dada->mySystem($gw_cmd);
-  logMessage(2, "robotSetStatus: ".$result." ".$response);
-
-  unindent();
-  return ("ok", "");
-
-}
 
 ##
 ## ROBOT FUNCTIONS
@@ -2150,12 +2146,12 @@ sub manualInsertTape($) {
   }
 
   my $string = "Insert Tape:::".$tape;
-  logMessage(2, "manualInsertTape: manualSetStatus(".$string.")");
-  ($result, $response) = manualSetStatus($string);
-  logMessage(2, "manualInsertTape: manualSetStatus() ".$result." ".$response);
+  logMessage(2, "manualInsertTape: setStatus(".$string.")");
+  ($result, $response) = setStatus($string);
+  logMessage(2, "manualInsertTape: setStatus() ".$result." ".$response);
 
   if ($result ne "ok") {
-    logMessage(0, "manualInsertTape: manualSetStatus() failed: ".$response);
+    logMessage(0, "manualInsertTape: setStatus() failed: ".$response);
     unindent();
     return ("fail", "could not set status on web interface");
   }
@@ -2180,12 +2176,12 @@ sub manualInsertTape($) {
     my $new_tape = $response;
 
     $string = "Current Tape: ".$new_tape;
-    logMessage(2, "manualInsertTape: manualSetStatus(".$string.")");
-    ($result, $response) = manualSetStatus($string);
-    logMessage(2, "manualInsertTape: manualSetStatus() ".$result." ".$response);
+    logMessage(2, "manualInsertTape: setStatus(".$string.")");
+    ($result, $response) = setStatus($string);
+    logMessage(2, "manualInsertTape: setStatus() ".$result." ".$response);
   
     if ($result ne "ok") {
-      logMessage(0, "manualInsertTape: manualSetStatus() failed: ".$response);
+      logMessage(0, "manualInsertTape: setStatus() failed: ".$response);
       unindent();
       return ("fail", "could not set status on web interface");
     }
@@ -2202,47 +2198,6 @@ sub manualInsertTape($) {
 
 
 #
-# write the current action in to the .state file for the web interface
-#
-sub manualSetStatus($) {
-
-  (my $string) = @_;
-    
-  indent();
-  logMessage(2, "manualSetStatus(".$string.")");
-
-  my $host = "apsr-srv0.atnf.csiro.au";
-  my $user = "dada";
-  my $dir = "/nfs/control/bpsr/";
-  my $file = $type.".state";
-  my $result = "";
-  my $response = "";
-
-  # Delete the existing state file
-  my $cmd = "ssh -x -l ".$user." ".$host." \"rm -f ".$dir."/".$file."\"";
-
-  logMessage(2, "manualSetStatus: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
-  logMessage(2, "manualSetStatus: ".$result." ".$response);
-                                                                                                                   
-  if ($result ne "ok") {
-    logMessage(0, "manualSetStatus: could not delete the existing state file ".$file.": ".$response);
-    unindent();
-    return ("fail", "could not remove state file: ".$file);
-  }
-
-  # Write the new file
-  $cmd = "ssh -x -l ".$user." ".$host." \"echo '".$string."' > ".$dir."/".$file."\"";
-  logMessage(2, "manualSetStatus: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
-  logMessage(2, "manualSetStatus: ".$result." ".$response);
-                                                                                                                   
-  unindent();
-  return ("ok", "");
-
-}
-
-#
 # get the .response file from the web interface
 #
 sub manualGetResponse() {
@@ -2250,15 +2205,18 @@ sub manualGetResponse() {
   indent();
   logMessage(2, "manualGetResponse()");
 
-  my $result = "";
-  my $response = "";
-  my $user = "dada";
-  my $host = "apsr-srv0.atnf.csiro.au";
   my $dir = "/nfs/control/bpsr/";
   my $file = $type.".response";
+  my $remote_cmd = "";
+  my $cmd = "";
+  my $result = "";
+  my $response = "";
+
+  # Delete the existing state file
+  $remote_cmd = "cat ".$dir."/".$file;
+  $cmd = $apsr_ssh_prefix.$remote_cmd.$apsr_ssh_suffix;
 
   # Wait for a response to appear from the user
-  my $cmd = "ssh -x -l ".$user." ".$host." \"cat ".$dir."/".$file."\"";
   logMessage(2, "manualGetResponse: ".$cmd);
   ($result, $response) = Dada->mySystem($cmd);
   logMessage(2, "manualGetResponse: ".$result." ".$response);
@@ -2282,19 +2240,22 @@ sub manualClearResponse() {
 
   my $result = ""; 
   my $response = "";
-  my $user = "dada";
-  my $host = "apsr-srv0.atnf.csiro.au";
   my $dir = "/nfs/control/bpsr/";
   my $file = $type.".response";
+  my $remote_cmd = ""; 
+  my $cmd = ""; 
+
+  # Delete the existing state file
+  $remote_cmd = "rm -f ".$dir."/".$file;
+  $cmd = $apsr_ssh_prefix.$remote_cmd.$apsr_ssh_suffix;
 
   # Wait for a response to appear from the user
-  my $cmd = "ssh -x -l ".$user." ".$host." \"rm -f ".$dir."/".$file."\"";
   logMessage(2, "manualClearResponse: ".$cmd);
   ($result, $response) = Dada->mySystem($cmd);
   logMessage(2, "manualClearResponse: ".$result." ".$response);
 
   if ($result ne "ok") {
-    logMessage(0, "manualSetStatus: could not delete the existing state file ".$file.": ".$response);
+    logMessage(0, "manualClearResponse: could not delete the existing state file ".$file.": ".$response);
     unindent();
     return ("fail", "could not remove state file: ".$file);
   }
@@ -2704,17 +2665,42 @@ sub tarSizeEst($$) {
 sub setStatus($) {
 
   (my $string) = @_;
+  indent();
+  logMessage(2, "setStatus(".$string.")");
+
+  my $dir = "/nfs/control/bpsr";
+  my $file = $type.".state";
 
   my $result = "";
   my $response = "";
-  
-  if ($type eq "swin") {
-    ($result, $response) = robotSetStatus($string);
-  } else {
-    ($result, $response) = manualSetStatus($string);
+  my $remote_cmd = "";
+  my $cmd = "";
+
+  # Delete the existing state file
+  $remote_cmd = "rm -f ".$dir."/".$file;
+  $cmd = $apsr_ssh_prefix.$remote_cmd.$apsr_ssh_suffix;
+
+  logMessage(2, "setStatus: ".$cmd);
+  ($result, $response) = Dada->mySystem($cmd);
+  logMessage(2, "setStatus: ".$result." ".$response);
+
+  if ($result ne "ok") {
+    logMessage(0, "setStatus: could not delete the existing state file ".$file.": ".$response);
+    unindent();
+    return ("fail", "could not remove state file: ".$file);
   }
 
-  return ($result, $response);
+  # Write the new file
+  $remote_cmd = "echo '".$string."' > ".$dir."/".$file;
+  $cmd = $apsr_ssh_prefix.$remote_cmd.$apsr_ssh_suffix;
+
+  logMessage(2, "setStatus: ".$cmd);
+  ($result, $response) = Dada->mySystem($cmd);
+  logMessage(2, "setStatus: ".$result." ".$response);
+
+  unindent();
+  return ("ok", "");
+
 }
 
 #
@@ -2752,12 +2738,15 @@ sub nc_thread($$$$$$) {
   return ("ok");
 }
 
-sub getTapeStatus(){
+sub getTapeStatus() {
   my $cmd="";
   my $filenum;
   my $blocknum;
 
-  $cmd="mt -f ".$dev." status | grep -e 'file number' | awk '{print \$4}'";
+  indent();
+  logMessage(2, "getTapeStatus()");
+
+  $cmd="mt -f ".$dev." status | grep 'File number' | awk -F, '{print \$1}' | awk -F= '{print \$2}'";
   logMessage(3, "getTapeStatus: cmd= $cmd");
 
   my ($result,$response) = Dada->mySystem($cmd);
@@ -2767,8 +2756,8 @@ sub getTapeStatus(){
     $filenum=-1;
     $blocknum=-1;
   } else {
-    $filenum=$response;
-    $cmd="mt -f ".$dev." status | grep -e 'block number' | awk '{print \$4}'";
+    $filenum = $response;
+    $cmd="mt -f ".$dev." status | grep 'block number' | awk -F, '{print \$2}' | awk -F= '{print \$2}'";
     my ($result,$response) = Dada->mySystem($cmd);
     if ($result ne "ok") {
       logMessage(0, "getTapeStatus: Failed $response");
@@ -2778,5 +2767,85 @@ sub getTapeStatus(){
       $blocknum=$response;
     }
   }
+  logMessage(2, "getTapeStatus: ".$result." ".$filenum." ".$blocknum);
+  unindent();
   return ($result,$filenum,$blocknum);
 }
+
+#
+# Mark the obsevation/beam as on.tape.type, and also remotely in /nfs/archives
+#
+sub markSentToTape($$$$$) {
+
+  my ($user, $host, $dir, $obs, $beam) = @_;
+
+  indent();
+  logMessage(2, "markSentToTape(".$user.", ".$host.", ".$dir.", ".$obs.", ".$beam.")");
+
+  my $cmd = "";
+  my $remote_cmd = "";
+  my $result = "";
+  my $respnose = "";
+  my $gw_cmd = "";
+  my $to_touch = "";
+
+  if ($beam ne "") {
+    $to_touch = $obs."/".$beam."/on.tape.".$type;
+  } else {
+    $to_touch = $obs."/on.tape.".$type;
+  }
+
+  $cmd = "ssh -x ".$ssh_opts." -l ".$user." ".$host." \"touch ".$dir."/".$to_touch."\"";
+  logMessage(2, "markSentToTape:" .$cmd);
+  my ($result,$response) = Dada->mySystem($cmd);
+  logMessage(2, "markSentToTape:" .$result." ".$response);
+  if ($result ne "ok") {
+    logMessage(0, "markSentToTape: could not touch ".$to_touch);
+  }
+
+  # if the beam is set, touch the beams on.tape.type
+  $remote_cmd = "touch ".$cfg{"SERVER_ARCHIVE_DIR"}."/".$to_touch;
+  $cmd = $apsr_ssh_prefix.$remote_cmd.$apsr_ssh_suffix;
+
+  logMessage(2, "markSentToTape: ".$cmd);
+  ($result, $response) = Dada->mySystem($cmd);
+  logMessage(2, "markSentToTape: ".$result." ".$response);
+  if ($result ne "ok") {
+    logMessage(0, "markSentToTape: could not touch remote on.tape.".$type.": ".$response);
+  }
+  
+  unindent();
+  return ($result, $response);
+
+}
+
+
+#
+#
+#
+sub localSshCommand($$$) {
+
+  my ($user, $host, $command) = @_;
+  indent();
+  logMessage(2, "localSshCommand(".$user.", ".$host.", ".$command);
+
+  my $cmd = "";
+  my $result = "";
+  my $response = "";
+
+  $cmd = "ssh -x ".$ssh_opts." -l ".$user." ".$host." \"".$command."\"";
+
+  logMessage(2, "localSshCommand:" .$cmd);
+  ($result,$response) = Dada->mySystem($cmd);
+  logMessage(2, "localSshCommand:" .$result." ".$response);
+
+  unindent();
+  return ($result, $response);
+
+}
+
+sub getToTape($$$$$) {
+
+  my ($user, $host, $dir, $obs, $beam) = @_;
+
+} 
