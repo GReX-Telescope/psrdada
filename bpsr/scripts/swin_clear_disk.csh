@@ -34,19 +34,42 @@ set n_nodelete = 0
 
 cd /nfs/cluster/pulsar/hitrun
 
-# list all files processed by llevin
+# list all files processed by llevin and sbates
 
 foreach student ( llevin sbates )
-  find . -name "*${student}*" -printf "%f\n" | awk -F. '{print $1"/"$2}' \
+  find . -maxdepth 1 -name "*${student}*" -printf "%f\n" | awk -F. '{print $1"/"$2}' \
 	> /tmp/${student}.done_$1
 end
 
+# list all files processed by both
+
 cd /tmp; cat llevin.done_$1 sbates.done_$1 | sort | uniq -d > both.done_$1
+
+# list all files processed by nobody, in reverse time order (newest first)
+
+cd $basedir
+ls -1rd */?? > /tmp/nobody.done_$1
+
+# clean up any empty directories
+
+foreach obsdir ( ????-??-??-??:??:?? )
+  # count the number of beams remaining to be deleted
+  set num_items = `ls -1 $obsdir/?? | wc -l`
+  if ($num_items == 0) then
+    if ($deletethem == 1 ) then
+      echo "rm -rf $basedir/$obsdir"
+      rm -rf $basedir/$obsdir
+      mv /nfs/cluster/pulsar/hitrun/${obsdir}* /nfs/cluster/pulsar/hitrun/cleared
+    else
+      echo "$obsdir would be deleted with: rm -rf $basedir/$obsdir"
+    endif
+  endif
+end
 
 # do not check minimum space requirement when clearing files processed by both
 set check_percent = 0
 
-foreach processed ( both llevin sbates )
+foreach processed ( both llevin sbates nobody )
 
   echo "Clearing data that have been processed by $processed"
 
@@ -55,38 +78,13 @@ foreach processed ( both llevin sbates )
 
   foreach beamdir ( `cat /tmp/${processed}.done_$1` ) 
 
-    set obsdir = `dirname $beamdir`
-
-    # If the observation dir exists on this disk
-    if ( -d $basedir/$obsdir ) then
-
-      # count the number of dirs to check for fully deleted beams
-      set num_items = `ls -1 $basedir/$obsdir | wc -l`
-      if ($num_items == 2) then
-        if ($deletethem == 1 ) then
-          echo "rm -rf $basedir/$obsdir"
-          rm -rf $basedir/$obsdir
-        else 
-          echo "$obsdir would be deleted with: rm -rf $basedir/$obsdir"
-        endif
-
-      # We have a beam dir in this observation at least
-      else 
-
-        # If the beam dir in question also exists
-        if ( -d "$basedir/$beamdir" ) then
-          @ n_delete = $n_delete + 1
-          if ( $deletethem == 1 ) then
-            echo "$beamdir" >> /tmp/hitrun_delete_$1
-          endif
-        else
-          @ n_skip = $n_skip + 1
-        endif
-
-      endif 
-
-    # if the obs does not exist on this disk (must be on another one) 
-    else 
+    # If the beam dir in question also exists
+    if ( -d "$basedir/$beamdir" ) then
+      @ n_delete = $n_delete + 1
+      if ( $deletethem == 1 ) then
+        echo "$beamdir" >> /tmp/hitrun_delete_$1
+      endif
+    else
       @ n_skip = $n_skip + 1
     endif
 
