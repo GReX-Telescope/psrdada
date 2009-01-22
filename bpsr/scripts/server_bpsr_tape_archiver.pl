@@ -120,6 +120,7 @@ if ($ENV{'HOST'} ne $required_host) {
 my $daemon_control_thread = 0;
 
 my $i=0;
+my $j=0;
 my @dirs  = ();
 my @hosts = ();
 my @users = ();
@@ -180,7 +181,7 @@ if ($type eq "robot_verify") {
 }
 
 
-Dada->daemonize($logfile, $pidfile);
+# Dada->daemonize($logfile, $pidfile);
 
 logMessage(0, "STARTING SCRIPT");
 
@@ -250,9 +251,12 @@ if (int($full) == 1) {
 
 
 my $obs = "";
+my $beam = "";
 my $dir = "";
+my $cmd = "";
 
 $i = 0;
+$j = 0;
 my $waiting = 0;
 
 while (!$quit_daemon) {
@@ -263,32 +267,65 @@ while (!$quit_daemon) {
   $user = $users[$i];
 
   # Look for files in the @dirs
-  logMessage(2, "main: getObsToTar(".$user.", ".$host.", ".$dir.")");
-  $obs = getObsToTar($user, $host, $dir);
-  logMessage(2, "main: getObsToTar() ".$obs);
+  logMessage(2, "main: getBeamToTar(".$user.", ".$host.", ".$dir.")");
+  ($obs, $beam) = getBeamToTar($user, $host, $dir);
+  logMessage(2, "main: getBeamToTar() ".$obs);
 
   # If we have one, write to tape
-  if ($obs ne "none") {
+  if (($obs ne "none") && ($beam ne "none")) {
 
-    logMessage(2, "main: tarObs(".$user.", ".$host.", ".$dir.", ".$obs.")");
-    ($result, $response) = tarObs($user, $host, $dir, $obs);
-    logMessage(2, "main: tarObs() ".$result." ".$response);
+    # lock this dir for READING
+    $cmd = "touch ".$dir."/READING";
+    logMessage(2, "main: localSshCommand(".$user.", ".$host.", ".$cmd.")");
+    ($result, $response) = localSshCommand($user, $host, $cmd);
+    logMessage(2, "main: localSshCommand() ".$result." ".$response);
+
+    if ($result ne "ok") {
+      logMessage(0, "main: could not touch READING flag in ".$dir.": ".$response);
+      exit_script(1);
+    }
+
+    logMessage(2, "main: tarBeam(".$user.", ".$host.", ".$dir.", ".$obs.", ".$beam.")");
+    ($result, $response) = tarBeam($user, $host, $dir, $obs, $beam);
+    logMessage(2, "main: tarBeam() ".$result." ".$response);
     $waiting = 0;
 
-    if (($result eq "ok") && ($response eq "fully archived")) {
+    $cmd = "rm -f ".$dir."/READING";
+    logMessage(2, "main: localSshCommand(".$user.", ".$host.", ".$cmd.")");
+    ($result, $response) = localSshCommand($user, $host, $cmd);
+    logMessage(2, "main: localSshCommand() ".$result." ".$response);
 
-      logMessage(2, "main: moveCompeltedObs(".$user.", ".$host.", ".$dir.", ".$obs.")");
-      ($result, $response) = moveCompletedObs($user, $host, $dir, $obs);
-      logMessage(2, "main: moveCompeltedObs() ".$result." ".$response);
+    if ($result ne "ok") {
+      logMessage(0, "main: could not unlink READING flag in ".$dir.": ".$response);
+      exit_script(1);
+    }
+
+    if ($result eq "ok") {
+
+      logMessage(2, "main: moveCompeltedBeam(".$user.", ".$host.", ".$dir.", ".$obs.", ".$beam.")");
+      ($result, $response) = moveCompletedBeam($user, $host, $dir, $obs, $beam);
+      logMessage(2, "main: moveCompeltedBeam() ".$result." ".$response);
       if ($result ne "ok") {
-        logMessage(0, "main: moveCompletedObs() failed: ".$response);
-        setStatus("Error: could not move obs");
+        logMessage(0, "main: moveCompletedBeam() failed: ".$response);
+        setStatus("Error: could not move beam: ".$obs."/".$beam);
         exit_script(1);
+      }
+
+      # If at parkes, we delete the beam after moving it
+      if ($robot eq 0) {
+        logMessage(2, "main: deleteCompeltedBeam(".$user.", ".$host.", ".$dir.", ".$obs.", ".$beam.")");
+        ($result, $response) = deleteCompletedBeam($user, $host, $dir, $obs, $beam);
+        logMessage(2, "main: deleteCompeltedBeam() ".$result." ".$response);
+        if ($result ne "ok") {
+          logMessage(0, "main: deleteCompletedBeam() failed: ".$response);
+          setStatus("Error: could not delete beam: ".$obs."/".$beam);
+          exit_script(1);
+        }
       }
 
     } else {
       setStatus("Error: ".$response);
-      logMessage(0, "main: tarObs() failed: ".$response);
+      logMessage(0, "main: tarBeam() failed: ".$response);
       exit_script(1);
     }
 
@@ -303,16 +340,23 @@ while (!$quit_daemon) {
 
   }
 
-  $i++;
-  # reset the dirs counter
-  if ($i >= ($#dirs+1)) {
-    $i = 0;
+  $j++;
+
+  # only move onto the next holding area after the 13th
+  # beam or handling 13 beams
+  if (($beam eq "13") || ($j == 13)) {
+
+    $j=0;
+    $i++;
+    # reset the dirs counter
+    if ($i >= ($#dirs+1)) {
+      $i = 0;
+    }
     if ($obs eq "none") {
       # Wait 10 secs if we didn't find a file
       sleep (10);
     }
   }
-
 } # main loop
 
 # rejoin threads
@@ -335,14 +379,15 @@ exit 0;
 #
 # try and find an observation to tar
 #
-sub getObsToTar($$$) {
+sub getBeamToTar($$$) {
 
   indent();
 
   my ($user, $host, $dir) = @_;
-  logMessage(2, "getObsToTar(".$user.", ".$host.", ".$dir.")");
+  logMessage(2, "getBeamToTar(".$user.", ".$host.", ".$dir.")");
 
   my $obs = "none";
+  my $beam = "none";
   my $subdir = "";
   my @subdirs = ();
   my $result = "";
@@ -350,24 +395,25 @@ sub getObsToTar($$$) {
   my $cmd = "";
 
   $cmd = "ls -1 ".$dir."/WRITING";
-  logMessage(2, "getObsToTar: localSshCommand(".$user.", ".$host.", ".$cmd);
+  logMessage(2, "getBeamToTar: localSshCommand(".$user.", ".$host.", ".$cmd);
   ($result, $response) = localSshCommand($user, $host, $cmd);
-  logMessage(2, "getObsToTar: localSshCommand() ".$result." ".$response);
+  logMessage(2, "getBeamToTar: localSshCommand() ".$result." ".$response);
 
   # If the file existed
   if ($result eq "ok") {
-    logMessage(2, "getObsToTar: ignoring dir ".$dir." as this is being written to");
+    logMessage(2, "getBeamToTar: ignoring dir ".$dir." as this is being written to");
 
   } else {
 
-    $cmd = "cd ".$dir."; find . -name 'xfer.complete' -maxdepth 2 -printf '\%h\\n' | sort | head -n 1";
-    logMessage(2, "getObsToTar: localSshCommand(".$user.", ".$host.", ".$cmd.")");
+    $cmd = "cd ".$dir."; find . -mindepth 3 -maxdepth 3 -name 'xfer.complete' ".
+           "-printf '\%h\\n' | sort | head -n 1";
+    logMessage(2, "getBeamToTar: localSshCommand(".$user.", ".$host.", ".$cmd.")");
     ($result, $response) = localSshCommand($user, $host, $cmd);
-    logMessage(2, "getObsToTar: localSshCommand() ".$result." ".$response);
+    logMessage(2, "getBeamToTar: localSshCommand() ".$result." ".$response);
 
     # if the ssh command failed
     if ($result ne "ok") {
-      logMessage(0, "getObsToTar: ssh cmd failed: ".$cmd);
+      logMessage(0, "getBeamToTar: ssh cmd failed: ".$cmd);
 
     # ssh worked
     } else {
@@ -375,147 +421,27 @@ sub getObsToTar($$$) {
       # find worked 
       if ($response ne "") {
         chomp $response;
+        my @arr = split(/\//,$response);
+        $obs = $arr[1];
+        $beam = $arr[2];
         # remove the leading ./ if it exists
-        $response =~ s/^\.\///;
-        $obs = $response;
+        #$response =~ s/^\.\///;
+        #$obs = $response;
+        logMessage(2, "getBeamToTar: found ".$obs."/".$beam);
     
       # find failed
       } else {
-        logMessage(2, "getObsToTar: could not find any xfer.complete's");
+        logMessage(2, "getBeamToTar: could not find any xfer.complete's");
       } 
 
     }
   }
-  logMessage(3, "getObsToTar: returning ".$obs);
+  logMessage(3, "getBeamToTar: returning ".$obs.", ".$beam);
 
   unindent();
-  return $obs;
+  return ($obs, $beam);
 }
 
-
-#
-# tars the observation to the tape drive
-#
-sub tarObs($$$$) {
-
-  my ($user, $host, $dir, $obs) = @_;
-  indent();
-
-  logMessage(2, "tarObs: (".$user.", ".$host.", ".$dir.", ".$obs.")");
-  logMessage(1, "tarObs: archiving observation: ".$obs);
-
-  my $subdir = "";
-  my @subdirs = ();
-  my $beam_problem = 0;
-  my $cmd = "";
-  my $result = "";
-  my $response = "";
-
-  $cmd = "touch ".$dir."/READING";
-  logMessage(2, "tarObs: localSshCommand(".$user.", ".$host.", ".$cmd.")");
-  ($result, $response) = localSshCommand($user, $host, $cmd);
-  logMessage(2, "tarObs: localSshCommand() ".$result." ".$response);
-
-  if ($result ne "ok") {
-    logMessage(0, "tarObs: could not touch READING flag in ".$dir.": ".$response);
-    unindent();
-    return ("fail", "could not touch READING flag");
-  }
-
-  # get the beam subdirectories
-  $cmd = "ssh -x ".$ssh_opts." -l ".$user." ".$host." \"cd ".$dir."/".$obs."; ls -1d ??\"";
-  logMessage(2, "tarObs: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
-  logMessage(2, "tarObs: ".$result." ".$response);
-  if ($result ne "ok") {
-    logMessage(0, "tarObs: could get beam directories in ".$dir."/".$obs.": ".$response);
-    unindent();
-    return ("fail", "could not get beam directories");
-  }
-
-  chomp $response;
-  @subdirs = split("\n",$response);
-
-  foreach $subdir (@subdirs) {
-
-    if ((! $beam_problem) && (!$quit_daemon) ) {
-
-      logMessage(2, "tarObs: checkIfArchived(".$user.", ".$host.", ".$dir.", ".$obs.", ".$subdir.")");
-      ($result, $response) = checkIfArchived($user, $host, $dir, $obs, $subdir);
-      logMessage(2, "tarObs: checkIfArchived() ".$result." ".$response);
-
-      if ($result ne "ok") {
-        logMessage(0, "tarObs: checkIfArchived failed: ".$response);
-      
-        $cmd = "rm -f ".$dir."/READING";
-        logMessage(2, "getObsToTar: localSshCommand(".$user.", ".$host.", ".$cmd.")");
-        ($result, $response) = localSshCommand($user, $host, $cmd);
-        logMessage(2, "getObsToTar: localSshCommand() ".$result." ".$response);
-
-        unindent();
-        return ("fail", "checkIfArchived failed: ".$response);
-      } 
-  
-      # If this beam has been archived, skip it 
-      if ($response eq "archived") {
-        logMessage(1, "Skipping archival of ".$obs."/".$subdir.", already archived to tape");
-
-      # Archive the beam 
-      } else {
-  
-        setStatus("Archiving  ".$obs." ".$subdir);
-
-        logMessage(2, "tarObs: tarBeam(".$user.", ".$host.", ".$dir.", ".$obs.", ".$subdir.")");
-        ($result, $response) = tarBeam($user, $host, $dir, $obs, $subdir);
-
-        if ($result ne "ok") {
-          logMessage(0, "tarObs: tarBeam() failed: ".$response);
-          $beam_problem = 1;
-        }
-      }
-
-    } else {
-      logMessage(2, "tarObs: skipping ".$subdir." due to previous beam problem, or quit flag");
-    }
-  }
-
-  my $total_response = "";
-
-  if ($beam_problem) {
-
-    logMessage(0, "tarObs: problem archiving a beam");
-    $cmd = "rm -f ".$dir."/READING";
-    logMessage(2, "getObsToTar: localSshCommand(".$user.", ".$host.", ".$cmd.")");
-    ($result, $response) = localSshCommand($user, $host, $cmd);
-    logMessage(2, "getObsToTar: localSshCommand() ".$result." ".$response);
-
-    unindent();
-    return ("fail", "problem occurred during archival of a beam");
-
-  } elsif ($quit_daemon) {
-
-    logMessage(0, "tarObs: not marking on.tape.".$type." for ".$obs." due to quit flag being raised");
-    $total_response = "quit flag raised before fully archived";
-
-  # Mark this entire pointing as successfully processed
-  } else {
-
-    $total_response = "fully archived";
-    logMessage(2, "getObsToTar: markSentToTape(".$user.", ".$host.", ".$dir.", ".$obs.", \"\"");
-    ($result, $response) = markSentToTape($user, $host, $dir, $obs, "");
-    logMessage(2, "getObsToTar: markSentToTape() ".$result." ".$response);
-
-  }
-
-  $cmd = "rm -f ".$dir."/READING";
-  logMessage(2, "getObsToTar: localSshCommand(".$user.", ".$host.", ".$cmd.")");
-  ($result, $response) = localSshCommand($user, $host, $cmd);
-  logMessage(2, "getObsToTar: localSshCommand() ".$result." ".$response);
-
-  logMessage(1, "tarObs: finished observation: ".$obs);
-  unindent();
-  return ("ok", $total_response);
-}
 
 #
 # tars the beam to the tape drive
@@ -530,7 +456,25 @@ sub tarBeam($$$$$) {
 
   my $cmd = "";
   my $result = "";
-  my $ressponse = "";
+  my $response = "";
+
+  # Check if this beam has already been archived
+  logMessage(2, "tarBeam: checkIfArchived(".$user.", ".$host.", ".$dir.", ".$obs.", ".$beam.")");
+  ($result, $response) = checkIfArchived($user, $host, $dir, $obs, $beam);
+  logMessage(2, "tarBeam: checkIfArchived() ".$result." ".$response);
+
+  if ($result ne "ok") {
+    logMessage(0, "tarBeam: checkIfArchived failed: ".$response);
+    unindent();
+    return ("fail", "checkIfArchived failed: ".$response);
+  } 
+
+  # If this beam has been archived, skip it 
+  if ($response eq "archived") {
+    logMessage(1, "Skipping archival of ".$obs."/".$beam.", already archived");
+    unindent();
+    return("ok", "beam already archived");
+  }
 
   # Check the tape is the expected one
   my $expected_tape = getExpectedTape(); 
@@ -660,7 +604,6 @@ sub tarBeam($$$$$) {
         return ("fail", "could not FSF seek to correct place on tape");
       }
     }
-
   }
 
   my $filenum = -1;
@@ -676,7 +619,8 @@ sub tarBeam($$$$$) {
   while (($filenum ne $nfiles) || ($blocknum ne 0)) {
 
     # we are not at 0 block of the next file!
-    logMessage(0, "tarBeam: WARNING: Tape out of position! (f=$filenum, b=$blocknum) Attempt to get to right place.");
+    logMessage(0, "tarBeam: WARNING: Tape out of position! (f=".$filenum.
+                  ", b=".$blocknum.") Attempt to get to right place.");
 
     $cmd = "mt -f ".$dev." rewind; mt -f ".$dev." fsf $nfiles";
     ($result, $response) = Dada->mySystem($cmd);
@@ -888,23 +832,30 @@ sub tarBeam($$$$$) {
 #
 # move a completed obs on the remote dir to the on_tape directory
 #
-sub moveCompletedObs($$$$) {
+sub moveCompletedBeam($$$$$) {
 
-  my ($user, $host, $dir, $obs) = @_;
+  my ($user, $host, $dir, $obs, $beam) = @_;
   indent();
-  logMessage(2, "moveCompletedObs(".$user.", ".$host.", ".$dir.", ".$obs.")");
+  logMessage(2, "moveCompletedBeam(".$user.", ".$host.", ".$dir.", ".$obs.", ".$beam.")");
 
   my $result = "";
   my $response = "";
   my $cmd = "";
 
-  $cmd = "cd ".$dir."; mv ".$obs." ../on_tape/";
-  logMessage(2, "moveCompletedObs: localSshCommand(".$user.", ".$host.", ".$cmd.")");
+  # ensure the remote directory is created
+  $cmd = "mkdir -p ".$dir."/../on_tape/".$obs;
+  logMessage(2, "moveCompletedBeam: localSshCommand(".$user.", ".$host.", ".$cmd.")");
   ($result, $response) = localSshCommand($user, $host, $cmd);
-  logMessage(2, "moveCompletedObs: localSshCommand() ".$result." ".$response);
+  logMessage(2, "moveCompletedBeam: localSshCommand() ".$result." ".$response);
+
+   # move the beam
+  $cmd = "cd ".$dir."; mv ".$obs."/".$beam." ../on_tape/".$obs."/";
+  logMessage(2, "moveCompletedBeam: localSshCommand(".$user.", ".$host.", ".$cmd.")");
+  ($result, $response) = localSshCommand($user, $host, $cmd);
+  logMessage(2, "moveCompletedBeam: localSshCommand() ".$result." ".$response);
 
   if ($result ne "ok") {
-    logMessage(0, "getObsToTar: failed to move ".$obs." to on_tape dir: ".$response);
+    logMessage(0, "moveCompletedBeam: failed to move ".$obs."/".$beam," to on_tape dir: ".$response);
   }
 
   unindent();
@@ -912,6 +863,45 @@ sub moveCompletedObs($$$$) {
 
 }
 
+#
+# Delete the beam from the specified location
+#
+sub deleteCompletedBeam($$$$$) {
+
+  my ($user, $host, $dir, $obs, $beam) = @_;
+  indent();
+  logMessage(2, "deleteCompletedBeam(".$user.", ".$host.", ".$dir.", ".$obs.", ".$beam.")");
+
+  my $result = "";
+  my $response = "";
+  my $cmd = "";
+
+  # ensure the remote directory exists
+  $cmd = "ls -1d ".$dir."/../on_tape/".$obs."/".$beam;
+  logMessage(2, "deleteCompletedBeam: localSshCommand(".$user.", ".$host.", ".$cmd.")");
+  ($result, $response) = localSshCommand($user, $host, $cmd);
+  logMessage(2, "deleteCompletedBeam: localSshCommand() ".$result." ".$response);
+
+  if ($result ne "ok") {
+    logMessage(0, "deleteCompletedBeam: ".$user."@".$host.":".$dir."/".$obs."/".$beam." did not exist");
+    
+  } else {
+
+    # delete the remote directory
+    $cmd = "rm -rf ".$dir."/../on_tape/".$obs."/".$beam;
+    logMessage(2, "deleteCompletedBeam: localSshCommand(".$user.", ".$host.", ".$cmd.")");
+    ($result, $response) = localSshCommand($user, $host, $cmd);
+    logMessage(2, "deleteCompletedBeam: localSshCommand() ".$result." ".$response);
+
+    if ($result ne "ok") {
+      logMessage(0, "deleteCompletedBeam: could not delete ".$user."@".$host.":".$dir."/".
+                    $obs."/".$beam.": ".$response);
+    }
+  }
+
+  unindent();
+  return ($result, $response);
+}
 
 #
 # Rewinds the current tape and reads the first "index" file
@@ -1598,9 +1588,9 @@ sub checkIfArchived($$$$$) {
 
   # Check the directory for a on.tape.type file
   $cmd = "ls -1 ".$dir."/".$obs."/".$beam."/on.tape.".$type;
-  logMessage(2, "getObsToTar: localSshCommand(".$user.", ".$host.", ".$cmd);
+  logMessage(2, "checkIfArchived: localSshCommand(".$user.", ".$host.", ".$cmd);
   ($result, $response) = localSshCommand($user, $host, $cmd);
-  logMessage(2, "getObsToTar: localSshCommand() ".$result." ".$response);
+  logMessage(2, "checkIfArchived: localSshCommand() ".$result." ".$response);
 
   if ($result eq "ok") {
     $archived_disk = 1;
