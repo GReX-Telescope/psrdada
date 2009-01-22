@@ -275,7 +275,7 @@ while (!$quit_daemon) {
     logMessage(2, "main: tarObs() ".$result." ".$response);
     $waiting = 0;
 
-    if ($result eq "ok") {
+    if (($result eq "ok") && ($response eq "fully archived")) {
 
       logMessage(2, "main: moveCompeltedObs(".$user.", ".$host.", ".$dir.", ".$obs.")");
       ($result, $response) = moveCompletedObs($user, $host, $dir, $obs);
@@ -479,6 +479,8 @@ sub tarObs($$$$) {
     }
   }
 
+  my $total_response = "";
+
   if ($beam_problem) {
 
     logMessage(0, "tarObs: problem archiving a beam");
@@ -493,10 +495,12 @@ sub tarObs($$$$) {
   } elsif ($quit_daemon) {
 
     logMessage(0, "tarObs: not marking on.tape.".$type." for ".$obs." due to quit flag being raised");
+    $total_response = "quit flag raised before fully archived";
 
   # Mark this entire pointing as successfully processed
   } else {
 
+    $total_response = "fully archived";
     logMessage(2, "getObsToTar: markSentToTape(".$user.", ".$host.", ".$dir.", ".$obs.", \"\"");
     ($result, $response) = markSentToTape($user, $host, $dir, $obs, "");
     logMessage(2, "getObsToTar: markSentToTape() ".$result." ".$response);
@@ -510,7 +514,7 @@ sub tarObs($$$$) {
 
   logMessage(1, "tarObs: finished observation: ".$obs);
   unindent();
-  return ("ok", "");
+  return ("ok", $total_response);
 }
 
 #
@@ -1182,7 +1186,7 @@ sub loadTape($) {
     my $inserted_tape = "none";
     my $n_tries = 10;
 
-    while (($inserted_tape ne $tape) && ($n_tries >= 0)) {
+    while (($inserted_tape ne $tape) && ($n_tries >= 0) && (!$quit_daemon)) {
 
       # Ask the user to insert the tape
       logMessage(2, "loadTape: manualInsertTape()");
@@ -2746,7 +2750,12 @@ sub getTapeStatus() {
   indent();
   logMessage(2, "getTapeStatus()");
 
-  $cmd="mt -f ".$dev." status | grep 'File number' | awk -F, '{print \$1}' | awk -F= '{print \$2}'";
+  # Parkes robot has a different print out than the swinburne one
+  if ($robot eq 0) {
+    $cmd="mt -f ".$dev." status | grep 'file number' | awk '{print \$4}'";
+  } else {
+    $cmd="mt -f ".$dev." status | grep 'File number' | awk -F, '{print \$1}' | awk -F= '{print \$2}'";
+  }
   logMessage(3, "getTapeStatus: cmd= $cmd");
 
   my ($result,$response) = Dada->mySystem($cmd);
@@ -2757,7 +2766,11 @@ sub getTapeStatus() {
     $blocknum=-1;
   } else {
     $filenum = $response;
-    $cmd="mt -f ".$dev." status | grep 'block number' | awk -F, '{print \$2}' | awk -F= '{print \$2}'";
+    if ($robot eq 0) {
+      $cmd="mt -f ".$dev." status | grep 'block number' | awk '{print \$4}'";
+    } else {
+      $cmd="mt -f ".$dev." status | grep 'block number' | awk -F, '{print \$2}' | awk -F= '{print \$2}'";
+    }
     my ($result,$response) = Dada->mySystem($cmd);
     if ($result ne "ok") {
       logMessage(0, "getTapeStatus: Failed $response");
