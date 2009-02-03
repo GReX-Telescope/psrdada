@@ -18,9 +18,10 @@ use threads::shared;
 #
 # Constants
 #
-use constant DEBUG_LEVEL  => 1;
+use constant DEBUG_LEVEL  => 2;
 use constant PIDFILE      => "bpsr_tape_archiver.pid";
 use constant LOGFILE      => "bpsr_tape_archiver.log";
+use constant QUITFILE     => "bpsr_tape_archiver.quit";
 use constant TAPES_DB     => "tapes.db";
 use constant FILES_DB     => "files.db";
 use constant TAPE_SIZE    => "750.00";
@@ -258,6 +259,7 @@ my $cmd = "";
 $i = 0;
 $j = 0;
 my $waiting = 0;
+my $give_up = 0;
 
 while (!$quit_daemon) {
 
@@ -290,16 +292,6 @@ while (!$quit_daemon) {
     logMessage(2, "main: tarBeam() ".$result." ".$response);
     $waiting = 0;
 
-    $cmd = "rm -f ".$dir."/READING";
-    logMessage(2, "main: localSshCommand(".$user.", ".$host.", ".$cmd.")");
-    ($result, $response) = localSshCommand($user, $host, $cmd);
-    logMessage(2, "main: localSshCommand() ".$result." ".$response);
-
-    if ($result ne "ok") {
-      logMessage(0, "main: could not unlink READING flag in ".$dir.": ".$response);
-      exit_script(1);
-    }
-
     if ($result eq "ok") {
 
       logMessage(2, "main: moveCompeltedBeam(".$user.", ".$host.", ".$dir.", ".$obs.", ".$beam.")");
@@ -308,24 +300,39 @@ while (!$quit_daemon) {
       if ($result ne "ok") {
         logMessage(0, "main: moveCompletedBeam() failed: ".$response);
         setStatus("Error: could not move beam: ".$obs."/".$beam);
-        exit_script(1);
+        $give_up = 1;
       }
 
+      # DISABLED FOR TESTING
       # If at parkes, we delete the beam after moving it
-      if ($robot eq 0) {
-        logMessage(2, "main: deleteCompletedBeam(".$user.", ".$host.", ".$dir.", ".$obs.", ".$beam.")");
-        ($result, $response) = deleteCompletedBeam($user, $host, $dir, $obs, $beam);
-        logMessage(2, "main: deleteCompletedBeam() ".$result." ".$response);
-        if ($result ne "ok") {
-          logMessage(0, "main: deleteCompletedBeam() failed: ".$response);
-          setStatus("Error: could not delete beam: ".$obs."/".$beam);
-          exit_script(1);
-        }
-      }
+      #if ($robot eq 0) {
+      #  logMessage(2, "main: deleteCompletedBeam(".$user.", ".$host.", ".$dir.", ".$obs.", ".$beam.")");
+      #  ($result, $response) = deleteCompletedBeam($user, $host, $dir, $obs, $beam);
+      #  logMessage(2, "main: deleteCompletedBeam() ".$result." ".$response);
+      #  if ($result ne "ok") {
+      #    logMessage(0, "main: deleteCompletedBeam() failed: ".$response);
+      #    setStatus("Error: could not delete beam: ".$obs."/".$beam);
+      #    $give_up = 1;
+      #  }
+      #}
 
     } else {
       setStatus("Error: ".$response);
       logMessage(0, "main: tarBeam() failed: ".$response);
+      $give_up = 1;
+    }
+
+    $cmd = "rm -f ".$dir."/READING";
+    logMessage(2, "main: localSshCommand(".$user.", ".$host.", ".$cmd.")");
+    ($result, $response) = localSshCommand($user, $host, $cmd);
+    logMessage(2, "main: localSshCommand() ".$result." ".$response);
+
+    if ($result ne "ok") {
+      logMessage(0, "main: could not unlink READING flag in ".$dir.": ".$response);
+      $give_up = 1;
+    }
+
+    if ($give_up) {
       exit_script(1);
     }
 
@@ -497,7 +504,7 @@ sub tarBeam($$$$$) {
 
   my $tape = $expected_tape;
 
-  # remove the xfer.complete in the beam fir if it exists
+  # remove the xfer.complete in the beam dir if it exists
   $cmd = "ls -1 ".$dir."/".$obs."/".$beam."/xfer.complete";
   logMessage(2, "tarBeam: localSshCommand(".$user.", ".$host.", ".$cmd.")");
   ($result, $response) = localSshCommand($user, $host, $cmd);
@@ -530,7 +537,6 @@ sub tarBeam($$$$$) {
   my $size_est_gbytes = $size_est_bytes / (1024*1024*1024);
 
   # check if this beam will fit on the tape
-  #($result, $response) = getTapeSpace($tape);
   ($result, $response) = getTapeInfo($tape);
 
   if ($result ne "ok") {
@@ -856,6 +862,28 @@ sub moveCompletedBeam($$$$$) {
 
   if ($result ne "ok") {
     logMessage(0, "moveCompletedBeam: failed to move ".$obs."/".$beam," to on_tape dir: ".$response);
+  } else {
+
+    # if there are no other beams in the observation directory, then we can delete it
+    # old, then we can remove it also
+
+    $cmd = "find ".$dir."/".$obs."/ -mindepth 1 -type d | wc -l";
+    logMessage(2, "deleteCompletedBeam: localSshCommand(".$user.", ".$host.", ".$cmd.")");
+    ($result, $response) = localSshCommand($user, $host, $cmd);
+    logMessage(2, "deleteCompletedBeam: localSshCommand() ".$result." ".$response);
+
+    if (($result eq "ok") && ($response eq "0")) {
+
+      # delete the remote directory
+      $cmd = "rmdir ".$dir."/".$obs;
+      logMessage(2, "deleteCompletedBeam: localSshCommand(".$user.", ".$host.", ".$cmd.")");
+      ($result, $response) = localSshCommand($user, $host, $cmd);
+      logMessage(2, "deleteCompletedBeam: localSshCommand() ".$result." ".$response);
+
+      if ($result ne "ok") {
+        logMessage(0, "deleteCompletedBeam: could not delete ".$user."@".$host.":".$dir."/".$obs.": ".$response);
+      }
+    }
   }
 
   unindent();
@@ -887,8 +915,8 @@ sub deleteCompletedBeam($$$$$) {
     
   } else {
 
-    # delete the remote directory
-    $cmd = "rm -rf ".$dir."/../on_tape/".$obs."/".$beam;
+    # delete the remote directory (just do whole obs)
+    $cmd = "rm -rf ".$dir."/../on_tape/".$obs;
     logMessage(2, "deleteCompletedBeam: localSshCommand(".$user.", ".$host.", ".$cmd.")");
     ($result, $response) = localSshCommand($user, $host, $cmd);
     logMessage(2, "deleteCompletedBeam: localSshCommand() ".$result." ".$response);
@@ -896,28 +924,6 @@ sub deleteCompletedBeam($$$$$) {
     if ($result ne "ok") {
       logMessage(0, "deleteCompletedBeam: could not delete ".$user."@".$host.":".$dir."/".
                     $obs."/".$beam.": ".$response);
-    }
-  
-    # if there are no other beams in the observation directory, then we can delete it
-    # old, then we can remove it also
-
-    $cmd = "ls -1d ".$dir."/".$obs."/ | wc -l";
-    logMessage(2, "deleteCompletedBeam: localSshCommand(".$user.", ".$host.", ".$cmd.")");
-    ($result, $response) = localSshCommand($user, $host, $cmd);
-    logMessage(2, "deleteCompletedBeam: localSshCommand() ".$result." ".$response);
-
-    if (($result eq "ok") && ($response eq "0")) {
-
-      # delete the remote directory
-      $cmd = "rmdir ".$dir."/".$obs;
-      logMessage(2, "deleteCompletedBeam: localSshCommand(".$user.", ".$host.", ".$cmd.")");
-      ($result, $response) = localSshCommand($user, $host, $cmd);
-      logMessage(2, "deleteCompletedBeam: localSshCommand() ".$result." ".$response);
-
-      if ($result ne "ok") {
-        logMessage(0, "deleteCompletedBeam: could not delete ".$user."@".$host.":".$dir."/".$obs.": ".$response);
-      }
-
     }
   }
 
@@ -2558,12 +2564,11 @@ sub daemonControlThread() {
   logMessage(2, "daemon_control: thread starting");
 
   my $pidfile = $cfg{"SERVER_CONTROL_DIR"}."/".PIDFILE;
-
-  my $daemon_quit_file = Dada->getDaemonControlFile($cfg{"SERVER_CONTROL_DIR"});
+  my $quitfile = $cfg{"SERVER_CONTROL_DIR"}."/".QUITFILE;
 
   # poll for the existence of the control file
-  while ((!-f $daemon_quit_file) && (!$quit_daemon)) {
-    logMessage(3, "daemon_control: Polling for ".$daemon_quit_file);
+  while ((!-f $quitfile) && (!$quit_daemon)) {
+    logMessage(3, "daemon_control: Polling for ".$quitfile);
     sleep(1);
   }
 
