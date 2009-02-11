@@ -11,12 +11,26 @@ if ( $1 == "" || $2 == "" || $3 == "" || "$4" == "" ) then
 	exit 1
 endif
 
-echo Running ssh $5 \'$4\' on $1$2-\>$3
+set job = `mktemp -p $HOME`
+echo "$4" > $job
+
+echo Running ssh $5 \'`cat $job`\' on $1$2-\>$3
+
+rm -f $job
 
 set n = $2
 while ( $n <= $3 )
+
+  # make a unique job for each node
+  set job = `mktemp -p $HOME`
+  echo "$4" > $job
+  echo "rm -f $job" >> $job
+
 	set nn = `echo $n | awk '{printf ("%02d", $1)}'`
-	ssh -x -f $5 $1$nn /bin/csh -c "echo; $4"
+
+	ssh -x -f $5 $1$nn source $job
+
 	@ n = $n + 1
+
 end
 
