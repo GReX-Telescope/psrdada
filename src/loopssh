@@ -11,7 +11,10 @@ if ( $1 == "" || $2 == "" || $3 == "" || "$4" == "" ) then
 	exit 1
 endif
 
-set job = `mktemp -p $HOME`
+mkdir -p $HOME/.loopssh
+chmod a+rwx $HOME/.loopssh
+
+set job = `mktemp -p $HOME/.loopssh`
 echo "$4" > $job
 
 echo Running ssh $5 \'`cat $job`\' on $1$2-\>$3
@@ -22,9 +25,10 @@ set n = $2
 while ( $n <= $3 )
 
   # make a unique job for each node
-  set job = `mktemp -p $HOME`
+  set job = `mktemp -p $HOME/.loopssh`
   echo "$4" > $job
   echo "rm -f $job" >> $job
+  chmod a+rw $job
 
 	set nn = `echo $n | awk '{printf ("%02d", $1)}'`
 
