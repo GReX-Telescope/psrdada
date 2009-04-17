@@ -18,7 +18,7 @@ use threads::shared;
 #
 # Constants
 #
-use constant DEBUG_LEVEL  => 2;
+use constant DEBUG_LEVEL  => 1;
 use constant PIDFILE      => "bpsr_tape_archiver.pid";
 use constant LOGFILE      => "bpsr_tape_archiver.log";
 use constant QUITFILE     => "bpsr_tape_archiver.quit";
@@ -155,7 +155,7 @@ my $response;
 #
 
 my $logfile = $db_dir."/".LOGFILE;
-my $pidfile = $db_dir."/".PIDFILE;
+my $pidfile = $cfg{"SERVER_CONTROL_DIR"}."/".PIDFILE;
 
 print "Running ".$type." Tape archiver\n";
 
@@ -305,16 +305,16 @@ while (!$quit_daemon) {
 
       # DISABLED FOR TESTING
       # If at parkes, we delete the beam after moving it
-      #if ($robot eq 0) {
-      #  logMessage(2, "main: deleteCompletedBeam(".$user.", ".$host.", ".$dir.", ".$obs.", ".$beam.")");
-      #  ($result, $response) = deleteCompletedBeam($user, $host, $dir, $obs, $beam);
-      #  logMessage(2, "main: deleteCompletedBeam() ".$result." ".$response);
-      #  if ($result ne "ok") {
-      #    logMessage(0, "main: deleteCompletedBeam() failed: ".$response);
-      #    setStatus("Error: could not delete beam: ".$obs."/".$beam);
-      #    $give_up = 1;
-      #  }
-      #}
+      if (($robot eq 0) && ($result eq "ok"))  {
+        logMessage(2, "main: deleteCompletedBeam(".$user.", ".$host.", ".$dir.", ".$obs.", ".$beam.")");
+        ($result, $response) = deleteCompletedBeam($user, $host, $dir, $obs, $beam);
+        logMessage(2, "main: deleteCompletedBeam() ".$result." ".$response);
+        if ($result ne "ok") {
+          logMessage(0, "main: deleteCompletedBeam() failed: ".$response);
+          setStatus("Error: could not delete beam: ".$obs."/".$beam);
+          $give_up = 1;
+        }
+      }
 
     } else {
       setStatus("Error: ".$response);
@@ -413,14 +413,16 @@ sub getBeamToTar($$$) {
   } else {
 
     $cmd = "cd ".$dir."; find . -mindepth 3 -maxdepth 3 -name 'xfer.complete' ".
-           "-printf '\%h\\n' | sort | head -n 1";
+           "-printf '\%h\\n' | sort -r | tail -n 1";
     logMessage(2, "getBeamToTar: localSshCommand(".$user.", ".$host.", ".$cmd.")");
     ($result, $response) = localSshCommand($user, $host, $cmd);
     logMessage(2, "getBeamToTar: localSshCommand() ".$result." ".$response);
 
     # if the ssh command failed
     if ($result ne "ok") {
-      logMessage(0, "getBeamToTar: ssh cmd failed: ".$cmd);
+      logMessage(0, "getBeamToTar: ssh cmd [".$user."@".$host."] failed: ".$cmd);
+      logMessage(0, "getBeamToTar: ssh response ".$response);
+      sleep(1);
 
     # ssh worked
     } else {
@@ -483,6 +485,8 @@ sub tarBeam($$$$$) {
     return("ok", "beam already archived");
   }
 
+  setStatus("Archiving ".$obs." ".$beam);
+
   # Check the tape is the expected one
   my $expected_tape = getExpectedTape(); 
 
@@ -496,29 +500,13 @@ sub tarBeam($$$$$) {
 
     if ($result ne "ok") {
       unindent();
-      return ("fail", "Could not load expected tape: ".$expected_tape);
+      return ("fail", "Could not load tape: ".$expected_tape);
     }
 
     $current_tape = $expected_tape;
   }
 
   my $tape = $expected_tape;
-
-  # remove the xfer.complete in the beam dir if it exists
-  $cmd = "ls -1 ".$dir."/".$obs."/".$beam."/xfer.complete";
-  logMessage(2, "tarBeam: localSshCommand(".$user.", ".$host.", ".$cmd.")");
-  ($result, $response) = localSshCommand($user, $host, $cmd);
-  logMessage(2, "tarBeam: localSshCommand() ".$result." ".$response);
-
-  if ($result eq "ok") {
-    $cmd = "rm -f ".$dir."/".$obs."/".$beam."/xfer.complete";
-    logMessage(2, "tarBeam: localSshCommand(".$user.", ".$host.", ".$cmd.")");
-    ($result, $response) = localSshCommand($user, $host, $cmd);
-    logMessage(2, "tarBeam: localSshCommand() ".$result." ".$response);
-    if ($result ne "ok") {
-      logMessage(2, "tarBeam: couldnt unlink ".$obs."/".$beam."/xfer.complete");
-    }
-  }
 
   # Find the combined file size in bytes
   $cmd = "du -sLb ".$dir."/".$obs."/".$beam;
@@ -529,7 +517,7 @@ sub tarBeam($$$$$) {
   if ($result ne "ok") {
     logMessage(0, "tarBeam: ".$cmd. "failed: ".$response);
     unindent();
-    return ("fail", "Could not determine archive size");
+    return ("fail", "Could not determine archive size for ".$obs."/".$beam);
   } 
 
   # get the upper limit on the archive size
@@ -562,7 +550,7 @@ sub tarBeam($$$$$) {
     if ($result ne "ok") {
       logMessage(0, "tarBeam: updateTapesDB() failed: ".$response);
       unindent();
-      return ("fail", "could not mark tape full");
+      return ("fail", "Could not mark tape full");
     }
 
     # Get the next expected tape
@@ -591,7 +579,7 @@ sub tarBeam($$$$$) {
     if ($result ne "ok") {
       logMessage(0, "tarBeam: getTapeInfo() failed: ".$response);
       unindent();
-      return ("fail", "could not determine tape information from database");
+      return ("fail", "Could not determine tape information from database");
     }
 
     # Setup the ID information for the new tape    
@@ -607,7 +595,7 @@ sub tarBeam($$$$$) {
       if ($result ne "ok") {
         logMessage(0, "tarBeam: tapeFSF failed: ".$response);
         unindent();
-        return ("fail", "could not FSF seek to correct place on tape");
+        return ("fail", "Could not FSF seek to correct place on tape");
       }
     }
   }
@@ -618,7 +606,7 @@ sub tarBeam($$$$$) {
   if ($result ne "ok") {
     logMessage(0, "TarBeam: getTapeStatus() failed.");
     unindent();
-    return ("fail", "getTapeStatus() failed");
+    return ("fail", "Could not get tape status");
   }
 
   my $ntries = 3;
@@ -712,7 +700,15 @@ sub tarBeam($$$$$) {
       
     logMessage(2, "tarBeam: ".$cmd);
     ($result, $response) = Dada->mySystem($cmd);
-    if (($result ne "ok") || ($response =~ m/refused/) || ($response =~ m/^0\+0 records in/)) {
+
+    # Fatal errors, give up straight away
+    if ($response =~ m/Input\/output error/) {
+      logMessage(0, "tarBeam: fatal tape error: ".$response);
+      $tries = -1;
+
+    # Non fatal errors
+    } 
+    elsif (($result ne "ok") || ($response =~ m/refused/) || ($response =~ m/^0\+0 records in/)) {
       logMessage(2, "tarBeam: ".$result." ".$response);
       logMessage(0, "tarBeam: failed to write archive to tape: ".$response);
       $tries--;
@@ -781,7 +777,38 @@ sub tarBeam($$$$$) {
     return ("fail","Archiving failed");
   }
 
-  # Else we wrote 3 files to the TAPE in 1 archive and need to update the database files
+  # Now check that the File number has been incremented one. Sometimes the
+  # file number is not incremented, which usually means an error...
+  ($result, my $filenum, my $blocknum) = getTapeStatus();
+  if ($result ne "ok") {
+    logMessage(0, "tarBeam: getTapeStatus() failed.");
+    unindent();
+    return ("fail", "getTapeStatus() failed");
+  }
+  
+  if (($blocknum ne 0) || ($filenum ne ($nfiles+1))) {
+    logMessage(0, "tarBeam: positioning error after write: filenum=".$filenum.", blocknum=".$blocknum);
+    unindent();
+    return ("fail", "write failed to complete EOF correctly");
+  }
+
+  # remove the xfer.complete in the beam dir if it exists
+  $cmd = "ls -1 ".$dir."/".$obs."/".$beam."/xfer.complete";
+  logMessage(2, "tarBeam: localSshCommand(".$user.", ".$host.", ".$cmd.")");
+  ($result, $response) = localSshCommand($user, $host, $cmd);
+  logMessage(2, "tarBeam: localSshCommand() ".$result." ".$response);
+
+  if ($result eq "ok") {
+    $cmd = "rm -f ".$dir."/".$obs."/".$beam."/xfer.complete";
+    logMessage(2, "tarBeam: localSshCommand(".$user.", ".$host.", ".$cmd.")");
+    ($result, $response) = localSshCommand($user, $host, $cmd);
+    logMessage(2, "tarBeam: localSshCommand() ".$result." ".$response);
+    if ($result ne "ok") {
+      logMessage(2, "tarBeam: couldnt unlink ".$obs."/".$beam."/xfer.complete");
+    }
+  }
+
+  # Else we wrote files to the TAPE in 1 archive and need to update the database files
   $used += $size_est_gbytes;
   $free -= $size_est_gbytes;
   $nfiles += 1;
@@ -868,20 +895,20 @@ sub moveCompletedBeam($$$$$) {
     # old, then we can remove it also
 
     $cmd = "find ".$dir."/".$obs."/ -mindepth 1 -type d | wc -l";
-    logMessage(2, "deleteCompletedBeam: localSshCommand(".$user.", ".$host.", ".$cmd.")");
+    logMessage(2, "moveCompletedBeam: localSshCommand(".$user.", ".$host.", ".$cmd.")");
     ($result, $response) = localSshCommand($user, $host, $cmd);
-    logMessage(2, "deleteCompletedBeam: localSshCommand() ".$result." ".$response);
+    logMessage(2, "moveCompletedBeam: localSshCommand() ".$result." ".$response);
 
     if (($result eq "ok") && ($response eq "0")) {
 
       # delete the remote directory
       $cmd = "rmdir ".$dir."/".$obs;
-      logMessage(2, "deleteCompletedBeam: localSshCommand(".$user.", ".$host.", ".$cmd.")");
+      logMessage(2, "moveCompletedBeam: localSshCommand(".$user.", ".$host.", ".$cmd.")");
       ($result, $response) = localSshCommand($user, $host, $cmd);
-      logMessage(2, "deleteCompletedBeam: localSshCommand() ".$result." ".$response);
+      logMessage(2, "moveCompletedBeam: localSshCommand() ".$result." ".$response);
 
       if ($result ne "ok") {
-        logMessage(0, "deleteCompletedBeam: could not delete ".$user."@".$host.":".$dir."/".$obs.": ".$response);
+        logMessage(0, "moveCompletedBeam: could not delete ".$user."@".$host.":".$dir."/".$obs.": ".$response);
       }
     }
   }
@@ -2152,15 +2179,19 @@ sub manualInsertTape($) {
 
   (my $tape) = @_;
 
+  my $cmd = "mt -f ".$dev." offline";
+  ($result, $response) = Dada->mySystem($cmd);
+  if ($result ne "ok") {
+    logMessage(0, "TarBeam: tape offline failed: ".$response);
+  }
+
   indent();
   logMessage(2, "manualInsertTape()");
   logMessage(1, "manualInsertTape: asking for tape ".$tape);
 
-  my $cmd = "";
-
   logMessage(2, "manualInsertTape: manualClearResponse()");
   ($result, $response) = manualClearResponse();
-                                                                                                                   
+
   if ($result ne "ok") {
     logMessage(0, "manualInsertTape: manualClearResponse() failed: ".$response);
     unindent();
@@ -2179,42 +2210,40 @@ sub manualInsertTape($) {
   }
 
   my $have_response = 0;
-  my $n_tries = 100;
   while ((!$have_response) && (!$quit_daemon)) {
 
-    ($result, $response) = manualGetResponse();
+    logMessage(2, "manualInsertTape: tapeIsLoaded()");
+    ($result, $response) = tapeIsLoaded();
+    logMessage(2, "manualInsertTape: tapeIsLoaded ".$result." ".$response);
 
-    if ($result eq "ok") {
-      $have_response = 1;
-    } else {
-      logMessage(2, "manualInsertTape: sleeping 1 second whilst waiting for reply");
-      sleep(1);
-      $n_tries--;
+    if ($result ne "ok") {
+      logMessage(0, "getCurrentTape: tapeIsLoaded failed: ".$response);
+      unindent();
+      return ("fail", "could not determine if tape is loaded in drive");
+    }
+
+    if ($response ne 1) {
+      logMessage(2, "manualInsertTape: sleeping 10 seconds for tape online");
+      sleep(10);
+    }
+    else {
+      $have_response=1;
     }
   } 
 
-  if ($have_response) {
-
-    my $new_tape = $response;
-
-    $string = "Current Tape: ".$new_tape;
-    logMessage(2, "manualInsertTape: setStatus(".$string.")");
-    ($result, $response) = setStatus($string);
-    logMessage(2, "manualInsertTape: setStatus() ".$result." ".$response);
+  $string = "Current Tape: ".$tape;
+  logMessage(2, "manualInsertTape: setStatus(".$string.")");
+  ($result, $response) = setStatus($string);
+  logMessage(2, "manualInsertTape: setStatus() ".$result." ".$response);
   
-    if ($result ne "ok") {
-      logMessage(0, "manualInsertTape: setStatus() failed: ".$response);
-      unindent();
-      return ("fail", "could not set status on web interface");
-    }
-
+  if ($result ne "ok") {
+    logMessage(0, "manualInsertTape: setStatus() failed: ".$response);
     unindent();
-    return ("ok", $new_tape);
-
-  } else {
-    unindent();
-    return ("fail", "did not received a response in 100 seconds");
+    return ("fail", "could not set status on web interface");
   }
+
+  unindent();
+  return ("ok", $tape);
 
 }
 
@@ -2451,6 +2480,14 @@ sub tapeGetID() {
 
   logMessage(2, "tapeGetID: ID = ".$response);
   my $tape_label = $response;
+
+  logMessage(2, "tapeGetID: tapeFSF(1)");
+  ($result, $response) = tapeFSF(1);
+  if ($result ne "ok") {
+    logMessage(0, "tapeGetID: tapeFSF failed: ".$response);
+    unindent();
+    return ("fail", "tapeFSF() failed to move forward 1 file");
+  }
 
   ($result, my $filenum, my $blocknum) = getTapeStatus();
   if ($result ne "ok") { 
