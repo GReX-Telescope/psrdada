@@ -63,26 +63,9 @@ $config = getConfigFile(SYS_CONFIG, TRUE);
           span.innerHTML = values[1]
           
           if (values[1] == "Insert Tape") {
-
-            var loc = "unknown";
-
-            if (values[0] == "PARKES_STATE") {
-              loc = "parkes"              
-            }
-            if (values[0] == "SWIN_STATE") {
-              loc = "swin"              
-            }
-
-            var html = "    <div class=\"btns\">\n"
-            html += "<a href=\"/bpsr/tapeupdate.php?tapeinserted="
-            html += values[2]+"&location="+loc+"\" class=\"btn\" >"
-            html += " <span>Load "+values[2]+"</span></a>\n";
-            html += "</div>\n"
-
-            span.innerHTML = html
-            td.style.backgroundColor = "red"
+            values[1]="Load "+values[2]
+            td.style.backgroundColor = "orange"
             //soundManager.play('changetape');
-
           } else {
             if (values[1].substring(0,5) == "Error") {
               td.style.backgroundColor = "red"
