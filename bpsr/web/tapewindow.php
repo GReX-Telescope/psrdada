@@ -63,7 +63,8 @@ $config = getConfigFile(SYS_CONFIG, TRUE);
           span.innerHTML = values[1]
           
           if (values[1] == "Insert Tape") {
-            values[1]="Load "+values[2]
+            var html = "<span>Load "+values[2]+"</span>\n";
+            span.innerHTML = html
             td.style.backgroundColor = "orange"
             //soundManager.play('changetape');
           } else {
