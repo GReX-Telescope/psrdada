@@ -21,7 +21,7 @@ $config = getConfigFile(SYS_CONFIG, TRUE);
     //soundManager.createSound('changetape','/sounds/tapechange.mp3');
   //}
 
-  var url="/bpsr/tapeupdate.php?control_dir=/nfs/control/bpsr"
+  var url="/bpsr/tapeupdate.php"
 
   function looper() {
 
@@ -48,26 +48,47 @@ $config = getConfigFile(SYS_CONFIG, TRUE);
     if (http_request.readyState == 4) {
       var response = String(http_request.responseText)
       var lines = response.split(";;;")
+      var span
+      var td
+      var values
       
       for (i=0; i<lines.length; i++) {
-        var values = lines[i].split(":::");
-        
-        if ((values[0]) && (document.getElementById(values[0]))) {
-          document.getElementById(values[0]).innerHTML = values[1]
+        values = lines[i].split(":::");
+  
+        if ((values[0]) && (document.getElementById(values[0]))) {  
+          //alert(values[0]+" -> "+values[1])
+          span = document.getElementById(values[0])
+          td = document.getElementById(values[0]+"_td")
 
+          span.innerHTML = values[1]
+          
           if (values[1] == "Insert Tape") {
 
+            var loc = "unknown";
+
+            if (values[0] == "PARKES_STATE") {
+              loc = "parkes"              
+            }
+            if (values[0] == "SWIN_STATE") {
+              loc = "swin"              
+            }
+
             var html = "    <div class=\"btns\">\n"
-            html += "<a href=\"/bpsr/tapeupdate.php?control_dir=/nfs/control/bpsr"
-            html += "&tapeinserted="+values[2]+"&location="+values[0]+"\" class=\"btn\" >"
+            html += "<a href=\"/bpsr/tapeupdate.php?tapeinserted="
+            html += values[2]+"&location="+loc+"\" class=\"btn\" >"
             html += " <span>Load "+values[2]+"</span></a>\n";
             html += "</div>\n"
 
-            document.getElementById(values[0]).innerHTML = html
-            document.getElementById(values[0]+"_td").style.backgroundColor = "red"
+            span.innerHTML = html
+            td.style.backgroundColor = "red"
             //soundManager.play('changetape');
+
           } else {
-            document.getElementById(values[0]+"_td").style.backgroundColor = ""
+            if (values[1].substring(0,5) == "Error") {
+              td.style.backgroundColor = "red"
+            } else {
+              td.style.backgroundColor = ""
+            }
           }
         }
       }
@@ -81,30 +102,44 @@ $config = getConfigFile(SYS_CONFIG, TRUE);
 ?>
   <table cellpadding=0 cellspacing=0 border=0 width=100%>
     <tr>
-      <td width=3>&nbsp;</td>
-      <td id="XFER_td">
-        <table> <tr>
-          <td align="right" class="smalltext"><b>XFER</b></td>
-          <td width=5>&nbsp;</td>
-          <td align="left" class="smalltext"><span class="smalltext" id ="XFER"></span></td>
-        </tr> </table>
+      <td width=33% align="center" valign="top">
+        <table width=100%> 
+          <tr> <td colspan=3 align="center" class="smalltext"><b>Transfer Manager</b></td> </tr>
+          <tr> <td colspan=3 id="XFER_td" align="center" class="smalltext"><span class="smalltext" id ="XFER"></span></td> </tr>
+          <tr> 
+            <td id="XFER_SWIN_td" align="center" class="smalltext">Swin: <span class="smalltext" id ="XFER_SWIN"></span></td> 
+            <td id="XFER_BEAMS_td" align="center" class="smalltext">Parkes: <span class="smalltext" id ="XFER_PARKES"></span></td> 
+            <td class="smalltext">[beams]</td>
+          </tr>
+        </table>
       </td>
-      <td id="SWIN_td">
-        <table> <tr>
-          <td align="right" class="smalltext"><b>SWIN</b></td>
-          <td width=5>&nbsp;</td>
-          <td align="left" class="smalltext"><span class="smalltext" id ="SWIN"></span></td>
-        </tr> </table>
+      <td width=33% align="center" valign="top">
+        <table width=100%> 
+          <tr> 
+            <td colspan=3 id="SWIN_TAPE_td" align="center" class="smalltext"><b>Swin Tape</b>&nbsp;&nbsp;&nbsp;<span class="smalltext" id ="SWIN_TAPE"></span></td> 
+          </tr>
+          <tr> <td colspan=3 id="SWIN_STATE_td" align="center" width=100% class="smalltext"><span class="smalltext" id ="SWIN_STATE"></span></td> </tr>
+          <tr> 
+            <td id="SWIN_NUM_td" align="center" width=33% class="smalltext">Queued: <span class="smalltext" id ="SWIN_NUM"></span></td>
+            <td id="SWIN_PERCENT_td" align="center" width=33% class="smalltext"><span class="smalltext" id ="SWIN_PERCENT"></span> &#37; Full</td> 
+            <td id="SWIN_TIME_LEFT_td" align="center" width=33% class="smalltext"><span class="smalltext" id ="SWIN_TIME_LEFT"></span> mins</td> 
+          </tr>
+        </table>
       </td>
-      <td id="PARKES_td">
-        <table> <tr>
-          <td align="right" class="smalltext"><b>PARKES</b></td>
-          <td width=5>&nbsp;</td>
-          <td align="left" class="smalltext"><span class="smalltext" id ="PARKES"></span></td>
-        </tr> </table>
+      <td width=33% align="center" valign="top">
+        <table width=100%> 
+          <tr> 
+            <td colspan=3 id="PARKES_TAPE_td" align="center" class="smalltext"><b>Parkes Tape</b>&nbsp;&nbsp;&nbsp;<span class="smalltext" id ="PARKES_TAPE"></span></td> 
+          </tr>
+          <tr> <td colspan=3 id="PARKES_STATE_td" align="center" width=100% class="smalltext"><span class="smalltext" id ="PARKES_STATE"></span></td> </tr>
+          <tr> 
+            <td id="PARKES_NUM_td" align="center" width=33% class="smalltext">Queued: <span class="smalltext" id ="PARKES_NUM"></span></td>
+            <td id="PARKES_PERCENT_td" align="center" width=33% class="smalltext"><span class="smalltext" id ="PARKES_PERCENT"></span> &#37; Full</td> 
+            <td id="PARKES_TIME_LEFT_td" align="center" width=33% class="smalltext"><span class="smalltext" id ="PARKES_TIME_LEFT"></span> mins</td> 
+          </tr>
+        </table>
       </td>
     </tr>
   </table>
 </body>
 </html>
-
