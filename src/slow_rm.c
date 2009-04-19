@@ -61,8 +61,8 @@ int main (int argc, char **argv)
       
   }
 
-  if ((rate <= 0) || (rate > 512)) {
-    fprintf(stderr, "rate must be between 0 and 512\n");
+  if ((rate <= 0) || (rate > 1024)) {
+    fprintf(stderr, "rate must be between 0 and 1024\n");
     usage();
     exit(EXIT_FAILURE);
   }
