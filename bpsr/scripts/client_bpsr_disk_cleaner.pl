@@ -86,11 +86,15 @@ if (! -f $daemon_quit_file ) {
       logMessage(1, "INFO", "Deleting ".$obs."/".$beam);
       ($result, $response) = deleteCompletedBeam($cfg{"CLIENT_ARCHIVE_DIR"}, $obs, $beam);
     } else {
-      logMessage(1, "INFO", "Found no beams to delete ".$obs."/".$beam);
+      logMessage(2, "INFO", "Found no beams to delete ".$obs."/".$beam);
     }
 
-    logMessage(2, "INFO", "Sleeping 60 seconds");
-    sleep(60);
+    my $counter = 12;
+    logMessage(2, "INFO", "Sleeping ".($counter*5)." seconds");
+    while ((!$quit_daemon) && ($counter > 0)) {
+      sleep(5);
+      $counter--;
+    }
 
   }
 
@@ -135,8 +139,8 @@ sub findCompletedBeam($) {
   $cmd = "ls ".$cfg{"SERVER_ARCHIVE_NFS_MNT"}." >& /dev/null";
   ($result, $response) = Dada->mySystem($cmd);
 
-  # Look for observations that are marked with obs.transferred
-  $cmd = "find ".$cfg{"SERVER_ARCHIVE_NFS_MNT"}." -maxdepth 2 -name 'obs.transferred'".
+  # Look for observations that are marked with obs.archived
+  $cmd = "find ".$cfg{"SERVER_ARCHIVE_NFS_MNT"}." -maxdepth 2 -name 'obs.archived'".
          " -printf '\%h\\n' | awk -F/ '{print \$NF}' | sort";
   logMessage(3, "INFO", $cmd);
   ($result, $response) = Dada->mySystem($cmd);
@@ -150,69 +154,79 @@ sub findCompletedBeam($) {
   chomp $response;
   my @observations = split(/\n/, $response);
 
+  logMessage(2, "INFO", "found ".($#observations+1)." eligble beams");
+
   for ($i=0; ((!$quit_daemon) && (!$found_obs) && ($i<$#observations)); $i++) {
 
     $o = $observations[$i];
 
-    # Get the beam subdir
-    $cmd = "ls -1d ".$archives_dir."/".$o."/?? | awk -F/ '{print \$NF}'";
-    logMessage(3, "INFO", $cmd);
-    ($result, $response) = Dada->mySystem($cmd);
-    logMessage(3, "INFO", $result." ".$response);
-    if ($result ne "ok") {
-      logMessage(0, "WARN", "findCompletedBeam ".$o." could not find the beam subdir");
-      next;
-    }
-    $b = $response;
-    chomp $b;
+    # If this has already been deleted...
+    if (-f $cfg{"SERVER_ARCHIVE_NFS_MNT"}."/".$o."/obs.deleted") {
+      logMessage(3, "INFO", "[".$i."] ".$o."/obs.deleted already existed");
 
-    if (-f $archives_dir."/".$o."/".$b."/obs.deleted") {
-      logMessage(0, "WARN", "Skipping ".$o."/".$b." obs.deleted existed");
-      next;
-    }
+    } else {
 
-    # Get the type of the observation (based on SOURCE name)
-    $file = $archives_dir."/".$o."/".$b."/obs.start";
-    if (-f $file) {
-
-      #$cmd = "grep SOURCE ".$file." | awk '{printf(\"\%c\",substr(\$2, 0, 1))}'";
-      $cmd = "grep SOURCE ".$file." | awk '{print \$2}'";
+      # Get the beam subdir
+      $cmd = "find ".$archives_dir."/".$o."/ -mindepth 1 -maxdepth 1 -type d -printf '\%f'";
       logMessage(3, "INFO", $cmd);
       ($result, $response) = Dada->mySystem($cmd);
       logMessage(3, "INFO", $result." ".$response);
 
       if ($result ne "ok") {
-        logMessage(0, "WARN", "findCompletedBeam could not extract SOURCE from obs.start");
-        next;
-      }
+        logMessage(2, "INFO", "[".$i."] ".$o." could not find the beam subdir");
 
-      $source = $response;
-      chomp $source; 
-      $s = substr($source, 0, 1);
-      logMessage(3, "INFO", "source = ".$source." [".$s."]");
-      
-      $found_obs = 1;
-      if (! -f $archives_dir."/".$o."/".$b."/on.tape.swin" ) {
-        logMessage(2, "INFO", $o."/".$b." [".$source."] on.tape.swin missing");
-        $found_obs = 0;
-      }
+      } else {
+    
+        chomp $response;
+        $b = $response;
 
-      if (($found_obs) && ($s eq "G") && (! -f $archives_dir."/".$o."/".$b."/on.tape.parkes")) {
-        logMessage(2, "INFO", $o."/".$b." [".$source."] on.tape.parkes missing");
-        $found_obs = 0;
-      }
+        if (-f $archives_dir."/".$o."/".$b."/obs.deleted") {
+          logMessage(2, "INFO", "[".$i."] Skipping ".$o."/".$b." obs.deleted existed");
+        } else {
 
-      if ($found_obs) {
-        logMessage(2, "INFO", $o."/".$b." is ready to be deleted");
-        $obs = $o;
-        $beam = $b;
-      }
+          # Get the type of the observation (based on SOURCE name)
+          $file = $archives_dir."/".$o."/".$b."/obs.start";
+          if (-f $file) {
 
-    } else {
-      logMessage(0, "WARN", "findCompletedBeam ".$file." did not exist");
-      next;
+            $cmd = "grep SOURCE ".$file." | awk '{print \$2}'";
+            logMessage(3, "INFO", $cmd);
+            ($result, $response) = Dada->mySystem($cmd);
+            logMessage(3, "INFO", $result." ".$response);
+
+            if ($result ne "ok") {
+              logMessage(0, "WARN", "findCompletedBeam could not extract SOURCE from obs.start");
+
+            } else {
+
+              $source = $response;
+              chomp $source; 
+              $s = substr($source, 0, 1);
+              logMessage(3, "INFO", "source = ".$source." [".$s."]");
+    
+              $found_obs = 1;
+              if (! -f $archives_dir."/".$o."/".$b."/on.tape.swin" ) {
+                logMessage(2, "INFO", $o."/".$b." [".$source."] on.tape.swin missing");
+                $found_obs = 0;
+              }
+
+              if (($found_obs) && ($s eq "G") && (! -f $archives_dir."/".$o."/".$b."/on.tape.parkes")) {
+                logMessage(2, "INFO", $o."/".$b." [".$source."] on.tape.parkes missing");
+                $found_obs = 0;
+              }
+
+              if ($found_obs) {
+                logMessage(2, "INFO", $o."/".$b." is ready to be deleted");
+                $obs = $o;
+                $beam = $b;
+              }
+
+            }
+          } else {
+            logMessage(2, "INFO", "findCompletedBeam ".$file." did not exist");
+          }
+        }
+      }
     }
-
   }
 
   $result = "ok";
@@ -237,7 +251,7 @@ sub deleteCompletedBeam($$) {
 
   logMessage(2, "INFO", "Deleting archived files in ".$path);  
 
-  my $cmd = "find ".$path." -name '*.fil' -o -name 'aux*' -o -name '*.ar' -o -name '*.png'";
+  my $cmd = "find ".$path." -name '*.fil' -o -name 'aux.tar' -o -name '*.ar' -o -name '*.png' -o -name '*.bp*' -o -name '*.ts?'";
 
   logMessage(2, "INFO", $cmd);
   ($result, $response) = Dada->mySystem($cmd);
@@ -251,12 +265,16 @@ sub deleteCompletedBeam($$) {
   chomp $response;
   my $files = $response;
 
-  $files =~ s/\n/ /;
-  $cmd = "slow_rm ".$files;
+  $files =~ s/\n/ /g;
+  $cmd = "slow_rm -r 256".$files;
 
   logMessage(2, "INFO", $cmd);
   ($result, $response) = Dada->mySystem($cmd);
   logMessage(2, "INFO", $result." ".$response);
+
+  if (-d $path."/aux") {
+    rmdir $path."/aux";
+  }
 
   $cmd = "touch ".$path."/obs.deleted";
   logMessage(2, "INFO", $cmd);
@@ -303,7 +321,7 @@ sub logMessage($$$) {
       $log_socket = Dada->nexusLogOpen($cfg{"SERVER_HOST"},$cfg{"SERVER_SYS_LOG_PORT"});
     }
     if ($log_socket) {
-      Dada->nexusLogMessage($log_socket, $time, "sys", $type, "disk cleaner", $message);
+      Dada->nexusLogMessage($log_socket, $time, "sys", $type, "cleaner", $message);
     }
     print "[".$time."] ".$message."\n";
   }
