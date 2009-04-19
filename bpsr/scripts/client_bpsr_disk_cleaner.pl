@@ -170,9 +170,7 @@ sub findCompletedBeam($) {
       chomp $response;
       $b = $response;
 
-      if (-f $archives_dir."/".$o."/".$b."/obs.deleted") {
-	logMessage(2, "INFO", "[".$i."] Skipping ".$o."/".$b." obs.deleted existed");
-      } else {
+      if (-f $archives_dir."/".$o."/".$b."/aux.tar") {
 
 	# Get the type of the observation (based on SOURCE name)
 	$file = $archives_dir."/".$o."/".$b."/obs.start";
@@ -240,7 +238,7 @@ sub deleteCompletedBeam($$) {
 
   logMessage(2, "INFO", "Deleting archived files in ".$path);
 
-  my $cmd = "find ".$path." -name '*.fil' -o -name 'aux.tar' -o -name '*.ar' -o -name '*.png' -o -name '*.bp*' -o -name '*.ts?'";
+  my $cmd = "find ".$path." -name '*.fil' -o -name 'aux.tar' -o -name '*.ar' -o -name '*.png' -o -name '*.bp*' -o -name '*.ts?' > ".$path."/slow_rm.ls";
 
   logMessage(2, "INFO", $cmd);
   ($result, $response) = Dada->mySystem($cmd);
@@ -255,11 +253,11 @@ sub deleteCompletedBeam($$) {
   my $files = $response;
 
   $files =~ s/\n/ /g;
-  $cmd = "slow_rm -r 256".$files;
+  $cmd = "slow_rm -r 256 -M ".$path."/slow_rm.ls";
 
   logMessage(2, "INFO", $cmd);
   ($result, $response) = Dada->mySystem($cmd);
-  logMessage(2, "INFO", $result." ".$response);
+  logMessage(1, "INFO", $result." ".$response);
 
   if (-d $path."/aux") {
     rmdir $path."/aux";
