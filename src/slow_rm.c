@@ -122,6 +122,9 @@ int main (int argc, char **argv)
 	fprintf(stderr, "Could not realloc memory\n");
 	return(EXIT_FAILURE);
       }
+      char* newline = strchr (name, '\n');
+      if (newline) *newline = '\0';
+
       f_names[i] = strdup(name);
       i++;
     }
