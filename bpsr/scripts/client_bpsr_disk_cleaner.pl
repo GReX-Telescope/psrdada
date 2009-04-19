@@ -121,7 +121,7 @@ sub findCompletedBeam($) {
   (my $archives_dir) = @_;
 
   logMessage(2, "INFO", "findCompletedBeam(".$archives_dir.")");
- 
+
   my $found_obs = 0;
   my $result = "";
   my $response = ""; 
@@ -135,13 +135,10 @@ sub findCompletedBeam($) {
   my $s = "";       # first letter of source
   my $file = "";
 
-  # Ensure this is NFS mounted
-  $cmd = "ls ".$cfg{"SERVER_ARCHIVE_NFS_MNT"}." >& /dev/null";
-  ($result, $response) = Dada->mySystem($cmd);
 
   # Look for observations that are marked with obs.archived
-  $cmd = "find ".$cfg{"SERVER_ARCHIVE_NFS_MNT"}." -maxdepth 2 -name 'obs.archived'".
-         " -printf '\%h\\n' | awk -F/ '{print \$NF}' | sort";
+  $cmd = "find ".$archives_dir." -maxdepth 3 -name on.tape.swin".
+         " -printf '\%h\\n' | awk -F/ '{print \$(NF-1)}' | sort";
   logMessage(3, "INFO", $cmd);
   ($result, $response) = Dada->mySystem($cmd);
   logMessage(3, "INFO", $result." ".$response);
@@ -160,71 +157,63 @@ sub findCompletedBeam($) {
 
     $o = $observations[$i];
 
-    # If this has already been deleted...
-    if (-f $cfg{"SERVER_ARCHIVE_NFS_MNT"}."/".$o."/obs.deleted") {
-      logMessage(3, "INFO", "[".$i."] ".$o."/obs.deleted already existed");
+    # Get the beam subdir
+    $cmd = "find ".$archives_dir."/".$o."/ -mindepth 1 -maxdepth 1 -type d -printf '\%f'";
+    logMessage(3, "INFO", $cmd);
+    ($result, $response) = Dada->mySystem($cmd);
+    logMessage(3, "INFO", $result." ".$response);
 
+    if ($result ne "ok") {
+      logMessage(2, "INFO", "[".$i."] ".$o." could not find the beam subdir");
     } else {
 
-      # Get the beam subdir
-      $cmd = "find ".$archives_dir."/".$o."/ -mindepth 1 -maxdepth 1 -type d -printf '\%f'";
-      logMessage(3, "INFO", $cmd);
-      ($result, $response) = Dada->mySystem($cmd);
-      logMessage(3, "INFO", $result." ".$response);
+      chomp $response;
+      $b = $response;
 
-      if ($result ne "ok") {
-        logMessage(2, "INFO", "[".$i."] ".$o." could not find the beam subdir");
-
+      if (-f $archives_dir."/".$o."/".$b."/obs.deleted") {
+	logMessage(2, "INFO", "[".$i."] Skipping ".$o."/".$b." obs.deleted existed");
       } else {
-    
-        chomp $response;
-        $b = $response;
 
-        if (-f $archives_dir."/".$o."/".$b."/obs.deleted") {
-          logMessage(2, "INFO", "[".$i."] Skipping ".$o."/".$b." obs.deleted existed");
-        } else {
+	# Get the type of the observation (based on SOURCE name)
+	$file = $archives_dir."/".$o."/".$b."/obs.start";
+	if (-f $file) {
 
-          # Get the type of the observation (based on SOURCE name)
-          $file = $archives_dir."/".$o."/".$b."/obs.start";
-          if (-f $file) {
+	  $cmd = "grep SOURCE ".$file." | awk '{print \$2}'";
+	  logMessage(3, "INFO", $cmd);
+	  ($result, $response) = Dada->mySystem($cmd);
+	  logMessage(3, "INFO", $result." ".$response);
 
-            $cmd = "grep SOURCE ".$file." | awk '{print \$2}'";
-            logMessage(3, "INFO", $cmd);
-            ($result, $response) = Dada->mySystem($cmd);
-            logMessage(3, "INFO", $result." ".$response);
+	  if ($result ne "ok") {
+	    logMessage(0, "WARN", "findCompletedBeam could not extract SOURCE from obs.start");
 
-            if ($result ne "ok") {
-              logMessage(0, "WARN", "findCompletedBeam could not extract SOURCE from obs.start");
+	  } else {
 
-            } else {
+	    $source = $response;
+	    chomp $source;
+	    $s = substr($source, 0, 1);
+	    logMessage(3, "INFO", "source = ".$source." [".$s."]");
 
-              $source = $response;
-              chomp $source; 
-              $s = substr($source, 0, 1);
-              logMessage(3, "INFO", "source = ".$source." [".$s."]");
-    
-              $found_obs = 1;
-              if (! -f $archives_dir."/".$o."/".$b."/on.tape.swin" ) {
-                logMessage(2, "INFO", $o."/".$b." [".$source."] on.tape.swin missing");
-                $found_obs = 0;
-              }
+	    $found_obs = 1;
+	    if (! -f $archives_dir."/".$o."/".$b."/on.tape.swin" ) {
+	      logMessage(2, "INFO", $o."/".$b." [".$source."] on.tape.swin missing");
+	      $found_obs = 0;
+	    }
 
-              if (($found_obs) && ($s eq "G") && (! -f $archives_dir."/".$o."/".$b."/on.tape.parkes")) {
-                logMessage(2, "INFO", $o."/".$b." [".$source."] on.tape.parkes missing");
-                $found_obs = 0;
-              }
+	    if (($found_obs) && ($s eq "G") && (! -f $archives_dir."/".$o."/".$b."/on.tape.parkes")) {
+	      logMessage(2, "INFO", $o."/".$b." [".$source."] on.tape.parkes missing");
+	      $found_obs = 0;
+	    }
 
-              if ($found_obs) {
-                logMessage(2, "INFO", $o."/".$b." is ready to be deleted");
-                $obs = $o;
-                $beam = $b;
-              }
+	    if ($found_obs) {
+	      logMessage(2, "INFO", $o."/".$b." is ready to be deleted");
+	      $obs = $o;
+	      $beam = $b;
+	    }
 
-            }
-          } else {
-            logMessage(2, "INFO", "findCompletedBeam ".$file." did not exist");
-          }
-        }
+	  }
+	} else {
+	  logMessage(2, "INFO", "findCompletedBeam ".$file." did not exist");
+	}
       }
     }
   }
@@ -246,10 +235,10 @@ sub deleteCompletedBeam($$) {
   my ($dir, $obs, $beam) = @_;
 
   my $result = "";
-  my $response = ""; 
+  my $response = "";
   my $path = $dir."/".$obs."/".$beam;
 
-  logMessage(2, "INFO", "Deleting archived files in ".$path);  
+  logMessage(2, "INFO", "Deleting archived files in ".$path);
 
   my $cmd = "find ".$path." -name '*.fil' -o -name 'aux.tar' -o -name '*.ar' -o -name '*.png' -o -name '*.bp*' -o -name '*.ts?'";
 
