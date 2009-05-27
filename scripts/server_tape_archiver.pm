@@ -371,7 +371,7 @@ sub getBeamToTar($$$) {
   my $response = "";
   my $cmd = "";
 
-  $cmd = "ls -1 ".$dir."/WRITING";
+  $cmd = "ls -1 ".$dir."/../../WRITING";
   Dada->logMsg(2, $dl, "getBeamToTar: localSshCommand(".$user.", ".$host.", ".$cmd.")");
   ($result, $response) = localSshCommand($user, $host, $cmd);
   Dada->logMsg(2, $dl, "getBeamToTar: localSshCommand() ".$result." ".$response);
