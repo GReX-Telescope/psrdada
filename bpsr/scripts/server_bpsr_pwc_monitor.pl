@@ -9,11 +9,19 @@ use threads;
 use threads::shared;
 
 
+#
+# Sanity check to prevent multiple copies of this daemon running
+#
+Dada->preventDuplicateDaemon(basename($0));
+
+
 # Constants
 #
 use constant DEBUG_LEVEL        => 0;
 use constant PIDFILE            => "bpsr_pwc_monitor.pid";
 use constant LOGFILE            => "bpsr_pwc_monitor.log";
+use constant QUITFILE           => "bpsr_pwc_monitor.quit";
+
 
 #
 # Global Variables
@@ -175,7 +183,7 @@ sub daemonControlThread() {
 
   my $pidfile = $cfg{"SERVER_CONTROL_DIR"}."/".PIDFILE;
 
-  my $daemon_quit_file = Dada->getDaemonControlFile($cfg{"SERVER_CONTROL_DIR"});
+  my $daemon_quit_file = $cfg{"SERVER_CONTROL_DIR"}."/".QUITFILE;
 
   # Poll for the existence of the control file
   while ((!-f $daemon_quit_file) && (!$quit_daemon)) {

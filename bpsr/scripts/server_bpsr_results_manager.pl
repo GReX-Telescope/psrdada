@@ -25,7 +25,7 @@ Dada->preventDuplicateDaemon(basename($0));
 #
 # Constants
 #
-use constant DL           => 2;
+use constant DL           => 1;
 use constant IMAGE_TYPE   => ".png";
 use constant PIDFILE      => "bpsr_results_manager.pid";
 use constant LOGFILE      => "bpsr_results_manager.log";
@@ -138,6 +138,7 @@ while (!$quit_daemon) {
 
   my $age = 0;
   my $nfiles = 0;
+  my $adir = "";
 
   # For each observation
   for ($h=0; (($h<=$#subdirs) && (!$quit_daemon)); $h++) {
@@ -146,9 +147,11 @@ while (!$quit_daemon) {
 
     $dir = $obs_results_dir."/".$subdirs[$h];
     $dir = $subdirs[$h];
+    $adir = $obs_archive_dir."/".$subdirs[$h];
 
-    # If this observation has not been finalized 
-    if (! -f $dir."/obs.finalized") {
+    # If this observation has not been inished, archived or transferred
+    if (!( (-f $adir."/obs.archived") || (-f $adir."/obs.finished") || (-f $adir."/obs.deleted") ||
+           (-f $adir."/obs.transferred") || (!(-d $adir)) )) {
 
       # determine the age of the observation and number of files that can be processed in it
       Dada->logMsg(2, DL, "main: getObsInfo(".$dir.")");
@@ -167,10 +170,9 @@ while (!$quit_daemon) {
           unlink $obs_results_dir."/".$dir."/obs.processing";
         }
 
-      # If the obs age is over five minutes, then we consider it finalized
+      # If the obs age is over five minutes, then we consider it finished
       } elsif ($age > 60) {
 
-  ### YIKES! results manager is not producing plots!
         Dada->logMsg(1, DL, "Finalising observation: ".$dir);
 
         # we need to patch the TCS logs into the file!
@@ -179,15 +181,17 @@ while (!$quit_daemon) {
         # remove any old files in the archive dir
         cleanUpObs($obs_results_dir."/".$dir);
 
+        # copy psrxml files to special dir for mike to deal with
+        copyPsrxmlToDb($obs_archive_dir, $dir);
+
         # Clear obs.processing
         if (-f $obs_results_dir."/".$dir."/obs.processing") {
           unlink $obs_results_dir."/".$dir."/obs.processing";
         }
 
         # mark the observation as finalised
-        system("touch ".$obs_results_dir."/".$dir."/obs.finalized");
-        system("touch ".$obs_archive_dir."/".$dir."/obs.finalized");
-
+        system("touch ".$obs_results_dir."/".$dir."/obs.finished");
+        system("touch ".$obs_archive_dir."/".$dir."/obs.finished");
 
       # Else this is an active observation, try to process the .pol
       # files that may exist in each beam
@@ -232,7 +236,7 @@ while (!$quit_daemon) {
 
   # If we have been asked to exit, dont sleep
   if (!$quit_daemon) {
-    sleep(2);
+    sleep(5);
   }
 
 }
@@ -628,8 +632,14 @@ sub getObsInfo($) {
 
         # If the obs.processing exists
         if (-f $dir."/obs.processing") {
-        
-          Dada->logMsgWarn($warn, "getObsInfo: current processing ".$dir.", but no mon files, age: ". $obs_age);
+      
+          # At the end of a legit obs, no mon files will appear for ~60 seconds, after which
+          # point the observation will be finished. Only warn about it after 70 seconds 
+          if ($obs_age > 70) { 
+            Dada->logMsgWarn($warn, "getObsInfo: current processing ".$dir.", but no mon files, age: ". $obs_age);
+          } else {
+            Dada->logMsg(2, DL, "getObsInfo: current processing ".$dir.", but no mon files, age: ". $obs_age);
+          }
           if ($obs_age < 0) {
             $obs_age = 0;
           }
@@ -834,4 +844,42 @@ sub patchInTcsLogs($$){
 
   return ($result,$response);
 
+}
+
+sub copyPsrxmlToDb($$) {
+
+  my ($obs_dir, $utc_name) = @_;
+
+  my $result = "";
+  my $response = "";
+  my $db_dump_dir = "/nfs/control/bpsr/header_files/";
+
+  if (! -d $db_dump_dir) {
+    mkdir $db_dump_dir;
+  }
+
+  my $psrxml_file = $utc_name.".psrxml";
+  my $b_psrxml_file = "";
+  my $b = "";
+
+  for ($i=0; $i<$cfg{"NUM_PWC"}; $i++) {
+    $b = $cfg{"BEAM_".$i};
+    $b_psrxml_file = $utc_name."_".$b.".psrxml";
+
+    # Copy <archives>/<utc>/<beam>/<utc>.psrxml to header_files/<utc>_<beam>.psrxml 
+    if ( -f $obs_dir."/".$utc_name."/".$b."/".$psrxml_file) {
+
+      $cmd = "cp ".$obs_dir."/".$utc_name."/".$b."/".$psrxml_file." ".$db_dump_dir."/".$b_psrxml_file;
+      Dada->logMsg(1, DL, "copyPsrxmlToDb: ".$cmd);
+      ($result, $response) = Dada->mySystem($cmd);
+      Dada->logMsg(2, DL, "copyPsrxmlToDb: ".$cmd);
+      if ($result ne "ok") {
+        Dada->logMsgWarn($warn, "copyPsrxmlToDb: ".$cmd." failed: ".$response);
+      }
+    } else {
+      Dada->logMsg(1, DL, "could not find psrxml file: ".$obs_dir."/".$utc_name."/".$b."/".$psrxml_file);
+    }
+  } 
+
+  return ("ok", "");
 }

@@ -90,8 +90,9 @@ if (! -f $daemon_quit_file ) {
     }
 
     my $counter = 12;
+    my $counter = 1;
     logMessage(2, "INFO", "Sleeping ".($counter*5)." seconds");
-    while ((!$quit_daemon) && ($counter > 0)) {
+    while ((!$quit_daemon) && ($counter > 0) && ($obs eq "none")) {
       sleep(5);
       $counter--;
     }
@@ -136,9 +137,9 @@ sub findCompletedBeam($) {
   my $file = "";
 
 
-  # Look for observations that are marked with obs.archived
+  # find all beams that have an on.tape.swin
   $cmd = "find ".$archives_dir." -maxdepth 3 -name on.tape.swin".
-         " -printf '\%h\\n' | awk -F/ '{print \$(NF-1)}' | sort";
+         " -printf '\%h\\n' | awk -F/ '{print \$(NF-1)\"\/\"\$NF}' | sort";
   logMessage(3, "INFO", $cmd);
   ($result, $response) = Dada->mySystem($cmd);
   logMessage(3, "INFO", $result." ".$response);
@@ -149,71 +150,62 @@ sub findCompletedBeam($) {
   }
 
   chomp $response;
-  my @observations = split(/\n/, $response);
+  my @beams = split(/\n/, $response);
+  #my @observations = split(/\n/, $response);
 
-  logMessage(2, "INFO", "found ".($#observations+1)." eligble beams");
+  logMessage(2, "INFO", "found ".($#beams+1)." beams with on.tape.swin");
 
-  for ($i=0; ((!$quit_daemon) && (!$found_obs) && ($i<$#observations)); $i++) {
+  for ($i=0; ((!$quit_daemon) && (!$found_obs) && ($i<=$#beams)); $i++) {
 
-    $o = $observations[$i];
+    # b is UTC_START/BEAM
+    $b = $beams[$i];
 
-    # Get the beam subdir
-    $cmd = "find ".$archives_dir."/".$o."/ -mindepth 1 -maxdepth 1 -type d -printf '\%f'";
-    logMessage(3, "INFO", $cmd);
-    ($result, $response) = Dada->mySystem($cmd);
-    logMessage(3, "INFO", $result." ".$response);
+    # if this beam has already been deleted, skip it
+    $file = $archives_dir."/".$b."/beam.deleted";
+    logMessage(2, "INFO","Testing for existence: ". $file);
+    if (-f $file) {
+      logMessage(2, "INFO", $b."/beam.deleted already existed, skipping");
 
-    if ($result ne "ok") {
-      logMessage(2, "INFO", "[".$i."] ".$o." could not find the beam subdir");
     } else {
 
-      chomp $response;
-      $b = $response;
+      # check the type of the observation
+      $file = $archives_dir."/".$b."/obs.start";
+      logMessage(2, "INFO","Testing for existence: ". $file);
+      if (-f $file) {
 
-      if (-f $archives_dir."/".$o."/".$b."/aux.tar") {
+        $cmd = "grep SOURCE ".$file." | awk '{print \$2}'";
+        logMessage(3, "INFO", $cmd);
+        ($result, $response) = Dada->mySystem($cmd);
+        logMessage(3, "INFO", $result." ".$response);
 
-	# Get the type of the observation (based on SOURCE name)
-	$file = $archives_dir."/".$o."/".$b."/obs.start";
-	if (-f $file) {
+        if ($result ne "ok") {
+          logMessage(0, "WARN", "findCompletedBeam could not extract SOURCE from obs.start");
 
-	  $cmd = "grep SOURCE ".$file." | awk '{print \$2}'";
-	  logMessage(3, "INFO", $cmd);
-	  ($result, $response) = Dada->mySystem($cmd);
-	  logMessage(3, "INFO", $result." ".$response);
+        } else {
 
-	  if ($result ne "ok") {
-	    logMessage(0, "WARN", "findCompletedBeam could not extract SOURCE from obs.start");
+          $source = $response;
+          chomp $source;
+          $s = substr($source, 0, 1);
+          logMessage(3, "INFO", "source = ".$source." [".$s."]");
+          $found_obs = 1;
 
-	  } else {
+          # we know that we have an on.tape.swin. If the source starts with a G, 
+          # check for on.tape.parkes also
+          if (($s eq "G") && (! -f $archives_dir."/".$b."/on.tape.parkes")) {
+            logMessage(2, "INFO", $b." [".$source."] on.tape.parkes missing");
+            $found_obs = 0;
+          }
 
-	    $source = $response;
-	    chomp $source;
-	    $s = substr($source, 0, 1);
-	    logMessage(3, "INFO", "source = ".$source." [".$s."]");
+          if ($found_obs) {
+            logMessage(2, "INFO", $b." is ready to be deleted");
+            ($obs, $beam) = split(/\//, $b);
+          }
+        }
 
-	    $found_obs = 1;
-	    if (! -f $archives_dir."/".$o."/".$b."/on.tape.swin" ) {
-	      logMessage(2, "INFO", $o."/".$b." [".$source."] on.tape.swin missing");
-	      $found_obs = 0;
-	    }
-
-	    if (($found_obs) && ($s eq "G") && (! -f $archives_dir."/".$o."/".$b."/on.tape.parkes")) {
-	      logMessage(2, "INFO", $o."/".$b." [".$source."] on.tape.parkes missing");
-	      $found_obs = 0;
-	    }
-
-	    if ($found_obs) {
-	      logMessage(2, "INFO", $o."/".$b." is ready to be deleted");
-	      $obs = $o;
-	      $beam = $b;
-	    }
-
-	  }
-	} else {
-	  logMessage(2, "INFO", "findCompletedBeam ".$file." did not exist");
-	}
+      } else {
+        logMessage(2, "INFO", "did not exist: ".$file); 
       }
-    }
+	  }
   }
 
   $result = "ok";
@@ -238,6 +230,10 @@ sub deleteCompletedBeam($$) {
 
   logMessage(2, "INFO", "Deleting archived files in ".$path);
 
+  if (-f $path."/slow_rm.ls") {
+    unlink $path."/slow_rm.ls";
+  }
+
   my $cmd = "find ".$path." -name '*.fil' -o -name 'aux.tar' -o -name '*.ar' -o -name '*.png' -o -name '*.bp*' -o -name '*.ts?' > ".$path."/slow_rm.ls";
 
   logMessage(2, "INFO", $cmd);
@@ -257,16 +253,27 @@ sub deleteCompletedBeam($$) {
 
   logMessage(2, "INFO", $cmd);
   ($result, $response) = Dada->mySystem($cmd);
-  logMessage(1, "INFO", $result." ".$response);
+  if ($result ne "ok") {
+    logMessage(1, "WARN", $result." ".$response);
+  }
 
   if (-d $path."/aux") {
     rmdir $path."/aux";
   }
 
-  $cmd = "touch ".$path."/obs.deleted";
+  $cmd = "touch ".$path."/beam.deleted";
   logMessage(2, "INFO", $cmd);
   ($result, $response) = Dada->mySystem($cmd);
   logMessage(2, "INFO", $result." ".$response);
+
+  # If the old style UTC_START/BEAM/obs.deleted existed, change it to a beam.deleted
+  if (-f $path."/obs.deleted") {
+    unlink $path."/obs.deleted";
+  }
+
+  if (-f $path."/slow_rm.ls") {
+    unlink $path."/slow_rm.ls";
+  }
 
   $result = "ok";
   $response = "";

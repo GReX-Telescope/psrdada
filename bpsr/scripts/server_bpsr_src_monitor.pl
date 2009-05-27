@@ -17,12 +17,18 @@ use strict;         # strict mode (like -Wall)
 use threads;
 use threads::shared;
 
+#
+# Sanity check to prevent multiple copies of this daemon running
+#
+Dada->preventDuplicateDaemon(basename($0));
+
 
 #
 # Constants
 #
 use constant DEBUG_LEVEL => 1;
 use constant PIDFILE     => "bpsr_src_monitor.pid";
+use constant QUITFILE    => "bpsr_src_monitor.quit";
 use constant LOGFILE     => "nexus.src.log";
 
 
@@ -221,7 +227,8 @@ sub daemonControlThread() {
 
   my $pidfile = $cfg{"SERVER_CONTROL_DIR"}."/".PIDFILE;
 
-  my $daemon_quit_file = Dada->getDaemonControlFile($cfg{"SERVER_CONTROL_DIR"});
+  my $daemon_quit_file = $cfg{"SERVER_CONTROL_DIR"}."/".QUITFILE;
+
   # Poll for the existence of the control file
   while ((!-f $daemon_quit_file) && (!$quit_daemon)) {
     sleep(1);

@@ -2,6 +2,7 @@
 # scripts distributed as is (installed in bin/)
 dist_bin_SCRIPTS = Bpsr.pm \
                    bpsr_reconfigure.pl \
+                   server_bpsr_bookkeeping_archiver.pl \
                    server_bpsr_tcs_interface.pl \
                    server_bpsr_results_manager.pl \
                    server_ibob_simulator.pl \
@@ -11,6 +12,11 @@ dist_bin_SCRIPTS = Bpsr.pm \
                    server_bpsr_sys_monitor.pl \
                    server_bpsr_transfer_manager.pl \
                    server_bpsr_tape_archiver.pl \
+                   server_bpsr_tape_parkes.pl \
+                   server_bpsr_tape_swin.pl \
+                   server_bpsr_server_logger.pl \
+                   server_bpsr_web_monitor.pl \
+                   client_bpsr_disk_cleaner.pl \
                    client_bpsr_master_control.pl \
                    client_bpsr_command.pl \
                    client_bpsr_observation_manager.pl \

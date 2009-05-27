@@ -94,9 +94,9 @@ if ( $pvfcheck != 0 ) then
   goto LoopOnObs
 endif 
 
-# now it has to wait for the presence of the obs.finalized file 
+# now it has to wait for the presence of the obs.finished file 
 # in the relevant directory before going on 
-while ( !(-e $rootplotdir"obs.finalized") ) 
+while ( !(-e $rootplotdir"obs.finished") ) 
   echo "beam-o-vision-collect: Waiting for completion of obs in "$goodplotdir
   sleep $timewait
 end
@@ -119,13 +119,13 @@ endif
 cp $goodplotdir*pvf*.png $collectdir"/"$refbeam"/."
 cp $goodplotdir"obs.start" $collectdir"/"$refbeam"/."
 cp $rootplotdir"obs.info" $collectdir"/."
-cp $rootplotdir"obs.finalized" $collectdir"/."
+cp $rootplotdir"obs.finshed" $collectdir"/."
 
 if ( $debug != 0) then
     echo "cp "$goodplotdir"*pvf*.png to "$collectdir"/"$refbeam"/."
     echo "cp "$goodplotdir"obs.start to "$collectdir"/"$refbeam"/."
     echo "cp "$rootplotdir"obs.info to "$collectdir"/."
-    echo "cp "$rootplotdir"obs.finalized to "$collectdir"/."
+    echo "cp "$rootplotdir"obs.finished to "$collectdir"/."
 else 
     echo "beam-o-vision-collect: Copied the files to "$goodplotdir
 endif

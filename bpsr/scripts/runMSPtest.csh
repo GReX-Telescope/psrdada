@@ -70,7 +70,7 @@ if ( !(-d $testdir) ) then
   mkdir $testdir
   cd $testdir
   cp $startdir"/"$pathnam2"obs.info" .
-  cp $startdir"/"$pathnam2"obs.finalized" .
+  cp $startdir"/"$pathnam2"obs.finished" .
   mkdir 01
   cd 01
   ln -s $startdir"/"$inpname

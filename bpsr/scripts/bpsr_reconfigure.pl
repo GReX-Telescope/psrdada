@@ -285,7 +285,8 @@ sub stopDaemons() {
 
     $allStopped = "true";
     foreach $daemon (@serverDaemons) {
-      my $cmd = "ps auxwww | grep \"perl ./server_".$daemon.".pl\" | grep -v grep";
+      my $cmd = "ps auxwww | grep perl | grep \"server_".$daemon.".pl\" | grep -v grep";
+      debugMessage(1, "stopDaemons: ".$cmd);
       `$cmd`;
 
       if ($? == 0) {

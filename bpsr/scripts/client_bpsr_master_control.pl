@@ -186,6 +186,14 @@ sub handleCommand($) {
   elsif ($commands[0] eq "stop_pwcs") {
     $cmd = "killall ".$cfg{"PWC_BINARY"};
     ($result,$response) = mysystem($cmd, 0);  
+ 
+    # If the stop successed, shut down the eth2 interface 
+    if ($result eq "ok") {
+      sleep(1);
+      $cmd = "sudo /sbin/ifdown eth2";
+      ($result,$response) = mysystem($cmd, 0);
+    }
+
   }
 
   elsif ($commands[0] eq "stop_pwc") {
@@ -213,8 +221,15 @@ sub handleCommand($) {
   }
 
   elsif ($commands[0] eq "start_pwcs") {
-    $cmd = $current_binary_dir."/".$cfg{"PWC_BINARY"}." -d -i 10.0.0.4 -k deda -p ".$cfg{"CLIENT_UDPDB_PORT"}." -c ".$cfg{"PWC_PORT"}." -l ".$cfg{"PWC_LOGPORT"};
+
+    $cmd = "sudo /sbin/ifup eth2";
     ($result,$response) = mysystem($cmd, 0);
+
+    if ($result eq "ok") {
+      sleep(1);
+      $cmd = $current_binary_dir."/".$cfg{"PWC_BINARY"}." -d -i 10.0.0.4 -k deda -p ".$cfg{"CLIENT_UDPDB_PORT"}." -c ".$cfg{"PWC_PORT"}." -l ".$cfg{"PWC_LOGPORT"};
+      ($result,$response) = mysystem($cmd, 0);
+    }
   }
   
   elsif ($commands[0] eq "set_bin_dir") {
@@ -436,11 +451,17 @@ sub handleCommand($) {
       $result = "fail";
     }
 
-    ($subresult,$subresponse) = Dada->getUnprocessedFiles($cfg{"CLIENT_RECORDING_DIR"});
+    ($subresult,$subresponse) = Dada->getTempInfo();
     $response .= $subresponse;
     if ($subresult eq "fail") {
       $result = "fail";
     }
+
+    #($subresult,$subresponse) = Dada->getUnprocessedFiles($cfg{"CLIENT_RECORDING_DIR"});
+    #$response .= $subresponse;
+    #if ($subresult eq "fail") {
+    #  $result = "fail";
+    #}
 
   }
 
