@@ -26,6 +26,7 @@ require AutoLoader;
   &getMultibobState
   &configureMultibobServer
   &clientCommand
+  &getConfig
 );
 
 $VERSION = '0.01';
@@ -288,5 +289,12 @@ sub clientCommand($$$) {
   return ($result, $response);
 
 }
+
+sub getConfig() {
+  my $config_file = $DADA_ROOT."/share/bpsr.cfg";
+  my %config = Dada->readCFGFileIntoHash($config_file, 0);
+  return %config;
+}
+
 
 __END__
