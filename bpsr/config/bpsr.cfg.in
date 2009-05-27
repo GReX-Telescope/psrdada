@@ -19,10 +19,11 @@ SERVER_RESULTS_DIR      /export/results/bpsr
 SERVER_ARCHIVE_DIR      /export/archives/bpsr
 SERVER_STATS_DIR        /export/results/bpsr/stats
 SERVER_LOG_DIR          /export/logs/bpsr
-SERVER_CONTROL_DIR      /tmp/bpsr/control
+SERVER_CONTROL_DIR      @PSRDADA_INSTALL@/control
 SERVER_RESULTS_NFS_MNT  /nfs/results/bpsr
 SERVER_ARCHIVE_NFS_MNT  /nfs/archives/bpsr
-SERVER_DAEMONS          bpsr_pwc_monitor bpsr_src_monitor bpsr_sys_monitor bpsr_tcs_interface bpsr_results_manager bpsr_multibob_manager bpsr_transfer_manager
+SERVER_DAEMONS          bpsr_pwc_monitor bpsr_src_monitor bpsr_sys_monitor bpsr_tcs_interface bpsr_results_manager bpsr_multibob_manager bpsr_web_monitor
+SERVER_DAEMONS_PERSIST  bpsr_transfer_manager bpsr_tape_swin bpsr_tape_parkes
 
 ###############################################################################
 #
@@ -43,12 +44,15 @@ PWC_LOGPORT             51023
 
 
 # For clients to log system messages
-SERVER_SRC_LOG_PORT       51002
-SERVER_SYS_LOG_PORT       51003
-SERVER_GAIN_CONTROL_PORT  51004
-SERVER_PWC_RESPONSE_PORT  51005
-SERVER_PWCC_LOG_PORT      51006
-
+SERVER_SRC_LOG_PORT        51002
+SERVER_SYS_LOG_PORT        51003
+SERVER_GAIN_CONTROL_PORT   51004
+SERVER_PWC_RESPONSE_PORT   51005
+SERVER_PWCC_LOG_PORT       51006
+SERVER_WEB_MONITOR_PORT    51024
+SERVER_XFER_PID_PORT       51025
+SERVER_PARKESTAPE_PID_PORT 51026
+SERVER_SWINTAPE_PID_PORT   51027
 
 ###############################################################################
 # DFB Simluator configuration
@@ -65,22 +69,26 @@ IBOB_SIM_PORT             51008     # port for PWC's to connect to is simulating
 ###############################################################################
 # Tape Archive Locations
 # 
-NUM_SWIN_DIRS           0
-SWIN_DIR_0              pulsar:shrek211:/nfs/cluster/shrek211a/from_parkes
+NUM_SWIN_DIRS           4
+SWIN_DIR_0              pulsar:shrek210-evlbi:/export/shrek210a/bpsr
+SWIN_DIR_1              pulsar:shrek210-evlbi:/export/shrek210b/bpsr
+SWIN_DIR_2              pulsar:shrek211-evlbi:/export/shrek211a/bpsr
+SWIN_DIR_3              pulsar:shrek211-evlbi:/export/shrek211b/bpsr
 SWIN_S4_DEVICE          /dev/nst0
-SWIN_DB_DIR             /home/ssi/pulsar/database
+SWIN_DB_DIR             pulsar:shrek211-evlbi:/home/ssi/pulsar/bookkeeping/tape_archiver
 NUM_SWIN_FOLD_DIRS      1
-SWIN_FOLD_DIR_0         pulsar:shrek211:/nfs/cluster/shrek210a/from_parkes_pulsars
+SWIN_FOLD_DIR_0         pulsar:shrek210-evlbi:/export/shrek210a/bpsr
 
 NUM_PARKES_DIRS         4
-PARKES_DIR_0            bpsr:apsr14:/lfs/data0/bpsr/from_parkes
-PARKES_DIR_1            bpsr:apsr15:/lfs/data0/bpsr/from_parkes
-PARKES_DIR_2            bpsr:apsr16:/lfs/data0/bpsr/from_parkes
-PARKES_DIR_3            bpsr:apsr17:/lfs/data0/bpsr/from_parkes
+PARKES_DIR_0            bpsr:apsr14:/lfs/data0/bpsr
+PARKES_DIR_1            bpsr:apsr15:/lfs/data0/bpsr
+PARKES_DIR_2            bpsr:apsr16:/lfs/data0/bpsr
+PARKES_DIR_3            bpsr:apsr17:/lfs/data0/bpsr
 PARKES_S4_DEVICE        /dev/nst0
-PARKES_DB_DIR           /home/pulsar/database
-NUM_PARKES_FOLD_DIRS    1
-PARKES_FOLD_DIR_0       bpsr:apsr00:/nfs/apsr00/bpsr/from_parkes_pulsars
+PARKES_DB_DIR           dada:jura:/home/dada/bookkeeping/tape_archiver
+NUM_PARKES_FOLD_DIRS    0
+#PARKES_FOLD_DIR_0       bpsr:apsr00:/nfs/apsr00/bpsr/from_parkes_pulsars
+
 
 ###############################################################################
 # Client directory configuration
@@ -90,9 +98,9 @@ CLIENT_CONTROL_DIR      /lfs/data0/bpsr/control
 CLIENT_LOG_DIR          /lfs/data0/bpsr/logs
 CLIENT_ARCHIVE_DIR      /lfs/data0/bpsr/archives
 CLIENT_RECORDING_DIR    /lfs/data0/bpsr/rawdata
-CLIENT_SCRATCH_DIR      /lfs/data0/scratch
+CLIENT_SCRATCH_DIR      /lfs/data0/bpsr/scratch
 
-CLIENT_DAEMONS          bpsr_observation_manager bpsr_results_monitor
+CLIENT_DAEMONS          bpsr_observation_manager bpsr_results_monitor bpsr_disk_cleaner
 
 CLIENT_UDPDB_PORT       4001      # udp packets arrive on this port
 CLIENT_MASTER_PORT      51009     # client master script listens on this port
@@ -107,9 +115,11 @@ CLIENT_UDPDB_STATS_PORT 51012     # udpdb reports stats on this port
 DATA_BLOCKS             DEDA
 PROCESSING_DATA_BLOCK   DEDA
                                                                                                              
-DEDA_BLOCK_NBUFS        250
+DEDA_BLOCK_NBUFS        1000
 DEDA_BLOCK_BUFSZ        4194304
-                                                                                                             
+
+# MACHINE DOWN FAIL BROKEN
+
 # Primary Write Client (PWC) configuration
 PWC_BINARY              bpsr_udpdb
 NUM_PWC                 13
@@ -175,7 +185,7 @@ IBOB_PORT_12            52012
 # The config/startup script will connect to the IBOB_HOST_i:IBOB_PORT_i
 # to IBOB_DEST_i:23 via the IBOB_GATEWAY using a ssh tunnel with a 
 # passphraseless SSH key.
-IBOB_MANAGER_PORT       520013
+IBOB_MANAGER_PORT       52013
 
 IBOB_DEST_0             169.254.128.1
 IBOB_DEST_1             169.254.128.2
@@ -190,6 +200,8 @@ IBOB_DEST_9             169.254.128.10
 IBOB_DEST_10            169.254.128.11
 IBOB_DEST_11            169.254.128.12
 IBOB_DEST_12            169.254.128.13
+
+# MACHINE DOWN FAILED BROKEN
 
 # The MAC address of the myricom 10Gig Ethernet card that is directly
 # connected to each IBOB
@@ -208,9 +220,19 @@ IBOB_LOCAL_MAC_ADDR_11  00:60:DD:47:16:EC   # apsr12
 IBOB_LOCAL_MAC_ADDR_12  00:60:DD:47:16:77   # apsr13
 
 # Spare machines with 10 gig cards:
-#IBOB_LOCAL_MAC_ADDR_i   00:60:DD:47:16:6E  # apsr00
-#IBOB_LOCAL_MAC_ADDR_i   00:60:DD:47:16:EE  # apsr14
+#IBOB_LOCAL_MAC_ADDR_i   00:60:DD:47:16:EE   # apsr14
+#IBOB_LOCAL_MAC_ADDR_i   00:60:DD:47:16:6E   # apsr00
 
 # Machine that runs the iBOB udp simulator
 DFB_0                   apsr16
+
+NUM_HELP                4
+HELP_0                  apsr14
+HELP_1                  apsr15
+HELP_2                  apsr16
+HELP_3                  apsr17
+
+# Project Destination configuration
+P630_DEST               swin parkes
+P682_DEST               parkes
 
