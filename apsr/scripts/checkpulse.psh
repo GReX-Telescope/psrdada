@@ -1,0 +1,17 @@
+#!/usr/bin/env psrsh
+
+fscrunch
+pscrunch
+tscrunch
+
+# 1024 bins
+if ( $on:max > 5*$off:rms ) edit file nbin snr
+
+# 512 bins
+bscrunch x2
+if ( $on:max > 5*$off:rms ) edit file nbin snr
+
+# 256 bins
+bscrunch x2
+if ( $on:max > 5*$off:rms ) edit file nbin snr
+

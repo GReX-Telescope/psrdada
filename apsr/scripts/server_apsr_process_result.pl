@@ -61,12 +61,12 @@ if (index($cfg{"SERVER_ALIASES"}, $ENV{'HOSTNAME'}) < 0 ) {
 
 
 # Get command line
-if ($#ARGV!=2) {
+if ($#ARGV!=3) {
     usage();
     exit 1;
 }
 
-my ($utc_start, $dir, $ext) = @ARGV;
+my ($utc_start, $source, $dir, $ext) = @ARGV;
 
 my $results_dir = $cfg{"SERVER_RESULTS_DIR"}."/".$utc_start;
 
@@ -109,13 +109,22 @@ if ($num_results > 0) {
   deleteProcessed($dir);
 
   debugMessage(1,"Processing all ".$ext." archives in ".$dir);
-  ($fres, $tres) = processAllArchives($dir, $ext);
+  ($fres, $tres) = processAllArchives($dir, $source, $ext);
+
+  print STDOUT "Plotting<br>\n";
+  print STDOUT "<script type='text/javascript'>self.scrollByLines(1000);</script>\n";
 
   debugMessage(1,"Making final low res plots");
-  Apsr->makePlotsFromArchives($results_dir, "/tmp", $fres, $tres, "240x180");
+  Apsr->makePlotsFromArchives($results_dir, $source, $fres, $tres, "240x180");
+  Apsr->removeFiles($results_dir, "phase_vs_flux_*_240x180.png", 0);
+  Apsr->removeFiles($results_dir, "phase_vs_time_*_240x180.png", 0);
+  Apsr->removeFiles($results_dir, "phase_vs_freq_*_240x180.png", 0);
 
   debugMessage(1,"Making final hi res plots");
-  Apsr->makePlotsFromArchives($results_dir, "/tmp", $fres, $tres, "1024x768");
+  Apsr->makePlotsFromArchives($results_dir, $source, $fres, $tres, "1024x768");
+  Apsr->removeFiles($results_dir, "phase_vs_flux_*_1024x768.png", 0);
+  Apsr->removeFiles($results_dir, "phase_vs_time_*_1024x768.png", 0);
+  Apsr->removeFiles($results_dir, "phase_vs_freq_*_1024x768.png", 0);
 
 }
 
@@ -131,18 +140,18 @@ exit(0);
 # For the given utc_start ($dir), and archive (file) add the archive to the 
 # summed archive for the observation
 #
-sub processArchive($$$) {
+sub processArchive($$$$) {
 
-  my ($dir, $file, $ext) = @_;
+  my ($dir, $file, $source, $ext) = @_;
 
-  debugMessage(2, "processArchive(".$dir.", ".$file.")");
+  debugMessage(2, "processArchive(".$dir.", ".$file.", ".$source.")");
 
   my $bindir =      Dada->getCurrentBinaryVersion();
   my $results_dir = $cfg{"SERVER_RESULTS_DIR"};
 
   # The combined results for this observation (dir == utc_start) 
-  my $total_f_res = $dir."/".TOTAL_F_RES;
-  my $total_t_res = $dir."/".TOTAL_T_RES;
+  my $total_f_res = $dir."/".substr($source,1)."_f.ar";
+  my $total_t_res = $dir."/".substr($source,1)."_t.ar";
 
   # If not all the archives are present, then we must create empty
   # archives in place of the missing ones
@@ -391,15 +400,19 @@ sub debugMessage($$) {
   }
 }
 
-sub processAllArchives($$) {
+sub processAllArchives($$$) {
 
-  my ($dir, $ext) = @_;
+  my ($dir, $source, $ext) = @_;
 
-  debugMessage(1, "processAllArchives(".$dir.",".$ext.")");
+  debugMessage(1, "processAllArchives(".$dir.",".$source.",".$ext.")");
+  my $tres_old = $dir."/".substr($source,1)."_t.ar";
+  my $fres_old = $dir."/".substr($source,1)."_f.ar";
 
   # Delete the existing fres and tres files
   unlink($dir."/".TOTAL_T_RES);
   unlink($dir."/".TOTAL_F_RES);
+  unlink($tres_old);
+  unlink($fres_old);
   
   # Get ALL archives in the observation dir
   my %unprocessed = countArchives($dir,$ext,0);
@@ -412,9 +425,11 @@ sub processAllArchives($$) {
     
   for ($i=0; $i<=$#keys; $i++) {
 
+    print STDOUT "Processing ".$i." of ".($#keys)."<BR>\n";
+    print STDOUT "<script type='text/javascript'>self.scrollByLines(1000);</script>\n";
     debugMessage(1, "Finalising archive ".$dir."/*/".$keys[$i]);
     # process the archive and summ it into the results archive for observation
-    ($current_archive, $fres, $tres) = processArchive($dir, $keys[$i], $ext);
+    ($current_archive, $fres, $tres) = processArchive($dir, $keys[$i], $source, $ext);
 
   }
 
@@ -435,8 +450,9 @@ sub sigHandle($) {
 }
 
 sub usage() {
-  print "Usage: ".basename($0)." utc_start dir ext\n";
+  print "Usage: ".basename($0)." utc_start source dir ext\n";
   print "  utc_start  utc_start of the observation\n";
+  print "  source     Jname of the source\n";
   print "  dir        full path to the directory containing the archives\n";
   print "  ext        extension of the archive (.lowres or .ar)\n";  
 }

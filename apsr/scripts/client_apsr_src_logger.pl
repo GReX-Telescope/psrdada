@@ -1,123 +1,35 @@
 #!/usr/bin/env perl
 
-#
-# Author:   Andrew Jameson
-# Created:  1 Feb 2008
-# Modified: 1 Feb 2008
-# 
-
-#
-# Include Modules
-#
-
 use lib $ENV{"DADA_ROOT"}."/bin";
 
-use Apsr;           # APSR/DADAModule for configuration options
-use strict;         # strict mode (like -Wall)
-use File::Basename;
-use Getopt::Std;
-
-
-#
-# Constants
-#
-use constant DEBUG_LEVEL   => 1;
-use constant LOGFILE       => "apsr_src_logger.log";
+use strict;
+use warnings;
+use Apsr;
+use Dada::client_logger qw(%cfg);
 
 
 #
 # Global Variable Declarations
 #
-our %cfg : shared = Apsr->getApsrConfig();      # Apsr.cfg in a hash
-our $log_socket;
-our $log_fh;
+%cfg = Apsr->getConfig();
+
 
 #
-# Local Variable Declarations
+# Initialize module variables
 #
-my $logfile = $cfg{"CLIENT_LOG_DIR"}."/".LOGFILE;
-my $type = "INFO";
-my $line = "";
+$Dada::client_logger::dl = 1;
+$Dada::client_logger::log_host = $cfg{"SERVER_HOST"};
+$Dada::client_logger::log_port = $cfg{"SERVER_SYS_LOG_PORT"};
+$Dada::client_logger::log_sock = 0;
+$Dada::client_logger::daemon_name = Dada->daemonBaseName($0);
+$Dada::client_logger::tag = "src";
+$Dada::client_logger::daemon = "proc";
 
-#
-# Register Signal handlers
-#
-$SIG{INT} = \&sigHandle;
-$SIG{TERM} = \&sigHandle;
-$SIG{PIPE} = \&sigPipeHandle;
 
-# Auto flush output
+# Autoflush STDOUT
 $| = 1;
 
-my %opts;
-getopts('e', \%opts);
+my $result = 0;
+$result = Dada::client_logger->main();
 
-if ($opts{e}) {
-  $type = "ERROR";
-}
-
-
-# Open a connection to the nexus logging facility
-$log_socket = Dada->nexusLogOpen($cfg{"SERVER_HOST"},$cfg{"SERVER_SRC_LOG_PORT"});
-if (!$log_socket) {
-  print "Could not open a connection to the nexus SRC log: $log_socket\n";
-}
-
-#open $log_fh, ">>".$logfile;
-
-while (defined($line = <STDIN>)) {
-
-  chomp $line;
-  logMessage(0,$type,$line, $logfile);
-
-}
-
-#close $log_fh;
-
-exit 0;
-
-
-#
-# Logs a message to the Nexus
-#
-sub logMessage($$$$) {
-  (my $level, my $type, my $message, my $logfile) = @_;
-  if ($level <= DEBUG_LEVEL) {
-    my $time = Dada->getCurrentDadaTime();
-    if (!($log_socket)) {
-      $log_socket = Dada->nexusLogOpen($cfg{"SERVER_HOST"},$cfg{"SERVER_SRC_LOG_PORT"});
-    }
-    if ($log_socket) {
-      Dada->nexusLogMessage($log_socket, $time, "src", $type, "proc", $message);
-    }
-    open $log_fh, ">>".$logfile;
-    print $log_fh "[".$time."] ".$message."\n";
-    close $log_fh
-  }
-}
-
-sub sigHandle($) {
-
-  my $sigName = shift;
-  print STDERR basename($0)." : Received SIG".$sigName."\n";
-
-  if ($log_socket) {
-    close($log_socket);
-  }
-
-  print STDERR basename($0)." : Exiting\n";
-
-  exit 1;
-
-}
-
-sub sigPipeHandle($) {
-
-  my $sigName = shift;
-  print STDERR basename($0)." : Received SIG".$sigName."\n";
-  $log_socket = 0;
-  $log_socket = Dada->nexusLogOpen($cfg{"SERVER_HOST"},$cfg{"SERVER_SRC_LOG_PORT"});
-
-}
-
-
+exit($result);

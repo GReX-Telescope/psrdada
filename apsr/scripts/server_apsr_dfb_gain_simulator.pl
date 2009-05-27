@@ -24,6 +24,7 @@ use Apsr;           # APSR/DADA Module for configuration options
 use constant DEBUG_LEVEL => 1;
 use constant PIDFILE     => "apsr_dfb_gain_simulator.pid";
 use constant LOGFILE     => "apsr_dfb_gain_simulator.log";
+use constant QUITFILE    => "apsr_dfb_gain_simulator.quit";
 
 
 #
@@ -45,8 +46,8 @@ $SIG{TERM} = \&sigHandle;
 #
 # Local Varaibles
 #
-my $dfb3_host = $cfg{"DFB3_HOST"};
-my $dfb3_port = $cfg{"DFB3_PORT"};
+my $dfb3_host = $cfg{"HWGAIN_HOST"};
+my $dfb3_port = $cfg{"HWGAIN_PORT"};
 
 my $dfb_sim_host = $cfg{"DFB_SIM_HOST"};
 my $dfb_sim_port = $cfg{"DFB_SIM_GAIN_PORT"};
@@ -291,8 +292,7 @@ sub daemonControlThread() {
   debugMessage(2, "Daemon control thread starting");
 
   my $pidfile = $cfg{"SERVER_CONTROL_DIR"}."/".PIDFILE;
-
-  my $daemon_quit_file = Dada->getDaemonControlFile($cfg{"SERVER_CONTROL_DIR"});
+  my $daemon_quit_file = $cfg{"SERVER_CONTROL_DIR"}."/".QUITFILE;
   # Poll for the existence of the control file
   while ((!-f $daemon_quit_file) && (!$quit_daemon)) {
     sleep(1);

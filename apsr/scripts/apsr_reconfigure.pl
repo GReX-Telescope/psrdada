@@ -1,14 +1,11 @@
 #!/usr/bin/env perl
 
 #
-# Reconfigures the DADA machine for a different instrument
+# Starts/Stops/Restarts the APSR Instrument
 #
 
 use lib $ENV{"DADA_ROOT"}."/bin";
 
-
-#use IO::Socket;     # Standard perl socket library
-#use Net::hostent;
 use Apsr;           # APSR/DADA Module for configuration options
 use threads;
 use threads::shared;
@@ -19,14 +16,14 @@ use Getopt::Std;
 #
 # Constants
 #
-
 use constant  DEBUG_LEVEL         => 1;
 
 #
 # Global Variables
 #
 our %cfg : shared = Apsr->getApsrConfig();      # Apsr.cfg in a hash
-our @serverDaemons = split(/ /,$cfg{"SERVER_DAEMONS"});
+our @server_daemons = split(/ /,$cfg{"SERVER_DAEMONS"});
+our @client_daemons = split(/ /,$cfg{"CLIENT_DAEMONS"});
 
 #
 # Local Variables
@@ -35,19 +32,42 @@ our @serverDaemons = split(/ /,$cfg{"SERVER_DAEMONS"});
 my $result = "";
 my $response = "";
 my @clients = ();
+my @servers = ();
 my @helpers = ();
-my @clients_n_helpers = ();
+my @clihelp = ();      # clients and helpers
+my @clihelpsrv = ();   # clients and helpers and servers
 my $i=0;
+my $start=1;
+my $stop=1;
 
 my %opts;
-getopts('h', \%opts);
+getopts('his', \%opts);
 
 if ($opts{h}) {
   usage();
   exit(0);
 }
 
-debugMessage(0, "Restarting APSR");
+if ($opts{i}) {
+  $start = 1;
+  $stop = 0;
+}
+if ($opts{s}) {
+  $stop = 1;
+  $start = 0;
+}
+
+if (($start == 1) && ($stop == 1)) {
+  debugMessage(0, "Restarting APSR");
+} elsif ($start == 0) {
+  debugMessage(0, "Stopping APSR");
+} elsif ($stop == 0) {
+  debugMessage(0, "Starting APSR");
+} else {
+  debugMessage(0, "Unsure of command");
+  usage();
+  exit(1);
+}
 
 # Setup directories should they not exist
 my $control_dir = $cfg{"SERVER_CONTROL_DIR"};
@@ -58,101 +78,110 @@ if (! -d $control_dir) {
 
 # Generate hosts lists
 for ($i=0; $i < $cfg{"NUM_PWC"}; $i++) {
-  push(@clients,           $cfg{"PWC_".$i});
-  push(@clients_n_helpers, $cfg{"PWC_".$i});
+  push(@clients,    $cfg{"PWC_".$i});
+  push(@clihelp,    $cfg{"PWC_".$i});
+  push(@clihelpsrv, $cfg{"PWC_".$i});
 }
 for ($i=0; $i < $cfg{"NUM_HELP"}; $i++) {
-  push(@helpers, $cfg{"HELP_".$i});
-  push(@clients_n_helpers, $cfg{"HELP_".$i});
+  push(@helpers,    $cfg{"HELP_".$i});
+  push(@clihelp,    $cfg{"HELP_".$i});
+  push(@clihelpsrv, $cfg{"HELP_".$i});
+}
+for ($i=0; $i < $cfg{"NUM_SRV"}; $i++) {
+  push(@servers,    $cfg{"SRV_".$i});
+  push(@clihelpsrv, $cfg{"SRV_".$i});
 }
 
-# Determine the current configuration
 
+if ($stop == 1) {
 
-# Stop PWC's
-debugMessage(0, "Stopping PWCs");
-if (!(issueTelnetCommand("stop_pwcs",\@clients))) {
-  debugMessage(0, "stop_pwcs failed");
+  # Stop PWC's
+  debugMessage(0, "Stopping PWCs");
+  if (!(issueTelnetCommand("stop_pwcs",\@clients))) {
+    debugMessage(0, "stop_pwcs failed");
+  }
+
+  # Stop client scripts
+  debugMessage(0, "Stopping client scripts");
+  if (!(issueTelnetCommand("stop_daemons",\@clihelp))) {
+    debugMessage(0,"stop_daemons failed");
+  }
+
+  # Destroy DB's
+  debugMessage(0, "Destroying Data blocks");
+  if (!(issueTelnetCommand("destroy_db",\@clihelp))) {
+    debugMessage(0,"destroy_db failed");
+  }
+
+  # Stop server scripts
+  debugMessage(0, "Stopping server scripts");
+  ($result, $response) = stopDaemons();
+  if ($result ne "ok") {
+    debugMessage(0, "Could not stop server daemons: ".$response);
+  }
+
+  # Stop client mastser script
+  debugMessage(0, "Stopping client master script");
+  if (!(issueTelnetCommand("stop_master_script",\@clihelpsrv))) {
+    debugMessage(0,"stop_master_script failed");
+  }
+
+  if ($cfg{"USE_DFB_SIMULATOR"} eq 1) {
+    my @arr = ();
+    push(@arr,$cfg{"DFB_SIM_HOST"});
+    issueTelnetCommand("stop_master_script",\@arr);
+  }
 }
 
-# Stop client scripts
-debugMessage(0, "Stopping client scripts");
-if (!(issueTelnetCommand("stop_daemons",\@clients_n_helpers))) {
-  debugMessage(0,"stop_daemons failed");
+if ($start == 1) {
+
+  # Start client master script
+  debugMessage(0, "Starting client master script");
+  if (!(issueTelnetCommand("start_master_script",\@clihelpsrv))) {
+    debugMessage(0,"start_master_script failed");
+  }
+
+  if ($cfg{"USE_DFB_SIMULATOR"} eq 1) {
+    my @arr = ();
+    push(@arr,$cfg{"DFB_SIM_HOST"});
+    issueTelnetCommand("start_master_script",\@arr);
+  }
+
+  sleep(2);
+
+  # initalize DB's
+  debugMessage(1, "Initializing Data blocks");
+  if (!(issueTelnetCommand("init_db",\@clihelp))) {
+    debugMessage(0, "init_db failed");
+  }
+
+  sleep(1);
+
+  # Start PWC's
+  debugMessage(1, "Starting PWCs");
+  if (!(issueTelnetCommand("start_pwcs",\@clients))) {
+    debugMessage(0,"start_pwcs failed");
+  }
+
+  # Start server scripts
+  debugMessage(0, "Starting server scripts");
+  ($result, $response) = startDaemons();
+  if ($result ne "ok") {
+    debugMessage(0, "Could not start server daemons: ".$response);
+  }
+
+  # Start client scripts
+  debugMessage(0, "Starting client scripts");
+  if (!(issueTelnetCommand("start_daemons",\@clients))) {
+    debugMessage(0,"start_daemons failed");
+  }
+
+  # Start client helper scripts
+  debugMessage(0, "Starting client helper scripts");
+  if (!(issueTelnetCommand("start_helper_daemons",\@helpers))) {
+    debugMessage(0,"start_helper_daemons failed");
+  }
 }
-
-# Destroy DB's
-debugMessage(0, "Destroying Data blocks");
-if (!(issueTelnetCommand("destroy_db",\@clients_n_helpers))) {
-  debugMessage(0,"destroy_db failed");
-}
-
-# Stop server scripts
-debugMessage(0, "Stopping server scripts");
-($result, $response) = stopDaemons();
-if ($result ne "ok") {
-  debugMessage(0, "Could not stop server daemons: ".$response);
-}
-
-# Stop client mastser script
-debugMessage(0, "Stopping client master script");
-if (!(issueTelnetCommand("stop_master_script",\@clients_n_helpers))) {
-  debugMessage(0,"stop_master_script failed");
-}
-
-if ($cfg{"USE_DFB_SIMULATOR"} eq 1) {
-  my @arr = ();
-  push(@arr,$cfg{"DFB_SIM_HOST"});
-  issueTelnetCommand("stop_master_script",\@arr);
-}
-
-# Start client master script
-debugMessage(0, "Starting client master script");
-if (!(issueTelnetCommand("start_master_script",\@clients_n_helpers))) {
-  debugMessage(0,"start_master_script failed");
-}
-
-if ($cfg{"USE_DFB_SIMULATOR"} eq 1) {
-  my @arr = ();
-  push(@arr,$cfg{"DFB_SIM_HOST"});
-  issueTelnetCommand("start_master_script",\@arr);
-}
-
-sleep(2);
-
-# initalize DB's
-debugMessage(1, "Initializing Data blocks");
-if (!(issueTelnetCommand("init_db",\@clients_n_helpers))) {
-  debugMessage(0, "init_db failed");
-}
-
-sleep(1);
-
-# Start PWC's
-debugMessage(1, "Starting PWCs");
-if (!(issueTelnetCommand("start_pwcs",\@clients))) {
-  debugMessage(0,"start_pwcs failed");
-}
-
-# Start server scripts
-debugMessage(0, "Starting server scripts");
-($result, $response) = startDaemons();
-if ($result ne "ok") {
-  debugMessage(0, "Could not start server daemons: ".$response);
-}
-
-# Start client scripts
-debugMessage(0, "Starting client scripts");
-if (!(issueTelnetCommand("start_daemons",\@clients))) {
-  debugMessage(0,"start_daemons failed");
-}
-
-# Start client helper scripts
-debugMessage(0, "Starting client helper scripts");
-if (!(issueTelnetCommand("start_helper_daemons",\@helpers))) {
-  debugMessage(0,"start_helper_daemons failed");
-}
-
 
 # Clear the web interface status directory
 my $dir = $cfg{"STATUS_DIR"};
@@ -210,7 +239,9 @@ sub commThread($$) {
 
 sub usage() {
   print "Usage: ".$0." [options]\n";
-  print "   -h               print help text\n";
+  print "   -h     print help text\n";
+  print "   -i     start the instrument\n";
+  print "   -s     stop the instrument\n";
 }
 
 sub debugMessage($$) {
@@ -267,8 +298,7 @@ sub issueTelnetCommand($\@){
 sub stopDaemons() {
 
   my $allStopped = "false";
-
-  my $daemon_control_file = Dada->getDaemonControlFile($cfg{"SERVER_CONTROL_DIR"});
+  my $control_dir = $cfg{"SERVER_CONTROL_DIR"};
 
   my $threshold = 20; # seconds
   my $daemon = "";
@@ -276,13 +306,21 @@ sub stopDaemons() {
   my $result = "";
   my $response = "";
 
-  `touch $daemon_control_file`;
+  my $i=0;
+  my $cmd = "";
+
+  # Ask all server daemons to quit
+  for ($i=0; $i<=$#server_daemons; $i++) {
+    $cmd = "touch ".$control_dir."/".$server_daemons[$i].".quit";
+    system($cmd);
+  }
 
   while (($allStopped eq "false") && ($threshold > 0)) {
 
     $allStopped = "true";
-    foreach $daemon (@serverDaemons) {
-      my $cmd = "ps auxwww | grep \"perl ./server_".$daemon.".pl\" | grep -v grep";
+    foreach $daemon (@server_daemons) {
+
+      $cmd = "ps auxwww | grep perl | grep \"".$daemon."\" | grep -v grep";
       `$cmd`;
 
       if ($? == 0) {
@@ -300,12 +338,11 @@ sub stopDaemons() {
     sleep(1);
   }
 
-  my $message = "";
-  if (unlink($daemon_control_file) != 1) {
-    $message = "Could not unlink the daemon control file \"".$daemon_control_file."\"";
-    debugMessage(0, "Error: ".$message);
-    return ("fail", $message);
+  # Clean up all the server daemons
+  for ($i=0; $i<=$#server_daemons; $i++) {
+    unlink($control_dir."/".$server_daemons[$i].".quit");
   }
+  my $message = "";
 
   # If we had to resort to a "kill", send an warning message back
   if (($threshold > 0) && ($threshold < 10)) {
@@ -333,7 +370,7 @@ sub startDaemons() {
 
   chdir $cfg{"SCRIPTS_DIR"};
 
-  foreach $daemon (@serverDaemons) {
+  foreach $daemon (@server_daemons) {
     $cmd = "server_".$daemon.".pl 2>&1";
 
     $string = `$cmd`;

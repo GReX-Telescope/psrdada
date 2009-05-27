@@ -10,7 +10,7 @@ use lib $ENV{"DADA_ROOT"}."/bin";
 use strict;        
 use warnings;        
 use Apsr;
-use Dada::client_archive_manager qw(%cfg);
+use Dada::client_auxiliary_manager qw(%cfg);
 
 
 #
@@ -21,15 +21,17 @@ use Dada::client_archive_manager qw(%cfg);
 #
 # Initialize module variables
 #
-$Dada::client_archive_manager::dl = 1;
-$Dada::client_archive_manager::daemon_name = Dada->daemonBaseName($0);
+$Dada::client_auxiliary_manager::dl = 1;
+$Dada::client_auxiliary_manager::daemon_name = Dada->daemonBaseName($0);
+$Dada::client_auxiliary_manager::dada_header_cmd = "dada_header -k fada";
+$Dada::client_auxiliary_manager::aux_db = "fada";
 
 
 # Autoflush STDOUT
 $| = 1;
 
 my $result = 0;
-$result = Dada::client_archive_manager->main();
+$result = Dada::client_auxiliary_manager->main();
 
 exit($result);
 

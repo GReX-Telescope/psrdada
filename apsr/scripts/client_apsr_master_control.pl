@@ -23,7 +23,7 @@ use Apsr;           # APSR/DADA Module for configuration options, includes Dada.
 # Constants
 #
 use constant RUN_SYS_COMMANDS => "true";
-use constant DEBUG_LEVEL      => 2;              # 0 == no debug
+use constant DEBUG_LEVEL      => 1;              # 0 == no debug
 use constant PIDFILE          => "apsr_master_control.pid";
 use constant LOGFILE          => "apsr_master_control.log";
 
@@ -300,13 +300,29 @@ sub handleCommand($) {
     }
 
   }
-                                                                                                                                                      
+  
+  elsif ($commands[0] eq "stop_daemon") {
+    if ($commands[1] eq "apsr_master_control") {
+      $quit = 1;
+      $result = "ok";
+      $response = "";
+    } else {
+      ($result,$response) = stopDaemon($commands[1], 10);
+    }
+  }
+                                                                                                                                                    
   elsif ($commands[0] eq "stop_daemons") {
     ($result,$response) = stopDaemons();
   }
 
   elsif ($commands[0] eq "daemon_info") {
     ($result,$response) = getDaemonInfo();
+  }
+
+  elsif ($commands[0] eq "start_daemon") {
+    $cmd = "client_".$commands[1].".pl"; 
+    ($result, $response) = mysystem($cmd, 0);
+
   }
 
   elsif ($commands[0] eq "start_daemons") {
@@ -376,6 +392,10 @@ sub handleCommand($) {
     ($result,$response) = Dada->getDBInfo(lc($cfg{"PROCESSING_DATA_BLOCK"}));
   }
 
+  elsif ($commands[0] eq "db_info") {
+     ($result,$response) = Dada->getDBInfo(lc($commands[1]));
+  }
+
   elsif ($commands[0] eq "get_alldb_info") {
     ($result,$response) = Dada->getAllDBInfo($cfg{"DATA_BLOCKS"});
   }
@@ -438,6 +458,12 @@ sub handleCommand($) {
     }
 
     ($subresult,$subresponse) = Dada->getUnprocessedFiles($cfg{"CLIENT_RECORDING_DIR"});
+    $response .= $subresponse.";;;";
+    if ($subresult eq "fail") {
+      $result = "fail";
+    }
+
+    ($subresult,$subresponse) = Dada->getTempInfo();
     $response .= $subresponse;
     if ($subresult eq "fail") {
       $result = "fail";
@@ -525,26 +551,87 @@ sub mysystem($$) {
                                                                                                                           
 }
 
+
+#
+# stops the specified client daemon, optionally kills it after a period
+#
+sub stopDaemon($;$) {
+
+  (my $daemon, my $timeout=10) = @_;
+
+  my $pid_file = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon.".pid";
+  my $quit_file = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon.".quit";
+  my $script = "client_".$daemon.".pl";
+
+  my $ps_cmd = "ps auxwww | grep apsr | grep '".$script."' | grep -v grep";
+
+  $cmd = "touch ".$quit_file;
+  system($cmd);
+
+  my $counter = $timeout;
+  my $running = 1;
+
+  while ($running && ($counter > 0)) {
+    `$ps_cmd`;
+    if ($? == 0) {
+      logMessage(0, "daemon ".$daemon." still running");
+    } else {
+      $running = 0;
+    }
+    $counter--;
+    sleep(1);
+  }
+
+  my $result = "ok";
+  my $response = "daemon exited";
+
+  # If the daemon is still running after the timeout, kill it
+  if ($running) {
+    ($result, $response) = Dada->killProcess($daemon);
+    $response = "daemon had to be killed";
+    $result = "fail";
+  }
+
+  if (unlink($quit_file) != 1) {
+    $response = "Could not unlink the control file ".$quit_file;
+    $result = "fail";
+    logMessage(0, "Error: ".$response);
+  }
+
+  return ($result, $response);
+}
+
+
+
 sub stopDaemons() {
 
   my $allStopped = "false";
-  my $daemon_control_file = Dada->getDaemonControlFile($cfg{"CLIENT_CONTROL_DIR"});
   my $threshold = 20; # seconds
   my $daemon = "";
   my $allStopped = "false";
   my $result = "";
   my $response = "";
+  my $quit_file = "";
+  my $cmd = "";
+  my $message = "";
 
-  `touch $daemon_control_file`;
+  # Touch the quit files for each daemon
+  foreach $daemon (@daemons) {
+
+    $quit_file = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon.".quit";
+    $cmd = "touch ".$quit_file;
+    system($cmd);
+
+  }
 
   while (($allStopped eq "false") && ($threshold > 0)) {
 
     $allStopped = "true";
     foreach $daemon (@daemons) {
-      my $cmd = "ps auxwww | grep \"perl ./client_".$daemon.".pl\" | grep -v grep";
+      my $cmd = "ps aux | grep apsr| grep 'client_".$daemon.".pl' | grep -v grep";
       `$cmd`;
       if ($? == 0) {
-        logMessage(1, "daemon ".$daemon." is still running");
+        logMessage(1, $daemon." is still running");
         $allStopped = "false";
         if ($threshold < 10) {
           ($result, $response) = Dada->killProcess($daemon);
@@ -556,25 +643,26 @@ sub stopDaemons() {
     sleep(1);
   }
 
-  my $message = "";
-  if (unlink($daemon_control_file) != 1) {
-    $message = "Could not unlink the daemon control file \"".$daemon_control_file."\"";
-    logMessage(0, "Error: ".$message);
-    return ("fail", $message);
+  # Clean up the quit files
+  foreach $daemon (@daemons) {
+    $quit_file = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon.".quit";
+    unlink($quit_file);
   }
+
   # If we had to resort to a "kill", send an warning message back
   if (($threshold > 0) && ($threshold < 10)) {
     $message = "Daemons did not exit cleanly within ".$threshold." seconds, a KILL signal was used and they exited";
     logMessage(0, "Error: ".$message);
     return ("fail", $message);
   } 
+
   if ($threshold <= 0) {
     $message = "Daemons did not exit cleanly after ".$threshold." seconds, a KILL signal was used and they exited";
     logMessage(0, "Error: ".$message);
     return ("fail", $message);
   }
 
-  return ("ok","Daemons exited correctly");
+  return ("ok", "Daemons exited correctly");
 
 }
 

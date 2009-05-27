@@ -86,7 +86,10 @@ debugMessage(2, "Inputs valid");
 
 chdir $cfg{"SERVER_RESULTS_DIR"};
 
-Dada->makePlotsFromArchives("", $results_dir, $fres_archive, $tres_archive, $resolution);
+Apsr->makePlotsFromArchives($results_dir, $fres_archive, $tres_archive, $resolution);
+Apsr->removeFiles($results_dir, "phase_vs_flux_*_".$resolution.".png", 0);
+Apsr->removeFiles($results_dir, "phase_vs_time_*_".$resolution.".png", 0);
+Apsr->removeFiles($results_dir, "phase_vs_freq_*_".$resolution.".png", 0);
 
 exit(0);
 
