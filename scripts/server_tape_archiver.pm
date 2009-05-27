@@ -108,14 +108,15 @@ use constant TAPE_SIZE    => "750.00";
 
 sub main() {
 
+  # location of DB files
+  ($db_user, $db_host, $db_dir) = split(/:/, $cfg{uc($type)."_DB_DIR"});
+
   my $pid_file    = $cfg{"SERVER_CONTROL_DIR"}."/".$daemon_name.".pid";
   my $quit_file   = $cfg{"SERVER_CONTROL_DIR"}."/".$daemon_name.".quit";
-  my $log_file    = $cfg{uc($type)."_DB_DIR"}."/".$daemon_name.".log";
+  my $log_file    = $db_dir."/".$daemon_name.".log";
   my $result      = "";
   my $response    = "";
 
-  # location of DB files
-  ($db_user, $db_host, $db_dir) = split(/:/, $cfg{uc($type)."_DB_DIR"});
   $tapes_db = "tapes.".$pid.".db";
   $files_db = "files.".$pid.".db";
 
