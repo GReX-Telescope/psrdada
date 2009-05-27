@@ -32,6 +32,7 @@ require AutoLoader;
   &waitForState
   &getLine
   &getLineSelect
+  &parseCFGLines
   &readCFGFile
   &readCFGFileIntoHash
   &getDADA_ROOT
@@ -39,6 +40,7 @@ require AutoLoader;
   &getRawDisk
   &getDBInfo
   &getAllDBInfo
+  &getLoad
   &getUnprocessedFiles
   &getServerResultsNFS
   &getServerArchiveNFS
@@ -53,6 +55,11 @@ require AutoLoader;
   &getHostMachineName
   &daemonize
   &commThread
+  &logMsg
+  &logMsgWarn
+  &remoteSshCommand
+  &headerToHash
+  &daemonBaseName
 );
 
 $VERSION = '0.01';
@@ -109,6 +116,40 @@ sub getDadaCFGFile() {
 }
 
 #
+# Parse the lines in the array reference and place
+# them in an hash of key:value pairs
+#
+sub parseCFGLines($\@) {
+  
+  (my $module, my $lines_ref) = @_;
+
+  my @lines = @$lines_ref;
+
+  my @arr;
+  my $line;
+  my %hash = ();
+
+  foreach $line (@lines) {
+
+    # get rid of newlines
+    chomp $line;
+
+    $line =~ s/#.*//;
+    $line =~ s/ +$//;
+
+    # skip blank lines
+    if (length($line) > 0) {
+      # strip comments
+      @arr = split(/ +/,$line,2);
+      if ((length(@arr[0]) > 0) && (length(@arr[1]) > 0)) {
+        $hash{$arr[0]} = $arr[1];
+      }
+    }
+  }
+  return %hash;
+}
+
+#
 # Reads a configuration file in the typical DADA format and strips
 # out comments and newlines. Returns as an associative array/hash
 #
@@ -116,13 +157,14 @@ sub readCFGFile($$) {
 
   (my $module, my $fname) = @_;
   my %return_array;
+  my @lines = ();
 
   if (!(-f $fname)) {
     print "configuration file \"$fname\" did not exist\n";
     return -1;
   } else {
     open FH,"<$fname" or return -1;
-    my @lines = <FH>;
+    @lines = <FH>;
     close FH;
 
     my @arr;
@@ -288,7 +330,10 @@ sub sendTelnetCommand($$$) {
   }
 
   while ($endofmessage eq "false") {
+
+    # AJ iffy change for testing.
     $line = <$handle>;
+    #$line = getLineSelect("Dada", $handle, 5);
 
     # remove a leading "> " if it exists
     $line =~ s/^> //;
@@ -740,7 +785,6 @@ sub getDBInfo($$) {
 
   my $bindir = getCurrentBinaryVersion();
   my $cmd = $bindir."/dada_dbmetric -k ".$key;
-  print $cmd."\n";
   my $result = `$cmd 2>&1`;
   chomp $result;
   if ($? != 0) {
@@ -760,20 +804,25 @@ sub getAllDBInfo($$) {
 
   my $bindir = getCurrentBinaryVersion();
   my $cmd;
-  my $db_info;
+  my $metric_out = "";
   my $result = "ok";
   my $response = "";
+  my @parts = ();
 
   foreach $key (@keys) {
-    $cmd = $bindir."/dada_dbmetric -k ".$key." 2>&1 | awk -F, '{print \$1, \$2}'";
-    $db_info = `$cmd`; 
-    chomp $db_info;
+
+    $cmd = $bindir."/dada_dbmetric -k ".$key." 2>&1";
+    $metric_out = `$cmd`;
+
+    # If the command failed
     if ($? != 0) {
       $result = "fail";
-      $response .= "Could not connect to DB ".$key." ";
-    }
-    $response .= $db_info." ";
+      $response .= "0 0 ";
+    } else {
 
+     @parts = split(/,/,$metric_out);
+     $response .= $parts[0]." ".$parts[1]." ";
+    } 
   }
 
   return ($result, $response);  
@@ -804,6 +853,43 @@ sub getLoadInfo() {
   ($one,$five,$fifteen) = (`uptime` =~ /(\d+\.\d+)/g);
   return ("ok", $one.",".$five.",".$fifteen);
 
+}
+
+sub getLoad($$) {
+
+  my ($module, $type) = @_;
+  my $one;
+  my $five;
+  my $fifteen;
+  my $response;
+
+  ($one,$five,$fifteen) = (`uptime` =~ /(\d+\.\d+)/g);
+
+  if ($type eq "one") {
+    $response = $one;
+  } elsif ($type eq "five") {
+    $response = $five;
+  } elsif ($type eq "fifteen") {
+    $response = $fifteen;
+  } else {
+    $response = $one.",".$five.",".$fifteen;
+  }
+
+  return $response;
+
+}
+
+#
+# Return the chassis tempreature
+#
+sub getTempInfo() {
+
+  my $cmd = "/usr/bin/omreport chassis temps | grep \"^Reading\" | awk '{print \$(NF-1)}'";
+  my $result = "";
+  my $response = "";
+
+  ($result, $response) = Dada->mySystem($cmd);
+  return ($result, $response);
 }
 
 sub sendErrorToServer($$$$){
@@ -849,6 +935,47 @@ sub nexusLogMessage($$$$$$$) {
 
 }
 
+
+#
+# Prints the message to STDOUT if the level is < dblevel
+#
+sub logMsg($$$) {
+
+  my ($module, $lvl, $dlvl, $message) = @_;
+
+  if ($lvl <= $dlvl) {
+    my $time = Dada->getCurrentDadaTime();
+    print STDOUT "[".$time."] ".$message."\n";
+  }
+}
+
+#
+# Prints, the message to STDOUT and cat to fname
+#
+sub logMsgWarn($$$$) {
+
+  my ($module, $fname, $message) = @_;
+
+  my $type = "";
+
+  if ($fname =~ m/warn$/) {
+    $type = "WARN: ";
+  }
+  if ($fname =~ m/error$/) {
+    $type = "ERROR: ";
+  } 
+
+  my $time = Dada->getCurrentDadaTime();
+
+  # Print the message to the log
+  print STDOUT "[".$time."] ".$type.$message."\n";
+
+  # Additionally, log to the warn/error file
+  system('echo "'.$message.'" >> '.$fname);
+
+}
+
+
 sub getServerArchiveNFS() {
   return "/nfs/archives";
 }
@@ -891,15 +1018,12 @@ sub mySystem($$$) {
 
   if ($background) { $realcmd .= " &"; }
 
-#  if (DEBUG_LEVEL >= 1) {
-    #print "$realcmd\n";
-#  }
   $response = `$realcmd`;
   $rVal = $?;
   $/ = "\n";
-  chomp $response;
-
-  #print $response;
+  #if ($response =~ /\n$/) {
+    chomp $response;
+  #}
 
   # If the command failed
   if ($rVal != 0) {
@@ -1006,6 +1130,10 @@ sub readCFGFileIntoHash($$$) {
   return %values;
 }
 
+#
+# Redirects stdout and stderr to the logfile and closes stdin. Perfect for
+# all your daemonizing needs
+#
 sub daemonize($$$) {
                
   my ($module, $logfile, $pidfile) = @_;
@@ -1035,5 +1163,119 @@ sub daemonize($$$) {
                                                                                 
 }
 
+
+#
+# check for more than 1 version of the specified process name
+#
+sub preventDuplicateDaemon($$) {
+
+  my ($module, $process_name) = @_;
+
+  my $cmd = "ps auxwww | grep '".$process_name."' | grep perl | grep -v grep | wc";
+  my $result = `$cmd`;
+  if ($? != 0) {
+    die "Something reall wrong here, daemon itself is not running??\n";
+  } else {
+    chomp $result;
+    if ($result == 1) {
+      # ok, let it run
+    } else {
+      $cmd = "ps auxwww | grep '".$process_name."' | grep perl | grep -v grep";
+      $result = `$cmd`;
+      print STDERR "Currently running:\n$result";
+      die "Cannot launch multiple ".$process_name." daemons\n";
+
+    }
+  } 
+}
+
+#
+# ssh to the host as the user, and run the remote_cmd. Optionally pipe the
+# output to the localpipe command
+#
+sub remoteSshCommand($$$$;$$) {
+
+  (my $module, my $user, my $host, my $remote_cmd, my $dir="", my $pipe="") = @_;
+
+  my $result = "";
+  my $response = "";
+  my $opts = "-x -o BatchMode=yes";
+  my $cmd = "";
+  my $rval = "";
+  
+  # since the command will be ssh'd, escape the special characters
+  $remote_cmd =~ s/\$/\\\$/g;
+  $remote_cmd =~ s/\"/\\\"/g;
+
+  # If a dir is specified, then chdir to that dir
+  if ($dir ne "") {
+    $remote_cmd = "cd ".$dir."; ".$remote_cmd;
+  }
+
+  if ($pipe eq "") {
+    $cmd = "ssh ".$opts." -l ".$user." ".$host." \"".$remote_cmd."\" 2>&1";
+  } else {
+    #$pipe =~ s/\$/\\\$/g;
+    #$pipe =~ s/\"/\\\"/g;
+    $cmd = "ssh ".$opts." -l ".$user." ".$host." \"".$remote_cmd."\" 2>&1 | ".$pipe;
+  }
+
+  # print $cmd."\n";
+  $response = `$cmd`;
+
+  # Perl return values are *256, so divide it. An ssh command 
+  # fails with a return value of 255
+  $rval = $?/256;
+
+  if ($rval == 0) {
+    $result = "ok";
+
+  } elsif ($rval == 255) {
+    $result = "fail";
+
+  } else {
+    $result = "ok"
+  }
+  chomp $response;
+
+  return ($result, $rval, $response);
+}
+
+#
+# Takes a DADA header in a string and returns
+# a hash of the header with key -> value pairs
+#
+sub headerToHash($$) {
+
+  my ($module, $raw_hdr) = @_;
+
+  my $line = "";
+  my @lines = ();
+  my $key = "";
+  my $val = "";
+  my %hash = ();
+
+  @lines = split(/\n/,$raw_hdr);
+  foreach $line (@lines) {
+    ($key,$val) = split(/ +/,$line,2);
+    if ((length($key) > 1) && (length($val) > 1)) {
+      # Remove trailing whitespace
+      $val =~ s/\s*$//g;
+      $hash{$key} = $val;
+    }
+  }
+  return %hash;
+}
+
+sub daemonBaseName($$) {
+
+  my ($module, $name) = @_;
+
+  $name =~ s/\.pl$//;
+  $name =~ s/^.*client_//;
+  $name =~ s/^.*server_//;
+
+  return ($name);
+}
 
 __END__
