@@ -22,7 +22,7 @@ BEGIN {
   @ISA         = qw(Exporter AutoLoader);
   @EXPORT      = qw(&main);
   %EXPORT_TAGS = ( );
-  @EXPORT_OK   = qw($dl $daemon_name $type $robot $pid $tapeid_pattern %cfg);
+  @EXPORT_OK   = qw($dl $daemon_name $type $robot $pid %cfg);
 
 }
 
@@ -36,7 +36,6 @@ our $daemon_name;
 our $robot;
 our $type;
 our $pid;
-our $tapeid_pattern;
 our $required_host;
 our $ssh_prefix;
 our $ssh_suffix;
@@ -72,7 +71,6 @@ $daemon_name = 0;
 $robot = 0;
 $pid = "";
 $type = "";
-$tapeid_pattern = "";
 $ssh_prefix = "";
 $ssh_suffix = "";
 $apsr_user = "";
@@ -126,6 +124,7 @@ sub main() {
   # Initialise tapes module variables
   $Dada::tapes::dl = $dl;
   $Dada::tapes::dev = $dev;
+  $Dada::tapes::robot = $robot;
 
   # sanity check on whether the module is good to go
   ($result, $response) = good($quit_file);
@@ -162,7 +161,7 @@ sub main() {
     push (@paths, $path);
   }
 
-  #Dada->daemonize($log_file, $pid_file);
+  Dada->daemonize($log_file, $pid_file);
   Dada->logMsg(0, $dl, "STARTING SCRIPT");
   setStatus("Scripting starting");
 
@@ -181,10 +180,33 @@ sub main() {
       exit_script(1);
     }
   }
-
-
   $current_tape = $response;
   Dada->logMsg(1, $dl, "main: current tape = ".$current_tape);
+
+  # get the expected tape to be loaded
+  Dada->logMsg(2, $dl, "main: getExpectedTape()");
+  ($result, $response) = getExpectedTape();
+  Dada->logMsg(2, $dl, "main: getExpectedTape() ".$result." ".$response);
+
+  if ($result ne "ok") {
+    Dada->logMsg(0, $dl, "main: getExpectedTape() failed: ".$response);
+    exit_script(1);
+  }
+
+  my $expected_tape = $response;
+  Dada->logMsg(1, $dl, "main: expected tape = ".$expected_tape);
+
+  if ($current_tape ne $expected_tape) {
+    Dada->logMsg(2, $dl, "main: loadTape(".$expected_tape.")");
+    ($result, $response) = loadTape($expected_tape);
+    Dada->logMsg(2, $dl, "main: loadTape() ".$result." ".$response);
+
+    if ($result ne "ok") {
+      Dada->logMsg(0, $dl, "getCurrentTape: loadTape() failed: ".$response);
+      exit_script(1);
+    }
+    $current_tape = $expected_tape;
+  }
 
   setStatus("Current tape: ".$current_tape);
 
@@ -313,6 +335,10 @@ sub main() {
       }
       sleep(10);
 
+      # increment to the next disk
+      Dada->logMsg(2, $dl, "main: moving from disk ".$i." -> ".($i+1));
+      $i++;
+
     }
 
     $j++;
@@ -320,18 +346,19 @@ sub main() {
     # only move onto the next holding area after the 13th
     # beam or handling 13 beams
     if (($beam eq "13") || ($j == 13)) {
-
       $j=0;
       $i++;
-      # reset the dirs counter
-      if ($i >= ($#paths+1)) {
-        $i = 0;
-      }
-        if ($obs eq "none") {
-        # Wait 10 secs if we didn't find a file
-        sleep (10);
-      }
     }
+
+    # reset the dirs counter
+    if ($i >= ($#paths+1)) {
+      $i = 0;
+    }
+    #if ($obs eq "none") {
+    #  # Wait 10 secs if we didn't find a file
+    #  sleep (10);
+    #}
+    #}
   } # main loop
 
   # rejoin threads
@@ -977,13 +1004,6 @@ sub getCurrentTape() {
     return ("fail", "no binary label existed on tape");
   }
 
-  # check that the binary label matched the pattern
-  if (!($tape_id =~ m/^$tapeid_pattern$/)) {
-    Dada->logMsg(0, $dl, "getCurrentTape: binary label ".$tape_id." did not match pattern");
-    return ("fail", "binary label on tape ".$tape_id." was malformed")
-  }
-
-
   Dada->logMsg(2, $dl, "getCurrentTape: current tape = ".$tape_id);
   return ("ok", $tape_id);
 
@@ -1023,7 +1043,7 @@ sub getExpectedTape() {
         my ($id, $size, $used, $free, $nfiles, $full, $newbkid) = split(/ +/,$line);
      
         if (int($full) == 1) {
-          Dada->logMsg(2, $dl, "getExpectedTape: skipping tape ".$id.", marked full");
+          Dada->logMsg(3, $dl, "getExpectedTape: skipping tape ".$id.", marked full");
         } elsif ($free < 0.1) {
           Dada->logMsg(1, $dl, "getExpectedTape: skipping tape ".$id." only ".$free." MB left");
         } else {
@@ -1597,11 +1617,13 @@ sub loadTape($) {
     $string = "Insert Tape:::".$tape;
   }
 
-  Dada->logMsg(2, $dl, "loadTapeManual: setStatus(".$string.")");
+  Dada->logMsg(2, $dl, "loadTape: setStatus(".$string.")");
   ($result, $response) = setStatus($string);
-  Dada->logMsg(2, $dl, "loadTapeManual: setStatus() ".$result." ".$response);
+  Dada->logMsg(2, $dl, "loadTape: setStatus() ".$result." ".$response);
 
+  Dada->logMsg(2, $dl, "loadTape: Dada::tapes::loadTapeGeneral(".$tape.")");
   ($result, $response) = Dada::tapes::loadTapeGeneral($tape);
+  Dada->logMsg(2, $dl, "loadTape: Dada::tapes::loadTapeGeneral() ".$result." ".$response);
 
   if (($result eq "ok") && ($response eq $tape)) {
     $string = "Current Tape: ".$tape;
@@ -1609,9 +1631,9 @@ sub loadTape($) {
     $string = "Failed to Load: ".$tape;
   }
 
-  Dada->logMsg(2, $dl, "loadTapeManual: setStatus(".$string.")");
+  Dada->logMsg(2, $dl, "loadTape: setStatus(".$string.")");
   ($result, $response) = setStatus($string);
-  Dada->logMsg(2, $dl, "loadTapeManual: setStatus() ".$result." ".$response);
+  Dada->logMsg(2, $dl, "loadTape: setStatus() ".$result." ".$response);
 
   if ($string =~ m/^Current Tape/) {
     return ("ok", $tape);
@@ -1701,11 +1723,11 @@ sub good($) {
   }
 
   if (! -f ($db_dir."/".$tapes_db)) {
-    return ("fail", "tapes db file [".$tapes_db."] did not exist");
+    return ("fail", "tapes db file [".$db_dir."/".$tapes_db."] did not exist");
   }
 
   if (! -f ($db_dir."/".$files_db)) {
-    return ("fail", "files db file [".$files_db."] did not exist");
+    return ("fail", "files db file [".$db_dir."/".$files_db."] did not exist");
   }
 
   return ("ok", "");
