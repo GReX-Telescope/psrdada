@@ -23,10 +23,9 @@ sub usage() {
 $Dada::server_tape_archiver::dl = 1;
 $Dada::server_tape_archiver::daemon_name = Dada->daemonBaseName($0);
 $Dada::server_tape_archiver::robot = 1;
-$Dada::server_tape_archiver::type = "SWIN";
-$Dada::server_tape_archiver::tapeid_pattern = "HRA[0-9][0-9][0-9]S4";
+$Dada::server_tape_archiver::type = "swin";
 $Dada::server_tape_archiver::ssh_prefix = "ssh -l pulsar shrek210 'ssh -l dada apsr-evlbi.atnf.csiro.au \"";
-$Dada::server_tape_archiver::ssh_suffic = "\"'";
+$Dada::server_tape_archiver::ssh_suffix = "\"'";
 $Dada::server_tape_archiver::required_host = "shrek202.ssi.swin.edu.au";
 
 # Autoflush STDOUT
