@@ -1,0 +1,19 @@
+
+# the calibrator database is loaded only once
+init cal load /lfs/data0/apsr/calibrators/database.txt
+
+# calibrate the archive using the database
+cal
+
+# zap the channels corrupted by the PDFB3 frequency shift bug
+if ( $nchan == 256 ) zap chan 0 16 32 48 64 80 96 112 128 144 160 176 192 208 224 240
+
+if ( $nchan == 128 ) zap chan 0 8 16 24 32 40 48 56 64 72 80 88 96 104 112
+
+if ( $nchan == 64 ) zap chan 0 4 8 12 16 20 24 28 32 36 40 44 48 52 56 60
+
+if ( $nchan == 32 ) zap chan 0 2 4 6 8 10 12 14 16 18 20 22 24 26 28 30
+
+# integrate all frequency channels
+fscrunch
+
