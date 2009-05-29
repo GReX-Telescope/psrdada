@@ -34,7 +34,7 @@ nobase_dist_data_DATA = testing/CAL.spec \
 
 
 edit = sed \
-	-e 's|@datadir[@]|$(pkgdatadir)|g' \
+	-e 's|@datadir[@]|$(datadir)|g' \
 	-e 's|@prefix[@]|$(prefix)|g'
 
 dspsr.singleF: Makefile
