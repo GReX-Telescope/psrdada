@@ -26,6 +26,7 @@ require AutoLoader;
   &getMultibobState
   &configureMultibobServer
   &clientCommand
+  &getObsDestinations
   &getConfig
 );
 
@@ -290,11 +291,37 @@ sub clientCommand($$$) {
 
 }
 
+# Return the destinations that an obs with the specified PID should be sent to
+sub getObsDestinations($$$) {
+  
+  my ($obs_pid, $survey_obs, $dests) = @_;
+  
+  my $want_swin = 0;
+  my $want_parkes = 0;
+  my $want_swinfold = 0;
+  
+  if ($dests =~ m/swin/) {
+    $want_swin = 1;
+  }
+  if ($dests =~ m/parkes/) {
+    $want_parkes = 1;
+  }
+
+  # special case for P630 non-survey observations only
+  if (($obs_pid eq "P630") && (!$survey_obs)) {
+    $want_swin = 0;
+    $want_parkes = 0;
+    $want_swinfold = 1;
+  }
+
+  return ($want_swin, $want_parkes, $want_swinfold);
+
+}
+
 sub getConfig() {
   my $config_file = $DADA_ROOT."/share/bpsr.cfg";
   my %config = Dada->readCFGFileIntoHash($config_file, 0);
   return %config;
 }
-
 
 __END__
