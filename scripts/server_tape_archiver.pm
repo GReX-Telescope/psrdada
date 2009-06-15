@@ -163,9 +163,9 @@ sub main() {
     push (@direxts, "staging_area");
   }
 
-  # add the pulsars directory also
-  for ($i=0; $i<$cfg{"NUM_".uc($type)."FOLD__DIRS"}; $i++) {
-    ($user, $host, $path) = split(/:/,$cfg{uc($type)."_FOLD_DIR_".$i},3);
+  # add the pulsars' directory also
+  for ($i=0; $i<$cfg{"NUM_".uc($type)."_DIRS"}; $i++) {
+    ($user, $host, $path) = split(/:/,$cfg{uc($type)."_DIR_".$i},3);
     push (@hosts, $host);
     push (@users, $user);
     push (@paths, $path);
