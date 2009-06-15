@@ -140,17 +140,18 @@ sub main() {
   #
   # Local Varaibles
   #
-
   my $control_thread = 0;
   my $completed_thread = 0;
   my $i = 0;
   my $j = 0;
   my @hosts = ();
   my @users = ();
-  my @paths  = ();
+  my @paths = ();
+  my @direxts = ();
   my $user = "";
   my $host = "";
   my $path = "";
+  my $direxts = "";
   my $path_pid = "";
 
   # setup the disks
@@ -159,6 +160,16 @@ sub main() {
     push (@hosts, $host);
     push (@users, $user);
     push (@paths, $path);
+    push (@direxts, "staging_area");
+  }
+
+  # add the pulsars directory also
+  for ($i=0; $i<$cfg{"NUM_".uc($type)."FOLD__DIRS"}; $i++) {
+    ($user, $host, $path) = split(/:/,$cfg{uc($type)."_FOLD_DIR_".$i},3);
+    push (@hosts, $host);
+    push (@users, $user);
+    push (@paths, $path);
+    push (@direxts, "pulsars");
   }
 
   Dada->daemonize($log_file, $pid_file);
@@ -268,7 +279,7 @@ sub main() {
     $host = $hosts[$i];
     $user = $users[$i];
     $path = $paths[$i];
-    $path_pid = $path."/".$pid."/staging_area";
+    $path_pid = $path."/".$pid."/".$direxts[$i];
 
     # Look for files in the @dirs
     Dada->logMsg(2, $dl, "main: getBeamToTar(".$user.", ".$host.", ".$path_pid.")");
@@ -1685,17 +1696,16 @@ sub completed_thread($$$$$) {
     setStatus("Error: could not move beam: ".$obs."/".$beam);
   }
 
-  # DISABLED FOR TESTING
-  # If at parkes, we delete the beam after moving it
-  #if (($robot eq 0) && ($result eq "ok"))  {
-  #  Dada->logMsg(2, $dl, "completed_thread: deleteCompletedBeam(".$user.", ".$host.", ".$dir.", ".$obs.", ".$beam.")");
-  #  ($result, $response) = deleteCompletedBeam($user, $host, $dir, $obs, $beam);
-  #  Dada->logMsg(2, $dl, "completed_thread: deleteCompletedBeam() ".$result." ".$response);
-  #  if ($result ne "ok") {
-  #    Dada->logMsg(0, $dl, "completed_thread: deleteCompletedBeam() failed: ".$response);
-  #    setStatus("Error: could not delete beam: ".$obs."/".$beam);
-  #  }
-  #}
+  # We delete the beam if its at parkes (no processing there, or if it is not a survey pointing
+  if (($result eq "ok") && (($robot eq 0) || ($dir =~ m/pulsars/)))  {
+    Dada->logMsg(2, $dl, "completed_thread: deleteCompletedBeam(".$user.", ".$host.", ".$dir.", ".$obs.", ".$beam.")");
+    ($result, $response) = deleteCompletedBeam($user, $host, $dir, $obs, $beam);
+    Dada->logMsg(2, $dl, "completed_thread: deleteCompletedBeam() ".$result." ".$response);
+    if ($result ne "ok") {
+      Dada->logMsg(0, $dl, "completed_thread: deleteCompletedBeam() failed: ".$response);
+      setStatus("Error: could not delete beam: ".$obs."/".$beam);
+    }
+  }
 }
 
 sub good($) {
