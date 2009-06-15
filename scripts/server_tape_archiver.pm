@@ -271,6 +271,7 @@ sub main() {
   $i = 0;
   $j = 0;
   my $waiting = 0;
+  my $disks_tried = 0;
   my $give_up = 0;
 
   while (!$quit_daemon) {
@@ -288,6 +289,8 @@ sub main() {
 
     # If we have one, write to tape
     if (($obs ne "none") && ($beam ne "none")) {
+
+      $disks_tried = 0;
 
       # lock this dir for READING
       $cmd = "touch ".$path."/READING";
@@ -338,16 +341,26 @@ sub main() {
 
     } else {
 
-      # Just log that we are in the main loop waiting for data
-      if (!$waiting) {
-        Dada->logMsg(1, $dl, "main: waiting for obs to transfer");
-        setStatus("Waiting for new");
-        $waiting = 1;
-      }
-      sleep(10);
+      $disks_tried++;
 
-      # increment to the next disk
-      Dada->logMsg(2, $dl, "main: moving from disk ".$i." -> ".($i+1));
+      # If we have cycled through all the disks and no files exist 
+      if ($disks_tried == ($#hosts+1)) {
+
+        # Just log that we are in the main loop waiting for data
+        if (!$waiting) {
+          Dada->logMsg(1, $dl, "main: waiting for obs to transfer");
+          setStatus("Waiting for new");
+          $waiting = 1;
+        }
+        sleep(10);
+
+      } else {
+
+        # increment to the next disk
+        Dada->logMsg(1, $dl, "main: moving from disk ".$i." -> ".($i+1));
+        sleep(1);
+
+      } 
       $i++;
 
     }
@@ -365,11 +378,7 @@ sub main() {
     if ($i >= ($#paths+1)) {
       $i = 0;
     }
-    #if ($obs eq "none") {
-    #  # Wait 10 secs if we didn't find a file
-    #  sleep (10);
-    #}
-    #}
+
   } # main loop
 
   # rejoin threads
