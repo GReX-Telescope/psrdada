@@ -392,8 +392,9 @@ int dada_client_write (dada_client_t* client)
   header_size = ipcbuf_get_bufsz (client->header_block);
   multilog (log, LOG_INFO, "header block size = %"PRIu64"\n", header_size);
 
+
   if (header_size) {
-  
+
     header = ipcbuf_get_next_write (client->header_block);
     if (!header)  {
       multilog (log, LOG_ERR, "Could not get next header block\n");
@@ -410,13 +411,18 @@ int dada_client_write (dada_client_t* client)
     if (bytes_read < 0)
       return -1;
 
-    // signal end of data on Data Block
-    if (ipcio_close (client->data_block) < 0)  {
-      multilog (log, LOG_ERR, "Could not close Data Block\n");
-      return -1;
-    }
-
   }
 
   return 0;
+}
+int dada_client_close (dada_client_t* client)
+{
+	  multilog_t* log = client->log;
+
+	//	signal end of data on Data Block
+	if (ipcio_close (client->data_block) < 0)  {
+		multilog (log, LOG_ERR, "Could not close Data Block\n");
+		return -1;
+	}
+	return 0;
 }

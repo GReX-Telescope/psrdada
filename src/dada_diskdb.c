@@ -18,6 +18,7 @@
 #include <sys/stat.h>
 
 /* #define _DEBUG 1 */
+#define MAX_FILES 1024
 
 void usage()
 {
@@ -41,7 +42,7 @@ typedef struct {
   uint64_t obs_offset;
 
   /* current filename */
-  char filename [FILENAME_MAX];
+  char filename [MAX_FILES][FILENAME_MAX];
 
   /* file offset from start of data, as defined by FILE_NUMBER attribute */
   unsigned file_number;
@@ -53,8 +54,11 @@ typedef struct {
 
 #define DADA_DISKDB_INIT { 0, "", 0, "", 0, 0 }
 
-/* Flag set when one file is specified */
-static char one_file = 0;
+/* Number of files to load */
+static int n_files = 0;
+/* Current file loading */
+static int cur_file = 0;
+
 
 /*! Pointer to the function that transfers data to/from the target */
 int64_t file_read_function (dada_client_t* client, 
@@ -83,8 +87,12 @@ int file_close_function (dada_client_t* client, uint64_t bytes_written)
     return -1;
   }
 
-  diskdb->filename[0] = '\0';
-  client->fd = -1;
+  cur_file++;
+  if(cur_file >= n_files){
+	  diskdb->filename[cur_file][0] = '\0';
+	  client->fd = -1;
+	  client->quit=1;
+  }
   return 0;
 }
 
@@ -121,9 +129,9 @@ int file_open_function (dada_client_t* client)
 
   log = client->log;
 
-  while (diskdb->filename[0] == '\0') {
+  while (diskdb->filename[cur_file][0] == '\0') {
 
-    if (one_file)
+    if (n_files > 0)
     {
       client->quit = 1;
       return 0;
@@ -135,11 +143,11 @@ int file_open_function (dada_client_t* client)
 
   }
 
-  client->fd = open (diskdb->filename, O_RDONLY);
+  client->fd = open (diskdb->filename[cur_file], O_RDONLY);
 
   if (client->fd < 0)  {
     multilog (client->log, LOG_ERR, "Error opening %s: %s\n",
-              diskdb->filename, strerror(errno));
+              diskdb->filename[cur_file], strerror(errno));
     return -1;
   } 
 
@@ -260,8 +268,8 @@ int main (int argc, char **argv)
       break;
 
     case 'f':
-      strcpy (diskdb.filename, optarg);
-      one_file = 1;
+      strcpy (diskdb.filename[n_files], optarg);
+      n_files++;
       break;
 
     case 'v':
@@ -312,7 +320,9 @@ int main (int argc, char **argv)
   client->context = &diskdb;
 
   while (!client->quit) {
-
+#ifdef _DEBUG
+	  fprintf (stderr, "call dada_client_write\n");
+#endif
     if (dada_client_write (client) < 0) {
       multilog (log, LOG_ERR, "Error during transfer\n");
       return -1;
@@ -322,6 +332,11 @@ int main (int argc, char **argv)
       client->quit = 1;
 
   }
+  if (dada_client_close (client) < 0) {
+	  multilog (log, LOG_ERR, "Error closing data block\n");
+	  return -1;
+  }
+
 
   if (dada_hdu_disconnect (hdu) < 0)
     return EXIT_FAILURE;

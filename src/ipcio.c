@@ -283,7 +283,7 @@ ssize_t ipcio_write (ipcio_t* ipc, char* ptr, size_t bytes)
   size_t towrite = bytes;
 
   if (ipc->rdwrt != 'W' && ipc->rdwrt != 'w') {
-    fprintf (stderr, "ipcio_write: invalid ipcio_t\n");
+    fprintf (stderr, "ipcio_write: invalid ipcio_t (%c)\n",ipc->rdwrt);
     return -1;
   }
 
