@@ -344,6 +344,7 @@ sub main() {
       $disks_tried++;
 
       # If we have cycled through all the disks and no files exist 
+      Dada->logMsg(1, $dl, "main: (".$disks_tried." == ".($#hosts+1).")");
       if ($disks_tried == ($#hosts+1)) {
 
         # Just log that we are in the main loop waiting for data
@@ -357,7 +358,9 @@ sub main() {
       } else {
 
         # increment to the next disk
-        Dada->logMsg(1, $dl, "main: moving from disk ".$i." -> ".($i+1));
+        Dada->logMsg(1, $dl, "main: moving from ".
+          $users[$i]."@".$hosts[$i].":".$paths[$i]."/".$pid."/".$direxts[$i]." -> ".
+          $users[$i+1]."@".$hosts[$i+1].":".$paths[$i+1]."/".$pid."/".$direxts[$i+1]);
         sleep(1);
 
       } 
