@@ -157,20 +157,24 @@ sub main() {
   # setup the disks
   for ($i=0; $i<$cfg{"NUM_".uc($type)."_DIRS"}; $i++) {
     ($user, $host, $path) = split(/:/,$cfg{uc($type)."_DIR_".$i},3);
-    push (@hosts, $host);
-    push (@users, $user);
-    push (@paths, $path);
-    push (@direxts, "staging_area");
+    $hosts[$j] = $host;
+    $users[$j] = $user;
+    $paths[$j] = $path;
+    $direxts[$j] = "staging_area";
+    $j++;
   }
 
   # add the pulsars' directory also
   for ($i=0; $i<$cfg{"NUM_".uc($type)."_DIRS"}; $i++) {
     ($user, $host, $path) = split(/:/,$cfg{uc($type)."_DIR_".$i},3);
-    push (@hosts, $host);
-    push (@users, $user);
-    push (@paths, $path);
-    push (@direxts, "pulsars");
+    $hosts[$j] = $host;
+    $users[$j] = $user;
+    $paths[$j] = $path;
+    $direxts[$j] = "pulsars";
+    $j++;
   }
+
+  $j = 0;
 
   Dada->daemonize($log_file, $pid_file);
   Dada->logMsg(0, $dl, "STARTING SCRIPT");
@@ -358,7 +362,7 @@ sub main() {
       } else {
 
         # increment to the next disk
-        Dada->logMsg(1, $dl, "main: moving from ".
+        Dada->logMsg(1, $dl, "main: moving from [".$i." -> ".($i+1)."] ".
           $users[$i]."@".$hosts[$i].":".$paths[$i]."/".$pid."/".$direxts[$i]." -> ".
           $users[$i+1]."@".$hosts[$i+1].":".$paths[$i+1]."/".$pid."/".$direxts[$i+1]);
         sleep(1);
@@ -379,6 +383,7 @@ sub main() {
 
     # reset the dirs counter
     if ($i >= ($#paths+1)) {
+      Dada->logMsg(1, $dl, "main: resetting i=".$i." to 0");
       $i = 0;
     }
 
