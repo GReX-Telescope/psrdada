@@ -277,6 +277,7 @@ sub main() {
   my $waiting = 0;
   my $disks_tried = 0;
   my $give_up = 0;
+  my $counter = 0;
 
   while (!$quit_daemon) {
 
@@ -343,13 +344,18 @@ sub main() {
         exit_script(1);
       }
 
+      $j++;
+
     } else {
 
       $disks_tried++;
-
+      Dada->logMsg(2, $dl, "main: source [".$i."] had no beams ".$users[$i]."@".$hosts[$i].":".$paths[$i]."/".$pid."/".$direxts[$i]);
       # If we have cycled through all the disks and no files exist 
-      Dada->logMsg(1, $dl, "main: (".$disks_tried." == ".($#hosts+1).")");
-      if ($disks_tried == ($#hosts+1)) {
+
+      if ($disks_tried > ($#hosts)) {
+
+        Dada->logMsg(2, $dl, "main: tried [".$disks_tried." of ".($#hosts+1)."] disks, doing a long sleep");
+        $disks_tried = 0;
 
         # Just log that we are in the main loop waiting for data
         if (!$waiting) {
@@ -357,22 +363,22 @@ sub main() {
           setStatus("Waiting for new");
           $waiting = 1;
         }
-        sleep(10);
+
+        $counter = 60;
+        while (!$quit_daemon && ($counter>0)) {
+          sleep 1;
+          $counter--;
+        }
 
       } else {
 
         # increment to the next disk
-        Dada->logMsg(1, $dl, "main: moving from [".$i." -> ".($i+1)."] ".
-          $users[$i]."@".$hosts[$i].":".$paths[$i]."/".$pid."/".$direxts[$i]." -> ".
-          $users[$i+1]."@".$hosts[$i+1].":".$paths[$i+1]."/".$pid."/".$direxts[$i+1]);
         sleep(1);
 
       } 
       $i++;
 
     }
-
-    $j++;
 
     # only move onto the next holding area after the 13th
     # beam or handling 13 beams
@@ -383,7 +389,6 @@ sub main() {
 
     # reset the dirs counter
     if ($i >= ($#paths+1)) {
-      Dada->logMsg(1, $dl, "main: resetting i=".$i." to 0");
       $i = 0;
     }
 
