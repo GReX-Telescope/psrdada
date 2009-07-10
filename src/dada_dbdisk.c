@@ -1,7 +1,9 @@
+/* To enable the use of O_DIRECT */
+#define _GNU_SOURCE
+
 #include "dada_client.h"
 #include "dada_hdu.h"
 #include "dada_def.h"
-
 #include "disk_array.h"
 #include "ascii_header.h"
 #include "daemon.h"
@@ -13,7 +15,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <assert.h>
-
 #include <sys/types.h>
 #include <sys/stat.h>
 
@@ -25,6 +26,7 @@ void usage()
            "dada_dbdisk [options]\n"
            " -k         hexadecimal shared memory key  [default: %x]\n"
            " -D <path>  add a disk to which data will be written\n"
+           " -o         use O_DIRECT flag to bypass kernel buffering\n"
            " -W         over-write exisiting files\n"
            " -s         single transfer only\n"
            " -d         run as daemon\n", DADA_DEFAULT_BLOCK_KEY);
@@ -46,9 +48,11 @@ typedef struct {
   /* file offset from start of data, as defined by FILE_NUMBER attribute */
   unsigned file_number;
 
+  char o_direct;
+
 } dada_dbdisk_t;
 
-#define DADA_DBDISK_INIT { 0, "", 0, "", 0 }
+#define DADA_DBDISK_INIT { 0, "", 0, "", 0, 0 }
 
 /*! Function that opens the data transfer target */
 int file_open_function (dada_client_t* client)
@@ -172,8 +176,13 @@ int file_open_function (dada_client_t* client)
 #endif
 
   /* Open the file */
+
+  int flags = 0;
+  if (dbdisk->o_direct)
+    flags = O_DIRECT;
+
   fd = disk_array_open (dbdisk->array, dbdisk->file_name,
-        		file_size, &optimal_bytes);
+        		file_size, &optimal_bytes, flags);
 
   if (fd < 0)
   {
@@ -267,7 +276,7 @@ int main (int argc, char **argv)
 
   dbdisk.array = disk_array_create ();
 
-  while ((arg=getopt(argc,argv,"k:dD:vWs")) != -1)
+  while ((arg=getopt(argc,argv,"k:dD:ovWs")) != -1)
     switch (arg) {
 
     case 'k':
@@ -288,8 +297,12 @@ int main (int argc, char **argv)
       }
       break;
       
+    case 'o':
+      dbdisk.o_direct = 1;
+      break;
+
     case 'v':
-      verbose=1;
+      verbose = 1;
       break;
       
     case 'W':
