@@ -67,7 +67,9 @@ int64_t dada_client_io_loop (dada_client_t* client)
 
   if (buffer_size != client->optimal_bytes) {
     buffer_size = client->optimal_bytes;
-    buffer = (char*) realloc (buffer, buffer_size);
+    if (buffer)
+      free (buffer);
+    int rval = posix_memalign ( (void **) &buffer, 512, client->optimal_bytes);
     assert (buffer != 0);
 
 #ifdef _DEBUG
@@ -248,7 +250,7 @@ int64_t dada_client_transfer (dada_client_t* client)
     transfer_time = diff_time (start_loop, end_loop);
     multilog (log, LOG_INFO, "%"PRIu64" bytes transfered in %lfs "
               "(%lg MB/s)\n", bytes_transfered, transfer_time,
-              bytes_transfered/(1e6*transfer_time));
+              bytes_transfered/(1024*1024*transfer_time));
     
   }
 
@@ -329,7 +331,11 @@ int dada_client_read (dada_client_t* client)
 
   /* Duplicate the header */
   if (header_size > client->header_size) {
-    client->header = realloc (client->header, header_size);
+    
+    if (client->header)
+      free (client->header);
+    int rval = posix_memalign ( (void **) &(client->header), 512, header_size);
+
     assert (client->header != 0);
     client->header_size = header_size;
   }
