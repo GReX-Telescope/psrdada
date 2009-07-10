@@ -444,7 +444,7 @@ time_t dada_pwc_parse_time (FILE* fptr, char* args)
   if (!args)
     return utc;
 
-  utc = str2time (args);
+  utc = str2utctime (args);
   if (utc == (time_t)-1) {
     fprintf (fptr, "Could not parse start time from '%s'\n", args);
     return -1;
@@ -749,7 +749,8 @@ int dada_pwc_set_state (dada_pwc_t* primary, int new_state, time_t utc)
     if (new_state != dada_pwc_prepared &&
         new_state != dada_pwc_soft_error &&
         new_state != dada_pwc_hard_error &&
-        new_state != dada_pwc_fatal_error) {
+        new_state != dada_pwc_fatal_error) 
+    {
       fprintf (stderr, "IDLE can change only to PREPARED\n");
       return -1;
     }
@@ -757,11 +758,12 @@ int dada_pwc_set_state (dada_pwc_t* primary, int new_state, time_t utc)
 
   case dada_pwc_prepared:
     if (new_state != dada_pwc_idle &&
-	new_state != dada_pwc_clocking &&
+        new_state != dada_pwc_clocking &&
         new_state != dada_pwc_recording &&
         new_state != dada_pwc_soft_error &&
         new_state != dada_pwc_hard_error &&
-        new_state != dada_pwc_fatal_error) {
+        new_state != dada_pwc_fatal_error) 
+    {
       fprintf (stderr, "PREPARED can change only to CLOCKING or RECORDING\n");
       return -1;
     }
@@ -773,7 +775,8 @@ int dada_pwc_set_state (dada_pwc_t* primary, int new_state, time_t utc)
         new_state != dada_pwc_idle &&
         new_state != dada_pwc_soft_error &&
         new_state != dada_pwc_hard_error &&
-        new_state != dada_pwc_fatal_error) {
+        new_state != dada_pwc_fatal_error) 
+    {
       fprintf (stderr, "CLOCKING can change only to RECORDING or IDLE\n");
       return -1;
     }
@@ -784,21 +787,24 @@ int dada_pwc_set_state (dada_pwc_t* primary, int new_state, time_t utc)
         new_state != dada_pwc_idle &&
         new_state != dada_pwc_soft_error &&
         new_state != dada_pwc_hard_error &&
-        new_state != dada_pwc_fatal_error) {
+        new_state != dada_pwc_fatal_error) 
+    {
       fprintf (stderr, "RECORDING can change only to CLOCKING or IDLE\n");
       return -1;
     }
     break;
 
   case dada_pwc_soft_error:
-    if (new_state != dada_pwc_idle) {
+    if (new_state != dada_pwc_idle) 
+    {
       fprintf (stderr, "SOFT ERROR state can only change to IDLE\n");
       return -1;
     }
     break;
 
   case dada_pwc_hard_error:
-    if (new_state != dada_pwc_idle) {
+    if (new_state != dada_pwc_idle) 
+    {
       fprintf (stderr, "HARD ERROR state can only change to IDLE\n");
       return -1;
     }
@@ -829,3 +835,42 @@ int dada_pwc_set_state (dada_pwc_t* primary, int new_state, time_t utc)
   return 0;
 }
 
+const char * dada_pwc_cmd_code_string(int command_code)
+{
+  switch (command_code)
+  {
+    case dada_pwc_no_command:
+      return "no_command";
+                                                                                                                                                                                                                    
+    case dada_pwc_header:
+      return "header";
+                                                                                                                                                                                                                    
+    case dada_pwc_clock:
+      return "clock";
+                                                                                                                                                                                                                    
+    case dada_pwc_record_start:
+      return "record_start";
+                                                                                                                                                                                                                    
+    case dada_pwc_record_stop:
+      return "record_stop";
+                                                                                                                                                                                                                    
+    case dada_pwc_start:
+      return "start";
+                                                                                                                                                                                                                    
+    case dada_pwc_stop:
+      return "stop";
+                                                                                                                                                                                                                    
+    case dada_pwc_set_utc_start:
+      return "set_utc_start";
+                                                                                                                                                                                                                    
+    case dada_pwc_reset:
+      return "reset";
+                                                                                                                                                                                                                    
+    case dada_pwc_exit:
+      return "exit";
+                                                                                                                                                                                                                    
+    default:
+      return "unknown";
+  }
+                                                                                                                                                                                                                    
+}

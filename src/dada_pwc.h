@@ -194,6 +194,8 @@ extern "C" {
   /*! Callback for the duration command */
   int dada_pwc_cmd_duration (void* context, FILE* fptr, char* args);
 
+  const char * dada_pwc_cmd_code_string(int command_code);
+
 #ifdef __cplusplus
 	   }
 #endif
