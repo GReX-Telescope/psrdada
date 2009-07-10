@@ -178,64 +178,71 @@ static void* command_parse_server (void * arg)
 
     comm_fd = sock_accept (server->listen_fd);
 
-    if (comm_fd < 0)  {
-      if (!server->quit)
+    if (comm_fd < 0)  
+    {
+      if (!server->quit) 
+      {
         perror ("command_parse_server: Error accepting connection");
-      return 0;
+        sleep(1);
+      }
+      else
+        return 0;
+
+    } else  {
+
+#ifdef _DEBUG
+      fprintf (stderr, "command_parse_server: connection accepted\n");
+#endif
+
+      parser = (command_parse_thread_t*) malloc (sizeof(command_parse_thread_t));
+      assert (parser != 0);
+
+      parser->server = server;
+
+#ifdef _DEBUG
+      fprintf (stderr, "command_parse_server: fdopen (fd=%d,r)\n", comm_fd);
+#endif
+
+      fptr = fdopen (comm_fd, "r");
+      if (!fptr)  {
+        perror ("command_parse_server: Error creating I/O stream");
+        return 0;
+      }
+
+      parser->input = fptr;
+#ifdef _DEBUG
+      fprintf (stderr, "command_parse_server: input=%p\n", parser->input);
+      fprintf (stderr, "command_parse_server: fdopen (fd=%d,w)\n", comm_fd);
+#endif
+
+      fptr = fdopen (comm_fd, "w");
+      if (!fptr)  {
+        perror ("command_parse_server: Error creating I/O stream");
+        return 0;
+      }
+
+      /* do not buffer the output */
+      setbuf (fptr, 0);
+
+      parser->output = fptr;
+
+#ifdef _DEBUG
+      fprintf (stderr, "command_parse_server: output=%p\n", parser->output);
+      fprintf (stderr, "command_parse_server: pthread_create command_parser\n");
+#endif
+
+      if (pthread_create (&tmp_thread, 0, command_parser, parser) < 0) {
+        perror ("command_parse_serve: Error creating new thread");
+        return 0;
+      }
+
+#ifdef _DEBUG
+      fprintf (stderr, "command_parse_server: pthread_detach\n");
+#endif
+
+      /* thread cannot be joined; resources will be destroyed on exit */
+      pthread_detach (tmp_thread);
     }
-
-#ifdef _DEBUG
-    fprintf (stderr, "command_parse_server: connection accepted\n");
-#endif
-
-    parser = (command_parse_thread_t*) malloc (sizeof(command_parse_thread_t));
-    assert (parser != 0);
-
-    parser->server = server;
-
-#ifdef _DEBUG
-    fprintf (stderr, "command_parse_server: fdopen (fd=%d,r)\n", comm_fd);
-#endif
-
-    fptr = fdopen (comm_fd, "r");
-    if (!fptr)  {
-      perror ("command_parse_server: Error creating I/O stream");
-      return 0;
-    }
-
-    parser->input = fptr;
-#ifdef _DEBUG
-    fprintf (stderr, "command_parse_server: input=%p\n", parser->input);
-    fprintf (stderr, "command_parse_server: fdopen (fd=%d,w)\n", comm_fd);
-#endif
-
-    fptr = fdopen (comm_fd, "w");
-    if (!fptr)  {
-      perror ("command_parse_server: Error creating I/O stream");
-      return 0;
-    }
-
-    /* do not buffer the output */
-    setbuf (fptr, 0);
-
-    parser->output = fptr;
-
-#ifdef _DEBUG
-    fprintf (stderr, "command_parse_server: output=%p\n", parser->output);
-    fprintf (stderr, "command_parse_server: pthread_create command_parser\n");
-#endif
-
-    if (pthread_create (&tmp_thread, 0, command_parser, parser) < 0) {
-      perror ("command_parse_serve: Error creating new thread");
-      return 0;
-    }
-
-#ifdef _DEBUG
-    fprintf (stderr, "command_parse_server: pthread_detach\n");
-#endif
-
-    /* thread cannot be joined; resources will be destroyed on exit */
-    pthread_detach (tmp_thread);
 
   }
 
