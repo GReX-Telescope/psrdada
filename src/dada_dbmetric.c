@@ -66,7 +66,7 @@ int main (int argc, char **argv)
                                                                                 
   }
   
-  log = multilog_open ("dada_dbmetric", '0');
+  log = multilog_open ("dada_dbmetric", 0);
   multilog_add (log, stderr);
 
   hdu = dada_hdu_create (log);
