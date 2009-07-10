@@ -8,7 +8,7 @@ use threads;
 use threads::shared;
 use Dada;
 use Bpsr;
-require Dada::tapes;
+use Dada::tapes;
 
 BEGIN {
 
@@ -125,6 +125,9 @@ sub main() {
   $Dada::tapes::dl = $dl;
   $Dada::tapes::dev = $dev;
   $Dada::tapes::robot = $robot;
+  Dada->logMsg(2, $dl, "main: setDada::tapes dl=".$Dada::tapes::dl." dev=".$Dada::tapes::dev." robot=".$Dada::tapes::robot);
+
+  
 
   # sanity check on whether the module is good to go
   ($result, $response) = good($quit_file);
@@ -880,29 +883,29 @@ sub tarBeam($$$$$) {
 #
 # move a completed obs on the remote dir to the on_tape directory
 #
-sub moveCompletedBeam($$$$$) {
+sub moveCompletedBeam($$$$$$) {
 
-  my ($user, $host, $dir, $obs, $beam) = @_;
-  Dada->logMsg(2, $dl, "moveCompletedBeam(".$user.", ".$host.", ".$dir.", ".$obs.", ".$beam.")");
+  my ($user, $host, $dir, $obs, $beam, $dest) = @_;
+  Dada->logMsg(2, $dl, "moveCompletedBeam(".$user.", ".$host.", ".$dir.", ".$obs.", ".$beam.", ".$dest.")");
 
   my $result = "";
   my $response = "";
   my $cmd = "";
 
   # ensure the remote directory is created
-  $cmd = "mkdir -p ".$dir."/../on_tape/".$obs;
+  $cmd = "mkdir -p ".$dir."/../".$dest."/".$obs;
   Dada->logMsg(2, $dl, "moveCompletedBeam: localSshCommand(".$user.", ".$host.", ".$cmd.")");
   ($result, $response) = localSshCommand($user, $host, $cmd);
   Dada->logMsg(2, $dl, "moveCompletedBeam: localSshCommand() ".$result." ".$response);
 
    # move the beam
-  $cmd = "cd ".$dir."; mv ".$obs."/".$beam." ../on_tape/".$obs."/";
+  $cmd = "cd ".$dir."; mv ".$obs."/".$beam." ../".$dest."/".$obs."/";
   Dada->logMsg(2, $dl, "moveCompletedBeam: localSshCommand(".$user.", ".$host.", ".$cmd.")");
   ($result, $response) = localSshCommand($user, $host, $cmd);
   Dada->logMsg(2, $dl, "moveCompletedBeam: localSshCommand() ".$result." ".$response);
 
   if ($result ne "ok") {
-    Dada->logMsg(0, $dl, "moveCompletedBeam: failed to move ".$obs."/".$beam," to on_tape dir: ".$response);
+    Dada->logMsg(0, $dl, "moveCompletedBeam: failed to move ".$obs."/".$beam," to ".$dest." dir: ".$response);
   } else {
 
     # if there are no other beams in the observation directory, then we can delete it
@@ -934,17 +937,17 @@ sub moveCompletedBeam($$$$$) {
 #
 # Delete the beam from the specified location
 #
-sub deleteCompletedBeam($$$$$) {
+sub deleteCompletedBeam($$$$$$) {
 
-  my ($user, $host, $dir, $obs, $beam) = @_;
-  Dada->logMsg(2, $dl, "deleteCompletedBeam(".$user.", ".$host.", ".$dir.", ".$obs.", ".$beam.")");
+  my ($user, $host, $dir, $obs, $beam, $dest) = @_;
+  Dada->logMsg(2, $dl, "deleteCompletedBeam(".$user.", ".$host.", ".$dir.", ".$obs.", ".$beam.", ".$dest.")");
 
   my $result = "";
   my $response = "";
   my $cmd = "";
 
   # ensure the remote directory exists
-  $cmd = "ls -1d ".$dir."/../on_tape/".$obs."/".$beam;
+  $cmd = "ls -1d ".$dir."/../".$dest."/".$obs."/".$beam;
   Dada->logMsg(2, $dl, "deleteCompletedBeam: localSshCommand(".$user.", ".$host.", ".$cmd.")");
   ($result, $response) = localSshCommand($user, $host, $cmd);
   Dada->logMsg(2, $dl, "deleteCompletedBeam: localSshCommand() ".$result." ".$response);
@@ -955,7 +958,7 @@ sub deleteCompletedBeam($$$$$) {
   } else {
 
     # delete the remote directory (just do whole obs)
-    $cmd = "rm -rf ".$dir."/../on_tape/".$obs;
+    $cmd = "rm -rf ".$dir."/../".$dest."/".$obs;
     Dada->logMsg(2, $dl, "deleteCompletedBeam: localSshCommand(".$user.", ".$host.", ".$cmd.")");
     ($result, $response) = localSshCommand($user, $host, $cmd);
     Dada->logMsg(2, $dl, "deleteCompletedBeam: localSshCommand() ".$result." ".$response);
@@ -1709,9 +1712,14 @@ sub completed_thread($$$$$) {
 
   my $result = "";
   my $response = "";
+  my $dest = "on_tape";
 
-  Dada->logMsg(2, $dl, "completed_thread: moveCompeltedBeam(".$user.", ".$host.", ".$dir.", ".$obs.", ".$beam.")");
-  ($result, $response) = moveCompletedBeam($user, $host, $dir, $obs, $beam);
+  if (($robot eq 1) && ($dir =~ m/pulsars/)) {
+    $dest = "on_tape_pulsars";
+  }
+
+  Dada->logMsg(2, $dl, "completed_thread: moveCompeltedBeam(".$user.", ".$host.", ".$dir.", ".$obs.", ".$beam.", ".$dest.")");
+  ($result, $response) = moveCompletedBeam($user, $host, $dir, $obs, $beam, $dest);
   Dada->logMsg(2, $dl, "completed_thread: moveCompeltedBeam() ".$result." ".$response);
   if ($result ne "ok") {
     Dada->logMsg(0, $dl, "completed_thread: moveCompletedBeam() failed: ".$response);
@@ -1719,9 +1727,9 @@ sub completed_thread($$$$$) {
   }
 
   # We delete the beam if its at parkes (no processing there, or if it is not a survey pointing
-  if (($result eq "ok") && (($robot eq 0) || ($dir =~ m/pulsars/)))  {
-    Dada->logMsg(2, $dl, "completed_thread: deleteCompletedBeam(".$user.", ".$host.", ".$dir.", ".$obs.", ".$beam.")");
-    ($result, $response) = deleteCompletedBeam($user, $host, $dir, $obs, $beam);
+  if (($result eq "ok") && ($robot eq 0)) {
+    Dada->logMsg(2, $dl, "completed_thread: deleteCompletedBeam(".$user.", ".$host.", ".$dir.", ".$obs.", ".$beam.", ".$dest.")");
+    ($result, $response) = deleteCompletedBeam($user, $host, $dir, $obs, $beam, $dest);
     Dada->logMsg(2, $dl, "completed_thread: deleteCompletedBeam() ".$result." ".$response);
     if ($result ne "ok") {
       Dada->logMsg(0, $dl, "completed_thread: deleteCompletedBeam() failed: ".$response);
