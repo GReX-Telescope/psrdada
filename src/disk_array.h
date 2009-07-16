@@ -47,7 +47,7 @@ extern "C" {
   int disk_array_set_overwrite (disk_array_t* array, char value);
 
   /*! Open a file on the disk array, return the open file descriptor */
-  int disk_array_open (disk_array_t*, char* name, uint64_t size, uint64_t* bs);
+  int disk_array_open (disk_array_t*, char* name, uint64_t size, uint64_t* bs, int add_flags);
 
   /*! Get the total amount of disk space */
   uint64_t disk_array_get_total (disk_array_t*);

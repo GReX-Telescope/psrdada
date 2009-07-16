@@ -1,3 +1,5 @@
+/* To enable the use of O_DIRECT */
+#define _GNU_SOURCE
 
 #ifdef HAVE_CONFIG_H
 #include <config.h>
@@ -200,7 +202,7 @@ uint64_t disk_array_get_available (disk_array_t* array)
 
 /*! Open a file on the disk array, return the open file descriptor */
 int disk_array_open (disk_array_t* array, char* filename, uint64_t filesize,
-		     uint64_t* optimal_buffer_size)
+		     uint64_t* optimal_buffer_size, int add_flags)
 {
   static char* fullname = 0;
   unsigned idisk;
@@ -209,6 +211,9 @@ int disk_array_open (disk_array_t* array, char* filename, uint64_t filesize,
 
   int flags = O_WRONLY | O_CREAT | O_TRUNC;
   int perms = S_IRUSR | S_IRGRP;
+
+  if (add_flags)
+    flags |= add_flags;
 
   if (array->overwrite)
     perms |= S_IWUSR;
