@@ -1276,6 +1276,17 @@ uint64_t ipcbuf_get_nclear (ipcbuf_t* id)
   return semctl (id->semid, IPCBUF_CLEAR, GETVAL);
 }
 
+uint64_t ipcbuf_get_sodack (ipcbuf_t* id)
+{
+  return semctl (id->semid, IPCBUF_SODACK, GETVAL);
+}
+
+uint64_t ipcbuf_get_eodack (ipcbuf_t* id)
+{
+  return semctl (id->semid, IPCBUF_EODACK, GETVAL);
+}
+
+
 /* Sets the buffer at which clocking began.  */
 uint64_t ipcbuf_set_soclock_buf (ipcbuf_t* id)
 {

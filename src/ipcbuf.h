@@ -208,6 +208,11 @@ extern "C" {
   /*! set the start of clocking data buffer  */
   uint64_t ipcbuf_set_soclock_buf(ipcbuf_t*);
 
+  uint64_t ipcbuf_get_sodack (ipcbuf_t* id);
+
+  uint64_t ipcbuf_get_eodack (ipcbuf_t* id);
+
+
 #ifdef __cplusplus
 	   }
 #endif
