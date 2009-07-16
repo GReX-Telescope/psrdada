@@ -1,15 +1,23 @@
-#include "tmutil.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
 
+#include "tmutil.h"
+
 time_t str2time (const char* str)
 {
   struct tm time;
   return str2tm (&time, str);
 }
+
+time_t str2utctime (const char* str)
+{
+  struct tm time;
+  return str2utctm (&time, str);
+}
+
 
 time_t str2tm (struct tm* time, const char* str)
 {
@@ -35,8 +43,8 @@ time_t str2tm (struct tm* time, const char* str)
     if (isdigit(temp[trav])) {
       digits ++;
       if (!infield) {
-	/* count only the transitions from non digits to a field of digits */
-	field_count ++;
+        /* count only the transitions from non digits to a field of digits */
+        field_count ++;
       }
       infield = 1;
     }
@@ -154,4 +162,19 @@ time_t str2tm (struct tm* time, const char* str)
   return mktime (time);
   
 } 
+
+time_t str2utctm (struct tm* time, const char* str)
+{
+  
+  /* append the GMT+0 timeszone information */
+  char * str_utc = malloc(sizeof(char) * (strlen(str) + 4 + 1));
+  sprintf(str_utc, "%s UTC",str);
+
+  const char * format = "%Y-%m-%d-%H:%M:%S %Z";
+  
+  strptime(str_utc, format, time);
+
+  free(str_utc);
+  return timegm(time);
+}
 
