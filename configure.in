@@ -118,6 +118,12 @@ AC_CONFIG_FILES([Makefile
 		bpsr/web/Makefile
 		bpsr/config/Makefile
 		bpsr/config/bpsr.cfg
+    caspsr/Makefile
+    caspsr/src/Makefile
+    caspsr/scripts/Makefile
+    caspsr/config/Makefile
+    caspsr/config/caspsr.cfg
+    caspsr/web/Makefile
 		puma2/Makefile
 		3rdparty/Makefile])
 
