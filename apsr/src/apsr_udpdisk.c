@@ -143,7 +143,7 @@ time_t udpdisk_start_function (udpdisk_t* udpdisk, time_t start_utc)
 
   uint64_t optimal_bytes;
   int fd = disk_array_open (udpdisk->array, udpdisk->file_name, file_size, 
-                        &optimal_bytes);
+                        &optimal_bytes, 0);
 
   if (fd < 0) {
     fprintf(stderr,"Error opening %s: %s\n", udpdisk->file_name, strerror (errno));
