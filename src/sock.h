@@ -3,9 +3,9 @@
 
 #include <sys/types.h>
 #include <unistd.h>
+#include <limits.h>
 
 #ifndef HOST_NAME_MAX
-#include <limits.h>
 #define HOST_NAME_MAX _POSIX_HOST_NAME_MAX
 #endif
 
