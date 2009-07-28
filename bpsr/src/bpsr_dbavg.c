@@ -185,7 +185,7 @@ int file_open_function (dada_client_t* client)
 
   /* Open the pol1 file */
   fd = disk_array_open (dbavg->array, dbavg->pol1_file_name,
-        		file_size, &optimal_bytes);
+        		file_size, &optimal_bytes, 0);
 
   if (fd < 0) {
     multilog (log, LOG_ERR, "Error opening %s: %s\n", dbavg->pol1_file_name,
@@ -200,7 +200,7 @@ int file_open_function (dada_client_t* client)
 
   /* Open the pol2 file */
   fd = disk_array_open (dbavg->array, dbavg->pol2_file_name,
-            file_size, &optimal_bytes);
+            file_size, &optimal_bytes, 0);
                                                                                                                                                                          
   if (fd < 0) {
     multilog (log, LOG_ERR, "Error opening %s: %s\n", dbavg->pol2_file_name,
