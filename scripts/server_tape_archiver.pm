@@ -301,7 +301,7 @@ sub main() {
       $disks_tried = 0;
 
       # lock this dir for READING
-      $cmd = "touch ".$path."/READING";
+      $cmd = "touch ".$path."/../READING";
       Dada->logMsg(2, $dl, "main: localSshCommand(".$user.", ".$host.", ".$cmd.")");
       ($result, $response) = localSshCommand($user, $host, $cmd);
       Dada->logMsg(2, $dl, "main: localSshCommand() ".$result." ".$response);
@@ -333,7 +333,7 @@ sub main() {
         $give_up = 1;
       }
 
-      $cmd = "rm -f ".$path."/READING";
+      $cmd = "rm -f ".$path."/../READING";
       Dada->logMsg(2, $dl, "main: localSshCommand(".$user.", ".$host.", ".$cmd.")");
       ($result, $response) = localSshCommand($user, $host, $cmd);
       Dada->logMsg(2, $dl, "main: localSshCommand() ".$result." ".$response);
