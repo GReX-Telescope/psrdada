@@ -44,5 +44,5 @@ nobase_dist_web_SCRIPTS = definitions_i.php \
                           control/client_command.php \
                           control/index.php \
                           stats/.htaccess \
-                          status/.empty
+                          status/.empty support.html
 
