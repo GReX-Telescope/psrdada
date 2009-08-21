@@ -55,7 +55,7 @@ $groups = getProjects($config["DADA_USER"]);
     <td align="center"> <a href="javascript:popUp('client_status.php')" class="button" ><span></span><i>Client Status</i><b></b></a> </td>
     <td align="center"> <a target="_ganglia" href="http://<?echo $_SERVER["SERVER_NAME"].":".$_SERVER["SERVER_PORT"]?>/ganglia/" class="button" ><span></span><i>Ganglia</i><b></b></a> </td>
     <td align="center"> <a href="javascript:popWindow('results.php',800, 800)" class="button" ><span></span><i>Results</i><b></b></a> </td>
-    <td align="center"> <a href="javascript:popWindow('control/', 1024, 650)" class="button" ><span></span><i>Controls</i><b></b></a>
+    <td align="center"> <a href="javascript:popWindow('control/', 1280, 650)" class="button" ><span></span><i>Controls</i><b></b></a>
     <td align="center"> <a href="javascript:popWindow('testing/', 1024, 768)" class="button" ><span></span><i>Test System</i><b></b></a>
 </td>-->
 
@@ -64,18 +64,18 @@ $groups = getProjects($config["DADA_USER"]);
 
     <div class="btns">
 
-      <a href="javascript:popWindow('annotate_obs.php', 800, 600)" class="btn" > <span>Annotate Obs</span> </a>
+      <a href="javascript:popWindow('annotate_obs.php', 800, 600)" class="btn" > <span>Ann. Obs</span> </a>
       <a href="javascript:popUp('client_status.php')"  class="btn" > <span>Client Status</span> </a>
 
       <a target="_ganglia" href="http://<?echo $_SERVER["SERVER_NAME"].":".$_SERVER["SERVER_PORT"]?>/ganglia/" class="btn" > <span>Ganglia</span> </a>
 
-      <a href="javascript:popWindow('results.php', 1060, 800)" class="btn" > <span>Results</span> </a>
+      <a href="javascript:popWindow('results.php', 1200, 800)" class="btn" > <span>Results</span> </a>
 
-      <a href="javascript:popWindow('control/', 1024, 800)" class="btn" > <span>Controls</span> </a>
+      <a href="javascript:popWindow('control/', 1200, 800)" class="btn" > <span>Controls</span> </a>
       <a href="javascript:popWindow('testing/', 1024, 800)" class="btn" > <span>Test</span> </a>
       <a href="javascript:popWindow('commandeer.php', 800, 480)" class="btn" > <span>Commandeer</span> </a>
 
-      <a href="javascript:popWindow('http://psrdada.sourceforge.net/support.shtml', 800, 480)" class="btn" > <span>Support</span> </a>
+      <a href="javascript:popWindow('support.html', 1200, 800)" class="btn" > <span>Help</span> </a>
 
     </div>
 
