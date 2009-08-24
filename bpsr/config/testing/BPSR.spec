@@ -10,7 +10,7 @@ FA                  23
 BW                  -400
 ACC_LEN             25
 PID                 P630
-PROC_FILE           THEDECIMATOR
+PROC_FILE           SURVEY.MULTIBEAM
 NBIT                8
 NPOL                2
 NDIM                1
