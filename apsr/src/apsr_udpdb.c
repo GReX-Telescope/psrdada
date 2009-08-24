@@ -262,7 +262,7 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
   
         if ((pwcm->pwc->state == dada_pwc_recording) &&
             (udpdb->expected_sequence_no != 0)) {
-          multilog (log, LOG_WARNING, "UDP packet timeout: no packet "
+          multilog (log, LOG_INFO, "UDP packet timeout: no packet "
                                       "received for 1 second\n");
         }
         quit = 1;
@@ -495,7 +495,7 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
     /* If the timeout ocurred, this is most likely due to end of data */
     if (timeout_ocurred) {
       *size = udpdb->curr_buffer_count * udpdb->packet_length;
-      multilog (log, LOG_WARNING, "Suspected EOD received, returning "
+      multilog (log, LOG_INFO, "Suspected EOD received, returning "
                      "%"PRIu64" bytes\n",*size);
     }
 
