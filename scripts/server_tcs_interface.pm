@@ -421,6 +421,12 @@ sub processTCSCommand($$) {
       $response = "";
       $current_state = "Preparing";
 
+      if (($key eq "BANDWIDTH") && ($val eq "0.000000")) {
+        $result = "fail";
+        $response = "cowardly refusing to observe with bandwidth=0.0";
+        $current_state = "Error";
+      }
+
     }
   }
 
@@ -1104,7 +1110,11 @@ sub addSiteConfig() {
   }
 
   # Determine the TSAMP based upon NDIM and BW 
-  $tcs_cmds{"TSAMP"} = (1.0 / abs($bw)) * ($tcs_cmds{"NDIM"} / 2);
+  if ($bw == 0.0) {
+    $tcs_cmds{"TSAMP"} = 0.0
+  } else {
+    $tcs_cmds{"TSAMP"} = (1.0 / abs($bw)) * ($tcs_cmds{"NDIM"} / 2);
+  }
 
   # Setup the number of channels per node
   if (!(exists $tcs_cmds{"NBAND"})) {
