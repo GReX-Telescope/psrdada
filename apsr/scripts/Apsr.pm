@@ -271,6 +271,15 @@ sub processHeader($$\%) {
 
   $proc_cmd .= $proc_args;
 
+  if ($source =~ m/CalDelay/) {
+    if ($proc_cmd =~ m/-2c100/) {
+      # TODO put error here
+    } else {
+      $proc_cmd .= " -2c100";
+    }
+  }
+
+
   if ($result eq "ok") {
     $response = $proc_cmd;
   }
