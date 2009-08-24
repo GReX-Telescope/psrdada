@@ -4,14 +4,17 @@ data_DATA = apsr.cfg
 
 dist_data_DATA = apsr.info \
                  apsr.viewer \
+                 dspsr.axp \
                  dspsr.cal \
                  dspsr.default \
+                 dspsr.fourth \
                  dspsr.multi \
                  dspsr.select \
                  dspsr.single \
                  dspsr.singleF \
                  singleF.psh \
                  apsr.scratch \
+                 P427.scratch \
                  multi.txt \
                  pdfb3_1024_1024_2048 \
                  pdfb3_1024_256_2048 \
@@ -46,20 +49,5 @@ dspsr.singleF: Makefile
 
 dspsr.singleF: $(srcdir)/dspsr.singleF.in
 
-DIFFDATA=$(nobase_dist_data_DATA) $(dist_data_DATA) $(data_DATA)
-
-diff:
-	@for file in $(DIFFDATA); do \
-	 if diff $$file $(datadir)/$$file > /dev/null; then \
-	  echo > /dev/null ; \
-	 else \
-	  echo "###########################################################"; \
-	  echo "#"; \
-	  echo "#"; \
-	  echo diff $$file $(datadir)/$$file; \
-	  diff $$file $(datadir)/$$file; \
-	  echo "#"; \
-	  echo "#"; \
-	 fi; \
-	done
+include $(top_srcdir)/config/Makefile.targets
 
