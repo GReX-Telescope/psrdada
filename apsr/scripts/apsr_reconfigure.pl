@@ -10,6 +10,7 @@ use Apsr;           # APSR/DADA Module for configuration options
 use threads;
 use threads::shared;
 use strict;         # strict mode (like -Wall)
+use warnings;
 use Getopt::Std;
 
 
