@@ -14,7 +14,8 @@ EOF
 
 endif
 
-echo "Running dada_edit -c $2 /lfs/data0/apsr/scratch/$1*"
+echo "Running dada_edit -c $2 /lfs/data0/apsr/scratch/$1"'*'
 
-dada_edit -c $2 /lfs/data0/apsr/scratch/$1*
+cd /lfs/data0/apsr/scratch/
+dada_edit -c $2 $1*
 

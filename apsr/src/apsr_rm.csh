@@ -14,7 +14,8 @@ EOF
 
 endif
 
-echo Removing /lfs/data0/apsr/scratch/$1*
+echo "Removing /lfs/data0/apsr/scratch/$1"'*'
 
-rm -f /lfs/data0/apsr/scratch/$1*
+cd /lfs/data0/apsr/scratch
+rm -f $1*
 
