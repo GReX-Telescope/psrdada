@@ -75,7 +75,7 @@ int bat_to_ut_str( char *str, int len, long long bat )
   else {
     
     if( ( pch = getenv( "DUTC" ) ) == NULL ) 
-      lldutc = 33;
+      lldutc = 34;
     else if( sscanf( pch, "%lld", &lldutc ) != 1 )
       return -3;
 
