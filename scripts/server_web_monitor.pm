@@ -298,6 +298,8 @@ sub currentInfoThread($) {
         $source =~ s/^[JB]//;
         #$source =~ s/[a-zA-Z]*$//;
 
+        Dada->logMsg(2, $dl, "currentInfoThread: [".$results_dir."/".$obs."/".$source."_t.ar]");
+
         if (-f $results_dir."/".$obs."/".$source."_t.ar") {
           $cmd = "vap -c length -n ".$results_dir."/".$obs."/".$source."_t.ar | awk '{print \$2}'";
           Dada->logMsg(2, $dl, "currentInfoThread: ".$cmd);
@@ -309,6 +311,7 @@ sub currentInfoThread($) {
           }
         }
 
+        Dada->logMsg(2, $dl, "currentInfoThread: [".$results_dir."/".$obs."/".$source."_f.ar]");
         if (-f $results_dir."/".$obs."/".$source."_f.ar") {
           $cmd = "psrstat -j 'zap median' -j FTp -qc snr ".$results_dir."/".$obs."/".$source."_f.ar 2>&1 | grep snr= | awk -F= '{print \$2}'";
           Dada->logMsg(2, $dl, "currentInfoThread: ".$cmd);
