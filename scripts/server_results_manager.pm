@@ -139,7 +139,13 @@ sub main() {
   
         # newest archive was more than 5 minutes old, finish the obs.
         if ($t > 300) {
-          markObsState($o, "processing", "finished");
+
+          ($result, $response) = checkBandFinished($o, $n_bands);
+          if ($result eq "ok") {
+            markObsState($o, "processing", "finished");
+          } else {
+            sleep(2);
+          }
 
         # we are still receiving results from this observation
         } elsif ($t >= 0) {
@@ -218,14 +224,53 @@ sub getObsAge($$) {
 
     # No files were found, use the age of the obs.start files instead
     } else {
-      $cmd = "find ".$o." -type f -name 'obs.start' -printf '\%T@\\n' | sort -n | tail -n 1";
+
+      # check the PROC_FILE 
+      $cmd = "grep ^PROC_FILE `find ".$o." -type f -name 'obs.start' | sort -n | tail -n 1` | awk '{print \$2}'";
       Dada->logMsg(2, $dl, "getObsAge: ".$cmd);
       ($result, $response) = Dada->mySystem($cmd);
       Dada->logMsg(2, $dl, "getObsAge: ".$result." ".$response);
+
+      # If this is a single pulse observation
+      if (($result eq "ok") && ($response =~ m/singleF/)) {
+
+        # only declare this as finished when the band.finished files are written
+        $cmd = "find ".$o." -type f -name 'band.finished' | wc -l";
+        Dada->logMsg(2, $dl, "getObsAge: [pulse] ".$cmd);
+        ($result, $response) = Dada->mySystem($cmd);
+        Dada->logMsg(2, $dl, "getObsAge: [pulse] ".$result." ".$response);
+
+        # if all the band.finished files have been touched
+        if (($result eq "ok") && ($num_bands == $response)) {
+
+          $cmd = "find ".$o." -type f -name 'band.finished' -printf '\%T@\\n' | sort -n | tail -n 1";
+          Dada->logMsg(2, $dl, "getObsAge: [pulse] ".$cmd);
+          ($result, $response) = Dada->mySystem($cmd);
+          Dada->logMsg(2, $dl, "getObsAge: [pulse] ".$result." ".$response);
+      
+          $time = $response;
+          $age = $now - $time;
+
+        # else, hardcode the time to -1, whilst we wait for the band.finished to be written
+        } else {
+
+          Dada->logMsg(2, $dl, "getObsAge: [pulse] waiting for band.finished");
+          $age = -1;
+        }
+
+      # this is a normal observation
+      } else {
+
+        $cmd = "find ".$o." -type f -name 'obs.start' -printf '\%T@\\n' | sort -n | tail -n 1";
+        Dada->logMsg(2, $dl, "getObsAge: ".$cmd);
+        ($result, $response) = Dada->mySystem($cmd);
+        Dada->logMsg(2, $dl, "getObsAge: ".$result." ".$response);
   
-      # we will be returning a negative value
-      $time = $response;
-      $age = $time - $now;
+        # we will be returning a negative value
+        $time = $response;
+        $age = $time - $now;
+
+      }
     }
   }
 
@@ -449,6 +494,8 @@ sub processArchive($$) {
     $source = $response;
     chomp $source;
   }
+
+  $source =~ s/^[JB]//;
 
   # The combined results for this observation (dir == utc_start) 
   my $total_f_res = $dir."/".$source."_f.ar";
@@ -976,6 +1023,44 @@ sub makePlotsFromArchives($$$$$) {
 }
 
 
+#
+# Checks that all the band.finished files exist. This ensures there
+# are not unprocessed rawdata files that may have been dumped to disk
+#
+sub checkBandFinished($$) {
+
+  my ($obs, $n_bands) = @_;
+
+  Dada->logMsg(2, $dl ,"checkBandFinished(".$obs.", ".$n_bands.")");
+
+  my $cmd = "";
+  my $result = "";
+  my $response = "";
+  my $dir = $cfg{"SERVER_RESULTS_NFS_MNT"};
+
+  # only declare this as finished when the band.finished files are written
+  $cmd = "find ".$dir."/".$obs." -type f -name 'band.finished' | wc -l";
+  Dada->logMsg(2, $dl, "checkBandFinished: ".$cmd);
+  ($result, $response) = Dada->mySystem($cmd);
+  Dada->logMsg(2, $dl, "checkBandFinished: ".$result." ".$response);
+
+  if ($result ne "ok") {
+    Dada->logMsgWarn($warn, "checkBandFinished: ".$cmd." failed: ".$response);
+  } else {
+    if ($response eq $n_bands) {
+      $result = "ok";
+      $response = "";
+    } else {
+      $result = "fail";
+      $response = "";
+    }
+  }
+
+  return ($result, $response); 
+
+}
+
+
 
 sub controlThread($$) {
 
@@ -999,6 +1084,8 @@ sub controlThread($$) {
   } else {
     Dada->logMsgWarn($warn, "controlThread: PID file did not exist on script exit");
   }
+
+  Dada->logMsg(1, $dl ,"controlThread: exiting");
 
   return 0;
 }
