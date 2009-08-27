@@ -68,7 +68,7 @@ $client_logger = 0;
 # initialize other variables
 #
 $quit_daemon = 0;
-$currently_processing = 0;
+$currently_processing = "none";
 $log_host = 0;
 $log_port = 0;
 $log_sock = 0;
@@ -129,7 +129,7 @@ sub main() {
   # Start the daemon control thread
   $control_thread = threads->new(\&controlThread, $quit_file, $pid_file);
 
-  # This thread will monitor for our daemon quit file
+  # This thread responds to requests for background processing
   $bg_processing_thread = threads->new(\&bgProcessingThread);
 
   # Main Loop
@@ -179,6 +179,7 @@ sub processingThread($$) {
 
   my $bindir = Dada->getCurrentBinaryVersion();
 
+  my $remote_dirs_thread = 0;
   my $utc_start = "";
   my $obs_offset = "";
   my $proc_cmd = "";
@@ -231,9 +232,11 @@ sub processingThread($$) {
 
     my $obs_start_file = createLocalDirectories($utc_start, $centre_freq, $proj_id, $raw_header);
 
-    createRemoteDirectories($utc_start, $centre_freq, $proj_id);
+    $remote_dirs_thread = threads->new(\&remoteDirsThread, $utc_start, $centre_freq, $proj_id, $obs_start_file);
 
-    copyObsStart($utc_start, $centre_freq, $obs_start_file);
+    # createRemoteDirectories($utc_start, $centre_freq, $proj_id);
+
+    # copyObsStart($utc_start, $centre_freq, $obs_start_file);
 
     # Determine if this observation is a calibrator
     if ($h{"MODE"} =~ m/CAL/) {
@@ -241,7 +244,7 @@ sub processingThread($$) {
     }
 
     # So that the background manager knows we are processing
-    $currently_processing = 1;
+    $currently_processing = $utc_start;
 
     $proc_cmd = "dada_dbNdb -k eada -k fada";
 
@@ -261,10 +264,18 @@ sub processingThread($$) {
       logMsg(0, "ERROR", "dada_dbNdb failed: ".$?." ".$return_value);
     }
 
+    # touch band.finished in the results directory
+    touchBandFinished($utc_start, $centre_freq); 
+
     # So that the background manager knows we have stopped processing
-    $currently_processing = 0;
+    $currently_processing = "none";
 
     logMsg(1, "INFO", "END ".$proc_cmd);;
+
+    logMsg(2, "INFO", "joining remoteDirsThread");
+    # join the remote directories threads
+    $remote_dirs_thread->join();
+    logMsg(2, "INFO", "remoteDirsThread joined");
 
     # a rather inelegant way to kill digimon
     $cmd = "killall digimon";
@@ -307,9 +318,9 @@ sub controlThread($$) {
   $cmd = "ps aux | grep -v grep | grep ".$user." | grep '".$dada_header_cmd."' | awk '{print \$2}'";
   logMsg(2, "INFO", " controlThread: ".$cmd);
   ($result, $response) = Dada->mySystem($cmd);
+  $response =~ s/\n/ /;
   logMsg(2, "INFO", "controlThread: ".$result." ".$response);
   if ($result eq "ok") {
-    $response =~ s/\n/ /;
     $cmd = "kill -KILL ".$response;
     logMsg(1, "INFO", "controlThread: Killing dada_header: ".$cmd);
     ($result, $response) = Dada->mySystem($cmd);
@@ -488,6 +499,21 @@ sub calibratorThread($$$) {
 
 
 #
+# Thread to create the remote directories and copy the obs_start file
+# 
+sub remoteDirsThread($$$$) {
+
+  my ($utc_start, $centre_freq, $proj_id, $obs_start_file) = @_;
+
+  createRemoteDirectories($utc_start, $centre_freq, $proj_id);
+
+  copyObsStart($utc_start, $centre_freq, $obs_start_file);
+
+}
+
+
+
+#
 # Create the remote directories required for this observation
 #
 sub createRemoteDirectories($$$) {
@@ -512,7 +538,7 @@ sub createRemoteDirectories($$$) {
   # Create the nfs soft link to the local archives directory 
   $cmd = "ln -s /nfs/".$localhost."/".$user."/archives/".$utc_start."/".$centre_freq.
           " ".$remote_archive_dir."/".$utc_start."/".$centre_freq;
-  logMsg(2, "INFO", $cmd);
+  logMsg(1, "INFO", $cmd);
   system($cmd);
 
   $cmd = "mkdir -p ".$remote_results_dir."/".$utc_start."/".$centre_freq;
@@ -704,6 +730,42 @@ sub digimonThread($$) {
   return $returnVal;
 }
 
+
+#
+# If there are no rawdata files, touch band.finished
+#
+sub touchBandFinished($$) {
+
+  my ($utc_start, $centre_freq) = @_;
+  logMsg(2, "INFO", "touchBandFinished(".$utc_start.", ".$centre_freq.")");
+
+  my $dir = "";
+  my $cmd = "";
+  my $result = "";
+  my $response = "";
+
+  $cmd = "find ".$cfg{"CLIENT_RECORDING_DIR"}." -maxdepth 1 -name '".$utc_start."*.dada' | wc -l";
+  logMsg(2, "INFO", "touchBandFinished: ".$cmd);
+  ($result, $response) = Dada->mySystem($cmd);
+  logMsg(2, "INFO", "touchBandFinished: ".$result." ".$response);
+
+  if (($result eq "ok") && ($response == "0")) {
+
+    # Ensure the results directory is mounted
+    $cmd = "ls ".$cfg{"SERVER_RESULTS_NFS_MNT"}." >& /dev/null";
+    ($result, $response) = Dada->mySystem($cmd);
+  
+    # Create the full nfs destinations
+    $dir = $cfg{"SERVER_RESULTS_NFS_MNT"}."/".$utc_start."/".$centre_freq;
+  
+    $cmd = "touch ".$dir."/band.finished";
+    logMsg(2, "INFO", "touchBandFinished: ".$cmd);
+    ($result, $response) = Dada->mySystem($cmd ,0);
+    logMsg(2, "INFO", "touchBandFinished: ".$result." ".$response);
+
+  }
+  
+}
 
 
 #
