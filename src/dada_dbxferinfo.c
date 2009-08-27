@@ -30,6 +30,7 @@ void usage()
      " -d         run as daemon\n", DADA_DEFAULT_BLOCK_KEY);
 }
 
+const char * state_to_str(int state);
 
 int main (int argc, char **argv)
 {
@@ -117,34 +118,51 @@ int main (int argc, char **argv)
   bufsz = ipcbuf_get_bufsz (db);
   uint64_t ndbufs = ipcbuf_get_nbufs (db);
   total_bytes = ndbufs * bufsz;
-  if (verbose) {
-    fprintf(stderr,"DATA BLOCK:\n");
-    fprintf(stderr,"Number of buffers: %"PRIu64"\n",ndbufs);
-    fprintf(stderr,"Buffer size: %"PRIu64"\n",bufsz);
-    fprintf(stderr,"Total buffer memory: %5.0f MB\n", ((double) total_bytes) / 
-                                                       (1024.0*1024.0));
-  }
 
+  fprintf(stderr,"DATA BLOCK:\n");
+  fprintf(stderr,"Number of buffers: %"PRIu64"\n",ndbufs);
+  fprintf(stderr,"Buffer size: %"PRIu64"\n",bufsz);
+  fprintf(stderr,"Total buffer memory: %5.0f MB\n", ((double) total_bytes) / 
+                                                       (1024.0*1024.0));
+
+  fprintf(stderr, "\n");
+  fprintf(stderr, "sync->r_buf:   %"PRIu64"\n", db->sync->r_buf);
+  fprintf(stderr, "sync->w_buf:   %"PRIu64"\n", db->sync->w_buf);
+  fprintf(stderr, "sync->w_state: %s\n", state_to_str(db->sync->w_state));
+  fprintf(stderr, "sync->r_state: %s\n", state_to_str(db->sync->r_state));
+  fprintf(stderr, "IPCBUF_SODACK: %"PRIu64"\n", ipcbuf_get_sodack(db));
+  fprintf(stderr, "IPCBUF_EODACK: %"PRIu64"\n", ipcbuf_get_eodack(db));
+  
   int i=0;
-  if (verbose) 
-    fprintf(stderr,"Data Block Xfers:\n");
+
+  fprintf(stderr, "\n");
+  fprintf(stderr, "           START              END            EOD\n");
+  fprintf(stderr, "ID [    buf,   byte]    [    buf,   byte]   FLAG\n");
+  fprintf(stderr, "=================================================\n");
   for (i=0;i<IPCBUF_XFERS;i++) {
-    if (verbose) {
-      fprintf(stderr,"[%"PRIu64",%"PRIu64"]=>[%"PRIu64",%"PRIu64"] %d\n", 
-                      db->sync->s_buf[i],db->sync->s_byte[i],
-                      db->sync->e_buf[i],db->sync->e_byte[i],db->sync->eod[i]);
-    } else {
-      fprintf(stderr,"%"PRIu64",%"PRIu64",%"PRIu64",%"PRIu64",%d\n",
-                       db->sync->s_buf[i],db->sync->s_byte[i],
-                       db->sync->e_buf[i],db->sync->e_byte[i],db->sync->eod[i]);
-    }
+    fprintf(stderr,"%2d [%7"PRIu64",%7"PRIu64"] => [%7"PRIu64",%7"PRIu64"]   %4d", 
+                    i, db->sync->s_buf[i],db->sync->s_byte[i],
+                    db->sync->e_buf[i],db->sync->e_byte[i],
+                    db->sync->eod[i]);
+
+    if (i == db->sync->w_xfer) 
+      fprintf(stderr, " W");
+    else
+      fprintf(stderr, "  ");
+    if (i == db->sync->r_xfer) 
+      fprintf(stderr, " R");
+    else 
+      fprintf(stderr, "  ");
+
+    fprintf(stderr,"\n");
+
   }
 
   if (verbose) {
     /* Note there is only 1 XFER in the header block, and it doesn't even have
      * a proper xfer concept in it */
           
-    fprintf(stderr,"Header Block Xfers:\n");
+    fprintf(stderr,"\nHeader Block Xfers:\n");
     fprintf(stderr,"[%"PRIu64",%"PRIu64"]=>[%"PRIu64",%"PRIu64"] %d\n",
                    hb->sync->s_buf[0],hb->sync->s_byte[0],
                    hb->sync->e_buf[0],hb->sync->e_byte[0],hb->sync->eod[0]);
@@ -156,3 +174,48 @@ int main (int argc, char **argv)
 
   return EXIT_SUCCESS;
 }
+
+
+const char * state_to_str(int state) 
+{
+
+  switch (state) 
+  {
+    case 0:
+      return "disconnected";
+
+    case 1:
+      return "connected";
+
+    case 2:
+      return "one process that writes to the buffer";
+
+    case 3:
+      return "start-of-data flag has been raised";
+
+    case 4:
+      return "next operation will change writing state";
+
+    case 5:
+      return "one process that reads from the buffer";
+
+    case 6:
+      return "start-of-data flag has been raised";
+
+    case 7:
+      return "end-of-data flag has been raised";
+
+    case 8:
+      return "currently viewing";
+
+    case 9:
+      return "end-of-data while viewer";
+
+    default:
+      return "unknown";
+
+  }
+
+}
+
+
