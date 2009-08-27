@@ -235,7 +235,14 @@ sub processingThread($$$) {
   if  ($result ne "ok") {
     logMsg(0, "ERROR", $response);
     logMsg(0, "ERROR", "DADA header malformed, ignoring file");
-    ($result, $response) = moveToUnprocessed($file, $fail_dir);
+    ($result, $response) = moveUnprocessableFile($file, $fail_dir);
+
+  # Check for dada_dbdisk 
+  } elsif ($response =~ m/dada_dbdisk/) {
+
+    logMsg(0, "WARN", $response);
+    logMsg(0, "WARN", "PROC_CMD contained dada_dbdisk");
+    ($result, $response) = moveUnprocessableFile($file, $fail_dir);
 
   } else {
 
@@ -288,7 +295,7 @@ sub processingThread($$$) {
      system("chgrp -R ".$proj_id." ".$proc_dir);
     }
 
-    logMsg(1, "INFO", "Processing ".basename($file)." on ".$ncores." cores");
+    logMsg(1, "INFO", "Processing ".$file." on ".$ncores." cores");
 
     $result = processOneFile($proc_dir, $proc_cmd);
 
@@ -303,7 +310,7 @@ sub processingThread($$$) {
       unlink($file);
     } else {
       logMsg(0, "WARN", "Processing failed: ".$file);
-      ($result, $response) = moveToUnprocessed($file, $fail_dir);
+      ($result, $response) = moveUnprocessableFile($file, $fail_dir);
     }
   }
 }
@@ -417,6 +424,73 @@ sub controlThread($$) {
 
 }
 
+
+#
+# If there are no rawdata for this obs, touch band.finished
+#
+sub touchBandFinished($$) {
+
+  my ($utc_start, $centre_freq) = @_;
+  logMsg(2, "INFO", "touchBandFinished(".$utc_start.", ".$centre_freq.")");
+
+  my $dir = "";
+  my $cmd = "";
+  my $result = "";
+  my $response = "";
+  my $handle = 0;
+  my $taking_data = "";
+
+  my $localhost = Dada->getHostMachineName();
+
+  $cmd = "find ".$cfg{"CLIENT_RECORDING_DIR"}." -maxdepth 1 -name '".$utc_start."*.dada' | wc -l";
+  logMsg(2, "INFO", "touchBandFinished: ".$cmd);
+  ($result, $response) = Dada->mySystem($cmd);
+  logMsg(2, "INFO", "touchBandFinished: ".$result." ".$response);
+
+  if (($result eq "ok") && ($response == "0")) {
+
+    # Assume we are taking data
+    $taking_data = "some";
+
+    # If there are no files to process, ensure that the observation has finished
+    $handle = Dada->connectToMachine($localhost, $cfg{"CLIENT_BG_PROC_PORT"});
+
+    if ($handle) {
+
+      logMsg(2, "INFO", "touchBandFinished: obs mngr connection established");
+
+      print $handle "is data currently being received?\r\n";
+      $taking_data = Dada->getLine($handle);
+      logMsg(2, "INFO", "touchBandFinished: obs mngr replied ".$taking_data);
+      $handle->close();
+      $handle = 0;
+
+    } else {
+      # we assume that we are not taking data
+      logMsg(0, "WARN", "Could not connect to obs mngr ".$localhost.":".
+                         $cfg{"CLIENT_BG_PROC_PORT"});
+      $taking_data = "none";
+    }
+
+    # If the current obs is different
+    if ($taking_data ne $utc_start) {
+
+      # Ensure the results directory is mounted
+      $cmd = "ls ".$cfg{"SERVER_RESULTS_NFS_MNT"}." >& /dev/null";
+      ($result, $response) = Dada->mySystem($cmd);
+
+      # Create the full nfs destinations
+      $dir = $cfg{"SERVER_RESULTS_NFS_MNT"}."/".$utc_start."/".$centre_freq;
+
+      logMsg(1, "INFO", $dir."/band.finished");
+
+      $cmd = "touch ".$dir."/band.finished";
+      logMsg(2, "INFO", "touchBandFinished: ".$cmd);
+      ($result, $response) = Dada->mySystem($cmd ,0);
+      logMsg(2, "INFO", "touchBandFinished: ".$result." ".$response);
+    }
+  }
+}
 
 
 #
