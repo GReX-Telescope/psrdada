@@ -4,6 +4,8 @@ use lib $ENV{"DADA_ROOT"}."/bin";
 
 use strict;
 use warnings;
+use threads;
+use threads::shared;
 use IO::Socket;
 use IO::Select;
 use Net::hostent;
@@ -91,6 +93,11 @@ sub main() {
   my $host = "";
   my $dir = "";
 
+  # Every 60 seconds, check for the existence of the script on the remote machine
+  my $counter_freq = 60;
+  my $counter = 0;
+  my $premature_exit = 0;
+
   # sanity check on whether the module is good to go
   ($result, $response) = good($quit_file);
   if ($result ne "ok") {
@@ -143,14 +150,11 @@ sub main() {
 
   if ($result ne "ok") {
     Dada->logMsgWarn($warn, $user."@".$host.":".$dest_script." returned ".$response);
+    $premature_exit = 1;
   }
 
   Dada->logMsg(2, $dl, "main: entering poll loop for quit file/SIGINT");
 
-  # Every 60 seconds, check for the existence of the script on the remote machine
-  my $counter_freq = 60;
-  my $counter = 0;
-  my $premature_exit = 0;
 
   # Poll for the existence of the control file
   while ((!$quit_daemon) && (!$premature_exit)) {
@@ -164,10 +168,25 @@ sub main() {
       Dada->logMsg(2, $dl, "main: checkRemoteScript(".$user.", ".$host.")");
       ($result, $response) = checkRemoteScript($user, $host);
       Dada->logMsg(2, $dl, "main: checkRemoteScript() ".$result." ".$response);
-  
-      if (!(($result eq "ok") && ($response eq "process existed"))) {
+
+      # Occaisionally we loose the ssh connection to swin, this is not
+      # a premature exit
+      if ($result ne "ok") {
+        Dada->logMsgWarn($warn, "Could not ssh to ".$user."@".$host.", sleeping 60 seconds");
+        my $sleep_count = 60;
+        while ((!$quit_daemon) && ($sleep_count > 0)) {
+          sleep(1);
+          $sleep_count--;
+        } 
+
+      } elsif ($response eq "no process existed") {
+
         Dada->logMsgWarn($error, "remote script exited unexpectedly");
         $premature_exit = 1;
+
+      } else {
+        # everything ok
+
       }
 
     } else {
@@ -231,6 +250,8 @@ sub main() {
 
   # Rejoin our daemon control thread
   $control_thread->join();
+
+  $pid_report_thread->join();
 
   Dada->logMsg(0, $dl ,"STOPPING SCRIPT");
 
@@ -298,7 +319,7 @@ sub pidReportThread($) {
 
   (my $daemon_pid) = @_;
 
-  Dada->logMsg(1, $dl, "pidReportThread: thread starting");
+  Dada->logMsg(1, $dl, "pidReportThread: starting");
 
   my $sock = 0;
   my $host = $cfg{"SERVER_HOST"};
@@ -365,7 +386,7 @@ sub pidReportThread($) {
     }
   }
 
-  Dada->logMsg(1, $dl, "pidReportThread: thread exiting");
+  Dada->logMsg(1, $dl, "pidReportThread: exiting");
 
   return 0;
 }
@@ -393,6 +414,8 @@ sub controlThread($$) {
   } else {
     Dada->logMsgWarn($warn, "controlThread: PID file did not exist on script exit");
   }
+
+  Dada->logMsg(1, $dl, "controlThread: exiting");
 
   return 0;
 }
