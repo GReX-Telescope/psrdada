@@ -269,8 +269,14 @@ sub get_gain($$$) {
 
   (my $sock, my $chan, my $pol) = @_;
 
-  my $cmd = "GAIN ".$chan." ".$pol;
+  my $result = "";
+  my $dfb_chan = "";
+  my $dfb_pol = "";
+  my $dfb_gain = "";
+  my $cmd = "";
 
+
+  $cmd = "GAIN ".$chan." ".$pol;
   logMsg(2, "INFO", "srv0 <- ".$cmd);
 
   print $sock $cmd."\r\n";
@@ -281,13 +287,11 @@ sub get_gain($$$) {
 
   logMsg(2, "INFO", "srv0 -> ".$dfb_response);
 
-  my ($result, $dfb_chan, $dfb_pol, $dfb_gain) = split(/ /,$dfb_response);
+  ($result, $dfb_chan, $dfb_pol, $dfb_gain) = split(/ /,$dfb_response);
 
   if ($result ne "OK") {
-
     logMsg(0, "WARN", "DFB3 returned an error: \"".$dfb_response."\"");
     return ("fail", 0);
-
   }
 
   if ($dfb_chan ne $chan) {
