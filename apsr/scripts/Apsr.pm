@@ -46,7 +46,7 @@ sub makePlotsFromArchives($$$$$$) {
 
   my %local_cfg = Apsr->getApsrConfig();
   my $web_style_txt = $local_cfg{"SCRIPTS_DIR"}."/web_style.txt";
-  my $psrplot_args = "-g ".$res." -jp";
+  my $psrplot_args = "-g ".$res." -jpC";
   my $cmd = "";
 
   # If we are plotting hi-res - include
