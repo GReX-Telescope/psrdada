@@ -17,7 +17,7 @@
 
 /* #define _DEBUG 1 */
 
-#define DEFAULT_DATA_RATE 64
+#define DEFAULT_DATA_RATE 64.000
 #define DEFAULT_WRITE_TIME 10 
 
 static void fsleep (double seconds)
@@ -35,7 +35,7 @@ void usage()
   fprintf (stdout,
 	   "dada_junkdb [options] header_file\n"
      " -k       hexadecimal shared memory key  [default: %x]\n"
-     " -z rate  data rate to write [default %d MB/s]\n"
+     " -z rate  data rate to write [default %f MB/s]\n"
      " -t secs  length of time to write [default %d s]\n"
      " -d       run as daemon\n", DADA_DEFAULT_BLOCK_KEY, DEFAULT_DATA_RATE,
      DEFAULT_WRITE_TIME);
@@ -47,7 +47,7 @@ typedef struct {
   char * header_file;
 
   /* data rate to write at */
-  uint64_t rate;
+  double rate;
 
   /* length of time to write for */
   uint64_t write_time;
@@ -102,7 +102,7 @@ int64_t transfer_data (dada_client_t* client, void* data, uint64_t data_size)
     junkdb->prev_time = junkdb->curr_time;
     junkdb->curr_time = time(0);
     if (junkdb->curr_time > junkdb->prev_time) {
-      junkdb->bytes_to_copy += (junkdb->rate * 1024 * 1024);
+      junkdb->bytes_to_copy += floor(junkdb->rate * 1024 * 1024);
     }
 
     if (junkdb->bytes_to_copy) {
@@ -199,7 +199,7 @@ int generate_data(dada_client_t* client)
 
   client->header_size = hdr_size;
   client->optimal_bytes = 32 * 1024 * 1024;
-  client->transfer_bytes = junkdb->rate * junkdb->write_time * 1024 * 1024;
+  client->transfer_bytes = floor(junkdb->rate * junkdb->write_time * 1024 * 1024);
   junkdb->bytes_to_copy = 0;
 
   /* seed the RNG */
@@ -242,7 +242,7 @@ int main (int argc, char **argv)
   char quit = 0;
 
   /* data rate [MB/s] */
-  unsigned rate = DEFAULT_DATA_RATE;
+  double rate = DEFAULT_DATA_RATE;
 
   /* write time [s] */
   unsigned write_time = DEFAULT_WRITE_TIME;
@@ -275,12 +275,12 @@ int main (int argc, char **argv)
       break;
       
     case 'z':
-      if (sscanf (optarg, "%u", &rate) != 1) {
+      if (sscanf (optarg, "%f", &rate) != 1) {
         fprintf (stderr,"Error: could not parse data rate from %s\n",optarg);
         usage();
         return -1;
       } else {
-        fprintf (stderr, "rate = %u\n", rate); 
+        fprintf (stderr, "rate = %f\n", rate); 
       }
       break;
 
@@ -326,9 +326,9 @@ int main (int argc, char **argv)
   client = dada_client_create ();
 
   client->log = log;
-  junkdb.rate = (uint64_t) rate;
+  junkdb.rate = rate;
   junkdb.write_time = write_time;
-  junkdb.data_size = rate * 1024 * 1024;
+  junkdb.data_size = floor(rate * 1024 * 1024);
   junkdb.header_file = strdup(header_file);
 
   client->data_block = hdu->data_block;
@@ -345,6 +345,9 @@ int main (int argc, char **argv)
     multilog (log, LOG_ERR, "Error during transfer\n");
     return -1;
   }
+
+  if (dada_hdu_unlock_write (hdu) < 0)
+    return EXIT_FAILURE;
 
   if (dada_hdu_disconnect (hdu) < 0)
     return EXIT_FAILURE;
