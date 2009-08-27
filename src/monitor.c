@@ -53,7 +53,7 @@ void* monitor_thread (void* context)
   /* Turn of timestamping as they will already be stamped by the pwc */
   monitor->log->timestamp = 0;
 
-  multilog_serve (monitor->log, DADA_DEFAULT_PWC_MONITOR_LOG); 
+  multilog_serve (monitor->log, monitor->nexus->multilog_port); 
 
 #ifdef _DEBUG
   fprintf (stderr, "monitor_thread start nexus=%p\n", monitor->nexus);
