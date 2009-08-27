@@ -49,6 +49,9 @@ extern "C" {
   /*! Open a file on the disk array, return the open file descriptor */
   int disk_array_open (disk_array_t*, char* name, uint64_t size, uint64_t* bs, int add_flags);
 
+  /*! Close a file, reopen it and seek to the end of the file */
+  int disk_array_reopen (disk_array_t* array, int curr_fd, char* filename);
+
   /*! Get the total amount of disk space */
   uint64_t disk_array_get_total (disk_array_t*);
 

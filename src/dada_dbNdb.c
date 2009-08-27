@@ -60,12 +60,15 @@ typedef struct {
   /* Length of a "packet" */
   int resolution;
 
+  /* All transfers must be a multiple of this many bytes */
+  int byte_multiple;
+
   /* Obs offset from header */
-  uint64_t obs_offset;
+  int64_t obs_offset;
   
 } dada_dbNdb_t;
 
-#define DADA_DBNDB_INIT { 0, 0, 0, "", 0, 0, 0, 0}
+#define DADA_DBNDB_INIT { 0, 0, 0, "", 0, 0, 0, 0, 0}
 
 int dbNdb_add_hdu (dada_dbNdb_t* queue, key_t key, multilog_t* log)
 {
@@ -182,8 +185,14 @@ int hdu_open_function (dada_client_t* client)
   /* Get the RESOLUTION */
   if (ascii_header_get (client->header, "RESOLUTION", "%d", &(queue->resolution)) != 1) {
     multilog (log, LOG_WARNING, "Header with no RESOLUTION\n");
-    queue->resolution = 2048;  // Set to random value to ensure no NaN's later on
+    queue->resolution = 0;  // Set to random value to ensure no NaN's later on
+    queue->byte_multiple = 1;
+  } else {
+    queue->byte_multiple = queue->resolution;
   }
+
+  /* ensure that the switching byte wont break O_DIRECT */
+  queue->byte_multiple *= 512;
 
 
 #ifdef _DEBUG
@@ -213,13 +222,15 @@ int hdu_open_function (dada_client_t* client)
   if (queue->verbose) 
     multilog (log, LOG_INFO, "HDU (key=%x) opened for writing\n", hdu->key);
 
-  //client->optimal_bytes = 1024 * queue->resolution; 
-  
   client->transfer_bytes = 0;
 
-  queue->current_bytes = 0;
+  /* Only set the obs_offset upon the first call to this function */
+  if (queue->obs_offset == -1) 
+    queue->obs_offset = obs_offset;
 
-  queue->obs_offset = obs_offset;
+  if (queue->verbose)
+    multilog (log, LOG_INFO, "current_bytes=%"PRIu64", obs_offset=%"PRIu64"\n",
+                    queue->current_bytes,  queue->obs_offset);
   
   /* Get the observation ID */
   int bytes_per_second = 0;
@@ -260,8 +271,6 @@ int hdu_close_function (dada_client_t* client, uint64_t bytes_written)
   log = client->log;
   assert (log != 0);
 
-  /* When closing the current hdu, update the OBS_OFFSET */
-
   if (dada_hdu_unlock_write (hdu->hdu) < 0)
   {
     multilog (log, LOG_ERR, "cannot unlock DADA HDU (key=%x)\n", hdu->key);
@@ -301,7 +310,6 @@ int64_t hdu_write_function (dada_client_t* client,
 
     /* If the next write would cross a chunk boundary, test if we should
      * change hdus */
-
     uint64_t current_chunk = queue->current_bytes / queue->chunk_size;
     uint64_t next_chunk_byte = (current_chunk + 1) *  queue->chunk_size;
 
@@ -321,20 +329,26 @@ int64_t hdu_write_function (dada_client_t* client,
           /* and its a different hdu to the current hdu, set stopping byte */
           if (ihdu != queue->ihdu) {
 
-            if (ihdu == 0) 
-              multilog(client->log, LOG_WARNING, "Primary datablock fulling, switching...\n");
-
-            if (queue->verbose) 
-              multilog(client->log, LOG_INFO, "Anticipate switch from %x to %x\n", hdu->key, newhdu->key);
+            //if (ihdu == 0) 
+              multilog(client->log, LOG_WARNING, "DB full, switching %x -> %x\n", hdu->key, newhdu->key);
 
             /* Take into account chunk size and resolution */
+            uint64_t gap = (queue->obs_offset + next_chunk_byte) % queue->byte_multiple;
 
-            uint64_t resolution_gap = (queue->obs_offset + next_chunk_byte) % queue->resolution;
-            client->transfer_bytes = next_chunk_byte + (queue->resolution - resolution_gap);
-            multilog(client->log, LOG_INFO, "CHUNK = %"PRIu64", RESOLUTION = %"PRIu64", CHANGE = %"PRIu64"\n",next_chunk_byte, queue->resolution, client->transfer_bytes);
+            if (queue->verbose) 
+              multilog(client->log, LOG_INFO, "hdu_write_function: gap is %"PRIu64" bytes\n", gap);
 
-            /* Resolution insensitive version */
-            //client->transfer_bytes = next_chunk_byte;
+            /* shrink the xfer so that it is on a byte_multiple */
+            client->transfer_bytes = next_chunk_byte - gap;
+
+            /* If the gap is > 0.5 byte_multiples, grow it */
+            if (gap > queue->byte_multiple / 2) 
+              client->transfer_bytes += queue->byte_multiple;
+
+            if (queue->verbose)
+              multilog(client->log, LOG_INFO, "CHUNK=%"PRIu64", "
+                       "BYTE_MULTIPLE=%"PRIu64", CHANGE = %"PRIu64"\n",
+                       next_chunk_byte, queue->byte_multiple, client->transfer_bytes);
 
           }
 
@@ -445,6 +459,9 @@ int main (int argc, char **argv)
   client->io_function    = hdu_write_function;
   client->close_function = hdu_close_function;
   client->direction      = dada_client_reader;
+
+  queue.current_bytes = 0;
+  queue.obs_offset = -1;
 
   client->context = &queue;
 

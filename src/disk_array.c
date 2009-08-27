@@ -226,7 +226,7 @@ int disk_array_open (disk_array_t* array, char* filename, uint64_t filesize,
     if (get_available (array->disks[idisk].path) > filesize)
     {
       if (!fullname)
-	fullname = malloc (FILENAME_MAX);
+        fullname = malloc (FILENAME_MAX);
 
       assert (fullname != 0);
 
@@ -248,3 +248,36 @@ int disk_array_open (disk_array_t* array, char* filename, uint64_t filesize,
   return fd;
 
 }
+
+/*! Reopen and existing file on the disk array, seek to the end, ready for operations */
+int disk_array_reopen (disk_array_t* array, int curr_fd, char* filename)
+{
+
+  if (close (curr_fd) < 0) 
+  {
+    fprintf (stderr, "disk_array_reopen: Error closing [%d] %s: %s\n", curr_fd, filename, strerror(errno));
+    return -1;
+  }
+
+  int fd = -1;
+  int flags = O_WRONLY;
+  int perms = S_IRUSR | S_IRGRP | S_IWUSR;
+
+  pthread_mutex_lock (&(array->mutex));
+
+  fd = open (filename, flags, perms);
+
+  if (fd < 0) 
+    fprintf(stderr, "disk_array_reopen: could not reopen %s: %s\n", filename, strerror(errno));
+
+  pthread_mutex_unlock (&(array->mutex));
+
+  lseek (fd, 0, SEEK_END);
+
+  return fd;
+
+}
+
+
+
+

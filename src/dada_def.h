@@ -32,7 +32,6 @@
 #define DADA_DEFAULT_PWC_LOG    56027
 
 /* default port to connect to dada_pwc_command combined logging interface */
-#define DADA_DEFAULT_PWC_MONITOR_LOG 56028
 #define DADA_DEFAULT_PWCC_LOGPORT 56028
 
 /* default port to connect to dbdisk logging interface */
