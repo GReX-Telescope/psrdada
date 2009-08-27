@@ -282,6 +282,7 @@ sub controlThread($$) {
   logMsg(2, "INFO", " controlThread: ".$cmd);
   ($result, $response) = Dada->mySystem($cmd);
   logMsg(2, "INFO", " controlThread: ".$result." ".$response);
+  $response =~ s/\n/ /;
   if (($result eq "ok") && ($response ne "")) {
     $response =~ s/\n/ /;
     $cmd = "kill -KILL ".$response;
@@ -294,9 +295,9 @@ sub controlThread($$) {
   $cmd = "ps aux | grep -v grep | grep ".$user." | grep dspsr | awk '{print \$2}'";
   logMsg(2, "INFO", "controlThread: ".$cmd);
   ($result, $response) = Dada->mySystem($cmd);
+  $response =~ s/\n/ /;
   logMsg(2, "INFO", "controlThread: ".$result." ".$response);
   if (($result eq "ok") && ($response ne "")) {
-    $response =~ s/\n/ /;
     $cmd = "killall -KILL ".$response;
     logMsg(1, "INFO", "Killing all dspsr ".$cmd);
     ($result, $response) = Dada->mySystem($cmd);
@@ -329,7 +330,7 @@ sub loadControlThread($) {
   my $handle = 0;
   my $hostinfo = 0;
   my $hostname = "";
-  my $taking_data = 0;
+  my $taking_data = "some";
   my $num_cores_available = 0;
   my $load = 0;
  
@@ -387,7 +388,7 @@ sub loadControlThread($) {
           $handle = Dada->connectToMachine($localhost, $cfg{"CLIENT_BG_PROC_PORT"});
 
           # Assume we are taking data
-          $taking_data = 1;
+          $taking_data = "some";
 
           if ($handle) {
 
@@ -403,11 +404,11 @@ sub loadControlThread($) {
             # we assume that we are not taking data
             logMsg(0, "WARN", "Could not connect to obs mngr ".$localhost.":".
                               $cfg{"CLIENT_BG_PROC_PORT"});
-            $taking_data = 0;
+            $taking_data = "none";
           }
 
           # if we are taking data, be sensitive to the machines current load
-          if ($taking_data) {
+          if ($taking_data ne "none") {
 
             logMsg(2, "INFO", "loadControlThread: receiving data");
 
