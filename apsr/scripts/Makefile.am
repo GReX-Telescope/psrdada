@@ -31,3 +31,6 @@ dist_bin_SCRIPTS = Apsr.pm \
                    dspsr_command_line.pl \
                    web_style.txt \
                    gain_hacker.pl
+
+include $(top_srcdir)/config/Makefile.targets
+
