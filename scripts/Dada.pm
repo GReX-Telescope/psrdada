@@ -60,6 +60,7 @@ require AutoLoader;
   &remoteSshCommand
   &headerToHash
   &daemonBaseName
+  &getProjectGroups
 );
 
 $VERSION = '0.01';
@@ -275,7 +276,6 @@ sub connectToMachine($$$;$) {
     }
     return 0;
   }
-
 
 }
 
@@ -1039,43 +1039,77 @@ sub killProcess($$) {
 
   (my $module, my $pname) = @_;
 
-  my $cmd = "ps axu | grep \"".$pname."\" | grep -v grep";
-  my $pids_to_kill = `$cmd`;
-  # If the process was running
+  my $pscmd = "";
+  my $cmd = "";
+  my $pids = "";
+  my $result = "";
+  my $response = "";
+  my $fnl = 2;
 
-  if ($? == 0) {
+  $pscmd = "ps axu | grep \"".$pname."\" | grep -v grep | awk '{print \$2}'";
 
-    $cmd = $cmd." | awk '{print \$2}'";
-    $pids_to_kill = `$cmd`;
-    my @arr = split(/\n/,$pids_to_kill);
-    my $i=0;
+  $cmd = $pscmd;
+  Dada->logMsg(2, $fnl, "killProcess: ".$cmd);
+  ($result, $response) = Dada->mySystem($cmd);
+  Dada->logMsg(2, $fnl, "killProcess: ".$result." ".$response);
 
-    for ($i=0;$i<=$#arr;$i++) {
-      my $pid = @arr[$i];
-      $cmd = "kill -TERM ".$pid;
-      system($cmd);
-    }
+  # We have a process running
+  if (($result eq "ok") && ($response ne ""))  {
 
-    if ($? == 0) {
-      return ("ok", "process killed");
-    } else {
+    $pids = $response;
+    $pids =~ s/\n/ /;
+    Dada->logMsg(2, $fnl, "killProcess: PIDS=".$pids);
 
-      # Now try with a KILL signal
-      for ($i=0;$i<=$#arr;$i++) {
-        my $pid = @arr[$i];
-        $cmd = "kill -KILL".$pid;
-        system($cmd);
-      }
-      if ($? == 0) {
-        return ("ok", "required -KILL signal");
-      } else {
+    $cmd = "kill -TERM ".$pids;
+    Dada->logMsg(2, $fnl, "killProcess: ".$cmd);
+    ($result, $response) = Dada->mySystem($cmd);
+    Dada->logMsg(2, $fnl, "killProcess: ".$result." ".$response);
+
+    # now check that the processes actually exited
+    sleep(1);
+
+    # Now get the PID list   
+    $cmd = $pscmd;
+
+    Dada->logMsg(2, $fnl, "killProcess: ".$cmd);
+    ($result, $response) = Dada->mySystem($cmd);
+    Dada->logMsg(2, $fnl, "killProcess: ".$result." ".$response);
+
+    # they didn't exit
+    if (($result eq "ok") && ($response ne ""))  {
+
+      $pids = $response;
+      $pids =~ s/\n/ /;
+      Dada->logMsg(2, $fnl, "killProcess: PIDS=".$pids);
+
+      $cmd = "kill -KILL ".$pids;
+      Dada->logMsg(2, $fnl, "killProcess: ".$cmd);
+      ($result, $response) = Dada->mySystem($cmd);
+      Dada->logMsg(2, $fnl, "killProcess: ".$result." ".$response);
+
+      sleep(1);
+
+      # Now get the PID list   
+      $cmd = $pscmd;
+
+      Dada->logMsg(2, $fnl, "killProcess: ".$cmd);
+      ($result, $response) = Dada->mySystem($cmd);
+      Dada->logMsg(2, $fnl, "killProcess: ".$result." ".$response);
+
+      if (($result eq "ok") && ($response ne ""))  {
         return ("fail", "process not killed");
+      } else {
+        return ("ok", "required -KILL signal");
       }
+
+    } else {
+      return ("ok", "process killed");
     }
 
   } else {
     return ("ok", "process did not exist");
   }
+
 }
 
 #
@@ -1220,8 +1254,9 @@ sub remoteSshCommand($$$$;$$) {
     $cmd = "ssh ".$opts." -l ".$user." ".$host." \"".$remote_cmd."\" 2>&1 | ".$pipe;
   }
 
-  # print $cmd."\n";
+  #print "remoteSshCommand: ".$cmd."\n";
   $response = `$cmd`;
+  #print "remoteSshCommand: ".$response."\n";
 
   # Perl return values are *256, so divide it. An ssh command 
   # fails with a return value of 255
@@ -1276,6 +1311,28 @@ sub daemonBaseName($$) {
   $name =~ s/^.*server_//;
 
   return ($name);
+}
+
+#
+# Return the P### groups the specified user belongs to
+#
+sub getProjectGroups($) {
+
+  (my $user) = @_;
+
+  my $cmd = "groups ".$user;
+  my $result = `$cmd`;
+  chomp $result;
+  my @parts = split(/ /, $result);   
+  my $i = 0;
+  my @results = ();
+
+  for ($i=0; $i<=$#parts; $i++) {
+    if ($parts[$i] =~ m/^P/) {
+      push(@results,$parts[$i]);
+    }
+  }
+  return @results;
 }
 
 __END__
