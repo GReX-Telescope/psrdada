@@ -39,9 +39,9 @@ our %cfg;
 #
 # initialize package globals
 #
-$log_name = 0;
+$log_name = "";
 $dl = 1; 
-$daemon_name = 0;
+$daemon_name = "";
 %cfg = ();
 
 #
@@ -110,7 +110,7 @@ sub logMsg($$$) {
   if ($level <= $dl) {
 
     if ($daemon_name ne "") {
-      print STDOUT "[".$time."] [".$daemon_name."] ".$msg."\n";
+      print STDOUT "[".$time."] [".$log_name."] ".$msg."\n";
     } else {
       print STDOUT "[".$time."] ".$msg."\n";
     }
