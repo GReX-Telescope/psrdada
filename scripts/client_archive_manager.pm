@@ -143,7 +143,10 @@ sub main() {
         # strip the leading ./ if it exists
         $line =~ s/^.\///;
 
-        logMsg(1, "INFO", "Processing archive ".$line);
+        if (!($line =~ /pulse_/)) {
+          logMsg(1, "INFO", "Processing archive ".$line);
+        }
+
         ($result, $response) = processArchive($line, $archive_dir);
       }
     }
