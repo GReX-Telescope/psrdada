@@ -124,10 +124,10 @@ int dada_pwc_nexus_parse (nexus_t* n, const char* config)
   /* If this is the mirror nexus, then setup the log file */
   if (ascii_header_get (config,"LOGFILE_DIR", "%s", &logfile_dir) < 0) {
 
-   multilog_fprintf (stderr, LOG_WARNING, "nexus_parse: LOGFILE_DIR not specified, not logging\n");
-                                                                                                                                                                              
+    multilog_fprintf (stderr, LOG_WARNING, "nexus_parse: LOGFILE_DIR not specified, not logging\n");
+
   } else {
-                                                                                                                                                                              
+
     // Get the PWC multilog port from the config file
     sprintf (node_name, "%s_LOGPORT", n->node_prefix);
     if (ascii_header_get (config, node_name, "%d", &(n->mirror->node_port)) < 0) {
@@ -140,11 +140,11 @@ int dada_pwc_nexus_parse (nexus_t* n, const char* config)
         return -1;
       }
     }
-                                                                                                                                                                              
+
     // Get the PWCC multilog port from the config file
     sprintf (node_name, "%sC_LOGPORT", n->node_prefix);
     if (ascii_header_get (config, node_name, "%d", &(n->mirror->multilog_port)) < 0) {
-     multilog_fprintf (stderr, LOG_WARNING, "nexus_parse: %s not specified.", node_name);
+      multilog_fprintf (stderr, LOG_WARNING, "nexus_parse: %s not specified.", node_name);
       n->mirror->multilog_port = DADA_DEFAULT_PWCC_LOGPORT;
       if (n->mirror->multilog_port)
        multilog_fprintf (stderr, LOG_WARNING, " using default=%d\n", n->mirror->multilog_port);
@@ -152,11 +152,11 @@ int dada_pwc_nexus_parse (nexus_t* n, const char* config)
        multilog_fprintf (stderr, LOG_ERR, " no default available\n");
         return -1;
       }
-    }
-                                                                                                                                                                              
+    } 
+
     n->mirror->logfile_dir = malloc(strlen(logfile_dir));
     sprintf(n->mirror->logfile_dir,"%s",logfile_dir);
-                                                                                                                                                                              
+
     struct stat st;
     stat(n->mirror->logfile_dir,&st);
                                                                                                                                                                               
@@ -355,7 +355,8 @@ void dada_pwc_nexus_init (dada_pwc_nexus_t* nexus)
   // nexus->pwc->convert_to_bytes = 0;
 
   /* convert time_t to local time strings */
-  nexus->convert_to_tm = localtime;
+  //nexus->convert_to_tm = localtime;
+  nexus->convert_to_tm = gmtime;
 
   nexus->header_template = 0;
 
