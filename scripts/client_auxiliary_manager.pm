@@ -163,11 +163,11 @@ sub processingThread($) {
     if ($result ne "ok") {
       logMsg(0, "ERROR", $response);
       logMsg(0, "ERROR", "DADA header malformed, jettesioning xfer");  
-      $proc_cmd = "dada_dbnull -s -k ".lc($cfg{"PROCESSING_DATA_BLOCK"});
+      $proc_cmd = $bindir."/dada_dbnull -s -k ".lc($cfg{"PROCESSING_DATA_BLOCK"});
 
     } elsif ($raw_header eq $prev_header) {
       logMsg(0, "ERROR", "DADA header repeated, likely cause failed PROC_CMD, jettesioning xfer");
-      $proc_cmd = "dada_dbnull -s -k ".lc($cfg{"PROCESSING_DATA_BLOCK"});
+      $proc_cmd = $bindir."/dada_dbnull -s -k ".lc($cfg{"PROCESSING_DATA_BLOCK"});
 
     } else {
       logMsg(2, "INFO", "processingThread: DADA header looks correct");
@@ -178,7 +178,7 @@ sub processingThread($) {
 
       # Check if any auxiliary nodes are available for processing 
       logMsg(2, "INFO", "processingThread: asking for aux nodes");
-      $node = auxiliaryNodesAvailable();
+      $node = auxNodesAvailable();
       logMsg(2, "INFO", "processingThread: received ".$node);
 
       # We got a free node, run dbnic on the xfer
@@ -190,12 +190,8 @@ sub processingThread($) {
       # If no nodes are available, run dbdisk on the xfer
       } else {
         # Do a check if the main command was dada_dbdisk, just dbnull it
-        my $proc_cmd_file = $cfg{"CONFIG_DIR"}."/".$h{"PROC_FILE"};
-        my %proc_cmd_hash = Dada->readCFGFile($proc_cmd_file);
-        $proc_cmd = $proc_cmd_hash{"PROC_CMD"};
-
         if ($proc_cmd =~ m/dada_dbdisk/) {
-          $proc_cmd =  "dada_dbnull -s -k ".$aux_db;
+          $proc_cmd =  $bindir."/dada_dbnull -s -k ".$aux_db;
         } else {
           $proc_cmd = $bindir."/dada_dbdisk -k ".$aux_db." -s -D ".$raw_data_dir;
         }
@@ -281,9 +277,9 @@ sub controlThread($$) {
           "' | awk '{print \$2}'";
   logMsg(2, "INFO", "controlThread: ".$cmd);
   ($result, $response) = Dada->mySystem($cmd);
+  $response =~ s/\n/ /;
   logMsg(2, "INFO", "controlThread: ".$result." ".$response);
   if ($result eq "ok") {
-    $response =~ s/\n/ /;
     $cmd = "kill -KILL ".$response;
     logMsg(1, "INFO", "controlThread: Killing dada_header: ".$cmd);
     ($result, $response) = Dada->mySystem($cmd);
