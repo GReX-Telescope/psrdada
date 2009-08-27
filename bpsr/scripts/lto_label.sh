@@ -68,15 +68,16 @@ echo Tape device: $device
 echo Project ID: $project
 echo Label prefix: $prefix
 
-dbase=$HOME/bookkeeping/tape_archiver/tapes.${project}.testing
+dbase=$HOME/bookkeeping/tape_archiver/tapes.${project}.db
+dbnew=${dbase}.new
 
 echo Database: $dbase
 
-if [ ! -e $dbase ]; then
-  touch $dbase
+if [ ! -e $dbnew ]; then
+  touch $dbnew
 fi
 
-last=`grep -F $prefix $dbase | awk '{print $1}' | sort | tail -1`
+last=`cat $dbase $dbnew | grep -F $prefix | awk '{print $1}' | sort | tail -1`
 
 if test x"$last" = x; then
   number=0
@@ -121,8 +122,8 @@ rm $name
 cd ..
 rm -rf tapelableotron
 
-echo Updating $database
-echo "$name  750.00    0.00  750.00  000001  0    0" >> $dbase
+echo Updating $dbnew
+echo "$name  750.00    0.00  750.00  000001  0    0" >> $dbnew
 
 echo
 echo "Please label the tape with $name"
