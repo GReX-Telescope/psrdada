@@ -114,12 +114,14 @@ int dada_pwc_main (dada_pwc_main_t* pwcm)
     {
       /* Start the data transfer. */
       rval = dada_pwc_main_start_transfer (pwcm);
-      if (rval < 0) dada_pwc_main_process_error (pwcm, rval);
+      if (rval < 0) 
+        dada_pwc_main_process_error (pwcm, rval);
       else {
 
         /* Enter the clocking/recording state. */
         rval = dada_pwc_main_transfer_data (pwcm);
-        if (rval < 0) dada_pwc_main_process_error (pwcm, rval); 
+        if (rval < 0) 
+          dada_pwc_main_process_error (pwcm, rval); 
 
       }
 
@@ -129,6 +131,11 @@ int dada_pwc_main (dada_pwc_main_t* pwcm)
         dada_pwc_main_process_error (pwcm, rval);
 
     } 
+
+    /* If we ever reach a fatal state, try to exit */
+    if (pwcm->pwc->state == dada_pwc_fatal_error) 
+      pwcm->pwc->quit = 1;
+
   }
 
   return rval;
@@ -203,7 +210,9 @@ int dada_pwc_main_prepare (dada_pwc_main_t* pwcm)
     }
     else if (pwcm->command.code == dada_pwc_start)
     {
+#ifdef _DEBUG            
       multilog (pwcm->log, LOG_INFO, "Start recording data\n");
+#endif
 
       if (pwcm->command.byte_count)
         multilog (pwcm->log, LOG_INFO,
@@ -218,10 +227,20 @@ int dada_pwc_main_prepare (dada_pwc_main_t* pwcm)
       /* leave the idle state loop */
       return 0;
     }
+    else if (pwcm->command.code == dada_pwc_stop) 
+    {
+      if (pwcm->pwc->state == dada_pwc_soft_error) 
+        multilog (pwcm->log, LOG_WARNING, "Resetting soft_error to idle\n");
+      else
+        multilog (pwcm->log, LOG_WARNING, "dada_pwc_main_prepare: Unexpected stop command\n");
+
+      dada_pwc_set_state (pwcm->pwc, dada_pwc_idle, 0);
+    }
     else
     {
       multilog (pwcm->log, LOG_ERR, "dada_pwc_main_prepare internal error = "
-               "unexpected command code %d\n", pwcm->command.code);
+               "unexpected command code %s\n", 
+               dada_pwc_cmd_code_string(pwcm->command.code));
       return DADA_ERROR_HARD;
     }
 
@@ -302,20 +321,6 @@ int dada_pwc_main_start_transfer (dada_pwc_main_t* pwcm)
         }
       }
     }
- 
-    /* only mark header block as filled if we know the UTC_START */
-    //if (utc > 0) {
-#ifdef _DEBUG
-      //fprintf (stderr, "dada_pwc_main_start_transfer: mark filled header\n");
-#endif
-
-      /* If we are entering the recording state from the idle state ...*/
-      //if (pwcm->command.code == dada_pwc_start &&
-      //    ipcbuf_mark_filled (pwcm->header_block, pwcm->header_size) < 0)  {
-      //  multilog (pwcm->log, LOG_ERR, "Could not mark filled header block\n");
-      //  return DADA_ERROR_SOFT;
-      //}
-    //}
   } 
 
 #ifdef _DEBUG
@@ -417,16 +422,6 @@ int dada_pwc_main_record_start (dada_pwc_main_t* pwcm)
     multilog (pwcm->log, LOG_ERR, "fail ascii_header_set OBS_OFFSET\n");
     return DADA_ERROR_HARD;
   }
-
-  /* write OBS_OFFSET to the header */
-  //if (ascii_header_set (pwcm->header, "OBS_OFFSET", "%"PRIu64,
-  //                      pwcm->command.byte_count) < 0) {
-  //  multilog (pwcm->log, LOG_ERR, "fail ascii_header_set OBS_OFFSET\n");
-  //  return DADA_ERROR_HARD;
-  // 
-  //multilog (pwcm->log, LOG_INFO, "dada_pwc_main_record_start: Writing OBS_OFFSET = %"PRIu64"\n",
-  //                      pwcm->command.byte_count);
-
 
   multilog (pwcm->log, LOG_INFO,"command_start_byte = %"PRIu64", command.byte_"
             "count = %"PRIu64"\n",command_start_byte,pwcm->command.byte_count);
@@ -543,7 +538,7 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
         } else {
 
           strftime (utc_buffer, utc_size, DADA_TIMESTR, 
-                    (struct tm*) localtime(&(pwcm->command.utc)));
+                    (struct tm*) gmtime(&(pwcm->command.utc)));
 
 #ifdef _DEBUG
           fprintf (stderr,"dada_pwc_main_transfer_data: set UTC_START in "
@@ -573,8 +568,9 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
               pwcm->header_valid = 1;
 
             if (pwcm->header_valid) {
-
-              //multilog (pwcm->log, LOG_INFO, "dada_pwc_main_transfer_data: marking header valid\n");
+#ifdef _DEBUG
+              multilog (pwcm->log, LOG_INFO, "dada_pwc_main_transfer_data: marking header valid\n");
+#endif
 
               if (ipcbuf_mark_filled (pwcm->header_block,pwcm->header_size) < 0) {
                 multilog (pwcm->log, LOG_ERR, "Could not mark filled header\n");
@@ -669,11 +665,10 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
       if (buffer_size < 0) 
         return buffer_size;
 
-
       if ((data_transfer_error_state) && (buffer_size != 0)) {
         data_transfer_error_state = 0;
         if (total_bytes_written) 
-          multilog (pwcm->log, LOG_WARNING, "Warning: pwc buffer_function "
+          multilog (pwcm->log, LOG_WARNING, "pwc buffer_function "
                     "recovered from error state\n");
       }
 
@@ -694,21 +689,27 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
         }
 
         if (data_transfer_error_state == 2) {
-          multilog (pwcm->log, LOG_ERR, "Error: pwc buffer_function returned "
-                    "0 bytes. Stopping\n");
+          multilog (pwcm->log, LOG_ERR, "pwc buffer_function returned 0 bytes."
+                                        " Stopping\n");
+
+          /* Ensure that the ipcio_write function is called with 1 bytes
+           * so that a reader may acknwowledge the SoD and subsequent EoD */
+          bytes_written = ipcio_write (pwcm->data_block, buffer, 1);
 
           /* If we are clocking, then its not the end of the world, signal
            * a soft error */
-          if (pwcm->pwc->state == dada_pwc_clocking)
+          //if (pwcm->pwc->state == dada_pwc_clocking)
             return DADA_ERROR_SOFT;
-          else
-            return DADA_ERROR_HARD;
+          //else
+          //  return DADA_ERROR_HARD;
         }
 
-        if ((data_transfer_error_state == 1) && total_bytes_written){
+        if ((data_transfer_error_state == 1) && total_bytes_written) {
           multilog (pwcm->log, LOG_WARNING, "Warning: pwc buffer function "
                     "returned 0 bytes. Trying to continue\n");
-          multilog (pwcm->log, LOG_WARNING, "total_bytes_written = %"PRIu64", bytes_to_write = %"PRIu64", transit_byte = %"PRIu64"\n",total_bytes_written, bytes_to_write, transit_byte);
+          multilog (pwcm->log, LOG_WARNING, "total_bytes_written = %"PRIu64
+                    ", bytes_to_write = %"PRIu64", transit_byte = %"PRIu64"\n",
+                    total_bytes_written, bytes_to_write, transit_byte);
         }
 
       }
@@ -830,7 +831,9 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
       } 
 
       else if (pwcm->command.code == dada_pwc_stop) {
+#ifdef _DEBUG
         multilog (pwcm->log, LOG_INFO, "stopping... entering idle state\n");
+#endif
         return 0;
       }
       
@@ -931,23 +934,39 @@ int dada_pwc_main_stop_transfer (dada_pwc_main_t* pwcm)
   return 0;
 }
 
-void dada_pwc_main_process_error(dada_pwc_main_t* pwcm, int rval) {
+void dada_pwc_main_process_error (dada_pwc_main_t* pwcm, int rval) {
 
-  if (rval == DADA_ERROR_SOFT) 
-    dada_pwc_set_state (pwcm->pwc, dada_pwc_soft_error, 0);
+  int new_state = pwcm->pwc->state;
 
-  else if (rval == DADA_ERROR_HARD)
-    dada_pwc_set_state (pwcm->pwc, dada_pwc_hard_error, 0);
-        
-  else if (rval == DADA_ERROR_FATAL)
-    dada_pwc_set_state (pwcm->pwc, dada_pwc_fatal_error, 0);
+  switch (rval) 
+  {
+    case DADA_ERROR_SOFT:
+      if ( (pwcm->pwc->state != dada_pwc_hard_error) && 
+           (pwcm->pwc->state != dada_pwc_fatal_error) )
+        new_state = dada_pwc_soft_error;
+      break;
 
-  else {
-    multilog (pwcm->log, LOG_ERR, "Unknown return value: %d\n",rval);
-    dada_pwc_set_state (pwcm->pwc, dada_pwc_fatal_error, 0);
+    case DADA_ERROR_HARD:
+      if (pwcm->pwc->state != dada_pwc_fatal_error)
+        new_state = dada_pwc_hard_error;
+      break;
+
+    case DADA_ERROR_FATAL:
+      new_state = dada_pwc_fatal_error;
+      break;
+
+    default:
+      multilog (pwcm->log, LOG_ERR, "Unknown error state: %d\n",rval);
+      new_state = dada_pwc_fatal_error;
   }
 
+  multilog(pwcm->log, LOG_WARNING, "PWC entering error state: %s\n",
+           dada_pwc_state_to_string(new_state));
+
+  if (dada_pwc_set_state (pwcm->pwc, new_state, 0) < 0) 
+    multilog(pwcm->log, LOG_ERR, "Failed to change state from %s to %s\n",
+             dada_pwc_state_to_string(pwcm->pwc->state),
+             dada_pwc_state_to_string(new_state));
+
+
 }
-    
-
-
