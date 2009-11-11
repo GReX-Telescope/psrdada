@@ -13,6 +13,8 @@ dist_data_DATA = apsr.info \
                  dspsr.single \
                  dspsr.singleF \
                  singleF.psh \
+                 dspsr.giant \
+                 giant.psh \
                  apsr.scratch \
                  P427.scratch \
                  multi.txt \
@@ -40,14 +42,14 @@ edit = sed \
 	-e 's|@datadir[@]|$(datadir)|g' \
 	-e 's|@prefix[@]|$(prefix)|g'
 
-dspsr.singleF: Makefile
+dspsr.singleF dspsr.giant: Makefile
 	rm -f $@ $@.tmp
 	$(edit) '$(srcdir)/$@.in' >$@.tmp
-	chmod +x $@.tmp
 	chmod a-w $@.tmp
 	mv $@.tmp $@
 
 dspsr.singleF: $(srcdir)/dspsr.singleF.in
+dspsr.giant: $(srcdir)/dspsr.giant.in
 
 include $(top_srcdir)/config/Makefile.targets
 
