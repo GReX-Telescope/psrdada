@@ -6,9 +6,9 @@ libbpsr_la_SOURCES = ibob.h ibob.c multibob.h multibob.c start_observation.c
 bin_PROGRAMS = bpsr_udpheader bpsr_udpdb bpsr_dbdisk bpsr_udpdisk \
 	bpsr_udpdb_fast bpsr_dbmon ibob_telnet multibob_server
 
-LDADD = libbpsr.la ../../src/libpsrdada.la
+LDADD = libbpsr.la $(top_builddir)/src/libpsrdada.la
 
-INCLUDES = -I../../src
+INCLUDES = -I$(top_srcdir)/src
 
 #############################################################################
 #
@@ -20,10 +20,10 @@ if COMPILE_THIRD
 
 bin_PROGRAMS += bpsr_dbavg bpsr_udpgenerator
 
-bpsr_dbavg_LDADD = $(LDADD) ../../3rdparty/libtimers.la 
-bpsr_udpgenerator_LDADD = $(LDADD) ../../3rdparty/libtimers.la 
+bpsr_dbavg_LDADD = $(LDADD) $(top_builddir)/3rdparty/libtimers.la 
+bpsr_udpgenerator_LDADD = $(LDADD) $(top_builddir)/3rdparty/libtimers.la 
 
-INCLUDES += -I../../3rdparty
+INCLUDES += -I$(top_srcdir)/3rdparty
 AM_CFLAGS = -D$(ARCH)
 
 endif

@@ -5,9 +5,9 @@ libcaspsr_la_SOURCES = bibob.h bibob.c mulbibob.h mulbibob.c caspsr_udp.h caspsr
 
 bin_PROGRAMS = caspsr_udpheader caspsr_udpdb bibob_terminal
 
-LDADD = libcaspsr.la ../../src/libpsrdada.la @PGPLOT_LIBS@
+LDADD = libcaspsr.la $(top_builddir)/src/libpsrdada.la @PGPLOT_LIBS@
 
-INCLUDES = -I../../src
+INCLUDES = -I$(top_srcdir)/src
 
 #############################################################################
 #
@@ -19,9 +19,9 @@ if COMPILE_THIRD
 
 bin_PROGRAMS += caspsr_udpgen
 
-caspsr_udpgen_LDADD = $(LDADD) ../../3rdparty/libtimers.la
+caspsr_udpgen_LDADD = $(LDADD) $(top_builddir)/3rdparty/libtimers.la
 
-INCLUDES += -I../../3rdparty
+INCLUDES += -I$(top_srcdir)/3rdparty
 AM_CFLAGS = -D$(ARCH)
 
 endif

@@ -7,11 +7,11 @@ bin_PROGRAMS = dedisperse_all
 
 dedisperse_all_SOURCES = dedisperse_all.C dedisperse_header.c
 
-LDADD = ../libswinproc.la libdedisp.la
+LDADD = $(top_builddir)/bpsr/swinproc/libswinproc.la libdedisp.la
 
 dedisperse_all_LDADD = $(LDADD)
 
-INCLUDES = -I../
+INCLUDES = -I$(top_srcdir)/bpsr/swinproc
 
 AM_CXXFLAGS = @OPENMP_CFLAGS@
 
