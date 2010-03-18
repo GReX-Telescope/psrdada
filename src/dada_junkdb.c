@@ -37,6 +37,7 @@ void usage()
      " -k       hexadecimal shared memory key  [default: %x]\n"
      " -z rate  data rate to write [default %f MB/s]\n"
      " -t secs  length of time to write [default %d s]\n"
+     " -g       write gaussian distributed data\n"
      " -d       run as daemon\n", DADA_DEFAULT_BLOCK_KEY, DEFAULT_DATA_RATE,
      DEFAULT_WRITE_TIME);
 }
@@ -47,7 +48,10 @@ typedef struct {
   char * header_file;
 
   /* data rate to write at */
-  double rate;
+  float rate;
+
+  /* generate gaussian data ? */
+  unsigned write_gaussian;
 
   /* length of time to write for */
   uint64_t write_time;
@@ -66,9 +70,11 @@ typedef struct {
 
   unsigned header_read;
 
+  unsigned verbose;
+
 } dada_junkdb_t;
 
-#define DADA_JUNKDB_INIT { "", 0, 0, "", 0, 0, 0, 0, 0 }
+#define DADA_JUNKDB_INIT { "", 0, 0, 0, "", 0, 0, 0, 0, 0 }
 
 
 /*! Pointer to the function that transfers data to/from the target */
@@ -178,9 +184,10 @@ int generate_data(dada_client_t* client)
     multilog (log, LOG_ERR, "Could not read header from %s\n", junkdb->header_file);
   }
 
+  if (junkdb->verbose)
   fprintf (stderr, "===========HEADER START=============\n"
                    "%s"
-                   "=============HEADER END==============\n", client->header);
+                   "============HEADER END==============\n", client->header);
   junkdb->header_read = 0;
 
   /* Get the header size */
@@ -203,13 +210,17 @@ int generate_data(dada_client_t* client)
   junkdb->bytes_to_copy = 0;
 
   /* seed the RNG */
-#ifdef _DEBUG
-  multilog (client->log, LOG_INFO, "generate_data\n");
-#endif
+//#ifdef _DEBUG
+  multilog (client->log, LOG_INFO, "generating gaussian data %"PRIu64"\n", junkdb->data_size);
+//#endif
 
   srand ( time(NULL) );
   junkdb->data = (char *) malloc (sizeof(char) * junkdb->data_size);
-  fill_gaussian_chars(junkdb->data, junkdb->data_size, 8, 500);
+
+  if (junkdb->write_gaussian) 
+    fill_gaussian_chars(junkdb->data, junkdb->data_size, 8, 500);
+
+  multilog (client->log, LOG_INFO, "data generated\n");
 
 #ifdef _DEBUG
   multilog (client->log, LOG_INFO, "generate_data returned\n");
@@ -241,8 +252,10 @@ int main (int argc, char **argv)
   /* Quit flag */
   char quit = 0;
 
+  unsigned write_gaussian = 0;
+
   /* data rate [MB/s] */
-  double rate = DEFAULT_DATA_RATE;
+  float rate = DEFAULT_DATA_RATE;
 
   /* write time [s] */
   unsigned write_time = DEFAULT_WRITE_TIME;
@@ -252,8 +265,12 @@ int main (int argc, char **argv)
 
   int arg = 0;
 
-  while ((arg=getopt(argc,argv,"k:t:vz:")) != -1)
+  while ((arg=getopt(argc,argv,"gk:t:vz:")) != -1)
     switch (arg) {
+
+    case 'g':
+      write_gaussian = 1;
+      break;
 
     case 'k':
       if (sscanf (optarg, "%x", &dada_key) != 1) {
@@ -268,6 +285,7 @@ int main (int argc, char **argv)
         usage();
         return -1;
       }
+      fprintf(stderr, "writing for %d seconds\n", write_time);
       break;
 
     case 'v':
@@ -280,7 +298,7 @@ int main (int argc, char **argv)
         usage();
         return -1;
       } else {
-        fprintf (stderr, "rate = %f\n", rate); 
+        fprintf (stderr, "optarg = %s, setting data rate = %f MB/s\n", optarg, rate); 
       }
       break;
 
@@ -328,8 +346,10 @@ int main (int argc, char **argv)
   client->log = log;
   junkdb.rate = rate;
   junkdb.write_time = write_time;
+  junkdb.write_gaussian = write_gaussian;
   junkdb.data_size = floor(rate * 1024 * 1024);
   junkdb.header_file = strdup(header_file);
+  junkdb.verbose = verbose;
 
   client->data_block = hdu->data_block;
   client->header_block = hdu->header_block;

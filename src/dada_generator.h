@@ -17,5 +17,4 @@ void fill_cal_chars(char *data, int size, int nbits, int gain);
 void fill_gaussian_unsigned(unsigned int *data, int size, int nbits, int gain);
 void fill_cal_unsigned(unsigned int *data, int size, int nbits, int gain);
 
-
 #endif /* __DADA_GENERATOR_H */

@@ -12,6 +12,7 @@ extern "C" {
 
   /* turn the calling process into a daemon */
   void be_a_daemon ();
+  int be_a_daemon_with_log(char * logfile);
 
 #ifdef __cplusplus
 }

@@ -34,6 +34,10 @@
 #define BIBOB_NBANDS 16
 #define BIBOB_BRAM_ARRAYS 4
 
+#define CASPSR_BIBOB_UDP_PAYLOAD 1024
+#define CASPSR_BIBOB_UDP_HEADER 8
+#define CASPSR_BIBOB_UDP_PACKET 1032
+
 /* ************************************************************************
 
    bibob_t - a struct and associated routines for creating and managing,
@@ -124,9 +128,9 @@ extern "C" {
     unsigned * dest_ports;
 
     //! Struct for the command socket data
-    socket_buffer_t* sock;
+    caspsr_sock_t * sock;
 
-    bibob_header_t* hdr;
+    bibob_header_t * hdr;
 
   } bibob_t;
 

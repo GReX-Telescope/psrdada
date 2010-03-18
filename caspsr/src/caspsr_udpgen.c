@@ -26,7 +26,10 @@
 
 #define MIN(x,y) (x < y ? x : y)
 #define MAX(x,y) (x > y ? x : y)
+
 #define UDPGEN_DEFAULT_PERIOD 10000
+#define CASPSR_DEFAULT_BW 25
+#define CASPSR_UDPGEN_LOG  49200
 
 /* Cross thread global variables */
 unsigned int scale0 = 4096;
@@ -101,7 +104,7 @@ int main(int argc, char *argv[])
   int udpfd;
 
   /* The generated signal arrays */
-  char packet[CASPSR_UDP_PAYLOAD];
+  char packet[UDP_PAYLOAD];
 
   uint64_t signal_size = 32000;
 
@@ -135,7 +138,8 @@ int main(int argc, char *argv[])
   int allow_gain_control = 0;
 
   /* Always start the sequence no nice and high */
-  caspsr_header_t * header;
+  uint64_t seq_no = 0;
+  //caspsr_header_t * header;
 
   opterr = 0;
   int c;
@@ -197,8 +201,9 @@ int main(int argc, char *argv[])
   dest_host = (char *) argv[optind];
 
   /* initialise header struct */
-  header = init_caspsr_header();
-  header->seq_no = 1000000;
+  seq_no = 1000000;
+  //header = init_caspsr_header();
+  //header->seq_no = 1000000;
 
   signal(SIGINT, signal_handler);
 
@@ -223,6 +228,8 @@ int main(int argc, char *argv[])
   /* create memory arrays based */
   create_memory_arrays(num_arrays, signal_length);
 
+  multilog(log, LOG_INFO, "sending to %s:%d\n", dest_host, udp_port);
+
   /* create the socket for outgoing UDP data */
   dada_udp_sock_out(&udpfd, &dagram, dest_host, udp_port, broadcast, "192.168.1.255");
 
@@ -233,16 +240,18 @@ int main(int argc, char *argv[])
   RealTime_Initialise(1);
   StopWatch_Initialise(1);
 
+  /*
   if (data_rate > 117000000) {
     multilog(log, LOG_ERR, "data rate [%f bps] too high 1GbE:\n",data_rate);
     close(udpfd);
     exit(1);
   }
+  */
 
   /* If we have a desired data rate, then we need to adjust our sleep time
    * accordingly */
   if (data_rate > 0) {
-    packets_ps = floor(((double) data_rate) / ((double) CASPSR_UDP_PAYLOAD));
+    packets_ps = floor(((double) data_rate) / ((double) UDP_PAYLOAD));
     sleep_time = (1.0/packets_ps)*1000000.0;
   }
   multilog(log,LOG_INFO,"Packets/sec = %"PRIu64"\n",packets_ps);
@@ -268,8 +277,8 @@ int main(int argc, char *argv[])
   time_t prev_time = time(0);
 
   multilog(log,LOG_INFO,"Total bytes to send = %"PRIu64"\n",total_bytes_to_send);
-  multilog(log,LOG_INFO,"UDP payload = %"PRIu64" bytes\n",CASPSR_UDP_PAYLOAD);
-  multilog(log,LOG_INFO,"UDP data size = %"PRIu64" bytes\n",CASPSR_UDP_DATA);
+  multilog(log,LOG_INFO,"UDP payload = %"PRIu64" bytes\n",UDP_PAYLOAD);
+  multilog(log,LOG_INFO,"UDP data size = %"PRIu64" bytes\n",UDP_DATA);
   multilog(log,LOG_INFO,"Wire Rate\t\tUseful Rate\tPacket\tSleep Time\n");
 
   /* Start the external control thread */
@@ -300,16 +309,16 @@ int main(int argc, char *argv[])
 
     /* If the control thread has asked us to reset the sequence number */
     if (reset_sequence) {
-      header->seq_no = 0;
+      seq_no = 0;
       reset_sequence = 0;
     }
 
     /* write the custom header into the packet */
-    caspsr_encode_header(packet, header);
+    caspsr_encode_header(packet, seq_no, 0);
 
     /* write the data from the packed signal into the packet, update offset */
-    s_off = caspsr_encode_data(packet+CASPSR_UDP_HEADER, packed_signals[s],
-                             CASPSR_UDP_DATA, signal_length, s_off);
+    s_off = caspsr_encode_data(packet+UDP_HEADER, packed_signals[s],
+                             UDP_DATA, signal_length, s_off);
 
     if (regenerate_signal) {
       fprintf(stderr, "regenerating signal\n");
@@ -328,15 +337,15 @@ int main(int argc, char *argv[])
       reselect_bits = 0;
     }
 
-    bytes_sent = dada_sock_send(udpfd, dagram, packet, (size_t) CASPSR_UDP_PAYLOAD); 
+    bytes_sent = dada_sock_send(udpfd, dagram, packet, (size_t) UDP_PAYLOAD); 
 
-    if (bytes_sent != CASPSR_UDP_PAYLOAD) 
+    if (bytes_sent != UDP_PAYLOAD) 
       multilog(log,LOG_ERR,"Error. Attempted to send %d bytes, but only "
-                           "%"PRIu64" bytes were sent\n",CASPSR_UDP_PAYLOAD,
+                           "%"PRIu64" bytes were sent\n",UDP_PAYLOAD,
                            bytes_sent);
 
     /* This is how much useful data we actaully sent */
-    total_bytes_sent += (bytes_sent - CASPSR_UDP_HEADER);
+    total_bytes_sent += (bytes_sent - UDP_HEADER);
 
     data_counter++;
     prev_time = current_time;
@@ -345,7 +354,7 @@ int main(int argc, char *argv[])
     if (prev_time != current_time) {
 
       double complete_udp_packet = (double) bytes_sent;
-      double useful_data_only = (double) (bytes_sent - CASPSR_UDP_HEADER);
+      double useful_data_only = (double) (bytes_sent - UDP_HEADER);
       double complete_packet = 28.0 + complete_udp_packet;
 
       double wire_ratio = complete_packet / complete_udp_packet;
@@ -359,23 +368,22 @@ int main(int argc, char *argv[])
       double useful_rate = rate * useful_ratio;
              
       multilog(log,LOG_INFO,"%"PRIu64": %5.2f MB/s  %5.2f MB/s  %"PRIu64
-                            "  %5.2f, %"PRIu64"\n", header->seq_no,
+                            "  %5.2f, %"PRIu64"\n", seq_no,
                             wire_rate, useful_rate, data_counter, sleep_time,
                             bytes_sent);
     }
 
-    header->seq_no++;
+    seq_no++;
 
     StopWatch_Delay(&wait_sw, sleep_time);
 
   }
 
-  uint64_t packets_sent = header->seq_no;
+  uint64_t packets_sent = seq_no;
 
   multilog(log, LOG_INFO, "Sent %"PRIu64" bytes\n",total_bytes_sent);
   multilog(log, LOG_INFO, "Sent %"PRIu64" packets\n",packets_sent);
 
-  free(header);
   close(udpfd);
 
   return 0;

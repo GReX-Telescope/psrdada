@@ -1,5 +1,5 @@
-#ifndef __DADA_UDP_H
-#define __DADA_UDP_H
+#ifndef __UDP_H
+#define __UDP_H
 
 /*
  * Generic functions for udp sockets
@@ -150,4 +150,4 @@ int dada_create_udp_socket(multilog_t* log, const char* interface, int port, int
   return fd;
 }
 
-#endif /* __DADA_UDP_H */
+#endif /* __UDP_H */

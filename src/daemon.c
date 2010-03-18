@@ -2,6 +2,11 @@
 
 #include <stdlib.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
+#define PS_IOERR 1
 
 void be_a_daemon ()
 {
@@ -25,4 +30,30 @@ void be_a_daemon ()
   close(STDIN_FILENO);
   close(STDOUT_FILENO);
   close(STDERR_FILENO);
+}
+
+
+int be_a_daemon_with_log(char * logfile) {
+
+  /* become a daemon */
+  be_a_daemon();
+
+  int fd = 0;
+
+  if ((fd = open("/dev/null", O_RDWR)) < 0) {   /* stdin */
+    return (PS_IOERR);
+  }
+
+  /* redirect STDOUT and STDERR to the logfile */
+  if (logfile) {
+    if ((fd = open(logfile, O_CREAT|O_WRONLY|O_APPEND, 0666)) < 0)  /* stdout */
+      return(PS_IOERR);
+  }
+
+  if (dup(fd) < 0) {        /* stderr */
+    return(PS_IOERR);
+  }
+
+  return 0;
+
 }

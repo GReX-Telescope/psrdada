@@ -12,13 +12,16 @@
 stats_t * init_stats_t()
 {
   stats_t * s = (stats_t *) malloc(sizeof(stats_t));
-
-  s->received = 0;
-  s->dropped = 0;
-  s->received_per_sec = 0;
-  s->dropped_per_sec = 0;
-
+  reset_stats_t (s);
   return s;
+}
+
+void reset_stats_t(stats_t * s)
+{
+    s->received = 0;
+    s->dropped = 0;
+    s->received_per_sec = 0;
+    s->dropped_per_sec = 0;
 }
 
 /*
@@ -38,13 +41,13 @@ int dada_udp_sock_in(multilog_t* log, const char* iface, int port, int verbose)
   int fd = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP);
 
   if (fd < 0) {
-    multilog(log, LOG_ERR, "Could not created UDP socket: %s\n",
-             strerror(errno));
+    multilog(log, LOG_ERR, "dada_udp_sock_in: socket() failed [iface=%s, port=%d]: %s\n",
+             iface, port, strerror(errno));
     return -1;
   }
 
   if (verbose) 
-    multilog(log, LOG_INFO, "Created UDP socket\n");
+    multilog(log, LOG_INFO, "created UDP socket\n");
 
   struct sockaddr_in udp_sock;
   bzero(&(udp_sock.sin_zero), 8);                     // clear the struct
@@ -57,8 +60,16 @@ int dada_udp_sock_in(multilog_t* log, const char* iface, int port, int verbose)
   }
 
   if (bind(fd, (struct sockaddr *)&udp_sock, sizeof(udp_sock)) == -1) {
-    multilog (log, LOG_ERR, "Error binding UDP socket: %s\n", strerror(errno));
+    multilog (log, LOG_ERR, "dada_udp_sock_in: bind() failed [iface=%s, port=%d]: %s\n", 
+              iface, port, strerror(errno));
     return -1;
+  }
+
+  /* ensure the socket is reuseable without the painful timeout */
+  int on = 1;
+  if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) != 0) {
+    multilog (log, LOG_WARNING, "dada_udp_sock_in: setsockopt(SO_REUSEADDR) failed "
+              "[iface=%s, port=%d]: %s\n", iface, port, strerror(errno));
   }
 
   if (verbose) 
@@ -68,17 +79,17 @@ int dada_udp_sock_in(multilog_t* log, const char* iface, int port, int verbose)
 
 }
 
-/* set the buffer sizes on the udp socket */
-int dada_udp_sock_set_buffer_size (multilog_t* log, int fd, int verbose) {
+/* set the SO_RCVBUF on socket fd */
+int dada_udp_sock_set_buffer_size (multilog_t* log, int fd, int verbose, int pref_size) {
 
   const int std_buffer_size = KERNEL_BUFFER_SIZE_DEFAULT;
-  const int pref_buffer_size = KERNEL_BUFFER_SIZE_MAX;
 
+  int value = 0;
   int len = 0;
-  int value = pref_buffer_size;
   int retval = 0;
 
-  // try setting the buffer to the maximum, warn if we cant
+  // Attempt to set to the specified value
+  value = pref_size;
   len = sizeof(value);
   retval = setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &value, len);
   if (retval != 0) {
@@ -95,11 +106,11 @@ int dada_udp_sock_set_buffer_size (multilog_t* log, int fd, int verbose) {
     return -1;
   } 
   
-  // If we could not set the buffer to the desired size, warn...
-  if (value/2 != pref_buffer_size) {
+  // Check the size. n.b. linux actually sets the size to DOUBLE the value
+  if (value/2 != pref_size) {
     multilog (log, LOG_WARNING, "Warning. Failed to set udp socket's "
               "buffer size to: %d, falling back to default size: %d\n",
-              pref_buffer_size, std_buffer_size);
+              pref_size, std_buffer_size);
 
     len = sizeof(value);
     value = std_buffer_size;
@@ -129,7 +140,7 @@ int dada_udp_sock_set_buffer_size (multilog_t* log, int fd, int verbose) {
   } else {
 
     if (verbose)
-      multilog(log, LOG_INFO, "UDP socket buffer size set to %d\n", pref_buffer_size);
+      multilog(log, LOG_INFO, "UDP socket buffer size set to %d\n", pref_size);
 
   }
 
@@ -157,6 +168,12 @@ int dada_udp_sock_out(int *fd, struct sockaddr_in * dagram, char *client,
       return(1);
     }
   }
+
+  /* ensure the socket is reuseable without the painful timeout */
+  int on = 1;
+  if (setsockopt(*fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) != 0)
+    fprintf(stderr, "dada_udp_sock_out: setsockopt(SO_REUSEADDR) failed", 
+              strerror(errno));
 
   /* Setup the UDP socket parameters*/
   struct in_addr *addr;

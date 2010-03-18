@@ -32,7 +32,7 @@ bibob_t* bibob_construct ()
 
   bibob->hdr = malloc (sizeof(bibob_header_t));
 
-  bibob->sock = init_socket_buffer(CASPSR_BIBOB_UDP_PACKET);
+  bibob->sock = caspsr_init_sock(CASPSR_BIBOB_UDP_PACKET);
 
   bibob->fd = -1;
   bibob->buffer_size = 0;
@@ -119,7 +119,7 @@ int bibob_destroy (bibob_t* bibob)
   free (bibob->dest_ips);
   free (bibob->dest_ports);
 
-  free_socket_buffer(bibob->sock);
+  caspsr_free_sock(bibob->sock);
 
   for (i=0; i<BIBOB_BRAM_ARRAYS; i++) 
     free_bram_array(bibob->bram_arrays[i]);
@@ -741,13 +741,13 @@ int bibob_bramdisk(bibob_t * bibob)
  * pgplot print the 8 bramdump information
  */
 int bibob_bramplot(bibob_t * bibob, char * device) {
-
+/*
   if (cpgopen(device) != 1) {
     fprintf(stderr, "bibob_bramplot: error opening plot device\n");
     return -1;
   }
 
-  /* determine the floating point min/max values */
+  // determine the floating point min/max values 
   float ymin = -1;
   float ymax = 1;
   float xmin = 1;
@@ -784,7 +784,7 @@ int bibob_bramplot(bibob_t * bibob, char * device) {
   }
 
   cpgclos();
-
+  */
 }
 
 

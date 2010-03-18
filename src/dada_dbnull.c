@@ -21,7 +21,7 @@ void usage()
 {
   fprintf (stdout,
      "dada_dbnull [options]\n"
-     " -b n       number of milliseconds to load the cpu for each sublock\n"
+     //" -b n       number of milliseconds to load the cpu for each sublock\n"
      " -k key     connect to key data block\n"
      " -v         be verbose\n"
      " -s         quit at end of data\n"
