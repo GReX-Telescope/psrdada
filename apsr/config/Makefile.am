@@ -4,7 +4,6 @@ data_DATA = apsr.cfg
 
 dist_data_DATA = apsr.info \
                  apsr.viewer \
-                 dspsr.axp \
                  dspsr.cal \
                  dspsr.default \
                  dspsr.fourth \
