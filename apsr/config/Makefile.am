@@ -15,7 +15,7 @@ dist_data_DATA = apsr.info \
                  dspsr.giant \
                  giant.psh \
                  apsr.scratch \
-                 P427.scratch \
+                 local.scratch \
                  multi.txt \
                  pdfb3_1024_1024_2048 \
                  pdfb3_1024_256_2048 \
