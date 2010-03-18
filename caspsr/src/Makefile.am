@@ -1,14 +1,3 @@
-
-lib_LTLIBRARIES = libcaspsr.la
-
-libcaspsr_la_SOURCES = bibob.h bibob.c mulbibob.h mulbibob.c caspsr_udp.h caspsr_udp.c start_observation.c
-
-bin_PROGRAMS = caspsr_udpheader caspsr_udpdb bibob_terminal
-
-LDADD = libcaspsr.la $(top_builddir)/src/libpsrdada.la @PGPLOT_LIBS@
-
-INCLUDES = -I$(top_srcdir)/src
-
 #############################################################################
 #
 # Depends on 3rdparty code
@@ -17,14 +6,18 @@ INCLUDES = -I$(top_srcdir)/src
 
 if COMPILE_THIRD
 
-bin_PROGRAMS += caspsr_udpgen
+lib_LTLIBRARIES = libcaspsr.la
 
-caspsr_udpgen_LDADD = $(LDADD) $(top_builddir)/3rdparty/libtimers.la
+libcaspsr_la_SOURCES = bibob.h bibob.c mulbibob.h mulbibob.c caspsr_udp.h caspsr_udp.c start_observation.c
 
-INCLUDES += -I$(top_srcdir)/3rdparty
+bin_PROGRAMS = caspsr_udpdb bibob_terminal caspsr_udpdb caspsr_udpthreaded caspsr_udpNdb caspsr_udpheader caspsr_udpgen
+
+LDADD = libcaspsr.la $(top_builddir)/src/libpsrdada.la $(top_builddir)/3rdparty/libtimers.la
+INCLUDES = -I$(top_srcdir)/src -I$(top_srcdir)/3rdparty
 AM_CFLAGS = -D$(ARCH)
 
-endif
+# INCLUDES += -I$(HOME)/packages/src/libpcap-0.9.8.20081128/
+
 
 #############################################################################
 #
@@ -34,8 +27,10 @@ endif
 
 if HAVE_PGPLOT
 
-bin_PROGRAMS += mulbibob_server
+bin_PROGRAMS += mulbibob_server caspsr_udpNnic
 AM_CPPFLAGS = @PGPLOT_CFLAGS@
 mulbibob_server_LDADD = $(LDADD) @PGPLOT_LIBS@
+caspsr_udpNnic_LDADD = $(LDADD) @PGPLOT_LIBS@
 endif
 
+endif
