@@ -25,8 +25,8 @@ SERVER_ARCHIVE_DIR      /export/archives/caspsr
 SERVER_LOG_DIR          /export/logs/caspsr
 SERVER_CONTROL_DIR      @PSRDADA_INSTALL@/control
 SERVER_RESULTS_NFS_MNT  /nfs/results/caspsr
-SERVER_ARCHIVE_NFS_MNT  /nfs/archives/psr
-SERVER_DAEMONS          none
+SERVER_ARCHIVE_NFS_MNT  /nfs/archives/caspsr
+SERVER_DAEMONS          caspsr_tcs_interface caspsr_results_manager caspsr_pwc_monitor caspsr_sys_monitor caspsr_src_monitor caspsr_web_monitor
 SERVER_DAEMONS_PERSIST  none
 
 # TCS Interface configuration. Note on different interface to server
@@ -69,17 +69,17 @@ DFB_SIM_DEST_PORT       10002	    # SHOULD mactch CLIENT_UDPDB_PORT below
 ###############################################################################
 # Client directory configuration
 #
-CLIENT_LOCAL_DIR        /lfs/data0/apsr/
-CLIENT_CONTROL_DIR      /lfs/data0/apsr/control
-CLIENT_LOG_DIR          /lfs/data0/apsr/logs
-CLIENT_RECORDING_DIR    /lfs/data0/apsr/rawdata
-CLIENT_SCRATCH_DIR      /lfs/data0/apsr/scratch
-CLIENT_ARCHIVE_DIR      /lfs/data0/apsr/archives
-CLIENT_RESULTS_DIR      /lfs/data0/apsr/results
+CLIENT_LOCAL_DIR        /lfs/data0/caspsr/
+CLIENT_CONTROL_DIR      /lfs/data0/caspsr/control
+CLIENT_LOG_DIR          /lfs/data0/caspsr/logs
+CLIENT_RECORDING_DIR    /lfs/data0/caspsr/rawdata
+CLIENT_SCRATCH_DIR      /lfs/data0/caspsr/scratch
+CLIENT_ARCHIVE_DIR      /lfs/data0/caspsr/archives
+CLIENT_RESULTS_DIR      /lfs/data0/caspsr/results
 
-CLIENT_DAEMONS          caspsr_archive_manager
+CLIENT_DAEMONS          caspsr_archive_manager caspsr_observation_manager caspsr_processing_manager caspsr_auxiliary_manager
 
-# Port on which apsr_udpdb will listen for udp packets
+# Port on which caspsr_udpdb will listen for udp packets
 CLIENT_UDPDB_PORT       10003     
 # Port for client_master_control.pl
 CLIENT_MASTER_PORT      52009
@@ -95,7 +95,9 @@ CLIENT_UDPDB_STATS_PORT 52012
 ################################################################################
 # Data block definitions
 DATA_BLOCKS             DADA EADA FADA
+RECEIVING_DATA_BLOCK    DADA
 PROCESSING_DATA_BLOCK   EADA
+AUXILIARY_DATA_BLOCK    FADA
 
 DADA_BLOCK_NBUFS        250         # dada_dbNdb data block
 DADA_BLOCK_BUFSZ        4194304
@@ -106,29 +108,39 @@ EADA_BLOCK_BUFSZ        4194304
 FADA_BLOCK_NBUFS        250          # auxilliary data block
 FADA_BLOCK_BUFSZ        4194304
 
+###############################################################################
+# Distributor configuration
+
+NUM_DISTRIB   4
+DISTRIB_0     apsr00:33108
+DISTRIB_1     apsr14:33109
+DISTRIB_2     apsr00:33110
+DISTRIB_3     apsr14:33111
+PKTS_PER_XFER 180000
+
 
 # Primary Write Client (PWC) configuration
 PWC_BINARY              caspsr_udpdb
+PWC_IFACE               caspsr_udpdb
 NUM_PWC                 16
-PWC_0                   apsr00
-PWC_1                   apsr01
-PWC_2                   apsr02
-PWC_3                   apsr03
-PWC_4                   apsr04
-PWC_5                   apsr05
-PWC_6                   apsr06
-PWC_7                   apsr07
-PWC_8                   apsr08
-PWC_9                   apsr09
-PWC_10                  apsr10
-PWC_11                  apsr11
-PWC_12                  apsr12
-PWC_13                  apsr13
-PWC_14                  apsr14
-PWC_15                  apsr15
+PWC_0                   apsr01
+PWC_1                   apsr02
+PWC_2                   apsr03
+PWC_3                   apsr04
+PWC_4                   apsr05
+PWC_5                   apsr06
+PWC_6                   apsr07
+PWC_7                   apsr08
+PWC_8                   apsr09
+PWC_9                   apsr10
+PWC_10                  apsr11
+PWC_11                  apsr12
+PWC_12                  apsr13
+PWC_13                  apsr15
+PWC_14                  apsr16
+PWC_15                  apsr17
 
-NUM_DFB                 1
-DFB_0	                  apsr17
+NUM_DFB                 0
 
 NUM_SRV                 2
 SRV_0                   srv0
@@ -136,7 +148,9 @@ SRV_1                   srv1
 
 # defines the number of helping nodes
 HELPER_DAEMONS          archive_manager auxiliary_processor 
-NUM_HELP                0
+NUM_HELP                2
+HELP_0                  apsr00
+HELP_1                  apsr14
 
 NUM_SWIN_DIRS           1
 SWIN_DIR_0              pulsar:shrek210-evlbi:/nfs/cluster/shrek210b/caspsr/

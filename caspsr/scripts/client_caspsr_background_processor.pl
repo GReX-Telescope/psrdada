@@ -20,10 +20,8 @@ use Dada::client_background_processor qw(%cfg);
 # Initialize module variables
 #
 $Dada::client_background_processor::dl = 2;
-$Dada::client_background_processor::log_host = $cfg{"SERVER_HOST"};
-$Dada::client_background_processor::log_port = $cfg{"SERVER_SYS_LOG_PORT"};
-$Dada::client_background_processor::log_sock = 0;
 $Dada::client_background_processor::daemon_name = Dada->daemonBaseName($0);
+$Dada::client_background_processor::user = "caspsr";
 
 # Autoflush STDOUT
 $| = 1;
