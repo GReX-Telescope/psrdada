@@ -151,6 +151,33 @@ sub main() {
       }
     }
 
+    # Look for 2 minute old .dada files that may have been produced in the results dir via baseband mode (i.e. P427)
+    $cmd = "find . -name \"*.dada\" -cmin +1 | sort";
+    logMsg(2, "INFO", "main: ".$cmd);
+    ($result, $response) = Dada->mySystem($cmd);
+    logMsg(2, "INFO", "main: ".$result." ".$response);
+
+    if ($result ne "ok") {
+      logMsg(2, "WARN", "find command ".$cmd." failed ".$response);
+
+    } else {
+       @lines = split(/\n/,$response);
+      for ($i=0; (($i<=$#lines) && (!$quit_daemon)); $i++) {
+
+        $line = $lines[$i];
+        $found_something = 1;
+
+        # strip the leading ./ if it exists
+        $line =~ s/^.\///;
+
+        if (!($line =~ /pulse_/)) {
+          logMsg(1, "INFO", "Processing baseband file ".$line);
+        }
+
+        ($result, $response) = processBasebandFile($line, $archive_dir);
+      }
+    }
+
     # If we didn't find any archives, sleep.
     if (!($found_something)) {
       sleep(5);
@@ -337,6 +364,50 @@ sub processArchive($$) {
   return ("ok", "");
 }
 
+#
+# Process an archive. Decimate it, send the decimated archive to srv via
+# NFS then move the high res archive to the storage area
+#   
+sub processBasebandFile($$) {
+
+  my ($path, $archive_dir) = @_;
+    
+  logMsg(1, "INFO", "processBasebandFile(".$path.", ".$archive_dir.")");
+
+  my $result = "";
+  my $response = "";
+  my $dir = ""; 
+  my $file = "";
+  my $file_decimated = "";
+  my $i = 0;
+  my $cmd = "";
+
+  # get the directory the file resides in. This may be 2 subdirs deep
+  my @parts = split(/\//, $path);
+
+  for ($i=0; $i<$#parts; $i++) {
+    # skip the leading ./
+    if ($parts[$i] ne ".") {
+      $dir .= $parts[$i]."/";
+    }
+  }
+
+  # remove the trailing slash
+  $dir =~ s/\/$//;
+
+  $file = $parts[$#parts];
+  logMsg(1, "INFO", "processBasebandFile: ".$dir."/".$file);
+
+   $cmd = "mv ".$dir."/".$file." ".$archive_dir."/".$dir."/";
+  logMsg(1, "INFO", "processBasebandFile: ".$cmd);
+  ($result, $response) = Dada->mySystem($cmd);
+  logMsg(2, "INFO", "processBasebandFile: ".$result." ".$response);
+
+  return ($result, $response); 
+
+}
+
+
 
 
 #
@@ -490,6 +561,12 @@ sub good($) {
   if (! -d $cfg{"CLIENT_RESULTS_DIR"} ) {
     return ("fail", "Error: results dir ".$cfg{"CLIENT_RESULTS_DIR"}." did not exist");
   } 
+
+  # Ensure more than one copy of this daemon is not running
+  my ($result, $response) = Dada::checkScriptIsUnique(basename($0));
+  if ($result ne "ok") {
+    return ($result, $response);
+  }
 
   return ("ok", "");
 

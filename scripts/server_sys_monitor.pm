@@ -4,6 +4,7 @@ use lib $ENV{"DADA_ROOT"}."/bin";
 
 use strict;
 use warnings;
+use File::Basename;
 use IO::Socket;
 use IO::Select;
 use Net::hostent;
@@ -329,6 +330,12 @@ sub good($) {
   );
   if (!$log_sock) {
     return ("fail", "Could not create listening socket: ".$log_host.":".$log_port);
+  }
+
+  # Ensure more than one copy of this daemon is not running
+  my ($result, $response) = Dada::checkScriptIsUnique(basename($0));
+  if ($result ne "ok") {
+    return ($result, $response);
   }
 
   return ("ok", "");

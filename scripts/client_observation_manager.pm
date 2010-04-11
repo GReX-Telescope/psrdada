@@ -5,6 +5,7 @@ use lib $ENV{"DADA_ROOT"}."/bin";
 use Dada;
 use strict;
 use warnings;
+use File::Basename;
 use threads;         # standard perl threads
 use threads::shared; # standard perl threads
 use IO::Socket;     # Standard perl socket library
@@ -91,12 +92,20 @@ sub main() {
   my $control_thread = 0;
   my $bg_processing_thread = 0;
   my $calibrator_thread = 0;
+  # my $first_calibrator_thread = 0;
 
   my $utc_start = "";
   my $obs_offset = "";
   my $band = "";
   my $source = "";
   my $calibrate = 0;
+  my $prev_utc_start = "";
+  my $prev_obs_offset = "";
+  # my $prev_band = "";
+  # my $prev_source=  "";
+  # my $prev_calibrate = 0; 
+  my $obs_end = 0;
+
   my $result = "";
   my $response = "";
 
@@ -135,21 +144,49 @@ sub main() {
   # Main Loop
   while( (!($quit_daemon) ) ) {
 
-    # Run the processing thread once
-    ($utc_start, $band, $source, $obs_offset, $calibrate) = processingThread($utc_start, $obs_offset);
+    # Process one observation/xfer
+    ($utc_start, $band, $source, $obs_offset, $calibrate, $obs_end) = processingThread($prev_utc_start, $prev_obs_offset);
 
-    # Join a previous calibrator thread if it existed
-    if ($calibrator_thread) {
-      $calibrator_thread->join();
-      $calibrator_thread = 0;
+    logMsg(0, "INFO", "processingThread() ($utc_start, $band, $source, $obs_offset, $calibrate, $obs_end)");
+
+    if (($utc_start eq "invalid") || ($band eq "invalid")) {
+
+      logMsg(0, "ERROR", "processingThread return an invalid obs/header");
+      sleep(1);
+
+    } else {
+
+      if ($obs_end) {
+
+        if ($utc_start eq $prev_utc_start) {
+
+          logMsg(0, "ERROR", "main: obs_end and UTC_START repeated");
+
+        } else {
+
+          # touch the band.finished file in the 
+          touchBandFinished($utc_start, $band);
+
+          # Join a previous calibrator thread if it existed
+          if ($calibrator_thread) {
+            $calibrator_thread->join();
+            $calibrator_thread = 0;
+          }
+
+          if ($calibrate) {
+            logMsg(2, "INFO", "main: calibratorThread(".$utc_start.", ".$band.", ".$source.")");
+            $calibrator_thread = threads->new(\&calibratorThread, $utc_start, $band, $source);
+          }
+        }
+      }
     }
+ 
+    $prev_utc_start = $utc_start;
+    $prev_obs_offset = $obs_offset;
+    # $prev_band = $band;
+    # $prev_source = $source;
+    # $prev_calibrate = $calibrate;
 
-    if ($calibrate) {
-      logMsg(2, "INFO", "main: calibratorThread(".$utc_start.", ".$band.", ".$source.")");
-      $calibrator_thread = threads->new(\&calibratorThread, $utc_start, $band, $source);
-    }
-
-    sleep(1);
   }
 
   logMsg(2, "INFO", "main: joining threads");
@@ -180,13 +217,15 @@ sub processingThread($$) {
   my $bindir = Dada->getCurrentBinaryVersion();
 
   my $remote_dirs_thread = 0;
-  my $utc_start = "";
-  my $obs_offset = "";
+  my $utc_start = "invalid";
+  my $band = "invalid";
+  my $obs_offset = "invalid";
   my $proc_cmd = "";
-  my $proj_id = "";
-  my $centre_freq = "";
-  my $source = "";
+  my $proj_id = "invalid";
+  my $source = "invalid";
   my $proc_file = "";
+  my $end_of_obs = 1;
+  my $obs_xfer = 0;
 
   my %h = ();
   my $raw_header = "";
@@ -198,6 +237,7 @@ sub processingThread($$) {
   my $digimon_rval = 0;
 
   my $calibrator = 0;
+  my $header_valid = 1;
 
   # Get the next filled header on the data block. Note that this may very
   # well hang for a long time - until the next header is written...
@@ -212,89 +252,161 @@ sub processingThread($$) {
 
     %h = Dada->headerToHash($raw_header);
 
-    $utc_start   = $h{"UTC_START"};
-    $obs_offset  = $h{"OBS_OFFSET"};
-    $proj_id     = $h{"PID"};
-    $centre_freq = $h{"FREQ"};
-    $source      = $h{"SOURCE"};
-    $proc_file   = $h{"PROC_FILE"};
+    $proc_file  = $h{"PROC_FILE"};
+    my $obs_start_file = "";
 
-    if (length($utc_start) < 5) {
-      logMsg(0, "ERROR", "UTC_START was malformed or non existent");
-    }
-    if (length($obs_offset) < 1) {
-      logMsg(0, "ERROR", "Error: OBS_OFFSET was malformed or non existent");
+    if (defined($h{"UTC_START"}) && length($h{"UTC_START"}) > 5) {
+      $utc_start  = $h{"UTC_START"};
+    } else {
+      logMsg(0, "ERROR", "UTC_START [".$utc_start."] was malformed or non existent");
+      $header_valid = 0;
     }
 
-    if (($utc_start eq $prev_utc_start) && ($obs_offset eq $prev_obs_offset)) {
-      logMsg(0, "ERROR", "The UTC_START and OBS_OFFSET has been repeated");
+    if (defined($h{"FREQ"}) && length($h{"FREQ"}) > 0) {
+      $band = $h{"FREQ"};
+    } else {
+      logMsg(0, "ERROR", "Error: FREQ [".$band."] was malformed or non existent");
+      $header_valid = 0;
     }
 
-    my $obs_start_file = createLocalDirectories($utc_start, $centre_freq, $proj_id, $raw_header);
-
-    $remote_dirs_thread = threads->new(\&remoteDirsThread, $utc_start, $centre_freq, $proj_id, $obs_start_file);
-
-    # createRemoteDirectories($utc_start, $centre_freq, $proj_id);
-
-    # copyObsStart($utc_start, $centre_freq, $obs_start_file);
-
-    # Determine if this observation is a calibrator
-    if ($h{"MODE"} =~ m/CAL/) {
-      $calibrator = 1;
+    if (defined($h{"OBS_OFFSET"}) && length($h{"OBS_OFFSET"}) > 0) {
+      $obs_offset = $h{"OBS_OFFSET"};
+    } else {
+      logMsg(0, "ERROR", "Error: OBS_OFFSET [".$h{"OBS_OFFSET"}."] was malformed or non existent");
+      $header_valid = 0;
+    }
+    if (defined($h{"PID"}) && length($h{"PID"}) > 3) {
+      $proj_id = $h{"PID"};
+    } else {
+      logMsg(0, "ERROR", "Error: PID [".$proj_id."] was malformed or non existent");
+      $header_valid = 0;
     }
 
-    # So that the background manager knows we are processing
-    $currently_processing = $utc_start;
+    if (defined($h{"SOURCE"}) && length($h{"SOURCE"}) > 3) {
+      $source = $h{"SOURCE"};
+    } else {
+      logMsg(0, "ERROR", "Error: SOURCE [".$source."] was malformed or non existent");
+      $header_valid = 0;
+    }
 
-    $proc_cmd = "dada_dbNdb -k eada -k fada";
+    if (defined($h{"OBS_XFER"})) {
+      $obs_xfer = $h{"OBS_XFER"};
+      if ($obs_xfer eq "-1") {
+        $end_of_obs = 1;
+      } else {
+        $end_of_obs = 0;
+      }
+      
+    } else {
+      $end_of_obs = 1;
+      $obs_xfer = 0;
+    }
 
-    logMsg(1, "INFO", "Starting level setting thread");
-    $digimon_thread  = threads->new(\&digimonThread, $digimon_cmd, $digimon_nchan);
+    logMsg(1, "INFO", "new header: UTC_START=".$utc_start.", FREQ=".$band.", OBS_OFFSET=".$obs_offset.", OBS_XFER=".$obs_xfer." END_OF_OBS=".$end_of_obs);
 
+    # TESTING FOR CASPSR
+    if (($obs_xfer eq "-1") && ($proc_file  =~ m/dbdisk/)) {
+      logMsg(1, "INFO", "Ignoring final transfer that had dbdisk set as procfile");
+      $header_valid = 0;
+    }
+
+    if (!$header_valid) {
+
+      $proc_cmd = "dada_dbnull -s -k ".lc($cfg{"RECEIVING_DATA_BLOCK"});
+      logMsg(0, "ERROR", "header invalid: jettesioning observation with dada_dbnull");
+      $currently_processing = "invalid";
+
+    } else {
+
+      # If the UTC START is the same
+      if ($utc_start eq $prev_utc_start) {
+
+        if ((!$end_of_obs) && ($obs_offset eq $prev_obs_offset)) {
+          logMsg(0, "ERROR", "The UTC_START and OBS_OFFSET has been repeated");
+        }  else {
+          logMsg(0, "INFO", "New xfer for ".$utc_start."/".$band." OBS_OFFSET=".$obs_offset." END_OF_OBS=".$end_of_obs);
+        }
+
+      # this is a new observation
+      } else {
+
+        logMsg(0, "INFO", "New observation: ".$utc_start."/".$band);
+
+        $obs_start_file = createLocalDirectories($utc_start, $band, $proj_id, $raw_header);
+
+        $remote_dirs_thread = threads->new(\&remoteDirsThread, $utc_start, $band, $proj_id, $obs_start_file);
+
+      }
+
+      # Determine if this observation is a calibrator
+      if ($h{"MODE"} =~ m/CAL/) {
+        $calibrator = 1;
+      }
+
+      # So that the background manager knows we are processing
+      $currently_processing = $utc_start;
+
+      $proc_cmd = "dada_dbNdb -k ".lc($cfg{"PROCESSING_DATA_BLOCK"})." -k ".lc($cfg{"AUXILIARY_DATA_BLOCK"});
+
+      # if we have been configured with a gain controller 
+      if ($gain_controller ne "") {
+        logMsg(1, "INFO", "Starting level setting thread");
+        $digimon_thread  = threads->new(\&digimonThread, $digimon_cmd, $digimon_nchan);
+      } else {
+        $digimon_thread = 0;
+      }
+    }
+
+    # run the processing command itself
     logMsg(1, "INFO", "START ".$proc_cmd);
-
     $cmd = $bindir."/".$proc_cmd;
     $cmd .= " 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/".$client_logger;
-
     logMsg(2, "INFO", "cmd = $cmd");
-
     my $return_value = system($cmd);
    
     if ($return_value != 0) {
-      logMsg(0, "ERROR", "dada_dbNdb failed: ".$?." ".$return_value);
+      logMsg(0, "ERROR", $proc_cmd." failed: ".$?." ".$return_value);
     }
-
-    # touch band.finished in the results directory
-    touchBandFinished($utc_start, $centre_freq); 
 
     # So that the background manager knows we have stopped processing
     $currently_processing = "none";
 
-    logMsg(1, "INFO", "END ".$proc_cmd);;
+    logMsg(1, "INFO", "END ".$proc_cmd);
 
-    logMsg(2, "INFO", "joining remoteDirsThread");
-    # join the remote directories threads
-    $remote_dirs_thread->join();
-    logMsg(2, "INFO", "remoteDirsThread joined");
+    if ($header_valid) {
 
-    # a rather inelegant way to kill digimon
-    $cmd = "killall digimon";
-    system($cmd);
+      if ($utc_start ne $prev_utc_start) {
 
-    logMsg(2, "INFO", "Waiting for level setting thread to join");
-    $digimon_rval = $digimon_thread->join();
-    logMsg(2, "INFO", "Waiting for level setting has joined: ".$digimon_rval);
-    $digimon_thread = 0;
+        logMsg(2, "INFO", "joining remoteDirsThread");
+        $remote_dirs_thread->join();
+        logMsg(2, "INFO", "remoteDirsThread joined");
 
-    return ($utc_start, $centre_freq, $source, $obs_offset, $calibrator);
+      }
+
+      # if configured with a gain controller 
+      if ($gain_controller ne "") {
+
+        logMsg(2, "INFO", "Stopping gain controller");
+
+        # a rather inelegant way to kill digimon
+        $cmd = "killall digimon";
+        system($cmd);
+
+        logMsg(2, "INFO", "Waiting for level setting thread to join");
+        $digimon_rval = $digimon_thread->join();
+        logMsg(2, "INFO", "Waiting for level setting has joined: ".$digimon_rval);
+        $digimon_thread = 0;
+      }
+    }
+
+    return ($utc_start, $band, $source, $obs_offset, $calibrator, $end_of_obs);
 
   } else {
-
     if (!$quit_daemon) {
       logMsg(2, "WARN", "dada_header_cmd failed - probably no data block");
       sleep 1;
     }
-    return ($utc_start, $centre_freq, $source, $obs_offset, $calibrator);
+    return ($utc_start, $band, $source, $obs_offset, $calibrator, $end_of_obs);
   }
 }
 
@@ -320,7 +432,7 @@ sub controlThread($$) {
   ($result, $response) = Dada->mySystem($cmd);
   $response =~ s/\n/ /;
   logMsg(2, "INFO", "controlThread: ".$result." ".$response);
-  if ($result eq "ok") {
+  if (($result eq "ok") & ($response ne "")) {
     $cmd = "kill -KILL ".$response;
     logMsg(1, "INFO", "controlThread: Killing dada_header: ".$cmd);
     ($result, $response) = Dada->mySystem($cmd);
@@ -503,11 +615,13 @@ sub calibratorThread($$$) {
 # 
 sub remoteDirsThread($$$$) {
 
-  my ($utc_start, $centre_freq, $proj_id, $obs_start_file) = @_;
+  my ($utc_start, $band, $proj_id, $obs_start_file) = @_;
 
-  createRemoteDirectories($utc_start, $centre_freq, $proj_id);
+  logMsg(2, "INFO", "remoteDirsThread(".$utc_start.", ".$band.", ".$proj_id.", ".$obs_start_file.")");
 
-  copyObsStart($utc_start, $centre_freq, $obs_start_file);
+  createRemoteDirectories($utc_start, $band, $proj_id);
+
+  copyObsStart($utc_start, $band, $obs_start_file);
 
 }
 
@@ -518,7 +632,9 @@ sub remoteDirsThread($$$$) {
 #
 sub createRemoteDirectories($$$) {
 
-  my ($utc_start, $centre_freq, $proj_id) = @_;
+  my ($utc_start, $band, $proj_id) = @_;
+
+  logMsg(2, "INFO", "createRemoteDirectories(".$utc_start.", ".$band.", ".$proj_id.")");
 
   my $remote_archive_dir = $cfg{"SERVER_ARCHIVE_NFS_MNT"};
   my $remote_results_dir = $cfg{"SERVER_RESULTS_NFS_MNT"};
@@ -535,18 +651,25 @@ sub createRemoteDirectories($$$) {
     `ls $remote_results_dir >& /dev/null`;
   }
 
+  # If the remote archives dir did not yet exist for some strange reason
+  if (! -d $remote_archive_dir."/".$utc_start ) {
+    $cmd = "mkdir -p ".$remote_archive_dir."/".$utc_start;
+    logMsg(2, "INFO", $cmd);
+    system($cmd);
+  }
+
   # Create the nfs soft link to the local archives directory 
-  $cmd = "ln -s /nfs/".$localhost."/".$user."/archives/".$utc_start."/".$centre_freq.
-          " ".$remote_archive_dir."/".$utc_start."/".$centre_freq;
-  logMsg(1, "INFO", $cmd);
+  $cmd = "ln -s /nfs/".$localhost."/".$user."/archives/".$utc_start."/".$band.
+          " ".$remote_archive_dir."/".$utc_start."/".$band;
+  logMsg(2, "INFO", $cmd);
   system($cmd);
 
-  $cmd = "mkdir -p ".$remote_results_dir."/".$utc_start."/".$centre_freq;
+  $cmd = "mkdir -p ".$remote_results_dir."/".$utc_start."/".$band;
   logMsg(2, "INFO", $cmd);
   system($cmd);
 
   # Check whether the user is a member of the specified group
-  $user_groups = `groups`;
+  $user_groups = `groups $user`;
   chomp $user_groups;
 
   if ($user_groups =~ m/$proj_id/) {
@@ -573,7 +696,6 @@ sub createRemoteDirectories($$$) {
     logMsg(0, "WARN", "Failed to chmod remote archive dir \"".
                $dir."\" to \"".$proj_id."\"");
   }
-
 
   # Adjust permission on remote results directory
   $dir = $remote_results_dir."/".$utc_start;
@@ -841,8 +963,14 @@ sub good($) {
   }
 
   if ( ($daemon_name eq "") || ($user eq "") || ($dada_header_cmd eq "") || 
-       ($gain_controller eq "") || ($client_logger eq "")) {
-    return ("fail", "Error: a package variable missing [daemon_name, user, dada_header_cmd, gain_controller, client_logger]");
+       ($client_logger eq "")) {
+    return ("fail", "Error: a package variable missing [daemon_name, user, dada_header_cmd, client_logger]");
+  }
+
+  # Ensure more than one copy of this daemon is not running
+  my ($result, $response) = Dada::checkScriptIsUnique(basename($0));
+  if ($result ne "ok") {
+    return ($result, $response);
   }
 
   return ("ok", "");

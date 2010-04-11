@@ -4,6 +4,7 @@ use lib $ENV{"DADA_ROOT"}."/bin";
 
 use strict;
 use warnings;
+use File::Basename;
 use IO::Socket;
 use IO::Select;
 use Net::hostent;
@@ -77,8 +78,6 @@ $gain_host = "";
 $gain_port = 0;
 $gain_sock = 0;
 
-use constant INITIAL_GAIN => 2000;
-
 ###############################################################################
 #
 # package functions
@@ -102,7 +101,11 @@ sub main() {
   my $string = "";
   my @pol0_gains = ();
   my @pol1_gains = ();
+  my $initial_gain = 2000;
 
+  if ($cfg{"USE_DFB_SIMULATOR"} == 1) {
+    $initial_gain = 33;
+  }
 
   # set the host/port globals for the good() test
   $gain_host   = $cfg{"SERVER_HOST"};
@@ -131,8 +134,8 @@ sub main() {
   Dada->logMsg(0, $dl ,"STARTING SCRIPT");
 
   for ($i=0; $i<$cfg{"NUM_PWC"}; $i++) {
-    $pol0_gains[$i] = INITIAL_GAIN;
-    $pol1_gains[$i] = INITIAL_GAIN;
+    $pol0_gains[$i] = $initial_gain;
+    $pol1_gains[$i] = $initial_gain;
   }
 
   Dada->logMsg(1, $dl, "Connecting to hardware gain interface: ".$hw_host.":".$hw_port);
@@ -260,7 +263,7 @@ sub main() {
               if ($machine eq $cfg{"PWC_".$i}) {
                 Dada->logMsg(2, $machine." <- ".$i);
                 print $rh $i."\r\n";
-                Dada->logMsg(1, $dl, "BASE: ".$machine." ".$i);
+                Dada->logMsg(2, $dl, "BASE: ".$machine." ".$i);
               }
             }
 
@@ -302,7 +305,7 @@ sub main() {
 
             Dada->logMsg(2, $machine." <- ".$hw_response);
             print $rh $hw_response."\r\n";
-            Dada->logMsg(1, $machine." -> ".$string."... ".$hw_response);
+            Dada->logMsg(2, $machine." -> ".$string."... ".$hw_response);
 
             if ($pol == 0) {
               $pol0_gains[$chan] = $val;
@@ -467,6 +470,12 @@ sub good($) {
   if (!$report_sock) {
     close ($gain_sock);
     return ("fail", "Error: could not open socket: ".$report_host.":".$report_port);
+  }
+
+  # Ensure more than one copy of this daemon is not running
+  my ($result, $response) = Dada::checkScriptIsUnique(basename($0));
+  if ($result ne "ok") {
+    return ($result, $response);
   }
 
   return ("ok", "");

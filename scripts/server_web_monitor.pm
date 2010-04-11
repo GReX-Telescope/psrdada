@@ -4,6 +4,7 @@ use lib $ENV{"DADA_ROOT"}."/bin";
 
 use strict;
 use warnings;
+use File::Basename;
 use IO::Socket;
 use IO::Select;
 use Net::hostent;
@@ -268,30 +269,11 @@ sub currentInfoThread($) {
         %cfg_file = Dada->readCFGFile($results_dir."/".$obs."/obs.info"); 
 
         # Determine the P0 for this source
-        $cmd = "psrcat -x -c 'P0' ".$cfg_file{"SOURCE"}." | awk '{print \$1}'";
-        Dada->logMsg(2, $dl, "currentInfoThread: ".$cmd);
-        ($result, $response) = Dada->mySystem($cmd);
-        Dada->logMsg(2, $dl, "currentInfoThread: ".$result." ".$response);
-        chomp $response;
-        if (($result eq "ok") && (!($response =~ /WARNING:/))) {
-          $P0 = sprintf("%5.4f",$response);
-          $P0 *= 1000;
-        } else {
-          $P0 = "unknown";
-        }
+        $P0 = Dada->getPeriod($cfg_file{"SOURCE"});
 
         # Determine the DM of this source
-        $cmd = "psrcat -x -c 'DM' ".$cfg_file{"SOURCE"}." | awk '{print \$1}'";
-        Dada->logMsg(2, $dl, "currentInfoThread: ".$cmd);
-        ($result, $response) = Dada->mySystem($cmd);
-        Dada->logMsg(2, $dl, "currentInfoThread: ".$result." ".$response);
-        chomp $response;
-        if ($result eq "ok") {
-          $DM = $response;
-        } else {
-          $DM = "unkown";
-        }
-
+        $DM = Dada->getDM($cfg_file{"SOURCE"});
+  
         # Determine how much data has been intergrated so far
         $integrated = 0;
         $source = $cfg_file{"SOURCE"};
@@ -338,6 +320,7 @@ sub currentInfoThread($) {
         $tmp_str .= "INTEGRATED:::".$integrated.";;;";
         $tmp_str .= "SNR:::".$snr.";;;";
         $tmp_str .= "CONFIG:::".$cfg_file{"CONFIG"}.";;;";
+        $tmp_str .= "PROC_FILE:::".$cfg_file{"PROC_FILE"}.";;;";
  
         # update the global variable 
         $curr_obs = $tmp_str;
@@ -543,7 +526,7 @@ sub statusInfoThread() {
         $tmp_str .= $key.":::1:::".$value.";;;";
       }
       while (($key, $value) = each(%errors)){
-        $tmp_str .= $key.":::1:::".$value.";;;";
+        $tmp_str .= $key.":::2:::".$value.";;;";
       }
       #$tmp_str .= "\n";
 
@@ -606,8 +589,17 @@ sub nodeInfoThread() {
         $handle = Dada->connectToMachine($machines[$i], $port, 0);
         # ensure our file handle is valid
         if (!$handle) {
-          $result = "fail";
-          $response = "0 0 0;;;0 0;;;0.00,0.00,0.00;;;0.0";
+
+          $response = "0 0 0;;;0 0;;;0.00,0.00,0.00;;;0.0;;;0.0";
+
+          # check if offline, or scripts not running
+          $handle = Dada->connectToMachine($machines[$i], 22, 0);
+          if (!$handle) {
+            $result = "offline";
+          } else {
+            $result = "stopped";
+            $handle->close();
+          }
         } else {
           ($result, $response) = Dada->sendTelnetCommand($handle, "get_status");
           $handle->close();
@@ -665,11 +657,15 @@ sub gainInfoThread() {
         Dada->logMsg(2, $dl, "gainInfoThread: -> REPORT GAINS");
         print $handle "REPORT GAINS\r\n";
         $response = Dada->getLine($handle);
-        Dada->logMsg(2, $dl, "gainInfoThread: <- ".$response);
+        if ($response) {
+          Dada->logMsg(2, $dl, "gainInfoThread: <- ".$response);
+          $result = "ok";
+        } else {
+          $result = "fail";
+        }
         $handle->close();
-        $result = "ok";
       } 
-      
+
       if ($result ne "ok") {
         $response = "50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50";
       } else {
@@ -771,6 +767,12 @@ sub good($) {
   );
   if (!$server_sock) {
     return ("fail", "Could not create listening socket: ".$server_host.":".$server_port);
+  }
+
+  # Ensure more than one copy of this daemon is not running
+  my ($result, $response) = Dada::checkScriptIsUnique(basename($0));
+  if ($result ne "ok") {
+    return ($result, $response);
   }
 
   return ("ok", "");

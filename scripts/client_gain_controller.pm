@@ -4,8 +4,8 @@ use lib $ENV{"DADA_ROOT"}."/bin";
 
 use strict;
 use warnings;
-use IO::Socket;
 use File::Basename;
+use IO::Socket;
 use threads;
 use threads::shared;
 use Dada;
@@ -112,7 +112,7 @@ sub main() {
     return 1;
   }
 
-  logMsg(0,"INFO", "STARTING SCRIPT");
+  logMsg(2, "INFO", "STARTING GAIN CONTROLLER");
 
   # install signal handlers
   $SIG{INT} = \&sigHandle;
@@ -250,7 +250,7 @@ sub main() {
     }
   }
 
-  logMsg(0, "INFO", "STOPPING SCRIPT");
+  logMsg(2, "INFO", "STOPPING GAIN CONTROLLER");
   Dada->nexusLogClose($log_sock);
   close ($gain_sock);
 

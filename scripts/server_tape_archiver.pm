@@ -4,6 +4,7 @@ use lib $ENV{"DADA_ROOT"}."/bin";
 
 use strict;
 use warnings;
+use File::Basename;
 use threads;
 use threads::shared;
 use Dada;
@@ -1768,6 +1769,12 @@ sub good($) {
 
   if (! -f ($db_dir."/".$files_db)) {
     return ("fail", "files db file [".$db_dir."/".$files_db."] did not exist");
+  }
+
+  # Ensure more than one copy of this daemon is not running
+  my ($result, $response) = Dada::checkScriptIsUnique(basename($0));
+  if ($result ne "ok") {
+    return ($result, $response);
   }
 
   return ("ok", "");

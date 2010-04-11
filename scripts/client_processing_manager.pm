@@ -7,9 +7,10 @@ use strict;
 use warnings;
 use threads;         # standard perl threads
 use threads::shared; # standard perl threads
-use IO::Socket;     # Standard perl socket library
-use IO::Select;     # Allows select polling on a socket
+use IO::Socket;      # Standard perl socket library
+use IO::Select;      # Allows select polling on a socket
 use Net::hostent;
+use File::Basename;
 
 
 BEGIN {
@@ -106,7 +107,7 @@ sub main() {
   # sanity check on whether the module is good to go
   ($result, $response) = good($quit_file);
   if ($result ne "ok") {
-    print STDERR $response."\n";
+    print STDERR "ERROR failed to start: ".$response."\n";
     return 1;
   }
 
@@ -178,7 +179,7 @@ sub processing_thread($) {
 
     my $proc_cmd = "";
 
-    ($result, $response) = Apsr->processHeader($raw_header, \%cfg); 
+    ($result, $response) = Dada->processHeader($raw_header, \%cfg); 
 
     if ($result ne "ok") {
       logMsg(0, "ERROR", $response);
@@ -534,8 +535,15 @@ sub good($) {
     return ("fail", "Error: package global hash cfg was uninitialized");
   }
 
+  # check required gloabl parameters
   if ( ($user eq "") || ($dada_header_cmd eq "") || ($client_logger eq "")) {
     return ("fail", "Error: a package variable missing [user, dada_header_cmd, client_logger]");
+  }
+
+  # Ensure more than one copy of this daemon is not running
+  my ($result, $response) = Dada::checkScriptIsUnique(basename($0));
+  if ($result ne "ok") {
+    return ($result, $response);
   }
 
   return ("ok", "");

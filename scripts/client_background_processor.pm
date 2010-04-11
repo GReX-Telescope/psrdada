@@ -4,6 +4,7 @@ use lib $ENV{"DADA_ROOT"}."/bin";
 
 use strict;
 use warnings;
+use File::Basename;
 use threads;
 use threads::shared;
 use Net::hostent;
@@ -21,7 +22,7 @@ BEGIN {
   @ISA         = qw(Exporter AutoLoader);
   @EXPORT      = qw(&main);
   %EXPORT_TAGS = ( );
-  @EXPORT_OK   = qw($dl $daemon_name %cfg);
+  @EXPORT_OK   = qw($dl $daemon_name $user %cfg);
 
 }
 
@@ -32,6 +33,7 @@ our @EXPORT_OK;
 #
 our $dl : shared;
 our $daemon_name : shared;
+our $user : shared;
 our %cfg : shared;
 
 #
@@ -48,6 +50,7 @@ our $proc_pid : shared;
 #
 $dl = 1; 
 $daemon_name = 0;
+$user = "";
 %cfg = ();
 
 #
@@ -228,9 +231,9 @@ sub processingThread($$$) {
   my $proc_dir = "";
   my %h = ();
   my $proj_id = "";
-  my $apsr_groups = "";
+  my $groups = "";
 
-  ($result, $response) = Apsr->processHeader($raw_header, \%cfg);
+  ($result, $response) = Dada->processHeader($raw_header, \%cfg);
 
   if  ($result ne "ok") {
     logMsg(0, "ERROR", $response);
@@ -281,16 +284,16 @@ sub processingThread($$$) {
       system("mkdir -p ".$proc_dir);
       system("chmod g+s ".$proc_dir);
 
-      # Check whether the apsr user is a member of the specified group
+      # Check whether the user is a member of the specified group
       $proj_id = $h{"PID"};
-      $apsr_groups = `groups`;
-      chomp $apsr_groups;
+      $groups = `groups $user`;
+      chomp $groups;
 
-     if ($apsr_groups =~ m/$proj_id/) {
+     if ($groups =~ m/$proj_id/) {
        logMsg(2, "INFO", "chgrp to ".$proj_id);
      } else {
-       logMsg(0, "WARN", "Project ".$proj_id." was not an apsr group. Using apsr instead'");
-       $proj_id = "apsr";
+       logMsg(0, "WARN", "Project ".$proj_id." was not an ".$user." group. Using ".$user." instead'");
+       $proj_id = $user
      }
      system("chgrp -R ".$proj_id." ".$proc_dir);
     }
@@ -564,8 +567,14 @@ sub good($) {
     return ("fail", "Error: package global hash cfg was uninitialized");
   }
 
-  if ( $daemon_name eq "") {
-    return ("fail", "Error: a package variable missing [daemon_name]");
+  if (( $daemon_name eq "") || ($user eq "")) {
+    return ("fail", "Error: a package variable missing [daemon_name, user]");
+  }
+
+  # Ensure more than one copy of this daemon is not running
+  my ($result, $response) = Dada::checkScriptIsUnique(basename($0));
+  if ($result ne "ok") {
+    return ($result, $response);
   }
 
   return ("ok", "");

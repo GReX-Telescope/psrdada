@@ -61,6 +61,11 @@ require AutoLoader;
   &headerToHash
   &daemonBaseName
   &getProjectGroups
+  &processHeader
+  &getDM
+  &getPeriod
+  &checkScriptIsUnique
+  &getObsDestinations
 );
 
 $VERSION = '0.01';
@@ -419,7 +424,7 @@ sub addToTime($$$) {
 
   my @t = split(/-|:/,$time);
 
-  my $unixtime = timelocal($t[5], $t[4], $t[3], $t[2], $t[1], $t[0]);
+  my $unixtime = timelocal($t[5], $t[4], $t[3], $t[2], ($t[1]-1), $t[0]);
 
   my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime ($unixtime + $toadd);
 
@@ -1223,6 +1228,40 @@ sub preventDuplicateDaemon($$) {
   } 
 }
 
+sub checkScriptIsUnique($) {
+
+  my ($process_name) = @_;
+
+  my $result = "";
+  my $response = "";
+  my $cmd = "";
+
+  $cmd = "ps auxwww | grep '".$process_name."' | grep perl | grep -v grep | wc";
+  $result = `$cmd`;
+  if ($? != 0) {
+    $result = "fail";
+    $response = "no process running";
+  } else {
+
+    chomp $result;
+    if ($result == 1) {
+      # ok, let it run
+      $result = "ok";
+      $response = "";
+
+    } else {
+      $cmd = "ps auxwww | grep '".$process_name."' | grep perl | grep -v grep | awk '{print \$2}'";
+      my $ps_running = `$cmd`;
+      chomp $ps_running;
+      $ps_running =~ s/\n/ /g;
+      $result = "fail";
+      $response = $process_name.": multiple daemons running with PIDs ".$ps_running;
+    }
+  }
+  return ($result, $response);
+
+}
+
 #
 # ssh to the host as the user, and run the remote_cmd. Optionally pipe the
 # output to the localpipe command
@@ -1293,7 +1332,7 @@ sub headerToHash($$) {
   @lines = split(/\n/,$raw_hdr);
   foreach $line (@lines) {
     ($key,$val) = split(/ +/,$line,2);
-    if ((length($key) > 1) && (length($val) > 1)) {
+    if ((length($key) > 1) && (length($val) > 0)) {
       # Remove trailing whitespace
       $val =~ s/\s*$//g;
       $hash{$key} = $val;
@@ -1333,6 +1372,269 @@ sub getProjectGroups($) {
     }
   }
   return @results;
+}
+
+
+#
+# Determine the processing command line given a raw header for APSR/CASPSR
+#
+sub processHeader($$\%) {
+
+  my ($module, $raw_header, $cfg_ref) = @_;
+
+  my %cfg = %$cfg_ref;
+  my $result = "ok";
+  my $response = "";
+  my $cmd = "";
+  my %h = ();
+
+  %h = Dada->headerToHash($raw_header);
+
+  if (($result eq "ok") && (length($h{"UTC_START"}) < 5)) {
+    $result = "fail";
+    $response .= "Error: UTC_START was malformed or non existent ";
+  }
+
+  if (($result eq "ok") && (length($h{"OBS_OFFSET"}) < 1)) {
+    $result = "fail";
+    $response .= "Error: OBS_OFFSET was malformed or non existent";
+  }
+
+  if (($result eq "ok") && (length($h{"PROC_FILE"}) < 1)) {
+    $result = "fail";
+    $response .=  "Error: PROC_FILE was malformed or non existent";
+  }
+  
+  if (($result eq "ok") && (length($h{"SOURCE"}) < 1)) {
+    $result = "fail"; 
+    $response .=  "Error: SOURCE was malformed or non existent";
+  }
+
+  my $source = $h{"SOURCE"};
+  my $proc_cmd = "";
+  my $proc_args = "";
+
+  # Multi pulsar mode special case
+  if ($h{"PROC_FILE"} eq "dspsr.multi") {
+
+    $source =~ s/^[JB]//;
+    $source =~ s/[a-zA-Z]*$//;
+
+    # find the source in multi.txt
+    $cmd = "grep ^".$source." ".$cfg{"CONFIG_DIR"}."/multi.txt";
+    my $multi_string = `$cmd`;
+
+    if ($? != 0) {
+      $result = "fail";
+      $response = "Error: ".$source." did not exist in multi.txt";
+
+    } else {
+
+      chomp $multi_string;
+      my @multis = split(/ +/,$multi_string);
+
+      # If we have a DM specified
+      if ($multis[1] ne "CAT") {
+        $proc_args .= " -D ".$multis[1];
+      }
+
+      $proc_args .= " -N ".$cfg{"CONFIG_DIR"}."/".$multis[2];
+
+      if (! -f $cfg{"CONFIG_DIR"}."/".$multis[2]) {
+        $result = "fail";
+        $response = "Error: Multi-source file: ".$cfg{"CONFIG_DIR"}.
+                    "/".$multis[2]." did not exist";
+
+      } else {
+        $cmd = "head -1 ".$cfg{"CONFIG_DIR"}."/".$multis[2];
+        $source = `$cmd`;
+        chomp $source;
+      }
+    }
+
+  # If we are writing the data to disk, dont worry about the DM
+  } elsif ($h{"PROC_FILE"} =~ m/scratch/) {
+
+    $result = "ok";
+    $response = "";
+
+  } else {
+
+    if ($h{"MODE"} eq "PSR") {
+
+      # test if the source is in the catalogue
+      my $dm = getDM("Dada", $source);
+
+      if ($dm eq "NA") {
+        $result = "fail";
+        $response = "Error: ".$source." was not in psrcat's catalogue";
+      }
+
+    }
+
+  }
+
+  # Add the dada header file to the proc_cmd
+  my $proc_cmd_file = $cfg{"CONFIG_DIR"}."/".$h{"PROC_FILE"};
+  my %proc_cmd_hash = Dada->readCFGFile($proc_cmd_file);
+  $proc_cmd = $proc_cmd_hash{"PROC_CMD"};
+
+  # Select command line arguements special case
+  if ($proc_cmd =~ m/SELECT/) {
+
+    my $dspsr_cmd = "dspsr_command_line.pl ".$source." ".$h{"BW"}.
+                    " ".$h{"FREQ"}." ".$h{"MODE"};
+
+    my $dspsr_options = `$dspsr_cmd`;
+
+    if ($? != 0) {
+      chomp $dspsr_options;
+      $result = "fail";
+      $response = "Error: dspsr_command_line.pl failed: ".$dspsr_options;
+
+    } else {
+      chomp $dspsr_options;
+      $proc_cmd =~ s/SELECT/$dspsr_options/;
+
+    }
+  }
+
+  $proc_cmd .= $proc_args;
+
+  if ($source =~ m/CalDelay/) {
+    if ($proc_cmd =~ m/-2c100/) {
+      # TODO put error here
+    } else {
+      $proc_cmd .= " -2c100";
+    }
+  }
+
+  if ($result eq "ok") {
+    $response = $proc_cmd;
+  }
+
+  return ($result, $response)
+
+}
+
+#
+# Get the DM from either psrcat or tempo's tzpar dir
+#
+sub getDM($$) {
+
+  my ($module, $source) = @_;  
+
+  my $cmd = "";
+  my $str = "";
+  my $dm = "unknown";
+  my $par_file = "";
+
+  # test if the source is in the catalogue
+  $cmd = "psrcat -x -c DM ".$source;
+  $str = `$cmd`;
+  chomp $str;
+
+  # Check to see if the source is in the catalogue
+  if ($str =~ m/not in catalogue/) {
+
+    # strip leading J or B
+    $source =~ s/^[JB]//;
+
+    $par_file = "/home/dada/runtime/tempo/tzpar/".$source.".par";
+
+    if ( -f $par_file ) {
+      $cmd = "grep ^DM ".$par_file." | grep -v DMEPOCH | awk '{print \$2}'";
+      $dm = `$cmd`;
+      chomp $dm;
+    } 
+
+  # DM did exist in the psrcat DB
+  } else {
+    ($dm, $str) = split(/ /,$str,2);
+
+  }
+
+  return $dm;
+
+}
+
+sub getPeriod($$) {
+
+  my ($module, $source) = @_;
+
+  my $cmd = "";
+  my $str = "";
+  my $period = "unknown";
+  my $par_file = "";
+  my $result = "";
+  my $response = "";
+
+  # test if the source is in the catalogue
+  $cmd = "psrcat -x -c 'P0' ".$source." | awk '{print \$1}'";
+  ($result, $response) = Dada->mySystem($cmd);
+  
+  chomp $response;
+  if (($result eq "ok") && (!($response =~ /WARNING:/))) {
+    $period = sprintf("%10.9f",$response);
+    $period *= 1000;
+    $period = sprintf("%5.4f",$period);
+
+  } else {
+
+    # strip leading J or B
+    $source =~ s/^[JB]//;
+
+    $par_file = "/home/dada/runtime/tempo/tzpar/".$source.".par";
+
+    if ( -f $par_file ) {
+
+      # try to get the period
+      $cmd = "grep ^F0 ".$par_file." | awk '{print \$2}'";
+      ($result, $response) = Dada->mySystem($cmd);
+      if (($result eq "ok") && ($response ne "")) {
+        chomp $response;
+        $period = sprintf("%10.9f",$response);
+        if ($period != 0) { 
+          $period = ( 1 / $period);
+          $period *= 1000;
+          $period = sprintf("%5.4f",$period);
+        }
+
+      # if F0 didn't exist, try for P
+      } else {
+        $cmd = "grep '^P ' ".$par_file." | awk '{print \$2}'";
+        ($result, $response) = Dada->mySystem($cmd);
+        if ($result eq "ok") {
+          chomp $response;
+          $period = sprintf("%10.9f",$response);
+          if ($period != 0) {
+            $period *= 1000;
+            $period = sprintf("%5.4f",$period);
+          }
+        }
+      }
+    }
+  }
+  return $period;
+}
+
+# Return the destinations that an obs with the specified PID should be sent to
+sub getObsDestinations($$) {
+
+  my ($obs_pid, $dests) = @_;
+
+  my $want_swin = 0;
+  my $want_parkes = 0;
+
+  if ($dests =~ m/swin/) {
+    $want_swin = 1;
+  }
+  if ($dests =~ m/parkes/) {
+    $want_parkes = 1;
+  }
+
+  return ($want_swin, $want_parkes);
+
 }
 
 __END__

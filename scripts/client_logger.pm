@@ -142,7 +142,7 @@ sub logMsg($$$;$) {
 
   if ($level <= $dl) {
 
-    if ($time eq "") {
+    if ((!defined($time)) || ($time eq "")) {
       $time = Dada->getCurrentDadaTime();
     }
 

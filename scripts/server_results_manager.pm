@@ -141,8 +141,14 @@ sub main() {
         if ($t > 300) {
 
           ($result, $response) = checkBandFinished($o, $n_bands);
+
           if ($result eq "ok") {
             markObsState($o, "processing", "finished");
+
+          # If some band.finished are missing for some reason, then mark finished after 3 hours
+          } elsif ($t > 10800) {
+            markObsState($o, "processing", "finished");
+
           } else {
             sleep(2);
           }
@@ -231,8 +237,8 @@ sub getObsAge($$) {
       ($result, $response) = Dada->mySystem($cmd);
       Dada->logMsg(2, $dl, "getObsAge: ".$result." ".$response);
 
-      # If this is a single pulse observation
-      if (($result eq "ok") && ($response =~ m/singleF/)) {
+      # If this is a single pulse observation or P427 observation
+      if (($result eq "ok") && (($response =~ m/singleF/) || ($response =~ m/P427/))) {
 
         # only declare this as finished when the band.finished files are written
         $cmd = "find ".$o." -type f -name 'band.finished' | wc -l";
@@ -362,6 +368,9 @@ sub processObservation($$) {
   my @fres_plot = ();
   my @tres_plot = ();
   my $source = "";
+  my $cmd = "";
+  my $result = "";
+  my $response = "";
 
   # Look for the oldest archives that have not been processed
   %unprocessed = countArchives($o,1);
@@ -412,7 +421,21 @@ sub processObservation($$) {
 
   # If we produce at least one archive from processArchive()
   for ($i=0; $i<=$#tres_plot; $i++) {
-    #$source = substr($tres_plot[$i],0,-5);
+
+    # determine the source name for this archive
+    $cmd = "vap -n -c name ".$tres_plot[$i]." | awk '{print \$2}'";
+    Dada->logMsg(2, $dl, "processObservation: ".$cmd);
+    ($result, $response) = Dada->mySystem($cmd);
+    Dada->logMsg(2, $dl, "processObservation: ".$result." ".$response);
+    if ($result ne "ok") {
+      Dada->logMsgWarn($warn, "processObservation: failed to determine source name: ".$response);
+      $source = "UNKNOWN";
+    } else {
+      $source = $response;
+      chomp $source;
+    }
+    $source =~ s/^[JB]//;
+
     Dada->logMsg(2, $dl, "processObservation: plotting [".$i."] (".$o.", ".$source.", ".$fres_plot[$i].", ".$tres_plot[$i].")");
     makePlotsFromArchives($o, $source, $fres_plot[$i], $tres_plot[$i], "240x180");
     makePlotsFromArchives($o, $source, $fres_plot[$i], $tres_plot[$i], "1024x768");
@@ -1137,6 +1160,12 @@ sub good($) {
   if (index($cfg{"SERVER_ALIASES"}, Dada->getHostMachineName()) < 0 ) {
     return ("fail", "Error: script must be run on ".$cfg{"SERVER_HOST"}.
                     ", not ".Dada->getHostMachineName());
+  }
+
+  # Ensure more than one copy of this daemon is not running
+  my ($result, $response) = Dada::checkScriptIsUnique(basename($0));
+  if ($result ne "ok") {
+    return ($result, $response);
   }
 
   return ("ok", "");

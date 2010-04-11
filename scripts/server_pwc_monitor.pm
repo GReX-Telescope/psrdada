@@ -4,6 +4,7 @@ use lib $ENV{"DADA_ROOT"}."/bin";
 
 use strict;
 use warnings;
+use File::Basename;
 use IO::Socket;
 use IO::Select;
 use Net::hostent;
@@ -292,6 +293,12 @@ sub good($) {
   if (index($cfg{"SERVER_ALIASES"}, Dada->getHostMachineName()) < 0 ) {
     return ("fail", "Error: script must be run on ".$cfg{"SERVER_HOST"}.
                     ", not ".Dada->getHostMachineName());
+  }
+
+  # Ensure more than one copy of this daemon is not running
+  my ($result, $response) = Dada::checkScriptIsUnique(basename($0));
+  if ($result ne "ok") {
+    return ($result, $response);
   }
 
   return ("ok", "");

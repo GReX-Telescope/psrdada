@@ -4,6 +4,7 @@ use lib $ENV{"DADA_ROOT"}."/bin";
 
 use strict;
 use warnings;
+use File::Basename;
 use threads;
 use threads::shared;
 use IO::Socket;
@@ -21,7 +22,7 @@ BEGIN {
   @ISA         = qw(Exporter AutoLoader);
   @EXPORT      = qw(&main);
   %EXPORT_TAGS = ( );
-  @EXPORT_OK   = qw($dl $daemon_name $dada_header_cmd $aux_db %cfg);
+  @EXPORT_OK   = qw($dl $daemon_name $user $dada_header_cmd %cfg);
 
 }
 
@@ -32,8 +33,8 @@ our @EXPORT_OK;
 #
 our $dl : shared;
 our $daemon_name : shared;
+our $user : shared;
 our $dada_header_cmd : shared;
-our $aux_db : shared;
 our %cfg : shared;
 
 #
@@ -49,8 +50,8 @@ our $log_sock;
 #
 $dl = 1; 
 $daemon_name = 0;
+$user = "";
 $dada_header_cmd = 0;
-$aux_db = 0;
 %cfg = ();
 
 #
@@ -142,8 +143,8 @@ sub processingThread($) {
   my $proc_cmd = "";
   my $node = "";
 
-  # Get the projects/groups that apsr is a member of
-  my $unix_groups = `groups`;
+  # Get the projects/groups that the user is a member of
+  my $unix_groups = `groups $user`;
   chomp $unix_groups;
 
   # Get the next filled header on the data block. Note that this may very
@@ -158,7 +159,7 @@ sub processingThread($) {
 
     $proc_cmd = "";
 
-    ($result, $response) = Apsr->processHeader($raw_header, \%cfg);
+    ($result, $response) = Dada->processHeader($raw_header, \%cfg);
 
     if ($result ne "ok") {
       logMsg(0, "ERROR", $response);
@@ -185,15 +186,15 @@ sub processingThread($) {
       if ($node =~ /apsr(\d\d):(\d+)/) {
 
         logMsg(2, "INFO", "processingThread: transferring data to ".$node);
-        $proc_cmd = $bindir."/dada_dbnic -k ".$aux_db." -s -N ".$node;
+        $proc_cmd = $bindir."/dada_dbnic -k ".$cfg{"AUXILIARY_DATA_BLOCK"}." -s -N ".$node;
 
       # If no nodes are available, run dbdisk on the xfer
       } else {
         # Do a check if the main command was dada_dbdisk, just dbnull it
         if ($proc_cmd =~ m/dada_dbdisk/) {
-          $proc_cmd =  $bindir."/dada_dbnull -s -k ".$aux_db;
+          $proc_cmd =  $bindir."/dada_dbnull -s -k ".$cfg{"AUXILIARY_DATA_BLOCK"};
         } else {
-          $proc_cmd = $bindir."/dada_dbdisk -k ".$aux_db." -s -D ".$raw_data_dir;
+          $proc_cmd = $bindir."/dada_dbdisk -k ".$cfg{"AUXILIARY_DATA_BLOCK"}." -s -D ".$raw_data_dir;
         }
       }
     }
@@ -273,7 +274,7 @@ sub controlThread($$) {
   $quit_daemon = 1;
  
   # Kill the dada_header command
-  $cmd = "ps aux | grep -v grep | grep apsr | grep '".$dada_header_cmd.
+  $cmd = "ps aux | grep -v grep | grep ".$user." | grep '".$dada_header_cmd.
           "' | awk '{print \$2}'";
   logMsg(2, "INFO", "controlThread: ".$cmd);
   ($result, $response) = Dada->mySystem($cmd);
@@ -370,8 +371,14 @@ sub good($) {
     return ("fail", "Error: package global hash cfg was uninitialized");
   }
 
-  if ( ($daemon_name eq "") || ($dada_header_cmd eq "") || ($aux_db eq "")) {
-    return ("fail", "Error: a package variable missing [daemon_name dada_header_cmd aux_db]");
+  if ( ($daemon_name eq "") || ($dada_header_cmd eq "") || ($user eq "")) {
+    return ("fail", "Error: a package variable missing [daemon_name dada_header_cmd user]");
+  }
+
+  # Ensure more than one copy of this daemon is not running
+  my ($result, $response) = Dada::checkScriptIsUnique(basename($0));
+  if ($result ne "ok") {
+    return ($result, $response);
   }
 
   return ("ok", "");

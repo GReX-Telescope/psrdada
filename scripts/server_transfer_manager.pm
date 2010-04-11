@@ -1,4 +1,4 @@
-###############################################################################
+##############################################################################
 #  
 #     Copyright (C) 2009 by Andrew Jameson
 #     Licensed under the Academic Free License version 2.1
@@ -17,6 +17,7 @@ use warnings;
 use threads;
 use threads::shared;
 use File::Basename;
+use Time::Local;
 use Dada;
 
 BEGIN {
@@ -146,12 +147,12 @@ sub main() {
 
 
   # become a daemon
-  # Dada->daemonize($log_file, $pid_file);
+  Dada->daemonize($log_file, $pid_file);
   
   Dada->logMsg(0, $dl ,"STARTING SCRIPT");
 
   # start the control thread
-  Dada->logMsg(2, "INFO", "main: controlThread(".$quit_file.", ".$pid_file.")");
+  Dada->logMsg(2, $dl, "main: controlThread(".$quit_file.", ".$pid_file.")");
   $control_thread = threads->new(\&controlThread, $quit_file, $pid_file);
 
   setStatus("Starting script");
@@ -159,9 +160,18 @@ sub main() {
   # We cycle through ports to prevent "Address already in use" problems
   $vsib_port = VSIB_MIN_PORT;
 
-  Dada->logMsg(1, $dl, "Starting Main");
+  Dada->logMsg(1, $dl, "Starting Transfer Manager for ".$pid);
 
   chdir $cfg{"SERVER_ARCHIVE_NFS_MNT"};
+
+  # On startup do a check for fully transferred or fully archived obvserations
+  Dada->logMsg(1, $dl, "Checking for fully transferred observations");
+  ($result, $response) = checkFullyTransferred();
+  Dada->logMsg(2, $dl, "main: checkFullyTransferred(): ".$result.":".$response);
+
+  Dada->logMsg(1, $dl, "Checking for fully deleted observations");
+  ($result, $response) = checkFullyDeleted();
+  Dada->logMsg(2, $dl, "main: checkFullyDeleted(): ".$result.":".$response);
 
   while (!$quit_daemon) {
 
@@ -170,9 +180,17 @@ sub main() {
     ($obs, $band) = getBandToSend($cfg{"SERVER_ARCHIVE_NFS_MNT"});
     Dada->logMsg(2, $dl, "main: getBandToSend(): ".$obs."/".$band);
 
-
     if ($obs eq "none") {
       Dada->logMsg(2, $dl, "main: no observations to send. sleep 60");
+
+      # On startup do a check for fully transferred or fully archived obvserations
+      Dada->logMsg(1, $dl, "Checking for fully transferred observations");
+      ($result, $response) = checkFullyTransferred();
+      Dada->logMsg(2, $dl, "main: checkFullyTransferred(): ".$result.":".$response);
+
+      Dada->logMsg(1, $dl, "Checking for fully deleted observations");
+      ($result, $response) = checkFullyDeleted();
+      Dada->logMsg(2, $dl, "main: checkFullyDeleted(): ".$result.":".$response)
 
     } else {
 
@@ -281,8 +299,8 @@ sub main() {
       }
     }
 
-    Dada->logMsg(1, $dl, "EARLY QUIT ENABLED FOR P427 TRANSFERS");
-    $quit_daemon = 1;
+    # Dada->logMsg(1, $dl, "EARLY QUIT ENABLED FOR P427 TRANSFERS");
+    # $quit_daemon = 1;
 
     # If we did not transfer, sleep 60
     if ($obs eq "none") {
@@ -384,7 +402,7 @@ sub checkTransfer($$$$$) {
     return ("fail", "could not determine host on which ".$obs."/".$band." resides");
   }
 
-  # host for vsib_send
+  # host for apsr_vsib_send
   $send_host = $response;
 
   # Get the listing of the files (assumes cwd is SERVER_ARCHIVES_NFS_MNT)
@@ -444,14 +462,17 @@ sub checkAllBands($) {
 
   my $cmd = "";
   my $find_result = "";
-  my $beam = "";
-  my @beams = ();
+  my $band = "";
+  my @bands = ();
   my $all_sent = 1;
   my $result = "";
   my $response = "";
-  my $nbeams = 0;
-  my $nbeams_mounted = 0;
+  my $nbands = 0;
+  my $nbands_mounted = 0;
   my $obs_pid = "";
+  my @links = ();
+  my $link = "";
+  my $all_online = 0;
     
   # Determine the number of NFS links in the archives dir
   $cmd = "find ".$obs." -mindepth 1 -maxdepth 1 -type l | wc -l";
@@ -462,58 +483,91 @@ sub checkAllBands($) {
     Dada->logMsgWarn($warn, "checkAllBands: find command failed: ".$response);
     return ("fail", "find command failed");
   } 
-  $nbeams = $response;
-  Dada->logMsg(2, $dl, "checkAllBands: Total number of beams ".$nbeams);
-    
+  $nbands = $response;
+  Dada->logMsg(2, $dl, "checkAllBands: Total number of bands ".$nbands);
+
   # Now find the number of mounted NFS links
   $cmd = "find -L ".$obs." -mindepth 1 -maxdepth 1 -type d -printf '\%f\\n' | sort";
   Dada->logMsg(2, $dl, "checkAllBands: ".$cmd);
   ($result, $response) = Dada->mySystem($cmd);
+  Dada->logMsg(3, $dl, "checkAllBands: ".$result." ".$response);
   if ($result ne "ok") { 
     Dada->logMsgWarn($warn, "checkAllBands: find command failed: ".$response);
      return ("fail", "find command failed");
   } 
-  @beams = split(/\n/, $response);
-  $nbeams_mounted = $#beams + 1;
-  Dada->logMsg(2, $dl, "checkAllBands: Total number of mounted beams: ".$nbeams_mounted);
+  @bands = split(/\n/, $response);
+  $nbands_mounted = $#bands + 1;
+  Dada->logMsg(2, $dl, "checkAllBands: Total number of mounted bands: ".$nbands_mounted);
   
   # If a machine is not online, they cannot all be verified
-  if ($nbeams != $nbeams_mounted) {
-    return ("ok", "all beams not mounted");
-  
-  } else {
-    $all_sent = 1;
-    
-    # skip if no obs.info exists
-    if (!( -f $obs."/obs.info")) {
-      Dada->logMsgWarn($warn, "checkAllBands: Required file missing ".$obs."/obs.info");
-      return ("fail", $obs."/obs.info did not exist");
-    }
+  if ($nbands != $nbands_mounted) {
 
-    # get the PID
-    $cmd = "grep ^PID ".$obs."/obs.info | awk '{print \$2}'";
+    # This may be because the directory has been deleted/lost or it may
+    # be because the machine is offline
+
+    $cmd = "find ".$obs." -mindepth 1 -maxdepth 1 -type l -printf '\%l\n' | awk -F/ '{ print \$1\"/\"\$2\"/\"\$3\"/\"\$4\"/\"\$5 }'";
     Dada->logMsg(2, $dl, "checkAllBands: ".$cmd);
     ($result, $response) = Dada->mySystem($cmd);
-    Dada->logMsg(2, $dl, "checkAllBands: ".$result." ".$response);
+    Dada->logMsg(3, $dl, "checkAllBands: ".$result." ".$response);
+
     if ($result ne "ok") {
-      return ("fail", "could not determine PID");
-    }
-    $obs_pid = $response;
-
-    my $i=0;
-    for ($i=0; (($i<=$#beams) && ($all_sent)); $i++) {
-      $beam = $beams[$i];
-      if (! -f $obs."/".$beam."/sent.to.".$dest) {
-        $all_sent = 0;
-        Dada->logMsg(2, $dl, "checkAllBands: ".$obs."/".$beam."/sent.to.".$dest." did not exist");
-      }
+      Dada->logMsgWarn($warn, "checkAllBands: find command failed: ".$response);
+      return ("fail", "find command failed");
     }
 
-    if ($all_sent) {
-      return ("ok", "all bands sent");
-    } else { 
-      return ("ok", "all bands not sent");
+    @links = split(/\n/, $response);
+    $all_online = 1;
+    foreach $link (@links) {
+      $cmd = "ls -ld ".$link;
+      Dada->logMsg(2, $dl, "checkAllBands: ".$cmd);
+      ($result, $response) = Dada->mySystem($cmd);
+      Dada->logMsg(3, $dl, "checkAllBands: ".$result." ".$response);
+      
+      if ($result ne "ok") {
+        Dada->logMsgWarn($warn, "checkAllBands: NFS dir ".$link." was offline");
+        $all_online = 0;
+      } 
     }
+
+    if (!$all_online) {
+      return ("ok", "all bands not mounted");
+    } else {
+      Dada->logMsgWarn($warn, "checkAllBands: ".($nbands - $nbands_mounted)." band(s) from ".$obs." were missing!");
+    }
+ 
+  }
+
+  $all_sent = 1;
+    
+  # skip if no obs.info exists
+  if (!( -f $obs."/obs.info")) {
+    Dada->logMsgWarn($warn, "checkAllBands: Required file missing ".$obs."/obs.info");
+    return ("fail", $obs."/obs.info did not exist");
+  }
+
+  # get the PID
+  $cmd = "grep ^PID ".$obs."/obs.info | awk '{print \$2}'";
+  Dada->logMsg(2, $dl, "checkAllBands: ".$cmd);
+  ($result, $response) = Dada->mySystem($cmd);
+  Dada->logMsg(2, $dl, "checkAllBands: ".$result." ".$response);
+  if ($result ne "ok") {
+    return ("fail", "could not determine PID");
+  }
+  $obs_pid = $response;
+
+  my $i=0;
+  for ($i=0; (($i<=$#bands) && ($all_sent)); $i++) {
+    $band = $bands[$i];
+    if (! -f $obs."/".$band."/sent.to.".$dest) {
+      $all_sent = 0;
+      Dada->logMsg(2, $dl, "checkAllBands: ".$obs."/".$band."/sent.to.".$dest." did not exist");
+    }
+  }
+
+  if ($all_sent) {
+    return ("ok", "all bands sent");
+  } else { 
+    return ("ok", "all bands not sent");
   }
 
 }
@@ -572,6 +626,7 @@ sub getBandToSend() {
   my $i = 0;
   my $j = 0;
   my $obs_pid = "";
+  my $proc_file = "";
   my $obs = "";
   my $band = "";
   my @bands = ();
@@ -631,6 +686,23 @@ sub getBandToSend() {
       next;
     }
 
+    # Check the PROC_FILE as we dont (currently) send single pulse observations
+    $cmd = "grep ^PROC_FILE ".$nfs_archives."/".$obs."/obs.info | awk '{print \$2}'";
+    Dada->logMsg(3, $dl, "getBandToSend: ".$cmd);
+    ($result, $response) = Dada->mySystem($cmd);
+    Dada->logMsg(3, $dl, "getBandToSend: ".$result.":".$response);
+    if (($result ne "ok") || ($response eq "")) {
+      Dada->logMsgWarn($warn, "getBandToSend: failed to parse PROC_FILE from obs.info [".$obs."] ".$response);
+      next;
+    }
+    $proc_file = $response;
+
+    # If the PID doesn't match, skip it
+    if (($proc_file =~ m/single/) && ($obs_pid ne "P661")) {
+      Dada->logMsg(2, $dl, "getBandToSend: skipping ".$obs." PROC_FILE indicates single_pulse [".$proc_file."]");
+      next;
+    }
+
     # Get the sorted list of band nfs links for this obs
     # This command will timeout on missing NFS links (6 s), but wont print ones that are missing
     $cmd = "find -L ".$nfs_archives."/".$obs." -mindepth 1 -maxdepth 1 -type d -printf \"%f\\n\" | sort";
@@ -674,11 +746,11 @@ sub getBandToSend() {
 
 #
 # Create the receiving directory on the remote machine
-# and then run vsib_recv
+# and then run apsr_vsib_recv
 #
-sub run_vsib_recv($$$$) {
+sub run_apsr_vsib_recv($$$$$) {
 
-  my ($u, $h, $d, $port) = @_;
+  my ($u, $h, $d, $port, $dirs) = @_;
 
   my $cmd = "";
   my $ssh_cmd = "";
@@ -689,69 +761,83 @@ sub run_vsib_recv($$$$) {
 
   # create the writing file
   $cmd = "touch ".$d."/../WRITING";
-  Dada->logMsg(2, $dl, "run_vsib_recv [".$h."]: ".$cmd);
+  Dada->logMsg(2, $dl, "run_apsr_vsib_recv [".$h."]: ".$cmd);
   ($result, $response) = Dada->remoteSshCommand($u, $h, $cmd);
-  Dada->logMsg(2, $dl, "run_vsib_recv [".$h."]: ".$result." ".$response);
+  Dada->logMsg(2, $dl, "run_apsr_vsib_recv [".$h."]: ".$result." ".$response);
 
   if ($result ne "ok") {
-    Dada->logMsgWarn($warn, "run_vsib_recv [".$h."]: could not touch remote WRITING file");
+    Dada->logMsgWarn($warn, "run_apsr_vsib_recv [".$h."]: could not touch remote WRITING file");
   }
 
   # sleeping to avoid immediately consecutive ssh commands
   sleep(1);
 
-  # run vsib_recv 'manually' for the output piping to server_logger
-  $cmd = "vsib_recv -q -1 -w ".TCP_WINDOW." -p ".$port." | tar -x";
-  $ssh_cmd =  "ssh ".SSH_OPTS." -l ".$u." ".$h." \"cd ".$d."; ".$cmd."\" 2>&1 | ".$server_logger." -n vsib_recv";
-  Dada->logMsg(2, $dl, "run_vsib_recv [".$h."]: ".$ssh_cmd);
+  # if dirs have been specified, then we are not transferring with tar, but rather individual files
+  if ($dirs) {
+
+    $cmd = "ssh ".SSH_OPTS." -l ".$u." ".$h." \"cd ".$d."; mkdir -p ".$dirs."\"";
+    Dada->logMsg(2, $dl, "run_apsr_vsib_recv [".$h."]: ".$cmd);
+    system($cmd);
+
+    # n.b. using -o means O_DIRECT
+    $cmd = "apsr_vsib_recv -q -1 -w ".TCP_WINDOW." -o -p ".$port;
+
+  } else {
+    $cmd = "apsr_vsib_recv -q -1 -w ".TCP_WINDOW." -p ".$port." | tar -x";
+  }
+
+
+  # run apsr_vsib_recv 'manually' for the output piping to server_logger
+  $ssh_cmd =  "ssh ".SSH_OPTS." -l ".$u." ".$h." \"cd ".$d."; ".$cmd."\" 2>&1 | ".$server_logger." -n apsr_vsib_recv";
+  Dada->logMsg(2, $dl, "run_apsr_vsib_recv [".$h."]: ".$ssh_cmd);
   system($ssh_cmd);
 
   if ($? == 0) {
     $result = "ok";
   } elsif ($? == -1) {
     $result = "fail";
-    Dada->logMsgWarn($error, "run_vsib_recv: failed to execute: $!");
+    Dada->logMsgWarn($error, "run_apsr_vsib_recv: failed to execute: $!");
   } elsif ($? & 127) {
     $result = "fail";
-    Dada->logMsgWarn($error, "run_vsib_recv: child died with signal ".($? & 127));
+    Dada->logMsgWarn($error, "run_apsr_vsib_recv: child died with signal ".($? & 127));
   } else {
     $result = "fail";
-    Dada->logMsg(1, $dl, "run_vsib_recv: child exited with value ".($? >> 8));
+    Dada->logMsg(1, $dl, "run_apsr_vsib_recv: child exited with value ".($? >> 8));
   }
 
   return $result;
 
-  #Dada->logMsg(2, $dl, "run_vsib_recv remoteSshCommand(".$u.", ".$h.", ".$cmd.", ".$d.", ".$pipe.")");
+  #Dada->logMsg(2, $dl, "run_apsr_vsib_recv remoteSshCommand(".$u.", ".$h.", ".$cmd.", ".$d.", ".$pipe.")");
   #($result, $response) = Dada->remoteSshCommand($u, $h, $cmd, $d, $pipe);
-  #Dada->logMsg(2, $dl, "run_vsib_recv [".$h."]: ".$result." ".$response);
+  #Dada->logMsg(2, $dl, "run_apsr_vsib_recv [".$h."]: ".$result." ".$response);
   #if ($result ne "ok") {
-  #  Dada->logMsgWarn($error, "run_vsib_recv [".$h."]: ssh failure ".
+  #  Dada->logMsgWarn($error, "run_apsr_vsib_recv [".$h."]: ssh failure ".
   #                           $response);
   #  return ("fail");
   #}
 
   #if ($rval != 0) {
-  #  Dada->logMsgWarn($warn, "vsib_recv returned a non zero exit value");
+  #  Dada->logMsgWarn($warn, "apsr_vsib_recv returned a non zero exit value");
   #  return ("fail");
   #} else {
-  #  Dada->logMsg(2, $dl, "vsib_recv succeeded");
+  #  Dada->logMsg(2, $dl, "apsr_vsib_recv succeeded");
   #  return ("ok");
   #}
 
 }
 
 #
-# Runs vsib_proxy on the localhost, it will connect to s_host upon receiving 
+# Runs apsr_vsib_proxy on the localhost, it will connect to s_host upon receiving 
 # an incoming connection
 #
-sub run_vsib_proxy($$) {
+sub run_apsr_vsib_proxy($$) {
 
   my ($host, $port) = @_;
 
-  Dada->logMsg(2, $dl, "run_vsib_proxy()");
+  Dada->logMsg(2, $dl, "run_apsr_vsib_proxy()");
 
   my $vsib_args = "-1 -q -w ".TCP_WINDOW." -p ".$port." -H ".$host;
-  my $cmd = "vsib_proxy ".$vsib_args." 2>&1 | ".$server_logger." -n vsib_proxy";
+  my $cmd = "apsr_vsib_proxy ".$vsib_args." 2>&1 | ".$server_logger." -n apsr_vsib_proxy";
   Dada->logMsg(2, $dl, $cmd);
 
   # Run the command on the localhost
@@ -760,13 +846,13 @@ sub run_vsib_proxy($$) {
   # Check return value for "success"
   if ($? != 0) {
 
-    Dada->logMsgWarn($error, "run_vsib_proxy: command failed");
+    Dada->logMsgWarn($error, "run_apsr_vsib_proxy: command failed");
     return ("fail");
 
   # On sucesss, return ok
   } else {
 
-    Dada->logMsg(2, $dl, "run_vsib_proxy: succeeded");
+    Dada->logMsg(2, $dl, "run_apsr_vsib_proxy: succeeded");
     return ("ok");
 
   }
@@ -779,25 +865,25 @@ sub interrupt_all() {
   Dada->logMsg(2, $dl, "interrupt_all()");
 
   # kill all potential senders
-  Dada->logMsg(2, $dl, "interrupt_all: interrupt_vsib_send()");
-  interrupt_vsib_send($send_user, $send_host);
+  Dada->logMsg(2, $dl, "interrupt_all: interrupt_apsr_vsib_send()");
+  interrupt_apsr_vsib_send($send_user, $send_host);
 
-  Dada->logMsg(2, $dl, "interrupt_all: interrupt_vsib_proxy()");
-  interrupt_vsib_proxy();
+  Dada->logMsg(2, $dl, "interrupt_all: interrupt_apsr_vsib_proxy()");
+  interrupt_apsr_vsib_proxy();
 
-  Dada->logMsg(2, $dl, "interrupt_all: interrupt_vsib_recv()");
-  interrupt_vsib_recv($dest_user, $dest_host, $dest_dir, "none", "none");
+  Dada->logMsg(2, $dl, "interrupt_all: interrupt_apsr_vsib_recv()");
+  interrupt_apsr_vsib_recv($dest_user, $dest_host, $dest_dir, "none", "none");
 
 }
 
 #
-# ssh to host specified and kill all vsib_send's
+# ssh to host specified and kill all apsr_vsib_send's
 #
-sub interrupt_vsib_send($$) {
+sub interrupt_apsr_vsib_send($$) {
 
   my ($u, $h) = @_;
  
-  Dada->logMsg(2, $dl, "interrupt_vsib_send(".$u.", ".$h.")");
+  Dada->logMsg(2, $dl, "interrupt_apsr_vsib_send(".$u.", ".$h.")");
   
   my $cmd = "";
   my $result = "";
@@ -807,20 +893,20 @@ sub interrupt_vsib_send($$) {
   if (($send_user eq "none") || ($send_host eq "none")) {
 
     $result = "ok";
-    $response = "vsib_send not running";
+    $response = "apsr_vsib_send not running";
 
   } else {
 
-    $cmd = "killall vsib_send";
-    Dada->logMsg(2, $dl, "interrupt_vsib_send: ".$cmd);
+    $cmd = "killall apsr_vsib_send";
+    Dada->logMsg(2, $dl, "interrupt_apsr_vsib_send: ".$cmd);
     ($result, $rval, $response) = Dada->remoteSshCommand($u, $h, $cmd);
-    Dada->logMsg(2, $dl, "interrupt_vsib_send: ".$result." ".$rval." ".$response);
+    Dada->logMsg(2, $dl, "interrupt_apsr_vsib_send: ".$result." ".$rval." ".$response);
 
     if ($result  ne "ok") {
-      Dada->logMsgWarn($warn, "interrupt_vsib_send: ssh failure ".$response);
+      Dada->logMsgWarn($warn, "interrupt_apsr_vsib_send: ssh failure ".$response);
     } else {
       if ($rval != 0) {
-        Dada->logMsgWarn($warn, "interrupt_vsib_send: failed to kill vsib_send: ".$response);
+        Dada->logMsgWarn($warn, "interrupt_apsr_vsib_send: failed to kill apsr_vsib_send: ".$response);
       }
     }
   }
@@ -830,13 +916,13 @@ sub interrupt_vsib_send($$) {
 
 
 #
-# ssh to host specified and kill all vsib_recv's, cleanup the obs
+# ssh to host specified and kill all apsr_vsib_recv's, cleanup the obs
 #
-sub interrupt_vsib_recv($$$$$) {
+sub interrupt_apsr_vsib_recv($$$$$) {
 
   my ($u, $h, $d, $obs, $band) = @_;
 
-  Dada->logMsg(2, $dl, "interrupt_vsib_recv(".$u.", ".$h.", ".$d.", ".$obs.", ".$band.")");
+  Dada->logMsg(2, $dl, "interrupt_apsr_vsib_recv(".$u.", ".$h.", ".$d.", ".$obs.", ".$band.")");
 
   my $cmd = "";
   my $result = "";
@@ -845,71 +931,71 @@ sub interrupt_vsib_recv($$$$$) {
 
   if ($h ne "none") {
 
-    # kill vsib_recv
-    $cmd = "killall vsib_recv";
-    Dada->logMsg(2, $dl, "interrupt_vsib_recv: ".$cmd);
+    # kill apsr_vsib_recv
+    $cmd = "killall apsr_vsib_recv";
+    Dada->logMsg(2, $dl, "interrupt_apsr_vsib_recv: ".$cmd);
     ($result, $rval, $response) = Dada->remoteSshCommand($u, $h, $cmd);
     if ($result  ne "ok") {
-      Dada->logMsgWarn($warn, "interrupt_vsib_recv: ssh failure ".$response);
+      Dada->logMsgWarn($warn, "interrupt_apsr_vsib_recv: ssh failure ".$response);
     } else {
       if ($rval != 0) {
-        Dada->logMsgWarn($warn, "interrupt_vsib_recv: failed to kill vsib_recv: ".$response);
+        Dada->logMsgWarn($warn, "interrupt_apsr_vsib_recv: failed to kill apsr_vsib_recv: ".$response);
       }
     }
 
     # delete the WRITING flag
     $cmd = "rm -f ../WRITING";
-    Dada->logMsg(2, $dl, "interrupt_vsib_recv: ".$cmd);
+    Dada->logMsg(2, $dl, "interrupt_apsr_vsib_recv: ".$cmd);
     ($result, $rval, $response) = Dada->remoteSshCommand($u, $h, $cmd, $d);
     if ($result  ne "ok") {
-      Dada->logMsgWarn($warn, "interrupt_vsib_recv: ssh failure ".$response);
+      Dada->logMsgWarn($warn, "interrupt_apsr_vsib_recv: ssh failure ".$response);
     } else {
       if ($rval != 0) {
-        Dada->logMsgWarn($warn, "interrupt_vsib_recv: failed to remove WRITING flag: ".$response);
+        Dada->logMsgWarn($warn, "interrupt_apsr_vsib_recv: failed to remove WRITING flag: ".$response);
       } 
     }
 
-    # optionally delete the transfer specied, this is a beam
+    # optionally delete the transfer specied, this is a band
     if (!(($obs eq "none") || ($obs eq ""))) {
       $cmd = "rm -rf ".$obs."/".$band;
-      Dada->logMsg(2, $dl, "interrupt_vsib_recv: ".$cmd);
+      Dada->logMsg(2, $dl, "interrupt_apsr_vsib_recv: ".$cmd);
       ($result, $rval, $response) = Dada->remoteSshCommand($u, $h, $cmd, $d);
       if ($result  ne "ok") {
-        Dada->logMsgWarn($warn, "interrupt_vsib_recv: ssh failure ".$response);
+        Dada->logMsgWarn($warn, "interrupt_apsr_vsib_recv: ssh failure ".$response);
       } else {
         if ($rval != 0) {
-          Dada->logMsgWarn($warn, "interrupt_vsib_recv: failed to remove WRITING flag: ".$response);
+          Dada->logMsgWarn($warn, "interrupt_apsr_vsib_recv: failed to remove WRITING flag: ".$response);
         } 
       }
     }
   }
 }
 
-sub interrupt_vsib_proxy() {
+sub interrupt_apsr_vsib_proxy() {
 
-  Dada->logMsg(2, $dl, "interrupt_vsib_proxy()");
+  Dada->logMsg(2, $dl, "interrupt_apsr_vsib_proxy()");
  
   my $cmd = "";
   my $result = "";
   my $response = "";
 
-  $cmd = "killall vsib_proxy";
-  Dada->logMsg(1, $dl, "interrupt_vsib_proxy: ".$cmd);
+  $cmd = "killall apsr_vsib_proxy";
+  Dada->logMsg(1, $dl, "interrupt_apsr_vsib_proxy: ".$cmd);
   ($result, $response) = Dada->mySystem($cmd);
-  Dada->logMsg(2, $dl, "interrupt_vsib_proxy: ".$result." ".$response);
+  Dada->logMsg(2, $dl, "interrupt_apsr_vsib_proxy: ".$result." ".$response);
 
   return ($result, $response);
 }
 
 #
-# run vsib_send  with tar -c obs feeding stdin to port to the recv_host
+# run apsr_vsib_send  with tar -c obs feeding stdin to port to the recv_host
 #
-sub run_vsib_send($$$$$) {
+sub run_apsr_vsib_send($$$$$$) {
 
-  my ($obs, $band, $s_host, $r_host, $port) = @_;
+  my ($obs, $band, $s_host, $r_host, $port, $files) = @_;
 
-  Dada->logMsg(2, $dl, "run_vsib_send(".$obs.", ".$band.", ".$s_host.
-                       ", ".$r_host.", ".$port.")");
+  Dada->logMsg(2, $dl, "run_apsr_vsib_send(".$obs.", ".$band.", ".$s_host.
+                       ", ".$r_host.", ".$port.", ".$files.")");
 
   my $cmd = "";
   my $ssh_cmd = "";
@@ -919,32 +1005,40 @@ sub run_vsib_send($$$$$) {
   my $response = "";
   my $s_dir = $cfg{"CLIENT_ARCHIVE_DIR"};
 
-  $cmd .= "tar --exclude obs.finished -c ".$obs." | ";
-  $cmd .= "vsib_send -q -w ".TCP_WINDOW." -p ".$port." -H ".$r_host." -z ".$rate;
+  if ($files ne "") {
+
+    $cmd .= "apsr_vsib_send -q -w ".TCP_WINDOW." -p ".$port." -H ".$r_host." -z ".$rate." ".$files;
+
+  } else {
+
+    $cmd .= "tar --exclude obs.finished -c ".$obs." | ";
+    $cmd .= "apsr_vsib_send -q -w ".TCP_WINDOW." -p ".$port." -H ".$r_host." -z ".$rate;
+
+  }
 
   $send_user = $instrument;
   $send_host = $s_host;
 
-  $ssh_cmd =  "ssh ".SSH_OPTS." -l ".$instrument." ".$s_host." \"cd ".$s_dir."; ".$cmd."\" 2>&1 | ".$server_logger." -n vsib_send";
-  Dada->logMsg(2, $dl, "run_vsib_send [".$s_host."]: ".$ssh_cmd);
+  $ssh_cmd =  "ssh ".SSH_OPTS." -l ".$instrument." ".$s_host." \"cd ".$s_dir."; ".$cmd."\" 2>&1 | ".$server_logger." -n apsr_vsib_send";
+  Dada->logMsg(2, $dl, "run_apsr_vsib_send [".$s_host."]: ".$ssh_cmd);
   system($ssh_cmd);
 
   if ($? == 0) {
     $result = "ok";
   } elsif ($? == -1) {
     $result = "fail";
-    Dada->logMsgWarn($error, "run_vsib_send: failed to execute: $!");
+    Dada->logMsgWarn($error, "run_apsr_vsib_send: failed to execute: $!");
   } elsif ($? & 127) {
     $result = "fail";
-    Dada->logMsgWarn($error, "run_vsib_send: child died with signal ".($? & 127));
+    Dada->logMsgWarn($error, "run_apsr_vsib_send: child died with signal ".($? & 127));
   } else {
     $result = "fail";
-    Dada->logMsg(1, $dl, "run_vsib_send: child exited with value ".($? >> 8));
+    Dada->logMsg(1, $dl, "run_apsr_vsib_send: child exited with value ".($? >> 8));
   }
 
-  #Dada->logMsg(2, $dl, "run_vsib_send: remoteSshCommand(".$instrument.", ".$s_host.", ".$cmd.", ".$s_dir.", ".$pipe.")");
+  #Dada->logMsg(2, $dl, "run_apsr_vsib_send: remoteSshCommand(".$instrument.", ".$s_host.", ".$cmd.", ".$s_dir.", ".$pipe.")");
   #($result, $rval, $response) = Dada->remoteSshCommand($instrument, $s_host, $cmd, $s_dir, $pipe);
-  #Dada->logMsg(2, $dl, "run_vsib_send: remoteSshCommand: ".$result." ".$rval." ".$response);
+  #Dada->logMsg(2, $dl, "run_apsr_vsib_send: remoteSshCommand: ".$result." ".$rval." ".$response);
 
   $send_user = "none";
   $send_host=  "none";
@@ -952,7 +1046,7 @@ sub run_vsib_send($$$$$) {
   return $result;
 
   #if ($result ne "ok") {
-  #  Dada->logMsgWarn($warn, "run_vsib_send: vsib_send failed ".$response);
+  #  Dada->logMsgWarn($warn, "run_apsr_vsib_send: apsr_vsib_send failed ".$response);
   #  return("fail");
   #} else {
   #  return("ok");
@@ -990,7 +1084,7 @@ sub setStatus($) {
 }
 
 #
-# Transfer the specified obs/beam on port to hosts
+# Transfer the specified obs/band on port to hosts
 #
 sub transferBand($$$) {
 
@@ -1003,6 +1097,7 @@ sub transferBand($$$) {
   my $rval = 0;
   my $cmd = "";
   my $dirs = "";
+  my $files = "";
 
   # Thread ID's
   my $send_thread = 0;
@@ -1028,15 +1123,44 @@ sub transferBand($$$) {
     return ("fail", "could not determine host on which ".$path." resides");
   }
 
-  # host for vsib_send
+  # host for apsr_vsib_send
   $send_host = $response;
 
-  Dada->logMsg(2, $dl, "run_vsib_recv(".$u.", ".$h.", ".$d.", ".$port.")");
-  $recv_thread = threads->new(\&run_vsib_recv, $u, $h, $d, $port);
+  # If transferring via apsr_vsib_send, do direct files, and not via tar 
+  if ($pid eq "P427_disabled") {
+
+    $cmd = "find -L ".$path." -type d -printf '\%h/\%f '";
+    Dada->logMsg(2, $dl, "transferBand: ".$cmd);
+    ($result, $response) = Dada->mySystem($cmd);
+    Dada->logMsg(2, $dl, "transferBand: ".$result." ".$response);
+
+    if ($result ne "ok") {
+      Dada->logMsgWarn($error, "could not determine the dirs of ".$path);
+      return ("fail", "could not determine the dirs of ".$path);
+    } 
+    $dirs = $response;
+    Dada->logMsg(1, $dl, "transferBand: dirs=".$dirs);
+
+    $cmd = "find -L ".$path." -type f -printf '\%h/\%f '";
+    Dada->logMsg(2, $dl, "transferBand: ".$cmd);
+    ($result, $response) = Dada->mySystem($cmd);
+    Dada->logMsg(2, $dl, "transferBand: ".$result." ".$response);
+
+    if ($result ne "ok") {
+      Dada->logMsgWarn($error, "could not determine the files of ".$path);
+      return ("fail", "could not determine the files of ".$path);
+    }
+    $files = $response;
+    Dada->logMsg(1, $dl, "transferBand: files=".$files);
+  }
+
+
+  Dada->logMsg(2, $dl, "run_apsr_vsib_recv(".$u.", ".$h.", ".$d.", ".$port.", ".$dirs.")");
+  $recv_thread = threads->new(\&run_apsr_vsib_recv, $u, $h, $d, $port, $dirs);
 
   # If we are sending to swin, need to start a proxy on the localhost
   if ($dest eq "swin") {
-    $proxy_thread = threads->new(\&run_vsib_proxy, $h, $port);
+    $proxy_thread = threads->new(\&run_apsr_vsib_proxy, $h, $port);
   }
 
   # sleep a small amount to allow startup of the receiver
@@ -1049,8 +1173,11 @@ sub transferBand($$$) {
 
     $receiver_ready = 1;
 
-    my $ps_cmd = "ps aux | grep vsib_recv | grep ".$u." | grep -v grep";
-    ($result, $rval, $response) = Dada->remoteSshCommand($u, $h, $ps_cmd);
+    # check that the socket is open/listening on the specified port
+    $cmd = "netstat -tln | grep ".$port;
+    Dada->logMsg(2, $dl, "main: ".$cmd);
+    ($result, $rval, $response) = Dada->remoteSshCommand($u, $h, $cmd);
+    Dada->logMsg(2, $dl, "main: $result, $rval, $response");
     if ($result ne "ok") {
       Dada->logMsgWarn($warn, "ssh cmd failed: ".$response);
       $receiver_ready = 0;
@@ -1068,11 +1195,11 @@ sub transferBand($$$) {
   }
 
   if ($quit_daemon) {
-    Dada->logMsgWarn($warn, "daemon asked to quit whilst waiting for vsib_recv");
+    Dada->logMsgWarn($warn, "daemon asked to quit whilst waiting for apsr_vsib_recv");
     $xfer_failure = 1;
 
   } elsif (!$receiver_ready) {
-    Dada->logMsgWarn($error, "vsib_recv was not ready after 20 seconds of waiting");
+    Dada->logMsgWarn($error, "apsr_vsib_recv was not ready after 20 seconds of waiting");
     $xfer_failure = 1;
 
   } else {
@@ -1081,7 +1208,7 @@ sub transferBand($$$) {
 
   if ($xfer_failure) {
     # Ensure the receiving thread is not hung waiting for an xfer
-    interrupt_vsib_recv($u, $h, $d, $curr_obs, $curr_band);
+    interrupt_apsr_vsib_recv($u, $h, $d, $curr_obs, $curr_band);
 
   } else {
 
@@ -1089,11 +1216,11 @@ sub transferBand($$$) {
 
     # start the sender
     if ($proxy_thread) {
-      Dada->logMsg(2, $dl, "run_vsib_send(".$obs.", ".$band.", ".$send_host.", ".$localhost.", ".$port.")");
-      $send_thread = threads->new(\&run_vsib_send, $obs, $band, $send_host, $localhost, $port);
+      Dada->logMsg(2, $dl, "run_apsr_vsib_send(".$obs.", ".$band.", ".$send_host.", ".$localhost.", ".$port.", ".$files.")");
+      $send_thread = threads->new(\&run_apsr_vsib_send, $obs, $band, $send_host, $localhost, $port, $files);
     } else {
-      Dada->logMsg(2, $dl, "run_vsib_send(".$obs.", ".$band.", ".$send_host.", ".$h.", ".$port.")");
-      $send_thread = threads->new(\&run_vsib_send, $obs, $band, $send_host, $h, $port);
+      Dada->logMsg(2, $dl, "run_apsr_vsib_send(".$obs.", ".$band.", ".$send_host.", ".$h.", ".$port.", ".$files.")");
+      $send_thread = threads->new(\&run_apsr_vsib_send, $obs, $band, $send_host, $h, $port, $files);
     }
 
     # Transfer runs now
@@ -1168,9 +1295,9 @@ sub checkDestination($$$) {
     return ("fail", "could not ssh to ".$u."@".$h.": ".$response);
   }
 
-  # check there is 260 * 1GB free
-  if (int($response) < (260*1024)) {
-    return ("fail", "less than 260 GB remaining on ".$u."@".$h.":".$d);
+  # check there is 100 * 1GB free
+  if (int($response) < (100*1024)) {
+    return ("fail", "less than 100 GB remaining on ".$u."@".$h.":".$d);
   }
 
   # check if this is being used for reading
@@ -1178,7 +1305,7 @@ sub checkDestination($$$) {
   $result = `$cmd`;
   chomp $result;
   if ($result =~ m/No such file or directory/) {
-    Dada->logMsg(1, $dl, "checkDestination: no READING file existed in ".$d."/../READING");
+    Dada->logMsg(2, $dl, "checkDestination: no READING file existed in ".$d."/../READING");
   } else {
     Dada->logMsg(1, $dl, "checkDestination: READING file existed in ".$d."/../READING");
     return ("fail", "Disk is being used for READING");
@@ -1208,6 +1335,246 @@ sub markRemoteFile($$$$$) {
 }
 
 
+#
+# Looks for fully transferred observations to see if they have been deleted yet
+#
+sub checkFullyTransferred() {
+
+  my $cmd = "";
+  my $result = "";
+  my $response = "";
+  my $i = 0;
+  my $n_bands = 0;
+  my $n_deleted = 0;
+  my $n_swin = 0;
+  my $n_parkes = 0;
+  my $o = "";
+  my $obs_pid = "";
+
+  Dada->logMsg(2, $dl, "checkFullyTransferred()");
+
+  # Find all observations marked as obs.transferred at least 14 days ago...
+  $cmd = "find ".$cfg{"SERVER_ARCHIVE_NFS_MNT"}." -maxdepth 2 -name 'obs.transferred' -printf '\%h\\n' | awk -F/ '{print \$NF}' | sort";
+  Dada->logMsg(2, $dl, "checkFullyTransferred: ".$cmd);
+  ($result, $response) = Dada->mySystem($cmd);
+  Dada->logMsg(3, $dl, "checkFullyTransferred: ".$result." ".$response);
+
+  if ($result ne "ok") {
+    Dada->logMsgWarn($warn, "checkFullyTransferred: find command failed: ".$response);
+    return ("fail", "find command failed: ".$response);
+  }
+
+  chomp $response;
+  my @observations = split(/\n/,$response);
+
+  for ($i=0; (($i<=$#observations) && (!$quit_daemon)); $i++) {
+    $o = $observations[$i];
+
+    # skip if no obs.info exists
+    if (!( -f $o."/obs.info")) {
+      Dada->logMsgWarn($warn, "checkFullyTransferred: Required file missing ".$o."/obs.info");
+      next;
+    }
+  
+    # get the PID 
+    $cmd = "grep ^PID ".$o."/obs.info | awk '{print \$2}'";
+    Dada->logMsg(2, $dl, "checkFullyTransferred: ".$cmd);
+    ($result, $response) = Dada->mySystem($cmd);
+    Dada->logMsg(2, $dl, "checkFullyTransferred: ".$result." ".$response);
+    if ($result ne "ok") {
+      return ("fail", "could not determine PID");
+    }
+    $obs_pid = $response;
+
+    Dada->logMsg(3, $dl, "checkFullyTransferred: getObsDestinations(".$obs_pid.", ".$cfg{$obs_pid."_DEST"}.")");
+    my ($want_swin, $want_parkes) = Dada::getObsDestinations($obs_pid, $cfg{$obs_pid."_DEST"});
+    Dada->logMsg(2, $dl, "checkFullyTransferred: getObsDestinations want swin:".$want_swin." parkes:".$want_parkes);
+
+    # find out how many band directories we have
+    $cmd = "ls -1d ".$o."/*/ | wc -l";
+    Dada->logMsg(3, $dl, "checkFullyTransferred: ".$cmd);
+    ($result, $response) = Dada->mySystem($cmd);
+    Dada->logMsg(3, $dl, "checkFullyTransferred: ".$result." ".$response);
+  
+    if ($result ne "ok") {
+      Dada->logMsgWarn($warn, "checkFullyTransferred: could not determine number of band directories: ".$response);
+      next;
+    }
+    chomp $response;
+    $n_bands = $response;
+
+    # find out how many band.deleted files we have
+    $cmd = "find -L ".$o." -mindepth 2 -maxdepth 2 -name 'band.deleted' | wc -l";
+    Dada->logMsg(3, $dl, "checkFullyTransferred: ".$cmd);
+    ($result, $response) = Dada->mySystem($cmd);
+    Dada->logMsg(3, $dl, "checkFullyTransferred: ".$result." ".$response);
+
+    if ($result ne "ok") {
+      Dada->logMsgWarn($warn, "checkFullyTransferred: could not count band.deleted files: ".$response);
+      next;
+    }
+    chomp $response;
+    $n_deleted = $response;
+
+    Dada->logMsg(2, $dl, "checkFullyTransferred: n_bands=".$n_bands.", n_deleted=".$n_deleted);
+
+    if ($n_deleted == $n_bands) {
+      $cmd = "touch ".$o."/obs.deleted";
+      Dada->logMsg(2, $dl, "checkFullyTransferred: ".$cmd);
+      ($result, $response) = Dada->mySystem($cmd);
+      Dada->logMsg(3, $dl, "checkFullyTransferred: ".$result." ".$response);
+
+      if ($result ne "ok") {
+        Dada->logMsgWarn($warn, "checkFullyTransferred: could not touch ".$o."/obs.deleted: ".$response);
+      }
+
+      if (-f $o."/obs.transferred") {
+        Dada->logMsg(2, $dl, "checkFullyTransferred: removing ".$o."/obs.transferred");
+        unlink $o."/obs.transferred";
+      }
+      Dada->logMsg(1, $dl, $o.": transferred -> deleted");
+    }
+  }
+  
+  return ("ok", "");
+}
+
+#
+# Looks for observations that have been marked obs.deleted and moves them
+# to /nfs/old_archives/apsr and /nfs/old_results/apsr if they are deleted
+# and > 1 month old
+#
+sub checkFullyDeleted() {
+  
+  my $i = 0;
+  my $cmd = "";
+  my $result = "";
+  my $response = "";
+  
+  Dada->logMsg(2, $dl, "checkFullyDeleted()");
+  
+  # Find all observations marked as obs.deleted and > 30*24 hours since being modified 
+  $cmd = "find ".$cfg{"SERVER_ARCHIVE_NFS_MNT"}."  -maxdepth 2 -name 'obs.deleted' -mtime +30 -printf '\%h\\n' | awk -F/ '{print \$NF}' | sort";
+
+  Dada->logMsg(2, $dl, "checkFullyDeleted: ".$cmd);
+  ($result, $response) = Dada->mySystem($cmd);
+  Dada->logMsg(3, $dl, "checkFullyDeleted: ".$result." ".$response);
+  
+  if ($result ne "ok") {
+    Dada->logMsgWarn($warn, "checkFullyDeleted: find command failed: ".$response);
+    return ("fail", "find command failed: ".$response);
+  }
+  
+  chomp $response; 
+  my @observations = split(/\n/,$response);
+  my @sources = ();
+  my $n_band_tres = 0;
+  my $req_band_tres = 0;
+  my $n_bands = 0;
+  my $o = "";
+  my $curr_time = time;
+  
+  for ($i=0; (($i<=$#observations) && (!$quit_daemon)); $i++) {
+
+    $o = $observations[$i];
+
+    my @t = split(/-|:/,$o);
+    my $unixtime = timelocal($t[5], $t[4], $t[3], $t[2], ($t[1]-1), $t[0]);
+
+    Dada->logMsg(2, $dl, "checkFullyDeleted: testing ".$o." curr=".$curr_time.", unix=".$unixtime);
+    # if UTC_START is less than 30 days old, dont delete it
+    if ($unixtime + (30*24*60*60) > $curr_time) {
+      Dada->logMsg(2, $dl, "checkFullyDeleted: Skipping ".$o.", less than 30 days old");
+      next;
+    }
+
+    # find out how many band directories we have
+    $cmd = "ls -1d ".$o."/*/ | wc -l";
+    Dada->logMsg(2, $dl, "checkFullyDeleted: ".$cmd);
+    ($result, $response) = Dada->mySystem($cmd);
+    Dada->logMsg(3, $dl, "checkFullyDeleted: ".$result." ".$response);
+    
+    if ($result ne "ok") {
+      Dada->logMsgWarn($warn, "checkFullyDeleted : could not determine number of band directories: ".$response);
+      next;
+    }
+    chomp $response;
+    $n_bands = $response;
+    Dada->logMsg(2, $dl, "checkFullyDeleted: n_bands=".$n_bands);
+
+    # find out how many sources in this observation (i.e. multifold)
+    $cmd = "find -L ".$o." -mindepth 2 -maxdepth 2 -type d -printf '\%f\\n' | sort | uniq";
+    Dada->logMsg(2, $dl, "checkFullyDeleted: ".$cmd);
+    ($result, $response) = Dada->mySystem($cmd);
+    Dada->logMsg(3, $dl, "checkFullyDeleted: ".$result." ".$response);
+    if ($result ne "ok") {
+      Dada->logMsgWarn($warn, "checkFullyDeleted : could not determine number of sources: ".$response);
+      next;
+    }
+    @sources = ();
+    if ($response ne "") {
+      @sources = split(/\n/, $response);
+      $req_band_tres = ($#sources + 1) * $n_bands;
+    } else {
+      $req_band_tres = $n_bands;
+    }
+    Dada->logMsg(2, $dl, "checkFullyDeleted: expected number of band.tres files =".$req_band_tres);
+
+    # find out how many band.tres files we have
+    $cmd = "find -L ".$o." -mindepth 2 -maxdepth 3 -name 'band.tres' | wc -l";
+    Dada->logMsg(2, $dl, "checkFullyDeleted: ".$cmd);
+    ($result, $response) = Dada->mySystem($cmd);
+    Dada->logMsg(3, $dl, "checkFullyDeleted: ".$result." ".$response);
+
+    if ($result ne "ok") {
+      Dada->logMsgWarn($warn, "checkFullyDeleted: could not count band.tres files: ".$response);
+      next;
+    }
+    chomp $response;
+    $n_band_tres = $response;
+    Dada->logMsg(2, $dl, "checkFullyDeleted: n_band_tres=".$n_band_tres);
+
+    # If we have all the required band.tres files, regenerated the band summed archives
+    if ($n_band_tres != $req_band_tres) {
+      Dada->logMsgWarn($warn, "checkFullyDeleted: num of band.tres mismatch for ".$o.": n_band_tres [".$n_band_tres."]  != req_band_tres [".$req_band_tres."]");
+    } 
+
+    $cmd = "/home/dada/psrdada/apsr/scripts/server_apsr_band_processor.pl ".$o;
+    Dada->logMsg(2, $dl, "checkFullyDeleted: ".$cmd);
+    ($result, $response) = Dada->mySystem($cmd);
+    Dada->logMsg(2, $dl, "checkFullyDeleted: ".$result." ".$response);
+
+    if ($result ne "ok") {
+      Dada->logMsgWarn($warn, "checkFullyDeleted: server_apsr_band_processor.pl ".$o." failed: ".$response);
+      return ("fail", "Failed to process ".$o);
+    } 
+
+    #$cmd = "mv ".$cfg{"SERVER_ARCHIVE_NFS_MNT"}."/".$o." /nfs/old_archives/apsr/".$o;
+    #Dada->logMsg(2, $dl, "checkFullyDeleted: ".$cmd);
+    #($result, $response) = Dada->mySystem($cmd);
+    #Dada->logMsg(3, $dl, "checkFullyDeleted: ".$result." ".$response);
+
+    #if ($result ne "ok") {
+    #  return ("fail", "failed to move ".$o." to old_archives");
+    #}
+
+    #$result = "ok";
+    #$response = "";
+    #$cmd = "mv ".$cfg{"SERVER_RESULTS_NFS_MNT"}."/".$o." /nfs/old_results/apsr/".$o;
+    #Dada->logMsg(2, $dl, "checkFullyDeleted: ".$cmd);
+    #($result, $response) = Dada->mySystem($cmd);
+    #Dada->logMsg(3, $dl, "checkFullyDeleted: ".$result." ".$response);
+
+    #if ($result ne "ok") {
+    #  return ("fail", "failed to move ".$o." to old_results");
+    #}
+
+    Dada->logMsg(1, $dl, $o.": deleted -> old");
+  
+  }
+  return ("ok", "");
+}
+
 sub controlThread($$) {
 
   Dada->logMsg(1, $dl ,"controlThread: starting");
@@ -1227,9 +1594,9 @@ sub controlThread($$) {
   # try to cleanly stop things
   if (!(($curr_obs eq "none") || ($curr_obs eq ""))) {
     Dada->logMsg(1, $dl, "controlThread: interrupting obs ".$curr_obs."/".$curr_band);
-    interrupt_vsib_send($send_user, $send_host);
-    interrupt_vsib_proxy();
-    interrupt_vsib_recv($dest_user, $dest_host, $dest_dir, $curr_obs, $curr_band);
+    interrupt_apsr_vsib_send($send_user, $send_host);
+    interrupt_apsr_vsib_proxy();
+    interrupt_apsr_vsib_recv($dest_user, $dest_host, $dest_dir, $curr_obs, $curr_band);
     sleep(2);
 
   } else {
@@ -1331,8 +1698,14 @@ sub good($) {
 
   my ($result, $response) = checkDestination($dest_user, $dest_host, $dest_dir);
 
-  if ($result ne "ok") {
+  if (($result ne "ok") && (!($response =~ m/Disk is being used for READING/))) {
     return ("fail", "Error: ".$response);
+  }
+
+  # Ensure more than one copy of this daemon is not running
+  ($result, $response) = Dada::checkScriptIsUnique(basename($0));
+  if ($result ne "ok") {
+    return ($result, $response);
   }
 
   return ("ok", "");
