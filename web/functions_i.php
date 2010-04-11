@@ -3,6 +3,7 @@
 function getConfigFile($fname, $quiet=FALSE) {
 
   $fptr = @fopen($fname,"r");
+  $returnArray = array();
 
   if (!$fptr) {
     if (!$quiet)
@@ -45,7 +46,6 @@ function getRawTextFile($fname) {
 }
 
 
-// TODO Implement
 function getAllStatuses($pwc_config) {
 
   $num_pwc = $pwc_config["NUM_PWC"];
@@ -99,6 +99,37 @@ function getAllStatuses($pwc_config) {
   return $status;
 
 }
+
+function getAllServerStatuses($daemons) {
+
+  $status = array();
+
+  for ($i=0; $i<count($daemons); $i++) {
+
+    $d = $daemons[$i];
+
+    $status[$d."_STATUS"] = STATUS_OK;
+    $status[$d."_MESSAGE"] = "";
+
+    $fname = STATUS_FILE_DIR."/".$d.".warn";
+    if (file_exists($fname)) {
+      $status[$d."_STATUS"] = STATUS_WARN;
+      $status[$d."_MESSAGE"] = getSingleStatusMessage($fname);
+    }
+
+    $fname = STATUS_FILE_DIR."/".$d.".error";
+    if (file_exists($fname)) {
+      $status[$d."_STATUS"] = STATUS_ERROR;
+      $status[$d."_MESSAGE"] = getSingleStatusMessage($fname);
+    }
+  }
+
+  return $status;
+
+}
+
+  
+
 
 function getSingleStatusMessage($fname) {
 
@@ -165,7 +196,7 @@ function openSocket($host, $port, $timeout=2) {
 function socketRead($socket) {
 
   if ($socket) {
-    $string = socket_read ($socket, 4096, PHP_NORMAL_READ);
+    $string = socket_read ($socket, 8192, PHP_NORMAL_READ);
     if ($string == FALSE) {
       $string = "Error on socketRead()\n";
     }
@@ -423,4 +454,124 @@ function getIntergrationLength($archive) {
   }
 }
 
+#
+# returns an array of the PWC machines as defined in a dada cfg file
+#
+function getConfigMachines($cfg, $type) {
+
+  $num = $cfg["NUM_".$type];
+  $array = array();
+  for ($i=0; $i<$num; $i++) {
+    $array[$i] = $cfg[$type."_".$i];
+  }
+  return $array;
+
+}
+
+
+#
+# Runs a perl script and returns an array of the output
+#
+function runPerlScript($script) {
+
+  $source = "source /home/dada/.bashrc";
+  $cmd = $source."; ".$script." 2>&1";
+
+  $output = array();
+  $lastline = exec($cmd, $output, $rval);
+
+  return ($output);
+
+}
+
+#
+# return an array of the daemon_info from the machines
+#
+function getDaemonInfo($hosts, $instrument) {
+
+  $hosts_str = $hosts[0];
+  for ($i=1; $i<count($hosts); $i++) {
+    $hosts_str .= " ".$hosts[$i];
+  }
+
+  $source = "source /home/dada/.bashrc";
+  $script = "client_".$instrument."_command.pl 'daemon_info' ".$hosts_str;
+  $cmd = $source."; ".$script;
+
+  $output = array();
+  $lastline = exec($cmd, $output, $rval); 
+
+  $results = array();
+  if ($rval == 0) {
+
+    for ($i=0; $i<count($output); $i++) {
+
+      $array = split(":",$output[$i],3);
+      $h = $array[0];   # the host
+      $result = $array[1];
+      $string = $array[2];
+
+      if ( (strpos($string, "Could not connect to machine")) !== FALSE) {
+        # We could not contact the master control script
+      } else {
+
+        $results[$h][INSTRUMENT."_master_control"] = 2;
+        $daemon_results = split(",",$string);
+
+        for ($j=0; $j<count($daemon_results); $j++) {
+          if (strlen($daemon_results[$j]) > 2) {
+            $arr = split(" ",$daemon_results[$j]);
+            $results[$h][$arr[0]] = $arr[1];
+          }
+        }
+      }
+    }
+  }
+  return $results;
+
+}
+
+
+#
+# get the db_info for the specified key
+#
+function getDBInfo($hosts, $key, $instrument) {
+
+  $hosts_str = $hosts[0];
+  for ($i=1; $i<count($hosts); $i++) {
+    $hosts_str .= " ".$hosts[$i];
+  }
+
+  $source = "source /home/dada/.bashrc";
+  $script = "client_".$instrument."_command.pl db_info ".$key." ".$hosts_str;
+  $cmd = $source."; ".$script;
+
+  $output = array();
+  $lastline = exec($cmd, $output, $rval);
+
+  $results = array();
+  if ($rval == 0) {
+
+    for ($i=0; $i<count($output); $i++) {
+
+      $array = split(":",$output[$i],3);
+      $h = $array[0];   # the host
+      $result = $array[1];
+      $string = $array[2];
+
+      if ( (strpos($string, "Could not connect to machine")) !== FALSE) {
+        # We could not contact the master control script
+        $results[$h] = 0;
+      } else {
+
+        if ($result == "ok") {
+          $results[$h] = 2;
+        }
+      }
+    }
+  }
+
+  return $results;
+
+}
 ?>

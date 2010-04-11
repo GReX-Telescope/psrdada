@@ -1,19 +1,18 @@
-<?PHP 
-
+<?PHP
 include("definitions_i.php");
 include("functions_i.php");
 
-/* apsr/bpsr.cfg */
-$config = getConfigFile(SYS_CONFIG);
+include(INSTRUMENT.".lib.php");
+$inst = new $instrument();
+$config = $inst->configFileToHash();
+
 $pwc_status = getAllStatuses($config);
 $nexus_status = STATUS_OK;
 $nexus_message = "no probs mate";
 
-/* get the instrument specific functions */
-include(INSTRUMENT."_functions_i.php");
-
 /* find the non src/pwc/sys daemons */
-$server_log_info = getServerLogInformation();
+$server_log_info = $inst->getServerLogInfo();
+
 $keys = array_keys($server_log_info);
 $server_daemons = array();
 for ($i=0; $i<count($keys); $i++) {
@@ -26,43 +25,30 @@ for ($i=0; $i<count($keys); $i++) {
 ?>
 
 <html>
-  <head>
-  <? echo STYLESHEET_HTML; ?>
-  <? echo FAVICO_HTML; ?>
+<head>
+<? $inst->print_head_int("Status Update", 0); ?>
 
-<!-- Include the sound manager JS to play sounds -->
-<script type="text/javascript" src="/js/soundmanager2.js"></script>
 <script type="text/javascript">
-
-  <!-- setup Sound Manager and create the required files -->
-  var sound_loaded = "false";
-  var play_it = "false";
-
-  soundManager.url = '/sounds/sm2-swf-movies/'; // directory where SM2 .SWFs live
-  soundManager.debugMode = false;
-  soundManager.volume = 100;
-  soundManager.waitForWindowLoad = true;
-
-  // callback function which is called once the page has been loaded */
-  soundManager.onload = function() {
-    soundManager.createSound('fatal_error','/sounds/a_fatal_error_has_occurred.mp3');
-    sound_loaded = "true";
-  }
-
-  var url = "statusupdate.php";
-
-  // Information for the warn/error div scroller
-  var scrollerwidth="450px";
-  var scrollerheight="50px";
-  var scrollerspeed=1;        // Scrollers speed here (larger is faster 1-10)
-  var scrollercontent='OK'
-  var pauseit=1
-  var scroll_it = "false";
-  var scroll_id;
+  
+  var url = "status_update.php";
 
   function looper() {
-    request();
-    setTimeout('looper()',4000);
+    request()
+    setTimeout('looper()',2000)
+  }
+
+  function request() {  
+  
+    if (window.XMLHttpRequest)
+      http_request = new XMLHttpRequest();
+    else
+      http_request = new ActiveXObject("Microsoft.XMLHTTP");
+
+    http_request.onreadystatechange = function() {
+      handle_data(http_request)
+    };
+    http_request.open("GET", url, true);
+    http_request.send(null);
   }
 
   // Set all the imgs and links not in the excluded array to green
@@ -71,60 +57,24 @@ for ($i=0; $i<count($keys); $i++) {
     var imgs = document.getElementsByTagName('img');
     var links = document.getElementsByTagName('a');
     var i=0;
-    var green_count = 0;
+
     for (i=0; i<imgs.length; i++) {
       if (excluded.indexOf(imgs[i].id) == -1) {
         imgs[i].src = "/images/green_light.png";
-        green_count++;
       }
     }
     for (i=0; i<links.length; i++) {
       if (excluded.indexOf(links[i].id) == -1) {
         links[i].title = "OK";
+        //links[i].disabled = true;
         links[i].href = "javascript:void(0)";
       }
     }
-
-    // clear the scrolling text if everything is ok 
-    if (green_count == imgs.length) {
-      clearInterval(scroll_id);
-      scroll_it = "false";
-      play_it = "false";
-    }
   }
-
-
-  scrollerspeed=(document.all)? scrollerspeed : Math.max(1, scrollerspeed-1) //slow speed down by 1 for NS
-  var copyspeed=scrollerspeed
-  var iedom=document.all||document.getElementById
-  var actualheight=''
-  var cross_scroller, ns_scroller
-  var pausespeed=(pauseit==0)? copyspeed: 0
-
-  function populate() {
-    cross_scroller=document.getElementById? document.getElementById("iescroller") : document.all.iescroller
-    cross_scroller=document.getElementById? document.getElementById("iescroller") : document.all.iescroller
-    cross_scroller.style.top=parseInt(scrollerheight)+8+"px"
-    cross_scroller.innerHTML=scrollercontent
-    actualheight=cross_scroller.offsetHeight
-    scroll_id=setInterval("scrollscroller()",100)
-  }
-
-  function scrollscroller() {
-
-    if (parseInt(cross_scroller.style.top)>(actualheight*(-1)+4)) 
-      cross_scroller.style.top=parseInt(cross_scroller.style.top)-copyspeed+"px"
-    else 
-      cross_scroller.style.top=parseInt(scrollerheight)+4+"px"
-
-  }
-
+  
   function handle_data(http_request) {
     if (http_request.readyState == 4) {
-
-      var response = String(http_request.responseText);
-      var set = new Array();
-      var scroll_msg = "";
+      var response = String(http_request.responseText)
 
       if (response.length > 0) {
 
@@ -142,16 +92,14 @@ for ($i=0; $i<count($keys); $i++) {
         var link_id;
         var instrument = "<?echo INSTRUMENT?>"
         var log_file;
-        var loglengthIndex = "";
-        var loglength = "";
 
-        if ((typeof parent != "undefined") && (typeof parent.parent != "undefined") && (typeof parent.parent.logheader != "undefined")) {
-          loglengthIndex = parent.parent.logheader.document.getElementById("loglength").selectedIndex
-          loglength = parent.parent.logheader.document.getElementById("loglength").options[loglengthIndex].value
-        }
+        var loglengthIndex = parent.parent.logheader.document.getElementById("loglength").selectedIndex
+        var loglength = parent.parent.logheader.document.getElementById("loglength").options[loglengthIndex].value
         var link_str = "";
 
         if (response.indexOf("Could not connect to") == -1) {
+
+          var set = new Array();
 
           for (i=0; i < lines.length; i++) {
 
@@ -184,58 +132,21 @@ for ($i=0; $i<count($keys); $i++) {
             }
             if (state == <?echo STATUS_WARN?>) {
               document.getElementById(img_id).src = "/images/yellow_light.png";
-              scroll_msg += "<font color=\"#c7d210\"><b>WARNING:</b></font><font size=-2> " + host + "  " + message + "</font><br>";
               log_level="warn";
-              if (scroll_it == "false") {
-                scroll_it = "true";
-                populate();
-              }
             }
             if (state == <?echo STATUS_ERROR?>) {
               document.getElementById(img_id).src = "/images/red_light.png";
               log_level="error";
-              scroll_msg +=  "<font color=\"#c80000\"><b>ERROR:</b></font> " + host + " " + message + "<br>";
-              if (scroll_it == "false") {
-                scroll_it = "true";
-                populate();
-              }
-              if (play_it == "false") {
-                if (sound_loaded == "true") {
-                  soundManager.play('fatal_error');
-                  play_it = "true";
-                }
-              }
             }
 
             document.getElementById(link_id).title = message;
-            if (loglength == "") { 
-              document.getElementById(link_id).href = "logwindow.php?machine="+host+"&loglevel="+log_level+"&daemon="+log_file+"&autoscroll=true"
-            } else {
-              document.getElementById(link_id).href = "logwindow.php?machine="+host+"&loglevel="+log_level+"&loglength="+loglength+"&daemon="+log_file+"&autoscroll=true"
-            }
+            document.getElementById(link_id).href = "logwindow.php?machine="+host+"&loglevel="+log_level+"&loglength="+loglength+"&daemon="+log_file+"&autoscroll=true"
           }
+
+          resetOthers(set);
         }
       }
-      if ((typeof cross_scroller != "undefined") && (scroll_msg != cross_scroller.innerHTML)) {
-        cross_scroller.innerHTML = scroll_msg;
-        actualheight=cross_scroller.offsetHeight
-      }
-      resetOthers(set);
     }
-  }
-
-  function request() {
-  
-    if (window.XMLHttpRequest)
-      http_request = new XMLHttpRequest();
-    else
-      http_request = new ActiveXObject("Microsoft.XMLHTTP");
-
-    http_request.onreadystatechange = function() {
-      handle_data(http_request)
-    };
-    http_request.open("GET", url, true);
-    http_request.send(null);
   }
 
   var activeMachine = "nexus";
@@ -273,7 +184,12 @@ for ($i=0; $i<count($keys); $i++) {
 
 </script>
 </head>
-<body onload="looper()">
+<!--<body onload="looper()">-->
+<body>
+<?PHP
+
+
+?>
 
 <table id="parent_table" border=0 cellspacing=0 cellpadding=0>
 <tr><td>
@@ -370,8 +286,9 @@ for($i=0; $i<$config["NUM_PWC"]; $i++) {
 </td>
 
 <td width="20px"</td>
-<td>
 
+<td>
+                                                                                                                                                                                                  
 <table border=0 cellspacing=0 cellpadding=0 id="server_status_table">
 <tr><td class="notselected">&nbsp;</td></tr>
 <?
@@ -402,19 +319,12 @@ for ($i=0; $i<count($keys); $i++) {
   } else {
     $j++;
   }
+                                                                                                                                                                                                  
 }
 ?>
 </table>
 </td>
 </tr> 
-<tr><td colspan=3>
-
-  <div style="position:relative;width:100%;height:50;overflow:hidden" onMouseover="copyspeed=pausespeed" onMouseout="copyspeed=scrollerspeed">
-  <div id="iescroller" style="position:absolute;left:0px;top:0px;width:100%;">
-  </div></div>
-
-</td></tr>
-</table>
 
 
 
@@ -484,3 +394,4 @@ function statusLight($status, $message, $machine, $linkid, $imgid) {
                                                                                    
 }
 ?>
+

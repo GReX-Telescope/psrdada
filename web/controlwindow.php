@@ -49,7 +49,7 @@ $config = getConfigFile(DADA_CONFIG);
 $groups = getProjects($config["DADA_USER"]);
 ?>
                                                                                    
-  <table border=0 width="100%" cellpadding=5>
+  <table border=0 width="100%" cellpadding=0 cellspacing=0>
   <!--
   <tr>
     <td align="center"> <a href="javascript:popUp('client_status.php')" class="button" ><span></span><i>Client Status</i><b></b></a> </td>
@@ -61,22 +61,16 @@ $groups = getProjects($config["DADA_USER"]);
 
 <tr>
     <td align="center"> 
-
     <div class="btns">
-
       <a href="javascript:popWindow('annotate_obs.php', 800, 600)" class="btn" > <span>Ann. Obs</span> </a>
       <a href="javascript:popUp('client_status.php')"  class="btn" > <span>Client Status</span> </a>
-
       <a target="_ganglia" href="http://<?echo $_SERVER["SERVER_NAME"].":".$_SERVER["SERVER_PORT"]?>/ganglia/" class="btn" > <span>Ganglia</span> </a>
-
       <a href="javascript:popWindow('results.php', 1200, 800)" class="btn" > <span>Results</span> </a>
-
       <a href="javascript:popWindow('control/', 1200, 800)" class="btn" > <span>Controls</span> </a>
       <a href="javascript:popWindow('testing/', 1024, 800)" class="btn" > <span>Test</span> </a>
       <a href="javascript:popWindow('commandeer.php', 800, 480)" class="btn" > <span>Commandeer</span> </a>
 
       <a href="javascript:popWindow('support.html', 1200, 800)" class="btn" > <span>Help</span> </a>
-
     </div>
 
     <!--

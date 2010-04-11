@@ -1,19 +1,42 @@
 <?PHP
+/*
+ * Runs the client_command perl script
+ */
+
 include("../definitions_i.php");
 include("../functions_i.php");
 
-$cmd = $_GET["cmd"];
-$readonly_commands = array("get_disk_info","get_db_info", "get_alldb_info", "get_db_xfer_info", "get_load_info", "get_all_status");
-if (in_array($cmd, $readonly_commands))
+// Name of script to execute on PWC's
+$client_script = "client_command.pl";
+if (strlen(INSTRUMENT) > 0) {
+  $client_script = "client_".INSTRUMENT."_command.pl";
+}
 
+// Get parameters
+$cmd = $_GET["cmd"];    // Command to execute
+$arg = $_GET["arg"];    // Additional args
+$flush = 0;             // Auto close the window after command
+if (isset($_GET["autoclose"])) {
+  $flush = 1;
+}
+
+$servers_too = 0;
+if ($cmd == "get_status") {
+  $servers_too = 1;
+}
+
+$readonly_commands = array("get_disk_info","get_db_info", "get_alldb_info", "get_db_xfer_info", "get_load_info", "get_all_status");
+
+// Check to see if the user is in control of the instrument
 if ((!IN_CONTROL) && (!(in_array($cmd, $readonly_commands))) ) {
 
   $hostname = strtolower(gethostbyaddr($_SERVER["REMOTE_ADDR"]));
   $controlling_hostname = strtolower(rtrim(file_get_contents(CONTROL_FILE)));
+?>
+  <html>
 
-  echo "<html>\n";
-  include("../header_i.php");
-  ?>
+<?  include("../header_i.php"); ?>
+
   <br>
   <h3><font color="red">You cannot make any changes to the instrument if your host is not in control.</font></h3>
 
@@ -24,9 +47,9 @@ if ((!IN_CONTROL) && (!(in_array($cmd, $readonly_commands))) ) {
   <script type="text/javascript">
   parent.control.location.href=parent.control.location.href;
   </script>
-
   </body>
   </html>
+
 <?
   exit(0);
 } 
@@ -61,6 +84,7 @@ $command_dests["get_all_status"]       = array("pwc");
 
 $command_dests["default"]              = array("pwc");
 
+# formatted output?
 $raw = 0;
 if (isset($_GET["raw"])) {
   $raw = 1;
@@ -76,7 +100,6 @@ if (!$raw) {
 # Get machines from the dada.cfg file
 $sys_config = getConfigFile(SYS_CONFIG);
 $machines = array();
-$cmd = $_GET["cmd"];
 
 if (isset($_GET["singlemachine"])) {
 
@@ -117,27 +140,39 @@ if (isset($_GET["singlemachine"])) {
 
 }   
 
-if (isset($_GET["arg"])) {
-  $cmd .= " ".$_GET["arg"];
-}
-
-if (isset($_GET["autoclose"])) {
-  $flush = 1;
-} else {
-  $flush = 0;
-}
-
+// Append the args (if any)
+$cmd .= " ".$arg;
 
 $all_machines = "";
 for ($i=0;$i<count($machines);$i++) { 
   $all_machines .= $machines[$i]." ";
 }
 
+// Execute the remote command on the nodes
 chdir($sys_config["SCRIPTS_DIR"]);
-
-$script = "export DADA_ROOT=".DADA_ROOT."; ./client_command.pl \"".$cmd."\" ".$all_machines;
-
+$script = "export DADA_ROOT=".DADA_ROOT."; ./".$client_script." \"".$cmd."\" ".$all_machines;
 $string = exec($script, $output, $return_var);
+
+// The command is get_status and we want the server status also
+if ($servers_too) {
+
+  $servers = array("srv0", "srv1");
+  $dbs = "0 0 ";
+
+  for($i=0; $i<count($servers); $i++) {
+  
+    echo "Doing server ".$servers[$i]."<BR>\n";
+
+    $cmd = "ssh ".$servers[$i]." \"uptime | awk '{print \$10,\$11,\$12}'\"";
+    $loads = system($cmd);
+
+    $cmd = "ssh ".$servers[$i]." \"df -h / | tail -n 1 |  awk '{print \$2,\$3,\$4,\$5}'\"";
+    $disks = system($cmd)
+
+    array_push($output, $servers[$i].":ok:".$disks.";;;".$dbs.";;;".$loads.";;;1\n";
+  }
+  
+}
 
 if ($raw) {
 

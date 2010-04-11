@@ -1,23 +1,28 @@
 <?PHP 
 include("definitions_i.php");
 include("functions_i.php");
+include(INSTRUMENT."_functions_i.php");
 
-/* Need to clear PHP's internal cache */
-clearstatcache();
+$config = getConfigFile(SYS_CONFIG,TRUE);
+$host = $config["SERVER_HOST"];
+$port = $config["SERVER_WEB_MONITOR_PORT"];
 
-$pwc_config = getConfigFile(SYS_CONFIG);
-$pwc_status = getAllStatuses($pwc_config);
+list ($socket, $result) = openSocket($host, $port);
 
-$pwcc_status = STATUS_OK;
-$pwcc_message = "no probs mate";
+if ($result == "ok") {
 
-echo "NUM_PWC:::".$pwc_config["NUM_PWC"].";;;";
-for($i=0; $i<$pwc_config["NUM_PWC"]; $i++) {
- echo "PWC_".$i.":::".$pwc_config["PWC_".$i].";;;";
- echo "PWC_".$i."_STATUS:::". $pwc_status["PWC_".$i."_STATUS"].";;;";
- echo "PWC_".$i."_MESSAGE:::".$pwc_status["PWC_".$i."_MESSAGE"].";;;";
- echo "SRC_".$i."_STATUS:::". $pwc_status["SRC_".$i."_STATUS"].";;;";
- echo "SRC_".$i."_MESSAGE:::".$pwc_status["SRC_".$i."_MESSAGE"].";;;";
- echo "SYS_".$i."_STATUS:::". $pwc_status["SYS_".$i."_STATUS"].";;;";
- echo "SYS_".$i."_MESSAGE:::".$pwc_status["SYS_".$i."_MESSAGE"].";;;";
+  # ensure the read is non blocking
+
+  $bytes_written = socketWrite($socket, "status_info\r\n");
+
+  $read = socketRead($socket);
+  socket_close($socket);
+
+  $string = str_replace(";;;","\n",$read);
+  $string = rtrim($string);
+
+} else {
+  $string = "Could not connect to $host:$port<BR>\n";
 }
+
+echo $string;

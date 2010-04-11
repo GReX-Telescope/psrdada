@@ -1,29 +1,24 @@
 <?PHP
 
+/*
+ * Displays the load, data block and disk information for each PWC, also for the 2 servers
+ */
+
 include("definitions_i.php");
 include("functions_i.php");
 
 $config = getConfigFile(SYS_CONFIG);
 $machine = $_GET["machine"];
 $machines = array();
+for ($i=0; $i<$config["NUM_PWC"]; $i++) {
+  $machines[$i] = $config["PWC_".$i];
+}
+$machines[$config["NUM_PWC"]] = "srv0";
+$machines[$config["NUM_PWC"]+1] = "srv1";
+
 
 $gang_network = "http://".$_SERVER["HTTP_HOST"]."/ganglia/graph.php?g=network_report&z=medium&c=APSR%20Clients&m=&r=hour&s=descending&hc=4";
 $gang_load = "http://".$_SERVER["HTTP_HOST"]."/ganglia/graph.php?g=load_report&z=medium&c=APSR%20Clients&m=&r=hour&s=descending&hc=4";
-
-/* If nexus, then we are running this for all nodes */
-if ($machine != "nexus") {
-
-  $single_machine = "&single_machine=".$machine;
-  $machines = array($machine);
-
-} else {
-
-  $single_machine = "";
-  for ($i=0; $i<$config["NUM_PWC"]; $i++) {
-    array_push($machines,$config["PWC_".$i]);
-  }  
-
-}
 
 // Don't allow this page to be cached, since it should always be fresh.
 header("Cache-Control: no-cache, must-revalidate"); // HTTP/1.1
@@ -42,7 +37,7 @@ header("Expires: Mon, 26 Jul 1997 05:00:00 GMT"); // Date in the past
 
   <script type="text/javascript">
 
-  var url = "http://<?echo $_SERVER["HTTP_HOST"]?>/<?echo INSTRUMENT?>/control/client_command.php?cmd=get_status&raw=1<?echo $single_machine?>"
+  var url = "http://<?echo $_SERVER["HTTP_HOST"]?>/<?echo INSTRUMENT?>/control/client_command.php?cmd=get_status&raw=1&single_machine=nexus"
 
   function looper() {
     request()
@@ -80,37 +75,55 @@ header("Expires: Mon, 26 Jul 1997 05:00:00 GMT"); // Date in the past
           var host = values[0];
           var result = values[1];
 
-          if (result == "ok") {
-            var statuses= values[2].split(";;;");
-            
-            var disks = statuses[0].split(" ");
-            var dbs   = statuses[1].split(" ");
-            var loads = statuses[2].split(",");
-            var unproc_gb = parseFloat(statuses[3])/1024;
+          var statuses= values[2].split(";;;");
 
-            var disk_percent = Math.floor(parseInt(disks[1]) / parseInt(disks[0])*100); 
-            var disk_gb = (parseInt(disks[0]) - parseInt(disks[1])) / 1024.0; 
+          var disks
+          var dbs
+          var loads
+          var unproc_gb
 
-            var db_percent = Math.floor(parseInt(dbs[1]) / parseInt(dbs[0])*100);
-            var load_percent = Math.floor((parseFloat(loads[0])/8)*100);
+          var disk_percent = 0
+          var disk_gb = 0
+          var db_percent = 0
+          var load_percent = 0
+          var mb_per_block =  0
+          var gb_unprocessed = 0
 
-            var mb_per_block = <?echo $config[$config["PROCESSING_DATA_BLOCK"]."_BLOCK_BUFSZ"]?> / (1024*1024*1024);
-            var gb_unprocessed = (mb_per_block*parseFloat(dbs[1]) + unproc_gb);
+          if (statuses.length == 4) {
+            disks = statuses[0].split(" ");
+            dbs   = statuses[1].split(" ");
+            loads = statuses[2].split(",");
+            unproc_gb = parseFloat(statuses[3])/1024;
+
+            disk_percent = Math.floor(parseInt(disks[1]) / parseInt(disks[0])*100); 
+            disk_gb = (parseInt(disks[0]) - parseInt(disks[1])) / 1024.0; 
+
+            // Special case for no data block
+            if ((parseInt(dbs[1]) == 0) && (parseInt(dbs[0]) == 0) ) {
+              db_percent = 0;
+            } else {
+              db_percent = Math.floor(parseInt(dbs[1]) / parseInt(dbs[0])*100);
+            }
+            load_percent = Math.floor((parseFloat(loads[0])/8)*100);
+
+            mb_per_block = <?echo $config[$config["PROCESSING_DATA_BLOCK"]."_BLOCK_BUFSZ"]?> / (1024*1024*1024);
+            gb_unprocessed = (mb_per_block*parseFloat(dbs[1]) + unproc_gb);
+          }
+
 <?
 for ($i=0; $i<count($machines); $i++) {
-  echo "          if (host == \"".$machines[$i]."\") {\n";
-  echo "            ".$machines[$i]."_db.setPercentage(db_percent);\n";
-  echo "            document.getElementById(\"".$machines[$i]."_db_value\").innerHTML = \"&nbsp;\"+dbs[1]+\"&nbsp;of&nbsp;\"+dbs[0]\n";
-  echo "            ".$machines[$i]."_disk.setPercentage(disk_percent);\n";
-  echo "            document.getElementById(\"".$machines[$i]."_disk_unproc\").innerHTML = \"&nbsp;\"+unproc_gb.toFixed(1)\n";
-  echo "            document.getElementById(\"".$machines[$i]."_disk_left\").innerHTML = \"&nbsp;\"+disk_gb.toFixed(1)\n";
-  echo "            ".$machines[$i]."_load.setPercentage(load_percent);\n";
-  echo "            document.getElementById(\"".$machines[$i]."_load_value\").innerHTML = \"&nbsp;\"+loads[0]\n";
-  echo "            document.getElementById(\"".$machines[$i]."_gb_unproc\").innerHTML = \"&nbsp;\"+gb_unprocessed.toFixed(1)\n";
-  echo "          }\n";
+  echo "        if (host == \"".$machines[$i]."\") {\n";
+  echo "          ".$machines[$i]."_db.setPercentage(db_percent);\n";
+  echo "          document.getElementById(\"".$machines[$i]."_db_value\").innerHTML = \"&nbsp;\"+dbs[1]+\"&nbsp;of&nbsp;\"+dbs[0]\n";
+  echo "          ".$machines[$i]."_disk.setPercentage(disk_percent);\n";
+  echo "          document.getElementById(\"".$machines[$i]."_disk_unproc\").innerHTML = \"&nbsp;\"+unproc_gb.toFixed(1)\n";
+  echo "          document.getElementById(\"".$machines[$i]."_disk_left\").innerHTML = \"&nbsp;\"+disk_gb.toFixed(1)\n";
+  echo "          ".$machines[$i]."_load.setPercentage(load_percent);\n";
+  echo "          document.getElementById(\"".$machines[$i]."_load_value\").innerHTML = \"&nbsp;\"+loads[0]\n";
+  echo "          document.getElementById(\"".$machines[$i]."_gb_unproc\").innerHTML = \"&nbsp;\"+gb_unprocessed.toFixed(1)\n";
+  echo "        }\n";
 }
 ?>
-          }
         }
       }
       var theTime = now.getTime();
@@ -160,14 +173,15 @@ for ($i=0; $i<count($machines); $i++) {
   <td align="right"><?echo $machines[$i].": "?></td>
 
   <td width="80px">
-  <? echo "<span id=\"".$machines[$i]."_load_progress_bar\">[  Loading Progress Bar ]</span></td>\n"; ?>
+  <? echo "<span id=\"".$machines[$i]."_load_progress_bar\">[  Loading Progress Bar ]</span>\n"; ?>
   </td>
 
   <td>
   <? echo "<span id=\"".$machines[$i]."_load_value\"></span>\n"; ?>
+  </td>
 
   <td width="80px">
-  <? echo "<span id=\"".$machines[$i]."_db_progress_bar\">[  Loading Progress Bar ]</span></td>\n"; ?>
+  <? echo "<span id=\"".$machines[$i]."_db_progress_bar\">[  Loading Progress Bar ]</span>\n"; ?>
   </td>
 
   <td>
@@ -204,4 +218,3 @@ for ($i=0; $i<count($machines); $i++) {
 </body>
 </table>
 </html>
-  

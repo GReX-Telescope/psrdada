@@ -2,11 +2,14 @@
 include("../definitions_i.php");
 include("../functions_i.php");
 
+$instrument = strtoupper(INSTRUMENT);
+$configure_script = INSTRUMENT."_reconfigure.pl";
+
 if (!IN_CONTROL) {
 
   $hostname = strtolower(gethostbyaddr($_SERVER["REMOTE_ADDR"]));
   $controlling_hostname = strtolower(rtrim(file_get_contents(CONTROL_FILE)));
-                                                                                                                                          
+
   echo "<html>\n";
   include("../header_i.php");
   ?>
@@ -34,9 +37,14 @@ if (!IN_CONTROL) {
 include("../header_i.php");
 
 $cmd         = $_GET["cmd"];
+$name        = $_GET["name"];
 $config      = getConfigFile(SYS_CONFIG);
 $host        = $config["SERVER_HOST"];
 $control_dir = $config["SERVER_CONTROL_DIR"];
+$pid         = "";
+if (isset($_GET["pid"])) {
+  $pid = $_GET["pid"];
+}
 
 chdir($config["SCRIPTS_DIR"]);
 
@@ -46,6 +54,21 @@ $server_daemons = split(" ",$config["SERVER_DAEMONS"]);
 for ($i=0; $i<count($server_daemons);$i++) {
   $server_names[$i] = str_replace("_", " ", $server_daemons[$i]);
 }
+
+if (array_key_exists("SERVER_DAEMONS_PERSIST", $config)) {
+  $server_daemons_persist = split(" ",$config["SERVER_DAEMONS_PERSIST"]);
+} else {
+  $server_daemons_persist = array();
+  $server_names_persist = array();
+}
+
+for ($i=0; $i<count($server_daemons_persist);$i++) {
+  $server_names_persist[$i] = str_replace("_", " ", $server_daemons_persist[$i]); 
+}
+
+$server_daemons_combined = array_merge($server_daemons, $server_daemons_persist);
+$server_names_combined   = array_merge($server_names, $server_names_persist);
+
 
 ?>
   <script type="text/javascript">
@@ -60,43 +83,109 @@ for ($i=0; $i<count($server_daemons);$i++) {
 /* Start the server side daemons */
 if ($cmd == "start_daemons") {
 
-?>
-
-<table class="datatable">
-  <tr><th colspan=3>Starting Server Daemons</th></tr>
-  <tr><th width="20%">Daemon</th><th width="10%">Result</th><th width="70%">Messages</th></tr>
-<?
+  ?>
+  <table class="datatable">
+    <tr><th colspan=3>Starting Server Daemons</th></tr>
+    <tr><th width="20%">Daemon</th><th width="10%">Result</th><th width="70%">Messages</th></tr>
+  <?
   for ($i=0; $i<count($server_daemons); $i++) {
-    $return_val += startDaemon($server_names[$i], $server_daemons[$i]);
+    $return_val += startDaemon($server_names[$i], $server_daemons[$i], "");
     flush();
   }
+  ?>
+  </table>
+  <?
 
-?>
+/* start a specific daemon */
+} else if ($cmd == "start_daemon") {
 
-</table>
-<?
+  ?>
+  <table class="datatable">
+    <tr><th colspan=3>Starting Daemon <?echo $name?></th></tr>
+  <?
 
+  $i = array_search($name, $server_daemons_combined);
+  
+
+  /* if the daemon does not exist */
+  if ($i === FALSE) {
+    ?>
+    <tr><td bgcolor="red" colspan=3>Daemon <?echo $name?> did not exist or was not configured to run</td></tr>
+    <?
+
+  /* the daemon existed, launch it! */
+  } else {
+
+    ?>
+    <tr><th width="20%">Daemon</th><th width="10%">Result</th><th width="70%">Messages</th></tr>
+    <?
+    $return_val = startDaemon($server_names_combined[$i], $server_daemons_combined[$i], $pid);
+    flush();
+  }
+  ?>
+  </table>
+  <?
+
+/* Stop all the server daemons */
 } else if ($cmd == "stop_daemons") {
-?>
 
-<table class="datatable">
-  <tr><th colspan=3>Stopping Server Daemons</th></tr>
-  <tr><th>Daemon</th><th>Result</th><th>Messages</th></tr>
+  ?>
+  <table class="datatable">
+    <tr><th colspan=3>Stopping Server Daemons</th></tr>
+    <tr><th>Daemon</th><th>Result</th><th>Messages</th></tr>
+  <?
 
-<?
+  /* create the quit files */
+  for ($i=0; $i<count($server_daemons); $i++) {
+    system("touch ".$control_dir."/".$server_daemons[$i].".quit");
+  }
 
-  system("touch ".$control_dir."/quitdaemons");
+  sleep(2);
 
+  /* wait for all daemons to exit */
   for ($i=0; $i<count($server_daemons); $i++) {
     $return_val += waitForDaemon($server_names[$i], $server_daemons[$i], $control_dir);
     flush();
   }
 
-  unlink($control_dir."/quitdaemons");
+  /* unlink the quit files */
+  for ($i=0; $i<count($server_daemons); $i++) {
+    unlink($control_dir."/".$server_daemons[$i].".quit");
+  }
 
-?>
+  ?>
   </table>
-<?
+  <?
+
+} else if ($cmd == "stop_daemon") {
+
+  ?>
+  <table class="datatable">
+    <tr><th colspan=3>Stopping Daemon <?echo $name?></th></tr>
+  <?
+
+  $i = array_search($name, $server_daemons_combined);
+
+  /* if the daemon does not exist */
+  if ($i === FALSE) {
+    ?>
+    <tr><td bgcolor="red" colspan=3>Daemon <?echo $name?> did not exist or was not configured to run</td></tr>
+    <?
+
+  /* the daemon existed, launch it! */
+  } else {
+
+    ?>
+    <tr><th width="20%">Daemon</th><th width="10%">Result</th><th width="70%">Messages</th></tr>
+    <?
+    system("touch ".$control_dir."/".$server_daemons_combined[$i].".quit");
+    sleep(2);
+    $return_val = waitForDaemon($server_names_combind[$i], $server_daemons_combined[$i], $control_dir);
+    unlink($control_dir."/".$server_daemons_combined[$i].".quit");
+  }
+  ?>
+  </table>
+  <?
 
 } else if ($cmd == "reset_pwcc") {
 
@@ -130,15 +219,53 @@ if ($cmd == "start_daemons") {
 
 ?>
 <table class="datatable" width=60%>
-  <tr><th colspan=1>Restarting Instrument: <?echo $config["INSTRUMENT"]?></th></tr>
+  <tr><th colspan=1>Restarting <? echo $instrument?></th></tr>
 
 <?
   flush();
 
-  $script_name = "dada_reconfigure.pl -e ".$config["INSTRUMENT"];
   echo "  <tr style=\"background: white;\">\n";
   echo "    <td align=\"left\">\n";
-  $script = "source /home/apsr/.bashrc; ".$script_name." 2>&1";
+  $script = "source /home/dada/.bashrc; ".$configure_script." 2>&1";
+  $string = exec($script, $output, $return_var);
+  for ($i=0; $i<count($output); $i++) {
+    echo $output[$i]."<BR>";
+  }
+  echo "    </td>\n";
+  echo "  </tr>\n";
+  echo "</table>\n";
+
+} else if ($cmd == "stop_instrument") {
+
+  ?>
+  <table class="datatable" width=60%>
+    <tr><th colspan=1>Stopping <? echo $instrument?></th></tr>
+  <?
+  flush();
+
+  echo "  <tr style=\"background: white;\">\n";
+  echo "    <td align=\"left\">\n";
+  $script = "source /home/dada/.bashrc; ".$configure_script." -s 2>&1";
+  $string = exec($script, $output, $return_var);
+  for ($i=0; $i<count($output); $i++) {
+    echo $output[$i]."<BR>";
+  }
+  echo "    </td>\n";
+  echo "  </tr>\n";
+  echo "</table>\n";
+
+} else if ($cmd == "start_instrument") {
+
+  ?>
+  <table class="datatable" width=60%>
+    <tr><th colspan=1>Starting <? echo $instrument?></th></tr>
+
+  <?
+  flush();
+
+  echo "  <tr style=\"background: white;\">\n";
+  echo "    <td align=\"left\">\n";
+  $script = "source /home/dada/.bashrc; ".$configure_script." -i 2>&1";
   $string = exec($script, $output, $return_var);
   for ($i=0; $i<count($output); $i++) {
     echo $output[$i]."<BR>";
@@ -184,7 +311,7 @@ if ($cmd == "start_daemons") {
 
 }
 flush();
-sleep(1);
+sleep(3);
 
 if (!$return_val) {
 ?>
@@ -196,13 +323,13 @@ if (!$return_val) {
 
 <?
 
-function startDaemon($title, $name) {
+function startDaemon($title, $name, $pid) {
 
-  $script_name = "./server_".$name.".pl";
+  $script_name = "server_".$name.".pl";
 
   echo "  <tr style=\"background: white;\">\n";
   echo "    <td>".$title."</td>\n";
-  $script = "source /home/apsr/.bashrc; ".$script_name." 2>&1";
+  $script = "source /home/dada/.bashrc; ".$script_name." ".$pid." 2>&1";
   $string = exec($script, $output, $return_var);
   echo "    <td>";
   echo ($return_var == 0) ? "OK" : "FAIL";
@@ -220,25 +347,29 @@ function startDaemon($title, $name) {
 
 function waitForDaemon($title, $name, $dir) {
 
-  $cmd = "ps auxwww | grep \"perl ./".$name."\" | grep -v grep";
+  $cmd = "ps auxwww | grep perl | grep \"".$name."\" | grep -v grep";
 
   $pid_file = $dir."/".$name.".pid";
 
   $daemon_running = 1;
-  $nwait = 5;
+  $nwait = 20;
 
   while (($daemon_running) && ($nwait > 0)) {
 
-    $last_line = system($cmd, $ret_val);
+    $last_line = exec($cmd, $output, $ret_val);
 
-    if (((file_exists($pid_file)) || ($ret_val == 0)) && ($nwait < 5)) {
-      echo "<tr style=\"background: white;\"><td>".$title."</td><td>FAIL</td><td>still running...</td>";
+    if (file_exists($pid_file)) {
+      echo "<tr style=\"background: white; text-align: left\"><td>".$title."</td><td>FAIL</td><td>PID file (".$pid_file.") still exists</td></tr>";
+    } else if ($ret_val == 0) {
+      echo "<tr style=\"background: white; text-align: left\"><td>".$title."</td><td>FAIL</td><td>Process still exists: ".$output[0]."</td></tr>";
     } else {
-      echo "<tr style=\"background: white;\"><td>".$title."</td><td>OK</td><td>Daemon Exited</td>";
-      $daemon_running = 0; 
+      echo "<tr style=\"background: white; text-align: left\"><td>".$title."</td><td>OK</td><td>Daemon is not running</td>";
+      $daemon_running = 0;
     }
+    flush();
     sleep(1);
     $nwait--;
+    clearstatcache();
   }
 
   if ($daemon_running) {
