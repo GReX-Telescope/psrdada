@@ -107,10 +107,11 @@ int dada_udp_sock_set_buffer_size (multilog_t* log, int fd, int verbose, int pre
   } 
   
   // Check the size. n.b. linux actually sets the size to DOUBLE the value
-  if (value/2 != pref_size) {
+  if (value*2 != pref_size && value/2 != pref_size)
+  {
     multilog (log, LOG_WARNING, "Warning. Failed to set udp socket's "
-              "buffer size to: %d, falling back to default size: %d\n",
-              pref_size, std_buffer_size);
+              "buffer size to: %d, falling back to default size: %d (return value: %d)\n",
+              pref_size, std_buffer_size, value);
 
     len = sizeof(value);
     value = std_buffer_size;
@@ -185,8 +186,15 @@ int dada_udp_sock_out(int *fd, struct sockaddr_in * dagram, char *client,
     dagram->sin_addr.s_addr = inet_addr (bcast_addr);
 
   /* Else packets direct to one host */
-  } else {
+  }
+  else
+  {
     addr = atoaddr(client);
+    if (!addr)
+    {
+      fprintf (stderr, "dada_udp_sock_out: failed atoaddr(%s)\n", client);
+      return 1;
+    }
     dagram->sin_addr.s_addr = addr->s_addr;
   }
 
