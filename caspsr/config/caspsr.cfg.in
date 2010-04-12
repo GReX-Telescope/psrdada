@@ -2,11 +2,11 @@
 INSTRUMENT              caspsr
 
 # Primary Write Client Controller
-PWCC_HOST               srv0.apsr.edu.au
+PWCC_HOST               srv0.caspsr.edu.au
 PWCC_PORT               12345
 
 # Owner of data files produced
-USER                    caspsr
+USER                    dada
 SCRIPTS_DIR             @PSRDADA_INSTALL@/bin
 CONFIG_DIR              @PSRDADA_INSTALL@/share
 WEB_DIR                 @PSRDADA_INSTALL@/web
@@ -18,8 +18,8 @@ VIEWING_DB_KEY          @PSRDADA_INSTALL@/share/caspsr.viewer
 # Server directory configuration
 #
 
-SERVER_HOST             srv0.apsr.edu.au
-SERVER_ALIASES          apsr-srv0.atnf.csiro.au srv0.apsr.edu.au
+SERVER_HOST             srv0.caspsr.edu.au
+SERVER_ALIASES          apsr-srv1.atnf.csiro.au srv0.caspsr.edu.au
 SERVER_RESULTS_DIR      /export/results/caspsr
 SERVER_ARCHIVE_DIR      /export/archives/caspsr
 SERVER_LOG_DIR          /export/logs/caspsr
@@ -30,12 +30,12 @@ SERVER_DAEMONS          caspsr_tcs_interface caspsr_results_manager caspsr_pwc_m
 SERVER_DAEMONS_PERSIST  none
 
 # TCS Interface configuration. Note on different interface to server
-TCS_INTERFACE_HOST      apsr-srv0.atnf.csiro.au
+TCS_INTERFACE_HOST      apsr-srv1.atnf.csiro.au
 TCS_INTERFACE_PORT      59000       # TCS connects here
 TCS_STATE_INFO_PORT     52001       # Web interface state information
 
 # PWCC -> PWC configuration
-PWCC_HOST               srv0.apsr.edu.au
+PWCC_HOST               srv0.caspsr.edu.au
 PWCC_PORT               52020
 PWCC_LOGPORT            52021
 PWC_PORT                52022
@@ -99,58 +99,43 @@ RECEIVING_DATA_BLOCK    DADA
 PROCESSING_DATA_BLOCK   EADA
 AUXILIARY_DATA_BLOCK    FADA
 
-DADA_BLOCK_NBUFS        250         # dada_dbNdb data block
+DADA_BLOCK_NBUFS        2048         # dada_dbNdb data block
 DADA_BLOCK_BUFSZ        4194304
 
-EADA_BLOCK_NBUFS        1000         # dspsr data block
+EADA_BLOCK_NBUFS        4            # dspsr data block
 EADA_BLOCK_BUFSZ        4194304
 
-FADA_BLOCK_NBUFS        250          # auxilliary data block
+FADA_BLOCK_NBUFS        4            # auxilliary data block
 FADA_BLOCK_BUFSZ        4194304
 
 ###############################################################################
 # Distributor configuration
 
 NUM_DISTRIB   4
-DISTRIB_0     apsr00:33108
-DISTRIB_1     apsr14:33109
-DISTRIB_2     apsr00:33110
-DISTRIB_3     apsr14:33111
+DISTRIB_0     demux0:33108
+DISTRIB_1     demux1:33109
+DISTRIB_2     demux0:33110
+DISTRIB_3     demux1:33111
 PKTS_PER_XFER 180000
 
 
 # Primary Write Client (PWC) configuration
 PWC_BINARY              caspsr_udpdb
 PWC_IFACE               caspsr_udpdb
-NUM_PWC                 16
-PWC_0                   apsr01
-PWC_1                   apsr02
-PWC_2                   apsr03
-PWC_3                   apsr04
-PWC_4                   apsr05
-PWC_5                   apsr06
-PWC_6                   apsr07
-PWC_7                   apsr08
-PWC_8                   apsr09
-PWC_9                   apsr10
-PWC_10                  apsr11
-PWC_11                  apsr12
-PWC_12                  apsr13
-PWC_13                  apsr15
-PWC_14                  apsr16
-PWC_15                  apsr17
+NUM_PWC                 4
+PWC_0                   gpu0
+PWC_1                   gpu1
+PWC_2                   gpu2
+PWC_3                   gpu3
 
 NUM_DFB                 0
 
-NUM_SRV                 2
+NUM_SRV                 1
 SRV_0                   srv0
-SRV_1                   srv1
 
 # defines the number of helping nodes
 HELPER_DAEMONS          archive_manager auxiliary_processor 
-NUM_HELP                2
-HELP_0                  apsr00
-HELP_1                  apsr14
+NUM_HELP                0
 
 NUM_SWIN_DIRS           1
 SWIN_DIR_0              pulsar:shrek210-evlbi:/nfs/cluster/shrek210b/caspsr/
