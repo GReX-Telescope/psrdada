@@ -2,6 +2,9 @@
  * caspsr_udpNnic. Reads UDP packets and checks the header for correctness
  */
 
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE 1
@@ -11,12 +14,15 @@
 #include <sys/socket.h>
 #include <math.h>
 #include <pthread.h>
-#include <cpgplot.h>
 #include <sys/sysinfo.h>
 #include <sys/types.h>
 #include <sys/syscall.h>
 #include <sys/mman.h>
 #include <sched.h>
+
+#ifdef HAVE_PGPLOT
+#include <cpgplot.h>
+#endif
 
 #include "caspsr_udpNnic.h"
 #include "dada_generator.h"
@@ -69,6 +75,7 @@ void usage()
      " -t secs        acquire for secs [default 30]\n"
      " -n packets     write num packets to each datablock [default %d]\n"
      " -b bytes       number of packets to append to each transfer\n"
+     " -c Mibytes     clamp the max sending rate [MiB/s]\n"
      " -d             run as a daemon\n"
      " -r             receive data only, do not attempt to send it\n"
      " -s             show plots of memory buffers\n"
@@ -77,7 +84,14 @@ void usage()
      "\n"
      "i_dist          index of distributor\n"
      "n_dist          number of distributors\n"
-     "host1 - hosti   destination hosts to write to\n",
+     "host1 - hosti   destination hosts to write to\n"
+     "\n"
+     "  The amount of memory used to buffer packets is:\n"
+     "    nhost * UDP_DATA * packets_per_xfer\n"
+     "  where\n"
+     "     nhost is the number of destination hosts\n"
+     "     UDP_DATA is 8kB [fixed for CASPSR]\n"
+     "     packets_per_xfer is the '-n packets' option\n",
      CASPSR_DEFAULT_UDPNNIC_PORT, CASPSR_DEFAULT_UDPNNIC_PORT, 
      CASPSR_UDPNNIC_PACKS_PER_XFER );
 }
@@ -117,7 +131,9 @@ int udpNnic_initialize_receivers (udpNnic_t * ctx)
       multilog (ctx->log, LOG_ERR, "failed to allocate %"PRIu64" bytes buffer memory "
                 "for receiver %d\n", buffer_size, i);
       return -1;
-    }
+    } 
+    else
+      multilog (ctx->log, LOG_INFO, "allocated %"PRIu64" bytes for sending thread %d\n", buffer_size, i);
 
     if (mlock((void *)  r->buffer, (size_t) buffer_size) < 0) 
       multilog (ctx->log, LOG_ERR, "failed to lock buffer memory: %s\n", strerror(errno));
@@ -191,16 +207,16 @@ time_t udpNnic_start_function (udpNnic_t * ctx)
 int udpNnic_new_receiver (udpNnic_t * ctx)
 {
 
-  //multilog(ctx->log, LOG_INFO, "udpNnic_new_receiver: curr = %d\n", ctx->receiver_i);
+  multilog(ctx->log, LOG_INFO, "udpNnic_new_receiver: curr=%d n=%d\n", ctx->receiver_i, ctx->n_receivers);
 
   ctx->receiver_i++;
   ctx->receiver_i = ctx->receiver_i % ctx->n_receivers;
 
-  //multilog(ctx->log, LOG_INFO, "udpNnic_new_receiver: next = %d\n", ctx->receiver_i);
+  multilog(ctx->log, LOG_INFO, "udpNnic_new_receiver: next = %d\n", ctx->receiver_i);
 
   if (ctx->receivers[ctx->receiver_i]->r_count < ctx->receivers[ctx->receiver_i]->w_count) 
   {
-    multilog (ctx->log, LOG_ERR, "receiver %d had not read all the data from the previous xfer\n", ctx->receiver_i);
+    multilog (ctx->log, LOG_ERR, "receiver %d had not read all the data from the previous xfer (r=%"PRIu64" w=%"PRIu64"\n", ctx->receiver_i);
     return -1;
   }
   
@@ -243,7 +259,7 @@ void * receiving_thread (void * arg)
   uint64_t ch_id = 0;
 
   /* all packets seem to have an offset of -3 */
-  uint64_t global_offset = 3;
+  int64_t global_offset = 3;
 
   /* amount the seq number should increment by */
   int64_t seq_offset = 0;
@@ -322,7 +338,7 @@ void * receiving_thread (void * arg)
   /* this is due to some very strange behaviour in the packet seq number */
   // seq_offset -= 3;
 
-  fprintf(stderr, "seq_inc=%"PRIu64", seq_offset=%"PRId64", gobal_offset=%"PRIu64"\n", seq_inc, seq_offset, global_offset);
+  fprintf(stderr, "seq_inc=%"PRIu64", seq_offset=%"PRId64", gobal_offset=%"PRIi64"\n", seq_inc, seq_offset, global_offset);
 
   /* choose the first datablock and set the ipc ptr */
   ctx->receiver_i = 0;
@@ -396,6 +412,13 @@ void * receiving_thread (void * arg)
 
       // fixed_raw_seq_no = raw_seq_no - seq_offset;
       seq_no = (offset_raw_seq_no) / seq_inc;
+
+static uint64_t last_seq_no = 0;
+if (seq_no - last_seq_no > 32*1024)
+{
+  fprintf (stderr, "B: sequence number = %"PRIu64"\n", seq_no);
+  last_seq_no = seq_no;
+}
 
       ch_id = UINT64_C (0);
       for (i = 0; i < 8; i++ )
@@ -639,6 +662,9 @@ int main (int argc, char **argv)
   /* receive only flag */
   unsigned receive_only = 0;
 
+  /* clamped output rate (for sending threads) [Million Bytes/second] */
+  int clamped_output_rate = 0;
+
   int arg = 0;
 
   /* statistics thread */
@@ -656,12 +682,16 @@ int main (int argc, char **argv)
   /* receiver threads that send data to the PWCs */
   pthread_t * receiver_thread_ids;
 
-  while ((arg=getopt(argc,argv,"b:di:l:n:p:q:rst:vh")) != -1) {
+  while ((arg=getopt(argc,argv,"b:c:di:l:n:p:q:rst:vh")) != -1) {
     switch (arg) {
 
     case 'b':
       packets_to_append = atoi(optarg);
       break;
+
+    case 'c':
+      clamped_output_rate = atoi(optarg);
+      break; 
 
     case 'd':
       daemon = 1;
@@ -820,6 +850,7 @@ int main (int argc, char **argv)
   udpNnic.recv_core = 0;
   udpNnic.send_sleeps = 0;
   udpNnic.receive_only = receive_only;
+  udpNnic.clamped_output_rate = clamped_output_rate;
 
   signal(SIGINT, signal_handler);
 
@@ -919,6 +950,8 @@ int main (int argc, char **argv)
     return -1;
   }
 
+#ifdef HAVE_PGPLOT
+
   if (show_plots) {
     multilog(log, LOG_INFO, "starting plotting_thread()\n");
     rval = pthread_create (&plotting_thread_id, 0, (void *) plotting_thread, (void *) &udpNnic);
@@ -928,8 +961,12 @@ int main (int argc, char **argv)
     }
   }
 
-  /* make the receiving thread high priority */
-  udpNnic.bytes_to_acquire = 800 * 1000 * 1000 * (int64_t) nsecs;
+#endif
+
+  /* set the total number of bytes to acquire */
+  udpNnic.bytes_to_acquire = 1600 * 1000 * 1000 * (int64_t) nsecs;
+  udpNnic.bytes_to_acquire /= udpNnic.n_distrib;
+
   if (verbose) 
     multilog(log, LOG_INFO, "bytes_to_acquire = %"PRIu64" Million Bytes, nsecs=%d\n", udpNnic.bytes_to_acquire/1000000, nsecs);
 
@@ -957,11 +994,13 @@ int main (int argc, char **argv)
     multilog(log, LOG_INFO, "joining stats_thread\n");
   pthread_join (stats_thread_id, &result);
 
+#ifdef HAVE_PGPLOT
   if (show_plots) {
     quit_plot_thread = 1;
     multilog(log, LOG_INFO, "joining plotting_thread\n");
     pthread_join (plotting_thread_id, &result);
   }
+#endif
 
   if (verbose) 
     multilog(log, LOG_INFO, "udpNnic_stop_function\n");
@@ -1000,7 +1039,6 @@ void * sending_thread(void * arg)
   unsigned j = 0;
 
   /* set the CPU that this thread shall run on */
-  
   cpu_set_t set;
   pid_t tpid;
 
@@ -1031,6 +1069,7 @@ void * sending_thread(void * arg)
     if (!ctx->receive_only) {
 
       //multilog (ctx->log, LOG_INFO, "sending_thread: opening %s:%d\n",  r->host, r->port);
+      // DONT WORRY , the 0 in 5th argument means that we are not broadcasting to 192.168.4.255
       if (dada_udp_sock_out(&(r->fd), &(r->dagram), r->host, r->port, 0, "192.168.4.255") < 0)
       {
         multilog (ctx->log, LOG_ERR, "sending_thread [%s:%d] failed to create UDP socket\n", r->host, r->port);
@@ -1052,11 +1091,17 @@ void * sending_thread(void * arg)
 
   /* calculate the expected packets per second */
   uint64_t packets_ps;
-  packets_ps = 1600000000 / (ctx->n_distrib * UDP_DATA);
+  double sleep_time;
 
-  double sleep_time = (1 / (double)packets_ps) * 1000000;
+  if (ctx->clamped_output_rate)
+    packets_ps = ctx->clamped_output_rate / UDP_DATA;
+  else 
+    packets_ps = 1600000000 / (ctx->n_distrib * UDP_DATA);
+
+  sleep_time = (1 / (double)packets_ps) * 1000000;
   sleep_time *= ctx->n_receivers;
   sleep_time *= 0.90;
+
   int reported = 0;
 
   fprintf(stderr, "packets_ps=%"PRIu64", sleep_time=%fus\n", packets_ps, sleep_time);
@@ -1243,6 +1288,7 @@ void stats_thread(void * arg) {
   }
 }
 
+#ifdef HAVE_PGPLOT
 
 /* 
  * Create a pgplot window and display buffer information
@@ -1393,7 +1439,7 @@ void plotting_thread(void * arg) {
 
 }
 
-
+#endif
 
 /*
  *  Simple signal handler to exit more gracefully
@@ -1409,6 +1455,8 @@ void signal_handler(int signalValue) {
   quit_threads = 1;
 
 }
+
+#ifdef HAVE_PGPLOT
 
 /*
  * Set the PGPLOT dimensions
@@ -1447,6 +1495,7 @@ void get_scale (int from, int to, float* width, float* height)
     *height = ty / fy;
 }
 
+#endif
 
 
 

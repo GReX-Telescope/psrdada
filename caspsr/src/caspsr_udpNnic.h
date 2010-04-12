@@ -45,7 +45,6 @@ typedef struct {
   int      fd;                /* outgoing file descriptor */
   struct sockaddr_in dagram;  /* UDP socket struct */
 
-
 } udpNnic_receiver_t;
 
 typedef struct {
@@ -74,7 +73,8 @@ typedef struct {
   stats_t * bytes;
 
   /* housekeeping */
-  int64_t bytes_to_acquire;
+  int      clamped_output_rate;
+  int64_t  bytes_to_acquire;
   uint64_t ch_id;
   uint64_t next_seq;
   struct   timeval timeout; 
