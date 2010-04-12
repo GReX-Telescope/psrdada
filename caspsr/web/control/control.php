@@ -242,7 +242,7 @@ function printClientHelpers($config, $control) {
 
   # $help    = getConfigMachines($config, "HELP");
   $dfbs    = getConfigMachines($config, "DFB");
-  $srvs    = array("srv0", "srv1");
+  $srvs    = array("srv0");
   $hosts   = array_merge($srvs, $dfbs);
 
   $d_info  = getDaemonInfo($hosts, INSTRUMENT);

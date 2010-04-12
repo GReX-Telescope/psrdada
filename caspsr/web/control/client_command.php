@@ -199,7 +199,7 @@ function determineRunningHosts($config, $dests, $host) {
   $pwcs = getConfigMachines($config, "PWC");
   $dfbs = getConfigMachines($config, "DFB");
   $help = getConfigMachines($config, "HELP");
-  $srvs = array("srv0", "srv1");
+  $srvs = array("srv0");
 
   $result = array();
 
