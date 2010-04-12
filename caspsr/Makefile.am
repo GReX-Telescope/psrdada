@@ -1,2 +1,2 @@
 
-SUBDIRS = src scripts config
+SUBDIRS = src web scripts config
