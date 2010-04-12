@@ -19,8 +19,6 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <cpgplot.h>
-
 
 #define BIBOB_VLAN_BASE "192.168.0."
 #define BIBOB_PORT 7
