@@ -1,2 +1,2 @@
-PROC_CMD dada_dbdisk -s -k eada -o -D /lfs/data0/caspsr/scratch/20091026_test
+PROC_CMD dada_dbdisk -s -o -D /lfs/data0/caspsr/scratch
 
