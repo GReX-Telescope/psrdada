@@ -5,6 +5,14 @@ AC_PREREQ(2.57)
 AC_INIT([DADA],[1.0],[straten@astron.nl])
 
 AC_CONFIG_SRCDIR([src/dada_def.h])
+
+AC_ARG_VAR([PSRHOME],    [Standard pulsar home directory])
+AC_ARG_VAR([LOGIN_ARCH], [Architecture-dependent sub-directory of PSRHOME])
+AC_ARG_VAR([PACKAGES],   [Root directory of third-party packages])
+AC_ARG_VAR([PGPLOT_DIR], [Pgplot graphics library directory])
+
+AC_PREFIX_DEFAULT([${PSRHOME:-"/usr/local"}${PSRHOME:+"/$LOGIN_ARCH"}])
+
 AM_INIT_AUTOMAKE([foreign subdir-objects])
 AC_DISABLE_SHARED
 
