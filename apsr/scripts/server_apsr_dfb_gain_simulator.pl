@@ -30,7 +30,7 @@ use constant QUITFILE    => "apsr_dfb_gain_simulator.quit";
 #
 # Global Variables
 #
-our %cfg = Apsr->getApsrConfig();      # Apsr.cfg
+our %cfg = Apsr::getApsrConfig();      # Apsr.cfg
 our $quit_daemon : shared  = 0;
 
 
@@ -83,7 +83,7 @@ $server_socket = new IO::Socket::INET (
 die "Could not create listening socket: $!\n" unless $server_socket;
 
 # Redirect standard output and error
-# Dada->daemonize($logfile, $pidfile);
+# Dada::daemonize($logfile, $pidfile);
 
 debugMessage(0, "STARTING SCRIPT");
 
@@ -144,11 +144,11 @@ while (!$quit_daemon) {
 
       debugMessage(2, "Average gain is ".$avg.", intavg = ".$int_avg);
 
-      my $handle = Dada->connectToMachine($dfb_sim_host, $dfb_sim_port);
+      my $handle = Dada::connectToMachine($dfb_sim_host, $dfb_sim_port);
       if ($handle) {
         debugMessage(1, "DFB <- APSRGAIN ".$int_avg);
         print $handle "APSRGAIN ".$int_avg."\r\n";
-        my $line = Dada->getLine($handle);
+        my $line = Dada::getLine($handle);
         debugMessage(0, "Reply from DFB3 simulator: ".$line);
         close($handle);
         $last_avg = $int_avg;
@@ -161,10 +161,10 @@ while (!$quit_daemon) {
         }
       }
     } else {
-      my $handle = Dada->connectToMachine($dfb_sim_host, $dfb_sim_port);
+      my $handle = Dada::connectToMachine($dfb_sim_host, $dfb_sim_port);
       if ($handle) {
         print $handle "APSRGAIN\r\n";
-        my $line = Dada->getLine($handle);
+        my $line = Dada::getLine($handle);
         debugMessage(2, "Current Gain: ".$line);
         close($handle);
         $last_avg = int($avg);
@@ -201,7 +201,7 @@ while (!$quit_daemon) {
       my $hostname = $hostinfo->name;
       my @parts = split(/\./,$hostname);
       my $machine = $parts[0];
-      $string = Dada->getLine($rh);
+      $string = Dada::getLine($rh);
 
       # If the string is not defined, then we have lost the connection.
       # remove it from the read_set
@@ -236,11 +236,11 @@ while (!$quit_daemon) {
             $response = "Error: invalid channel specified ".$chan;
           }
 
-          debugMessage(2, $machine." <- ".$response);
+          debugMessage(1, $machine." <- ".$response);
 
         } elsif ($string =~ m/^APSRGAIN (\d+) (0|1) (\d+)$/) {
 
-          debugMessage(2, $machine." -> ".$string);
+          debugMessage(1, $machine." -> ".$string);
 
           my ($ignore, $chan, $pol, $val) = split(/ /, $string);
 
@@ -311,7 +311,7 @@ sub daemonControlThread() {
 sub debugMessage($$) {
   (my $level, my $message) = @_;
   if ($level <= DEBUG_LEVEL) {
-    my $time = Dada->getCurrentDadaTime();
+    my $time = Dada::getCurrentDadaTime();
     print "[".$time."] ".$message."\n";
   }
 }

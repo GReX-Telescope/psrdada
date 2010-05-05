@@ -19,7 +19,7 @@ use constant  DEBUG_LEVEL         => 1;
 #
 # Global Variables
 #
-our %cfg : shared = Apsr->getApsrConfig();      # dada.cfg in a hash
+our %cfg : shared = Apsr::getApsrConfig();      # dada.cfg in a hash
 
 
 my $cmd = "";
@@ -117,13 +117,13 @@ sub commThread($$) {
   my $result = "fail";
   my $response = "Failure Message";
  
-  my $handle = Dada->connectToMachine($machine, $cfg{"CLIENT_MASTER_PORT"}, 0);
+  my $handle = Dada::connectToMachine($machine, $cfg{"CLIENT_MASTER_PORT"}, 0);
   # ensure our file handle is valid
   if (!$handle) { 
     return ("fail","Could not connect to machine ".$machine.":".$cfg{"CLIENT_MASTER_PORT"}); 
   }
 
-  ($result, $response) = Dada->sendTelnetCommand($handle,$command);
+  ($result, $response) = Dada::sendTelnetCommand($handle,$command);
 
   $handle->close();
 

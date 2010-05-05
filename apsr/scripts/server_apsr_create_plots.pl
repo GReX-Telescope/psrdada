@@ -21,14 +21,14 @@ use constant IMAGE_TYPE          => ".png";
 #
 # Global Variable Declarations
 #
-our %cfg = Apsr->getApsrConfig();
+our %cfg = Apsr::getApsrConfig();
 
 
 #
 # Local Variable Declarations
 #
 
-my $bindir              = Dada->getCurrentBinaryVersion();
+my $bindir              = Dada::getCurrentBinaryVersion();
 
 #
 # Main 
@@ -86,10 +86,10 @@ debugMessage(2, "Inputs valid");
 
 chdir $cfg{"SERVER_RESULTS_DIR"};
 
-Apsr->makePlotsFromArchives($results_dir, $fres_archive, $tres_archive, $resolution);
-Apsr->removeFiles($results_dir, "phase_vs_flux_*_".$resolution.".png", 0);
-Apsr->removeFiles($results_dir, "phase_vs_time_*_".$resolution.".png", 0);
-Apsr->removeFiles($results_dir, "phase_vs_freq_*_".$resolution.".png", 0);
+Apsr::makePlotsFromArchives($results_dir, $fres_archive, $tres_archive, $resolution);
+Apsr::removeFiles($results_dir, "phase_vs_flux_*_".$resolution.".png", 0);
+Apsr::removeFiles($results_dir, "phase_vs_time_*_".$resolution.".png", 0);
+Apsr::removeFiles($results_dir, "phase_vs_freq_*_".$resolution.".png", 0);
 
 exit(0);
 

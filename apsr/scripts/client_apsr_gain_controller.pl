@@ -29,17 +29,24 @@ if ($#ARGV!=0) {
 #
 # Global Variables
 # 
-%cfg = Apsr->getConfig();
+%cfg = Apsr::getConfig();
 
 #
 # Initialize module variables
 #
 $Dada::client_gain_controller::dl = 1;
 $Dada::client_gain_controller::nchan = $chan;
-$Dada::client_gain_controller::gain_min = 0;
-$Dada::client_gain_controller::gain_default = 2000;
-$Dada::client_gain_controller::gain_max = 65535;
-$Dada::client_gain_controller::daemon_name = Dada->daemonBaseName($0);
+
+if ($cfg{"USE_DFB_SIMULATOR"} == 1) {
+  $Dada::client_gain_controller::gain_min = 0;
+  $Dada::client_gain_controller::gain_default = 33;
+  $Dada::client_gain_controller::gain_max = 100;
+} else {
+  $Dada::client_gain_controller::gain_min = 0;
+  $Dada::client_gain_controller::gain_default = 2000;
+  $Dada::client_gain_controller::gain_max = 65535;
+}
+$Dada::client_gain_controller::daemon_name = Dada::daemonBaseName($0);
 
 
 # Autoflush STDOUT

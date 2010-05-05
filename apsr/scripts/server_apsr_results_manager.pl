@@ -10,13 +10,13 @@ use Dada::server_results_manager qw(%cfg);
 #
 # Global Variable Declarations
 #
-%cfg = Apsr->getConfig();
+%cfg = Apsr::getConfig();
 
 #
 # Initialize module variables
 #
 $Dada::server_results_manager::dl = 1;
-$Dada::server_results_manager::daemon_name = Dada->daemonBaseName($0);
+$Dada::server_results_manager::daemon_name = Dada::daemonBaseName($0);
 
 # Autoflush STDOUT
 $| = 1;

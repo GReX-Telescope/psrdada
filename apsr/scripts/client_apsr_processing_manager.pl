@@ -14,15 +14,15 @@ use Dada::client_processing_manager qw(%cfg);
 #
 # Global Variables
 # 
-%cfg = Apsr->getConfig();
+%cfg = Apsr::getConfig();
 
 #
 # Initialize module variables
 #
 $Dada::client_processing_manager::dl = 1;
 $Dada::client_processing_manager::user = "apsr";
-$Dada::client_processing_manager::daemon_name = Dada->daemonBaseName($0);
-$Dada::client_processing_manager::dada_header_cmd = "dada_header -k eada";
+$Dada::client_processing_manager::daemon_name = Dada::daemonBaseName($0);
+$Dada::client_processing_manager::dada_header_cmd = "dada_header -k ".lc($cfg{"PROCESSING_DATA_BLOCK"});
 $Dada::client_processing_manager::client_logger = "client_apsr_src_logger.pl";
 
 # Autoflush STDOUT

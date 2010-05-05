@@ -4,9 +4,11 @@
 #
 # dspsr_command_line.pl
 #
+use lib $ENV{"DADA_ROOT"}."/bin";
 
 use strict;         # strict mode (like -Wall)
 use Getopt::Std;
+use Dada;
 
 #
 # Constants
@@ -83,26 +85,38 @@ if ($mode ne "PSR") {
 
   $dedisp = "D";
 
-  # Determine the source name from the catalogue
-  $cmd = $psrcat." -x -c DM ".$source." 2>&1";
-  $str = `$cmd`;
-  chomp $str;
+  $dm = Dada::getDM($source);
 
-  # Check to see if the source is in the catalogue
-  if ($str =~ m/not in catalogue/) {
-
+  if ($dm eq "NA") {
     print "ERROR: source $source not in catalogue\n";
     exit(1);
-
-  } else {
-
-    ($dm, $str) = split(/ /,$str,2);
-
-    if (DEBUG_LEVEL >= 1) {
-      print "$source has DM of $dm\n";
-    }
-
   }
+
+  # Determine the source name from the catalogue
+  # $cmd = $psrcat." -x -c DM ".$source." 2>&1";
+  # $str = `$cmd`;
+  # chomp $str;
+
+  # Check to see if the source is in the catalogue
+  # if ($str =~ m/not in catalogue/) {
+
+  #   if ($source eq "J1731-1845") {
+  #     $dm = "106.37";
+
+  #   } else {
+  #     print "ERROR: source $source not in catalogue\n";
+  #     exit(1);
+  #   }
+
+  # } else {
+
+  #   ($dm, $str) = split(/ /,$str,2);
+
+  #   if (DEBUG_LEVEL >= 1) {
+  #     print "$source has DM of $dm\n";
+  #   }
+
+  # }
 
   $cmd = $dmsmear." -f ".$freq." -d ".$dm." -b ".$bw." -n ".$nchan.
          " 2>&1 | grep \"Minimum Kernel Length\" | awk '{print \$4}'";

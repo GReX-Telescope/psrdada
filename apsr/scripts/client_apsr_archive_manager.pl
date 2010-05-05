@@ -16,13 +16,13 @@ use Dada::client_archive_manager qw(%cfg);
 #
 # Global Variables
 # 
-%cfg = Apsr->getConfig();
+%cfg = Apsr::getConfig();
 
 #
 # Initialize module variables
 #
 $Dada::client_archive_manager::dl = 1;
-$Dada::client_archive_manager::daemon_name = Dada->daemonBaseName($0);
+$Dada::client_archive_manager::daemon_name = Dada::daemonBaseName($0);
 
 
 # Autoflush STDOUT

@@ -29,7 +29,8 @@ use constant TOTAL_T_RES         => "total_t_res.ar";
 #
 # Global Variable Declarations
 #
-our %cfg = Apsr->getApsrConfig();
+our %cfg = Apsr::getApsrConfig();
+our $dl = DEBUG_LEVEL;
 
 
 #
@@ -43,11 +44,13 @@ $SIG{TERM} = \&sigHandle;
 # Local Variable Declarations
 #
 
-my $bindir              = Dada->getCurrentBinaryVersion();
+my $bindir              = Dada::getCurrentBinaryVersion();
 my $cmd;
 my $num_results = 0;
 my $fres = "";
 my $tres = "";
+my $result = "";
+my $response = "";
 
 # Autoflush output
 $| = 1;
@@ -109,23 +112,71 @@ if ($num_results > 0) {
   deleteProcessed($dir);
 
   debugMessage(1,"Processing all ".$ext." archives in ".$dir);
-  ($fres, $tres) = processAllArchives($dir, $source, $ext);
+  #($fres, $tres) = processAllArchives($dir, $source, $ext);
+
+  # Delete the existing fres and tres files
+  $cmd = "rm -f ".$dir."/*_t.ar ".$dir."/*_f.ar";
+  Dada::logMsg(2, $dl, "main: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(2, $dl, "main: ".$result." ".$response);
+
+  # Get ALL archives in the observation dir
+  my %unprocessed = countArchives($dir, $ext, 0);
+
+  # Sort the files into time order.
+  my @keys = sort (keys %unprocessed);
+
+  my $i=0;
+  my $current_archive = "";
+  my @fres_plot = ();
+  my @tres_plot = ();
+
+  for ($i=0; $i<=$#keys; $i++) {
+
+    print STDOUT "Processing ".$i." of ".($#keys)."<BR>\n";
+    print STDOUT "<script type='text/javascript'>self.scrollByLines(1000);</script>\n";
+    debugMessage(1, "Finalising archive ".$dir."/*/".$keys[$i]);
+    # process the archive and summ it into the results archive for observation
+    ($current_archive, $fres, $tres) = processArchive($dir, $keys[$i], $ext);
+
+    if (($fres ne "none") && ($tres ne "none") && (!(grep $_ eq $fres, @fres_plot))) {
+      push @fres_plot, $fres;
+      push @tres_plot, $tres;
+    }
+  }
 
   print STDOUT "Plotting<br>\n";
   print STDOUT "<script type='text/javascript'>self.scrollByLines(1000);</script>\n";
 
-  debugMessage(1,"Making final low res plots");
-  Apsr->makePlotsFromArchives($results_dir, $source, $fres, $tres, "240x180");
-  Apsr->removeFiles($results_dir, "phase_vs_flux_*_240x180.png", 0);
-  Apsr->removeFiles($results_dir, "phase_vs_time_*_240x180.png", 0);
-  Apsr->removeFiles($results_dir, "phase_vs_freq_*_240x180.png", 0);
+  for ($i=0; $i<=$#tres_plot; $i++) {
 
-  debugMessage(1,"Making final hi res plots");
-  Apsr->makePlotsFromArchives($results_dir, $source, $fres, $tres, "1024x768");
-  Apsr->removeFiles($results_dir, "phase_vs_flux_*_1024x768.png", 0);
-  Apsr->removeFiles($results_dir, "phase_vs_time_*_1024x768.png", 0);
-  Apsr->removeFiles($results_dir, "phase_vs_freq_*_1024x768.png", 0);
+    # determine the source name for this archive
+    $cmd = "vap -n -c name ".$tres_plot[$i]." | awk '{print \$2}'";
+    Dada::logMsg(2, $dl, "processArchive: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(2, $dl, "processArchive: ".$result." ".$response);
+    if ($result ne "ok") {
+      Dada::logMsg(0, $dl, "WARN: processArchive: failed to determine source name: ".$response);
+      $source = "UNKNOWN";
+    } else {
+      $source = $response;
+      chomp $source;
+    }
 
+    $source =~ s/^[JB]//;
+
+    debugMessage(1,"Making final low res plots for ".$source." [".$fres_plot[$i].", ".$tres_plot[$i]."]");
+    Apsr::makePlotsFromArchives($results_dir, $source, $fres_plot[$i], $tres_plot[$i], "240x180");
+    debugMessage(1,"Making final hi res plots for ".$source." [".$fres_plot[$i].", ".$tres_plot[$i]."]");
+    Apsr::makePlotsFromArchives($results_dir, $source, $fres_plot[$i], $tres_plot[$i], "1024x768");
+
+    Apsr::removeFiles($results_dir, "phase_vs_flux_".$source."*_240x180.png", 0);
+    Apsr::removeFiles($results_dir, "phase_vs_time_".$source."*_240x180.png", 0);
+    Apsr::removeFiles($results_dir, "phase_vs_freq_".$source."*_240x180.png", 0);
+    Apsr::removeFiles($results_dir, "phase_vs_flux_".$source."*_1024x768.png", 0);
+    Apsr::removeFiles($results_dir, "phase_vs_time_".$source."*_1024x768.png", 0);
+    Apsr::removeFiles($results_dir, "phase_vs_freq_".$source."*_1024x768.png", 0);
+  }
 }
 
 exit(0);
@@ -140,34 +191,261 @@ exit(0);
 # For the given utc_start ($dir), and archive (file) add the archive to the 
 # summed archive for the observation
 #
-sub processArchive($$$$) {
+sub processArchive($$$) {
+
+  (my $dir, my $file, my $ext) = @_;
+
+  my $result = "";
+  my $response = "";
+  my $cmd = "";
+  my @archives = ();
+
+  Dada::logMsg(2, $dl, "processArchive(".$dir.", ".$file.")");
+
+  my $bindir =      Dada::getCurrentBinaryVersion();
+  my $results_dir = $cfg{"SERVER_RESULTS_DIR"};
+
+  # Get the sub directories in the obs (bands)
+  $cmd = "find ".$dir."/* -maxdepth 0 -type d";
+  Dada::logMsg(2, $dl, "processArchive: ".$cmd);
+  my $find_result = `$cmd`;
+  my @sub_dirs = split(/\n/, $find_result);
+
+  # Find out how many archives we actaully hae
+  $cmd = "ls -1 ".$dir."/*/".$file;
+  Dada::logMsg(2, $dl, "processArchive: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(2, $dl, "processArchive: ".$result." ".$response);
+  if ($result ne "ok") {
+    Dada::logMsg(0, $dl, "WARN: processArchive: '".$cmd."' failed: ".$response);
+  } else {
+    @archives = split(/\n/, $response);  
+  }
+
+  Dada::logMsg(2, $dl, "processArchive: found ".($#archives+1)." / ".($#sub_dirs+1)." archives");
+  Dada::logMsg(1, $dl, "Processing ".$dir." -> ".$file." ".($#archives+1)." of ".($#sub_dirs+1));
+
+  my $output = "";
+  my $real_archives = "";
+  my $subdir = "";
+  my $plottable_archives = "";
+  my $source = "";
+
+  # determine the source name for this archive
+  $cmd = "vap -n -c name ".$archives[0]." | awk '{print \$2}'";
+  Dada::logMsg(2, $dl, "processArchive: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(2, $dl, "processArchive: ".$result." ".$response);
+  if ($result ne "ok") {
+    Dada::logMsg(0, $dl, "WARN: processArchive: failed to determine source name: ".$response);
+    $source = "UNKNOWN";
+  } else {
+    $source = $response;
+    chomp $source;
+  }
+
+  $source =~ s/^[JB]//;
+
+  # The combined results for this observation (dir == utc_start) 
+  my $total_f_res = $dir."/".$source."_f.ar";
+  my $total_t_res = $dir."/".$source."_t.ar";
+
+  # The frequency summed archive for this time period
+  my $total_f_sum = $file;
+  $total_f_sum =~ s/\//_/g;
+  $total_f_sum = $dir."/".$total_f_sum;
+
+  my $tmp_ar = "";
+  my $out_ar = "";
+  my $band_freq = "";
+  my $dirs = "";
+  my $suffix = "";
+
+  # If we are missing some archives from some of the bands
+  if ($#archives < $#sub_dirs) {
+
+    foreach $subdir (@sub_dirs) {
+
+     Dada::logMsg(2, $dl, "subdir = ".$subdir.", file = ".$file); 
+     # If the archive does not exist in the frequency dir
+      if (!(-f ($subdir."/".$file))) {
+
+        Dada::logMsg(1, $dl, "archive ".$subdir."/".$file." was not present");
+
+        ($band_freq, $dirs, $suffix) = fileparse($subdir);
+
+        $tmp_ar = $archives[0];
+        $tmp_ar =~ s/\.$ext$/\.zeroed/;
+        $out_ar = $subdir."/".$file;
+
+        # create a copy of archives[0] with .ext -> .tmp
+        $cmd = $bindir."/pam -o ".$band_freq." -e zeroed ".$archives[0]." 2>&1";
+        Dada::logMsg(2, $dl, $cmd);
+        $output = `$cmd`;
+        Dada::logMsg(2, $dl, $output);
+
+        # move the zeroed archive to the band subdir
+        $cmd = "mv -f ".$tmp_ar." ".$out_ar." 2>&1";
+        Dada::logMsg(2, $dl, $cmd);
+        $output = `$cmd`;
+        Dada::logMsg(2, $dl, $output);
+
+        # set the weights in the zeroed archive to 0
+        $cmd = $bindir."/paz -w 0 -m ".$out_ar." 2>&1";
+        Dada::logMsg(2, $dl, $cmd);
+        $output = `$cmd`;
+        Dada::logMsg(2, $dl, $output);
+
+        $plottable_archives .= " ".$out_ar;
+        Dada::logMsg(2, $dl, "Added ".$out_ar." to plottable archives");
+
+      } else {
+        ($band_freq, $dirs, $suffix) = fileparse($subdir);
+        $real_archives .= " ".$band_freq;
+        $plottable_archives .= " ".$subdir."/".$file;
+      }
+    }
+
+  # We have all the required archives
+  } else {
+
+    foreach $subdir (@sub_dirs) {
+      ($band_freq, $dirs, $suffix) = fileparse($subdir);
+      $real_archives .= " ".$band_freq;
+      $plottable_archives .= " ".$subdir."/".$file;
+    } 
+  }
+
+  # combine all thr frequency channels
+  $cmd = $bindir."/psradd -R -f ".$total_f_sum." ".$plottable_archives." 2>&1";
+  Dada::logMsg(2, $dl, $cmd);
+  $output = `$cmd`;
+
+  if ($#archives < $#sub_dirs) {
+    # Delete any "temp" files that we needed to use to produce the result
+    $cmd = "rm -f ".$dir."/*/*.zeroed ".$dir."/*/*/*.zeroed";
+    Dada::logMsg(2, $dl, $cmd);
+    $output = `$cmd`;
+  }
+
+
+  # If this is the first result for this observation
+  if (!(-f $total_f_res)) {
+
+    $cmd = "cp ".$total_f_sum." ".$total_f_res;
+    Dada::logMsg(2, $dl, $cmd);
+    $output = `$cmd`;
+
+    # Fscrunc the archive
+    $cmd = $bindir."/pam -F -m ".$total_f_sum;
+    Dada::logMsg(2, $dl, $cmd);
+    $output = `$cmd`;
+
+    # Tres operations
+    $cmd = "cp ".$total_f_sum." ".$total_t_res;
+    Dada::logMsg(2, $dl, $cmd);
+    $output = `$cmd`;
+
+  } else {
+
+    my $temp_ar = $dir."/temp.ar";
+
+    # Fres Operations
+    $cmd = $bindir."/psradd -s -f ".$temp_ar." ".$total_f_res." ".$total_f_sum." 2>&1";
+    ($result, $response) = Dada::mySystem($cmd);
+    if ($result ne "ok") {
+      Dada::logMsg(0, $dl, "psradd failed cmd=".$cmd);
+      Dada::logMsg(0, $dl, "psradd output=".$response);
+    }
+    #Dada::logMsg(2, $dl, $cmd);
+    #$output = `$cmd`;
+
+    unlink($total_f_res);
+    rename($temp_ar,$total_f_res);
+
+    # Fscrunc the archive
+    $cmd = $bindir."/pam -F -m ".$total_f_sum;
+    ($result, $response) = Dada::mySystem($cmd);
+    if ($result ne "ok") {
+      Dada::logMsg(0, $dl, "pam failed cmd=".$cmd);
+      Dada::logMsg(0, $dl, "pam output=".$response);
+    }
+    #Dada::logMsg(2, $dl, $cmd);
+    #$output = `$cmd`;
+
+    # Tres Operations
+    $cmd = $bindir."/psradd -f ".$temp_ar." ".$total_t_res." ".$total_f_sum." 2>&1";
+    ($result, $response) = Dada::mySystem($cmd);
+    if ($result ne "ok") {
+      Dada::logMsg(0, $dl, "psradd failed cmd=".$cmd);
+      Dada::logMsg(0, $dl, "psradd output=".$response);
+    }
+    #Dada::logMsg(2, $dl, $cmd);
+    #$output = `$cmd`;
+
+    unlink($total_t_res);
+    rename($temp_ar,$total_t_res);
+  }
+ 
+  # clean up the current archive
+  unlink($total_f_sum);
+  Dada::logMsg(2, $dl, "unlinking $total_f_sum");
+
+  # Record this archive as processed and what sub bands were legit
+  recordProcessed($dir, $file, $real_archives);
+
+  return ($source, $total_f_res, $total_t_res);
+
+}
+
+
+#
+# For the given utc_start ($dir), and archive (file) add the archive to the 
+# summed archive for the observation
+#
+sub processArchiveOLD($$$$) {
 
   my ($dir, $file, $source, $ext) = @_;
 
   debugMessage(2, "processArchive(".$dir.", ".$file.", ".$source.")");
 
-  my $bindir =      Dada->getCurrentBinaryVersion();
+  my $bindir =      Dada::getCurrentBinaryVersion();
   my $results_dir = $cfg{"SERVER_RESULTS_DIR"};
 
-  # The combined results for this observation (dir == utc_start) 
-  my $total_f_res = $dir."/".substr($source,1)."_f.ar";
-  my $total_t_res = $dir."/".substr($source,1)."_t.ar";
 
   # If not all the archives are present, then we must create empty
   # archives in place of the missing ones
-  $cmd = "find ".$dir."/* -type d";
+  $cmd = "find ".$dir."/* -maxdepth 0 -type d";
   debugMessage(2, $cmd);
   my $find_result = `$cmd`;
-  #print $find_result;
   my @sub_dirs = split(/\n/, $find_result);
 
   # Find out how many archives we actaully hae
-  $cmd = "find ".$dir."/*/ -type f -name ".$file;
+  $cmd = "ls -1 ".$dir."/*/".$file;
   debugMessage(2, $cmd);
   $find_result = `$cmd`;
   my @archives = split(/\n/, $find_result);
 
   debugMessage(2, "Found ".($#archives+1)." / ".($#sub_dirs+1)." archives");
+
+  # determine the source name for this archive
+  $cmd = "vap -n -c name ".$archives[0]." | awk '{print \$2}'";
+  Dada::logMsg(2, $dl, "processArchive: ".$cmd);
+  my ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(2, $dl, "processArchive: ".$result." ".$response);
+  if ($result ne "ok") {
+    Dada::logMsg(0, $dl, "WARN: processArchive: failed to determine source name: ".$response);
+    $source = "UNKNOWN";
+  } else {
+    $source = $response;
+    chomp $source;
+  }
+
+  $source =~ s/^[JB]//;
+
+  # The combined results for this observation (dir == utc_start) 
+  my $total_f_res = $dir."/".$source."_f.ar";
+  my $total_t_res = $dir."/".$source."_t.ar";
 
   my $output = "";
   my $real_archives = "";
@@ -223,7 +501,7 @@ sub processArchive($$$$) {
   my $current_archive = $dir."/".$file;
 
   # combine all thr frequency channels
-  $cmd = $bindir."/psradd -R -f ".$current_archive." ".$dir."/*/".$file;
+  $cmd = $bindir."/psradd -R -f ".$current_archive." ".$dir."/*/".$file." 2>&1";
   debugMessage(1, $cmd);
   $output = `$cmd`;
   debugMessage(2, $output);
@@ -253,7 +531,7 @@ sub processArchive($$$$) {
     my $temp_ar = $dir."/temp.ar";
 
     # Fres Operations
-    $cmd = $bindir."/psradd -s -f ".$temp_ar." ".$total_f_res." ".$current_archive;
+    $cmd = $bindir."/psradd -s -f ".$temp_ar." ".$total_f_res." ".$current_archive." 2>&1";
     debugMessage(2, $cmd);
     $output = `$cmd`;
     debugMessage(2, $output);
@@ -429,7 +707,7 @@ sub processAllArchives($$$) {
     print STDOUT "<script type='text/javascript'>self.scrollByLines(1000);</script>\n";
     debugMessage(1, "Finalising archive ".$dir."/*/".$keys[$i]);
     # process the archive and summ it into the results archive for observation
-    ($current_archive, $fres, $tres) = processArchive($dir, $keys[$i], $source, $ext);
+    ($current_archive, $fres, $tres) = processArchive($dir, $keys[$i], $ext);
 
   }
 
@@ -444,7 +722,7 @@ sub sigHandle($) {
 
   my $sigName = shift;
   print STDERR basename($0)." : Received SIG".$sigName."\n";
-  print STDERR basename($0)." : Exiting: ".Dada->getCurrentDadaTime(0)."\n";
+  print STDERR basename($0)." : Exiting: ".Dada::getCurrentDadaTime(0)."\n";
   exit(1);
 
 }

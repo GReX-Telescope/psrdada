@@ -10,21 +10,20 @@ use Dada::server_transfer_manager qw(%cfg);
 #
 # Global Variable Declarations
 #
-%cfg = Apsr->getConfig();
+%cfg = Apsr::getConfig();
 
 sub usage() {
-  print STDERR "Usage: ".$0." PID DEST_ID [dir]\n";
+  print STDERR "Usage: ".$0." PID [dir]\n";
   print STDERR "  PID     Project ID to process\n";
-  print STDERR "  DEST_ID SWIN_DIR_? location to send to (see apsr.cfg)\n";
   print STDERR "  dir     Overide default destination dir with specified\n";
 }
 
 #
 # Initialize module variables
 #
-$Dada::server_transfer_manager::dl = 0;
-$Dada::server_transfer_manager::daemon_name = Dada->daemonBaseName($0);
-$Dada::server_transfer_manager::rate = 600;
+$Dada::server_transfer_manager::dl = 1;
+$Dada::server_transfer_manager::daemon_name = Dada::daemonBaseName($0);
+$Dada::server_transfer_manager::rate = 100;
 $Dada::server_transfer_manager::server_logger = "server_apsr_logger.pl";
 $Dada::server_transfer_manager::dest_id = 0;
 
@@ -33,7 +32,7 @@ $| = 1;
 
 my $pid_arg = "";
 
-if (!(($#ARGV == 1) || ($#ARGV == 2))) {
+if (!(($#ARGV == 0) || ($#ARGV == 1))) {
   usage();
   print STDERR "Only ".($#ARGV+1)." argument provided\n";
   exit(1);
@@ -46,7 +45,13 @@ if (!defined($cfg{$pid_arg."_DEST"})) {
   exit(1);
 }
 
-$Dada::server_transfer_manager::dest_id = $ARGV[1];
+# Determine the dest_id based on the PID
+if (!defined($cfg{$pid_arg."_DEST_ID"})) {
+  print STDERR "Specified PID [".$pid_arg."] did not have matching '".$pid_arg."_DEST_ID' in the APSR config file\n";
+  exit(1);
+}
+
+$Dada::server_transfer_manager::dest_id = $cfg{$pid_arg."_DEST_ID"};
 $Dada::server_transfer_manager::pid = $pid_arg;
 $Dada::server_transfer_manager::dest = $cfg{$pid_arg."_DEST"};
 

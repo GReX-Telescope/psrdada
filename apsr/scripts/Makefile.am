@@ -2,6 +2,7 @@
 # scripts distributed as is (installed in bin/)
 dist_bin_SCRIPTS = Apsr.pm \
                    client_apsr_command.pl \
+                   client_apsr_disk_cleaner.pl \
                    client_apsr_src_logger.pl \
                    client_apsr_sys_logger.pl \
                    client_apsr_master_control.pl \
@@ -21,6 +22,7 @@ dist_bin_SCRIPTS = Apsr.pm \
                    server_apsr_gain_manager.pl \
                    server_apsr_process_result.pl \
                    server_apsr_results_manager.pl \
+                   server_apsr_replot_result.pl \
                    server_apsr_tcs_interface.pl \
                    server_apsr_transfer_manager.pl \
                    server_apsr_pwc_monitor.pl \
@@ -29,6 +31,7 @@ dist_bin_SCRIPTS = Apsr.pm \
                    server_apsr_logger.pl \
                    apsr_reconfigure.pl \
                    dspsr_command_line.pl \
+                   web_apsr_local_observations.pl \
                    web_style.txt \
                    gain_hacker.pl
 

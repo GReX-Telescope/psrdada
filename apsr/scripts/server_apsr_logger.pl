@@ -18,13 +18,13 @@ sub usage() {
 #
 # Global Variable Declarations
 #
-%cfg = Apsr->getConfig();
+%cfg = Apsr::getConfig();
 
 #
 # Initialize module variables
 #
 $Dada::server_logger::dl = 1;
-$Dada::server_logger::daemon_name = Dada->daemonBaseName($0);
+$Dada::server_logger::daemon_name = Dada::daemonBaseName($0);
 $Dada::server_logger::log_name = "";
 
 

@@ -36,7 +36,7 @@ use constant LOGFILE          => "apsr_monitor.log";
 #
 our $log_socket = 0;
 our $quit_daemon : shared  = 0;
-our %cfg : shared = Apsr->getApsrConfig();      # Apsr.cfg in a hash
+our %cfg : shared = Apsr::getApsrConfig();      # Apsr.cfg in a hash
 
 
 #
@@ -44,9 +44,9 @@ our %cfg : shared = Apsr->getApsrConfig();      # Apsr.cfg in a hash
 #
 my $logfile = $cfg{"CLIENT_LOG_DIR"}."/".LOGFILE;
 my $pidfile = $cfg{"CLIENT_CONTROL_DIR"}."/".PIDFILE;
-my $bindir = Dada->getCurrentBinaryVersion();
+my $bindir = Dada::getCurrentBinaryVersion();
 my $cmd = $bindir."/dada_dbmetric -k eada";
-my $daemon_quit_file = Dada->getDaemonControlFile($cfg{"CLIENT_CONTROL_DIR"});
+my $daemon_quit_file = Dada::getDaemonControlFile($cfg{"CLIENT_CONTROL_DIR"});
 
 
 #
@@ -57,13 +57,13 @@ $SIG{TERM} = \&sigHandle;
 $SIG{PIPE} = \&sigPipeHandle;
 
 # Turn the script into a daemon
-Dada->daemonize($logfile, $pidfile);
+Dada::daemonize($logfile, $pidfile);
 
 # Autoflush output
 $| = 1;
 
 # Open a logging connection to the Nexus
-$log_socket = Dada->nexusLogOpen($cfg{"SERVER_HOST"},$cfg{"SERVER_SYS_LOG_PORT"});
+$log_socket = Dada::nexusLogOpen($cfg{"SERVER_HOST"},$cfg{"SERVER_SYS_LOG_PORT"});
 if (!$log_socket) {
   print "Could not open a connection to the nexus SYS log: $log_socket\n";
 }
@@ -109,7 +109,7 @@ exit(0);
 sub udp_thread() {
 
   # Connect to apsr_udpdb running on this machine.
-  my $localhost = Dada->getHostMachineName();
+  my $localhost = Dada::getHostMachineName();
   my $port = $cfg{"CLIENT_UDPDB_STATS_PORT"};
   my $threadQuit = "false";
 
@@ -119,7 +119,7 @@ sub udp_thread() {
   while ($threadQuit eq "false") {
 
     logMessage(2, "INFO", "udpthread: Trying to connect to udpdb stats ".$localhost.":".$port);
-    my $handle = Dada->connectToMachine($localhost,$port); # udpdb stats port
+    my $handle = Dada::connectToMachine($localhost,$port); # udpdb stats port
 
     if (!$handle) {
 
@@ -305,12 +305,12 @@ sub db_thread($) {
 sub logMessage($$$) {
   (my $level, my $type, my $message) = @_;
   if ($level <= DEBUG_LEVEL) {
-    my $time = Dada->getCurrentDadaTime();
+    my $time = Dada::getCurrentDadaTime();
     if (!($log_socket)) {
-      $log_socket = Dada->nexusLogOpen($cfg{"SERVER_HOST"},$cfg{"SERVER_SYS_LOG_PORT"});
+      $log_socket = Dada::nexusLogOpen($cfg{"SERVER_HOST"},$cfg{"SERVER_SYS_LOG_PORT"});
     }
     if ($log_socket) {
-      Dada->nexusLogMessage($log_socket, $time, "sys", $type, "monitor", $message);
+      Dada::nexusLogMessage($log_socket, $time, "sys", $type, "monitor", $message);
     }
     print "[".$time."] ".$message."\n";
   }
@@ -344,6 +344,6 @@ sub sigPipeHandle($) {
   my $sigName = shift;
   print STDERR basename($0)." : Received SIG".$sigName."\n";
   $log_socket = 0;
-  $log_socket = Dada->nexusLogOpen($cfg{"SERVER_HOST"},$cfg{"SERVER_SYS_LOG_PORT"});
+  $log_socket = Dada::nexusLogOpen($cfg{"SERVER_HOST"},$cfg{"SERVER_SYS_LOG_PORT"});
 
 }

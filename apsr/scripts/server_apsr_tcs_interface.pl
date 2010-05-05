@@ -10,18 +10,18 @@ use Apsr;
 use Dada::server_tcs_interface qw(%cfg);
 
 
-Dada->preventDuplicateDaemon(basename($0));
+Dada::preventDuplicateDaemon(basename($0));
 
 #
 # Global Variable Declarations
 #
-%cfg = Apsr->getConfig();
+%cfg = Apsr::getConfig();
 
 #
 # Initialize module variables
 #
 $Dada::server_tcs_interface::dl = 1;
-$Dada::server_tcs_interface::daemon_name = Dada->daemonBaseName($0);
+$Dada::server_tcs_interface::daemon_name = Dada::daemonBaseName($0);
 $Dada::server_tcs_interface::tcs_cfg_file = $cfg{"CONFIG_DIR"}."/apsr_tcs.cfg";
 $Dada::server_tcs_interface::tcs_spec_file = $cfg{"CONFIG_DIR"}."/apsr_tcs.spec";
 

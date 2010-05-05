@@ -33,7 +33,7 @@ use constant LOGFILE     => "apsr_aux_manager.log";
 #
 # Global Variables
 #
-our %cfg = Apsr->getApsrConfig();      # Apsr.cfg
+our %cfg = Apsr::getApsrConfig();      # Apsr.cfg
 our $quit_daemon : shared  = 0;
 
 
@@ -97,9 +97,9 @@ $assist_socket = new IO::Socket::INET (
 die "Could not create SERVER_AUX_ASSIST socket on port ".$cfg{"SERVER_AUX_ASSIST_PORT"}.": $!\n" unless $assist_socket;
 
 # Redirect standard output and error
-Dada->daemonize($logfile, $pidfile);
+Dada::daemonize($logfile, $pidfile);
 
-debugMessage(0, "STARTING SCRIPT: ".Dada->getCurrentDadaTime(0));
+debugMessage(0, "STARTING SCRIPT: ".Dada::getCurrentDadaTime(0));
 
 # Start the daemon control thread
 $daemon_control_thread = threads->new(\&daemonControlThread);
@@ -144,7 +144,7 @@ while (!$quit_daemon) {
 
     } else {
 
-      my $string = Dada->getLine($rh);
+      my $string = Dada::getLine($rh);
 
       if (! defined $string) {
 
@@ -243,7 +243,7 @@ for ($i=0; $i<=$#helper_rhs; $i++) {
 # Rejoin our daemon control thread
 $daemon_control_thread->join();
                                                                                 
-debugMessage(0, "STOPPING SCRIPT: ".Dada->getCurrentDadaTime(0));
+debugMessage(0, "STOPPING SCRIPT: ".Dada::getCurrentDadaTime(0));
                                                                                 
 exit(0);
 
@@ -259,7 +259,7 @@ sub daemonControlThread() {
 
   my $pidfile = $cfg{"SERVER_CONTROL_DIR"}."/".PIDFILE;
 
-  my $daemon_quit_file = Dada->getDaemonControlFile($cfg{"SERVER_CONTROL_DIR"});
+  my $daemon_quit_file = Dada::getDaemonControlFile($cfg{"SERVER_CONTROL_DIR"});
   # Poll for the existence of the control file
   while ((!-f $daemon_quit_file) && (!$quit_daemon)) {
     sleep(1);
@@ -277,7 +277,7 @@ sub daemonControlThread() {
 
 sub debugMessage($$) {
   (my $level, my $message) = @_;
-  my $time = Dada->getCurrentDadaTime();
+  my $time = Dada::getCurrentDadaTime();
   if ($level <= DEBUG_LEVEL) {
     print "[".$time."] ".$message."\n";
   }

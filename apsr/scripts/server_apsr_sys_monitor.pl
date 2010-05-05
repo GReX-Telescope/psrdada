@@ -10,13 +10,13 @@ use Dada::server_sys_monitor qw(%cfg);
 #
 # Global Variable Declarations
 #
-%cfg = Apsr->getConfig();
+%cfg = Apsr::getConfig();
 
 #
 # Initialize module variables
 #
 $Dada::server_sys_monitor::dl = 1;
-$Dada::server_sys_monitor::daemon_name = Dada->daemonBaseName($0);
+$Dada::server_sys_monitor::daemon_name = Dada::daemonBaseName($0);
 $Dada::server_sys_monitor::log_host = $cfg{"SERVER_HOST"};
 $Dada::server_sys_monitor::log_port = $cfg{"SERVER_SYS_LOG_PORT"};
 

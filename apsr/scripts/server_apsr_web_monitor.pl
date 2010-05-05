@@ -10,18 +10,18 @@ use Apsr;
 use Dada::server_web_monitor qw(%cfg);
 
 
-Dada->preventDuplicateDaemon(basename($0));
+Dada::preventDuplicateDaemon(basename($0));
 
 #
 # Global Variable Declarations
 #
-%cfg = Apsr->getConfig();
+%cfg = Apsr::getConfig();
 
 #
 # Initialize module variables
 #
 $Dada::server_web_monitor::dl = 1;
-$Dada::server_web_monitor::daemon_name = Dada->daemonBaseName($0);
+$Dada::server_web_monitor::daemon_name = Dada::daemonBaseName($0);
 
 
 # Autoflush STDOUT

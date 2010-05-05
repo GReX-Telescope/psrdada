@@ -39,7 +39,7 @@ use constant LOGFILE            => "apsr_aux_manager.log";
 # Global Variable Declarations
 #
 our $log_socket;
-our %cfg : shared = Apsr->getApsrConfig();      # Apsr.cfg in a hash
+our %cfg : shared = Apsr::getApsrConfig();      # Apsr.cfg in a hash
 our $quit_daemon : shared = 0;
 
 
@@ -49,7 +49,7 @@ our $quit_daemon : shared = 0;
 my $logfile = $cfg{"CLIENT_LOG_DIR"}."/".LOGFILE;
 my $pidfile = $cfg{"CLIENT_CONTROL_DIR"}."/".PIDFILE;
 my $prev_header = "";
-my $daemon_quit_file = Dada->getDaemonControlFile($cfg{"CLIENT_CONTROL_DIR"});
+my $daemon_quit_file = Dada::getDaemonControlFile($cfg{"CLIENT_CONTROL_DIR"});
 my $daemon_control_thread = "";
 my $proc_thread = "";
 
@@ -62,10 +62,10 @@ $SIG{TERM} = \&sigHandle;
 $SIG{PIPE} = \&sigPipeHandle;
 
 # Turn the script into a daemon
-Dada->daemonize($logfile, $pidfile);
+Dada::daemonize($logfile, $pidfile);
 
 # Open a connection to the nexus logging facility
-$log_socket = Dada->nexusLogOpen($cfg{"SERVER_HOST"},$cfg{"SERVER_SYS_LOG_PORT"});
+$log_socket = Dada::nexusLogOpen($cfg{"SERVER_HOST"},$cfg{"SERVER_SYS_LOG_PORT"});
 if (!$log_socket) {
   print "Could not open a connection to the nexus SYS log: $log_socket\n";
 }
@@ -87,7 +87,7 @@ if (!(-f $daemon_quit_file)) {
   }
 
   logMessage(0, "INFO", "STOPPING SCRIPT");
-  Dada->nexusLogClose($log_socket);
+  Dada::nexusLogClose($log_socket);
   $daemon_control_thread->join();
 
   exit(0);
@@ -95,7 +95,7 @@ if (!(-f $daemon_quit_file)) {
 } else {
 
   logMessage(0,"INFO", "STOPPING SCRIPT");
-  Dada->nexusLogClose($log_socket);
+  Dada::nexusLogClose($log_socket);
   exit(1);
 
 }
@@ -105,7 +105,7 @@ sub processing_thread($) {
 
   (my $prev_header) = @_;
 
-  my $bindir = Dada->getCurrentBinaryVersion();
+  my $bindir = Dada::getCurrentBinaryVersion();
   my $dada_header_cmd = $bindir."/".DADA_HEADER_BINARY;
   my $processing_dir = $cfg{"CLIENT_ARCHIVE_DIR"};
   my $raw_data_dir = $cfg{"CLIENT_RECORDING_DIR"};
@@ -217,10 +217,10 @@ sub auxiliaryNodesAvailable() {
   my $host = $cfg{"SERVER_HOST"};
   my $port = $cfg{"SERVER_AUX_CLIENT_PORT"};
 
-  my $localhost = Dada->getHostMachineName();
+  my $localhost = Dada::getHostMachineName();
 
   logMessage(2, "INFO", "Trying to connect to ". $cfg{"SERVER_HOST"}.":".$cfg{"SERVER_AUX_CLIENT_PORT"});
-  my $handle = Dada->connectToMachine($host, $port);
+  my $handle = Dada::connectToMachine($host, $port);
 
   if (!$handle) {
 
@@ -235,7 +235,7 @@ sub auxiliaryNodesAvailable() {
     print $handle $localhost.":help\r\n";
 
     logMessage(2, "INFO", "Sent \"".$localhost.":help\"");
-    my $string = Dada->getLineSelect($handle,2);
+    my $string = Dada::getLineSelect($handle,2);
     logMessage(2, "INFO", "Received \"".$string."\"");
 
     close($handle);
@@ -252,7 +252,7 @@ sub daemon_control_thread($) {
   logMessage(2, "INFO", "control_thread: kill command ".$cmd_to_kill);
 
   my $pidfile = $cfg{"CLIENT_CONTROL_DIR"}."/".PIDFILE;
-  my $daemon_quit_file = Dada->getDaemonControlFile($cfg{"CLIENT_CONTROL_DIR"});
+  my $daemon_quit_file = Dada::getDaemonControlFile($cfg{"CLIENT_CONTROL_DIR"});
 
   while ((!(-f $daemon_quit_file)) && (!$quit_daemon)) {
     sleep(1);
@@ -281,12 +281,12 @@ sub daemon_control_thread($) {
 sub logMessage($$$) {
   (my $level, my $type, my $message) = @_;
   if ($level <= DEBUG_LEVEL) {
-    my $time = Dada->getCurrentDadaTime();
+    my $time = Dada::getCurrentDadaTime();
     if (!($log_socket)) {
-      $log_socket = Dada->nexusLogOpen($cfg{"SERVER_HOST"},$cfg{"SERVER_SYS_LOG_PORT"});
+      $log_socket = Dada::nexusLogOpen($cfg{"SERVER_HOST"},$cfg{"SERVER_SYS_LOG_PORT"});
     }
     if ($log_socket) {
-      Dada->nexusLogMessage($log_socket, $time, "sys", $type, "aux mngr", $message);
+      Dada::nexusLogMessage($log_socket, $time, "sys", $type, "aux mngr", $message);
     }
     print "[".$time."] ".$message."\n";
   }
@@ -317,7 +317,7 @@ sub sigPipeHandle($) {
   print STDERR basename($0)." : Received SIG".$sigName."\n";
   print basename($0)." : Received SIG".$sigName."\n";
   $log_socket = 0;
-  $log_socket = Dada->nexusLogOpen($cfg{"SERVER_HOST"},$cfg{"SERVER_SYS_LOG_PORT"});
+  $log_socket = Dada::nexusLogOpen($cfg{"SERVER_HOST"},$cfg{"SERVER_SYS_LOG_PORT"});
 
 
 }

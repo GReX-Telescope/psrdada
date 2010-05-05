@@ -10,7 +10,6 @@ use Apsr;           # APSR/DADA Module for configuration options
 use threads;
 use threads::shared;
 use strict;         # strict mode (like -Wall)
-use warnings;
 use Getopt::Std;
 
 
@@ -22,7 +21,7 @@ use constant  DEBUG_LEVEL         => 1;
 #
 # Global Variables
 #
-our %cfg : shared = Apsr->getApsrConfig();      # Apsr.cfg in a hash
+our %cfg : shared = Apsr::getApsrConfig();      # Apsr.cfg in a hash
 our @server_daemons = split(/ /,$cfg{"SERVER_DAEMONS"});
 our @client_daemons = split(/ /,$cfg{"CLIENT_DAEMONS"});
 
@@ -189,11 +188,11 @@ my $dir = $cfg{"STATUS_DIR"};
 if (-d $dir) {
   my $cmd = "rm -f ".$dir."/*.error";
   debugMessage(0, "clearing .error from status_dir");
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
                                                                                                                                                                           
   my $cmd = "rm -f ".$dir."/*.warn";
   debugMessage(0, "clearing .warn from status_dir");
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
 }
 
 
@@ -222,14 +221,14 @@ sub commThread($$) {
   my $result = "fail";
   my $response = "Failure Message";
  
-  my $handle = Dada->connectToMachine($machine, $cfg{"CLIENT_MASTER_PORT"}, 2);
+  my $handle = Dada::connectToMachine($machine, $cfg{"CLIENT_MASTER_PORT"}, 2);
   # ensure our file handle is valid
   if (!$handle) { 
     debugMessage(0, "Could not connect to machine ".$machine.":".$cfg{"CLIENT_MASTER_PORT"});
     return ("fail","Could not connect to machine ".$machine.":".$cfg{"CLIENT_MASTER_PORT"}); 
   }
 
-  ($result, $response) = Dada->sendTelnetCommand($handle,$command);
+  ($result, $response) = Dada::sendTelnetCommand($handle,$command);
   # debugMessage(0, $command." => ".$result.":".$response);
 
   $handle->close();
@@ -251,7 +250,7 @@ sub debugMessage($$) {
   if (DEBUG_LEVEL >= $level) {
 
     # print this message to the console
-    print "[".Dada->getCurrentDadaTime(0)."] ".$message."\n";
+    print "[".Dada::getCurrentDadaTime(0)."] ".$message."\n";
   }
 }
 
@@ -269,16 +268,16 @@ sub issueTelnetCommand($\@){
   if ($command eq "start_master_script") {
     for ($i=0; $i<=$#nodes; $i++) {
       my $string = "ssh -x apsr@".$nodes[$i]." \"cd ".$cfg{"SCRIPTS_DIR"}."; ./client_apsr_master_control.pl\"";
-      @threads[$i] = threads->new(\&sshCmdThread, $string);
+      $threads[$i] = threads->new(\&sshCmdThread, $string);
     } 
   } else {
     for ($i=0; $i<=$#nodes; $i++) {
-      @threads[$i] = threads->new(\&commThread, $command, $nodes[$i]);
+      $threads[$i] = threads->new(\&commThread, $command, $nodes[$i]);
     } 
   }  
   for($i=0;$i<=$#nodes;$i++) {
     debugMessage(2, "Waiting for ".$nodes[$i]);
-    (@results[$i],@responses[$i]) = $threads[$i]->join;
+    ($results[$i],$responses[$i]) = $threads[$i]->join;
   }
 
   for($i=0;$i<=$#nodes;$i++) {
@@ -328,7 +327,7 @@ sub stopDaemons() {
         debugMessage(1, "daemon ".$daemon." is still running");
         $allStopped = "false";
         if ($threshold < 10) {
-          ($result, $response) = Dada->killProcess("server_".$daemon.".pl");
+          ($result, $response) = Dada::killProcess("server_".$daemon.".pl");
         }
       } else {
         debugMessage(2, "daemon ".$daemon." has been stopped");

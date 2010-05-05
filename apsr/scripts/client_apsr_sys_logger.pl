@@ -11,7 +11,7 @@ use Dada::client_logger qw(%cfg);
 #
 # Global Variable Declarations
 #
-%cfg = Apsr->getConfig();
+%cfg = Apsr::getConfig();
 
 
 #
@@ -21,7 +21,7 @@ $Dada::client_logger::dl = 1;
 $Dada::client_logger::log_host = $cfg{"SERVER_HOST"};
 $Dada::client_logger::log_port = $cfg{"SERVER_SYS_LOG_PORT"};
 $Dada::client_logger::log_sock = 0;
-$Dada::client_logger::daemon_name = Dada->daemonBaseName($0);
+$Dada::client_logger::daemon_name = Dada::daemonBaseName($0);
 $Dada::client_logger::tag = "sys";
 $Dada::client_logger::daemon = "obs mngr";
 
