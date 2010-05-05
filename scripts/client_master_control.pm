@@ -79,7 +79,7 @@ sub main() {
   my $archive_dir    = $cfg{"CLIENT_ARCHIVE_DIR"};   # hi res archive storage
   my $results_dir    = $cfg{"CLIENT_RESULTS_DIR"};   # dspsr output directory
 
-  $host = Dada->getHostMachineName();
+  $host = Dada::getHostMachineName();
   $port = $cfg{"CLIENT_MASTER_PORT"};
   $sock = 0;
 
@@ -103,7 +103,7 @@ sub main() {
   $SIG{TERM} = \&sigHandle;
 
   # become a daemon
-  Dada->daemonize($log_file, $pid_file);
+  Dada::daemonize($log_file, $pid_file);
 
   logMsg(0, "STARTING SCRIPT");
  
@@ -200,7 +200,7 @@ sub handleCommand($) {
   my @cmds = split(/ /,$string, 2);
   my $key = $cmds[0];
 
-  my $current_binary_dir = Dada->getCurrentBinaryVersion();
+  my $current_binary_dir = Dada::getCurrentBinaryVersion();
   my $cmd = "";
   my $result = "ok";
   my $response = "";
@@ -228,42 +228,42 @@ sub handleCommand($) {
   elsif ($key eq "stop_iface") {
     $cmd = "sudo /sbin/ifdown ".$cfg{"PWC_DEVICE"};
     logMsg(1, $cmd);
-    ($result, $response) = Dada->mySystem($cmd);
+    ($result, $response) = Dada::mySystem($cmd);
   }
 
   elsif ($key eq "stop_pwcs") {
     $cmd = "killall ".$cfg{"PWC_BINARY"};
-    ($result,$response) = Dada->mySystem($cmd);  
+    ($result,$response) = Dada::mySystem($cmd);  
   }
 
   elsif ($key eq "stop_pwc") {
     $cmd = "killall -KILL ".$cmds[1];
-    ($result,$response) = Dada->mySystem($cmd);  
+    ($result,$response) = Dada::mySystem($cmd);  
   }
 
   elsif ($key eq "stop_dfbs") {
     $cmd = "killall -KILL ".$cfg{"DFB_SIM_BINARY"};
-    ($result,$response) = Dada->mySystem($cmd);
+    ($result,$response) = Dada::mySystem($cmd);
   }
 
   elsif ($key eq "stop_srcs") {
     $cmd = "killall dada_dbdisk dspsr dada_dbnic";
-    ($result,$response) = Dada->mySystem($cmd);  
+    ($result,$response) = Dada::mySystem($cmd);  
   }
 
   elsif ($key eq "kill_process") {
-    ($result,$response) = Dada->killProcess($cmds[1]);
+    ($result,$response) = Dada::killProcess($cmds[1]);
   }
 
   elsif ($key eq  "start_bin") {
     $cmd = $current_binary_dir."/".$cmds[1];
-    ($result,$response) = Dada->mySystem($cmd);  
+    ($result,$response) = Dada::mySystem($cmd);  
   }
 
   elsif ($key eq "start_iface") {
     $cmd = "sudo /sbin/ifup ".$cfg{"PWC_DEVICE"};
     logMsg(1, $cmd);
-    ($result,$response) = Dada->mySystem($cmd);
+    ($result,$response) = Dada::mySystem($cmd);
   }
 
   elsif ($key eq "start_pwcs") {
@@ -275,19 +275,19 @@ sub handleCommand($) {
     # add any instrument specific options here (see bpsr)
     $cmd .= $pwc_add;
     
-    ($result,$response) = Dada->mySystem($cmd);
+    ($result,$response) = Dada::mySystem($cmd);
   }
 
   elsif ($key eq "set_bin_dir") {
-    ($result, $response) = Dada->setBinaryDir($cmds[1]);
+    ($result, $response) = Dada::setBinaryDir($cmds[1]);
   }
 
   elsif ($key eq "get_bin_dir") {
-    ($result, $response) = Dada->getCurrentBinaryVersion();
+    ($result, $response) = Dada::getCurrentBinaryVersion();
   }
 
   elsif ($key eq "get_bin_dirs") {
-    ($result, $response) = Dada->getAvailableBinaryVersions();
+    ($result, $response) = Dada::getAvailableBinaryVersions();
   }
 
   elsif ($key eq "destroy_db") {
@@ -301,7 +301,7 @@ sub handleCommand($) {
       
       if ( (defined $cfg{$db."_BLOCK_BUFSZ"}) && (defined $cfg{$db."_BLOCK_NBUFS"}) ) {
         $cmd = "sudo ".$current_binary_dir."/dada_db -d -k ".lc($db);
-        ($temp_result,$temp_response) = Dada->mySystem($cmd);
+        ($temp_result,$temp_response) = Dada::mySystem($cmd);
 
       } else {
         $temp_result = "fail";
@@ -330,7 +330,7 @@ sub handleCommand($) {
       if ( (defined $cfg{$db."_BLOCK_BUFSZ"}) && (defined $cfg{$db."_BLOCK_NBUFS"}) ) {
         $cmd = "sudo ".$current_binary_dir."/dada_db -l -k ".lc($db).
                " -b ".$cfg{$db."_BLOCK_BUFSZ"}." -n ".$cfg{$db."_BLOCK_NBUFS"};
-        ($temp_result,$temp_response) = Dada->mySystem($cmd);
+        ($temp_result,$temp_response) = Dada::mySystem($cmd);
 
       } else {
         $temp_result = "fail";
@@ -368,7 +368,7 @@ sub handleCommand($) {
 
   elsif ($key eq "start_daemon") {
     $cmd = "client_".$cmds[1].".pl";
-    ($result, $response) = Dada->mySystem($cmd);
+    ($result, $response) = Dada::mySystem($cmd);
   }
 
   elsif ($key eq "start_daemons") {
@@ -381,44 +381,44 @@ sub handleCommand($) {
 
   elsif ($key eq "dfbsimulator") {
     $cmd = $current_binary_dir."/".$cfg{"DFB_SIM_BINARY"}." ".$cmds[1];
-    ($result,$response) = Dada->mySystem($cmd);
+    ($result,$response) = Dada::mySystem($cmd);
   }
 
   elsif ($key eq "system") {
-    ($result,$response) = Dada->mySystem($cmds[1], 0);  
+    ($result,$response) = Dada::mySystem($cmds[1], 0);  
   }
 
   elsif ($key eq "get_disk_info") {
-    ($result,$response) = Dada->getDiskInfo($cfg{"CLIENT_RECORDING_DIR"});
+    ($result,$response) = Dada::getDiskInfo($cfg{"CLIENT_RECORDING_DIR"});
   }
 
   elsif ($key eq "get_db_info") {
-    ($result,$response) = Dada->getDBInfo(lc($cfg{"PROCESSING_DATA_BLOCK"}));
+    ($result,$response) = Dada::getDBInfo(lc($cfg{"PROCESSING_DATA_BLOCK"}));
   }
 
   elsif ($key eq "get_alldb_info") {
-    ($result,$response) = Dada->getAllDBInfo($cfg{"DATA_BLOCKS"});
+    ($result,$response) = Dada::getAllDBInfo($cfg{"DATA_BLOCKS"});
   }
 
   elsif ($key eq "db_info") {
-    ($result,$response) = Dada->getDBInfo(lc($cmds[1]));
+    ($result,$response) = Dada::getDBInfo(lc($cmds[1]));
   }
 
   elsif ($key eq "get_db_xfer_info") {
-   ($result,$response) = Dada->getXferInfo();
+   ($result,$response) = Dada::getXferInfo();
   }
 
   elsif ($key eq "get_load_info") {
-    ($result,$response) = Dada->getLoadInfo();
+    ($result,$response) = Dada::getLoadInfo();
   }
 
   elsif ($key eq "set_udp_buffersize") {
     $cmd = "sudo /sbin/sysctl -w net.core.wmem_max=67108864";
-    ($result,$response) = Dada->mySystem($cmd);
+    ($result,$response) = Dada::mySystem($cmd);
 
     if ($result eq "ok") {
       $cmd = "sudo /sbin/sysctl -w net.core.rmem_max=67108864";
-      ($result,$response) = Dada->mySystem($cmd);
+      ($result,$response) = Dada::mySystem($cmd);
     }
   }
 
@@ -426,16 +426,16 @@ sub handleCommand($) {
     my $subresult = "";
     my $subresponse = "";
 
-    ($result,$subresponse) = Dada->getDiskInfo($cfg{"CLIENT_RECORDING_DIR"});
+    ($result,$subresponse) = Dada::getDiskInfo($cfg{"CLIENT_RECORDING_DIR"});
     $response = "DISK_INFO:".$subresponse."\n";
   
-    ($subresult,$subresponse) = Dada->getALLDBInfo($cfg{"DATA_BLOCKS"});
+    ($subresult,$subresponse) = Dada::getALLDBInfo($cfg{"DATA_BLOCKS"});
     $response .= "DB_INFO:".$subresponse."\n";
     if ($subresult eq "fail") {
       $result = "fail";
     }
 
-    ($subresult,$subresponse) = Dada->getLoadInfo();
+    ($subresult,$subresponse) = Dada::getLoadInfo();
     $response .= "LOAD_INFO:".$subresponse;
     if ($subresult eq "fail") {
       $result = "fail";
@@ -447,28 +447,28 @@ sub handleCommand($) {
     my $subresult = "";
     my $subresponse = "";
 
-    ($result,$subresponse) = Dada->getRawDisk($cfg{"CLIENT_RECORDING_DIR"});
+    ($result,$subresponse) = Dada::getRawDisk($cfg{"CLIENT_RECORDING_DIR"});
     $response = $subresponse.";;;";
 
-    ($subresult,$subresponse) = Dada->getAllDBInfo(lc($cfg{"PROCESSING_DATA_BLOCK"}));
+    ($subresult,$subresponse) = Dada::getAllDBInfo(lc($cfg{"PROCESSING_DATA_BLOCK"}));
     $response .= $subresponse.";;;";
     if ($subresult eq "fail") {
       $result = "fail";
     }
 
-    ($subresult,$subresponse) = Dada->getLoadInfo();
+    ($subresult,$subresponse) = Dada::getLoadInfo();
     $response .= $subresponse.";;;";
     if ($subresult eq "fail") {
       $result = "fail";
     }
 
-    ($subresult,$subresponse) = Dada->getUnprocessedFiles($cfg{"CLIENT_RECORDING_DIR"});
+    ($subresult,$subresponse) = Dada::getUnprocessedFiles($cfg{"CLIENT_RECORDING_DIR"});
     $response .= $subresponse.";;;";
     if ($subresult eq "fail") {
       $result = "fail";
     }
 
-    ($subresult,$subresponse) = Dada->getTempInfo();
+    ($subresult,$subresponse) = Dada::getTempInfo();
     $response .= $subresponse;
     if ($subresult eq "fail") {
       $result = "fail";
@@ -523,7 +523,7 @@ sub stopDaemon($;$) {
   
   # If the daemon is still running after the timeout, kill it
   if ($running) {
-    ($result, $response) = Dada->killProcess($daemon);
+    ($result, $response) = Dada::killProcess($daemon);
     $response = "daemon had to be killed";
     $result = "fail";
   }
@@ -568,7 +568,7 @@ sub stopDaemons(\@) {
         logMsg(1, $d." is still running");
         $all_stopped = 0;
         if ($threshold < 10) {
-          ($result, $response) = Dada->killProcess($d);
+          ($result, $response) = Dada::killProcess($d);
         }
       }
     }
@@ -616,7 +616,7 @@ sub startDaemons(\@) {
   foreach $d (@ds) {
     $cmd = "client_".$d.".pl";
     logMsg(2, "Starting daemon: ".$cmd);
-    ($daemon_result, $daemon_response) = Dada->mySystem($cmd);
+    ($daemon_result, $daemon_response) = Dada::mySystem($cmd);
     logMsg(2, "Result: ".$daemon_result.":".$daemon_response);
 
      if ($daemon_result eq "fail") {
@@ -711,7 +711,7 @@ sub logMsg($$) {
 
   my ($level, $msg) = @_;
   if ($level <= $dl) {
-    print "[".Dada->getCurrentDadaTime()."] ".$msg."\n";
+    print "[".Dada::getCurrentDadaTime()."] ".$msg."\n";
   }
 }
 

@@ -97,14 +97,14 @@ sub main() {
 
   $log_host = $cfg{"SERVER_HOST"};
   $log_port = $cfg{"SERVER_SYS_LOG_PORT"};
-  $log_sock = Dada->nexusLogOpen($log_host, $log_port);
+  $log_sock = Dada::nexusLogOpen($log_host, $log_port);
   if (!$log_sock) {
     print STDERR "Could open log port: ".$log_host.":".$log_port."\n";
   }
 
   $gain_host = $cfg{"SERVER_HOST"};
   $gain_port = $cfg{"SERVER_GAIN_CONTROL_PORT"};
-  $gain_sock = Dada->connectToMachine($gain_host, $gain_port, 1);
+  $gain_sock = Dada::connectToMachine($gain_host, $gain_port, 1);
   if (!$gain_sock) {
     logMsg(0, "ERROR", "Could not connect to the server gain manager ".
                         $gain_host.":".$gain_port);
@@ -149,7 +149,7 @@ sub main() {
   $cmd = "CHANNEL_BASE";
   logMsg(1, "INFO", "srv0 <- ".$cmd);
   print $gain_sock $cmd."\r\n";
-  $chan_base = Dada->getLine($gain_sock);
+  $chan_base = Dada::getLine($gain_sock);
   logMsg(1, "INFO", "srv0 -> ".$chan_base);
 
   logMsg(2, "INFO", "Asking for initial gains");
@@ -251,7 +251,7 @@ sub main() {
   }
 
   logMsg(2, "INFO", "STOPPING GAIN CONTROLLER");
-  Dada->nexusLogClose($log_sock);
+  Dada::nexusLogClose($log_sock);
   close ($gain_sock);
 
   return 0;
@@ -283,7 +283,7 @@ sub get_gain($$$) {
 
   # The DFB3 should return a string along the lines of
   # OK <chan> <pol> <value>
-  my $dfb_response = Dada->getLine($sock);
+  my $dfb_response = Dada::getLine($sock);
 
   logMsg(2, "INFO", "srv0 -> ".$dfb_response);
 
@@ -321,7 +321,7 @@ sub set_gain($$$$$) {
   # The DFB3 should return a string along the lines of
   # OK 
 
-  my $dfb_response = Dada->getLine($sock);
+  my $dfb_response = Dada::getLine($sock);
 
   # logMsg(2, "INFO", "srv0 -> ".$dfb_response);
 
@@ -351,12 +351,12 @@ sub logMsg($$$) {
 
   my ($level, $type, $msg) = @_;
   if ($level <= $dl) {
-    my $time = Dada->getCurrentDadaTime();
+    my $time = Dada::getCurrentDadaTime();
     if (! $log_sock ) {
-      $log_sock = Dada->nexusLogOpen($log_host, $log_port);
+      $log_sock = Dada::nexusLogOpen($log_host, $log_port);
     }
     if ($log_sock) {
-      Dada->nexusLogMessage($log_sock, $time, "sys", $type, "gain mon", $msg);
+      Dada::nexusLogMessage($log_sock, $time, "sys", $type, "gain mon", $msg);
     }
     print "[".$time."] ".$msg."\n";
   }
@@ -393,11 +393,11 @@ sub sigPipeHandle($) {
 
   close($log_sock);
   $log_sock = 0;
-  $log_sock = Dada->nexusLogOpen($log_host, $log_port);
+  $log_sock = Dada::nexusLogOpen($log_host, $log_port);
 
   close($gain_sock);
   $gain_sock = 0;
-  $gain_sock = Dada->connectToMachine($gain_host, $gain_port, 1);
+  $gain_sock = Dada::connectToMachine($gain_host, $gain_port, 1);
   if (!$gain_sock) {
     logMsg(0, "WARN", "Could not connect to the server gain manager ".
                       $gain_host.":".$gain_port);

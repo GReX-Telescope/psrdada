@@ -97,12 +97,12 @@ sub main() {
   $SIG{PIPE} = \&sigPipeHandle;
 
   # become a daemon
-  Dada->daemonize($log_file, $pid_file);
+  Dada::daemonize($log_file, $pid_file);
   
-  Dada->logMsg(0, $dl ,"STARTING SCRIPT");
+  Dada::logMsg(0, $dl ,"STARTING SCRIPT");
 
   # start the control thread
-  Dada->logMsg(2, "INFO", "main: controlThread(".$quit_file.", ".$pid_file.")");
+  Dada::logMsg(2, "INFO", "main: controlThread(".$quit_file.", ".$pid_file.")");
   $control_thread = threads->new(\&controlThread, $quit_file, $pid_file);
 
   chdir $obs_results_dir;
@@ -110,15 +110,15 @@ sub main() {
   while (!$quit_daemon) {
 
     # TODO check that directories are correctly sorted by UTC_START time
-    Dada->logMsg(2, $dl, "Looking for obs.processing");
+    Dada::logMsg(2, $dl, "Looking for obs.processing");
 
     # Only get observations that are marked as procesing
     $cmd = "find ".$obs_results_dir." -maxdepth 2 -name 'obs.processing' ".
            "-printf '\%h\\n' | awk -F/ '{print \$NF}' | sort";
 
-    Dada->logMsg(2, $dl, "main: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
-    Dada->logMsg(2, $dl, "main: ".$result." ".$response);
+    Dada::logMsg(2, $dl, "main: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(2, $dl, "main: ".$result." ".$response);
 
     if ($result eq "ok") {
 
@@ -179,7 +179,7 @@ sub main() {
 
   }
 
-  Dada->logMsg(0, $dl, "STOPPING SCRIPT");
+  Dada::logMsg(0, $dl, "STOPPING SCRIPT");
                                                                                 
   return 0;
 }
@@ -194,7 +194,7 @@ sub main() {
 sub getObsAge($$) {
 
   my ($o, $num_bands, $ext) = @_;
-  Dada->logMsg(2, $dl, "getObsAge(".$o.", ".$num_bands.", ".$ext.")");
+  Dada::logMsg(2, $dl, "getObsAge(".$o.", ".$num_bands.", ".$ext.")");
 
   my $result = "";
   my $response = "";
@@ -209,18 +209,18 @@ sub getObsAge($$) {
   # obs dir
   if ($num_bands == 0) {
     $cmd = "find ".$o." -maxdepth 0 -type d -printf '\%T@\\n'";
-    Dada->logMsg(2, $dl, "getObsAge: ".$cmd); 
-    ($result, $response) = Dada->mySystem($cmd);
-    Dada->logMsg(2, $dl, "getObsAge: ".$result." ".$response);
+    Dada::logMsg(2, $dl, "getObsAge: ".$cmd); 
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(2, $dl, "getObsAge: ".$result." ".$response);
     $time = $response;
     $age = $time - $now;
 
   # We have some band subdirectories, see if we have any archives
   } else {
     $cmd = "find ".$o." -type f -name '*.".$ext."' -printf '\%T@\\n' | sort -n | tail -n 1";
-    Dada->logMsg(2, $dl, "getObsAge: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
-    Dada->logMsg(2, $dl, "getObsAge: ".$result." ".$response);
+    Dada::logMsg(2, $dl, "getObsAge: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(2, $dl, "getObsAge: ".$result." ".$response);
   
     # If we didn't found a file
     if ($response ne "") {
@@ -233,26 +233,26 @@ sub getObsAge($$) {
 
       # check the PROC_FILE 
       $cmd = "grep ^PROC_FILE `find ".$o." -type f -name 'obs.start' | sort -n | tail -n 1` | awk '{print \$2}'";
-      Dada->logMsg(2, $dl, "getObsAge: ".$cmd);
-      ($result, $response) = Dada->mySystem($cmd);
-      Dada->logMsg(2, $dl, "getObsAge: ".$result." ".$response);
+      Dada::logMsg(2, $dl, "getObsAge: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      Dada::logMsg(2, $dl, "getObsAge: ".$result." ".$response);
 
       # If this is a single pulse observation or P427 observation
       if (($result eq "ok") && (($response =~ m/singleF/) || ($response =~ m/P427/))) {
 
         # only declare this as finished when the band.finished files are written
         $cmd = "find ".$o." -type f -name 'band.finished' | wc -l";
-        Dada->logMsg(2, $dl, "getObsAge: [pulse] ".$cmd);
-        ($result, $response) = Dada->mySystem($cmd);
-        Dada->logMsg(2, $dl, "getObsAge: [pulse] ".$result." ".$response);
+        Dada::logMsg(2, $dl, "getObsAge: [pulse] ".$cmd);
+        ($result, $response) = Dada::mySystem($cmd);
+        Dada::logMsg(2, $dl, "getObsAge: [pulse] ".$result." ".$response);
 
         # if all the band.finished files have been touched
         if (($result eq "ok") && ($num_bands == $response)) {
 
           $cmd = "find ".$o." -type f -name 'band.finished' -printf '\%T@\\n' | sort -n | tail -n 1";
-          Dada->logMsg(2, $dl, "getObsAge: [pulse] ".$cmd);
-          ($result, $response) = Dada->mySystem($cmd);
-          Dada->logMsg(2, $dl, "getObsAge: [pulse] ".$result." ".$response);
+          Dada::logMsg(2, $dl, "getObsAge: [pulse] ".$cmd);
+          ($result, $response) = Dada::mySystem($cmd);
+          Dada::logMsg(2, $dl, "getObsAge: [pulse] ".$result." ".$response);
       
           $time = $response;
           $age = $now - $time;
@@ -260,7 +260,7 @@ sub getObsAge($$) {
         # else, hardcode the time to -1, whilst we wait for the band.finished to be written
         } else {
 
-          Dada->logMsg(2, $dl, "getObsAge: [pulse] waiting for band.finished");
+          Dada::logMsg(2, $dl, "getObsAge: [pulse] waiting for band.finished");
           $age = -1;
         }
 
@@ -268,9 +268,9 @@ sub getObsAge($$) {
       } else {
 
         $cmd = "find ".$o." -type f -name 'obs.start' -printf '\%T@\\n' | sort -n | tail -n 1";
-        Dada->logMsg(2, $dl, "getObsAge: ".$cmd);
-        ($result, $response) = Dada->mySystem($cmd);
-        Dada->logMsg(2, $dl, "getObsAge: ".$result." ".$response);
+        Dada::logMsg(2, $dl, "getObsAge: ".$cmd);
+        ($result, $response) = Dada::mySystem($cmd);
+        Dada::logMsg(2, $dl, "getObsAge: ".$result." ".$response);
   
         # we will be returning a negative value
         $time = $response;
@@ -280,7 +280,7 @@ sub getObsAge($$) {
     }
   }
 
-  Dada->logMsg(2, $dl, "getObsAge: time=".$time.", now=".$now.", age=".$age);
+  Dada::logMsg(2, $dl, "getObsAge: time=".$time.", now=".$now.", age=".$age);
   return $age;
 }
 
@@ -291,7 +291,7 @@ sub markObsState($$$) {
 
   my ($o, $old, $new) = @_;
 
-  Dada->logMsg(2, $dl, "markObsState(".$o.", ".$old.", ".$new.")");
+  Dada::logMsg(2, $dl, "markObsState(".$o.", ".$old.", ".$new.")");
 
   my $cmd = "";
   my $result = "";
@@ -304,43 +304,43 @@ sub markObsState($$$) {
   my $file = "";
   my $ndel = 0;
 
-  Dada->logMsg(1, $dl, $o." ".$old." -> ".$new);
+  Dada::logMsg(1, $dl, $o." ".$old." -> ".$new);
 
   $cmd = "touch ".$results_dir."/".$o."/".$new_file;
-  Dada->logMsg(2, $dl, "markObsState: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
-  Dada->logMsg(2, $dl, "markObsState: ".$result." ".$response);
+  Dada::logMsg(2, $dl, "markObsState: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(2, $dl, "markObsState: ".$result." ".$response);
 
   $cmd = "touch ".$archives_dir."/".$o."/".$new_file;
-  Dada->logMsg(2, $dl, "markObsState: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
-  Dada->logMsg(2, $dl, "markObsState: ".$result." ".$response);
+  Dada::logMsg(2, $dl, "markObsState: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(2, $dl, "markObsState: ".$result." ".$response);
 
   $file = $results_dir."/".$o."/".$old_file;
   if ( -f $file ) {
     $ndel = unlink ($file);
     if ($ndel != 1) {
-      Dada->logMsgWarn($warn, "markObsState: could not unlink ".$file);
+      Dada::logMsgWarn($warn, "markObsState: could not unlink ".$file);
     }
   } else {
-    Dada->logMsgWarn($warn, "markObsState: expected file missing: ".$file);
+    Dada::logMsgWarn($warn, "markObsState: expected file missing: ".$file);
   }
 
   $file = $archives_dir."/".$o."/".$old_file;
   if ( -f $file ) {
     $ndel = unlink ($file);
     if ($ndel != 1) {
-      Dada->logMsgWarn($warn, "markObsState: could not unlink ".$file);
+      Dada::logMsgWarn($warn, "markObsState: could not unlink ".$file);
     }
   } else {
-    Dada->logMsgWarn($warn, "markObsState: expected file missing: ".$file);
+    Dada::logMsgWarn($warn, "markObsState: expected file missing: ".$file);
   }
 
   # TODO optinonly reprocess all the received results, and then delete the
   # archives from each band individual archives
   # if (($old eq "processing") && ($new eq "finished")) {
   #   ($fres, $tres) = processAllArchives($o);
-  #   Dada->logMsg(2, $dl, "markObsState: Deleting .lowres archives");
+  #   Dada::logMsg(2, $dl, "markObsState: Deleting .lowres archives");
   #   deleteArchives($o, ".lowres");
   # }
 
@@ -356,7 +356,7 @@ sub processObservation($$) {
 
   my ($o, $n_bands) = @_;
 
-  Dada->logMsg(2, $dl, "processObservation(".$o.", ".$n_bands.")");
+  Dada::logMsg(2, $dl, "processObservation(".$o.", ".$n_bands.")");
 
   my %unprocessed = ();
   my @keys = ();
@@ -383,13 +383,13 @@ sub processObservation($$) {
     return 0;
   }
 
-  Dada->logMsg(2, $dl, "processObservation: [".$o."] found ".($#keys+1)." unprocessed");
+  Dada::logMsg(2, $dl, "processObservation: [".$o."] found ".($#keys+1)." unprocessed");
 
   # Process all the files, plot at the end
   for ($i=0;$i<=$#keys;$i++) {
 
     $k = $keys[$i];
-    Dada->logMsg(2, $dl, "processObservation: file=".$k.", found=".$unprocessed{$k}."/".$n_bands);
+    Dada::logMsg(2, $dl, "processObservation: file=".$k.", found=".$unprocessed{$k}."/".$n_bands);
 
     $process = 0;
 
@@ -398,7 +398,7 @@ sub processObservation($$) {
       # AND there are 2 subqeuent sets of archives
       if ($i < ($#keys-2)) {
         # then we will process it regardless...
-        Dada->logMsg(1, $dl, "Processing late ".$o."/*/".$k);
+        Dada::logMsg(1, $dl, "Processing late ".$o."/*/".$k);
         $process = 1;
       }
     } else {
@@ -408,9 +408,9 @@ sub processObservation($$) {
     # process the archive and summ it into the results archive for observation
     if ($process) {
 
-      Dada->logMsg(2, $dl, "processObservation: processArchives(".$o.", ".$k.")");
+      Dada::logMsg(2, $dl, "processObservation: processArchives(".$o.", ".$k.")");
       ($source, $fres_ar, $tres_ar) = processArchive($o, $k);
-      Dada->logMsg(2, $dl, "processObservation: processArchives() ".$source." ".$fres_ar." ".$tres_ar);
+      Dada::logMsg(2, $dl, "processObservation: processArchives() ".$source." ".$fres_ar." ".$tres_ar);
 
       if (($fres_ar ne "none") && ($tres_ar ne "none") && (!(grep $_ eq $fres_ar, @fres_plot))) {
         push @fres_plot, $fres_ar;
@@ -424,11 +424,11 @@ sub processObservation($$) {
 
     # determine the source name for this archive
     $cmd = "vap -n -c name ".$tres_plot[$i]." | awk '{print \$2}'";
-    Dada->logMsg(2, $dl, "processObservation: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
-    Dada->logMsg(2, $dl, "processObservation: ".$result." ".$response);
+    Dada::logMsg(2, $dl, "processObservation: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(2, $dl, "processObservation: ".$result." ".$response);
     if ($result ne "ok") {
-      Dada->logMsgWarn($warn, "processObservation: failed to determine source name: ".$response);
+      Dada::logMsgWarn($warn, "processObservation: failed to determine source name: ".$response);
       $source = "UNKNOWN";
     } else {
       $source = $response;
@@ -436,7 +436,7 @@ sub processObservation($$) {
     }
     $source =~ s/^[JB]//;
 
-    Dada->logMsg(2, $dl, "processObservation: plotting [".$i."] (".$o.", ".$source.", ".$fres_plot[$i].", ".$tres_plot[$i].")");
+    Dada::logMsg(2, $dl, "processObservation: plotting [".$i."] (".$o.", ".$source.", ".$fres_plot[$i].", ".$tres_plot[$i].")");
     makePlotsFromArchives($o, $source, $fres_plot[$i], $tres_plot[$i], "240x180");
     makePlotsFromArchives($o, $source, $fres_plot[$i], $tres_plot[$i], "1024x768");
     Apsr->removeFiles($o, "phase_vs_flux_".$source."*_240x180.png", 40);
@@ -453,7 +453,7 @@ sub deleteObservation($) {
   (my $dir) = @_;
   my $cmd = "";
 
-  Dada->logMsg(1, $dl, "Deleting observation: ".$dir);
+  Dada::logMsg(1, $dl, "Deleting observation: ".$dir);
   $cmd = "rm -rf $dir";
   `$cmd`;
   return $?;
@@ -474,30 +474,30 @@ sub processArchive($$) {
   my $cmd = "";
   my @archives = ();
 
-  Dada->logMsg(2, $dl, "processArchive(".$dir.", ".$file.")");
+  Dada::logMsg(2, $dl, "processArchive(".$dir.", ".$file.")");
 
-  my $bindir =      Dada->getCurrentBinaryVersion();
+  my $bindir =      Dada::getCurrentBinaryVersion();
   my $results_dir = $cfg{"SERVER_RESULTS_DIR"};
 
   # Get the sub directories in the obs (bands)
   $cmd = "find ".$dir."/* -maxdepth 0 -type d";
-  Dada->logMsg(2, $dl, "processArchive: ".$cmd);
+  Dada::logMsg(2, $dl, "processArchive: ".$cmd);
   my $find_result = `$cmd`;
   my @sub_dirs = split(/\n/, $find_result);
 
   # Find out how many archives we actaully hae
   $cmd = "ls -1 ".$dir."/*/".$file;
-  Dada->logMsg(2, $dl, "processArchive: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
-  Dada->logMsg(2, $dl, "processArchive: ".$result." ".$response);
+  Dada::logMsg(2, $dl, "processArchive: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(2, $dl, "processArchive: ".$result." ".$response);
   if ($result ne "ok") {
-    Dada->logMsgWarn($warn, "processArchive: '".$cmd."' failed: ".$response);
+    Dada::logMsgWarn($warn, "processArchive: '".$cmd."' failed: ".$response);
   } else {
     @archives = split(/\n/, $response);  
   }
 
-  Dada->logMsg(2, $dl, "processArchive: found ".($#archives+1)." / ".($#sub_dirs+1)." archives");
-  Dada->logMsg(1, $dl, "Processing ".$dir." -> ".$file." ".($#archives+1)." of ".($#sub_dirs+1));
+  Dada::logMsg(2, $dl, "processArchive: found ".($#archives+1)." / ".($#sub_dirs+1)." archives");
+  Dada::logMsg(1, $dl, "Processing ".$dir." -> ".$file." ".($#archives+1)." of ".($#sub_dirs+1));
 
   my $output = "";
   my $real_archives = "";
@@ -507,11 +507,11 @@ sub processArchive($$) {
 
   # determine the source name for this archive
   $cmd = "vap -n -c name ".$archives[0]." | awk '{print \$2}'";
-  Dada->logMsg(2, $dl, "processArchive: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
-  Dada->logMsg(2, $dl, "processArchive: ".$result." ".$response);
+  Dada::logMsg(2, $dl, "processArchive: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(2, $dl, "processArchive: ".$result." ".$response);
   if ($result ne "ok") {
-    Dada->logMsgWarn($warn, "processArchive: failed to determine source name: ".$response);
+    Dada::logMsgWarn($warn, "processArchive: failed to determine source name: ".$response);
     $source = "UNKNOWN";
   } else {
     $source = $response;
@@ -540,11 +540,11 @@ sub processArchive($$) {
 
     foreach $subdir (@sub_dirs) {
 
-     Dada->logMsg(2, $dl, "subdir = ".$subdir.", file = ".$file); 
+     Dada::logMsg(2, $dl, "subdir = ".$subdir.", file = ".$file); 
      # If the archive does not exist in the frequency dir
       if (!(-f ($subdir."/".$file))) {
 
-        Dada->logMsg(1, $dl, "archive ".$subdir."/".$file." was not present");
+        Dada::logMsg(1, $dl, "archive ".$subdir."/".$file." was not present");
 
         ($band_freq, $dirs, $suffix) = fileparse($subdir);
 
@@ -554,24 +554,24 @@ sub processArchive($$) {
 
         # create a copy of archives[0] with .lowres -> .tmp
         $cmd = $bindir."/pam -o ".$band_freq." -e zeroed ".$archives[0]." 2>&1";
-        Dada->logMsg(2, $dl, $cmd);
+        Dada::logMsg(2, $dl, $cmd);
         $output = `$cmd`;
-        Dada->logMsg(2, $dl, $output);
+        Dada::logMsg(2, $dl, $output);
 
         # move the zeroed archive to the band subdir
         $cmd = "mv -f ".$tmp_ar." ".$out_ar." 2>&1";
-        Dada->logMsg(2, $dl, $cmd);
+        Dada::logMsg(2, $dl, $cmd);
         $output = `$cmd`;
-        Dada->logMsg(2, $dl, $output);
+        Dada::logMsg(2, $dl, $output);
 
         # set the weights in the zeroed archive to 0
         $cmd = $bindir."/paz -w 0 -m ".$out_ar." 2>&1";
-        Dada->logMsg(2, $dl, $cmd);
+        Dada::logMsg(2, $dl, $cmd);
         $output = `$cmd`;
-        Dada->logMsg(2, $dl, $output);
+        Dada::logMsg(2, $dl, $output);
 
         $plottable_archives .= " ".$out_ar;
-        Dada->logMsg(2, $dl, "Added ".$out_ar." to plottable archives");
+        Dada::logMsg(2, $dl, "Added ".$out_ar." to plottable archives");
 
       } else {
         ($band_freq, $dirs, $suffix) = fileparse($subdir);
@@ -592,13 +592,13 @@ sub processArchive($$) {
 
   # combine all thr frequency channels
   $cmd = $bindir."/psradd -R -f ".$total_f_sum." ".$plottable_archives;
-  Dada->logMsg(2, $dl, $cmd);
+  Dada::logMsg(2, $dl, $cmd);
   $output = `$cmd`;
 
   if ($#archives < $#sub_dirs) {
     # Delete any "temp" files that we needed to use to produce the result
     $cmd = "rm -f ".$dir."/*/*.zeroed ".$dir."/*/*/*.zeroed";
-    Dada->logMsg(2, $dl, $cmd);
+    Dada::logMsg(2, $dl, $cmd);
     $output = `$cmd`;
   }
 
@@ -613,7 +613,7 @@ sub processArchive($$) {
     # Delete condition
     if ($output eq "") {
       $cmd = "echo 'rm -f */$file' >> ".$cfg{"SERVER_ARCHIVE_DIR"}."/".$dir."/deleteme.csh";
-      Dada->logMsg(1, $dl, "pulse: ".$cmd);
+      Dada::logMsg(1, $dl, "pulse: ".$cmd);
       `$cmd`;
       $plot_this = 0;
 
@@ -626,17 +626,17 @@ sub processArchive($$) {
   if (!(-f $total_f_res)) {
 
     $cmd = "cp ".$total_f_sum." ".$total_f_res;
-    Dada->logMsg(2, $dl, $cmd);
+    Dada::logMsg(2, $dl, $cmd);
     $output = `$cmd`;
 
     # Fscrunc the archive
     $cmd = $bindir."/pam -F -m ".$total_f_sum;
-    Dada->logMsg(2, $dl, $cmd);
+    Dada::logMsg(2, $dl, $cmd);
     $output = `$cmd`;
 
     # Tres operations
     $cmd = "cp ".$total_f_sum." ".$total_t_res;
-    Dada->logMsg(2, $dl, $cmd);
+    Dada::logMsg(2, $dl, $cmd);
     $output = `$cmd`;
 
   } else {
@@ -645,12 +645,12 @@ sub processArchive($$) {
 
     # Fres Operations
     $cmd = $bindir."/psradd -s -f ".$temp_ar." ".$total_f_res." ".$total_f_sum;
-    ($result, $response) = Dada->mySystem($cmd);
+    ($result, $response) = Dada::mySystem($cmd);
     if ($result ne "ok") {
-      Dada->logMsg(0, $dl, "psradd failed cmd=".$cmd);
-      Dada->logMsg(0, $dl, "psradd output=".$response);
+      Dada::logMsg(0, $dl, "psradd failed cmd=".$cmd);
+      Dada::logMsg(0, $dl, "psradd output=".$response);
     }
-    #Dada->logMsg(2, $dl, $cmd);
+    #Dada::logMsg(2, $dl, $cmd);
     #$output = `$cmd`;
 
     unlink($total_f_res);
@@ -658,22 +658,22 @@ sub processArchive($$) {
 
     # Fscrunc the archive
     $cmd = $bindir."/pam -F -m ".$total_f_sum;
-    ($result, $response) = Dada->mySystem($cmd);
+    ($result, $response) = Dada::mySystem($cmd);
     if ($result ne "ok") {
-      Dada->logMsg(0, $dl, "pam failed cmd=".$cmd);
-      Dada->logMsg(0, $dl, "pam output=".$response);
+      Dada::logMsg(0, $dl, "pam failed cmd=".$cmd);
+      Dada::logMsg(0, $dl, "pam output=".$response);
     }
-    #Dada->logMsg(2, $dl, $cmd);
+    #Dada::logMsg(2, $dl, $cmd);
     #$output = `$cmd`;
 
     # Tres Operations
     $cmd = $bindir."/psradd -f ".$temp_ar." ".$total_t_res." ".$total_f_sum;
-    ($result, $response) = Dada->mySystem($cmd);
+    ($result, $response) = Dada::mySystem($cmd);
     if ($result ne "ok") {
-      Dada->logMsg(0, $dl, "psradd failed cmd=".$cmd);
-      Dada->logMsg(0, $dl, "psradd output=".$response);
+      Dada::logMsg(0, $dl, "psradd failed cmd=".$cmd);
+      Dada::logMsg(0, $dl, "psradd output=".$response);
     }
-    #Dada->logMsg(2, $dl, $cmd);
+    #Dada::logMsg(2, $dl, $cmd);
     #$output = `$cmd`;
 
     unlink($total_t_res);
@@ -687,7 +687,7 @@ sub processArchive($$) {
 
   # clean up the current archive
   unlink($total_f_sum);
-  Dada->logMsg(2, $dl, "unlinking $total_f_sum");
+  Dada::logMsg(2, $dl, "unlinking $total_f_sum");
 
   # Record this archive as processed and what sub bands were legit
   recordProcessed($dir, $file, $real_archives);
@@ -708,7 +708,7 @@ sub countArchives($$) {
   my @processed = getProcessedFiles($dir);
 
   my $cmd = "find ".$dir."/*/ -name \"*.lowres\" -printf \"%P\n\"";
-  Dada->logMsg(2, $dl, "find ".$dir."/*/ -name \"*.lowres\"");
+  Dada::logMsg(2, $dl, "find ".$dir."/*/ -name \"*.lowres\"");
 
   my $find_result = `$cmd`;
 
@@ -781,12 +781,12 @@ sub countObsBands($) {
   my $num_bands = 0;
 
   $cmd = "find ".$dir." -maxdepth 2 -type d | wc -l";
-  Dada->logMsg(2, $dl, "countObsBands: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
-  Dada->logMsg(2, $dl, "countObsBands: ".$result." ".$response);
+  Dada::logMsg(2, $dl, "countObsBands: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(2, $dl, "countObsBands: ".$result." ".$response);
 
   if ($result ne "ok") {
-    Dada->logMsgWarn($warn, "countObsBands: ".$cmd." failed: ".$response);
+    Dada::logMsgWarn($warn, "countObsBands: ".$cmd." failed: ".$response);
     $num_bands = 0;
   } else {
     $num_bands = $response;
@@ -821,7 +821,7 @@ sub deleteArchives($) {
   my $i=0;
   for ($i=0; $i <= $#subdirs; $i++) {
     $cmd  = "rm -rf ".$dir."/".$subdirs[$i];
-    Dada->logMsg(2, $dl, "Deleting ".$dir."/".$subdirs[$i]);
+    Dada::logMsg(2, $dl, "Deleting ".$dir."/".$subdirs[$i]);
     # system($cmd);
   }
 
@@ -872,18 +872,18 @@ sub getMostRecentResult($$) {
 
   # Check if any directories exist yet...
   my $cmd = "find ".$dir."/* -type d | wc -l";
-  #Dada->logMsg(1, $dl, "find ".$dir."/* -type d | wc -l");
+  #Dada::logMsg(1, $dl, "find ".$dir."/* -type d | wc -l");
   my $num_dirs = `$cmd`;
   chomp($num_dirs);
-  #Dada->logMsg(1, $dl, "\"".$num_dirs."\"");
+  #Dada::logMsg(1, $dl, "\"".$num_dirs."\"");
 
   if ($num_dirs > 0) {
     
     $cmd = "find ".$dir."/*/ -name \"*.".$ext."\" -printf \"%T@\\n\" | sort | tail -n 1";
-    #Dada->logMsg(1, $dl, "find ".$dir."/*/ -name \"*.".$ext."\" -printf \"\%T@\" | sort | tail -n 1");
+    #Dada::logMsg(1, $dl, "find ".$dir."/*/ -name \"*.".$ext."\" -printf \"\%T@\" | sort | tail -n 1");
     my $unix_time_of_most_recent_result = `$cmd`;
     chomp($unix_time_of_most_recent_result);
-    #Dada->logMsg(1, $dl, "\"".$unix_time_of_most_recent_result."\"");
+    #Dada::logMsg(1, $dl, "\"".$unix_time_of_most_recent_result."\"");
 
     my $current_unix_time = time;
 
@@ -893,14 +893,14 @@ sub getMostRecentResult($$) {
   
     } else {
 
-      #Dada->logMsg(1, $dl, "No .lowres files found in $dir");
+      #Dada::logMsg(1, $dl, "No .lowres files found in $dir");
       # Check the age of the directories - if > 5 minutes then likely
       # a dud obs.
       $cmd = "find ".$dir."/* -type d -printf \"%T@\\n\" | sort | tail -n 1";
-      #Dada->logMsg(1, $dl, "find ".$dir."/* -type d -printf \"\%T@\" | sort | tail -n 1");
+      #Dada::logMsg(1, $dl, "find ".$dir."/* -type d -printf \"\%T@\" | sort | tail -n 1");
       $unix_time_of_most_recent_result = `$cmd`;
       chomp($unix_time_of_most_recent_result);
-      #Dada->logMsg(1, $dl, "\"".$unix_time_of_most_recent_result."\"");
+      #Dada::logMsg(1, $dl, "\"".$unix_time_of_most_recent_result."\"");
 
       # If we found no .lowres files, this may be a dud observation.
       # Check the age of the obs.start
@@ -909,7 +909,7 @@ sub getMostRecentResult($$) {
 
       if ($unix_time_of_most_recent_result) {
         $age = $current_unix_time - $unix_time_of_most_recent_result;
-        #Dada->logMsg(1, $dl, "Dir age = ".$age);
+        #Dada::logMsg(1, $dl, "Dir age = ".$age);
 
         # If the obs.start is more than 5 minutes old, but we have no 
         # archives, then this observation is considered a dud
@@ -921,7 +921,7 @@ sub getMostRecentResult($$) {
         $age = -1;
       }
     }
-    Dada->logMsg(2, $dl, "Observation: ".$dir.", age: ".$age." seconds");
+    Dada::logMsg(2, $dl, "Observation: ".$dir.", age: ".$age." seconds");
   } else {
     $age = 0;
   }
@@ -935,7 +935,7 @@ sub processAllArchives($) {
 
   (my $dir) = @_;
 
-  Dada->logMsg(1, $dl, "processAllArchives(".$dir.")");
+  Dada::logMsg(1, $dl, "processAllArchives(".$dir.")");
   my $cmd = "";
 
   # Delete the existing fres and tres files
@@ -958,7 +958,7 @@ sub processAllArchives($) {
     
   for ($i=0; $i<=$#keys; $i++) {
 
-    Dada->logMsg(1, $dl, "Finalising archive ".$dir."/*/".$keys[$i]);
+    Dada::logMsg(1, $dl, "Finalising archive ".$dir."/*/".$keys[$i]);
     # process the archive and summ it into the results archive for observation
     ($source, $curr_ar, $fres_ar, $tres_ar) = processArchive($dir, $keys[$i]);
 
@@ -989,8 +989,8 @@ sub makePlotsFromArchives($$$$$) {
     $psrplot_args .= " -s ".$web_style_txt." -c below:l=unset";
   }
 
-  my $bin = Dada->getCurrentBinaryVersion()."/psrplot ".$psrplot_args;
-  my $timestamp = Dada->getCurrentDadaTime(0);
+  my $bin = Dada::getCurrentBinaryVersion()."/psrplot ".$psrplot_args;
+  my $timestamp = Dada::getCurrentDadaTime(0);
 
   my $pvt  = "phase_vs_time_".$source."_".$timestamp."_".$res.".png";
   my $pvfr = "phase_vs_freq_".$source."_".$timestamp."_".$res.".png";
@@ -999,21 +999,21 @@ sub makePlotsFromArchives($$$$$) {
   # Combine the archives from the machine into the archive to be processed
   # PHASE vs TIME
   $cmd = $bin." -p time -jFD -D ".$dir."/pvt_tmp/png ".$total_t_res;
-  Dada->logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
-  Dada->logMsg(2, $dl, "makePlotsFromArchives: ".$result." ".$response);
+  Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$result." ".$response);
 
   # PHASE vs FREQ
   $cmd = $bin." -p freq -jTD -D ".$dir."/pvfr_tmp/png ".$total_f_res;
-  Dada->logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
-  Dada->logMsg(2, $dl, "makePlotsFromArchives: ".$result." ".$response);
+  Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$result." ".$response);
 
   # PHASE vs TOTAL INTENSITY
   $cmd = $bin." -p flux -jTF -D ".$dir."/pvfl_tmp/png ".$total_f_res;
-  Dada->logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
-  Dada->logMsg(2, $dl, "makePlotsFromArchives: ".$result." ".$response);
+  Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$result." ".$response);
 
 
   # Get plots to delete in the destination directory
@@ -1054,7 +1054,7 @@ sub checkBandFinished($$) {
 
   my ($obs, $n_bands) = @_;
 
-  Dada->logMsg(2, $dl ,"checkBandFinished(".$obs.", ".$n_bands.")");
+  Dada::logMsg(2, $dl ,"checkBandFinished(".$obs.", ".$n_bands.")");
 
   my $cmd = "";
   my $result = "";
@@ -1063,12 +1063,12 @@ sub checkBandFinished($$) {
 
   # only declare this as finished when the band.finished files are written
   $cmd = "find ".$dir."/".$obs." -type f -name 'band.finished' | wc -l";
-  Dada->logMsg(2, $dl, "checkBandFinished: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
-  Dada->logMsg(2, $dl, "checkBandFinished: ".$result." ".$response);
+  Dada::logMsg(2, $dl, "checkBandFinished: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(2, $dl, "checkBandFinished: ".$result." ".$response);
 
   if ($result ne "ok") {
-    Dada->logMsgWarn($warn, "checkBandFinished: ".$cmd." failed: ".$response);
+    Dada::logMsgWarn($warn, "checkBandFinished: ".$cmd." failed: ".$response);
   } else {
     if ($response eq $n_bands) {
       $result = "ok";
@@ -1087,11 +1087,11 @@ sub checkBandFinished($$) {
 
 sub controlThread($$) {
 
-  Dada->logMsg(1, $dl ,"controlThread: starting");
+  Dada::logMsg(1, $dl ,"controlThread: starting");
 
   my ($quit_file, $pid_file) = @_;
 
-  Dada->logMsg(2, $dl ,"controlThread(".$quit_file.", ".$pid_file.")");
+  Dada::logMsg(2, $dl ,"controlThread(".$quit_file.", ".$pid_file.")");
 
   # Poll for the existence of the control file
   while ((!(-f $quit_file)) && (!$quit_daemon)) {
@@ -1102,13 +1102,13 @@ sub controlThread($$) {
   $quit_daemon = 1;
 
   if ( -f $pid_file) {
-    Dada->logMsg(2, $dl ,"controlThread: unlinking PID file");
+    Dada::logMsg(2, $dl ,"controlThread: unlinking PID file");
     unlink($pid_file);
   } else {
-    Dada->logMsgWarn($warn, "controlThread: PID file did not exist on script exit");
+    Dada::logMsgWarn($warn, "controlThread: PID file did not exist on script exit");
   }
 
-  Dada->logMsg(1, $dl ,"controlThread: exiting");
+  Dada::logMsg(1, $dl ,"controlThread: exiting");
 
   return 0;
 }
@@ -1157,9 +1157,9 @@ sub good($) {
   }
 
   # this script can *only* be run on the configured server
-  if (index($cfg{"SERVER_ALIASES"}, Dada->getHostMachineName()) < 0 ) {
+  if (index($cfg{"SERVER_ALIASES"}, Dada::getHostMachineName()) < 0 ) {
     return ("fail", "Error: script must be run on ".$cfg{"SERVER_HOST"}.
-                    ", not ".Dada->getHostMachineName());
+                    ", not ".Dada::getHostMachineName());
   }
 
   # Ensure more than one copy of this daemon is not running

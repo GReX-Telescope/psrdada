@@ -112,68 +112,68 @@ sub main() {
   $SIG{PIPE} = \&sigPipeHandle;
   
   # become a daemon
-  Dada->daemonize($log_file, $pid_file);
+  Dada::daemonize($log_file, $pid_file);
 
-  Dada->logMsg(0, $dl ,"STARTING SCRIPT");
+  Dada::logMsg(0, $dl ,"STARTING SCRIPT");
 
   # Start the tape script (background daemon)
   ($user, $host, $dir) = split(/:/, $db_dir);
 
   # Set if a daemon is running there already
-  Dada->logMsg(2, $dl, "main: checkRemoteScript(".$user.", ".$host.")");
+  Dada::logMsg(2, $dl, "main: checkRemoteScript(".$user.", ".$host.")");
   ($result, $response) = checkRemoteScript($user, $host);
-  Dada->logMsg(2, $dl, "main: checkRemoteScript() ".$result." ".$response);
+  Dada::logMsg(2, $dl, "main: checkRemoteScript() ".$result." ".$response);
 
   if ($result ne "ok") {
-    Dada->logMsgWarn($error, "could not contact ".$dest_script.", quitting");
+    Dada::logMsgWarn($error, "could not contact ".$dest_script.", quitting");
     $quit_daemon = 1;
     unlink($pid_file);
     return 1;
   }
 
   if (($result eq "ok") && ($response eq "process existed")) {
-    Dada->logMsgWarn($error, "tape archiver script already running, quitting");
+    Dada::logMsgWarn($error, "tape archiver script already running, quitting");
     unlink($pid_file);
     return 1;
   }
 
   # start the control thread
-  Dada->logMsg(2, $dl ,"starting controlThread(".$quit_file.", ".$pid_file.")");
+  Dada::logMsg(2, $dl ,"starting controlThread(".$quit_file.", ".$pid_file.")");
   $control_thread = threads->new(\&controlThread, $quit_file, $pid_file);
 
   # Start the PID reporting thread
   $pid_report_thread = threads->new(\&pidReportThread, $pid);
 
   # Start the remote tape script
-  Dada->logMsg(1, $dl, "Starting ".$dest_script);
+  Dada::logMsg(1, $dl, "Starting ".$dest_script);
 
   ($result, $response) = sshViaProxy($user, $host, $dest_script." ".$pid);
 
   if ($result ne "ok") {
-    Dada->logMsgWarn($warn, $user."@".$host.":".$dest_script." returned ".$response);
+    Dada::logMsgWarn($warn, $user."@".$host.":".$dest_script." returned ".$response);
     $premature_exit = 1;
   }
 
-  Dada->logMsg(2, $dl, "main: entering poll loop for quit file/SIGINT");
+  Dada::logMsg(2, $dl, "main: entering poll loop for quit file/SIGINT");
 
 
   # Poll for the existence of the control file
   while ((!$quit_daemon) && (!$premature_exit)) {
 
-    Dada->logMsg(3, $dl, "main: Sleeping for quit_daemon");
+    Dada::logMsg(3, $dl, "main: Sleeping for quit_daemon");
     sleep(1);
 
     if ($counter == $counter_freq) {
       $counter = 0;
 
-      Dada->logMsg(2, $dl, "main: checkRemoteScript(".$user.", ".$host.")");
+      Dada::logMsg(2, $dl, "main: checkRemoteScript(".$user.", ".$host.")");
       ($result, $response) = checkRemoteScript($user, $host);
-      Dada->logMsg(2, $dl, "main: checkRemoteScript() ".$result." ".$response);
+      Dada::logMsg(2, $dl, "main: checkRemoteScript() ".$result." ".$response);
 
       # Occaisionally we loose the ssh connection to swin, this is not
       # a premature exit
       if ($result ne "ok") {
-        Dada->logMsgWarn($warn, "Could not ssh to ".$user."@".$host.", sleeping 60 seconds");
+        Dada::logMsgWarn($warn, "Could not ssh to ".$user."@".$host.", sleeping 60 seconds");
         my $sleep_count = 60;
         while ((!$quit_daemon) && ($sleep_count > 0)) {
           sleep(1);
@@ -182,7 +182,7 @@ sub main() {
 
       } elsif ($response eq "no process existed") {
 
-        Dada->logMsgWarn($error, "remote script exited unexpectedly");
+        Dada::logMsgWarn($error, "remote script exited unexpectedly");
         $premature_exit = 1;
 
       } else {
@@ -199,12 +199,12 @@ sub main() {
   if (!$premature_exit) {
 
     # Now stop the tape script
-    Dada->logMsg(1, $dl, "main: stopping ".$dest_script);
+    Dada::logMsg(1, $dl, "main: stopping ".$dest_script);
 
-    $cmd = "touch \$DADA_ROOT/control/".Dada->daemonBaseName($dest_script).".quit";
-    Dada->logMsg(2, $dl, "main: sshViaProxy(".$user.", ".$host.",". $cmd.")");
+    $cmd = "touch \$DADA_ROOT/control/".Dada::daemonBaseName($dest_script).".quit";
+    Dada::logMsg(2, $dl, "main: sshViaProxy(".$user.", ".$host.",". $cmd.")");
     ($result, $response) = sshViaProxy($user, $host, $cmd);
-    Dada->logMsg(2, $dl, "main: sshViaProxy() ".$result." ".$response);
+    Dada::logMsg(2, $dl, "main: sshViaProxy() ".$result." ".$response);
 
     sleep(5);
 
@@ -220,12 +220,12 @@ sub main() {
       ($result, $response) = checkRemoteScript($user, $host);
 
       if ($result ne "ok") {
-        Dada->logMsgWarn($error, "could not contact ".$user."@".$host.":".$dest_script.", quitting");
+        Dada::logMsgWarn($error, "could not contact ".$user."@".$host.":".$dest_script.", quitting");
         $remote_daemon_exited = 1;
       } else {
 
         if ($response eq "process existed") {
-          Dada->logMsg(1, $dl, "main: waiting for ".$user."@".$host.":".$dest_script." to quit");
+          Dada::logMsg(1, $dl, "main: waiting for ".$user."@".$host.":".$dest_script." to quit");
           sleep(5);
           $n_tries--;
           } else {
@@ -235,15 +235,15 @@ sub main() {
     }
 
     if ($n_tries == 0) {
-      Dada->logMsgWarn($error, $user."@".$host.":".$dest_script." did not exit after 300 seconds, quitting");
+      Dada::logMsgWarn($error, $user."@".$host.":".$dest_script." did not exit after 300 seconds, quitting");
     }
 
     # Now stop the tape script
-    Dada->logMsg(1, $dl, "main: unlinking quit file on remote machine");
-    $cmd = "unlink \$DADA_ROOT/control/".Dada->daemonBaseName($dest_script).".quit";
-    Dada->logMsg(2, $dl, "main: sshViaProxy(".$user.", ".$host.",". $cmd.")");
+    Dada::logMsg(1, $dl, "main: unlinking quit file on remote machine");
+    $cmd = "unlink \$DADA_ROOT/control/".Dada::daemonBaseName($dest_script).".quit";
+    Dada::logMsg(2, $dl, "main: sshViaProxy(".$user.", ".$host.",". $cmd.")");
     ($result, $response) = sshViaProxy($user, $host, $cmd);
-    Dada->logMsg(2, $dl, "main: sshViaProxy() ".$result." ".$response);
+    Dada::logMsg(2, $dl, "main: sshViaProxy() ".$result." ".$response);
 
   }
 
@@ -254,7 +254,7 @@ sub main() {
 
   $pid_report_thread->join();
 
-  Dada->logMsg(0, $dl ,"STOPPING SCRIPT");
+  Dada::logMsg(0, $dl ,"STOPPING SCRIPT");
 
   return 0;
 
@@ -271,9 +271,9 @@ sub checkRemoteScript($$) {
   my $result = "";
   my $response = "";
 
-  Dada->logMsg(2, $dl, "checkRemoteScript: ".$cmd);
+  Dada::logMsg(2, $dl, "checkRemoteScript: ".$cmd);
   ($result, $response) = sshViaProxy($user, $host, $cmd);
-  Dada->logMsg(2, $dl, "checkRemoteScript: ".$result." ".$response);
+  Dada::logMsg(2, $dl, "checkRemoteScript: ".$result." ".$response);
 
   if ($result ne "ok") {
     # the grep command failed (no process) and returned a line count of 0
@@ -292,7 +292,7 @@ sub checkRemoteScript($$) {
 sub sshViaProxy($$$) {
 
   my ($user, $host, $remote_cmd) = @_;
-  Dada->logMsg(2, $dl, "sshViaProxy(".$user.", ".$host.", ".$remote_cmd.")");
+  Dada::logMsg(2, $dl, "sshViaProxy(".$user.", ".$host.", ".$remote_cmd.")");
 
   my $cmd = "";
   my $result = "";
@@ -304,9 +304,9 @@ sub sshViaProxy($$$) {
     $cmd = "ssh -x -l ".$user." ".$host." '".$remote_cmd."'";
   }
 
-  Dada->logMsg(2, $dl, "sshViaProxy: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
-  Dada->logMsg(2, $dl, "sshViaProxy: ".$result." ".$response);
+  Dada::logMsg(2, $dl, "sshViaProxy: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(2, $dl, "sshViaProxy: ".$result." ".$response);
 
   return ($result, $response);
 
@@ -320,7 +320,7 @@ sub pidReportThread($) {
 
   (my $daemon_pid) = @_;
 
-  Dada->logMsg(1, $dl, "pidReportThread: starting");
+  Dada::logMsg(1, $dl, "pidReportThread: starting");
 
   my $sock = 0;
   my $host = $cfg{"SERVER_HOST"};
@@ -338,7 +338,7 @@ sub pidReportThread($) {
   );
 
   if (!$sock) {
-    Dada->logMsgWarn($warn, "Could not create PID reporting socket [".$host.":".$port."]: ".$!);
+    Dada::logMsgWarn($warn, "Could not create PID reporting socket [".$host.":".$port."]: ".$!);
 
   } else {
 
@@ -356,7 +356,7 @@ sub pidReportThread($) {
 
           $handle = $rh->accept();
           $handle->autoflush();
-          Dada->logMsg(2, $dl, "pidReportThread: Accepting connection");
+          Dada::logMsg(2, $dl, "pidReportThread: Accepting connection");
 
           # Add this read handle to the set
           $read_set->add($handle);
@@ -364,22 +364,22 @@ sub pidReportThread($) {
 
         } else {
 
-          $string = Dada->getLine($rh);
+          $string = Dada::getLine($rh);
 
           if (! defined $string) {
-            Dada->logMsg(2, $dl, "pidReportThread: Closing a connection");
+            Dada::logMsg(2, $dl, "pidReportThread: Closing a connection");
             $read_set->remove($rh);
             close($rh);
 
           } else {
 
-            Dada->logMsg(2, $dl, "pidReportThread: <- ".$string);
+            Dada::logMsg(2, $dl, "pidReportThread: <- ".$string);
 
             if ($string eq "get_pid") {
               print $rh $daemon_pid."\r\n";
-              Dada->logMsg(2, $dl, "pidReportThread: -> ".$daemon_pid);
+              Dada::logMsg(2, $dl, "pidReportThread: -> ".$daemon_pid);
             } else {
-              Dada->logMsgWarn($warn, "pidReportThread: received unexpected string: ".$string);
+              Dada::logMsgWarn($warn, "pidReportThread: received unexpected string: ".$string);
             }
           }
         }
@@ -387,7 +387,7 @@ sub pidReportThread($) {
     }
   }
 
-  Dada->logMsg(1, $dl, "pidReportThread: exiting");
+  Dada::logMsg(1, $dl, "pidReportThread: exiting");
 
   return 0;
 }
@@ -395,11 +395,11 @@ sub pidReportThread($) {
 
 sub controlThread($$) {
 
-  Dada->logMsg(1, $dl ,"controlThread: starting");
+  Dada::logMsg(1, $dl ,"controlThread: starting");
 
   my ($quit_file, $pid_file) = @_;
 
-  Dada->logMsg(2, $dl ,"controlThread(".$quit_file.", ".$pid_file.")");
+  Dada::logMsg(2, $dl ,"controlThread(".$quit_file.", ".$pid_file.")");
 
   # Poll for the existence of the control file
   while ((!(-f $quit_file)) && (!$quit_daemon)) {
@@ -410,13 +410,13 @@ sub controlThread($$) {
   $quit_daemon = 1;
 
   if ( -f $pid_file) {
-    Dada->logMsg(2, $dl ,"controlThread: unlinking PID file");
+    Dada::logMsg(2, $dl ,"controlThread: unlinking PID file");
     unlink($pid_file);
   } else {
-    Dada->logMsgWarn($warn, "controlThread: PID file did not exist on script exit");
+    Dada::logMsgWarn($warn, "controlThread: PID file did not exist on script exit");
   }
 
-  Dada->logMsg(1, $dl, "controlThread: exiting");
+  Dada::logMsg(1, $dl, "controlThread: exiting");
 
   return 0;
 }
@@ -465,9 +465,9 @@ sub good($) {
   }
 
   # this script can *only* be run on the configured server
-  if (index($cfg{"SERVER_ALIASES"}, Dada->getHostMachineName()) < 0 ) {
+  if (index($cfg{"SERVER_ALIASES"}, Dada::getHostMachineName()) < 0 ) {
     return ("fail", "Error: script must be run on ".$cfg{"SERVER_HOST"}.
-                    ", not ".Dada->getHostMachineName());
+                    ", not ".Dada::getHostMachineName());
   }
 
   # Ensure more than one copy of this daemon is not running

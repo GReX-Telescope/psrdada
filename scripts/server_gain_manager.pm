@@ -126,25 +126,25 @@ sub main() {
   $SIG{PIPE} = \&sigPipeHandle;
 
   # become a daemon
-  Dada->daemonize($log_file, $pid_file);
+  Dada::daemonize($log_file, $pid_file);
   
   # start the control thread
   $control_thread = threads->new(\&controlThread, $quit_file, $pid_file);
 
-  Dada->logMsg(0, $dl ,"STARTING SCRIPT");
+  Dada::logMsg(0, $dl ,"STARTING SCRIPT");
 
   for ($i=0; $i<$cfg{"NUM_PWC"}; $i++) {
     $pol0_gains[$i] = $initial_gain;
     $pol1_gains[$i] = $initial_gain;
   }
 
-  Dada->logMsg(1, $dl, "Connecting to hardware gain interface: ".$hw_host.":".$hw_port);
-  $hw_sock = Dada->connectToMachine($hw_host, $hw_port);
+  Dada::logMsg(1, $dl, "Connecting to hardware gain interface: ".$hw_host.":".$hw_port);
+  $hw_sock = Dada::connectToMachine($hw_host, $hw_port);
   if (!$hw_sock) {
-    Dada->logMsgWarn($warn, "Could not connect to hardware gain interface, polling...");
+    Dada::logMsgWarn($warn, "Could not connect to hardware gain interface, polling...");
     $hw_sock = 0;
   } else {
-    Dada->logMsg(1, $dl, "Connection to hardware gain interface establised");
+    Dada::logMsg(1, $dl, "Connection to hardware gain interface establised");
   }
 
   # create a read set to handle gain and report connectinos
@@ -152,8 +152,8 @@ sub main() {
   $read_set->add($gain_sock);
   $read_set->add($report_sock);
 
-  Dada->logMsg(1, $dl, "PWC gain socket opened ".$gain_host.":".$gain_port);
-  Dada->logMsg(1, $dl, "PWC gain report opened ".$report_host.":".$report_port);
+  Dada::logMsg(1, $dl, "PWC gain socket opened ".$gain_host.":".$gain_port);
+  Dada::logMsg(1, $dl, "PWC gain report opened ".$report_host.":".$report_port);
 
   my $handle = 0;
   my $hostinfo = 0;
@@ -171,15 +171,15 @@ sub main() {
 
     # If we haven't got a connection, try to open it
     if (!$hw_sock) {
-      Dada->logMsg(2, $dl, "Trying to connect to HGI ".$hw_host.":".$hw_port);
-      $hw_sock = Dada->connectToMachine($hw_host, $hw_port, 1);
+      Dada::logMsg(2, $dl, "Trying to connect to HGI ".$hw_host.":".$hw_port);
+      $hw_sock = Dada::connectToMachine($hw_host, $hw_port, 1);
 
       if ($hw_sock) {
-        Dada->logMsg(0, $dl, "Connection to HGI re-established");
+        Dada::logMsg(0, $dl, "Connection to HGI re-established");
        $read_set->add($hw_sock);
 
       } else {
-        Dada->logMsg(2, $dl, "Failed to connect to HGI");
+        Dada::logMsg(2, $dl, "Failed to connect to HGI");
         $hw_sock = 0;
       }
     }
@@ -195,7 +195,7 @@ sub main() {
         $handle->autoflush();
         $hostinfo = gethostbyaddr($handle->peeraddr);
         $hostname = $hostinfo->name;
-        Dada->logMsg(2, $dl, "Accepting connection from ".$hostname);
+        Dada::logMsg(2, $dl, "Accepting connection from ".$hostname);
 
         # Add this read handle to the set
         $read_set->add($handle); 
@@ -209,7 +209,7 @@ sub main() {
         $hostinfo = gethostbyaddr($handle->peeraddr);
         $hostname = $hostinfo->name;
 
-        Dada->logMsg(2, $dl, "Accepting connection from ".$hostname);
+        Dada::logMsg(2, $dl, "Accepting connection from ".$hostname);
 
         # Add this read handle to the set
         $read_set->add($handle);
@@ -218,14 +218,14 @@ sub main() {
       # This is a connection from the hardware gain interface
       } elsif ($rh == $hw_sock) {
 
-        $string = Dada->getLine($rh);
+        $string = Dada::getLine($rh);
         if (! defined $string) {
-          Dada->logMsg(0, $dl, "lost connection to hardware gain interface, re-polling...");
+          Dada::logMsg(0, $dl, "lost connection to hardware gain interface, re-polling...");
           $read_set->remove($rh);
           close($rh);
           $hw_sock = 0;
         } else {
-          Dada->logMsgWarn($warn, "unexpected string from hardare gain interface ".$string);
+          Dada::logMsgWarn($warn, "unexpected string from hardare gain interface ".$string);
         }
 
       } else {
@@ -240,30 +240,30 @@ sub main() {
           $machine = $parts[0];
         }
 
-        $string = Dada->getLine($rh);
+        $string = Dada::getLine($rh);
 
         # If the string is not defined, then we have lost the connection.
         # remove it from the read_set
         if (! defined $string) {
 
-          Dada->logMsg(2, $dl, "Lost connection from ".$hostname.", closing socket");
+          Dada::logMsg(2, $dl, "Lost connection from ".$hostname.", closing socket");
           $read_set->remove($rh);
           close($rh);
 
         # We have a request
         } else {
 
-          Dada->logMsg(2, $dl, $machine.": ".$string);
+          Dada::logMsg(2, $dl, $machine.": ".$string);
 
           # If a client is asking what its CHANNEL base multiplier
           if ($string =~ m/CHANNEL_BASE/) {
 
-            Dada->logMsg(2, $dl, $machine." -> ".$string);
+            Dada::logMsg(2, $dl, $machine." -> ".$string);
             for ($i=0; $i<$cfg{"NUM_PWC"}; $i++) {
               if ($machine eq $cfg{"PWC_".$i}) {
-                Dada->logMsg(2, $machine." <- ".$i);
+                Dada::logMsg(2, $dl, $machine." <- ".$i);
                 print $rh $i."\r\n";
-                Dada->logMsg(2, $dl, "BASE: ".$machine." ".$i);
+                Dada::logMsg(2, $dl, "BASE: ".$machine." ".$i);
               }
             }
 
@@ -272,40 +272,40 @@ sub main() {
 
             ($ignore, $chan, $pol) = split(/ /, $string);
             $hw_string = $hw_gain_tag." ".$chan." ".$pol;
-            Dada->logMsg(2, $dl, $machine." -> ".$hw_string);
+            Dada::logMsg(2, $dl, $machine." -> ".$hw_string);
 
             $hw_response = "FAIL";
 
             if ($hw_sock) {
-              Dada->logMsg(2, $dl, "  HWI <- ".$hw_string);
+              Dada::logMsg(2, $dl, "  HWI <- ".$hw_string);
               print $hw_sock $hw_string."\n";
-              $hw_response = Dada->getLine($hw_sock);
-              Dada->logMsg(2, $dl, "  HWI -> ".$hw_response);
+              $hw_response = Dada::getLine($hw_sock);
+              Dada::logMsg(2, $dl, "  HWI -> ".$hw_response);
             }
 
             print $rh $hw_response."\r\n";
 
-            Dada->logMsg(2, $dl, $machine." <- ".$hw_response);
+            Dada::logMsg(2, $dl, $machine." <- ".$hw_response);
 
           # A gain "SET" command
           } elsif ($string =~ m/^GAIN (\d+) (0|1) (\d)+$/) {
 
-            Dada->logMsg(2, $dl, $machine." -> ".$string);
+            Dada::logMsg(2, $dl, $machine." -> ".$string);
 
             ($ignore, $chan, $pol, $val) = split(/ /, $string);
             $hw_string = $hw_gain_tag." ".$chan." ".$pol." ".$val;
             $hw_response = "OK";
 
             if ($hw_sock) {
-              Dada->logMsg(2, $dl, "  HWI <- ".$hw_string);
+              Dada::logMsg(2, $dl, "  HWI <- ".$hw_string);
               print $hw_sock $hw_string."\n";
-              $hw_response = Dada->getLine($hw_sock);
-              Dada->logMsg(2, $dl, "  HWI -> ".$hw_response);
+              $hw_response = Dada::getLine($hw_sock);
+              Dada::logMsg(2, $dl, "  HWI -> ".$hw_response);
             }
 
-            Dada->logMsg(2, $machine." <- ".$hw_response);
+            Dada::logMsg(2, $dl, $machine." <- ".$hw_response);
             print $rh $hw_response."\r\n";
-            Dada->logMsg(2, $machine." -> ".$string."... ".$hw_response);
+            Dada::logMsg(2, $dl, $machine." -> ".$string."... ".$hw_response);
 
             if ($pol == 0) {
               $pol0_gains[$chan] = $val;
@@ -316,20 +316,20 @@ sub main() {
 
           } elsif ($string =~ m/^GAINHACK (\d+) (0|1) (\d)+$/) {
                                                                                       
-            Dada->logMsg(2, $machine." -> ".$string);
+            Dada::logMsg(2, $dl, $machine." -> ".$string);
                                                                                       
             ($ignore, $chan, $pol, $val) = split(/ /, $string);
             $hw_string = $hw_gain_tag." ".$chan." ".$pol." ".$val;
             $hw_response = "FAIL";
                                                                                       
             if ($hw_sock) {
-              Dada->logMsg(2, $dl, "  HWI <- ".$hw_string);
+              Dada::logMsg(2, $dl, "  HWI <- ".$hw_string);
               print $hw_sock $hw_string."\n";
-              $hw_response = Dada->getLine($hw_sock);
-              Dada->logMsg(2, $dl, "  HWI -> ".$hw_response);
+              $hw_response = Dada::getLine($hw_sock);
+              Dada::logMsg(2, $dl, "  HWI -> ".$hw_response);
             }
                                                                                       
-            Dada->logMsg(2, $machine." <- ".$hw_response);
+            Dada::logMsg(2, $dl, $machine." <- ".$hw_response);
             print $rh $hw_response."\r\n";
 
             if ($pol == 0) {
@@ -348,11 +348,11 @@ sub main() {
             print $rh $tempstring."\r\n";
 
           } else {
-            Dada->logMsg(2, $dl, "Unknown request received");
+            Dada::logMsg(2, $dl, "Unknown request received");
 
           } 
         }
-        Dada->logMsg(2, $dl, "=========================================");
+        Dada::logMsg(2, $dl, "=========================================");
       }
     }
   }
@@ -360,7 +360,7 @@ sub main() {
   # Rejoin our daemon control thread
   $control_thread->join();
 
-  Dada->logMsg(0, $dl, "STOPPING SCRIPT");
+  Dada::logMsg(0, $dl, "STOPPING SCRIPT");
                                               
   return 0;
 }
@@ -368,11 +368,11 @@ sub main() {
 
 sub controlThread($$) {
 
-  Dada->logMsg(1, $dl ,"controlThread: starting");
+  Dada::logMsg(1, $dl ,"controlThread: starting");
 
   my ($quit_file, $pid_file) = @_;
 
-  Dada->logMsg(2, $dl ,"controlThread(".$quit_file.", ".$pid_file.")");
+  Dada::logMsg(2, $dl ,"controlThread(".$quit_file.", ".$pid_file.")");
 
   # Poll for the existence of the control file
   while ((!(-f $quit_file)) && (!$quit_daemon)) {
@@ -383,10 +383,10 @@ sub controlThread($$) {
   $quit_daemon = 1;
 
   if ( -f $pid_file) {
-    Dada->logMsg(2, $dl ,"controlThread: unlinking PID file");
+    Dada::logMsg(2, $dl ,"controlThread: unlinking PID file");
     unlink($pid_file);
   } else {
-    Dada->logMsgWarn($warn, "controlThread: PID file did not exist on script exit");
+    Dada::logMsgWarn($warn, "controlThread: PID file did not exist on script exit");
   }
 
   return 0;
@@ -438,9 +438,9 @@ sub good($) {
   }
 
   # this script can *only* be run on the configured server
-  if (index($cfg{"SERVER_ALIASES"}, Dada->getHostMachineName()) < 0 ) {
+  if (index($cfg{"SERVER_ALIASES"}, Dada::getHostMachineName()) < 0 ) {
     return ("fail", "Error: script must be run on ".$cfg{"SERVER_HOST"}.
-                    ", not ".Dada->getHostMachineName());
+                    ", not ".Dada::getHostMachineName());
   }
 
   # check some package globals

@@ -59,7 +59,7 @@ sub main() {
   my $line     = "";
   my $time     = "";
 
-  $time = Dada->getCurrentDadaTime();
+  $time = Dada::getCurrentDadaTime();
   logMsg(2, $time, "server_logger::".$daemon_name);
 
   # install signal handlers
@@ -85,7 +85,7 @@ sub main() {
       }
   
     } else {
-      $time = Dada->getCurrentDadaTime();
+      $time = Dada::getCurrentDadaTime();
 
     }
 
@@ -93,7 +93,7 @@ sub main() {
 
   }
 
-  $time = Dada->getCurrentDadaTime();
+  $time = Dada::getCurrentDadaTime();
   logMsg(2,  $time, "server_logger: finished reading from STDIN");
   
   return  0;

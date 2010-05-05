@@ -128,12 +128,12 @@ sub main() {
   $SIG{PIPE} = \&sigPipeHandle;
   
   # become a daemon
-  Dada->daemonize($log_file, $pid_file);
+  Dada::daemonize($log_file, $pid_file);
 
-  Dada->logMsg(0, $dl ,"STARTING SCRIPT");
+  Dada::logMsg(0, $dl ,"STARTING SCRIPT");
 
   # start the control thread
-  Dada->logMsg(2, $dl ,"starting controlThread(".$quit_file.", ".$pid_file.")");
+  Dada::logMsg(2, $dl ,"starting controlThread(".$quit_file.", ".$pid_file.")");
   $control_thread = threads->new(\&controlThread, $quit_file, $pid_file);
 
   # create handle set for reading
@@ -141,8 +141,8 @@ sub main() {
   $read_set->add($client_sock);
   $read_set->add($assist_sock);
 
-  Dada->logMsg(2, $dl, "Listening for clients ".$server_host.":".$client_port);
-  Dada->logMsg(2, $dl, "Listening for helpers ".$server_host.":".$assist_port);
+  Dada::logMsg(2, $dl, "Listening for clients ".$server_host.":".$client_port);
+  Dada::logMsg(2, $dl, "Listening for helpers ".$server_host.":".$assist_port);
 
   while (!$quit_daemon) {
 
@@ -162,7 +162,7 @@ sub main() {
         $hostinfo = gethostbyaddr($handle->peeraddr);
         $hostname = $hostinfo->name;
         $handle->autoflush();
-        Dada->logMsg(2, $dl, "Accepting client connection: ". $hostname);
+        Dada::logMsg(2, $dl, "Accepting client connection: ". $hostname);
         $read_set->add($handle);
         $handle = 0;
 
@@ -172,21 +172,21 @@ sub main() {
         $hostinfo = gethostbyaddr($handle->peeraddr);
         $hostname = $hostinfo->name;
         $handle->autoflush();
-        Dada->logMsg(2, $dl, "Accepting assist connection: ". $hostname);
+        Dada::logMsg(2, $dl, "Accepting assist connection: ". $hostname);
         $read_set->add($handle);
         $handle = 0;
 
       # read some data from a connceted node
       } else {
 
-        $line = Dada->getLine($rh);
+        $line = Dada::getLine($rh);
 
         # we have received an EOF on the socket, indicates closure
         if (! defined $line) {
 
           for ($i=0; $i<=$#helper_rhs; $i++) {
             if ($helper_rhs[$i] eq $rh) {
-              Dada->logMsg(2, $dl, "Helper disconnect: ".$helper_hosts[$i]);
+              Dada::logMsg(2, $dl, "Helper disconnect: ".$helper_hosts[$i]);
               splice(@helper_hosts, $i, 1);
               splice(@helper_ports, $i, 1);
               splice(@helper_rhs, $i, 1);
@@ -195,7 +195,7 @@ sub main() {
 
           for ($i=0; $i<=$#client_rhs; $i++) {
             if ($client_rhs[$i] eq $rh) {
-              Dada->logMsg(2, $dl, "Client disconnect: ".$client_hosts[$i]);
+              Dada::logMsg(2, $dl, "Client disconnect: ".$client_hosts[$i]);
               splice(@client_hosts, $i, 1);
               splice(@client_rhs, $i, 1);
             }
@@ -210,7 +210,7 @@ sub main() {
         } else {
 
           ($host, $arg) = split(/:/,$line, 2);
-          Dada->logMsg(1, $dl, "[".$host."] -> ".$arg);
+          Dada::logMsg(1, $dl, "[".$host."] -> ".$arg);
 
           # if a node is asking for help 
           if ($arg eq "help") {
@@ -221,7 +221,7 @@ sub main() {
             # If we have at least 1 machine to help 
             if ($#helper_hosts >= 0) {
 
-              Dada->logMsg(3, $dl, "We have help available");
+              Dada::logMsg(3, $dl, "We have help available");
          
               # grab the first helper from the arary 
               $helper_host = shift @helper_hosts;
@@ -230,17 +230,17 @@ sub main() {
 
               # tell the helper to expect incoming dbnic connection
               print $helper_rh "ack\r\n";
-              Dada->logMsg(1, "[".$helper_host."] <- ack");
+              Dada::logMsg(1, $dl, "[".$helper_host."] <- ack");
 
               # tell the client the host:port of the helping node
               print $rh $helper_host.":".$helper_port."\r\n";
-              Dada->logMsg(1, "[".$host."] <- ".$helper_host.":".$helper_port);
+              Dada::logMsg(1, $dl, "[".$host."] <- ".$helper_host.":".$helper_port);
 
             # we have no helper nodes available :(
             } else {
 
               # tell the client we have no help
-              Dada->logMsg(1, "[".$host."] <- none");
+              Dada::logMsg(1, $dl, "[".$host."] <- none");
               print $rh "none\r\n";
 
             }
@@ -271,7 +271,7 @@ sub main() {
   # Rejoin our daemon control thread
   $control_thread->join();
 
-  Dada->logMsg(0, $dl ,"STOPPING SCRIPT");
+  Dada::logMsg(0, $dl ,"STOPPING SCRIPT");
 
   return 0;
 
@@ -280,11 +280,11 @@ sub main() {
 
 sub controlThread($$) {
 
-  Dada->logMsg(1, $dl ,"controlThread: starting");
+  Dada::logMsg(1, $dl ,"controlThread: starting");
 
   my ($quit_file, $pid_file) = @_;
 
-  Dada->logMsg(2, $dl ,"controlThread(".$quit_file.", ".$pid_file.")");
+  Dada::logMsg(2, $dl ,"controlThread(".$quit_file.", ".$pid_file.")");
 
   # Poll for the existence of the control file
   while ((!(-f $quit_file)) && (!$quit_daemon)) {
@@ -295,10 +295,10 @@ sub controlThread($$) {
   $quit_daemon = 1;
 
   if ( -f $pid_file) {
-    Dada->logMsg(2, $dl ,"controlThread: unlinking PID file");
+    Dada::logMsg(2, $dl ,"controlThread: unlinking PID file");
     unlink($pid_file);
   } else {
-    Dada->logMsgWarn($warn, "controlThread: PID file did not exist on script exit");
+    Dada::logMsgWarn($warn, "controlThread: PID file did not exist on script exit");
   }
 
   return 0;
@@ -348,9 +348,9 @@ sub good($) {
   }
 
   # this script can *only* be run on the configured server
-  if (index($cfg{"SERVER_ALIASES"}, Dada->getHostMachineName()) < 0 ) {
+  if (index($cfg{"SERVER_ALIASES"}, Dada::getHostMachineName()) < 0 ) {
     return ("fail", "Error: script must be run on ".$cfg{"SERVER_HOST"}.
-                    ", not ".Dada->getHostMachineName());
+                    ", not ".Dada::getHostMachineName());
   }
 
   $client_sock = new IO::Socket::INET (

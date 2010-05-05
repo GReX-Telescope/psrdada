@@ -93,10 +93,10 @@ sub main() {
   $SIG{PIPE} = \&sigPipeHandle;
 
   # become a daemon
-  Dada->daemonize($log_file, $pid_file);
+  Dada::daemonize($log_file, $pid_file);
 
   # Open a connection to the server_sys_monitor.pl script
-  $log_sock = Dada->nexusLogOpen($log_host, $log_port);
+  $log_sock = Dada::nexusLogOpen($log_host, $log_port);
   if (!$log_sock) {
     print STDERR "Could not open log port: ".$log_host.":".$log_port."\n";
   }
@@ -152,7 +152,7 @@ sub main() {
   $control_thread->join();
 
   logMsg(0, "INFO", "STOPPING SCRIPT");
-  Dada->nexusLogClose($log_sock);
+  Dada::nexusLogClose($log_sock);
 
   return 0;
 }
@@ -191,7 +191,7 @@ sub findCompletedBand($) {
   $cmd = "find ".$archives_dir." -maxdepth 3 -name band.deleted".
          " -printf '\%h\\n' | awk -F/ '{print \$(NF-1)\"\/\"\$NF}' | sort";
   logMsg(3, "INFO", "findCompletedBand: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMsg(3, "INFO", "findCompletedBand: ".$result." ".$response);
   if ($result eq "ok") {
     @array= split(/\n/, $response);
@@ -203,7 +203,7 @@ sub findCompletedBand($) {
   $cmd = "find ".$archives_dir." -maxdepth 3 -name sent.to.swin".
          " -printf '\%h\\n' | awk -F/ '{print \$(NF-1)\"\/\"\$NF}' | sort";
   logMsg(3, "INFO", "findCompletedBand: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMsg(3, "INFO", "findCompletedBand: ".$result." ".$response);
   if ($result eq "ok") {
     @array = ();
@@ -220,7 +220,7 @@ sub findCompletedBand($) {
   $cmd = "find ".$archives_dir." -maxdepth 3 -name sent.to.parkes".
          " -printf '\%h\\n' | awk -F/ '{print \$(NF-1)\"\/\"\$NF}' | sort";
   logMsg(3, "INFO", "findCompletedBand: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMsg(3, "INFO", "findCompletedBand: ".$result." ".$response);
   if ($result eq "ok") {
     @array = ();
@@ -267,7 +267,7 @@ sub findCompletedBand($) {
 
       $cmd = "grep ^SOURCE ".$file." | awk '{print \$2}'";
       logMsg(3, "INFO", "findCompletedBand: ".$cmd);
-      ($result, $response) = Dada->mySystem($cmd);
+      ($result, $response) = Dada::mySystem($cmd);
       logMsg(3, "INFO", "findCompletedBand: ".$result." ".$response);
 
       if ($result ne "ok") {
@@ -281,7 +281,7 @@ sub findCompletedBand($) {
 
       $cmd = "grep ^PID ".$file." | awk '{print \$2}'";
       logMsg(3, "INFO", "findCompletedBand: ".$cmd);
-      ($result, $response) = Dada->mySystem($cmd);
+      ($result, $response) = Dada::mySystem($cmd);
       logMsg(3, "INFO", "findCompletedBand: ".$result." ".$response);
 
       if ($result ne "ok") {
@@ -317,7 +317,7 @@ sub findCompletedBand($) {
 
         $cmd = "du -sh ".$archives_dir."/".$k." | awk '{print \$1}'";
         logMsg(2, "INFO", "findCompletedBand: ".$cmd);
-        ($result, $response) = Dada->mySystem($cmd);
+        ($result, $response) = Dada::mySystem($cmd);
         logMsg(2, "INFO", "findCompletedBand: ".$result." ".$response);
         $space = $response;
 
@@ -330,7 +330,7 @@ sub findCompletedBand($) {
       if (-f $archives_dir."/".$k."/obs.deleted") {
         $cmd = "touch ".$archives_dir."/".$k."/band.deleted";
         logMsg(2, "INFO", "findCompletedBand: ".$cmd);
-        ($result, $response) = Dada->mySystem($cmd);
+        ($result, $response) = Dada::mySystem($cmd);
         logMsg(2, "INFO", "findCompletedBand: ".$result." ".$response);
 
       } else {
@@ -370,7 +370,7 @@ sub checkBandArchives($$$) {
   $file = $path."/obs.start";
   $cmd = "grep ^PROC_FILE ".$file." | awk '{print \$2}'";
   logMsg(3, "INFO", "checkBandArchives: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMsg(3, "INFO", "checkBandArchives: ".$result." ".$response);
 
   if ($result ne "ok") {
@@ -387,7 +387,7 @@ sub checkBandArchives($$$) {
   # get any subdirs [i.e. multifold] that may exist
   $cmd = "find ".$path." -mindepth 1 -type d -printf '%f\n'";
   logMsg(3, "INFO", "checkBandArchives: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMsg(3, "INFO", "checkBandArchives: ".$result." ".$response);
   if ($result ne "ok") {
     logMsg(0, "WARN", "checkBandArchives: could not check if multifold: ".$response);
@@ -410,7 +410,7 @@ sub checkBandArchives($$$) {
     # count the archives
     $cmd = "find ".$path." -name '*.ar' | wc -l";
     logMsg(3, "INFO", "checkBandArchives: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
+    ($result, $response) = Dada::mySystem($cmd);
     logMsg(3, "INFO", "checkBandArchives: ".$result." ".$response);
     if ($result ne "ok") {
       logMsg(0, "WARN", "checkBandArchives: could not count archives for ".$path.": ".$response);
@@ -422,7 +422,7 @@ sub checkBandArchives($$$) {
     if ( -f $path."/band.tres" ) {
       $cmd = "psredit -c nsubint -Q ".$path."/band.tres | awk '{print \$2}'";
       logMsg(3, "INFO", "checkBandArchives: ".$cmd);
-      ($result, $response) = Dada->mySystem($cmd);
+      ($result, $response) = Dada::mySystem($cmd);
       logMsg(3, "INFO", "checkBandArchives: ".$result." ".$response);
       if ($result ne "ok") {
         logMsg(0, "WARN", "checkBandArchives: could not count subints in band.tres for ".$path.": ".$response);
@@ -464,7 +464,7 @@ sub regenBandArchives($)
 
   $cmd = "find -L ".$dir." -name '2*.ar'";
   logMsg(2, "INFO", "regenBandArchives: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMsg(3, "INFO", "regenBandArchives: ".$result." ".$response);
 
   if ($result ne "ok") {
@@ -489,7 +489,7 @@ sub regenBandArchives($)
   # generate a META file list of the filenames to be processed
   $cmd = "find ".$dir." -name '2*.ar' | sort > ".$dir."/archives.list";
   logMsg(2, "INFO", "regenBandArchives: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMsg(3, "INFO", "regenBandArchives: ".$result." ".$response);
   if ($result ne "ok") {
     logMsg(0, "ERROR", "regenBandArchives: ".$cmd." failed: ".$response);
@@ -499,7 +499,7 @@ sub regenBandArchives($)
   # Add the archive to the T scrunched total
   $cmd = "psradd -T -f ".$fres_archive." -M ".$dir."/archives.list";
   logMsg(2, "INFO", "regenBandArchives: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMsg(2, "INFO", "regenBandArchives: ".$result." ".$response);
   if ($result ne "ok") {
     logMsg(0, "ERROR", $cmd." failed: ".$response);
@@ -509,7 +509,7 @@ sub regenBandArchives($)
   # Add the archive to the F scrunched total
   $cmd = "psradd -jF -f ".$tres_archive." -M ".$dir."/archives.list";
   logMsg(2, "INFO", "regenBandArchives: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMsg(2, "INFO", "regenBandArchives: ".$result." ".$response);
   if ($result ne "ok") {
     logMsg(0, "ERROR", $cmd." failed: ".$response);
@@ -542,7 +542,7 @@ sub deleteCompletedBand($$$) {
   if (-f $path."/slow_rm.ls") {
     $cmd = "rm -f ".$path."/slow_rm.ls";
     logMsg(2, "INFO", "deleteCompletedBand: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
+    ($result, $response) = Dada::mySystem($cmd);
     logMsg(2, "INFO", "deleteCompletedBand: ".$result." ".$response);
     if ($result ne "ok") {
       logMsg(0, "ERROR", "deleteCompletedBand: ".$cmd." failed: ".$response);
@@ -552,7 +552,7 @@ sub deleteCompletedBand($$$) {
 
   $cmd = "find ".$path." -name '*.ar' -o -name '*.tar' > ".$path."/slow_rm.ls";
   logMsg(2, "INFO", $cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMsg(2, "INFO", $result." ".$response);
   if ($result ne "ok") {
     logMsg(0, "ERROR", "deleteCompletedBand: find command failed: ".$response);
@@ -566,7 +566,7 @@ sub deleteCompletedBand($$$) {
   $cmd = "slow_rm -r 256 -M ".$path."/slow_rm.ls";
 
   logMsg(2, "INFO", $cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMsg(2, "INFO", "deleteCompletedBand: ".$result." ".$response);
   if ($result ne "ok") {
     logMsg(0, "ERROR", "deleteCompletedBand: ".$cmd." failed: ".$response);
@@ -575,14 +575,14 @@ sub deleteCompletedBand($$$) {
 
   $cmd = "touch ".$path."/band.deleted";
   logMsg(2, "INFO", "deleteCompletedBand: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMsg(2, "INFO", "deleteCompletedBand: ".$result." ".$response);
 
   # If the old style UTC_START/band/obs.deleted existed, change it to a band.deleted
   if (-f $path."/obs.deleted") {
     $cmd = "rm -f ".$path."/obs.deleted";
     logMsg(2, "INFO", "deleteCompletedBand: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
+    ($result, $response) = Dada::mySystem($cmd);
     logMsg(2, "INFO", "deleteCompletedBand: ".$result." ".$response);
     if ($result ne "ok") {
       logMsg(0, "ERROR", "deleteCompletedBand: ".$cmd." failed: ".$response);
@@ -593,7 +593,7 @@ sub deleteCompletedBand($$$) {
   if (-f $path."/slow_rm.ls") {
      $cmd = "rm -f ".$path."/slow_rm.ls";
     logMsg(2, "INFO", "deleteCompletedBand: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
+    ($result, $response) = Dada::mySystem($cmd);
     logMsg(2, "INFO", "deleteCompletedBand: ".$result." ".$response);
     if ($result ne "ok") {
       logMsg(0, "ERROR", "deleteCompletedBand: ".$cmd." failed: ".$response);
@@ -642,12 +642,12 @@ sub logMsg($$$) {
 
   my ($level, $type, $msg) = @_;
   if ($level <= $dl) {
-    my $time = Dada->getCurrentDadaTime();
+    my $time = Dada::getCurrentDadaTime();
     if (! $log_sock ) {
-      $log_sock = Dada->nexusLogOpen($log_host, $log_port);
+      $log_sock = Dada::nexusLogOpen($log_host, $log_port);
     }
     if ($log_sock) {
-      Dada->nexusLogMessage($log_sock, $time, "sys", $type, "cleaner", $msg);
+      Dada::nexusLogMessage($log_sock, $time, "sys", $type, "cleaner", $msg);
     }
     print "[".$time."] ".$msg."\n";
   }
@@ -684,7 +684,7 @@ sub sigPipeHandle($) {
   print STDERR $daemon_name." : Received SIG".$sigName."\n";
   $log_sock = 0;
   if ($log_host && $log_port) {
-    $log_sock = Dada->nexusLogOpen($log_host, $log_port);
+    $log_sock = Dada::nexusLogOpen($log_host, $log_port);
   }
 
 }

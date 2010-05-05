@@ -103,19 +103,19 @@ sub main() {
   $SIG{PIPE} = \&sigPipeHandle;
   
   # become a daemon
-  Dada->daemonize($log_file, $pid_file);
+  Dada::daemonize($log_file, $pid_file);
 
-  Dada->logMsg(0, $dl, "STARTING SCRIPT");
+  Dada::logMsg(0, $dl, "STARTING SCRIPT");
 
   # start the control thread
-  Dada->logMsg(2, $dl, "starting controlThread(".$quit_file.", ".$pid_file.")");
+  Dada::logMsg(2, $dl, "starting controlThread(".$quit_file.", ".$pid_file.")");
   $control_thread = threads->new(\&controlThread, $quit_file, $pid_file);
 
   # create a read set for handle connections and data 
   $read_set = new IO::Select();
   $read_set->add($log_sock);
 
-  Dada->logMsg(2, $dl, "Waiting for connection on ".$log_host.":".$log_port);
+  Dada::logMsg(2, $dl, "Waiting for connection on ".$log_host.":".$log_port);
 
   while (!$quit_daemon) {
 
@@ -133,7 +133,7 @@ sub main() {
         $hostinfo = gethostbyaddr($handle->peeraddr);
         $hostname = $hostinfo->name;
 
-        Dada->logMsg(2, $dl, "Accepting connection from ", $hostname);
+        Dada::logMsg(2, $dl, "Accepting connection from ". $hostname);
 
         # Add this read handle to the set
         $read_set->add($handle);
@@ -144,13 +144,13 @@ sub main() {
         $hostinfo = gethostbyaddr($rh->peeraddr);
         $hostname = $hostinfo->name;
         ($host, $domain) = split(/\./,$hostname,2);
-        $string = Dada->getLine($rh);
+        $string = Dada::getLine($rh);
 
         if (! defined $string) {
           $read_set->remove($rh);
           close($rh);
         } else {
-          Dada->logMsg(2, $dl, "Received String \"".$string."\"");
+          Dada::logMsg(2, $dl, "Received String \"".$string."\"");
           logMessage($host, $string);
         }
       }
@@ -160,7 +160,7 @@ sub main() {
   # Rejoin our daemon control thread
   $control_thread->join();
 
-  Dada->logMsg(0, $dl, "STOPPING SCRIPT");
+  Dada::logMsg(0, $dl, "STOPPING SCRIPT");
 
   close($log_sock);
 
@@ -248,11 +248,11 @@ sub logMessage($$) {
 
 sub controlThread($$) {
 
-  Dada->logMsg(1, $dl, "controlThread: starting");
+  Dada::logMsg(1, $dl, "controlThread: starting");
 
   my ($quit_file, $pid_file) = @_;
 
-  Dada->logMsg(2, $dl, "controlThread(".$quit_file.", ".$pid_file.")");
+  Dada::logMsg(2, $dl, "controlThread(".$quit_file.", ".$pid_file.")");
 
   # Poll for the existence of the control file
   while ((!(-f $quit_file)) && (!$quit_daemon)) {
@@ -263,10 +263,10 @@ sub controlThread($$) {
   $quit_daemon = 1;
 
   if ( -f $pid_file) {
-    Dada->logMsg(2, $dl, "controlThread: unlinking PID file");
+    Dada::logMsg(2, $dl, "controlThread: unlinking PID file");
     unlink($pid_file);
   } else {
-    Dada->logMsgWarn($warn, "controlThread: PID file did not exist on script exit");
+    Dada::logMsgWarn($warn, "controlThread: PID file did not exist on script exit");
   }
 
   return 0;
@@ -316,9 +316,9 @@ sub good($) {
   }
 
   # this script can *only* be run on the configured server
-  if (index($cfg{"SERVER_ALIASES"}, Dada->getHostMachineName()) < 0 ) {
+  if (index($cfg{"SERVER_ALIASES"}, Dada::getHostMachineName()) < 0 ) {
     return ("fail", "Error: script must be run on ".$cfg{"SERVER_HOST"}.
-                    ", not ".Dada->getHostMachineName());
+                    ", not ".Dada::getHostMachineName());
   }
 
   $log_sock = new IO::Socket::INET (

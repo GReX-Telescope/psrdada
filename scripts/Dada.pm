@@ -17,7 +17,6 @@ require AutoLoader;
 @EXPORT_OK = qw(
   &sendTelnetCommand
   &connectToMachine
-  &setBinaryDir
   &getAPSRBinaryDir
   &getDADABinaryDir
   &getCurrentBinaryVersion
@@ -93,7 +92,7 @@ sub getDADA_ROOT() {
 
 sub getDadaConfig() {
   my $config_file = getDadaCFGFile();
-  my %config = readCFGFileIntoHash("Dada", $config_file, 0);
+  my %config = readCFGFileIntoHash($config_file, 0);
   return %config;
 }
 
@@ -101,8 +100,8 @@ sub getDadaConfig() {
 #
 # Returns the name of the file that controls the daemons
 #
-sub getDaemonControlFile($$) {
-  my ($module, $control_dir) = @_;
+sub getDaemonControlFile($) {
+  my ($control_dir) = @_;
   return $control_dir."/quitdaemons";
 }
 
@@ -125,9 +124,9 @@ sub getDadaCFGFile() {
 # Parse the lines in the array reference and place
 # them in an hash of key:value pairs
 #
-sub parseCFGLines($\@) {
+sub parseCFGLines(\@) {
   
-  (my $module, my $lines_ref) = @_;
+  (my $lines_ref) = @_;
 
   my @lines = @$lines_ref;
 
@@ -159,9 +158,9 @@ sub parseCFGLines($\@) {
 # Reads a configuration file in the typical DADA format and strips
 # out comments and newlines. Returns as an associative array/hash
 #
-sub readCFGFile($$) {
+sub readCFGFile($) {
 
-  (my $module, my $fname) = @_;
+  (my $fname) = @_;
   my %return_array;
   my @lines = ();
 
@@ -196,9 +195,9 @@ sub readCFGFile($$) {
   return %return_array;
 }
 
-sub readRawTextFile($$) {
+sub readRawTextFile($) {
 
-  (my $module, my $fname) = @_;
+  (my $fname) = @_;
   my @return_array;
 
   if (!(-f $fname)) {
@@ -221,11 +220,6 @@ sub readRawTextFile($$) {
 }
 
 
-sub setBinaryDir($$) {
-  my ($module, $dir) = @_;
-  $DEFAULT_BINARY_DIR = $dir;
-}
-
 sub getAPSRBinaryDir() {
   return $DEFAULT_APSR_BINARY_DIR;
 }
@@ -235,9 +229,109 @@ sub getDADABinaryDir() {
 }
 
 
-sub connectToMachine($$$;$) {
+###############################################################################
+# 
+# Open a TCP socket to the specified host, port and debug level for messages
+#
+sub openSocket($$$;$) 
+{
+
+  (my $host, my $port, my $dl, my $attempts=10) = @_;
+
+  my $sock = 0;
+  my $tries = 0;
+
+  # try to open the socket
+  while ((!$sock) && ($tries < $attempts)) 
+  {
+
+    $sock = new IO::Socket::INET (
+      PeerAddr => $host,
+      PeerPort => $port,
+      Proto => 'tcp',
+    );
+
+    if (!$sock)
+    {
+      $tries++;
+      sleep 1;
+    }
+  }
+
+  if ($sock) {
+    
+    # dont buffer IO
+    $sock->autoflush(1);
+
+    Dada::logMsg(1, $dl, "Connected to ".$host.":".$port);
+    return $sock;
   
-  (my $module, my $machine, my $port, my $ntries=10) = @_;
+  } else {
+    Dada::logMsg(0, $dl, "ERROR : Could not connect to ".$host.":".$port." ".$!);
+    return 0;
+  }
+}
+
+
+###############################################################################
+# 
+# Send a 'telnet' style command and return the response
+#
+sub telnetCmd($$$) {
+    
+  my ($sock, $command, $dl) = @_;
+  my @lines;
+  my $response = "";
+  my $result = "fail";
+  my $eof = 0;
+    
+  my $line;
+    
+  print $sock $command."\r\n";
+  Dada::logMsg(1, $dl, "Dada::telnetCmd: sent ".$command);
+
+  while (!$eof)
+  {
+  
+    # wait no more than 5 seconds for a reponse  
+    $line = getLineSelect($sock, 5);
+    
+    # remove a leading "> " if it exists
+    $line =~ s/^> //;
+  
+    $/ = "\n";
+    chomp $line;
+    $/ = "\r";
+    chomp $line;
+    $/ = "\n";
+
+    if (($line eq "ok") || ($line eq "> ok")) {
+      $eof = 1;
+      $result = "ok";
+    } elsif (($line eq "fail") || ($line eq "> fail")) {
+      $eof = 1;
+      $result = "fail";
+    } else {
+      if ($response eq "") {
+        $response = $line;
+      } else {
+        $response = $response."\n".$line;
+      } 
+    }
+  }
+  
+  $/ = "\n";
+
+  Dada::logMsg(1, $dl, "Dada::telnetCmd: recv ".$result." ".$response);
+
+  return ($result, $response);
+
+} 
+
+
+sub connectToMachine($$;$) {
+  
+  (my $machine, my $port, my $ntries=10) = @_;
 
   my $tries = 0;
   my $handle = 0;
@@ -267,6 +361,7 @@ sub connectToMachine($$$;$) {
   }
 
   if ($handle) {
+
     # dont buffer IO
     $handle->autoflush(1);
 
@@ -284,9 +379,9 @@ sub connectToMachine($$$;$) {
 
 }
 
-sub getLine($$) {
+sub getLine($) {
 
-  (my $module, my $handle) = @_;
+  (my $handle) = @_;
 
   my $line = <$handle>;
   $/ = "\n";
@@ -299,29 +394,31 @@ sub getLine($$) {
 
 }
 
-sub getLineSelect($$$) {
+sub getLineSelect($$) {
 
-  (my $module, my $handle, my $timeout) = @_;
+  (my $handle, my $timeout) = @_;
 
   my $read_set = new IO::Select($handle);  # create handle set for reading
 
   my ($readable_handles) = IO::Select->select($read_set, undef, undef, $timeout);
 
-  my $line = "null";
+  my $line = "";
   my $rh = 0;
 
   foreach $rh (@$readable_handles) {
-    $line = Dada->getLine($rh);
+    if ($line ne "") {
+      $line .= "\n";
+    }
+    $line .= Dada::getLine($rh);
   }
-
   return $line;
 
 }
 
 
-sub sendTelnetCommand($$$) {
+sub sendTelnetCommand($$) {
 
-  (my $module, my $handle, my $command) = @_;
+  (my $handle, my $command) = @_;
   my @lines;
   my $response = "";
   my $result = "fail";
@@ -338,7 +435,7 @@ sub sendTelnetCommand($$$) {
 
     # AJ iffy change for testing.
     $line = <$handle>;
-    #$line = getLineSelect("Dada", $handle, 5);
+    #$line = getLineSelect($handle, 5);
 
     # remove a leading "> " if it exists
     $line =~ s/^> //;
@@ -375,13 +472,13 @@ sub sendTelnetCommand($$$) {
 }
 
 
-sub getPWCCState($$) {
+sub getPWCCState($) {
 
-  (my $module, my $handle) = @_;
+  (my $handle) = @_;
   my $result = "fail";
   my $response = "";
 
-  ($result, $response) = sendTelnetCommand("Dada",$handle,"state");
+  ($result, $response) = sendTelnetCommand($handle, "state");
 
   if ($result eq "ok") {
     #Parse the $response;
@@ -417,10 +514,11 @@ sub getPWCCState($$) {
 
 }
 
+###############################################################################
 
-sub addToTime($$$) {
+sub addToTime($$) {
 
-  (my $module, my $time, my $toadd) = @_;
+  (my $time, my $toadd) = @_;
 
   my @t = split(/-|:/,$time);
 
@@ -437,30 +535,13 @@ sub addToTime($$$) {
                                                                                                                
   return $year."-".$mon."-".$mday."-".$hour.":".$min.":".$sec;
 
-  
-  #@t[5] += $toadd;
-  #if (@t[5] >= 60) { @t[4]++; @t[5] -= 60; }
-  #if (@t[4] >= 60) { @t[3]++; @t[4] -= 60; }
-  #if (@t[3] >=24) {
-  #  print "Stop working at midnight!!. Couldn't be bothered ";
-  #  print "accounting for this case... :p\n";
-  #  exit(0);
-  #}
-#
-#  my $year = @t[0];
-#  my $mon = sprintf("%02d", @t[1]);
-#  my $mday = sprintf("%02d", @t[2]);
-#  my $hour = sprintf("%02d", @t[3]);
-#  my $min = sprintf("%02d", @t[4]);
-#  my $sec = sprintf("%02d", @t[5]);
-
-#  return $year."-".$mon."-".$mday."-".$hour.":".$min.":".$sec;
-
 }
 
-sub getCurrentDadaTime($$) {
+###############################################################################
 
-  (my $module, my $secsToAdd) = @_;
+sub getCurrentDadaTime(;$) {
+
+  (my $secsToAdd=0) = @_;
 
   my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime (time+$secsToAdd);
   $year += 1900;
@@ -475,9 +556,11 @@ sub getCurrentDadaTime($$) {
 
 }
 
-sub printDadaTime($$) {
+###############################################################################
 
-  my ($module, $time) = @_;
+sub printDadaTime($) {
+
+  my ($time) = @_;
 
   my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime ($time);
   $year += 1900;
@@ -492,9 +575,11 @@ sub printDadaTime($$) {
 
 }
 
-sub printTime($$$) {
+###############################################################################
 
-  my ($module, $time, $type) = @_;
+sub printTime($$) {
+
+  my ($time, $type) = @_;
                                                                                                                  
   my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime ($time);
 
@@ -514,24 +599,24 @@ sub printTime($$$) {
 
 }
 
-sub printDadaLocalTime($$) {
+sub printDadaLocalTime($) {
 
-  my ($module, $time) = @_;
-  return printTime("Dada", $time, "local");
-
-}
-
-sub printDadaUTCTime($$) {
-
-  my ($module, $time) = @_;
-  return printTime("Dada", $time, "utc");
+  my ($time) = @_;
+  return printTime($time, "local");
 
 }
 
+sub printDadaUTCTime($) {
 
-sub waitForState($$$$) {
+  my ($time) = @_;
+  return printTime($time, "utc");
+
+}
+
+
+sub waitForState($$$) {
                                                                                 
-  (my $module, my $stateString, my $handle, my $Twait) = @_;
+  (my $stateString, my $handle, my $Twait) = @_;
                                                                                 
   my $pwcc;
   my $pwc;
@@ -552,7 +637,7 @@ sub waitForState($$$$) {
                                                                                 
     $myready = "yes";
                                                                                 
-    ($pwcc, @pwcs) = getPWCCState("Dada",$handle);
+    ($pwcc, @pwcs) = getPWCCState($handle);
                                                                                 
     if ($pwcc ne $stateString) {
       if (DEBUG_LEVEL >= 1){
@@ -632,13 +717,13 @@ sub getDefaultBinaryVersion() {
   return $DADA_ROOT."/bin/stable";
 }
 
-sub setBinaryDir($$) {
+sub setBinaryDir($) {
 
-  (my $module, my $dir) = @_;
+  (my $dir) = @_;
   
   my $result;
   my $response;
-  ($result, $response) = getAvailableBinaryVersions();
+  ($result, $response) = Dada::getAvailableBinaryVersions();
   if ($result ne "ok") {  
     return ("fail","The specified directory was not a valid binary directory");
   }
@@ -739,9 +824,9 @@ sub in_array() {
   return 0;
 }
 
-sub getDiskInfo($$) {
+sub getDiskInfo($) {
   
-  (my $module, my $dir) = @_;
+  (my $dir) = @_;
 
   my $dfresult = `df $dir -h 2>&1`;
   if ($? != 0) {
@@ -754,9 +839,9 @@ sub getDiskInfo($$) {
   }
 }
 
-sub getRawDisk($$) {
+sub getRawDisk($) {
 
-  (my $module, my $dir) = @_;
+  (my $dir) = @_;
 
   my $dfresult = `df $dir -B 1048576 2>&1`;
   if ($? != 0) {
@@ -770,9 +855,9 @@ sub getRawDisk($$) {
 
 }
 
-sub getUnprocessedFiles($$) {
+sub getUnprocessedFiles($) {
 
-  (my $module, my $dir) = @_;
+  (my $dir) = @_;
 
   my $duresult = `du -sB 1048576 $dir | awk '{print \$1}' `;
   chomp($duresult);
@@ -784,9 +869,9 @@ sub getUnprocessedFiles($$) {
 
 }
 
-sub getDBInfo($$) {
+sub getDBInfo($) {
 
-  my ($module, $key) = @_;
+  my ($key) = @_;
 
   my $bindir = getCurrentBinaryVersion();
   my $cmd = $bindir."/dada_dbmetric -k ".$key;
@@ -800,9 +885,9 @@ sub getDBInfo($$) {
 
 }
 
-sub getAllDBInfo($$) {
+sub getAllDBInfo($) {
 
-  my ($module, $key_string) = @_;
+  my ($key_string) = @_;
 
   my @keys = split(/ /,$key_string);
   my $key;
@@ -860,9 +945,9 @@ sub getLoadInfo() {
 
 }
 
-sub getLoad($$) {
+sub getLoad($) {
 
-  my ($module, $type) = @_;
+  my ($type) = @_;
   my $one;
   my $five;
   my $fifteen;
@@ -893,12 +978,12 @@ sub getTempInfo() {
   my $result = "";
   my $response = "";
 
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   return ($result, $response);
 }
 
-sub sendErrorToServer($$$$){
-  (my $module, my $host, my $script, my $message) = @_;
+sub sendErrorToServer($$$){
+  (my $host, my $script, my $message) = @_;
 }
 
 
@@ -906,11 +991,11 @@ sub sendErrorToServer($$$$){
 # Logs a message to the nexus machine on the standard logging port.
 # The type and level dictate where the log message will be recorded
 #
-sub nexusLogOpen($$$) {
+sub nexusLogOpen($$) {
 
-  my ($module, $host, $port) = @_;
+  my ($host, $port) = @_;
 
-  my $handle = connectToMachine("Dada", $host, $port); 
+  my $handle = connectToMachine($host, $port); 
   # So output goes their straight away
   if (!$handle) {
     print STDERR "Error: $0 could not connect to ".$host.":".$port."\n";
@@ -921,18 +1006,18 @@ sub nexusLogOpen($$$) {
 
 }
 
-sub nexusLogClose($$) { 
+sub nexusLogClose($) { 
 
-  (my $module, my $handle) = @_;
+  (my $handle) = @_;
   if ($handle) {
     $handle->close();
   }
 
 }
 
-sub nexusLogMessage($$$$$$$) {
+sub nexusLogMessage($$$$$$) {
 
-  (my $module, my $handle, my $timestamp, my $type, my $level, my $source, my $message) = @_;
+  (my $handle, my $timestamp, my $type, my $level, my $source, my $message) = @_;
   if ($handle) {
     print $handle $timestamp."|".$type."|".$level."|".$source."|".$message."\r\n";
   }
@@ -940,16 +1025,30 @@ sub nexusLogMessage($$$$$$$) {
 
 }
 
+###############################################################################
+# 
+# print a timestamped message if debug levels are correct to STDOUT
+#
+sub log($$$)
+{
+  my ($lvl, $dlvl, $message) = @_;
+  if ($lvl <= $dlvl) 
+  {
+    print STDOUT "[".Dada::getCurrentDadaTime()."] ".$message."\n";
+  }
+}
 
+
+###############################################################################
 #
 # Prints the message to STDOUT if the level is < dblevel
 #
 sub logMsg($$$) {
 
-  my ($module, $lvl, $dlvl, $message) = @_;
+  my ($lvl, $dlvl, $message) = @_;
 
   if ($lvl <= $dlvl) {
-    my $time = Dada->getCurrentDadaTime();
+    my $time = Dada::getCurrentDadaTime();
     print STDOUT "[".$time."] ".$message."\n";
   }
 }
@@ -957,9 +1056,9 @@ sub logMsg($$$) {
 #
 # Prints, the message to STDOUT and cat to fname
 #
-sub logMsgWarn($$$$) {
+sub logMsgWarn($$) {
 
-  my ($module, $fname, $message) = @_;
+  my ($fname, $message) = @_;
 
   my $type = "";
 
@@ -970,7 +1069,7 @@ sub logMsgWarn($$$$) {
     $type = "ERROR: ";
   } 
 
-  my $time = Dada->getCurrentDadaTime();
+  my $time = Dada::getCurrentDadaTime();
 
   # Print the message to the log
   print STDOUT "[".$time."] ".$type.$message."\n";
@@ -989,17 +1088,17 @@ sub getServerResultsNFS() {
   return "/nfs/results";
 }
 
-sub constructRsyncURL($$$$) {
+sub constructRsyncURL($$$) {
 
-  my ($module, $user, $host, $dir) = @_;
+  my ($user, $host, $dir) = @_;
   return $user."@".$host.":".$dir;
 
 }
 
 
-sub headerFormat($$$) {
+sub headerFormat($$) {
 
-  (my $module, my $key, my $string) = @_;
+  (my $key, my $string) = @_;
 
   my $pad = 20 - length($key);
   my $header_string = $key;
@@ -1012,9 +1111,9 @@ sub headerFormat($$$) {
   return $header_string;
 }
 
-sub mySystem($$$) {
+sub mySystem($;$) {
 
-  (my $module, my $cmd, my $background=0) = @_;
+  (my $cmd, my $background=0) = @_;
 
   my $rVal = 0;
   my $result = "ok";
@@ -1040,9 +1139,9 @@ sub mySystem($$$) {
 }
 
 
-sub killProcess($$) {
+sub killProcess($) {
 
-  (my $module, my $pname) = @_;
+  (my $pname) = @_;
 
   my $pscmd = "";
   my $cmd = "";
@@ -1054,21 +1153,21 @@ sub killProcess($$) {
   $pscmd = "ps axu | grep \"".$pname."\" | grep -v grep | awk '{print \$2}'";
 
   $cmd = $pscmd;
-  Dada->logMsg(2, $fnl, "killProcess: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
-  Dada->logMsg(2, $fnl, "killProcess: ".$result." ".$response);
+  Dada::logMsg(2, $fnl, "killProcess: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(2, $fnl, "killProcess: ".$result." ".$response);
 
   # We have a process running
   if (($result eq "ok") && ($response ne ""))  {
 
     $pids = $response;
     $pids =~ s/\n/ /;
-    Dada->logMsg(2, $fnl, "killProcess: PIDS=".$pids);
+    Dada::logMsg(2, $fnl, "killProcess: PIDS=".$pids);
 
     $cmd = "kill -TERM ".$pids;
-    Dada->logMsg(2, $fnl, "killProcess: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
-    Dada->logMsg(2, $fnl, "killProcess: ".$result." ".$response);
+    Dada::logMsg(2, $fnl, "killProcess: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(2, $fnl, "killProcess: ".$result." ".$response);
 
     # now check that the processes actually exited
     sleep(1);
@@ -1076,30 +1175,30 @@ sub killProcess($$) {
     # Now get the PID list   
     $cmd = $pscmd;
 
-    Dada->logMsg(2, $fnl, "killProcess: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
-    Dada->logMsg(2, $fnl, "killProcess: ".$result." ".$response);
+    Dada::logMsg(2, $fnl, "killProcess: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(2, $fnl, "killProcess: ".$result." ".$response);
 
     # they didn't exit
     if (($result eq "ok") && ($response ne ""))  {
 
       $pids = $response;
       $pids =~ s/\n/ /;
-      Dada->logMsg(2, $fnl, "killProcess: PIDS=".$pids);
+      Dada::logMsg(2, $fnl, "killProcess: PIDS=".$pids);
 
       $cmd = "kill -KILL ".$pids;
-      Dada->logMsg(2, $fnl, "killProcess: ".$cmd);
-      ($result, $response) = Dada->mySystem($cmd);
-      Dada->logMsg(2, $fnl, "killProcess: ".$result." ".$response);
+      Dada::logMsg(2, $fnl, "killProcess: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      Dada::logMsg(2, $fnl, "killProcess: ".$result." ".$response);
 
       sleep(1);
 
       # Now get the PID list   
       $cmd = $pscmd;
 
-      Dada->logMsg(2, $fnl, "killProcess: ".$cmd);
-      ($result, $response) = Dada->mySystem($cmd);
-      Dada->logMsg(2, $fnl, "killProcess: ".$result." ".$response);
+      Dada::logMsg(2, $fnl, "killProcess: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      Dada::logMsg(2, $fnl, "killProcess: ".$result." ".$response);
 
       if (($result eq "ok") && ($response ne ""))  {
         return ("fail", "process not killed");
@@ -1121,9 +1220,9 @@ sub killProcess($$) {
 # Reads a configuration file in the typical DADA format and strips
 # out comments and newlines. Returns as an associative array/hash
 #
-sub readCFGFileIntoHash($$$) {
+sub readCFGFileIntoHash($$) {
 
-  (my $module, my $fname, my $raw) = @_;
+  (my $fname, my $raw) = @_;
 
   my %values = ();
 
@@ -1173,9 +1272,9 @@ sub readCFGFileIntoHash($$$) {
 # Redirects stdout and stderr to the logfile and closes stdin. Perfect for
 # all your daemonizing needs
 #
-sub daemonize($$$) {
+sub daemonize($$) {
                
-  my ($module, $logfile, $pidfile) = @_;
+  my ($logfile, $pidfile) = @_;
                                                                                 
   my $pid = fork;
                                                                                 
@@ -1206,9 +1305,9 @@ sub daemonize($$$) {
 #
 # check for more than 1 version of the specified process name
 #
-sub preventDuplicateDaemon($$) {
+sub preventDuplicateDaemon($) {
 
-  my ($module, $process_name) = @_;
+  my ($process_name) = @_;
 
   my $cmd = "ps auxwww | grep '".$process_name."' | grep perl | grep -v grep | wc";
   my $result = `$cmd`;
@@ -1266,9 +1365,9 @@ sub checkScriptIsUnique($) {
 # ssh to the host as the user, and run the remote_cmd. Optionally pipe the
 # output to the localpipe command
 #
-sub remoteSshCommand($$$$;$$) {
+sub remoteSshCommand($$$;$$) {
 
-  (my $module, my $user, my $host, my $remote_cmd, my $dir="", my $pipe="") = @_;
+  (my $user, my $host, my $remote_cmd, my $dir="", my $pipe="") = @_;
 
   my $result = "";
   my $response = "";
@@ -1319,9 +1418,9 @@ sub remoteSshCommand($$$$;$$) {
 # Takes a DADA header in a string and returns
 # a hash of the header with key -> value pairs
 #
-sub headerToHash($$) {
+sub headerToHash($) {
 
-  my ($module, $raw_hdr) = @_;
+  my ($raw_hdr) = @_;
 
   my $line = "";
   my @lines = ();
@@ -1341,9 +1440,9 @@ sub headerToHash($$) {
   return %hash;
 }
 
-sub daemonBaseName($$) {
+sub daemonBaseName($) {
 
-  my ($module, $name) = @_;
+  my ($name) = @_;
 
   $name =~ s/\.pl$//;
   $name =~ s/^.*client_//;
@@ -1378,17 +1477,16 @@ sub getProjectGroups($) {
 #
 # Determine the processing command line given a raw header for APSR/CASPSR
 #
-sub processHeader($$\%) {
+sub processHeader($$) {
 
-  my ($module, $raw_header, $cfg_ref) = @_;
+  my ($raw_header, $config_dir) = @_;
 
-  my %cfg = %$cfg_ref;
   my $result = "ok";
   my $response = "";
   my $cmd = "";
   my %h = ();
 
-  %h = Dada->headerToHash($raw_header);
+  %h = Dada::headerToHash($raw_header);
 
   if (($result eq "ok") && (length($h{"UTC_START"}) < 5)) {
     $result = "fail";
@@ -1421,7 +1519,7 @@ sub processHeader($$\%) {
     $source =~ s/[a-zA-Z]*$//;
 
     # find the source in multi.txt
-    $cmd = "grep ^".$source." ".$cfg{"CONFIG_DIR"}."/multi.txt";
+    $cmd = "grep ^".$source." ".$config_dir."/multi.txt";
     my $multi_string = `$cmd`;
 
     if ($? != 0) {
@@ -1438,15 +1536,15 @@ sub processHeader($$\%) {
         $proc_args .= " -D ".$multis[1];
       }
 
-      $proc_args .= " -N ".$cfg{"CONFIG_DIR"}."/".$multis[2];
+      $proc_args .= " -N ".$config_dir."/".$multis[2];
 
-      if (! -f $cfg{"CONFIG_DIR"}."/".$multis[2]) {
+      if (! -f $config_dir."/".$multis[2]) {
         $result = "fail";
-        $response = "Error: Multi-source file: ".$cfg{"CONFIG_DIR"}.
+        $response = "Error: Multi-source file: ".$config_dir.
                     "/".$multis[2]." did not exist";
 
       } else {
-        $cmd = "head -1 ".$cfg{"CONFIG_DIR"}."/".$multis[2];
+        $cmd = "head -1 ".$config_dir."/".$multis[2];
         $source = `$cmd`;
         chomp $source;
       }
@@ -1463,7 +1561,7 @@ sub processHeader($$\%) {
     if ($h{"MODE"} eq "PSR") {
 
       # test if the source is in the catalogue
-      my $dm = getDM("Dada", $source);
+      my $dm = getDM($source);
 
       if ($dm eq "NA") {
         $result = "fail";
@@ -1475,8 +1573,8 @@ sub processHeader($$\%) {
   }
 
   # Add the dada header file to the proc_cmd
-  my $proc_cmd_file = $cfg{"CONFIG_DIR"}."/".$h{"PROC_FILE"};
-  my %proc_cmd_hash = Dada->readCFGFile($proc_cmd_file);
+  my $proc_cmd_file = $config_dir."/".$h{"PROC_FILE"};
+  my %proc_cmd_hash = Dada::readCFGFile($proc_cmd_file);
   $proc_cmd = $proc_cmd_hash{"PROC_CMD"};
 
   # Select command line arguements special case
@@ -1520,9 +1618,9 @@ sub processHeader($$\%) {
 #
 # Get the DM from either psrcat or tempo's tzpar dir
 #
-sub getDM($$) {
+sub getDM($) {
 
-  my ($module, $source) = @_;  
+  my ($source) = @_;  
 
   my $cmd = "";
   my $str = "";
@@ -1558,9 +1656,9 @@ sub getDM($$) {
 
 }
 
-sub getPeriod($$) {
+sub getPeriod($) {
 
-  my ($module, $source) = @_;
+  my ($source) = @_;
 
   my $cmd = "";
   my $str = "";
@@ -1571,7 +1669,7 @@ sub getPeriod($$) {
 
   # test if the source is in the catalogue
   $cmd = "psrcat -x -c 'P0' ".$source." | awk '{print \$1}'";
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   
   chomp $response;
   if (($result eq "ok") && (!($response =~ /WARNING:/))) {
@@ -1590,7 +1688,7 @@ sub getPeriod($$) {
 
       # try to get the period
       $cmd = "grep ^F0 ".$par_file." | awk '{print \$2}'";
-      ($result, $response) = Dada->mySystem($cmd);
+      ($result, $response) = Dada::mySystem($cmd);
       if (($result eq "ok") && ($response ne "")) {
         chomp $response;
         $period = sprintf("%10.9f",$response);
@@ -1603,7 +1701,7 @@ sub getPeriod($$) {
       # if F0 didn't exist, try for P
       } else {
         $cmd = "grep '^P ' ".$par_file." | awk '{print \$2}'";
-        ($result, $response) = Dada->mySystem($cmd);
+        ($result, $response) = Dada::mySystem($cmd);
         if ($result eq "ok") {
           chomp $response;
           $period = sprintf("%10.9f",$response);

@@ -96,10 +96,10 @@ sub main() {
   $SIG{PIPE} = \&sigPipeHandle;
 
   # become a daemon
-  Dada->daemonize($log_file, $pid_file);
+  Dada::daemonize($log_file, $pid_file);
 
   # Open a connection to the server_sys_monitor.pl script
-  $log_sock = Dada->nexusLogOpen($log_host, $log_port);
+  $log_sock = Dada::nexusLogOpen($log_host, $log_port);
   if (!$log_sock) {
     print STDERR "Could not open log port: ".$log_host.":".$log_port."\n";
   }
@@ -121,7 +121,7 @@ sub main() {
   $control_thread->join();
 
   logMsg(0, "INFO", "STOPPING SCRIPT");
-  Dada->nexusLogClose($log_sock);
+  Dada::nexusLogClose($log_sock);
 
   return 0;
 }
@@ -131,7 +131,7 @@ sub processingThread($) {
 
   (my $prev_header) = @_;
 
-  my $bindir         = Dada->getCurrentBinaryVersion();
+  my $bindir         = Dada::getCurrentBinaryVersion();
   my $processing_dir = $cfg{"CLIENT_RESULTS_DIR"};
   my $raw_data_dir   = $cfg{"CLIENT_RECORDING_DIR"};
 
@@ -159,7 +159,7 @@ sub processingThread($) {
 
     $proc_cmd = "";
 
-    ($result, $response) = Dada->processHeader($raw_header, \%cfg);
+    ($result, $response) = Dada::processHeader($raw_header, $cfg{"CONFIG_DIR"});
 
     if ($result ne "ok") {
       logMsg(0, "ERROR", $response);
@@ -228,10 +228,10 @@ sub auxNodesAvailable() {
   
   my $host = $cfg{"SERVER_HOST"};
   my $port = $cfg{"SERVER_AUX_CLIENT_PORT"};
-  my $localhost = Dada->getHostMachineName();
+  my $localhost = Dada::getHostMachineName();
   
   logMsg(2, "INFO", "auxNodesAvailable: conecting to ".$host.":".$port);
-  my $handle = Dada->connectToMachine($host, $port);
+  my $handle = Dada::connectToMachine($host, $port);
   
   if (!$handle) {
 
@@ -246,7 +246,7 @@ sub auxNodesAvailable() {
     print $handle $localhost.":help\r\n";
 
     logMsg(2, "INFO", "auxNodesAvailable: sent ".$localhost.":help");
-    my $string = Dada->getLineSelect($handle,2);
+    my $string = Dada::getLineSelect($handle,2);
     logMsg(2, "INFO", "auxNodesAvailable: received ".$string);
 
     close($handle);
@@ -277,13 +277,13 @@ sub controlThread($$) {
   $cmd = "ps aux | grep -v grep | grep ".$user." | grep '".$dada_header_cmd.
           "' | awk '{print \$2}'";
   logMsg(2, "INFO", "controlThread: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   $response =~ s/\n/ /;
   logMsg(2, "INFO", "controlThread: ".$result." ".$response);
   if ($result eq "ok") {
     $cmd = "kill -KILL ".$response;
     logMsg(1, "INFO", "controlThread: Killing dada_header: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
+    ($result, $response) = Dada::mySystem($cmd);
     logMsg(2, "INFO", "controlThread: ".$result." ".$response);
   }
   
@@ -307,12 +307,12 @@ sub logMsg($$$) {
 
   my ($level, $type, $msg) = @_;
   if ($level <= $dl) {
-    my $time = Dada->getCurrentDadaTime();
+    my $time = Dada::getCurrentDadaTime();
     if (! $log_sock ) {
-      $log_sock = Dada->nexusLogOpen($log_host, $log_port);
+      $log_sock = Dada::nexusLogOpen($log_host, $log_port);
     }
     if ($log_sock) {
-      Dada->nexusLogMessage($log_sock, $time, "sys", $type, "aux mngr", $msg);
+      Dada::nexusLogMessage($log_sock, $time, "sys", $type, "aux mngr", $msg);
     }
     print "[".$time."] ".$msg."\n";
   }
@@ -349,7 +349,7 @@ sub sigPipeHandle($) {
   print STDERR $daemon_name." : Received SIG".$sigName."\n";
   $log_sock = 0;
   if ($log_host && $log_port) {
-    $log_sock = Dada->nexusLogOpen($log_host, $log_port);
+    $log_sock = Dada::nexusLogOpen($log_host, $log_port);
   }
 
 }

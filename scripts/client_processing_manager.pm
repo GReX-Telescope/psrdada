@@ -117,10 +117,10 @@ sub main() {
   $SIG{PIPE} = \&sigPipeHandle;
 
   # become a daemon
-  Dada->daemonize($log_file, $pid_file);
+  Dada::daemonize($log_file, $pid_file);
   
   # open a connection to the nexus logging port
-  $log_sock = Dada->nexusLogOpen($log_host, $log_port);
+  $log_sock = Dada::nexusLogOpen($log_host, $log_port);
   if (!$log_sock) {
     print STDERR "Could open log port: ".$log_host.":".$log_port."\n";
   }
@@ -148,7 +148,7 @@ sub main() {
   logMsg(2, "INFO", "main: controlThread joined");
 
   logMsg(0, "INFO", "STOPPING SCRIPT");
-  Dada->nexusLogClose($log_sock);
+  Dada::nexusLogClose($log_sock);
 
   return 0;
 }
@@ -157,7 +157,7 @@ sub processing_thread($) {
 
   (my $prev_header) = @_;
 
-  my $bindir = Dada->getCurrentBinaryVersion();
+  my $bindir = Dada::getCurrentBinaryVersion();
   my $proc_log = $cfg{"CLIENT_LOG_DIR"}."/dspsr.log";
   my $processing_dir = $cfg{"CLIENT_RESULTS_DIR"};
   my $raw_header = "";
@@ -179,7 +179,7 @@ sub processing_thread($) {
 
     my $proc_cmd = "";
 
-    ($result, $response) = Dada->processHeader($raw_header, \%cfg); 
+    ($result, $response) = Dada::processHeader($raw_header, $cfg{"CONFIG_DIR"}); 
 
     if ($result ne "ok") {
       logMsg(0, "ERROR", $response);
@@ -198,7 +198,7 @@ sub processing_thread($) {
         $proc_cmd .= " ".$cfg{"PROCESSING_DB_KEY"};
       }
 
-      %h = Dada->headerToHash($raw_header);
+      %h = Dada::headerToHash($raw_header);
 
       $processing_dir .= "/".$h{"UTC_START"}."/".$h{"FREQ"};
 
@@ -281,27 +281,27 @@ sub controlThread($$) {
   # Kill the dada_header command
   $cmd = "ps aux | grep -v grep | grep ".$user." | grep '".$dada_header_cmd."' | awk '{print \$2}'";
   logMsg(2, "INFO", " controlThread: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMsg(2, "INFO", " controlThread: ".$result." ".$response);
   $response =~ s/\n/ /;
   if (($result eq "ok") && ($response ne "")) {
     $response =~ s/\n/ /;
     $cmd = "kill -KILL ".$response;
     logMsg(1, "INFO", "controlThread: Killing dada_header: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
+    ($result, $response) = Dada::mySystem($cmd);
     logMsg(2, "INFO", "controlThread: ".$result." ".$response);
   }
 
   # Kill all running dspsr commands
   $cmd = "ps aux | grep -v grep | grep ".$user." | grep dspsr | awk '{print \$2}'";
   logMsg(2, "INFO", "controlThread: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   $response =~ s/\n/ /;
   logMsg(2, "INFO", "controlThread: ".$result." ".$response);
   if (($result eq "ok") && ($response ne "")) {
     $cmd = "killall -KILL ".$response;
     logMsg(1, "INFO", "Killing all dspsr ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
+    ($result, $response) = Dada::mySystem($cmd);
     logMsg(2, "INFO", "controlThread: ".$result." ".$response);
   }
 
@@ -335,7 +335,7 @@ sub loadControlThread($) {
   my $num_cores_available = 0;
   my $load = 0;
  
-  $localhost = Dada->getHostMachineName();
+  $localhost = Dada::getHostMachineName();
 
   # create a listening server socket
   $server = new IO::Socket::INET (
@@ -371,7 +371,7 @@ sub loadControlThread($) {
 
       } else {
 
-        my $string = Dada->getLine($rh);
+        my $string = Dada::getLine($rh);
 
         if (! defined $string) {
           logMsg(3, "INFO", "loadControlThread: removing read handle");
@@ -386,7 +386,7 @@ sub loadControlThread($) {
           $num_cores_available = 0;
 
           # find out if we are still taking data
-          $handle = Dada->connectToMachine($localhost, $cfg{"CLIENT_BG_PROC_PORT"});
+          $handle = Dada::connectToMachine($localhost, $cfg{"CLIENT_BG_PROC_PORT"});
 
           # Assume we are taking data
           $taking_data = "some";
@@ -396,7 +396,7 @@ sub loadControlThread($) {
             logMsg(2, "INFO", "loadControlThread: obs mngr connection established");
 
             print $handle "is data currently being received?\r\n";
-            $taking_data = Dada->getLine($handle);
+            $taking_data = Dada::getLine($handle);
             logMsg(2, "INFO", "loadControlThread: obs mngr replied ".$taking_data);
             $handle->close();
             $handle = 0;
@@ -418,7 +418,7 @@ sub loadControlThread($) {
 
               logMsg(2, "INFO", "loadControlThread: dspsr running > 120 seconds");
 
-              $load = int(Dada->getLoad("one"));
+              $load = int(Dada::getLoad("one"));
 
               # always keep 1 core free
               $num_cores_available = ($cfg{"CLIENT_NUM_CORES"} - (1+$load));
@@ -439,7 +439,7 @@ sub loadControlThread($) {
 
               logMsg(2, "INFO", "loadControlThread: dspsr is running");
 
-              $load = int(Dada->getLoad("one"));
+              $load = int(Dada::getLoad("one"));
 
               # always keep 1 core free
               $num_cores_available = ($cfg{"CLIENT_NUM_CORES"}- (1+$load));
@@ -470,12 +470,12 @@ sub logMsg($$$) {
 
   my ($level, $type, $msg) = @_;
   if ($level <= $dl) {
-    my $time = Dada->getCurrentDadaTime();
+    my $time = Dada::getCurrentDadaTime();
     if (! $log_sock ) {
-      $log_sock = Dada->nexusLogOpen($log_host, $log_port);
+      $log_sock = Dada::nexusLogOpen($log_host, $log_port);
     }
     if ($log_sock) {
-      Dada->nexusLogMessage($log_sock, $time, "src", $type, "proc mngr", $msg);
+      Dada::nexusLogMessage($log_sock, $time, "src", $type, "proc mngr", $msg);
     }
     print "[".$time."] ".$msg."\n";
   }
@@ -512,7 +512,7 @@ sub sigPipeHandle($) {
   print STDERR $daemon_name." : Received SIG".$sigName."\n";
   $log_sock = 0;
   if ($log_host && $log_port) {
-    $log_sock = Dada->nexusLogOpen($log_host, $log_port);
+    $log_sock = Dada::nexusLogOpen($log_host, $log_port);
   }
 
 }

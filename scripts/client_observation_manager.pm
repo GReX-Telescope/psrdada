@@ -122,13 +122,13 @@ sub main() {
   $SIG{PIPE} = \&sigPipeHandle;
 
   # become a daemon
-  Dada->daemonize($log_file, $pid_file);
+  Dada::daemonize($log_file, $pid_file);
 
   # Auto flush output
   $| = 1;
 
   # Open a connection to the server_sys_monitor.pl script
-  $log_sock = Dada->nexusLogOpen($log_host, $log_port);
+  $log_sock = Dada::nexusLogOpen($log_host, $log_port);
   if (!$log_sock) {
     print STDERR "Could not open log port: ".$log_host.":".$log_port."\n";
   }
@@ -200,7 +200,7 @@ sub main() {
   }
 
   logMsg(0, "INFO", "STOPPING SCRIPT");
-  Dada->nexusLogClose($log_sock);
+  Dada::nexusLogClose($log_sock);
 
   return 0;
 }
@@ -214,7 +214,7 @@ sub processingThread($$) {
 
   (my $prev_utc_start, my $prev_obs_offset) = @_;
 
-  my $bindir = Dada->getCurrentBinaryVersion();
+  my $bindir = Dada::getCurrentBinaryVersion();
 
   my $remote_dirs_thread = 0;
   my $utc_start = "invalid";
@@ -250,7 +250,7 @@ sub processingThread($$) {
   # signal to dada_header_cmd, we should check the return value
   if ($? == 0) {
 
-    %h = Dada->headerToHash($raw_header);
+    %h = Dada::headerToHash($raw_header);
 
     $proc_file  = $h{"PROC_FILE"};
     my $obs_start_file = "";
@@ -429,13 +429,13 @@ sub controlThread($$) {
   # Kill the dada_header command
   $cmd = "ps aux | grep -v grep | grep ".$user." | grep '".$dada_header_cmd."' | awk '{print \$2}'";
   logMsg(2, "INFO", " controlThread: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   $response =~ s/\n/ /;
   logMsg(2, "INFO", "controlThread: ".$result." ".$response);
   if (($result eq "ok") & ($response ne "")) {
     $cmd = "kill -KILL ".$response;
     logMsg(1, "INFO", "controlThread: Killing dada_header: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
+    ($result, $response) = Dada::mySystem($cmd);
     logMsg(2, "INFO", "controlThread: ".$result." ".$response);
   }
 
@@ -455,7 +455,7 @@ sub bgProcessingThread() {
 
   logMsg(2, "INFO", "bgProcessingThread: starting");
 
-  my $localhost = Dada->getHostMachineName();
+  my $localhost = Dada::getHostMachineName();
 
   my $server = new IO::Socket::INET (
     LocalHost => $localhost,
@@ -490,7 +490,7 @@ sub bgProcessingThread() {
 
       } else {
 
-        my $string = Dada->getLine($rh);
+        my $string = Dada::getLine($rh);
 
         if (! defined $string) {
           $read_set->remove($rh);
@@ -547,7 +547,7 @@ sub calibratorThread($$$) {
     # find out how many archives exist the tres archive
     $cmd = "psredit -q -c nsubint ".$tres_archive." | awk -F= '{print \$2}'";
     logMsg(2, "INFO", "calibratorThread: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
+    ($result, $response) = Dada::mySystem($cmd);
     logMsg(2, "INFO", "calibratorThread: ".$result." ".$response);
     if ($result ne "ok") {
       logMsg(0, "WARN", "calibratorThread: ".$cmd." failed: ".$response);
@@ -559,7 +559,7 @@ sub calibratorThread($$$) {
     # find out how many archive exist on disk
     $cmd = "find ".$archives_dir."/".$utc_start."/".$band." -name '*.ar' | wc -l";
     logMsg(2, "INFO", "calibratorThread: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
+    ($result, $response) = Dada::mySystem($cmd);
     logMsg(2, "INFO", "calibratorThread: ".$result." ".$response);
     if ($result ne "ok") {
       logMsg(0, "WARN", "calibratorThread: ".$cmd." failed: ".$response);
@@ -581,7 +581,7 @@ sub calibratorThread($$$) {
 
     $cmd = "mkdir -p ".$dir;
     logMsg(2, "INFO", "calibratorThread: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
+    ($result, $response) = Dada::mySystem($cmd);
     logMsg(2, "INFO", "calibratorThread: ".$result." ".$response);
     if ($result ne "ok") {
       logMsg(0, "WARN", "calibratorThread: ".$cmd." failed: ".$response);
@@ -589,15 +589,15 @@ sub calibratorThread($$$) {
 
     $cmd = "cp ".$fres_archive." ".$dir."/".$band.".ar";
     logMsg(2, "INFO", "calibratorThread: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
+    ($result, $response) = Dada::mySystem($cmd);
     logMsg(2, "INFO", "calibratorThread: ".$result." ".$response);
     if ($result ne "ok") {
       logMsg(0, "WARN", "calibratorThread: ".$cmd." failed: ".$response);
     }
 
-    $cmd = "pac -w -p ".$cfg{"CLIENT_CALIBRATOR_DIR"}." -u ar";
+    $cmd = "pac -w -p ".$cfg{"CLIENT_CALIBRATOR_DIR"}." -u ar -u fits";
     logMsg(2, "INFO", "calibratorThread: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
+    ($result, $response) = Dada::mySystem($cmd);
     logMsg(2, "INFO", "calibratorThread: ".$result." ".$response);
     if ($result ne "ok") {
       logMsg(0, "WARN", "calibratorThread: ".$cmd." failed: ".$response);
@@ -638,7 +638,7 @@ sub createRemoteDirectories($$$) {
 
   my $remote_archive_dir = $cfg{"SERVER_ARCHIVE_NFS_MNT"};
   my $remote_results_dir = $cfg{"SERVER_RESULTS_NFS_MNT"};
-  my $localhost = Dada->getHostMachineName();
+  my $localhost = Dada::getHostMachineName();
   my $cmd = "";
   my $dir = "";
   my $user_groups = "";
@@ -737,7 +737,7 @@ sub createLocalDirectories($$$$) {
   logMsg(2, "INFO", "Creating local results dir: ".$results_dir);
   $cmd = "mkdir -p ".$results_dir;
   logMsg(2, "INFO", "createLocalDirectories: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMsg(2, "INFO", "createLocalDirectories: ".$result." ".$response);
   if ($result ne "ok") {
     logMsg(0,"ERROR", "Could not create local results dir: ".$response);
@@ -747,7 +747,7 @@ sub createLocalDirectories($$$$) {
   logMsg(2, "INFO", "Creating local results dir: ".$archive_dir);
   $cmd = "mkdir -p ".$archive_dir;
   logMsg(2, "INFO", "createLocalDirectories: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMsg(2, "INFO", "createLocalDirectories: ".$result." ".$response);
   if ($result ne "ok") {
     logMsg(0,"ERROR", "Could not create local archive dir: ".$response);
@@ -767,7 +767,7 @@ sub createLocalDirectories($$$$) {
   # Set GID on these dirs
   $cmd = "chgrp -R $proj_id $results_dir $archive_dir";
   logMsg(2, "INFO", "createLocalDirectories: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMsg(2, "INFO", "createLocalDirectories: ".$result." ".$response);
   if ($result ne "ok") {
     logMsg(0, "WARN", "chgrp to ".$proj_id." failed on $results_dir $archive_dir");
@@ -776,7 +776,7 @@ sub createLocalDirectories($$$$) {
   # Set group sticky bit on local archive dir
   $cmd = "chmod -R g+s $results_dir $archive_dir";
   logMsg(2, "INFO", "createLocalDirectories: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMsg(2, "INFO", "createLocalDirectories: ".$result." ".$response);
   if ($result ne "ok") {
     logMsg(0, "WARN", "chmod g+s failed on $results_dir $archive_dir");
@@ -803,14 +803,14 @@ sub copyObsStart($$$) {
 
   # Ensure each directory is automounted
   $cmd = "ls ".$cfg{"SERVER_RESULTS_NFS_MNT"}." >& /dev/null";
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
 
   # Create the full nfs destinations
   $dir = $cfg{"SERVER_RESULTS_NFS_MNT"}."/".$utc_start."/".$centre_freq;
 
   $cmd = "cp ".$obs_start." ".$dir."/";
   logMsg(2, "INFO", "NFS copy \"".$cmd."\"");
-  ($result, $response) = Dada->mySystem($cmd,0);
+  ($result, $response) = Dada::mySystem($cmd,0);
 
   if ($result ne "ok") {
     logMsg(0, "ERROR", "NFS copy failed: ".$obs_start." to ".$dir.", response: ".$response);
@@ -868,21 +868,21 @@ sub touchBandFinished($$) {
 
   $cmd = "find ".$cfg{"CLIENT_RECORDING_DIR"}." -maxdepth 1 -name '".$utc_start."*.dada' | wc -l";
   logMsg(2, "INFO", "touchBandFinished: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMsg(2, "INFO", "touchBandFinished: ".$result." ".$response);
 
   if (($result eq "ok") && ($response == "0")) {
 
     # Ensure the results directory is mounted
     $cmd = "ls ".$cfg{"SERVER_RESULTS_NFS_MNT"}." >& /dev/null";
-    ($result, $response) = Dada->mySystem($cmd);
+    ($result, $response) = Dada::mySystem($cmd);
   
     # Create the full nfs destinations
     $dir = $cfg{"SERVER_RESULTS_NFS_MNT"}."/".$utc_start."/".$centre_freq;
   
     $cmd = "touch ".$dir."/band.finished";
     logMsg(2, "INFO", "touchBandFinished: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd ,0);
+    ($result, $response) = Dada::mySystem($cmd ,0);
     logMsg(2, "INFO", "touchBandFinished: ".$result." ".$response);
 
   }
@@ -897,13 +897,13 @@ sub logMsg($$$) {
 
   my ($level, $type, $msg) = @_;
   if ($level <= $dl) {
-    my $time = Dada->getCurrentDadaTime();
+    my $time = Dada::getCurrentDadaTime();
     if (! $log_sock ) {
       print "opening nexus log: ".$log_host.":".$log_port."\n";
-      $log_sock = Dada->nexusLogOpen($log_host, $log_port);
+      $log_sock = Dada::nexusLogOpen($log_host, $log_port);
     }
     if ($log_sock) {
-      Dada->nexusLogMessage($log_sock, $time, "sys", $type, "obs mngr", $msg);
+      Dada::nexusLogMessage($log_sock, $time, "sys", $type, "obs mngr", $msg);
     }
     print "[".$time."] ".$msg."\n";
   }
@@ -940,7 +940,7 @@ sub sigPipeHandle($) {
   print STDERR $daemon_name." : Received SIG".$sigName."\n";
   $log_sock = 0;
   if ($log_host && $log_port) {
-    $log_sock = Dada->nexusLogOpen($log_host, $log_port);
+    $log_sock = Dada::nexusLogOpen($log_host, $log_port);
   }
 
 }

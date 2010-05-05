@@ -79,7 +79,7 @@ sub main() {
   $SIG{PIPE} = \&sigPipeHandle;
 
   # Open a connection to the nexus logging port
-  $log_sock = Dada->nexusLogOpen($log_host, $log_port);
+  $log_sock = Dada::nexusLogOpen($log_host, $log_port);
   if (!$log_sock) {
     print STDERR "Could open log port: ".$log_host.":".$log_port."\n";
   }
@@ -108,17 +108,17 @@ sub main() {
       }
   
     } else {
-      $time = Dada->getCurrentDadaTime();
+      $time = Dada::getCurrentDadaTime();
     }
 
     # Always log these messages
     logMsg(0, $type, $line, $time);
 
     #if (! $log_sock ) {
-    #  $log_sock = Dada->nexusLogOpen($log_host, $log_port);
+    #  $log_sock = Dada::nexusLogOpen($log_host, $log_port);
     #} 
     #if ($log_sock) {
-    #  Dada->nexusLogMessage($log_sock, $time, $tag, $type, $daemon, $line);
+    #  Dada::nexusLogMessage($log_sock, $time, $tag, $type, $daemon, $line);
     #}
 
     #open $log_fh, ">>".$log_file;
@@ -143,16 +143,16 @@ sub logMsg($$$;$) {
   if ($level <= $dl) {
 
     if ((!defined($time)) || ($time eq "")) {
-      $time = Dada->getCurrentDadaTime();
+      $time = Dada::getCurrentDadaTime();
     }
 
     # open the socket if it is closted
     if (!($log_sock)) {
-      $log_sock = Dada->nexusLogOpen($log_host, $log_port);
+      $log_sock = Dada::nexusLogOpen($log_host, $log_port);
     }
 
     if ($log_sock) {
-      Dada->nexusLogMessage($log_sock, $time, $tag, $type, $daemon, $message);
+      Dada::nexusLogMessage($log_sock, $time, $tag, $type, $daemon, $message);
     }
 
     open FH, ">>".$log_file;
@@ -191,7 +191,7 @@ sub sigPipeHandle($) {
   print STDERR $daemon_name." : Received SIG".$sigName."\n";
   $log_sock = 0;
   if ($log_host && $log_port) {
-    $log_sock = Dada->nexusLogOpen($log_host, $log_port);
+    $log_sock = Dada::nexusLogOpen($log_host, $log_port);
   }
 
 }

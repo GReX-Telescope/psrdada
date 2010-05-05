@@ -74,7 +74,7 @@ sub main() {
   my $pid_file      = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".pid";
   my $quit_file     = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
   my $raw_data_dir  = $cfg{"CLIENT_RECORDING_DIR"};
-  my $proc_mng_host = Dada->getHostMachineName();
+  my $proc_mng_host = Dada::getHostMachineName();
   my $proc_mng_port = $cfg{"CLIENT_PROC_LOAD_PORT"};
 
   $log_host         = $cfg{"SERVER_HOST"};
@@ -101,10 +101,10 @@ sub main() {
   $SIG{PIPE} = \&sigPipeHandle;
 
   # become a daemon
-  Dada->daemonize($log_file, $pid_file);
+  Dada::daemonize($log_file, $pid_file);
 
   # Open a connection to the server_sys_monitor.pl script
-  $log_sock = Dada->nexusLogOpen($log_host, $log_port);
+  $log_sock = Dada::nexusLogOpen($log_host, $log_port);
   if (!$log_sock) {
     print STDERR "Could not open log port: ".$log_host.":".$log_port."\n";
   }
@@ -128,12 +128,12 @@ sub main() {
       logMsg(2, "INFO", "file to process ".$file);
 
       # Find out how many cores are available to background process on
-      my $handle = Dada->connectToMachine($proc_mng_host, $proc_mng_port);
+      my $handle = Dada::connectToMachine($proc_mng_host, $proc_mng_port);
       if ($handle) {
 
         logMsg(2, "INFO", "connection to processing manager established");
         print $handle "how many cores are available?\r\n";
-        $response = Dada->getLine($handle);
+        $response = Dada::getLine($handle);
 
         $ncores = $response;
         $handle->close();
@@ -171,7 +171,7 @@ sub main() {
   $control_thread->join();
 
   logMsg(0, "INFO", "STOPPING SCRIPT");
-  Dada->nexusLogClose($log_sock);
+  Dada::nexusLogClose($log_sock);
 
   return 0;
 }
@@ -192,7 +192,7 @@ sub getUnprocessedFile($) {
   
   $cmd = "find ".$dir." -maxdepth 1 -type f -name '*.dada' | sort";
   logMsg(2, "INFO", "getUnprocessedFile: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMsg(3, "INFO", "getUnprocessedFile: ".$result." ".$response);
 
   if ($result ne "ok") {
@@ -233,7 +233,7 @@ sub processingThread($$$) {
   my $proj_id = "";
   my $groups = "";
 
-  ($result, $response) = Dada->processHeader($raw_header, \%cfg);
+  ($result, $response) = Dada::processHeader($raw_header, $cfg{"CONFIG_DIR"});
 
   if  ($result ne "ok") {
     logMsg(0, "ERROR", $response);
@@ -249,7 +249,7 @@ sub processingThread($$$) {
 
   } else {
 
-    %h = Dada->headerToHash($raw_header);
+    %h = Dada::headerToHash($raw_header);
 
     $proc_cmd = $response;
     $proc_cmd .= " ".$file;
@@ -380,7 +380,7 @@ sub moveUnprocessableFile($$) {
   
   $cmd = "mv ".$file." ".$unprocessable_dir."/";
   logMsg(2, "INFO", "moveUnprocessableFile: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMsg(2, "INFO", "moveUnprocessableFile: ".$result." ".$response);
   
   if ($result ne "ok") {
@@ -412,7 +412,7 @@ sub controlThread($$) {
   if ($proc_pid) {
     $cmd = "kill -KILL ".$proc_pid;
     logMsg(1, "INFO", "controlThread: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
+    ($result, $response) = Dada::mySystem($cmd);
     logMsg(2, "INFO", "controlThread: ".$result." ".$response);
   }
   
@@ -443,11 +443,11 @@ sub touchBandFinished($$) {
   my $handle = 0;
   my $taking_data = "";
 
-  my $localhost = Dada->getHostMachineName();
+  my $localhost = Dada::getHostMachineName();
 
   $cmd = "find ".$cfg{"CLIENT_RECORDING_DIR"}." -maxdepth 1 -name '".$utc_start."*.dada' | wc -l";
   logMsg(2, "INFO", "touchBandFinished: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMsg(2, "INFO", "touchBandFinished: ".$result." ".$response);
 
   if (($result eq "ok") && ($response == "0")) {
@@ -456,14 +456,14 @@ sub touchBandFinished($$) {
     $taking_data = "some";
 
     # If there are no files to process, ensure that the observation has finished
-    $handle = Dada->connectToMachine($localhost, $cfg{"CLIENT_BG_PROC_PORT"});
+    $handle = Dada::connectToMachine($localhost, $cfg{"CLIENT_BG_PROC_PORT"});
 
     if ($handle) {
 
       logMsg(2, "INFO", "touchBandFinished: obs mngr connection established");
 
       print $handle "is data currently being received?\r\n";
-      $taking_data = Dada->getLine($handle);
+      $taking_data = Dada::getLine($handle);
       logMsg(2, "INFO", "touchBandFinished: obs mngr replied ".$taking_data);
       $handle->close();
       $handle = 0;
@@ -480,7 +480,7 @@ sub touchBandFinished($$) {
 
       # Ensure the results directory is mounted
       $cmd = "ls ".$cfg{"SERVER_RESULTS_NFS_MNT"}." >& /dev/null";
-      ($result, $response) = Dada->mySystem($cmd);
+      ($result, $response) = Dada::mySystem($cmd);
 
       # Create the full nfs destinations
       $dir = $cfg{"SERVER_RESULTS_NFS_MNT"}."/".$utc_start."/".$centre_freq;
@@ -489,7 +489,7 @@ sub touchBandFinished($$) {
 
       $cmd = "touch ".$dir."/band.finished";
       logMsg(2, "INFO", "touchBandFinished: ".$cmd);
-      ($result, $response) = Dada->mySystem($cmd ,0);
+      ($result, $response) = Dada::mySystem($cmd ,0);
       logMsg(2, "INFO", "touchBandFinished: ".$result." ".$response);
     }
   }
@@ -503,12 +503,12 @@ sub logMsg($$$) {
 
   my ($level, $type, $msg) = @_;
   if ($level <= $dl) {
-    my $time = Dada->getCurrentDadaTime();
+    my $time = Dada::getCurrentDadaTime();
     if (! $log_sock ) {
-      $log_sock = Dada->nexusLogOpen($log_host, $log_port);
+      $log_sock = Dada::nexusLogOpen($log_host, $log_port);
     }
     if ($log_sock) {
-      Dada->nexusLogMessage($log_sock, $time, "sys", $type, "bg mngr", $msg);
+      Dada::nexusLogMessage($log_sock, $time, "sys", $type, "bg mngr", $msg);
     }
     print "[".$time."] ".$msg."\n";
   }
@@ -545,7 +545,7 @@ sub sigPipeHandle($) {
   print STDERR $daemon_name." : Received SIG".$sigName."\n";
   $log_sock = 0;
   if ($log_host && $log_port) {
-    $log_sock = Dada->nexusLogOpen($log_host, $log_port);
+    $log_sock = Dada::nexusLogOpen($log_host, $log_port);
   }
 
 }

@@ -100,12 +100,12 @@ sub main() {
   $SIG{PIPE} = \&sigPipeHandle;
   
   # become a daemon
-  Dada->daemonize($log_file, $pid_file);
+  Dada::daemonize($log_file, $pid_file);
 
-  Dada->logMsg(0, $dl, "STARTING SCRIPT");
+  Dada::logMsg(0, $dl, "STARTING SCRIPT");
 
   # start the control thread
-  Dada->logMsg(2, $dl, "starting controlThread(".$quit_file.", ".$pid_file.")");
+  Dada::logMsg(2, $dl, "starting controlThread(".$quit_file.", ".$pid_file.")");
   $control_thread = threads->new(\&controlThread, $quit_file, $pid_file);
 
   while (!$quit_daemon) {
@@ -113,22 +113,22 @@ sub main() {
     # If we have lost the connection, try to reconnect to the PWCC (nexus)
     while (!$handle && !$quit_daemon) {
 
-      Dada->logMsg(2, $dl, "Connecting to ".$log_host.":".$log_port);
+      Dada::logMsg(2, $dl, "Connecting to ".$log_host.":".$log_port);
 
-      $handle = Dada->connectToMachine($log_host, $log_port);
+      $handle = Dada::connectToMachine($log_host, $log_port);
 
       if (!$handle)  {
         sleep(1);
-        Dada->logMsgWarn($warn, "Failed to connect to dada_pwc_command ".$log_host.":".$log_port);
+        Dada::logMsgWarn($warn, "Failed to connect to dada_pwc_command ".$log_host.":".$log_port);
       } else {
-        Dada->logMsg(1, $dl, "Connected to ".$log_host.":".$log_port);
+        Dada::logMsg(1, $dl, "Connected to ".$log_host.":".$log_port);
 
       }
     }
 
     while ($handle && !$quit_daemon) {
 
-      $line = Dada->getLineSelect($handle,1);
+      $line = Dada::getLineSelect($handle,1);
 
       # If we have lost the connection
       if (! defined $line) {
@@ -138,24 +138,24 @@ sub main() {
 
       } elsif ($line eq "null") {
 
-        Dada->logMsg(3, $dl, "Received null line");
+        Dada::logMsg(3, $dl, "Received null line");
 
       } else {
 
-        Dada->logMsg(2, $dl, "Received: ".$line);
+        Dada::logMsg(2, $dl, "Received: ".$line);
         logMessage($line);
 
       }
     }
   
-    Dada->logMsg(1, $dl, "Lost connection with PWCC");
+    Dada::logMsg(1, $dl, "Lost connection with PWCC");
     sleep(1);
   }
 
   # Rejoin our daemon control thread
   $control_thread->join();
 
-  Dada->logMsg(0, $dl, "STOPPING SCRIPT");
+  Dada::logMsg(0, $dl, "STOPPING SCRIPT");
 
   return 0;
 
@@ -195,9 +195,9 @@ sub logMessage($) {
   # If we are starting a new obs, delete the error and warn files 
   } elsif ($msg =~ /STATE = prepared/) {
     $cmd = "rm -f ".$status_dir."/*.warn ".$status_dir."/*.error";
-    ($result, $response) = Dada->mySystem($cmd);
+    ($result, $response) = Dada::mySystem($cmd);
     if ($result ne "ok") {
-      Dada->logMsgWarn($warn, "failed to delted warn and error status files: ".$response);
+      Dada::logMsgWarn($warn, "failed to delted warn and error status files: ".$response);
     }
 
   } else {
@@ -211,22 +211,22 @@ sub logMessage($) {
       open(FH,">".$status_file);
     }
     if ($? != 0) {
-      Dada->logMsg(0, $dl, "Could not open status_file: ".$status_file);
+      Dada::logMsg(0, $dl, "Could not open status_file: ".$status_file);
     }
 
     print FH $msg."\n";
     close FH;
-    Dada->logMsg(1,  $dl, "Logged: ".$host.", ".$time.", ".$msg);
+    Dada::logMsg(1,  $dl, "Logged: ".$host.", ".$time.", ".$msg);
   }
 }
 
 sub controlThread($$) {
 
-  Dada->logMsg(1, $dl, "controlThread: starting");
+  Dada::logMsg(1, $dl, "controlThread: starting");
 
   my ($quit_file, $pid_file) = @_;
 
-  Dada->logMsg(2, $dl, "controlThread(".$quit_file.", ".$pid_file.")");
+  Dada::logMsg(2, $dl, "controlThread(".$quit_file.", ".$pid_file.")");
 
   # Poll for the existence of the control file
   while ((!(-f $quit_file)) && (!$quit_daemon)) {
@@ -237,10 +237,10 @@ sub controlThread($$) {
   $quit_daemon = 1;
 
   if ( -f $pid_file) {
-    Dada->logMsg(2, $dl, "controlThread: unlinking PID file");
+    Dada::logMsg(2, $dl, "controlThread: unlinking PID file");
     unlink($pid_file);
   } else {
-    Dada->logMsgWarn($warn, "controlThread: PID file did not exist on script exit");
+    Dada::logMsgWarn($warn, "controlThread: PID file did not exist on script exit");
   }
 
   return 0;
@@ -290,9 +290,9 @@ sub good($) {
   }
 
   # this script can *only* be run on the configured server
-  if (index($cfg{"SERVER_ALIASES"}, Dada->getHostMachineName()) < 0 ) {
+  if (index($cfg{"SERVER_ALIASES"}, Dada::getHostMachineName()) < 0 ) {
     return ("fail", "Error: script must be run on ".$cfg{"SERVER_HOST"}.
-                    ", not ".Dada->getHostMachineName());
+                    ", not ".Dada::getHostMachineName());
   }
 
   # Ensure more than one copy of this daemon is not running

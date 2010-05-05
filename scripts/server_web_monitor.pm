@@ -124,19 +124,19 @@ sub main() {
   $SIG{PIPE} = \&sigPipeHandle;
 
   # become a daemon
-  Dada->daemonize($log_file, $pid_file);
+  Dada::daemonize($log_file, $pid_file);
   
-  Dada->logMsg(0, $dl ,"STARTING SCRIPT");
-  Dada->logMsg(1, $dl, "Listening on socket: ".$server_host.":".$server_port);
+  Dada::logMsg(0, $dl ,"STARTING SCRIPT");
+  Dada::logMsg(1, $dl, "Listening on socket: ".$server_host.":".$server_port);
 
   # start the control thread
-  Dada->logMsg(2, $dl ,"starting controlThread(".$quit_file.", ".$pid_file.")");
+  Dada::logMsg(2, $dl ,"starting controlThread(".$quit_file.", ".$pid_file.")");
   $control_thread = threads->new(\&controlThread, $quit_file, $pid_file);
 
   my $read_set = new IO::Select();  # create handle set for reading
   $read_set->add($server_sock);   # add the main socket to the set
 
-  Dada->logMsg(2, $dl, "Waiting for connection on: ".$server_host.":".$server_port);
+  Dada::logMsg(2, $dl, "Waiting for connection on: ".$server_host.":".$server_port);
 
   # launch the threads
   $curr_info_thread = threads->new(\&currentInfoThread, $cfg{"SERVER_RESULTS_DIR"});
@@ -163,7 +163,7 @@ sub main() {
 
         $handle = $rh->accept();
         $handle->autoflush();
-        Dada->logMsg(2, $dl, "Accepting connection");
+        Dada::logMsg(2, $dl, "Accepting connection");
 
         # Add this read handle to the set
         $read_set->add($handle); 
@@ -171,15 +171,15 @@ sub main() {
 
       } else {
 
-        $string = Dada->getLine($rh);
+        $string = Dada::getLine($rh);
   
         if (! defined $string) {
-          Dada->logMsg(2, $dl, "Closing a connection");
+          Dada::logMsg(2, $dl, "Closing a connection");
           $read_set->remove($rh);
           close($rh);
 
         } else {
-          Dada->logMsg(2, $dl, "<- '".$string."'");
+          Dada::logMsg(2, $dl, "<- '".$string."'");
           my $r = "";
 
           if ($string eq "node_info") {
@@ -193,14 +193,14 @@ sub main() {
           } elsif ($string eq "gain_info") { 
             $r = $gain_info; 
           } else {
-            Dada->logMsgWarn($warn, "unexpected command: ".$string);
+            Dada::logMsgWarn($warn, "unexpected command: ".$string);
           } 
           print $rh $r."\r\n";
 
           if ($dl < 3) {
             $r = substr($r, 0, 80);
           }
-          Dada->logMsg(2, $dl, "-> ".$r." ...");
+          Dada::logMsg(2, $dl, "-> ".$r." ...");
         }
       }
     }
@@ -218,7 +218,7 @@ sub main() {
 
   close($server_sock);
                                                                                 
-  Dada->logMsg(0, $dl, "STOPPING SCRIPT");
+  Dada::logMsg(0, $dl, "STOPPING SCRIPT");
                                                                                 
   return 0;
 }
@@ -231,7 +231,7 @@ sub currentInfoThread($) {
 
   (my $results_dir) = @_;
 
-  Dada->logMsg(1, $dl, "currentInfoThread: starting");
+  Dada::logMsg(1, $dl, "currentInfoThread: starting");
 
   my $sleep_time = 4;
   my $sleep_counter = 0;
@@ -258,21 +258,21 @@ sub currentInfoThread($) {
       $sleep_counter = $sleep_time;
 
       $cmd = "find ".$results_dir." -maxdepth 1 -type d -name '2*' -printf '\%f\n' | sort | tail -n 1";
-      Dada->logMsg(3, $dl, "currentInfoThread: ".$cmd);
+      Dada::logMsg(3, $dl, "currentInfoThread: ".$cmd);
       $obs = `$cmd`;
       chomp $obs ;
-      Dada->logMsg(3, $dl, "currentInfoThread: ".$obs);
+      Dada::logMsg(3, $dl, "currentInfoThread: ".$obs);
 
       if (-f $results_dir."/".$obs."/obs.info") {
 
         $tmp_str = "";
-        %cfg_file = Dada->readCFGFile($results_dir."/".$obs."/obs.info"); 
+        %cfg_file = Dada::readCFGFile($results_dir."/".$obs."/obs.info"); 
 
         # Determine the P0 for this source
-        $P0 = Dada->getPeriod($cfg_file{"SOURCE"});
+        $P0 = Dada::getPeriod($cfg_file{"SOURCE"});
 
         # Determine the DM of this source
-        $DM = Dada->getDM($cfg_file{"SOURCE"});
+        $DM = Dada::getDM($cfg_file{"SOURCE"});
   
         # Determine how much data has been intergrated so far
         $integrated = 0;
@@ -280,25 +280,25 @@ sub currentInfoThread($) {
         $source =~ s/^[JB]//;
         #$source =~ s/[a-zA-Z]*$//;
 
-        Dada->logMsg(2, $dl, "currentInfoThread: [".$results_dir."/".$obs."/".$source."_t.ar]");
+        Dada::logMsg(2, $dl, "currentInfoThread: [".$results_dir."/".$obs."/".$source."_t.ar]");
 
         if (-f $results_dir."/".$obs."/".$source."_t.ar") {
           $cmd = "vap -c length -n ".$results_dir."/".$obs."/".$source."_t.ar | awk '{print \$2}'";
-          Dada->logMsg(2, $dl, "currentInfoThread: ".$cmd);
-          ($result, $response) = Dada->mySystem($cmd);
-          Dada->logMsg(2, $dl, "currentInfoThread: ".$result." ".$response);
+          Dada::logMsg(2, $dl, "currentInfoThread: ".$cmd);
+          ($result, $response) = Dada::mySystem($cmd);
+          Dada::logMsg(2, $dl, "currentInfoThread: ".$result." ".$response);
           chomp $response;
           if ($result eq "ok") {
             $integrated = sprintf("%5.1f",$response);
           }
         }
 
-        Dada->logMsg(2, $dl, "currentInfoThread: [".$results_dir."/".$obs."/".$source."_f.ar]");
+        Dada::logMsg(2, $dl, "currentInfoThread: [".$results_dir."/".$obs."/".$source."_f.ar]");
         if (-f $results_dir."/".$obs."/".$source."_f.ar") {
           $cmd = "psrstat -j 'zap median' -j FTp -qc snr ".$results_dir."/".$obs."/".$source."_f.ar 2>&1 | grep snr= | awk -F= '{print \$2}'";
-          Dada->logMsg(2, $dl, "currentInfoThread: ".$cmd);
-          ($result, $response) = Dada->mySystem($cmd);
-          Dada->logMsg(2, $dl, "currentInfoThread: ".$result." ".$response);
+          Dada::logMsg(2, $dl, "currentInfoThread: ".$cmd);
+          ($result, $response) = Dada::mySystem($cmd);
+          Dada::logMsg(2, $dl, "currentInfoThread: ".$result." ".$response);
           chomp $response;
           if ($result eq "ok") {
             $snr = sprintf("%5.1f",$response);
@@ -325,13 +325,13 @@ sub currentInfoThread($) {
         # update the global variable 
         $curr_obs = $tmp_str;
 
-        Dada->logMsg(3, $dl, "currInfoThread: ".$curr_obs);
+        Dada::logMsg(3, $dl, "currInfoThread: ".$curr_obs);
         
       }
     }
   }
 
-  Dada->logMsg(1, $dl, "currentInfoThread: exiting");
+  Dada::logMsg(1, $dl, "currentInfoThread: exiting");
 
 }
 
@@ -343,7 +343,7 @@ sub imageInfoThread($) {
 
   my ($results_dir) = @_;
 
-  Dada->logMsg(1, $dl, "imageInfoThread: starting");
+  Dada::logMsg(1, $dl, "imageInfoThread: starting");
 
   my $sleep_time = 4;
   my $sleep_counter = 0;
@@ -437,11 +437,11 @@ sub imageInfoThread($) {
       }
 
       $image_info = $tmp_str;
-      Dada->logMsg(3, $dl, "imageInfoThread: ".$tmp_str);
+      Dada::logMsg(3, $dl, "imageInfoThread: ".$tmp_str);
     }
   }
 
-  Dada->logMsg(1, $dl, "imageInfoThread: exiting");
+  Dada::logMsg(1, $dl, "imageInfoThread: exiting");
 
 }
 
@@ -453,7 +453,7 @@ sub statusInfoThread() {
 
   my $status_dir = $cfg{"STATUS_DIR"};
 
-  Dada->logMsg(1, $dl, "statusInfoThread: starting");
+  Dada::logMsg(1, $dl, "statusInfoThread: starting");
 
   my @server_daemons = split(/ /,$cfg{"SERVER_DAEMONS"});
   my %clients = ();
@@ -532,12 +532,12 @@ sub statusInfoThread() {
 
       $status_info = $tmp_str;
 
-      Dada->logMsg(2, $dl, "statusInfoThread: ".$status_info);
+      Dada::logMsg(2, $dl, "statusInfoThread: ".$status_info);
 
     }
   }
 
-  Dada->logMsg(1, $dl, "statusInfoThread: exiting");
+  Dada::logMsg(1, $dl, "statusInfoThread: exiting");
 }
 
 #
@@ -545,7 +545,7 @@ sub statusInfoThread() {
 #
 sub nodeInfoThread() {
 
-  Dada->logMsg(1, $dl, "nodeInfoThread: starting");
+  Dada::logMsg(1, $dl, "nodeInfoThread: starting");
 
   my $sleep_time = 4;
   my $sleep_counter = 0;
@@ -586,14 +586,14 @@ sub nodeInfoThread() {
 
       for ($i=0; $i<=$#machines; $i++) {
 
-        $handle = Dada->connectToMachine($machines[$i], $port, 0);
+        $handle = Dada::connectToMachine($machines[$i], $port, 0);
         # ensure our file handle is valid
         if (!$handle) {
 
           $response = "0 0 0;;;0 0;;;0.00,0.00,0.00;;;0.0;;;0.0";
 
           # check if offline, or scripts not running
-          $handle = Dada->connectToMachine($machines[$i], 22, 0);
+          $handle = Dada::connectToMachine($machines[$i], 22, 0);
           if (!$handle) {
             $result = "offline";
           } else {
@@ -601,7 +601,7 @@ sub nodeInfoThread() {
             $handle->close();
           }
         } else {
-          ($result, $response) = Dada->sendTelnetCommand($handle, "get_status");
+          ($result, $response) = Dada::sendTelnetCommand($handle, "get_status");
           $handle->close();
         }
 
@@ -616,18 +616,18 @@ sub nodeInfoThread() {
       }
       $node_info = $tmp_str;
 
-      Dada->logMsg(3, $dl, "nodeInfoThread: ".$node_info);
+      Dada::logMsg(3, $dl, "nodeInfoThread: ".$node_info);
 
     }
   }  
 
-  Dada->logMsg(1, $dl, "nodeInfoThread: exiting");
+  Dada::logMsg(1, $dl, "nodeInfoThread: exiting");
 
 }
 
 sub gainInfoThread() {
 
-  Dada->logMsg(1, $dl, "gainInfoThread: starting");
+  Dada::logMsg(1, $dl, "gainInfoThread: starting");
                                                                                                                                                                           
   my $sleep_time = 4;
   my $sleep_counter = 0;
@@ -647,18 +647,18 @@ sub gainInfoThread() {
     } else {
       $sleep_counter = $sleep_time;
 
-      Dada->logMsg(2, $dl, "gainInfoThread: connecting to ".$host.":".$port);
-      $handle = Dada->connectToMachine($host, $port, 0);
+      Dada::logMsg(2, $dl, "gainInfoThread: connecting to ".$host.":".$port);
+      $handle = Dada::connectToMachine($host, $port, 0);
 
       # ensure our file handle is valid
       if (!$handle) {
         $result = "fail";
       } else {
-        Dada->logMsg(2, $dl, "gainInfoThread: -> REPORT GAINS");
+        Dada::logMsg(2, $dl, "gainInfoThread: -> REPORT GAINS");
         print $handle "REPORT GAINS\r\n";
-        $response = Dada->getLine($handle);
+        $response = Dada::getLine($handle);
         if ($response) {
-          Dada->logMsg(2, $dl, "gainInfoThread: <- ".$response);
+          Dada::logMsg(2, $dl, "gainInfoThread: <- ".$response);
           $result = "ok";
         } else {
           $result = "fail";
@@ -671,12 +671,12 @@ sub gainInfoThread() {
       } else {
         chomp $response;
       }
-      Dada->logMsg(2, $dl, "gainInfoThread: ".$response);
+      Dada::logMsg(2, $dl, "gainInfoThread: ".$response);
       $gain_info = $response;
     }
   }
 
-  Dada->logMsg(1, $dl, "gainInfoThread: exiting");
+  Dada::logMsg(1, $dl, "gainInfoThread: exiting");
 
 }
 
@@ -684,11 +684,11 @@ sub gainInfoThread() {
 
 sub controlThread($$) {
 
-  Dada->logMsg(1, $dl ,"controlThread: starting");
+  Dada::logMsg(1, $dl ,"controlThread: starting");
 
   my ($quit_file, $pid_file) = @_;
 
-  Dada->logMsg(2, $dl ,"controlThread(".$quit_file.", ".$pid_file.")");
+  Dada::logMsg(2, $dl ,"controlThread(".$quit_file.", ".$pid_file.")");
 
   # Poll for the existence of the control file
   while ((!(-f $quit_file)) && (!$quit_daemon)) {
@@ -699,10 +699,10 @@ sub controlThread($$) {
   $quit_daemon = 1;
 
   if ( -f $pid_file) {
-    Dada->logMsg(2, $dl ,"controlThread: unlinking PID file");
+    Dada::logMsg(2, $dl ,"controlThread: unlinking PID file");
     unlink($pid_file);
   } else {
-    Dada->logMsgWarn($warn, "controlThread: PID file did not exist on script exit");
+    Dada::logMsgWarn($warn, "controlThread: PID file did not exist on script exit");
   }
 
   return 0;
@@ -753,9 +753,9 @@ sub good($) {
   }
 
   # this script can *only* be run on the configured server
-  if (index($cfg{"SERVER_ALIASES"}, Dada->getHostMachineName()) < 0 ) {
+  if (index($cfg{"SERVER_ALIASES"}, Dada::getHostMachineName()) < 0 ) {
     return ("fail", "Error: script must be run on ".$cfg{"SERVER_HOST"}.
-                    ", not ".Dada->getHostMachineName());
+                    ", not ".Dada::getHostMachineName());
   }
 
   $server_sock = new IO::Socket::INET (

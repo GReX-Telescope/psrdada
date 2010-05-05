@@ -100,10 +100,10 @@ sub main() {
   $SIG{PIPE} = \&sigPipeHandle;
 
   # become a daemon
-  Dada->daemonize($log_file, $pid_file);
+  Dada::daemonize($log_file, $pid_file);
 
   # Open a connection to the nexus logging port
-  $log_sock = Dada->nexusLogOpen($log_host, $log_port);
+  $log_sock = Dada::nexusLogOpen($log_host, $log_port);
   if (!$log_sock) {
     print STDERR "Could open log port: ".$log_host.":".$log_port."\n";
   }
@@ -126,7 +126,7 @@ sub main() {
     # Look for dspsr archives (both normal and pulse_ archives)
     $cmd = "find . -name \"*.ar\" | sort";
     logMsg(2, "INFO", "main: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
+    ($result, $response) = Dada::mySystem($cmd);
     logMsg(2, "INFO", "main: ".$result." ".$response);
 
     if ($result ne "ok") {
@@ -154,7 +154,7 @@ sub main() {
     # Look for 2 minute old .dada files that may have been produced in the results dir via baseband mode (i.e. P427)
     $cmd = "find . -name \"*.dada\" -cmin +1 | sort";
     logMsg(2, "INFO", "main: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
+    ($result, $response) = Dada::mySystem($cmd);
     logMsg(2, "INFO", "main: ".$result." ".$response);
 
     if ($result ne "ok") {
@@ -190,7 +190,7 @@ sub main() {
 
   logMsg(0, "INFO", "STOPPING SCRIPT");
 
-  Dada->nexusLogClose($log_sock);
+  Dada::nexusLogClose($log_sock);
 
   return 0;
 
@@ -208,7 +208,7 @@ sub decimateArchive($$) {
   my $cmd = "";
   my $result = "";
   my $response = "";
-  my $bindir = Dada->getCurrentBinaryVersion();
+  my $bindir = Dada::getCurrentBinaryVersion();
 
   logMsg(2, "INFO", "Decimating archive ".$file);
 
@@ -216,7 +216,7 @@ sub decimateArchive($$) {
   $cmd = $bindir."/".$psh_script." ".$file;
 
   logMsg(2, "INFO", "decimateArchive: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMsg(2, "INFO", "decimateArchive ".$result." ".$response);
 
   if ($result ne "ok") {
@@ -295,7 +295,7 @@ sub processArchive($$) {
 
     $cmd = "mkdir -p ".$archive_dir."/".$dir;
     logMsg(2, "INFO", "processArchive: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
+    ($result, $response) = Dada::mySystem($cmd);
     logMsg(2, "INFO", "processArchive: ".$result." ".$response);
     if ($result ne "ok") {
       logMsg(0, "WARN", "failed to create archive dir: ".$response);
@@ -304,7 +304,7 @@ sub processArchive($$) {
   
   $cmd = "mv ".$dir."/".$file." ".$archive_dir."/".$dir."/";
   logMsg(2, "INFO", "processArchive: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMsg(2, "INFO", "processArchive: ".$result." ".$response);
   
   if ($result ne "ok") {
@@ -322,7 +322,7 @@ sub processArchive($$) {
       # The T scrunched (fres) archive
       $cmd = "cp ".$archive_dir."/".$dir."/".$file." ".$fres_archive;
       logMsg(2, "INFO", "processArchive: ".$cmd);
-      ($result, $response) = Dada->mySystem($cmd);
+      ($result, $response) = Dada::mySystem($cmd);
       logMsg(2, "INFO", "processArchive: ".$result." ".$response);
       if ($result ne "ok") {
         logMsg(0, "WARN", $cmd." failed: ".$response);
@@ -331,7 +331,7 @@ sub processArchive($$) {
       # The F scrunched (tres) archive
       $cmd = "pam -F -e tres ".$fres_archive;
       logMsg(2, "INFO", "processArchive: ".$cmd);
-      ($result, $response) = Dada->mySystem($cmd);
+      ($result, $response) = Dada::mySystem($cmd);
       logMsg(2, "INFO", "processArchive: ".$result." ".$response);
       if ($result ne "ok") {
         logMsg(0, "WARN", $cmd." failed: ".$response);
@@ -343,7 +343,7 @@ sub processArchive($$) {
       # Add the archive to the T scrunched total
       $cmd = "psradd -T -f ".$fres_archive." ".$fres_archive." ".$archive_dir."/".$dir."/".$file;
       logMsg(2, "INFO", "processArchive: ".$cmd);
-      ($result, $response) = Dada->mySystem($cmd);
+      ($result, $response) = Dada::mySystem($cmd);
       logMsg(2, "INFO", "processArchive: ".$result." ".$response);
       if ($result ne "ok") {
         logMsg(0, "WARN", $cmd." failed: ".$response);
@@ -352,7 +352,7 @@ sub processArchive($$) {
       # Add the archive to the F scrunched total
       $cmd = "psradd -jF -f ".$tres_archive." ".$tres_archive." ".$archive_dir."/".$dir."/".$file;
       logMsg(2, "INFO", "processArchive: ".$cmd);
-      ($result, $response) = Dada->mySystem($cmd);
+      ($result, $response) = Dada::mySystem($cmd);
       logMsg(2, "INFO", "processArchive: ".$result." ".$response);
       if ($result ne "ok") {
         logMsg(0, "WARN", $cmd." failed: ".$response);
@@ -400,7 +400,7 @@ sub processBasebandFile($$) {
 
    $cmd = "mv ".$dir."/".$file." ".$archive_dir."/".$dir."/";
   logMsg(1, "INFO", "processBasebandFile: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMsg(2, "INFO", "processBasebandFile: ".$result." ".$response);
 
   return ($result, $response); 
@@ -434,14 +434,14 @@ sub nfsCopy($$$) {
   
   my $cmd = "cp ".$file." ".$nfsdir."/".$tmp_file;
   logMsg(2, "INFO", "NFS copy \"".$cmd."\"");
-  ($result, $response) = Dada->mySystem($cmd,0);
+  ($result, $response) = Dada::mySystem($cmd,0);
 
   if ($result ne "ok") {
     return ("fail", "Command was \"".$cmd."\" and response was \"".$response."\"");
   } else {
     $cmd = "mv ".$nfsdir."/".$tmp_file." ".$nfsdir."/".$file;
     logMsg(2, "INFO", $cmd);
-    ($result, $response) = Dada->mySystem($cmd,0);
+    ($result, $response) = Dada::mySystem($cmd,0);
     if ($result ne "ok") {
       return ("fail", "Command was \"".$cmd."\" and response was \"".$response."\"");
     } else {
@@ -485,12 +485,12 @@ sub logMsg($$$) {
 
   my ($level, $type, $msg) = @_;
   if ($level <= $dl) {
-    my $time = Dada->getCurrentDadaTime();
+    my $time = Dada::getCurrentDadaTime();
     if (! $log_sock ) {
-      $log_sock = Dada->nexusLogOpen($log_host, $log_port);
+      $log_sock = Dada::nexusLogOpen($log_host, $log_port);
     }
     if ($log_sock) {
-      Dada->nexusLogMessage($log_sock, $time, "sys", $type, "arch mngr", $msg);
+      Dada::nexusLogMessage($log_sock, $time, "sys", $type, "arch mngr", $msg);
     }
     print "[".$time."] ".$msg."\n";
   }
@@ -527,7 +527,7 @@ sub sigPipeHandle($) {
   print STDERR $daemon_name." : Received SIG".$sigName."\n";
   $log_sock = 0;
   if ($log_host && $log_port) {
-    $log_sock = Dada->nexusLogOpen($log_host, $log_port);
+    $log_sock = Dada::nexusLogOpen($log_host, $log_port);
   }
 
 }
