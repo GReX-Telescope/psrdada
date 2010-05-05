@@ -29,7 +29,7 @@ sub usage() {
 #
 # Sanity check to prevent multiple copies of this daemon running
 #
-Dada->preventDuplicateDaemon(basename($0));
+Dada::preventDuplicateDaemon(basename($0));
 
 
 #
@@ -48,7 +48,7 @@ use constant SSH_OPTS      => "-x -o BatchMode=yes";
 #
 # Global Variables
 #
-our %cfg   = Bpsr->getBpsrConfig();   # Bpsr.cfg
+our %cfg   = Bpsr::getBpsrConfig();   # Bpsr.cfg
 our $error = $cfg{"STATUS_DIR"}."/bpsr_transfer_manager.error";
 our $warn  = $cfg{"STATUS_DIR"}."/bpsr_transfer_manager.warn";
 our $quit_daemon : shared  = 0;
@@ -100,7 +100,6 @@ my $i=0;
 #
 my @s_disks = ();
 my @p_disks = ();
-my @f_disks = ();
 
 for ($i=0; $i<$cfg{"NUM_SWIN_DIRS"}; $i++) {
   push (@s_disks, $cfg{"SWIN_DIR_".$i});
@@ -110,16 +109,12 @@ for ($i=0; $i<$cfg{"NUM_PARKES_DIRS"}; $i++) {
   push (@p_disks, $cfg{"PARKES_DIR_".$i});
 }
 
-for ($i=0; $i<$cfg{"NUM_SWIN_FOLD_DIRS"}; $i++) {
-  push (@f_disks, $cfg{"SWIN_FOLD_DIR_".$i});
-}
-
 #
 # Main
 #
 
-Dada->daemonize($logfile, $pidfile);
-Dada->logMsg(0, DL, "STARTING SCRIPT");
+Dada::daemonize($logfile, $pidfile);
+Dada::logMsg(0, DL, "STARTING SCRIPT");
 
 # Start the daemon control thread
 $daemon_control_thread = threads->new(\&daemonControlThread);
@@ -131,13 +126,20 @@ setStatus("Starting script");
 
 my $s_i = 0;
 my $p_i = 0;
-my $f_i = 0;
 
 # my $s_start_disk = 0;
 # my $p_start_disk = 0;
 
 # Ensure that destination directories exist for this project
-($result, $response) = checkDestinations(\@s_disks, \@p_disks, \@f_disks);
+($result, $response) = checkDestinations(\@s_disks);
+if ($result ne "ok") {
+  $quit_daemon = 1;
+  sleep(3);
+  exit(1);
+}
+
+# Ensure that destination directories exist for this project
+($result, $response) = checkDestinations(\@p_disks);
 if ($result ne "ok") {
   $quit_daemon = 1;
   sleep(3);
@@ -145,11 +147,10 @@ if ($result ne "ok") {
 }
 
 
-
 chdir $cfg{"SERVER_ARCHIVE_NFS_MNT"};
 
 # Ensure no vsib processes running on sending machines, srv's or remote's
-interrupt_all(\@s_disks, \@p_disks, \@f_disks);
+interrupt_all(\@s_disks, \@p_disks);
 
 #
 # Main loop
@@ -158,9 +159,6 @@ interrupt_all(\@s_disks, \@p_disks, \@f_disks);
 # We cycle through ports to prevent "Address already in use" problems
 my $vsib_port = VSIB_MIN_PORT;
 
-my $f_user = "";
-my $f_host = "";
-my $f_dir = "";
 my $is_fold = 0;
 my $cmd = "";
 my $path = "";
@@ -170,18 +168,22 @@ my $files = "";
 my $counter = 0;
 my $go_swin = 0;
 my $go_parkes = 0;
-my $go_fold = 0;
+my $is_fold = 0;
 
 # On startup do a check for fully transferred or fully archived obvserations
-# Dada->logMsg(1, DL, "Checking for full transferred observations");
-# ($result, $response) = checkFullyTransferred();
-# Dada->logMsg(2, DL, "main: checkFullyTransferred(): ".$result.":".$response);
+Dada::logMsg(1, DL, "Checking for fully transferred observations");
+($result, $response) = checkFullyTransferred();
+Dada::logMsg(2, DL, "main: checkFullyTransferred(): ".$result.":".$response);
 
-# Dada->logMsg(1, DL, "Checking for full archived observations");
-# ($result, $response) = checkFullyArchived();
-# Dada->logMsg(2, DL, "main: checkFullyArchived(): ".$result.":".$response);
+Dada::logMsg(1, DL, "Checking for fully archived observations");
+($result, $response) = checkFullyArchived();
+Dada::logMsg(2, DL, "main: checkFullyArchived(): ".$result.":".$response);
 
-Dada->logMsg(1, DL, "Starting Main");
+Dada::logMsg(1, DL, "Checking for fully deleted observations");
+($result, $response) = checkFullyDeleted();
+Dada::logMsg(2, DL, "main: checkFullyDeleted(): ".$result.":".$response);
+
+Dada::logMsg(1, DL, "Starting Main [".$pid."]");
 
 while (!$quit_daemon) {
 
@@ -189,20 +191,23 @@ while (!$quit_daemon) {
   # This is important otherwise we can get stuck in a loop waiting for one place
   ($s_user, $s_host, $s_dir) = findHoldingArea(\@s_disks, $s_i);
   ($p_user, $p_host, $p_dir) = findHoldingArea(\@p_disks, $p_i);
-  ($f_user, $f_host, $f_dir) = findHoldingArea(\@f_disks, $f_i);
 
-  $s_dir .= "/".$pid."/staging_area";
-  $p_dir .= "/".$pid."/staging_area";
-  $f_dir .= "/".$pid."/pulsars";
-
-  Dada->logMsg(2, DL, "Swin holding area: ".$s_host.":".$s_dir);
-  Dada->logMsg(2, DL, "Parkes holding area: ".$p_host.":".$p_dir);
-  Dada->logMsg(2, DL, "Fold holding area: ".$f_host.":".$f_dir);
+  Dada::logMsg(2, DL, "Swin holding area: ".$s_host.":".$s_dir);
+  Dada::logMsg(2, DL, "Parkes holding area: ".$p_host.":".$p_dir);
 
   # Find the optimal beam to send to swin/parkes
-  Dada->logMsg(2, DL, "main: getBeamToSend(". $s_host.", ".$p_host.", ".$f_host.")");
-  ($obs, $beam, $go_swin, $go_parkes, $go_fold) = getBeamToSend($s_host, $p_host, $f_host);
-  Dada->logMsg(2, DL, "main: getBeamToSend(): ".$obs.", ".$beam.", ".$go_swin.", ".$go_parkes.", ".$go_fold);
+  Dada::logMsg(2, DL, "main: getBeamToSend(". $s_host.", ".$p_host.")");
+  ($obs, $beam, $go_swin, $go_parkes, $is_fold) = getBeamToSend($s_host, $p_host);
+  Dada::logMsg(2, DL, "main: getBeamToSend(): ".$obs.", ".$beam.", ".$go_swin.", ".$go_parkes.", ".$is_fold);
+
+  if ($is_fold) {
+    Dada::logMsg(2, DL, "main: ".$obs." is a folded observation");
+    $s_dir .= "/".$pid."/pulsars";
+    $p_dir .= "/".$pid."/pulsars";
+  } else {
+    $s_dir .= "/".$pid."/staging_area";
+    $p_dir .= "/".$pid."/staging_area";
+  }
 
   # If we have something to send
 
@@ -217,58 +222,39 @@ while (!$quit_daemon) {
     $files = "";
 
     # Make adjustments to the destinations based on getBeamToSend
-    if ($go_fold) {
-
-      Dada->logMsg(2, DL, "main: ".$obs." is a folded observation");
-      $s_user = $f_user;
-      $s_host = $f_host;
-      $s_dir  = $f_dir;
+    if ($go_swin) {
+      if ($beam eq "13") {
+        $s_i = ($s_i + 1) % ($#s_disks+1);
+      }
+      $dest_string .= $s_host." ";
+    } else {
+      $s_user = "none";
+      $s_host = "none";
+      $s_dir = "none";
+    }
+    if ($go_parkes) {
+      if ($beam eq "13") {
+        $p_i = ($p_i + 1) % ($#s_disks+1);
+      }
+      $dest_string .= $p_host." ";
+    } else {
       $p_user = "none";
       $p_host = "none";
       $p_dir  = "none";
-
-      # try to get all the beams from an obs to the holding area
-      if ($beam eq "13") {
-        $f_i = ($f_i + 1) % ($#f_disks+1);
-      }
-      $dest_string .= $f_host." ";
-
-    } else {
-
-      if ($go_swin) {
-        if ($beam eq "13") {
-          $s_i = ($s_i + 1) % ($#s_disks+1);
-        }
-        $dest_string .= $s_host." ";
-      } else {
-        $s_user = "none";
-        $s_host = "none";
-        $s_dir = "none";
-      }
-      if ($go_parkes) {
-        if ($beam eq "13") {
-          $p_i = ($p_i + 1) % ($#s_disks+1);
-        }
-        $dest_string .= $p_host." ";
-      } else {
-        $p_user = "none";
-        $p_host = "none";
-        $p_dir  = "none";
-      }
     }
 
-    Dada->logMsg(2, DL, "main: swin: ".$s_user."@".$s_host.":".$s_dir);
-    Dada->logMsg(2, DL, "main: parkes ".$p_user."@".$p_host.":".$p_dir);
-    Dada->logMsg(2, DL, "main: dest_string ".$dest_string);
+    Dada::logMsg(2, DL, "main: swin: ".$s_user."@".$s_host.":".$s_dir);
+    Dada::logMsg(2, DL, "main: parkes ".$p_user."@".$p_host.":".$p_dir);
+    Dada::logMsg(2, DL, "main: dest_string ".$dest_string);
   
     setStatus($obs."/".$beam." &rarr; ".$dest_string);
 
     # If at least one destination is available
     if (($p_host ne "none") || ($s_host ne "none")) {
 
-      Dada->logMsg(2, DL, "main: getBeamFiles(".$obs.", ".$beam.")");
+      Dada::logMsg(2, DL, "main: getBeamFiles(".$obs.", ".$beam.")");
       $files = getBeamFiles($obs, $beam);
-      Dada->logMsg(2, DL, "main: getBeamFiles: ".$files);
+      Dada::logMsg(2, DL, "main: getBeamFiles: ".$files);
 
       $path = $obs."/".$beam;
 
@@ -277,7 +263,7 @@ while (!$quit_daemon) {
 
       # If we have been asked to quit
       if ($quit_daemon) {
-        Dada->logMsg(2, DL, "main: asked to quit");
+        Dada::logMsg(2, DL, "main: asked to quit");
 
       } else {
 
@@ -287,23 +273,23 @@ while (!$quit_daemon) {
           if ($p_host ne "none") {
             ($result, $response) = checkTransferredFiles($p_user, $p_host, $p_dir, $files);
             if ($result eq "ok") {
-              Dada->logMsg(0, DL, "Successfully transferred to parkes: ".$path);
+              Dada::logMsg(0, DL, "Successfully transferred to parkes: ".$path);
               recordTransferResult("sent.to.parkes", $path);
               markRemoteCompleted("xfer.complete", $p_user, $p_host, $p_dir, $path);
             } else {
               $xfer_failure = 1;
-              Dada->logMsgWarn($warn, "Failed to transfer ".$path." to parkes: ".$response);
+              Dada::logMsgWarn($warn, "Failed to transfer ".$path." to parkes: ".$response);
             }
           }
           if ($s_host ne "none") {
             ($result, $response) = checkTransferredFiles($s_user, $s_host, $s_dir, $files);
             if ($result eq "ok") {
-              Dada->logMsg(0, DL, "Successfully transferred to swin: ".$path);
+              Dada::logMsg(0, DL, "Successfully transferred to swin: ".$path);
               recordTransferResult("sent.to.swin", $path);
               markRemoteCompleted("xfer.complete", $s_user, $s_host, $s_dir, $path);
             } else {
               $xfer_failure = 1;
-              Dada->logMsgWarn($warn, "Failed to transfer ".$path." to swin: ".$response);
+              Dada::logMsgWarn($warn, "Failed to transfer ".$path." to swin: ".$response);
             }
           }
         }
@@ -326,53 +312,48 @@ while (!$quit_daemon) {
 
       # Check if all beams have been trasnferred successfully, if so, mark 
       # the observation as sent.to.dest
-      Dada->logMsg(2, DL, "main: checkAllBeams(".$obs.")");
+      Dada::logMsg(2, DL, "main: checkAllBeams(".$obs.")");
       ($result, $response) = checkAllBeams($obs);
-      Dada->logMsg(2, DL, "main: checkAllBeams: ".$result." ".$response);
+      Dada::logMsg(2, DL, "main: checkAllBeams: ".$result." ".$response);
 
       if ($result ne "ok") { 
-        Dada->logMsgWarn($warn, "main: checkAllBeams failed: ".$response);
+        Dada::logMsgWarn($warn, "main: checkAllBeams failed: ".$response);
 
       } else {
         if ($response ne "all beams sent") {
-          Dada->logMsg(1, DL, "Obs ".$obs." not fully transferred: ".$response);
+          Dada::logMsg(1, DL, "Obs ".$obs." not fully transferred: ".$response);
 
         } else {
-          Dada->logMsg(0, DL, "Successfully transferred to swin & parkes: ".$obs);
+          Dada::logMsg(0, DL, "Successfully transferred to swin & parkes: ".$obs);
           recordTransferResult("obs.transferred", $obs);
           unlink ($obs."/obs.finished");
-
-          # Dont mark the observation as transferred anymore
-          # markRemoteCompleted("xfer.complete", $s_user, $s_host, $s_dir, $obs);
-          # if (!$is_fold) {
-            # we dont transfer folded observations to parkes
-            # markRemoteCompleted("xfer.complete", $p_user, $p_host, $p_dir, $obs);
-          # }
-
           setStatus($obs." xfer success");
 
-          Dada->logMsg(2, DL, "Checking for full transferred observations");
-          ($result, $response) = checkFullyTransferred();
-          Dada->logMsg(2, DL, "Checking for full archived observations");
-          ($result, $response) = checkFullyArchived();
-
+          # Dada::logMsg(2, DL, "Checking for fully transferred observations");
+          # ($result, $response) = checkFullyTransferred();
+          # Dada::logMsg(2, DL, "Checking for fully archived observations");
+          # ($result, $response) = checkFullyArchived();
+          # Dada::logMsg(2, DL, "Checking for fully deleted observations");
+          # ($result, $response) = checkFullyDeleted();
         }
       }
 
     } else {
-      Dada->logMsg(0, DL, "Obs ".$obs." is ready to send, but swin & parkes unavailable to receive");
+      Dada::logMsg(0, DL, "Obs ".$obs." is ready to send, but swin & parkes unavailable to receive");
       setStatus("Warn: no dest available");
     }
 
   } else {
 
-    Dada->logMsg(2, DL, "Checking for full transferred observations");
+    Dada::logMsg(2, DL, "Checking for fully transferred observations");
     ($result, $response) = checkFullyTransferred();
-    Dada->logMsg(2, DL, "Checking for full archived observations");
+    Dada::logMsg(2, DL, "Checking for fully archived observations");
     ($result, $response) = checkFullyArchived();
+    Dada::logMsg(2, DL, "Checking for fully deleted observations");
+    ($result, $response) = checkFullyDeleted();
 
     setStatus("Waiting for obs");
-    Dada->logMsg(2, DL, "Sleeping 60 seconds");
+    Dada::logMsg(2, DL, "Sleeping 60 seconds");
 
     $counter = 12;
     while ((!$quit_daemon) && ($counter > 0)) {
@@ -390,7 +371,7 @@ $daemon_control_thread->join();
 $pid_report_thread->join();
 
 setStatus("Script stopped");
-Dada->logMsg(0, DL, "STOPPING SCRIPT");
+Dada::logMsg(0, DL, "STOPPING SCRIPT");
 
 exit 0;
 
@@ -409,31 +390,31 @@ sub checkTransferredFiles($$$$) {
 
   my ($user, $host, $dir, $files) = @_;
 
-  Dada->logMsg(2, DL, "checkRemoteArchive(".$user.", ".$host.", ".$dir.", ".$files.")");
+  Dada::logMsg(2, DL, "checkRemoteArchive(".$user.", ".$host.", ".$dir.", ".$files.")");
 
   my $cmd = "ls -l ".$files." | awk '{print \$5\" \"\$9}' | sort";
 
-  Dada->logMsg(2, DL, "checkRemoteArchive: ".$cmd);
+  Dada::logMsg(2, DL, "checkRemoteArchive: ".$cmd);
   my $local_list = `$cmd`;
   if ($? != 0) {
-    Dada->logMsgWarn($warn, "checkRemoteArchive: local find failed ".$local_list);
+    Dada::logMsgWarn($warn, "checkRemoteArchive: local find failed ".$local_list);
   }
 
   $cmd = "ssh ".SSH_OPTS." -l ".$user." ".$host." \"cd ".$dir."; ls -l ".$files."\" | awk '{print \$5\" \"\$9}' | sort";
   
-  Dada->logMsg(2, DL, "checkRemoteArchive: ".$cmd);
+  Dada::logMsg(2, DL, "checkRemoteArchive: ".$cmd);
   my $remote_list = `$cmd`;
 
   if ($? != 0) {
-    Dada->logMsgWarn($warn, "checkRemoteArchive: remote find failed ".$remote_list);
+    Dada::logMsgWarn($warn, "checkRemoteArchive: remote find failed ".$remote_list);
   }
 
   # Regardless of transfer success, remove the WRITIING flag
-  $cmd = "ssh ".SSH_OPTS." -l ".$user." ".$host." \"cd ".$dir."; rm -f ../../WRITING\"";
-  Dada->logMsg(2, DL, "checkRemoteArchive: ".$cmd);
+  $cmd = "ssh ".SSH_OPTS." -l ".$user." ".$host." \"cd ".$dir."; rm -f ../../../WRITING\"";
+  Dada::logMsg(2, DL, "checkRemoteArchive: ".$cmd);
   system($cmd);
   if ($? != 0) {
-    Dada->logMsgWarn($warn, "checkRemoteArchive: could not remove remote WRITING file");
+    Dada::logMsgWarn($warn, "checkRemoteArchive: could not remove remote WRITING file");
   }
 
   if (($local_list eq $remote_list) && ($local_list ne "")) {
@@ -441,8 +422,8 @@ sub checkTransferredFiles($$$$) {
     return ("ok","");
   } else {
 
-    Dada->logMsgWarn($warn, "ARCHIVE MISMATCH: local: ".$local_list);
-    Dada->logMsgWarn($warn, "ARCHIVE MISMATCH: remote: ".$remote_list);
+    Dada::logMsgWarn($warn, "ARCHIVE MISMATCH: local: ".$local_list);
+    Dada::logMsgWarn($warn, "ARCHIVE MISMATCH: remote: ".$remote_list);
 
     return ("fail", "archive mismatch");
   }
@@ -455,9 +436,9 @@ sub recordTransferResult($$) {
   my ($file, $dir) = @_;
 
   my $cmd = "sudo -u bpsr touch ".$dir."/".$file;
-  Dada->logMsg(2, DL, "recordTransferResult: ".$cmd);
-  my ($result, $response) = Dada->mySystem($cmd);
-  Dada->logMsg(2, DL, "recordTransferResult: ".$result." ".$response);
+  Dada::logMsg(2, DL, "recordTransferResult: ".$cmd);
+  my ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(2, DL, "recordTransferResult: ".$result." ".$response);
 
   return ($result, $response);
 }
@@ -465,17 +446,17 @@ sub recordTransferResult($$) {
 sub markRemoteCompleted($$$$$) {
 
   my ($file, $user, $host, $dir, $obs) = @_;
-  Dada->logMsg(2, DL, "markRemoteCompleted(".$file.", ".$user.", ".$host.", ".$dir.", ".$obs.")");
+  Dada::logMsg(2, DL, "markRemoteCompleted(".$file.", ".$user.", ".$host.", ".$dir.", ".$obs.")");
 
   my $cmd = "cd ".$dir."; touch ".$obs."/".$file;
   my $ssh_cmd = "ssh ".SSH_OPTS." -l ".$user." ".$host." \"".$cmd."\"";
 
-  Dada->logMsg(2, DL, "markRemoteCompleted: ".$cmd);
-  my ($result, $response) = Dada->mySystem($ssh_cmd);
-  Dada->logMsg(2, DL, "markRemoteCompleted: ".$result." ".$response);
+  Dada::logMsg(2, DL, "markRemoteCompleted: ".$cmd);
+  my ($result, $response) = Dada::mySystem($ssh_cmd);
+  Dada::logMsg(2, DL, "markRemoteCompleted: ".$result." ".$response);
 
   if ($result ne "ok") {
-    Dada->logMsgWarn($warn, "could not mark ".$host.":".$dir."/".$obs." as completed");
+    Dada::logMsgWarn($warn, "could not mark ".$host.":".$dir."/".$obs." as completed");
   }
 
   return ($result, $response);
@@ -507,7 +488,7 @@ sub findHoldingArea(\@$) {
     $i = ($c + $startdisk)%($#disks+1);
 
     $disk = $disks[$i];
-    Dada->logMsg(2, DL, "Evaluating ".$path);
+    Dada::logMsg(2, DL, "Evaluating ".$path);
 
     $user = "";
     $host = "";
@@ -523,38 +504,38 @@ sub findHoldingArea(\@$) {
 
       # check for disk space on this disk
       $cmd = "ssh ".SSH_OPTS." -l ".$user." ".$host." \"ls ".$path."\" 2>&1";
-      Dada->logMsg(2, DL, $cmd);
+      Dada::logMsg(2, DL, $cmd);
       $result = `$cmd`;
 
       if ($? != 0) {
         chomp $result;
-        Dada->logMsgWarn($warn, "ssh cmd '".$cmd."' failed: ".$result);
+        Dada::logMsgWarn($warn, "ssh cmd '".$cmd."' failed: ".$result);
         $result = "";
       } else {
 
         # check if this is being used for reading
-        $cmd = "ssh ".SSH_OPTS." -l ".$user." ".$host." \"ls ".$path."/READING\" 2>&1";
+        $cmd = "ssh ".SSH_OPTS." -l ".$user." ".$host." \"ls ".$path."/../READING\" 2>&1";
         $result = `$cmd`;
         chomp $result;
         if ($result =~ m/No such file or directory/) {
 
           # There is no READING file.
           $cmd = "ssh ".SSH_OPTS." -l ".$user." ".$host." \"df ".$path." -P\" | tail -n 1";
-          Dada->logMsg(2, DL, $cmd);
+          Dada::logMsg(2, DL, $cmd);
           $result = `$cmd`;
           if ($? != 0) {
-            Dada->logMsgWarn($warn, "df command ".$cmd." failed: ".$result);
+            Dada::logMsgWarn($warn, "df command ".$cmd." failed: ".$result);
             $result = "";
           } 
         } else {
           # we are writing to the disk
-          Dada->logMsg(0, DL, "Skipping disk $host:$path as the disk is being used for reading");
+          Dada::logMsg(2, DL, "Skipping disk $host:$path as the disk is being used for reading");
           $result="";
         }
       }
     } else {
 
-      Dada->logMsgWarn($warn, "disk line syntax error ".$disk);
+      Dada::logMsgWarn($warn, "disk line syntax error ".$disk);
       $result = "";
 
     }
@@ -563,31 +544,36 @@ sub findHoldingArea(\@$) {
 
       chomp($result);
 
-      Dada->logMsg(2, DL, "df_result  = $result");
+      Dada::logMsg(2, DL, "df_result  = $result");
 
       if ($result =~ m/No such file or directory/) {
 
-        Dada->logMsgWarn($error, $user." ".$host." ".$path." was not a valid directory");
+        Dada::logMsgWarn($error, $user." ".$host." ".$path." was not a valid directory");
         $result = "";
 
       } else {
 
         my ($location, $total, $used, $avail, $junk) = split(" ",$result);
-        Dada->logMsg(2, DL, "used = $used, avail = $avail, total = $total");
+        Dada::logMsg(2, DL, "used = $used, avail = $avail, total = $total");
 
-        if (($avail / $total) < 0.05) {
+        my $stop_percent = 0.05;
+        if ($host =~ m/apsr/) {
+          $stop_percent = 0.50;
+        }
 
-          Dada->logMsgWarn($warn, $host.":".$path." is over 95% full");
+        if (($avail / $total) < $stop_percent) {
+
+          Dada::logMsgWarn($warn, $host.":".$path." is over ".((1.00-$stop_percent)*100)." full");
 
         } else {
 
           # Need more than 10 Gig
           if ($avail < 10000) {
 
-            Dada->logMsgWarn($warn, $host.":".$path." has less than 10 GB left");
+            Dada::logMsgWarn($warn, $host.":".$path." has less than 10 GB left");
 
           } else {
-            Dada->logMsg(2, DL, "Holding area: ".$user." ".$host." ".$path);
+            Dada::logMsg(2, DL, "Holding area: ".$user." ".$host." ".$path);
             return ($user,$host,$path);
           }
         }
@@ -603,11 +589,11 @@ sub findHoldingArea(\@$) {
 #
 # Find a beam to send. Looks for observations that have an obs.finished in them
 # 
-sub getBeamToSend($$$) {
+sub getBeamToSend($$) {
 
-  my ($swin, $parkes, $fold) = @_;
+  my ($swin, $parkes) = @_;
 
-  Dada->logMsg(2, DL, "getBeamToSend(".$swin.", ".$parkes.", ".$fold.")");
+  Dada::logMsg(2, DL, "getBeamToSend(".$swin.", ".$parkes.")");
 
   my $obs_to_send= "";
   my $beam_to_send = "";
@@ -629,7 +615,7 @@ sub getBeamToSend($$$) {
   # find all observations that have been finished
   $cmd = "find ".$archives_dir." -maxdepth 2 -name \"obs.finished\"".
          " -printf \"%h %T@\\n\" | sort | awk -F/ '{print \$NF}'";
-  Dada->logMsg(2, DL, "getBeamToSend: ".$cmd);
+  Dada::logMsg(2, DL, "getBeamToSend: ".$cmd);
   $find_result = `$cmd`;
   chomp $find_result;
   @obs_finished = split(/\n/, $find_result);
@@ -656,90 +642,102 @@ sub getBeamToSend($$$) {
   my $parkes_file = 0;
   my $psrxml_file = 0;
   my $archive_file = 0;
+  my $sent_beams = 0;
 
   # desried destinations
   my $want_swin = 0;
   my $want_parkes = 0;
-  my $want_swinfold = 0;
+  my $is_fold = 0;
 
   # Ensure NFS mounts exist for subsequent parsing
   $cmd = "ls /nfs/apsr??/ >& /dev/null";
-  Dada->logMsg(2, DL, "getBeamToSend: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
-  Dada->logMsg(2, DL, "getBeamToSend: ".$result.":".$response);
+  Dada::logMsg(2, DL, "getBeamToSend: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(2, DL, "getBeamToSend: ".$result.":".$response);
 
   if ($result ne "ok") {
-    Dada->logMsgWarn($warn, "Not all NFS directories were mounted");
+    Dada::logMsgWarn($warn, "Not all NFS directories were mounted");
   }
 
-  Dada->logMsg(2, DL, "Found (".$#obs_finished.") observations with obs.finished");
+  Dada::logMsg(2, DL, "Found (".$#obs_finished.") observations with obs.finished");
 
   # Go through the list of finished observations, looking for something to send
-  for ($i=0; (($i<=$#obs_finished) && ($optimal_obs eq "none") ); $i++) {
+  for ($i=0; (($i<=$#obs_finished) && ($optimal_obs eq "none") && (!$have_obs)); $i++) {
 
-    Dada->logMsg(3, DL, "getBeamToSend: checking ".$obs_finished[$i]);
+    Dada::logMsg(3, DL, "getBeamToSend: checking ".$obs_finished[$i]);
     ($obs, $time) = split(/ /,$obs_finished[$i]);
-    Dada->logMsg(3, DL, "getBeamToSend: time: ".$time.", obs:".$obs);
+    Dada::logMsg(3, DL, "getBeamToSend: time: ".$time.", obs:".$obs);
 
     # skip if no obs.info exists
     if (!( -f $obs."/obs.info")) {
-      Dada->logMsg(0, DL, "Required file missing: ".$obs."/obs.info");
+      Dada::logMsg(0, DL, "Required file missing: ".$obs."/obs.info");
       next;
     }
 
     # get the PID
     $cmd = "grep ^PID ".$obs."/obs.info | awk '{print \$2}'";
-    Dada->logMsg(3, DL, "getBeamToSend: ".$cmd);
+    Dada::logMsg(3, DL, "getBeamToSend: ".$cmd);
     $obs_pid = `$cmd`;
     chomp $obs_pid;
-    Dada->logMsg(3, DL, "getBeamToSend: PID = ".$obs_pid);
+    Dada::logMsg(3, DL, "getBeamToSend: PID = ".$obs_pid);
     if ($obs_pid ne $pid) {
-      Dada->logMsg(2, DL, "getBeamToSend: skipping ".$obs." as its PID [".$obs_pid."] was not ".$pid);
+      Dada::logMsg(2, DL, "getBeamToSend: skipping ".$obs." as its PID [".$obs_pid."] was not ".$pid);
       next;
     }
 
     $cmd = "grep SOURCE ".$obs."/obs.info | awk '{print \$2}'";
-    Dada->logMsg(3, DL, "getBeamToSend: ".$cmd);
+    Dada::logMsg(3, DL, "getBeamToSend: ".$cmd);
     $source = `$cmd`;
     chomp $source;
-    Dada->logMsg(3, DL, "getBeamToSend: SOURCE = ".$source);
+    Dada::logMsg(3, DL, "getBeamToSend: SOURCE = ".$source);
 
     if ($source =~ m/^G/) {
       $survey_obs = 1;
+      $is_fold = 0;
     } else {
       $survey_obs = 0;
+      $is_fold = 1;
     }
 
     # determine the required destinations based on PID
-    ($want_swin, $want_parkes, $want_swinfold) = getObsDestinations($obs_pid, $survey_obs);
+    ($want_swin, $want_parkes) = Bpsr::getObsDestinations($obs_pid, $cfg{$obs_pid."_DEST"});
+
+    Dada::logMsg(2, DL, "getBeamToSend: ".$obs." [".$source."] want[".$want_swin.",".$want_parkes."] fold[".$is_fold."]");
 
     # Get the sorted list of beam nfs links for this obs
     # $cmd = "find  ".$obs." -maxdepth 1 -type l -printf '\%f\n' | sort";
     # This command will timeout on missing NFS links (6 s), but wont print ones that are missing
     $cmd = "find -L ".$obs." -mindepth 1 -maxdepth 1 -type d -printf \"%f\\n\" | sort";
-    Dada->logMsg(3, DL, "getBeamToSend: ".$cmd);
+    Dada::logMsg(3, DL, "getBeamToSend: ".$cmd);
 
     $find_result = `$cmd`;
     chomp $find_result;
     @beams = split(/\n/, $find_result);
-    Dada->logMsg(3, DL, "getBeamToSend: found ".($#beams+1)." beams in obs ".$obs);
+    Dada::logMsg(3, DL, "getBeamToSend: found ".($#beams+1)." beams in obs ".$obs);
+
+    $sent_beams = 0;
 
     # See if we can find a beam that matches
-    for ($j=0; (($j<=$#beams) && ($optimal_obs eq "none")); $j++) {
+    for ($j=0; (($j<=$#beams) && ($optimal_obs eq "none") && (!$have_obs)); $j++) {
 
       $beam = $beams[$j];
-      Dada->logMsg(3, DL, "getBeamToSend: checking ".$obs."/".$beam);
+      Dada::logMsg(3, DL, "getBeamToSend: checking ".$obs."/".$beam);
       
       # If the remote NFS mount exists
       if (-f $obs."/".$beam."/obs.start") {
 
         # see what flags we have
-        $twobit_file = -f $obs."/".$beam."/".$obs.".fil";
-        $swin_file = -f $obs."/".$beam."/sent.to.swin";
-        $parkes_file = -f $obs."/".$beam."/sent.to.parkes";
-        $psrxml_file = -f $obs."/".$beam."/".$obs.".psrxml";
-        $archive_file = -f $obs."/".$beam."/integrated.ar";
+        $twobit_file = (-f $obs."/".$beam."/".$obs.".fil") ? 1 : 0;
+        $swin_file = (-f $obs."/".$beam."/sent.to.swin") ? 1 : 0;
+        $parkes_file = (-f $obs."/".$beam."/sent.to.parkes") ? 1 : 0;
+        $psrxml_file = (-f $obs."/".$beam."/".$obs.".psrxml") ? 1 : 0;
+        $archive_file = (-f $obs."/".$beam."/integrated.ar") ? 1 : 0;
 
+        if (!(($want_swin && !$swin_file) || ($want_parkes && !$parkes_file))) {
+          $sent_beams += 1;  
+        }
+
+        Dada::logMsg(3, DL, "getBeamToSend: ".$obs."/".$beam." fil[".$twobit_file."] swin[".$want_swin.",".$swin_file."] parkes[".$want_parkes.",".$parkes_file."]");
 
         if ($twobit_file) {
 
@@ -748,7 +746,7 @@ sub getBeamToSend($$$) {
             $optimal_obs = $obs;
             $optimal_beam = $beam;
             $have_obs = 1;
-            Dada->logMsg(2, DL, "getBeamToSend: found optimal beam ".$obs."/".$beam);
+            Dada::logMsg(2, DL, "getBeamToSend: found optimal beam ".$obs."/".$beam);
           }
 
           # If only one, then done acceptable
@@ -757,61 +755,53 @@ sub getBeamToSend($$$) {
             $acceptable_obs = $obs;
             $acceptable_beam = $beam;
             $have_obs = 1;
-            Dada->logMsg(2, DL, "getBeamToSend: found acceptable beam ".$obs."/".$beam);
+            Dada::logMsg(2, DL, "getBeamToSend: found acceptable beam ".$obs."/".$beam);
           }
 
-        } else {
-
-          # If only one, then sub optimal
-          if ( ($suboptimal_obs eq "none") && ($fold) && (!$swin_file) && ($want_swin) ) {
-            $suboptimal_obs = $obs;
-            $suboptimal_beam = $beam;
-            $have_obs = 1;
-            Dada->logMsg(2, DL, "getBeamToSend: found sub optimal beam ".$obs."/".$beam);
-          }
         }
 
-#        # If this is a survey obs
-#        if (($survey_obs) && ($twobit_file)) { 
-#
-#          # If both need to be transferred, done!          
-#          if (($want_swin) && ($want_parkes) && ($swin ne "none") && (!$swin_file) && ($parkes ne "none") && (!$parkes_file)) {
-#            $optimal_obs = $obs;
-#            $optimal_beam = $beam;
-#            $have_obs = 1;
-#            Dada->logMsg(2, DL, "getBeamToSend: found optimal beam ".$obs."/".$beam);
-#          }
-#
-#          # If only one, then done acceptable
-#          if ( ($acceptable_obs eq "none") && ((($swin ne "none") && (!$swin_file)) || (($parkes ne "none") && (!$parkes_file))) ) {
-#            $acceptable_obs = $obs;
-#            $acceptable_beam = $beam;
-#            $have_obs = 1;
-#            Dada->logMsg(2, DL, "getBeamToSend: found acceptable beam ".$obs."/".$beam);
-#          }
-#
-#        # This is not a survey obs, likely a 2bit test obs or folded obs
-#        } else {
-#
-#          # If only one, then sub optimal
-#          if ( ($suboptimal_obs eq "none") && ($fold) && (!$swin_file) ) {
-#            $suboptimal_obs = $obs;
-#            $suboptimal_beam = $beam;
-#            $have_obs = 1;
-#            Dada->logMsg(2, DL, "getBeamToSend: found sub optimal beam ".$obs."/".$beam);
-#          }
-#        }
+        # If only one, then sub optimal
+        if ( ($suboptimal_obs eq "none") && ((($swin ne "none") && (!$swin_file) && ($want_swin)) ||
+                                             (($parkes ne "none") && (!$parkes_file) && ($want_parkes)))) {
+          $suboptimal_obs = $obs;
+          $suboptimal_beam = $beam;
+          $have_obs = 1;
+          Dada::logMsg(2, DL, "getBeamToSend: found sub optimal beam ".$obs."/".$beam);
+        }
+
       } else {
-        Dada->logMsgWarn($warn, $obs."/".$beam."/obs.start did not exist, or dir was not mounted");
+        # Dada::logMsgWarn($warn, $obs."/".$beam."/obs.start did not exist, or dir was not mounted");
+        Dada::logMsg(3, DL, $obs."/".$beam."/obs.start did not exist, or dir was not mounted");
       }
     
-      if ($optimal_obs ne "none") {
-        $have_obs = 1;
+    }
+    if ($sent_beams == ($#beams+1)) {
+      Dada::logMsg(2, DL, "getBeamToSend: ".$obs.": ALL BEAMS SENT");
+
+      # Check if all beams have been trasnferred successfully, if so, mark 
+      # the observation as sent.to.dest
+      Dada::logMsg(2, DL, "getBeamToSend: checkAllBeams(".$obs.")");
+      ($result, $response) = checkAllBeams($obs);
+      Dada::logMsg(2, DL, "getBeamToSend: checkAllBeams: ".$result." ".$response);
+
+      if ($result ne "ok") {
+        Dada::logMsgWarn($warn, "main: checkAllBeams failed: ".$response);
+
+      } else {
+        if ($response ne "all beams sent") {
+          Dada::logMsg(1, DL, "Obs ".$obs." not fully transferred: ".$response);
+
+        } else {
+          Dada::logMsg(0, DL, "Successfully transferred to swin & parkes: ".$obs);
+          recordTransferResult("obs.transferred", $obs);
+          unlink ($obs."/obs.finished");
+        }
       }
     }
+
   }
 
-  Dada->logMsg(2, DL, "have_obs: ".$have_obs);
+  Dada::logMsg(2, DL, "have_obs: ".$have_obs);
 
   if ($have_obs) {
     if ($optimal_obs ne "none") {
@@ -824,34 +814,36 @@ sub getBeamToSend($$$) {
       $obs_to_send = $suboptimal_obs;
       $beam_to_send = $suboptimal_beam;
     } else {
-      Dada->logMsgWarn($error, "getBeamToSend: something went wrong in logic");
+      Dada::logMsgWarn($error, "getBeamToSend: something went wrong in logic");
     }
 
-    Dada->logMsg(2, DL, "getBeamToSend: to_send obs=".$obs_to_send.", beam=".$beam_to_send);
+    Dada::logMsg(2, DL, "getBeamToSend: to_send obs=".$obs_to_send.", beam=".$beam_to_send);
 
     # get the PID
     $cmd = "grep ^PID ".$obs_to_send."/obs.info | awk '{print \$2}'";
-    Dada->logMsg(3, DL, "getBeamToSend: ".$cmd);
+    Dada::logMsg(3, DL, "getBeamToSend: ".$cmd);
     $obs_pid = `$cmd`;
     chomp $obs_pid;
-    Dada->logMsg(2, DL, "getBeamToSend: PID = ".$obs_pid);
+    Dada::logMsg(2, DL, "getBeamToSend: PID = ".$obs_pid);
     
     $cmd = "grep SOURCE ".$obs_to_send."/obs.info | awk '{print \$2}'";
-    Dada->logMsg(3, DL, "getBeamToSend: ".$cmd);
+    Dada::logMsg(3, DL, "getBeamToSend: ".$cmd);
     $source = `$cmd`;
     chomp $source;
-    Dada->logMsg(2, DL, "getBeamToSend: SOURCE = ".$source);
+    Dada::logMsg(2, DL, "getBeamToSend: SOURCE = ".$source);
     
     if ($source =~ m/^G/) {
       $survey_obs = 1;
+      $is_fold = 0;
     } else {
       $survey_obs = 0;
+      $is_fold = 1;
     }
     
     # determine the required destinations based on PID
-    Dada->logMsg(3, DL, "getBeamToSend: getObsDestinations(".$obs_pid.", ".$survey_obs.")");
-    ($want_swin, $want_parkes, $want_swinfold) = getObsDestinations($obs_pid, $survey_obs);
-    Dada->logMsg(2, DL, "getBeamToSend: getObsDestinations want swin:".$want_swin." parkes:".$want_parkes." swinfold:".$want_swinfold);
+    Dada::logMsg(3, DL, "getBeamToSend: getObsDestinations(".$obs_pid.", ".$cfg{$obs_pid."_DEST"}.")");
+    ($want_swin, $want_parkes) = Bpsr::getObsDestinations($obs_pid, $cfg{$obs_pid."_DEST"});
+    Dada::logMsg(2, DL, "getBeamToSend: getObsDestinations want swin:".$want_swin." parkes:".$want_parkes);
 
     # Flags for chosen archive
     $twobit_file = 0;
@@ -860,13 +852,12 @@ sub getBeamToSend($$$) {
     $parkes_file = 0;
     $go_swin = 0;
     $go_parkes = 0;
-    $go_fold = 0;
 
-    Dada->logMsg(3, DL, "getBeamToSend: testing ".$obs_to_send."/".$beam_to_send);
+    Dada::logMsg(3, DL, "getBeamToSend: testing ".$obs_to_send."/".$beam_to_send);
     $cmd = "ls ".$obs_to_send."/".$beam_to_send;
-    Dada->logMsg(3, DL, "getBeamToSend: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
-    Dada->logMsg(3, DL, "getBeamToSend: ".$result.":".$response);
+    Dada::logMsg(3, DL, "getBeamToSend: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, DL, "getBeamToSend: ".$result.":".$response);
 
     if ( -f $obs_to_send."/".$beam_to_send."/".$obs_to_send.".fil" ) { 
       $twobit_file = 1; 
@@ -880,7 +871,7 @@ sub getBeamToSend($$$) {
     if ( -f $obs_to_send."/".$beam_to_send."/sent.to.parkes") { 
       $parkes_file = 1; 
     }
-    Dada->logMsg(2, DL, "getBeamToSend: [".$twobit_file.", ".$swin_file.", ".$parkes_file.", ".$archive_file."]");
+    Dada::logMsg(2, DL, "getBeamToSend: [".$twobit_file.", ".$swin_file.", ".$parkes_file.", ".$archive_file."]");
 
     if (($want_swin) && (!$swin_file)) {
       $go_swin = 1;
@@ -888,52 +879,14 @@ sub getBeamToSend($$$) {
     if (($want_parkes) && (!$parkes_file)) {
       $go_parkes = 1;
     }
-    if (($want_swinfold) && (!$survey_obs)) {
-      $go_fold = 1;
-    }
-
-    #if (($archive_file) || (!$survey_obs)) {
-    #  $fold_file = 1;
-    #}
-
-    Dada->logMsg(2, DL, "getBeamToSend: returning (".$obs_to_send.", ".$beam_to_send.", ".$go_swin.
-                        ", ".$go_parkes.", ".$go_fold.")"); 
+    Dada::logMsg(2, DL, "getBeamToSend: returning (".$obs_to_send.", ".$beam_to_send.", ".$go_swin.
+                        ", ".$go_parkes.", ".$is_fold.")"); 
   
-    return ($obs_to_send, $beam_to_send, $go_swin, $go_parkes, $go_fold);
+    return ($obs_to_send, $beam_to_send, $go_swin, $go_parkes, $is_fold);
   } else {
     return ("none", "none", 0, 0, 0);
   }
     
-}
-
-# Return the destinations that an obs with the specified PID should be sent to
-sub getObsDestinations($$) {
-
-  my ($obs_pid, $survey_obs) = @_;
-
-  my $want_swin = 0;
-  my $want_parkes = 0;
-  my $want_swinfold = 0;
-  my $dests = "";
-
-  $dests = $cfg{$obs_pid."_DEST"};
-
-  if ($dests =~ m/swin/) {
-    $want_swin = 1; 
-  }
-  if ($dests =~ m/parkes/) {
-    $want_parkes = 1; 
-  }
-
-  # special case for P630 non-survey observations only
-  if (($obs_pid eq "P630") && (!$survey_obs)) {
-    $want_swin = 0;
-    $want_parkes = 0;
-    $want_swinfold = 1;
-  }
-
-  return ($want_swin, $want_parkes, $want_swinfold);
-
 }
 
 
@@ -949,14 +902,16 @@ sub run_vsib_recv($$$$$) {
   my $result = "";
   my $response = "";
 
-  # create the writing file
-  $cmd = "ssh ".SSH_OPTS." -l ".$user." ".$host." \"cd ".$dir."; touch ../../WRITING\"";
-  Dada->logMsg(2, DL, "run_vsib_recv [".$host."]: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
-  Dada->logMsg(2, DL, "run_vsib_recv [".$host."]: ".$result." ".$response);
+  # create the writing file 
+  #   [disk]/bpsr/[staging_area|pulsars]/<PID>/../../../WRITING
+  #   [disk]/WRITING
+  $cmd = "ssh ".SSH_OPTS." -l ".$user." ".$host." \"cd ".$dir."; touch ../../../WRITING\"";
+  Dada::logMsg(2, DL, "run_vsib_recv [".$host."]: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(2, DL, "run_vsib_recv [".$host."]: ".$result." ".$response);
 
   if ($result ne "ok") {
-    Dada->logMsgWarn($warn, "run_vsib_recv [".$host."]: could not touch remote WRITING file");
+    Dada::logMsgWarn($warn, "run_vsib_recv [".$host."]: could not touch remote WRITING file");
   }
 
   # sleeping to avoid immediately consecutive ssh commands
@@ -964,12 +919,12 @@ sub run_vsib_recv($$$$$) {
 
   # create the output directory
   $cmd = "ssh ".SSH_OPTS." -l ".$user." ".$host." \"mkdir -p ".$dir."/".$obs_dir."\"";
-  Dada->logMsg(2, DL, $cmd);
-  ($result, $response) = Dada->mySystem($cmd);
-  Dada->logMsg(2, DL, "run_vsib_recv [".$host."]: ".$result." ".$response);
+  Dada::logMsg(2, DL, $cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(2, DL, "run_vsib_recv [".$host."]: ".$result." ".$response);
 
   if ($result ne "ok") {
-    Dada->logMsgWarn($error, "run_vsib_recv[".$host."]: could not create output dir \"".
+    Dada::logMsgWarn($error, "run_vsib_recv[".$host."]: could not create output dir \"".
                             $dir."/".$obs_dir."\": ".$response);
     return ("fail");
   }
@@ -981,14 +936,14 @@ sub run_vsib_recv($$$$$) {
   $cmd = "vsib_recv -q -1 -w ".TCP_WINDOW." -p ".$port." >> transfer.log";
   my $ssh_cmd =  "ssh ".SSH_OPTS." -l ".$user." ".$host." \"cd ".$dir."; ".$cmd."\" 2>&1 | server_bpsr_server_logger.pl -n vsib_recv_".$host;
 
-  Dada->logMsg(2, DL, "run_vsib_recv [".$host."]: ".$ssh_cmd);
+  Dada::logMsg(2, DL, "run_vsib_recv [".$host."]: ".$ssh_cmd);
   system($ssh_cmd);
 
   if ($? != 0) {
-    Dada->logMsgWarn($warn, "vsib_recv returned a non zero exit value");
+    Dada::logMsgWarn($warn, "vsib_recv returned a non zero exit value");
     return ("fail");
   } else {
-    Dada->logMsg(2, DL, "vsib_recv succeeded");
+    Dada::logMsg(2, DL, "vsib_recv succeeded");
     return ("ok");
   }
 
@@ -1002,11 +957,11 @@ sub run_vsib_proxy($$) {
 
   my ($host, $port) = @_;
 
-  Dada->logMsg(2, DL, "run_vsib_proxy()");
+  Dada::logMsg(2, DL, "run_vsib_proxy()");
 
   my $vsib_args = "-1 -q -w ".TCP_WINDOW." -p ".$port." -H ".$host;
   my $cmd = "vsib_proxy ".$vsib_args." 2>&1 | server_bpsr_server_logger.pl -n vsib_proxy";
-  Dada->logMsg(2, DL, $cmd);
+  Dada::logMsg(2, DL, $cmd);
 
   # Run the command on the localhost
   system($cmd);
@@ -1014,13 +969,13 @@ sub run_vsib_proxy($$) {
   # Check return value for "success"
   if ($? != 0) {
 
-    Dada->logMsgWarn($error, "run_vsib_proxy: command failed");
+    Dada::logMsgWarn($error, "run_vsib_proxy: command failed");
     return ("fail");
 
   # On sucesss, return ok
   } else {
 
-    Dada->logMsg(2, DL, "run_vsib_proxy: succeeded");
+    Dada::logMsg(2, DL, "run_vsib_proxy: succeeded");
     return ("ok");
 
   }
@@ -1032,7 +987,7 @@ sub interrupt_all(\@\@) {
 
   my ($s_ref, $p_ref) = @_;
 
-  Dada->logMsg(2, DL, "interrupt_all()");
+  Dada::logMsg(2, DL, "interrupt_all()");
 
   my @s = @$s_ref;
   my @p = @$p_ref;
@@ -1042,7 +997,7 @@ sub interrupt_all(\@\@) {
 
   # kill all potential senders
   for ($i=0; $i<$cfg{"NUM_PWC"}; $i++) {
-    Dada->logMsg(2, DL, "interrupt_all: interrupt_vsib_send(bpsr, ".$cfg{"PWC_".$i}.")");
+    Dada::logMsg(2, DL, "interrupt_all: interrupt_vsib_send(bpsr, ".$cfg{"PWC_".$i}.")");
     interrupt_vsib_send("bpsr", $cfg{"PWC_".$i});
   }
 
@@ -1063,7 +1018,7 @@ sub interrupt_all(\@\@) {
     $path = "";
     @disk_components = split(":",$disk,3);
 
-    Dada->logMsg(2, DL, "interrupt_all: swin ".$disk);
+    Dada::logMsg(2, DL, "interrupt_all: swin ".$disk);
 
     if ($#disk_components == 2) {
       $user = $disk_components[0];
@@ -1082,7 +1037,7 @@ sub interrupt_all(\@\@) {
     $path = "";
     @disk_components = split(":",$disk,3);
 
-    Dada->logMsg(2, DL, "interrupt_all: parkes ".$disk);
+    Dada::logMsg(2, DL, "interrupt_all: parkes ".$disk);
 
     if ($#disk_components == 2) {
       $user = $disk_components[0];
@@ -1098,10 +1053,10 @@ sub interrupt_all(\@\@) {
 #
 sub interrupt_vsib_proxy() {
 
-  Dada->logMsg(2, DL, "interrupt_vsib_proxy()");
+  Dada::logMsg(2, DL, "interrupt_vsib_proxy()");
   
   my $cmd = "killall vsib_proxy";
-  Dada->logMsg(1, DL, "interrupt_vsib_proxy: ".$cmd);
+  Dada::logMsg(1, DL, "interrupt_vsib_proxy: ".$cmd);
   my $result = `$cmd 2>&1`;
 }
 
@@ -1112,10 +1067,10 @@ sub interrupt_vsib_send($$) {
 
   my ($user, $host) = @_;
 
-  Dada->logMsg(2, DL, "interrupt_vsib_send(".$user.", ".$host.")");
+  Dada::logMsg(2, DL, "interrupt_vsib_send(".$user.", ".$host.")");
  
   my $cmd = "ssh ".SSH_OPTS." -l ".$user." ".$host." \"killall vsib_send\"";
-  Dada->logMsg(1, DL, "interrupt_vsib_send: ".$cmd);
+  Dada::logMsg(1, DL, "interrupt_vsib_send: ".$cmd);
   my $result = `$cmd 2>&1`;
 
 }
@@ -1128,24 +1083,24 @@ sub interrupt_vsib_recv($$$$$) {
   my ($user, $host, $dir, $obs, $beam) = @_;
 
   my $cmd = "";
-  Dada->logMsg(2, DL, "interrupt_vsib_recv(".$user.", ".$host.", ".$dir.", ".$obs.", ".$beam.")");
+  Dada::logMsg(2, DL, "interrupt_vsib_recv(".$user.", ".$host.", ".$dir.", ".$obs.", ".$beam.")");
 
   if ($host ne "none") {
 
     # kill vsib_recv
     $cmd = "ssh ".SSH_OPTS." -l ".$user." ".$host." \"killall vsib_recv\"";
-    Dada->logMsg(1, DL, "interrupt_vsib_recv: ".$cmd);
+    Dada::logMsg(1, DL, "interrupt_vsib_recv: ".$cmd);
     my $result = `$cmd 2>&1`;
 
     # delete the WRITING flag
-    $cmd = "ssh ".SSH_OPTS." -l ".$user." ".$host." \"cd ".$dir."; rm -f ../../WRITING\"";
-    Dada->logMsg(1, DL, "interrupt_vsib_recv: ".$cmd);
+    $cmd = "ssh ".SSH_OPTS." -l ".$user." ".$host." \"cd ".$dir."; rm -f ../../../WRITING\"";
+    Dada::logMsg(1, DL, "interrupt_vsib_recv: ".$cmd);
     system($cmd);
 
     # optionally delete the transfer specified, this is a beam
     if (($obs ne "none") && ($obs ne "")) {
       $cmd = "ssh ".SSH_OPTS." -l ".$user." ".$host." \"cd ".$dir."; rm -rf ".$obs."/".$beam."\"";
-      Dada->logMsg(1, DL, "interrupt_vsib_recv: ".$cmd);
+      Dada::logMsg(1, DL, "interrupt_vsib_recv: ".$cmd);
       system($cmd);
     }
   }
@@ -1181,11 +1136,11 @@ sub run_vsib_send($$$$$) {
 
   my $ssh_cmd = "ssh ".SSH_OPTS." -l bpsr ".$send_host." \"cd ".$cfg{"CLIENT_ARCHIVE_DIR"}."; ".$cmd."\" 2>&1 | server_bpsr_server_logger.pl -n vsib_send";
 
-  Dada->logMsg(2, DL, "run_vsib_send: ".$ssh_cmd);
+  Dada::logMsg(2, DL, "run_vsib_send: ".$ssh_cmd);
   system($ssh_cmd);
 
   if ($? != 0) {
-    Dada->logMsgWarn($warn, "run_vsib_send: vsib_send returned a non-zero exit value");
+    Dada::logMsgWarn($warn, "run_vsib_send: vsib_send returned a non-zero exit value");
     return("fail");
   } else {
     return("ok");
@@ -1200,7 +1155,7 @@ sub getBeamFiles($$) {
 
   my ($obs, $beam) = @_;
 
-  Dada->logMsg(2, DL, "getBeamFiles(".$obs.", ".$beam.")");
+  Dada::logMsg(2, DL, "getBeamFiles(".$obs.", ".$beam.")");
 
  # my $archives_dir = $cfg{"SERVER_ARCHIVE_NFS_MNT"};
   my $dir = $obs."/".$beam;
@@ -1212,7 +1167,7 @@ sub getBeamFiles($$) {
   # aux.tar, integrated.ar, $obs.psrxml, $obs.fil, obs.txt and obs.start
   #$cmd = "ls -1 ".$dir."/*ar ".$dir."/".$obs.".* ".$dir."/obs.*";
   $cmd = "find -L ".$dir." -maxdepth 1 -name '*ar' -o -name '".$obs.".*' -o -name  'obs.*'";
-  Dada->logMsg(2, DL, "getBeamFiles: ".$cmd);
+  Dada::logMsg(2, DL, "getBeamFiles: ".$cmd);
   $list = `$cmd`;
   chomp $list;
   @files = split(/\n/,$list);
@@ -1222,7 +1177,7 @@ sub getBeamFiles($$) {
     $file_list .= $files[$i]." ";
   }
   
-  Dada->logMsg(2, DL, "getBeamFiles: ".$file_list);
+  Dada::logMsg(2, DL, "getBeamFiles: ".$file_list);
 
   return $file_list;
 
@@ -1235,7 +1190,7 @@ sub getBeamFiles($$) {
 #
 sub daemonControlThread() {
 
-  Dada->logMsg(2, DL, "daemon_control: thread starting");
+  Dada::logMsg(2, DL, "daemon_control: thread starting");
 
   my $pidfile = $cfg{"SERVER_CONTROL_DIR"}."/".PIDFILE;
   my $daemon_quit_file = $cfg{"SERVER_CONTROL_DIR"}."/".QUITFILE;
@@ -1247,7 +1202,7 @@ sub daemonControlThread() {
 
   # poll for the existence of the control file
   while ((!-f $daemon_quit_file) && (!$quit_daemon)) {
-    Dada->logMsg(3, DL, "daemon_control: Polling for ".$daemon_quit_file);
+    Dada::logMsg(3, DL, "daemon_control: Polling for ".$daemon_quit_file);
     sleep(1);
   }
 
@@ -1256,7 +1211,7 @@ sub daemonControlThread() {
 
   # try to cleanly stop things
   if (!(($curr_obs eq "none") || ($curr_obs eq ""))) {
-    Dada->logMsg(1, DL, "daemon_control: interrupting obs ".$curr_obs);
+    Dada::logMsg(1, DL, "daemon_control: interrupting obs ".$curr_obs);
     interrupt_vsib_send($send_user, $send_host);
     interrupt_vsib_proxy();
     interrupt_vsib_recv($p_user, $p_host, $p_dir, $curr_obs, $curr_beam);
@@ -1280,18 +1235,18 @@ sub daemonControlThread() {
 
     # Clean up the sent.to.[swin|parkes] in the current archives dir
     my $cmd = "sudo -u bpsr rm -f ".$tags_to_clean;
-    Dada->logMsg(1, DL, "daemon_control: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
-    Dada->logMsg(1, DL, "daemon_control: ".$result." ".$response);
+    Dada::logMsg(1, DL, "daemon_control: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(1, DL, "daemon_control: ".$result." ".$response);
 
   } else {
-    Dada->logMsg(1, DL, "daemon_control: not interrupting due to no current observation");
+    Dada::logMsg(1, DL, "daemon_control: not interrupting due to no current observation");
   }
 
-  Dada->logMsg(2, DL, "daemon_control: Unlinking PID file ".$pidfile);
+  Dada::logMsg(2, DL, "daemon_control: Unlinking PID file ".$pidfile);
   unlink($pidfile);
 
-  Dada->logMsg(2, DL, "daemon_control: exiting");
+  Dada::logMsg(2, DL, "daemon_control: exiting");
 
 }
 
@@ -1302,7 +1257,7 @@ sub pidReportThread($) {
 
   (my $daemon_pid) = @_;
 
-  Dada->logMsg(1, DL, "pidReportThread: thread starting");
+  Dada::logMsg(1, DL, "pidReportThread: thread starting");
 
   my $sock = 0;
   my $host = $cfg{"SERVER_HOST"};
@@ -1320,7 +1275,7 @@ sub pidReportThread($) {
   );
 
   if (!$sock) {
-    Dada->logMsgWarn($warn, "Could not create PID reporting socket [".$host.":".$port."]: ".$!);
+    Dada::logMsgWarn($warn, "Could not create PID reporting socket [".$host.":".$port."]: ".$!);
 
   } else {
 
@@ -1338,7 +1293,7 @@ sub pidReportThread($) {
     
           $handle = $rh->accept();
           $handle->autoflush();
-          Dada->logMsg(2, DL, "pidReportThread: Accepting connection");
+          Dada::logMsg(2, DL, "pidReportThread: Accepting connection");
 
           # Add this read handle to the set
           $read_set->add($handle);
@@ -1346,22 +1301,22 @@ sub pidReportThread($) {
 
         } else {
 
-          $string = Dada->getLine($rh);
+          $string = Dada::getLine($rh);
 
           if (! defined $string) {
-            Dada->logMsg(2, DL, "pidReportThread: Closing a connection");
+            Dada::logMsg(2, DL, "pidReportThread: Closing a connection");
             $read_set->remove($rh);
             close($rh);
   
           } else {
 
-            Dada->logMsg(2, DL, "pidReportThread: <- ".$string);
+            Dada::logMsg(2, DL, "pidReportThread: <- ".$string);
 
             if ($string eq "get_pid") {
               print $rh $daemon_pid."\r\n";
-              Dada->logMsg(2, DL, "pidReportThread: -> ".$daemon_pid);
+              Dada::logMsg(2, DL, "pidReportThread: -> ".$daemon_pid);
             } else {
-              Dada->logMsgWarn($warn, "pidReportThread: received unexpected string: ".$string);
+              Dada::logMsgWarn($warn, "pidReportThread: received unexpected string: ".$string);
             }
           }
         }
@@ -1369,7 +1324,7 @@ sub pidReportThread($) {
     }
   }
 
-  Dada->logMsg(1, DL, "pidReportThread: thread exiting");
+  Dada::logMsg(1, DL, "pidReportThread: thread exiting");
 
   return 0;
 }
@@ -1382,7 +1337,7 @@ sub sigHandle($) {
   print STDERR basename($0)." : Received SIG".$sigName."\n";
   $quit_daemon = 1;
   sleep(3);
-  print STDERR basename($0)." : Exiting: ".Dada->getCurrentDadaTime(0)."\n";
+  print STDERR basename($0)." : Exiting: ".Dada::getCurrentDadaTime(0)."\n";
 
 }
 
@@ -1392,12 +1347,12 @@ sub killAndCleanExisting($$$) {
 
   my $cmd =  "ssh ".SSH_OPTS." -l ".$user." ".$host." \"server_bpsr_transfer_killer.sh ".$dir."\"";
 
-  Dada->logMsg(2, DL, $cmd);
-  my ($result, $response) = Dada->mySystem($cmd);
-  Dada->logMsg(3, DL, "server_bpsr_transfer_killer.sh: ".$result." ".$response);
+  Dada::logMsg(2, DL, $cmd);
+  my ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, DL, "server_bpsr_transfer_killer.sh: ".$result." ".$response);
 
   if ($result ne "ok") {
-    Dada->logMsg(0, DL, "server_bpsr_transfer_killer returned a non zero exit value");
+    Dada::logMsg(0, DL, "server_bpsr_transfer_killer returned a non zero exit value");
   }
 
   return ($result, $response);
@@ -1406,12 +1361,12 @@ sub killAndCleanExisting($$$) {
 
 sub killLocal(){
   my $cmd = "server_bpsr_transfer_kill_server.sh";
-  Dada->logMsg(2, DL, $cmd);
-  my ($result, $response) = Dada->mySystem($cmd);
-  Dada->logMsg(3, DL, "server_bpsr_transfer_kill_server.sh: ".$result." ".$response);
+  Dada::logMsg(2, DL, $cmd);
+  my ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, DL, "server_bpsr_transfer_kill_server.sh: ".$result." ".$response);
 
   if ($result ne "ok") {
-    Dada->logMsgWarn($warn, "server_bpsr_transfer_kill_server returned a non zero exit value");
+    Dada::logMsgWarn($warn, "server_bpsr_transfer_kill_server returned a non zero exit value");
   }
 
   return ($result, $response);
@@ -1435,7 +1390,7 @@ sub killDisks(\@) {
   for ($i=0; $i<=$#disks; $i++) {
 
     my $disk = $disks[$i];
-    Dada->logMsg(2, DL, "Evaluating ".$path);
+    Dada::logMsg(2, DL, "Evaluating ".$path);
 
     $user = "";
     $host = "";
@@ -1469,9 +1424,9 @@ sub checkIfFold($){
 
   # this is muuuuuuuuuuuuch easier to understand 
   my $cmd = "grep source_name_centre_beam ".$obs."/01/*.psrxml| awk -F\\> '{print \$2}' | awk -F\\< '{printf(\"%.1s\",\$1)}'";
-  Dada->logMsg(2, DL, "checkIfFold: ".$cmd);
-  my ($result, $response) = Dada->mySystem($cmd);
-  Dada->logMsg(2, DL, "checkIfFold: ".$result." ".$response);
+  Dada::logMsg(2, DL, "checkIfFold: ".$cmd);
+  my ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(2, DL, "checkIfFold: ".$result." ".$response);
  
   if ($result eq "ok") {
 
@@ -1484,7 +1439,7 @@ sub checkIfFold($){
     $is_fold = 1;
   }
 
-  Dada->logMsg(2, DL, "checkIfFold(): For $obs is_fold=".$is_fold);
+  Dada::logMsg(2, DL, "checkIfFold(): For $obs is_fold=".$is_fold);
 
   return $is_fold;
 }
@@ -1496,7 +1451,7 @@ sub setStatus($) {
 
   (my $message) = @_;
 
-  Dada->logMsg(2, DL, "setStatus(".$message.")");
+  Dada::logMsg(2, DL, "setStatus(".$message.")");
 
   my $dir = "/nfs/control/bpsr/";
   my $file = "xfer.state";
@@ -1505,14 +1460,14 @@ sub setStatus($) {
   my $response = "";
 
 
-  Dada->logMsg(2, DL, "setStatus: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
-  Dada->logMsg(2, DL, "setStatus: ".$result." ".$response);
+  Dada::logMsg(2, DL, "setStatus: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(2, DL, "setStatus: ".$result." ".$response);
 
   $cmd = "echo '".$message."' > ".$dir."/".$file;
-  Dada->logMsg(2, DL, "setStatus: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
-  Dada->logMsg(2, DL, "setStatus: ".$result." ".$response);
+  Dada::logMsg(2, DL, "setStatus: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(2, DL, "setStatus: ".$result." ".$response);
 
   return ("ok", "");
     
@@ -1537,18 +1492,18 @@ sub transferBeam($$$$$$$$$$) {
 
   my $xfer_failure = 0;
   my $path = $obs."/".$beam;
-  my $proxy_host = Dada->getHostMachineName();
+  my $proxy_host = Dada::getHostMachineName();
 
-  Dada->logMsg(1, DL, "Transferring ".$path." to (".$p_host." ".$s_host.")");
+  Dada::logMsg(1, DL, "Transferring ".$path." to (".$p_host." ".$s_host.")");
 
   # copy the obs.txt file into the beam directory (if it exists)
   if (-f $obs."/obs.txt") {
     my $cmd = "cp ".$obs."/obs.txt ".$path."/obs.txt";
-    Dada->logMsg(2, DL, $cmd);
-    ($result, $response) = Dada->mySystem($cmd);
-    Dada->logMsg(2, DL, $result," ".$response);
+    Dada::logMsg(2, DL, $cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(2, DL, $result." ".$response);
     if ($result ne "ok") {
-      Dada->logMsgWarn($warn, "could not add obs.txt to the transfer");
+      Dada::logMsgWarn($warn, "could not add obs.txt to the transfer");
     } else {
       $files .= " ".$path."/obs.txt";
     }
@@ -1560,11 +1515,11 @@ sub transferBeam($$$$$$$$$$) {
 
   # Find the host on which the beam directory is located
   $cmd = "find ".$path." -maxdepth 1 -printf \"\%l\" | awk -F/ '{print \$3}'";
-  Dada->logMsg(2, DL, $cmd);
-  ($result, $response) = Dada->mySystem($cmd);
-  Dada->logMsg(2, DL, $result," ".$response);
+  Dada::logMsg(2, DL, $cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(2, DL, $result." ".$response);
   if ($result ne "ok") {
-    Dada->logMsgWarn($error, "could not determine host on which ".$path." resides");
+    Dada::logMsgWarn($error, "could not determine host on which ".$path." resides");
     return ("fail", "could not determine host on which ".$path." resides");
   }
 
@@ -1573,13 +1528,13 @@ sub transferBeam($$$$$$$$$$) {
 
   # start the receivers
   if ($p_host ne "none") {
-    Dada->logMsg(2, DL, "run_vsib_recv(".$p_user.", ".$p_host.", ".$p_dir." ".$path.", ".$port.")");
+    Dada::logMsg(2, DL, "run_vsib_recv(".$p_user.", ".$p_host.", ".$p_dir." ".$path.", ".$port.")");
     $p_recv_thread = threads->new(\&run_vsib_recv, $p_user, $p_host, $p_dir, $path, $port);
   }
 
   if ($s_host ne "none") {
 
-    Dada->logMsg(2, DL, "run_vsib_recv(".$s_user.", ".$s_host.", ".$s_dir.", ".$path.", ".$port.")");
+    Dada::logMsg(2, DL, "run_vsib_recv(".$s_user.", ".$s_host.", ".$s_dir.", ".$path.", ".$port.")");
     $s_recv_thread = threads->new(\&run_vsib_recv, $s_user, $s_host, $s_dir, $path, $port);
 
     # The proxy is only run on srv0 for swin transfers
@@ -1599,49 +1554,54 @@ sub transferBeam($$$$$$$$$$) {
   # Wait for the recv threads to be "ready"
   my $receivers_ready = 0;
   my $recv_wait = 10;
+  my $rval = 0;
   while ((!$receivers_ready) && ($recv_wait > 0) && (!$quit_daemon)) {
 
     $receivers_ready = 1;
 
     if ($p_recv_thread) {
-      my $ps_cmd = "ps aux | grep vsib_recv | grep ".$p_user." | grep -v grep";
-      $cmd = "ssh ".SSH_OPTS." -l ".$p_user." ".$p_host." \"".$ps_cmd."\"";
-      Dada->logMsg(3, DL, $cmd);
-      ($result, $response) = Dada->mySystem($cmd);
-      Dada->logMsg(3, DL, "run_vsib_recv [".$p_host."]: ".$result." ".$response);
-
-      # if this command works, then there is a vsib_recv running
+      $cmd = "netstat -tln | grep ".$port;
+      Dada::logMsg(3, DL, "main: ".$cmd);
+      ($result, $rval, $response) = Dada::remoteSshCommand($p_user, $p_host, $cmd);
+      Dada::logMsg(3, DL, "main: $result, $rval, $response");
       if ($result ne "ok") {
+        Dada::logMsgWarn($warn, "run_vsib_recv [".$p_host."]: ssh cmd failed: ".$response);
         $receivers_ready = 0;
+      } else {
+        if ($rval != 0) {
+          $receivers_ready = 0;
+        }
       }
     }
 
     if ($s_recv_thread) {
-      my $ps_cmd = "ps aux | grep vsib_recv | grep ".$s_user." | grep -v grep";
-      $cmd = "ssh ".SSH_OPTS." -l ".$s_user." ".$s_host." \"".$ps_cmd."\"";
-      Dada->logMsg(3, DL, $cmd);
-      ($result, $response) = Dada->mySystem($cmd);
-      Dada->logMsg(3, DL, "run_vsib_recv [".$s_host."]: ".$result." ".$response);
-
-      # if this command works, then there is a vsib_recv running
+      $cmd = "netstat -tln | grep ".$port;
+      Dada::logMsg(3, DL, "main: ".$cmd);
+      ($result, $rval, $response) = Dada::remoteSshCommand($s_user, $s_host, $cmd);
+      Dada::logMsg(3, DL, "main: $result, $rval, $response");
       if ($result ne "ok") {
+        Dada::logMsgWarn($warn, "run_vsib_recv [".$s_host."]: ssh cmd failed: ".$response);
         $receivers_ready = 0;
+      } else {
+        if ($rval != 0) {
+          $receivers_ready = 0;
+        }
       }
     }
 
     if (!$receivers_ready) {
-      Dada->logMsg(1, DL, "Waiting 2 seconds for receivers [".$p_host.", ".$s_host."] to be ready");
+      Dada::logMsg(1, DL, "Waiting 2 seconds for receivers [".$p_host.", ".$s_host."] to be ready");
       sleep(2);
       $recv_wait--;
     }
   }
 
   if ($quit_daemon) {
-    Dada->logMsgWarn($warn, "daemon asked to quit whilst waiting for vsib_recv");
+    Dada::logMsgWarn($warn, "daemon asked to quit whilst waiting for vsib_recv");
     $xfer_failure = 1;
 
   } elsif (!$receivers_ready) {
-    Dada->logMsgWarn($error, "vsib_recv was not ready after 20 seconds of waiting");
+    Dada::logMsgWarn($error, "vsib_recv was not ready after 20 seconds of waiting");
     $xfer_failure = 1;
 
   } else {
@@ -1660,59 +1620,59 @@ sub transferBeam($$$$$$$$$$) {
 
   } else {
 
-    sleep(2);
+    sleep(5);
 
     # start the sender
-    Dada->logMsg(2, DL, "run_vsib_send(".$send_host.", ".$s_proxy_host.", ".$p_host.", ".$port.")");
+    Dada::logMsg(2, DL, "run_vsib_send(".$send_host.", ".$s_proxy_host.", ".$p_host.", ".$port.")");
     $send_thread = threads->new(\&run_vsib_send, $send_host, $s_proxy_host, $p_host, $port, $files);
 
     # Transfer runs now
-    Dada->logMsg(1, DL, "Transfer now running: ".$path);
+    Dada::logMsg(1, DL, "Transfer now running: ".$path);
 
     # join the sending thread
-    Dada->logMsg(2, DL, "joining send_thread");
+    Dada::logMsg(2, DL, "joining send_thread");
     $result = $send_thread->join();
-    Dada->logMsg(2, DL, "send_thread: ".$result);
+    Dada::logMsg(2, DL, "send_thread: ".$result);
     if ($result ne "ok") {
       $xfer_failure = 1;
-      Dada->logMsgWarn($warn, "send_thread failed for ".$path);
+      Dada::logMsgWarn($warn, "send_thread failed for ".$path);
     }
   }
 
   # join the parkes thread, if it exists
   if ($p_recv_thread) {
-    Dada->logMsg(2, DL, "joining p_recv_thread");
+    Dada::logMsg(2, DL, "joining p_recv_thread");
     $result = $p_recv_thread->join();
-    Dada->logMsg(2, DL, "p_recv_thread: ".$result);
+    Dada::logMsg(2, DL, "p_recv_thread: ".$result);
     if ($result ne "ok") {
       $xfer_failure = 1;
-      Dada->logMsgWarn($warn, "p_recv_thread failed for ".$path);
+      Dada::logMsgWarn($warn, "p_recv_thread failed for ".$path);
     }
   }
 
   # join the swin thread, if it exists
   if ($s_recv_thread) {
 
-    Dada->logMsg(2, DL, "joining proxy_thread");
+    Dada::logMsg(2, DL, "joining proxy_thread");
     $result = $proxy_thread->join();
-    Dada->logMsg(2, DL, "proxy_thread: ".$result);
+    Dada::logMsg(2, DL, "proxy_thread: ".$result);
     if ($result ne "ok") {
       $xfer_failure = 1;
-      Dada->logMsgWarn($warn, "proxy_thread failed for ".$path);
+      Dada::logMsgWarn($warn, "proxy_thread failed for ".$path);
     }
 
-    Dada->logMsg(2, DL, "joining s_recv_thread");
+    Dada::logMsg(2, DL, "joining s_recv_thread");
     $result = $s_recv_thread->join();
-    Dada->logMsg(2, DL, "s_recv_thread: ".$result);
+    Dada::logMsg(2, DL, "s_recv_thread: ".$result);
     if ($result ne "ok") {
       $xfer_failure = 1;
-      Dada->logMsgWarn($warn, "s_recv_thread failed for ".$path);
+      Dada::logMsgWarn($warn, "s_recv_thread failed for ".$path);
     }
   }
   if ($xfer_failure) {
-    Dada->logMsgWarn($warn, "Transfer error for beam: ".$path);
+    Dada::logMsgWarn($warn, "Transfer error for beam: ".$path);
   } else {
-    Dada->logMsg(1, DL, "Transfer complete: ".$path);
+    Dada::logMsg(1, DL, "Transfer complete: ".$path);
   }
 
   # Increment the vsib port to prevent SO_REUSEADDR based issues
@@ -1744,32 +1704,30 @@ sub checkAllBeams($) {
   my $nbeams = 0;
   my $nbeams_mounted = 0;
   my $obs_pid = "";
-  my $source = "";
-  my $survey_obs = 0;
 
   # Determine the number of NFS links in the archives dir
   $cmd = "find ".$obs." -mindepth 1 -maxdepth 1 -type l | wc -l";
-  Dada->logMsg(2, DL, "checkAllBeams: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
-  Dada->logMsg(2, DL, "checkAllBeams: ".$result." ".$response);
+  Dada::logMsg(2, DL, "checkAllBeams: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(2, DL, "checkAllBeams: ".$result." ".$response);
   if ($result ne "ok") {
-    Dada->logMsgWarn($warn, "checkAllBeams: find command failed: ".$response);
+    Dada::logMsgWarn($warn, "checkAllBeams: find command failed: ".$response);
     return ("fail", "find command failed");
   }
   $nbeams = $response;
-  Dada->logMsg(1, DL, "checkAllBeams: Total number of beams ".$nbeams);
+  Dada::logMsg(1, DL, "checkAllBeams: Total number of beams ".$nbeams);
 
   # Now find the number of mounted NFS links
   $cmd = "find -L ".$obs." -mindepth 1 -maxdepth 1 -type d -printf '\%f\\n' | sort";
-  Dada->logMsg(2, DL, "checkAllBeams: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  Dada::logMsg(2, DL, "checkAllBeams: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   if ($result ne "ok") {
-    Dada->logMsgWarn($warn, "checkAllBeams: find command failed: ".$response);
+    Dada::logMsgWarn($warn, "checkAllBeams: find command failed: ".$response);
      return ("fail", "find command failed");
   }
   @beams = split(/\n/, $response);
   $nbeams_mounted = $#beams + 1;
-  Dada->logMsg(1, DL, "checkAllBeams: Total number of mounted beams: ".$nbeams_mounted);
+  Dada::logMsg(1, DL, "checkAllBeams: Total number of mounted beams: ".$nbeams_mounted);
 
   # If a machine is not online, they cannot all be verified
   if ($nbeams != $nbeams_mounted) {
@@ -1778,43 +1736,36 @@ sub checkAllBeams($) {
   } else {
     $all_sent = 1;
 
+    # skip if no obs.info exists
+    if (!( -f $obs."/obs.info")) {
+      Dada::logMsgWarn($warn, "checkAllBeams: Required file missing ".$obs."/obs.info");
+      return ("fail", $obs."/obs.info did not exist");
+    }
+
     # get the PID
     $cmd = "grep ^PID ".$obs."/obs.info | awk '{print \$2}'";
-    Dada->logMsg(2, DL, "checkAllBeams: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
-    Dada->logMsg(2, DL, "checkAllBeams: ".$result." ".$response);
+    Dada::logMsg(2, DL, "checkAllBeams: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(2, DL, "checkAllBeams: ".$result." ".$response);
     if ($result ne "ok") {
       return ("fail", "could not determine PID");
     }
     $obs_pid = $response;
 
-    # get the source
-    $cmd = "grep SOURCE ".$obs."/obs.info | awk '{print \$2}'";
-    Dada->logMsg(2, DL, "getBeamToSend: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
-    Dada->logMsg(2, DL, "checkAllBeams: ".$result." ".$response);
-    if ($result ne "ok") {
-      return ("fail", "could not determine SOURCE");
-    }
-    $source = $response;
-
-    if ($source =~ m/^G/) {
-      $survey_obs = 1;
-    } else {
-      $survey_obs = 0;
-    }
-  
-    my ($want_swin, $want_parkes, $want_swinfold) = getObsDestinations($obs_pid, $survey_obs);
+    Dada::logMsg(3, DL, "checkAllBeams: getObsDestinations(".$obs_pid.", ".$cfg{$obs_pid."_DEST"}.")");
+    my ($want_swin, $want_parkes) = Bpsr::getObsDestinations($obs_pid, $cfg{$obs_pid."_DEST"});
+    Dada::logMsg(2, DL, "checkAllBeams: getObsDestinations want swin:".$want_swin." parkes:".$want_parkes);
  
     for ($i=0; (($i<=$#beams) && ($all_sent)); $i++) {
       $beam = $beams[$i];
 
-      if (($want_swin || $want_swinfold) && (! -f $obs."/".$beam."/sent.to.swin")) {
+      if ($want_swin && (! -f $obs."/".$beam."/sent.to.swin")) {
         $all_sent = 0;
-        Dada->logMsg(2, DL, "checkAllBeams: ".$obs."/".$beam."/sent.to.swin did not exist");
+        Dada::logMsg(2, DL, "checkAllBeams: ".$obs."/".$beam."/sent.to.swin did not exist");
       }
+
       if ($want_parkes && (! -f $obs."/".$beam."/sent.to.parkes")) {
-        Dada->logMsg(2, DL, "checkAllBeams: ".$obs."/".$beam."/sent.to.parkes did not exist");
+        Dada::logMsg(2, DL, "checkAllBeams: ".$obs."/".$beam."/sent.to.parkes did not exist");
         $all_sent = 0;
       }
     }
@@ -1828,6 +1779,71 @@ sub checkAllBeams($) {
 
 }
 
+
+#
+# Looks for observations that have been marked obs.deleted and moves them
+# to /nfs/old_archives/bpsr and /nfs/old_results/bpsr if they are deleted
+# and > 1 month old
+#
+sub checkFullyDeleted() {
+
+  my $cmd = "";
+  my $result = "";
+  my $response = "";
+
+  Dada::logMsg(2, DL, "checkFullyDeleted()");
+
+  # Find all observations marked as obs.deleted and > 14*24 hours since being modified 
+  $cmd = "find ".$cfg{"SERVER_ARCHIVE_NFS_MNT"}."  -maxdepth 2 -name 'obs.deleted' -mtime +14 -printf '\%h\\n' | awk -F/ '{print \$NF}' | sort";
+  Dada::logMsg(2, DL, "checkFullyDeleted: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, DL, "checkFullyDeleted: ".$result." ".$response);
+
+  if ($result ne "ok") {
+    Dada::logMsgWarn($warn, "checkFullyDeleted: find command failed: ".$response);
+    return ("fail", "find command failed: ".$response);
+  }
+
+  chomp $response;
+  my @observations = split(/\n/,$response);
+  my $s = "";
+  my $n_beams = 0;
+  my $n_deleted = 0;
+  my $o = "";
+
+  for ($i=0; (($i<=$#observations) && (!$quit_daemon)); $i++) {
+    $o = $observations[$i];
+
+    $result = "ok";
+    $response = "";
+
+    $cmd = "mv ".$cfg{"SERVER_ARCHIVE_NFS_MNT"}."/".$o." /nfs/old_archives/bpsr/".$o;
+    Dada::logMsg(2, DL, "checkFullyDeleted: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, DL, "checkFullyDeleted: ".$result." ".$response);
+
+    if ($result ne "ok") {
+      return ("fail", "failed to move ".$o." to old_archives");
+    }
+
+    $result = "ok";
+    $response = "";
+
+    $cmd = "mv ".$cfg{"SERVER_RESULTS_NFS_MNT"}."/".$o." /nfs/old_results/bpsr/".$o;
+    Dada::logMsg(2, DL, "checkFullyDeleted: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, DL, "checkFullyDeleted: ".$result." ".$response);
+
+    if ($result ne "ok") {
+      return ("fail", "failed to move ".$o." to old_results");
+    }
+
+    Dada::logMsg(1, DL, $o.": deleted -> old");
+
+  }
+  return ("ok", "");
+}
+
 #
 # Looks for fully archived observations, and marks obs.deleted if they
 #
@@ -1837,23 +1853,21 @@ sub checkFullyArchived() {
   my $result = "";
   my $response = "";
 
-  Dada->logMsg(2, DL, "checkFullyArchived()");
+  Dada::logMsg(2, DL, "checkFullyArchived()");
 
   # Find all observations marked as obs.transferred to 
   $cmd = "find ".$cfg{"SERVER_ARCHIVE_NFS_MNT"}."  -maxdepth 2 -name 'obs.archived' -printf '\%h\\n' | awk -F/ '{print \$NF}' | sort";
-  Dada->logMsg(2, DL, "checkFullyArchived: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
-  Dada->logMsg(2, DL, "checkFullyArchived: ".$result." ".$response);
+  Dada::logMsg(2, DL, "checkFullyArchived: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, DL, "checkFullyArchived: ".$result." ".$response);
 
   if ($result ne "ok") {
-    Dada->logMsgWarn($warn, "checkFullyArchived: find command failed: ".$response);
+    Dada::logMsgWarn($warn, "checkFullyArchived: find command failed: ".$response);
     return ("fail", "find command failed: ".$response);
   }
 
   chomp $response;
   my @observations = split(/\n/,$response);
-  my $source = "";
-  my $survey_obs = "";
   my $s = "";
   my $n_beams = 0;
   my $n_deleted = 0;
@@ -1862,44 +1876,20 @@ sub checkFullyArchived() {
   for ($i=0; (($i<=$#observations) && (!$quit_daemon)); $i++) {
     $o = $observations[$i];
 
-    # find out what type of observation this is
-    # skip if no obs.info exists
-    if (!( -f $o."/obs.info")) {
-      Dada->logMsgWarn($warn, "checkFullyArchived: Required file missing ".$o."/obs.info");
-      next;
-    }
-
-    # Dont bother checking test pulsars
-    $cmd = "grep SOURCE ".$o."/obs.info | awk '{print \$2}'";
-    Dada->logMsg(2, DL, "checkFullyArchived: ".$cmd);
-    $source = `$cmd`;
-    chomp $source;
-    Dada->logMsg(2, DL, "checkFullyArchived: SOURCE = ".$source);
-
-    if ($source =~ m/^G/) {
-      $survey_obs = 1;
-    } else {
-      $survey_obs = 0;
-    }
-
-    if (!$survey_obs) {
-      next;
-    }
-
     if (-f $o."/obs.deleted") {
-      Dada->logMsg(2, DL, "checkFullyArchived: removing old ".$o."/obs.archived");
+      Dada::logMsg(2, DL, "checkFullyArchived: removing old ".$o."/obs.archived");
       unlink $o."/obs.archived";
       next;
     }
 
     # find out how many beam directories we have
     $cmd = "ls -1d ".$o."/?? | wc -l";
-    Dada->logMsg(2, DL, "checkFullyArchived: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
-    Dada->logMsg(2, DL, "checkFullyArchived: ".$result." ".$response);
+    Dada::logMsg(3, DL, "checkFullyArchived: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, DL, "checkFullyArchived: ".$result." ".$response);
 
     if ($result ne "ok") {
-      Dada->logMsgWarn($warn, "checkFullyArchived: could not determine number of beam directories: ".$response);
+      Dada::logMsgWarn($warn, "checkFullyArchived: could not determine number of beam directories: ".$response);
       next;
     }
     chomp $response;
@@ -1907,12 +1897,12 @@ sub checkFullyArchived() {
 
     # find out how many beam.deleted files we have
     $cmd = "find -L ".$o." -mindepth 2 -maxdepth 2 -name 'beam.deleted' | wc -l";
-    Dada->logMsg(2, DL, "checkFullyArchived: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
-    Dada->logMsg(2, DL, "checkFullyArchived: ".$result." ".$response);
+    Dada::logMsg(3, DL, "checkFullyArchived: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, DL, "checkFullyArchived: ".$result." ".$response);
 
     if ($result ne "ok") {
-      Dada->logMsgWarn($warn, "checkFullyArchived: could not count beam.deleted files: ".$response);
+      Dada::logMsgWarn($warn, "checkFullyArchived: could not count beam.deleted files: ".$response);
       next;
     }
     chomp $response;
@@ -1920,17 +1910,17 @@ sub checkFullyArchived() {
 
     if ($n_deleted == $n_beams) {
       $cmd = "touch ".$o."/obs.deleted";
-      Dada->logMsg(1, DL, $o." archived -> deleted");
-      Dada->logMsg(2, DL, "checkFullyArchived: ".$cmd);
-      ($result, $response) = Dada->mySystem($cmd);
-      Dada->logMsg(2, DL, "checkFullyArchived: ".$result." ".$response);
+      Dada::logMsg(1, DL, $o.": archived -> deleted");
+      Dada::logMsg(2, DL, "checkFullyArchived: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      Dada::logMsg(3, DL, "checkFullyArchived: ".$result." ".$response);
 
       if ($result ne "ok") {
-        Dada->logMsgWarn($warn, "checkFullyArchived: could not touch ".$o."/obs.deleted: ".$response);
+        Dada::logMsgWarn($warn, "checkFullyArchived: could not touch ".$o."/obs.deleted: ".$response);
       }
 
       if (-f $o."/obs.archived") {
-        Dada->logMsg(2, DL, "checkFullyArchived: removing ".$o."/obs.archived");
+        Dada::logMsg(2, DL, "checkFullyArchived: removing ".$o."/obs.archived");
         unlink $o."/obs.archived";
       }
 
@@ -1938,6 +1928,7 @@ sub checkFullyArchived() {
   }
   return ("ok", "");
 }
+
 
 #
 # Looks for fully transferred observations to see if they have been archived yet
@@ -1947,25 +1938,24 @@ sub checkFullyTransferred() {
   my $cmd = "";
   my $result = "";
   my $response = "";
-  my $source = "";
-  my $survey_obs = "";
   my $i = 0;
   my $n_beams = 0;
   my $n_swin = 0;
   my $n_parkes = 0;
   my $o = "";
+  my $obs_pid = "";
 
-  Dada->logMsg(2, DL, "checkFullyTransferred()");
+  Dada::logMsg(2, DL, "checkFullyTransferred()");
  
   # Find all observations marked as obs.transferred to 
   $cmd = "find ".$cfg{"SERVER_ARCHIVE_NFS_MNT"}."  -maxdepth 2 -name 'obs.transferred' -printf '\%h\\n' | awk -F/ '{print \$NF}' |
 sort";
-  Dada->logMsg(2, DL, "checkFullyTransferred: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
-  Dada->logMsg(2, DL, "checkFullyTransferred: ".$result." ".$response);
+  Dada::logMsg(2, DL, "checkFullyTransferred: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, DL, "checkFullyTransferred: ".$result." ".$response);
 
   if ($result ne "ok") {
-    Dada->logMsgWarn($warn, "checkFullyTransferred: find command failed: ".$response);
+    Dada::logMsgWarn($warn, "checkFullyTransferred: find command failed: ".$response);
     return ("fail", "find command failed: ".$response);
   }
 
@@ -1975,38 +1965,34 @@ sort";
   for ($i=0; (($i<=$#observations) && (!$quit_daemon)); $i++) {
     $o = $observations[$i];
   
-    # find out what type of observation this is
-     # skip if no obs.info exists
+    # skip if no obs.info exists
     if (!( -f $o."/obs.info")) {
-      Dada->logMsgWarn($warn, "checkFullyTransferred: Required file missing ".$o."/obs.info");
+      Dada::logMsgWarn($warn, "checkFullyTransferred: Required file missing ".$o."/obs.info");
       next;
     }
 
-    $cmd = "grep SOURCE ".$o."/obs.info | awk '{print \$2}'";
-    Dada->logMsg(2, DL, "checkFullyTransferred: ".$cmd);
-    $source = `$cmd`;
-    chomp $source;
-    Dada->logMsg(2, DL, "checkFullyTransferred: SOURCE = ".$source);
-
-    if ($source =~ m/^G/) {
-      $survey_obs = 1;
-    } else {
-      $survey_obs = 0;
+    # get the PID 
+    $cmd = "grep ^PID ".$o."/obs.info | awk '{print \$2}'";
+    Dada::logMsg(2, DL, "checkFullyTransferred: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(2, DL, "checkFullyTransferred: ".$result." ".$response);
+    if ($result ne "ok") {
+      return ("fail", "could not determine PID");
     }
-
-    # dont bother checking folded/test pulsars
-    if (!$survey_obs) {
-      next;
-    }
+    $obs_pid = $response;
+  
+    Dada::logMsg(3, DL, "checkFullyTransferred: getObsDestinations(".$obs_pid.", ".$cfg{$obs_pid."_DEST"}.")");
+    my ($want_swin, $want_parkes) = Bpsr::getObsDestinations($obs_pid, $cfg{$obs_pid."_DEST"});
+    Dada::logMsg(2, DL, "checkFullyTransferred: getObsDestinations want swin:".$want_swin." parkes:".$want_parkes);
 
     # find out how many beam directories we have
     $cmd = "ls -1d ".$o."/?? | wc -l";
-    Dada->logMsg(2, DL, "checkFullyTransferred: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
-    Dada->logMsg(2, DL, "checkFullyTransferred: ".$result." ".$response);
+    Dada::logMsg(3, DL, "checkFullyTransferred: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, DL, "checkFullyTransferred: ".$result." ".$response);
 
     if ($result ne "ok") {
-      Dada->logMsgWarn($warn, "checkFullyTransferred: could not determine number of beam directories: ".$response);
+      Dada::logMsgWarn($warn, "checkFullyTransferred: could not determine number of beam directories: ".$response);
       next;
     }
     chomp $response;
@@ -2017,12 +2003,12 @@ sort";
 
     # num on.tape.swin
     $cmd = "find -L ".$o." -name 'on.tape.swin' | wc -l";
-    Dada->logMsg(2, DL, "checkFullyTransferred: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
-    Dada->logMsg(2, DL, "checkFullyTransferred: ".$result." ".$response);
+    Dada::logMsg(3, DL, "checkFullyTransferred: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, DL, "checkFullyTransferred: ".$result." ".$response);
     
     if ($result ne "ok") {
-      Dada->logMsgWarn($warn, "checkFullyTransferred: could not count on.tape.swin files: ".$response);
+      Dada::logMsgWarn($warn, "checkFullyTransferred: could not count on.tape.swin files: ".$response);
       next;
     }
     chomp $response;
@@ -2030,50 +2016,46 @@ sort";
 
     # num on.tape.aprkes
     $cmd = "find -L ".$o." -name 'on.tape.parkes' | wc -l";
-    Dada->logMsg(2, DL, "checkFullyTransferred: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
-    Dada->logMsg(2, DL, "checkFullyTransferred: ".$result." ".$response);
+    Dada::logMsg(3, DL, "checkFullyTransferred: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, DL, "checkFullyTransferred: ".$result." ".$response);
 
     if ($result ne "ok") {
-
-      if ($survey_obs) {
-        Dada->logMsgWarn($warn, "checkFullyTransferred: could not count on.tape.parkes files: ".$response);
-        next;
-      } else {
-        $n_parkes = 0;
-      }
-    } else {
-      chomp $response;
-      $n_parkes = $response;
+      Dada::logMsgWarn($warn, "checkFullyTransferred: could not count on.tape.parkes files: ".$response);
+      next;
     }
+    chomp $response;
+    $n_parkes = $response;
 
     # now the conditions
-    if ( ($n_beams == $n_swin) && 
-         ( ($survey_obs && ($n_beams == $n_parkes)) || (!$survey_obs))) {
-        
+    if ( ($want_swin && ($n_swin < $n_beams)) || 
+         ($want_parkes && ($n_parkes < $n_beams)) ){
+
+      Dada::logMsg(2, DL, "checkFullyTransferred: ".$o." [".$obs_pid."] swin[".$n_swin."/".$n_beams."] ".
+                          "parkes[".$n_parkes."/".$n_beams."]");
+
+    } else {
+
       if (-f $o."/obs.archived") {
         # do nothing
 
       } else {
         $cmd = "touch ".$o."/obs.archived";
-        Dada->logMsg(1, DL, $o.": transferred -> archived");
-        Dada->logMsg(2, DL, "checkFullyTransferred: ".$cmd);
-        ($result, $response) = Dada->mySystem($cmd);
-        Dada->logMsg(2, DL, "checkFullyTransferred: ".$result." ".$response);
+        Dada::logMsg(1, DL, $o.": transferred -> archived");
+        Dada::logMsg(2, DL, "checkFullyTransferred: ".$cmd);
+        ($result, $response) = Dada::mySystem($cmd);
+        Dada::logMsg(2, DL, "checkFullyTransferred: ".$result." ".$response);
 
       }
 
       if (-f $o."/obs.transferred") {
         $cmd = "rm -f ".$o."/obs.transferred";
-        Dada->logMsg(2, DL, "checkFullyTransferred: ".$o." has been fully archived, deleting obs.transferred");
-        Dada->logMsg(2, DL, "checkFullyTransferred: ".$cmd);
-        ($result, $response) = Dada->mySystem($cmd);
-        Dada->logMsg(2, DL, "checkFullyTransferred: ".$result." ".$response);
+        Dada::logMsg(2, DL, "checkFullyTransferred: ".$o." has been fully archived, deleting obs.transferred");
+        Dada::logMsg(2, DL, "checkFullyTransferred: ".$cmd);
+        ($result, $response) = Dada::mySystem($cmd);
+        Dada::logMsg(2, DL, "checkFullyTransferred: ".$result." ".$response);
       }
 
-    } else {
-      Dada->logMsg(2, DL, "checkFullyTransferred: ".$o." [".$source."] had ".$n_beams.
-                          " beams ".$n_swin." swin and ".$n_parkes." parkes files");
     }
   }
  
@@ -2081,16 +2063,13 @@ sort";
 
 }
 
-sub checkDestinations(\@\@\@) {
+sub checkDestinations(\@) {
 
-  my ($s_ref, $p_ref, $f_ref) = @_;
+  my ($ref) = @_;
 
-  Dada->logMsg(2, DL, "checkDestinations()");
+  Dada::logMsg(2, DL, "checkDestinations()");
 
-  my @s = @$s_ref;
-  my @p = @$p_ref;
-  my @f = @$f_ref;
-
+  my @dests = @$ref;
   my $i = 0;
   my $user = "";
   my $host = "";
@@ -2100,129 +2079,66 @@ sub checkDestinations(\@\@\@) {
   my $rval = 0;
   my $response = "";
 
-  # for each swinburne disk 
-  for ($i=0; $i<=$#s; $i++) {
+  # for each destinatinos
+  for ($i=0; $i<=$#dests; $i++) {
 
-    ($user, $host, $path) = split(":",$s[$i],3);
-    Dada->logMsg(2, DL, "checkDestinations: ".$user."@".$host.":".$path);
+    ($user, $host, $path) = split(":",$dests[$i],3);
+    Dada::logMsg(2, DL, "checkDestinations: ".$user."@".$host.":".$path);
 
     $cmd = "ls ".$path."/".$pid."/staging_area > /dev/null";
-    Dada->logMsg(2, DL, "checkDestinations: [".$host."] ".$cmd);
-    ($result, $rval, $response) = Dada->remoteSshCommand($user, $host, $cmd);
-    Dada->logMsg(2, DL, "checkDestinations: [".$host."] ".$result." ".$response);
+    Dada::logMsg(2, DL, "checkDestinations: [".$host."] ".$cmd);
+    ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
+    Dada::logMsg(2, DL, "checkDestinations: [".$host."] ".$result." ".$response);
     if ($result ne "ok") {
-      Dada->logMsgWarn($warn, "checkDestinations: ssh failed: ".$response);
+      Dada::logMsgWarn($warn, "checkDestinations: ssh failed: ".$response);
       return ("fail", "ssh ".$user."@".$host." failed: ".$response);
 
     } else {
       if ($rval != 0) {
-        Dada->logMsgWarn($warn, "checkDestinations: remote dir did not exist: ".$response);
+        Dada::logMsgWarn($warn, "checkDestinations: remote dir did not exist: ".$response);
         $cmd = "mkdir -p ".$path."/".$pid."/staging_area";
-        Dada->logMsg(1, DL, "checkDestinations: [".$host."] ".$cmd);
-        #($result, $rval, $response) = Dada->remoteSshCommand($user, $host, $cmd);
-        Dada->logMsg(1, DL, "checkDestinations: [".$host."] ".$result." ".$response);
+        Dada::logMsg(1, DL, "checkDestinations: [".$host."] ".$cmd);
+        ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
+        Dada::logMsg(1, DL, "checkDestinations: [".$host."] ".$result." ".$response);
       }
     }
 
     $cmd = "ls ".$path."/".$pid."/on_tape > /dev/null";
-    Dada->logMsg(2, DL, "checkDestinations: [".$host."] ".$cmd);
-    ($result, $rval, $response) = Dada->remoteSshCommand($user, $host, $cmd);
-    Dada->logMsg(2, DL, "checkDestinations: [".$host."] ".$result." ".$response);
+    Dada::logMsg(2, DL, "checkDestinations: [".$host."] ".$cmd);
+    ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
+    Dada::logMsg(2, DL, "checkDestinations: [".$host."] ".$result." ".$response);
     if ($result ne "ok") {
-      Dada->logMsgWarn($warn, "checkDestinations: ssh failed: ".$response);
+      Dada::logMsgWarn($warn, "checkDestinations: ssh failed: ".$response);
       return ("fail", "ssh ".$user."@".$host." failed: ".$response);
     } else {
       if ($rval != 0) {
-        Dada->logMsgWarn($warn, "checkDestinations: remote dir did not exist: ".$response);
+        Dada::logMsgWarn($warn, "checkDestinations: remote dir did not exist: ".$response);
         $cmd = "mkdir -p ".$path."/".$pid."/on_tape";
-        Dada->logMsg(1, DL, "checkDestinations: [".$host."] ".$cmd);
-        #($result, $rval, $response) = Dada->remoteSshCommand($user, $host, $cmd);
-        Dada->logMsg(1, DL, "checkDestinations: [".$host."] ".$result." ".$response);
+        Dada::logMsg(1, DL, "checkDestinations: [".$host."] ".$cmd);
+        ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
+        Dada::logMsg(1, DL, "checkDestinations: [".$host."] ".$result." ".$response);
       }
     }
-  }
-
-  # for each parkes disk 
-  for ($i=0; $i<=$#p; $i++) {
-
-    ($user, $host, $path) = split(":",$p[$i],3);
-    Dada->logMsg(2, DL, "checkDestinations: ".$user."@".$host.":".$path);
-
-    $cmd = "ls ".$path."/".$pid."/staging_area > /dev/null";
-    Dada->logMsg(2, DL, "checkDestinations: [".$host."] ".$cmd);
-    ($result, $rval, $response) = Dada->remoteSshCommand($user, $host, $cmd);
-    Dada->logMsg(2, DL, "checkDestinations: [".$host."] ".$result." ".$response);
-    if ($result ne "ok") {
-      Dada->logMsgWarn($warn, "checkDestinations: ssh failed: ".$response);
-      return ("fail", "ssh ".$user."@".$host." failed: ".$response);
-    } else {
-      if ($rval != 0) {
-        Dada->logMsgWarn($warn, "checkDestinations: remote dir did not exist: ".$response);
-        $cmd = "mkdir -p ".$path."/".$pid."/staging_area";
-        Dada->logMsg(1, DL, "checkDestinations: [".$host."] ".$cmd);
-        #($result, $rval, $response) = Dada->remoteSshCommand($user, $host, $cmd);
-        Dada->logMsg(1, DL, "checkDestinations: [".$host."] ".$result." ".$response);
-      }
-    }
-
-    $cmd = "ls ".$path."/".$pid."/on_tape > /dev/null";
-    Dada->logMsg(2, DL, "checkDestinations: [".$host."] ".$cmd);
-    ($result, $rval, $response) = Dada->remoteSshCommand($user, $host, $cmd);
-    Dada->logMsg(2, DL, "checkDestinations: [".$host."] ".$result." ".$response);
-    if ($result ne "ok") {
-      Dada->logMsgWarn($warn, "checkDestinations: ssh failed: ".$response);
-      return ("fail", "ssh ".$user."@".$host." failed: ".$response);
-    } else {
-      if ($rval != 0) {
-        Dada->logMsgWarn($warn, "checkDestinations: remote dir did not exist: ".$response);
-        $cmd = "mkdir -p ".$path."/".$pid."/on_tape";
-        Dada->logMsg(1, DL, "checkDestinations: [".$host."] ".$cmd);
-        #($result, $rval, $response) = Dada->remoteSshCommand($user, $host, $cmd);
-        Dada->logMsg(1, DL, "checkDestinations: [".$host."] ".$result." ".$response);
-      }
-    }
-  }
-
-  # for each swin_fold disk 
-  for ($i=0; $i<=$#f; $i++) {
-
-    ($user, $host, $path) = split(":",$f[$i],3);
-    Dada->logMsg(2, DL, "checkDestinations: ".$user."@".$host.":".$path);
 
     $cmd = "ls ".$path."/".$pid."/pulsars > /dev/null";
-    Dada->logMsg(2, DL, "checkDestinations: [".$host."] ".$cmd);
-    ($result, $rval, $response) = Dada->remoteSshCommand($user, $host, $cmd);
-    Dada->logMsg(2, DL, "checkDestinations: [".$host."] ".$result." ".$response);
+    Dada::logMsg(2, DL, "checkDestinations: [".$host."] ".$cmd);
+    ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
+    Dada::logMsg(2, DL, "checkDestinations: [".$host."] ".$result." ".$response);
     if ($result ne "ok") {
-      Dada->logMsgWarn($warn, "checkDestinations: ssh failed: ".$response);
+      Dada::logMsgWarn($warn, "checkDestinations: ssh failed: ".$response);
       return ("fail", "ssh ".$user."@".$host." failed: ".$response);
     } else {
       if ($rval != 0) {
-        Dada->logMsgWarn($warn, "checkDestinations: remote dir did not exist: ".$response);
+        Dada::logMsgWarn($warn, "checkDestinations: remote dir did not exist: ".$response);
         $cmd = "mkdir -p ".$path."/".$pid."/pulsars";
-        Dada->logMsg(1, DL, "checkDestinations: [".$host."] ".$cmd);
-        #($result, $rval, $response) = Dada->remoteSshCommand($user, $host, $cmd);
-        Dada->logMsg(1, DL, "checkDestinations: [".$host."] ".$result." ".$response);
+        Dada::logMsg(1, DL, "checkDestinations: [".$host."] ".$cmd);
+        ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
+        Dada::logMsg(1, DL, "checkDestinations: [".$host."] ".$result." ".$response);
       }
     }
 
-    $cmd = "ls ".$path."/".$pid."/on_tape > /dev/null";
-    Dada->logMsg(2, DL, "checkDestinations: [".$host."] ".$cmd);
-    ($result, $rval, $response) = Dada->remoteSshCommand($user, $host, $cmd);
-    Dada->logMsg(2, DL, "checkDestinations: [".$host."] ".$result." ".$response);
-    if ($result ne "ok") {
-      Dada->logMsgWarn($warn, "checkDestinations: ssh failed: ".$response);
-      return ("fail", "ssh ".$user."@".$host." failed: ".$response);
-    } else {
-      if ($rval != 0) {
-        Dada->logMsgWarn($warn, "checkDestinations: remote dir did not exist: ".$response);
-        $cmd = "mkdir -p ".$path."/".$pid."/on_tape";
-        Dada->logMsg(1, DL, "checkDestinations: [".$host."] ".$cmd);
-        #($result, $rval, $response) = Dada->remoteSshCommand($user, $host, $cmd);
-        Dada->logMsg(1, DL, "checkDestinations: [".$host."] ".$result." ".$response);
-      }
-    } 
   }
+
   return ("ok", "");
 }
 

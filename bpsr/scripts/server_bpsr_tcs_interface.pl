@@ -40,7 +40,7 @@ use strict;         # strict mode (like -Wall)
 #
 # Sanity check to prevent multiple copies of this daemon running
 #
-Dada->preventDuplicateDaemon(basename($0));
+Dada::preventDuplicateDaemon(basename($0));
 
 
 #
@@ -62,7 +62,7 @@ use constant NHOST              => 13;        # This is constant re DFB3
 our $current_state : shared = "Idle";
 our $pwcc_running : shared  = 0;
 our $quit_threads : shared  = 0;
-our %cfg : shared           = Bpsr->getBpsrConfig();
+our %cfg : shared           = Bpsr::getBpsrConfig();
 our $use_dfb_simulator      = $cfg{"USE_DFB_SIMULATOR"};
 our $dfb_sim_host           = $cfg{"DFB_SIM_HOST"};
 our $dfb_sim_port           = $cfg{"DFB_SIM_PORT"};
@@ -102,7 +102,7 @@ my $state_thread = 0;
 my $daemon_control_thread = 0;
 my $rh;
 
-my %site_cfg = Dada->readCFGFileIntoHash($cfg{"CONFIG_DIR"}."/site.cfg", 0);
+my %site_cfg = Dada::readCFGFileIntoHash($cfg{"CONFIG_DIR"}."/site.cfg", 0);
 
 
 # set initial state
@@ -129,19 +129,19 @@ if ($cfg{"NUM_PWC"} != NHOST) {
 }
 
 # Redirect standard output and error
-Dada->daemonize($logfile, $pidfile);
+Dada::daemonize($logfile, $pidfile);
 
-Dada->logMsg(0, DL, "STARTING SCRIPT: ".Dada->getCurrentDadaTime(0));
+Dada::logMsg(0, DL, "STARTING SCRIPT: ".Dada->getCurrentDadaTime(0));
 
-Dada->logMsg(0, DL, "Waiting for Multibob to be configured");
+Dada::logMsg(0, DL, "Waiting for Multibob to be configured");
 ($result, $response) = waitForMultibobBoot();
 if ($result ne "ok") {
-  Dada->logMsgWarn($warn, "Failed to configure multibob server \"".$response."\"");
+  Dada::logMsgWarn($warn, "Failed to configure multibob server \"".$response."\"");
 } else {
-  Dada->logMsg(0, DL, "Multibob ready");
+  Dada::logMsg(0, DL, "Multibob ready");
 }
 
-Dada->logMsg(1, DL, "Opening socket for control commands on ".$tcs_host.":".$tcs_port);
+Dada::logMsg(1, DL, "Opening socket for control commands on ".$tcs_host.":".$tcs_port);
 
 my $tcs_socket = new IO::Socket::INET (
   LocalHost => $tcs_host,
@@ -154,7 +154,7 @@ my $tcs_socket = new IO::Socket::INET (
 die "Could not create socket: $!\n" unless $tcs_socket;
 
 foreach $key (keys (%site_cfg)) {
-  Dada->logMsg(2, DL, "site_cfg: ".$key." => ".$site_cfg{$key});
+  Dada::logMsg(2, DL, "site_cfg: ".$key." => ".$site_cfg{$key});
 }
 
 # Run dada_pwc_command with the most recent config. This will be killed
@@ -165,11 +165,11 @@ my $pwcc_file = $config_dir."/bpsr_tcs.cfg";
 my $utc_start = "";
 
 $pwcc_thread = threads->new(\&pwcc_thread, $pwcc_file);
-Dada->logMsg(2, DL, "dada_pwc_command thread started");
+Dada::logMsg(2, DL, "dada_pwc_command thread started");
 
 # This thread will simply report the current state of the PWCC_CONTROLLER
 $state_thread = threads->new(\&state_reporter_thread, $server_host, $tcs_state_port);
-Dada->logMsg(2, DL, "state_reporter_thread started");
+Dada::logMsg(2, DL, "state_reporter_thread started");
 
 # Start the daemon control thread
 $daemon_control_thread = threads->new(\&daemonControlThread);
@@ -182,7 +182,7 @@ while (!$quit_threads) {
 
   # Get all the readable handles from the server
   my ($readable_handles) = IO::Select->select($read_set, undef, undef, 1);
-  Dada->logMsg(3, DL, "select on read_set returned");
+  Dada::logMsg(3, DL, "select on read_set returned");
                                                                                 
   foreach $rh (@$readable_handles) {
   
@@ -196,7 +196,7 @@ while (!$quit_threads) {
         $peeraddr = $handle->peeraddr;
         $hostinfo = gethostbyaddr($peeraddr);
 
-        Dada->logMsgWarn($warn, "Rejecting additional connection from ".$hostinfo->name);
+        Dada::logMsgWarn($warn, "Rejecting additional connection from ".$hostinfo->name);
         $handle->close();
 
       } else {
@@ -213,7 +213,7 @@ while (!$quit_threads) {
         # Get information about the connecting machine
         $peeraddr = $handle->peeraddr;
         $hostinfo = gethostbyaddr($peeraddr);
-        Dada->logMsg(1, DL, "Accepting connection from ".$hostinfo->name);
+        Dada::logMsg(1, DL, "Accepting connection from ".$hostinfo->name);
       }
 
     } else {
@@ -223,7 +223,7 @@ while (!$quit_threads) {
       # If we have lost the connection...
       if (! defined $command) {
 
-        Dada->logMsg(1, DL, "Lost TCS connection");
+        Dada::logMsg(1, DL, "Lost TCS connection");
 
         $read_set->remove($rh);
         close($rh);
@@ -249,7 +249,7 @@ while (!$quit_threads) {
         $val = $cmds[1];
         $lckey = lc $key;
 
-        Dada->logMsg(1, DL, "TCS -> ".$key."\t".$val);
+        Dada::logMsg(1, DL, "TCS -> ".$key."\t".$val);
 
 
 ################################################################################
@@ -270,7 +270,7 @@ while (!$quit_threads) {
   
         if ($lckey eq "start") {
 
-          Dada->logMsg(2, DL, "Processing START command"); 
+          Dada::logMsg(2, DL, "Processing START command"); 
 
           %tcs_cmds = fixTCSCommands(\%tcs_cmds);
 
@@ -278,25 +278,25 @@ while (!$quit_threads) {
           ($result, $response) = parseTCSCommands(\%tcs_cmds);
 
           # Send response to TCS
-          Dada->logMsg(1, DL, "TCS <- ".$result);
+          Dada::logMsg(1, DL, "TCS <- ".$result);
           print $handle $result.TERMINATOR;
 
           if ($result ne "ok") {
 
-            Dada->logMsg(0, DL, "parseTCSCommands returned \"".$result.":".$response."\"");
+            Dada::logMsg(0, DL, "parseTCSCommands returned \"".$result.":".$response."\"");
 
           } else {
 
-            Dada->logMsg(1, DL, "TCS commands parsed ok");
+            Dada::logMsg(1, DL, "TCS commands parsed ok");
 
             # quit/kill the current daemon
             quit_pwc_command();
 
             # Clear the status files
             my $cmd = "rm -f ".$cfg{"STATUS_DIR"}."/*";
-            ($result, $response) = Dada->mySystem($cmd);
+            ($result, $response) = Dada::mySystem($cmd);
             if ($result ne "ok") {
-              Dada->logMsgWarn($warn, "Could not delete status files: $response");
+              Dada::logMsgWarn($warn, "Could not delete status files: $response");
             }
 
             # Add the extra commands/config for each PWC
@@ -304,7 +304,7 @@ while (!$quit_threads) {
 
             # Create the tcs.cfg file to launch dada_pwc_command
             ($result, $response) = generateConfigFile($cfg{"CONFIG_DIR"}."/bpsr_tcs.cfg", \%tcs_cmds);
-            Dada->logMsg(1, DL, "Generated config file ".$result.":".$response); 
+            Dada::logMsg(1, DL, "Generated config file ".$result.":".$response); 
 
             # rejoin the pwcc command thread
             $pwcc_thread->join();
@@ -314,23 +314,23 @@ while (!$quit_threads) {
 
             # Create the bpsr_tcs.spec file to launch dada_pwc_command
             ($result, $response) = generateSpecificationFile($cfg{"CONFIG_DIR"}."/bpsr_tcs.spec", \%tcs_cmds);
-            Dada->logMsg(1, DL, "Generated specification file ".$result.":".$response);
+            Dada::logMsg(1, DL, "Generated specification file ".$result.":".$response);
   
             # Issue the start command itself
             ($result, $response) = start($cfg{"CONFIG_DIR"}."/bpsr_tcs.spec", \%tcs_cmds);
 
             if ($result ne "ok") {
-              Dada->logMsgWarn($warn, "start() failed \"".$response."\"");
+              Dada::logMsgWarn($warn, "start() failed \"".$response."\"");
             } else {
 
-              Dada->logMsg(2, DL, "start() successful \"".$response."\"");
+              Dada::logMsg(2, DL, "start() successful \"".$response."\"");
 
               $utc_start = $response;
 
               $current_state = "Recording";
 
               $cmd = "start_utc ".$utc_start;
-              Dada->logMsg(1, DL, "TCS <- ".$cmd);
+              Dada::logMsg(1, DL, "TCS <- ".$cmd);
               print $handle $cmd.TERMINATOR;
 
               %tcs_cmds = ();
@@ -343,7 +343,7 @@ while (!$quit_threads) {
 #
         } elsif ($lckey eq "stop")  {
 
-          Dada->logMsg(2, DL, "Processing STOP command"); 
+          Dada::logMsg(2, DL, "Processing STOP command"); 
           ($result, $response) = stop();
 
           # Stop the simulator (if not using DFB3)
@@ -361,14 +361,14 @@ while (!$quit_threads) {
 #
         } elsif ($lckey eq "rec_stop") {
 
-          Dada->logMsg(2, DL, "Processing REC_STOP command");
+          Dada::logMsg(2, DL, "Processing REC_STOP command");
           ($result, $response) = rec_stop(ltrim($val));
           $current_state = "Idle";
           $utc_start = "";
 
         } elsif ($lckey eq "quit_script") {
 
-          Dada->logMsg(2, DL, "Processing QUIT_SCRIPT command");
+          Dada::logMsg(2, DL, "Processing QUIT_SCRIPT command");
           $quit_threads = 1;
           $handle->close();
 
@@ -376,7 +376,7 @@ while (!$quit_threads) {
 
         } else {
 
-          Dada->logMsg(3, DL, "Processing HEADER parameter"); 
+          Dada::logMsg(3, DL, "Processing HEADER parameter"); 
 
           # TODO - PROC FILE HACK UNTIL TCS IS FIXED
           if ($key eq "PROCFIL") {
@@ -393,7 +393,7 @@ while (!$quit_threads) {
 
         if ($result eq "fail") {
           $current_state = "Error";
-          Dada->logMsgWarn($error, $result." ".$response);
+          Dada::logMsgWarn($error, $result." ".$response);
           print $handle $result.TERMINATOR;
           print $handle $response.TERMINATOR;
 
@@ -410,7 +410,7 @@ while (!$quit_threads) {
           } else {
 
             print $handle $result.TERMINATOR;
-            Dada->logMsg(1, DL, "TCS <- ".$result);
+            Dada::logMsg(1, DL, "TCS <- ".$result);
           }
         }
       }
@@ -418,14 +418,14 @@ while (!$quit_threads) {
   }
 }
 
-Dada->logMsg(2, DL, "Joining threads");
+Dada::logMsg(2, DL, "Joining threads");
 
 # rejoin threads
 $daemon_control_thread->join();
 $pwcc_thread->join();
 $state_thread->join();
 
-Dada->logMsg(0, DL, "STOPPING SCRIPT: ".Dada->getCurrentDadaTime(0));
+Dada::logMsg(0, DL, "STOPPING SCRIPT: ".Dada->getCurrentDadaTime(0));
 
 exit 0;
 
@@ -445,23 +445,23 @@ sub pwcc_thread($) {
   (my $fname) = @_;
 
   my $logfile = $cfg{"SERVER_LOG_DIR"}."/".PWCC_LOGFILE;
-  my $bindir = Dada->getCurrentBinaryVersion();
+  my $bindir = Dada::getCurrentBinaryVersion();
 
   my $cmd = $bindir."/dada_pwc_command ".$fname." >> ".$logfile." 2>&1";
 
-  Dada->logMsg(2, DL, "pwcc_thread: running dada_pwc_command ".$fname);
+  Dada::logMsg(2, DL, "pwcc_thread: running dada_pwc_command ".$fname);
 
   $pwcc_running = 1;
   my $returnVal = system($cmd);
   $pwcc_running = 0;
 
   if ($returnVal == 0) {   
-    Dada->logMsg(2, DL, "pwcc_thread: dada_pwc_command returned ".$returnVal);
-    Dada->logMsg(2, DL, "pwcc_thread: exiting");
+    Dada::logMsg(2, DL, "pwcc_thread: dada_pwc_command returned ".$returnVal);
+    Dada::logMsg(2, DL, "pwcc_thread: exiting");
     return "ok";
   } else {
-    Dada->logMsgWarn($warn, "pwcc_thread: dada_pwc_command returned ".$returnVal);
-    Dada->logMsg(2, DL, "pwcc_thread: exiting");
+    Dada::logMsgWarn($warn, "pwcc_thread: dada_pwc_command returned ".$returnVal);
+    Dada::logMsg(2, DL, "pwcc_thread: exiting");
     return "fail";
   }
 }
@@ -479,7 +479,7 @@ sub state_reporter_thread($$) {
     Reuse => 1,
   );
 
-  Dada->logMsg(2, DL, "state_reporter: created socket ".$host.":".$port);
+  Dada::logMsg(1, DL, "state_reporter: created socket ".$host.":".$port);
 
   die "state_reporter: Could not create socket: $!\n" unless $state_socket;
 
@@ -496,7 +496,7 @@ sub state_reporter_thread($$) {
     # Get all the readable handles from the read set
     my ($readable_handles) = IO::Select->select($read_set, undef, undef, 1);
 
-    Dada->logMsg(3, DL, "state_reporter: select time loop");
+    Dada::logMsg(3, DL, "state_reporter: select time loop");
 
     foreach $rh (@$readable_handles) {
 
@@ -509,32 +509,32 @@ sub state_reporter_thread($$) {
         my $hostinfo = gethostbyaddr($handle->peeraddr);
         my $hostname = $hostinfo->name;
                                                                                 
-        Dada->logMsg(3, DL, "state_reporter: Accepting connection from ".$hostname);
+        Dada::logMsg(3, DL, "state_reporter: Accepting connection from ".$hostname);
 
         $read_set->add($handle);
       } else {
 
         # Get the request
-        $result = Dada->getLine($handle);
+        $result = Dada::getLine($rh);
 
         if (! defined $result) {
-          Dada->logMsg(3, DL, "state_reporter: closing rh");
+          Dada::logMsg(3, DL, "state_reporter: closing rh");
           $read_set->remove($rh);
           close($rh);
         } else {
 
-          Dada->logMsg(3, DL, "state_reported: \"".$result."\"");
+          Dada::logMsg(3, DL, "state_reporter: <- ".$result);
 
-          if ($rh eq "state") {
+          if ($result eq "state") {
             print $rh $current_state."\r\n";
-            Dada->logMsg(3, DL, "state_reporter: \"".$current_state."\"");
+            Dada::logMsg(3, DL, "state_reporter: -> ".$current_state);
           }
         }
       }
     }
   }
 
-  Dada->logMsg(2, DL, "state_reporter: exiting");
+  Dada::logMsg(2, DL, "state_reporter: exiting");
 
 }
 
@@ -543,17 +543,17 @@ sub quit_pwc_command() {
   my $host = $cfg{"PWCC_HOST"};
   my $port = $cfg{"PWCC_PORT"};
 
-  my $handle = Dada->connectToMachine($host, $port);
+  my $handle = Dada::connectToMachine($host, $port);
   my $success = 1;
                                                                                                                 
   if (!$handle) {
 
-    Dada->logMsgWarn($warn, "Could not connect to Nexus (".$host.": ".$port.")");
+    Dada::logMsgWarn($warn, "Could not connect to Nexus (".$host.": ".$port.")");
 
     # try to kill the process manually
     my $result = "";
     my $response = "";
-    ($result, $response) = Dada->killProcess("dada_pwc_command");
+    ($result, $response) = Dada::killProcess("dada_pwc_command");
 
     return ($result, $response);
 
@@ -565,7 +565,7 @@ sub quit_pwc_command() {
 
     # Send config command
     my $cmd = "quit";
-    Dada->logMsg(2, DL, "quit_pwc_command: sending: \"".$cmd."\"");
+    Dada::logMsg(2, DL, "quit_pwc_command: sending: \"".$cmd."\"");
     print $handle $cmd."\r\n";
     $handle->close();
 
@@ -575,8 +575,8 @@ sub quit_pwc_command() {
       $nwait--;
     }
     if ($pwcc_running) {
-       Dada->logMsgWarn($warn, "Was forced to kill dada_pwc_command");
-      ($result, $response) = Dada->killProcess("dada_pwc_command");
+       Dada::logMsgWarn($warn, "Was forced to kill dada_pwc_command");
+      ($result, $response) = Dada::killProcess("dada_pwc_command");
     }
 
     return ("ok","");
@@ -613,9 +613,9 @@ sub start($\%) {
 
   }
 
-  Dada->logMsg(2, DL, "Connecting to PWCC ".$pwcc_host.":".$pwcc_port);
+  Dada::logMsg(2, DL, "Connecting to PWCC ".$pwcc_host.":".$pwcc_port);
   # Connect to dada_pwc_command
-  my $handle = Dada->connectToMachine($pwcc_host, $pwcc_port, 5);
+  my $handle = Dada::connectToMachine($pwcc_host, $pwcc_port, 5);
 
   if (!$handle) {
     return ("fail", "Could not connect to dada_pwc_command ".$pwcc_host.":".$pwcc_port);
@@ -626,44 +626,44 @@ sub start($\%) {
     $result = <$handle>;
 
     # Check we are in the IDLE state before continuing
-    if (Dada->waitForState("idle", $handle, 5) != 0) {
+    if (Dada::waitForState("idle", $handle, 5) != 0) {
       return ("fail", "Nexus was not in IDLE state");
     }
-    Dada->logMsg(2, DL, "PWCC in IDLE state");
+    Dada::logMsg(2, DL, "PWCC in IDLE state");
 
     # Send CONFIG command
     $cmd = "config ".$file;
-    Dada->logMsg(1, DL, "PWCC <- ".$cmd);
-    ($result,$response) = Dada->sendTelnetCommand($handle,$cmd);
-    Dada->logMsg(1, DL, "PWCC -> ".$result." ".$response);
+    Dada::logMsg(1, DL, "PWCC <- ".$cmd);
+    ($result,$response) = Dada::sendTelnetCommand($handle,$cmd);
+    Dada::logMsg(1, DL, "PWCC -> ".$result." ".$response);
 
     if ($result ne "ok") { 
       return ("fail", "config command failed on nexus: \"".$response."\"");
     }
 
     # Wait for the PREPARED state
-    if (Dada->waitForState("prepared",$handle,5) != 0) {
+    if (Dada::waitForState("prepared",$handle,5) != 0) {
       return ("fail", "Nexus did not enter PREPARED state after config command");
     }
-    Dada->logMsg(2, DL, "Nexus in PREPARED state");
+    Dada::logMsg(2, DL, "Nexus in PREPARED state");
 
     # Send start command
     $cmd = "start";
 
-    Dada->logMsg(1, DL, "PWCC <- ".$cmd);
-    ($result,$response) = Dada->sendTelnetCommand($handle,$cmd);
-    Dada->logMsg(1, DL, "PWCC -> ".$result." ".$response);
+    Dada::logMsg(1, DL, "PWCC <- ".$cmd);
+    ($result,$response) = Dada::sendTelnetCommand($handle,$cmd);
+    Dada::logMsg(1, DL, "PWCC -> ".$result." ".$response);
 
     if ($result ne "ok") {
       return ("fail", "start command failed on nexus: ".$response);
     } 
 
-    my $multibob_host = Dada->getHostMachineName();
-    my $multibob = Dada->connectToMachine($multibob_host,$cfg{"IBOB_MANAGER_PORT"});
+    my $multibob_host = Dada::getHostMachineName();
+    my $multibob = Dada::connectToMachine($multibob_host,$cfg{"IBOB_MANAGER_PORT"});
 
     if (!$multibob) {
 
-      Dada->logMsg(1, DL, "Could not connect to ibob manager");
+      Dada::logMsg(1, DL, "Could not connect to ibob manager");
       return ("fail", "utc_known");
 
     } else {
@@ -671,46 +671,46 @@ sub start($\%) {
       # ignore welcome message
       $response = <$multibob>;
 
-      ($result, $response) = Bpsr->waitForMultibobState("active", $handle, 2);
+      ($result, $response) = Bpsr::waitForMultibobState("active", $handle, 2);
 
       if ($result ne "ok") {
 
-        Dada->logMsgWarn($error, "multibob_server was not in the active state: ".$response);
+        Dada::logMsgWarn($error, "multibob_server was not in the active state: ".$response);
         return ("fail", $response);
 
       } 
 
       # Run the level setting script on ibob manager
       $cmd = "acclen ".$tcs_cmds{"ACC_LEN"};
-      Dada->logMsg(1, DL, "multibob <- ".$cmd);
-      ($result,$response) = Dada->sendTelnetCommand($multibob,$cmd);
-      Dada->logMsg(1, DL, "multibob -> ".$result." ".$response);
+      Dada::logMsg(1, DL, "multibob <- ".$cmd);
+      ($result,$response) = Dada::sendTelnetCommand($multibob,$cmd);
+      Dada::logMsg(1, DL, "multibob -> ".$result." ".$response);
 
       # Run the level setting script on ibob manager
       $cmd = "levels";
-      Dada->logMsg(1, DL, "multibob <- ".$cmd);
-      ($result,$response) = Dada->sendTelnetCommand($multibob,$cmd);
-      Dada->logMsg(1, DL, "multibob -> ".$result);
+      Dada::logMsg(1, DL, "multibob <- ".$cmd);
+      ($result,$response) = Dada::sendTelnetCommand($multibob,$cmd);
+      Dada::logMsg(1, DL, "multibob -> ".$result);
       if ($result ne "ok") {
-        Dada->logMsgWarn($warn, "mulibob -> ".$response);
+        Dada::logMsgWarn($warn, "mulibob -> ".$response);
       } else {
-        Dada->logMsg(2, DL, "mulibob -> ".$response);
+        Dada::logMsg(2, DL, "mulibob -> ".$response);
       }
 
       # Run the rearming script on ibob manager
       $cmd = "arm";
-      Dada->logMsg(1, DL, "multibob <- ".$cmd);
-      ($result,$response) = Dada->sendTelnetCommand($multibob,$cmd);
-      Dada->logMsg(1, DL, "multibob -> ".$result);
+      Dada::logMsg(1, DL, "multibob <- ".$cmd);
+      ($result,$response) = Dada::sendTelnetCommand($multibob,$cmd);
+      Dada::logMsg(1, DL, "multibob -> ".$result);
       if ($result ne "ok") {
-        Dada->logMsgWarn($warn, $response);
+        Dada::logMsgWarn($warn, $response);
       }
 
       my $utc_start = ltrim($response);
-      Dada->logMsg(1, DL, "UTC_START ".$utc_start);
+      Dada::logMsg(1, DL, "UTC_START ".$utc_start);
 
       $cmd = "exit";
-      Dada->logMsg(1, DL, "multibob <- ".$cmd);
+      Dada::logMsg(1, DL, "multibob <- ".$cmd);
       print $multibob $cmd."\r\n";
       close($multibob);
 
@@ -719,19 +719,19 @@ sub start($\%) {
 
       # Now we should have a UTC_START!
       $cmd = "set_utc_start ".$utc_start;
-      Dada->logMsg(1, DL, "PWCC <- ".$cmd);
-      ($result, $response) = Dada->sendTelnetCommand($handle, $cmd);
-      Dada->logMsg(1, DL, "PWCC -> ".$result);
+      Dada::logMsg(1, DL, "PWCC <- ".$cmd);
+      ($result, $response) = Dada::sendTelnetCommand($handle, $cmd);
+      Dada::logMsg(1, DL, "PWCC -> ".$result);
       if ($result ne "ok") {
-        Dada->logMsgWarn($warn, $response);
+        Dada::logMsgWarn($warn, $response);
       }
 
       # Wait for the prepared state
-      if (Dada->waitForState("recording",$handle,30) != 0) {
+      if (Dada::waitForState("recording",$handle,30) != 0) {
         return ("fail", "Nexus did not enter RECORDING state after clock command");
       }
 
-      Dada->logMsg(2, DL, "Nexus now in RECORDING state");
+      Dada::logMsg(2, DL, "Nexus now in RECORDING state");
 
       # Close nexus connection
       $handle->close();
@@ -752,7 +752,7 @@ sub set_utc_start($\%) {
 
   my %tcs_cmds = %$tcs_cmds_ref;
 
-  Dada->logMsg(2, DL, "set_utc_start(".$utc_start.")");
+  Dada::logMsg(2, DL, "set_utc_start(".$utc_start.")");
 
   my $ignore = "";
   my $result = "ok";
@@ -777,84 +777,91 @@ sub set_utc_start($\%) {
     `ls $dir >& /dev/null`;
   }
 
-  Dada->logMsg(2, DL, "Setting up results dir: ".$results_dir);
-  Dada->logMsg(2, DL, "Setting up archives dir: ".$archive_dir);
+  Dada::logMsg(2, DL, "Setting up results dir: ".$results_dir);
+  Dada::logMsg(2, DL, "Setting up archives dir: ".$archive_dir);
 
   $cmd = "mkdir -p ".$results_dir;
-  my ($resu, $resp) = Dada->mySystem($cmd,0);
+  my ($resu, $resp) = Dada::mySystem($cmd,0);
   if ($resu != "ok") {
-    Dada->logMsgWarn($warn, "Failed to create the server results directory (".$results_dir.") \"".$resp."\"");
+    Dada::logMsgWarn($warn, "Failed to create the server results directory (".$results_dir.") \"".$resp."\"");
   }
 
   $cmd = "mkdir -p ".$archive_dir;
-  ($resu, $resp) = Dada->mySystem($cmd,0);
+  ($resu, $resp) = Dada::mySystem($cmd,0);
   if ($resu != "ok") {
-    Dada->logMsgWarn($warn, "Failed to create the server archive directory (".$archive_dir.") \"".$resp."\"");
+    Dada::logMsgWarn($warn, "Failed to create the server archive directory (".$archive_dir.") \"".$resp."\"");
   }
 
   $cmd = "chgrp -R ".$proj_id." ".$results_dir;
-  ($resu, $resp) = Dada->mySystem($cmd,0);
+  ($resu, $resp) = Dada::mySystem($cmd,0);
   if ($resu != "ok") {
-    Dada->logMsgWarn($warn, "cmd ".$cmd." failed: ".$resp);
+    Dada::logMsgWarn($warn, "cmd ".$cmd." failed: ".$resp);
   }
 
   $cmd = "chgrp -R ".$proj_id." ".$archive_dir;
-  ($resu, $resp) = Dada->mySystem($cmd,0);
+  ($resu, $resp) = Dada::mySystem($cmd,0);
   if ($resu != "ok") {
-    Dada->logMsgWarn($warn, "cmd ".$cmd." failed: ".$resp);
+    Dada::logMsgWarn($warn, "cmd ".$cmd." failed: ".$resp);
   }
 
   $cmd = "chmod -R g+sw ".$results_dir;
-  ($resu, $resp) = Dada->mySystem($cmd,0);
+  ($resu, $resp) = Dada::mySystem($cmd,0);
   if ($resu != "ok") {
-    Dada->logMsgWarn($warn, "cmd ".$cmd." failed: ".$resp);
+    Dada::logMsgWarn($warn, "cmd ".$cmd." failed: ".$resp);
   }
 
   $cmd = "chmod -R g+sw ".$archive_dir;
-  ($resu, $resp) = Dada->mySystem($cmd,0);
+  ($resu, $resp) = Dada::mySystem($cmd,0);
   if ($resu != "ok") {
-    Dada->logMsgWarn($warn, "cmd ".$cmd." failed: ".$resp);
+    Dada::logMsgWarn($warn, "cmd ".$cmd." failed: ".$resp);
   }
 
   my $fname = $results_dir."/obs.info";
   open FH, ">$fname" or return ("fail","Could not create writeable file: ".$fname);
 
   print FH "# Observation Summary created by: ".$0."\n";
-  print FH "# Created: ".Dada->getCurrentDadaTime()."\n\n";
-  print FH Dada->headerFormat("SOURCE",$tcs_cmds{"SOURCE"})."\n";
-  print FH Dada->headerFormat("RA",$tcs_cmds{"RA"})."\n";
-  print FH Dada->headerFormat("DEC",$tcs_cmds{"DEC"})."\n";
-  print FH Dada->headerFormat("FA",$tcs_cmds{"FA"})."\n";
-  print FH Dada->headerFormat("CFREQ",$tcs_cmds{"CFREQ"})."\n";
-  print FH Dada->headerFormat("PID",$tcs_cmds{"PID"})."\n";
-  print FH Dada->headerFormat("BANDWIDTH",$tcs_cmds{"BANDWIDTH"})."\n";
-  print FH Dada->headerFormat("ACC_LEN",$tcs_cmds{"ACC_LEN"})."\n";
-  print FH Dada->headerFormat("UTC_START",$utc_start)."\n";
+  print FH "# Created: ".Dada::getCurrentDadaTime()."\n\n";
+  print FH Dada::headerFormat("SOURCE",$tcs_cmds{"SOURCE"})."\n";
+  print FH Dada::headerFormat("RA",$tcs_cmds{"RA"})."\n";
+  print FH Dada::headerFormat("DEC",$tcs_cmds{"DEC"})."\n";
+  print FH Dada::headerFormat("FA",$tcs_cmds{"FA"})."\n";
+  print FH Dada::headerFormat("CFREQ",$tcs_cmds{"CFREQ"})."\n";
+  print FH Dada::headerFormat("PID",$tcs_cmds{"PID"})."\n";
+  print FH Dada::headerFormat("BANDWIDTH",$tcs_cmds{"BANDWIDTH"})."\n";
+  print FH Dada::headerFormat("ACC_LEN",$tcs_cmds{"ACC_LEN"})."\n";
+  print FH Dada::headerFormat("UTC_START",$utc_start)."\n";
   print FH "\n";
-  print FH Dada->headerFormat("NUM_PWC",$tcs_cmds{"NUM_PWC"})."\n";
-  print FH Dada->headerFormat("NBIT",$tcs_cmds{"NBIT"})."\n";
-  print FH Dada->headerFormat("NPOL",$tcs_cmds{"NPOL"})."\n";
-  print FH Dada->headerFormat("NDIM",$tcs_cmds{"NDIM"})."\n";
-  print FH Dada->headerFormat("NCHAN",$tcs_cmds{"NCHAN"})."\n";
+  print FH Dada::headerFormat("NUM_PWC",$tcs_cmds{"NUM_PWC"})."\n";
+  print FH Dada::headerFormat("NBIT",$tcs_cmds{"NBIT"})."\n";
+  print FH Dada::headerFormat("NPOL",$tcs_cmds{"NPOL"})."\n";
+  print FH Dada::headerFormat("NDIM",$tcs_cmds{"NDIM"})."\n";
+  print FH Dada::headerFormat("NCHAN",$tcs_cmds{"NCHAN"})."\n";
   close FH;
 
   $cmd = "cp ".$fname." ".$archive_dir;
-  ($resu, $resp) = Dada->mySystem($cmd,0);
+  ($resu, $resp) = Dada::mySystem($cmd,0);
   if ($resu != "ok") {
-    Dada->logMsgWarn($warn, "cmd ".$cmd." failed: ".$resp);
+    Dada::logMsgWarn($warn, "cmd ".$cmd." failed: ".$resp);
   }
 
   $cmd = "sudo -b chown -R bpsr ".$results_dir;
-  ($resu, $resp) = Dada->mySystem($cmd,0);
+  ($resu, $resp) = Dada::mySystem($cmd,0);
   if ($resu != "ok") {
-    Dada->logMsgWarn($warn, "cmd ".$cmd." failed: ".$resp);
+    Dada::logMsgWarn($warn, "cmd ".$cmd." failed: ".$resp);
   }
 
   $cmd = "sudo -b chown -R bpsr ".$archive_dir;
-  ($resu, $resp) = Dada->mySystem($cmd,0);
+  ($resu, $resp) = Dada::mySystem($cmd,0);
   if ($resu != "ok") {
-    Dada->logMsgWarn($warn, "cmd ".$cmd." failed: ".$resp);
+    Dada::logMsgWarn($warn, "cmd ".$cmd." failed: ".$resp);
   }
+
+  # Create the obs.processing files
+  $cmd = "touch ".$results_dir."/obs.processing";
+  system($cmd);
+  
+  $cmd = "touch ".$archive_dir."/obs.processing";
+  system($cmd);
 
   return ($result, $response);
 
@@ -869,7 +876,7 @@ sub stop() {
   my $result = "";
   my $response = "";
 
-  my $handle = Dada->connectToMachine($cfg{"PWCC_HOST"}, $cfg{"PWCC_PORT"});
+  my $handle = Dada::connectToMachine($cfg{"PWCC_HOST"}, $cfg{"PWCC_PORT"});
 
   if (!$handle) {
     return ("fail", "Could not connect to Nexus ".$cfg{"PWCC_HOST"}.":".$cfg{"PWCC_PORT"});
@@ -880,20 +887,20 @@ sub stop() {
 
   my $cmd = "stop";
 
-  Dada->logMsg(1, DL, "PWCC <- ".$cmd);
-  ($result, $response) = Dada->sendTelnetCommand($handle,$cmd);
-  Dada->logMsg(1, DL, "PWCC -> ".$result);
+  Dada::logMsg(1, DL, "PWCC <- ".$cmd);
+  ($result, $response) = Dada::sendTelnetCommand($handle,$cmd);
+  Dada::logMsg(1, DL, "PWCC -> ".$result);
   if ($result ne "ok") {
-    Dada->logMsgWarn($warn, "stop command failed: ".$response);
+    Dada::logMsgWarn($warn, "stop command failed: ".$response);
   }
 
   # Check we are in the IDLE state before continuing
-  if (Dada->waitForState("idle", $handle, 5) != 0) {
+  if (Dada::waitForState("idle", $handle, 5) != 0) {
 
-    Dada->logMsgWarn($warn, "STOP command failed. Attempting to recover");
+    Dada::logMsgWarn($warn, "STOP command failed. Attempting to recover");
 
     # Try to determine the problem
-    my ($pwcc, @pwcs) = Dada->getPWCCState($handle);
+    my ($pwcc, @pwcs) = Dada::getPWCCState($handle);
 
     my $have_soft = 0;
     my $have_hard = 0;
@@ -901,9 +908,9 @@ sub stop() {
 
     # check for errors
     my $i=0;
-    Dada->logMsg(2, DL, "PWCC state : ".$pwcc);
+    Dada::logMsg(2, DL, "PWCC state : ".$pwcc);
     for ($i=0; $i<=$#pwcs; $i++) {
-      Dada->logMsg(2, DL, $cfg{"PWC_".$i}." state : ".$pwcs[$i]);
+      Dada::logMsg(2, DL, $cfg{"PWC_".$i}." state : ".$pwcs[$i]);
       if (($pwcc eq "soft_error") || ($pwcs[$i] eq "soft_error")) {
         $have_soft++;
       }
@@ -915,7 +922,7 @@ sub stop() {
       }
     }
 
-    Dada->logMsg(2, DL, "n_soft = ".$have_soft.", n_hard = ".$have_hard.", n_fatal = ".$have_fatal);
+    Dada::logMsg(2, DL, "n_soft = ".$have_soft.", n_hard = ".$have_hard.", n_fatal = ".$have_fatal);
       
     my $pwcs_string = "";
     for ($i=0; $i<$cfg{"NUM_PWC"}; $i++) {
@@ -927,48 +934,48 @@ sub stop() {
       $handle->close(); 
 
       # Tell the PWCC to quit
-      Dada->logMsg(1, DL, "PWCC <- quit");
+      Dada::logMsg(1, DL, "PWCC <- quit");
       quit_pwc_command();
       $pwcc_thread->join();
 
       $cmd = "stop_pwcs";
-      Dada->logMsg(1, DL, "PWCs <- ".$cmd);
+      Dada::logMsg(1, DL, "PWCs <- ".$cmd);
       for ($i=0; $i<$cfg{"NUM_PWC"}; $i++) {
-        Dada->logMsg(2, DL, $cfg{"PWC_".$i}." <- ".$cmd);
-        ($result, $response) = Bpsr->clientCommand($cmd, $cfg{"PWC_".$i});
-        Dada->logMsg(2, DL, $cfg{"PWC_".$i}." -> ".$result.":".$response);
+        Dada::logMsg(2, DL, $cfg{"PWC_".$i}." <- ".$cmd);
+        ($result, $response) = Bpsr::clientCommand($cmd, $cfg{"PWC_".$i});
+        Dada::logMsg(2, DL, $cfg{"PWC_".$i}." -> ".$result.":".$response);
       }
 
       if ($have_fatal > 0) {
 
         $cmd = "destroy_db";
-        Dada->logMsg(1, DL, "PWCs <- ".$cmd);
+        Dada::logMsg(1, DL, "PWCs <- ".$cmd);
         for ($i=0; $i<$cfg{"NUM_PWC"}; $i++) {
-          Dada->logMsg(2, DL, $cfg{"PWC_".$i}." <- ".$cmd);
-          ($result, $response) = Bpsr->clientCommand($cmd, $cfg{"PWC_".$i});
-          Dada->logMsg(2, DL, $cfg{"PWC_".$i}." -> ".$result.":".$response);
+          Dada::logMsg(2, DL, $cfg{"PWC_".$i}." <- ".$cmd);
+          ($result, $response) = Bpsr::clientCommand($cmd, $cfg{"PWC_".$i});
+          Dada::logMsg(2, DL, $cfg{"PWC_".$i}." -> ".$result.":".$response);
         }
 
         $cmd = "init_db";
-        Dada->logMsg(1, DL, "PWCs <- ".$cmd);
+        Dada::logMsg(1, DL, "PWCs <- ".$cmd);
         for ($i=0; $i<$cfg{"NUM_PWC"}; $i++) {
-          Dada->logMsg(2, DL, $cfg{"PWC_".$i}." <- ".$cmd);
-          ($result, $response) = Bpsr->clientCommand($cmd, $cfg{"PWC_".$i});
-          Dada->logMsg(2, DL, $cfg{"PWC_".$i}." -> ".$result.":".$response);
+          Dada::logMsg(2, DL, $cfg{"PWC_".$i}." <- ".$cmd);
+          ($result, $response) = Bpsr::clientCommand($cmd, $cfg{"PWC_".$i});
+          Dada::logMsg(2, DL, $cfg{"PWC_".$i}." -> ".$result.":".$response);
         }
 
       }
 
       $cmd = "start_pwcs";
-      Dada->logMsg(1, DL, "PWCs <- ".$cmd);
+      Dada::logMsg(1, DL, "PWCs <- ".$cmd);
       for ($i=0; $i<$cfg{"NUM_PWC"}; $i++) {
-        Dada->logMsg(2, DL, $cfg{"PWC_".$i}." <- ".$cmd);
-        ($result, $response) = Bpsr->clientCommand($cmd, $cfg{"PWC_".$i});
-        Dada->logMsg(2, DL, $cfg{"PWC_".$i}." -> ".$result.":".$response);
+        Dada::logMsg(2, DL, $cfg{"PWC_".$i}." <- ".$cmd);
+        ($result, $response) = Bpsr::clientCommand($cmd, $cfg{"PWC_".$i});
+        Dada::logMsg(2, DL, $cfg{"PWC_".$i}." -> ".$result.":".$response);
       }
 
       # Relaunch PWCC Thread with the current/previous config
-      Dada->logMsg(1, DL, "PWCC <- ".$cfg{"CONFIG_DIR"}."/bpsr_tcs.cfg");
+      Dada::logMsg(1, DL, "PWCC <- ".$cfg{"CONFIG_DIR"}."/bpsr_tcs.cfg");
       $pwcc_thread = threads->new(\&pwcc_thread, $cfg{"CONFIG_DIR"}."/bpsr_tcs.cfg");
 
       if ($have_fatal > 0) {
@@ -981,9 +988,9 @@ sub stop() {
     } elsif ($have_soft > 0) {
       
       #$cmd = "reset";
-      #Dada->logMsg(1, DL, $cmd);
-      #($result, $response) = Dada->sendTelnetCommand($handle, $cmd);
-      #Dada->logMsg(1, DL, $result.":".$response);
+      #Dada::logMsg(1, DL, $cmd);
+      #($result, $response) = Dada::sendTelnetCommand($handle, $cmd);
+      #Dada::logMsg(1, DL, $result.":".$response);
       #$handle->close();
       return ("ok", "SOFT ERROR occurred. PWCC and PWC's resset");
 
@@ -993,7 +1000,7 @@ sub stop() {
     }
   }
 
-  Dada->logMsg(2, DL, "PWCC in IDLE state");
+  Dada::logMsg(2, DL, "PWCC in IDLE state");
 
   # Close nexus connection
   $handle->close();
@@ -1010,13 +1017,13 @@ sub rec_stop($) {
 
   (my $utc) = @_;
 
-  Dada->logMsg(2, DL, "rec_stop (".$utc.")");
+  Dada::logMsg(2, DL, "rec_stop (".$utc.")");
 
   my $ignore = "";
   my $result = "";
   my $response = "";
 
-  my $handle = Dada->connectToMachine($cfg{"PWCC_HOST"}, $cfg{"PWCC_PORT"});
+  my $handle = Dada::connectToMachine($cfg{"PWCC_HOST"}, $cfg{"PWCC_PORT"});
   if (!$handle) {
     return ("fail", "Could not connect to Nexus ".$cfg{"PWCC_HOST"}.":".$cfg{"PWCC_PORT"});
   }
@@ -1026,7 +1033,7 @@ sub rec_stop($) {
 
   my $cmd = "rec_stop ".$utc;
 
-  ($result, $response) = Dada->sendTelnetCommand($handle,$cmd);
+  ($result, $response) = Dada::sendTelnetCommand($handle,$cmd);
   logMessage("Sent \"".$cmd."\", Received \"".$result." ".$response."\"");
 
   # Close nexus connection
@@ -1061,7 +1068,7 @@ sub createDFBSimulator(\%) {
     $noise = "-j";
   } 
 
-  Dada->logMsg(2, DL, "createDFBSimulator: $host, $dest, $dest_port, $acc_len, $duration");
+  Dada::logMsg(2, DL, "createDFBSimulator: $host, $dest, $dest_port, $acc_len, $duration");
 
   my $args = "$dest_port $acc_len $duration $noise $dest";
 
@@ -1070,17 +1077,17 @@ sub createDFBSimulator(\%) {
 
   # Launch dfb simulator on remote host
   my $dfb_cmd = "dfbsimulator -d ".$args;
-  my $handle = Dada->connectToMachine($host, $client_master_port);
+  my $handle = Dada::connectToMachine($host, $client_master_port);
 
   if (!$handle) {
     return ("fail", "Could not connect to client_master_control.pl ".$host.":".$client_master_port);
   }
 
-  Dada->logMsg(2, DL, "createDFBSimulator: sending cmd ".$dfb_cmd);
+  Dada::logMsg(2, DL, "createDFBSimulator: sending cmd ".$dfb_cmd);
 
-  ($result, $response) = Dada->sendTelnetCommand($handle,$dfb_cmd);
+  ($result, $response) = Dada::sendTelnetCommand($handle,$dfb_cmd);
 
-  Dada->logMsg(2, DL, "createDFBSimulator: received reply: (".$result.", ".$response.")");
+  Dada::logMsg(2, DL, "createDFBSimulator: received reply: (".$result.", ".$response.")");
 
   $handle->close();
 
@@ -1098,11 +1105,11 @@ sub stopDFBSimulator() {
   my $result = "";
   my $response = "";
 
-  Dada->logMsg(1, DL, "stopDFBSimulator: stopping simulator in 10 seconds");
+  Dada::logMsg(1, DL, "stopDFBSimulator: stopping simulator in 10 seconds");
   sleep(10);
 
   # connect to client_master_control.pl
-  my $handle = Dada->connectToMachine($host, $client_master_port);
+  my $handle = Dada::connectToMachine($host, $client_master_port);
 
   if (!$handle) {
     return ("fail", "Could not connect to client_master_control.pl ".$host.":".$client_master_port);
@@ -1111,9 +1118,9 @@ sub stopDFBSimulator() {
   # This command will kill the udp packet generator
   my $dfb_cmd = "stop_dfbs";
 
-  ($result, $response) = Dada->sendTelnetCommand($handle,$dfb_cmd);
+  ($result, $response) = Dada::sendTelnetCommand($handle,$dfb_cmd);
 
-  Dada->logMsg(1, DL, "stopDFBSimulator: received reply: ".$response);
+  Dada::logMsg(1, DL, "stopDFBSimulator: received reply: ".$response);
 
   $handle->close();
 
@@ -1158,7 +1165,7 @@ sub sigHandle($) {
   $quit_threads = 1;
   # sleep to allow threads to quit 
   sleep(5);
-  Dada->logMsgWarn($warn, "STOPPING SCRIPT: ".Dada->getCurrentDadaTime(0));
+  Dada::logMsgWarn($warn, "STOPPING SCRIPT: ".Dada->getCurrentDadaTime(0));
   exit(1);
 
 }
@@ -1169,14 +1176,14 @@ sub sigHandle($) {
 #
 sub daemonControlThread() {
 
-  Dada->logMsg(2, DL, "daemon_control: thread starting");
+  Dada::logMsg(2, DL, "daemon_control: thread starting");
 
   my $pidfile = $cfg{"SERVER_CONTROL_DIR"}."/".PIDFILE;
   my $daemon_quit_file = $cfg{"SERVER_CONTROL_DIR"}."/".QUITFILE;
 
   # Poll for the existence of the control file
   while ((!-f $daemon_quit_file) && (!$quit_threads)) {
-    Dada->logMsg(3, DL, "daemon_control: Polling for ".$daemon_quit_file);
+    Dada::logMsg(3, DL, "daemon_control: Polling for ".$daemon_quit_file);
     sleep(1);
   }
 
@@ -1186,10 +1193,10 @@ sub daemonControlThread() {
   # Manually tell dada_pwc_command to quit
   quit_pwc_command();
 
-  Dada->logMsg(2, DL, "daemon_control: Unlinking PID file ".$pidfile);
+  Dada::logMsg(2, DL, "daemon_control: Unlinking PID file ".$pidfile);
   unlink($pidfile);
 
-  Dada->logMsg(2, DL, "daemon_control: exiting");
+  Dada::logMsg(2, DL, "daemon_control: exiting");
 
 }
 
@@ -1257,7 +1264,8 @@ sub fixTCSCommands(\%) {
   $add{"PID"} = "P630";
   $add{"CFREQ"} = "1382";
   $add{"RECEIVER"} = "MULTI";
-  $add{"RESOLUTION"} = "1024";
+  $add{"RESOLUTION"} = "2048";
+  $add{"BANDWIDTH"} = "-400";
 
   my %new_cmds = ();
 
@@ -1341,44 +1349,50 @@ sub generateConfigFile($\%) {
                                                                                                                                                                               
   my %tcs_cmds = %$tcs_cmds_ref;
   my $string = "";
+  my $active_pwcs = $cfg{"NUM_PWC"};
+
+  # special case for observing with primary beam [01] only
+  if (exists($tcs_cmds{"NUM_BEAMS"}) && ($tcs_cmds{"NUM_BEAMS"} eq "1")) {
+    $active_pwcs = 1;  
+  }
 
   open FH, ">".$fname or return ("fail", "Could not write to ".$fname);
-
   print FH "# Header file created by ".$0."\n";
-  print FH "# Created: ".Dada->getCurrentDadaTime()."\n\n";
-  print FH  Dada->headerFormat("NUM_PWC",$tcs_cmds{"NUM_PWC"})."\n";
-  Dada->logMsg(2, DL, "bpsr_tcs.cfg: ".Dada->headerFormat("NUM_PWC",$cfg{"NUM_PWC"}));
+  print FH "# Created: ".Dada::getCurrentDadaTime()."\n\n";
 
-  # Port information for dada_pwc_command
-  $string = Dada->headerFormat("PWC_PORT",$cfg{"PWC_PORT"});
-  print FH $string."\n";    
-  Dada->logMsg(2, DL, "bpsr_tcs.cfg: ".$string);
- 
-  $string = Dada->headerFormat("PWC_LOGPORT",$cfg{"PWC_LOGPORT"});
-  print FH $string."\n";    
-  Dada->logMsg(2, DL, "bpsr_tcs.cfg: ".$string);
-
-  $string = Dada->headerFormat("PWCC_PORT",$cfg{"PWCC_PORT"});
-  print FH $string."\n";    
-  Dada->logMsg(2, DL, "bpsr_tcs.cfg: ".$string);
-
-  $string = Dada->headerFormat("PWCC_LOGPORT",$cfg{"PWCC_LOGPORT"});
-  print FH $string."\n";    
-  Dada->logMsg(2, DL, "bpsr_tcs.cfg: ".$string);
-
-  $string = Dada->headerFormat("LOGFILE_DIR",$cfg{"SERVER_LOG_DIR"});
-  print FH $string."\n";    
-  Dada->logMsg(2, DL, "bpsr_tcs.cfg: ".$string);
- 
-  $string = Dada->headerFormat("HDR_SIZE",$tcs_cmds{"HDR_SIZE"});
+  $string = Dada::headerFormat("NUM_PWC", $active_pwcs);
   print FH $string."\n";
-  Dada->logMsg(2, DL, "bpsr_tcs.cfg: ".$string);
+  Dada::logMsg(2, DL, "bpsr_tcs.cfg: ".$string);
+
+  $string = Dada::headerFormat("PWC_PORT",$cfg{"PWC_PORT"});
+  print FH $string."\n";    
+  Dada::logMsg(2, DL, "bpsr_tcs.cfg: ".$string);
+ 
+  $string = Dada::headerFormat("PWC_LOGPORT",$cfg{"PWC_LOGPORT"});
+  print FH $string."\n";    
+  Dada::logMsg(2, DL, "bpsr_tcs.cfg: ".$string);
+
+  $string = Dada::headerFormat("PWCC_PORT",$cfg{"PWCC_PORT"});
+  print FH $string."\n";    
+  Dada::logMsg(2, DL, "bpsr_tcs.cfg: ".$string);
+
+  $string = Dada::headerFormat("PWCC_LOGPORT",$cfg{"PWCC_LOGPORT"});
+  print FH $string."\n";    
+  Dada::logMsg(2, DL, "bpsr_tcs.cfg: ".$string);
+
+  $string = Dada::headerFormat("LOGFILE_DIR",$cfg{"SERVER_LOG_DIR"});
+  print FH $string."\n";    
+  Dada::logMsg(2, DL, "bpsr_tcs.cfg: ".$string);
+ 
+  $string = Dada::headerFormat("HDR_SIZE",$tcs_cmds{"HDR_SIZE"});
+  print FH $string."\n";
+  Dada::logMsg(2, DL, "bpsr_tcs.cfg: ".$string);
 
   my $i=0;
-  for($i=0; $i<$cfg{"NUM_PWC"}; $i++) {
-    $string = Dada->headerFormat("PWC_".$i,$cfg{"PWC_".$i});
+  for($i=0; $i<$active_pwcs; $i++) {
+    $string = Dada::headerFormat("PWC_".$i,$cfg{"PWC_".$i});
     print FH $string."\n";
-    Dada->logMsg(2, DL, "bpsr_tcs.cfg: ".$string);
+    Dada::logMsg(2, DL, "bpsr_tcs.cfg: ".$string);
   }
 
   close FH;
@@ -1396,7 +1410,7 @@ sub generateSpecificationFile($\%) {
 
   open FH, ">".$fname or return ("fail", "Could not write to ".$fname);
   print FH "# Specification File created by ".$0."\n";
-  print FH "# Created: ".Dada->getCurrentDadaTime()."\n\n";
+  print FH "# Created: ".Dada::getCurrentDadaTime()."\n\n";
 
   my %ignore = ();
   $ignore{"NUM_PWC"} = "yes";
@@ -1411,8 +1425,8 @@ sub generateSpecificationFile($\%) {
   my $line;
   foreach $line (@sorted) {
     if (!(exists $ignore{$line})) {
-      print FH Dada->headerFormat($line, $tcs_cmds{$line})."\n";
-      Dada->logMsg(2, DL, "bpsr_tcs.spec: ".Dada->headerFormat($line, $tcs_cmds{$line}));
+      print FH Dada::headerFormat($line, $tcs_cmds{$line})."\n";
+      Dada::logMsg(2, DL, "bpsr_tcs.spec: ".Dada->headerFormat($line, $tcs_cmds{$line}));
     }
   }
 
@@ -1437,7 +1451,7 @@ sub calcTsampFromAccLen($) {
 
 sub waitForMultibobBoot() {
 
-  my $host = Dada->getHostMachineName();
+  my $host = Dada::getHostMachineName();
   my $port = $cfg{"IBOB_MANAGER_PORT"};
 
   my $result;
@@ -1445,7 +1459,7 @@ sub waitForMultibobBoot() {
 
   sleep(5);
 
-  my $handle = Dada->connectToMachine($host, $port, 10);
+  my $handle = Dada::connectToMachine($host, $port, 10);
 
   if (!$handle) {
     return ("fail", "Could not connect to multibob_server ".$host.":".$port);
@@ -1454,7 +1468,7 @@ sub waitForMultibobBoot() {
   # ignore welcome message
   $response = <$handle>;
 
-  ($result, $response) = Bpsr->waitForMultibobState("alive", $handle, 60);
+  ($result, $response) = Bpsr::waitForMultibobState("alive", $handle, 60);
 
   return ($result, $response);
 

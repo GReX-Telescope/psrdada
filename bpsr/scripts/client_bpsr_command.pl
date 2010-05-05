@@ -4,7 +4,7 @@ use lib $ENV{"DADA_ROOT"}."/bin";
 
 use IO::Socket;     # Standard perl socket library
 use Net::hostent;
-use Bpsr;           # BPSR Module for configuration options
+use Bpsr;           # BPSR/DADA Module for configuration options
 use threads;
 use threads::shared;
 use strict;         # strict mode (like -Wall)
@@ -19,42 +19,54 @@ use constant  DEBUG_LEVEL         => 1;
 #
 # Global Variables
 #
-our %cfg : shared = Bpsr->getBpsrConfig();      # dada.cfg in a hash
+our %cfg : shared = Bpsr::getBpsrConfig();      # dada.cfg in a hash
 
+
+my $cmd = "";
+my $arg = "";
+my $host_offset = 1;
 
 my $i;
 my $j;
-my $commString = @ARGV[0];
-my @threads;
-my @results;
-my @responses;
-my $failure = "false";
-
-my $logdir     = $cfg{"CLIENT_LOG_DIR"};
-my $controldir = $cfg{"CLIENT_CONTROL_DIR"};
-my $archivedir = $cfg{"CLIENT_ARCHIVE_DIR"};
-my $rawdatadir = $cfg{"CLIENT_RECORDING_DIR"};
-my $scratchdir = $cfg{"CLIENT_SCRATCH_DIR"};
-
 my @machines = ();
+my @threads = ();
+my @results = ();
+my @responses = ();
+my $failure = "false";
+my $comm_string = "";
 
-# Machines to run this command on
-for ($i=1;$i<=$#ARGV;$i++) {
+# get the command
+$cmd = $ARGV[0];
+
+
+# some commands may have arguments before the machine list
+if (($cmd eq "start_daemon") || ($cmd eq "stop_daemon") || ($cmd eq "db_info")) {
+  $arg = $ARGV[1];
+  $host_offset = 2;
+}
+
+# get the hosts from the arguements
+for ($i=$host_offset; $i<=$#ARGV; $i++) {
   push(@machines, $ARGV[$i]);
 }
 
-for ($i=1;$i<=$#ARGV;$i++) {
+for ($i=0; $i<=$#machines; $i++) {
 
-  if ($commString eq "start_master_script") {
-    
-    my $result;
-    my $response;
+  # special case for starting the master control script
+  if (($cmd eq "start_daemon") && ($arg eq "bpsr_master_control")) {
 
-    my $string = "ssh -x -l bpsr ".@ARGV[$i]." \"cd ".$cfg{"SCRIPTS_DIR"}."; ./client_bpsr_master_control.pl\"";
-    @threads[$i] = threads->new(\&sshCmdThread, $string);
+    $comm_string = "ssh -x -l bpsr ".$machines[$i]." \"client_bpsr_master_control.pl\"";
+    @threads[$i] = threads->new(\&sshCmdThread, $comm_string);
 
   } else {
-    @threads[$i] = threads->new(\&commThread, $commString, @ARGV[$i]);
+
+    if ($arg ne "") {
+      $comm_string = $cmd." ".$arg;
+    } else {
+      $comm_string = $cmd;
+    }
+
+    @threads[$i] = threads->new(\&commThread, $comm_string, $machines[$i]);
   }
 
   if ($? != 0) {
@@ -63,15 +75,14 @@ for ($i=1;$i<=$#ARGV;$i++) {
   }
 }
 
-for($i=1;$i<=$#ARGV;$i++) {
+for($i=0;$i<=$#machines;$i++) {
   if ($results[$i] ne "dnf") {  
     (@results[$i],@responses[$i]) = @threads[$i]->join;
   }
-
 }
 
-for($i=1;$i<=$#ARGV;$i++) {
-  print $ARGV[$i].":".$results[$i].":".$responses[$i]."\n";
+for($i=0;$i<=$#machines;$i++) {
+  print $machines[$i].":".$results[$i].":".$responses[$i]."\n";
   if (($results[$i] eq "fail") || ($results[$i] eq "dnf")) {
     $failure = "true";
   }
@@ -106,13 +117,13 @@ sub commThread($$) {
   my $result = "fail";
   my $response = "Failure Message";
  
-  my $handle = Dada->connectToMachine($machine, $cfg{"CLIENT_MASTER_PORT"}, 0);
+  my $handle = Dada::connectToMachine($machine, $cfg{"CLIENT_MASTER_PORT"}, 0);
   # ensure our file handle is valid
   if (!$handle) { 
     return ("fail","Could not connect to machine ".$machine.":".$cfg{"CLIENT_MASTER_PORT"}); 
   }
 
-  ($result, $response) = Dada->sendTelnetCommand($handle,$command);
+  ($result, $response) = Dada::sendTelnetCommand($handle,$command);
 
   $handle->close();
 

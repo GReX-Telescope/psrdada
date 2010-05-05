@@ -39,7 +39,7 @@ use constant DEBUG_LEVEL  => 0;
 
 sub getBpsrConfig() {
   my $config_file = getBpsrCFGFile();
-  my %config = Dada->readCFGFileIntoHash($config_file, 0);
+  my %config = Dada::readCFGFileIntoHash($config_file, 0);
   return %config;
 }
 
@@ -47,9 +47,9 @@ sub getBpsrCFGFile() {
   return $DADA_ROOT."/share/bpsr.cfg";
 }
 
-sub waitForMultibobState($$$$) {
+sub waitForMultibobState($$$) {
 
-  (my $module, my $stateString, my $handle, my $Twait) = @_;
+  (my $stateString, my $handle, my $Twait) = @_;
 
   my $pwc;
   my @pwcs;
@@ -73,7 +73,7 @@ sub waitForMultibobState($$$$) {
 
     $myready = "yes";
 
-    (@pwcs) = getMultibobState("Bpsr", $handle);
+    (@pwcs) = getMultibobState($handle);
 
     for ($i=0; $i<=$#pwcs;$i++) {
       $pwc = @pwcs[$i];
@@ -101,13 +101,13 @@ sub waitForMultibobState($$$$) {
 
 }
 
-sub getMultibobState($$) {
+sub getMultibobState($) {
 
-  (my $module, my $handle) = @_;
+  (my $handle) = @_;
   my $result = "fail";
   my $response = "";
 
-  ($result, $response) = Dada->sendTelnetCommand($handle,"state");
+  ($result, $response) = Dada::sendTelnetCommand($handle,"state");
 
   if ($result eq "ok") {
     #Parse the $response;
@@ -141,13 +141,13 @@ sub configureMultibobServer() {
   my %cfg = getBpsrConfig();
 
   # multibob_server runs on localhost
-  my $host = Dada->getHostMachineName();
+  my $host = Dada::getHostMachineName();
   my $port = $cfg{"IBOB_MANAGER_PORT"};
 
   my $result;
   my $response;
 
-  my $handle = Dada->connectToMachine($host, $port, 10);
+  my $handle = Dada::connectToMachine($host, $port, 10);
 
   if (!$handle) {
     return ("fail", "Could not connect to multibob_server ".$host.":".$port);
@@ -156,31 +156,31 @@ sub configureMultibobServer() {
   # ignore welcome message
   $response = <$handle>;
 
-  logMessage("Bpsr",1, "multibob <- close");
-  ($result, $response) = Dada->sendTelnetCommand($handle, "close");
+  logMessage(1, "multibob <- close");
+  ($result, $response) = Dada::sendTelnetCommand($handle, "close");
   if ($result ne "ok") {
-    logMessage("Bpsr",0, "multibob close command failed");
+    logMessage(0, "multibob close command failed");
     return ($result, $response);
   } else {
-    logMessage("Bpsr",1, "multibob -> ".$result." ".$response);
+    logMessage(1, "multibob -> ".$result." ".$response);
   }
 
   # get the current hostports configuration
 
-  ($result, $response) = Bpsr->waitForMultibobState("closed", $handle, 10);
+  ($result, $response) = Bpsr::waitForMultibobState("closed", $handle, 10);
   if ($result ne "ok") {
-    logMessage("Bpsr",0, "multibob did not close successfully");
+    logMessage(0, "multibob did not close successfully");
     return ($result, $response);
   }
 
   # get the current hostports configuration
-  logMessage("Bpsr",1, "multibob <- hostports");
-  ($result, $response) = Dada->sendTelnetCommand($handle, "hostports");
+  logMessage(1, "multibob <- hostports");
+  ($result, $response) = Dada::sendTelnetCommand($handle, "hostports");
   if ($result ne "ok") {
-    logMessage("Bpsr",0, "multibob hostports command failed");
+    logMessage(0, "multibob hostports command failed");
     return ($result, $response);
   } else {
-    logMessage("Bpsr",1, "multibob -> ".$result." ".$response);
+    logMessage(1, "multibob -> ".$result." ".$response);
   }
 
   # setup the IBOB host/port mappings
@@ -194,32 +194,32 @@ sub configureMultibobServer() {
   if ($cmd ne $response) {
     $cmd = "hostports ".$cmd;
 
-    logMessage("Bpsr",1, "multibob <- ".$cmd);
-    ($result, $response) = Dada->sendTelnetCommand($handle, $cmd);
+    logMessage(1, "multibob <- ".$cmd);
+    ($result, $response) = Dada::sendTelnetCommand($handle, $cmd);
     if ($result ne "ok") {
-      logMessage("Bpsr",0, "multibob hostports command failed");
+      logMessage(0, "multibob hostports command failed");
       return ($result, $response);
     }
 
   # just issue the open command
   } else {
 
-    logMessage("Bpsr",1, "multibob <- open");
-    ($result, $response) = Dada->sendTelnetCommand($handle, "open");
+    logMessage(1, "multibob <- open");
+    ($result, $response) = Dada::sendTelnetCommand($handle, "open");
     if ($result ne "ok") {
-      logMessage("Bpsr",0, "multibob open command failed");
+      logMessage(0, "multibob open command failed");
       return ($result, $response);
     } else {
-      logMessage("Bpsr",1, "multibob -> ".$result." ".$response);
+      logMessage(1, "multibob -> ".$result." ".$response);
     }
   }
 
-  ($result, $response) = Bpsr->waitForMultibobState("alive", $handle, 60);
+  ($result, $response) = Bpsr::waitForMultibobState("alive", $handle, 60);
   if ($result ne "ok") {
-    logMessage("Bpsr",0, "multibob threads did not come alive after 60 seconds");
+    logMessage(0, "multibob threads did not come alive after 60 seconds");
     return ($result, $response);
   } else {
-    logMessage("Bpsr",0, "multibob threads now alive");
+    logMessage(0, "multibob threads now alive");
   }
 
   # setup the IBOB mac addresses
@@ -231,27 +231,37 @@ sub configureMultibobServer() {
     $cmd .= " ".$i." ".$mac;
   }
 
-  logMessage("Bpsr",1, "multibob <- ".$cmd);
-  ($result, $response) = Dada->sendTelnetCommand($handle, $cmd);
+  logMessage(1, "multibob <- ".$cmd);
+  ($result, $response) = Dada::sendTelnetCommand($handle, $cmd);
   if ($result ne "ok") {
-    logMessage("Bpsr",0, "multibob macs command failed");
+    logMessage(0, "multibob macs command failed");
     return ($result, $response);
   } else {
-    logMessage("Bpsr",1, "multibob -> ".$result." ".$response);
+    logMessage(1, "multibob -> ".$result." ".$response);
   }
 
   $cmd = "acclen 25";
-  logMessage("Bpsr",1, "multibob <- ".$cmd);
-  ($result, $response) = Dada->sendTelnetCommand($handle, $cmd);
+  logMessage(1, "multibob <- ".$cmd);
+  ($result, $response) = Dada::sendTelnetCommand($handle, $cmd);
   if ($result ne "ok") {
-    logMessage("Bpsr",0, "multibob acclen command failed");
+    logMessage(0, "multibob acclen command failed");
     return ($result, $response);
   } else {
-    logMessage("Bpsr",1, "multibob -> ".$result." ".$response);
+    logMessage(1, "multibob -> ".$result." ".$response);
+  }
+
+  $cmd = "levels";
+  logMessage(1, "multibob <- ".$cmd);
+  ($result, $response) = Dada::sendTelnetCommand($handle, $cmd);
+  if ($result ne "ok") {
+    logMessage(0, "multibob levels command failed");
+    return ($result, $response);
+  } else {
+    logMessage(1, "multibob -> ".$result." ".$response);
   }
 
   $cmd = "exit";
-  logMessage("Bpsr",1, "multibob <- ".$cmd);
+  logMessage(1, "multibob <- ".$cmd);
   print $handle $cmd."\r\n";
 
   close($handle);
@@ -259,31 +269,31 @@ sub configureMultibobServer() {
   return ("ok", "");
 }
 
-sub logMessage($$$) {
+sub logMessage($$) {
   
-  my ($module, $level, $msg) = @_;
+  my ($level, $msg) = @_;
 
   if ($level <= 2) {
-     print "[".Dada->getCurrentDadaTime(0)."] ".$msg."\n";
+     print "[".Dada::getCurrentDadaTime(0)."] ".$msg."\n";
   }
 
 }
 
-sub clientCommand($$$) {
+sub clientCommand($$) {
 
-  my ($module, $command, $machine) = @_;
+  my ($command, $machine) = @_;
 
   my %cfg = getBpsrConfig();
   my $result = "fail";
   my $response = "Failure Message";
 
-  my $handle = Dada->connectToMachine($machine, $cfg{"CLIENT_MASTER_PORT"}, 0);
+  my $handle = Dada::connectToMachine($machine, $cfg{"CLIENT_MASTER_PORT"}, 0);
   # ensure our file handle is valid
   if (!$handle) {
     return ("fail","Could not connect to machine ".$machine.":".$cfg{"CLIENT_MASTER_PORT"});
   }
 
-  ($result, $response) = Dada->sendTelnetCommand($handle,$command);
+  ($result, $response) = Dada::sendTelnetCommand($handle,$command);
 
   $handle->close();
 
@@ -292,13 +302,12 @@ sub clientCommand($$$) {
 }
 
 # Return the destinations that an obs with the specified PID should be sent to
-sub getObsDestinations($$$) {
+sub getObsDestinations($$) {
   
-  my ($obs_pid, $survey_obs, $dests) = @_;
+  my ($obs_pid, $dests) = @_;
   
   my $want_swin = 0;
   my $want_parkes = 0;
-  my $want_swinfold = 0;
   
   if ($dests =~ m/swin/) {
     $want_swin = 1;
@@ -307,20 +316,13 @@ sub getObsDestinations($$$) {
     $want_parkes = 1;
   }
 
-  # special case for P630 non-survey observations only
-  if (($obs_pid eq "P630") && (!$survey_obs)) {
-    $want_swin = 0;
-    $want_parkes = 0;
-    $want_swinfold = 1;
-  }
-
-  return ($want_swin, $want_parkes, $want_swinfold);
+  return ($want_swin, $want_parkes);
 
 }
 
 sub getConfig() {
   my $config_file = $DADA_ROOT."/share/bpsr.cfg";
-  my %config = Dada->readCFGFileIntoHash($config_file, 0);
+  my %config = Dada::readCFGFileIntoHash($config_file, 0);
   return %config;
 }
 

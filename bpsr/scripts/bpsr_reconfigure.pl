@@ -1,32 +1,36 @@
 #!/usr/bin/env perl
 
 #
-# Reconfigures the DADA machine for a different instrument
+# Starts/Stops/Restarts the BPSR Instrument
 #
 
 use lib $ENV{"DADA_ROOT"}."/bin";
 
-
-#use IO::Socket;     # Standard perl socket library
-#use Net::hostent;
-use Bpsr;           # BPSR/DADA Module for configuration options
+use Bpsr;
 use threads;
 use threads::shared;
-use strict;         # strict mode (like -Wall)
+use strict;
+use warnings;
 use Getopt::Std;
+
+sub usage();
+sub debugMessage($$);
+sub issueTelnetCommand($$);
+sub stopDaemons();
+sub startDaemons();
 
 
 #
 # Constants
 #
-
 use constant  DEBUG_LEVEL         => 1;
 
 #
 # Global Variables
 #
-our %cfg : shared = Bpsr->getBpsrConfig();      # Bpsr.cfg in a hash
-our @serverDaemons = split(/ /,$cfg{"SERVER_DAEMONS"});
+our %cfg : shared = Bpsr::getBpsrConfig();      # Bpsr.cfg in a hash
+our @server_daemons = split(/ /,$cfg{"SERVER_DAEMONS"});
+our @client_daemons = split(/ /,$cfg{"CLIENT_DAEMONS"});
 
 #
 # Local Variables
@@ -35,12 +39,14 @@ our @serverDaemons = split(/ /,$cfg{"SERVER_DAEMONS"});
 my $result = "";
 my $response = "";
 my @clients = ();
+my @servers = ();
 my @helpers = ();
-my @clients_n_helpers = ();
+my @clihelp = ();     # clients and helpers
+my @clihelpsrv = ();  # clients, helpers and servers
 my $i=0;
-my $start=1;
-my $stop=1;
-
+my $start = 1;
+my $stop = 1;
+my $cmd = "";
 
 my %opts;
 getopts('his', \%opts);
@@ -54,7 +60,6 @@ if ($opts{i}) {
   $start = 1;
   $stop = 0;
 } 
-
 if ($opts{s}) {
   $stop = 1;
   $start = 0;
@@ -81,9 +86,20 @@ if (! -d $control_dir) {
 
 # Generate hosts lists
 for ($i=0; $i < $cfg{"NUM_PWC"}; $i++) {
-  push(@clients,           $cfg{"PWC_".$i});
-  push(@clients_n_helpers, $cfg{"PWC_".$i});
+  push(@clients,    $cfg{"PWC_".$i});
+  push(@clihelp,    $cfg{"PWC_".$i});
+  push(@clihelpsrv, $cfg{"PWC_".$i});
 }
+for ($i=0; $i < $cfg{"NUM_HELP"}; $i++) {
+  push(@helpers,    $cfg{"HELP_".$i});
+  push(@clihelp,    $cfg{"HELP_".$i});
+  push(@clihelpsrv, $cfg{"HELP_".$i});
+}
+for ($i=0; $i<$cfg{"NUM_SRV"}; $i++) {
+  push(@servers,    $cfg{"SRV_".$i});
+  push(@clihelpsrv, $cfg{"SRV_".$i});
+}
+
 
 if ($stop == 1) {
 
@@ -93,15 +109,21 @@ if ($stop == 1) {
     debugMessage(0, "stop_pwcs failed");
   }
 
+  # Shutdown eth2
+  debugMessage(0, "Shutting down eth2");
+  if (!(issueTelnetCommand("stop_iface",\@clients))) {
+    debugMessage(0, "stop_iface failed");
+  }
+
   # Stop client scripts
   debugMessage(0, "Stopping client scripts");
-  if (!(issueTelnetCommand("stop_daemons",\@clients_n_helpers))) {
+  if (!(issueTelnetCommand("stop_daemons",\@clihelp))) {
     debugMessage(0,"stop_daemons failed");
   }
 
   # Destroy DB's
   debugMessage(0, "Destroying Data blocks");
-  if (!(issueTelnetCommand("destroy_db",\@clients_n_helpers))) {
+  if (!(issueTelnetCommand("destroy_db",\@clihelp))) {
     debugMessage(0,"destroy_db failed");
   }
 
@@ -114,7 +136,7 @@ if ($stop == 1) {
 
   # Stop client mastser script
   debugMessage(0, "Stopping client master script");
-  if (!(issueTelnetCommand("stop_master_script",\@clients_n_helpers))) {
+  if (!(issueTelnetCommand("stop_master_script",\@clihelpsrv))) {
     debugMessage(0,"stop_master_script failed");
   }
 }
@@ -122,7 +144,7 @@ if ($stop == 1) {
 if ($start == 1) {
   # Start client master script
   debugMessage(0, "Starting client master script");
-  if (!(issueTelnetCommand("start_master_script",\@clients_n_helpers))) {
+  if (!(issueTelnetCommand("start_master_script",\@clihelpsrv))) {
     debugMessage(0,"start_master_script failed");
   }
 
@@ -130,11 +152,17 @@ if ($start == 1) {
 
   # initalize DB's
   debugMessage(1, "Initializing Data blocks");
-  if (!(issueTelnetCommand("init_db",\@clients_n_helpers))) {
+  if (!(issueTelnetCommand("init_db",\@clihelp))) {
     debugMessage(0, "init_db failed");
   }
 
   sleep(1);
+
+  # Start eth2
+  debugMessage(0, "Starting up eth2");
+  if (!(issueTelnetCommand("start_iface",\@clients))) {
+    debugMessage(0, "start_iface failed");
+  }
 
   # Start PWC's
   debugMessage(1, "Starting PWCs");
@@ -159,17 +187,22 @@ if ($start == 1) {
 # Clear the web interface status directory
 my $dir = $cfg{"STATUS_DIR"};
 if (-d $dir) {
-  my $cmd = "rm -f ".$dir."/*.error";
+  $cmd = "rm -f ".$dir."/*.error";
   debugMessage(0, "clearing .error from status_dir"); 
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
 
-  my $cmd = "rm -f ".$dir."/*.warn";
+  $cmd = "rm -f ".$dir."/*.warn";
   debugMessage(0, "clearing .warn from status_dir"); 
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
 }
 
 exit 0;
 
+
+###############################################################################
+#
+# Functinos
+#
 
 sub sshCmdThread($) {
 
@@ -193,14 +226,14 @@ sub commThread($$) {
   my $result = "fail";
   my $response = "Failure Message";
  
-  my $handle = Dada->connectToMachine($machine, $cfg{"CLIENT_MASTER_PORT"}, 2);
+  my $handle = Dada::connectToMachine($machine, $cfg{"CLIENT_MASTER_PORT"}, 2);
   # ensure our file handle is valid
   if (!$handle) { 
     debugMessage(0, "Could not connect to machine ".$machine.":".$cfg{"CLIENT_MASTER_PORT"});
     return ("fail","Could not connect to machine ".$machine.":".$cfg{"CLIENT_MASTER_PORT"}); 
   }
 
-  ($result, $response) = Dada->sendTelnetCommand($handle,$command);
+  ($result, $response) = Dada::sendTelnetCommand($handle,$command);
   # debugMessage(0, $command." => ".$result.":".$response);
 
   $handle->close();
@@ -222,11 +255,11 @@ sub debugMessage($$) {
   if (DEBUG_LEVEL >= $level) {
 
     # print this message to the console
-    print "[".Dada->getCurrentDadaTime(0)."] ".$message."\n";
+    print "[".Dada::getCurrentDadaTime(0)."] ".$message."\n";
   }
 }
 
-sub issueTelnetCommand($\@){
+sub issueTelnetCommand($$){
 
   my ($command, $nodesRef) = @_;
 
@@ -240,16 +273,16 @@ sub issueTelnetCommand($\@){
   if ($command eq "start_master_script") {
     for ($i=0; $i<=$#nodes; $i++) {
       my $string = "ssh -x bpsr@".$nodes[$i]." \"cd ".$cfg{"SCRIPTS_DIR"}."; ./client_bpsr_master_control.pl\"";
-      @threads[$i] = threads->new(\&sshCmdThread, $string);
+      $threads[$i] = threads->new(\&sshCmdThread, $string);
     } 
   } else {
     for ($i=0; $i<=$#nodes; $i++) {
-      @threads[$i] = threads->new(\&commThread, $command, $nodes[$i]);
+      $threads[$i] = threads->new(\&commThread, $command, $nodes[$i]);
     } 
   }  
   for($i=0;$i<=$#nodes;$i++) {
     debugMessage(2, "Waiting for ".$nodes[$i]);
-    (@results[$i],@responses[$i]) = $threads[$i]->join;
+    ($results[$i],$responses[$i]) = $threads[$i]->join;
   }
 
   for($i=0;$i<=$#nodes;$i++) {
@@ -270,30 +303,37 @@ sub issueTelnetCommand($\@){
 sub stopDaemons() {
 
   my $allStopped = "false";
-
-  my $daemon_control_file = Dada->getDaemonControlFile($cfg{"SERVER_CONTROL_DIR"});
+  my $control_dir = $cfg{"SERVER_CONTROL_DIR"};
 
   my $threshold = 20; # seconds
   my $daemon = "";
-  my $allStopped = "false";
   my $result = "";
   my $response = "";
+  my $i = 0;
+  my $cmd = "";
 
-  `touch $daemon_control_file`;
+  # Ask all the server dameons to quit
+  for ($i=0; $i<=$#server_daemons; $i++) {
+    $cmd = "touch ".$control_dir."/".$server_daemons[$i].".quit";
+    system($cmd);
+  }
 
   while (($allStopped eq "false") && ($threshold > 0)) {
 
     $allStopped = "true";
-    foreach $daemon (@serverDaemons) {
+    foreach $daemon (@server_daemons) {
+
       my $cmd = "ps auxwww | grep perl | grep \"server_".$daemon.".pl\" | grep -v grep";
-      debugMessage(1, "stopDaemons: ".$cmd);
+      debugMessage(2, "stopDaemons: ".$cmd);
       `$cmd`;
 
       if ($? == 0) {
-        debugMessage(1, "daemon ".$daemon." is still running");
+        debugMessage(1, $daemon." still running");
         $allStopped = "false";
         if ($threshold < 10) {
-          ($result, $response) = Dada->killProcess("server_".$daemon.".pl");
+          debugMessage(1, "stopDaemon: killing daemon that refuses to exit: ".$daemon);
+          ($result, $response) = Dada::killProcess("server_".$daemon.".pl");
+          debugMessage(1, "stopDaemon: ".$result." ".$response);
         }
       } else {
         debugMessage(2, "daemon ".$daemon." has been stopped");
@@ -304,13 +344,12 @@ sub stopDaemons() {
     sleep(1);
   }
 
-  my $message = "";
-  if (unlink($daemon_control_file) != 1) {
-    $message = "Could not unlink the daemon control file \"".$daemon_control_file."\"";
-    debugMessage(0, "Error: ".$message);
-    return ("fail", $message);
+  # Clean up all the server daemons
+  for ($i=0; $i<=$#server_daemons; $i++) {
+    unlink($control_dir."/".$server_daemons[$i].".quit");
   }
 
+  my $message = "";
   # If we had to resort to a "kill", send an warning message back
   if (($threshold > 0) && ($threshold < 10)) {
     $message = "Daemons did not exit cleanly within ".$threshold." seconds, a KILL signal was used and they exited";
@@ -337,10 +376,13 @@ sub startDaemons() {
 
   chdir $cfg{"SCRIPTS_DIR"};
 
-  foreach $daemon (@serverDaemons) {
-    $cmd = "server_".$daemon.".pl 2>&1";
+  foreach $daemon (@server_daemons) {
 
+
+    debugMessage(0, "starting  daemon ".$daemon);
+    $cmd = "server_".$daemon.".pl 2>&1";
     $string = `$cmd`;
+    debugMessage(0, "started  daemon ".$daemon);
 
     if ($? != 0) {
       $result = "fail";

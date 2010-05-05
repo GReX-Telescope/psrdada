@@ -20,7 +20,7 @@ use threads::shared;
 #
 # Sanity check to prevent multiple copies of this daemon running
 #
-Dada->preventDuplicateDaemon(basename($0));
+Dada::preventDuplicateDaemon(basename($0));
 
 
 #
@@ -35,7 +35,7 @@ use constant LOGFILE     => "nexus.src.log";
 #
 # Global Variables
 #
-our %cfg = Bpsr->getBpsrConfig();      # Bpsr.cfg
+our %cfg = Bpsr::getBpsrConfig();      # Bpsr.cfg
 our $quit_daemon : shared  = 0;
 
 
@@ -80,9 +80,9 @@ $server_socket = new IO::Socket::INET (
 die "Could not create listening socket: $!\n" unless $server_socket;
 
 # Redirect standard output and error
-Dada->daemonize($logfile, $pidfile);
+Dada::daemonize($logfile, $pidfile);
 
-debugMessage(0, "STARTING SCRIPT: ".Dada->getCurrentDadaTime(0));
+debugMessage(0, "STARTING SCRIPT: ".Dada::getCurrentDadaTime(0));
 
 # Start the daemon control thread
 $daemon_control_thread = threads->new(\&daemonControlThread);
@@ -119,7 +119,7 @@ while (!$quit_daemon) {
       my $hostname = $hostinfo->name;
       my @parts = split(/\./,$hostname);
       my $machine = $parts[0];
-      $string = Dada->getLine($rh);
+      $string = Dada::getLine($rh);
 
       if (! defined $string) {
         $read_set->remove($rh);
@@ -137,7 +137,7 @@ $daemon_control_thread->join();
 
 close($server_socket);
                                                                                 
-debugMessage(0, "STOPPING SCRIPT: ".Dada->getCurrentDadaTime(0));
+debugMessage(0, "STOPPING SCRIPT: ".Dada::getCurrentDadaTime(0));
                                                                                 
 exit(0);
 

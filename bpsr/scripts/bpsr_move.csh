@@ -15,13 +15,13 @@ set NODE=$2
 set ARCHIVES=/nfs/archives/bpsr
 
 cd /lfs/data0/bpsr/archives
+set FROM=$UTC/??
 
 if ( ! -d $UTC ) then
   echo $PWD/$UTC does not exist
   exit -1
 endif
 
-set FROM=$UTC/??
 set TO=/nfs/apsr${NODE}/bpsr/archives
 
 if ( ! -d $TO ) then
@@ -32,18 +32,16 @@ if ( ! -d $TO ) then
   endif
 endif
 
-echo "This script will move $FROM to $TO"
+echo "This script will move $UTC to $TO"
 
 if ( "$3" != "force" ) then
   echo "Press <Enter> to continue or <Ctrl-C> to abort"
   $<
 endif
 
-mkdir -p $TO/$UTC
-
-cp -a $FROM $TO/$UTC
-
 ln -sf $TO/$FROM $ARCHIVES/$FROM
+
+tar cf - $UTC | ssh apsr$NODE "cd /lfs/data0/bpsr/archives && tar xf -"
 
 rm -rf $FROM
 

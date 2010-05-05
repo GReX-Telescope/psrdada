@@ -29,7 +29,7 @@ use constant TAPE_SIZE    => "750.00";
 #
 # Global Variables
 #
-our %cfg = Bpsr->getBpsrConfig();      # Bpsr.cfg
+our %cfg = Bpsr::getBpsrConfig();      # Bpsr.cfg
 our $quit_daemon : shared  = 0;
 our $dev = "";
 our $robot = 0;                        # Flag for a tape robot
@@ -182,7 +182,7 @@ if ($type eq "robot_verify") {
 }
 
 
-Dada->daemonize($logfile, $pidfile);
+Dada::daemonize($logfile, $pidfile);
 
 logMessage(0, "STARTING SCRIPT");
 
@@ -617,7 +617,7 @@ sub tarBeam($$$$$) {
                   ", b=".$blocknum.") Attempt to get to right place.");
 
     $cmd = "mt -f ".$dev." rewind; mt -f ".$dev." fsf $nfiles";
-    ($result, $response) = Dada->mySystem($cmd);
+    ($result, $response) = Dada::mySystem($cmd);
     if ($result ne "ok") {
       logMessage(0, "TarBeam: tape re-wind/skip failed: ".$response);
       unindent();
@@ -654,7 +654,7 @@ sub tarBeam($$$$$) {
     } else {
       $cmd = "nc -zd ".$host." ".$port." > /dev/null";
     }
-    ($result, $response) = Dada->mySystem($cmd);
+    ($result, $response) = Dada::mySystem($cmd);
 
     if ($result eq "ok") {
       # This is an error condition!
@@ -684,7 +684,7 @@ sub tarBeam($$$$$) {
   # Allow some time for this thread to start-up, ssh and launch tar + nc
   sleep(10);
 
-  my $localhost = Dada->getHostMachineName();
+  my $localhost = Dada::getHostMachineName();
 
   $tries=10;
   while ($tries > 0) {
@@ -699,7 +699,7 @@ sub tarBeam($$$$$) {
     }
       
     logMessage(2, "tarBeam: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
+    ($result, $response) = Dada::mySystem($cmd);
 
     # Fatal errors, give up straight away
     if ($response =~ m/Input\/output error/) {
@@ -759,7 +759,7 @@ sub tarBeam($$$$$) {
       $cmd = "nc -zd ".$host." ".$port." > /dev/null";
     }
     logMessage(0, "tarBeam: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
+    ($result, $response) = Dada::mySystem($cmd);
     logMessage(0, "tarBeam: ".$result." ".$response);
 
     $remote_nc_thread->detach();
@@ -1373,7 +1373,7 @@ sub updateBookKeepr($$){
   my $psrxmlid="";
   if ($bkid=="0"){
     $cmd="book_create_tape $bookkeepr $id $uc_type | & sed -e 's:.*<id>\\([^>]*\\)</id>.*:\\1:p' -e 'd'";
-    ($result,$response) = Dada->mySystem($cmd);
+    ($result,$response) = Dada::mySystem($cmd);
     if($result ne "ok"){
       return ($result,$response);
     }
@@ -1384,7 +1384,7 @@ sub updateBookKeepr($$){
     return ("fail","<id> not set in the psrxml file");
   }
   $cmd="book_write_to_tape $bookkeepr $psrxmlid $bkid $number";
-  ($result,$response) = Dada->mySystem($cmd);
+  ($result,$response) = Dada::mySystem($cmd);
   if($result ne "ok"){
           return ($result,$response);
   }
@@ -1504,7 +1504,7 @@ sub updateFilesDB($$$$) {
 
   my $fname = $db_dir."/".FILES_DB;
 
-  my $date = Dada->getCurrentDadaTime();
+  my $date = Dada::getCurrentDadaTime();
 
   my $newline = $archive." ".$tape." ".$date." ".$fsf." ".$size;
 
@@ -1583,7 +1583,7 @@ sub getCurrentRobotTape() {
 
   my $cmd = "mtx status | grep 'Data Transfer Element' | awk '{print \$10}'";
   logMessage(2, "getCurrentRobotTape: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
 
   if ($result ne "ok") {
 
@@ -1690,7 +1690,7 @@ sub robotGetStatus() {
   $cmd = "mtx status";
   logMessage(2, "robotGetStatus: ".$cmd);
 
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
 
   if ($result ne "ok") {
     logMessage(2, "robotGetStatus: ".$cmd." failed: ".$response);
@@ -1753,7 +1753,7 @@ sub robotUnloadCurrentTape() {
   $cmd = "mt -f ".$dev." eject";
   logMessage(2, "robotUnloadCurrentTape: ".$cmd);
 
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
 
   if ($result ne "ok") {
     logMessage(0, "robotUnloadCurrentTape: ".$cmd." failed: ".$response);
@@ -1764,7 +1764,7 @@ sub robotUnloadCurrentTape() {
   $cmd = "mtx unload";
   logMessage(2, "robotUnloadCurrentTape: ".$cmd);
                                                                                                                              
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
                                                                                                                              
   if ($result ne "ok") {
     logMessage(0, "robotUnloadCurrentTape: ".$cmd." failed: ".$response);
@@ -1793,7 +1793,7 @@ sub robotLoadTapeFromSlot($) {
 
   $cmd = "mtx load ".$slot." 0";
   logMessage(2, "robotLoadTapeFromSlot: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMessage(2, "robotLoadTapeFromSlot: ".$result." ".$response);
 
   if ($result ne "ok") {
@@ -1923,7 +1923,7 @@ sub robotVerifyAllTapes() {
   if (! -d $local_dir) {
     $cmd = "mkdir -p ".$local_dir;
     logMessage(1, "robotVerifyAllTapes: ".$cmd);
-    ($result, $response) = Dada->mySystem($cmd);
+    ($result, $response) = Dada::mySystem($cmd);
 
     if ($result ne "ok") {
       logMessage(0, "robotVerifyAllTapes: could not create tape verification dir");
@@ -1987,7 +1987,7 @@ sub robotVerifyAllTapes() {
         # If we have already verified this, skip
         $cmd = "grep \"".$curr_tape." ".$ifile." \" ".$db_dir."/verify.log | grep \" OK \"";
         logMessage(3, "robotVerifyAllTapes: ".$cmd);
-        ($result, $response) = Dada->mySystem($cmd);
+        ($result, $response) = Dada::mySystem($cmd);
         logMessage(3, "robotVerifyAllTapes: ".$result." ".$response);
 
         if ($result eq "ok") {
@@ -2012,7 +2012,7 @@ sub robotVerifyAllTapes() {
         # check ifile vs mt's tape identifier
         logMessage(2, "robotVerifyAllTapes: ".$cmd);
         $cmd =  "mt -f /dev/nst0 status | grep 'File number' | awk -F, '{print \$1}' | awk -F= '{print \$2}'";
-         ($result, $response) = Dada->mySystem($cmd);
+         ($result, $response) = Dada::mySystem($cmd);
         logMessage(2, "robotVerifyAllTapes: ".$result." ".$response);
 
         if ($result ne "ok") {
@@ -2033,14 +2033,14 @@ sub robotVerifyAllTapes() {
         # ensure there is nothing in the localdir
         $cmd = "rm -rf ".$local_dir."/*";
         logMessage(2, "robotVerifyAllTapes: ".$cmd);
-        ($result, $response) = Dada->mySystem($cmd);
+        ($result, $response) = Dada::mySystem($cmd);
         logMessage(2, "robotVerifyAllTapes: ".$result." ".$response);
 
 
         # extract the tar archive on tape
         $cmd = "tar -b 128 -xvf ".$dev; 
         logMessage(2, "robotVerifyAllTapes: ".$cmd);
-        ($result, $response) = Dada->mySystem($cmd);
+        ($result, $response) = Dada::mySystem($cmd);
         logMessage(2, "robotVerifyAllTapes: ".$result." ".$response);
 
         if ($result ne "ok") {
@@ -2077,7 +2077,7 @@ sub robotVerifyAllTapes() {
         # it exists, check the size
         $cmd = "du -sLb ./".$utc_beam." | awk '{print \$1}'";
         logMessage(2, "robotVerifyAllTapes: ".$cmd);
-        ($result, $response) = Dada->mySystem($cmd);
+        ($result, $response) = Dada::mySystem($cmd);
         logMessage(2, "robotVerifyAllTapes: ".$result." ".$response);
 
         if ($result ne "ok") {
@@ -2092,7 +2092,7 @@ sub robotVerifyAllTapes() {
         # now compared to the size in the files.db
         $cmd = "grep '".$utc_beam."' ".$db_dir."/".FILES_DB;
         logMessage(2, "robotVerifyAllTapes: ".$cmd);
-        ($result, $response) = Dada->mySystem($cmd);
+        ($result, $response) = Dada::mySystem($cmd);
         logMessage(2, "robotVerifyAllTapes: ".$result." ".$response);
 
         if ($result ne "ok") {
@@ -2122,7 +2122,7 @@ sub robotVerifyAllTapes() {
         if (-f ($utc_beam."/aux.tar")) {
           $cmd = "md5sum ./".$utc_beam."/aux.tar | awk '{print \$1}'";
           logMessage(2, "robotVerifyAllTapes: ".$cmd);
-          ($result, $response) = Dada->mySystem($cmd);
+          ($result, $response) = Dada::mySystem($cmd);
           logMessage(2, "robotVerifyAllTapes: ".$result." ".$response);
 
           if ($result ne "ok") {
@@ -2150,7 +2150,7 @@ sub verifyLog($) {
   
   my $cmd = "echo '".$string."' >> ".$db_dir."/verify.log";
   logMessage(2, "verifyLog: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMessage(2, "verifyLog: ".$result." ".$response);
 
   unindent();
@@ -2180,7 +2180,7 @@ sub manualInsertTape($) {
   (my $tape) = @_;
 
   my $cmd = "mt -f ".$dev." offline";
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   if ($result ne "ok") {
     logMessage(0, "TarBeam: tape offline failed: ".$response);
   }
@@ -2269,7 +2269,7 @@ sub manualGetResponse() {
 
   # Wait for a response to appear from the user
   logMessage(2, "manualGetResponse: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMessage(2, "manualGetResponse: ".$result." ".$response);
 
   unindent();
@@ -2302,7 +2302,7 @@ sub manualClearResponse() {
 
   # Wait for a response to appear from the user
   logMessage(2, "manualClearResponse: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMessage(2, "manualClearResponse: ".$result." ".$response);
 
   if ($result ne "ok") {
@@ -2342,7 +2342,7 @@ sub tapeFSF($) {
 
   $cmd = "mt -f ".$dev." fsf ".$nfiles;
   logMessage(2, "tapeFSF: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
 
   if ($result ne "ok") {
     logMessage(0, "tapeFSF: ".$cmd." failed: ".$response);
@@ -2445,7 +2445,7 @@ sub tapeGetID() {
 
   my $cmd = "mt -f ".$dev." rewind";
   logMessage(2, "tapeGetID: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMessage(2, "tapeGetID: ".$result." ".$response);
 
   if ($result ne "ok") {
@@ -2456,7 +2456,7 @@ sub tapeGetID() {
 
   $cmd = "tar -tf ".$dev;
   logMessage(2, "tapeGetID: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMessage(2, "tapeGetID: ".$result." ".$response);
 
   if ($result ne "ok") {
@@ -2500,7 +2500,7 @@ sub tapeGetID() {
     # we are not at 0 block of file 1...
     logMessage(1, "tapeGetID: Tape out of position (f=$filenum, b=$blocknum), rewinding and skipping to start of data");
     $cmd="mt -f ".$dev." rewind; mt -f ".$dev." fsf 1";
-    ($result, $response) = Dada->mySystem($cmd);
+    ($result, $response) = Dada::mySystem($cmd);
     if ($result ne "ok") {
       logMessage(0, "tapeGetID: tape re-wind/skip failed: ".$response);
       unindent();
@@ -2537,7 +2537,7 @@ sub tapeWriteID($) {
 
   my $cmd = "mt -f ".$dev." rewind";
   logMessage(2, "tapeWriteID: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMessage(2, "tapeWriteID: ".$result." ".$response);
 
   if ($result ne "ok") {
@@ -2549,7 +2549,7 @@ sub tapeWriteID($) {
   # create an emprty file in the CWD to use
   $cmd = "touch ".$tape_id;
   logMessage(2, "tapeWriteID: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMessage(2, "tapeWriteID: ".$result." ".$response);
   if ($result ne "ok") {
     logMessage(0, "tapeWriteID: ".$cmd." failed: ".$response);
@@ -2560,7 +2560,7 @@ sub tapeWriteID($) {
   # write the empty file to tape
   $cmd = "tar -cf ".$dev." ".$tape_id;
   logMessage(2, "tapeWriteID: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMessage(2, "tapeWriteID: ".$result." ".$response);
 
   unlink($tape_id);
@@ -2574,7 +2574,7 @@ sub tapeWriteID($) {
   # write the EOF marker
   $cmd = "mt -f ".$dev." weof";
   logMessage(2, "tapeWriteID: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMessage(2, "tapeWriteID: ".$result." ".$response);
 
   # Initialisze the tapes DB record also
@@ -2625,7 +2625,7 @@ sub daemonControlThread() {
 sub logMessage($$) {
   (my $level, my $message) = @_;
   if ($level <= DEBUG_LEVEL) {
-    my $time = Dada->getCurrentDadaTime();
+    my $time = Dada::getCurrentDadaTime();
     print "[".$time."] ".$indent.$message."\n";
     # system("echo '[".$time."] ".$indent.$message."' >> ".$db_dir."/bpsr_tape_archiver.log");
   }
@@ -2655,7 +2655,7 @@ sub sigHandle($) {
   #  }
   #}
   sleep(3);
-  print STDERR basename($0)." : Exiting: ".Dada->getCurrentDadaTime(0)."\n";
+  print STDERR basename($0)." : Exiting: ".Dada::getCurrentDadaTime(0)."\n";
 
 }
 
@@ -2739,7 +2739,7 @@ sub setStatus($) {
   $cmd = $apsr_ssh_prefix.$remote_cmd.$apsr_ssh_suffix;
 
   logMessage(2, "setStatus: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMessage(2, "setStatus: ".$result." ".$response);
 
   if ($result ne "ok") {
@@ -2753,7 +2753,7 @@ sub setStatus($) {
   $cmd = $apsr_ssh_prefix.$remote_cmd.$apsr_ssh_suffix;
 
   logMessage(2, "setStatus: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMessage(2, "setStatus: ".$result." ".$response);
 
   unindent();
@@ -2775,7 +2775,7 @@ sub nc_thread($$$$$$) {
 
   my $cmd = "ssh ".$ssh_opts." -l ".$user." ".$host." \"ls ".$dir." > /dev/null\"";
   logMessage(2, "nc_thread: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMessage(2, "nc_thread: ".$result." ".$response);
 
   if ($result ne "ok") {
@@ -2786,7 +2786,7 @@ sub nc_thread($$$$$$) {
          "tar -b 128 -c ".$obs."/".$beam." | nc -l ".$port."\"";
 
   logMessage(2, "nc_thread: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMessage(2, "nc_thread: ".$result." ".$response);
 
   if ($result ne "ok") {
@@ -2812,7 +2812,7 @@ sub getTapeStatus() {
   }
   logMessage(3, "getTapeStatus: cmd= $cmd");
 
-  my ($result,$response) = Dada->mySystem($cmd);
+  my ($result,$response) = Dada::mySystem($cmd);
 
   if ($result ne "ok") {
     logMessage(0, "getTapeStatus: Failed $response");
@@ -2825,7 +2825,7 @@ sub getTapeStatus() {
     } else {
       $cmd="mt -f ".$dev." status | grep 'block number' | awk -F, '{print \$2}' | awk -F= '{print \$2}'";
     }
-    my ($result,$response) = Dada->mySystem($cmd);
+    my ($result,$response) = Dada::mySystem($cmd);
     if ($result ne "ok") {
       logMessage(0, "getTapeStatus: Failed $response");
       $filenum=-1;
@@ -2864,7 +2864,7 @@ sub markSentToTape($$$$$) {
 
   $cmd = "ssh -x ".$ssh_opts." -l ".$user." ".$host." \"touch ".$dir."/".$to_touch."\"";
   logMessage(2, "markSentToTape:" .$cmd);
-  my ($result,$response) = Dada->mySystem($cmd);
+  my ($result,$response) = Dada::mySystem($cmd);
   logMessage(2, "markSentToTape:" .$result." ".$response);
   if ($result ne "ok") {
     logMessage(0, "markSentToTape: could not touch ".$to_touch);
@@ -2875,7 +2875,7 @@ sub markSentToTape($$$$$) {
   $cmd = $apsr_ssh_prefix.$remote_cmd.$apsr_ssh_suffix;
 
   logMessage(2, "markSentToTape: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
   logMessage(2, "markSentToTape: ".$result." ".$response);
   if ($result ne "ok") {
     logMessage(0, "markSentToTape: could not touch remote on.tape.".$type.": ".$response);
@@ -2903,7 +2903,7 @@ sub localSshCommand($$$) {
   $cmd = "ssh -x ".$ssh_opts." -l ".$user." ".$host." \"".$command."\"";
 
   logMessage(2, "localSshCommand:" .$cmd);
-  ($result,$response) = Dada->mySystem($cmd);
+  ($result,$response) = Dada::mySystem($cmd);
   logMessage(2, "localSshCommand:" .$result." ".$response);
 
   unindent();

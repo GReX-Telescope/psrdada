@@ -60,13 +60,19 @@ if ($opts{n}) {
 #
 # Main
 # 
+my $time = "";
+
 while (defined($line = <STDIN>)) {
 
   chomp $line;
+  $time = Dada::getCurrentDadaTime();
+
   if ($input_daemon_name ne "none") { 
-    Dada->logMsg(0, 0, "[".$input_daemon_name."] ".$line);
+    print STDERR "[".$time."] [".$input_daemon_name."] ".$line."\n";
+    #Dada::logMsg(0, 0, "[".$input_daemon_name."] ".$line);
   } else {
-    Dada->logMsg(0, 0, $line);
+    print STDERR "[".$time."] ".$line."\n";
+    #Dada::logMsg(0, 0, $line);
   }
 
 }

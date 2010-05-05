@@ -34,7 +34,7 @@ use constant AVG_VALUES       => 2;
 #
 # Global Variable Declarations
 #
-our %cfg = Bpsr->getBpsrConfig();      # dada.cfg in a hash
+our %cfg = Bpsr::getBpsrConfig();      # dada.cfg in a hash
 our $handle = 0;
 our $eol = "\r";
 
@@ -122,7 +122,7 @@ if ($use_simulator) {
 
 
 logMessage(2, "Tring to connect to ".$ibob_host.":".$ibob_port);
-$handle = Dada->connectToMachine($ibob_host,$ibob_port);
+$handle = Dada::connectToMachine($ibob_host,$ibob_port);
 
 my $utc_result = 0;
 
@@ -143,7 +143,7 @@ if (!$handle) {
   } else {
 
     logMessage(2, "Setting iBob Levels");
-    my ($s0, $s1, $bit) = Bpsr->set_ibob_levels($handle, $acc_len, $eol); 
+    my ($s0, $s1, $bit) = Bpsr::set_ibob_levels($handle, $acc_len, $eol); 
     logMessage(2, "s0 = $s0, s1 = $s1, bit = $bit");
 
   }
@@ -158,7 +158,7 @@ if (!$handle) {
     my $host = $cfg{"SERVER_HOST"};
     my $port = $cfg{"SERVER_PWC_RESPONSE_PORT"};
 
-    my $tcs_interface_sock = Dada->connectToMachine($host, $port, 10);
+    my $tcs_interface_sock = Dada::connectToMachine($host, $port, 10);
     # ensure our file handle is valid
     if (!$tcs_interface_sock) {
       print "-1";
@@ -176,13 +176,13 @@ if (!$handle) {
   # bpsr_udpgenerator
   if ($use_simulator) {
 
-    $utc_result = Dada->getLine($handle);
+    $utc_result = Dada::getLine($handle);
     logMessage(1, "Counter reset");
 
   } else {
 
     logMessage(2, "Starting on next 1 second tick");
-    $utc_result = Bpsr->start_ibob($handle, $eol);
+    $utc_result = Bpsr::start_ibob($handle, $eol);
     logMessage(2, "UTC_START = ".$utc_result);
   }
 
@@ -202,7 +202,7 @@ sub logMessage($$) {
   (my $level, my $message) = @_;
   if ($level <= DEBUG_LEVEL) {
     my @t2 = gettimeofday();
-    my $time = Dada->printDadaTime($t2[0]);
+    my $time = Dada::printDadaTime($t2[0]);
     my $subsec = substr(sprintf("%.3f",$t2[1]/1000000.0),2);
     print "[".$time.".".$subsec."] ".$message."\n";
   }

@@ -12,7 +12,7 @@ use threads::shared;
 #
 # Sanity check to prevent multiple copies of this daemon running
 #
-Dada->preventDuplicateDaemon(basename($0));
+Dada::preventDuplicateDaemon(basename($0));
 
 
 # Constants
@@ -26,7 +26,7 @@ use constant QUITFILE           => "bpsr_pwc_monitor.quit";
 #
 # Global Variables
 #
-our %cfg = Bpsr->getBpsrConfig();      # Bpsr.cfg
+our %cfg = Bpsr::getBpsrConfig();      # Bpsr.cfg
 our $quit_daemon : shared  = 0;
 
 
@@ -64,9 +64,9 @@ if (index($cfg{"SERVER_ALIASES"}, $ENV{'HOSTNAME'}) < 0 ) {
 
 
 # Redirect standard output and error
-Dada->daemonize($logfile, $pidfile);
+Dada::daemonize($logfile, $pidfile);
 
-logMessage(0, "STARTING SCRIPT: ".Dada->getCurrentDadaTime(0));
+logMessage(0, "STARTING SCRIPT: ".Dada::getCurrentDadaTime(0));
 
 
 # Start the daemon control thread
@@ -88,7 +88,7 @@ while (!$quit_daemon) {
 
     logMessage(2, "Attemping connection to PWCC: ".$cfg{"SERVER_HOST"}.":".$cfg{"PWCC_LOGPORT"});
 
-    $handle = Dada->connectToMachine($cfg{"SERVER_HOST"},$cfg{"PWCC_LOGPORT"});
+    $handle = Dada::connectToMachine($cfg{"SERVER_HOST"},$cfg{"PWCC_LOGPORT"});
 
     if (!$handle)  {
       logMessage(0, "Could not connect to dada_pwc_command on ".$cfg{"SERVER_HOST"}.":".$cfg{"PWCC_LOGPORT"});
@@ -101,7 +101,7 @@ while (!$quit_daemon) {
 
   while ($handle && !$quit_daemon) {
  
-    $result = Dada->getLineSelect($handle,1);
+    $result = Dada::getLineSelect($handle,1);
 
     # If we have lost the connection
     if (! defined $result) { 
@@ -167,7 +167,7 @@ while (!$quit_daemon) {
 # Rejoin our daemon control thread
 $daemon_control_thread->join();
 
-logMessage(0, "STOPPING SCRIPT: ".Dada->getCurrentDadaTime(0));
+logMessage(0, "STOPPING SCRIPT: ".Dada::getCurrentDadaTime(0));
 
 exit(0);
 

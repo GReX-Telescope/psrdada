@@ -10,7 +10,7 @@ use Dada::server_tape_archiver qw(%cfg);
 #
 # Global Variable Declarations
 #
-%cfg = Bpsr->getConfig();
+%cfg = Bpsr::getConfig();
 
 sub usage() {
   print STDERR "Usage: ".$0." PID\n";
@@ -21,7 +21,7 @@ sub usage() {
 # Initialize module variables
 #
 $Dada::server_tape_archiver::dl = 1;
-$Dada::server_tape_archiver::daemon_name = Dada->daemonBaseName($0);
+$Dada::server_tape_archiver::daemon_name = Dada::daemonBaseName($0);
 $Dada::server_tape_archiver::robot = 0;
 $Dada::server_tape_archiver::type = "parkes";
 $Dada::server_tape_archiver::ssh_prefix = "ssh -o Batchmode=yes -x -l dada apsr-srv0 \"";

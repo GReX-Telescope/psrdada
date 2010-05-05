@@ -25,7 +25,7 @@ use threads::shared;
 #
 # Sanity check to prevent multiple copies of this daemon running
 #
-Dada->preventDuplicateDaemon(basename($0));
+Dada::preventDuplicateDaemon(basename($0));
 
 
 #
@@ -44,7 +44,7 @@ use constant STATUS_ERROR => 2;
 #
 # Global Variables
 #
-our %cfg = Bpsr->getBpsrConfig();      # Bpsr.cfg
+our %cfg = Bpsr::getBpsrConfig();      # Bpsr.cfg
 our $error                      = $cfg{"STATUS_DIR"}."/bpsr_web_monitor.error";
 our $warn                       = $cfg{"STATUS_DIR"}."/bpsr_web_monitor.warn";
 our $quit_daemon : shared       = 0;
@@ -100,9 +100,9 @@ $server_socket = new IO::Socket::INET (
 die "Could not create listening socket: $!\n" unless $server_socket;
 
 # Redirect standard output and error
-Dada->daemonize($logfile, $pidfile);
+Dada::daemonize($logfile, $pidfile);
 
-Dada->logMsg(0, DL, "STARTING SCRIPT");
+Dada::logMsg(0, DL, "STARTING SCRIPT");
 
 # Start the daemon control thread
 $daemon_control_thread = threads->new(\&daemonControlThread);
@@ -110,7 +110,7 @@ $daemon_control_thread = threads->new(\&daemonControlThread);
 my $read_set = new IO::Select();  # create handle set for reading
 $read_set->add($server_socket);   # add the main socket to the set
 
-Dada->logMsg(2, DL, "Waiting for connection on ".$cfg{"SERVER_HOST"}.":".$cfg{"SERVER_WEB_MONITOR_PORT"});
+Dada::logMsg(2, DL, "Waiting for connection on ".$cfg{"SERVER_HOST"}.":".$cfg{"SERVER_WEB_MONITOR_PORT"});
 
 #
 # Data to "maintain"
@@ -160,7 +160,7 @@ while (!$quit_daemon) {
       $handle->autoflush();
       # my $hostinfo = gethostbyaddr($handle->peeraddr);
       # my $hostname = $hostinfo->name;
-      Dada->logMsg(2, DL, "Accepting connection");
+      Dada::logMsg(2, DL, "Accepting connection");
 
       # Add this read handle to the set
       $read_set->add($handle); 
@@ -172,15 +172,15 @@ while (!$quit_daemon) {
       # my $hostname = $hostinfo->name;
       # my @parts = split(/\./,$hostname);
       # my $machine = $parts[0];
-      $string = Dada->getLine($rh);
+      $string = Dada::getLine($rh);
 
       if (! defined $string) {
-        Dada->logMsg(2, DL, "Closing a connection");
+        Dada::logMsg(2, DL, "Closing a connection");
         $read_set->remove($rh);
         close($rh);
       } else {
 
-        Dada->logMsg(2, DL, "<- ".$string);
+        Dada::logMsg(2, DL, "<- ".$string);
         my $r = "";
 
         if ($string eq "node_info")     { $r = $node_info; }
@@ -193,10 +193,10 @@ while (!$quit_daemon) {
         elsif ($string eq "curr_obs")      { $r = $curr_obs; }
         elsif ($string eq "status_info")   { $r = $status_info; }
         elsif ($string eq "tape_info")     { $r = $tape_info_string; }
-        else    { Dada->logMsgWarn($warn, "unexpected command: ".$string); } 
+        else    { Dada::logMsgWarn($warn, "unexpected command: ".$string); } 
 
         print $rh $r."\r\n";
-        Dada->logMsg(2, DL, "-> ".$r);
+        Dada::logMsg(2, DL, "-> ".$r);
       }
     }
   }
@@ -214,7 +214,7 @@ $image_info_thread->join();
 
 close($server_socket);
                                                                                 
-Dada->logMsg(0, DL, "STOPPING SCRIPT: ".Dada->getCurrentDadaTime(0));
+Dada::logMsg(0, DL, "STOPPING SCRIPT: ".Dada->getCurrentDadaTime(0));
                                                                                 
 exit(0);
 
@@ -226,7 +226,7 @@ exit(0);
 
 sub daemonControlThread() {
 
-  Dada->logMsg(2, DL, "daemonControlThread: starting");
+  Dada::logMsg(2, DL, "daemonControlThread: starting");
 
   my $pidfile = $cfg{"SERVER_CONTROL_DIR"}."/".PIDFILE;
 
@@ -240,10 +240,10 @@ sub daemonControlThread() {
   # set the global variable to quit the daemon
   $quit_daemon = 1;
 
-  Dada->logMsg(2, DL, "Unlinking PID file: ".$pidfile);
+  Dada::logMsg(2, DL, "Unlinking PID file: ".$pidfile);
   unlink($pidfile);
 
-  Dada->logMsg(1, DL, "daemonControlThread: exiting");
+  Dada::logMsg(1, DL, "daemonControlThread: exiting");
 
 }
 
@@ -270,7 +270,7 @@ sub currentInfoThread($) {
 
   (my $results_dir) = @_;
 
-  Dada->logMsg(1, DL, "currentInfoThread: starting");
+  Dada::logMsg(1, DL, "currentInfoThread: starting");
 
   my $sleep_time = 10;
   my $sleep_counter = 0;
@@ -287,16 +287,17 @@ sub currentInfoThread($) {
       sleep(1);
     
     } else {
+
       $sleep_counter = $sleep_time;
 
-      Dada->logMsg(3, DL, "currentInfoThread: ".$cmd);
+      Dada::logMsg(3, DL, "currentInfoThread: ".$cmd);
       $obs = `$cmd`;
       chomp $obs ;
-      Dada->logMsg(3, DL, "currentInfoThread: ".$obs);
+      Dada::logMsg(3, DL, "currentInfoThread: ".$obs);
 
       if (-f $results_dir."/".$obs."/obs.info") {
         $tmp_str = "";
-        %cfg_file = Dada->readCFGFile($results_dir."/".$obs."/obs.info"); 
+        %cfg_file = Dada::readCFGFile($results_dir."/".$obs."/obs.info"); 
 
         $tmp_str .= "SOURCE:::".$cfg_file{"SOURCE"}.";;;";
         $tmp_str .= "RA:::".$cfg_file{"RA"}.";;;";
@@ -309,17 +310,17 @@ sub currentInfoThread($) {
         $tmp_str .= "UTC_START:::".$cfg_file{"UTC_START"}.";;;";
         $tmp_str .= "INTERGRATED:::0;;;";
  
-        Dada->logMsg(3, DL, $tmp_str); 
+        Dada::logMsg(3, DL, $tmp_str); 
         # update the global variable 
         $curr_obs = $tmp_str;
 
-        Dada->logMsg(2, DL, "currInfoThread: ".$curr_obs);
+        Dada::logMsg(2, DL, "currInfoThread: ".$curr_obs);
         
       }
     }
   }
 
-  Dada->logMsg(1, DL, "currentInfoThread: exiting");
+  Dada::logMsg(1, DL, "currentInfoThread: exiting");
 
 }
 
@@ -331,7 +332,7 @@ sub imageInfoThread($) {
 
   my ($results_dir) = @_;
 
-  Dada->logMsg(1, DL, "imageInfoThread: starting");
+  Dada::logMsg(1, DL, "imageInfoThread: starting");
 
   my $sleep_time = 10;
   my $sleep_counter = 0;
@@ -360,10 +361,12 @@ sub imageInfoThread($) {
     if ($sleep_counter > 0) {
       $sleep_counter--;
       sleep(1);
+
     } else {
 
       $sleep_counter = $sleep_time;
 
+      # find the most recent directory (ls gives arg list too long)
       $cmd = "find . -maxdepth 1 -type d -name '2*' -printf '\%f\n' | sort | tail -n 1";
       $obs = `$cmd`;
       chomp $obs;
@@ -487,19 +490,19 @@ sub imageInfoThread($) {
       }
       $pdbp_image_string = $tmp_str;
 
-      Dada->logMsg(2, DL, "imageInfoThread: collected images");
+      Dada::logMsg(2, DL, "imageInfoThread: collected images");
 
     }
   }
 
-  Dada->logMsg(1, DL, "imageInfoThread: exiting");
+  Dada::logMsg(1, DL, "imageInfoThread: exiting");
 
 }
 
 
 sub tapeInfoThread() {
 
-  Dada->logMsg(1, DL, "tapeInfoThread: starting");
+  Dada::logMsg(1, DL, "tapeInfoThread: starting");
 
   my $sleep_time = 30;
   my $sleep_counter = 0;
@@ -561,6 +564,8 @@ sub tapeInfoThread() {
   my $xfer_pid = "";
   my $num_parkes = 0;
   my $num_swin = 0;
+  my $want_swin = 0;
+  my $want_parkes = 0;
 
   my $ready_to_send = 0;
   my @obs_fin = ();
@@ -606,7 +611,7 @@ sub tapeInfoThread() {
         $secondary_counter = $secondary_freq;
 
         # Get information from tapes.db
-        $cmd = "ssh -x -l ".$swin_db[0]." ".$parkes_db[1]." 'cat ".$parkes_db[2]."/tapes.".$parkes_pid.".db' | awk '{print \$1,\$2,\$3,\$6}'";
+        $cmd = "ssh -x -l ".$parkes_db[0]." ".$parkes_db[1]." 'cat ".$parkes_db[2]."/tapes.".$parkes_pid.".db' | awk '{print \$1,\$2,\$3,\$6}'";
         $tmp_str = `$cmd`;
         chomp $tmp_str;
         @parkes_files_db = split(/\n/,$tmp_str);
@@ -640,8 +645,8 @@ sub tapeInfoThread() {
           }
         }
 
-        Dada->logMsg(2, DL, "tapeInfoThread: percents parkes=".$parkes_percent."% swin=".$swin_percent."%");
-        Dada->logMsg(2, DL, "tapeInfoThread: names parkes=".$parkes_tape." swin=".$swin_tape);
+        Dada::logMsg(2, DL, "tapeInfoThread: percents parkes=".$parkes_percent."% swin=".$swin_percent."%");
+        Dada::logMsg(2, DL, "tapeInfoThread: names parkes=".$parkes_tape." swin=".$swin_tape);
 
         # Find out how many are ready for sending of each type
         %stp_list = ();
@@ -654,7 +659,7 @@ sub tapeInfoThread() {
           $cmd = "ssh -l bpsr apsr".sprintf("%02d",$i)." \"cd ".$cfg{"CLIENT_ARCHIVE_DIR"}."; ".
                   "find -mindepth 3 -maxdepth 3 -type f -name 'sent.to.*' ".
                   "-printf '\%h/\%f\\n'\" | awk -F/ '{print \$2\" \"\$4}'";
-          ($result, $tmp_str) = Dada->mySystem($cmd);
+          ($result, $tmp_str) = Dada::mySystem($cmd);
 
           if ($result eq "ok") {
             @arr = split(/\n/,$tmp_str);
@@ -678,15 +683,15 @@ sub tapeInfoThread() {
         
         # Now get a list of all observations that have obs.finished in them
         $cmd = "cd ".$cfg{"SERVER_ARCHIVE_NFS_MNT"}."; find  -mindepth 2 -maxdepth 2 -name 'obs.finished' -printf '\%h\\n' | awk -F/ '{print \$2}'";
-        ($result, $tmp_str) = Dada->mySystem($cmd);
+        ($result, $tmp_str) = Dada::mySystem($cmd);
         if ($result eq "ok") {
           @arr = split(/\n/,$tmp_str);
           for ($j=0; $j<=$#arr; $j++) {
 
             # check if the PID matches
             $cmd = "grep ^PID ".$cfg{"SERVER_ARCHIVE_NFS_MNT"}."/".$arr[$j]."/obs.info | grep ".$xfer_pid; 
-            Dada->logMsg(2, DL, "tapeInfoThread: ".$cmd);
-            ($result, $tmp_str) = Dada->mySystem($cmd);
+            Dada::logMsg(2, DL, "tapeInfoThread: ".$cmd);
+            ($result, $tmp_str) = Dada::mySystem($cmd);
             if ($result eq "ok") {
               push @obs_fin, $arr[$j];
             }
@@ -708,45 +713,37 @@ sub tapeInfoThread() {
           }
         }
 
-        Dada->logMsg(2, DL, "tapeInfoThread: obs_fin=".($#obs_fin+1).", swin_ready=".$swin_ready.", parkes_ready=".$parkes_ready);
+        # check if each destination is actually one that will be used
+        ($want_swin, $want_parkes) = Bpsr::getObsDestinations($xfer_pid, $cfg{$xfer_pid."_DEST"});
+        if (!$want_swin) {
+          $swin_ready = 0;
+        }
+        if (!$want_parkes) {
+          $parkes_ready = 0;
+        }
+        
+        Dada::logMsg(2, DL, "tapeInfoThread: obs_fin=".($#obs_fin+1).", swin_ready=".$swin_ready.", parkes_ready=".$parkes_ready);
 
         $num_parkes = 0;
         $num_swin = 0;
-        # number of beams in P630's staging area for PARKES_DIRS
-        #%parkes = ();
+        # number of beams in staging area for PARKES_DIRS
         for ($i=0; $i<=$#p_users; $i++) {
-          $cmd = "ssh -x -l ".$p_users[$i]." ".$p_hosts[$i]." 'ls ".$p_paths[$i]."/".$parkes_pid."/staging_area >& /dev/null; find ".$p_paths[$i]."/".$parkes_pid."/staging_area -mindepth 2 -maxdepth 2 -type d -printf \"\%f\\n\"' | wc -l";
+          $cmd = "ssh -x -l ".$p_users[$i]." ".$p_hosts[$i]." 'cd ".$p_paths[$i]."/".$parkes_pid."; find staging_area pulsars -mindepth 2 -maxdepth 2 -type d -printf \"\%f\\n\"' | wc -l";
           $tmp_str = `$cmd`;
           chomp $tmp_str;
           $num_parkes += int($tmp_str);
-      
-          #@arr = split(/\n/,$tmp_str);
-          #for ($j=0; $j<=$#arr; $j++) {
-          #  if (! exists($parkes{$arr[$j]})) {
-          #    $parkes{$arr[$j]} = 1;
-          #  }
-          #}
         } 
 
-        #$num_parkes = scalar keys %parkes;
-        Dada->logMsg(2, DL, "tapeInfoThread: num_parkes = ".$num_parkes);
+        Dada::logMsg(2, DL, "tapeInfoThread: num_parkes = ".$num_parkes);
 
-        # number of beams in P630's staging area for SWIN_DIRS
-        #%swin = ();
+        # number of beams in staging area for SWIN_DIRS
         for ($i=0; $i<=$#s_users; $i++) {
-          $cmd = "ssh -x -l ".$s_users[$i]." ".$s_hosts[$i]." 'ls ".$s_paths[$i]."/".$swin_pid."/staging_area >& /dev/null; find ".$s_paths[$i]."/".$swin_pid."/staging_area -mindepth 2 -maxdepth 2 -type d -printf \"\%f\\n\"' | wc -l";
+          $cmd = "ssh -x -l ".$s_users[$i]." ".$s_hosts[$i]." 'cd ".$s_paths[$i]."/".$swin_pid."; find staging_area pulsars -mindepth 2 -maxdepth 2 -type d -printf \"\%f\\n\"' | wc -l";
           $tmp_str = `$cmd`;
           chomp $tmp_str;
           $num_swin += int($tmp_str);
-          #@arr = split(/\n/,$tmp_str);
-          #for ($j=0; $j<=$#arr; $j++) {
-          #  if (! exists($swin{$arr[$j]})) {
-          #    $swin{$arr[$j]} = 1;
-          #  }
-          #}
         } 
-        #$num_swin = scalar keys %swin;
-        Dada->logMsg(2, DL, "tapeInfoThread: num_swin= ".$num_swin);
+        Dada::logMsg(2, DL, "tapeInfoThread: num_swin= ".$num_swin);
       }
 
       $tmp_str = "";
@@ -769,11 +766,11 @@ sub tapeInfoThread() {
 
       $tape_info_string = $tmp_str;
 
-      Dada->logMsg(2, DL, "tapeInfoThread: ".$tape_info_string);
+      Dada::logMsg(2, DL, "tapeInfoThread: ".$tape_info_string);
     }
   }
 
-  Dada->logMsg(1, DL, "tapeInfoThread: exiting");
+  Dada::logMsg(1, DL, "tapeInfoThread: exiting");
 }
 
 #
@@ -783,7 +780,7 @@ sub statusInfoThread() {
 
   my $status_dir = $cfg{"STATUS_DIR"};
 
-  Dada->logMsg(1, DL, "statusInfoThread: starting");
+  Dada::logMsg(1, DL, "statusInfoThread: starting");
 
   my @server_daemons = split(/ /,$cfg{"SERVER_DAEMONS"}." ".$cfg{"SERVER_DAEMONS_PERSIST"});
   my %clients = ();
@@ -855,18 +852,18 @@ sub statusInfoThread() {
         $tmp_str .= $key.":::1:::".$value.";;;";
       }
       while (($key, $value) = each(%errors)){
-        $tmp_str .= $key.":::1:::".$value.";;;";
+        $tmp_str .= $key.":::2:::".$value.";;;";
       }
       #$tmp_str .= "\n";
 
       $status_info = $tmp_str;
 
-      Dada->logMsg(2, DL, "statusInfoThread: ".$status_info);
+      Dada::logMsg(2, DL, "statusInfoThread: ".$status_info);
 
     }
   }
 
-  Dada->logMsg(1, DL, "statusInfoThread: exiting");
+  Dada::logMsg(1, DL, "statusInfoThread: exiting");
 }
 
 #
@@ -874,7 +871,7 @@ sub statusInfoThread() {
 #
 sub nodeInfoThread() {
 
-  Dada->logMsg(1, DL, "nodeInfoThread: starting");
+  Dada::logMsg(1, DL, "nodeInfoThread: starting");
 
   my $sleep_time = 4;
   my $sleep_counter = 0;
@@ -911,15 +908,15 @@ sub nodeInfoThread() {
       @results = ();
       @responses = ();
 
-      for ($i=0; $i<=$#machines; $i++) {
+      for ($i=0; ((!$quit_daemon) && $i<=$#machines); $i++) {
 
-        $handle = Dada->connectToMachine($machines[$i], $port, 0);
+        $handle = Dada::connectToMachine($machines[$i], $port, 0);
         # ensure our file handle is valid
         if (!$handle) {
           $result = "fail";
           $response = "0 0 0;;;0 0;;;0.00,0.00,0.00;;;0.0";
         } else {
-          ($result, $response) = Dada->sendTelnetCommand($handle, "get_status");
+          ($result, $response) = Dada::sendTelnetCommand($handle, "get_status");
           $handle->close();
         }
 
@@ -934,12 +931,12 @@ sub nodeInfoThread() {
       }
       $node_info = $tmp_str;
 
-      Dada->logMsg(2, DL, "nodeInfoThread: ".$node_info);
+      Dada::logMsg(2, DL, "nodeInfoThread: ".$node_info);
 
     }
   }  
 
-  Dada->logMsg(1, DL, "nodeInfoThread: exiting");
+  Dada::logMsg(1, DL, "nodeInfoThread: exiting");
 
 }
 
@@ -953,14 +950,14 @@ sub commThread($$$) {
   my $result = "fail";
   my $response = "Failure Message";
 
-  my $handle = Dada->connectToMachine($machine, $port, 0);
+  my $handle = Dada::connectToMachine($machine, $port, 0);
   # ensure our file handle is valid
   if (!$handle) {
     # return ("fail","Could not connect to machine ".$machine.":".$port);
     return ("fail","0 0 0;;;0 0;;;0.00,0.00,0.00");
   }
 
-  ($result, $response) = Dada->sendTelnetCommand($handle, $command);
+  ($result, $response) = Dada::sendTelnetCommand($handle, $command);
 
   $handle->close();
 
@@ -979,16 +976,16 @@ sub getDaemonPID($$) {
 
   my $response = "";
 
-  Dada->logMsg(2, DL, "getDaemonPID: ".$machine.":".$port);
-  my $handle = Dada->connectToMachine($machine, $port, 0);
+  Dada::logMsg(2, DL, "getDaemonPID: ".$machine.":".$port);
+  my $handle = Dada::connectToMachine($machine, $port, 0);
   # ensure our file handle is valid
   if ($handle) {
 
     print $handle "get_pid\r\n";
-    Dada->logMsg(2, DL, "getDaemonPID: -> get_pid");
+    Dada::logMsg(2, DL, "getDaemonPID: -> get_pid");
     
-    $response = Dada->getLine($handle);  
-    Dada->logMsg(2, DL, "getDaemonPID: ".$response);
+    $response = Dada::getLine($handle);  
+    Dada::logMsg(2, DL, "getDaemonPID: ".$response);
 
     $handle->close();
 
@@ -997,7 +994,7 @@ sub getDaemonPID($$) {
     }
   }
 
-  Dada->logMsg(2, DL, "getDaemonPID: returning ".$d_pid);
+  Dada::logMsg(2, DL, "getDaemonPID: returning ".$d_pid);
   return $d_pid;
 
 }

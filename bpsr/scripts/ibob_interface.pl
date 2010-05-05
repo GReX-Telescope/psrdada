@@ -1,5 +1,4 @@
 #!/usr/bin/env perl
-#
 # Author:   Andrew Jameson
 # Created:  21 May 2008
 # Modified: 21 May 2008
@@ -9,7 +8,7 @@
 # Include Modules
 #
                                                                                                                    
-use lib $ENV{"DADA_ROOT"}."/scripts";
+use lib $ENV{"DADA_ROOT"}."/bin";
 
 use strict;         # strict mode (like -Wall)
 use IO::Socket::INET;
@@ -27,8 +26,8 @@ use Bpsr;             # BPSR Module for configuration options
 # Constants
 #
 use constant DEBUG_LEVEL     => 2;
-use constant IBOB_IP         => "srv0";   # "169.254.128.2";
-use constant IBOB_PORT       => "35000";    # "23";
+use constant IBOB_IP         => "169.254.128.15";   # "169.254.128.2";
+use constant IBOB_PORT       => "23";    # "23";
 use constant IBOB_TERMINATOR => "\r";
 
 use constant MAX_VALUE        => 1;
@@ -60,7 +59,7 @@ $SIG{PIPE} = \&sigPipeHandle;
 # Main
 #
 logMessage(2, "Tring to connect to ".IBOB_IP.":".IBOB_PORT);
-$handle = Dada->connectToMachine(IBOB_IP, IBOB_PORT);
+$handle = Dada::connectToMachine(IBOB_IP, IBOB_PORT);
 
 if (!$handle) {
 
@@ -316,7 +315,7 @@ sub logMessage($$) {
   (my $level, my $message) = @_;
   if ($level <= DEBUG_LEVEL) {
     my @t2 = gettimeofday();
-    my $time = Dada->printDadaTime($t2[0]);
+    my $time = Dada::printDadaTime($t2[0]);
     my $subsec = substr(sprintf("%.3f",$t2[1]/1000000.0),2);
     print "[".$time.".".$subsec."] ".$message."\n";
   }

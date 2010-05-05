@@ -10,7 +10,7 @@ use Dada::server_tape_controller qw(%cfg);
 #
 # Global Variable Declarations
 #
-%cfg = Bpsr->getConfig();
+%cfg = Bpsr::getConfig();
 
 sub usage() {
   print STDERR "Usage: ".$0." PID\n";
@@ -21,7 +21,7 @@ sub usage() {
 # Initialize module variables
 #
 $Dada::server_tape_controller::dl = 1;
-$Dada::server_tape_controller::daemon_name = Dada->daemonBaseName($0);
+$Dada::server_tape_controller::daemon_name = Dada::daemonBaseName($0);
 $Dada::server_tape_controller::pid_report_port = $cfg{"SERVER_PARKESTAPE_PID_PORT"};
 $Dada::server_tape_controller::db_dir = $cfg{"PARKES_DB_DIR"};
 $Dada::server_tape_controller::dest_script = "server_bpsr_parkes_tape_archiver.pl";

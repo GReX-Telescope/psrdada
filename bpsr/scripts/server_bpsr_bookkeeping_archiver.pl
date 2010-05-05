@@ -21,13 +21,13 @@ use strict;         # strict mode (like -Wall)
 # Constants
 #
 use constant DEBUG_LEVEL  => 2;
-use constant TAPES_DB     => "tapes.db";
-use constant FILES_DB     => "files.db";
+use constant TAPES_DB     => "tapes.P630.db";
+use constant FILES_DB     => "files.P630.db";
 
 #
 # Global Variables
 #
-our %cfg = Bpsr->getBpsrConfig();      # Bpsr.cfg
+our %cfg = Bpsr::getBpsrConfig();      # Bpsr.cfg
 
 # Autoflush output
 $| = 1;
@@ -81,7 +81,7 @@ sub checkFile($$$$) {
   my $cmd = "scp -q ".$user."@".$host.":".$path."/".$file." ./".$type.".".$file.".current";
   my $result = "";
   my $response = "";
-  ($result, $response) = Dada->mySystem($cmd);
+  ($result, $response) = Dada::mySystem($cmd);
 
   if ($result ne "ok") {
     print $cmd." failed: ".$response."\n";
@@ -90,7 +90,7 @@ sub checkFile($$$$) {
 
   my $curr = $type.".".$file.".current";
   my $prev = $type.".".$file.".previous";
-  my $time = $type.".".$file.".".Dada->getCurrentDadaTime();
+  my $time = $type.".".$file.".".Dada::getCurrentDadaTime();
   my $diff = 0;
 
   if (-f $prev) {

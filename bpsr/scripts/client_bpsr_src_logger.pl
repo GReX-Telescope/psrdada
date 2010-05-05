@@ -28,7 +28,7 @@ use constant LOGFILE       => "bpsr_src_logger.log";
 #
 # Global Variable Declarations
 #
-our %cfg : shared = Bpsr->getBpsrConfig();      # Bpsr.cfg in a hash
+our %cfg : shared = Bpsr::getBpsrConfig();      # Bpsr.cfg in a hash
 our $log_socket;
 our $log_fh;
 
@@ -58,7 +58,7 @@ if ($opts{e}) {
 
 
 # Open a connection to the nexus logging facility
-$log_socket = Dada->nexusLogOpen($cfg{"SERVER_HOST"},$cfg{"SERVER_SRC_LOG_PORT"});
+$log_socket = Dada::nexusLogOpen($cfg{"SERVER_HOST"},$cfg{"SERVER_SRC_LOG_PORT"});
 if (!$log_socket) {
   print "Could not open a connection to the nexus SRC log: $log_socket\n";
 }
@@ -79,12 +79,12 @@ exit 0;
 sub logMessage($$$$) {
   (my $level, my $type, my $message, my $logfile) = @_;
   if ($level <= DEBUG_LEVEL) {
-    my $time = Dada->getCurrentDadaTime();
+    my $time = Dada::getCurrentDadaTime();
     if (!($log_socket)) {
-      $log_socket = Dada->nexusLogOpen($cfg{"SERVER_HOST"},$cfg{"SERVER_SRC_LOG_PORT"});
+      $log_socket = Dada::nexusLogOpen($cfg{"SERVER_HOST"},$cfg{"SERVER_SRC_LOG_PORT"});
     }
     if ($log_socket) {
-      Dada->nexusLogMessage($log_socket, $time, "src", $type, "proc", $message);
+      Dada::nexusLogMessage($log_socket, $time, "src", $type, "proc", $message);
     }
     open $log_fh, ">>".$logfile;
     print $log_fh "[".$time."] ".$message."\n";
@@ -112,7 +112,7 @@ sub sigPipeHandle($) {
   my $sigName = shift;
   print STDERR basename($0)." : Received SIG".$sigName."\n";
   $log_socket = 0;
-  $log_socket = Dada->nexusLogOpen($cfg{"SERVER_HOST"},$cfg{"SERVER_SRC_LOG_PORT"});
+  $log_socket = Dada::nexusLogOpen($cfg{"SERVER_HOST"},$cfg{"SERVER_SRC_LOG_PORT"});
 
 }
 

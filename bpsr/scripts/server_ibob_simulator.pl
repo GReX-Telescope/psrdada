@@ -28,7 +28,7 @@ use constant LOGFILE     => "ibob_simulator.log";
 #
 # Global Variables
 #
-our %cfg = Bpsr->getBpsrConfig();      # Bpsr.cfg
+our %cfg = Bpsr::getBpsrConfig();      # Bpsr.cfg
 our $quit_daemon : shared  = 0;
 
 
@@ -90,7 +90,7 @@ $pwc_socket = new IO::Socket::INET (
 die "Could not create listening socket: $!\n" unless $pwc_socket;
 
 # Redirect standard output and error
-Dada->daemonize($logfile, $pidfile);
+Dada::daemonize($logfile, $pidfile);
 
 debugMessage(0, "STARTING SCRIPT");
 
@@ -134,7 +134,7 @@ while (!$quit_daemon) {
       my $hostname = $hostinfo->name;
       my @parts = split(/\./,$hostname);
       my $machine = $parts[0];
-      $string = Dada->getLine($rh);
+      $string = Dada::getLine($rh);
 
       # If the string is not defined, then we have lost the connection.
       # remove it from the read_set
@@ -170,16 +170,16 @@ while (!$quit_daemon) {
   # If we need to start up the simulator
   if (($start_ibob == 1) && ($n_replies == $cfg{"NUM_PWC"})) {
     
-    my $handle = Dada->connectToMachine($ibob_host, $ibob_port, 2);
+    my $handle = Dada::connectToMachine($ibob_host, $ibob_port, 2);
 
     if ($handle) {
 
       debugMessage(1, "Setting iBob Levels");
-      my ($s0, $s1, $bit) = Bpsr->set_ibob_levels($handle, $acc_len, $eol);
+      my ($s0, $s1, $bit) = Bpsr::set_ibob_levels($handle, $acc_len, $eol);
       debugMessage(1, "s0 = $s0, s1 = $s1, bit = $bit");
 
       debugMessage(1, "Starting on next 1 sec tick");
-      $utc_start = Bpsr->start_ibob($handle, $eol);
+      $utc_start = Bpsr::start_ibob($handle, $eol);
       debugMessage(1, "utc_start = ".$utc_start);
 
     } else {
@@ -220,7 +220,7 @@ sub daemonControlThread() {
 
   my $pidfile = $cfg{"SERVER_CONTROL_DIR"}."/".PIDFILE;
 
-  my $daemon_quit_file = Dada->getDaemonControlFile($cfg{"SERVER_CONTROL_DIR"});
+  my $daemon_quit_file = Dada::getDaemonControlFile($cfg{"SERVER_CONTROL_DIR"});
   # Poll for the existence of the control file
   while ((!-f $daemon_quit_file) && (!$quit_daemon)) {
     sleep(1);
@@ -239,7 +239,7 @@ sub daemonControlThread() {
 sub debugMessage($$) {
   (my $level, my $message) = @_;
   if ($level <= DEBUG_LEVEL) {
-    my $time = Dada->getCurrentDadaTime();
+    my $time = Dada::getCurrentDadaTime();
     print "[".$time."] ".$message."\n";
   }
 }

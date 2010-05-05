@@ -12,8 +12,8 @@ dist_bin_SCRIPTS = Bpsr.pm \
                    server_bpsr_sys_monitor.pl \
                    server_bpsr_transfer_manager.pl \
                    server_bpsr_tape_archiver.pl \
-                   server_bpsr_tape_parkes.pl \
-                   server_bpsr_tape_swin.pl \
+                   server_bpsr_parkes_tape_controller.pl \
+                   server_bpsr_swin_tape_controller.pl \
                    server_bpsr_server_logger.pl \
                    server_bpsr_web_monitor.pl \
                    client_bpsr_disk_cleaner.pl \
@@ -26,5 +26,7 @@ dist_bin_SCRIPTS = Bpsr.pm \
                    ibob_interface.pl \
                    web_style.txt \
                    merge_tcs_logs.csh \
-                   beam-o-vision_collect.csh
+                   beam-o-vision_collect.csh bpsr_single.csh
+
+include $(top_srcdir)/config/Makefile.targets
 

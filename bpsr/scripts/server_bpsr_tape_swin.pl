@@ -20,7 +20,7 @@ use threads::shared;
 #
 # Sanity check to prevent multiple copies of this daemon running
 #
-Dada->preventDuplicateDaemon(basename($0));
+Dada::preventDuplicateDaemon(basename($0));
 
 
 #
@@ -37,7 +37,7 @@ use constant REMOTE_HOST => "shrek202";
 #
 # Global Variables
 #
-our %cfg = Bpsr->getBpsrConfig();      # Bpsr.cfg
+our %cfg = Bpsr::getBpsrConfig();      # Bpsr.cfg
 our $quit_daemon : shared  = 0;
 our $error = $cfg{"STATUS_DIR"}."/bpsr_tape_".LOCATION.".error";
 our $warn  = $cfg{"STATUS_DIR"}."/bpsr_tape_".LOCATION.".warn";
@@ -75,41 +75,41 @@ if (index($cfg{"SERVER_ALIASES"}, $ENV{'HOSTNAME'}) < 0 ) {
 }
 
 # Redirect standard output and error
-Dada->daemonize($logfile, $pidfile);
+Dada::daemonize($logfile, $pidfile);
 
-Dada->logMsg(0, DL, "STARTING SCRIPT");
+Dada::logMsg(0, DL, "STARTING SCRIPT");
 
 # Start the tape script (background daemon)
 ($user, $host, $dir) = split(/:/, $cfg{$db_dir_string});
 
 # Set if a daemon is running there already
-Dada->logMsg(2, DL, "main: checkRemoteScript(".$user.", ".$host.", ".LOCATION.")");
+Dada::logMsg(2, DL, "main: checkRemoteScript(".$user.", ".$host.", ".LOCATION.")");
 ($result, $response) = checkRemoteScript($user, $host, LOCATION);
-Dada->logMsg(2, DL, "main: checkRemoteScript() ".$result." ".$response);
+Dada::logMsg(2, DL, "main: checkRemoteScript() ".$result." ".$response);
 
 if ($result ne "ok") {
-  Dada->logMsgWarn($error, "could not contact tape archiver at ".LOCATION.", quitting");
+  Dada::logMsgWarn($error, "could not contact tape archiver at ".LOCATION.", quitting");
   unlink($pidfile);
   exit(1);
 }
 
 if (($result eq "ok") && ($response eq "process existed")) {
-  Dada->logMsgWarn($error, "tape archiver script already running, quitting");
+  Dada::logMsgWarn($error, "tape archiver script already running, quitting");
   unlink($pidfile);
   exit(1);
 }
 
 # Start the remote tape script
 
-Dada->logMsg(1, DL, "Starting ".LOCATION." tape archiver");
+Dada::logMsg(1, DL, "Starting ".LOCATION." tape archiver");
 
 ($result, $response) = sshViaProxy($user, $host, "server_bpsr_tape_archiver.pl ".LOCATION);
 
 if ($result ne "ok") {
-  Dada->logMsgWarn($warn, "server_bpsr_tape_archiver.pl on ".LOCATION." return ".$response);
+  Dada::logMsgWarn($warn, "server_bpsr_tape_archiver.pl on ".LOCATION." return ".$response);
 }
 
-Dada->logMsg(2, DL, "Entering poll loop for quit file/SIGINT");
+Dada::logMsg(2, DL, "Entering poll loop for quit file/SIGINT");
 
 # Every 60 seconds, check for the existence of the script on the remote machine
 my $counter_freq = 30;
@@ -118,14 +118,14 @@ my $premature_exit = 0;
 
 # Poll for the existence of the control file
 while ((!$quit_daemon) && (! -f $quitfile) && (!$premature_exit)) {
-  Dada->logMsg(3, DL, "sleeping for quitfile: ".$quitfile);
+  Dada::logMsg(3, DL, "sleeping for quitfile: ".$quitfile);
   sleep(2);
     
   if ($counter == $counter_freq) {
     $counter = 0;
     ($result, $response) = checkRemoteScript($user, $host, LOCATION);
     if (!(($result eq "ok") && ($response eq "process existed"))) {
-      Dada->logMsgWarn($error, "remote script exited unexpectedly");
+      Dada::logMsgWarn($error, "remote script exited unexpectedly");
       $premature_exit = 1;
     }
   
@@ -138,7 +138,7 @@ while ((!$quit_daemon) && (! -f $quitfile) && (!$premature_exit)) {
 if (!$premature_exit) {
 
   # Now stop the tape script
-  Dada->logMsg(1, DL, "Stopping ".LOCATION." tape archiver");
+  Dada::logMsg(1, DL, "Stopping ".LOCATION." tape archiver");
 
   ($result, $response) = sshViaProxy($user, $host, "touch \$DADA_ROOT/control/bpsr_tape_archiver.quit");
 
@@ -156,12 +156,12 @@ if (!$premature_exit) {
     ($result, $response) = checkRemoteScript($user, $host, LOCATION);
 
     if ($result ne "ok") {
-      Dada->logMsgWarn($error, "could not contact tape archiver at ".LOCATION.", quitting");
+      Dada::logMsgWarn($error, "could not contact tape archiver at ".LOCATION.", quitting");
       $remote_daemon_exited = 1;
     } else {
 
       if ($response eq "process existed") {
-        Dada->logMsg(1, DL, "Waiting for tape archiver at ".LOCATION." to quit");
+        Dada::logMsg(1, DL, "Waiting for tape archiver at ".LOCATION." to quit");
         sleep(5);
         $n_tries--;
       } else {
@@ -171,18 +171,18 @@ if (!$premature_exit) {
   }
 
   if ($n_tries == 0) {
-    Dada->logMsgWarn($error, "remote tape script did not exit after 300 seconds, quitting");
+    Dada::logMsgWarn($error, "remote tape script did not exit after 300 seconds, quitting");
   }
 }
 
 # Now stop the tape script
-Dada->logMsg(2, DL, "Unlinking quitdaemon file on remote machine");
+Dada::logMsg(2, DL, "Unlinking quitdaemon file on remote machine");
 ($result, $response) = sshViaProxy($user, $host, "unlink \$DADA_ROOT/control/bpsr_tape_archiver.quit");
 
-Dada->logMsg(2, DL, "Unlinking PID file: ".$pidfile);
+Dada::logMsg(2, DL, "Unlinking PID file: ".$pidfile);
 unlink($pidfile);
 
-Dada->logMsg(0, DL, "STOPPING SCRIPT");
+Dada::logMsg(0, DL, "STOPPING SCRIPT");
                                                                                 
 exit(0);
 
@@ -215,9 +215,9 @@ sub checkRemoteScript($$$) {
   my $result = "";
   my $response = "";
 
-  Dada->logMsg(2, DL, "checkRemoteScript: ".$cmd);
+  Dada::logMsg(2, DL, "checkRemoteScript: ".$cmd);
   ($result, $response) = sshViaProxy($user, $host, $cmd);
-  Dada->logMsg(2, DL, "checkRemoteScript: ".$result." ".$response);
+  Dada::logMsg(2, DL, "checkRemoteScript: ".$result." ".$response);
 
   if ($result ne "ok") {
     # the grep command failed (no process) and returned a line count of 0
@@ -247,9 +247,9 @@ sub sshViaProxy($$$) {
     $cmd = "ssh -x -l ".$user." ".$host." \"".$remote_cmd."\"";
   }
 
-  Dada->logMsg(2, DL, "sshViaProxy: ".$cmd);
-  ($result, $response) = Dada->mySystem($cmd);
-  Dada->logMsg(2, DL, "sshViaProxy: ".$result." ".$response);
+  Dada::logMsg(2, DL, "sshViaProxy: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(2, DL, "sshViaProxy: ".$result." ".$response);
 
   return ($result, $response);
 
