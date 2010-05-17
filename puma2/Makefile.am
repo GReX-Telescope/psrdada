@@ -1,7 +1,7 @@
 
 lib_LTLIBRARIES = libpic.la
 
-libpic_la_SOURCES = pic.c
+libpic_la_SOURCES = pic.h puma2_dmadb.h pic.c
 
 bin_PROGRAMS = puma2_dmadb
 

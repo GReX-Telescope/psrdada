@@ -24,7 +24,6 @@ case $host in
   *) ARCH=unsupported;
      AC_MSG_WARN([architecture is not supported by third party software]);;
 esac
-
 AC_SUBST(ARCH)
 AM_CONDITIONAL(COMPILE_THIRD, [test x"$ARCH" != xunsupported])
 
@@ -120,8 +119,6 @@ AC_CONFIG_FILES([Makefile
     bpsr/Makefile
 		bpsr/src/Makefile
 		bpsr/mon/Makefile
-		bpsr/swinproc/Makefile
-		bpsr/swinproc/dedisp/Makefile
 		bpsr/scripts/Makefile
 		bpsr/web/Makefile
 		bpsr/config/Makefile
@@ -132,8 +129,8 @@ AC_CONFIG_FILES([Makefile
     caspsr/config/Makefile
     caspsr/config/caspsr.cfg
     caspsr/web/Makefile
-		puma2/Makefile
 		3rdparty/Makefile])
 
+#		puma2/Makefile # Removed since tim.h is missing
 AC_OUTPUT
 

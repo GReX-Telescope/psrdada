@@ -1,7 +1,7 @@
 
 lib_LTLIBRARIES = libplot4mon.la
 
-libplot4mon_la_SOURCES = get_commandline.c check_file_exists.c display_help.c \
+libplot4mon_la_SOURCES = plot4mon.h get_commandline.c check_file_exists.c display_help.c \
         compute_extremes.c compute_margin.c strings_compare.c \
         read_params.c read_stream.c create_xaxis.c set_array_dim.c \
         create_outputname.c create_labels.c four1.c realft.c do_powerspec.c \

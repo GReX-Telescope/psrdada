@@ -36,6 +36,8 @@ nobase_dist_data_DATA = testing/CAL.spec \
                         testing/J0437_2500MHz.spec \
                         testing/J0737-3038.spec
 
+EXTRA_DIST = apsr.cfg.in dspsr.giant.in dspsr.singleF.in
+MOSTLYCLEANFILES=apsr.cfg dspsr.giant dspsr.singleF
 
 edit = sed \
 	-e 's|@datadir[@]|$(datadir)|g' \

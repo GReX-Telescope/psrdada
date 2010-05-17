@@ -5,3 +5,8 @@ data_DATA = caspsr.cfg \
             caspsr.dbdisk \
             caspsr.viewer
 
+EXTRA_DIST=caspsr.cfg \
+	   caspsr.dbnull \
+	   caspsr.dbdisk \
+	   caspsr.viewer
+
