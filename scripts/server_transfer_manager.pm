@@ -151,6 +151,10 @@ sub main() {
   
   Dada::logMsg(0, $dl ,"STARTING SCRIPT");
 
+  Dada::logMsg(2, $dl, "Clearing status warn/error files");
+  unlink($warn);
+  unlink($error);
+
   # start the control thread
   Dada::logMsg(2, $dl, "main: controlThread(".$quit_file.", ".$pid_file.")");
   $control_thread = threads->new(\&controlThread, $quit_file, $pid_file);
@@ -184,11 +188,11 @@ sub main() {
       Dada::logMsg(2, $dl, "main: no observations to send. sleep 60");
 
       # On startup do a check for fully transferred or fully archived obvserations
-      Dada::logMsg(1, $dl, "Checking for fully transferred observations");
+      Dada::logMsg(2, $dl, "Checking for fully transferred observations");
       ($result, $response) = checkFullyTransferred();
       Dada::logMsg(2, $dl, "main: checkFullyTransferred(): ".$result.":".$response);
 
-      Dada::logMsg(1, $dl, "Checking for fully deleted observations");
+      Dada::logMsg(2, $dl, "Checking for fully deleted observations");
       ($result, $response) = checkFullyDeleted();
       Dada::logMsg(2, $dl, "main: checkFullyDeleted(): ".$result.":".$response)
 
@@ -655,7 +659,7 @@ sub getBandToSend() {
     return ("none", "none");
   }
 
-  Dada::logMsg(2, $dl, "getBandToSend: found ".($#obs_finished+1)." observations marked obs.finised");
+  Dada::logMsg(2, $dl, "getBandToSend: found ".($#obs_finished+1)." observations marked obs.finished");
 
   # Go through the list of finished observations, looking for something to send
   for ($i=0; (($i<=$#obs_finished) && ($obs_to_send eq "none")); $i++) {
@@ -698,7 +702,7 @@ sub getBandToSend() {
     $proc_file = $response;
 
     # If the PID doesn't match, skip it
-    if (($proc_file =~ m/single/) && ($obs_pid ne "P661")) {
+    if ($proc_file =~ m/single/) {
       Dada::logMsg(2, $dl, "getBandToSend: skipping ".$obs." PROC_FILE indicates single_pulse [".$proc_file."]");
       next;
     }
