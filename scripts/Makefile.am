@@ -22,6 +22,7 @@ nobase_dist_mod_SCRIPTS = client_archive_manager.pm \
                           server_pwc_monitor.pm \
                           server_results_manager.pm \
                           server_sys_monitor.pm \
+                          server_tape_archiver.pm \
                           server_tape_controller.pm \
                           server_tcs_interface.pm \
                           server_transfer_manager.pm \
