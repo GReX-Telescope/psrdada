@@ -209,6 +209,9 @@ static void* command_parse_server (void * arg)
         return 0;
       }
 
+      /* do not buffer the input */
+      setbuf (fptr, 0);
+
       parser->input = fptr;
 #ifdef _DEBUG
       fprintf (stderr, "command_parse_server: input=%p\n", parser->input);
