@@ -29,7 +29,7 @@ use constant DEFAULT_GAIN  => 2000;
 #
 # Global Variable Declarations
 #
-our %cfg = Dada->getDadaConfig();      # dada.cfg in a hash
+our %cfg = Dada::getDadaConfig();      # dada.cfg in a hash
 our $socket;
 our $log_fh;
 
@@ -72,7 +72,7 @@ if ($#ARGV!=0) {
 #  Therefore we always have a max on 2*chan gain values to maintain 
 
 # Open a connection to the nexus logging facility
-$socket = Dada->connectToMachine($cfg{"SERVER_HOST"},$cfg{"SERVER_GAIN_CONTROL_PORT"}, 1);
+$socket = Dada::connectToMachine($cfg{"SERVER_HOST"},$cfg{"SERVER_GAIN_CONTROL_PORT"}, 1);
 
 if (!$socket) {
   print "Could not open a connection to server_dfb3_gain_controller.pl : $socket\n";
@@ -104,7 +104,7 @@ exit 0;
 sub logMessage($$) {
   (my $level, my $message) = @_;
   if ($level <= DEBUG_LEVEL) {
-    my $time = Dada->getCurrentDadaTime();
+    my $time = Dada::getCurrentDadaTime();
 
     print "[".$time."] ".$message."\n";
   }
@@ -130,7 +130,7 @@ sub sigPipeHandle($) {
   my $sigName = shift;
   print STDERR basename($0)." : Received SIG".$sigName."\n";
   $socket = 0;
-  $socket = Dada->connectToMachine($cfg{"SERVER_HOST"},$cfg{"SERVER_GAIN_CONTROL_PORT"}, 1);
+  $socket = Dada::connectToMachine($cfg{"SERVER_HOST"},$cfg{"SERVER_GAIN_CONTROL_PORT"}, 1);
 
 }
 
@@ -156,7 +156,7 @@ sub set_dfb3_gain($$$$) {
   # The DFB3 should return a string along the lines of
   # OK 
                                                                                                                                            
-  my $dfb_response = Dada->getLine($socket);
+  my $dfb_response = Dada::getLine($socket);
                                                                                                                                            
   logMessage(2, "srv0 -> ".$dfb_response);
 
@@ -180,7 +180,7 @@ sub get_dfb3_gain($$$) {
   # The DFB3 should return a string along the lines of
   # OK <chan> <pol> <value>
                                                                                                                                                                                                 
-  my $dfb_response = Dada->getLine($socket);
+  my $dfb_response = Dada::getLine($socket);
                                                                                                                                                                                                 
   logMessage(2, "srv0 -> ".$dfb_response);
                                                                                                                                                                                                 
