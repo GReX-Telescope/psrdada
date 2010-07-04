@@ -616,59 +616,70 @@ sub printDadaUTCTime($) {
 
 sub waitForState($$$) {
                                                                                 
-  (my $stateString, my $handle, my $Twait) = @_;
+  (my $required_state, my $handle, my $wait_secs) = @_;
                                                                                 
   my $pwcc;
   my $pwc;
   my @pwcs;
-  my $myready = "no";
-  my $counter = $Twait;
+  my $ready = 0;
+  my $counter = 0;
   my $i=0;
+  my $result = "";
+  my $response = "";
 
-  while (($myready eq "no") && ($counter > 0)) {
+  while ((!$ready) && ($counter < $wait_secs)) {
 
-    if ($counter == $Twait) {
-      ; 
-    } elsif ($counter == ($Twait-1)) {
-      if (DEBUG_LEVEL >= 1) { print STDERR "Waiting for $stateString."; }
+    if ($counter == $wait_secs) {
+      if (DEBUG_LEVEL >= 1) { 
+        print "waitForState: waited ".$wait_secs.", timed out\n"; 
+      }
     } else {
-      if (DEBUG_LEVEL >= 1) { print STDERR "."; }
+      if (DEBUG_LEVEL >= 1) { 
+        print "waitForState: Waiting for $required_state\n"; 
+      }
     }
-                                                                                
-    $myready = "yes";
-                                                                                
+    
+    # presume that we the state change has worked                                                                            
+    $ready = 1;
+
+    # parse the nexus' state
     ($pwcc, @pwcs) = getPWCCState($handle);
                                                                                 
-    if ($pwcc ne $stateString) {
+    if ($pwcc ne $required_state) {
       if (DEBUG_LEVEL >= 1){
-        print "Waiting for PWC Controller to transition to ".$stateString."\n";
+        print "Waiting for PWC Controller to transition to ".$required_state."\n";
       }
-      $myready = "no";
+      $ready = 0;
     }
+
+    $response = "PWCC=".$pwcc." ";
                                                                                 
     for ($i=0; $i<=$#pwcs;$i++) {
+
       $pwc = @pwcs[$i];
-      if ($pwc ne $stateString) {
+      $response .= " PWC".$i."=".$pwc;
+      if ($pwc ne $required_state) {
         if (DEBUG_LEVEL >= 1) {
-          print "Waiting for PWC_".$i." to transition to ".$stateString."\n";
+          print "Waiting for PWC_".$i." to transition to ".$required_state."\n";
         }
-        $myready = "no";
+        $ready = 0;
       }
     }
 
-    sleep 1;
-    $counter--;
-  }
-  if (($counter+1) != $Twait) {
-    if (DEBUG_LEVEL >= 1) { print STDERR "\n"; }
+    if (!$ready) {
+      if ($counter > 0) {
+        print "waitForState: not yet ready: ".$response."\n";
+      }
+      sleep 1;
+      $counter++;
+    }
   }
 
-  if ($myready eq "yes") {
-    return 0;
+  if ($ready) {
+    return ("ok", "");
   } else {
-    return -1;
+    return ("fail", $response);
   }
-                                                                                
 }
 
 sub runSanityChecks() {
