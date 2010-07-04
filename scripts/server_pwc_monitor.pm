@@ -78,6 +78,7 @@ sub main() {
   my $control_thread = 0;
   my $read_set = 0;
   my $rh = 0;
+  my $readable_handles = ();
   my $handle = 0;
   my $hostname = "";
   my $hostinfo = 0;
@@ -85,7 +86,7 @@ sub main() {
   my $line = "";
   my $result = "";
   my $response = "";
-
+  my $timeout = 0;
 
   # sanity check on whether the module is good to go
   ($result, $response) = good($quit_file);
@@ -108,6 +109,8 @@ sub main() {
   Dada::logMsg(2, $dl, "starting controlThread(".$quit_file.", ".$pid_file.")");
   $control_thread = threads->new(\&controlThread, $quit_file, $pid_file);
 
+  Dada::logMsg(1, $dl, "Connecting to dada_pwc_command ".$log_host.":".$log_port);
+
   while (!$quit_daemon) {
 
     # If we have lost the connection, try to reconnect to the PWCC (nexus)
@@ -119,22 +122,37 @@ sub main() {
 
       if (!$handle)  {
         sleep(1);
-        Dada::logMsgWarn($warn, "Failed to connect to dada_pwc_command ".$log_host.":".$log_port);
+        Dada::logMsg(2, $dl, "Failed to connect to dada_pwc_command ".$log_host.":".$log_port);
       } else {
-        Dada::logMsg(1, $dl, "Connected to ".$log_host.":".$log_port);
+        Dada::logMsg(1, $dl, "Connected to dada_pwc_command ".$log_host.":".$log_port);
 
       }
     }
 
+    # create a read set for selecting on the socket
+    if ($handle) {
+      $read_set = new IO::Select($handle);
+    }
+
     while ($handle && !$quit_daemon) {
 
-      $line = Dada::getLineSelect($handle,1);
+      $timeout = 1;
+      ($readable_handles) = IO::Select->select($read_set, undef, undef, $timeout);
+
+      $line = "";
+      foreach $rh (@$readable_handles) {
+        $line = Dada::getLine($rh);
+      }
 
       # If we have lost the connection
       if (! defined $line) {
 
+        Dada::logMsg(1, $dl, "Lost connection from dada_pwc_command ".$log_host.":".$log_port);
         $handle->close();
         $handle = 0;
+
+      } elsif ($line eq "") {
+        # nothing was read from the socket 
 
       } elsif ($line eq "null") {
 
@@ -148,8 +166,9 @@ sub main() {
       }
     }
   
-    Dada::logMsg(1, $dl, "Lost connection with PWCC");
-    sleep(1);
+    if (!$quit_daemon) {
+      sleep(1);
+    }
   }
 
   # Rejoin our daemon control thread
