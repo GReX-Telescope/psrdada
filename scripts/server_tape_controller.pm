@@ -110,11 +110,15 @@ sub main() {
   $SIG{INT} = \&sigHandle;
   $SIG{TERM} = \&sigHandle;
   $SIG{PIPE} = \&sigPipeHandle;
-  
+
   # become a daemon
   Dada::daemonize($log_file, $pid_file);
 
   Dada::logMsg(0, $dl ,"STARTING SCRIPT");
+
+  Dada::logMsg(1, $dl, "Clearing status warn/error files");
+  unlink($warn); 
+  unlink($error); 
 
   # Start the tape script (background daemon)
   ($user, $host, $dir) = split(/:/, $db_dir);
