@@ -145,7 +145,7 @@ int nexus_parse (nexus_t* n, const char* buffer)
   }
 
   if (ascii_header_get (buffer, "COM_POLL", "%d", &(n->polling_interval)) <0) {
-    multilog_fprintf (stderr, LOG_WARNING, "nexus_parse: using default COM_POLL\n");
+    multilog_fprintf (stderr, LOG_INFO, "nexus_parse: using default COM_POLL\n");
     n->polling_interval = 10;
   }
 
@@ -206,6 +206,10 @@ typedef struct {
     int id;
 } node_open_t;
 
+
+/*
+ * Opens a connection to the specified node in a background thread
+ */
 void* node_open_thread (void* context)
 {
   node_open_t* request = (node_open_t*) context;
@@ -278,7 +282,7 @@ void* node_open_thread (void* context)
   }
 
 
-  /* If we are the mirror and have a logfile_dir */
+  /* If we are the mirror i.e. have a logfile_dir specified */
   if ((nexus->node_port != 0) && (nexus->logfile_dir)) {
 
     char *buffer = 0;
