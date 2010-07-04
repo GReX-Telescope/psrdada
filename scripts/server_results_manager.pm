@@ -439,12 +439,12 @@ sub processObservation($$) {
     Dada::logMsg(2, $dl, "processObservation: plotting [".$i."] (".$o.", ".$source.", ".$fres_plot[$i].", ".$tres_plot[$i].")");
     makePlotsFromArchives($o, $source, $fres_plot[$i], $tres_plot[$i], "240x180");
     makePlotsFromArchives($o, $source, $fres_plot[$i], $tres_plot[$i], "1024x768");
-    Apsr->removeFiles($o, "phase_vs_flux_".$source."*_240x180.png", 40);
-    Apsr->removeFiles($o, "phase_vs_time_".$source."*_240x180.png", 40);
-    Apsr->removeFiles($o, "phase_vs_freq_".$source."*_240x180.png", 40);
-    Apsr->removeFiles($o, "phase_vs_flux_".$source."*_1024x768.png", 40);
-    Apsr->removeFiles($o, "phase_vs_time_".$source."*_1024x768.png", 40);
-    Apsr->removeFiles($o, "phase_vs_freq_".$source."*_1024x768.png", 40);
+    Apsr::removeFiles($o, "phase_vs_flux_".$source."*_240x180.png", 40);
+    Apsr::removeFiles($o, "phase_vs_time_".$source."*_240x180.png", 40);
+    Apsr::removeFiles($o, "phase_vs_freq_".$source."*_240x180.png", 40);
+    Apsr::removeFiles($o, "phase_vs_flux_".$source."*_1024x768.png", 40);
+    Apsr::removeFiles($o, "phase_vs_time_".$source."*_1024x768.png", 40);
+    Apsr::removeFiles($o, "phase_vs_freq_".$source."*_1024x768.png", 40);
   }
 }
 
@@ -591,7 +591,7 @@ sub processArchive($$) {
   }
 
   # combine all thr frequency channels
-  $cmd = $bindir."/psradd -R -f ".$total_f_sum." ".$plottable_archives;
+  $cmd = $bindir."/psradd -R -o ".$total_f_sum." ".$plottable_archives;
   Dada::logMsg(2, $dl, $cmd);
   $output = `$cmd`;
 
@@ -644,7 +644,7 @@ sub processArchive($$) {
     my $temp_ar = $dir."/temp.ar";
 
     # Fres Operations
-    $cmd = $bindir."/psradd -s -f ".$temp_ar." ".$total_f_res." ".$total_f_sum;
+    $cmd = $bindir."/psradd -T -o ".$temp_ar." ".$total_f_res." ".$total_f_sum;
     ($result, $response) = Dada::mySystem($cmd);
     if ($result ne "ok") {
       Dada::logMsg(0, $dl, "psradd failed cmd=".$cmd);
@@ -667,7 +667,7 @@ sub processArchive($$) {
     #$output = `$cmd`;
 
     # Tres Operations
-    $cmd = $bindir."/psradd -f ".$temp_ar." ".$total_t_res." ".$total_f_sum;
+    $cmd = $bindir."/psradd -o ".$temp_ar." ".$total_t_res." ".$total_f_sum;
     ($result, $response) = Dada::mySystem($cmd);
     if ($result ne "ok") {
       Dada::logMsg(0, $dl, "psradd failed cmd=".$cmd);
