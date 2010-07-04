@@ -149,7 +149,10 @@ sub main() {
 
     logMsg(0, "INFO", "processingThread() ($utc_start, $band, $source, $obs_offset, $calibrate, $obs_end)");
 
-    if (($utc_start eq "invalid") || ($band eq "invalid")) {
+    if ($quit_daemon) {
+      # we have been asked to quit, no need to complain about anything
+
+    } elsif (($utc_start eq "invalid") || ($band eq "invalid")) {
 
       logMsg(0, "ERROR", "processingThread return an invalid obs/header");
       sleep(1);
