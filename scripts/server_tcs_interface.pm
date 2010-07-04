@@ -58,9 +58,12 @@ our $client_master_port;
 our %tcs_cmds;
 our %site_cfg;
 our $pwcc_thread;
+our $start_thread;
+our $stopping_thread;
 our $tcs_host;
 our $tcs_port;
 our $tcs_sock;
+our $nexus_sock;
 
 #
 # initialize package globals
@@ -92,6 +95,9 @@ $client_master_port = 0;
 %tcs_cmds = ();
 %site_cfg = ();
 $pwcc_thread = 0;
+$start_thread = 0;
+$stopping_thread = 0;
+$nexus_sock = 0;
 
 
 use constant PWCC_LOGFILE       => "dada_pwc_command.log";
@@ -169,7 +175,7 @@ sub main() {
   Dada::logMsg(0, $dl, "STARTING SCRIPT");
 
   # start the control thread
-  Dada::logMsg(2, "INFO", "main: controlThread(".$quit_file.", ".$pid_file.")");
+  Dada::logMsg(2, $dl, "main: controlThread(".$quit_file.", ".$pid_file.")");
   $control_thread = threads->new(\&controlThread, $quit_file, $pid_file);
 
   foreach $key (keys (%site_cfg)) {
@@ -260,15 +266,44 @@ sub main() {
           }
         }
       }
+
+    }
+
+    if ($start_thread) {
+      if ($current_state eq "Recording") {
+        Dada::logMsg(2, $dl, "main: now Recording, joining startThread");
+        $start_thread->join();
+        $start_thread = 0;
+        Dada::logMsg(2, $dl, "main: startThread joined");
+      } elsif ($current_state eq "Failed to start") {
+        Dada::logMsg(0, $dl, "main: Failed to start, joining startThread");
+        $start_thread->join();
+        Dada::logMsg(0, $dl, "main: startThread joined");
+      } else {
+        Dada::logMsg(2, $dl, "main: waiting for startThread to get to Recording");
+      }
+    }
+
+    if ($current_state eq "Stopped") {
+      $stopping_thread->join();
+      $current_state = "Idle";
     }
   }
 
-  Dada::logMsg(0, $dl, "main: joining threads");
+  Dada::logMsg(2, $dl, "main: joining threads");
 
   # rejoin threads
-  $control_thread->join();
-  $pwcc_thread->join();
-  $state_thread->join();
+  if ($control_thread) {
+    $control_thread->join();
+  }
+
+  if ($pwcc_thread) {
+    $pwcc_thread->join();
+  }
+
+  if ($state_thread) {
+    $state_thread->join();
+  }
 
   Dada::logMsg(0, $dl, "STOPPING SCRIPT");
 
@@ -300,7 +335,138 @@ sub processTCSCommand($$) {
   switch ($lckey) {
 
     case "bat" {
-      Dada::logMsg(2, $dl, "Processing BAT command");
+
+      Dada::logMsg(2, $dl, "processTCSCommand: processing BAT");
+
+      if ($current_state ne "Recording") {
+        Dada::logMsgWarn($error, "Received BAT command, but not in RECORDING state");
+        Dada::logMsg(1, $dl, "TCS <- fail");
+        print $handle "fail".TERMINATOR;
+
+      } else {
+
+        # reply immediately to TCS
+        Dada::logMsg(1, $dl, "TCS <- ok");
+        print $handle "ok".TERMINATOR;
+
+        $cmd = "bat_to_utc ".$val;
+        Dada::logMsg(2, $dl, "processTCSCommand: ".$cmd);
+        ($result, $response) = Dada::mySystem($cmd);
+        Dada::logMsg(2, $dl, "processTCSCommand: ".$result." ".$response);
+
+        if ($result ne "ok") {
+
+          Dada::logMsgWarn($error, "failed to convert BAT to UTC");
+          $response = "bat_to_utc ".$val." failed: ".$response;
+
+        } else {
+
+          $utc_start = ltrim($response);
+          Dada::logMsg(2, $dl, "processTCSCommand: prepareObservation(".$utc_start.")");
+          ($result, $response) = prepareObservation($utc_start);
+          Dada::logMsg(2, $dl, "processTCSCommand: prepareObservation() ".$result." ".$response);
+
+          # After the utc has been set, we can reset the tcs_cmds
+          %tcs_cmds = ();
+        }
+      }
+    }
+
+    case "start" {
+
+      Dada::logMsg(2, $dl, "processTCSCommand: START command");
+
+      if ($current_state ne "Preparing") {
+
+        Dada::logMsgWarn($error, "Received START command, but wasn't in Preparing state");
+        Dada::logMsg(1, $dl, "TCS <- fail");
+        print $handle "fail".TERMINATOR;
+
+      } else {
+
+        # Check that %tcs_cmds has all the required parameters in it
+        Dada::logMsg(2, $dl, "processTCSCommand: parseTCSCommands()");
+        ($result, $response) = parseTCSCommands();
+        Dada::logMsg(2, $dl, "processTCSCommand: ".$result." ".$response);
+        if ($result ne "ok") {
+          Dada::logMsgWarn($error, "TCS Commands had errors: ".$response);
+        }
+
+        # Send response to TCS
+        Dada::logMsg(1, $dl, "TCS <- ".$result);
+        print $handle $result.TERMINATOR;
+
+        if ($result eq "ok") {
+
+          # start a remote thread to handle the start command, so that 
+          # we are ready for TCS's next command
+          $current_state = "Starting"; 
+
+          Dada::logMsg(2, $dl, "processTCSCommand: startThread()");
+          $start_thread = threads->new(\&startThread);
+
+        } else {
+
+          $current_state = "TCS Config Error: ".$response;
+
+        }
+      }
+    }
+
+    case "stop" {
+
+      Dada::logMsg(2, $dl, "processTCSCommand: STOP command");
+
+      if ($current_state =~ m/Recording/) {
+
+        # since it can take quite while to stop, issue the
+        # stop command to the nexus, reply to TCS, then 
+        # continue the stopping process
+
+        Dada::logMsg(2, $dl, "processTCSCommand: stopNexus()");
+        ($result, $response) = stopNexus();
+        Dada::logMsg(2, $dl, "processTCSCommand: stopNexus() ".$result." ".$response);
+
+        $current_state = "Stopping";
+
+        Dada::logMsg(2, $dl, "processTCSCommand: stopInBackground()");
+        $stopping_thread = threads->new(\&stopInBackground);
+
+      } elsif ($current_state eq "Idle") {
+
+        Dada::logMsgWarn($warn, "Received STOP command when IDLE");
+        Dada::logMsg(0, $dl, "Received STOP command when IDLE");
+        $result = "ok";
+
+      } elsif ($current_state eq "Preparing") {
+
+        Dada::logMsgWarn($warn, "Received STOP during preparing state");
+        Dada::logMsg(0, $dl, "Received STOP during preparing state");
+        %tcs_cmds = ();
+        $result = "ok";
+
+      } elsif ($current_state eq "Starting") {
+
+        Dada::logMsgWarn($warn, "Received STOP command whilst starting");
+        Dada::logMsg(0, $dl, "Received STOP command whilst starting");
+        $result = "fail";
+
+      } else {
+
+        Dada::logMsgWarn($warn, "Received STOP command whilst in ".$current_state." state");
+        Dada::logMsg(0, $dl, "Received STOP command whilst in ".$current_state." state");
+        $result = "fail";
+
+      }
+
+      if ($result ne "ok") {
+        $current_state = "Error [Failed to stop]";
+      }
+    }
+
+    case "set_utc_start" {
+
+      Dada::logMsg(2, $dl, "Processing SET_UTC_START command");
 
       if ($current_state ne "Recording") {
         Dada::logMsg(1, $dl, "TCS <- fail");
@@ -311,116 +477,32 @@ sub processTCSCommand($$) {
         Dada::logMsg(1, $dl, "TCS <- ok");
         print $handle "ok".TERMINATOR;
 
-        $cmd = "bat_to_utc ".$val;
-        Dada::logMsg(2, $dl, "processTCSCommand: ".$cmd);
-        ($result, $response) = Dada::mySystem($cmd);
-        Dada::logMsg(2, $dl, "processTCSCommand: ".$result." ".$response);
+        # If simulating, start the DFB simulator
+        if ($use_dfb_simulator) {
 
-        if ($result ne "ok") {
-          Dada::logMsg(0, $dl, "processTCSCommand: ".$cmd." failed: ".$response);
-          $response = "bat_to_utc failed: ".$response;
+          Dada::logMsg(2, $dl, "processTCSCommand: startDFB(".$val.")");
+          ($result, $response) = startDFB($val);
+          Dada::logMsg(2, $dl, "processTCSCommand:: startDFB() ".$result." ".$response);
 
         } else {
 
-          $utc_start = ltrim($response);
-          ($result, $response) = set_utc_start($utc_start);
-
-          # After the utc has been set, we can reset the tcs_cmds
-          %tcs_cmds = ();
-        }
-      }
-    }
-
-    case "start" {
-
-      Dada::logMsg(2, $dl, "Processing START command");
-
-      # Check that %tcs_cmds has all the required parameters in it
-      ($result, $response) = parseTCSCommands();
-
-      # Send response to TCS
-      Dada::logMsg(1, $dl, "TCS <- ".$result);
-      print $handle $result.TERMINATOR;
-
-      if ($result eq "ok") {
-
-        # clear the status directory
-        clearStatusDir();
-
-        # Add site.config parameters to the tcs_cmds;
-        addSiteConfig();
-
-        # check that the PWCC is actually running
-        if (!$pwcc_running) {
-
-          Dada::logMsgWarn($warn, "PWCC thread was not running, attemping to relaunch");
-          $pwcc_thread->join();
-          Dada::logMsg(0, $dl, "pwcc_thread was joined");
-          $pwcc_thread = threads->new(\&pwccThread);
-          Dada::logMsg(0, $dl, "pwcc_thread relaunched");
+          $result = "ok";
 
         }
 
+        if ($result eq "ok") {
 
-        # Create spec file for dada_pwc_command
-        ($result, $response) = generateSpecificationFile($tcs_spec_file);
-
-        # Issue the start command itself
-        ($result, $response) = start($tcs_spec_file);
-
-        if ($result eq "fail") {
-
-          # Dada::logMsgWarn($error, "start command failed: ".$response);
-          $current_state = "Failed to start";
-
-        } else {
-          Dada::logMsg(2, $dl, "Start command successful ".$response);
-          $current_state = "Recording";
-
-          # If simulating, start the DFB simulator
-          if ($use_dfb_simulator) {
-
-            ($result, $response) = startDFB();
-
-            if ($result eq "ok") {
-
-              $utc_start = $response;
-              Dada::logMsg(1, $dl, "UTC_START = ".$utc_start);
-              ($result,$response) = set_utc_start($response);
-              Dada::logMsg(1, $dl, "set_utc_start: ".$result.":".$response);
-            }
-            %tcs_cmds = ();
-          }
+          Dada::logMsg(1, $dl, "UTC_START = ".$val);
+          Dada::logMsg(2, $dl, "startThread: prepareObservation(".$val.")");
+          ($result,$response) = prepareObservation($val);
+          Dada::logMsg(2, $dl, "startThread: prepareObservation() ".$result.":".$response);
 
         }
-      } else {
-        $current_state = "TCS Config Error: ".$response;
+        # After the utc has been set, we can reset the tcs_cmds
+        %tcs_cmds = ();
       }
     }
 
-    case "stop" {
-
-      Dada::logMsg(2, $dl, "Processing STOP command");
-      ($result, $response) = stop();
-
-      # Stop the simulator (if not using DFB3)
-      if ($use_dfb_simulator) {
-        my $dfbstopthread = threads->new(\&stopDFBSimulator, $dfb_sim_host);
-        $dfbstopthread->detach();
-      }
-
-      $current_state = "Idle";
-      $utc_start = "";
-
-    }
-
-    case "set_utc_start" {
-      Dada::logMsg(2, $dl, "Processing SET_UTC_START command");
-      $utc_start = $val;
-      ($result, $response) = set_utc_start(ltrim($utc_start), \%tcs_cmds);
-      %tcs_cmds = ();
-    }
-  
     case "quit" {
 
     } 
@@ -428,17 +510,26 @@ sub processTCSCommand($$) {
     # This should be a header parameter, add it to the tcs_cmds hash
     else {
 
-      $tcs_cmds{$key} = $val;
-      $result = "ok";
-      $response = "";
-      $current_state = "Preparing";
+      if (($current_state eq "Idle") || ($current_state eq "Preparing")) {
 
-      if (($key eq "BANDWIDTH") && ($val eq "0.000000")) {
+        $tcs_cmds{$key} = $val;
+        $result = "ok";
+        $response = "";
+        $current_state = "Preparing";
+
+        if (($key eq "BANDWIDTH") && ($val eq "0.000000")) {
+          $result = "fail";
+          $response = "cowardly refusing to observe with bandwidth=0.0";
+          $current_state = "Error";
+        }
+
+      } else {
+
         $result = "fail";
-        $response = "cowardly refusing to observe with bandwidth=0.0";
+        Dada::logMsgWarn($warn, "Received header from TCS when not in IDLE state
+[".$current_state."]"); 
         $current_state = "Error";
       }
-
     }
   }
 
@@ -454,11 +545,13 @@ sub processTCSCommand($$) {
     if ($result eq "fail") {
       $current_state = "Error";
       print $handle $result.TERMINATOR;
+      Dada::logMsg(1, $dl, "TCS <- ".$result);
       print $handle $response.TERMINATOR;
+      Dada::logMsg(1, $dl, "TCS <- ".$response);
 
       if ($use_dfb_simulator) {
-        my $dfbstopthread2 = threads->new(\&stopDFBSimulator, $dfb_sim_host);
-        $dfbstopthread2->detach();
+        Dada::logMsg(0, $dl, "stopping DFB simulator on failed command");
+        ($result, $response) = stopDFBSimulator($dfb_sim_host)
       }
 
     } else {
@@ -468,7 +561,64 @@ sub processTCSCommand($$) {
   }
 
 }
-  
+
+############################################################################### 
+#
+# Starts the observation in a background thread
+#
+sub startThread() 
+{
+
+  Dada::logMsg(2, $dl, "startThread()");
+
+  my $result = "";
+  my $response = "";
+
+  # clear the status directory
+  Dada::logMsg(2, $dl, "startThread: clearStatusDir()");
+  clearStatusDir();
+
+  # Add site.config parameters to the tcs_cmds;
+  Dada::logMsg(2, $dl, "startThread: addSiteConfig()");
+  addSiteConfig();
+
+  # check that the PWCC is actually running
+  if (!$pwcc_running) {
+
+    Dada::logMsgWarn($warn, "PWCC thread was not running, attemping to relaunch");
+    $pwcc_thread->join();
+    Dada::logMsg(0, $dl, "startThread: pwcc_thread was joined");
+    $pwcc_thread = threads->new(\&pwccThread);
+    Dada::logMsg(0, $dl, "startThread: pwcc_thread relaunched");
+
+  }
+
+  # Create spec file for dada_pwc_command
+  Dada::logMsg(2, $dl, "startThread: generateSpecificationFile(".$tcs_spec_file.")");
+  ($result, $response) = generateSpecificationFile($tcs_spec_file);
+
+  # Issue the start command itself
+  Dada::logMsg(2, $dl, "startThread: start(".$tcs_spec_file.")");
+  ($result, $response) = start($tcs_spec_file);
+  Dada::logMsg(2, $dl, "startThread: start() ".$result." ".$response);
+
+  if ($result eq "fail") {
+
+    $current_state = "Failed to start";
+
+  } else {
+
+    $current_state = "Recording";
+    Dada::logMsg(2, $dl, "startThread: current_state = Recording");
+
+  }
+
+  # reset the TCS commands hash
+  %tcs_cmds = ();
+
+}
+
+############################################################################### 
 #
 # Runs dada_pwc_command in non daemon mode. All ouput should be logged to
 # the log file specified
@@ -501,8 +651,6 @@ sub pwccThread() {
   Dada::logMsg(1, $dl, "pwccThread: exiting");
   return ($result);
 }
-
-
 
 
 #
@@ -613,7 +761,7 @@ sub quitPWCCommand() {
       print $handle "quit\r\n";
       $handle->close();
 
-      # wait 2 seconds for the nexus to quite
+      # wait 2 seconds for the nexus to quit
       my $nwait = 2;
       while (($pwcc_running) && ($nwait > 0)) {
         sleep(1);
@@ -654,98 +802,100 @@ sub start($) {
 
   # If we will run a separate DFB simulator
   if ($use_dfb_simulator) {
-
-    # ARGS: host, dest port, nbit, npol, mode, duration 
+    Dada::logMsg(1, $dl, "start: createDFBSimulator()");
     ($result, $response) = createDFBSimulator();
-
-    # Give it half a chance to startup
-    sleep(2);
-
+    Dada::logMsg(1, $dl, "start: createDFBSimulator() ".$result." ".$response);
   }
 
   while (! $pwcc_running) {
     Dada::logMsg(0, $dl, "start: waiting for dada_pwc_command to start");
     sleep(1);
   }
-  sleep(1);
 
   # Connect to dada_pwc_command
-  my $handle = Dada::connectToMachine($pwcc_host, $pwcc_port, 5);
+  Dada::logMsg(2, $dl, "start: connecting to dada_pwc_command ".$pwcc_host.":".$pwcc_port);
+  nexusSockMaintain();
 
-  if (!$handle) {
-    Dada::logMsg(0, $dl, "start: could not connect to dada_pwc_command ".$pwcc_host.":".$pwcc_port);
-    return ("fail", "could not connect to nexus to issue START command"); 
-
-  } else {
+  #my $handle = Dada::connectToMachine($pwcc_host, $pwcc_port, 5);
+  #
+  #if (!$handle) {
+  #  Dada::logMsg(0, $dl, "start: could not connect to dada_pwc_command ".$pwcc_host.":".$pwcc_port);
+  #  return ("fail", "could not connect to nexus to issue START command"); 
+  #
+  #} else {
 
     # Ignore the "welcome" message
-    $result = <$handle>;
+    #$result = <$handle>;
 
     # Check we are in the IDLE state before continuing
-    if (Dada::waitForState("idle", $handle, 5) != 0) {
-      Dada::logMsg(0, $dl, "start: nexus was not in the idle state after 5 seconds"); 
-      return ("fail", "nexus was not in IDLE state");
+    Dada::logMsg(2, $dl, "start: waiting for IDLE state");
+    ($result, $response) = Dada::waitForState("idle", $nexus_sock, 2);
+    if ($result ne "ok") {
+      Dada::logMsgWarn($error, "Nexus not IDLE at start of observation"); 
+      return ("fail", "nexus was not in IDLE state: ".$response);
     }
+    Dada::logMsg(2, $dl, "start: nexus in IDLE state");
 
     # Send CONFIG command with apsr_tcs.spec
     $cmd = "config ".$file;
     Dada::logMsg(1, $dl, "nexus <- ".$cmd);
-    ($result,$response) = Dada::sendTelnetCommand($handle,$cmd);
+    ($result,$response) = Dada::sendTelnetCommand($nexus_sock, $cmd);
     Dada::logMsg(1, $dl, "nexus -> ".$result." ".$response);
     if ($result ne "ok") { 
-      Dada::logMsg(0, $dl, "start: config command failed: ".$response);
+      Dada::logMsgWarn($error, "Could not configure nexus");
       return ("fail", "CONFIG command failed on nexus: ".$response)
     }
 
     # Wait for the PREPARED state
-    if (Dada::waitForState("prepared",$handle,10) != 0) {
-      Dada::logMsg(0, $dl, "start: nexus did not enter PREPARED state 10 seconds after config command");
-      return ("fail", "nexus did not enter PREPARED state");
+    Dada::logMsg(2, $dl, "start: waiting for PREPARED state");
+    ($result, $response) = Dada::waitForState("prepared", $nexus_sock,10);
+    if ($result ne "ok") {
+      Dada::logMsgWarn($error, "Nexus not PREPARED after config");
+      return ("fail", "nexus did not enter PREPARED state: ".$response);
     }
-
-    Dada::logMsg(2, $dl, "Nexus now in PREPARED state");
+    Dada::logMsg(2, $dl, "start: nexus in PREPARED state");
 
     # Send start command 
     $cmd = "start";
-
     Dada::logMsg(1, $dl, "nexus <- ".$cmd);
-    ($result,$response) = Dada::sendTelnetCommand($handle,$cmd);
+    ($result,$response) = Dada::sendTelnetCommand($nexus_sock, $cmd);
     Dada::logMsg(1, $dl, "nexus -> ".$result." ".$response);
 
-    if ($result ne "ok") { 
-      Dada::logMsg(0, $dl, "start: start command failed: ".$response);
+    if ($result ne "ok") {
+      Dada::logMsgWarn($error, "Nexus could not be started: ".$response);
       return ("fail", "START command failed on nexus: ".$response);
     }
 
     # Wait for the prepared state
-    if (Dada::waitForState("recording",$handle,10) != 0) {
-      Dada::logMsg(0, $dl, "start: nexus did not enter RECORDING state 10 seconds after start command");
-      return ("fail", "nexus did not enter RECORDING state");
+    Dada::logMsg(2, $dl, "start: waiting for RECORDING state");
+    ($result, $response) = Dada::waitForState("recording", $nexus_sock, 10);
+    if ($result ne "ok") {
+      Dada::logMsgWarn($error, "Nexus did not start recording");
+      return ("fail", "nexus did not enter RECORDING state: ".$response);
     }
-
-    Dada::logMsg(2, $dl, "Nexus now in RECORDING state");
+    Dada::logMsg(2, $dl, "start: now in RECORDING state");
 
     # Close nexus connection
-    $handle->close();
+    #$handle->close();
 
     if ($result eq "ok") {
       $response = "START successful";
     }
 
     return ($result, $response);
-  }
+  #}
 
 }
 
-
+###############################################################################
 #
-# Sends a UTC_START command to the pwcc
+# create the requried directories and send the UTC_START to the nexus 
 #
-sub set_utc_start($) {
+sub prepareObservation($) {
 
   my ($utc_start) = @_;
 
-  Dada::logMsg(2, $dl, "set_utc_start(".$utc_start.")");
+  Dada::logMsg(2, $dl, "prepareObservation(".$utc_start.")");
 
   my $ignore = "";
   my $result = "";
@@ -759,20 +909,21 @@ sub set_utc_start($) {
   my $archive_dir = $cfg{"SERVER_ARCHIVE_DIR"}."/".$utc_start;
   my $proj_id     = $tcs_cmds{"PID"};
 
-  # Ensure each directory is automounted
-  if (!( -d $archive_dir)) {
-    `ls $archive_dir >& /dev/null`;
-  }
-
-  if (!( -d $results_dir)) {
-    `ls $results_dir >& /dev/null`;
-  }
-
   $cmd = "mkdir -p ".$results_dir;
-  system($cmd);
+  Dada::logMsg(2, $dl, "prepareObservation: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, $dl, "prepareObservation: ".$result." ".$response);
+  if ($result ne "ok") {
+    Dada::logMsgWarn($warn, "prepareObservation: ".$cmd." failed: ".$response);
+  }
 
   $cmd = "mkdir -p ".$archive_dir;
-  system($cmd);
+  Dada::logMsg(2, $dl, "prepareObservation: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, $dl, "prepareObservation: ".$result." ".$response);
+  if ($result ne "ok") {
+    Dada::logMsgWarn($warn, "prepareObservation: ".$cmd." failed: ".$response);
+  }
 
   my $apsr_groups = `groups apsr`;
   chomp $apsr_groups;
@@ -784,19 +935,39 @@ sub set_utc_start($) {
   }
 
   $cmd = "chgrp -R ".$proj_id." ".$results_dir;
-  system($cmd);
+  Dada::logMsg(2, $dl, "prepareObservation: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, $dl, "prepareObservation: ".$result." ".$response);
+  if ($result ne "ok") {
+    Dada::logMsgWarn($warn, "prepareObservation: ".$cmd." failed: ".$response);
+  }
 
   $cmd = "chgrp -R ".$proj_id." ".$archive_dir;
-  system($cmd);
+  Dada::logMsg(2, $dl, "prepareObservation: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, $dl, "prepareObservation: ".$result." ".$response);
+  if ($result ne "ok") {
+    Dada::logMsgWarn($warn, "prepareObservation: ".$cmd." failed: ".$response);
+  }
 
   $cmd = "chmod -R g+s ".$results_dir;
-  system($cmd);
+  Dada::logMsg(2, $dl, "prepareObservation: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, $dl, "prepareObservation: ".$result." ".$response);
+  if ($result ne "ok") {
+    Dada::logMsgWarn($warn, "prepareObservation: ".$cmd." failed: ".$response);
+  }
 
   $cmd = "chmod -R g+s ".$archive_dir;
-  system($cmd);
+  Dada::logMsg(2, $dl, "prepareObservation: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, $dl, "prepareObservation: ".$result." ".$response);
+  if ($result ne "ok") {
+    Dada::logMsgWarn($warn, "prepareObservation: ".$cmd." failed: ".$response);
+  }
 
   my $fname = $results_dir."/obs.info";
-  Dada::logMsg(2, $dl, "set_utc_start: creating obs.info \"".$fname."\"");
+  Dada::logMsg(2, $dl, "prepareObservation: creating ".$fname);
 
   open FH, ">$fname" or return ("fail","Could not create writeable file: ".$fname);
   print FH "# Observation Summary created by: ".$0."\n";
@@ -817,89 +988,173 @@ sub set_utc_start($) {
   close FH;
 
   $cmd = "touch ".$results_dir."/obs.processing";
-  system($cmd);
+  Dada::logMsg(2, $dl, "prepareObservation: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, $dl, "prepareObservation: ".$result." ".$response);
+  if ($result ne "ok") {
+    Dada::logMsgWarn($warn, "prepareObservation: ".$cmd." failed: ".$response);
+  }
 
   $cmd = "touch ".$archive_dir."/obs.processing";
-  system($cmd);
+  Dada::logMsg(2, $dl, "prepareObservation: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, $dl, "prepareObservation: ".$result." ".$response);
+  if ($result ne "ok") {
+    Dada::logMsgWarn($warn, "prepareObservation: ".$cmd." failed: ".$response);
+  }
 
   $cmd = "cp ".$fname." ".$archive_dir;
-  system($cmd);
+  Dada::logMsg(2, $dl, "prepareObservation: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, $dl, "prepareObservation: ".$result." ".$response);
+  if ($result ne "ok") {
+    Dada::logMsgWarn($warn, "prepareObservation: ".$cmd." failed: ".$response);
+  }
 
   $cmd = "sudo -b chown -R apsr ".$results_dir;
-  system($cmd);
-                                                                              
-  $cmd = "sudo -b chown -R apsr ".$archive_dir;
-  system($cmd);
+  Dada::logMsg(2, $dl, "prepareObservation: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, $dl, "prepareObservation: ".$result." ".$response);
+  if ($result ne "ok") {
+    Dada::logMsgWarn($warn, "prepareObservation: ".$cmd." failed: ".$response);
+  }
 
+  $cmd = "sudo -b chown -R apsr ".$archive_dir;
+  Dada::logMsg(2, $dl, "prepareObservation: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, $dl, "prepareObservation: ".$result." ".$response);
+  if ($result ne "ok") {
+    Dada::logMsgWarn($warn, "prepareObservation: ".$cmd." failed: ".$response);
+  }
 
   # connect to nexus
-  my $handle = Dada::connectToMachine($pwcc_host, $pwcc_port);
+  nexusSockMaintain();
+  #my $handle = Dada::connectToMachine($pwcc_host, $pwcc_port);
 
-  if (!$handle) {
-    Dada::logMsg(0, $dl, "set_utc_start: could not connect to dada_pwc_command ".$pwcc_host.":".$pwcc_port);
-    return ("fail", "could not connect to nexus to issue SET_UTC_START command"); 
-  }
+  #if (!$handle) {
+  #  Dada::logMsgWarn($error, "prepareObservation: could not connect to dada_pwc_command ".$pwcc_host.":".$pwcc_port);
+  #  return ("fail", "could not connect to nexus to issue SET_UTC_START command"); 
+  #}
 
   # Ignore the "welcome" message
-  $ignore = <$handle>;
+  #$ignore = <$handle>;
 
   # Wait for the prepared state
-  if (Dada::waitForState("recording", $handle, 10) != 0) {
-    Dada::logMsg(0, $dl, "set_utc_start: nexus did not enter RECORDING state 10 seconds after START command");
-    $handle->close();
-    return ("fail", "nexus did not enter RECORDING state");
+  Dada::logMsg(2, $dl, "prepareObservation: waiting for RECORDING state");
+  ($result, $response) = Dada::waitForState("recording", $nexus_sock, 10);
+  if ($result ne "ok") {
+    Dada::logMsgWarn($error, "Nexus was not RECORDING for UTC_START command");
+    #$handle->close();
+    return ("fail", "nexus did not enter RECORDING state: ".$response);
   }
+  Dada::logMsg(2, $dl, "prepareObservation: now in RECORDING state");
 
   # Send UTC Start command to the nexus
   $cmd = "set_utc_start ".$utc_start;
-
   Dada::logMsg(1, $dl, "nexus <- ".$cmd);
-  ($result,$response) = Dada::sendTelnetCommand($handle,$cmd);
+  ($result,$response) = Dada::sendTelnetCommand($nexus_sock,$cmd);
   Dada::logMsg(1, $dl, "nexus -> ".$result." ".$response);
   if ($result ne "ok") {
-    Dada::logMsg(0, $dl, "set_utc_start: nexus returned ".$response." after sending ".$cmd);
+    Dada::logMsgWarn($error, "Nexus failed on setting of UTC_START");
   }
-
-  $handle->close();
+  #$handle->close();
 
   return ($result, $response);
 
 }
 
 
+###############################################################################
 #
-# Sends the "stop" command to the Nexus
+# Ask the nexus to stop
 #
-sub stop() {
+sub stopNexus() 
+{
 
-  Dada::logMsg(2, $dl, "stop()");
+  Dada::logMsg(2, $dl, "stopNexus()");
 
-  my $ignore = "";
+  #my $ignore = "";
   my $result = "";
   my $response = "";
-  my $handle = 0;
+  my $cmd = "";
+  #my $handle = 0;
 
-  Dada::logMsg(2, $dl, "stop: connecting to: ".$pwcc_host.":".$pwcc_port);
-  $handle = Dada::connectToMachine($pwcc_host, $pwcc_port);
-
-  if (!$handle) {
-    Dada::logMsg(0, $dl, "stop: could not connect to dada_pwc_command ".$pwcc_host.":".$pwcc_port);
-    return ("fail", "could not connect to nexus to issue STOP command");
-  }
+  #Dada::logMsg(2, $dl, "stopNexus: opening connection to ".$pwcc_host.":".$pwcc_port);
+  #$handle = Dada::connectToMachine($pwcc_host, $pwcc_port);
+  #if (!$handle) {
+  #  Dada::logMsg(0, $dl, "stopNexus: could not connect to dada_pwc_command ".$pwcc_host.":".$pwcc_port);
+  #  return ("fail", "could not connect to nexus to issue STOP <UTC_STOP>");
+  #}
 
   # Ignore the "welcome" message
-  $ignore = <$handle>;
+  #$ignore = <$handle>;
+  nexusSockMaintain();
 
-  Dada::logMsg(2, $dl, "stop: nexus <- stop");
-  ($result, $response) = Dada::sendTelnetCommand($handle, "stop");
-  Dada::logMsg(2, $dl, "stop: nexus -> ".$result." ".$response);
+  $cmd = "stop";
+
+  Dada::logMsg(1, $dl, "stopNexus: nexus <- ".$cmd);
+  ($result, $response) = Dada::sendTelnetCommand($nexus_sock, $cmd);
+  Dada::logMsg(1, $dl, "stopNexus: nexus -> ".$result." ".$response);
+
   if ($result ne "ok") {
-    Dada::logMsg(0, $dl, "stop: stop command failed: ".$response);
-    $response = "stop command failed on nexus";
+    Dada::logMsg(0, $dl, "stopNexus: ".$cmd." failed: ".$response);
+    $response = $cmd." command failed on nexus";
   }
 
+  #$handle->close();
+
+  return ($result, $response);
+
+}
+
+###############################################################################
+#
+# stop the observation in a background thread.
+#
+sub stopInBackground() {
+
+  Dada::logMsg(2, $dl, "stopInBackground()");
+
+  #my $ignore = "";
+  my $result = "";
+  my $response = "";
+  my $cmd = "";
+  #my $handle = 0;
+  my $i = 0;
+
+  #Dada::logMsg(2, $dl, "stopInBackground: opening connection to ".$pwcc_host.":".$pwcc_port);
+  #$handle = Dada::connectToMachine($pwcc_host, $pwcc_port);
+  #if (!$handle) {
+  #  Dada::logMsgWarn($error, "Could not connect to nexus to wait for IDLE state");
+
+    # Stop the simulator 
+  #  if ($use_dfb_simulator) {
+  #    Dada::logMsg(2, $dl, "processTCSCommand: stopDFBSimulator(".$dfb_sim_host.")");
+  #    ($result, $response) = &stopDFBSimulator($dfb_sim_host);
+  #    Dada::logMsg(2, $dl, "processTCSCommand: stopDFBSimulator() ".$result." ".$response);
+  #  }
+
+  #  return ("fail", "could not connect to nexus to wait for IDLE state");
+  #}
+
+  # Ignore the "welcome" message
+  #$ignore = <$handle>;
+
+  nexusSockMaintain();
+
+  Dada::logMsg(2, $dl, "stopInBackground: waiting for IDLE state");
+  ($result, $response) = Dada::waitForState("idle", $nexus_sock, 10);
+  if ($result ne "ok") {
+    Dada::logMsgWarn($error, "Nexus did not return to IDLE at end of observation");
+    return ("fail", "nexus was not in IDLE state: ".$response);
+  }
+  Dada::logMsg(2, $dl, "stopInBackground: nexus in IDLE state");
+
+
   # Close nexus connection
-  $handle->close();
+  #$handle->close();
+
+  $current_state = "Stopped";
 
   return ($result, $response);
 
@@ -941,7 +1196,7 @@ sub createDFBSimulator() {
     # }
 
   } else {
-    $calfreq    = "-j ".$calfreq; 
+    $calfreq    = "-j -c 6400";
   }
 
   my $drate = $tcs_cmds{"NBIT"} * $tcs_cmds{"NPOL"} * $tcs_cmds{"NDIM"};
@@ -970,11 +1225,8 @@ sub createDFBSimulator() {
   }
 
   Dada::logMsg(2, $dl, "createDFBSimulator: sending cmd ".$dfb_cmd);
-
   ($result, $response) = Dada::sendTelnetCommand($handle,$dfb_cmd);
-
   Dada::logMsg(2, $dl, "createDFBSimulator: received reply: (".$result.", ".$response.")");
-
   $handle->close();
 
   return ($result, $response);
@@ -983,28 +1235,31 @@ sub createDFBSimulator() {
 
 
 #
-# Starts the remote dfb simulator and gets the UTC_START of the first 
-# packet sent
+# Starts the remote dfb simulator on the specified UTC_START
 #
-sub startDFB() {
+sub startDFB($) {
+
+  (my $utc_start) = @_;
+
+  Dada::logMsg(2, $dl, "startDFB(".$utc_start.")");
 
   my $host = $cfg{"DFB_SIM_HOST"};
   my $port = $cfg{"DFB_SIM_PORT"};
 
+  my $cmd = "";
   my $result = "";
   my $response = "";
 
-  Dada::logMsg(2, $dl, "startDFB: ()");
-
-  my $handle = Dada::connectToMachine($host, $port);
+  Dada::logMsg(2, $dl, "startDFB: connecting to ".$host.":".$port." [".$cfg{"DFB_SIM_BINARY"}."]");
+  my $handle = Dada::connectToMachine($host, $port, 10);
   if (!$handle) {
-    return ("fail", "Could not connect to apsr_test_triwave ".$host.":".$port);
+    Dada::logMsgWarn($error, "startDFB: could not connect to ".$host.":".$port." [".$cfg{"DFB_SIM_BINARY"}."]");
+    return ("fail", "Could not connect to ".$host.":".$port." [".$cfg{"DFB_SIM_BINARY"}."]");
   }
 
-  Dada::logMsg(2, $dl, "startDFB: sending command \"start\"");
- 
-  ($result, $response) = Dada::sendTelnetCommand($handle,"start");
-
+  $cmd = "start ".$utc_start;
+  Dada::logMsg(2, $dl, "startDFB: sending command \"".$cmd."\"");
+  ($result, $response) = Dada::sendTelnetCommand($handle, $cmd);
   Dada::logMsg(2, $dl, "startDFB: received reply (".$result.", ".$response.")");
 
   $handle->close();
@@ -1013,29 +1268,31 @@ sub startDFB() {
 
 }
 
+###############################################################################
+# 
+# stop the DFB Simulator
+#
 sub stopDFBSimulator() {
 
-  my $host = $cfg{"DFB_SIM_HOST"};
+  Dada::logMsg(1, $dl, "stopDFBSimulator()");
 
+  my $host = $cfg{"DFB_SIM_HOST"};
+  my $cmd = "";
+  my $port = $client_master_port;
   my $result = "";
   my $response = "";
 
-  Dada::logMsg(1, $dl, "stopDFBSimulator: stopping simulator in 10 seconds");
-  sleep(10);
-
   # connect to client_master_control.pl
-  my $handle = Dada::connectToMachine($host, $client_master_port);
-
+  my $handle = Dada::connectToMachine($host, $port);
   if (!$handle) {
-    return ("fail", "Could not connect to client_master_control.pl ".$host.":".$client_master_port);
+    return ("fail", "Could not connect to client_master_control.pl ".$host.":".$port);
   }
 
   # This command will kill the udp packet generator
-  my $dfb_cmd = "stop_dfbs";
-
-  ($result, $response) = Dada::sendTelnetCommand($handle,$dfb_cmd);
-
-  Dada::logMsg(1, $dl, "stopDFBSimulator: received reply: ".$response);
+  $cmd = "stop_dfbs";
+  Dada::logMsg(2, $dl, "stopDFBSimulator: ".$host.":".$port." <- ".$cmd);
+  ($result, $response) = Dada::sendTelnetCommand($handle, $cmd);
+  Dada::logMsg(2, $dl, "stopDFBSimulator: ".$host.":".$port." -> ".$result." ".$response);
 
   $handle->close();
 
@@ -1309,7 +1566,7 @@ sub generateSpecificationFile($) {
   foreach $line (@sorted) {
     if (!(exists $ignore{$line})) {
       print FH Dada::headerFormat($line, $tcs_cmds{$line})."\n";
-      Dada::logMsg(2, $dl, $tcs_spec_file." ".Dada->headerFormat($line, $tcs_cmds{$line}));
+      Dada::logMsg(3, $dl, $tcs_spec_file." ".Dada->headerFormat($line, $tcs_cmds{$line}));
     }
   }
 
@@ -1449,6 +1706,28 @@ sub good($) {
   return ("ok", "");
 }
 
+
+sub nexusSockMaintain() {
+
+  if (!$nexus_sock) {
+
+    my $ignore = "";
+
+    while (!$pwcc_running) {
+      Dada::logMsg(1, $dl, "nexusSockMaintain: waiting for pwcc_running");
+      sleep(1);
+    }
+
+    Dada::logMsg(2, $dl, "nexusSockMaintain: connecting to dada_pwc_command ".$pwcc_host.":".$pwcc_port);
+    $nexus_sock = Dada::connectToMachine($pwcc_host, $pwcc_port, 5);
+    Dada::logMsg(2, $dl, "nexusSockMaintain: sock=".$nexus_sock);
+    if (!$nexus_sock) {
+      Dada::logMsgWarn($error, "nexusSockMaintain: could not connect to nexus");
+    } else {
+    $ignore = <$nexus_sock>;
+    }
+  }
+}
 
 
 
