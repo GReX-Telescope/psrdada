@@ -314,7 +314,9 @@ int dada_pwc_main_start_transfer (dada_pwc_main_t* pwcm)
         pwcm->header_valid = 1;
 
       if (pwcm->header_valid) {
-        multilog(pwcm->log, LOG_INFO, "dada_pwc_main_start_transfer: Marking header filled\n");
+#ifdef _DEBUG
+          multilog(pwcm->log, LOG_INFO, "dada_pwc_main_start_transfer: Marking header filled\n");
+#endif
         if ( ipcbuf_mark_filled (pwcm->header_block, pwcm->header_size) < 0)  {
           multilog (pwcm->log, LOG_ERR, "Could not marked header filled or command.code != start\n");
           return DADA_ERROR_HARD;
@@ -442,9 +444,9 @@ int dada_pwc_main_record_start (dada_pwc_main_t* pwcm)
       pwcm->header_valid = 1;
 
     if (pwcm->header_valid) {
-
-      multilog(pwcm->log, LOG_INFO, "dada_pwc_main_record_start: Marking header filled\n");
-
+#ifdef _DEBUG
+        multilog(pwcm->log, LOG_INFO, "dada_pwc_main_record_start: Marking header filled\n");
+#endif
       if (ipcbuf_mark_filled (pwcm->header_block, pwcm->header_size) < 0)  {
         multilog (pwcm->log, LOG_ERR, "Could not mark filled header\n");
         return DADA_ERROR_HARD;
@@ -727,7 +729,9 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
       
         /* If the header is NOW valid, flag the header as filled */  
         if (pwcm->header_valid) {
-          multilog (pwcm->log, LOG_INFO,"dada_pwc_main_transfer_data: marking header filled\n");
+#ifdef _DEBUG
+            multilog (pwcm->log, LOG_INFO,"dada_pwc_main_transfer_data: marking header filled\n");
+#endif
           if (ipcbuf_mark_filled (pwcm->header_block,pwcm->header_size) < 0) {
             multilog (pwcm->log, LOG_ERR, "Could not mark filled header\n");
             return DADA_ERROR_HARD;
