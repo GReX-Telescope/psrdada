@@ -17,6 +17,7 @@ dist_bin_SCRIPTS = Apsr.pm \
                    lowres_pulse.psh \
                    checkpulse.psh \
                    server_apsr_auxiliary_manager.pl \
+                   server_apsr_band_processor.pl \
                    server_apsr_create_plots.pl \
                    server_apsr_dfb_gain_simulator.pl \
                    server_apsr_gain_manager.pl \
