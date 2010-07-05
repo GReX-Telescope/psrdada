@@ -1,11 +1,3 @@
-#include "ascii_header.h"
-#include "sock.h"
-#include "daemon.h"
-#include "multilog.h"
-#include "bpsr_def.h"
-#include "bpsr_udpdb.h"
-#include "bpsr_udp.h"
-
 #include <stdlib.h> 
 #include <stdio.h> 
 #include <errno.h> 
@@ -19,6 +11,14 @@
 //#include <arpa/inet.h>
 #include <math.h>
 #include <pthread.h>
+
+#include "ascii_header.h"
+#include "sock.h"
+#include "daemon.h"
+#include "multilog.h"
+#include "bpsr_def.h"
+#include "bpsr_udpdb.h"
+#include "bpsr_udp.h"
 
 #include "arch.h"
 #include "Statistics.h"
@@ -76,7 +76,7 @@ void convert_to_bits(unsigned int value, char * binary_string);
 void print_bram_line(FILE * fp, unsigned int i, unsigned int value, char * binary);
 
 int sendPacket(int sockfd, struct sockaddr_in addr, char *data, int size);
-struct in_addr *atoaddr(char *address);
+//struct in_addr *atoaddr(char *address);
 void signal_handler(int signalValue);
 void usage();
 void quit();
@@ -446,12 +446,12 @@ void usage() {
     ,BPSR_DEFAULT_ACC_LEN, BPSR_DEFAULT_UDPDB_PORT);
 }
 
-
+/*
 struct in_addr *atoaddr(char *address) {
   struct hostent *host;
   static struct in_addr saddr;
 
-  /* First try it as aaa.bbb.ccc.ddd. */
+  // First try it as aaa.bbb.ccc.ddd. 
   saddr.s_addr = inet_addr(address);
   if ((int) saddr.s_addr != -1) {
     return &saddr;
@@ -462,6 +462,7 @@ struct in_addr *atoaddr(char *address) {
   }
   return NULL;
 }
+*/
 
 
 /*
@@ -730,7 +731,7 @@ void create_udpout_socket(int *fd, struct sockaddr_in * dagram_socket,
 
   /* Else packets direct to one host */
   } else {
-    addr = atoaddr(client);
+    addr = atoaddr (client);
     dagram_socket->sin_addr.s_addr = addr->s_addr;
   }
 

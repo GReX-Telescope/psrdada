@@ -167,9 +167,7 @@ void* udpheader_read_function (udpheader_t* udpheader, uint64_t* size)
       }
 
       /* Get a packet from the socket */
-      udpheader->received = sock_recv (udpheader->udpfd, 
-                                       udpheader->socket_buffer,
-                                       BPSR_UDP_PAYLOAD_BYTES, 0);
+      udpheader->received = recvfrom (udpheader->udpfd, udpheader->socket_buffer, BPSR_UDP_PAYLOAD_BYTES, 0, NULL, NULL);
     }
 
     /* If we did get a packet within the timeout, or one was in the buffer */
@@ -178,6 +176,10 @@ void* udpheader_read_function (udpheader_t* udpheader, uint64_t* size)
       /* Decode the packets apsr specific header */
       raw_sequence_no = decode_header(udpheader->socket_buffer);
       sequence_no = raw_sequence_no / udpheader->sequence_incr;
+
+      if (udpheader->verbose == 2) {
+        fprintf(stderr, "2: %"PRIu64" [%"PRIu64"]\n", sequence_no, raw_sequence_no);
+      }
 
       if ((sequence_no != (prevnum + 1)) && (prevnum != 0)){
         fprintf(stderr, "%"PRIu64" = > %"PRIu64", prev+1 = %"PRIu64"\n",raw_sequence_no, sequence_no, (prevnum+1));

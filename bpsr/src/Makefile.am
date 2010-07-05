@@ -1,12 +1,12 @@
 
 lib_LTLIBRARIES = libbpsr.la
 
-bpsr_hdr=bpsr_def.h bpsr_udp.h bpsr_udpdb.h bpsr_udpdb_fast.h bpsr_udpdisk.h bpsr_udpheader.h
+bpsr_hdr=bpsr_def.h bpsr_udp.h bpsr_udpdb.h bpsr_udpdb_fast.h bpsr_udpdisk.h bpsr_udpheader.h ibob.h multibob.h
 
-libbpsr_la_SOURCES = $(bpsr_hdr) ibob.h ibob.c multibob.h multibob.c start_observation.c
+libbpsr_la_SOURCES = $(bpsr_hdr) ibob.c multibob.c start_observation.c
 
 bin_PROGRAMS = bpsr_udpheader bpsr_udpdb bpsr_dbdisk bpsr_udpdisk \
-	bpsr_udpdb_fast bpsr_dbmon ibob_telnet multibob_server
+	bpsr_dbmon ibob_telnet multibob_server
 
 LDADD = libbpsr.la $(top_builddir)/src/libpsrdada.la
 

@@ -252,9 +252,8 @@ void* udpdisk_read_function (udpdisk_t* udpdisk, uint64_t* size)
       } else {
 
         /* Get a packet from the socket */
-        udpdisk->received = sock_recv (udpdisk->udpfd, 
-                                       udpdisk->socket_buffer,
-                                       BPSR_UDP_PAYLOAD_BYTES, 0);
+        udpdisk->received = recvfrom (udpdisk->udpfd, udpdisk->socket_buffer,
+                                       BPSR_UDP_PAYLOAD_BYTES, 0, NULL, NULL);
       }
     }
 

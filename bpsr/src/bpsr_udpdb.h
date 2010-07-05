@@ -32,12 +32,6 @@
 #include "daemon.h"
 #include "futils.h"
 
-
-/* Number of UDP packets to be recived for a called to buffer_function
- *   64 MB = 2048 * 32768 */
-#define STATS_INIT = {0, 0, 0, 0}
-
-/* structures dmadb datatype  */
 typedef struct{
   int verbose;           /* verbosity flag */
   int fd;                /* udp socket file descriptor */
