@@ -135,7 +135,6 @@ int main (int argc, char **argv)
   for (i=0; i<IBOB_BRAM_CHANNELS; i++) 
     xval[i] = (float) i*2;
 
-
   /* convert data to log base 2 */
   float logbase2 = logf(2.0);
   for (i=0; i<IBOB_BRAM_CHANNELS; i++)
@@ -197,15 +196,10 @@ void createPlot (char* device, float * xvals, float * pol1, float * pol2,
     set_dimensions (width_pixels, height_pixels);
 
   float ymin = 0;
-  float ymax = 8;
+  float ymax = 32;
 
   /* Get the min/max values */
   unsigned i=0;
-  for (i=0; i < IBOB_BRAM_CHANNELS; i++) {
-    if (pol1[i] > ymax) ymax = pol1[i];
-    if (pol2[i] > ymax) ymax = pol2[i];
-  }
-
   float * bits_x[5];
   float * bits_y[5];
 
@@ -231,7 +225,6 @@ void createPlot (char* device, float * xvals, float * pol1, float * pol2,
   }
   else 
   {
-    //cpgenv(1024, 0, 0, (1.1*ymax), 0, 0);
     cpgsvp(0.1,0.9,0.1,0.9);
     cpgswin((IBOB_BRAM_CHANNELS*2), 0, 0, (1.1*ymax));
     cpglab("IBoB Channel", "Activated Bits", "Pre Bit-selected Bandpass");
