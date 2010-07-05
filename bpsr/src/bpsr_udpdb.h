@@ -4,7 +4,6 @@
 #include "dada_def.h"
 #include "dada_pwc_main.h"
 #include "bpsr_udp.h"
-#include "udp.h"
 
 #include "ipcio.h"
 #include "multilog.h"

@@ -255,7 +255,7 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
       } else {
 
         /* Get a packet from the socket */
-        udpdb->received = sock_recv (udpdb->fd, udpdb->socket_buffer, BPSR_UDP_PAYLOAD_BYTES, 0);
+        udpdb->received = recvfrom (udpdb->fd, udpdb->socket_buffer, BPSR_UDP_PAYLOAD_BYTES, 0, NULL, NULL);
         ignore_packet = 0;
 
       }
