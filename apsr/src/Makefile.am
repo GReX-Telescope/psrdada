@@ -1,9 +1,13 @@
 
-dist_bin_SCRIPTS = apsr_rm.csh apsr_edit.csh
+lib_LTLIBRARIES = libapsr.la
 
-bin_PROGRAMS = apsr_udpdb bat_to_utc apsr_udpdisk apsr_udpheader
+libapsr_la_SOURCES = apsr_udp.c
 
-LDADD = $(top_builddir)/src/libpsrdada.la
+dist_bin_SCRIPTS = apsr_rm.csh apsr_edit.csh apsr_reprocess.csh
+
+bin_PROGRAMS = apsr_udpdb bat_to_utc apsr_udpdisk apsr_udpheader 
+
+LDADD = libapsr.la $(top_builddir)/src/libpsrdada.la
 
 INCLUDES = -I$(top_srcdir)/src
 
