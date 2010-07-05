@@ -780,6 +780,7 @@ void extract_counts(char * bram, long * vals, int n_chan) {
     value[8] = '\0';
     sscanf(value, "%x",&val);
     vals[i] += val;
+
   }
 
 }
@@ -874,7 +875,8 @@ long calculate_max(long * array, unsigned size) {
   long max = 0;
   for (i=0; i<size; i++)
   {
-    max = (array[i] > max) ? array[i] : max;
+    if ((i<430) || (i>480))
+      max = (array[i] > max) ? array[i] : max;
   }
   return max;
 }
