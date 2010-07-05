@@ -1252,6 +1252,7 @@ sub fixTCSCommands(\%) {
   $fix{"chanav"} = "CHAN_AV";
   $fix{"nprod"} = "N_PROD";
   $fix{"ftmax"} = "FT_MAX";
+  $fix{"pid"} = "PID";
 
   my %add = ();
   $add{"STATE"} = "PPQQ";
@@ -1261,7 +1262,6 @@ sub fixTCSCommands(\%) {
   $add{"NBIT"} = "8";
   $add{"NPOL"} = "2";
   $add{"NDIM"} = "1";
-  $add{"PID"} = "P630";
   $add{"CFREQ"} = "1382";
   $add{"RECEIVER"} = "MULTI";
   $add{"RESOLUTION"} = "2048";
