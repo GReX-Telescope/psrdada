@@ -42,7 +42,7 @@ our $log_sock;
 #
 # Initialize globals
 #
-$dl = 2;
+$dl = 1;
 $quit_daemon = 0;
 %cfg = Bpsr::getBpsrConfig();
 $log_host = $cfg{"SERVER_HOST"};
@@ -381,7 +381,7 @@ sub fold_one_obs($) {
           if ($result eq "ok") {
 
             # PSRADD 
-            $cmd = "psradd -f ".$ar_file." /tmp/*.aa";
+            $cmd = "psradd -o ".$ar_file." /tmp/*.aa";
             logMsg(1, "INFO", "fold_one_obs: ".$cmd);
             ($result, $response) = Dada::mySystem($cmd);
             logMsg(2, "INFO", "fold_one_obs: ".$result." ".$response);
