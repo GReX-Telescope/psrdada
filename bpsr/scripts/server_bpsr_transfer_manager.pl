@@ -39,7 +39,7 @@ use constant DL            => 1;
 use constant PIDFILE       => "bpsr_transfer_manager.pid";
 use constant LOGFILE       => "bpsr_transfer_manager.log";
 use constant QUITFILE      => "bpsr_transfer_manager.quit";
-use constant DATA_RATE     => 400;  # Mbits / sec
+use constant DATA_RATE     => 600;  # Mbits / sec
 use constant TCP_WINDOW    => 1700;
 use constant VSIB_MIN_PORT => 23301;
 use constant VSIB_MAX_PORT => 23326;
@@ -279,6 +279,13 @@ while (!$quit_daemon) {
             } else {
               $xfer_failure = 1;
               Dada::logMsgWarn($warn, "Failed to transfer ".$path." to parkes: ".$response);
+
+
+    my $cmd = "mv ".$path."/obs.start ".$path."/obs.bad";
+    Dada::logMsg(1, DL, $cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(1, DL, $result." ".$response);
+
             }
           }
           if ($s_host ne "none") {
@@ -321,7 +328,7 @@ while (!$quit_daemon) {
 
       } else {
         if ($response ne "all beams sent") {
-          Dada::logMsg(1, DL, "Obs ".$obs." not fully transferred: ".$response);
+          Dada::logMsg(2, DL, "Obs ".$obs." not fully transferred: ".$response);
 
         } else {
           Dada::logMsg(0, DL, "Successfully transferred to swin & parkes: ".$obs);
@@ -1715,7 +1722,7 @@ sub checkAllBeams($) {
     return ("fail", "find command failed");
   }
   $nbeams = $response;
-  Dada::logMsg(1, DL, "checkAllBeams: Total number of beams ".$nbeams);
+  Dada::logMsg(2, DL, "checkAllBeams: Total number of beams ".$nbeams);
 
   # Now find the number of mounted NFS links
   $cmd = "find -L ".$obs." -mindepth 1 -maxdepth 1 -type d -printf '\%f\\n' | sort";
@@ -1727,7 +1734,7 @@ sub checkAllBeams($) {
   }
   @beams = split(/\n/, $response);
   $nbeams_mounted = $#beams + 1;
-  Dada::logMsg(1, DL, "checkAllBeams: Total number of mounted beams: ".$nbeams_mounted);
+  Dada::logMsg(2, DL, "checkAllBeams: Total number of mounted beams: ".$nbeams_mounted);
 
   # If a machine is not online, they cannot all be verified
   if ($nbeams != $nbeams_mounted) {
@@ -1794,7 +1801,7 @@ sub checkFullyDeleted() {
   Dada::logMsg(2, DL, "checkFullyDeleted()");
 
   # Find all observations marked as obs.deleted and > 14*24 hours since being modified 
-  $cmd = "find ".$cfg{"SERVER_ARCHIVE_NFS_MNT"}."  -maxdepth 2 -name 'obs.deleted' -mtime +14 -printf '\%h\\n' | awk -F/ '{print \$NF}' | sort";
+  $cmd = "find ".$cfg{"SERVER_ARCHIVE_DIR"}." -mindepth 2 -maxdepth 2 -name 'obs.deleted' -mtime +14 -printf '\%h\\n' | awk -F/ '{print \$NF}' | sort";
   Dada::logMsg(2, DL, "checkFullyDeleted: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(3, DL, "checkFullyDeleted: ".$result." ".$response);
@@ -1810,6 +1817,12 @@ sub checkFullyDeleted() {
   my $n_beams = 0;
   my $n_deleted = 0;
   my $o = "";
+  my @remote_hosts = ();
+  my $host = "";
+  my $user = "";
+  my $rval = "";
+  my $j = 0;
+  my $i = 0;
 
   for ($i=0; (($i<=$#observations) && (!$quit_daemon)); $i++) {
     $o = $observations[$i];
@@ -1817,18 +1830,51 @@ sub checkFullyDeleted() {
     $result = "ok";
     $response = "";
 
-    $cmd = "mv ".$cfg{"SERVER_ARCHIVE_NFS_MNT"}."/".$o." /nfs/old_archives/bpsr/".$o;
+    # get a list of the host machines that have an archive dir on them
+    $cmd = "find ".$cfg{"SERVER_ARCHIVE_DIR"}."/".$o." -mindepth 1 -maxdepth 1 -type l -printf '\%l\n' | awk -F/ '{print \$3}' | sort";
     Dada::logMsg(2, DL, "checkFullyDeleted: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     Dada::logMsg(3, DL, "checkFullyDeleted: ".$result." ".$response);
-
     if ($result ne "ok") {
-      return ("fail", "failed to move ".$o." to old_archives");
+      return ("fail", "failed to find remote hosts for ".$o);
+    }
+    @remote_hosts = split(/\n/, $response);
+
+    # copy the archives dir, converting NFS links to remote nodes to directories
+    $cmd = "cp -rL ".$cfg{"SERVER_ARCHIVE_NFS_MNT"}."/".$o." /nfs/old_archives/bpsr/".$o;
+    Dada::logMsg(2, DL, "checkFullyDeleted: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, DL, "checkFullyDeleted: ".$result." ".$response);
+    if ($result ne "ok") {
+      return ("fail", "failed to copy ".$o." to old_archives");
+    }
+
+    # delete the client archive dirs fir each remote host
+    $cmd = "rm -rf ".$cfg{"CLIENT_ARCHIVE_DIR"}.$o;
+    $user = "bpsr";
+
+    for ($j=0; $j<=$#remote_hosts; $j++) {
+
+      $host = $remote_hosts[$j];
+
+      ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
+      Dada::logMsg(2, DL, "checkFullyDeleted: [".$host."] ".$result." ".$response);
+      if ($result ne "ok") {
+        Dada::logMsgWarn($warn, "checkFullyDeleted: ssh failed: ".$response);
+        return ("fail", "ssh ".$user."@".$host." failed: ".$response);
+      } else {
+        if ($rval != 0) {
+          Dada::logMsgWarn($warn, "checkFullyDeleted: remote dir did not exist: ".$response);
+          return ("fail", $cmd." failed: : ".$response);
+        }
+      }
+
     }
 
     $result = "ok";
     $response = "";
 
+    # move the results dir
     $cmd = "mv ".$cfg{"SERVER_RESULTS_NFS_MNT"}."/".$o." /nfs/old_results/bpsr/".$o;
     Dada::logMsg(2, DL, "checkFullyDeleted: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
@@ -1856,7 +1902,7 @@ sub checkFullyArchived() {
   Dada::logMsg(2, DL, "checkFullyArchived()");
 
   # Find all observations marked as obs.transferred to 
-  $cmd = "find ".$cfg{"SERVER_ARCHIVE_NFS_MNT"}."  -maxdepth 2 -name 'obs.archived' -printf '\%h\\n' | awk -F/ '{print \$NF}' | sort";
+  $cmd = "find ".$cfg{"SERVER_ARCHIVE_DIR"}." -mindepth 2 -maxdepth 2 -name 'obs.archived' -printf '\%h\\n' | awk -F/ '{print \$NF}' | sort";
   Dada::logMsg(2, DL, "checkFullyArchived: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(3, DL, "checkFullyArchived: ".$result." ".$response);
@@ -1883,7 +1929,7 @@ sub checkFullyArchived() {
     }
 
     # find out how many beam directories we have
-    $cmd = "ls -1d ".$o."/?? | wc -l";
+    $cmd = "find  ".$o." -mindepth 1 -maxdepth 1 -type l | wc -l";
     Dada::logMsg(3, DL, "checkFullyArchived: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     Dada::logMsg(3, DL, "checkFullyArchived: ".$result." ".$response);
@@ -1948,8 +1994,7 @@ sub checkFullyTransferred() {
   Dada::logMsg(2, DL, "checkFullyTransferred()");
  
   # Find all observations marked as obs.transferred to 
-  $cmd = "find ".$cfg{"SERVER_ARCHIVE_NFS_MNT"}."  -maxdepth 2 -name 'obs.transferred' -printf '\%h\\n' | awk -F/ '{print \$NF}' |
-sort";
+  $cmd = "find ".$cfg{"SERVER_ARCHIVE_DIR"}."  -mindepth 2 -maxdepth 2 -name 'obs.transferred' -printf '\%h\\n' | awk -F/ '{print \$NF}' | sort";
   Dada::logMsg(2, DL, "checkFullyTransferred: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(3, DL, "checkFullyTransferred: ".$result." ".$response);
@@ -1963,6 +2008,7 @@ sort";
   my @observations = split(/\n/,$response);
 
   for ($i=0; (($i<=$#observations) && (!$quit_daemon)); $i++) {
+
     $o = $observations[$i];
   
     # skip if no obs.info exists
@@ -1986,7 +2032,7 @@ sort";
     Dada::logMsg(2, DL, "checkFullyTransferred: getObsDestinations want swin:".$want_swin." parkes:".$want_parkes);
 
     # find out how many beam directories we have
-    $cmd = "ls -1d ".$o."/?? | wc -l";
+    $cmd = "find ".$o." -mindepth 1 -maxdepth 1 -type l | wc -l";
     Dada::logMsg(3, DL, "checkFullyTransferred: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     Dada::logMsg(3, DL, "checkFullyTransferred: ".$result." ".$response);
@@ -2002,7 +2048,7 @@ sort";
     $n_parkes = 0;
 
     # num on.tape.swin
-    $cmd = "find -L ".$o." -name 'on.tape.swin' | wc -l";
+    $cmd = "find -L ".$o." -mindepth 2 -maxdepth 2 -name 'on.tape.swin' | wc -l";
     Dada::logMsg(3, DL, "checkFullyTransferred: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     Dada::logMsg(3, DL, "checkFullyTransferred: ".$result." ".$response);
@@ -2014,8 +2060,8 @@ sort";
     chomp $response;
     $n_swin = $response;
 
-    # num on.tape.aprkes
-    $cmd = "find -L ".$o." -name 'on.tape.parkes' | wc -l";
+    # num on.tape.parkes
+    $cmd = "find -L ".$o." -mindepth 2 -maxdepth 2 -name 'on.tape.parkes' | wc -l";
     Dada::logMsg(3, DL, "checkFullyTransferred: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     Dada::logMsg(3, DL, "checkFullyTransferred: ".$result." ".$response);
@@ -2084,6 +2130,21 @@ sub checkDestinations(\@) {
 
     ($user, $host, $path) = split(":",$dests[$i],3);
     Dada::logMsg(2, DL, "checkDestinations: ".$user."@".$host.":".$path);
+
+    $cmd = "ls ".$path;
+    Dada::logMsg(2, DL, "checkDestinations: [".$host."] ".$cmd);
+    ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
+    Dada::logMsg(2, DL, "checkDestinations: [".$host."] ".$result." ".$response);
+    if ($result ne "ok") {
+      Dada::logMsgWarn($warn, "checkDestinations: ssh failed: ".$response);
+      return ("fail", "ssh ".$user."@".$host." failed: ".$response);
+
+    } else {
+      if ($rval != 0) {
+        Dada::logMsgWarn($warn, "checkDestinations: remote dir did not exist: ".$response);
+        return ("fail", "remote dir did not exist: ".$response);
+      }
+    }
 
     $cmd = "ls ".$path."/".$pid."/staging_area > /dev/null";
     Dada::logMsg(2, DL, "checkDestinations: [".$host."] ".$cmd);
