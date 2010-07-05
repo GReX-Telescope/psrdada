@@ -1,4 +1,4 @@
-#!/bin/csh -f
+#!/bin/csh -ef
 
 if ( "$1" == "" ) then
   echo Please specify the UTC and the NODE to which the data will be moved
@@ -32,16 +32,22 @@ if ( ! -d $TO ) then
   endif
 endif
 
-echo "This script will move $UTC to $TO"
+echo "This script will move $FROM to $TO"
 
 if ( "$3" != "force" ) then
   echo "Press <Enter> to continue or <Ctrl-C> to abort"
   $<
 endif
 
-ln -sf $TO/$FROM $ARCHIVES/$FROM
+mkdir -p $TO/$FROM
 
-tar cf - $UTC | ssh apsr$NODE "cd /lfs/data0/bpsr/archives && tar xf -"
+ln -sf $TO/$FROM $ARCHIVES/$UTC
+
+cd $UTC
+
+rsync -av --progress --bwlimit=4096 ?? apsr${NODE}:/lfs/data0/bpsr/archives/$UTC
+
+cd ..
 
 rm -rf $FROM
 

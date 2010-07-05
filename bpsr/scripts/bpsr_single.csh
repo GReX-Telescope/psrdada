@@ -41,8 +41,13 @@ echo Deleting BPSR beams 02 through 13 of $UTC
 touch $ARCHIVES/$UTC/obs.single
 touch $RESULTS/$UTC/obs.single
 
+chgrp -R $PID $ARCHIVES/$UTC
+chgrp -R $PID $RESULTS/$UTC
+
 perl -p -i -e 's/P630/'$PID'/' $ARCHIVES/$UTC/obs.info  
 perl -p -i -e 's/P630/'$PID'/' $RESULTS/$UTC/obs.info
+perl -p -i -e 's/P743/'$PID'/' $ARCHIVES/$UTC/obs.info  
+perl -p -i -e 's/P743/'$PID'/' $RESULTS/$UTC/obs.info
 
 foreach beam ( 02 03 04 05 06 07 08 09 10 11 12 13 )
 
