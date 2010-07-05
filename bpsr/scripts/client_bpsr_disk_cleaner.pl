@@ -172,6 +172,7 @@ sub findCompletedBeam($) {
     }
   }
 
+
   @array = ();
   $cmd = "find ".$archives_dir." -maxdepth 3 -name on.tape.parkes".
          " -printf '\%h\\n' | awk -F/ '{print \$(NF-1)\"\/\"\$NF}' | sort";
