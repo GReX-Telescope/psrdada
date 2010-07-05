@@ -22,7 +22,6 @@
 
 int sendPacket(int sockfd, struct sockaddr_in addr, char *data, int size);
 void encode_data(char * udp_data, int size_of_frame, int value);
-struct in_addr *atoaddr(char *address);
 void signal_handler(int signalValue);
 void usage();
 void quit();
@@ -267,22 +266,6 @@ void usage() {
     APSR_DEFAULT_UDPDB_PORT);
 }
 
-
-struct in_addr *atoaddr(char *address) {
-  struct hostent *host;
-  static struct in_addr saddr;
-
-  /* First try it as aaa.bbb.ccc.ddd. */
-  saddr.s_addr = inet_addr(address);
-  if ((int) saddr.s_addr != -1) {
-    return &saddr;
-  }
-  host = gethostbyname(address);
-  if (host != NULL) {
-    return (struct in_addr *) *host->h_addr_list;
-  }
-  return NULL;
-}
 
 void encode_data(char * udp_data, int size_of_frame, int value) {
 
