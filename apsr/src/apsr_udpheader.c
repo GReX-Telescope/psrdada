@@ -26,6 +26,8 @@ void usage()
 time_t udpheader_start_function (udpheader_t* udpheader, time_t start_utc)
 {
 
+  multilog_t* log = udpheader->log;
+
   /* Initialise variables */
   udpheader->dropped_packets_to_fill = 0;
   udpheader->packet_in_buffer = 0;
@@ -41,8 +43,10 @@ time_t udpheader_start_function (udpheader_t* udpheader, time_t start_utc)
   if (udpheader->verbose == 2) 
     fprintf(stderr, "udpheader_start_function: creating udp socket\n");        
           
-  if (create_udp_socket(udpheader) < 0) {
-    fprintf(stderr,"udpheader_start_function: Error, Failed to create udp socket\n");
+  /* Create a udp socket */
+  udpheader->udpfd = apsr_create_udp_socket(log, "any", udpheader->port, udpheader->verbose);
+  if (udpheader->udpfd < 0) {
+    multilog (log, LOG_ERR, "Failed to create udp socket\n");
     return 0; // n.b. this is an error value 
   }
 
@@ -174,8 +178,8 @@ void* udpheader_read_function (udpheader_t* udpheader, uint64_t* size)
       } else {
 
         /* Get a packet from the socket */
-        udpheader->received = sock_recv (udpheader->udpfd, udpheader->socket_buffer,
-                                     UDPBUFFSIZE, 0);
+        udpheader->received = recvfrom (udpheader->udpfd, udpheader->socket_buffer,
+                                        UDPBUFFSIZE, 0, NULL, NULL);
       }
     }
 
@@ -228,8 +232,6 @@ void* udpheader_read_function (udpheader_t* udpheader, uint64_t* size)
         min_sequence = udpheader->expected_sequence_no;
         mid_sequence = min_sequence + buffer_capacity;
         max_sequence = mid_sequence + buffer_capacity;
-
-        //multilog(log, LOG_INFO, "FIRST: [%"PRIu64" <-> %"PRIu64" <-> %"PRIu64"]\n",min_sequence,mid_sequence,max_sequence); 
 
         /* Set the amount a data we expect to return */
         *size = buffer_capacity * udpheader->packet_length;
@@ -469,7 +471,11 @@ int main (int argc, char **argv)
     }
   }
 
+  multilog_t* log = multilog_open ("apsr_udpheader", 0);
+  multilog_add (log, stderr);
+
   /* Setup context information */
+  udpheader.log = log;
   udpheader.verbose = verbose;
   udpheader.port = port;
   udpheader.packets_dropped = 0;
@@ -521,7 +527,8 @@ int main (int argc, char **argv)
 
 
 
-int create_udp_socket(udpheader_t* udpheader) {
+/*
+  int create_udp_socket(udpheader_t* udpheader) {
 
   udpheader->udpfd = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP);
 
@@ -597,7 +604,7 @@ int create_udp_socket(udpheader_t* udpheader) {
     }
   }
   return 0;
-}
+}*/
 
 void print_udpbuffer(char * buffer, int buffersize) {
 

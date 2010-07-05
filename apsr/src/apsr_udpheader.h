@@ -1,12 +1,3 @@
-/* dada, ipc stuff */
-
-#include "dada_hdu.h"
-#include "dada_def.h"
-#include "apsr_def.h"
-#include "apsr_udp.h"
-
-#include "futils.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -18,6 +9,15 @@
 #include <netinet/in.h>
 #include <signal.h>
 
+/* dada, ipc stuff */
+
+#include "dada_hdu.h"
+#include "dada_def.h"
+#include "apsr_def.h"
+#include "apsr_udp.h"
+#include "multilog.h"
+#include "futils.h"
+
 /* Number of UDP packets to be recived for a called to buffer_function */
 #define NUMUDPPACKETS 2000
 
@@ -27,6 +27,7 @@
 
 /* structures dmadb datatype  */
 typedef struct{
+  multilog_t* log;
   int state;
   int verbose;           /* verbosity flag */
   int udpfd;             /* udp socket file descriptor */
