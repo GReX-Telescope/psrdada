@@ -29,8 +29,6 @@
 #define MAX(x,y) (x > y ? x : y)
 
 int sendPacket(int sockfd, struct sockaddr_in addr, char *data, int size);
-void encode_data(char * udp_data, int size_of_frame, int value);
-struct in_addr *atoaddr(char *address);
 void signal_handler(int signalValue);
 void usage();
 void quit();
@@ -48,14 +46,10 @@ int encode_tri_data(char * udp_data, int size_of_frame, char * tri_data,
                     int tri_datasize, int tri_counter, int npol, int print);
 char two_bit_convert(int value);
 char four_bit_convert(int value);
-void scramble_2bit_data(char *array, int array_size);
 void gain_monitor(void);
-unsigned reverse (unsigned value, unsigned N);
-void reverse_array(char *array, int array_size);
 void create_udpout_socket(int *fd, struct sockaddr_in * dagram_socket,
                        char *client, int port, int broadcast);
 time_t wait_for_start(int daemon, multilog_t* log);
-float gasdev(long *idum);
 double rand_normal(double mean, double stddev);
 
 /* UDP socket */
@@ -299,6 +293,7 @@ int main(int argc, char *argv[])
    * encode the packets
    */
 
+  fprintf(stderr,"calfreq = %d\n", calfreq);
 
   float time_slices = 1000000 / tsamp;	// 64,000,000
   float time_slices_ina_cal = time_slices / (float) calfreq;	// 64,000
@@ -340,13 +335,6 @@ int main(int argc, char *argv[])
     else
       generate_signal(signal_arrays[i], signal_size, nbit, ndim, npol, produce_noise, 333);
 
-  }
-
-  if ((verbose) && (!daemon)) {
-    /* print_triwave(tri_data, tri_datasize, nbit); */
-    //fprintf(stderr,"Singal Array:\n");
-    print_triwave(signal_arrays[0], signal_size, nbit);
-    print_header(&header);
   }
 
   int tri_counter = 0;
@@ -392,10 +380,8 @@ int main(int argc, char *argv[])
 
   while (total_bytes_sent < total_bytes_to_send) {
          
-   // multilog(log,LOG_INFO, "while(%"PRIu64" <= %"PRIu64")\n",bytes_sent,bytes_to_send); 
-
     if (daemon)  {
-      while (current_time >= start_time) {
+      while (current_time < start_time) {
         current_time = time(0);
       }
       daemon=0;
@@ -406,11 +392,6 @@ int main(int argc, char *argv[])
     encode_header(udp_data, &header);
     header.sequence++;
     
-    /*
-    tri_counter = encode_tri_data(udp_data+UDPHEADERSIZE, udp_data_size, 
-                                  tri_data, tri_datasize, tri_counter, npol);
-    */
-
     if (allow_gain_control) {
 
       if ((current_gain != new_gain_value) && (new_gain_value >= 0) && (new_gain_value < n_signals)) {
@@ -422,6 +403,7 @@ int main(int argc, char *argv[])
       actual_gain = (int) (6 * (rand() / (RAND_MAX + 1.0)));
       actual_gain += current_gain - 3;
       if (actual_gain > n_signals) 
+
         actual_gain = n_signals -1;
       if (actual_gain < 0)
         actual_gain = 0;
@@ -433,11 +415,6 @@ int main(int argc, char *argv[])
 
     tri_counter = encode_tri_data(udp_data+UDPHEADERSIZE, udp_data_size,
                                 signal_arrays[actual_gain], signal_size, tri_counter, npol, 0);
-
-    if ((header.sequence == 1) && verbose){
-      //fprintf(stderr,"UDP Packet:\n");
-      //print_triwave(udp_data+UDPHEADERSIZE, udp_data_size, nbit);
-    }
 
     /* Bytes to send in the next packet */
     bytes_to_send = size_of_frame - UDPHEADERSIZE;
@@ -494,12 +471,11 @@ int main(int argc, char *argv[])
 
 
 void signal_handler(int signalValue) {
-
   exit(EXIT_SUCCESS);
-
 }
 
-int sendPacket(int sockfd, struct sockaddr_in their_addr, char *udp_data, int size_of_frame) {
+int sendPacket(int sockfd, struct sockaddr_in their_addr, char *udp_data, 
+               int size_of_frame) {
 
   int numbytes;
 
@@ -533,34 +509,6 @@ void usage() {
     (UDPHEADERSIZE + DEFAULT_UDPDATASIZE), APSR_DEFAULT_UDPDB_PORT);
 }
 
-
-struct in_addr *atoaddr(char *address) {
-  struct hostent *host;
-  static struct in_addr saddr;
-
-  /* First try it as aaa.bbb.ccc.ddd. */
-  saddr.s_addr = inet_addr(address);
-  if ((int) saddr.s_addr != -1) {
-    return &saddr;
-  }
-  host = gethostbyname(address);
-  if (host != NULL) {
-    return (struct in_addr *) *host->h_addr_list;
-  }
-  return NULL;
-}
-
-void encode_data(char * udp_data, int size_of_frame, int value) {
-
-  int i = 0;
-  char c = (char) value;
-  //printf("sending int %d as char %d\n",value,c);
-  for (i=0; i<size_of_frame; i++) {
-    udp_data[i] = c;
-  }
-}
-
-
 int encode_tri_data(char * udp_data, int size_of_frame, char * tri_data, 
                     int tri_datasize, int tri_counter, int npol, int print) {
 
@@ -569,7 +517,6 @@ int encode_tri_data(char * udp_data, int size_of_frame, char * tri_data,
 
   /* If we have 2 polarisations, the first half of the packet is the first
    * polarsation, and the second half is the second polarisation */
-  
   int data_length = (size_of_frame / npol);
 
   for (i=0; i < data_length; i++) {
@@ -592,7 +539,11 @@ int encode_tri_data(char * udp_data, int size_of_frame, char * tri_data,
         j = 0;
 
       udp_data[i] = tri_data[j];
+
       j++;
+      if (j == tri_datasize) 
+        j = 0;
+
       udp_data[data_length + i] = tri_data[j];
 
     }
@@ -601,35 +552,6 @@ int encode_tri_data(char * udp_data, int size_of_frame, char * tri_data,
   }
 
   return j;
-
-}
-
-/* Randomly changes the 2 bit array */
-void scramble_2bit_data(char *array, int array_size) {
-
- int i=0;
- int j=0;
- int shift;
- int halfway = array_size / 2;
-
- //srand ( time(NULL) );
-
- shift = (int) (halfway * (rand() / (RAND_MAX + 1.0)));
-
- j = shift;
-
- for (i=0;i < halfway; i++) {
-
-   array[i] = array[j];
-   array[halfway+i] = array[halfway+j];
-
-   j++;
-   if (j > halfway)
-     j = 0;
-
-   //fprintf(stderr," %d <= %d \t %d <= %d\n",i,rnd, (halfway+i), (halfway+rnd));
-   
- }
 
 }
 
@@ -726,18 +648,12 @@ void generate_2bit(char *array, int array_size, int noise, int gain) {
   }
 
   if (!noise) {
-    //fprintf(stderr, "LOW CAL:  0:%5.4f%, 1:%5.4f%, 2:%5.4f%, 3: %5.4f%\n", ((float) state0 / (float)(nsamples/2)),((float) state1 / (float)(nsamples/2)),((float) state2 / (float)(nsamples/2)),((float) state3 / (float)(nsamples/2)));
-
-    //fprintf(stderr, "HIGH CAL: 4:%5.4f%, 5:%5.4f%, 6:%5.4f%, 7: %5.4f%\n", ((float) state4 / (float)(nsamples/2)),((float) state5 / (float)(nsamples/2)),((float) state6 / (float)(nsamples/2)),((float) state7 / (float)(nsamples/2)));
-
     state0 += state4;
     state1 += state5;
     state2 += state6;
     state3 += state7;
   }
 
-  //fprintf(stderr, "STATES: 0:%5.4f%, 1:%5.4f%, 2:%5.4f%, 3: %5.4f%\n", ((float) state0 / (float)nsamples),((float) state1 / (float)nsamples),((float) state2 / (float)nsamples),((float) state3 / (float)nsamples));
-  
   /* Now pack the data from the samples into the char array */
   /* The second polarization gets packed into the second half of each packet */
   for (i=0; i<array_size; i++) {
@@ -800,7 +716,6 @@ void generate_4bit(char *array, int array_size, int noise, int gain) {
 
   /* 0->8 if off */
   /* 9->15 is on */
-
   /* 0 -> 3 cal off */
   /* 4 -> 7 cal on */
   /* 8 -> 11 cal off */
@@ -861,40 +776,24 @@ void generate_4bit(char *array, int array_size, int noise, int gain) {
       states[val]++;
 
     }
-    //fprintf(stderr, "endval = %d\n",val);
-
     samples_array[i] = val;
 
   }
 
-  /*
-  fprintf(stderr, "Nsamples = %d, gain = %d\n",nsamples, gain);
-  for(i=0;i<nstates;i++) {
-    fprintf(stderr, "%d:\t%d [%3.2f]\t%d [%3.2f]\t%d [%3.2f]\n",i, states[i], ((float)states[i] / (float)nsamples)*100, 
-                    low_states[i], ((float)low_states[i] / (float)nsamples)*100,
-                    high_states[i], ((float)high_states[i] / (float)nsamples)*100);
-  }*/
-
   for (i=0; i<array_size; i++) {
     for (j=0; j < 2; j++) {
-
       /* Get the 4 bit value in char form */
       char four_bit_value = four_bit_convert(samples_array[((2*i)+j)]);
       if (j == 0) array[i]  = four_bit_value << 4;
       if (j == 1) array[i] |= four_bit_value;
-
     }
-    
   }
-
-
 }
 
 
 /* 
  * Generates the signal 
  */
-
 void generate_signal(char *array, int array_size, int nbits, int ndim, 
                      int npol, int noise, int gain) {
 
@@ -905,143 +804,89 @@ void generate_signal(char *array, int array_size, int nbits, int ndim,
   else
     generate_8bit(array, array_size, noise, gain);
 
-  /* Invert the bits in each byte */
-  //print_triwave(array, array_size, nbits);
-  //reverse_array(array, array_size);
-  //print_triwave(array, array_size, nbits);
-
 }
 
+/*
+ *  The goal is to produce a gaussian distribution, centered around
+ *  0. The gain should change the width of the distribution, with 
+ *  the nominal gain have 1 std deviation at 10
+ *
+ */
 
 void generate_8bit(char *array, int array_size, int produce_noise, int gain) {
 
-  float max_value = 255;
-  int samples_per_byte = 1;
-  float mid_point = ((float) array_size) / 2.0;
+  // nominal stddev for 8bit data is 10
+  double stddev = 10;
+
+  // apply gain value to stddev
+  stddev *= ((((float) gain) + 500) / 1000);
+
+  double off = stddev;
+  double on = stddev * 1.4;
+
+  // generate an array of distribution for use with creating the array
+  int random_count = 100000;
+  int * off_array = (int *) malloc(sizeof(int) * random_count);
+  int * on_array = (int *) malloc(sizeof(int) * random_count);
+
+  int i, j;
+  double n1, n2, x, y, r, d;
+
+  for (i=0; i+1<random_count; i+=2) {
+
+    // Choose a point x,y in the unit circle uniformaly at random
+    do {
+      // scale two random integers to doubles between -1 and 1
+      x = 2.0*rand()/RAND_MAX - 1;
+      y = 2.0*rand()/RAND_MAX - 1;
+      r = x*x + y*y;
+    } while (r == 0.0 || r > 1.0);
+
+    {
+      // Apply Box-Muller transform on x,y
+      d = sqrt(-2.0*log(r)/r);
+      n1 = x*d;
+      n2 = y*d;
+
+      off_array[i] = (int) floor(n1*off);
+      off_array[i+1] = (int) floor(n2*off);
+
+      if (!produce_noise) {
+        on_array[i] = (int) (n1*on);
+        on_array[i+1] = (int) (n2*on);
+      }
+    }
+    assert(i+1 < random_count);
+  }
 
   int val;
   int twos;
-  int i, j;
-  
-  float y2, y1=1;
-
-  //gain = 500;
-
-  // 100 since we never want to up near 255
-  float centre = 255 * ((float) (gain-500) / 1000);
-  float off = centre / 1.3;
-  float on = centre * 1.3;
-  float div = 4.0;
-
   unsigned int mask = 0x000000ff;
-
-  //fprintf(stderr, "array_size = %d, gain = %d, centre = %f, stddev = %f\n", array_size, gain, centre, 255/div);
-
   for (i=0; i < array_size; i++) {
-                                                                                                                    
-    if (produce_noise) {
-
-      val = 0;
-
-      y2 = (float) rand_normal(centre, 255/div);
-
-      if ((y2 < -128) || (y2 > 128)) {
-        y2 = y1;
-      } else {
-        y1 = y2;
-      }
-
-      val = (int) floor(y2);
-
-      //fprintf(stdout, "%d, twos_complement: ", val);
-      //displayCharBits((char)val);
-      //fprintf(stdout, " full int : ");
-      //displayBits(val);
-      //fprintf(stdout,"\n");
-      
-      /* determine the twos complement equivalent */
-      twos = ~val;
-      twos = twos + 1;
-      twos &= mask;
-
-      //fprintf(stdout, "%d, offset_binary: ", twos);
-      //displayCharBits((char) twos);
-      //fprintf(stdout, " full int : ");
-      //displayBits(twos);
-      //fprintf(stdout,"\n");
-
-      val &= mask;
-
-      array[i] = (char) val;
-
-      //if ((y2 >= 255) || (y2 == 0)) 
-      //fprintf(stdout, "%f -> %d -> %d -> ", y2, val, twos);
-      //displayCharBits(array[i]);
-      //fprintf(stdout,"\n");
-
-
-    /* else produce a triangular wave */
-
-    } else {
-
-      if ((i < (array_size*0.25)) || (i > (array_size*0.75) )) {
-        y2 = (float) rand_normal(off, 255/div);
-      } else {
-        y2 = (float) rand_normal(on, 255/div);
-      }
-
-      if ((y2 < -128) || (y2 > 128)) {
-        y2 = y1;
-      } else {
-        y1 = y2;
-      }
-
-      val = (int) floor(y2);
-
-      //twos = ~val;
-      //twos = twos + 1;
-      //twos &= mask;
-      
-      val &= mask;
-      array[i] = (char) val;
-
-      //float pos = ((float) i) / ((float) array_size);
-      //float y = 2 * (0.5 - fabs(pos - 0.5));
-      //val = (unsigned int) (max_value * (y+0.5/max_value));
-      //array[i] = val;
-                                                                                                                    
-    }
     
+    j++;
+    if (j >= random_count) 
+      j=0;
+
+    assert (j < random_count);
+
+    if (produce_noise)
+      val = off_array[j];
+    else {
+      if ( (i < (array_size*0.25)) || (i > (array_size*0.75)) )
+        val = off_array[j];
+      else
+        val = on_array[j];
+    } 
+
+    twos = ~val;
+    twos = twos + 1;
+    twos &= mask;
+    array[i] = (char) twos;
   }
 
-  /*
-  int counts[256];
-  int intval = 0;
-
-  for (i=0; i < 256; i++) {
-    counts[i] = 0; 
-  }
-  for (i=0; i < array_size; i++) {
-    intval = (int) array[i];
-    //fprintf(stdout, "intval: %d -> ",intval);
-    intval += 128;
-    //fprintf(stdout, "%d\n",intval);
-    counts[intval] += 1;
-  }
-
-  for (i=0; i<256; i++) {
-    //printf("%d : %d\n",(i-128),counts[i]);
-    displayCharBits((i-128));
-    printf(": ",(i-128));
-    int fac = (int) ( ((float) counts[i]) / (((float) array_size)/ 10000));
-    for (j=0; j<fac; j++) {
-      printf("#");
-    }
-    printf("\n");
-  }
-
-  exit(0);
-  */
+  free(off_array);
+  free(on_array);
 
 }
 
@@ -1161,17 +1006,13 @@ void print_triwave(char *array, int array_size, int nbits) {
         }
       }
 
-      //print_two_bit_char(array[i]);
-
     } else {
 
-      //val << ((sizeof(val)*8)-1);
       val = (unsigned int) array[i];
       val &= 0x000000ff;
       fprintf(stderr,"%u.", val);
 
     }
-    //if (i != (array_size - 1)) printf(",");
   }
   fprintf(stderr,"]\n");
  
@@ -1189,8 +1030,6 @@ void print_triwave(char *array, int array_size, int nbits) {
 void displayBits(unsigned int value) {
   unsigned int c, displayMask = 1 << 31;
 
-  //printf("%7u = ", value);
-
   for (c=1; c<= 32; c++) {
     putchar(value & displayMask ? '1' : '0');
     value <<= 1;
@@ -1198,29 +1037,25 @@ void displayBits(unsigned int value) {
     if (c% 8 == 0)
       putchar(' ');
   }    
-  //putchar('\n');
+  
 }
 
 
 void displayCharBits(char value) {
   char c, displayMask = 1 << 7;
                                                                                 
-  //printf("    %c = ", value);
-                                                                                
   for (c=1; c<= 8; c++) {
     putchar(value & displayMask ? '1' : '0');
-    //if (c%2 == 0) printf(" ");
     value <<= 1;
                                                                                 
   }
-  //putchar('\n');
 }
 
 void gain_monitor(void) {
 
   FILE *sockin = 0;
   FILE *sockout = 0;
-                                                                                                                   
+
   /* Port for control from tcs simulator */
   int port = APSR_UDPGENERATOR_GAIN_PORT;
 
@@ -1243,7 +1078,7 @@ void gain_monitor(void) {
       quit = 1;
       break;
     }
-                                                                                                                   
+
     /* wait for a connection */
     fd =  sock_accept (listen_fd);
     if (fd < 0)  {
@@ -1267,7 +1102,6 @@ void gain_monitor(void) {
 
     if (rgot && !feof(sockin)) {
       buffer[strlen(buffer)-1] = '\0';
-      //fprintf(stderr, "buffer = %s\n",buffer);
 
       int gain = 0;
 
@@ -1297,31 +1131,8 @@ void gain_monitor(void) {
     close(listen_fd);
 
   }
-                                                                                                                   
-}
-
-void reverse_array(char *array, int array_size) {
-
-  int i=0;
-  for (i=0; i < array_size; i++) {
-    array[i] = reverse((unsigned) array[i], 8);
-  }
 
 }
-
-//! Reverses the order of bits
-unsigned reverse (unsigned value, unsigned N)
-{
-  unsigned one = 1;
-  unsigned result = 0;
-  unsigned bit = 0;
-
-  for (bit=0; bit < N; bit++)
-    if ((value >> bit) & one)
-      result |= one << (N-bit-1);
-  return result;
-}
-
 
 /* Creates a UDP socket for outgoing UDP sockets */
 void create_udpout_socket(int *fd, struct sockaddr_in * dagram_socket, 
@@ -1330,14 +1141,14 @@ void create_udpout_socket(int *fd, struct sockaddr_in * dagram_socket,
   /* Get the client hostname */
   struct hostent * client_hostname;
   client_hostname = gethostbyname(client);
-                                                                                                                                    
+
   /* Setup the socket for UDP packets */
   *fd = socket(PF_INET, SOCK_DGRAM, 0);
   if (*fd < 0) {
     perror("failed to create UDP socket");
     exit(EXIT_FAILURE);
   }
-                                                                                                                                    
+
   /* If broadcasting across the entire subnet */
   if (broadcast) {
    int yes = 1;
@@ -1346,7 +1157,7 @@ void create_udpout_socket(int *fd, struct sockaddr_in * dagram_socket,
       exit(EXIT_FAILURE);
     }
   }
-                                                                                                                                    
+
   /* Setup the UDP socket parameters*/
   struct in_addr *addr;
   dagram_socket->sin_family = AF_INET;        /* host byte order */
@@ -1370,9 +1181,11 @@ void create_udpout_socket(int *fd, struct sockaddr_in * dagram_socket,
 /* Create a socket to listen for a START command */
 time_t wait_for_start(int daemon, multilog_t* log) {
 
-  time_t start_time;
-  int bufsize = 4096;
+  time_t utc_start_time;
+  int bufsize = 64;
   char* buffer = (char*) malloc ( bufsize);
+  char* utc_string = (char*) malloc ( bufsize);
+  char* command = (char*) malloc ( bufsize);
   assert (buffer != 0);
 
   if (daemon) {
@@ -1391,79 +1204,64 @@ time_t wait_for_start(int daemon, multilog_t* log) {
     }
 
     multilog(log,LOG_INFO,"waiting for command connection\n");
-                                                                                                                                    
+
     /* wait for a connection */
     int tcpfd =  sock_accept (listen_fd);
     if (tcpfd < 0)  {
       multilog(log,LOG_ERR,"Error accepting connection: %s\n", strerror(errno));
       return EXIT_FAILURE;
     }
-                                                                                                                                    
+
     sockin = fdopen(tcpfd,"r");
     sockout = fdopen(tcpfd,"w");
     setbuf (sockin, 0);
     setbuf (sockout, 0);
-                                                                                                                                    
+
     char* rgot = NULL;
     rgot = fgets (buffer, bufsize, sockin);
     if (rgot && !feof(sockin)) {
       buffer[strlen(buffer)-1] = '\0';
     }
-                                                                                                                                    
-    /* we will start on a 10 second boundary */
-    start_time = time(0) + 1;
-    time_t remainder = start_time % 10;
-    sleep((int) (10-remainder));
 
-    start_time = start_time + (10 - remainder);
+    /* check the command, should be of form "start YYYY-MM-DD-HH:MM:SS" */
+    sscanf(buffer, "%s %s", command, utc_string);
 
-    strftime (buffer, bufsize, DADA_TIMESTR,
-              (struct tm*) gmtime(&start_time));
-    fprintf(sockout,"%s\n",buffer);
-    fprintf(sockout,"ok\n");
-                                                                                                                                    
+    if (strstr(command ,"start") != NULL) {
+
+      utc_start_time = str2utctime (utc_string);
+
+      if (utc_start_time == (time_t)-1) {
+
+        fprintf(sockout,  "Could not parse start time from '%s'\n", utc_string);
+        fprintf(sockout,"fail\n");
+
+      } else {
+
+        time_t remainder = utc_start_time - time(0);
+        fprintf(sockout,  "starting in %d seconds\n", (int) remainder);
+        fprintf(sockout,"ok\n");
+
+        sleep(remainder-1);
+      }
+
+    } else {
+      fprintf(sockout,  "unrecognized command '%s'\n", buffer);
+      fprintf(sockout,"fail\n");
+    }
+
     close(tcpfd);
     close(listen_fd);
-                                                                                                                                    
   } else {
-    start_time = time(0);
-    strftime (buffer, bufsize, DADA_TIMESTR, (struct tm*) localtime(&start_time));
+
+    utc_start_time = time(0) + 1;
   }
+
   free(buffer);
+  free(command);
+  free(utc_string);
 
-  return start_time;
+  return utc_start_time;
 
-
-}
-
-
-float gasdev (long *idum) {
-
-  //float ran1(long*idum); 
-  static int iset=0; 
-  static float gset; 
-  float fac,rsq,v1,v2; 
-  if (iset==0) {
-    do {
-      //v1 = 2.0 * ran1(idum) - 1.0;
-      //v2 = 2.0 * ran1(idum) - 1.0;
-      v1 = 2.0 * (((double)rand()) / ((double) RAND_MAX)) - 1.0;
-      v2 = 2.0 * (((double)rand()) / ((double) RAND_MAX)) - 1.0;
-      rsq = v1 * v1 + v2 * v2;
-    } while (rsq >= 1.0 || rsq == 0.0);
-
-    fac=sqrt(-2.0*log(rsq)/rsq); 
-
-    // Now make th eBox-Muller transformation to get two normal deviates. Return one and save the other for next time. 
-
-    gset = v1 * fac; 
-    iset = 1;           // Set flag. 
-
-    return v2 * fac; 
-  } else {
-    iset = 0;
-    return gset; 
-  }
 }
 
 double rand_normal(double mean, double stddev) {
@@ -1472,32 +1270,32 @@ double rand_normal(double mean, double stddev) {
   static int n2_cached = 0;
   
   if (!n2_cached) {
-     // Choose a point x,y in the unit circle uniformaly at random
-     double x, y, r;
-     do {
+    // Choose a point x,y in the unit circle uniformaly at random
+    double x, y, r;
+    do {
       // scale two random integers to doubles between -1 and 1
-       x = 2.0*rand()/RAND_MAX - 1;
-       y = 2.0*rand()/RAND_MAX - 1;
+      x = 2.0*rand()/RAND_MAX - 1;
+      y = 2.0*rand()/RAND_MAX - 1;
 
-       r = x*x + y*y;
-     } while (r == 0.0 || r > 1.0);
+      r = x*x + y*y;
+    } while (r == 0.0 || r > 1.0);
 
-     {
-       // Apply Box-Muller transform on x,y
-       double d = sqrt(-2.0*log(r)/r);
-       double n1 = x*d;
-       n2 = y*d;
+    {
+      // Apply Box-Muller transform on x,y
+      double d = sqrt(-2.0*log(r)/r);
+      double n1 = x*d;
+      n2 = y*d;
 
-       // Scale and translate to get desired mean and standard deviation
-       double result = n1*stddev + mean;
+      // Scale and translate to get desired mean and standard deviation
+      double result = n1*stddev + mean;
 
-       n2_cached = 1;
-       return result;
-     }
-   } else {
+      n2_cached = 1;
+      return result;
+    }
+  } else {
      n2_cached = 0;
     return n2*stddev + mean;
-   }
+  }
 }
 
 
