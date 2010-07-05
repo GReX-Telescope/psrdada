@@ -23,10 +23,11 @@ dist_bin_SCRIPTS = Bpsr.pm \
                    client_bpsr_results_monitor.pl \
                    client_ibob_level_setter.pl \
                    client_bpsr_src_logger.pl \
+                   web_observations_helper.pl \
                    ibob_interface.pl \
                    web_style.txt \
                    merge_tcs_logs.csh \
-                   beam-o-vision_collect.csh bpsr_single.csh
+                   beam-o-vision_collect.csh bpsr_single.csh bpsr_move.csh
 
 include $(top_srcdir)/config/Makefile.targets
 
