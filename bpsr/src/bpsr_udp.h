@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#include "udp.h"
+#include "dada_udp.h"
 
 
 #define BPSR_UDP_COUNTER_BYTES  8          // size of header/sequence number
@@ -26,9 +26,12 @@ void     uint64ToByteArray (uint64_t num, size_t bytes, unsigned char *arr, int 
 uint64_t byteArrayToUInt64 (unsigned char *arr, size_t bytes, int type);
 
 
-/* Creates a UDP socket */
+/* Creates a UDP socket, and set the socket buffer to 64 MB */
 int bpsr_create_udp_socket(multilog_t* log, const char* interface, int port, int verbose) {
-  return dada_create_udp_socket(log, interface, port, verbose);
+
+  int fd = dada_udp_sock_in(log, interface, port, verbose);
+  int rval = dada_udp_sock_set_buffer_size(log, fd, verbose, 67108864);
+  return fd;
 }
 
 
