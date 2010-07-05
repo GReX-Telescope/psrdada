@@ -225,7 +225,7 @@ sub handleCommand($) {
   }
 
   elsif ($commands[0] eq "start_pwcs") {
-    $cmd = $current_binary_dir."/".$cfg{"PWC_BINARY"}." -d -k dada -p ".$cfg{"CLIENT_UDPDB_PORT"}." -c ".$cfg{"PWC_PORT"}." -l ".$cfg{"PWC_LOGPORT"}." -D ".$cfg{"CLIENT_LOG_DIR"}."/apsr_udpdb.log";
+    $cmd = $current_binary_dir."/".$cfg{"PWC_BINARY"}." -d -k dada -p ".$cfg{"CLIENT_UDPDB_PORT"}." -c ".$cfg{"PWC_PORT"}." -l ".$cfg{"PWC_LOGPORT"};
     ($result,$response) = mysystem($cmd, 0);
   }
   
