@@ -1,7 +1,7 @@
 
 lib_LTLIBRARIES = libbpsr.la
 
-bpsr_hdr=bpsr_def.h bpsr_udp.h bpsr_udpdb.h bpsr_udpdb_fast.h bpsr_udpdisk.h bpsr_udpheader.h ibob.h multibob.h
+bpsr_hdr=bpsr_def.h bpsr_udp.h ibob.h multibob.h
 
 libbpsr_la_SOURCES = $(bpsr_hdr) ibob.c multibob.c start_observation.c
 
