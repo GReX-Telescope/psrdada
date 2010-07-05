@@ -32,46 +32,65 @@
 
 /* structures dmadb datatype  */
 typedef struct{
+
+  /* multilog pointers */
+  multilog_t* log;
+  multilog_t* stats_log;
+
   int verbose;           /* verbosity flag */
-  int fd;                /* udp socket file descriptor */
-  int port;              /* port to receive UDP data */
-  char *socket_buffer;   /* data buffer for stioring of multiple udp packets */
-  int datasize;          /* size of *data array */
-  char *next_buffer;     /* buffer for a single udp packet */
-  char *curr_buffer;     /* buffer for a single udp packet */
-  int packet_in_buffer;  /* flag if buffer overrun occured */
-  uint64_t curr_buffer_count;
-  uint64_t next_buffer_count;
-  uint64_t received;     /* number of bytes received */
+    
+  //int fd;                /* udp socket file descriptor */
+  //int port;              
+  //char *socket_buffer;   /* data buffer for stioring of multiple udp packets */
+  //int datasize;          /* size of *data array */
+  //char *next_buffer;     /* buffer for a single udp packet */
+  //char *curr_buffer;     /* buffer for a single udp packet */
+  //int packet_in_buffer;  /* flag if buffer overrun occured */
+
+  /* data buffers for the buffer function to fill */
+  apsr_data_t * curr;
+  apsr_data_t * next;
+  apsr_data_t * temp;
+
+  /* incoming UDP data */
+  char          * interface;    // IP address for UDP data
+  int             port;         // port for UDP data
+  apsr_sock_t   * sock;         // UDP socket struct
+
+  /* statistics for packets/bytes received/lost */
+  stats_t       * packets;
+  stats_t       * bytes;
+
+  /* packet information */
+  unsigned got_enough;
+  uint64_t packets_per_buffer;
+  uint64_t packet_length;
+  uint64_t payload_length;
+
+  /* thread control */
+  unsigned quit_threads;
+
+  /* timer control on packets/socket */
+  uint64_t timer_count;
+  uint64_t timer_max;
+  int      bps;
+
+  uint64_t next_seq;
+
+  char zerod_char;
+
   uint64_t expected_sequence_no;
-  uint64_t packets_dropped;           // Total dropped
-  uint64_t packets_dropped_last_sec;  // Total dropped in the previous second
-  uint64_t packets_dropped_this_run;  // Dropped b/w start and stop
-  uint64_t packets_received;          // Total dropped
-  uint64_t packets_received_this_run; // Dropped b/w start and stop
-  uint64_t packets_received_last_sec; // Dropped b/w start and stop
-  uint64_t bytes_received;            // Total dropped
-  uint64_t bytes_received_this_run;   // Dropped b/w start and stop
-  uint64_t bytes_received_last_sec;   // Dropped b/w start and stop
-  uint64_t dropped_packets_to_fill;   // 
   uint64_t packets_late_this_sec;     //
   unsigned int expected_header_bits;  // Expected bits/sample
   unsigned int expected_nchannels;    // Expected channels 
   unsigned int expected_nbands;       // Expected number of bands
-  float current_bandwidth;            // Bandwidth currently being received
-  multilog_t* statslog;               // special log for statistics
-  time_t current_time;                
-  time_t prev_time; 
   uint64_t error_seconds;             // Number of seconds to wait for 
-  uint64_t packet_length;                                    
-  int npol;
-}udpdb_t;
 
-void print_udpbuffer(char * buffer, int buffersize);
-void check_udpdata(char * buffer, int buffersize, int value);
-int create_udp_socket(dada_pwc_main_t* pwcm);
+} udpdb_t;
+
 void check_header(header_struct header, udpdb_t *udpdb, multilog_t *log); 
 void quit(dada_pwc_main_t* pwcm);
 void signal_handler(int signalValue); 
+void stats_thread (void * arg);
 
 
