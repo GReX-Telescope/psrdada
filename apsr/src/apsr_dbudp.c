@@ -1,3 +1,16 @@
+/***************************************************************************
+ *
+ *   Copyright (C) 2009 by Andrew Jameson 
+ *   Licensed under the Academic Free License version 2.1
+ *
+ ***************************************************************************/
+
+/***************************************************************************
+ *
+ *  Send data in a datablock out via UDP packets 
+ * 
+ ****************************************************************************/
+
 #include "dada_client.h"
 #include "dada_hdu.h"
 #include "apsr_def.h"
@@ -27,8 +40,6 @@
 #include "Statistics.h"
 #include "RealTime.h"
 #include "StopWatch.h"
-
-struct in_addr *atoaddr(char *address);
 
 /* structures dbudp datatype  */
 typedef struct{
@@ -471,22 +482,6 @@ int main (int argc, char **argv)
     return EXIT_FAILURE;
 
   return EXIT_SUCCESS;
-}
-
-struct in_addr *atoaddr(char *address) {
-  struct hostent *host;
-  static struct in_addr saddr;
-
-  /* First try it as aaa.bbb.ccc.ddd. */
-  saddr.s_addr = inet_addr(address);
-  if ((int) saddr.s_addr != -1) {
-    return &saddr;
-  }
-  host = gethostbyname(address);
-  if (host != NULL) {
-    return (struct in_addr *) *host->h_addr_list;
-  }
-  return NULL;
 }
 
 int create_control_socket(dbudp_t *dbudp) {
