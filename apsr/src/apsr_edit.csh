@@ -4,7 +4,7 @@ if ( "$2" == "" ) then
 
 cat <<EOF
 
-apsr_edit.csh - use with loopssh to remove \$1* from /lfs/data0/apsr/scratch
+apsr_edit.csh - use with loopssh to edit \$1* in /lfs/data0/apsr/scratch
 
 e.g. loopssh apsr 0 15 apsr_edit.csh 2008-10-11-04:30:10 NBIT=8
 
