@@ -1,16 +1,24 @@
-/*
- * bpsr_udpdb
- *
- */
+/***************************************************************************
+ *  
+ *    Copyright (C) 2010 by Andrew Jameson
+ *    Licensed under the Academic Free License version 2.1
+ * 
+ ****************************************************************************/
 
+/***************************************************************************
+ *
+ * bpsr_udpdb
+ * 
+ * Primary Write Client for BPSR backend
+ *
+ ****************************************************************************/
 
 // #define _DEBUG 1
+//
+#include <math.h>
 
 #include "bpsr_def.h"
 #include "bpsr_udpdb.h"
-
-#include "sock.h"
-#include <math.h>
 
 void usage()
 {

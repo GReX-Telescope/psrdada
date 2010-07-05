@@ -1,15 +1,9 @@
-/* dada, ipc stuff */
-
-#include "dada_hdu.h"
-#include "dada_def.h"
-#include "dada_pwc_main.h"
-#include "bpsr_udp.h"
-
-#include "ipcio.h"
-#include "multilog.h"
-#include "ascii_header.h"
-#include "daemon.h"
-#include "futils.h"
+/***************************************************************************
+ *  
+ *    Copyright (C) 2010 by Andrew Jameson
+ *    Licensed under the Academic Free License version 2.1
+ * 
+ ****************************************************************************/
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,6 +20,18 @@
 #include <sys/ipc.h>
 #include <sys/sem.h>
 #include <sys/shm.h>
+
+#include "dada_hdu.h"
+#include "dada_def.h"
+#include "dada_pwc_main.h"
+#include "bpsr_udp.h"
+
+#include "ipcio.h"
+#include "multilog.h"
+#include "ascii_header.h"
+#include "daemon.h"
+#include "futils.h"
+
 
 /* Number of UDP packets to be recived for a called to buffer_function
  *   64 MB = 2048 * 32768 */
