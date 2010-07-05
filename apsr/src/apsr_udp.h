@@ -1,10 +1,10 @@
-#ifndef __DADA_APSR_UDP_H
-#define __DADA_APSR_UDP_H
+#ifndef __APSR_UDP_H
+#define __APSR_UDP_H
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#include "udp.h"
+#include "dada_udp.h"
 
 /* Maximum size of a UDP packet */
 #define UDPBUFFSIZE 16384
@@ -28,73 +28,56 @@ typedef struct {
   unsigned int pollength;
 } header_struct;
 
+/* data buffer for udpdb */
+typedef struct {
+
+  char     * buffer;  // data buffer itself
+  uint64_t   count;   // number of packets in this buffer
+  uint64_t   size;    // size in bytes of the buffer
+  uint64_t   min;     // minimum seq number acceptable
+  uint64_t   max;     // maximum seq number acceptable
+
+} apsr_data_t;
+
+/* socket buffer for receiving udp data */
+typedef struct {
+
+  int        fd;            // FD of the socket
+  char     * buffer;        // the socket buffer
+  unsigned   size;          // size of the buffer
+  unsigned   have_packet;   // is there a packet in the buffer
+  ssize_t     got;           // amount of data received
+
+} apsr_sock_t;
+
+/* initialize an APSR sock struct */
+apsr_sock_t * apsr_init_sock(unsigned size);
+
+/* initialize an APSR data struct */
+apsr_data_t * apsr_init_data(uint64_t size);
+
+/* free an APSR sock struct */
+void apsr_free_sock(apsr_sock_t* b);
+
+/* free an APSR data struct */
+void apsr_free_data(apsr_data_t * b);
+
+/* set all the data values in an APSR buffer to zero */
+void apsr_zero_data(apsr_data_t * b);
+
+/* reset the counters in an APSR buffer to zero */
+void apsr_reset_data(apsr_data_t * b);
+
+/* create a socket for UDP data */
+int  apsr_create_udp_socket(multilog_t* log, const char* interface, int port, int verbose);
+
+/* decode a PDFB3 custom packet header */
 void decode_header(char *buffer, header_struct *header);
+
+/* encode a PDFB3 custom packet header */
 void encode_header(char *buffer, header_struct *header);
+
+/* print a PDFB3 custom packet header */
 void print_header(header_struct *header);
 
-void encode_header(char *buffer, header_struct *header) {
-
-  if (header->bits == 0) header->bits = 8;
-
-  int temp = header->sequence;
-       
-  buffer[7] = 0x00;
-  buffer[6] = header->bits;
-  buffer[5] = temp & 0xff;
-  buffer[4] = (temp >> 8) & 0xff;
-  buffer[3] = (temp >> 16) & 0xff;
-  buffer[2] = (temp >> 24) & 0xff;
-  buffer[1] = header->source;
-  buffer[0] = header->length;
-  buffer[15] = 0x00;
-  buffer[14] = 0x00;
-  buffer[13] = header->bandID[3];
-  buffer[12] = header->bandID[2];
-  buffer[11] = header->bandID[1];
-  buffer[10] = header->bandID[0];
-  buffer[9] = header->bands;
-  buffer[8] = header->channels;
-
-}
-
-void decode_header(char *buffer, header_struct *header) {
-    
-  int temp;
-
-  /* header decode */
-  header->length    = buffer[0];
-  header->source    = buffer[1];
-  header->sequence  = buffer[2]; 
-  header->sequence  <<= 24;
-  temp              = buffer[3];
-  header->sequence  |= ((temp << 16) & 0xff0000);
-  temp              = buffer[4];
-  header->sequence  |= (temp << 8) & 0xff00;
-  header->sequence  |=  (buffer[5] & 0xff);
-    
-  // header->packetbitsum  = buffer                                                            
-  // header->bits      = buffer[6];    
-  // zeros	    = buffer[7];
-  header->channels  = buffer[8];
-  header->bands     = buffer[9];
-                                                 
-  header->bandID[0] = buffer[10];
-  header->bandID[1] = buffer[11];
-  header->bandID[2] = buffer[12];
-  header->bandID[3] = buffer[13];
-  // zeros          = buffer[14];
-  // zeros          = buffer[14];
-
-}
-
-void print_header(header_struct *header) {
-
-  fprintf(stderr,"length = %d\n",header->length);
-  fprintf(stderr,"source = %d\n",header->source);
-  fprintf(stderr,"sequence= %d\n",header->sequence);
-  fprintf(stderr,"bits = %d\n",header->bits);
-  fprintf(stderr,"channels = %d\n",header->channels);
-  fprintf(stderr,"bands = %d\n",header->bands);
-}
-
-#endif /* __DADA_APSR_UDP_H */
+#endif /* __APSR_UDP_H */
