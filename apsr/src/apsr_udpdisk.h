@@ -1,14 +1,3 @@
-/* dada, ipc stuff */
-
-#include "dada_hdu.h"
-#include "apsr_udp.h"
-#include "apsr_def.h"
-#include "dada_def.h"
-#include "disk_array.h"
-
-#include "ascii_header.h"
-#include "futils.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -20,6 +9,17 @@
 #include <netinet/in.h>
 #include <signal.h>
 
+/* dada, ipc stuff */
+
+#include "dada_hdu.h"
+#include "apsr_udp.h"
+#include "apsr_def.h"
+#include "dada_def.h"
+#include "disk_array.h"
+#include "ascii_header.h"
+#include "futils.h"
+#include "multilog.h"
+
 /* Number of UDP packets to be recived for a called to buffer_function */
 #define NUMUDPPACKETS 2000
 
@@ -29,6 +29,7 @@
 
 /* structures dmadb datatype  */
 typedef struct{
+  multilog_t* log;
   char* header;          /* ascii header */
   int state;
   int verbose;           /* verbosity flag */
@@ -88,9 +89,6 @@ int64_t udpdisk_write_function (udpdisk_t* udpdisk, void* data, uint64_t size);
 int     udpdisk_stop_function (udpdisk_t* udpdisk);
 
 /* Utility functions */
-void print_udpbuffer (char * buffer, int buffersize);
-void check_udpdata (char * buffer, int buffersize, int value);
-int  create_udp_socket (udpdisk_t* udpdisk);
 void quit (udpdisk_t* udpdisk);
 void signal_handler (int signalValue); 
 

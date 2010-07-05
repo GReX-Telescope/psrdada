@@ -22,6 +22,8 @@ void usage()
 time_t udpdisk_start_function (udpdisk_t* udpdisk, time_t start_utc)
 {
 
+  multilog_t* log = udpdisk->log;
+
   /* Initialise variables */
   udpdisk->packets_dropped_this_run = 0;
   udpdisk->packets_received_this_run = 0;
@@ -35,18 +37,16 @@ time_t udpdisk_start_function (udpdisk_t* udpdisk, time_t start_utc)
   udpdisk->next_buffer_count = 0;
   udpdisk->packets_late_this_sec = 0;
 
-  /* UDP SETUP */
-
-  /* Create a udp socket */
-
   if (udpdisk->verbose == 2) 
     fprintf(stderr, "apsr_udpdisk: creating udp socket\n");        
-          
-  if (create_udp_socket(udpdisk) < 0) {
-    fprintf(stderr,"Error, Failed to create udp socket\n");
+
+  /* Create a udp socket */
+  udpdisk->udpfd = apsr_create_udp_socket(log, "any", udpdisk->port, udpdisk->verbose);
+  if (udpdisk->udpfd < 0) {
+    multilog (log, LOG_ERR, "Failed to create udp socket\n");
     return 0; // n.b. this is an error value 
   }
-
+          
   /* Set the current machines name in the header block as RECV_HOST */
   char myhostname[HOST_NAME_MAX] = "unknown";;
   gethostname(myhostname,HOST_NAME_MAX); 
@@ -77,9 +77,6 @@ time_t udpdisk_start_function (udpdisk_t* udpdisk, time_t start_utc)
 
   /* set the packet_length to an expected value */
   udpdisk->packet_length = 8972 - UDPHEADERSIZE;
-
-
-  /* OUTPUT FILE SETUP */
 
   /* utc start, as defined by UTC_START attribute */
   char utc_start[64] = "";
@@ -259,8 +256,8 @@ void* udpdisk_read_function (udpdisk_t* udpdisk, uint64_t* size)
       } else {
 
         /* Get a packet from the socket */
-        udpdisk->received = sock_recv (udpdisk->udpfd, udpdisk->socket_buffer,
-                                     UDPBUFFSIZE, 0);
+        udpdisk->received = recvfrom (udpdisk->udpfd, udpdisk->socket_buffer,
+                                     UDPBUFFSIZE, 0, NULL, NULL);
       }
     }
 
@@ -599,10 +596,11 @@ int main (int argc, char **argv)
 
   header_file = (char *) argv[optind];
 
-  /* Setup the global pointer to point to pwcm for the signal handler to
-   * reference */
+  multilog_t* log = multilog_open ("apsr_udpdisk", 0);
+  multilog_add (log, stderr);
 
   /* Setup context information */
+  udpdisk.log = log;
   udpdisk.verbose = verbose;
   udpdisk.port = port;
   udpdisk.packets_dropped = 0;
@@ -711,112 +709,3 @@ int main (int argc, char **argv)
   return EXIT_SUCCESS;
 
 }
-
-
-
-int create_udp_socket(udpdisk_t* udpdisk) {
-
-  udpdisk->udpfd = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP);
-
-  const int std_buffer_size = (128*1024) - 1;   // stanard socket buffer 128KB
-  const int pref_buffer_size = 64*1024*1024;    // preffered socket buffer 64MB
-
-
-  if (udpdisk->udpfd < 0) {
-    fprintf(stderr,"Could not created UDP socket: %s\n", strerror(errno));
-    return -1;
-  }
-
-  struct sockaddr_in udp_sock;
-  bzero(&(udp_sock.sin_zero), 8);                     // clear the struct
-  udp_sock.sin_family = AF_INET;                      // internet/IP
-  udp_sock.sin_port = htons(udpdisk->port);           // set the port number
-  udp_sock.sin_addr.s_addr = htonl(INADDR_ANY);       // receive from any ip
-
-  if (bind(udpdisk->udpfd, (struct sockaddr *)&udp_sock, sizeof(udp_sock)) == -1) {
-    fprintf(stderr,"Error binding UDP socket: %s\n", strerror(errno));
-    return -1;
-  }
-
-  // try setting the buffer to the maximum, warn if we cant
-  int len = 0;
-  int value = pref_buffer_size;
-  int retval = 0;
-  len = sizeof(value);
-  retval = setsockopt(udpdisk->udpfd, SOL_SOCKET, SO_RCVBUF, &value, len);
-  if (retval != 0) {
-    perror("setsockopt SO_RCVBUF");
-    return -1;
-  }
-
-  // now check if it worked....
-  len = sizeof(value);
-  value = 0;
-  retval = getsockopt(udpdisk->udpfd, SOL_SOCKET, SO_RCVBUF, &value, 
-                      (socklen_t *) &len);
-  if (retval != 0) {
-    perror("getsockopt SO_RCVBUF");
-    return -1;
-  }
-
-  // If we could not set the buffer to the desired size, warn...
-  if (value/2 != pref_buffer_size) {
-    fprintf(stderr,"Warning. Failed to set udp socket's "
-              "buffer size to: %d, falling back to default size: %d\n",
-              pref_buffer_size, std_buffer_size);
-
-    len = sizeof(value);
-    value = std_buffer_size;
-    retval = setsockopt(udpdisk->udpfd, SOL_SOCKET, SO_RCVBUF, &value, len);
-    if (retval != 0) {
-      perror("setsockopt SO_RCVBUF");
-      return -1;
-    }
-
-    // Now double check that the buffer size is at least correct here
-    len = sizeof(value);
-    value = 0;
-    retval = getsockopt(udpdisk->udpfd, SOL_SOCKET, SO_RCVBUF, &value, 
-                        (socklen_t *) &len);
-    if (retval != 0) {
-      perror("getsockopt SO_RCVBUF");
-      return -1;
-    }
-                                                                                                                
-    // If we could not set the buffer to the desired size, warn...
-    if (value/2 != std_buffer_size) {
-      fprintf(stderr, "Warning. Failed to set udp socket's "
-                "buffer size to: %d\n", std_buffer_size);
-    }
-  }
-  return 0;
-}
-
-void print_udpbuffer(char * buffer, int buffersize) {
-
-  int i = 0;
-  fprintf(stdout,"udp_packet_buffer[");
-  for (i=0; i < buffersize; i++) {
-    fprintf(stdout,"%d",buffer[i]);
-  }
-  fprintf(stdout,"]\n");
-        
-}
-
-void check_udpdata(char * buffer, int buffersize, int value) {
-                                                                                
-  int i = 0;
-  char c;
-  c = (char) value;
-  
-  for (i=0; i < buffersize; i++) {
-    if (c != buffer[i]){ 
-      fprintf(stderr,"%d: [%d] != [%d]\n",i,buffer[i],c);
-      i = buffersize;
-    }
-  }
-                                                                                
-}
-
-
-
