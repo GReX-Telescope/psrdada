@@ -222,7 +222,7 @@ int disk_array_open (disk_array_t* array, char* filename, uint64_t filesize,
 
   pthread_mutex_lock (&(array->mutex));
 
-  for (idisk = 0; idisk < array->ndisk; idisk++)
+  for (idisk = 0; idisk < array->ndisk; idisk++) {
     if (get_available (array->disks[idisk].path) > filesize)
     {
       if (!fullname)
@@ -242,7 +242,7 @@ int disk_array_open (disk_array_t* array, char* filename, uint64_t filesize,
 
       break;
     }
-
+  }
   pthread_mutex_unlock (&(array->mutex));
 
   return fd;

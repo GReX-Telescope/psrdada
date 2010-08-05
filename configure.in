@@ -56,8 +56,10 @@ else
   fi
 fi
 
-AX_OPENMP
 SWIN_LIB_PGPLOT
+SWIN_LIB_CUDA
+
+AX_OPENMP
 
 AC_CHECK_LIB([m], [sin])
 
@@ -129,6 +131,8 @@ AC_CONFIG_FILES([Makefile
     caspsr/config/Makefile
     caspsr/config/caspsr.cfg
     caspsr/web/Makefile
+    gmrt/Makefile
+    gmrt/src/Makefile
 		3rdparty/Makefile])
 
 #		puma2/Makefile # Removed since tim.h is missing
