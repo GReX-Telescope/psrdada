@@ -76,8 +76,8 @@ int main(int argc, char* argv[])
   if (read_antenna_connectivity(params.sampler_hdr, &corr) < 0)
     return EXIT_FAILURE;
 
-  // read the antenna connectivity
-	cout << "Reading sampler header" << endl;
+  // read the source file
+	cout << "Reading source header" << endl;
   if (read_source_file(params.source_hdr, &source, &BW, source_name) < 0)
     return EXIT_FAILURE;
 

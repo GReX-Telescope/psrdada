@@ -4,7 +4,7 @@
 #
 #############################################################################
 
-lib_LTLIBRARIES = libgmrt.la libgmrtcuda.la
+lib_LTLIBRARIES = libgmrt.la 
 
 gmrt_hdr = gmrt_udp.h gmrt_def.h gmrt_udpdb.h gmrt_udpheader.h gmrt_delay_fns.h
 
@@ -15,6 +15,8 @@ bin_PROGRAMS = gmrt_udpdb gmrt_udpdb_multi gmrt_udpheader gmrt_udpheader_multi g
 LDADD = libgmrt.la $(top_builddir)/src/libpsrdada.la
 
 if HAVE_CUDA
+
+lib_LTLIBRARIES += libgmrtcuda.la
 
 gmrt_corr_hdr = gmrt_corr_dada.h gmrt_corr_lib.h gmrt_corr_cuda.h
 

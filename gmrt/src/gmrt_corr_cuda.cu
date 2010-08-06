@@ -239,6 +239,7 @@ float gmrt_corr_cuda_run(gmrt_corr_data_t * d, gmrt_corr_params_t * p, gmrt_corr
         prof->fft_time += stop_profiling(prof->start_event, prof->stop_event, d->queues[q]);
         
         // Phase shift
+        /*
         start_profiling(prof->start_event, d->queues[q]);
        
         // need to calculate the fractional delay and apply  
@@ -248,7 +249,7 @@ float gmrt_corr_cuda_run(gmrt_corr_data_t * d, gmrt_corr_params_t * p, gmrt_corr
                            0.1f, // TODO: Insert delay here
                            d->queues[q]);
         prof->phase_time += stop_profiling(prof->start_event, prof->stop_event, d->queues[q]);
-
+        */
         if (p->verbose)
           cout << "Queue " << q << " MACing data..." << endl;
         // MAC
@@ -294,7 +295,7 @@ float gmrt_corr_cuda_run(gmrt_corr_data_t * d, gmrt_corr_params_t * p, gmrt_corr
     // Output
     synchronize(); // Wait for device->host copy to finish
 
-    if (p->write_output) {
+    if (p->write_output && !finished) {
       // HACK to avoid waiting ages when benchmarking
       if( p->ant_count <= 16 ) {
         size_t ij = 0;

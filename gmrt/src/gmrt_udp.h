@@ -33,7 +33,6 @@ typedef struct gmrt_data {
 
 	unsigned    n_bufs;       // number of data streams
   char     ** bufs;   		  // data buffer itself [padded for delay]
-  //char     ** real_ptrs;    // ptrs to the real start of the buffer
   char     ** delay_ptrs;   // ptrs to the integer delayed start of the buffer
   uint64_t *  ids;          // packet ids in the buffer
   uint64_t    count;        // number of packets in this buffer

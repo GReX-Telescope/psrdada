@@ -27,7 +27,7 @@ void usage()
   fprintf (stdout,
    "gmrt_udpheader_multi [options]\n"
      " -h             print help text\n"
-		 " -a antsys      antsys.hdr file [default `pwd`/antsys.hdr]\n"
+     " -a antsys      antsys.hdr file [default `pwd`/antsys.hdr]\n"
      " -i interface   ip/interface for inc. UDP packets [default all]\n"
      " -n streams     number of streams to interpret in the UDP packets [default 1]\n"
      " -p port        port on which to listen [default %d]\n"
@@ -69,10 +69,12 @@ int main (int argc, char **argv)
 	/* sampler.hdr file */
 	char * sampler_hdr = "sampler.hdr";
 
+  char * source_hdr = "source.hdr";
+
 	unsigned num_hdus = 1;
 
   /* command line arguments */
-  while ((arg=getopt(argc,argv,"i:n:p:vh")) != -1) {
+  while ((arg=getopt(argc,argv,"i:n:o:p:vh")) != -1) {
     switch (arg) {
 
     case 'a':
@@ -102,6 +104,15 @@ int main (int argc, char **argv)
     case 'v':
       verbose=1;
       break;
+
+    case 'o':
+      if (optarg) {
+        source_hdr = strdup(optarg);
+        break;
+      } else {
+        usage();
+        return EXIT_FAILURE;
+      }
 
     case 's':
       if (optarg) {
@@ -147,6 +158,7 @@ int main (int argc, char **argv)
   receiver.verbose = verbose;
   receiver.interface = strdup(interface);
   receiver.port = port;
+  receiver.start_on_reset = 0;
 	udpheader.receiver = &receiver;
 
   signal(SIGINT, signal_handler);
@@ -164,11 +176,11 @@ int main (int argc, char **argv)
 
 	/* setup some of the delay required values */
   // TODO need to get these variables from the header [hardcode for the mo]
-  udpheader.source.ra_app      = 1.498449;
-  udpheader.source.dec_app     = 0.870157;
-  udpheader.source.freq[0]     = 1190000000;
-  udpheader.source.first_lo[0] = 1340000000.000000;
-  udpheader.source.bb_lo[0]    = 70000000.000000;
+  //udpheader.source.ra_app      = 1.498449;
+  //udpheader.source.dec_app     = 0.870157;
+  //udpheader.source.freq[0]     = 1190000000;
+  //udpheader.source.first_lo[0] = 1340000000.000000;
+  //udpheader.source.bb_lo[0]    = 70000000.000000;
 
 	udpheader.receiver->bytes_per_sample = 1;
 	udpheader.receiver->t_samp = 0.0025;
@@ -185,6 +197,13 @@ int main (int argc, char **argv)
 
   // read the antenna connectivity
   if (read_antenna_connectivity(sampler_hdr, &(udpheader.corr)) < 0)
+    return EXIT_FAILURE;
+
+  // read the source header file TODO, should be integrated into start
+  // function and read these values from the header...
+  double BW;
+  char source_name[100];
+  if (read_source_file(source_hdr, &(udpheader.source), &BW, source_name ) < 0)
     return EXIT_FAILURE;
 
   uint64_t bsize = (UDP_DATA * UDP_NPACKS);
@@ -232,25 +251,27 @@ int main (int argc, char **argv)
 void ** gmrt_udpheader_multi_buffer_function (gmrt_udpheader_multi_t * ctx, uint64_t* size)
 {
 
-  /* calculate the delays */  ctx->receiver->total_time = ctx->receiver->total_bytes / ctx->receiver->bytes_per_second;
+  /* calculate the delays */  
+  ctx->receiver->total_time = ctx->receiver->total_bytes / ctx->receiver->bytes_per_second;
   ctx->timestamp.tv_sec = (int) ctx->receiver->total_time;
   ctx->timestamp.tv_usec = (ctx->receiver->total_time - ctx->timestamp.tv_sec) * 1000000;
-  //multilog(ctx->log, LOG_INFO, "total_bytes=%lf, total_time=%lf s, timestamp.tv_sec = %d, timestamp.tv_usec = %lf\n", ctx->receiver->total_bytes, ctx->receiver->total_time, ctx->timestamp.tv_sec, ctx->timestamp.tv_usec);
+  multilog(ctx->log, LOG_INFO, "total_bytes=%lf, total_time=%lf s, timestamp.tv_sec = %d, timestamp.tv_usec = %lf\n", ctx->receiver->total_bytes, ctx->receiver->total_time, ctx->timestamp.tv_sec, ctx->timestamp.tv_usec);
 
   ctx->timestamp.tv_sec += ctx->utc_start.tv_sec;
-  //multilog(ctx->log, LOG_INFO, "timestamp.tv_sec = %d\n", ctx->timestamp.tv_sec);
+  multilog(ctx->log, LOG_INFO, "timestamp.tv_sec = %d\n", ctx->timestamp.tv_sec);
 
   calculate_delays(&(ctx->source), &(ctx->corr), ctx->timestamp, ctx->delays, ctx->fringes);
+
   // now that we have the delays, update the delay_ptrs (for "next")
   multilog(ctx->log, LOG_INFO, "stream[0] delay offset %2.16lf s -> %d bytes -> %d bytes\n",ctx->delays[0].delay_t0,
                                 (int) (ctx->delays[0].delay_t0 * ctx->receiver->bytes_per_second),
-																GMRT_SAMPLE_DELAY_OFFSET + (int) (ctx->delays[0].delay_t0 * ctx->receiver->bytes_per_second));
-  ctx->receiver->next->delay_ptrs[0] = ctx->receiver->next->bufs[0] + GMRT_SAMPLE_DELAY_OFFSET + (int) (ctx->delays[0].delay_t0 * ctx->receiver->bytes_per_second);
+                                GMRT_SAMPLE_DELAY_OFFSET - (int) (ctx->delays[0].delay_t0 * ctx->receiver->bytes_per_second));
+  ctx->receiver->next->delay_ptrs[0] = ctx->receiver->next->bufs[0] + (GMRT_SAMPLE_DELAY_OFFSET - (int) (ctx->delays[0].delay_t0 * ctx->receiver->bytes_per_second));
+
   multilog(ctx->log, LOG_INFO, "stream[1] delay offset %2.16lf s -> %d bytes -> %d bytes\n",ctx->delays[1].delay_t0,
                                 (int) (ctx->delays[1].delay_t0 * ctx->receiver->bytes_per_second),
-																GMRT_SAMPLE_DELAY_OFFSET + (int) (ctx->delays[1].delay_t0 * ctx->receiver->bytes_per_second));
-  ctx->receiver->next->delay_ptrs[1] = ctx->receiver->next->bufs[1] + GMRT_SAMPLE_DELAY_OFFSET + (int) (ctx->delays[1].delay_t0 * ctx
-->receiver->bytes_per_second);
+                                GMRT_SAMPLE_DELAY_OFFSET - (int) (ctx->delays[1].delay_t0 * ctx->receiver->bytes_per_second));
+  ctx->receiver->next->delay_ptrs[1] = ctx->receiver->next->bufs[1] + (GMRT_SAMPLE_DELAY_OFFSET - (int) (ctx->delays[1].delay_t0 * ctx->receiver->bytes_per_second));
 
   return gmrt_multi_buffer_function(ctx->receiver, size);
 }

@@ -99,6 +99,7 @@ int main (int argc, char **argv)
 
   udpheader.log = log;
   receiver.log = log;
+  receiver.start_on_reset = 0;
 
   /* Setup context information */
   receiver.verbose = verbose;

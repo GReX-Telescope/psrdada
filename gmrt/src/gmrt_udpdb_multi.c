@@ -26,7 +26,7 @@ int quit_threads = 0;
 void usage()
 {
   fprintf (stdout,
-     "gmrt_udpdb [options] num_hdus hdu_1 ... hdu_n\n"
+      "gmrt_udpdb_multi [options] num_hdus hdu_1 ... hdu_n\n"
      " -h             print help text\n"
      " -a antsys      antsys.hdr file [default `pwd`/antsys.hdr]\n"
      " -i iface       interface for UDP packets [default all interfaces]\n"
@@ -145,7 +145,12 @@ time_t gmrt_udpdb_multi_start_function (dada_pwc_main_multi_t* pwcm, time_t star
 
   // ignore pol as this will be 2 for the testing mode...
   ctx->receiver->bytes_per_sample = ctx->receiver->npol * ctx->receiver->nbit * ctx->receiver->ndim * ctx->receiver->nchan / 8.0;
-  ctx->receiver->bytes_per_second /= ctx->receiver->npol;
+  //ctx->receiver->bytes_per_second /= ctx->receiver->npol;
+  ctx->receiver->bytes_per_second = (ctx->receiver->bytes_per_sample / ctx->receiver->t_samp) * 1000000;
+
+  ctx->receiver->bytes_per_sample = 1;
+  double t_samp = 0.0025;
+  ctx->receiver->bytes_per_second = (ctx->receiver->bytes_per_sample / t_samp) * 1000000;
 
   for (i=0; i<pwcm->num_hdus; i++)
     ascii_header_set (pwcm->hdus[i]->header, "BYTES_PER_SECOND", "%lf", ctx->receiver->bytes_per_second);
@@ -189,6 +194,7 @@ void ** gmrt_udpdb_multi_buffer_function (dada_pwc_main_multi_t* pwcm, uint64_t*
 
   /* calculate the delays */
   ctx->receiver->total_time = ctx->receiver->total_bytes / ctx->receiver->bytes_per_second;
+
   ctx->timestamp.tv_sec = (int) ctx->receiver->total_time;
   ctx->timestamp.tv_usec = (ctx->receiver->total_time - ctx->timestamp.tv_sec) * 1000000;
 
@@ -201,15 +207,15 @@ void ** gmrt_udpdb_multi_buffer_function (dada_pwc_main_multi_t* pwcm, uint64_t*
   calculate_delays(&(ctx->source), &(ctx->corr), ctx->timestamp, ctx->delays, ctx->fringes);
 
   // now that we have the delays, update the delay_ptrs (for "next")
-  ctx->receiver->next->delay_ptrs[0] = ctx->receiver->next->bufs[0] + GMRT_SAMPLE_DELAY_OFFSET + (int) (ctx->delays[0].delay_t0 * ctx->receiver->bytes_per_second);
-  //multilog(ctx->log, LOG_INFO, "stream[0] delay offset %2.16lf s -> %d bytes -> %d bytes\n", ctx->delays[0].delay_t0,
-  //                              (int) (ctx->delays[0].delay_t0 * ctx->receiver->bytes_per_second),
-  //                              GMRT_SAMPLE_DELAY_OFFSET + (int) (ctx->delays[0].delay_t0 * ctx->receiver->bytes_per_second));
+  multilog(ctx->log, LOG_INFO, "stream[0] delay offset %2.16lf s -> %d bytes -> %d bytes\n",ctx->delays[0].delay_t0,
+                                (int) (ctx->delays[0].delay_t0 * ctx->receiver->bytes_per_second),
+                                GMRT_SAMPLE_DELAY_OFFSET - (int) (ctx->delays[0].delay_t0 * ctx->receiver->bytes_per_second)); 
+  ctx->receiver->next->delay_ptrs[0] = ctx->receiver->next->bufs[0] + (GMRT_SAMPLE_DELAY_OFFSET - (int) (ctx->delays[0].delay_t0 * ctx->receiver->bytes_per_second));
 
-  ctx->receiver->next->delay_ptrs[1] = ctx->receiver->next->bufs[1] + GMRT_SAMPLE_DELAY_OFFSET + (int) (ctx->delays[1].delay_t0 * ctx->receiver->bytes_per_second);
-  //multilog(ctx->log, LOG_INFO, "stream[1] delay offset %2.16lf s -> %d bytes -> %d bytes\n", ctx->delays[1].delay_t0,
-  //                              (int) (ctx->delays[1].delay_t0 * ctx->receiver->bytes_per_second),
-  //                              GMRT_SAMPLE_DELAY_OFFSET + (int) (ctx->delays[1].delay_t0 * ctx->receiver->bytes_per_second));
+  multilog(ctx->log, LOG_INFO, "stream[1] delay offset %2.16lf s -> %d bytes -> %d bytes\n",ctx->delays[1].delay_t0,
+                                (int) (ctx->delays[1].delay_t0 * ctx->receiver->bytes_per_second),
+                                GMRT_SAMPLE_DELAY_OFFSET - (int) (ctx->delays[1].delay_t0 * ctx->receiver->bytes_per_second));
+  ctx->receiver->next->delay_ptrs[1] = ctx->receiver->next->bufs[1] + (GMRT_SAMPLE_DELAY_OFFSET - (int) (ctx->delays[1].delay_t0 * ctx->receiver->bytes_per_second));
 
   return gmrt_multi_buffer_function(ctx->receiver, size);
 

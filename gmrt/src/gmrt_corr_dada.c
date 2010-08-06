@@ -27,6 +27,7 @@ int gmrt_corr_get_header(dada_hdu_t * hdu)
     
     if (!header_size) {
 
+      fprintf(stderr, "gmrt_corr_get_header: ipcbuf_mark_cleared 1\n");
       ipcbuf_mark_cleared (hdu->header_block);
 
       if (ipcbuf_eod (hdu->header_block)) {
@@ -73,8 +74,8 @@ int gmrt_corr_get_header(dada_hdu_t * hdu)
   }
 	memcpy (hdu->header, header, header_size);
   
+  fprintf(stderr, "gmrt_corr_get_header: ipcbuf_mark_cleared 2\n");
   ipcbuf_mark_cleared (hdu->header_block);
-  fprintf(stderr, "gmrt_corr_get_header: ipcbuf_mark_cleared [header]\n");
 
 	return 0;
 

@@ -681,17 +681,25 @@ void ** gmrt_multi_buffer_function(gmrt_receiver_t * ctx, uint64_t * size)
 					// if GMRT_BYTES_PER_BUFFERS is not 4 !!!
 					for (i=0; i<(UDP_DATA/GMRT_BYTES_PER_BUFFER); i+=ctx->sock->n_buffers)
 					{
-            for (j=0; j<ctx->sock->n_buffers; j++)
-						  ctx->sock->buf_ptrs[j][k] = ctx->sock->buf_ptr[i+j];
+            //for (j=0; j<ctx->sock->n_buffers; j++)
+						 // ctx->sock->buf_ptrs[j][k] = ctx->sock->buf_ptr[i+j];
+						 ctx->sock->buf_ptrs[0][k] = ctx->sock->buf_ptr[i];
+						 ctx->sock->buf_ptrs[1][k] = ctx->sock->buf_ptr[i+1];
 						k++;
 					}
 
           // copy the de-interleave data into the curr buffer
+          /*
           for (i=0; i<ctx->sock->n_buffers; i++)
           {
             memcpy( ctx->curr->bufs[i] + (seq_no - ctx->curr->min) * ctx->sock->udpdata_per_buf,
                     ctx->sock->buffers[i], ctx->sock->udpdata_per_buf);
-          }
+          }*/
+
+          memcpy( ctx->curr->bufs[0] + (seq_no - ctx->curr->min) * ctx->sock->udpdata_per_buf,
+                  ctx->sock->buffers[0], ctx->sock->udpdata_per_buf);
+          memcpy( ctx->curr->bufs[1] + (seq_no - ctx->curr->min) * ctx->sock->udpdata_per_buf,
+                  ctx->sock->buffers[1], ctx->sock->udpdata_per_buf);
 
           ctx->curr->count++;
 
@@ -704,17 +712,27 @@ void ** gmrt_multi_buffer_function(gmrt_receiver_t * ctx, uint64_t * size)
           k = 0;
           for (i=0; i<(UDP_DATA/GMRT_BYTES_PER_BUFFER); i+=ctx->sock->n_buffers)
           {
+            /*
             for (j=0; j<ctx->sock->n_buffers; j++)
 						  ctx->sock->buf_ptrs[j][k] = ctx->sock->buf_ptr[i+j];
+            */
+						ctx->sock->buf_ptrs[j][0] = ctx->sock->buf_ptr[i];
+						ctx->sock->buf_ptrs[j][1] = ctx->sock->buf_ptr[i+1];
             k++;
           }
 
           // copy the de-interleave data into the next buffer
+          /*
           for (i=0; i<ctx->sock->n_buffers; i++)
           {
 					  memcpy( ctx->next->bufs[i] + (seq_no - ctx->next->min) * ctx->sock->udpdata_per_buf,
 						  	    ctx->sock->buffers[i], ctx->sock->udpdata_per_buf);
           }
+          */
+					memcpy( ctx->next->bufs[0] + (seq_no - ctx->next->min) * ctx->sock->udpdata_per_buf,
+					 	    ctx->sock->buffers[0], ctx->sock->udpdata_per_buf);
+					memcpy( ctx->next->bufs[1] + (seq_no - ctx->next->min) * ctx->sock->udpdata_per_buf,
+					 	    ctx->sock->buffers[1], ctx->sock->udpdata_per_buf);
 
           ctx->next->count++;
 
