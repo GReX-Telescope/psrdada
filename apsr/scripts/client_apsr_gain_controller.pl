@@ -42,7 +42,7 @@ if ($cfg{"USE_DFB_SIMULATOR"} == 1) {
   $Dada::client_gain_controller::gain_default = 33;
   $Dada::client_gain_controller::gain_max = 100;
 } else {
-  $Dada::client_gain_controller::gain_min = 0;
+  $Dada::client_gain_controller::gain_min = 1;
   $Dada::client_gain_controller::gain_default = 2000;
   $Dada::client_gain_controller::gain_max = 65535;
 }
@@ -53,6 +53,7 @@ $Dada::client_gain_controller::daemon_name = Dada::daemonBaseName($0);
 $| = 1;
 
 my $result = 0;
+
 $result = Dada::client_gain_controller->main();
 
 exit($result);

@@ -327,7 +327,7 @@ sub stopDaemons() {
         debugMessage(1, "daemon ".$daemon." is still running");
         $allStopped = "false";
         if ($threshold < 10) {
-          ($result, $response) = Dada::killProcess("server_".$daemon.".pl");
+          ($result, $response) = Dada::killProcess("^perl.*server_".$daemon.".pl");
         }
       } else {
         debugMessage(2, "daemon ".$daemon." has been stopped");

@@ -105,8 +105,8 @@ my $i=0;
 
 for ($i=0; $i<$nchan; $i++) {
 
-  @pol0_gains[$i] = 33;
-  @pol1_gains[$i] = 33;
+  @pol0_gains[$i] = 50;
+  @pol1_gains[$i] = 50;
 
 }
 
@@ -156,8 +156,8 @@ while (!$quit_daemon) {
       } else {
         debugMessage(2, "Couldn't connect to the dfb3 simulator");
         for ($i=0; $i<$nchan; $i++) {
-          @pol0_gains[$i] = 33;
-          @pol1_gains[$i] = 33;
+          @pol0_gains[$i] = 50;
+          @pol1_gains[$i] = 50;
         }
       }
     } else {
@@ -169,10 +169,10 @@ while (!$quit_daemon) {
         close($handle);
         $last_avg = int($avg);
       } else {
-        debugMessage(2, "dfb3 simulator not running, gain set to 33");
+        debugMessage(2, "dfb3 simulator not running, gain set to 50");
         for ($i=0; $i<$nchan; $i++) {
-          @pol0_gains[$i] = 33;
-          @pol1_gains[$i] = 33;
+          @pol0_gains[$i] = 50;
+          @pol1_gains[$i] = 50;
         }
       }
     }
