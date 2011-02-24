@@ -10,10 +10,10 @@
 #define _LARGEFILE_SOURCE
 #define _LARGEFILE64_SOURCE
 #define _FILE_OFFSET_BITS 64
-
 #define OPENOPTIONS O_RDONLY|O_LARGEFILE
 
 #endif
+
 
 #include <sys/types.h>
 #include <time.h>
@@ -35,6 +35,7 @@
 #include <pthread.h>
 #include <fcntl.h>
 #include <getopt.h>
+#include <limits.h>
 
 typedef struct disktime {
   double         time;
@@ -47,7 +48,7 @@ typedef struct writesocks {
   char **    hosts;
 } writesocks;
 
-#define NBUF       3   // Must not be less than 3
+#define NBUF                 3   // Must not be less than 3
 #define DEFAULT_BUFSIZE      2
 #define DEFAULT_TOTALSIZE  1000
 #define MAXSTR              200
@@ -111,7 +112,7 @@ int main (int argc, char * const argv[]) {
   unsigned long long filesize;
   int quiet = 0;
 
-  bufsize   = DEFAULT_BUFSIZE * 1000*1000;
+  bufsize   = DEFAULT_BUFSIZE * 1024 * 1024;
   file = -1;
   i = -1;
   write_failure = 0;
@@ -134,7 +135,7 @@ int main (int argc, char * const argv[]) {
       if (status!=1)
         fprintf(stderr, "Bad blocksize option %s\n", optarg);
       else
-        bufsize = ftmp * 1000*1000;
+        bufsize = ftmp * 1024 * 1024;
      break;
 
     case 'w':
@@ -214,11 +215,15 @@ int main (int argc, char * const argv[]) {
     }
   }
 
+   /*
   if (argc - optind < 1) {
     fprintf(stderr, "ERROR: no files specified on command line\n");
     usage();
     exit(1);
   }
+  */
+
+  /* for netwrite thread to clamp the sending rate */
 
   if (strlen(hostname) == 0) {
     strcpy(hostname, "localhost");
@@ -236,9 +241,9 @@ int main (int argc, char * const argv[]) {
 
   // Initialise buffers and syncronisation variables
   for (i=0; i<NBUF; i++) {
-    buf[i] = malloc(bufsize);
+    posix_memalign ( (void **) &(buf[i]), 512, bufsize);
     if (buf[i]==NULL) {
-      sprintf(msg, "Trying to allocate %d MB", bufsize/1000/1000);
+      sprintf(msg, "Trying to allocate %d MB", bufsize/1024/1024);
       perror(msg);
       return(1);
     }
@@ -286,16 +291,35 @@ int main (int argc, char * const argv[]) {
   }
 
   if (!quiet)
-    printf("Reading in chunks of %d MB\n", bufsize/(1000*1000));
+    printf("Reading in chunks of %d MB\n", bufsize/(1024*1024));
 
   gettime(&times, 0, &ntime, &maxtimes);
   firsttime = times[0].time;
   tbehind = 0;
 
-  for (nfile=optind; nfile<argc; nfile++) {
+  unsigned int nfiles = argc - optind;
+  char ** fnames;
 
-    // Remove directories if present
-    fname = argv[nfile];
+  // if no files are specified, read from stdin
+  if (nfiles == 0) {
+    nfiles = 1;
+    fnames = malloc(sizeof(char*));
+    fnames[0] = strdup("/dev/stdin");
+  } else {
+
+    fnames = malloc(sizeof(char*) * nfiles);
+    i=0;
+    for (nfile=optind; nfile<argc; nfile++) {
+      fnames[i] = strdup(argv[nfile]);
+      i++;
+    }
+  }
+
+  /* setup the number of files to be transferred */
+  int j=0;
+  for (j=0; j<nfiles; j++) {
+
+    fname = fnames[j]; 
     fnamesize = strlen(fname)+1;
 
     if (fnamesize==1) {
@@ -303,34 +327,46 @@ int main (int argc, char * const argv[]) {
       continue;
     }
 
-    file = open(argv[nfile], OPENOPTIONS);
+    /* open the file */
+    file = open(fname, OPENOPTIONS);
     if (file==-1) {
       sprintf(msg, "Failed to open input file (%s) [%d]",
-              argv[nfile], errno);
+              fname, errno);
       perror(msg);
       continue;
     }
 
-    /* Fill first buffer with filesize and filename */
-    /* 8 byte file size
+    /* Fill first buffer with filesize and filename
+       8 byte file size
        2 byte filename size
        n bytes filename
     */
 
-    status =  fstat(file, &filestat);
-    if (status != 0) {
-      sprintf(msg, "Trying to stat %s", argv[nfile]);
-      perror(msg);
-      return(1);
-    }
+    /* special case for stdin, set filesize to -1 */
+    if (strcmp(fname,"/dev/stdin") == 0) {
+      // now that the file is open, change it to stdout
+      fname = strdup("/dev/stdout");
+      fnamesize = strlen(fname)+1;
+      filesize = ULONG_MAX;
 
-    if (S_ISDIR(filestat.st_mode)) {
-      printf("Skipping %s (directory)\n", argv[nfile]);
-      close(file);
-      continue;
-    }
+    /* determine the file size via fstat */
+    } else {
 
-    filesize = filestat.st_size;
+      status =  fstat(file, &filestat);
+      if (status != 0) {
+        sprintf(msg, "Trying to stat %s", argv[nfile]);
+        perror(msg);
+        return(1);
+      }
+
+      if (S_ISDIR(filestat.st_mode)) {
+        printf("Skipping %s (directory)\n", argv[nfile]);
+        close(file);
+        continue;
+      }
+
+      filesize = filestat.st_size;
+    }
 
     //if (strlen(fname)+1>MAXSHORT) {
     //  fprintf(stderr, "Passed filename too long\n");
@@ -789,11 +825,12 @@ void throttle_rate (double firsttime, float datarate,
     }
   } else {
     twait *= -1;
-    //if ((-twait>1) & (abs(twait-*tbehind)>0.1)) {
     if ((abs(twait-*tbehind)>1)) {
       /* More than a second difference */
       *tbehind = twait;
+#ifdef _DEBUG
       fprintf(stderr, " Dropping behind %.1f seconds\n", twait);
+#endif
     }
   }
   return;
