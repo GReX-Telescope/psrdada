@@ -134,7 +134,7 @@ if ($num_results > 0) {
   for ($i=0; $i<=$#keys; $i++) {
 
     print STDOUT "Processing ".$i." of ".($#keys)."<BR>\n";
-    print STDOUT "<script type='text/javascript'>self.scrollByLines(1000);</script>\n";
+    #print STDOUT "<script type='text/javascript'>self.scrollByLines(1000);</script>\n";
     debugMessage(1, "Finalising archive ".$dir."/*/".$keys[$i]);
     # process the archive and summ it into the results archive for observation
     ($current_archive, $fres, $tres) = processArchive($dir, $keys[$i], $ext);
@@ -351,17 +351,13 @@ sub processArchive($$$) {
     my $temp_ar = $dir."/temp.ar";
 
     # Fres Operations
-    $cmd = $bindir."/psradd -s -f ".$temp_ar." ".$total_f_res." ".$total_f_sum." 2>&1";
+    $cmd = $bindir."/psradd -s --inplace ".$total_f_res." ".$total_f_sum." 2>&1";
+    Dada::logMsg(2, $dl, $cmd);
     ($result, $response) = Dada::mySystem($cmd);
     if ($result ne "ok") {
       Dada::logMsg(0, $dl, "psradd failed cmd=".$cmd);
       Dada::logMsg(0, $dl, "psradd output=".$response);
     }
-    #Dada::logMsg(2, $dl, $cmd);
-    #$output = `$cmd`;
-
-    unlink($total_f_res);
-    rename($temp_ar,$total_f_res);
 
     # Fscrunc the archive
     $cmd = $bindir."/pam -F -m ".$total_f_sum;
@@ -370,21 +366,16 @@ sub processArchive($$$) {
       Dada::logMsg(0, $dl, "pam failed cmd=".$cmd);
       Dada::logMsg(0, $dl, "pam output=".$response);
     }
-    #Dada::logMsg(2, $dl, $cmd);
-    #$output = `$cmd`;
 
     # Tres Operations
-    $cmd = $bindir."/psradd -f ".$temp_ar." ".$total_t_res." ".$total_f_sum." 2>&1";
+    $cmd = $bindir."/psradd --inplace ".$total_t_res." ".$total_f_sum." 2>&1";
+    Dada::logMsg(2, $dl, $cmd);
     ($result, $response) = Dada::mySystem($cmd);
     if ($result ne "ok") {
       Dada::logMsg(0, $dl, "psradd failed cmd=".$cmd);
       Dada::logMsg(0, $dl, "psradd output=".$response);
     }
-    #Dada::logMsg(2, $dl, $cmd);
-    #$output = `$cmd`;
 
-    unlink($total_t_res);
-    rename($temp_ar,$total_t_res);
   }
  
   # clean up the current archive
@@ -395,173 +386,6 @@ sub processArchive($$$) {
   recordProcessed($dir, $file, $real_archives);
 
   return ($source, $total_f_res, $total_t_res);
-
-}
-
-
-#
-# For the given utc_start ($dir), and archive (file) add the archive to the 
-# summed archive for the observation
-#
-sub processArchiveOLD($$$$) {
-
-  my ($dir, $file, $source, $ext) = @_;
-
-  debugMessage(2, "processArchive(".$dir.", ".$file.", ".$source.")");
-
-  my $bindir =      Dada::getCurrentBinaryVersion();
-  my $results_dir = $cfg{"SERVER_RESULTS_DIR"};
-
-
-  # If not all the archives are present, then we must create empty
-  # archives in place of the missing ones
-  $cmd = "find ".$dir."/* -maxdepth 0 -type d";
-  debugMessage(2, $cmd);
-  my $find_result = `$cmd`;
-  my @sub_dirs = split(/\n/, $find_result);
-
-  # Find out how many archives we actaully hae
-  $cmd = "ls -1 ".$dir."/*/".$file;
-  debugMessage(2, $cmd);
-  $find_result = `$cmd`;
-  my @archives = split(/\n/, $find_result);
-
-  debugMessage(2, "Found ".($#archives+1)." / ".($#sub_dirs+1)." archives");
-
-  # determine the source name for this archive
-  $cmd = "vap -n -c name ".$archives[0]." | awk '{print \$2}'";
-  Dada::logMsg(2, $dl, "processArchive: ".$cmd);
-  my ($result, $response) = Dada::mySystem($cmd);
-  Dada::logMsg(2, $dl, "processArchive: ".$result." ".$response);
-  if ($result ne "ok") {
-    Dada::logMsg(0, $dl, "WARN: processArchive: failed to determine source name: ".$response);
-    $source = "UNKNOWN";
-  } else {
-    $source = $response;
-    chomp $source;
-  }
-
-  $source =~ s/^[JB]//;
-
-  # The combined results for this observation (dir == utc_start) 
-  my $total_f_res = $dir."/".$source."_f.ar";
-  my $total_t_res = $dir."/".$source."_t.ar";
-
-  my $output = "";
-  my $real_archives = "";
-  my $subdir = "";
-
-  if ($#archives < $#sub_dirs) {
-
-    foreach $subdir (@sub_dirs) {
-
-     debugMessage(2, "subdir = ".$subdir.", file = ".$file); 
-     # If the archive does not exist in the frequency dir
-      if (!(-f ($subdir."/".$file))) { 
-
-        debugMessage(1, "archive ".$subdir."/".$file." was not present");
-
-        my ($filename, $directories, $suffix) = fileparse($subdir);
-        my $band_frequency = $filename;
-        my $input_file = $archives[0];
-        my $output_file = $subdir."/".$file;
-        my $tmp_file = $input_file;
-        $tmp_file =~ s/\.$ext$/\.tmp/;
-
-        $cmd = $bindir."/pam -o ".$band_frequency." -e tmp ".$input_file;
-        debugMessage(2, $cmd);
-        $output = `$cmd`;
-        debugMessage(2, $output);
-
-        $cmd = "mv -f ".$tmp_file." ".$output_file;
-        $output = `$cmd`;
-
-        $cmd = $bindir."/paz -w 0 -m ".$output_file;
-        debugMessage(2, $cmd);
-        $output = `$cmd`;
-        debugMessage(2, $output);
-
-        debugMessage(2, "Deleting tmp file ".$tmp_file);
-        unlink($tmp_file);
-
-      } else {
-        my ($filename, $directories, $suffix) = fileparse($subdir);
-        $real_archives .= " ".$filename;
-      }
-    }
-
-  } else {
-    foreach $subdir (@sub_dirs) {
-      my ($filename, $directories, $suffix) = fileparse($subdir);
-      $real_archives .= " ".$filename;
-    } 
-  }
-
-  # The frequency summed archive for this time period
-  my $current_archive = $dir."/".$file;
-
-  # combine all thr frequency channels
-  $cmd = $bindir."/psradd -R -f ".$current_archive." ".$dir."/*/".$file." 2>&1";
-  debugMessage(1, $cmd);
-  $output = `$cmd`;
-  debugMessage(2, $output);
-
-  # If this is the first result for this observation
-  if (!(-f $total_f_res)) {
-
-    $cmd = "cp ".$current_archive." ".$total_f_res;
-    debugMessage(2, $cmd);
-    $output = `$cmd`;
-    debugMessage(2, $output);
-                                                                                                                 
-    # Fscrunc the archive
-    $cmd = $bindir."/pam -F -m ".$current_archive;
-    debugMessage(2, $cmd);
-    $output = `$cmd`;
-    debugMessage(2, $output);
-                                                                                                                 
-    # Tres operations
-    $cmd = "cp ".$current_archive." ".$total_t_res;
-    debugMessage(2, $cmd);
-    $output = `$cmd`;
-    debugMessage(2, $output);
-
-  } else {
-
-    my $temp_ar = $dir."/temp.ar";
-
-    # Fres Operations
-    $cmd = $bindir."/psradd -s -f ".$temp_ar." ".$total_f_res." ".$current_archive." 2>&1";
-    debugMessage(2, $cmd);
-    $output = `$cmd`;
-    debugMessage(2, $output);
-    unlink($total_f_res);
-    rename($temp_ar,$total_f_res);
-                                                                                                                 
-    # Fscrunc the archive
-    $cmd = $bindir."/pam -F -m ".$current_archive;
-    debugMessage(2, $cmd);
-    $output = `$cmd`;
-    debugMessage(2, $output);
-                                                                                                                 
-    # Tres Operations
-    $cmd = $bindir."/psradd -f ".$temp_ar." ".$total_t_res." ".$current_archive;
-    debugMessage(2, $cmd);
-    $output = `$cmd`;
-    debugMessage(2, $output);
-    unlink($total_t_res);
-    rename($temp_ar,$total_t_res);
-
-  }
-
-  # clean up the current archive
-  unlink($current_archive);
-  debugMessage(2, "unlinking $current_archive");
-
-  # Record this archive as processed and what sub bands were legit
-  recordProcessed($dir, $file, $real_archives);
-
-  return ($current_archive, $total_f_res, $total_t_res);
 
 }
 
