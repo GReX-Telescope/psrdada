@@ -1,21 +1,17 @@
 <?PHP
 
+include ("bpsr.lib.php");
 
-include("definitions_i.php");
-include("functions_i.php");
+$inst = new bpsr();
 
-$config = getConfigFile(SYS_CONFIG);
-$conf = getConfigFile(DADA_CONFIG,TRUE);
-$spec = getConfigFile(DADA_SPECIFICATION, TRUE);
-
-#$nbeam = $config["NUM_PWC"];
 $nbeam = 13;
 
 ?>
 <html>
-<head>
-  <? echo STYLESHEET_HTML; ?>
-  <? echo FAVICO_HTML?>
+<?
+  $inst->open_head();
+  $inst->print_head_int("BPSR Plot Window", 0);
+?>
 
   <script type="text/javascript">
 
@@ -26,7 +22,9 @@ $nbeam = 13;
       var width = "1300";
       var height = "820";
 
-      URL = URL + "&obsid=" + document.getElementById("utc_start").value;
+      var utc_start = parent.infowindow.document.getElementById("UTC_START").innerHTML;
+
+      URL = URL + "&obsid=" + utc_start;
 
       day = new Date();
       id = day.getTime();
@@ -45,31 +43,27 @@ $nbeam = 13;
 
       if (http_request.readyState == 4) {
         var response = String(http_request.responseText)
-        var lines = response.split(";;;")
+        var lines = response.split("\n");
+        var currImg
+        var beam
+        var size
+        var type
+        var img
 
-<?
-        for ($i=0; $i<$config["NUM_PWC"]; $i++) {
-          echo "        var img".$i."_line = lines[".$i."].split(\":::\")\n";
-        }
+        for (i=0; i < lines.length-1; i++) {
 
-        for ($i=0; $i<$config["NUM_PWC"]; $i++) {
-          echo "        var img".$i."_hires = img".$i."_line[1]\n";
-          echo "        var img".$i."_lowres = img".$i."_line[2]\n";
-          echo "        var img".$i." = document.getElementById(\"beam".$config["BEAM_".$i]."\")\n";
-        }
-
-        for ($i=0; $i<$config["NUM_PWC"]; $i++) {
-
-          echo "        if (img".$i.".src != img".$i."_lowres) {\n";
-          echo "          img".$i.".src = img".$i."_lowres\n";
-          echo "        }\n";
-        }
-?>
-        if (document.imageform.imagetype[4].checked != true) {
-<?
-          echo "         var utc_start = lines[".$config["NUM_PWC"]."]\n";
-?>
-          document.getElementById("utc_start").value = utc_start;
+          values = lines[i].split(":::");
+          beam = values[0];
+          size = values[1];
+          type = values[2];
+          img  = values[3];
+        
+          currImg = document.getElementById("beam"+beam);
+          if (currImg) {
+            if (currImg.src != img) {
+              currImg.src = img
+            }
+          }
         }
       }
     }
@@ -99,20 +93,20 @@ $nbeam = 13;
         type = "fft";
       }
 
-      if (document.imageform.imagetype[3].checked == true) {
-        type = "dts";
-      }
+      //if (document.imageform.imagetype[3].checked == true) {
+      //  type = "dts";
+      //}
 
-      if (document.imageform.imagetype[4].checked == true) {
+      if (document.imageform.imagetype[3].checked == true) {
         type = "pdbp";
       }
 
-      if (document.imageform.imagetype[5].checked == true) {
+      if (document.imageform.imagetype[4].checked == true) {
         type = "pvf";
       }
 
       /* This URL will return the names of the 5 current */
-      var url = "plotupdate.php?results_dir=<?echo $config["SERVER_RESULTS_DIR"]?>&type="+type;
+      var url = "plotupdate.php?type="+type+"&size=112x84&beam=all";
 
       http_request.open("GET", url, true)
       http_request.send(null)
@@ -120,11 +114,11 @@ $nbeam = 13;
 
 
   </script>
-
-</head>
+<?
+  $inst->close_head();
+?>
 <body onload="looper()">
 <script type="text/javascript" src="/js/wz_tooltip.js"></script>
-<input id="utc_start" type="hidden" value="">
 <center>
 <table border=0 cellspacing=0 cellpadding=5>
 
@@ -134,51 +128,47 @@ $nbeam = 13;
       <input type="radio" name="imagetype" id="imagetype" value="bp" checked onClick="request()">Bandpass<br>
       <input type="radio" name="imagetype" id="imagetype" value="ts" onClick="request()">Time Series<br>
       <input type="radio" name="imagetype" id="imagetype" value="fft" onClick="request()">Fluct. PS<br>
-      <input type="radio" name="imagetype" id="imagetype" value="dts" onClick="request()">Digitizer Stats<br>
       <input type="radio" name="imagetype" id="imagetype" value="pdbp" onClick="request()">PD Bandpass<br>
       <input type="radio" name="imagetype" id="imagetype" value="pvf" onClick="request()">Phase v Freq<br>
       </form>
     </td>
 
-    <?//echoBlank()?>
-    <?echoBeam(13, $nbeam)?>
+    <?echoBeam(13)?>
     <?echoBlank()?>
-    <?echoBeam(12, $nbeam)?>
+    <?echoBeam(12)?>
     <?echoBlank()?> 
   </tr>
   <tr height=42>
-    <?//echoBlank()?>
-    <?echoBeam(6, $nbeam)?>
+    <?echoBeam(6)?>
     <?echoBlank()?>
   </tr>
   <tr height=42>
-    <?//echoBlank()?>
-    <?echoBeam(7, $nbeam)?>
-    <?echoBeam(5, $nbeam)?>
+    <?echoBeam(7)?>
+    <?echoBeam(5)?>
     <?echoBlank()?> 
   </tr>
 
   <tr height=42>
-    <?echoBeam(8, $nbeam)?>
-    <?echoBeam(1, $nbeam)?>
-    <?echoBeam(11, $nbeam)?>
+    <?echoBeam(8)?>
+    <?echoBeam(1)?>
+    <?echoBeam(11)?>
   </tr>
 
   <tr height=42>
-    <?echoBeam(2, $nbeam)?>
-    <?echoBeam(4, $nbeam)?>
-  </tr>
-
-  <tr height=42>
-    <?echoBlank()?>
-    <?echoBeam(3, $nbeam)?>
-    <?echoBlank()?>
+    <?echoBeam(2)?>
+    <?echoBeam(4)?>
   </tr>
 
   <tr height=42>
     <?echoBlank()?>
-    <?echoBeam(9, $nbeam)?>
-    <?echoBeam(10, $nbeam)?>
+    <?echoBeam(3)?>
+    <?echoBlank()?>
+  </tr>
+
+  <tr height=42>
+    <?echoBlank()?>
+    <?echoBeam(9)?>
+    <?echoBeam(10)?>
     <?echoBlank()?>
   </tr>
   
@@ -202,22 +192,14 @@ function echoBlank() {
   echo "<td ></td>\n";
 }
 
-function echoBeam($beam_no, $num_beams) {
+function echoBeam($beam_no) {
 
-  if ($beam_no <= $num_beams) {
-    //$mousein = "onmouseover=\"Tip('<img src=/images/blankimage.gif width=241 height=181>')\"";
-    //$mouseout = "onmouseout=\"UnTip()\"";
+  $beam_str = sprintf("%02d", $beam_no);
 
-    $beam_str = sprintf("%02d", $beam_no);
-
-    echo "<td rowspan=2 align=right>";
-    echo "<a border=0px href=\"javascript:popWindow('beamwindow.php?beamid=".$beam_no."')\">";
-
-    echo "<img src=\"/images/blankimage.gif\" border=0 width=112 height=84 id=\"beam".$beam_str."\" TITLE=\"Beam ".$beam_str."\" alt=\"Beam ".$beam_no."\" ".$mousein." ".$mouseout.">\n";
-    echo "</a></td>\n";
-  } else {
-    echo "<td rowspan=2></td>\n";
-  }
+  echo "<td rowspan=2 align=right>";
+  echo "<a border=0px href=\"javascript:popWindow('beamwindow.php?beamid=".$beam_no."')\">";
+  echo "<img src=\"/images/blankimage.gif\" border=0 width=113 height=85 id=\"beam".$beam_str."\" TITLE=\"Beam ".$beam_str."\" alt=\"Beam ".$beam_no."\" ".$mousein." ".$mouseout.">\n";
+  echo "</a></td>\n";
 
 }
 

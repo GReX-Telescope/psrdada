@@ -1,6 +1,8 @@
 <?PHP 
-include("definitions_i.php");
-include("functions_i.php");
+
+include ("bpsr.lib.php");
+
+$inst = new bpsr();
 
 /* special case for a click of the insert tape button */
 
@@ -31,9 +33,8 @@ if (isset($_GET["tapeinserted"])) {
 
 } else {
 
-  $config = getConfigFile(SYS_CONFIG,TRUE);
-  $host = $config["SERVER_HOST"];
-  $port = $config["SERVER_WEB_MONITOR_PORT"];
+  $host = $inst->config["SERVER_HOST"];
+  $port = $inst->config["SERVER_WEB_MONITOR_PORT"];
 
   list ($socket, $result) = openSocket($host, $port);
 

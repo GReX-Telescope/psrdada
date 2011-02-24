@@ -14,6 +14,7 @@ define(RESULTS_DIR,     WEB_BASE."/results");
 define(SYS_CONFIG,         DADA_ROOT."/share/bpsr.cfg");
 define(DADA_CONFIG,        DADA_ROOT."/share/bpsr_tcs.cfg");
 define(DADA_SPECIFICATION, DADA_ROOT."/share/bpsr_tcs.spec");
+define(IBOB_CONFIG,        DADA_ROOT."/share/ibob.cfg");
 
 /* Time/date configuration */
 define(DADA_TIME_FORMAT,  "Y-m-d-H:i:s");

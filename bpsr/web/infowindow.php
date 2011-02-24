@@ -1,22 +1,22 @@
 <?PHP
-include("definitions_i.php");
-include("functions_i.php");
 
-$config = getConfigFile(SYS_CONFIG, TRUE);
+include ("bpsr.lib.php");
+$inst = new bpsr();
 
 ?>
 <html>
-<? include("header_i.php"); ?>
+<? 
+  $inst->open_head();
+  $inst->print_head_int("BPSR Info Window", 0);
+?>
 
 <script type="text/javascript">
 
-  var url="/bpsr/infoupdate.php?results_dir=<?echo $config["SERVER_RESULTS_DIR"]?>"
+  var url="/bpsr/infoupdate.php"
 
   function looper() {
-
     request()
-    setTimeout('looper()',5000)
-
+    setTimeout('looper()',10000)
   }
 
   function request() {
@@ -48,11 +48,10 @@ $config = getConfigFile(SYS_CONFIG, TRUE);
       }
     }
   }
-
-
-
-
 </script>
+<?
+  $inst->close_head();
+?>
 <body onload="looper()">
 <? 
 ?>
@@ -63,17 +62,17 @@ $config = getConfigFile(SYS_CONFIG, TRUE);
         <tr>
           <td align="right" class="smalltext"><b>Source</b></td>
           <td width=5>&nbsp;</td>
-          <td align="left" class="smalltext"><span class="smalltext" id ="SOURCE"><?echo $spec["SOURCE"]?></span></td>
+          <td align="left" class="smalltext"><span class="smalltext" id ="SOURCE"></span></td>
         </tr>
         <tr>
           <td align="right" class="smalltext"><b>RA</b></td>
           <td width=5>&nbsp;</td>
-          <td align="left" class="smalltext"><span class="smalltext" id ="RA"><?echo $spec["RA"]?></span></td>
+          <td align="left" class="smalltext"><span class="smalltext" id ="RA"></span></td>
         </tr>
         <tr>
           <td align="right" class="smalltext"><b>DEC</b></td>
           <td width=5>&nbsp;</td>
-          <td align="left" class="smalltext"><span class="smalltext" id ="DEC"><?echo $spec["DEC"]?></span></td>
+          <td align="left" class="smalltext"><span class="smalltext" id ="DEC"></span></td>
         </tr>
       </table>
     </td>
@@ -83,17 +82,17 @@ $config = getConfigFile(SYS_CONFIG, TRUE);
         <tr>
           <td align="right" class="smalltext"><b>CFREQ</b></td>
           <td width=5>&nbsp;</td>
-          <td align="left" class="smalltext"><span class="smalltext" id ="CFREQ"><?echo $spec["CFREQ"]?></span> MHz</td>
+          <td align="left" class="smalltext"><span class="smalltext" id ="CFREQ"></span> MHz</td>
         </tr>
         <tr>
           <td align="right" class="smalltext"><b>Bandwith</b></td>
           <td width=5>&nbsp;</td>
-          <td align="left" class="smalltext"><span class="smalltext" id ="BANDWIDTH"><?echo $spec["BANDWIDTH"]?></span> MHz</td>
+          <td align="left" class="smalltext"><span class="smalltext" id ="BANDWIDTH"></span> MHz</td>
         </tr>
         <tr>
           <td align="right" class="smalltext"><b>ACC LEN</b></td>
           <td width=5>&nbsp;</td>
-          <td align="left" class="smalltext"><span class="smalltext" id ="ACC_LEN"><?echo $conf["ACC_LEN"]?></span></td>
+          <td align="left" class="smalltext"><span class="smalltext" id ="ACC_LEN"></span></td>
         </tr>
       </table>
     </td>
@@ -103,17 +102,17 @@ $config = getConfigFile(SYS_CONFIG, TRUE);
         <tr>
           <td align="right" class="smalltext"><b>Num PWCs</b></td>
           <td width=5>&nbsp;</td>
-          <td align="left" class="smalltext"><span class="smalltext" id ="NUM_PWC"><?echo $conf["NUM_PWC"]?></span></td>
+          <td align="left" class="smalltext"><span class="smalltext" id ="NUM_PWC"></span></td>
         </tr>
         <tr>
           <td align="right" class="smalltext"><b>Project ID</b></td>
           <td width=5>&nbsp;</td>
-          <td align="left" class="smalltext"><span class="smalltext" id ="PID"><?echo $spec["PID"]?></span></td>
+          <td align="left" class="smalltext"><span class="smalltext" id ="PID"></span></td>
         </tr>
         <tr>
           <td align="right" class="smalltext"><b>UTC START</b></td>
           <td width=5>&nbsp;</td>
-          <td align="left" class="smalltext"><span class="smalltext" id ="UTC_START"><?echo $spec["UTC_START"]?></span></td>
+          <td align="left" class="smalltext"><span class="smalltext" id ="UTC_START"></span></td>
         </tr>
       </table>
     </td>

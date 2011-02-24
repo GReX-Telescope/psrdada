@@ -1,20 +1,14 @@
 <?PHP
-include("definitions_i.php");
-include("functions_i.php");
 
-$config = getConfigFile(SYS_CONFIG, TRUE);
+include ("bpsr.lib.php");
+$inst  = new bpsr();
 ?>
 <html>
-<head>
-  <title>BPSR | Archive Monitor</title>
-  <link rel="STYLESHEET" type="text/css" href="/bpsr/style.css">
-  <link rel="shortcut icon" href="/images/favicon.ico"/>
-  <style>
-    .archivetable {
-      text-align: center;
-      vertical-align: top;
-    }
-  </style>
+
+<?
+  $inst->open_head();
+  $inst->print_head_int("BPSR Archive Monitor", 0);
+?>
 
 <script type="text/javascript">
 
@@ -75,7 +69,10 @@ $config = getConfigFile(SYS_CONFIG, TRUE);
   }
 
 </script>
-</head>
+
+<?
+  $inst->close_head();
+?>
 
 <body>
 <? 

@@ -1,94 +1,145 @@
 <?PHP
 
-include("definitions_i.php");
-include("functions_i.php");
-include("bpsr_functions_i.php");
-
-$config = getConfigFile(SYS_CONFIG);
-$conf = getConfigFile(DADA_CONFIG,TRUE);
-$spec = getConfigFile(DADA_SPECIFICATION, TRUE);
+include ("bpsr.lib.php");
+$inst = new bpsr();
 
 $utc_start = $_GET["utc_start"];
-if (! isset($_GET["imagetype"])) {
-  $imagetype = "bandpass";
-} else {
+$imagetype = "bp";
+if (isset($_GET["imagetype"])) {
   $imagetype = $_GET["imagetype"];
 }
 
-if (! isset($_GET["brief"])) {
-  $brief = 1;
-} else {
-  $brief = $_GET["brief"];
-}
-
-$data = getResultsInfo($utc_start, $config["SERVER_RESULTS_DIR"]);
-$images = getBPSRResults($config["SERVER_RESULTS_DIR"], $utc_start, "all", array("400x300","112x84"), "all");
+$tmp = $inst->getResultsInfo($utc_start, $inst->config["SERVER_RESULTS_DIR"]);
+$data = $tmp[$utc_start];
 
 $nbeam = $data["nbeams"];
 $header = getConfigFile($data["obs_start"], TRUE);
 
-$obs_info_file = $config["SERVER_RESULTS_DIR"]."/".$utc_start."/obs.info";
+$obs_info_file = $inst->config["SERVER_RESULTS_DIR"]."/".$utc_start."/obs.info";
 $obs_info = getConfigFile($obs_info_file);
 
-
 ?>
+
 <html>
-
 <?
-$title = "BPSR | Observation ".$utc_start;
-include("header_i.php"); 
+  $inst->open_head();
+  $inst->print_head_int("BPSR | Observation ".$utc_start, 0);
 ?>
 
-<body>
-<script type="text/javascript" src="/js/wz_tooltip.js"></script>
-<script type="text/javascript">
+  <script type="text/javascript">
 
-  function changeImage(type) {
-<?
-    $patterns = array("/&imagetype=bp/", "/&imagetype=ts/", "/&imagetype=fft/", "/&imagetype=dts/", "/&imagetype=pvf/");
-    $replacements= array("", "", "", "");
-    $cleaned_uri = preg_replace($patterns, $replacements, $_SERVER["REQUEST_URI"]);
-    echo "var newurl = \"".$cleaned_uri."&imagetype=\"+type\n";
-?>
-    document.location = newurl
+  var utc_start = "<?echo $utc_start?>"
 
+  /* Creates a pop up window */
+  function popWindow(URL,width,height) {
+
+    var width = "1300";
+    var height = "820";
+
+    URL = URL + "&obsid=<?echo $utc_start?>"
+
+    day = new Date();
+    id = day.getTime();
+    eval("page" + id + " = window.open(URL, '" + id + "', 'toolbar=1,scrollbars=1,location=1,statusbar=1,menubar=1,resizable=1,width="+width+",height="+height+"');");
+  }
+
+
+  /* Looping function to try and refresh the images */
+  function looper() {
+    request()
+    setTimeout('looper()',20000)
+  }
+
+  /* Parses the HTTP response and makes changes to images
+   * as requried */
+  function handle_data(http_request) {
+
+    if (http_request.readyState == 4) {
+      var response = String(http_request.responseText)
+      var lines = response.split("\n");
+
+      var currImg
+      var beam
+      var size
+      var type
+      var img
+
+      for (i=0; i < lines.length-1; i++) {
+
+        values = lines[i].split(":::");
+        beam = values[0];
+        size = values[1];
+        type = values[2];
+        img  = values[3];
+
+        if (size == "112x84") {
+          currImg = document.getElementById("beam"+beam);
+
+          if (currImg == null) {
+            alert("beam"+beam+ " gave a currImg Null");
+          }
+          if (currImg.src != img) {
+            currImg.src = img
+          }
+        }
+      }
+    }
+  }
+
+  function request() {
+    if (window.XMLHttpRequest)
+      http_request = new XMLHttpRequest()
+    else
+      http_request = new ActiveXObject("Microsoft.XMLHTTP");
+    
+    http_request.onreadystatechange = function() {
+      handle_data(http_request)
+    }
+
+    var type = "bp";
+
+    if (document.imageform.imagetype[0].checked == true) {
+      type = "bp";
+    }
+
+    if (document.imageform.imagetype[1].checked == true) {
+      type = "ts";
+    }
+
+    if (document.imageform.imagetype[2].checked == true) {
+      type = "fft";
+    }
+
+    if (document.imageform.imagetype[3].checked == true) {
+      type = "pvf";
+    }
+
+    /* This URL will return the names of the 5 current */
+    var url = "plotupdate.php?obs=<?echo $utc_start?>&type="+type+"&size=112x84";
+
+    http_request.open("GET", url, true)
+    http_request.send(null)
   }
 
 </script>
-<? 
-$text = "Observation ".$utc_start;
-include("banner.php"); 
-?>
 
-<center>
-<input id="utc_start" type="hidden" value="">
-<table cellspacing=5>
-<tr>
-  <td valign="top">
-    <table class="datatable"> 
-      <tr><th colspan=2>Observation Summary</th></tr>
 <?
-        echo "    <tr><td>UTC_START</td><td>".$obs_info["UTC_START"]."</td></tr>\n";
-        echo "    <tr><td>SOURCE</td><td>".$obs_info["SOURCE"]."</td></tr>\n";
-        echo "    <tr><td>RA</td><td>".$obs_info["RA"]."</td></tr>\n";
-        echo "    <tr><td>DEC</td><td>".$obs_info["DEC"]."</td></tr>\n";
-        echo "    <tr><td>FA</td><td>".$obs_info["FA"]."</td></tr>\n";
-        echo "    <tr><td>ACC_LEN</td><td>".$obs_info["ACC_LEN"]."</td></tr>\n";
-        echo "    <tr><td>NUM BEAMS</td><td>".$obs_info["NUM_PWC"]."</td></tr>\n";
+  $inst->close_head();
 ?>
-    </table>
-  </td>
-  <td width=50px>&nbsp;</td>
-  <td valign="top">
-<?printHeader($header, $brief);?>
-  </td>
-</tr>
-</table>
-</center>
+<body onload='looper()'>
+<script type="text/javascript" src="/js/wz_tooltip.js"></script>
+<? 
+$inst->print_banner("Observation ".$utc_start);
+?>
 
 <center>
-<table border=0 cellspacing=10 cellpadding=0 class="multibeam">
 
+<table>
+ <tr>
+  <td valign="top">
+
+<!-- Beam/Image Table -->
+<table border=0 cellspacing=10 cellpadding=0 class="multibeam">
   <tr>
     <td rowspan=3>
       <form name="imageform" class="smalltext">
@@ -99,62 +150,95 @@ include("banner.php");
       echo "<br>\n";
       echoRadio("imagetype","fft", "Power Spectrum", $imagetype); 
       echo "<br>\n";
-      echoRadio("imagetype","dts", "Digitizer Statistics", $imagetype);
-      echo "<br>\n";
       echoRadio("imagetype","pvf", "Phase v Freq", $imagetype);
   ?>
       </form>
     
-    <?echoBeam(13, $nbeam, $imagetype, $data, $images, $utc_start)?>
-    <?echoBlank()?>
-    <?echoBeam(12, $nbeam, $imagetype, $data, $images, $utc_start)?>
-    <?echoBlank()?> 
+<?    echoBeam(13, $nbeam)?>
+<?    echoBlank()?>
+<?    echoBeam(12, $nbeam)?>
+<?    echoBlank()?> 
   </tr>
   <tr>
    
-    <?echoBeam(6, $nbeam, $imagetype, $data, $images, $utc_start)?>
-    <?echoBlank()?>
+<?    echoBeam(6, $nbeam)?>
+<?    echoBlank()?>
   </tr>
   <tr>
   
-    <?echoBeam(7, $nbeam, $imagetype, $data, $images, $utc_start)?>
-    <?echoBeam(5, $nbeam, $imagetype, $data, $images, $utc_start)?>
-    <?echoBlank()?> 
+<?    echoBeam(7, $nbeam)?>
+<?    echoBeam(5, $nbeam)?>
+<?    echoBlank()?> 
   </tr>
 
   <tr>
-    <?echoBeam(8, $nbeam, $imagetype, $data, $images, $utc_start)?>
-    <?echoBeam(1, $nbeam, $imagetype, $data, $images, $utc_start)?>
-    <?echoBeam(11, $nbeam, $imagetype, $data, $images, $utc_start)?>
+<?    echoBeam(8, $nbeam)?>
+<?    echoBeam(1, $nbeam)?>
+<?    echoBeam(11, $nbeam)?>
   </tr>
 
   <tr>
-    <?echoBeam(2, $nbeam, $imagetype, $data, $images, $utc_start)?>
-    <?echoBeam(4, $nbeam, $imagetype, $data, $images, $utc_start)?>
+<?    echoBeam(2, $nbeam)?>
+<?    echoBeam(4, $nbeam)?>
   </tr>
 
   <tr>
-    <?echoBlank()?>
-    <?echoBeam(3, $nbeam, $imagetype, $data, $images, $utc_start)?>
-    <?echoBlank()?>
+<?    echoBlank()?>
+<?    echoBeam(3, $nbeam)?>
+<?    echoBlank()?>
   </tr>
 
   <tr>
-    <?echoBlank()?>
-    <?echoBeam(9, $nbeam, $imagetype, $data, $images, $utc_start)?>
-    <?echoBeam(10, $nbeam, $imagetype, $data, $images, $utc_start)?>
-    <?echoBlank()?>
+<?    echoBlank()?>
+<?    echoBeam(9, $nbeam)?>
+<?    echoBeam(10, $nbeam)?>
+<?    echoBlank()?>
   </tr>
   
   <tr>
-    <?echoBlank()?>
-    <?echoBlank()?>
-    <?echoBlank()?>
+<?    echoBlank()?>
+<?    echoBlank()?>
+<?    echoBlank()?>
   </tr>
 </table>
-</center>
 
+ </td>
 
+ <td>
+
+ <!-- Obs Summary Table -->
+    
+<table cellspacing=5>
+<tr>
+ <td valign="top">
+  <table class="datatable"> 
+   <tr><th colspan=2>Observation Summary</th></tr>
+<?
+        echo "   <tr><td>UTC_START</td><td>".$obs_info["UTC_START"]."</td></tr>\n";
+        echo "   <tr><td>SOURCE</td><td>".$obs_info["SOURCE"]."</td></tr>\n";
+        echo "   <tr><td>RA</td><td>".$obs_info["RA"]."</td></tr>\n";
+        echo "   <tr><td>DEC</td><td>".$obs_info["DEC"]."</td></tr>\n";
+        echo "   <tr><td>NUM BEAMS</td><td>".$obs_info["NUM_PWC"]."</td></tr>\n";
+?>
+   </table>
+ </td>
+</tr>
+<tr>
+ <td valign="top">
+<?
+  if (is_array($header)) {
+    printHeader($header, $brief);
+  } else {
+    echo "obs.start file did not exist<BR>\n";
+  }
+?>
+ </td>
+</tr>
+</table>
+
+</td>
+</tr>
+</table>
 </body>
 </html>
 
@@ -162,7 +246,7 @@ include("banner.php");
 
 function echoRadio($id, $value, $title, $selected) {
 
-  echo "<input type=\"radio\" name=\"".$id."\" id=\"".$id."\" value=\"".$value."\" onChange=\"changeImage('".$value."')\"";
+  echo "<input type=\"radio\" name=\"".$id."\" id=\"".$id."\" value=\"".$value."\" onChange=\"request()\"";
 
   if ($value == $selected)
     echo " checked";
@@ -173,31 +257,22 @@ function echoRadio($id, $value, $title, $selected) {
 
 function echoBlank() {
 
-  echo "<td><img src=\"/images/spacer.gif\" width=113 height=45></td>\n";
+  echo "    <td><img src=\"/images/spacer.gif\" width=113 height=45></td>\n";
 }
 
-function echoBeam($beam_no, $num_beams, $imagetype, $data, $images, $utc_start) {
 
-  if ($beam_no <= $num_beams) {
+function echoBeam($beam_no, $n_beams) {
 
-    $img_med = $images[$utc_start][($beam_no-1)][$imagetype."_400x300"];
-    $img_low = $images[$utc_start][($beam_no-1)][$imagetype."_112x84"];
+  $beam_str = sprintf("%02d",$beam_no);
 
-    $mousein = "onmouseover=\"Tip('<img src=".$img_med." width=400 height=300>')\"";
-    $mouseout = "onmouseout=\"UnTip()\"";
-
-    echo "<td rowspan=2 class=\"multibeam\" height=84>";
-    echo "<a class=\"multibeam\" href=\"javascript:popWindow('bpsr/beamwindow.php?beamid=".$beam_no."')\">";
-
-    echo "<img src=\"".$img_low."\" width=112 height=84 id=\"beam".$beam_no."\" border=0 TITLE=\"Beam ".$beam_no."\" alt=\"Beam ".$beam_no."\" ".$mousein." ".$mouseout.">\n";
-
-    echo "</a>";
-    echo "</td>\n";
-  } else {
-    echo "<td rowspan=2></td>\n";
-  }
+  echo "    <td rowspan=2 class='multibeam' height=84'>\n";
+  echo "      <a class='multibeam' href=\"javascript:popWindow('/bpsr/beamwindow.php?beamid=".$beam_str."')\">\n";
+  echo "        <img src='/images/blankimage.gif' width='112px' height='84px' id='beam".$beam_str."' border=0>\n";
+  echo "      </a>\n";
+  echo "    </td>\n";
 
 }
+
 
 function printHeader($header, $brief) {
 

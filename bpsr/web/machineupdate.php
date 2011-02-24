@@ -1,10 +1,10 @@
 <?PHP 
-include("definitions_i.php");
-include("functions_i.php");
 
-$config = getConfigFile(SYS_CONFIG,TRUE);
-$host = $config["SERVER_HOST"];
-$port = $config["SERVER_WEB_MONITOR_PORT"];
+include ("bpsr.lib.php");
+$inst = new bpsr();
+
+$host = $inst->config["SERVER_HOST"];
+$port = $inst->config["SERVER_WEB_MONITOR_PORT"];
 
 list ($socket, $result) = openSocket($host, $port);
 

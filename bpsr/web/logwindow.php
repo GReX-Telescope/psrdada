@@ -1,8 +1,8 @@
 <?PHP
 
-include("definitions_i.php");
-include("functions_i.php");
-include("bpsr_functions_i.php");
+include ("bpsr.lib.php");
+
+$inst = new bpsr();
 
 /* Don't allow this page to be cached, since it should always be fresh. */
 header("Cache-Control: no-cache, must-revalidate"); // HTTP/1.1
@@ -14,10 +14,8 @@ $daemon = $_GET["daemon"];
 $auto_scroll = $_GET["autoscroll"];
 $filter = $_GET["filter"];
 
-$server_daemons = getServerLogInformation();
-$client_daemons = getClientLogInformation();
-
-$pwc_config = getConfigFile(SYS_CONFIG);
+$server_daemons = $inst->serverLogInfo();
+$client_daemons = $inst->clientLogInfo();
 
 if (isset($_GET["loglength"])) {
   if ($_GET["loglength"] == "all") {
@@ -44,12 +42,12 @@ if ($machine == "nexus") {
 
   if (array_key_exists($daemon, $server_daemons)) {
 
-    $logfile = $pwc_config["SERVER_LOG_DIR"]."/".$server_daemons[$daemon]["logfile"];
+    $logfile = $inst->config["SERVER_LOG_DIR"]."/".$server_daemons[$daemon]["logfile"];
     $log_tag = "*";
 
   } else {
 
-    $logfile = $pwc_config["SERVER_LOG_DIR"]."/".$client_daemons[$daemon]["logfile"];
+    $logfile = $inst->config["SERVER_LOG_DIR"]."/".$client_daemons[$daemon]["logfile"];
     $log_tag = "*";
 
   }
@@ -60,7 +58,7 @@ if ($machine == "nexus") {
   if (array_key_exists($daemon, $client_daemons)) {
 
     $trans = array("nexus" => $machine);
-    $logfile = $pwc_config["SERVER_LOG_DIR"]."/".strtr($client_daemons[$daemon]["logfile"],$trans);
+    $logfile = $inst->config["SERVER_LOG_DIR"]."/".strtr($client_daemons[$daemon]["logfile"],$trans);
     $log_tag = $client_daemons[$daemon]["tag"];
 
   } else {
@@ -69,7 +67,7 @@ if ($machine == "nexus") {
     # machine name
 
     $trans = array("nexus" => $machine);
-    $logfile = $pwc_config["SERVER_LOG_DIR"]."/".strtr($server_daemons[$daemon]["logfile"],$trans);
+    $logfile = $inst->config["SERVER_LOG_DIR"]."/".strtr($server_daemons[$daemon]["logfile"],$trans);
     $log_tag = "*";
 
   }
@@ -81,14 +79,10 @@ if (isset($_GET["loglevel"])) {
   $loglevel = $_GET["loglevel"];
 }
 
-# echo "file: ".$logfile."<BR>\n";
-# echo "grep: ".$log_tag."<BR>\n";
-
 ob_start();
 
 ?>
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
-  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
   <link rel="STYLESHEET" type="text/css" href="./style_log.css">

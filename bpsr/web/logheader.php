@@ -1,19 +1,21 @@
-<?PHP?>
+<?PHP
+
+include ("bpsr.lib.php");
+
+$inst = new bpsr();
+
+?>
 <html>
 <?
-include("definitions_i.php");
-include("functions_i.php");
-include("bpsr_functions_i.php");
-include("header_i.php");
 
-$pwc_config = getConfigFile(SYS_CONFIG);
-$num_pwc = $pwc_config["NUM_PWC"];
+$inst->print_head("BPSR Log Header Window", 0);
 
-# Get the names of server log files
-$server_daemons = getServerLogInformation();
+$config = $inst->config;
+
+$server_daemons = $inst->serverLogInfo();
 $server_daemon_ids = array_keys($server_daemons);
 
-$client_daemons = getClientLogInformation();
+$client_daemons = $inst->clientLogInfo();
 $client_daemon_ids = array_keys($client_daemons);
 
 ?>
@@ -91,8 +93,8 @@ $client_daemon_ids = array_keys($client_daemons);
        Node: <select id="active_machine" class="smalltext" onchange="changeLogWindow()">
                <option value="nexus">nexus</option>
 <?
-for ($i=0;$i<$num_pwc;$i++) {
-  echo "              <option value=".$pwc_config["PWC_".$i].">".$pwc_config["PWC_".$i]."</option>";
+for ($i=0;$i<$config["NUM_PWC"];$i++) {
+  echo "              <option value=".$config["PWC_".$i].">".$config["PWC_".$i]."</option>";
 }
 ?>
              </select>&nbsp;&nbsp;&nbsp;&nbsp;

@@ -3,46 +3,43 @@ webdir = $(prefix)/web/bpsr
 
 nobase_dist_web_SCRIPTS = definitions_i.php \
                           archives.php \
+                          archival_summary_window.lib.php \
+                          archival.lib.php \
+                          backend_state_window.lib.php \
+                          beam_config.lib.php \
+                          beam_config.php \
+                          beam_reconfig.php \
+                          beamovision.lib.php \
                           bpsr_functions_i.php \
+                          beam_viewer.lib.php \
+                          bpsr.css \
+                          bpsr.lib.php \
+                          bpsr_webpage.lib.php \
+                          state_banner.lib.php \
+                          control.lib.php \
+                          current_obs_window.lib.php \
                           observations.php \
-                          plotupdate.php \
-                          plotwindow.php \
-                          plotwindow_large.php \
-                          beamwindow.php \
-                          machine_status.php \
-                          machineupdate.php \
+                          machine_summary.lib.php \
                           result.php \
-                          result_beamovision.php \
+                          result.lib.php \
                           results.php \
+                          results.lib.php \
                           index.php \
-                          infowindow.php \
-                          infoupdate.php \
-                          logheader.php \
-                          logwindow.php \
-                          parkes_disks.php \
-                          processed.php \
-                          swin_disks.php \
-                          archiverwindow.php \
-                          archiverupdate.php \
-                          tapewindow.php \
-                          tapeupdate.php \
+                          ganglia_window.lib.php \
+                          log_list.lib.php \
+                          log_viewer.php \
+                          old_results.lib.php \
+                          plot_window.lib.php \
+                          images/bpsr_favico.ico \
+                          images/bpsr_logo_1x60.png \
+                          images/bpsr_logo.png \
                           images/arrow_south_50x30.png \
                           images/arrow_southeast_50x50.png \
                           images/arrow_southwest_50x50.png \
-                          images/bandpass_1024x768.png \
-                          images/bandpass_240x180.png \
-                          images/digitizer_1024x768.png \
-                          images/digitizer_240x180.png \
-                          images/dm0timeseries_1024x768.png \
-                          images/dm0timeseries_240x180.png \
-                          images/powerspectrum_1024x768.png \
-                          images/powerspectrum_240x180.png \
-                          testing/configuration.php \
-                          testing/display_text_file.php \
-                          testing/index.php \
-                          testing/simulator.php \
-                          control/client_command.php \
-                          control/index.php \
+                          images/bpsr_beam_disabled_240x180.png \
+                          tcs_simulator.lib.php \
                           stats/.htaccess \
-                          status/.empty support.html
+                          status/.empty \
+                          support.html
+              
 

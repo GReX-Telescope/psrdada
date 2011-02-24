@@ -4,27 +4,30 @@
  * Displays the load, data block and disk information for each PWC, also for the 2 servers
  */
 
-include("definitions_i.php");
-include("functions_i.php");
+include ("bpsr.lib.php");
+$inst = new bpsr();
 
-$config = getConfigFile(SYS_CONFIG);
 $machine = $_GET["machine"];
 
 $pwcs = array();
 $servers = array("srv0", "srv1");
 $helpers = array();
 
-for ($i=0; $i<$config["NUM_PWC"]; $i++) {
-  $pwcs[$i] = $config["PWC_".$i];
+for ($i=0; $i<$inst->config["NUM_PWC"]; $i++) {
+  $pwcs[$i] = $inst->config["PWC_".$i];
 }
-for ($i=0; $i<$config["NUM_HELP"]; $i++) {
-  $helpers[$i] = $config["HELP_".$i];
+for ($i=0; $i<$inst->config["NUM_HELP"]; $i++) {
+  $helpers[$i] = $inst->config["HELP_".$i];
 }
 
 $machines = array_merge($pwcs, $servers, $helpers);
 $gang_base =  "http://".$_SERVER["HTTP_HOST"]."/ganglia/";
-$gang_network = $gang_base."graph.php?g=network_report&z=medium&c=APSR%20Clients&m=&r=hour&s=descending&hc=4";
-$gang_load = $gang_base."graph.php?g=load_report&z=medium&c=APSR%20Clients&m=&r=hour&s=descending&hc=4";
+$clients_network = $gang_base."graph.php?g=network_report&z=medium&c=APSR%20Clients&m=&r=hour&s=descending&hc=4";
+$clients_load = $gang_base."graph.php?g=load_report&z=medium&c=APSR%20Clients&m=&r=hour&s=descending&hc=4";
+$servers_network = $gang_base."graph.php?g=network_report&z=medium&c=APSR%20Servers&m=&r=hour&s=descending&hc=4";
+$servers_load = $gang_base."graph.php?g=load_report&z=medium&c=APSR%20Servers&m=&r=hour&s=descending&hc=4";
+$srv0_network = $gang_base."graph.php?g=network_report&z=medium&c=APSR%20Servers&h=srv0.apsr.edu.au&m=&r=hour&s=descending&hc=4";
+$srv0_load = $gang_base."graph.php?g=load_report&z=medium&c=APSR%20Servers&h=srv0.apsr.edu.au&m=&r=hour&s=descending&hc=4";
 
 // Don't allow this page to be cached, since it should always be fresh.
 header("Cache-Control: no-cache, must-revalidate"); // HTTP/1.1
@@ -118,13 +121,13 @@ header("Expires: Mon, 26 Jul 1997 05:00:00 GMT"); // Date in the past
           var time_4_str = ""
           var time_52_str = ""
 
-          if (statuses.length == 4) {
+          if (statuses.length == 5) {
 
             disks = statuses[0].split(" ");
             dbs   = statuses[1].split(" ");
             loads = statuses[2].split(",");
-            temp  = statuses[3];
             //unproc_gb = parseFloat(statuses[3])/1024;
+            temp  = statuses[4];
 
             if ((disks[0] == 0) && (disks[1] == 0)) {
               disk_percent = 0;
@@ -145,7 +148,7 @@ header("Expires: Mon, 26 Jul 1997 05:00:00 GMT"); // Date in the past
 
             load_percent = Math.floor((parseFloat(loads[0])/8)*100);
 
-            mb_per_block = <?echo $config[$config["PROCESSING_DATA_BLOCK"]."_BLOCK_BUFSZ"]?> / (1024*1024*1024);
+            mb_per_block = <?echo $inst->config[$inst->config["PROCESSING_DATA_BLOCK"]."_BLOCK_BUFSZ"]?> / (1024*1024*1024);
 
             time_4.setTime((disk_mb / 4.0) * 1000);
             time_52.setTime((disk_mb / 52.0) * 1000);
@@ -199,8 +202,10 @@ for ($i=0;$i<count($helpers); $i++) {
       }
       }
       var theTime = now.getTime();
-      document.getElementById("load").src = "<?echo $gang_load?>?"+theTime;
-      document.getElementById("network").src = "<?echo $gang_network?>?"+theTime;
+      document.getElementById("clients_load").src = "<?echo $clients_load?>?"+theTime;
+      document.getElementById("clients_network").src = "<?echo $clients_network?>?"+theTime;
+      document.getElementById("servers_load").src = "<?echo $srv0_load?>?"+theTime;
+      document.getElementById("servers_network").src = "<?echo $srv0_network?>?"+theTime;
     }
   }
   </script>
@@ -299,14 +304,21 @@ for ($i=0; $i<count($machines); $i++) {
 <tr height="100%"><td></td></tr>
 <? } ?>
 </table>
-<br>
-<br>
-<img id="load" src="<?echo $gang_load?>">
-<br>
-<br>
-<img id="network" src="<?echo $gang_network?>">
+<br><br>
+
+<table>
+<tr><td>
+<img id="clients_load" src="<?echo $clients_load?>" width="298px" height="115px">
+</td><td>
+<img id="clients_network" src="<?echo $clients_network?>" width="298px" height="115px">
+</td></tr>
+<tr><td>
+<img id="servers_load" src="<?echo $srv0_load?>" width="298px" height="115px">
+</td><td>
+<img id="servers_network" src="<?echo $srv0_network?>" width="298px" height="115px">
+</td></tr>
 </center>
 
-</body>
 </table>
+</body>
 </html>

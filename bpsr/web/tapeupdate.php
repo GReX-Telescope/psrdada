@@ -2,18 +2,20 @@
 include("definitions_i.php");
 include("functions_i.php");
 
-/* Need to clear PHP's internal cache */
-clearstatcache();
-
-/* Find most recent result in results dir */
-$control_dir = $_GET["control_dir"];
+/* special case for a click of the insert tape button */
 
 if (isset($_GET["tapeinserted"])) {
+
+  /* Need to clear PHP's internal cache */
+  clearstatcache();
+
+  /* Find most recent result in results dir */
+  $control_dir = "/nfs/control/bpsr";
 
   if (isset($_GET["location"])) {
     $location = strtolower($_GET["location"]);
   } else {
-    $location = "parkes"; 
+    $location = "parkes";
   }
 
   $fname = $control_dir."/".$location.".response.tmp";
@@ -27,28 +29,37 @@ if (isset($_GET["tapeinserted"])) {
   chmod($fname,0775);
   rename($fname, $control_dir."/".$location.".response");
 
+  /* Now wait for script to respond and then delete the file. */
+  echo "Waiting for acknowledge...<BR>\n";
+  flush();
+
+  while (file_exists( $control_dir."/".$location.".response" )) {
+    sleep(5);
+    clearstatcache();
+  }
+
+  /* now return to the old pagea */
+  echo '<script type="text/javascript">\n';
+  echo '  document.location = tapewindow.php\n';
+  echo '</script>\n';
+
 } else {
 
-$parkes_file = $control_dir."/parkes.state";
-$swin_file = $control_dir."/swin.state";
-$xfer_file = $control_dir."/xfer.state";
+  $config = getConfigFile(SYS_CONFIG,TRUE);
+  $host = $config["SERVER_HOST"];
+  $port = $config["SERVER_WEB_MONITOR_PORT"];
 
-$parkes_state = "unknown";
-$swin_state = "unknown";
-$xfer_state = "unknown";
+  list ($socket, $result) = openSocket($host, $port);
 
-if (file_exists($parkes_file)) {
-  $parkes_state = rtrim(file_get_contents($parkes_file));
-}
-if (file_exists($swin_file)) {
-  $swin_state = rtrim(file_get_contents($swin_file));
-}
-if (file_exists($xfer_file)) {
-  $xfer_state = rtrim(file_get_contents($xfer_file));
-}
+  if ($result == "ok") {
 
-echo "PARKES:::".$parkes_state.";;;";
-echo "SWIN:::".$swin_state.";;;";
-echo "XFER:::".$xfer_state.";;;";
+    $bytes_written = socketWrite($socket, "tape_info\r\n");
+    $string = socketRead($socket);
+    socket_close($socket);
 
+  } else {
+    $string = "Could not connect to $host:$port<BR>\n";
+  }
+
+  echo $string;
 }

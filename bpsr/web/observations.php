@@ -1,7 +1,7 @@
 <?PHP
-include("definitions_i.php");
-include("functions_i.php");
-include("bpsr_functions_i.php");
+
+include ("bpsr.lib.php");
+$inst = new bpsr();
 
 ini_set("memory_limit","128M");
 
@@ -25,17 +25,13 @@ define(INA, 16);   # in /nfs/archives/bpsr
 define(INR, 17);   # in /nfs/results/bpsr
 define(INL, 18);   # in /lfs/data0/bpsr/archives
 define(NBM, 19);   # number of beams
+define(PID, 20);   # PID of the observatino
 
-define(STS_COUNT, 20);
-define(STP_COUNT, 21);
+define(STP_COUNT, 22);
+define(STP_COUNT, 23);
 
-# Get the system configuration (dada.cfg)
-$cfg = getConfigFile(SYS_CONFIG,TRUE);
-$conf = getConfigFile(DADA_CONFIG,TRUE);
-$spec = getConfigFile(DADA_SPECIFICATION, TRUE);
-
-$archives_dir = $cfg["SERVER_ARCHIVE_DIR"];
-$results_dir = $cfg["SERVER_RESULTS_DIR"];
+$archives_dir = $inst->config["SERVER_ARCHIVE_DIR"];
+$results_dir = $inst->config["SERVER_RESULTS_DIR"];
 $apsr01_dir = "/nfs/apsr01/bpsr/archives";
 $staging_suffix = "/P630/staging_area";
 $on_tape_suffix = "/P630/on_tape";
@@ -47,10 +43,10 @@ if (isset($_GET["current_day"])) {
   $current_day = "all";
 }
 
-if (isset($_GET["type"])) {
-  $type = $_GET["type"];
+if (isset($_GET["PID"])) {
+  $pid = $_GET["PID"];
 } else {
-  $type = "all";
+  $pid = "all";
 }
 
 if (isset($_GET["show_test"])) {
@@ -89,13 +85,13 @@ if (isset($_GET["show_beams"])) {
   $show_beams = "no";
 }
 
-
 ?>
 <html>
-<head>
-  <title>BPSR | Observations</title>
-  <link rel="STYLESHEET" type="text/css" href="/bpsr/style.css">
-  <link rel="shortcut icon" href="/images/favicon.ico"/>
+
+<?
+  $inst->open_head();
+  $inst->print_head_int("BPSR | Observations", 0);
+?>
   <style>
     .active {
       font-family: arial,helvetica,sans-serif,times;
@@ -119,20 +115,18 @@ if (isset($_GET["show_beams"])) {
       clear: both;
     }
   </style>
-</head>
-<body>
-
 <?
-echo "<body>\n";
-
-$text = "Mega Archives Page";
-include("banner.php");
+  $inst->close_head();
+?>
+<body>
+<?
+  $inst->print_banner("BPSR Observations");
 
 echo "<center>\n";
 
 # Get the disk listing information
-$num_swin_dirs = $cfg["NUM_SWIN_DIRS"];
-$num_parkes_dirs = $cfg["NUM_PARKES_DIRS"];
+$num_swin_dirs = $inst->config["NUM_SWIN_DIRS"];
+$num_parkes_dirs = $inst->config["NUM_PARKES_DIRS"];
 
 $swin_dirs = array();
 $parkes_dirs = array();
@@ -140,7 +134,7 @@ $swin_db = array();
 $parkes_db = array();
 
 for ($i=0; $i<$num_swin_dirs; $i++) {
-  $arr = split(":",$cfg["SWIN_DIR_".$i]);
+  $arr = split(":",$inst->config["SWIN_DIR_".$i]);
   $swin_dirs[$i] = array();
   $swin_dirs[$i]["user"] = $arr[0];
   $swin_dirs[$i]["host"] = $arr[1];
@@ -148,7 +142,7 @@ for ($i=0; $i<$num_swin_dirs; $i++) {
 }
 
 for ($i=0; $i<$num_parkes_dirs; $i++) {
-  $arr = split(":",$cfg["PARKES_DIR_".$i]);
+  $arr = split(":",$inst->config["PARKES_DIR_".$i]);
   $parkes_dirs[$i] = array();
   $parkes_dirs[$i]["user"] = $arr[0];
   $parkes_dirs[$i]["host"] = $arr[1];
@@ -156,19 +150,26 @@ for ($i=0; $i<$num_parkes_dirs; $i++) {
 }
 
 # Get the bookkeeping db information
-$arr = split(":",$cfg["SWIN_DB_DIR"]);
+$arr = split(":",$inst->config["SWIN_DB_DIR"]);
 $swin_db["user"] = $arr[0];
 $swin_db["host"] = $arr[1];
 $swin_db["dir"]  = $arr[2];
 $swin_db["file"] = $arr[2]."/files.P630.db";
+$swin_db["file"] = $arr[2]."/files.P???.db";
 
-$arr = split(":",$cfg["PARKES_DB_DIR"]);
+$arr = split(":",$inst->config["PARKES_DB_DIR"]);
 $parkes_db["user"] = $arr[0];
 $parkes_db["host"] = $arr[1];
 $parkes_db["dir"]  = $arr[2];
 $parkes_db["file"] = $arr[2]."/files.P630.db";
+$parkes_db["file"] = $arr[2]."/files.P???.db";
 
 echo "<span id=\"progress\">\n";
+
+echo "Retreiving local archives listing: \n";
+flush();
+$archives = getArchivesArray($archives_dir, $results_dir, $apsr01_dir, $pid);
+$archives_keys = array_keys($archives);
 
 echo "Retreiving swin files.db<br>\n";
 flush();
@@ -179,9 +180,12 @@ $swin_files_db = array();
 $swin_files_db_count = array();
 for ($i=0; $i<count($array); $i++) {
   $arr = split("/", $array[$i]);
-  $swin_files_db[$arr[0]] .= $arr[1]." ";
-  if (!array_key_exists($arr[0],$swin_files_db_count)) $swin_files_db_count[$arr[0]] = 0;
-  $swin_files_db_count[$arr[0]] += 1;
+  # If this obs will be displayed
+  if (array_key_exists($arr[0], $archives)) {
+    $swin_files_db[$arr[0]] .= $arr[1]." ";
+    if (!array_key_exists($arr[0],$swin_files_db_count)) $swin_files_db_count[$arr[0]] = 0;
+    $swin_files_db_count[$arr[0]] += 1;
+  }
 }
 
 echo "Retreiving parkes files.db<br>\n";
@@ -193,9 +197,11 @@ $parkes_files_db = array();
 $parkes_files_db_count = array();
 for ($i=0; $i<count($array); $i++) {
   $arr = split("/", $array[$i]);
-  $parkes_files_db[$arr[0]] .= $arr[1]." ";
-  if (!array_key_exists($arr[0], $parkes_files_db_count)) $parkes_files_db_count[$arr[0]] = 0;
-  $parkes_files_db_count[$arr[0]] += 1;
+  if (array_key_exists($arr[0], $archives)) {
+    $parkes_files_db[$arr[0]] .= $arr[1]." ";
+    if (!array_key_exists($arr[0], $parkes_files_db_count)) $parkes_files_db_count[$arr[0]] = 0;
+    $parkes_files_db_count[$arr[0]] += 1;
+  }
 }
 
 $beam_dir_find_suffix = "find -mindepth 2 -maxdepth 2 -type d' | awk '{print substr($1,3)}' | sort";
@@ -234,43 +240,6 @@ for ($i=0; $i<$num_parkes_dirs; $i++) {
   }
 }
 
-/*
-# swin "on_tape"
-$swin_on_tape = array();
-$swin_on_tape_count = array();
-for ($i=0; $i<$num_swin_dirs; $i++) {
-  echo "Retreiving listing of ".$swin_dirs[$i]["user"]." ".$swin_dirs[$i]["host"]." ".$swin_dirs[$i]["disk"].$on_tape_suffix."<br>\n";
-  flush();
-  $cmd = "ssh -l ".$swin_dirs[$i]["user"]." ".$swin_dirs[$i]["host"]." 'cd ".$swin_dirs[$i]["disk"].$on_tape_suffix."; ".$beam_dir_find_suffix;
-  $array = array();
-  $lastline = exec($cmd, $array, $return_var);
-  for ($j=0; $j<count($array); $j++) {
-    $arr = split("/", $array[$j]);
-    $swin_on_tape[$arr[0]] .= $arr[1]." ";
-    if (!array_key_exists($arr[0], $swin_on_tape_count)) $swin_on_tape_count[$arr[0]] = 0;
-    $swin_on_tape_count[$arr[0]] += 1; 
-  }
-}
-
-
-# Parkes "on_tape"
-$parkes_on_tape = array();
-$parkes_on_tape_count = array();
-for ($i=0; $i<$num_parkes_dirs; $i++) {
-  echo "Retreiving listing of ".$parkes_dirs[$i]["user"]." ".$parkes_dirs[$i]["host"]." ".$parkes_dirs[$i]["disk"].$on_tape_suffix."<br>\n";
-  flush();
-  $cmd = "ssh -l ".$parkes_dirs[$i]["user"]. " ".$parkes_dirs[$i]["host"]." 'cd ".$parkes_dirs[$i]["disk"].$on_tape_suffix."; ".$beam_dir_find_suffix;
-  $array = array();
-  $lastline = exec($cmd, $array, $return_var);
-  for ($j=0; $j<count($array); $j++) {
-    $arr = split("/", $array[$j]);
-    $parkes_on_tape[$arr[0]] .= $arr[1]." ";
-     if (!array_key_exists($arr[0], $parkes_on_tape_count)) $parkes_on_tape_count[$arr[0]] = 0;
-     $parkes_on_tape_count[$arr[0]] += 1; 
-  }
-}
-*/
-
 # Get the listing of archives in pulsars @ swin
 $swin_pulsars = array();
 $swin_pulsars_count = array();
@@ -306,16 +275,12 @@ for ($i=0; $i<$num_parkes_dirs; $i++) {
 }
 
 
-echo "Retreiving local archives listing<br>\n";
-flush();
-$archives = getArchivesArray($archives_dir, $results_dir, $apsr01_dir);
 
 # Try to make a complete list of archives
 $swin_files_db_keys = array_keys($swin_files_db);
 $parkes_files_db_keys = array_keys($parkes_files_db);
-$archives_keys = array_keys($archives);
 
-$all_archives = array_merge($swin_files_db_keys, $parkes_files_db_keys, $archives_keys);
+$all_archives = $archives_keys;
 
 unset($swin_files_db_keys);
 unset($parkes_files_db_keys);
@@ -453,7 +418,7 @@ echo "</span>";
 <table border=0 cellpadding=0 cellspacing=0 class='obstable' width="99%">
  <thead>
   <tr>
-   <th colspan=7></th>
+   <th colspan=8></th>
    <th colspan=7>obs.?</th>
    <th></th>
    <th colspan=3>Swin</th>
@@ -465,17 +430,20 @@ echo "</span>";
    <th>Num</th>
    <th>Source</th>
    <th>UTC Start</th>
+<? if ($pid == "all") {
+     echo "    <th>PID</th>\n";
+}?>
    <th>Type</th>
    <th>Status</th>
    <th>Swin status</th>
    <th>Parkes status</th>
    <th>i</th>
    <th>f</th>
-   <th>d</th>
    <th>p</th>
    <th>x</th>
    <th>t</th>
    <th>a</th>
+   <th>d</th>
    <th>N</th>
    <th>S</th>
    <th>D</th>
@@ -516,22 +484,11 @@ for ($i=0; $i<count($keys); $i++) {
     # array of the current obs
     $d = $archives[$k];
 
-    #if ($d[SRV] == 0) {
-    #  $id = "testobs";
-    #  $status_string = "TESTOBS";
-    #}
-
-    /*
-    $sts = 0;
-    $stp = 0;
-    if (($d[OBX] == 2) || ($d[OBA] == 2) || ($d[OBD] == 2)) {
-      $sts = 1;
-      if ($d[SRV] == 1) 
-        $stp = 1;
-    }*/
-
+    # error to swin and parkes 
     $ets = $d[ETS];
     $etp = $d[ETP];
+
+    # on tape counts [only really applies for P630]
     $ots = array_key_exists($k, $swin_files_db);
     $ots_count = 0;
     if ($ots) 
@@ -584,14 +541,6 @@ for ($i=0; $i<count($keys); $i++) {
     $in_r = $d[INR];
     $in_l = $d[INL];
 
-    /*
-    if ($d[STS_COUNT] == "") {
-      $d[STS_COUNT] = "0";
-    }
-    if (($d[STP_COUNT] == "") && ($d[SRV]==1)) {
-      $d[STP_COUNT] = "0";
-    }*/
-
     # sent.to.swin flag
     if (($d[STS_COUNT]>=$d[NBM]) || ($d[OBX] == 2) || ($d[OBA] == 2) || ($d[OBD] == 2)) {
       $to_s = 2;
@@ -605,7 +554,7 @@ for ($i=0; $i<count($keys); $i++) {
     }
 
     # sent.to.parkes flag
-    if (($d[STP_COUNT]>=$d[NBM]) && (($d[OBX] == 2) || ($d[OBA] == 2) || ($d[OBD] == 2))) {
+    if (($d[STP_COUNT]>=$d[NBM]) || ($d[OBX] == 2) || ($d[OBA] == 2) || ($d[OBD] == 2)) {
       $to_p = 2;
     } else if ($d[STP_COUNT] > 0) {
       $to_p = 1;
@@ -615,25 +564,6 @@ for ($i=0; $i<count($keys); $i++) {
     if ($etp) {
       $to_p = 0;
     }
-
-    # SENT flag
-    /*
-    if ($sts) {
-      $to_s = 2;  # sent
-    } else if ($ets) {
-      $to_s = 0;  # error
-      $status_swin = "Send Error";
-    } else {
-      $to_s = 1;  # pending
-    }
-    if ($stp) {
-      $to_p = 2;  # sent
-    } else if ($etp) {
-      $to_p = 0;  # error
-      $status_parkes = "Send Error";
-    } else {
-      $to_p = 1;  # pending
-    }*/
 
     # ON DISK flag
     if ($fps)
@@ -655,6 +585,17 @@ for ($i=0; $i<count($keys); $i++) {
     else
       $on_p = ($otp_count > 0) ? 1 : -1;
 
+    # CHECK FOR OBS.PROBLEM OR OBS.FAILED
+    if ($d[OBP] == 0) {
+      $to_s = 0;
+      $to_p = 0;
+      $od_s = -1;
+      $od_p = -1;
+      $on_s = -1;
+      $on_p = -1;
+    }
+
+    # determine the state of the observation 
     if (($d[OBA]==2 || $d[OBD]==2) && $to_s==2 && $to_p==2 && $on_s==2 && $on_p==2) {
       if ($d[OBD]==2) {
         $status_string = "FINALIZED";
@@ -783,7 +724,12 @@ for ($i=0; $i<count($keys); $i++) {
       /* UTC_START */
       echo "    <td id=\"".$id."\" class=\"".$class."\">".$k."</td>\n";
 
-      /* UTC_START */
+      /* PID */
+      if ($pid == "all") {
+        echo "    <td id=\"".$id."\" class=\"".$class."\">".$d[PID]."</td>\n";
+      }
+
+      /* TYPE */
       echo "    <td id=\"".$id."\" class=\"".$class."\">".(($d[SRV]) ? "S" : "P")."</td>\n";
 
       /* OVERALL STATUS*/
@@ -821,11 +767,11 @@ for ($i=0; $i<count($keys); $i++) {
 
       echo "    ".statusTD($d[OBI],$id,$class,"&nbsp;")."\n";
       echo "    ".statusTD($d[OBF],$id,$class,"&nbsp;")."\n";
-      echo "    ".statusTD($d[OBD],$id,$class,"&nbsp;")."\n";
       echo "    ".statusTD($d[OBP],$id,$class,"&nbsp;")."\n";
       echo "    ".statusTD($d[OBX],$id,$class,"&nbsp;")."\n";
       echo "    ".statusTD($d[OBT],$id,$class,"&nbsp;")."\n";
       echo "    ".statusTD($d[OBA],$id,$class,"&nbsp;")."\n";
+      echo "    ".statusTD($d[OBD],$id,$class,"&nbsp;")."\n";
       echo "    ".statusTD("-1",$id,$class,$d[NBM])."\n";
       echo "    ".statusTD($to_s,$id,$class,$d[STS_COUNT])."\n";
       echo "    ".statusTD($od_s,$id,$class,$fps_count)."\n";
@@ -862,15 +808,15 @@ for ($i=0; $i<count($keys); $i++) {
 
 <?
 
-function getArchivesArray($a_dir, $r_dir, $n_dir) {
+function getArchivesArray($a_dir, $r_dir, $n_dir, $pid) {
 
   $results = array();
 
   $obs_a = getSubDirs($a_dir);
   $obs_r = getSubDirs($r_dir);
-  $obs_n = getSubDirs($n_dir);
+  #$obs_n = getSubDirs($n_dir);
 
-  $obs_all = array_merge($obs_a, $obs_r, $obs_n);
+  $obs_all = array_merge($obs_a, $obs_r);
   $obs_all = array_unique($obs_all);
   sort($obs_all);
 
@@ -888,13 +834,13 @@ function getArchivesArray($a_dir, $r_dir, $n_dir) {
   # Get the remote file listings soas to not tax NFS too much
   $user = "bpsr";
   $remote = array();
+  echo "<span id='local_host_status'></span>\n";
   for ($i=0; $i<=17; $i++) {
     $host = sprintf("apsr%02d",$i);
-    echo "$host [".memory_get_usage(true)."]<br>\n";
+    echo "<script type='text/javascript'>document.getElementById('local_host_status').innerHTML = \"".$host." [".sprintf("%4.2f MB",(memory_get_usage(true)/(1024*1024)))."]\";</script>\n";
     flush();
     $temp_array = getRemoteListing($user, $host, "/lfs/data0/bpsr/archives", $remote);
     $remote = $temp_array;
-
   }
   echo "<BR>\n";
   flush();
@@ -988,18 +934,20 @@ function getArchivesArray($a_dir, $r_dir, $n_dir) {
   echo "100%<br>\n";
   flush();
 
-  # check project ID's, removing all that are not P630
-  $array = array();
-  $cmd = "find /nfs/archives/bpsr/ -type f -maxdepth 2 -name 'obs.info' -print0 | xargs -0 grep ^PID | grep -v P630 | awk -F/ '{print $(NF-1)}' | sort";
+  # get the PID of each observation from obs.info
+  $cmd = "find /nfs/archives/bpsr/ -type f -maxdepth 2 -name 'obs.info' -print0 | xargs -0 grep ^PID | awk -F/ '{print $5\" \"$6}' | awk '{print $1\" \"$3}'";
   $lastline = exec($cmd, $array, $return_val);
-
-  echo "Found ".count($array)." non P630 observations<BR>\n";
-  flush();
-
   for ($i=0; $i<count($array); $i++) {
-    echo "removing ".$array[$i]."<BR>\n";
-    flush();
-    unset($results[$array[$i]]);
+    $bits = split(" ",$array[$i]);
+    $results[$bits[0]][PID] = $bits[1];
+  }
+
+  if ($pid != "all") {
+    $keys = array_keys($results);
+    for ($i=0; $i<count($keys); $i++) {
+      if ($results[$keys[$i]][PID] != $pid) 
+        unset($results[$keys[$i]]);
+    }
   }
 
   return $results;
@@ -1041,10 +989,12 @@ function statusLight($on) {
 #
 function getRemoteListing($user, $host, $dir, $results) {
 
-  $cmd = "ssh -l ".$user." ".$host." \"cd ".$dir.";  find . -mindepth 3 ".
-         "-maxdepth 3 -type f -name 'obs.start' -o -type f -name 'sent.to.*'".
-         " -o -type f -name 'error.to.*' -o -type f -name 'integrated.ar'".
-         "  -o -type f -name '*.fil'\" | sort";
+  $cmd = "ssh -l ".$user." ".$host." \"web_observations_helper.pl\"";
+
+   #      "cd ".$dir.";  find . -mindepth 3 ".
+   #       "-maxdepth 3 -type f -name 'obs.start' -o -type f -name 'sent.to.*'".
+   #       " -o -type f -name 'error.to.*' -o -type f -name 'integrated.ar'".
+   #       "  -o -type f -name '*.fil'\" | sort";
 
   $array = array();
   $lastline = exec($cmd, $array, $return_val);
@@ -1127,7 +1077,7 @@ function getObsDotListing($dir) {
     if ($f == "obs.txt") {
       $results[$o][OBT] = 2;
     }
-    if ($f == "obs.problem") {
+    if (($f == "obs.problem") || ($f == "obs.failed")) {
       $results[$o][OBP] = 0;
     }
     if ($f == "obs.transferred") {
