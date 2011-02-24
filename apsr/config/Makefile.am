@@ -30,12 +30,6 @@ dist_data_DATA = apsr.info \
                  names_J1748-2446.txt
 
 
-nobase_dist_data_DATA = testing/CAL.spec \
-                        testing/J0437_1405MHz.spec \
-                        testing/J0437_2500MHz_dbdisk.spec \
-                        testing/J0437_2500MHz.spec \
-                        testing/J0737-3038.spec
-
 EXTRA_DIST = apsr.cfg.in dspsr.giant.in dspsr.singleF.in
 MOSTLYCLEANFILES=apsr.cfg dspsr.giant dspsr.singleF
 
