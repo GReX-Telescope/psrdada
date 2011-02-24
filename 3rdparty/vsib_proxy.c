@@ -31,7 +31,7 @@ typedef struct writesocks {
 } writesocks;
 
 
-#define NBUF       3    /* Minimum 3 buffers or locking will fail */
+#define NBUF                 3    // min 3
 #define DEFAULT_BUFSIZE      2
 #define MAXSTR              200 
 
@@ -89,7 +89,7 @@ int main (int argc, char * const argv[]) {
   struct hostent     *hostptr;
   int one_transfer = 0;
   
-  bufsize   = DEFAULT_BUFSIZE * 1000*1000;
+  bufsize   = DEFAULT_BUFSIZE * 1024 * 1024;
   ofile = -1;
   i = -1;
   write_failure = 0;
@@ -113,7 +113,7 @@ int main (int argc, char * const argv[]) {
         if (status!=1)
           fprintf(stderr, "Bad blocksize option %s\n", optarg);
         else
-          bufsize = ftmp * 1000*1000;
+          bufsize = ftmp * 1024 * 1024;
       break;
 
       case 'w':
@@ -214,9 +214,9 @@ int main (int argc, char * const argv[]) {
     
   // Initialise buffers and syncronisation variables
   for (i=0; i<NBUF; i++) {
-    buf[i] = malloc(bufsize);
+    posix_memalign ( (void **) &(buf[i]), 512, bufsize);
     if (buf[i]==NULL) {
-      sprintf(msg, "Trying to allocate %d MB", bufsize/1000/1000);
+      sprintf(msg, "Trying to allocate %d MB", bufsize/1024/1024);
       perror(msg);
       return(1);
     }
@@ -238,6 +238,8 @@ int main (int argc, char * const argv[]) {
   /* setup a socket for incoming data */
   status =  setup_net(portserver, window_size1, &listensock, quiet);
   if (status) return(1);
+
+  fprintf(stderr, "ready for connection on %d\n",portserver);
 
   while (!time_to_quit) {
 
@@ -374,9 +376,11 @@ int main (int argc, char * const argv[]) {
       perror("Error closing server socket");
     }
 
-    status = close(listensock);
-    if (status!=0) {
-      perror("Error closing listening socket");
+    if (time_to_quit) {
+      status = close(listensock);
+      if (status!=0) {
+        perror("Error closing listening socket");
+      }
     }
 
     for (i=0; i<socks.nsocks; i++) {
