@@ -2,7 +2,6 @@
 webdir = $(prefix)/web/bpsr
 
 nobase_dist_web_SCRIPTS = definitions_i.php \
-                          archives.php \
                           archival_summary_window.lib.php \
                           archival.lib.php \
                           backend_state_window.lib.php \
@@ -18,11 +17,8 @@ nobase_dist_web_SCRIPTS = definitions_i.php \
                           state_banner.lib.php \
                           control.lib.php \
                           current_obs_window.lib.php \
-                          observations.php \
                           machine_summary.lib.php \
-                          result.php \
                           result.lib.php \
-                          results.php \
                           results.lib.php \
                           index.php \
                           ganglia_window.lib.php \
