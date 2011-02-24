@@ -8,6 +8,9 @@
 /*		option to omit labels, option to omit plot box             */
 /*                                                                         */
 /*                                                                         */
+/* Ver 4.0 RB 24 Aug 2009                                                  */
+/*              display a red box warning if data samples are all zero     */
+/*                                                                         */
 /***************************************************************************/
 
 #include "plot4mon.h"
@@ -57,6 +60,12 @@ int plot_stream_1D(float x[], float y[], float y1[],
   if (max_y1 > max_y) max_y = max_y1;
   if (min_y1 < min_y) min_y = min_y1;
 
+  if (fabs(max_y - min_y) < 0.0001) {
+    fprintf(stderr, "compute_extremes returned equal min/max values\n");
+    min_y = 0.0;
+    max_y = 0.1;
+  }
+
   /*
    *  Compute reasonable margins for plotting purposes
    */
@@ -70,6 +79,9 @@ int plot_stream_1D(float x[], float y[], float y1[],
   printf("           Ymin = %f     Ymax = %f \n",min_y,max_y);
   printf(" Margins : Xmargin = %f \n",marg_x); 
   printf(" Margins : Ymargin = %f \n",marg_y); 
+
+  int blank=0;
+  if (min_y == 0.00 ) { blank = 1; }
 
   // initiate plot if display device selected 
   if(cpgbeg(0, inpdev, 1, 1) != 1) return -2;
@@ -101,6 +113,27 @@ int plot_stream_1D(float x[], float y[], float y1[],
   // plot pol1
   cpgsci(10);
   plotdat (x, y1, endvalue, dommm);
+
+  /* Display a "red box" warning if data samples are zero */
+
+  float xc, yc, xb[4], yb[4];
+  char message[100];
+  strcpy(message,"Data=0.0");
+  xb[0]=min_x; yb[0]=min_y;
+  xb[1]=max_x; yb[1]=min_y;
+  xb[2]=max_x; yb[2]=max_y;
+  xb[3]=min_x; yb[3]=max_y;
+  xc = 0.10*(max_x-min_x); yc = 0.50*(max_y-min_y);
+  if (blank == 1) {
+    printf(" blanking the plot window \n");
+    cpgsci(2);
+    cpgsfs(1);
+    cpgpoly(4, xb, yb);
+    cpgsci(1);
+    cpgsch(10.0);
+    cpgtext(xc, yc, message);
+    cpgsch(1.2);
+  }
 
   cpgsci(1);
   cpgend();

@@ -18,6 +18,9 @@ int plot_stream_2D(float plotarray[], int nbin_x, int nsub_y, float yscale,
                   -0.5, 0.0, 1.0};
   float x[nbin_x];
 
+  min_value = 0.0;
+  max_value = 1.0;
+
    /*
    *   Rescale the value of the input array according to yscale
    */
@@ -33,6 +36,15 @@ int plot_stream_2D(float plotarray[], int nbin_x, int nsub_y, float yscale,
   inivalue=0;
   compute_extremes(plotarray,nvalues,inivalue,&max_value,&min_value);
   cutoff=0.5;
+
+  int blank=0;
+  if (min_value == max_value == 0.00) {
+    fprintf(stderr, "compute_extremes returned equal min/max values\n");
+    min_value = 0.0;
+    max_value = 0.1;
+    blank = 1;
+  }
+
   /*
    * Reporting number of values and extremes of the plot
    */

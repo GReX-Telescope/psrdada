@@ -10,6 +10,8 @@
 /* the array, with "nfft" being the largest power-of-2 value    */
 /* smaller than "nvalues"                                       */
 /*                                                              */
+/* RB 24 Aug 09: bypass whitening if data samples are all zeros */
+/*                                                              */
 /****************************************************************/
 
 #include "plot4mon.h"
@@ -23,6 +25,8 @@ void do_powerspec(float timeseries[], float powsp[],
   int exponent=0;
   long minbin,maxbin,nsegments;
   unsigned long nfft; 
+  long inivalue, endvalue;
+  float min_y, max_y;  
 
     /* obtain the nearest power of two number to the integer passed down */
   while( pow(2.0,(double)exponent) < nvalues) exponent++;
@@ -54,9 +58,20 @@ void do_powerspec(float timeseries[], float powsp[],
         }
    }
 
-  /*  whiten the power spectrum */
-  nsegments=(long)pow(2.0, (double)exponent-8); // segments are 2^7=28 bin long
-  whiten(&powsp[0], (long)nfft/2, nsegments);
+
+  /* check the data range before proceeding with whitening */
+  inivalue = 0; endvalue = nfft/2;
+  compute_extremes(powsp,endvalue,inivalue,&max_y,&min_y);
+  
+  if ( min_y == max_y ) { 
+    printf(" data range is 0.0, bypassing whitening \n");
+    } 
+    else 
+    {
+      /*  whiten the power spectrum */
+      nsegments=(long)pow(2.0, (double)exponent-8); // segments are 2^7=28 bin long
+      whiten(&powsp[0], (long)nfft/2, nsegments);
+    }
 
   /* calculate the one sided (hence the factor 2) power spectral density */
 

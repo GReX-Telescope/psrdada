@@ -9,7 +9,8 @@
 /* taking. Usage is reported on-line with plot4mon -h                        */
 /*                                                                           */
 /* Ver 2.0 RB 04 Oct 2008                                                    */
-/* modified for new file format and to overplot bandpass and time series for */ /* both pol0 and pol1, labels and title based on file extension, default dev */
+/* modified for new file format and to overplot bandpass and time series for */ 
+/* both pol0 and pol1, labels and title based on file extension, default dev */
 /* png                                                                       */
 /*                                                                           */
 /* RB 05 Oct 2008: plots with x axes in proper units (e.g. MHz, secs,...)    */
@@ -17,6 +18,9 @@
 /* WV 19 Nov 2008: plotting min mean and max of time series                  */
 /*                                                                           */
 /* Ver 3.0 AP 21 Nov 2008: added zooming capabilities                        */
+/*                                                                           */
+/* Ver 4.0 RB 24 Aug 2009: bug fix and error checking; bypass power spectrum */
+/*               whitening if data are zeros and display a "red box" warning */
 /*                                                                           */
 /*****************************************************************************/
 
