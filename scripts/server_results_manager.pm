@@ -83,6 +83,15 @@ sub main() {
   my $response = "";
   my $counter = 5;
   my $cmd = "";
+  my $archives_processed = 0;
+
+  # clear the error and warning files if they exist
+  if ( -f $warn ) {
+    unlink ($warn);
+  }
+  if ( -f $error) {
+    unlink ($error);
+  }
 
   # sanity check on whether the module is good to go
   ($result, $response) = good($quit_file);
@@ -124,6 +133,8 @@ sub main() {
 
       @observations = split(/\n/,$response);
 
+      $archives_processed = 0;
+
       # For process all valid observations
       for ($i=0; (($i<=$#observations) && (!$quit_daemon)); $i++) {
 
@@ -155,7 +166,8 @@ sub main() {
 
         # we are still receiving results from this observation
         } elsif ($t >= 0) {
-          processObservation($o, $n_bands);
+          $archives_processed += processObservation($o, $n_bands);
+          Dada::logMsg(2, $dl, "main: processObservation processed ".$archives_processed." archives");
 
         # no archives yet received, wait
         } elsif ($t > -60) {
@@ -172,7 +184,7 @@ sub main() {
   
     # Only look for files every 5 seconds
     $counter = 5;
-    while ($counter && !$quit_daemon) {
+    while ($counter && !$quit_daemon && $archives_processed == 0) {
       sleep(1);
       $counter--;
     }
@@ -238,7 +250,7 @@ sub getObsAge($$) {
       Dada::logMsg(2, $dl, "getObsAge: ".$result." ".$response);
 
       # If this is a single pulse observation or P427 observation
-      if (($result eq "ok") && (($response =~ m/singleF/) || ($response =~ m/P427/))) {
+      if (($result eq "ok") && (($response =~ m/single/) || ($response =~ m/P427/))) {
 
         # only declare this as finished when the band.finished files are written
         $cmd = "find ".$o." -type f -name 'band.finished' | wc -l";
@@ -446,6 +458,8 @@ sub processObservation($$) {
     Apsr::removeFiles($o, "phase_vs_time_".$source."*_1024x768.png", 40);
     Apsr::removeFiles($o, "phase_vs_freq_".$source."*_1024x768.png", 40);
   }
+
+  return ($#tres_plot + 1);
 }
 
 sub deleteObservation($) {
@@ -622,64 +636,52 @@ sub processArchive($$) {
 
   if ($plot_this) {
 
-  # If this is the first result for this observation
-  if (!(-f $total_f_res)) {
+    # If this is the first result for this observation
+    if (!(-f $total_f_res)) {
 
-    $cmd = "cp ".$total_f_sum." ".$total_f_res;
-    Dada::logMsg(2, $dl, $cmd);
-    $output = `$cmd`;
+      $cmd = "cp ".$total_f_sum." ".$total_f_res;
+      Dada::logMsg(2, $dl, $cmd);
+      $output = `$cmd`;
 
-    # Fscrunc the archive
-    $cmd = $bindir."/pam -F -m ".$total_f_sum;
-    Dada::logMsg(2, $dl, $cmd);
-    $output = `$cmd`;
+      # Fscrunc the archive
+      $cmd = $bindir."/pam -F -m ".$total_f_sum;
+      Dada::logMsg(2, $dl, $cmd);
+      $output = `$cmd`;
 
-    # Tres operations
-    $cmd = "cp ".$total_f_sum." ".$total_t_res;
-    Dada::logMsg(2, $dl, $cmd);
-    $output = `$cmd`;
+      # Tres operations
+      $cmd = "cp ".$total_f_sum." ".$total_t_res;
+      Dada::logMsg(2, $dl, $cmd);
+      $output = `$cmd`;
 
-  } else {
+    } else {
 
-    my $temp_ar = $dir."/temp.ar";
+      my $temp_ar = $dir."/temp.ar";
 
-    # Fres Operations
-    $cmd = $bindir."/psradd -T -o ".$temp_ar." ".$total_f_res." ".$total_f_sum;
-    ($result, $response) = Dada::mySystem($cmd);
-    if ($result ne "ok") {
-      Dada::logMsg(0, $dl, "psradd failed cmd=".$cmd);
-      Dada::logMsg(0, $dl, "psradd output=".$response);
+      # Fres Operations
+      $cmd = $bindir."/psradd -T --inplace ".$total_f_res." ".$total_f_sum;
+      ($result, $response) = Dada::mySystem($cmd);
+      if ($result ne "ok") {
+        Dada::logMsg(0, $dl, "psradd failed cmd=".$cmd);
+        Dada::logMsg(0, $dl, "psradd output=".$response);
+      }
+
+      # Fscrunc the archive
+      $cmd = $bindir."/pam -F -m ".$total_f_sum;
+      ($result, $response) = Dada::mySystem($cmd);
+      if ($result ne "ok") {
+        Dada::logMsg(0, $dl, "pam failed cmd=".$cmd);
+        Dada::logMsg(0, $dl, "pam output=".$response);
+      }
+
+      # Tres Operations
+      $cmd = $bindir."/psradd --inplace ".$total_t_res." ".$total_f_sum;
+      ($result, $response) = Dada::mySystem($cmd);
+      if ($result ne "ok") {
+        Dada::logMsg(0, $dl, "psradd failed cmd=".$cmd);
+        Dada::logMsg(0, $dl, "psradd output=".$response);
+      }
+
     }
-    #Dada::logMsg(2, $dl, $cmd);
-    #$output = `$cmd`;
-
-    unlink($total_f_res);
-    rename($temp_ar,$total_f_res);
-
-    # Fscrunc the archive
-    $cmd = $bindir."/pam -F -m ".$total_f_sum;
-    ($result, $response) = Dada::mySystem($cmd);
-    if ($result ne "ok") {
-      Dada::logMsg(0, $dl, "pam failed cmd=".$cmd);
-      Dada::logMsg(0, $dl, "pam output=".$response);
-    }
-    #Dada::logMsg(2, $dl, $cmd);
-    #$output = `$cmd`;
-
-    # Tres Operations
-    $cmd = $bindir."/psradd -o ".$temp_ar." ".$total_t_res." ".$total_f_sum;
-    ($result, $response) = Dada::mySystem($cmd);
-    if ($result ne "ok") {
-      Dada::logMsg(0, $dl, "psradd failed cmd=".$cmd);
-      Dada::logMsg(0, $dl, "psradd output=".$response);
-    }
-    #Dada::logMsg(2, $dl, $cmd);
-    #$output = `$cmd`;
-
-    unlink($total_t_res);
-    rename($temp_ar,$total_t_res);
-
-  }
   } else {
     $total_f_res = "none";
     $total_t_res = "none";
@@ -984,9 +986,9 @@ sub makePlotsFromArchives($$$$$) {
 
   # If we are plotting hi-res - include
   if ($res eq "1024x768") {
-    # No changes
+    $psrplot_args .= " -jC";
   } else {
-    $psrplot_args .= " -s ".$web_style_txt." -c below:l=unset";
+    $psrplot_args .= " -s ".$web_style_txt." -c below:l=unset -jC";
   }
 
   my $bin = Dada::getCurrentBinaryVersion()."/psrplot ".$psrplot_args;

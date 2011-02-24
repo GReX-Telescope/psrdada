@@ -235,7 +235,7 @@ sub processing_thread($) {
     $cmd = $bindir."/".$proc_cmd;
     $cmd .= " 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/".$client_logger;
 
-    logMsg(1, "INFO", "Cmd: ".$cmd);
+    logMsg(2, "INFO", "Cmd: ".$cmd);
 
     my $returnVal = system($cmd);
 

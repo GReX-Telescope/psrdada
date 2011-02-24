@@ -563,7 +563,7 @@ sub deleteCompletedBand($$$) {
   my $files = $response;
 
   $files =~ s/\n/ /g;
-  $cmd = "slow_rm -r 256 -M ".$path."/slow_rm.ls";
+  $cmd = "slow_rm -r 128 -M ".$path."/slow_rm.ls";
 
   logMsg(2, "INFO", $cmd);
   ($result, $response) = Dada::mySystem($cmd);

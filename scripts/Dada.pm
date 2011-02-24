@@ -15,6 +15,7 @@ require AutoLoader;
 @ISA = qw(Exporter AutoLoader);
 
 @EXPORT_OK = qw(
+  &array_unique
   &sendTelnetCommand
   &connectToMachine
   &getAPSRBinaryDir
@@ -96,6 +97,16 @@ sub getDadaConfig() {
   return %config;
 }
 
+sub array_unique
+{
+  my @list = @_;
+  my %finalList;
+  foreach(@list)
+  {
+    $finalList{$_} = 1; # delete double values
+  }
+  return (keys(%finalList));
+}
 
 #
 # Returns the name of the file that controls the daemons
@@ -415,8 +426,149 @@ sub getLineSelect($$) {
 
 }
 
+sub sendTelnetCommand($$;$) {
 
-sub sendTelnetCommand($$) {
+  (my $handle, my $command, my $timeout=1) = @_;
+
+  my $output = "";
+  my @lines = ();
+  my $res = "";
+  my $result = "fail";
+  my $response = "";
+  my $eod = 0;
+
+  my $line;
+
+  print $handle $command."\r\n";
+  if (DEBUG_LEVEL >= 1) {
+    print "Sending command: \"".$command."\"\n";
+  }
+
+  # my $ofh = select $handle;
+  # $| = 1;
+  # select $ofh;
+
+  while ($handle && !$eod) {
+
+    ($res, $output) = getLinesSelect($handle, 10);
+
+    if ($res eq "ok") {
+
+      @lines = split(/\n/, $output);
+
+      foreach $line ( @lines ) {
+        # remove a leading "> " if it exists
+        $line =~ s/^> //;
+
+        # remove a trailing \r\n if it exists
+        $line =~ s/\r\n//;
+
+        if (($line eq "ok") || ($line eq "fail")) {
+          $eod = 1;
+          $result = $line;
+        } else {
+          if ($response eq "") {
+            $response = $line;
+          } else {
+            $response = $response."\n".$line;
+          }
+        }
+      }
+    } else {
+      $eod = 1;
+      $result = "fail";
+      $response = $line;
+    }
+  }
+
+  if (DEBUG_LEVEL >= 1) {
+    print "Result:          \"".$result."\"\n";
+    print "Response:        \"".$response."\"\n";
+  }
+
+  return ($result, $response);
+
+}
+
+
+sub getLinesSelect($$) {
+
+  (my $handle, my $timeout) = @_;
+
+  my $blocking_state = $handle->blocking;
+  my $irs_state =  $/;
+  my $read_set = 0;
+  my $rh = 0;
+  my $line = "";
+  my $result = "fail";
+  my $response = "timed out";
+  my $poll_handle = 1;
+
+  # set socket to non blocking
+  $handle->blocking(0);
+
+  $/ = "\r\n";
+
+  # add handle to a read set
+  $read_set = new IO::Select($handle);
+
+  #print "select on $handle for $timeout\n";
+  my ($readable_handles) = IO::Select->select($read_set, undef, undef, $timeout);
+  #print "select on $handle returns\n";
+
+  foreach $rh (@$readable_handles) {
+    if ($rh == $handle) {
+
+      while ($poll_handle) {
+
+        $line = $rh->getline;
+        #print "1: line = '$line'\n";
+
+        # if there was nothing at the socket
+        if ((! defined $line) || ($line eq "")) {
+
+          $poll_handle = 0;
+
+          if ($response eq "timed out") {
+            $result = "fail";
+          } else {
+            $result = "ok";
+          }
+
+        } else {
+
+          $line =~ s/\r\n$//;
+          #print "2: line = '$line'\n";
+
+          $result = "ok";
+          if ($response eq "timed out") {
+            $response = $line;
+          } else {
+            $response .= "\n".$line;
+          }
+        }
+      }
+    }
+  }
+  
+  #print "line received = ".$response."\n";
+  
+  # remove read handle from set
+  $read_set->remove($handle);
+  
+  # restore the blocking state of the handle
+  $handle->blocking($blocking_state);
+  
+  # restore the input record seperator
+  $/ = $irs_state;
+  
+  return ($result, $response);
+
+}
+
+
+
+sub sendTelnetCommandOld($$) {
 
   (my $handle, my $command) = @_;
   my @lines;
@@ -527,6 +679,7 @@ sub addToTime($$) {
   my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime ($unixtime + $toadd);
 
   $year += 1900;
+  $mon++;
   $mon = sprintf("%02d", $mon);
   $mday = sprintf("%02d", $mday);
   $hour = sprintf("%02d", $hour);
@@ -667,7 +820,7 @@ sub waitForState($$$) {
     }
 
     if (!$ready) {
-      if ($counter > 0) {
+      if ($counter > 3) {
         print "waitForState: not yet ready: ".$response."\n";
       }
       sleep 1;
@@ -985,7 +1138,7 @@ sub getLoad($) {
 #
 sub getTempInfo() {
 
-  my $cmd = "/usr/bin/omreport chassis temps | grep \"^Reading\" | awk '{print \$(NF-1)}'";
+  my $cmd = "/opt/dell/srvadmin/bin/omreport chassis temps | grep \"^Reading\" | awk '{print \$(NF-1)}'";
   my $result = "";
   my $response = "";
 
@@ -1152,81 +1305,81 @@ sub mySystem($;$) {
 
 sub killProcess($) {
 
-  (my $pname) = @_;
+  (my $regex) = @_;
 
   my $pscmd = "";
   my $cmd = "";
   my $pids = "";
   my $result = "";
   my $response = "";
-  my $fnl = 2;
+  my $fnl = 1;
 
-  $pscmd = "ps axu | grep \"".$pname."\" | grep -v grep | awk '{print \$2}'";
+  $pscmd = "pgrep -f '".$regex."'";
 
   $cmd = $pscmd;
   Dada::logMsg(2, $fnl, "killProcess: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(2, $fnl, "killProcess: ".$result." ".$response);
 
-  # We have a process running
-  if (($result eq "ok") && ($response ne ""))  {
+  # We have one or more processes running
+  if (($result eq "ok") && ($response ne "")) {
 
-    $pids = $response;
-    $pids =~ s/\n/ /;
-    Dada::logMsg(2, $fnl, "killProcess: PIDS=".$pids);
-
-    $cmd = "kill -TERM ".$pids;
+    # send the process the INT signal
+    $cmd = "pkill -INT -f '".$regex."'";
     Dada::logMsg(2, $fnl, "killProcess: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     Dada::logMsg(2, $fnl, "killProcess: ".$result." ".$response);
 
-    # now check that the processes actually exited
+    # give the process(es) a chance to exit
     sleep(1);
 
-    # Now get the PID list   
-    $cmd = $pscmd;
-
+    # check they are gone
+    $cmd = "pgrep -f '".$regex."'";
     Dada::logMsg(2, $fnl, "killProcess: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     Dada::logMsg(2, $fnl, "killProcess: ".$result." ".$response);
 
-    # they didn't exit
-    if (($result eq "ok") && ($response ne ""))  {
-
-      $pids = $response;
-      $pids =~ s/\n/ /;
-      Dada::logMsg(2, $fnl, "killProcess: PIDS=".$pids);
-
-      $cmd = "kill -KILL ".$pids;
+    if (($result eq "ok") && ($response ne "")) {
+    
+      # send the process the TERM signal
+      $cmd = "pkill -TERM -f '".$regex."'";
       Dada::logMsg(2, $fnl, "killProcess: ".$cmd);
       ($result, $response) = Dada::mySystem($cmd);
       Dada::logMsg(2, $fnl, "killProcess: ".$result." ".$response);
 
+      # give the process(es) a chance to exit
       sleep(1);
-
-      # Now get the PID list   
-      $cmd = $pscmd;
-
+    
+      # check they are gone
+      $cmd = "pgrep -f '".$regex."'";
       Dada::logMsg(2, $fnl, "killProcess: ".$cmd);
       ($result, $response) = Dada::mySystem($cmd);
       Dada::logMsg(2, $fnl, "killProcess: ".$result." ".$response);
 
-      if (($result eq "ok") && ($response ne ""))  {
-        return ("fail", "process not killed");
+      if (($result eq "ok") && ($response ne "")) {
+       
+        # send the process the KILL signal
+        $cmd = "pkill -KILL -f '".$regex."'";
+        Dada::logMsg(2, $fnl, "killProcess: ".$cmd);
+        ($result, $response) = Dada::mySystem($cmd);
+        Dada::logMsg(2, $fnl, "killProcess: ".$result." ".$response);
+      
+        if (($result eq "ok") && ($response ne ""))  {
+          return ("fail", "process not killed");
+        } else {
+          return ("ok", "process killed with SIGKILL");
+        }
       } else {
-        return ("ok", "required -KILL signal");
+        return ("ok", "process killed with SIGTERM");
       }
-
     } else {
-      return ("ok", "process killed");
+      return ("ok", "process killed with SIGINT");
     }
-
   } else {
     return ("ok", "process did not exist");
   }
-
 }
-
+        
 #
 # Reads a configuration file in the typical DADA format and strips
 # out comments and newlines. Returns as an associative array/hash
@@ -1634,17 +1787,17 @@ sub getDM($) {
   my ($source) = @_;  
 
   my $cmd = "";
-  my $str = "";
+  my $result = "";
+  my $response = "";
   my $dm = "unknown";
   my $par_file = "";
 
   # test if the source is in the catalogue
-  $cmd = "psrcat -x -c DM ".$source;
-  $str = `$cmd`;
-  chomp $str;
+  $cmd = "psrcat -all -x -c DM ".$source." | awk '{print \$1}'";
+  ($result, $response) = mySystem($cmd);
 
-  # Check to see if the source is in the catalogue
-  if ($str =~ m/not in catalogue/) {
+  # If we had a problem getting the DM from the catalogue
+  if (($result ne "ok") || ($response =~ m/not in catalogue/)) {
 
     # strip leading J or B
     $source =~ s/^[JB]//;
@@ -1653,14 +1806,15 @@ sub getDM($) {
 
     if ( -f $par_file ) {
       $cmd = "grep ^DM ".$par_file." | grep -v DMEPOCH | awk '{print \$2}'";
-      $dm = `$cmd`;
-      chomp $dm;
+      ($result, $response) = mySystem($cmd);
+      if ($result eq "ok") {
+        $dm = $response;
+      }
     } 
 
-  # DM did exist in the psrcat DB
+  # we found the DM ok
   } else {
-    ($dm, $str) = split(/ /,$str,2);
-
+    $dm = $response;
   }
 
   return $dm;
@@ -1679,7 +1833,7 @@ sub getPeriod($) {
   my $response = "";
 
   # test if the source is in the catalogue
-  $cmd = "psrcat -x -c 'P0' ".$source." | awk '{print \$1}'";
+  $cmd = "psrcat -all -x -c 'P0' ".$source." | awk '{print \$1}'";
   ($result, $response) = Dada::mySystem($cmd);
   
   chomp $response;

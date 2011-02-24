@@ -107,6 +107,9 @@ use constant TAPE_SIZE    => "750.00";
 
 sub main() {
 
+  $warn  = $cfg{"STATUS_DIR"}."/".$daemon_name.".warn";
+  $error = $cfg{"STATUS_DIR"}."/".$daemon_name.".error";
+
   # location of DB files
   ($db_user, $db_host, $db_dir) = split(/:/, $cfg{uc($type)."_DB_DIR"});
 

@@ -2,7 +2,8 @@
 # scripts distributed as is (installed in bin/)
 dist_bin_SCRIPTS = Dada.pm \
                    gain_hacker.pl \
-                   machine_status.pl 
+                   machine_status.pl \
+                   om_custom_report.csh
 
 moddir = $(prefix)/bin/Dada
 

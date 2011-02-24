@@ -88,6 +88,14 @@ sub main() {
   my $response = "";
   my $timeout = 0;
 
+  # clear the error and warning files if they exist
+  if ( -f $warn ) {
+    unlink ($warn);
+  }
+  if ( -f $error) {
+    unlink ($error);
+  }
+
   # sanity check on whether the module is good to go
   ($result, $response) = good($quit_file);
   if ($result ne "ok") {

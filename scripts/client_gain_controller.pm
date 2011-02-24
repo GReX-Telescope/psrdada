@@ -147,10 +147,10 @@ sub main() {
 
   # Ask the server gain manager what channel we are
   $cmd = "CHANNEL_BASE";
-  logMsg(1, "INFO", "srv0 <- ".$cmd);
+  logMsg(2, "INFO", "srv0 <- ".$cmd);
   print $gain_sock $cmd."\r\n";
   $chan_base = Dada::getLine($gain_sock);
-  logMsg(1, "INFO", "srv0 -> ".$chan_base);
+  logMsg(2, "INFO", "srv0 -> ".$chan_base);
 
   logMsg(2, "INFO", "Asking for initial gains");
 

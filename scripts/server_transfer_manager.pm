@@ -151,9 +151,13 @@ sub main() {
   
   Dada::logMsg(0, $dl ,"STARTING SCRIPT");
 
-  Dada::logMsg(2, $dl, "Clearing status warn/error files");
-  unlink($warn);
-  unlink($error);
+  # clear the error and warning files if they exist
+  if ( -f $warn ) {
+    unlink ($warn);
+  }
+  if ( -f $error) {
+    unlink ($error);
+  }
 
   # start the control thread
   Dada::logMsg(2, $dl, "main: controlThread(".$quit_file.", ".$pid_file.")");
@@ -701,11 +705,11 @@ sub getBandToSend() {
     }
     $proc_file = $response;
 
-    # If the PID doesn't match, skip it
-    if ($proc_file =~ m/single/) {
-      Dada::logMsg(2, $dl, "getBandToSend: skipping ".$obs." PROC_FILE indicates single_pulse [".$proc_file."]");
-      next;
-    }
+    # Skip all single pulse observations TODO Deactivated this check temporarily!
+    #if ($proc_file =~ m/single/) {
+    #  Dada::logMsg(2, $dl, "getBandToSend: skipping ".$obs." PROC_FILE indicates single_pulse [".$proc_file."]");
+    #  next;
+    #}
 
     # Get the sorted list of band nfs links for this obs
     # This command will timeout on missing NFS links (6 s), but wont print ones that are missing
@@ -1550,8 +1554,12 @@ sub checkFullyDeleted() {
 
     if ($result ne "ok") {
       Dada::logMsgWarn($warn, "checkFullyDeleted: server_apsr_band_processor.pl ".$o." failed: ".$response);
+      $cmd = "mv ".$cfg{"SERVER_ARCHIVE_NFS_MNT"}."/".$o."/obs.deleted ".$cfg{"SERVER_ARCHIVE_NFS_MNT"}."/".$o."/obs.failed";
+      Dada::logMsg(1, $dl, "checkFullyDeleted: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      Dada::logMsg(2, $dl, "checkFullyDeleted: ".$result." ".$response);
       return ("fail", "Failed to process ".$o);
-    } 
+    }
 
     #$cmd = "mv ".$cfg{"SERVER_ARCHIVE_NFS_MNT"}."/".$o." /nfs/old_archives/apsr/".$o;
     #Dada::logMsg(2, $dl, "checkFullyDeleted: ".$cmd);

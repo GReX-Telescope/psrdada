@@ -341,7 +341,8 @@ sub processArchive($$) {
     } else {
 
       # Add the archive to the T scrunched total
-      $cmd = "psradd -T -o ".$fres_archive." ".$fres_archive." ".$archive_dir."/".$dir."/".$file;
+      #$cmd = "psradd -T -o ".$fres_archive." ".$fres_archive." ".$archive_dir."/".$dir."/".$file;
+      $cmd = "psradd -T --inplace ".$fres_archive." ".$archive_dir."/".$dir."/".$file;
       logMsg(2, "INFO", "processArchive: ".$cmd);
       ($result, $response) = Dada::mySystem($cmd);
       logMsg(2, "INFO", "processArchive: ".$result." ".$response);
@@ -350,7 +351,8 @@ sub processArchive($$) {
       }
 
       # Add the archive to the F scrunched total
-      $cmd = "psradd -jF -o ".$tres_archive." ".$tres_archive." ".$archive_dir."/".$dir."/".$file;
+      #$cmd = "psradd -jF -o ".$tres_archive." ".$tres_archive." ".$archive_dir."/".$dir."/".$file;
+      $cmd = "psradd -jF --inplace ".$tres_archive." ".$archive_dir."/".$dir."/".$file;
       logMsg(2, "INFO", "processArchive: ".$cmd);
       ($result, $response) = Dada::mySystem($cmd);
       logMsg(2, "INFO", "processArchive: ".$result." ".$response);
@@ -426,7 +428,7 @@ sub nfsCopy($$$) {
   }
   
   if (! -d $nfsdir."/".$dir) {
-     logMsg(0, "WARN", "nfsCopy: ".$nfsdir."/".$dir." did not exist, creating");
+     logMsg(1, "INFO", "nfsCopy: ".$nfsdir."/".$dir." did not exist, creating");
     `mkdir -p $nfsdir/$dir`;
   }
      

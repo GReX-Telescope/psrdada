@@ -111,6 +111,14 @@ sub main() {
   my $rh = "";
   my $string = "";
 
+  # clear the error and warning files if they exist
+  if ( -f $warn ) {
+    unlink ($warn);
+  }
+  if ( -f $error) {
+    unlink ($error);
+  }
+
   # sanity check on whether the module is good to go
   ($result, $response) = good($quit_file);
   if ($result ne "ok") {
@@ -295,7 +303,7 @@ sub currentInfoThread($) {
 
         Dada::logMsg(2, $dl, "currentInfoThread: [".$results_dir."/".$obs."/".$source."_f.ar]");
         if (-f $results_dir."/".$obs."/".$source."_f.ar") {
-          $cmd = "psrstat -j 'zap median' -j FTp -qc snr ".$results_dir."/".$obs."/".$source."_f.ar 2>&1 | grep snr= | awk -F= '{print \$2}'";
+          $cmd = "psrstat -j 'zap median' -j FTp -c snr ".$results_dir."/".$obs."/".$source."_f.ar 2>&1 | grep snr= | awk -F= '{print \$2}'";
           Dada::logMsg(2, $dl, "currentInfoThread: ".$cmd);
           ($result, $response) = Dada::mySystem($cmd);
           Dada::logMsg(2, $dl, "currentInfoThread: ".$result." ".$response);
@@ -605,8 +613,17 @@ sub nodeInfoThread() {
           $handle->close();
         }
 
-        $results[$i] = $result;
-        $responses[$i] = $response;
+        if (!defined($result)) {
+          $results[$i] = "fail";
+        } else {
+          $results[$i] = $result;
+        }
+      
+        if (!defined($response)) {
+          $responses[$i] = "0 0 0;;;0 0;;;0.00,0.00,0.00;;;0.0;;;0.0";
+        } else {
+          $responses[$i] = $response;
+        }
       }
 
       # now set the global string
