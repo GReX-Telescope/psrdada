@@ -15,6 +15,9 @@
 
 #endif
 
+/* To enable the use of O_DIRECT */
+#define _GNU_SOURCE
+
 #include <sys/types.h>
 #include <time.h>
 #include <math.h>
@@ -42,12 +45,10 @@ typedef struct disktime {
   unsigned long  size;
 } disktime;
 
-#define NBUF       3  // Must be at least 3
+#define NBUF                 64   // Must be at least 3
 #define DEFAULT_BUFSIZE       2
 #define DEFAULT_TOTALSIZE  1000
 #define MAXSTR              200 
-
-#define DEBUG(x)
 
 double tim(void);
 void gettime(disktime **, long, int *, int *);
@@ -95,6 +96,8 @@ int main (int argc, char * const argv[]) {
   struct sockaddr_in client;    /* Client address */
   socklen_t client_len;
   disktime *times;
+  unsigned o_direct = 0;
+  int open_flags = OPENOPTIONS;
 
   unsigned long long currentfilesize, completed;
   
@@ -123,13 +126,13 @@ int main (int argc, char * const argv[]) {
     {0, 0, 0, 0}
   };
 
-  bufsize   = DEFAULT_BUFSIZE * 1000*1000;
+  bufsize   = DEFAULT_BUFSIZE * 1024 * 1024;
   ofile = -1;
   i = -1;
   write_failure = 0;
 
   /* Read command line options */
-  while ((opt=getopt(argc,argv,"b:w:p:t:H:Dsmqh1")) != -1) {
+  while ((opt=getopt(argc,argv,"b:w:op:t:H:Dsmqh1")) != -1) {
 
     switch (opt) {
       
@@ -138,7 +141,7 @@ int main (int argc, char * const argv[]) {
       if (status!=1)
         fprintf(stderr, "Bad blocksize option %s\n", optarg);
       else 
-        bufsize = ftmp * 1000*1000;
+        bufsize = ftmp * 1024 * 1024;
      break;
 
     case 'w':
@@ -148,7 +151,11 @@ int main (int argc, char * const argv[]) {
       else 
         window_size = ftmp * 1024;
      break;
-     
+
+    case 'o':
+      o_direct = 1;
+      break;
+ 
     case 'p':
       status = sscanf(optarg, "%d", &tmp);
       if (status!=1)
@@ -206,17 +213,18 @@ int main (int argc, char * const argv[]) {
     }
   }
 
-
-
+  if (o_direct) {
+    open_flags |= O_DIRECT;
+  }
 
   nupdate = timeupdate/(bufsize/1e6);
   if (nupdate==0) nupdate = 1;
 
   // Initialise buffers and syncronisation variables
   for (i=0; i<NBUF; i++) {
-    buf[i] = malloc(bufsize);
+    posix_memalign ( (void **) &(buf[i]), 512, bufsize);
     if (buf[i]==NULL) {
-      sprintf(msg, "Trying to allocate %d MB", bufsize/1000/1000);
+      sprintf(msg, "Trying to allocate %d MB", bufsize/1024/1024);
       perror(msg);
       return(1);
     }
@@ -281,7 +289,9 @@ int main (int argc, char * const argv[]) {
     j = 0;
 
     //i Lock the last mutex
-    DEBUG(fprintf(stderr, "MAIN:   Locked %d for thread\n", jbuf));
+#ifdef _DEBUG
+    fprintf(stderr, "MAIN:   Locked %d for thread\n", jbuf);
+#endif
     pthread_mutex_lock( &bufmutex[jbuf] );
     
     /* Need to start netread thread */
@@ -292,9 +302,13 @@ int main (int argc, char * const argv[]) {
     }
     
     /* Wait on netread to lock the first buffer and unlock this one */
-    DEBUG(fprintf(stderr, "MAIN:   Wait on lock for buf %d\n", jbuf));
+#ifdef _DEBUG
+    fprintf(stderr, "MAIN:   Wait on lock for buf %d\n", jbuf);
+#endif
     pthread_mutex_lock( &bufmutex[jbuf] );
-    DEBUG(fprintf(stderr, "MAIN:   Got it\n"));
+#ifdef _DEBUG
+    fprintf(stderr, "MAIN:   Got it\n");
+#endif
     
     /* Loop over files */
     done = 0;
@@ -310,25 +324,36 @@ int main (int argc, char * const argv[]) {
       while (newfile || completed < currentfilesize) {
         
         // Wait until buffer ibuf has some data for us 
-        DEBUG(fprintf(stderr"MAIN:   Try and get lock on %d\n", ibuf));
+#ifdef _DEBUG
+        fprintf(stderr"MAIN:   Try and get lock on %d\n", ibuf);
+#endif
         pthread_mutex_lock( &bufmutex[ibuf] );
-        DEBUG(fprintf(stderr, "MAIN:   Got it\n"));
+#ifdef _DEBUG
+        fprintf(stderr, "MAIN:   Got it\n");
+#endif
         
         // Unlock the previous lock
-        DEBUG(fprintf(stderr, "MAIN:   Release lock %d\n", jbuf));
+#ifdef _DEBUG
+        fprintf(stderr, "MAIN:   Release lock %d\n", jbuf);
+#endif
         pthread_mutex_unlock( &bufmutex[jbuf] );
         
         pthread_mutex_lock(&globalmutex);
-        DEBUG(fprintf(stderr, "MAIN:    Nfullbuf = %d\n", nfullbuf));
+#ifdef _DEBUG
+        fprintf(stderr, "MAIN:    Nfullbuf = %d\n", nfullbuf);
+#endif
         if (nfullbuf==0) {
-          DEBUG(fprintf(stderr, "MAIN:    Quitting\n"));
+#ifdef _DEBUG
+          fprintf(stderr, "MAIN:    Quitting\n");
+#endif
           pthread_mutex_unlock(&globalmutex);
           done = 1;
           break;
         }
         pthread_mutex_unlock(&globalmutex);
-        
-        DEBUG(fprintf(stderr, "MAIN: nbufsize = %d\n", nbufsize[ibuf]));
+#ifdef _DEBUG
+        fprintf(stderr, "MAIN: nbufsize = %d\n", nbufsize[ibuf]);
+#endif
         
         if (newfile) { // Need to read filename
           
@@ -342,7 +367,7 @@ int main (int argc, char * const argv[]) {
             /* Open the output file if necessary */
             
             // File name contained in buffer
-            ofile = open(fname, OPENOPTIONS,S_IRWXU|S_IRWXG|S_IRWXO); 
+            ofile = open(fname, open_flags, S_IRWXU|S_IRWXG|S_IRWXO); 
             
             if (ofile==-1) {
               sprintf(msg, "Failed to open output file (%s)", fname);
@@ -384,8 +409,30 @@ int main (int argc, char * const argv[]) {
             }
           }
         } else if (dodisk && nbufsize[ibuf]>0) {
-          
-          nwrote = write(ofile, buf[ibuf], nbufsize[ibuf]);
+          if (o_direct) {
+            if (nbufsize[ibuf] % 512 == 0) {
+              nwrote = write(ofile, buf[ibuf], nbufsize[ibuf]);
+            } else {
+              /* write all except the mod 512 bytes */
+              uint64_t end = (nbufsize[ibuf] / 512) * 512;
+              uint64_t wrote = write (ofile, buf[ibuf], end);
+              close (ofile); 
+              ofile = open(fname, OPENOPTIONS, S_IRWXU|S_IRWXG|S_IRWXO);
+              if (ofile==-1) {
+                sprintf(msg, "Failed to open output file (%s)", fname);
+                perror(msg);
+
+                if (summary)
+                  save_summary(times, "Transfer.summary", "", ntime);
+                return(1);
+              }
+              lseek (ofile, 0, SEEK_END);
+              wrote += write (ofile, buf[ibuf] + wrote, nbufsize[ibuf] - wrote);
+              nwrote = wrote;
+            }
+          } else { 
+            nwrote = write(ofile, buf[ibuf], nbufsize[ibuf]);
+          }
           if (nwrote==-1) {
             perror("Error writing outfile");
             close(ofile);
@@ -413,15 +460,17 @@ int main (int argc, char * const argv[]) {
           if (!quiet) 
             PRINTSPEED(ntime-1, stderr);
         }
-        
-        DEBUG(fprintf(stderr, "MAIN: ibuf++\n"));
+#ifdef _DEBUG
+        fprintf(stderr, "MAIN: ibuf++\n");
+#endif
         jbuf = ibuf;
         ibuf = (ibuf+1)%NBUF;
         
+#ifdef _DEBUG
         pthread_mutex_lock(&globalmutex);
-        DEBUG(fprintf(stderr, "MAIN:    (Nfullbuf = %d)\n", nfullbuf));
+        fprintf(stderr, "MAIN:    (Nfullbuf = %d)\n", nfullbuf);
         pthread_mutex_unlock(&globalmutex);
-        
+#endif
         
         if (time_to_quit) break;
         i++;
@@ -647,23 +696,30 @@ void *netread (void *arg) {
   char *poff;
   unsigned long long bytesremaining = 0;
   size_t ntoread;
+  ssize_t nr_this_buf = 0;
 
   sock = *(int*)arg;
   
   while (1) {
 
     if (time_to_quit || write_failure) {
-      DEBUG(fprintf(stderr, "THREAD: Time to quit\n"));
-      DEBUG(fprintf(stderr, "THREAD: Unlock buf %d\n", jbuf));
+#ifdef _DEBUG
+      fprintf(stderr, "THREAD: Time to quit\n");
+      fprintf(stderr, "THREAD: Unlock buf %d\n", jbuf);
+#endif
       pthread_mutex_unlock( &bufmutex[jbuf] );
       pthread_exit(NULL);
     }
 
     if (!newfile || fnamesize==0) {
-      DEBUG(fprintf(stderr, "THREAD: Wait on %d\n", ibuf));
+#ifdef _DEBUG
+      fprintf(stderr, "THREAD: Wait on %d\n", ibuf);
+#endif
       pthread_mutex_lock( &bufmutex[ibuf] );
-      DEBUG(fprintf(stderr, "THREAD: Got it\n"));
-      DEBUG(fprintf(stderr, "THREAD: Release buf %d\n", jbuf));
+#ifdef _DEBUG
+      fprintf(stderr, "THREAD: Got it\n");
+      fprintf(stderr, "THREAD: Release buf %d\n", jbuf);
+#endif
       pthread_mutex_unlock( &bufmutex[jbuf] );
     }
     nbufsize[ibuf] = 0;
@@ -679,22 +735,31 @@ void *netread (void *arg) {
 
       if (fnamesize==0) { // Have not read filesize and file name yet
         ntoread = sizeof(long long) + sizeof(short);
-        DEBUG(fprintf(stderr, "THREAD: Attempt to read file and filename sizes from network\n"));
+#ifdef _DEBUG
+        fprintf(stderr, "THREAD: Attempt to read file and filename sizes from network\n");
+#endif
       } else {            // Need to read filename
         ntoread = fnamesize;
 
         poff += sizeof(long long); // Retain filesize header
-        DEBUG(fprintf(stderr, "THREAD: Attempt to read filename from network\n"));
+#ifdef _DEBUG
+        fprintf(stderr, "THREAD: Attempt to read filename from network\n");
+#endif
       }
     } else {
-      DEBUG(fprintf(stderr, "THREAD: Bytes remaining =  %lld\n", bytesremaining));
+#ifdef _DEBUG
+      fprintf(stderr, "THREAD: Bytes remaining =  %lld\n", bytesremaining);
+#endif
       if (bytesremaining>bufsize) 
         ntoread = bufsize;
       else
         ntoread = bytesremaining;
     }
-    DEBUG(fprintf(stderr, "THREAD: Try and read %d bytes from socket\n", ntoread));
+#ifdef _DEBUG
+    fprintf(stderr, "THREAD: Try and read %d bytes from socket\n", ntoread);
+#endif
 
+    nr_this_buf = 0;
     while (nbufsize[ibuf]<ntoread) {
     
       nr = recv(sock,poff,ntoread-nbufsize[ibuf],0);
@@ -706,7 +771,9 @@ void *netread (void *arg) {
         pthread_exit(NULL);
 
       } else if (nr==0) {
-        DEBUG(fprintf(stderr, "THREAD: Socket connection closed\n"));
+#ifdef _DEBUG
+        fprintf(stderr, "THREAD: Socket connection closed\n");
+#endif
         /* Assume for now this means the socket was closed */
         pthread_mutex_lock(&globalmutex);
         if (nbufsize[ibuf]>0) nfullbuf++;
@@ -718,14 +785,19 @@ void *netread (void *arg) {
         nbufsize[ibuf] += nr;
         poff += nr;
         if (!newfile) {
-          pthread_mutex_lock(&globalmutex);
-          totalsize += nr;
-          bwrote += nr;
-          pthread_mutex_unlock(&globalmutex);
+          nr_this_buf += nr;
+          //pthread_mutex_lock(&globalmutex);
+          //totalsize += nr;
+          //bwrote += nr;
+          //pthread_mutex_unlock(&globalmutex);
           bytesremaining -= nr;
         }
       }
     }
+    pthread_mutex_lock(&globalmutex);
+    totalsize += nr_this_buf;
+    bwrote += nr_this_buf;
+    pthread_mutex_unlock(&globalmutex);
 
     if (newfile) {
       if (fnamesize==0) { // Just read filesize and filename size
@@ -734,8 +806,10 @@ void *netread (void *arg) {
 
         memcpy(&fnamesize,  buf[ibuf]+sizeof(long long), sizeof(short));
 
-        DEBUG(fprintf(stderr, "THREAD: Will read %lld bytes from network\n", bytesremaining));
-        DEBUG(fprintf(stderr, "THREAD: Will read %d bytes for filename\n", fnamesize));
+#ifdef _DEBUG
+        fprintf(stderr, "THREAD: Will read %lld bytes from network\n", bytesremaining);
+        fprintf(stderr, "THREAD: Will read %d bytes for filename\n", fnamesize);
+#endif
 
         if (fnamesize>bufsize-sizeof(long long)) {
           fprintf(stderr, "Passed filename too long\n");
@@ -750,7 +824,9 @@ void *netread (void *arg) {
         newfile = 0;
 
         poff = buf[ibuf]+ sizeof(long long);
-        DEBUG(fprintf(stderr, "THREAD: Filename %s\n", poff));
+#ifdef _DEBUG
+        fprintf(stderr, "THREAD: Filename %s\n", poff);
+#endif
 
 
       }
@@ -759,7 +835,9 @@ void *netread (void *arg) {
     if (!newfile) {  // Reuse this buffer if receiving file name
       pthread_mutex_lock(&globalmutex);
       nfullbuf++;
-      DEBUG(fprintf(stderr, "THREAD: nfullbuf =  %d\n", nfullbuf));
+#ifdef _DEBUG
+      fprintf(stderr, "THREAD: nfullbuf =  %d\n", nfullbuf);
+#endif
       pthread_mutex_unlock(&globalmutex);
 
       jbuf = ibuf;
@@ -850,6 +928,7 @@ void usage(void) {
   fprintf(stderr, "  -w <SIZE>     Network window size (kB)\n");
   fprintf(stderr, "  -t <TIME>     Number of blocks (-b) to average timing statistics\n");
   fprintf(stderr, "  -H <HOST>     Act as client and connect to remove server\n");
+  fprintf(stderr, "  -o            enable O_DIRECT\n");
   fprintf(stderr, "  -s            Save a summary of network statistics\n");
   fprintf(stderr, "  -m            Don't write data to disk\n");
   fprintf(stderr, "  -q            Quiet mode, less output\n");
