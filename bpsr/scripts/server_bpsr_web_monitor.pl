@@ -44,7 +44,8 @@ use constant STATUS_ERROR => 2;
 #
 # Global Variables
 #
-our %cfg = Bpsr::getBpsrConfig();      # Bpsr.cfg
+our %cfg                        = Bpsr::getConfig();
+our %ibobs                      = Bpsr::getIBOBConfig();
 our $error                      = $cfg{"STATUS_DIR"}."/bpsr_web_monitor.error";
 our $warn                       = $cfg{"STATUS_DIR"}."/bpsr_web_monitor.warn";
 our $quit_daemon : shared       = 0;
@@ -59,14 +60,20 @@ our $dts_image_string : shared  = "";
 our $pvf_image_string : shared  = "";
 our $pdbp_image_string : shared = "";
 
+# clear the error and warning files if they exist
+if ( -f $warn ) {
+  unlink ($warn);
+}
+if ( -f $error) {
+  unlink ($error);
+}
+
 # Autoflush output
 $| = 1;
-
 
 # Signal Handler
 $SIG{INT} = \&sigHandle;
 $SIG{TERM} = \&sigHandle;
-
 
 #
 # Local Varaibles
@@ -158,8 +165,6 @@ while (!$quit_daemon) {
 
       $handle = $rh->accept();
       $handle->autoflush();
-      # my $hostinfo = gethostbyaddr($handle->peeraddr);
-      # my $hostname = $hostinfo->name;
       Dada::logMsg(2, DL, "Accepting connection");
 
       # Add this read handle to the set
@@ -168,10 +173,6 @@ while (!$quit_daemon) {
 
     } else {
 
-      # my $hostinfo = gethostbyaddr($rh->peeraddr);
-      # my $hostname = $hostinfo->name;
-      # my @parts = split(/\./,$hostname);
-      # my $machine = $parts[0];
       $string = Dada::getLine($rh);
 
       if (! defined $string) {
@@ -308,6 +309,7 @@ sub currentInfoThread($) {
         $tmp_str .= "NUM_PWC:::".$cfg_file{"NUM_PWC"}.";;;";
         $tmp_str .= "PID:::".$cfg_file{"PID"}.";;;";
         $tmp_str .= "UTC_START:::".$cfg_file{"UTC_START"}.";;;";
+        $tmp_str .= "PROC_FILE:::".$cfg_file{"PROC_FILE"}.";;;";
         $tmp_str .= "INTERGRATED:::0;;;";
  
         Dada::logMsg(3, DL, $tmp_str); 
@@ -353,6 +355,16 @@ sub imageInfoThread($) {
   my %pvf_images = ();
   my %pdbp_images = ();
   my @keys = ();
+  my $k = "";
+  my $dirs_string = ();
+  my @dirs = ();
+
+  my %beams = ();
+
+  for ($i=0; $i<$cfg{"NUM_PWC"}; $i++)
+  {
+    $beams{$cfg{"PWC_".$i}} = Bpsr::getBeamForPWCHost($cfg{"PWC_".$i});
+  }
 
   chdir $results_dir;
 
@@ -371,6 +383,13 @@ sub imageInfoThread($) {
       $obs = `$cmd`;
       chomp $obs;
 
+      # get the listing of beam dirs
+      @dirs = ();
+      $cmd = "find ".$obs." -mindepth 1 -maxdepth 1 -type d -name '??' -printf '\%f '";
+      $dirs_string = `$cmd`;
+      chomp $dirs_string;
+
+      # get the listing of small image files
       $cmd = "find ".$obs." -name '*_112x84.png' | sort | awk -F/ '{print \$2, \$3}'";
       $image_string = `$cmd`;
       @images = split(/\n/, $image_string);
@@ -382,12 +401,16 @@ sub imageInfoThread($) {
       %pvf_images = ();
 
       for ($i=0; $i<$cfg{"NUM_PWC"}; $i++) {
-        $bp_images{$cfg{"BEAM_".$i}} = "";
-        $ts_images{$cfg{"BEAM_".$i}} = "";
-        $fft_images{$cfg{"BEAM_".$i}} = "";
-        $dts_images{$cfg{"BEAM_".$i}} = "";
-        $pvf_images{$cfg{"BEAM_".$i}} = "";
-        $pdbp_images{$cfg{"IBOB_DEST_".$i}} = "";
+        $b = $beams{$cfg{"PWC_".$i}};
+        $bp_images{$b} = "";
+        $ts_images{$b} = "";
+        $fft_images{$b} = "";
+        $dts_images{$b} = "";
+        $pvf_images{$b} = "";
+      }
+
+      for ($i=0; $i<$cfg{"NUM_IBOB"}; $i++) {
+        $pdbp_images{$ibobs{"CONTROL_IP_".$i}} = "";
       }
 
       for ($i=0; $i<=$#images; $i++) {
@@ -415,10 +438,13 @@ sub imageInfoThread($) {
       $tmp_str = "";
       @keys = keys %bp_images;
       for ($i=0; $i<=$#keys; $i++) {
-        if ($bp_images{$keys[$i]} ne "") {
-          $tmp_str .= $keys[$i].":::".$obs."/".$keys[$i]."/".$bp_images{$keys[$i]}.";;;";
+        $k = $keys[$i];
+        if ($bp_images{$k} ne "") {
+          $tmp_str .= $k.":::".$obs."/".$k."/".$bp_images{$k}.";;;";
+        } elsif (!($dirs_string =~ m/$k/)) {
+          $tmp_str .= $k.":::../images/bpsr_beam_disabled_240x180.png;;;";
         } else {
-          $tmp_str .= $keys[$i].":::../../images/blankimage.gif;;;";
+          $tmp_str .= $k.":::../../images/blankimage.gif;;;";
         }
       }
       $bp_image_string = $tmp_str;
@@ -426,10 +452,13 @@ sub imageInfoThread($) {
       $tmp_str = "";
       @keys = keys %ts_images;
       for ($i=0; $i<=$#keys; $i++) {
-        if ($ts_images{$keys[$i]} ne "") {
-          $tmp_str .= $keys[$i].":::".$obs."/".$keys[$i]."/".$ts_images{$keys[$i]}.";;;";
+        $k = $keys[$i];
+        if ($ts_images{$k} ne "") {
+          $tmp_str .= $k.":::".$obs."/".$k."/".$ts_images{$k}.";;;";
+        } elsif (!($dirs_string =~ m/$k/)) {
+          $tmp_str .= $k.":::../images/bpsr_beam_disabled_240x180.png;;;";
         } else {
-          $tmp_str .= $keys[$i].":::../../images/blankimage.gif;;;";
+          $tmp_str .= $k.":::../../images/blankimage.gif;;;";
         }
       }
       $ts_image_string = $tmp_str;
@@ -437,10 +466,13 @@ sub imageInfoThread($) {
       $tmp_str = "";
       @keys = keys %fft_images;
       for ($i=0; $i<=$#keys; $i++) {
-        if ($fft_images{$keys[$i]} ne "") {
-          $tmp_str .= $keys[$i].":::".$obs."/".$keys[$i]."/".$fft_images{$keys[$i]}.";;;";
+        $k = $keys[$i];
+        if ($fft_images{$k} ne "") {
+          $tmp_str .= $k.":::".$obs."/".$k."/".$fft_images{$k}.";;;";
+        } elsif (!($dirs_string =~ m/$k/)) {
+          $tmp_str .= $k.":::../images/bpsr_beam_disabled_240x180.png;;;";
         } else {
-          $tmp_str .= $keys[$i].":::../../images/blankimage.gif;;;";
+          $tmp_str .= $k.":::../../images/blankimage.gif;;;";
         }
       }
       $fft_image_string = $tmp_str;
@@ -448,10 +480,13 @@ sub imageInfoThread($) {
       $tmp_str = "";
       @keys = keys %dts_images;
       for ($i=0; $i<=$#keys; $i++) {
-        if ($dts_images{$keys[$i]} ne "") {
-          $tmp_str .= $keys[$i].":::".$obs."/".$keys[$i]."/".$dts_images{$keys[$i]}.";;;";
+        $k = $keys[$i];
+        if ($dts_images{$k} ne "") {
+          $tmp_str .= $k.":::".$obs."/".$k."/".$dts_images{$k}.";;;";
+        } elsif (!($dirs_string =~ m/$k/)) {
+          $tmp_str .= $k.":::../images/bpsr_beam_disabled_240x180.png;;;";
         } else {
-          $tmp_str .= $keys[$i].":::../../images/blankimage.gif;;;";
+          $tmp_str .= $k.":::../../images/blankimage.gif;;;";
         }
       }
       $dts_image_string = $tmp_str;
@@ -459,10 +494,13 @@ sub imageInfoThread($) {
       $tmp_str = "";
       @keys = keys %pvf_images;
       for ($i=0; $i<=$#keys; $i++) {
-        if ($pvf_images{$keys[$i]} ne "") {
-          $tmp_str .= $keys[$i].":::".$obs."/".$keys[$i]."/".$pvf_images{$keys[$i]}.";;;";
+        $k = $keys[$i];
+        if ($pvf_images{$k} ne "") {
+          $tmp_str .= $k.":::".$obs."/".$k."/".$pvf_images{$k}.";;;";
+        } elsif (!($dirs_string =~ m/$k/)) {
+          $tmp_str .= $k.":::../images/bpsr_beam_disabled_240x180.png;;;";
         } else {
-          $tmp_str .= $keys[$i].":::../../images/blankimage.gif;;;";
+          $tmp_str .= $k.":::../../images/blankimage.gif;;;";
         }
       }
       $pvf_image_string = $tmp_str;
@@ -482,10 +520,13 @@ sub imageInfoThread($) {
       $tmp_str = "";
       @keys = keys %pdbp_images;
       for ($i=0; $i<=$#keys; $i++) {
-        if ($pdbp_images{$keys[$i]} ne "") {
-          $tmp_str .= $keys[$i].":::stats/".$pdbp_images{$keys[$i]}.";;;";
+        $k = $keys[$i];
+        if ($pdbp_images{$k} ne "") {
+          $tmp_str .= $k.":::stats/".$pdbp_images{$k}.";;;";
+        } elsif (!($dirs_string =~ m/$k/)) {
+          $tmp_str .= $k.":::../images/bpsr_beam_disabled_240x180.png;;;";
         } else {
-          $tmp_str .= $keys[$i].":::../../images/blankimage.gif;;;";
+          $tmp_str .= $k.":::../../images/blankimage.gif;;;";
         }
       }
       $pdbp_image_string = $tmp_str;
@@ -680,7 +721,10 @@ sub tapeInfoThread() {
             }
           }
         }
-        
+
+        $swin_ready = 0;
+        $parkes_ready = 0;
+
         # Now get a list of all observations that have obs.finished in them
         $cmd = "cd ".$cfg{"SERVER_ARCHIVE_NFS_MNT"}."; find  -mindepth 2 -maxdepth 2 -name 'obs.finished' -printf '\%h\\n' | awk -F/ '{print \$2}'";
         ($result, $tmp_str) = Dada::mySystem($cmd);
@@ -694,6 +738,15 @@ sub tapeInfoThread() {
             ($result, $tmp_str) = Dada::mySystem($cmd);
             if ($result eq "ok") {
               push @obs_fin, $arr[$j];
+
+              # check the "rough" number of beams
+              $cmd = "grep ^NUM_PWC ".$cfg{"SERVER_ARCHIVE_NFS_MNT"}."/".$arr[$j]."/obs.info | awk '{print \$2}'";
+              Dada::logMsg(2, DL, "tapeInfoThread: ".$cmd);
+              ($result, $tmp_str) = Dada::mySystem($cmd);
+              if ($result eq "ok") {
+                $swin_ready += int($tmp_str);
+                $parkes_ready += int($tmp_str);
+              }
             }
           }
         }
@@ -701,8 +754,9 @@ sub tapeInfoThread() {
         # Determine how many beams are sent.to.*
         @obs_fin = sort @obs_fin;
 
-        $swin_ready = 13 * ($#obs_fin+1);
-        $parkes_ready = 13 * ($#obs_fin+1);
+        # TODO this is erroneous now with single beam obs...
+        #$swin_ready = 13 * ($#obs_fin+1);
+        #$parkes_ready = 13 * ($#obs_fin+1);
 
         for ($i=0; $i<=$#obs_fin; $i++) {
           if (defined $sts_list{$obs_fin[$i]}) { 
@@ -817,6 +871,7 @@ sub statusInfoThread() {
 
       $cmd = "ls -1 ".$status_dir;
       $statuses = `$cmd`;
+      chomp($statuses);
       @files = split(/\n/, $statuses);
 
       # get the current warnings and errors
@@ -849,10 +904,10 @@ sub statusInfoThread() {
       # string
       $tmp_str = "";
       while (($key, $value) = each(%warnings)){
-        $tmp_str .= $key.":::1:::".$value.";;;";
+        $tmp_str .= $key.":::1:::".$value.";;;;;;";
       }
       while (($key, $value) = each(%errors)){
-        $tmp_str .= $key.":::2:::".$value.";;;";
+        $tmp_str .= $key.":::2:::".$value.";;;;;;";
       }
       #$tmp_str .= "\n";
 
@@ -891,7 +946,6 @@ sub nodeInfoThread() {
     push(@machines, $cfg{"HELP_".$i});
   }
   push(@machines, "srv0");
-  push(@machines, "srv1");
 
   my $handle = 0;
 
@@ -927,7 +981,7 @@ sub nodeInfoThread() {
       # now set the global string
       $tmp_str = "";
       for ($i=0; $i<=$#machines; $i++) {
-        $tmp_str .= $machines[$i].":".$results[$i].":".$responses[$i].";;;;;;";
+        $tmp_str .= $machines[$i].":::".$results[$i].":::".$responses[$i].";;;;;;";
       }
       $node_info = $tmp_str;
 
@@ -937,31 +991,6 @@ sub nodeInfoThread() {
   }  
 
   Dada::logMsg(1, DL, "nodeInfoThread: exiting");
-
-}
-
-#
-# Opens a port to the machine, issues the command and collects the response
-#
-sub commThread($$$) {
-
-  my ($command, $machine, $port) = @_;
-
-  my $result = "fail";
-  my $response = "Failure Message";
-
-  my $handle = Dada::connectToMachine($machine, $port, 0);
-  # ensure our file handle is valid
-  if (!$handle) {
-    # return ("fail","Could not connect to machine ".$machine.":".$port);
-    return ("fail","0 0 0;;;0 0;;;0.00,0.00,0.00");
-  }
-
-  ($result, $response) = Dada::sendTelnetCommand($handle, $command);
-
-  $handle->close();
-
-  return ($result, $response);
 
 }
 

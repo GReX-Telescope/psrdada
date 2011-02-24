@@ -27,7 +27,7 @@ use constant FILES_DB     => "files.P630.db";
 #
 # Global Variables
 #
-our %cfg = Bpsr::getBpsrConfig();      # Bpsr.cfg
+our %cfg = Bpsr::getConfig();
 
 # Autoflush output
 $| = 1;

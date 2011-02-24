@@ -35,7 +35,7 @@ use constant QUITFILE     => "bpsr_results_manager.quit";
 #
 # Global Variable Declarations
 #
-our %cfg = Bpsr::getBpsrConfig();
+our %cfg = Bpsr::getConfig();
 our $quit_daemon : shared = 0;
 our $error = $cfg{"STATUS_DIR"}."/bpsr_results_manager.error";
 our $warn  = $cfg{"STATUS_DIR"}."/bpsr_results_manager.warn";
@@ -63,9 +63,6 @@ my $daemon_control_thread = 0;
 my $cmd;
 my $timestamp = "";
 my $fname = "";
-
-#$cmd = "rm -f *.gif";
-#system($cmd);
 
 # This will have to be determined */
 my $have_new_archive = 1;
@@ -98,6 +95,14 @@ my $j;
 my $result = "";
 my $response = "";
 my $counter = 0;
+
+# clear the error and warning files if they exist
+if ( -f $warn ) {
+  unlink ($warn);
+}
+if ( -f $error) {
+  unlink ($error);
+}
 
 # Autoflush output
 $| = 1;
@@ -184,7 +189,7 @@ while (!$quit_daemon) {
           markObsState($dir, "processing", "failed");
 
         # If the obs age is over five minutes, then we consider it finished
-        } elsif ($age > 60) {
+        } elsif (($age > 60) && (! -f $dir."/rfi.processing")) {
 
           Dada::logMsg(1, DL, "Finalising observation: ".$dir);
 
@@ -585,9 +590,8 @@ sub patchInTcsLogs($$) {
   }
 
   # retrieve the TCS log file from jura
-  Dada::logMsg(1, DL, "Getting TCS log file: /psr1/tcs/logs/".$tcs_logfile);
-
-  $cmd = "scp -p pulsar\@jura.atnf.csiro.au:/psr1/tcs/logs/$tcs_logfile $obs_dir/$utcname/";
+  Dada::logMsg(2, DL, "Getting TCS log file: /psr1/tcs/logs/".$tcs_logfile);
+  $cmd = "scp -p pulsar\@pavo.atnf.csiro.au:/psr1/tcs/logs/$tcs_logfile $obs_dir/$utcname/";
   Dada::logMsg(2, DL, "patchInTcsLogs: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(2, DL, "patchInTcsLogs: ".$result." ".$response);
@@ -597,7 +601,7 @@ sub patchInTcsLogs($$) {
     return ("ok", "failed to get TCS log file");
   }
 
-  Dada::logMsg(1, DL, "Merging TCS log file with obs.start files");
+  Dada::logMsg(2, DL, "Merging TCS log file with obs.start files");
   $cmd = "merge_tcs_logs.csh $obs_dir/$utcname $tcs_logfile";
   Dada::logMsg(2, DL, "patchInTcsLogs: ".$cmd);
   ($result,$response) = Dada::mySystem($cmd);
@@ -636,7 +640,7 @@ sub copyPsrxmlToDb($$) {
   # Check if this psrxml file has already been submitted
   $day = substr $utc_name, 0, 10;
   for ($i=0; $i<$cfg{"NUM_PWC"}; $i++) {
-    $b = $cfg{"BEAM_".$i};
+    $b = Bpsr::getBeamForPWCHost($cfg{"PWC_".$i});
     $b_psrxml_file = $utc_name."_".$b.".psrxml";
 
     Dada::logMsg(2, DL, "copyPsrxmlToDb: checking database to see if file exists [$day, $utc_name]");
@@ -650,10 +654,10 @@ sub copyPsrxmlToDb($$) {
     return ("ok", $utc_name." already been submitted");
   }
 
-  Dada::logMsg(1, DL, "Copying ".$obs_dir."/".$utc_name."/??/*.psrxml to ".$db_dump_dir);
+  Dada::logMsg(2, DL, "Copying ".$obs_dir."/".$utc_name."/??/*.psrxml to ".$db_dump_dir);
 
   for ($i=0; $i<$cfg{"NUM_PWC"}; $i++) {
-    $b = $cfg{"BEAM_".$i};
+    $b = Bpsr::getBeamForPWCHost($cfg{"PWC_".$i});
     $b_psrxml_file = $utc_name."_".$b.".psrxml";
 
     # Copy <archives>/<utc>/<beam>/<utc>.psrxml to header_files/<utc>_<beam>.psrxml 
@@ -751,11 +755,13 @@ sub fixFilHeaders($$) {
   my $response = "";
   my $fn_result = "ok";
 
-  Dada::logMsg(1, DL, "Fixing TCS/Fil headers for ".$utc_start);
+  Dada::logMsg(2, DL, "Fixing TCS/Fil headers for ".$utc_start);
 
-  for ($i=1; $i<=13; $i++) {
+  #for ($i=1; $i<=13; $i++) {
+  for ($i=0; $i<$cfg{"NUM_PWC"}; $i++) {
 
-    $beam = sprintf("%02d", $i);
+    #$beam = sprintf("%02d", $i);
+    $beam = Bpsr::getBeamForPWCHost($cfg{"PWC_".$i});
 
     $cmd = "ls ".$d."/".$utc_start."/".$beam." >& /dev/null";
     Dada::logMsg(2, DL, "fixFilHeaders: ".$cmd);
@@ -778,7 +784,7 @@ sub fixFilHeaders($$) {
         $response = "fix_fil_header failed: ".$response;
       }
     } else {
-      Dada::logMsgWarn($warn, "fixFilHeaders: fil/psrxml file missing");
+      Dada::logMsgWarn($warn, "fixFilHeaders: fil/psrxml file missing for ".$utc_start."/".$beam);
       $response = "fil/psrxml file missing";
     }
   }

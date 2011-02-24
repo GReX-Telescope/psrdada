@@ -13,10 +13,11 @@ use lib $ENV{"DADA_ROOT"}."/bin";
 #
 use Bpsr;            # DADA Module for configuration options
 use strict;          # strict mode (like -Wall)
+use File::Basename; 
 use threads;         # standard perl threads
 use threads::shared; # standard perl threads
-use IO::Socket;     # Standard perl socket library
-use IO::Select;     # Allows select polling on a socket
+use IO::Socket;      # Standard perl socket library
+use IO::Select;      # Allows select polling on a socket
 use Net::hostent;
 
 
@@ -27,6 +28,12 @@ use constant DADA_HEADER_BINARY => "dada_header -k deda";
 use constant DAEMON_NAME        => "bpsr_observation_manager";
 use constant LOCAL_PSRCAT_DB    => "/tmp/htru_interim.db";
 use constant REMOTE_PSRCAT_DB   => "/psr1/cvshome/pulsar/soft_atnf/search/hitrun/database/htru_interim.db";
+
+
+#
+# Sanity check to prevent multiple copies of this daemon running
+#
+Dada::preventDuplicateDaemon(basename($0));
 
 #
 # Global Variable Declarations
@@ -44,7 +51,7 @@ our $log_sock;
 #
 $dl = 1;
 $quit_daemon = 0;
-%cfg = Bpsr::getBpsrConfig();
+%cfg = Bpsr::getConfig();
 $log_host = $cfg{"SERVER_HOST"};
 $log_port = $cfg{"SERVER_SYS_LOG_PORT"};
 $log_sock = 0;
@@ -165,6 +172,7 @@ sub process_one_obs($) {
   if ($remote_dirs_thread) {
     logMsg(2, "INFO", "joining remoteDirsThread");
     $remote_dirs_thread->join();
+    $remote_dirs_thread = 0;
     logMsg(2, "INFO", "remoteDirsThread joined");
   }
 
@@ -241,7 +249,7 @@ sub process_one_obs($) {
       logMsg(2, "INFO", "Final PROC_CMD: ".$proc_cmd);
     }
 
-    logMsg(1, "INFO", "START ".$proc_cmd);
+    logMsg(1, "INFO", "START ".substr($proc_cmd, 0, 60)." ...");
     logMsg(2, "INFO", "Changing dir to $processing_dir");
     chdir $processing_dir;
 
@@ -259,7 +267,7 @@ sub process_one_obs($) {
     $time_str = Dada::getCurrentDadaTime();
 
     chdir "../../";
-    logMsg(1, "INFO", "END ".$proc_cmd);;
+    logMsg(1, "INFO", "END   ".substr($proc_cmd, 0, 60)." ...");
 
     return (0, $raw_header);
 
@@ -329,7 +337,7 @@ sub fold_one_obs($) {
 
   # If we 2bit file and source starts with J and Beam01
   if ( ( $proc_cmd =~ m/the_decimator/) && ($h{"SOURCE"} =~ m/^J/) && 
-       ( $h{"BEAM"} eq "01" ) ) {
+       ( $h{"BEAM"} eq "01" ) && ( $h{"PID"} eq "P630") ) {
 
     logMsg(1, "INFO", "fold_one_obs: UTC_START=".$h{"UTC_START"}.", SOURCE=".$h{"SOURCE"});
 
@@ -578,7 +586,7 @@ sub createRemoteDirectories($$$) {
   }
 
   $cmd = "chmod g+s ".$dir;
-  logMsg(1, "INFO", $cmd);
+  logMsg(2, "INFO", $cmd);
   `$cmd`;
   if ($? != 0) {
     logMsg(0, "WARN", "Failed to chmod remote results dir \"".

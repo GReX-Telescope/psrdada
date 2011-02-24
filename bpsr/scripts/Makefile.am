@@ -2,6 +2,7 @@
 # scripts distributed as is (installed in bin/)
 dist_bin_SCRIPTS = Bpsr.pm \
                    bpsr_reconfigure.pl \
+                   bpsr_hard_reset.pl \
                    server_bpsr_bookkeeping_archiver.pl \
                    server_bpsr_tcs_interface.pl \
                    server_bpsr_results_manager.pl \
@@ -13,6 +14,7 @@ dist_bin_SCRIPTS = Bpsr.pm \
                    server_bpsr_transfer_manager.pl \
                    server_bpsr_tape_archiver.pl \
                    server_bpsr_parkes_tape_controller.pl \
+                   server_bpsr_rfi_masker.pl \
                    server_bpsr_swin_tape_controller.pl \
                    server_bpsr_server_logger.pl \
                    server_bpsr_web_monitor.pl \
@@ -27,7 +29,7 @@ dist_bin_SCRIPTS = Bpsr.pm \
                    ibob_interface.pl \
                    web_style.txt \
                    merge_tcs_logs.csh \
-                   beam-o-vision_collect.csh bpsr_single.csh bpsr_move.csh
+                   beam-o-vision_collect.csh bpsr_single.csh bpsr_move.csh bpsr_delete.csh
 
 include $(top_srcdir)/config/Makefile.targets
 

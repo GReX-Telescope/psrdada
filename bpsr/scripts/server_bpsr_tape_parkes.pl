@@ -41,7 +41,7 @@ use constant REMOTE_HOST => "shrek202";
 #
 # Global Variables
 #
-our %cfg = Bpsr::getBpsrConfig();      # Bpsr.cfg
+our %cfg = Bpsr::getConfig();      # Bpsr.cfg
 our $quit_daemon : shared  = 0;
 our $error = $cfg{"STATUS_DIR"}."/bpsr_tape_".LOCATION.".error";
 our $warn  = $cfg{"STATUS_DIR"}."/bpsr_tape_".LOCATION.".warn";
@@ -76,6 +76,14 @@ my $cmd = "";
 my $user = "";
 my $host = "";
 my $dir = "";
+
+# clear the error and warning files if they exist
+if ( -f $warn ) {
+  unlink ($warn);
+}
+if ( -f $error) {
+  unlink ($error);
+}
 
 # Sanity check for this script
 if (index($cfg{"SERVER_ALIASES"}, $ENV{'HOSTNAME'}) < 0 ) {

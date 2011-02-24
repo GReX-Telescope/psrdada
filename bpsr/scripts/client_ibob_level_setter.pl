@@ -34,7 +34,7 @@ use constant AVG_VALUES       => 2;
 #
 # Global Variable Declarations
 #
-our %cfg = Bpsr::getBpsrConfig();      # dada.cfg in a hash
+our %cfg = Bpsr::getConfig();      # dada.cfg in a hash
 our $handle = 0;
 our $eol = "\r";
 

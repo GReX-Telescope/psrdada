@@ -8,7 +8,6 @@
 # have been written to tape in all required locations
 #
 
-
 use lib $ENV{"DADA_ROOT"}."/bin";
 
 #
@@ -19,6 +18,13 @@ use strict;          # strict mode (like -Wall)
 use threads;         # standard perl threads
 use threads::shared; # standard perl threads
 use Net::hostent;
+use File::Basename;
+
+
+#
+# Sanity check to prevent multiple copies of this daemon running
+#
+Dada::preventDuplicateDaemon(basename($0));
 
 
 #
@@ -31,7 +37,7 @@ use constant DAEMON_NAME        => "bpsr_disk_cleaner";
 #
 our $dl : shared = 1;
 our $quit_daemon : shared = 0;
-our %cfg : shared = Bpsr::getBpsrConfig();	# dada.cfg in a hash
+our %cfg : shared = Bpsr::getConfig();	# dada.cfg in a hash
 our $log_host = ""; 
 our $log_port = 0; 
 our $log_sock = 0;
@@ -320,7 +326,7 @@ sub deleteCompletedBeam($$) {
     unlink $path."/slow_rm.ls";
   }
 
-  my $cmd = "find ".$path." -name '*.fil' -o -name 'aux.tar' -o -name '*.ar' -o -name '*.png' -o -name '*.bp*' -o -name '*.ts?' > ".$path."/slow_rm.ls";
+  my $cmd = "find ".$path." -name '*.fil' -o -name 'aux.tar' -o -name '*.ar' -o -name '*.png' -o -name '*.bp*' -o -name '*.ts?' -o -name 'rfi.*' > ".$path."/slow_rm.ls";
 
   logMsg(2, "INFO", $cmd);
   ($result, $response) = Dada::mySystem($cmd);

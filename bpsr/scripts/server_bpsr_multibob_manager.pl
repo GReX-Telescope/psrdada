@@ -25,7 +25,6 @@ Dada::preventDuplicateDaemon(basename($0));
 #
 # Constants
 #
-use constant DEBUG_LEVEL  => 1;
 use constant DL           => 1;
 use constant PIDFILE      => "bpsr_multibob_manager.pid";
 use constant LOGFILE      => "bpsr_multibob_manager.log";
@@ -36,7 +35,8 @@ use constant MULTIBOB_BIN => "multibob_server";
 #
 # Global Variables
 #
-our %cfg   = Bpsr::getBpsrConfig();
+our %cfg   = Bpsr::getConfig();
+our %ibobs = Bpsr::getIBOBConfig();
 our $error = $cfg{"STATUS_DIR"}."/bpsr_multibob_manager.error";
 our $warn  = $cfg{"STATUS_DIR"}."/bpsr_multibob_manager.warn";
 our $quit_daemon : shared  = 0;
@@ -61,9 +61,19 @@ my $control_thread = 0;
 my $multibob_thread = 0;
 my $multibob_plot_thread = 0;
 
+
 #
 # Main
 #
+
+# clear the error and warning files if they exist
+if ( -f $warn ) {
+  unlink ($warn);
+}
+if ( -f $error) {
+  unlink ($error);
+}
+
 Dada::daemonize($log_file, $pid_file);
 
 Dada::logMsg(0, DL, "STARTING SCRIPT");
@@ -83,7 +93,7 @@ while (!$quit_daemon) {
 }
 
 # rejoin threads
-Dada::logMsg(0, DL, "main: joining threads");
+Dada::logMsg(2, DL, "main: joining threads");
 $control_thread->join();
 $multibob_thread->join();
 $multibob_plot_thread->join();
@@ -117,8 +127,8 @@ sub multibobThread() {
   my $result = "";
   my $response = "";
 
-  Dada::logMsg(2, DL, "multibobThread: checkMultibobServer()");
-  ($result, $response) = checkMultibobServer();
+  Dada::logMsg(2, DL, "multibobThread: stopMultibobServer()");
+  ($result, $response) = stopMultibobServer();
   Dada::logMsg(2, DL, "multibobThread: ".$result." ".$response);
 
   $cmd =  "cd ".$runtime_dir."; echo '' | ".MULTIBOB_BIN." -n ".$npwc." -p ".$port." 2>&1";
@@ -126,22 +136,23 @@ sub multibobThread() {
 
   while (!$quit_daemon) {
 
+    Dada::logMsg(1, DL, "multibobThread: launching config thread");
     $config_thread = threads->new(\&configureMultibobServerWrapper);
 
+    Dada::logMsg(1, DL, "multibobThread: running ".MULTIBOB_BIN);
+
     # This command should "hang" until the multibob_server command has terminated
-    Dada::logMsg(1, DL, "multibobThread: ".$cmd);
+    Dada::logMsg(2, DL, "multibobThread: ".$cmd);
     system($cmd);
-    #($result, $response) = Dada::mySystem($cmd);
-    #Dada::logMsg(1, DL, "multibobThread: ".$result." ".$response);
 
     if (!$quit_daemon) {
       Dada::logMsgWarn($warn, "multibobThread: ".MULTIBOB_BIN." exited unexpectedly, re-launching");
       sleep(1);
     }
     
-    Dada::logMsg(1, DL, "multibobThread: joining config_thread");
+    Dada::logMsg(2, DL, "multibobThread: joining config_thread");
     $config_thread->join();
-    Dada::logMsg(1, DL, "multibobThread: config_thread joined");
+    Dada::logMsg(2, DL, "multibobThread: config_thread joined");
     $config_thread = 0;
   }
 
@@ -155,14 +166,14 @@ sub multibobThread() {
 sub configureMultibobServerWrapper() 
 {
 
-  Dada::logMsg(1, DL, "configureMultibobServer: configuring multibob_server");
+  Dada::logMsg(2, DL, "configureMultibobServer: configuring multibob_server");
   my ($result, $response) = Bpsr::configureMultibobServer();
 
   if ($result ne "ok") {
     Dada::logMsgWarn($error, "configureMultibobServer: failed ".$response);
-
   } else {
-    Dada::logMsg(1, DL, "configureMultibobServer: done");
+    Dada::logMsg(1, DL, MULTIBOB_BIN." configured");
+    Dada::logMsg(2, DL, "configureMultibobServer: done");
   }
 }
 
@@ -212,7 +223,7 @@ sub multibobPlotThread()
       if ($result ne "ok") {
         Dada::logMsgWarn($warn, "plot of ".$bramfile." failed ".$response);
       } else {
-        Dada::logMsg(2, DL, "bpsr_bramplot ".$bramfile.": ".$response);
+        Dada::logMsg(3, DL, "bpsr_bramplot ".$bramfile.": ".$response);
       }
       unlink($bramfile);
     }
@@ -221,8 +232,8 @@ sub multibobPlotThread()
 
     my $ibob = "";
 
-    for ($i=0; $i < $cfg{"NUM_PWC"}; $i++ ) {
-      $ibob = $cfg{"IBOB_DEST_".$i};
+    for ($i=0; $i < $ibobs{"NUM_IBOB"}; $i++ ) {
+      $ibob = $ibobs{"CONTROL_IP_".$i};
       removeOldPngs($stats_dir, $ibob, "1024x768");
       removeOldPngs($stats_dir, $ibob, "400x300");
       removeOldPngs($stats_dir, $ibob, "112x84");
@@ -232,7 +243,7 @@ sub multibobPlotThread()
 
   }
 
-  Dada::logMsg(2, DL, "multibobPlotThread: exiting");
+  Dada::logMsg(1, DL, "multibobPlotThread: exiting");
 }
 
 
@@ -258,9 +269,9 @@ sub controlThread($$) {
   $quit_daemon = 1;
 
   # Get the multibob server to quit
-  Dada::logMsg(1, DL, "controlThread: checkMultibobServer()");
-  ($result, $response) = checkMultibobServer();
-  Dada::logMsg(1, DL, "controlThread: checkMultibobServer: ".$result." ".$response);
+  Dada::logMsg(1, DL, "controlThread: stopMultibobServer()");
+  ($result, $response) = stopMultibobServer();
+  Dada::logMsg(1, DL, "controlThread: stopMultibobServer: ".$result." ".$response);
 
   if (-f $pid_file) {
     Dada::logMsg(2, DL, "controlThread: unlinking PID file");
@@ -269,7 +280,7 @@ sub controlThread($$) {
     Dada::logMsgWarn($warn, "controlThread: PID file did not exist on script exit");
   }
 
-  Dada::logMsg(2, DL, "controlThread: exiting");
+  Dada::logMsg(1, DL, "controlThread: exiting");
 
 }
 
@@ -304,7 +315,7 @@ sub removeOldPngs($$$) {
 
   my ($stats_dir, $ibob, $res) = @_;
 
-  Dada::logMsg(2, DL, "removeOldPngs(".$stats_dir.", ".$ibob.", ".$res.")");
+  Dada::logMsg(3, DL, "removeOldPngs(".$stats_dir.", ".$ibob.", ".$res.")");
 
   # remove any existing plot files that are more than 10 seconds old
   my $cmd  = "find ".$stats_dir." -name '*".$ibob."_".$res.".png' -printf \"%T@ %f\\n\" | sort -n -r";
@@ -325,21 +336,21 @@ sub removeOldPngs($$$) {
     if (($time+20) < time)
     {
       $file = $stats_dir."/".$file;
-      Dada::logMsg(2, DL, "removeOldPngs: unlink ".$file);
+      Dada::logMsg(3, DL, "removeOldPngs: unlink ".$file);
       unlink($file);
     }
   }
 
-  Dada::logMsg(2, DL, "removeOldPngs: exiting");
+  Dada::logMsg(3, DL, "removeOldPngs: exiting");
 }
 
 
 #
 # Ensures that the multibob server is not running
 #
-sub checkMultibobServer() {
+sub stopMultibobServer() {
 
-  Dada::logMsg(1, DL, "checkMultibobServer()");
+  Dada::logMsg(1, DL, "stopMultibobServer()");
 
   my $localhost = Dada::getHostMachineName();
   my $port      = $cfg{"IBOB_MANAGER_PORT"};
@@ -350,32 +361,31 @@ sub checkMultibobServer() {
   my $handle = 0;
 
   # Check if the binary is running
-  $cmd = "ps aux | grep ".MULTIBOB_BIN." | grep -v grep > /dev/null";
-  Dada::logMsg(2, DL, "checkMultibobServer: ".$cmd);
+  $cmd = "pgrep -lf ^".MULTIBOB_BIN;
+  Dada::logMsg(2, DL, "stopMultibobServer: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
-  Dada::logMsg(2, DL, "checkMultibobServer: ".$result." ".$response);
+  Dada::logMsg(2, DL, "stopMultibobServer: ".$result." ".$response);
 
   if ($result eq "ok") {
 
-    Dada::logMsgWarn($warn, "checkMultibobServer: ".MULTIBOB_BIN." process existed");
+    Dada::logMsg(1, DL, "stopMultibobServer: ".MULTIBOB_BIN." process existed");
 
     # set the global variable to quit the daemon
     $handle = Dada::connectToMachine($localhost, $port, 1);
     if (!$handle) {
-      Dada::logMsgWarn($warn, "checkMultibobServer: could not connect to ".MULTIBOB_BIN." on ".$localhost.":".$port);
-
+      Dada::logMsgWarn($warn, "stopMultibobServer: could not connect to ".MULTIBOB_BIN." on ".$localhost.":".$port);
     } else {
 
       # ignore welcome message
       $response = <$handle>;
                                                                                                           
-      Dada::logMsg(0, DL, "checkMultibobServer: multibob <- close");
+      Dada::logMsg(0, DL, "stopMultibobServer: multibob <- close");
       ($result, $response) = Dada::sendTelnetCommand($handle, "close");
-      Dada::logMsg(0, DL, "checkMultibobServer: multibob -> ".$result.":".$response);
+      Dada::logMsg(0, DL, "stopMultibobServer: multibob -> ".$result.":".$response);
 
       sleep(1);
 
-      Dada::logMsg(0, DL, "checkMultibobServer: multibob_server <- quit");
+      Dada::logMsg(0, DL, "stopMultibobServer: multibob_server <- quit");
       print $handle "quit\r\n";
       close($handle);
     }
@@ -383,26 +393,24 @@ sub checkMultibobServer() {
     sleep(1);
 
     # try again to ensure it exited
-    Dada::logMsg(2, DL, "checkMultibobServer: ".$cmd);
+    Dada::logMsg(2, DL, "stopMultibobServer: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
-    Dada::logMsg(2, DL, "checkMultibobServer: ".$result." ".$response);
+    Dada::logMsg(2, DL, "stopMultibobServer: ".$result." ".$response);
 
     # if is it still running
     if ($result eq "ok") {
-      Dada::logMsgWarn($warn, "checkMultibobServer: multibob_server, refused to exit gracefully, killing...");
-      $cmd = "killall -KILL multibob_server";
-      Dada::logMsg(1, DL, "checkMultibobServer: ".$cmd);
-      ($result, $response) = Dada::mySystem($cmd);
-      Dada::logMsg(1, DL, "checkMultibobServer: ".$result." ".$response);
 
-      return ("ok", "process had to be killed"); 
+      Dada::logMsgWarn($warn, "stopMultibobServer: multibob_server, refused to exit, killing...");
+      Dada::logMsg(1, DL, "stopMultibobServer: killProcess(^".MULTIBOB_BIN.")");
+      ($result, $response) = Dada::killProcess("^".MULTIBOB_BIN);
+      Dada::logMsg(1, DL, "stopMultibobServer: killProcess ".$result." ".$response);
+      return ("ok", $response);
 
     } else {
       return ("ok", "process exited correctly"); 
     }
 
   } else {
-
     return ("ok", "process not running");
   }
 

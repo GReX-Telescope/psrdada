@@ -29,7 +29,7 @@ use constant TAPE_SIZE    => "750.00";
 #
 # Global Variables
 #
-our %cfg = Bpsr::getBpsrConfig();      # Bpsr.cfg
+our %cfg = Bpsr::getConfig();      # Bpsr.cfg
 our $quit_daemon : shared  = 0;
 our $dev = "";
 our $robot = 0;                        # Flag for a tape robot

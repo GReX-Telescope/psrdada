@@ -28,7 +28,7 @@ use constant LOGFILE       => "bpsr_src_logger.log";
 #
 # Global Variable Declarations
 #
-our %cfg : shared = Bpsr::getBpsrConfig();      # Bpsr.cfg in a hash
+our %cfg : shared = Bpsr::getConfig();      # Bpsr.cfg in a hash
 our $log_socket;
 our $log_fh;
 

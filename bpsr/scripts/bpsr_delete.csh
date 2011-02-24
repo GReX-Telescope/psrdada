@@ -30,8 +30,8 @@ if ( -f $ARCHIVES/$UTC/obs.single ) then
 endif
 
 
-touch $ARCHIVES/$UTC/obs.single
-touch $RESULTS/$UTC/obs.single
+touch $ARCHIVES/$UTC/obs.deleted
+touch $RESULTS/$UTC/obs.deleted
 
 echo Deleting BPSR beams 01 through 13 of $UTC
 
@@ -46,7 +46,6 @@ foreach beam ( 01 02 03 04 05 06 07 08 09 10 11 12 13 )
 
   echo Deleting beam $beam on node $node
 
-  rm -rf $RESULTS/$UTC/$beam
   rm -f $ARCHIVES/$UTC/$beam
 
   ssh -x -f bpsr@$node "rm -rf /lfs/data0/bpsr/archives/$UTC"

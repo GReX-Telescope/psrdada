@@ -19,6 +19,11 @@ use threads::shared;
 
 
 #
+# Sanity check to prevent multiple copies of this daemon running
+#
+Dada::preventDuplicateDaemon(basename($0));
+
+#
 # Constants
 #
 use constant DAEMON_NAME => "bpsr_results_monitor";
@@ -39,7 +44,7 @@ our $log_sock;
 #
 $dl = 1;
 $quit_daemon = 0;
-%cfg = Bpsr::getBpsrConfig();
+%cfg = Bpsr::getConfig();
 $log_host = $cfg{"SERVER_HOST"};
 $log_port = $cfg{"SERVER_SYS_LOG_PORT"};
 $log_sock = 0;
@@ -305,12 +310,11 @@ sub process_dspsr_files() {
 
     my $sumd_archive = $file_dir."/integrated.ar";
     my $curr_archive = $file_dir."/".$file;
-    my $temp_archive = $file_dir."/temp.ar";
 
     if (! -f $sumd_archive) {
-      $cmd = "cp ".$curr_archive." " .$temp_archive;
+      $cmd = "cp ".$curr_archive." " .$sumd_archive;
     } else {
-      $cmd = $bindir."/psradd -s -f ".$temp_archive." ".$sumd_archive." ".$curr_archive;
+      $cmd = $bindir."/psradd -s --inplace ".$sumd_archive." ".$curr_archive;
     }    
 
     logMsg(2, "INFO", $cmd); 
@@ -318,16 +322,10 @@ sub process_dspsr_files() {
     if ($result ne "ok") {
 
       logMsg(0, "ERROR", "process_dspsr_files: ".$cmd." failed: ".$response);
-      unlink($temp_archive);
 
     } else {
 
       logMsg(2, "INFO", "process_dspsr_files: archive added");
-
-      logMsg(2, "INFO", "unlink(".$sumd_archive.")");
-      unlink($sumd_archive);
-      logMsg(2, "INFO", "rename(".$temp_archive.", ".$sumd_archive.")");
-      rename($temp_archive, $sumd_archive);
 
       my $plot_file = "";
       my $plot_binary = $bindir."/psrplot";

@@ -13,7 +13,7 @@ for beam in `seq 1 13` ; do
   beam=`echo $beam | awk '{printf("%02d",$1)}'`
   grep -e 'beam_all' -e "beam_$beam" $file > tcs.$beam
   cat tcs.$beam >> $beam/obs.start
-  ref_beam=`grep refbeam $file | head -n 1 | awk '{printf("%02d",$3)}'`
+  ref_beam=`grep refbeam $file | head -n 1 | awk '{printf("%02d",$2)}'`
 
   xml_file="$beam/"`echo $file | sed -e 's:\(.*\)_bpsr.log:\1.psrxml:g'`
   centre_xml_file="$ref_beam/"`echo $file | sed -e 's:\(.*\)_bpsr.log:\1.psrxml:g'`
@@ -34,14 +34,14 @@ echo "xf $xml_file cxf $centre_xml_file"
   psrxml_modify_key $xml_file local_time $localtime
 
   lst=`grep lst $file | head -n 1 | awk '{printf("%f", $3/3.141592654)}'`
-  lst_h=`echo $lst | awk '{printf("%02d",$1*12.0)}'`
+  lst_h=`echo $lst | awk '{printf("%02d",($1*12.0)%24)}'`
   lst_m=`echo $lst $lst_h | awk '{printf("%02d",($1*12-$2)*60)}'`
   lst_s=`echo $lst $lst_h $lst_m | awk '{printf("%04.1f",(($1*12-$2)*60 - $3)*60)}'`
   lst=$lst_h":"$lst_m":"$lst_s
   psrxml_modify_key $xml_file lst $lst
 
-  tobs=`grep obsval $file | head -n 1 | awk '{print $3}'`
-  tunit=`grep obsunit $file | head -n 1 | awk '{print $3}'`
+  tobs=`grep obsval $file | head -n 1 | awk '{print $2}'`
+  tunit=`grep obsunit $file | head -n 1 | awk '{print $2}'`
   if test x$tunit = xCYCLES ; then
     tobs=`echo $tobs | awk '{print $1 * 10.0}'`
   fi
@@ -66,10 +66,10 @@ echo "xf $xml_file cxf $centre_xml_file"
   para=`grep para $file | tail -n 1 | awk '{printf("%f", 180.0*$3/3.141592654)}'`
   psrxml_modify_key $xml_file end_paralactic_angle $para "units='degrees'"
  
-  observer=`grep observer $file | head -n 1 | awk '{print $3}'`
+  observer=`grep observer $file | head -n 1 | awk '{print $2}'`
   psrxml_modify_key $xml_file observer_name $observer
 
-  programme=`grep project $file | head -n 1 | awk '{print $3}'`
+  programme=`grep project $file | head -n 1 | awk '{print $2}'`
   psrxml_modify_key $xml_file observing_programme $programme
 
 #  paralactify=`grep beam_shift $file | head -n 1 | \

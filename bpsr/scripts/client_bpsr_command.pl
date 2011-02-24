@@ -19,7 +19,7 @@ use constant  DEBUG_LEVEL         => 1;
 #
 # Global Variables
 #
-our %cfg : shared = Bpsr::getBpsrConfig();      # dada.cfg in a hash
+our %cfg : shared = Bpsr::getConfig();      # dada.cfg in a hash
 
 
 my $cmd = "";

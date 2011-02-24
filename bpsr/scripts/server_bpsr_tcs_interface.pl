@@ -53,7 +53,6 @@ use constant QUITFILE           => "bpsr_tcs_interface.quit";
 use constant PWCC_LOGFILE       => "dada_pwc_command.log";
 use constant DFBSIM_DURATION    => "3600";    # Simulator runs for 1 hour
 use constant TERMINATOR         => "\r";
-use constant NHOST              => 13;        # This is constant re DFB3
 
 #
 # Global Variables
@@ -62,7 +61,7 @@ use constant NHOST              => 13;        # This is constant re DFB3
 our $current_state : shared = "Idle";
 our $pwcc_running : shared  = 0;
 our $quit_threads : shared  = 0;
-our %cfg : shared           = Bpsr::getBpsrConfig();
+our %cfg : shared           = Bpsr::getConfig();
 our $use_dfb_simulator      = $cfg{"USE_DFB_SIMULATOR"};
 our $dfb_sim_host           = $cfg{"DFB_SIM_HOST"};
 our $dfb_sim_port           = $cfg{"DFB_SIM_PORT"};
@@ -104,7 +103,6 @@ my $rh;
 
 my %site_cfg = Dada::readCFGFileIntoHash($cfg{"CONFIG_DIR"}."/site.cfg", 0);
 
-
 # set initial state
 $current_state = "Idle";
 
@@ -122,10 +120,11 @@ if (index($cfg{"SERVER_ALIASES"}, $ENV{'HOSTNAME'}) < 0 ) {
   exit(1);
 }
 
-# Check that the dada.cfg matches NHOST
-if ($cfg{"NUM_PWC"} != NHOST) {
-  print STDERR "ERROR: Dada config file's NUM_PWC (".$cfg{"NUM_PWC"}.") did not match the expected value of ".NHOST."\n";
-  exit(1);
+if (-f $warn) {
+  unlink $warn;
+}
+if (-f $error) {
+  unlink $error;
 }
 
 # Redirect standard output and error
@@ -529,6 +528,12 @@ sub state_reporter_thread($$) {
             print $rh $current_state."\r\n";
             Dada::logMsg(3, DL, "state_reporter: -> ".$current_state);
           }
+
+          if ($result eq "num_pwcs") {
+            print $rh $cfg{"NUM_PWC"}."\r\n";
+            Dada::logMsg(3, DL, "state_reporter: -> ".$cfg{"NUM_PWC"});
+          }
+
         }
       }
     }
@@ -545,7 +550,7 @@ sub quit_pwc_command() {
 
   my $handle = Dada::connectToMachine($host, $port);
   my $success = 1;
-                                                                                                                
+
   if (!$handle) {
 
     Dada::logMsgWarn($warn, "Could not connect to Nexus (".$host.": ".$port.")");
@@ -553,7 +558,8 @@ sub quit_pwc_command() {
     # try to kill the process manually
     my $result = "";
     my $response = "";
-    ($result, $response) = Dada::killProcess("dada_pwc_command");
+    
+    ($result, $response) = Dada::killProcess("dada_pwc_command.*bpsr_tcs.cfg");
 
     return ($result, $response);
 
@@ -576,7 +582,7 @@ sub quit_pwc_command() {
     }
     if ($pwcc_running) {
        Dada::logMsgWarn($warn, "Was forced to kill dada_pwc_command");
-      ($result, $response) = Dada::killProcess("dada_pwc_command");
+      ($result, $response) = Dada::killProcess("dada_pwc_command.*bpsr_tcs.cfg");
     }
 
     return ("ok","");
@@ -707,6 +713,7 @@ sub start($\%) {
       }
 
       my $utc_start = ltrim($response);
+      chomp $utc_start;
       Dada::logMsg(1, DL, "UTC_START ".$utc_start);
 
       $cmd = "exit";
@@ -715,7 +722,9 @@ sub start($\%) {
       close($multibob);
 
       # Setup the server output directories before telling the clients to begin
+      Dada::logMsg(1, DL, "set_utc_start(".$utc_start.")");
       ($result, $response) = set_utc_start($utc_start, \%tcs_cmds);
+      Dada::logMsg(1, DL, "set_utc_start() ".$result." ".$response);
 
       # Now we should have a UTC_START!
       $cmd = "set_utc_start ".$utc_start;
@@ -836,6 +845,7 @@ sub set_utc_start($\%) {
   print FH Dada::headerFormat("NPOL",$tcs_cmds{"NPOL"})."\n";
   print FH Dada::headerFormat("NDIM",$tcs_cmds{"NDIM"})."\n";
   print FH Dada::headerFormat("NCHAN",$tcs_cmds{"NCHAN"})."\n";
+  print FH Dada::headerFormat("PROC_FILE",$tcs_cmds{"PROC_FILE"})."\n";
   close FH;
 
   $cmd = "cp ".$fname." ".$archive_dir;
@@ -1292,6 +1302,8 @@ sub fixTCSCommands(\%) {
     $new_cmds{"NDECI_BIT"} = 2;
   }
 
+  $new_cmds{"PROC_FILE"} = uc($new_cmds{"PROC_FILE"});
+
   return %new_cmds;
 }
 
@@ -1311,7 +1323,7 @@ sub addHostCommands(\%\%) {
   my %tcs_cmds = %$tcs_cmds_ref;
   my %site_cfg = %$site_cfg_ref;
 
-  $tcs_cmds{"NUM_PWC"}     = NHOST;
+  $tcs_cmds{"NUM_PWC"}     = $cfg{"NUM_PWC"};
   $tcs_cmds{"HDR_SIZE"}    = $site_cfg{"HDR_SIZE"};
 
   # Determine the BW & FREQ for each channel
@@ -1319,9 +1331,9 @@ sub addHostCommands(\%\%) {
   my $bw = int($tcs_cmds{"BW"});            # bandwidth per beam
 
   my $i=0;
-  for ($i=0; $i<NHOST; $i++) {
+  for ($i=0; $i<$cfg{"NUM_PWC"}; $i++) {
     $tcs_cmds{"Band".$i."_BW"} = $bw;
-    $tcs_cmds{"Band".$i."_BEAM"} = $cfg{"BEAM_".$i};
+    $tcs_cmds{"Band".$i."_BEAM"} = Bpsr::getBeamForPWCHost($cfg{"PWC_".$i});
   }
 
   # Add the site configuration to tcs_cmds

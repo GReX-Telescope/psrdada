@@ -6,7 +6,7 @@ use Bpsr;
 use strict;
 use warnings;
 
-my %cfg = Bpsr::getBpsrConfig();      # dada.cfg in a hash
+my %cfg = Bpsr::getConfig();      # dada.cfg in a hash
 
 my $cmd = "";
 my $result = "";
@@ -37,7 +37,7 @@ if ($result eq "ok") {
   chdir $cfg{"CLIENT_ARCHIVE_DIR"};
 
   $cmd = "find . -mindepth 3 -maxdepth 3 -type f -name 'obs.start' -o -type f -name 'sent.to.*'".
-         " -o -type f -name 'error.to.*' -o -type f -name 'integrated.ar'".
+         " -o -type f -name 'error.to.*' -o -type f -name 'on.tape.*' -o -type f -name 'integrated.ar'".
          "  -o -type f -name '*.fil' | sort";
   ($result, $response) = Dada::mySystem($cmd);
   

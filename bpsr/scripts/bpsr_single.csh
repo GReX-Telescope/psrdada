@@ -36,20 +36,31 @@ if ( -f $ARCHIVES/$UTC/obs.single ) then
   exit -1
 endif
 
-echo Deleting BPSR beams 02 through 13 of $UTC
 
 touch $ARCHIVES/$UTC/obs.single
 touch $RESULTS/$UTC/obs.single
 
-chgrp -R $PID $ARCHIVES/$UTC
-chgrp -R $PID $RESULTS/$UTC
+echo Chgrping obs to $PID
 
-perl -p -i -e 's/P630/'$PID'/' $ARCHIVES/$UTC/obs.info  
-perl -p -i -e 's/P630/'$PID'/' $RESULTS/$UTC/obs.info
-perl -p -i -e 's/P743/'$PID'/' $ARCHIVES/$UTC/obs.info  
-perl -p -i -e 's/P743/'$PID'/' $RESULTS/$UTC/obs.info
+sudo -u bpsr /bin/chgrp -RLf $PID $ARCHIVES/$UTC
+sudo -u bpsr /bin/chgrp -RLf $PID $RESULTS/$UTC
+sudo -u dada /bin/chgrp -RLf $PID $ARCHIVES/$UTC
+sudo -u dada /bin/chgrp -RLf $PID $RESULTS/$UTC
 
-foreach beam ( 02 03 04 05 06 07 08 09 10 11 12 13 )
+set OLDPID=`grep PID $ARCHIVES/$UTC/obs.info | awk '{print $2}'`
+
+echo Changing PID in obs.info and obs.start from $OLDPID to $PID
+
+perl -p -i -e 's/'$OLDPID'/'$PID'/' $ARCHIVES/$UTC/obs.info  
+perl -p -i -e 's/'$OLDPID'/'$PID'/' $RESULTS/$UTC/obs.info
+
+perl -p -i -e 's/'$OLDPID'/'$PID'/' $ARCHIVES/$UTC/01/obs.start
+perl -p -i -e 's/'$OLDPID'/'$PID'/' $RESULTS/$UTC/01/obs.start
+
+echo Deleting BPSR beams 02 through 13 of $UTC
+
+#foreach beam ( 02 03 04 05 06 07 08 09 10 11 12 13 )
+foreach beam ( 02 03 04 05 06 07 08 09 10 11 )
 
   if ( ! -d $ARCHIVES/$UTC/$beam ) then
     echo $ARCHIVES/$UTC/$beam not found ... aborting.
@@ -66,4 +77,6 @@ foreach beam ( 02 03 04 05 06 07 08 09 10 11 12 13 )
   ssh -x -f bpsr@$node "rm -rf /lfs/data0/bpsr/archives/$UTC"
     
 end
+
+
 

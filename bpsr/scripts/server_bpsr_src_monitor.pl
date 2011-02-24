@@ -8,6 +8,8 @@
 # to files on the server. Messages conatin a severity and a text string. 
 #
 
+use lib $ENV{"DADA_ROOT"}."/bin";
+
 use IO::Socket;     # Standard perl socket library
 use IO::Select;     # Allows select polling on a socket
 use Net::hostent;
@@ -35,7 +37,7 @@ use constant LOGFILE     => "nexus.src.log";
 #
 # Global Variables
 #
-our %cfg = Bpsr::getBpsrConfig();      # Bpsr.cfg
+our %cfg = Bpsr::getConfig();      # Bpsr.cfg
 our $quit_daemon : shared  = 0;
 
 

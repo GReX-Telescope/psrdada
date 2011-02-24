@@ -28,7 +28,7 @@ use constant LOGFILE     => "ibob_simulator.log";
 #
 # Global Variables
 #
-our %cfg = Bpsr::getBpsrConfig();      # Bpsr.cfg
+our %cfg = Bpsr::getConfig();      # Bpsr.cfg
 our $quit_daemon : shared  = 0;
 
 

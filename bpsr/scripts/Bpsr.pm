@@ -20,14 +20,14 @@ require AutoLoader;
 @ISA = qw(Exporter AutoLoader);
 
 @EXPORT_OK = qw(
-  &getBpsrConfig
-  &getBpsrConfigFile
   &waitForMultibobState
   &getMultibobState
   &configureMultibobServer
   &clientCommand
   &getObsDestinations
   &getConfig
+  &getIBOBConfig
+  &getBeamForPWCHost
 );
 
 $VERSION = '0.01';
@@ -35,17 +35,6 @@ $VERSION = '0.01';
 my $DADA_ROOT = $ENV{'DADA_ROOT'};
 
 use constant DEBUG_LEVEL  => 0;
-
-
-sub getBpsrConfig() {
-  my $config_file = getBpsrCFGFile();
-  my %config = Dada::readCFGFileIntoHash($config_file, 0);
-  return %config;
-}
-
-sub getBpsrCFGFile() {
-  return $DADA_ROOT."/share/bpsr.cfg";
-}
 
 sub waitForMultibobState($$$) {
 
@@ -107,7 +96,7 @@ sub getMultibobState($) {
   my $result = "fail";
   my $response = "";
 
-  ($result, $response) = Dada::sendTelnetCommand($handle,"state");
+  ($result, $response) = Dada::sendTelnetCommand($handle, "state");
 
   if ($result eq "ok") {
     #Parse the $response;
@@ -138,7 +127,8 @@ sub getMultibobState($) {
 
 sub configureMultibobServer() {
 
-  my %cfg = getBpsrConfig();
+  my %cfg   = Bpsr::getConfig();
+  my %ibobs = Bpsr::getIBOBConfig();
 
   # multibob_server runs on localhost
   my $host = Dada::getHostMachineName();
@@ -186,8 +176,19 @@ sub configureMultibobServer() {
   # setup the IBOB host/port mappings
   my $cmd = $cfg{"NUM_PWC"};
   my $i=0;
+  my $j=0;
+  my $ibob = 0;
   for ($i=0; $i<$cfg{"NUM_PWC"}; $i++) {
-    $cmd .= " ".$i." ".$cfg{"IBOB_DEST_".$i}." 23";
+    $ibob = 0;
+    for ($j=0; $j<$ibobs{"NUM_IBOB"}; $j++) {
+      if ($cfg{"PWC_".$i} eq $ibobs{"10GbE_CABLE_".$j}) {
+        if ($ibob) {
+          logMessage(1, "ERROR: configuration error in ibob config file");
+        }
+        $ibob = $j;
+      }
+    }
+    $cmd .= " ".$i." ".$ibobs{"CONTROL_IP_".$ibob}." 23";
   }
 
   # if the hostports config on the ibob isn't what we require
@@ -226,9 +227,14 @@ sub configureMultibobServer() {
   $cmd = "macs ".$cfg{"NUM_PWC"};
   my $mac = "";
   for ($i=0; $i<$cfg{"NUM_PWC"}; $i++) {
-    $mac = $cfg{"IBOB_LOCAL_MAC_ADDR_".$i};
-    $mac =~ s/://g;
-    $cmd .= " ".$i." ".$mac;
+    if (exists($ibobs{"10GbE_MAC_".$cfg{"PWC_".$i}})) {
+      $mac = $ibobs{"10GbE_MAC_".$cfg{"PWC_".$i}};
+      $mac =~ s/://g;
+      $cmd .= " ".$i." ".$mac;
+    } else {
+      logMessage(1, "ERROR: configuration error in ibob config file, 10GbE_MAC_".$cfg{"PWC_".$i}." did not exist in ibobs hash");
+    }
+  
   }
 
   logMessage(1, "multibob <- ".$cmd);
@@ -283,7 +289,7 @@ sub clientCommand($$) {
 
   my ($command, $machine) = @_;
 
-  my %cfg = getBpsrConfig();
+  my %cfg = Bpsr::getConfig();
   my $result = "fail";
   my $response = "Failure Message";
 
@@ -320,10 +326,45 @@ sub getObsDestinations($$) {
 
 }
 
-sub getConfig() {
+sub getConfig() 
+{
   my $config_file = $DADA_ROOT."/share/bpsr.cfg";
   my %config = Dada::readCFGFileIntoHash($config_file, 0);
+
+  my $pwc_config_file = $DADA_ROOT."/share/bpsr_pwcs.cfg";
+  my %pwc_config = Dada::readCFGFileIntoHash($pwc_config_file, 0);
+
+  my %combined = (%config, %pwc_config);
+  return %combined;
+}
+
+sub getIBOBConfig()
+{
+  my $config_file = $DADA_ROOT."/share/ibob.cfg";
+  my %config = Dada::readCFGFileIntoHash($config_file, 0);
   return %config;
+}
+
+sub getBeamForPWCHost($) 
+{
+  my ($host) = @_;
+
+  my %ibobs = Bpsr::getIBOBConfig();
+  my $beam = 0;
+  my $i = 0;
+  my $test_host = "";
+
+  for ($i=0; $i<$ibobs{"NUM_IBOB"}; $i++) 
+  {
+    $test_host = $ibobs{"10GbE_CABLE_".$i};
+    if ($host =~ m/$test_host/)
+    {
+      $beam = $ibobs{"BEAM_".$i};
+    }
+  } 
+
+  return $beam;
+
 }
 
 __END__
