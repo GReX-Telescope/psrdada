@@ -1,4 +1,6 @@
-bin_PROGRAMS = vsib_proxy vsib_recv vsib_send
+bin_PROGRAMS = vsib_proxy vsib_recv vsib_send 
+
+AM_CFLAGS = -D$(ARCH)
 
 lib_LTLIBRARIES = libtimers.la
 
