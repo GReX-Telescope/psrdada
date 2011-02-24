@@ -141,9 +141,8 @@ HELP_1                  apsr15
 HELP_2                  apsr16
 HELP_3                  apsr17
 
-NUM_SRV                 2 
+NUM_SRV                 1 
 SRV_0                   srv0
-SRV_1                   srv1
 
 # Project Destination configuration
 P630_DEST               swin parkes
