@@ -6,10 +6,17 @@ webapsrdir = $(prefix)/web/apsr
 webbpsrdir = $(prefix)/web/bpsr
 webcaspsrdir = $(prefix)/web/caspsr
 
-dist_web_SCRIPTS = index.html \
+dist_web_SCRIPTS = admin.html \
+    dada_webpage.lib.php \
+    instrument.lib.php \
+    dada.css \
+    admin.lib.php \
+    index.php \
+    index.lib.php \
     schedule.html \
     style.css \
-    rac.php
+    rac.php \
+    favicon.ico
 
 # scripts distributed as is (installed in bin/)
 nobase_dist_webapsr_SCRIPTS = annotate_obs.php \
@@ -20,17 +27,17 @@ nobase_dist_webapsr_SCRIPTS = annotate_obs.php \
     controlwindow.php \
     fatalerror.php \
     footer_i.php \
+    instrument.lib.php \
     header_i.php \
     secure_i.php \
     statebanner.php \
     stateupdate.php \
     statusupdate.php \
     statuswindow.php \
+    site_definitions_i.php \
     style.css \
     style_viewer.css \
     style_log.css
- #   control/control.php \
- #   control/server_command.php
 
 # scripts distributed as is (installed in bin/)
 nobase_dist_webbpsr_SCRIPTS = annotate_obs.php \
@@ -38,20 +45,15 @@ nobase_dist_webbpsr_SCRIPTS = annotate_obs.php \
     banner.php \
     client_status.php \
     commandeer.php \
-    controlwindow.php \
     fatalerror.php \
     footer_i.php \
     header_i.php \
+    instrument.lib.php \
     secure_i.php \
-    statebanner.php \
-    stateupdate.php \
-    statusupdate.php \
-    statuswindow.php \
+    site_definitions_i.php \
     style.css \
     style_viewer.css \
     style_log.css
-#    control/control.php \
-#    control/server_command.php
 
 # scripts distributed as is (installed in bin/)
 nobase_dist_webcaspsr_SCRIPTS = site_definitions_i.php \
@@ -81,19 +83,24 @@ nobase_dist_web_SCRIPTS = images/apsr_logo_1x60.png \
     images/gb_pressed_right.jpg \
     images/gb_right.png \
     images/green_light.png \
+    images/grey_light.png \
     images/red_light.png \
     images/spacer.gif \
     images/yellow_light.png \
     images/jsprogress/custom1_bar.gif \
     images/jsprogress/custom1_box.gif \
-    images/jsprogress/percentImage_back1_80.png \
     images/jsprogress/percentImage_back1.png \
-    images/jsprogress/percentImage_back2_80.png \
+    images/jsprogress/percentImage_back1_40.png \
+    images/jsprogress/percentImage_back1_80.png \
     images/jsprogress/percentImage_back2.png \
-    images/jsprogress/percentImage_back3_80.png \
+    images/jsprogress/percentImage_back2_40.png \
+    images/jsprogress/percentImage_back2_80.png \
     images/jsprogress/percentImage_back3.png \
-    images/jsprogress/percentImage_back4_80.png \
+    images/jsprogress/percentImage_back3_40.png \
+    images/jsprogress/percentImage_back3_80.png \
     images/jsprogress/percentImage_back4.png \
+    images/jsprogress/percentImage_back4_40.png \
+    images/jsprogress/percentImage_back4_80.png \
     images/jsprogress/percentImage_back_80.png \
     images/jsprogress/percentImage_back.png \
     images/jsprogress/percentImage.png \

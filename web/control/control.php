@@ -138,7 +138,7 @@ for ($i=0; $i<count($groups); $i++) {
   <tr><td style="vertical-align: middle; text-align: right">DB</td><td>
     <div class="btns">
       <a href="javascript:popUp('client_command.php?cmd=reset_db')"  class="btn" > <span>Reset</span> </a>
-      <a href="javascript:popUp('client_command.php?cmd=init_db')"  class="btn" > <span>Init</span> </a>
+      <a href="javascript:popUp('client_command.php?cmd=init_db&args=dada 1000 4194304')"  class="btn" > <span>Init</span> </a>
       <a href="javascript:popUp('client_command.php?cmd=destroy_db')"  class="btn" > <span>Destroy</span> </a>
       <a href="javascript:popUp('client_command.php?cmd=get_db_info')"  class="btn" > <span>Info</span> </a>
     </div>
