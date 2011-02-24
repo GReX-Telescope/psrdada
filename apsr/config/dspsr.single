@@ -1,1 +1,1 @@
-PROC_CMD dspsr -Q -t 7 SELECT -s -K -2c0
+PROC_CMD dspsr -Q -t 7 SELECT -s -W -2c0 -b 8192

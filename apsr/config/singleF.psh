@@ -1,6 +1,7 @@
 
 # the calibrator database is loaded only once
 init cal load /lfs/data0/apsr/calibrators/database.txt
+init cal type ovhb04
 
 # calibrate the archive using the database
 cal

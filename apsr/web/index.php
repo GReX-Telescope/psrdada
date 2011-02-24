@@ -11,7 +11,7 @@ include("header_i.php");
 ?>
 
 <FRAMESET ROWS="1" COLS="800px,*" frameborder=1>
-  <FRAMESET COLS=1 ROWS="60px,95px,40px,110px,230px,*" border=0>
+  <FRAMESET COLS=1 ROWS="60px,140px,30px,110px,260px,*" border=0>
     <FRAME name="banner" src="statebanner.php" frameborder=0 marginheight=0 marginwidth=0>
     <FRAME name="statuswindow" src="statuswindow.php" frameborder=0 marginheight=0 marginwidth=0>
     <FRAME name="controlwindow" src="controlwindow.php" frameborder=0 marginheight=0 marginwidth=0>
@@ -21,7 +21,7 @@ include("header_i.php");
   </FRAMESET>
   <FRAMESET name=rightwindow COLS=1 ROWS="70px,*" border=0>
     <FRAME name="logheader" src="logheader.php" frameborder=0 marginheight=0 marginwidth=0>
-    <FRAME name="logwindow" src="machine_status.php?machine=nexus">
+    <FRAME name="logwindow" src="machine_status.php">
   </FRAMESET>
 </FRAMESET>
 </HTML>

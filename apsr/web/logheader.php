@@ -172,15 +172,14 @@ $client_daemon_ids = array_keys($client_daemons);
   </tr>
 
   <tr>
-    <td class="smalltext" valign="middle"><input type="checkbox" id="auto_scroll" onchange="autoScroll()">Auto scroll?</input></td>
-    <td class="smalltext" valign="middle">Filter: <input type="text" id="filter" onchange="changeLogWindow()"></input></td>
+    <td class="smalltext" valign="middle"><input type="checkbox" id="auto_scroll" onchange="autoScroll()">Auto scroll?</td>
+    <td class="smalltext" valign="middle">Filter: <input type="text" id="filter" onchange="changeLogWindow()"></td>
     <td align="center">
         <table cellpadding=0 cellspacing=0><tr><td>
         <div class="btns" align="center">
           <a href="javascript:changeLogWindow()"  class="btn" > <span>Reload Logs</span> </a>
           <a href="machine_status.php?machine=nexus" target="logwindow" class="btn" > <span>System Status</span> </a>
         </div>
-        </center>
         </td></tr></table>
       </td>
     </tr>

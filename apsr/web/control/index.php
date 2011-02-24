@@ -1,9 +1,7 @@
 <?PHP
 include("../definitions_i.php");
 include("../functions_i.php");
-
 ?>
-
 <HTML>
 <HEAD>
   <TITLE>APSR | Controls</TITLE>

@@ -1,70 +1,35 @@
 <?PHP 
 include("definitions_i.php");
 include("functions_i.php");
+$config = getConfigFile(SYS_CONFIG);
 
-/* Find the latest files in the plot file directory */
-$img1 = "/images/blankimage.gif";
-$img2 = "/images/blankimage.gif";
-$img3 = "/images/blankimage.gif";
-$img4 = "/images/blankimage.gif";
-$img1_hi = "/images/blankimage.gif";
-$img2_hi = "/images/blankimage.gif";
-$img3_hi = "/images/blankimage.gif";
-$img4_hi = "/images/blankimage.gif";
-
-$results_dir = $_GET["results_dir"];
-$cmd = "ls -1 ".$results_dir." | tail -n 1";
-$result = exec($cmd);
-
-$dir = $results_dir."/".$result;
-
-$got_images = 3;
-while ($got_images) {
-  if ($handle = opendir($dir)) {
-
-    while (false !== ($file = readdir($handle))) {
-      if ($file != "." && $file != "..") {
-        if (ereg("^phase_vs_flux([A-Za-z0-9\_\:-]*)240x180.png$",$file)) {
-          $img1 = "/apsr/results/".$result."/".$file;
-        }
-        if (ereg("^phase_vs_time([A-Za-z0-9\_\:-]*)240x180.png$",$file)) {
-          $img2 = "/apsr/results/".$result."/".$file;
-        }
-        if (ereg("^phase_vs_freq([A-Za-z0-9\_\:-]*)240x180.png$",$file)) {
-          $img3 = "/apsr/results/".$result."/".$file;
-        }
-        if (ereg("^phase_vs_flux([A-Za-z0-9\_\:-]*)1024x768.png$",$file)) {
-          $img1_hi = "/apsr/results/".$result."/".$file;
-        }
-        if (ereg("^phase_vs_time([A-Za-z0-9\_\:-]*)1024x768.png$",$file)) {
-          $img2_hi = "/apsr/results/".$result."/".$file;
-        }
-        if (ereg("^phase_vs_freq([A-Za-z0-9\_\:-]*)1024x768.png$",$file)) {
-          $img3_hi = "/apsr/results/".$result."/".$file;
-        }
-      }
-    }
-    closedir($handle);
-  } else {
-    echo "Could not open plot directory: ".$dir."<BR>\n";
-  }
-
-  if ( ($img1 == "/images/blankimage.gif") ||
-       ($img2 == "/images/blankimage.gif") ||
-       ($img3 == "/images/blankimage.gif") ) {
-    $got_images--;
-  } else {
-    $got_images = 0;
-  }
-}
-
+$host = $config["SERVER_HOST"];
+$port = $config["SERVER_WEB_MONITOR_PORT"];
 $url = "http://".$_SERVER["SERVER_NAME"].":".$_SERVER["SERVER_PORT"];
+                                                                                                
+list ($socket, $result) = openSocket($host, $port);
+                                                                                                
+if ($result == "ok") {
+                                                                                                
+  $bytes_written = socketWrite($socket, "img_info\r\n");
+  $string = socketRead($socket);
+  socket_close($socket);
+                                                                                                
+  # Add the require URL links to the image
+  $lines = split(";;;", $string);
+  $string = "";
 
-echo "img1:::".$url.$img1.";;;";
-echo "img2:::".$url.$img2.";;;";
-echo "img3:::".$url.$img3.";;;";
-echo "img4:::".$url.$img4.";;;";
-echo "img1_hi:::".$url.$img1_hi.";;;";
-echo "img2_hi:::".$url.$img2_hi.";;;";
-echo "img3_hi:::".$url.$img3_hi.";;;";
-echo "img4_hi:::".$url.$img4_hi.";;;";
+  for ($i=0; $i<count($lines)-1; $i++) {
+    $p = split(":::", $lines[$i]);
+    if (($p[0] == "utc_start") || ($p[0] == "npsrs") || ( substr($p[0],0,3) == "psr")) {
+      $string .=  $p[0].":::".$p[1]."\n";
+    } else {
+      $string .= $p[0].":::".$url."/apsr/results/".$p[1]."\n";;
+    }
+  }
+
+} else {
+  $string = "Could not connect to $host:$port<BR>\n";
+}
+                                                                                                  
+echo $string;

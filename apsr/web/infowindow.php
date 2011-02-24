@@ -6,18 +6,16 @@ $config = getConfigFile(SYS_CONFIG, TRUE);
 
 ?>
 <html>
-<? include("header_i.php"); ?>
-
-
-<script type="text/javascript">
+  <head>
+  <? echo STYLESHEET_HTML; ?>
+  <? echo FAVICO_HTML?>
+  <script type="text/javascript">
 
   var url="/apsr/infoupdate.php?results_dir=<?echo $config["SERVER_RESULTS_DIR"]?>"
 
   function looper() {
-
     request()
-    setTimeout('looper()',5000)
-
+    setTimeout('looper()',4000)
   }
 
   function request() {
@@ -39,24 +37,24 @@ $config = getConfigFile(SYS_CONFIG, TRUE);
     if (http_request.readyState == 4) {
       var response = String(http_request.responseText)
 
-      var lines = response.split(";;;")
+      if (response.indexOf("Could not connect to") == -1) {
 
-      for (i=0; i<lines.length; i++) {
+        var lines = response.split(";;;")
 
-        var values = lines[i].split(":::")
-        if (values[0]) {
-          if (document.getElementById(values[0])) {
-            document.getElementById(values[0]).innerHTML = values[1]
+        for (i=0; i<lines.length; i++) {
+
+          var values = lines[i].split(":::")
+          if (values[0]) {
+            if (document.getElementById(values[0])) {
+              document.getElementById(values[0]).innerHTML = values[1]
+            }
           }
         }
       }
     }
   }
-
-
-
-
-</script>
+  </script>
+</head>
 <body onload="looper()">
 <? 
 ?>
@@ -143,6 +141,16 @@ $config = getConfigFile(SYS_CONFIG, TRUE);
           <td align="right" class="smalltext"><b>Integrated</b></td>
           <td width=10>&nbsp;</td>
           <td align="left" class="smalltext"><span class="smalltext" id ="INTEGRATED"><?echo $spec["INTEGRATED"]?></span></td>
+        </tr>
+        <tr>
+          <td align="right" class="smalltext"><b>SNR</b></td>
+          <td width=10>&nbsp;</td>
+          <td align="left" class="smalltext"><span class="smalltext" id ="SNR"><?echo $spec["SNR"]?></span></td>
+        </tr>
+        <tr>
+          <td align="right" class="smalltext"><b>PROC FILE</b></td>
+          <td width=10>&nbsp;</td>
+          <td align="left" class="smalltext"><span class="smalltext" id ="PROC_FILE"><?echo $spec["PROC_FILE"]?></span></td>
         </tr>
       </table>
     </td>

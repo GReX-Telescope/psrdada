@@ -147,7 +147,8 @@ header("Expires: Mon, 26 Jul 1997 05:00:00 GMT"); // Date in the past
             unproc_gb = parseFloat(statuses[3])/1024;
             temp  = statuses[4];
 
-            disk_percent = Math.floor((parseInt(disks[0]) - parseInt(disks[2])) / parseInt(disks[0])*100); 
+            disk_percent = Math.floor((parseFloat(disks[1]) / parseFloat(disks[0])) * 100);
+            //disk_percent = Math.floor((parseInt(disks[0]) - parseInt(disks[2])) / parseInt(disks[0])*100); 
             disk_gb = (parseInt(disks[2])) / 1024.0; 
 
             // Special case for no data block

@@ -37,7 +37,8 @@ if (isset($_GET["loglength"])) {
 /* Determine what type and sub type of logs we will display */
 $log_type = "pwc";
 $log_tag = "*";
-print_r($_GET);
+
+/* print_r($_GET); */
 
 /* Server Logs */
 if ($machine == "nexus") {

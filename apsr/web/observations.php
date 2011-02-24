@@ -473,10 +473,10 @@ for ($i=0; $i<count($keys); $i++) {
   echo "  <tr>\n";
 
   /* COUNT */
-  echo "    <td class=\"".$class."\">".$num."</td>\n";
+  echo "    <td class=\"".$class."\"><a href='/apsr/result.php?utc_start=".$o."'>".$num."</a></td>\n";
 
   /* UTC_START */
-  echo "    <td class=\"".$class."\"><a href='/apsr/result.php?utc_start=".$o."'>".$o."</a></td>\n";
+  echo "    <td class=\"".$class."\">".$o."</td>\n";
    
   /* PARAMS */
   for ($j=0; $j<count($params); $j++) {

@@ -45,8 +45,8 @@ if (isset($_GET["filter_value"])) {
 }
 
 
-$basedir = $cfg["SERVER_RESULTS_DIR"];
-$archive_ext = ".lowres";
+$basedir = "/export/old_results/apsr";
+$archive_ext = ".ar";
 
 $cmd = "";
 if (($filter_type == "") && ($filter_value == "")) {
@@ -93,7 +93,7 @@ if ($offset + ($length*2) < $total_num_results) {
   $oldest_length = $total_num_results - $oldest_offset;
 }
 
-$results = getResultsArray($cfg["SERVER_RESULTS_DIR"], $cfg["SERVER_ARCHIVE_DIR"],  $archive_ext, $offset, $length, $filter_type, $filter_value);
+$results = getResultsArray($basedir, $archive_ext, $offset, $length, $filter_type, $filter_value);
 $keys = array_keys($results);
 $num_results = count($keys);
 
@@ -103,7 +103,7 @@ $num_results = count($keys);
 
 <?
 
-$title = "APSR | Recent Results";
+$title = "APSR | Old Results";
 # $refresh = PAGE_REFRESH_SECONDS;
 include("header_i.php");
 
@@ -122,7 +122,7 @@ include("header_i.php");
       if (inlineimages.checked) {
         img = "1";
       }
-      var URL = "/apsr/results.php?offset=<?echo $offset?>&length="+length+"&inlineimages="+img
+      var URL = "/apsr/oldresults.php?offset=<?echo $offset?>&length="+length+"&inlineimages="+img
 
       var filter_type = document.getElementById("filter_type");
       i = filter_type.selectedIndex
@@ -138,7 +138,7 @@ include("header_i.php");
   </script>
 
 <? 
-$text = "Recent Results";
+$text = "Old Results";
 include("banner.php");
 
 ?>
@@ -179,12 +179,12 @@ include("banner.php");
   <!--<td width=50%><input type="checkbox" value="hide_cal">Hide CAL Observations</input></td>-->
 <?
   if ($newest_offset !== "unset") {
-    echo "<td><a href=/apsr/results.php?offset=".$newest_offset."&length=".$newest_length."&inlineimages=".$inlineimages.">&#171; Newest</a></td>\n";
+    echo "<td><a href=/apsr/oldresults.php?offset=".$newest_offset."&length=".$newest_length."&inlineimages=".$inlineimages.">&#171; Newest</a></td>\n";
     echo "<td width=5>&nbsp;</td>\n";
   }
 
   if ($newer_offset !== "unset") {
-    echo "<td><a href=/apsr/results.php?offset=".$newer_offset."&length=".$newer_length."&inlineimages=".$inlineimages.">&#8249; Newer</a></td>\n";
+    echo "<td><a href=/apsr/oldresults.php?offset=".$newer_offset."&length=".$newer_length."&inlineimages=".$inlineimages.">&#8249; Newer</a></td>\n";
     echo "<td width=5>&nbsp;</td>\n";
   }
 ?>
@@ -195,12 +195,12 @@ include("banner.php");
 <?
 
   if ($older_offset !== "unset") {
-    echo "<td><a href=/apsr/results.php?offset=".$older_offset."&length=".$older_length."&inlineimages=".$inlineimages.">Older &#8250;</a></td>\n";
+    echo "<td><a href=/apsr/oldresults.php?offset=".$older_offset."&length=".$older_length."&inlineimages=".$inlineimages.">Older &#8250;</a></td>\n";
     echo "<td width=5>&nbsp;</td>\n";
   }
 
   if ($oldest_offset !== "unset") {
-    echo "<td><a href=/apsr/results.php?offset=".$oldest_offset."&length=".$oldest_length."&inlineimages=".$inlineimages.">Oldest &#187;</a></td>\n";
+    echo "<td><a href=/apsr/oldresults.php?offset=".$oldest_offset."&length=".$oldest_length."&inlineimages=".$inlineimages.">Oldest &#187;</a></td>\n";
   }
 
 ?>
@@ -242,8 +242,8 @@ for ($i=0; $i < count($keys); $i++) {
   $data = getObservationImages($basedir."/".$k);
 
   $freq_keys = array_keys($results[$k]);
-  $url = "/apsr/result.php?utc_start=".$keys[$i];
-  $mousein = "onmouseover=\"Tip('<img src=\'/apsr/results/".$k."/".$data["phase_vs_flux"]."\' width=241 height=181>')\"";
+  $url = "/apsr/oldresult.php?utc_start=".$keys[$i];
+  $mousein = "onmouseover=\"Tip('<img src=\'/apsr/old_results/".$k."/".$data["phase_vs_flux"]."\' width=241 height=181>')\"";
   $mouseout = "onmouseout=\"UnTip()\"";
 
   $bg_style = "";
@@ -259,7 +259,7 @@ for ($i=0; $i < count($keys); $i++) {
   /* IMAGE/SOURCE */
   if ($inlineimages == 1) {
     echo "    <td><a href=\"".$url."\" ".$mousein." ".$mouseout.">\n";
-    echo "          <img src=/apsr/results/".$k."/".$data["phase_vs_flux"]." width=64 height=48>\n";
+    echo "          <img src=/apsr/old_results/".$k."/".$data["phase_vs_flux"]." width=64 height=48>\n";
     echo "        </a></td>\n";
     echo "    <td ".$bg_style."><a href=\"".$url."\">".$results[$k]["SOURCE"]."</a></td>\n";
   } else {
@@ -319,7 +319,7 @@ that recieved data</td></tr>
 </center>
 <?
 
-function getResultsArray($results_dir, $archive_dir, $archive_ext, $offset=0, $length=0, $filter_type, $filter_value) {
+function getResultsArray($results_dir, $archive_ext, $offset=0, $length=0, $filter_type, $filter_value) {
 
   $all_results = array();
 
@@ -346,32 +346,6 @@ function getResultsArray($results_dir, $archive_dir, $archive_ext, $offset=0, $l
 
     $dir = $results_dir."/".$observations[$i];
     $freq_channels = getSubDirs($dir);
-
-    /* Now get all the .lowres files for each freq channel */
-    for ($j=0; $j<count($freq_channels); $j++) {
-
-      $dir = $results_dir."/".$observations[$i]."/".$freq_channels[$j];
-      $all_results[$observations[$i]][$freq_channels[$j]] = array();
-
-      $files = array();
-
-      if (is_dir($dir)) {
-        if ($dh = opendir($dir)) {
-          while (($file = readdir($dh)) !== false) {
-            if (($file != ".") && ($file != "..") && (strpos($file, $archive_ext, (strlen($file)-strlen($archive_ext))) !== FALSE)) {
-              array_push($files, $file);
-            }
-          }
-          closedir($dh);
-        }
-      }
-  
-      sort($files);
-
-      for ($k=0; $k<count($files); $k++) {
-        array_push($all_results[$observations[$i]][$freq_channels[$j]],$files[$k]);
-      }
-    }
 
     /* If no archives have been produced */
     if (count($freq_channels) == 0) {

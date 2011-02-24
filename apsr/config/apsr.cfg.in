@@ -16,10 +16,9 @@ VIEWING_DB_KEY          @PSRDADA_INSTALL@/share/apsr.viewer
 
 ###############################################################################
 # DFB3 Configuration. For gain level control
-#
-DFB3_HOST               pkccc3.atnf.CSIRO.au
-#DFB3_HOST               apsr17.apsr.edu.au
-DFB3_PORT               50321
+# if running apsr then set to pkccc3.atnf.CSIRO.au for simulator apsr17.apsr.edu.au
+HWGAIN_HOST             pkccc3.atnf.CSIRO.au
+HWGAIN_PORT             50321
 
 ###############################################################################
 # Server directory configuration
@@ -30,10 +29,11 @@ SERVER_ALIASES          apsr-srv0.atnf.csiro.au srv0.apsr.edu.au
 SERVER_RESULTS_DIR      /export/results/apsr
 SERVER_ARCHIVE_DIR      /export/archives/apsr
 SERVER_LOG_DIR          /export/logs/apsr
-SERVER_CONTROL_DIR      /tmp/apsr/control
+SERVER_CONTROL_DIR      @PSRDADA_INSTALL@/control
 SERVER_RESULTS_NFS_MNT  /nfs/results/apsr
 SERVER_ARCHIVE_NFS_MNT  /nfs/archives/apsr
-SERVER_DAEMONS          apsr_aux_manager apsr_pwc_monitor apsr_results_manager apsr_src_monitor apsr_sys_monitor apsr_tcs_interface apsr_gain_manager apsr_web_monitor
+SERVER_DAEMONS          apsr_auxiliary_manager apsr_pwc_monitor apsr_results_manager apsr_sys_monitor apsr_tcs_interface apsr_gain_manager apsr_web_monitor
+SERVER_DAEMONS_PERSIST  apsr_transfer_manager
 
 # TCS Interface configuration. Note on different interface to server
 TCS_INTERFACE_HOST      apsr-srv0.atnf.csiro.au
@@ -66,7 +66,7 @@ SERVER_AUX_ASSIST_PORT    52007
 #
 USE_DFB_SIMULATOR       0         # 1 means tcs_interface will launch dfb sim
 DFB_SIM_BINARY          apsr_udpgenerator
-DFB_SIM_HOST            apsr16
+DFB_SIM_HOST            apsr17
 DFB_SIM_PORT            52014     # control of dfb simulator
 DFB_SIM_GAIN_PORT       52015     # control of dfb simulator
 DFB_SIM_DEST_PORT       10002	    # SHOULD mactch CLIENT_UDPDB_PORT below
@@ -81,8 +81,10 @@ CLIENT_LOG_DIR          /lfs/data0/apsr/logs
 CLIENT_RECORDING_DIR    /lfs/data0/apsr/rawdata
 CLIENT_SCRATCH_DIR      /lfs/data0/apsr/scratch
 CLIENT_ARCHIVE_DIR      /lfs/data0/apsr/archives
+CLIENT_RESULTS_DIR      /lfs/data0/apsr/results
+CLIENT_CALIBRATOR_DIR   /lfs/data0/apsr/calibrators
 
-CLIENT_DAEMONS          apsr_observation_manager apsr_archive_manager apsr_processing_manager apsr_background_processor apsr_aux_manager
+CLIENT_DAEMONS          apsr_observation_manager apsr_archive_manager apsr_processing_manager apsr_background_processor apsr_auxiliary_manager apsr_disk_cleaner
 
 # Port on which apsr_udpdb will listen for udp packets
 CLIENT_UDPDB_PORT       10002     
@@ -100,9 +102,11 @@ CLIENT_UDPDB_STATS_PORT 52012
 ################################################################################
 # Data block definitions
 DATA_BLOCKS             DADA EADA FADA
+RECEIVING_DATA_BLOCK    DADA
 PROCESSING_DATA_BLOCK   EADA
+AUXILIARY_DATA_BLOCK    FADA
 
-DADA_BLOCK_NBUFS        250         # dada_dbNdb data block
+DADA_BLOCK_NBUFS        250          # dada_dbNdb data block
 DADA_BLOCK_BUFSZ        4194304
 
 EADA_BLOCK_NBUFS        1000         # dspsr data block
@@ -132,10 +136,59 @@ PWC_13                  apsr13
 PWC_14                  apsr14
 PWC_15                  apsr15
 
-DFB_0	                  apsr16
+NUM_DFB                 1
+DFB_0	                  apsr17
+
+NUM_SRV                 2
+SRV_0                   srv0
+SRV_1                   srv1
 
 # defines the number of helping nodes
-HELPER_DAEMONS          archive_manager auxiliary_processor 
+HELPER_DAEMONS          
 NUM_HELP                0
-HELP_0                  apsr17
+HELP_0                  apsr16
+HELP_1                  apsr17
 
+NUM_SWIN_DIRS           6
+SWIN_DIR_0              pulsar:shrek210-gb:/export/shrek210a/apsr
+SWIN_DIR_1              pulsar:shrek210-gb:/export/shrek210b/apsr
+SWIN_DIR_2              pulsar:shrek211-gb:/export/shrek211a/apsr
+SWIN_DIR_3              pulsar:shrek211-gb:/export/shrek211b/apsr
+SWIN_DIR_4              pulsar:shrek214-gb:/export/shrek214a/apsr
+SWIN_DIR_5              pulsar:shrek214-gb:/export/shrek214b/apsr
+
+NUM_PARKES_DIRS         1
+PARKES_DIR_0            dada:jura:/data/JURA_1/apsr
+
+# swinburne archival
+P140_DEST               swin
+P361_DEST               swin
+P427_DEST               swin
+P455_DEST               swin
+P456_DEST               swin
+P574_DEST               swin
+P630_DEST               swin
+P675_DEST               swin
+P661_DEST               swin
+P739_DEST               swin
+P781_DEST               swin
+P999_DEST               swin
+
+# custom / parkes archival
+P282_DEST               parkes
+P511_DEST               parkes
+P602_DEST               parkes
+P682_DEST               parkes
+
+P140_DEST_ID            2
+P361_DEST_ID            1
+P427_DEST_ID            0
+P455_DEST_ID            1
+P456_DEST_ID            1
+P574_DEST_ID            1
+P630_DEST_ID            3
+P661_DEST_ID            3
+P675_DEST_ID            1
+P739_DEST_ID            2
+P781_DEST_ID            5
+P999_DEST_ID            1

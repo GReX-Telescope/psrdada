@@ -7,6 +7,7 @@ include("functions_i.php");
 $action = $_GET["action"];
 $cfg = getConfigFile(SYS_CONFIG, TRUE);
 $observation = $_GET["observation"];
+$source = $_GET["source"];
 $action_string = "No Action";
 
 if ($action == "reprocess_low") $action_string = "Re-processing low-res results";
@@ -74,9 +75,24 @@ include("banner.php");
 ?>
 <h3>Observation: <?echo $observation?></h3>
 
-<?echo $action_string.": "?>
+<?echo $action_string."<br><br>";
 
-<?
+# Be sure that the Observation is legitimate
+if (!(preg_match("/^\d\d\d\d-\d\d-\d\d-\d\d:\d\d:\d\d$/", $observation))) {
+  echo "Specified Observation did not match the expected YYYY-MM-DD-HH:MM:SS pattern<BR>\n";
+  $action_string = "No Action";
+}
+
+if (!(file_exists($cfg["SERVER_RESULTS_NFS_MNT"]."/".$observation))) {
+  echo "Specified Observation did not exist: ".$cfg["SERVER_RESULTS_NFS_MNT"]."/".$observation;
+  $action_string = "No Action";
+}
+
+if ($source == "") {
+  echo "Specified SOURCE was empty";
+  $action_string = "No Action";
+}
+
 flush();
 
 # dont do anything if result is no action
@@ -86,9 +102,9 @@ if ($action_string == "No Action") {
 
   chdir($cfg["SCRIPTS_DIR"]);
   $obs_dir = $cfg["SERVER_RESULTS_NFS_MNT"]."/".$observation;
-  $script = "./server_apsr_process_result.pl ".$observation." ".$obs_dir." lowres";
+  $script = "./server_apsr_process_result.pl ".$observation." ".$source." ".$obs_dir." lowres";
   $cmd = "/bin/csh -c 'setenv HOME /home/dada; source \$HOME/.cshrc; ".$script."'";
-  $string = exec($cmd, $array, $return_val);
+  system($cmd);
 
   if ($return_val != 0) {
     echo "<BR>\nserver_apsr_process_results.pl returned a non zero exit value: ". $return_var."\n";
@@ -104,16 +120,15 @@ if ($action_string == "No Action") {
 
   chdir($cfg["SCRIPTS_DIR"]);
   $obs_dir = $cfg["SERVER_ARCHIVE_NFS_MNT"]."/".$observation;
-  $script = "./server_apsr_process_result.pl ".$observation." ".$obs_dir." ar";
+  $script = "./server_apsr_process_result.pl ".$observation." ".$source." ".$obs_dir." ar";
   $cmd = "/bin/csh -c 'setenv HOME /home/dada; source \$HOME/.cshrc; ".$script."'";
-  $string = exec($cmd, $array, $return_val);
+  system($cmd);
 
   if ($return_val != 0) {
     echo $cmd."<BR>\n";
     echo "<BR>\nserver_apsr_process_results.pl returned a non zero exit value: ". $return_var."\n";
     echo $string."<BR>\n";
     print_r($array);
-    
     flush();
   } else {
     echo "Hi-res results processed<BR>\n";
@@ -127,6 +142,7 @@ if ($action_string == "No Action") {
   chdir($cfg["SCRIPTS_DIR"]);
   $obs_dir = $cfg["SERVER_RESULTS_NFS_MNT"]."/".$observation;
   $script = "./server_apsr_create_plots.pl ".$obs_dir." 1024x768";
+  echo $script."<BR>\n"; 
   $cmd = "/bin/csh -c 'setenv HOME /home/dada; source \$HOME/.cshrc; ".$script."'";
   $string = exec($cmd, $array, $return_val);
 
@@ -140,7 +156,7 @@ if ($action_string == "No Action") {
   } else {
     echo "Plots created<BR>\n";
     flush();
-    sleep(1);
+    sleep(5);
     echo "<script type=\"text/javascript\"> finish(); </script>\n";
   }
 
@@ -171,6 +187,7 @@ if ($action_string == "No Action") {
 </textarea>
   <input type="hidden" name="action" value="write_annotation">
   <input type="hidden" name="observation" value="<?echo $observation?>">
+  <input type="hidden" name="source" value="<?echo $source?>">
   <input type="submit" value="Save"></input>
   <input type="button" value="Close" onclick="finish()"></input>
   </form>
@@ -203,8 +220,13 @@ if ($action_string == "No Action") {
   $results_dir = $cfg["SERVER_RESULTS_NFS_MNT"]."/".$observation;
   $archive_dir = $cfg["SERVER_ARCHIVE_NFS_MNT"]."/".$observation;
 
-  $cmd = "rm -rf \"".$results_dir."\" \"".$archive_dir."\"";
-  $returnVal = system($cmd);
+  # Need to delete the archive and results directory on each node
+  # and then the archive and results on the NFS mount
+  #$cmd = "/home/dada/scripts/loopssh apsr 0 18 '
+
+  #$cmd = "rm -rf \"".$results_dir."\" \"".$archive_dir."\"";
+  #echo "CMD = ".$cmd."<BR>\n";
+  # $returnVal = system($cmd);
 
   if ($returnVal == 0) {
 
