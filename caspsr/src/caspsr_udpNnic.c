@@ -20,10 +20,6 @@
 #include <sys/mman.h>
 #include <sched.h>
 
-#ifdef HAVE_PGPLOT
-#include <cpgplot.h>
-#endif
-
 #include "caspsr_udpNnic.h"
 #include "dada_generator.h"
 #include "dada_affinity.h"
@@ -50,7 +46,6 @@
 
 /* global variables */
 int quit_threads = 0;
-int quit_plot_thread = 0;
 int start_pending = 0;
 int stop_pending = 0;
 int recording = 0;
@@ -79,7 +74,6 @@ void usage()
      " -c Mibytes     clamp the max sending rate [MiB/s]\n"
      " -d             run as a daemon\n"
      " -r             receive data only, do not attempt to send it\n"
-     " -s             show plots of memory buffers\n"
      " -h             print help text\n"
      " -v             verbose messages\n"
      "\n"
@@ -745,9 +739,6 @@ int main (int argc, char **argv)
   /* number of packets to append to each transfer */ 
   int packets_to_append = 0;
 
-  /* show plots of the memory buffers */
-  int show_plots = 0;
-
   /* receive only flag */
   unsigned receive_only = 0;
 
@@ -758,9 +749,6 @@ int main (int argc, char **argv)
 
   /* statistics thread */
   pthread_t stats_thread_id;
-
-  /* plotting thread */
-  pthread_t plotting_thread_id;
 
   /* control thread */
   pthread_t control_thread_id;
@@ -774,7 +762,7 @@ int main (int argc, char **argv)
   /* receiver threads that send data to the PWCs */
   pthread_t * receiver_thread_ids;
 
-  while ((arg=getopt(argc,argv,"b:c:di:l:n:o:p:q:rst:vh")) != -1) {
+  while ((arg=getopt(argc,argv,"b:c:di:l:n:o:p:q:rt:vh")) != -1) {
     switch (arg) {
 
     case 'b':
@@ -821,10 +809,6 @@ int main (int argc, char **argv)
 
     case 'r':
       receive_only = 1;
-      break;
-
-    case 's':
-      show_plots = 1;
       break;
 
     case 't':
@@ -1081,19 +1065,6 @@ int main (int argc, char **argv)
       return -1;
     }
 
-#ifdef HAVE_PGPLOT
-
-    if (show_plots) {
-      multilog(log, LOG_INFO, "starting plotting_thread()\n");
-      rval = pthread_create (&plotting_thread_id, 0, (void *) plotting_thread, (void *) &udpNnic);
-      if (rval != 0) {
-        multilog(log, LOG_INFO, "Error creating plotting_thread: %s\n", strerror(rval));
-        return -1;
-      }
-    }
-
-#endif
-
     /* set the total number of bytes to acquire */
     udpNnic.bytes_to_acquire = 1600 * 1000 * 1000 * (int64_t) nsecs;
     udpNnic.bytes_to_acquire /= udpNnic.n_distrib;
@@ -1124,14 +1095,6 @@ int main (int argc, char **argv)
     if (verbose) 
       multilog(log, LOG_INFO, "joining sending_thread\n");
     pthread_join (sending_thread_id, &result);
-
-#ifdef HAVE_PGPLOT
-    if (show_plots) {
-      quit_plot_thread = 1;
-      multilog(log, LOG_INFO, "joining plotting_thread\n");
-      pthread_join (plotting_thread_id, &result);
-    }
-#endif
 
     if (verbose) 
       multilog(log, LOG_INFO, "udpNnic_stop_function\n");
@@ -1672,163 +1635,6 @@ void stats_thread(void * arg) {
   }
 }
 
-#ifdef HAVE_PGPLOT
-
-/* 
- * Create a pgplot window and display buffer information
- */
-void plotting_thread(void * arg) {
-
-  udpNnic_t * ctx = (udpNnic_t *) arg;
-
-  multilog(ctx->log, LOG_INFO,"plotting_thread starting\n");
-
-  char device[6];
-  sprintf(device, "%d/xs", (ctx->i_distrib+1));
-
-  unsigned recv_bins = (ctx->n_receivers*3);
-  unsigned extra_bins = 6;
-  unsigned n_bins = (recv_bins + extra_bins);
-
-  if (cpgopen(device) != 1) {
-    fprintf(stderr, "plotting_thread: error opening plot device [%s]\n", device);
-    return ;
-  }
-
-  set_dimensions(670, 300);
-
-  float * x_vals = malloc(sizeof(float) * n_bins);
-  float * y_vals = malloc(sizeof(float) * n_bins);
-  float * y_rate = malloc(sizeof(float) * n_bins);
-  unsigned i = 0;
-
-  float ymax = (float) 440;
-
-  cpgask(0);
-
-  struct timeval timeout;
-
-  for (i=0; i<n_bins; i++) 
-  {
-    x_vals[i] = (float) i;
-    y_rate[i] = 0;
-  }
-
-  uint64_t b_last = 0;
-  uint64_t b_now = 0;
-  uint64_t d_last = 0;
-  uint64_t d_now = 0;
-  uint64_t r_last = 0;
-  uint64_t r_now = 0;
-
-  float r_val = 0;
-  float w_val = 0;
-  float y_val = 0;
-  char string[64];
-  int dumps_ps = 3;
-  long sleep_time = 1000000 / dumps_ps;
-
-  cpgsvp(0.1,0.9,0.1,0.9);
-  cpgswin(-0.5, n_bins-0.5, 0, ymax);
-
-  while (!quit_plot_thread)
-  {
-
-    /* the current buffer status for each receiver */
-    for (i=0; i<ctx->n_receivers; i++) 
-    {
-      r_val = ((float) ctx->receivers[i]->r_count) / ((float) ctx->receivers[i]->size);
-      w_val = ((float) ctx->receivers[i]->w_count) / ((float) ctx->receivers[i]->size);
-
-      // normalise to 400
-      r_val *= 400;
-      w_val *= 400;
-
-      y_val = w_val - r_val;
-
-      if (y_val > 0) {
-        y_rate[(i*3)+0] = (y_vals[i] - y_val) * dumps_ps;
-        y_rate[(i*3)+1] = 0;
-        y_rate[(i*3)+2] = 0;
-      }
-
-      y_vals[(i*3)+0] = y_val;
-      y_vals[(i*3)+1] = w_val;
-      y_vals[(i*3)+2] = r_val;
-    }
-
-    /* current overall recv/drop rate */
-    b_now = ctx->bytes->received;
-    d_now = ctx->bytes->dropped;
-    r_now = ctx->r_bytes;
-
-    if (b_now > 0) 
-      y_rate[recv_bins+1] = (float) ((b_now - b_last) / 1000000) * dumps_ps;
-    y_vals[recv_bins+1] = y_rate[recv_bins+1];
-    b_last = b_now;
-
-    if (d_now > 0) 
-      y_rate[recv_bins+2] = (float) ((d_now - d_last) / 1000000) * dumps_ps;
-    y_vals[recv_bins+2] = y_rate[recv_bins+2];
-    d_last = d_now;
-
-    y_vals[recv_bins+3] = y_vals[recv_bins+1] + y_vals[recv_bins+2];
-    y_rate[recv_bins+3] = y_rate[recv_bins+1] + y_rate[recv_bins+2];
-
-    if (r_now > 0)
-      y_rate[recv_bins+4] = (float) ((r_now - r_last) / 1000000) * dumps_ps;
-    y_vals[recv_bins+4] = y_rate[recv_bins+4];
-    r_last = r_now;
-
-    y_rate[recv_bins+5] = 0.0;
-    y_vals[recv_bins+5] = 0.0;
-
-    cpgbbuf();
-    cpgpage();
-    cpgsci(1);
-    cpglab("Buffers", "Capacity [Million B]", "CASPSR Memory Buffer Status");
-    cpgbox("BST", 0.0, 0, "BNST", 0.0, 0);
-
-    for (i=0; i<ctx->n_receivers; i++)
-    {
-      sprintf(string, "%d",i);
-      cpgtext((i*3)-0.1, -20, string);
-    }
-    sprintf(string, "CAP");
-    cpgtext(recv_bins+0.5, -20, string);
-
-    sprintf(string, "DRP");
-    cpgtext(recv_bins+1.5, -20, string);
-
-    sprintf(string, "TOT");
-    cpgtext(recv_bins+2.5, -20, string);
-
-    sprintf(string, "SND");
-    cpgtext(recv_bins+3.5, -20, string);
-
-    cpgsch(0.7);
-    for (i=0; i<(n_bins-1); i++)
-    {
-      sprintf(string, "%3.0f", y_rate[i]);
-      cpgtext(i-0.3, -40, string);
-    }
-
-    cpgsch(1.0);
-    cpgsci(1);
-    cpgbin(n_bins, x_vals, y_vals, 1);
-    cpgebuf();
-
-    usleep(sleep_time);
-  }
-
-  free (x_vals);
-  free (y_vals);
-
-  multilog(ctx->log, LOG_INFO,"plotting_thread exiting\n");
-
-}
-
-#endif
 
 /*
  *  Simple signal handler to exit more gracefully
@@ -1842,47 +1648,3 @@ void signal_handler(int signalValue) {
   quit_threads = 1;
 
 }
-
-#ifdef HAVE_PGPLOT
-
-/*
- * Set the PGPLOT dimensions
- */
-void set_dimensions (unsigned width_pixels, unsigned height_pixels)
-{
-  float width_scale, height_scale;
-
-  get_scale (Pixels, Inches, &width_scale, &height_scale);
-
-  float width_inches = width_pixels * width_scale;
-  float aspect_ratio = height_pixels * height_scale / width_inches;
-
-  cpgpap( width_inches, aspect_ratio );
-
-  float x1, x2, y1, y2;
-  cpgqvsz (Pixels, &x1, &x2, &y1, &y2);
-}
-
-/*
- * Get scaling factors for PGPLOT
- */
-
-void get_scale (int from, int to, float* width, float* height)
-{
-  float j = 0;
-  float fx, fy;
-  cpgqvsz (from, &j, &fx, &j, &fy);
-
-  float tx, ty;
-  cpgqvsz (to, &j, &tx, &j, &ty);
-
-  if (width)
-    *width = tx / fx;
-  if (height)
-    *height = ty / fy;
-}
-
-#endif
-
-
-

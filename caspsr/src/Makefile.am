@@ -14,20 +14,14 @@ bin_PROGRAMS = bibob_terminal caspsr_udpthreaded caspsr_udpNdb caspsr_udpgen bib
 
 
 LDADD = libcaspsr.la $(top_builddir)/src/libpsrdada.la 
-INCLUDES = -I$(top_srcdir)/src -I$(top_srcdir)/3rdparty
+INCLUDES = -I$(top_srcdir)/src 
 AM_CFLAGS = -D$(ARCH)
-
-caspsr_udpNnic_LDADD = $(LDADD) @PGPLOT_LIBS@
-
-# INCLUDES += -I$(HOME)/packages/src/libpcap-0.9.8.20081128/
-
 
 #############################################################################
 #
 # Depends on RDMA and Infiniband
 #
 #############################################################################
-
 
 if HAVE_RDMACM
 
@@ -45,7 +39,6 @@ endif
 #
 #############################################################################
 
-
 if COMPILE_THIRD
 
 bin_PROGRAMS += caspsr_udpdb caspsr_udpheader caspsr_udpNnic
@@ -56,7 +49,6 @@ INCLUDES += -I$(top_srcdir)/3rdparty
 LDADD += $(top_builddir)/3rdparty/libtimers.la
 
 endif
-
 
 
 #############################################################################
