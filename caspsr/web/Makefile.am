@@ -31,6 +31,7 @@ nobase_dist_web_SCRIPTS = admin.lib.php \
                           images/caspsr_logo_480x60.png \
                           images/caspsr_logo_200x60.png \
                           images/caspsr_logo_1x60.png \
+                          images/caspsr_logo.png \
                           Arty/Arty.css \
                           Arty/BlockContentBullets.png \
                           Arty/Block-c.png \
