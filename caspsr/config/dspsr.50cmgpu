@@ -1,0 +1,2 @@
+PROC_CMD dspsr -Q --repeat --cuda=0,1 -F256:D --fft-bench -minram 512 -L 10 --Lmin 0 -j "weight time, edit int:wt[0]=0" -tdec 2
+

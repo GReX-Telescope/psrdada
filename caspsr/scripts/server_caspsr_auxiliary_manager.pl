@@ -10,13 +10,13 @@ use Dada::server_auxiliary_manager qw(%cfg);
 #
 # Global Variable Declarations
 #
-%cfg = Caspsr->getConfig();
+%cfg = Caspsr::getConfig();
 
 #
 # Initialize module variables
 #
 $Dada::server_auxiliary_manager::dl = 2;
-$Dada::server_auxiliary_manager::daemon_name = Dada->daemonBaseName($0);
+$Dada::server_auxiliary_manager::daemon_name = Dada::daemonBaseName($0);
 
 # Autoflush STDOUT
 $| = 1;

@@ -104,7 +104,7 @@ sub main() {
     print STDERR "Could not open log port: ".$log_host.":".$log_port."\n";
   }
 
-  logMsg(0, "INFO", "STARTING SCRIPT");
+  msg(0, "INFO", "STARTING SCRIPT");
 
   # Start the daemon control thread
   $control_thread = threads->new(\&controlThread, $quit_file, $pid_file);
@@ -120,7 +120,7 @@ sub main() {
 
   $control_thread->join();
 
-  logMsg(0, "INFO", "STOPPING SCRIPT");
+  msg(0, "INFO", "STOPPING SCRIPT");
   Dada::nexusLogClose($log_sock);
 
   return 0;
@@ -150,7 +150,7 @@ sub processingThread($) {
   # Get the next filled header on the data block. Note that this may very
   # well hang for a long time - until the next header is written...
   $cmd = $bindir."/".$dada_header_cmd;
-  logMsg(2, "INFO", "processingThread: ".$cmd);
+  msg(2, "INFO", "processingThread: ".$cmd);
   $raw_header = `$cmd 2>&1`;
 
   # since the only way to currently stop this daemon is to send a kill
@@ -162,30 +162,30 @@ sub processingThread($) {
     ($result, $response) = Dada::processHeader($raw_header, $cfg{"CONFIG_DIR"});
 
     if ($result ne "ok") {
-      logMsg(0, "ERROR", $response);
-      logMsg(0, "ERROR", "DADA header malformed, jettesioning xfer");  
+      msg(0, "ERROR", $response);
+      msg(0, "ERROR", "DADA header malformed, jettesioning xfer");  
       $proc_cmd = $bindir."/dada_dbnull -s -k ".lc($cfg{"PROCESSING_DATA_BLOCK"});
 
     } elsif ($raw_header eq $prev_header) {
-      logMsg(0, "ERROR", "DADA header repeated, likely cause failed PROC_CMD, jettesioning xfer");
+      msg(0, "ERROR", "DADA header repeated, likely cause failed PROC_CMD, jettesioning xfer");
       $proc_cmd = $bindir."/dada_dbnull -s -k ".lc($cfg{"PROCESSING_DATA_BLOCK"});
 
     } else {
-      logMsg(2, "INFO", "processingThread: DADA header looks correct");
+      msg(2, "INFO", "processingThread: DADA header looks correct");
       $proc_cmd = $response;
       if ($proc_cmd =~ m/dspsr/) {
         $proc_cmd .= " ".$cfg{"PROCESSING_DB_KEY"};
       }
 
       # Check if any auxiliary nodes are available for processing 
-      logMsg(2, "INFO", "processingThread: asking for aux nodes");
+      msg(2, "INFO", "processingThread: asking for aux nodes");
       $node = auxNodesAvailable();
-      logMsg(2, "INFO", "processingThread: received ".$node);
+      msg(2, "INFO", "processingThread: received ".$node);
 
       # We got a free node, run dbnic on the xfer
       if ($node =~ /apsr(\d\d):(\d+)/) {
 
-        logMsg(2, "INFO", "processingThread: transferring data to ".$node);
+        msg(2, "INFO", "processingThread: transferring data to ".$node);
         $proc_cmd = $bindir."/dada_dbnic -k ".$cfg{"AUXILIARY_DATA_BLOCK"}." -s -N ".$node;
 
       # If no nodes are available, run dbdisk on the xfer
@@ -200,22 +200,22 @@ sub processingThread($) {
     }
 
     # Create an obs.start file in the processing dir:
-    logMsg(0, "INFO", "START ".$proc_cmd);
+    msg(0, "INFO", "START ".$proc_cmd);
 
     $response = `$proc_cmd`;
 
     if ($? != 0) {
-      logMsg(0, "ERROR", "Aux cmd ".$proc_cmd." failed: ".$response);
+      msg(0, "ERROR", "Aux cmd ".$proc_cmd." failed: ".$response);
     }
 
-    logMsg(0, "INFO", "END ".$proc_cmd);
+    msg(0, "INFO", "END ".$proc_cmd);
 
     return ($raw_header);
   
   } else {
 
     if (!$quit_daemon) {
-      logMsg(2, "WARN", "processingThread: dada_header_cmd failed - probably no data block");
+      msg(2, "WARN", "processingThread: dada_header_cmd failed - probably no data block");
       sleep 1;
     }
     return ("");
@@ -230,27 +230,27 @@ sub auxNodesAvailable() {
   my $port = $cfg{"SERVER_AUX_CLIENT_PORT"};
   my $localhost = Dada::getHostMachineName();
   
-  logMsg(2, "INFO", "auxNodesAvailable: conecting to ".$host.":".$port);
+  msg(2, "INFO", "auxNodesAvailable: conecting to ".$host.":".$port);
   my $handle = Dada::connectToMachine($host, $port);
   
   if (!$handle) {
 
-    logMsg(0, "WARN", "Could not connect to assisant manager ".
+    msg(0, "WARN", "Could not connect to assisant manager ".
                   $host.":".$port);
     return "none";
   
   } else {
 
-    logMsg(2, "INFO", "auxNodesAvailable: connected to ".$host.":".$port);
+    msg(2, "INFO", "auxNodesAvailable: connected to ".$host.":".$port);
 
     print $handle $localhost.":help\r\n";
 
-    logMsg(2, "INFO", "auxNodesAvailable: sent ".$localhost.":help");
+    msg(2, "INFO", "auxNodesAvailable: sent ".$localhost.":help");
     my $string = Dada::getLineSelect($handle,2);
-    logMsg(2, "INFO", "auxNodesAvailable: received ".$string);
+    msg(2, "INFO", "auxNodesAvailable: received ".$string);
 
     close($handle);
-    logMsg(2, "INFO", "auxNodesAvailable: closed handle");
+    msg(2, "INFO", "auxNodesAvailable: closed handle");
     return $string;
   }
 }
@@ -261,7 +261,7 @@ sub controlThread($$) {
   
   my ($quit_file, $pid_file) = @_;
   
-  logMsg(2, "INFO", "controlThread : starting");
+  msg(2, "INFO", "controlThread : starting");
 
   my $cmd = "";
   my $result = "";
@@ -276,25 +276,25 @@ sub controlThread($$) {
   # Kill the dada_header command
   $cmd = "ps aux | grep -v grep | grep ".$user." | grep '".$dada_header_cmd.
           "' | awk '{print \$2}'";
-  logMsg(2, "INFO", "controlThread: ".$cmd);
+  msg(2, "INFO", "controlThread: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   $response =~ s/\n/ /;
-  logMsg(2, "INFO", "controlThread: ".$result." ".$response);
+  msg(2, "INFO", "controlThread: ".$result." ".$response);
   if ($result eq "ok") {
     $cmd = "kill -KILL ".$response;
-    logMsg(1, "INFO", "controlThread: Killing dada_header: ".$cmd);
+    msg(1, "INFO", "controlThread: Killing dada_header: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
-    logMsg(2, "INFO", "controlThread: ".$result." ".$response);
+    msg(2, "INFO", "controlThread: ".$result." ".$response);
   }
   
   if ( -f $pid_file) {
-    logMsg(2, "INFO", "controlThread: unlinking PID file");
+    msg(2, "INFO", "controlThread: unlinking PID file");
     unlink($pid_file);
   } else {
-    logMsg(1, "WARN", "controlThread: PID file did not exist on script exit");
+    msg(1, "WARN", "controlThread: PID file did not exist on script exit");
   }
  
-  logMsg(2, "INFO", "controlThread: exiting");
+  msg(2, "INFO", "controlThread: exiting");
 
 }
 
@@ -303,7 +303,7 @@ sub controlThread($$) {
 #
 # logs a message to the nexus logger and prints to stdout
 #
-sub logMsg($$$) {
+sub msg($$$) {
 
   my ($level, $type, $msg) = @_;
   if ($level <= $dl) {

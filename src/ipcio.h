@@ -85,6 +85,14 @@ extern "C" {
 
   uint64_t ipcio_get_soclock_byte(ipcio_t* ipc);
 
+  char * ipcio_open_block_read (ipcio_t *ipc, uint64_t *curbufsz, uint64_t *block_id);
+
+  ssize_t ipcio_close_block_read (ipcio_t *ipc, uint64_t bytes);
+
+  char * ipcio_open_block_write (ipcio_t *ipc, uint64_t *block_id);
+
+  ssize_t ipcio_close_block_write (ipcio_t *ipc, uint64_t bytes);
+
 #ifdef __cplusplus
 	   }
 #endif

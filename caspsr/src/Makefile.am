@@ -4,24 +4,59 @@
 #
 #############################################################################
 
-if COMPILE_THIRD
-
 lib_LTLIBRARIES = libcaspsr.la
 
-casper_hdr=bibob.h caspsr_def.h caspsr_udp.h caspsr_udpNdb.h caspsr_udpNnic.h caspsr_udpdb.h caspsr_udpheader.h caspsr_udpthreaded.h mulbibob.h
+casper_hdr = bibob.h caspsr_def.h mulbibob.h caspsr_rdma.h 
 
-libcaspsr_la_SOURCES = $(casper_hdr) bibob.h bibob.c mulbibob.h mulbibob.c caspsr_udp.h caspsr_udp.c start_observation.c
+libcaspsr_la_SOURCES = $(casper_hdr) bibob.c mulbibob.c start_observation.c
 
-bin_PROGRAMS = caspsr_udpdb bibob_terminal caspsr_udpdb caspsr_udpthreaded caspsr_udpNdb caspsr_udpheader caspsr_udpgen caspsr_udpNnic
+bin_PROGRAMS = bibob_terminal caspsr_udpthreaded caspsr_udpNdb caspsr_udpgen bibob_start_observation caspsr_udpNdebug caspsr_dbnum caspsr_udptester caspsr_dbdecidb
 
 
-LDADD = libcaspsr.la $(top_builddir)/src/libpsrdada.la $(top_builddir)/3rdparty/libtimers.la
+LDADD = libcaspsr.la $(top_builddir)/src/libpsrdada.la 
 INCLUDES = -I$(top_srcdir)/src -I$(top_srcdir)/3rdparty
 AM_CFLAGS = -D$(ARCH)
 
 caspsr_udpNnic_LDADD = $(LDADD) @PGPLOT_LIBS@
 
 # INCLUDES += -I$(HOME)/packages/src/libpcap-0.9.8.20081128/
+
+
+#############################################################################
+#
+# Depends on RDMA and Infiniband
+#
+#############################################################################
+
+
+if HAVE_RDMACM
+
+bin_PROGRAMS += caspsr_dbib caspsr_ibdb caspsr_pwc_ibdb
+
+caspsr_dbib_LDADD = $(LDADD) $(RDMACM_LIBS)
+caspsr_ibdb_LDADD = $(LDADD) $(RDMACM_LIBS)
+caspsr_pwc_ibdb_LDADD = $(LDADD) $(RDMACM_LIBS)
+
+endif
+
+#############################################################################
+#
+# Depends on 3rd Party Timers
+#
+#############################################################################
+
+
+if COMPILE_THIRD
+
+bin_PROGRAMS += caspsr_udpdb caspsr_udpheader caspsr_udpNnic
+libcaspsr_la_SOURCES += caspsr_udp.c caspsr_udp.h 
+
+AM_CFLAGS += -D$(ARCH)
+INCLUDES += -I$(top_srcdir)/3rdparty
+LDADD += $(top_builddir)/3rdparty/libtimers.la
+
+endif
+
 
 
 #############################################################################
@@ -37,4 +72,3 @@ AM_CPPFLAGS = @PGPLOT_CFLAGS@
 mulbibob_server_LDADD = $(LDADD) @PGPLOT_LIBS@
 endif
 
-endif

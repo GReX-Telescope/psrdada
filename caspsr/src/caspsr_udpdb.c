@@ -17,7 +17,7 @@
 #include "caspsr_udpdb.h"
 #include "dada_generator.h"
 
-#define _DEBUG 1
+/* #define _DEBUG 1 */
 
 int quit_threads = 0;
 
@@ -34,6 +34,7 @@ void usage()
      " -n secs        manually acquire for secs\n"
      " -H file        load header from file, run without PWCC\n"
      " -d             run as a daemon\n"
+     " -D file        run as a daemon, logging all output to file\n"
      " -v             verbose messages\n\n"
      " i_dest         the number of this destination\n"
      " n_dests        the total number of destinations\n"
@@ -83,27 +84,55 @@ int udpdb_error_function (dada_pwc_main_t* pwcm) {
 
   /* check if the header is valid */
   if (udpdb_header_valid_function (pwcm)) {
-
-    /* if the header is valid, then check if we are at the end of an xfer */
-    if (ctx->receiver->xfer_ending) 
-      error = 1;
-    else
-      error = 2;
-
-  } else 
     error = 0;
+  } else 
+    error = 2;
 
   return error;
 
 }
 
+/*
+ * udpdb_xfer_pending_function
+ *
+ * called when the buffer_function returns 0 bytes. Depending on the
+ * state of the receiver, returns:
+ *   0  waitinf for SOD on current xfer, continue waiting for data
+ *   1  at the end of an xfer, but obs continuing
+ *   2  at the end of an obs 
+ */
+int udpdb_xfer_pending_function (dada_pwc_main_t* pwcm) {
+
+  udpdb_t *ctx = (udpdb_t*)pwcm->context;
+
+  int xfer_state = 0;
+
+  // check if the header is valid 
+  if (udpdb_header_valid_function (pwcm)) {
+
+    // if the current xfer is ending
+    if (ctx->receiver->xfer_ending)
+      xfer_state = 1;
+    // we are at the end of the obs, and have data in the current buffer
+    else if (ctx->receiver->sod)
+      xfer_state = 2;
+    // at the start of first xfer and dont have SOD yet
+    else 
+      xfer_state = 0;
+  }
+
+  return xfer_state;
+
+}
+
+
 
 /*
- *  udpdb_start_new_xfer
+ *  udpdb_new_xfer_function
  *
  *  Start a new xfer and return next byte that the buffer function will receive
  */
-uint64_t udpdb_start_new_xfer (dada_pwc_main_t *pwcm) {
+uint64_t udpdb_new_xfer_function (dada_pwc_main_t *pwcm) {
 
   udpdb_t * ctx = (udpdb_t*) pwcm->context;
 
@@ -111,12 +140,14 @@ uint64_t udpdb_start_new_xfer (dada_pwc_main_t *pwcm) {
   if (ascii_header_set (pwcm->header, "OBS_XFER", "%d", ctx->receiver->xfer_count) < 0) 
     multilog (pwcm->log, LOG_WARNING, "Could not write OBS_XFER to header\n");
 
-  multilog (pwcm->log, LOG_INFO, "udpdb_start_new_xfer: OBS_XFER=%d\n", ctx->receiver->xfer_count);
+  if (pwcm->verbose)
+    multilog (pwcm->log, LOG_INFO, "udpdb_new_xfer_function: OBS_XFER=%d\n", ctx->receiver->xfer_count);
 
   uint64_t first_byte = caspsr_start_xfer(ctx->receiver);
   ascii_header_set (pwcm->header, "OBS_OFFSET", "%"PRIu64, first_byte);
 
-  multilog (pwcm->log, LOG_INFO, "udpdb_start_new_xfer: OBS_OFFSET=%"PRIu64"\n", first_byte);
+  if (pwcm->verbose)
+    multilog (pwcm->log, LOG_INFO, "udpdb_new_xfer_function: OBS_OFFSET=%"PRIu64"\n", first_byte);
 
   return first_byte;
 
@@ -135,19 +166,18 @@ time_t udpdb_start_function (dada_pwc_main_t* pwcm, time_t start_utc)
 #endif
 
   udpdb_t *ctx = (udpdb_t*)pwcm->context;
-  multilog_t* log = pwcm->log;
 
-  if (ascii_header_set (pwcm->header, "OBS_XFER", "%d", ctx->receiver->xfer_count) < 0)
-    multilog (pwcm->log, LOG_WARNING, "Could not write OBS_XFER to header\n");
-
-  uint64_t first_byte = caspsr_start_xfer(ctx->receiver);
+  /* set OBS_XFER and OBS_OFFSET  for the first time*/
+  // uint64_t first_byte = udpdb_new_xfer_function(pwcm);
 
   /* set header param RECV_HOST */
   char myhostname[HOST_NAME_MAX] = "unknown";
   gethostname(myhostname,HOST_NAME_MAX); 
   ascii_header_set (pwcm->header, "RECV_HOST", "%s", myhostname);
 
-  return 0;
+  /* open the UDP socket */
+  return caspsr_open_sock(ctx->receiver);
+
 }
 
 
@@ -168,7 +198,6 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
 
 int udpdb_stop_function (dada_pwc_main_t* pwcm)
 {
-
   udpdb_t *ctx = (udpdb_t*)pwcm->context;
   return caspsr_stop_xfer(ctx->receiver);
 
@@ -232,9 +261,12 @@ int main (int argc, char **argv)
   /* Pointer to array of "read" data */
   char *src;
 
+  /* optinal log file for multi log messages */
+  char * log_file = 0;
+
   int arg = 0;
 
-  while ((arg=getopt(argc,argv,"c:dH:k:i:l:n:p:vh")) != -1) {
+  while ((arg=getopt(argc,argv,"c:dD:H:k:i:l:n:p:vh")) != -1) {
     switch (arg) {
 
     case 'c':
@@ -249,6 +281,17 @@ int main (int argc, char **argv)
     case 'd':
       daemon = 1;
       break; 
+
+    case 'D':
+      daemon = 1; 
+      if (optarg) { 
+        log_file = optarg;
+      } else {
+        fprintf (stderr, "Specify a log_file\n");
+        usage();
+        return EXIT_FAILURE;
+      }
+      break;
   
     case 'H':
       if (optarg) {
@@ -257,6 +300,7 @@ int main (int argc, char **argv)
       } else {
         fprintf(stderr,"-H flag requires a file arguement\n");
         usage();
+        return EXIT_FAILURE;
       }
       break;
 
@@ -303,7 +347,6 @@ int main (int argc, char **argv)
       
     }
   }
-
 
   /* parse required command line options */
   if (argc-optind != 4) {
@@ -363,7 +406,14 @@ int main (int argc, char **argv)
   log = multilog_open ("caspsr_udpdb", 0);
 
   if (daemon)
-    be_a_daemon ();
+  {
+    if (log_file) 
+    {
+      multilog_add (log, stderr);
+      be_a_daemon_with_log (log_file);
+    } else
+      be_a_daemon();
+  }
   else
     multilog_add (log, stderr);
 
@@ -377,6 +427,8 @@ int main (int argc, char **argv)
   pwcm->buffer_function       = udpdb_buffer_function;
   pwcm->stop_function         = udpdb_stop_function;
   pwcm->error_function        = udpdb_error_function;
+  pwcm->xfer_pending_function = udpdb_xfer_pending_function;
+  pwcm->new_xfer_function     = udpdb_new_xfer_function;
   pwcm->header_valid_function = udpdb_header_valid_function;
   pwcm->verbose               = verbose;
 
@@ -505,12 +557,14 @@ int main (int argc, char **argv)
       return EXIT_FAILURE;
     }
 
+#if 0
     if (ascii_header_set (header_buf, "FREQ", "%d", i_dest) < 0) {
       multilog (pwcm->log, LOG_ERR, "failed ascii_header_set FREQ\n");
       return EXIT_FAILURE;
     }
 
     fprintf(stdout, "caspsr_udpdb: FREQ hardset to %d\n", i_dest);
+#endif
 
     /* HACK just set the UTC_START to roughly now */
     fprintf(stdout, "caspsr_udpdb: UTC_START [now] = %s\n",buffer);
@@ -587,33 +641,40 @@ int main (int argc, char **argv)
         multilog(pwcm->log, LOG_INFO, "main: acquired enough bytes [bytes_to_acquire=%"PRId64"\n", bytes_to_acquire);
       }
 
-      /* check if we should be moving to a new xfer 
+      /* check whether a new xfer is pending 
+       *  0 OBS still waiting for data on first XFER
        *  1 OBS continuing, end of XFER
-       *  2 OBS end  */
-      int error_status = udpdb_error_function (pwcm);
-      multilog(pwcm->log, LOG_ERR, "main: error_status = %d, xfer_bytes_written=%"PRIu64"\n", error_status, xfer_bytes_written);
+       *  2 OBS end
+       */
+      int xfer_pending_status = udpdb_xfer_pending_function (pwcm);
+      multilog(pwcm->log, LOG_INFO, "main: xfer_pending_status = %d, xfer_bytes_written=%"PRIu64"\n", xfer_pending_status, xfer_bytes_written);
 
-      /* If this obs has 0 bytes written, we must write at least 1 byte */
-      if ((error_status == 2) && (xfer_bytes_written == 0)) {
+      if (xfer_pending_status > 0) {
 
-        multilog(pwcm->log, LOG_ERR, "main: OBS END and XFER %d had 0 bytes written\n", receiver.xfer_count);
-        if (ipcio_write(hdu->data_block, src, 1) != 1) 
-          multilog(pwcm->log, LOG_ERR, "main: failed to write 1 byte to empty datablock at end of OBS\n");
-      }
+        // check whether any bytes have been written in this xfer
+        uint64_t bytes_written_this_xfer = pwcm->data_block->bytes;
+        multilog(pwcm->log, LOG_INFO, "main : current DB had %"PRIu64" bytes written\n",
+                                       bytes_written_this_xfer);
 
-      /* close the current data block */ 
-      fprintf(stderr, "main: dada_hdu_unlock_write\n");
-      if (dada_hdu_unlock_write (hdu) < 0)
-        return EXIT_FAILURE;
+        // if we have written 0 bytes, we must write at least 1 byte so that 
+        // the SOD and EOD are seperated
+        if (bytes_written_this_xfer == 0) {
+          if (ipcio_write(pwcm->data_block, src, 1) != 1)
+          {
+            multilog(pwcm->log, LOG_ERR, "main: failed to write 1 byte to empty datablock at end of OBS\n");
+            return EXIT_FAILURE;
+          }
+        }
 
-      /* connect to the HDU */
-      fprintf(stderr, "main: dada_hdu_lock_write\n");
-      if (dada_hdu_lock_write (hdu) < 0)
-         return EXIT_FAILURE;
+        /* close the current data block */ 
+        multilog(pwcm->log, LOG_INFO, "main: closing data block\n");
+        if (dada_hdu_unlock_write (hdu) < 0)
+          return EXIT_FAILURE;
 
-      /* If we have some sort of timeout, then either a new XFER or the
-       * ending "null" XFER is required */
-      if ( error_status > 0) {
+        /* re-connect to the data block */
+        multilog(pwcm->log, LOG_INFO, "main: re-opening data block\n");
+        if (dada_hdu_lock_write (hdu) < 0)
+           return EXIT_FAILURE;
 
         /* get the next header block */
         pwcm->header = ipcbuf_get_next_write (hdu->header_block);
@@ -622,30 +683,31 @@ int main (int argc, char **argv)
         memcpy(pwcm->header, header_buf, header_size);
 
         /* get the OBS_OFFSET of the next xfer */
-        if (error_status == 1) {
-
-          first_byte = udpdb_start_new_xfer(pwcm);
+        if (xfer_pending_status == 1) {
+  
+          first_byte = udpdb_new_xfer_function(pwcm);
           multilog(log, LOG_INFO, "main: XFER %d on byte=%"PRIu64"\n",receiver.xfer_count, first_byte);
-           
+
+        }
+             
         /* signify that this header is the end of the observation */ 
-        } else if (error_status == 2) {
+        if (xfer_pending_status == 2) {
 
           multilog(log, LOG_INFO, "main: OBS ended on XFER %d, writing new header with OBS_XFER=-1\n", receiver.xfer_count);
           int end_of_xfer = -1;
 
           if (ascii_header_set (pwcm->header, "OBS_XFER", "%d", end_of_xfer) < 0) {
-            multilog (pwcm->log, LOG_ERR, "Could not write OBS_XFER to header\n");
+              multilog (pwcm->log, LOG_ERR, "Could not write OBS_XFER to header\n");
             return EXIT_FAILURE;
           }
           
-          uint64_t obs_offset = 1;
+          uint64_t obs_offset = 0;
           if (ascii_header_set (pwcm->header, "OBS_OFFSET", "%d", obs_offset) < 0) {
             multilog (pwcm->log, LOG_ERR, "Could not write OBS_OFFSET to header\n");
             return EXIT_FAILURE;
           }
 
-        } else {
-          multilog(log, LOG_ERR, "main: unrecognized error status %d\n", error_status);
+          multilog(log, LOG_ERR, "main: unrecognized error status %d\n", xfer_pending_status);
         }
 
         /* marked the header as filled */
@@ -655,7 +717,7 @@ int main (int argc, char **argv)
         }
 
         /* end of OBS */
-        if (error_status == 2) {
+        if (xfer_pending_status == 2) {
 
           /* write 1 byte so that EOD/SOD are separated */
           ipcio_write(hdu->data_block, src, 1);
@@ -663,12 +725,12 @@ int main (int argc, char **argv)
           bytes_to_acquire = 0;
 
         }
-      
-      /* This indicates that the UTC_START is not set - EEEEP */
+     
+      /* we are still waiting for the first packet */
       } else {
-        multilog(pwcm->log, LOG_ERR, "main: udpdb_error_function returned 1");
-        bytes_to_acquire = 0;  
-      } 
+
+        multilog(pwcm->log, LOG_INFO, "main: waiting for first packet");
+      }
     }
 
     fprintf(stderr, "udpdb_stop_function\n");

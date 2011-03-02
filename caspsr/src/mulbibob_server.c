@@ -12,7 +12,7 @@
 
 void usage()
 {
-  printf ("mulbibob_server -n N \n"
+  printf ("mulbibob_server [options]\n"
 	  " -n N        number of iBoBs to be controlled [default: 1] \n"
 	  " -p port     port on which to listen for control connections \n"
 	  " -v          verbose \n" );

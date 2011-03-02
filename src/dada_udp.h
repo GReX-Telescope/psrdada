@@ -46,4 +46,7 @@ int dada_udp_sock_out(int *fd, struct sockaddr_in * dagram, char *client,
 
 int dada_udp_sock_set_buffer_size (multilog_t* log, int fd, int verbose, int pref_size);
 
+int dada_udp_sock_set_size (multilog_t* log, int fd, int verbose, int pref_size, int buf);
+
+size_t dada_sock_clear_buffered_packets(int fd, size_t size);
 #endif /* __DADA_UDP_H */

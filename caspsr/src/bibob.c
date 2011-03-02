@@ -204,13 +204,13 @@ int bibob_open (bibob_t* bibob)
     return -1;
   }
 
-  fprintf (stderr, "bibob_open: opening %s:%d\n",bibob->host, bibob->port);
+  //fprintf (stderr, "bibob_open: opening %s:%d\n",bibob->host, bibob->port);
   int r = dada_udp_sock_out( &(bibob->fd), &(bibob->dagram), bibob->host, bibob->port, 
                              0, "");
   if (r < 0) {
     fprintf (stderr, "bibob_open: dada_udp_sock_out failed\n");
   } else {
-    fprintf (stderr, "bibob_open: socket is open, fd=%d\n",bibob->fd);
+    //fprintf (stderr, "bibob_open: socket is open, fd=%d\n",bibob->fd);
   }
 
   if ( bibob->fd < 0 )

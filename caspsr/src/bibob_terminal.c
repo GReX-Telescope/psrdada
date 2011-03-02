@@ -65,15 +65,15 @@ int main (int argc, char** argv)
   bibob_t * bibob = bibob_construct();
   int r = 0;
 
-
   r = bibob_set_host(bibob, hostname, port);
 
-   r= bibob_open(bibob);
+  r= bibob_open(bibob);
 
   unsigned done = 0;
   char command[100];
   int len = 0;
   size_t bytes = 0;
+  struct timeval timeout;
 
   while (!done) {
 
@@ -93,6 +93,11 @@ int main (int argc, char** argv)
       printf("Received response in %d bytes:\n", bytes);
       printf("%s\n", bibob->buffer);
     }
+
+    timeout.tv_sec = 0;
+    timeout.tv_usec = 50000;
+    select(0, NULL, NULL, NULL, &timeout);
+
   }
 
   bibob_close(bibob);

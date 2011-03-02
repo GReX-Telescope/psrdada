@@ -60,13 +60,13 @@ sub main() {
   my $time     = "";
 
   $time = Dada::getCurrentDadaTime();
-  logMsg(2, $time, "server_logger::".$daemon_name);
+  msg(2, $time, "server_logger::".$daemon_name);
 
   # install signal handlers
   $SIG{INT} = \&sigHandle;
   $SIG{TERM} = \&sigHandle;
 
-  logMsg(2, $time, "server_logger: begin reading from STDIN");
+  msg(2, $time, "server_logger: begin reading from STDIN");
 
   while (defined($line = <STDIN>)) {
 
@@ -89,12 +89,12 @@ sub main() {
 
     }
 
-    logMsg(0, $time, $line);
+    msg(0, $time, $line);
 
   }
 
   $time = Dada::getCurrentDadaTime();
-  logMsg(2,  $time, "server_logger: finished reading from STDIN");
+  msg(2,  $time, "server_logger: finished reading from STDIN");
   
   return  0;
 }  
@@ -103,7 +103,7 @@ sub main() {
 #
 # logs a message to the nexus logger and prints to stdout
 #
-sub logMsg($$$) {
+sub msg($$$) {
 
   my ($level, $time, $msg) = @_;
 

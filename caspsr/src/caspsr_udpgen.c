@@ -207,7 +207,8 @@ int main(int argc, char *argv[])
 
   signal(SIGINT, signal_handler);
 
-  log = multilog_open ("caspsr_udpgen", daemon);
+  // do not use the syslog facility
+  log = multilog_open ("caspsr_udpgen", 0);
 
   if (daemon) {
     be_a_daemon();

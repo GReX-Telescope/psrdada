@@ -1,5 +1,7 @@
 <?PHP 
 
+if (!$_INSTRUMENT_LIB_PHP) { $_INSTRUMENT_LIB_PHP = 1;
+
 class instrument
 {
   /* instrument name */
@@ -145,7 +147,7 @@ class instrument
     $bin_dir = DADA_ROOT."/bin";
   
     # Determine the Period (P0)
-    $cmd = $prefix." ".$bin_dir."/psrcat -x -c \"P0\" ".$source." | awk '{print \$1}'";
+    $cmd = $prefix." ".$bin_dir."/psrcat -all -x -c \"P0\" ".$source." | awk '{print \$1}'";
     $array = array();
     $P0 = exec($cmd, $array, $rval);
     if (($rval != 0) || ($P0 == "WARNING:")) {
@@ -164,7 +166,7 @@ class instrument
     $prefix = "source /home/dada/.bashrc;";
     $bin_dir = DADA_ROOT."/bin";
   
-    $cmd = $prefix." ".$bin_dir."/psrcat -x -c \"DM\" ".$source." | awk '{print \$1}'";
+    $cmd = $prefix." ".$bin_dir."/psrcat -all -x -c \"DM\" ".$source." | awk '{print \$1}'";
     $array = array();
     $DM = exec($cmd, $array, $rval);
     if (($rval != 0) || ($DM == "WARNING:")) {
@@ -200,7 +202,7 @@ class instrument
 
     if (file_exists($archive)) {
 
-      $cmd = "psrstat -j 'zap median' -j FTp -qc snr ".$archive." 2>&1 | grep snr= | awk -F= '{print \$2}'";
+      $cmd = "psrstat -j 'zap median' -j FTp -c snr ".$archive." 2>&1 | grep snr= | awk -F= '{print \$2}'";
       $script = "source /home/dada/.bashrc; ".$cmd." 2>&1";
       $string = exec($script, $output, $return_var);
       $snr = $output[0];
@@ -262,25 +264,6 @@ class instrument
     }
 
     return $status;
-  }
-
-  #
-  # return a list of all the PSRS listed in this user's psrcat catalogue
-  #
-  function getPsrcatPsrs() {
-
-    $cmd = "psrcat -all -c \"PSRJ RAJ DECJ\" -nohead | awk '{print $2,$4, $7}'";
-    $script = "source /home/dada/.bashrc; ".$cmd." 2>&1";
-    $string = exec($script, $output, $return_var);
-
-    $psrs = array();
-
-    for ($i=0; $i<count($output); $i++) {
-      $bits = split(" ", $output[$i]);
-      $psrs[$bits[0]] = array("RAJ" => $bits[1], "DECJ" => $bits[2]);
-    }
-
-    return $psrs;
   }
 
   #
@@ -372,6 +355,119 @@ class instrument
     return $header_string;
 
   }
+
+  #
+  # Return the source names, DM's, periods and SNRS from _t.tot and _f.tot archives
+  # located in the specified directory
+  #
+  function getObsSources($dir) {
+
+    # determine how many pulsars are present
+    $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -name '*.tot' -printf '%f\n'";
+    $pulsars = array();
+    $rval = 0;
+    $line = exec($cmd, $pulsars, $rval);
+    $results = array();
+
+    for ($i=0; $i<count($pulsars); $i++) {
+
+      $arr = split("_", $pulsars[$i], 3);
+      if (count($arr) == 3)
+        $p = $arr[0]."_".$arr[1];
+      else
+        $p = $arr[0];
+
+      if (strpos($pulsars[$i], "_t") !== FALSE) {
+        $results[$p]["int"] = getIntergrationLength($dir."/".$pulsars[$i]);
+        $results[$p]["src"] = getArchiveName($dir."/".$pulsars[$i]);
+        $results[$p]["dm"] =  getSourceDM($results[$p]["src"]);
+        $results[$p]["p0"] =  getSourcePeriodMS($results[$p]["src"]);
+        $results[$p]["nsubint"] =  getNumSubints($dir."/".$pulsars[$i]);
+      }
+
+      if (strpos($pulsars[$i], "_f") !== FALSE) {
+        $results[$p]["snr"] = getSNR($dir."/".$pulsars[$i]);
+      }
+    }
+
+    return $results;
+  }
+
+  #
+  # Find the most recent images for this observation
+  #
+  function getObsImages($dir) {
+
+    # determine how many pulsars are present
+    $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -name '*_t*.tot' -printf '%f\n'";
+    $pulsars = array();
+    $rval = 0;
+    $line = exec($cmd, $pulsars, $rval);
+    $results = array();
+
+    for ($i=0; $i<count($pulsars); $i++) {
+
+      $arr = split("_t", $pulsars[$i], 2);
+      $p = $arr[0];
+      $p_regex = str_replace("+","\+",$p);
+
+      $cmd = "find ".$dir." -name '*".$p."*.png' -printf '%f\n'";
+      $pvfl = "phase_vs_flux_*".$p_regex;
+      $pvfr = "phase_vs_freq_*".$p_regex;
+      $pvtm = "phase_vs_time_*".$p_regex;
+      $bp = "bandpass_*".$p_regex;
+
+      $array = array();
+      $rval = 0;
+      $line = exec($cmd, $array, $rval);
+
+      for ($j=0; $j<count($array); $j++) {
+
+        $f = $array[$j];
+  
+        if (preg_match("/^".$pvfl.".+2\d\dx1\d\d.png$/", $f))
+          $results[$p]["phase_vs_flux"] = $f;
+        if (preg_match("/^".$pvtm.".+2\d\dx1\d\d.png$/",$f))
+          $results[$p]["phase_vs_time"] = $f;
+        if (preg_match("/^".$pvfr.".+2\d\dx1\d\d.png$/",$f))
+          $results[$p]["phase_vs_freq"] = $f;
+        if (preg_match("/^".$bp.".+2\d\dx1\d\d.png$/",$f))
+          $results[$p]["bandpass"] = $f;
+        if (preg_match("/^".$pvfl.".+1024x768.png$/",$f))
+          $results[$p]["phase_vs_flux_hires"] = $f;
+        if (preg_match("/^".$pvtm.".+1024x768.png$/",$f))
+          $results[$p]["phase_vs_time_hires"] = $f;
+        if (preg_match("/^".$pvfr.".+1024x768.png$/",$f))
+          $results[$p]["phase_vs_freq_hires"] = $f;
+        if (preg_match("/^".$bp.".+1024x768.png$/",$f))
+          $results[$p]["bandpass_hires"] = $f;
+      }
+    }
+    return $results;
+  }
+
+
+  #
+  # return a list of all the PSRS listed in this user's psrcat catalogue
+  #
+  function getPsrcatPsrs() {
+
+    $cmd = "psrcat -all -c \"PSRJ RAJ DECJ\" -nohead | grep -v \"*             *\" | awk '{print $2,$4, $7}'";
+    $script = "source /home/dada/.bashrc; ".$cmd." 2>&1";
+    $string = exec($script, $output, $return_var);
+
+    $psrs = array();
+
+    for ($i=0; $i<count($output); $i++) {
+      $bits = split(" ", $output[$i]);
+      $psrs[$bits[0]] = array("RAJ" => $bits[1], "DECJ" => $bits[2]);
+    }
+
+    return $psrs;
+
+  }
+
 }
 
-  ?>
+} // _INSTRUMENT_LIB_PHP
+?>

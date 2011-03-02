@@ -171,7 +171,7 @@ int file_open_function (dada_client_t* client)
   /* Get the resolution */
   if (ascii_header_get (header, "RESOLUTION", "%"PRIu64, &resolution) != 1)
   {
-    multilog (log, LOG_WARNING, "Header with no RESOLUTION\n");
+    multilog (log, LOG_INFO, "Header with no RESOLUTION\n");
     resolution = 0;
   }
 
@@ -304,6 +304,12 @@ int64_t file_write_function (dada_client_t* client,
   return write (client->fd, data, data_size);
 }
 
+/*! Pointer to the function that transfers data to/from the target */
+int64_t file_write_block_function (dada_client_t* client, void* data, uint64_t data_size, uint64_t block_id)
+{
+  return file_write_function(client, data, data_size);
+}
+
 
 int main (int argc, char **argv)
 {
@@ -325,14 +331,18 @@ int main (int argc, char **argv)
   /* Quit flag */
   char quit = 0;
 
+  /* Zero copy flag */
+  char zero_copy = 0;
+
   /* hexadecimal shared memory key */
   key_t dada_key = DADA_DEFAULT_BLOCK_KEY;
 
   int arg = 0;
 
+
   dbdisk.array = disk_array_create ();
 
-  while ((arg=getopt(argc,argv,"k:dD:ovWs")) != -1)
+  while ((arg=getopt(argc,argv,"k:dD:ovWsz")) != -1)
     switch (arg) {
 
     case 'k':
@@ -371,6 +381,10 @@ int main (int argc, char **argv)
       quit = 1;
       break;
 
+    case 'z':
+      zero_copy = 1;
+      break;
+
     default:
       usage ();
       return 0;
@@ -404,6 +418,10 @@ int main (int argc, char **argv)
   client->header_block = hdu->header_block;
 
   client->open_function  = file_open_function;
+
+  if (zero_copy)
+    client->io_block_function    = file_write_block_function;
+
   client->io_function    = file_write_function;
   client->close_function = file_close_function;
   client->direction      = dada_client_reader;

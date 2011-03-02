@@ -41,40 +41,79 @@ typedef struct {
 
 typedef struct {
 
-  multilog_t* log;
-  int verbose;          /* verbosity flag */
-  int fd;               /* incoming UDP socket */
-  int port;             /* port to receive UDP data */
-  char *   interface;   /* NIC/Interface to open socket on */
-  char *   header;      /* ascii header to write to all DBs */
-  int      header_size; /* header size */
+  multilog_t*       log;        // DADA logging interface
+  int               verbose;    // verbosity flag 
 
-  /* receiving datablocks */
-  unsigned n_receivers;     /* number of receivers */
-  unsigned receiver_i;      /* current receiver */
-  udpNdb_receiver_t ** receivers;
+  caspsr_sock_t *   sock;       // UDP socket for data capture
+  int               port;       // port to receive UDP data 
+  int               control_port;
+  char *            interface;  // IP Address to accept packets on 
+
+  // header information
+  char            * obs_header;  // ascii header for this observation 
+  char            * header;      // ascii header to write to all DBs
+  int               header_size; // header size
+
+  int64_t           obs_xfer;    // counter for the OBS_XFER header variable
+  uint64_t          obs_offset;  // counter for the OBS_OFFSET header variable
+
+  // datablocks
+  unsigned      ihdu;
+  unsigned      nhdus;
+  dada_hdu_t ** hdus;
+  uint64_t      hdu_bufsz;
+  unsigned      hdu_open;        // if the current HDU is open
+  unsigned      block_open;      // if the current data block element is open
+  char        * current_buffer;  // pointer to current datablock buffer
+
+  uint64_t     buffer_start_byte;
+  uint64_t     buffer_end_byte;
+
+  uint64_t     xfer_start_byte; // first byte of the current xfer
+  uint64_t     xfer_end_byte;   // last byte of the current xfer
 
   /* packets per "transfer" */
-  uint64_t packets_this_xfer;
-  uint64_t packets_per_xfer;
-  char  *  zeroed_packet;
+  uint64_t    packets_per_xfer;   // number of UDP packets per xfer
+  uint64_t    packets_per_buffer; // number of UDP packest per datablock buffer
+  uint64_t    bytes_this_xfer;
+  uint64_t    packets_this_xfer;
+  char  *     zeroed_packet;
+  unsigned    packet_reset;
 
   /* Packet and byte statistics */
   stats_t * packets;
   stats_t * bytes;
 
-  /* socket used to receive a packet */
-  caspsr_sock_t * sock;
+  uint64_t bytes_to_acquire;
+  double mb_rcv_ps;
+  double mb_drp_ps;
+  double mb_free;
+  double mb_total;
+  uint64_t rcv_sleeps;
 
-  uint64_t obs_offset;      // current byte offset from first byte
+
   uint64_t next_seq;        // Next packet we are expecting
   struct   timeval timeout; 
 
   uint64_t n_sleeps;
   uint64_t ooo_packets;
 
+  unsigned recv_core;
+  unsigned i_distrib;
+  unsigned n_distrib;
 
 } udpNdb_t;
+
+
+int caspsr_udpNdb_init_receiver (udpNdb_t * ctx);
+void caspsr_udpNnb_reset_receiver (udpNdb_t * ctx);
+int caspsr_udpNdb_destroy_receiver (udpNdb_t * ctx);
+int caspsr_udpNdb_close_hdu (udpNdb_t * ctx, uint64_t bytes_written);
+int caspsr_udpNdb_open_hdu (udpNdb_t * ctx);
+int caspsr_udpNdb_new_hdu (udpNdb_t * ctx);
+int caspsr_udpNdb_open_buffer (udpNdb_t * ctx);
+int caspsr_udpNdb_close_buffer (udpNdb_t * ctx, uint64_t bytes_written);
+int caspsr_udpNdb_new_buffer (udpNdb_t * ctx);
 
 time_t udpNdb_start_function (udpNdb_t * ctx);
 int udpNdb_open_datablocks(udpNdb_t * ctx);
@@ -88,4 +127,4 @@ int udpNdb_stop_function (udpNdb_t* ctx);
 void usage();
 void signal_handler (int signalValue); 
 void stats_thread(void * arg);
-
+void control_thread(void * arg);

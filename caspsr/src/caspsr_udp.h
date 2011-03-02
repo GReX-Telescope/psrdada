@@ -22,12 +22,6 @@
 #include "arch.h"
 #include "StopWatch.h"
 
-#define UDP_HEADER   16             // size of header/sequence number
-#define UDP_DATA     8192           // obs bytes per packet
-#define UDP_PAYLOAD  8208           // header + datasize
-#define UDP_NPACKS   25600          // 200 MB worth
-#define UDP_IFACE    "192.168.4.14" // default interface
-
 //#define _DEBUG 1
 
 /* a buffer that can be filled with data */
@@ -36,7 +30,7 @@ typedef struct {
   char     * buffer;  // data buffer itself
   uint64_t * ids;     // packet ids in the buffer
   uint64_t   count;   // number of packets in this buffer
-  uint64_t   size;    // size in bytes of the buffer
+  size_t     size;    // size in bytes of the buffer
   uint64_t   min;     // minimum seq number acceptable
   uint64_t   max;     // maximum seq number acceptable
 
@@ -47,7 +41,7 @@ typedef struct {
 
   int        fd;            // FD of the socket
   char     * buffer;        // the socket buffer
-  unsigned   size;          // size of the buffer
+  size_t     size;          // size of the buffer
   unsigned   have_packet;   // is there a packet in the buffer
   size_t     got;           // amount of data received
 
@@ -99,10 +93,16 @@ void caspsr_decode_header (unsigned char * b, uint64_t * seq_no, uint64_t * ch_i
 void caspsr_encode_header (char * b, uint64_t seq_no, uint64_t ch_id);
 
 /* initialize a CASPSR sock struct */
-caspsr_sock_t * caspsr_init_sock(unsigned size);
+caspsr_sock_t * caspsr_init_sock();
+
+int caspsr_open_sock(caspsr_receiver_t * ctx);
+
+int caspsr_close_sock(caspsr_receiver_t * ctx);
 
 /* initialize a CASPSR data struct */
-caspsr_data_t * caspsr_init_data(uint64_t size);
+caspsr_data_t * caspsr_init_data();
+
+void caspsr_reset_data_t(caspsr_data_t * b);
 
 /* free a CASPSR sock struct */
 void caspsr_free_sock(caspsr_sock_t* b);
@@ -119,6 +119,8 @@ unsigned int caspsr_encode_data(char * b, char * s, unsigned int b_length,
 /* initialize the caspsr_receiver */
 int caspsr_receiver_init(caspsr_receiver_t * ctx, unsigned i_dest, unsigned n_dest, 
                         unsigned n_packets, unsigned n_append);
+
+void caspsr_reset_receiver_t(caspsr_receiver_t * ctx);
 
 int      caspsr_receiver_dealloc(caspsr_receiver_t * ctx);
 uint64_t caspsr_start_xfer(caspsr_receiver_t * ctx);

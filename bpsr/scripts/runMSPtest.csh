@@ -55,8 +55,8 @@ set datename = `echo $inpname | awk '{print substr($1,length($1)-22,19)}'`
 set pathname = `echo $inpname | awk '{print substr($1,1,length($1)-23)}'`
 set pathnam2 = `echo $inpname | awk '{print substr($1,1,length($1)-26)}'`
 set psrname  = `$headerexe $inpname | grep "Source Name" | awk '{print $4}'` 
-set psrname2 = `psrcat -nohead -nonumber -o short -c "jname dm" $psrname | awk '{print $1}'`
-set psrdm    = `psrcat -nohead -nonumber -o short -c "jname dm" $psrname | awk '{print $2}'`
+set psrname2 = `psrcat -all -nohead -nonumber -o short -c "jname dm" $psrname | awk '{print $1}'`
+set psrdm    = `psrcat -all -nohead -nonumber -o short -c "jname dm" $psrname | awk '{print $2}'`
 if ( $psrname != $psrname2 ) then
   echo "PSR name mismatch btw file header and catalogue" 
   exit

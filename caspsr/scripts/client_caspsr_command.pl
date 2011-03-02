@@ -14,13 +14,24 @@ use strict;         # strict mode (like -Wall)
 # Constants
 #
 
-use constant  DEBUG_LEVEL         => 1;
 
 #
 # Global Variables
 #
-our %cfg : shared = Caspsr->getConfig();      # dada.cfg in a hash
+our %cfg : shared;
+our $dl : shared;
 
+
+#
+# Initialize Global Variables
+# 
+$dl = 1;
+%cfg = Caspsr::getConfig();
+
+
+#
+# Local Variables
+#
 
 my $cmd = "";
 my $arg = "";
@@ -66,7 +77,7 @@ for ($i=0; $i<=$#machines; $i++) {
       $comm_string = $cmd;
     }
 
-    @threads[$i] = threads->new(\&commThread, $comm_string, $machines[$i]);
+    @threads[$i] = threads->new(\&commThread, $machines[$i], $cfg{"CLIENT_MASTER_PORT"}, $comm_string);
   }
 
   if ($? != 0) {
@@ -110,24 +121,48 @@ sub sshCmdThread($) {
   
 }
 
-sub commThread($$) {
+sub commThread($$$) {
 
-  (my $command, my $machine) = @_;
+  my ($host, $port, $cmd) = @_;
 
+  logMsg(2, $dl, "[".$host."] commThread(".$host.", ".$port.", ".$cmd.")");
+
+  my $handle = 0;
   my $result = "fail";
   my $response = "Failure Message";
- 
-  my $handle = Dada->connectToMachine($machine, $cfg{"CLIENT_MASTER_PORT"}, 0);
-  # ensure our file handle is valid
-  if (!$handle) { 
-    return ("fail","Could not connect to machine ".$machine.":".$cfg{"CLIENT_MASTER_PORT"}); 
-  }
 
-  ($result, $response) = Dada->sendTelnetCommand($handle,$command);
+  logMsg(2, $dl, "[".$host."] connectToMachine(".$host.", ".$port.", 1)");
+  $handle = Dada::connectToMachine($host, $port, 1);
+  # ensure our file handle is valid
+
+  if (!$handle) { 
+    logMsg(2, $dl, "[".$host."] could not connect to ".$host.":".$port);
+    return ("fail","Could not connect to machine ".$host.":".$port);
+  }
+  logMsg(2, $dl, "[".$host."] connection opened");
+
+  logMsg(2, $dl, "[".$host."] sendTelnetCommand(".$handle.", ".$cmd.")");
+  ($result, $response) = Dada::sendTelnetCommand($handle, $cmd);
+  logMsg(2, $dl, "[".$host."] sendTelnetCommand() ".$result." ".$response);
 
   $handle->close();
+  logMsg(2, $dl, "[".$host."] connection closed");
 
+  logMsg(2, $dl, "[".$host."] returning ".$result." ".$response);
   return ($result, $response);
 
+}
+
+###############################################################################
+#
+# log a message based on debug level
+#
+sub logMsg($$$) {
+
+  my ($lvl, $dlvl, $message) = @_;
+  if ($lvl <= $dlvl) {
+    my $time = Dada::getCurrentDadaTime();
+    print STDOUT "[".$time."] ".$message."\n";
+  }
 }
 

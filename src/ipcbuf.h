@@ -175,8 +175,14 @@ extern "C" {
   /*! Return the number of bytes written to the ring buffer */
   uint64_t ipcbuf_get_write_count (ipcbuf_t*);
 
+  /*! Return the Data Block index of the write buffer */
+  uint64_t ipcbuf_get_write_index (ipcbuf_t* id);
+
   /*! Return the number of bytes read from the ring buffer */
   uint64_t ipcbuf_get_read_count (ipcbuf_t*);
+
+  /*! Return the Data Block index of the read buffer */
+  uint64_t ipcbuf_get_read_index (ipcbuf_t* id);
 
   /*! Return the number of buffers in the ring buffer */
   uint64_t ipcbuf_get_nbufs (ipcbuf_t*);

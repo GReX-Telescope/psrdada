@@ -58,6 +58,15 @@
 /* default port to connect to dbnic logging interface */
 #define DADA_DEFAULT_DBNDB_LOG  56071
 
+/* default port to connect to for IB comm management */
+#define DADA_DEFAULT_IBDB_PORT 56072
+
+/* default port to connect to dbib logging interface */
+#define DADA_DEFAULT_DBIB_LOG  56073
+
+/* default port to connect to ibdb logging interface */
+#define DADA_DEFAULT_IBDB_LOG  56074
+
 /* default file size of 640 Million bytes */
 #define DADA_DEFAULT_FILESIZE 640000000
 

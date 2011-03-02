@@ -2,6 +2,7 @@ package Dada;
 
 use lib $ENV{"DADA_ROOT"}."/bin";
 
+use IO::Handle;
 use IO::Socket;     # Standard perl socket library
 use IO::Select;     # Allows select polling on a socket
 use strict;
@@ -10,65 +11,21 @@ use Sys::Hostname;
 use Time::Local;
 use POSIX qw(setsid);
 
-require Exporter;
-require AutoLoader;
-@ISA = qw(Exporter AutoLoader);
+BEGIN {
 
-@EXPORT_OK = qw(
-  &array_unique
-  &sendTelnetCommand
-  &connectToMachine
-  &getAPSRBinaryDir
-  &getDADABinaryDir
-  &getCurrentBinaryVersion
-  &getDefaultBinaryVersion
-  &setBinaryDir
-  &getAvailableBinaryVersions
-  &addToTime
-  &getCurrentDadaTime
-  &printDadaTime 
-  &printTime
-  &getPWCCState
-  &waitForState
-  &getLine
-  &getLineSelect
-  &parseCFGLines
-  &readCFGFile
-  &readCFGFileIntoHash
-  &getDADA_ROOT
-  &getDiskInfo
-  &getRawDisk
-  &getDBInfo
-  &getAllDBInfo
-  &getLoad
-  &getUnprocessedFiles
-  &getServerResultsNFS
-  &getServerArchiveNFS
-  &constructRsyncURL
-  &headerFormat
-  &mySystem
-  &killProcess
-  &getAPSRConfigVariable
-  &nexusLogOpen
-  &nexusLogClose
-  &nexusLogMessage
-  &getHostMachineName
-  &daemonize
-  &commThread
-  &logMsg
-  &logMsgWarn
-  &remoteSshCommand
-  &headerToHash
-  &daemonBaseName
-  &getProjectGroups
-  &processHeader
-  &getDM
-  &getPeriod
-  &checkScriptIsUnique
-  &getObsDestinations
-);
+  require Exporter;
+  our ($VERSION, @ISA, @EXPORT, @EXPORT_OK, %EXPORT_TAGS);
 
-$VERSION = '0.01';
+  require AutoLoader;
+
+  $VERSION = '1.00';
+
+  @ISA         = qw(Exporter AutoLoader);
+  @EXPORT      = qw(&sendTelnetCommand &connectToMachine &getDADABinaryDir &getCurrentBinaryVersion &getDefaultBinaryVersion &setBinaryDir &getAvailableBinaryVersions &addToTime &getUnixTimeUTC &getCurrentDadaTime &printDadaTime &printTime &getPWCCState &waitForState &getLine &getLines &parseCFGLines &readCFGFile &readCFGFileIntoHash &getDADA_ROOT &getDiskInfo &getRawDisk &getDBInfo &getAllDBInfo &getLoad &getUnprocessedFiles &getServerResultsNFS &getServerArchiveNFS &constructRsyncURL &headerFormat &mySystem &killProcess &getAPSRConfigVariable &nexusLogOpen &nexusLogClose &nexusLogMessage &getHostMachineName &daemonize &commThread &logMsg &logMsgWarn &remoteSshCommand &headerToHash &daemonBaseName &getProjectGroups &processHeader &getDM &getPeriod &checkScriptIsUnique &getObsDestinations &removeFiles);
+  %EXPORT_TAGS = ( );
+  @EXPORT_OK   = ( );
+
+}
 
 use constant DEBUG_LEVEL         => 0;
 use constant IMAGE_TYPE          => ".png";
@@ -231,10 +188,6 @@ sub readRawTextFile($) {
 }
 
 
-sub getAPSRBinaryDir() {
-  return $DEFAULT_APSR_BINARY_DIR;
-}
-
 sub getDADABinaryDir() {
   return $DEFAULT_BINARY_DIR;
 }
@@ -305,7 +258,7 @@ sub telnetCmd($$$) {
   {
   
     # wait no more than 5 seconds for a reponse  
-    $line = getLineSelect($sock, 5);
+    $line = <$sock>;
     
     # remove a leading "> " if it exists
     $line =~ s/^> //;
@@ -375,7 +328,6 @@ sub connectToMachine($$;$) {
 
     # dont buffer IO
     $handle->autoflush(1);
-
     if (DEBUG_LEVEL >= 1) {
       print "Connected to ".$machine." on port ".$port."\n";
     }
@@ -405,24 +357,95 @@ sub getLine($) {
 
 }
 
-sub getLineSelect($$) {
+sub getLines($) {
+
+  (my $handle) = @_;
+
+  my @lines = $handle->getlines();
+  my $i=0;
+  for ($i=0; $i<=$#lines; $i++) {
+    $/ = "\n";
+    chomp $lines[$i];
+    $/ = "\r";
+    chomp $lines[$i];
+    $/ = "\n";
+  }
+  return @lines;
+}
+
+
+sub getLinesSelect($$) {
 
   (my $handle, my $timeout) = @_;
 
-  my $read_set = new IO::Select($handle);  # create handle set for reading
-
-  my ($readable_handles) = IO::Select->select($read_set, undef, undef, $timeout);
-
-  my $line = "";
+  my $blocking_state = $handle->blocking;
+  my $irs_state =  $/;
+  my $read_set = 0;
   my $rh = 0;
+  my $line = "";
+  my $result = "fail";
+  my $response = "timed out";
+  my $poll_handle = 1;
+
+  # set socket to non blocking
+  $handle->blocking(0);
+
+  $/ = "\r\n";
+
+  # add handle to a read set
+  $read_set = new IO::Select($handle);
+
+  #print "select on $handle for $timeout\n";
+  my ($readable_handles) = IO::Select->select($read_set, undef, undef, $timeout);
+  #print "select on $handle returns\n";
 
   foreach $rh (@$readable_handles) {
-    if ($line ne "") {
-      $line .= "\n";
+    if ($rh == $handle) {
+
+      while ($poll_handle) {
+
+        $line = $rh->getline;
+        #print "1: line = '$line'\n";
+
+        # if there was nothing at the socket
+        if ((! defined $line) || ($line eq "")) {
+
+          $poll_handle = 0;
+
+          if ($response eq "timed out") { 
+            $result = "fail";
+          } else {
+            $result = "ok";
+          }
+
+        } else {
+
+          $line =~ s/\r\n$//;
+          #print "2: line = '$line'\n";
+
+          $result = "ok";
+          if ($response eq "timed out") {
+            $response = $line;
+          } else {
+            $response .= "\n".$line;
+          }
+        } 
+      }
     }
-    $line .= Dada::getLine($rh);
   }
-  return $line;
+
+  #print "line received = ".$response."\n";
+
+  # remove read handle from set
+  $read_set->remove($handle);
+
+  # restore the blocking state of the handle
+  $handle->blocking($blocking_state);
+
+  # restore the input record seperator
+  $/ = $irs_state;
+
+  return ($result, $response);
 
 }
 
@@ -567,63 +590,6 @@ sub getLinesSelect($$) {
 }
 
 
-
-sub sendTelnetCommandOld($$) {
-
-  (my $handle, my $command) = @_;
-  my @lines;
-  my $response = "";
-  my $result = "fail";
-  my $endofmessage = "false";
-
-  my $line;
-
-  print $handle $command."\r\n";
-  if (DEBUG_LEVEL >= 1) {
-    print "Sending command: \"".$command."\"\n";
-  }
-
-  while ($endofmessage eq "false") {
-
-    # AJ iffy change for testing.
-    $line = <$handle>;
-    #$line = getLineSelect($handle, 5);
-
-    # remove a leading "> " if it exists
-    $line =~ s/^> //;
-
-    $/ = "\n";
-    chomp $line;
-    $/ = "\r";
-    chomp $line;
-    $/ = "\n";
-    if (($line eq "ok") || ($line eq "> ok")) {
-      $endofmessage = "true";
-      $result = "ok";
-    } elsif (($line eq "fail") || ($line eq "> fail")) {
-      $endofmessage = "true";
-      $result = "fail";
-    } else {
-      if ($response eq "") {
-        $response = $line;
-      } else {
-        $response = $response."\n".$line;
-      }
-    }
-  }
-
-  $/ = "\n";
-
-  if (DEBUG_LEVEL >= 1) {
-    print "Result:          \"".$result."\"\n";
-    print "Response:        \"".$response."\"\n";
-  }
-
-  return ($result, $response);
-
-}
-
-
 sub getPWCCState($) {
 
   (my $handle) = @_;
@@ -688,6 +654,19 @@ sub addToTime($$) {
                                                                                                                
   return $year."-".$mon."-".$mday."-".$hour.":".$min.":".$sec;
 
+}
+
+###############################################################################
+
+sub getUnixTimeUTC($) {
+
+  (my $time) = @_;
+
+  my @t = split(/-|:/,$time);
+
+  my $unixtime = timegm($t[5], $t[4], $t[3], $t[2], ($t[1]-1), $t[0]);
+
+  return $unixtime;
 }
 
 ###############################################################################
@@ -1007,14 +986,13 @@ sub getRawDisk($) {
 
   (my $dir) = @_;
 
-  my $dfresult = `df $dir -B 1048576 2>&1`;
+  my $cmd = "df ".$dir." -B 1048576 -P | tail -n 1 | awk '{print \$2,\$3,\$4}'";
+  my $dfresult = `$cmd`;
+  chomp($dfresult);
   if ($? != 0) {
-    chomp($dfresult);
     return ("fail",$dfresult);
   } else {
-    my $list = `echo "$dfresult" | awk '{print \$2,\$3,\$4}'`;
-    my @values = split(/\n/,$list);
-    return ("ok",@values[1]);
+    return ("ok", $dfresult);
   }
 
 }
@@ -1079,6 +1057,8 @@ sub getAllDBInfo($) {
     } 
   }
 
+  $response =~ s/\s+$//;
+
   return ($result, $response);  
 
 }
@@ -1138,12 +1118,55 @@ sub getLoad($) {
 #
 sub getTempInfo() {
 
-  my $cmd = "/opt/dell/srvadmin/bin/omreport chassis temps | grep \"^Reading\" | awk '{print \$(NF-1)}'";
+  my $cmd = "";
   my $result = "";
   my $response = "";
+  my $temp_str = "NA";
+  my @lines = ();
 
-  ($result, $response) = Dada::mySystem($cmd);
-  return ($result, $response);
+  if ( -f "/usr/bin/omreport" ) {
+
+    $cmd = "/usr/bin/omreport chassis temps | grep \"^Reading\" | awk '{print \$(NF-1)}'";
+    ($result, $response) = Dada::mySystem($cmd);
+    if ($result eq "ok") {
+      $temp_str = $response;
+    }
+
+  } elsif ( -f "/opt/dell/srvadmin/bin/omreport" ) {
+
+    $cmd = "/opt/dell/srvadmin/bin/omreport chassis temps | grep \"^Reading\" | tail -n 1 | awk '{print \$(NF-1)}'";
+    ($result, $response) = Dada::mySystem($cmd);
+    if ($result eq "ok") {
+      $temp_str = $response;
+    }
+
+  } elsif ( -f "/usr/bin/ipmitool") {
+    
+    $cmd = "/usr/bin/ipmitool sensor get 'System Temp' | grep \"Sensor Reading\" | awk -F: '{print \$2}' | awk '{print \$1}'";
+    ($result, $response) = Dada::mySystem($cmd);
+    if ($result eq "ok") {
+      $temp_str = $response.".0";
+    }
+
+  } else {
+    $result = "ok";
+    $response = "NA";
+  }
+
+  # also query the GPU temperatures
+  #if ( -f "/usr/bin/nvidia-smi") {
+  #  $cmd = "/usr/bin/nvidia-smi -q -a | grep Temp | awk -F: '{print \$2}' | awk '{print \$1}'";
+  #  ($result, $response) = Dada::mySystem($cmd);
+  #  if ($result eq "ok") {
+  #    @lines = split(/\n/, $response);
+  #    my $i = 0;
+  #    for ($i=0; $i<=$#lines; $i++) {
+  #      $temp_str .= " ".$lines[$i];
+  #    }
+  #  }
+  #}
+
+  return ($result, $temp_str);
 }
 
 sub sendErrorToServer($$$){
@@ -1185,6 +1208,7 @@ sub nexusLogMessage($$$$$$) {
   if ($handle) {
     print $handle $timestamp."|".$type."|".$level."|".$source."|".$message."\r\n";
   }
+  $handle->flush;
   return $?;
 
 }
@@ -1460,8 +1484,14 @@ sub daemonize($$) {
   if (my $stdout_file = $logfile) {
      open(STDOUT, ">>".$stdout_file) or die "Could not redirect STDOUT to $stdout_file : $!";
   }
-  $| = 1;
   open(STDERR, ">&STDOUT") or die "Failed to re-open STDERR to STDOUT";
+
+  # make both STDOUT and STDERR "hot" to disable perl output buffering
+  my $ofh = select STDOUT;
+  $| = 1;
+  select STDERR;
+  $| = 1;
+  select $ofh;
                                                                                 
 }
 
@@ -1900,4 +1930,67 @@ sub getObsDestinations($$) {
 
 }
 
-__END__
+sub array_unique
+{
+  my @list = @_;
+  my %finalList;
+  foreach(@list)
+  {
+    $finalList{$_} = 1; # delete double values
+  }
+  return (keys(%finalList));
+}
+
+sub inArray {
+  my ($arr,$search_for) = @_;
+  my $value;
+  foreach $value (@$arr) {
+    return 1 if $value eq $search_for;
+  }
+  return 0;
+}
+
+#
+# Removes files that match pattern with age > specified age
+#
+sub removeFiles($$$;$) {
+
+  (my $dir, my $pattern, my $age, my $loglvl=0) = @_;
+
+  Dada::logMsg(2, $loglvl, "removeFiles(".$dir.", ".$pattern.", ".$age.")");
+
+  my $cmd = "";
+  my $result = "";
+  my @array = ();
+
+  # find files that match the pattern in the specified dir.
+  $cmd  = "find ".$dir." -name '".$pattern."' -printf \"%T@ %f\\n\" | sort -n -r";
+  Dada::logMsg(2, $loglvl, "removeFiles: ".$cmd);
+
+  $result = `$cmd`;
+  @array = split(/\n/,$result);
+
+  my $time = 0;
+  my $file = "";
+  my $line = "";
+  my $i = 0;
+
+  # foreach file, check the age, always leave the oldest alone :)
+  for ($i=1; $i<=$#array; $i++) {
+
+    $line = $array[$i];
+    ($time, $file) = split(/ /,$line,2);
+
+    if (($time+$age) < time) {
+      $file = $dir."/".$file;
+      Dada::logMsg(2, $loglvl, "removeFiles: unlink ".$file);
+      unlink($file);
+    }
+  }
+
+  Dada::logMsg(2, $loglvl, "removeFiles: exiting");
+}
+
+END { }
+
+1;  # return value from file

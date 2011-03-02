@@ -35,6 +35,9 @@ extern "C" {
     int64_t (*io_function) (struct dada_client*, 
 			    void* data, uint64_t data_size);
 
+    /*! Pointer to the function that directly operates on shared memory blocks */
+    int64_t (*io_block_function) (struct dada_client*, void* data, uint64_t data_size, uint64_t block_id);
+
     /*! Pointer to the function that closes the data transfer target */
     int (*close_function) (struct dada_client*, uint64_t bytes_written);
 
@@ -66,6 +69,9 @@ extern "C" {
 
     /*! The quit flag */
     char quit;
+
+    /*! The quiet flag */
+    int quiet;
 
   } dada_client_t;
 

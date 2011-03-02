@@ -36,6 +36,10 @@ extern "C" {
     /*! Pointer to the function that returns a data buffer */
     void* (*buffer_function) (struct dada_pwc_main*, uint64_t* size);
 
+    /*! Pointer to the function that fills data buffer with data */
+    int64_t (*block_function) (struct dada_pwc_main*, void* data,
+                               uint64_t size, uint64_t block_id);
+
     /*! Pointer to the function that stops data transfer */
     int (*stop_function) (struct dada_pwc_main*);
 
@@ -44,6 +48,12 @@ extern "C" {
 
     /*! Pointer to the function that checks header validity */
     int (*header_valid_function) (struct dada_pwc_main*);
+
+    /*! Pointer to the function that checks whether a new xfer is pending*/
+    int (*xfer_pending_function) (struct dada_pwc_main*);
+
+    /*! Pointer to the function that starts a new xfer*/
+    uint64_t (*new_xfer_function) (struct dada_pwc_main*);
 
     /*! Additional context information */
     void* context;
@@ -76,6 +86,10 @@ extern "C" {
 
   /*! process error value, and set state accordingly */
   void dada_pwc_main_process_error(dada_pwc_main_t* pwcm, int rval); 
+
+  /*! handle a change of xfer */
+  int64_t dada_pwc_main_process_xfer(dada_pwc_main_t* pwcm, int override_xfer_status,
+                                     uint64_t bytes_this_xfer);
 
 
 #ifdef __cplusplus

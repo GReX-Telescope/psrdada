@@ -71,6 +71,13 @@ int64_t file_read_function (dada_client_t* client,
   return read (client->fd, data, data_size);
 }
 
+int64_t file_read_block_function (dada_client_t* client, void* data, uint64_t data_size, uint64_t block_id)
+{
+  return file_read_function (client, data, data_size);
+}
+
+
+
 /*! Function that closes the data file */
 int file_close_function (dada_client_t* client, uint64_t bytes_written)
 {
@@ -246,6 +253,9 @@ int main (int argc, char **argv)
   /* Quit flag */
   char quit = 0;
 
+  /* Zero copy flag */
+  char zero_copy = 0;
+
   /* hexadecimal shared memory key */
   key_t dada_key = DADA_DEFAULT_BLOCK_KEY;
 
@@ -253,7 +263,7 @@ int main (int argc, char **argv)
 
   diskdb.array = disk_array_create ();
 
-  while ((arg=getopt(argc,argv,"k:df:vs")) != -1)
+  while ((arg=getopt(argc,argv,"k:df:vsz")) != -1)
     switch (arg) {
 
     case 'k':
@@ -278,6 +288,10 @@ int main (int argc, char **argv)
       
     case 's':
       quit=1;
+      break;
+
+    case 'z':
+      zero_copy=1;
       break;
 
     default:
@@ -314,6 +328,9 @@ int main (int argc, char **argv)
 
   client->open_function  = file_open_function;
   client->io_function    = file_read_function;
+  if (zero_copy)
+      client->io_block_function    = file_read_block_function;
+
   client->close_function = file_close_function;
   client->direction      = dada_client_writer;
 

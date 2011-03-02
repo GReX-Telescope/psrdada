@@ -125,7 +125,7 @@ sub main() {
     print STDERR "Could open log port: ".$log_host.":".$log_port."\n";
   }
 
-  logMsg(0,"INFO", "STARTING SCRIPT");
+  msg(0,"INFO", "STARTING SCRIPT");
 
   # start the control thread
   $control_thread = threads->new(\&controlThread, $quit_file, $pid_file);
@@ -141,13 +141,13 @@ sub main() {
 
   }
 
-  logMsg(2, "INFO", "main: joining threads");
+  msg(2, "INFO", "main: joining threads");
   $load_control_thread->join();
-  logMsg(2, "INFO", "main: loadControlThread joined");
+  msg(2, "INFO", "main: loadControlThread joined");
   $control_thread->join();
-  logMsg(2, "INFO", "main: controlThread joined");
+  msg(2, "INFO", "main: controlThread joined");
 
-  logMsg(0, "INFO", "STOPPING SCRIPT");
+  msg(0, "INFO", "STOPPING SCRIPT");
   Dada::nexusLogClose($log_sock);
 
   return 0;
@@ -169,9 +169,9 @@ sub processing_thread($) {
   # Get the next filled header on the data block. Note that this may very
   # well hang for a long time - until the next header is written...
   $cmd =  $bindir."/".$dada_header_cmd;
-  logMsg(2, "INFO", "Running ".$cmd);
+  msg(2, "INFO", "Running ".$cmd);
   $raw_header = `$cmd 2>&1`;
-  logMsg(2, "INFO", $cmd." returned");
+  msg(2, "INFO", $cmd." returned");
 
   # since the only way to currently stop this daemon is to send a kill
   # signal to dada_header_cmd, we should check the return value
@@ -182,17 +182,17 @@ sub processing_thread($) {
     ($result, $response) = Dada::processHeader($raw_header, $cfg{"CONFIG_DIR"}); 
 
     if ($result ne "ok") {
-      logMsg(0, "ERROR", $response);
-      logMsg(0, "ERROR", "DADA header malformed, jettesioning xfer");  
+      msg(0, "ERROR", $response);
+      msg(0, "ERROR", "DADA header malformed, jettesioning xfer");  
       $proc_cmd = "dada_dbnull -s -k ".lc($cfg{"PROCESSING_DATA_BLOCK"});
 
     } elsif ($raw_header eq $prev_header) {
-      logMsg(0, "ERROR", "DADA header repeated, likely cause failed PROC_CMD, jettesioning xfer");
+      msg(0, "ERROR", "DADA header repeated, likely cause failed PROC_CMD, jettesioning xfer");
       $proc_cmd = "dada_dbnull -s -k ".lc($cfg{"PROCESSING_DATA_BLOCK"});
 
     } else {
 
-      logMsg(2, "INFO", "DADA header looks correct");
+      msg(2, "INFO", "DADA header looks correct");
       $proc_cmd = $response;
       if ($proc_cmd =~ m/dspsr/) {
         $proc_cmd .= " ".$cfg{"PROCESSING_DB_KEY"};
@@ -205,7 +205,7 @@ sub processing_thread($) {
       # This should not be requried as the observation manager should be creating
       # this directory for us
       if (! -d ($processing_dir)) {
-        logMsg(0, "WARN", "The archive directory was not created by the ".
+        msg(0, "WARN", "The archive directory was not created by the ".
                   "observation manager: \"".$processing_dir."\"");
         system("mkdir -p ".$processing_dir);
         system("chmod g+s ".$processing_dir);
@@ -216,9 +216,9 @@ sub processing_thread($) {
         chomp $user_groups;
 
         if ($user_groups =~ m/$proj_id/) {
-          logMsg(2, "INFO", "chgrp to ".$proj_id);
+          msg(2, "INFO", "chgrp to ".$proj_id);
         } else {
-          logMsg(0, "WARN", "Project ".$proj_id." was not an ".$user." group. Using '".$user."' instead'");
+          msg(0, "WARN", "Project ".$proj_id." was not an ".$user." group. Using '".$user."' instead'");
           $proj_id = $user;
         }
          system("chgrp -R ".$proj_id." ".$processing_dir);
@@ -226,34 +226,34 @@ sub processing_thread($) {
     }
 
     # Create an obs.start file in the processing dir:
-    logMsg(1, "INFO", "START ".$proc_cmd);
+    msg(1, "INFO", "START ".$proc_cmd);
 
     chdir $processing_dir;
     $dspsr_start_time = time;
-    logMsg(2, "INFO", "Setting dspsr_start_time = ".$dspsr_start_time);
+    msg(2, "INFO", "Setting dspsr_start_time = ".$dspsr_start_time);
 
     $cmd = $bindir."/".$proc_cmd;
     $cmd .= " 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/".$client_logger;
 
-    logMsg(2, "INFO", "Cmd: ".$cmd);
+    msg(1, "INFO", "Cmd: ".$cmd);
 
     my $returnVal = system($cmd);
 
     if ($returnVal != 0) {
-      logMsg(0, "WARN", "Processing command failed: ".$?." ".$returnVal);
+      msg(0, "WARN", "Processing command failed: ".$?." ".$returnVal);
     }
 
-    logMsg(1, "INFO", "END ".$proc_cmd);
+    msg(1, "INFO", "END ".$proc_cmd);
 
     $dspsr_start_time = 0;
-    logMsg(2, "INFO", "Setting dspsr_start_time = ".$dspsr_start_time);
+    msg(2, "INFO", "Setting dspsr_start_time = ".$dspsr_start_time);
 
     return (0, $raw_header);
 
   } else {
 
     if (!$quit_daemon) {
-      logMsg(0, "WARN", "dada_header_cmd failed");
+      msg(0, "WARN", "dada_header_cmd failed");
       sleep 1;
     }
     return (1, "");
@@ -265,7 +265,7 @@ sub controlThread($$) {
 
   my ($quit_file, $pid_file) = @_;
 
-  logMsg(2, "INFO", "controlThread: starting (".$quit_file.", ".$pid_file.")");
+  msg(2, "INFO", "controlThread: starting (".$quit_file.", ".$pid_file.")");
 
   my $cmd = "";
   my $result = "";
@@ -280,39 +280,39 @@ sub controlThread($$) {
 
   # Kill the dada_header command
   $cmd = "ps aux | grep -v grep | grep ".$user." | grep '".$dada_header_cmd."' | awk '{print \$2}'";
-  logMsg(2, "INFO", " controlThread: ".$cmd);
+  msg(2, "INFO", " controlThread: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
-  logMsg(2, "INFO", " controlThread: ".$result." ".$response);
+  msg(2, "INFO", " controlThread: ".$result." ".$response);
   $response =~ s/\n/ /;
   if (($result eq "ok") && ($response ne "")) {
     $response =~ s/\n/ /;
     $cmd = "kill -KILL ".$response;
-    logMsg(1, "INFO", "controlThread: Killing dada_header: ".$cmd);
+    msg(1, "INFO", "controlThread: Killing dada_header: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
-    logMsg(2, "INFO", "controlThread: ".$result." ".$response);
+    msg(2, "INFO", "controlThread: ".$result." ".$response);
   }
 
   # Kill all running dspsr commands
   $cmd = "ps aux | grep -v grep | grep ".$user." | grep dspsr | awk '{print \$2}'";
-  logMsg(2, "INFO", "controlThread: ".$cmd);
+  msg(2, "INFO", "controlThread: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   $response =~ s/\n/ /;
-  logMsg(2, "INFO", "controlThread: ".$result." ".$response);
+  msg(2, "INFO", "controlThread: ".$result." ".$response);
   if (($result eq "ok") && ($response ne "")) {
     $cmd = "killall -KILL ".$response;
-    logMsg(1, "INFO", "Killing all dspsr ".$cmd);
+    msg(1, "INFO", "Killing all dspsr ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
-    logMsg(2, "INFO", "controlThread: ".$result." ".$response);
+    msg(2, "INFO", "controlThread: ".$result." ".$response);
   }
 
   if ( -f $pid_file) {
-    logMsg(2, "INFO", "controlThread: unlinking PID file");
+    msg(2, "INFO", "controlThread: unlinking PID file");
     unlink($pid_file);
   } else {
-    logMsg(1, "WARN", "controlThread: PID file did not exist on script exit");
+    msg(1, "WARN", "controlThread: PID file did not exist on script exit");
   } 
 
-  logMsg(2, "INFO", "controlThread: exiting");
+  msg(2, "INFO", "controlThread: exiting");
 }
 
 #
@@ -321,7 +321,7 @@ sub controlThread($$) {
 #
 sub loadControlThread($) {
 
-  logMsg(2, "INFO", "loadControlThread: starting");
+  msg(2, "INFO", "loadControlThread: starting");
 
   my $localhost = 0;
   my $server = 0;
@@ -354,7 +354,7 @@ sub loadControlThread($) {
     my ($readable_handles) = IO::Select->select($read_set, undef, undef, 2);                                                                                 
     foreach $rh (@$readable_handles) {
 
-      logMsg(3, "INFO", "loadControlThread: checking read handle");
+      msg(3, "INFO", "loadControlThread: checking read handle");
 
       if ($rh == $server) {
                                                                                 
@@ -363,7 +363,7 @@ sub loadControlThread($) {
         $hostinfo = gethostbyaddr($handle->peeraddr);
         $hostname = $hostinfo->name;
 
-        logMsg(2, "INFO", "loadControlThread: accepting connection from". $hostname);
+        msg(2, "INFO", "loadControlThread: accepting connection from". $hostname);
 
         # Add this read handle to the set
         $read_set->add($handle);
@@ -374,14 +374,14 @@ sub loadControlThread($) {
         my $string = Dada::getLine($rh);
 
         if (! defined $string) {
-          logMsg(3, "INFO", "loadControlThread: removing read handle");
+          msg(3, "INFO", "loadControlThread: removing read handle");
           $read_set->remove($rh);
-          logMsg(3, "INFO", "loadControlThread: closing socket");
+          msg(3, "INFO", "loadControlThread: closing socket");
           close($rh);
 
         } else {
 
-          logMsg(2, "INFO", "loadControlThread: received ".$string);
+          msg(2, "INFO", "loadControlThread: received ".$string);
 
           $num_cores_available = 0;
 
@@ -393,17 +393,17 @@ sub loadControlThread($) {
 
           if ($handle) {
 
-            logMsg(2, "INFO", "loadControlThread: obs mngr connection established");
+            msg(2, "INFO", "loadControlThread: obs mngr connection established");
 
             print $handle "is data currently being received?\r\n";
             $taking_data = Dada::getLine($handle);
-            logMsg(2, "INFO", "loadControlThread: obs mngr replied ".$taking_data);
+            msg(2, "INFO", "loadControlThread: obs mngr replied ".$taking_data);
             $handle->close();
             $handle = 0;
 
           } else {
             # we assume that we are not taking data
-            logMsg(0, "WARN", "Could not connect to obs mngr ".$localhost.":".
+            msg(0, "WARN", "Could not connect to obs mngr ".$localhost.":".
                               $cfg{"CLIENT_BG_PROC_PORT"});
             $taking_data = "none";
           }
@@ -411,12 +411,12 @@ sub loadControlThread($) {
           # if we are taking data, be sensitive to the machines current load
           if ($taking_data ne "none") {
 
-            logMsg(2, "INFO", "loadControlThread: receiving data");
+            msg(2, "INFO", "loadControlThread: receiving data");
 
             # if dspsr has been running for more than 120 seconds
             if (($dspsr_start_time+120) < time) {
 
-              logMsg(2, "INFO", "loadControlThread: dspsr running > 120 seconds");
+              msg(2, "INFO", "loadControlThread: dspsr running > 120 seconds");
 
               $load = int(Dada::getLoad("one"));
 
@@ -425,7 +425,7 @@ sub loadControlThread($) {
 
             # We have not been running for a minute, 0 cores available
             } else {
-              logMsg(2, "INFO", "loadControlThread: dspsr running < 120 seconds");
+              msg(2, "INFO", "loadControlThread: dspsr running < 120 seconds");
               $num_cores_available = 0;
 
             }
@@ -433,11 +433,11 @@ sub loadControlThread($) {
           # we are not currently taking data, but check if dspsr is running
           } else {
 
-            logMsg(2, "INFO", "loadControlThread: not receving data");
+            msg(2, "INFO", "loadControlThread: not receving data");
 
             if ($dspsr_start_time) {
 
-              logMsg(2, "INFO", "loadControlThread: dspsr is running");
+              msg(2, "INFO", "loadControlThread: dspsr is running");
 
               $load = int(Dada::getLoad("one"));
 
@@ -445,12 +445,12 @@ sub loadControlThread($) {
               $num_cores_available = ($cfg{"CLIENT_NUM_CORES"}- (1+$load));
 
             } else {
-              logMsg(2, "INFO", "loadControlThread: dspsr not running");
+              msg(2, "INFO", "loadControlThread: dspsr not running");
               $num_cores_available = $cfg{"CLIENT_NUM_CORES"};
             }
           }
 
-          logMsg(2, "INFO", "loadControlThread: replying ".$num_cores_available.
+          msg(2, "INFO", "loadControlThread: replying ".$num_cores_available.
                             " cores available");
 
           print $rh $num_cores_available."\r\n";
@@ -460,13 +460,13 @@ sub loadControlThread($) {
     }
   }
 
-  logMsg(2, "INFO", "loadControlThread: exiting");
+  msg(2, "INFO", "loadControlThread: exiting");
 }
 
 #
 # logs a message to the nexus logger and prints to stdout
 #
-sub logMsg($$$) {
+sub msg($$$) {
 
   my ($level, $type, $msg) = @_;
   if ($level <= $dl) {

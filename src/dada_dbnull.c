@@ -21,10 +21,15 @@ void usage()
 {
   fprintf (stdout,
      "dada_dbnull [options]\n"
-     //" -b n       number of milliseconds to load the cpu for each sublock\n"
      " -k key     connect to key data block\n"
      " -v         be verbose\n"
+     " -q         be quiet\n"
+     " -x mbytes  transfer size MB [default 64]\n"
+     " -X mbytes  transfer size MiB [default 64]\n"
+     " -o mbytes  transfer block sizei MB [default 8]\n"
+     " -O mbytes  transfer block size Mi [default 8]\n"
      " -s         quit at end of data\n"
+     " -z         use zero copy direct shm access\n"
      " -d         run as daemon\n");
 }
 
@@ -38,12 +43,6 @@ int sock_open_function (dada_client_t* client)
   /* the header */
   char* header = 0;
 
-  /* size of each transfer in bytes, as defined by TRANSFER_SIZE attribute */
-  uint64_t xfer_size = 64*1024*1024;
-
-  /* the optimal buffer size for writing to file */
-  uint64_t optimal_bytes = 8*1024*1024;
-
   assert (client != 0);
 
   log = client->log;
@@ -54,8 +53,6 @@ int sock_open_function (dada_client_t* client)
 
   /* multilog (log, LOG_INFO, "Ready for writing %"PRIu64" bytes\n", xfer_size); */
 
-  client->transfer_bytes = xfer_size;
-  client->optimal_bytes = optimal_bytes;
   client->fd = 1;
 
   return 0;
@@ -74,8 +71,9 @@ int sock_close_function (dada_client_t* client, uint64_t bytes_written)
   assert (log != 0);
 
   if (bytes_written < client->transfer_bytes) {
-    multilog (log, LOG_INFO, "Transfer stopped early at %"PRIu64" bytes\n",
-	      bytes_written);
+    if (!client->quiet)
+      multilog (log, LOG_INFO, "Transfer stopped early at %"PRIu64" bytes\n",
+	              bytes_written);
   }
 
   return 0;
@@ -85,13 +83,15 @@ int sock_close_function (dada_client_t* client, uint64_t bytes_written)
 int64_t sock_send_function (dada_client_t* client, 
 			    void* data, uint64_t data_size)
 {
-  //fprintf (stderr, "sock_send_function %p %"PRIu64"\n", data, data_size);
-  // Set the data in the data block to 0 "we have read it"
-  //memset(data,'0',data_size);
-
   return data_size;
 }
 
+/*! Pointer to the function that transfers data to/from the target */
+int64_t sock_send_block_function (dada_client_t* client,
+              void* data, uint64_t data_size, uint64_t block_id)
+{
+    return data_size;
+}
 
 int main (int argc, char **argv)
 {
@@ -111,11 +111,26 @@ int main (int argc, char **argv)
   /* Flag set in verbose mode */
   char verbose = 0;
 
+  /* Flag set in quiet mode */
+  char quiet = 0;
+
   /* Quit flag */
   char quit = 0;
 
+  /* optimal mbytes to transfer in */
+  int optimal_mbytes = 8;
+
+  /* transfer size */
+  int transfer_size_mbytes = 64;
+
+  /* transfer byte multiplier */
+  int byte_base = 1024*1024;
+
   /* dada key for SHM */
   key_t dada_key = DADA_DEFAULT_BLOCK_KEY;
+
+  /* zero copy direct block access */
+  char zero_copy = 0;
 
   int arg = 0;
 
@@ -123,7 +138,7 @@ int main (int argc, char **argv)
    * block */
   int busy_sleep = 0;
 
-  while ((arg=getopt(argc,argv,"dN:vk:s")) != -1)
+  while ((arg=getopt(argc,argv,"dN:vk:o:O:qsx:X:z")) != -1)
     switch (arg) {
       
     case 'd':
@@ -145,8 +160,34 @@ int main (int argc, char **argv)
       }
       break;
 
+    case 'o':
+      optimal_mbytes = atoi(optarg);
+      break;
+
+    case 'O':
+      optimal_mbytes = atoi(optarg);
+      byte_base = 1000000;
+      break;
+
+    case 'q':
+      quiet = 1;
+      break;
+
     case 's':
       quit = 1;
+      break;
+
+    case 'x':
+      transfer_size_mbytes = atoi(optarg);
+      break;
+
+    case 'X':
+      transfer_size_mbytes = atoi(optarg);
+      byte_base = 1000000;
+      break;
+
+    case 'z':
+      zero_copy = 1;
       break;
 
     default:
@@ -182,11 +223,17 @@ int main (int argc, char **argv)
   client->header_block = hdu->header_block;
 
   client->open_function  = sock_open_function;
+
+  if (zero_copy)
+    client->io_block_function = sock_send_block_function;
+
   client->io_function    = sock_send_function;
   client->close_function = sock_close_function;
   client->direction      = dada_client_reader;
 
-  //client->context = &dbnull;
+  client->transfer_bytes = transfer_size_mbytes * byte_base;
+  client->optimal_bytes  = optimal_mbytes * byte_base;
+  client->quiet          = quiet;
 
   while (!client->quit) {
     

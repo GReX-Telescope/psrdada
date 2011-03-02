@@ -64,6 +64,8 @@ int dada_udp_sock_in(multilog_t* log, const char* iface, int port, int verbose)
               iface, port, strerror(errno));
     return -1;
   }
+  if (verbose) 
+    multilog(log, LOG_INFO, "bound UDP socket to %s:%d\n", iface, port);
 
   /* ensure the socket is reuseable without the painful timeout */
   int on = 1;
@@ -79,8 +81,12 @@ int dada_udp_sock_in(multilog_t* log, const char* iface, int port, int verbose)
 
 }
 
-/* set the SO_RCVBUF on socket fd */
 int dada_udp_sock_set_buffer_size (multilog_t* log, int fd, int verbose, int pref_size) {
+  return dada_udp_sock_set_size(log, fd, verbose, pref_size, SO_RCVBUF);
+}
+
+/* set the buf [default SO_RCVBUF] on socket fd to the preferred size*/
+int dada_udp_sock_set_size (multilog_t* log, int fd, int verbose, int pref_size, int buf) {
 
   const int std_buffer_size = KERNEL_BUFFER_SIZE_DEFAULT;
 
@@ -91,18 +97,18 @@ int dada_udp_sock_set_buffer_size (multilog_t* log, int fd, int verbose, int pre
   // Attempt to set to the specified value
   value = pref_size;
   len = sizeof(value);
-  retval = setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &value, len);
+  retval = setsockopt(fd, SOL_SOCKET, buf, &value, len);
   if (retval != 0) {
-    perror("setsockopt SO_RCVBUF");
+    perror("setsockopt");
     return -1;
   } 
   
   // now check if it worked
   len = sizeof(value);
   value = 0;
-  retval = getsockopt(fd, SOL_SOCKET, SO_RCVBUF, &value, (socklen_t *) &len);
+  retval = getsockopt(fd, SOL_SOCKET, buf, &value, (socklen_t *) &len);
   if (retval != 0) {
-    perror("getsockopt SO_RCVBUF");
+    perror("getsockopt");
     return -1;
   } 
   
@@ -115,22 +121,21 @@ int dada_udp_sock_set_buffer_size (multilog_t* log, int fd, int verbose, int pre
 
     len = sizeof(value);
     value = std_buffer_size;
-    retval = setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &value, len);
+    retval = setsockopt(fd, SOL_SOCKET, buf, &value, len);
     if (retval != 0) {
-      perror("setsockopt SO_RCVBUF");
+      perror("setsockopt");
       return -1;
     }
 
     // Now double check that the buffer size is at least correct here
     len = sizeof(value);
     value = 0;
-    retval = getsockopt(fd, SOL_SOCKET, SO_RCVBUF, &value,
+    retval = getsockopt(fd, SOL_SOCKET, buf, &value,
                         (socklen_t *) &len);
     if (retval != 0) {
-      perror("getsockopt SO_RCVBUF");
+      perror("getsockopt");
       return -1;
     }
-
 
     // If we could not set the buffer to the desired size, warn...
     if (value/2 != std_buffer_size) {
@@ -254,4 +259,47 @@ size_t dada_sock_send(int fd, struct sockaddr_in addr, char *data, size_t size) 
   }
 
   return numbytes;
+}
+
+/*
+ * clear any packets that are buffered at the socket
+ */
+size_t dada_sock_clear_buffered_packets(int fd, size_t size) 
+{
+
+  size_t bytes_cleared = 0;
+  size_t bytes_read = 0;
+  unsigned keep_reading = 1;
+  int errsv;
+
+  char * buffer = (char *) malloc(sizeof(char) * size);
+  if (!buffer) {
+    fprintf(stderr, "dada_sock_clear_buffered_packets: malloc %d bytes failed\n", size);
+    return -1;
+  }
+
+  while ( keep_reading) 
+  {
+    bytes_read = recvfrom (fd, buffer, size, 0, NULL, NULL);
+    if (bytes_read == size)
+    {
+      bytes_cleared += bytes_read;
+    }
+    else if (bytes_read == -1) 
+    {
+      keep_reading = 0;
+      errsv = errno;
+      if (errsv != EAGAIN) 
+        fprintf(stderr, "dada_sock_clear_buffered_packets: recvfrom failed: %s\n", strerror(errsv));
+    }
+    else 
+    {
+      fprintf(stderr, "dada_sock_clear_buffered_packets: received %d byte packet, expected %d\n", bytes_read, size);
+      keep_reading = 0;
+    }
+
+  }
+  free(buffer);
+  return bytes_cleared;
+
 }

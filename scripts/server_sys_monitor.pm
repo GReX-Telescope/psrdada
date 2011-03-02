@@ -1,5 +1,13 @@
 package Dada::server_sys_monitor;
 
+###############################################################################
+#
+# monitors all multilog messages from the various client daemons. It also 
+# writes warning and error messages to the STATUS_DIR for display in the 
+# web interface
+#
+###############################################################################
+
 use lib $ENV{"DADA_ROOT"}."/bin";
 
 use strict;
@@ -24,7 +32,7 @@ BEGIN {
   @ISA         = qw(Exporter AutoLoader);
   @EXPORT      = qw(&main);
   %EXPORT_TAGS = ( );
-  @EXPORT_OK   = qw($dl $log_host $log_port $daemon_name %cfg);
+  @EXPORT_OK   = qw($dl $log_host $log_port $daemon_name $master_log_prefix %cfg);
 
 }
 
@@ -37,6 +45,7 @@ our $dl;
 our $log_host;
 our $log_port;
 our $daemon_name;
+our $master_log_prefix;
 our %cfg;
 
 #
@@ -44,6 +53,7 @@ our %cfg;
 #
 our $quit_daemon : shared;
 our $log_sock;
+our $log_lock : shared;
 our $warn;
 our $error;
 
@@ -54,7 +64,9 @@ $dl = 1;
 $log_host = "";
 $log_port = 0;
 $log_sock = 0;
+$log_lock = 0;
 $daemon_name = 0;
+$master_log_prefix= "";
 %cfg = ();
 
 #
@@ -86,9 +98,10 @@ sub main() {
   my $hostinfo = 0;
   my $host = "";
   my $domain = "";
-  my $string = "";
   my $result = "";
   my $response = "";
+  my $tid = 0;
+  my @threads = ();
 
   # clear the error and warning files if they exist
   if ( -f $warn ) {
@@ -137,36 +150,35 @@ sub main() {
       if ($rh == $log_sock) {
 
         $handle = $rh->accept();
-        $handle->autoflush();
+        $handle->autoflush(1);
         $hostinfo = gethostbyaddr($handle->peeraddr);
         $hostname = $hostinfo->name;
-
+        ($host, $domain) = split(/\./,$hostname,2);
         Dada::logMsg(2, $dl, "Accepting connection from ". $hostname);
 
-        # Add this read handle to the set
-        $read_set->add($handle);
+        # start a thread to handle this connection
+        $tid = threads->new(\&logThread, $handle, $host);
+        $tid->detach();
+        #push @threads, $tid;
         $handle = 0;
 
       } else {
+        Dada::logMsg(0, $dl, "main: received connection not on lock_sock");
 
-        $hostinfo = gethostbyaddr($rh->peeraddr);
-        $hostname = $hostinfo->name;
-        ($host, $domain) = split(/\./,$hostname,2);
-        $string = Dada::getLine($rh);
-
-        if (! defined $string) {
-          $read_set->remove($rh);
-          close($rh);
-        } else {
-          Dada::logMsg(2, $dl, "Received String \"".$string."\"");
-          logMessage($host, $string);
-        }
       }
     }
+
+  
+
   }
 
   # Rejoin our daemon control thread
   $control_thread->join();
+
+  #my $i = 0;
+  #for ($i=0; $i<=$#threads; $i++) {
+  #  $threads[$i]->join();
+  #}
 
   Dada::logMsg(0, $dl, "STOPPING SCRIPT");
 
@@ -177,6 +189,99 @@ sub main() {
 }
 
 
+###############################################################################
+# 
+#
+#
+sub logThread($$) {
+
+  my ($handle, $host) = @_;
+
+  Dada::logMsg(2, $dl, "logThread(".$handle.", ".$host.")");
+
+  my $poll_handle = 1;
+  my $read_something = 0;
+  my $line = "";
+  my $quit_this_thread = 0;
+  my $read_set = 0;
+  my $rh = 0;
+
+  # set the input record seperator to \r\n
+  $/ = "\r\n";
+
+  # make the socket non blocking
+  $handle->blocking(0);
+
+  # create a read set for handle connections and data 
+  $read_set = new IO::Select();
+  $read_set->add($handle);
+
+  while (!$quit_daemon && $handle) {
+
+    # Get all the readable handles from the log_sock 
+    my ($readable_handles) = IO::Select->select($read_set, undef, undef, 1);
+
+    $read_something = 0;
+    $poll_handle = 1;
+
+    foreach $rh (@$readable_handles) {
+
+      if ($rh && ($rh == $handle)) {
+
+        # since the handle is non blocking, we poll read it until we get 
+        # nothing back, then drop this loop and return to selecting on 
+        # the socket
+        while (!$quit_daemon && $poll_handle) {
+
+          $line = $handle->getline;
+         
+          # if there was nothing at the socket
+          if ((!defined $line) || ($line eq "")) {
+
+            # stop polling the socket
+            $poll_handle = 0;
+
+            # if we haven't read anything, the socket is shutting down
+            if (!$read_something) {
+              Dada::logMsg(2, $dl, "logThread: lost connection from ".$host);
+              $read_set->remove($rh);
+              close($rh);
+              $rh = 0;
+              $handle = 0;
+            }
+  
+          } else {
+
+            $read_something = 1;        
+
+            # strip a trailing \r\n if it exists
+            $line =~ s/\r\n$//;
+
+            # the log_lock is explicitly unlocked when it goes out of scope
+            lock($log_lock);
+            Dada::logMsg(2, $dl, "logThread [".$host."] received: ".$line);
+            my $result = logMessage($host, $line);
+            if ($result ne "ok") {
+              Dada::logMsg(0, $dl, "logThread [".$host."] misformed: ".$line);
+            }
+          
+          }
+        }
+        Dada::logMsg(3, $dl, "logThread [".$handle."] log_loop ended");
+
+      } else {
+        Dada::logMsg(0, $dl, "logThread: received data on wrong handle");
+      }
+    }
+  }
+
+  # need to clean up memory used
+  Dada::logMsg(2, $dl, "logThread: exiting");
+
+}
+
+
+###############################################################################
 #
 # logs a message to the desginated log file, NOT the scripts' log
 #
@@ -196,64 +301,72 @@ sub logMessage($$) {
   my $msg = "";
 
   # determine the source machine
-  ($time, $tag, $lvl, $src, $msg) = split(/\|/,$string,5);
   my @array = split(/\|/,$string,5);
+  if ($#array == 4) {
 
-  $host_log_file = $logfile_dir."/".$machine.".".$tag.".log";
-  $combined_log_file = $logfile_dir."/nexus.".$tag.".log";
+    ($time, $tag, $lvl, $src, $msg) = split(/\|/,$string,5);
 
-  if ($lvl eq "WARN") {
-    $status_file = $statusfile_dir."/".$machine.".".$tag.".warn";
-  } 
-  if ($lvl eq "ERROR") {
-    $status_file = $statusfile_dir."/".$machine.".".$tag.".error";
-  }
+    $host_log_file = $logfile_dir."/".$machine.".".$tag.".log";
+    $combined_log_file = $logfile_dir."/".$master_log_prefix.".".$tag.".log";
 
-  # Log the message to the hosts' log file
-  if ($host_log_file ne "") {
-    if (-f $host_log_file) {
-      open(FH,">>".$host_log_file);
-    } else {
-      open(FH,">".$host_log_file);
+    if ($lvl eq "WARN") {
+      $status_file = $statusfile_dir."/".$machine.".".$tag.".warn";
+    } 
+    if ($lvl eq "ERROR") {
+      $status_file = $statusfile_dir."/".$machine.".".$tag.".error";
     }
 
-    if ($lvl eq "INFO") {
-      print FH "[".$time."] ".$src.": ".$msg."\n";
-    } else {
-      print FH "[".$time."] ".$src.": ".$lvl.": ".$msg."\n";
+    # Log the message to the hosts' log file
+    if ($host_log_file ne "") {
+      if (-f $host_log_file) {
+        open(FH,">>".$host_log_file);
+      } else {
+        open(FH,">".$host_log_file);
+      }
+
+      if ($lvl eq "INFO") {
+        print FH "[".$time."] ".$src.": ".$msg."\n";
+      } else {
+        print FH "[".$time."] ".$src.": ".$lvl.": ".$msg."\n";
+      }
+      close FH;
     }
+
+    # Log the message to the combined log file
+    if (-f $combined_log_file) {
+      open(FH,">>".$combined_log_file);
+    } else {
+      open(FH,">".$combined_log_file);
+    }
+
+
+    if (($lvl eq "WARN") || ($lvl eq "ERROR")) {
+      print FH $machine." [".$time."] ".$lvl." ".$src.": ".$msg."\n";  
+    } else  {
+      print FH $machine." [".$time."] ".$src.": ".$msg."\n";
+    }
+    
     close FH;
-  }
 
-  # Log the message to the combined log file
-  if (-f $combined_log_file) {
-    open(FH,">>".$combined_log_file);
+    # If the file is a warning or error, we create a warn/error file too
+    if ($status_file ne "") {
+      if (-f $status_file) {
+        open(FH,">>".$status_file);
+      } else {
+        open(FH,">".$status_file);
+      }
+      print FH $src.": ".$msg."\n";
+      close FH;
+    }
   } else {
-    open(FH,">".$combined_log_file);
-  }
-
-
-  if (($lvl eq "WARN") || ($lvl eq "ERROR")) {
-    print FH $machine." [".$time."] ".$lvl." ".$src.": ".$msg."\n";  
-  } else  {
-    print FH $machine." [".$time."] ".$src.": ".$msg."\n";
-  }
-  
-  close FH;
-
-  # If the file is a warning or error, we create a warn/error file too
-  if ($status_file ne "") {
-    if (-f $status_file) {
-      open(FH,">>".$status_file);
-    } else {
-      open(FH,">".$status_file);
-    }
-    print FH $src.": ".$msg."\n";
-    close FH;
+    return "fail";
   }
 }
 
-
+###############################################################################
+#
+# listens for quit commands
+#
 sub controlThread($$) {
 
   Dada::logMsg(1, $dl, "controlThread: starting");
@@ -282,6 +395,7 @@ sub controlThread($$) {
   
 
 
+###############################################################################
 #
 # Handle a SIGINT or SIGTERM
 #
@@ -296,6 +410,7 @@ sub sigHandle($) {
   
 }
 
+###############################################################################
 # 
 # Handle a SIGPIPE
 #
@@ -306,6 +421,7 @@ sub sigPipeHandle($) {
 
 } 
 
+###############################################################################
 #
 # Test to ensure all module variables are set before main
 #
@@ -339,6 +455,10 @@ sub good($) {
   if (!$log_sock) {
     return ("fail", "Could not create listening socket: ".$log_host.":".$log_port);
   }
+
+  if ($master_log_prefix eq "") {
+    return ("fail", "master_log_prefix was not set");
+  } 
 
   # Ensure more than one copy of this daemon is not running
   my ($result, $response) = Dada::checkScriptIsUnique(basename($0));

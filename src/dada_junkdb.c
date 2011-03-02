@@ -34,12 +34,15 @@ void usage()
 {
   fprintf (stdout,
 	   "dada_junkdb [options] header_file\n"
-     " -k       hexadecimal shared memory key  [default: %x]\n"
-     " -z rate  data rate to write [default %f MB/s]\n"
-     " -t secs  length of time to write [default %d s]\n"
+     " -c char  fill data with char\n"
      " -g       write gaussian distributed data\n"
-     " -d       run as daemon\n", DADA_DEFAULT_BLOCK_KEY, DEFAULT_DATA_RATE,
-     DEFAULT_WRITE_TIME);
+     " -k       hexadecimal shared memory key  [default: %x]\n"
+     " -r rate  data rate MB/s [default %f]\n"
+     " -R rate  data rate MiB/s [default %f]\n"
+     " -t secs  length of time to write [default %d s]\n"
+     " -z       use zero copy direct shm access\n"
+     " -h       print help\n",
+     DADA_DEFAULT_BLOCK_KEY, DEFAULT_DATA_RATE, DEFAULT_DATA_RATE, DEFAULT_WRITE_TIME);
 }
 
 typedef struct {
@@ -47,11 +50,13 @@ typedef struct {
   /* header file to use */
   char * header_file;
 
-  /* data rate to write at */
-  float rate;
+  /* data rate B/s */
+  uint64_t rate;
 
   /* generate gaussian data ? */
   unsigned write_gaussian;
+
+  char fill_char;
 
   /* length of time to write for */
   uint64_t write_time;
@@ -74,7 +79,7 @@ typedef struct {
 
 } dada_junkdb_t;
 
-#define DADA_JUNKDB_INIT { "", 0, 0, 0, "", 0, 0, 0, 0, 0 }
+#define DADA_JUNKDB_INIT { "", 0, 0, 0, 0, "", 0, 0, 0, 0, 0 }
 
 
 /*! Pointer to the function that transfers data to/from the target */
@@ -108,7 +113,7 @@ int64_t transfer_data (dada_client_t* client, void* data, uint64_t data_size)
     junkdb->prev_time = junkdb->curr_time;
     junkdb->curr_time = time(0);
     if (junkdb->curr_time > junkdb->prev_time) {
-      junkdb->bytes_to_copy += floor(junkdb->rate * 1024 * 1024);
+      junkdb->bytes_to_copy += junkdb->rate;
     }
 
     if (junkdb->bytes_to_copy) {
@@ -135,8 +140,12 @@ int64_t transfer_data (dada_client_t* client, void* data, uint64_t data_size)
 #endif
 
   return (int64_t) bytes_copied;
-} 
+}
 
+int64_t transfer_data_block (dada_client_t* client, void* data, uint64_t data_size, uint64_t block_id)
+{
+  return transfer_data(client, data, data_size);
+}
 
 
 /*! Function that closes the data file */
@@ -206,19 +215,26 @@ int generate_data(dada_client_t* client)
 
   client->header_size = hdr_size;
   client->optimal_bytes = 32 * 1024 * 1024;
-  client->transfer_bytes = floor(junkdb->rate * junkdb->write_time * 1024 * 1024);
+  client->transfer_bytes = junkdb->rate * junkdb->write_time;
   junkdb->bytes_to_copy = 0;
 
   /* seed the RNG */
-//#ifdef _DEBUG
-  multilog (client->log, LOG_INFO, "generating gaussian data %"PRIu64"\n", junkdb->data_size);
-//#endif
-
   srand ( time(NULL) );
   junkdb->data = (char *) malloc (sizeof(char) * junkdb->data_size);
 
+  if (junkdb->fill_char)
+  {
+    multilog (client->log, LOG_INFO, "setting all data to %c\n", junkdb->fill_char);
+    memset ((void *) junkdb->data, (int) junkdb->fill_char, junkdb->data_size);
+  }
+
   if (junkdb->write_gaussian) 
+  {
+    multilog (client->log, LOG_INFO, "generating gaussian data %"PRIu64"\n", junkdb->data_size);
     fill_gaussian_chars(junkdb->data, junkdb->data_size, 8, 500);
+    multilog (client->log, LOG_INFO, "data generated\n");
+  }
+
 
   multilog (client->log, LOG_INFO, "data generated\n");
 
@@ -252,9 +268,12 @@ int main (int argc, char **argv)
   /* Quit flag */
   char quit = 0;
 
+  /* ascii char to fill data with */
+  char fill_char = 0;
+
   unsigned write_gaussian = 0;
 
-  /* data rate [MB/s] */
+  /* data rate [MB/s | MiB/s] */
   float rate = DEFAULT_DATA_RATE;
 
   /* write time [s] */
@@ -263,27 +282,64 @@ int main (int argc, char **argv)
   /* hexadecimal shared memory key */
   key_t dada_key = DADA_DEFAULT_BLOCK_KEY;
 
+  /* zero copy direct shm access */
+  char zero_copy = 0;
+
+  uint64_t rate_base = 1024*1024;
+
   int arg = 0;
 
-  while ((arg=getopt(argc,argv,"gk:t:vz:")) != -1)
+  while ((arg=getopt(argc,argv,"c:ghk:r:R:t:vz")) != -1)
     switch (arg) {
+
+    case 'c':
+      if (sscanf(optarg, "%c", &fill_char) != 1)
+      {
+        fprintf (stderr, "ERROR: could not parse fill char from %s\n",optarg);
+        usage();
+        return EXIT_FAILURE;
+      }
+      break;
 
     case 'g':
       write_gaussian = 1;
       break;
 
+    case 'h':
+      usage();
+      return (EXIT_SUCCESS);
+
     case 'k':
       if (sscanf (optarg, "%x", &dada_key) != 1) {
-        fprintf (stderr,"dada_dbmonitor: could not parse key from %s\n",optarg);
-        return -1;
+        fprintf (stderr, "ERROR: could not parse key from %s\n",optarg);
+        usage();
+        return EXIT_FAILURE;
       }
+      break;
+
+    case 'r':
+      if (sscanf (optarg, "%f", &rate) != 1) {
+        fprintf (stderr,"ERROR: could not parse data rate from %s\n",optarg);
+        usage();
+        return EXIT_FAILURE;
+      }
+      rate_base = 1024*1024;
+      break;
+
+    case 'R':
+      if (sscanf (optarg, "%f", &rate) != 1) {
+        fprintf (stderr,"ERROR: could not parse data rate from %s\n",optarg);
+        usage();
+        return EXIT_FAILURE;
+      }
+      rate_base = 1000000;
       break;
 
     case 't':
       if (sscanf (optarg, "%u", &write_time) != 1) {
-        fprintf (stderr,"Error: could not parse write time from %s\n",optarg);
+        fprintf (stderr,"ERROR: could not parse write time from %s\n",optarg);
         usage();
-        return -1;
+        return EXIT_FAILURE;
       }
       fprintf(stderr, "writing for %d seconds\n", write_time);
       break;
@@ -291,21 +347,14 @@ int main (int argc, char **argv)
     case 'v':
       verbose=1;
       break;
-      
-    case 'z':
-      if (sscanf (optarg, "%f", &rate) != 1) {
-        fprintf (stderr,"Error: could not parse data rate from %s\n",optarg);
-        usage();
-        return -1;
-      } else {
-        fprintf (stderr, "optarg = %s, setting data rate = %f MB/s\n", optarg, rate); 
-      }
-      break;
 
+    case 'z':
+      zero_copy = 1;
+      break;
+      
     default:
       usage ();
-      return 0;
-      
+      return EXIT_FAILURE;
     }
 
   if ((argc - optind) != 1) {
@@ -344,20 +393,25 @@ int main (int argc, char **argv)
   client = dada_client_create ();
 
   client->log = log;
-  junkdb.rate = rate;
+  junkdb.rate = (uint64_t) rate * rate_base;
   junkdb.write_time = write_time;
   junkdb.write_gaussian = write_gaussian;
-  junkdb.data_size = floor(rate * 1024 * 1024);
+  junkdb.data_size = (uint64_t) rate * rate_base;
   junkdb.header_file = strdup(header_file);
   junkdb.verbose = verbose;
+  junkdb.fill_char = fill_char;
 
   client->data_block = hdu->data_block;
   client->header_block = hdu->header_block;
 
-  client->open_function  = generate_data;
-  client->io_function    = transfer_data;
+  client->open_function = generate_data;
+
+  if (zero_copy)
+    client->io_block_function = transfer_data_block;
+
+  client->io_function = transfer_data;
   client->close_function = release_data;
-  client->direction      = dada_client_writer;
+  client->direction = dada_client_writer;
 
   client->context = &junkdb;
 

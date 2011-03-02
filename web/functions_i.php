@@ -1,5 +1,7 @@
 <?PHP
 
+if (!$_FUNCTIONS_I_PHP) { $_FUNCTIONS_I_PHP = 1;
+
 function getConfigFile($fname, $quiet=FALSE) {
 
   $fptr = @fopen($fname,"r");
@@ -196,8 +198,8 @@ function openSocket($host, $port, $timeout=2) {
 function socketRead($socket) {
 
   if ($socket) {
-    $string = socket_read ($socket, 8192, PHP_NORMAL_READ);
-    if ($string == FALSE) {
+    $string = @socket_read ($socket, 8192, PHP_NORMAL_READ);
+    if ($string === FALSE) {
       $string = "Error on socketRead()\n";
     }
     return $string;
@@ -209,7 +211,7 @@ function socketRead($socket) {
 function socketWrite($socket, $string) {
 
   $bytes_to_write = strlen($string);
-  $bytes_written = socket_write($socket,$string,$bytes_to_write);
+  $bytes_written = @socket_write($socket,$string,$bytes_to_write);
 
   if ($bytes_written === FALSE) {
     echo "Error writing data with socket_write()<BR>\n";
@@ -229,8 +231,11 @@ function getProjects($user) {
   $string = exec("groups $user",$output,$return_var);
   $array = split(" ", $output[0]);
 
+  $groups = array();
   for ($i=0;$i<count($array); $i++) {
-    $groups[$i] = $array[$i];
+    if (strpos($array[$i], "P") !== FALSE) {
+      array_push($groups, $array[$i]);
+    }
   }
   return $groups;
 
@@ -294,14 +299,14 @@ function echoList($name, $selected, $list, $indexlist="none", $readonly=FALSE,$o
 
 function echoOption($value,$name,$readonly=FALSE,$selected="notAlwaysNeeded")
 {
-  echo  "<OPTION VALUE=\"".$value."\"";
+  echo  "<option value=\"".$value."\"";
   if ("$selected" == "$value") {
     echo " SELECTED";
   }
   if ($_SESSION["readonly"] == "true") {
     echo " DISABLED";
   }
-  echo ">".$name."\n";
+  echo ">".$name."</option>\n";
 }
 
 function getFileListing($dir,$pattern="/*/") {
@@ -463,6 +468,10 @@ function getConfigMachines($cfg, $type) {
   $array = array();
   for ($i=0; $i<$num; $i++) {
     $array[$i] = $cfg[$type."_".$i];
+    if (strpos($array[$i], ":") !== FALSE) {
+      $bits = split(":",$array[$i]);
+      $array[$i] = $bits[0];
+    }
   }
   return $array;
 
@@ -574,4 +583,6 @@ function getDBInfo($hosts, $key, $instrument) {
   return $results;
 
 }
+
+} // _FUNCTIONS_I_PHP
 ?>

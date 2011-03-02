@@ -1,5 +1,13 @@
 package Dada::server_pwc_monitor;
 
+###############################################################################
+#
+# Maintains a connection to dada_pwc_commands multi log port and writes 
+# messages to the relevant <host>.pwc.[warn|error] on the receipt of 
+# these types of log messagse
+#
+###############################################################################
+
 use lib $ENV{"DADA_ROOT"}."/bin";
 
 use strict;
@@ -58,9 +66,9 @@ $daemon_name = 0;
 #
 # initialize other variables
 #
+$quit_daemon = 0;
 $warn = ""; 
 $error = ""; 
-$quit_daemon = 0;
 
 ###############################################################################
 #
@@ -76,10 +84,10 @@ sub main() {
   my $quit_file = $cfg{"SERVER_CONTROL_DIR"}."/".$daemon_name.".quit";
   my $log_file  = $cfg{"SERVER_LOG_DIR"}."/".$daemon_name.".log";
   my $control_thread = 0;
-  my $read_set = 0;
-  my $rh = 0;
-  my $readable_handles = ();
   my $handle = 0;
+  my $read_set = 0;
+  my $readable_handles = ();
+  my $rh = 0;
   my $hostname = "";
   my $hostinfo = 0;
   my $host = "";
@@ -121,10 +129,10 @@ sub main() {
 
   while (!$quit_daemon) {
 
-    # If we have lost the connection, try to reconnect to the PWCC (nexus)
+    # If we have lost the connection, try to reconnect
     while (!$handle && !$quit_daemon) {
 
-      Dada::logMsg(2, $dl, "Connecting to ".$log_host.":".$log_port);
+      Dada::logMsg(2, $dl, "Reconnecting to ".$log_host.":".$log_port);
 
       $handle = Dada::connectToMachine($log_host, $log_port);
 
@@ -133,8 +141,12 @@ sub main() {
         Dada::logMsg(2, $dl, "Failed to connect to dada_pwc_command ".$log_host.":".$log_port);
       } else {
         Dada::logMsg(1, $dl, "Connected to dada_pwc_command ".$log_host.":".$log_port);
-
       }
+    }
+  
+    # create a read set for selecting on the socket
+    if ($handle) {
+      $read_set = new IO::Select($handle);
     }
 
     # create a read set for selecting on the socket
@@ -151,7 +163,7 @@ sub main() {
       foreach $rh (@$readable_handles) {
         $line = Dada::getLine($rh);
       }
-
+      
       # If we have lost the connection
       if (! defined $line) {
 
@@ -163,11 +175,10 @@ sub main() {
         # nothing was read from the socket 
 
       } elsif ($line eq "null") {
-
         Dada::logMsg(3, $dl, "Received null line");
 
+      # we must have something to log
       } else {
-
         Dada::logMsg(2, $dl, "Received: ".$line);
         logMessage($line);
 
@@ -188,7 +199,7 @@ sub main() {
 
 }
 
-
+###############################################################################
 # 
 # logs a message to the status dir if warn/error, NOT the scripts' log
 #
@@ -207,46 +218,54 @@ sub logMessage($) {
   my $cmd = "";
 
   # determine the source machine
-  ($host, $rest) =  split(/: \[/, $line, 2);
-  $time = substr($rest,0,19);
-  $msg  = substr($rest,21);
+  if ($line =~ /: \[/) {
+    ($host, $rest) =  split(/: \[/, $line, 2);
+    $time = substr($rest,0,19);
+    $msg  = substr($rest,21);
 
-  # If contains a warning message
-  if ($msg =~ /WARN: /) {
-    $status_file = $status_dir."/".$host.".pwc.warn" ;
+    # If contains a warning message
+    if ($msg =~ /WARN: /) {
+      $status_file = $status_dir."/".$host.".pwc.warn" ;
 
-  # If contains an error message
-  } elsif ($msg =~ /ERR:/) {
-    $status_file = $status_dir."/".$host.".pwc.error" ;
+    # If contains an error message
+    } elsif ($msg =~ /ERR:/) {
+      $status_file = $status_dir."/".$host.".pwc.error" ;
 
-  # If we are starting a new obs, delete the error and warn files 
-  } elsif ($msg =~ /STATE = prepared/) {
-    $cmd = "rm -f ".$status_dir."/*.warn ".$status_dir."/*.error";
-    ($result, $response) = Dada::mySystem($cmd);
-    if ($result ne "ok") {
-      Dada::logMsgWarn($warn, "failed to delted warn and error status files: ".$response);
-    }
+    # If we are starting a new obs, delete the error and warn files 
+    } elsif ($msg =~ /STATE = prepared/) {
+      $cmd = "rm -f ".$status_dir."/*.warn ".$status_dir."/*.error";
+      ($result, $response) = Dada::mySystem($cmd);
+      if ($result ne "ok") {
+        Dada::logMsgWarn($warn, "failed to delted warn and error status files: ".$response);
+      }
 
-  } else {
-    # We ignore the message
-  }
-
-  if ($status_file ne "") {
-    if (-f $status_file) {
-      open(FH,">>".$status_file);
     } else {
-      open(FH,">".$status_file);
-    }
-    if ($? != 0) {
-      Dada::logMsg(0, $dl, "Could not open status_file: ".$status_file);
+      # We ignore the message
     }
 
-    print FH $msg."\n";
-    close FH;
-    Dada::logMsg(1,  $dl, "Logged: ".$host.", ".$time.", ".$msg);
+    if ($status_file ne "") {
+      if (-f $status_file) {
+        open(FH,">>".$status_file);
+      } else {
+        open(FH,">".$status_file);
+      }
+      if ($? != 0) {
+        Dada::logMsg(0, $dl, "Could not open status_file: ".$status_file);
+      }
+
+      print FH $msg."\n";
+      close FH;
+      Dada::logMsg(2,  $dl, "Logged: ".$host.", ".$time.", ".$msg);
+    }
+  } else {
+    Dada::logMsg(0, $dl, "Odd message received: ".$line);
   }
 }
 
+###############################################################################
+#
+# controlThread : monitor for quit requests
+#
 sub controlThread($$) {
 
   Dada::logMsg(1, $dl, "controlThread: starting");
@@ -270,11 +289,12 @@ sub controlThread($$) {
     Dada::logMsgWarn($warn, "controlThread: PID file did not exist on script exit");
   }
 
+  Dada::logMsg(1, $dl, "controlThread: exiting");
   return 0;
 }
   
 
-
+###############################################################################
 #
 # Handle a SIGINT or SIGTERM
 #
@@ -289,6 +309,7 @@ sub sigHandle($) {
   
 }
 
+###############################################################################
 # 
 # Handle a SIGPIPE
 #
@@ -299,6 +320,7 @@ sub sigPipeHandle($) {
 
 } 
 
+###############################################################################
 #
 # Test to ensure all module variables are set before main
 #
@@ -331,7 +353,6 @@ sub good($) {
   return ("ok", "");
 
 }
-
 
 
 END { }

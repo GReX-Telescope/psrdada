@@ -133,7 +133,7 @@ sub main() {
     print STDERR "Could not open log port: ".$log_host.":".$log_port."\n";
   }
 
-  logMsg(0, "INFO", "STARTING SCRIPT");
+  msg(0, "INFO", "STARTING SCRIPT");
 
   # Start the daemon control thread
   $control_thread = threads->new(\&controlThread, $quit_file, $pid_file);
@@ -147,14 +147,14 @@ sub main() {
     # Process one observation/xfer
     ($utc_start, $band, $source, $obs_offset, $calibrate, $obs_end) = processingThread($prev_utc_start, $prev_obs_offset);
 
-    logMsg(0, "INFO", "processingThread() ($utc_start, $band, $source, $obs_offset, $calibrate, $obs_end)");
+    msg(0, "INFO", "processingThread() ($utc_start, $band, $source, $obs_offset, $calibrate, $obs_end)");
 
     if ($quit_daemon) {
       # we have been asked to quit, no need to complain about anything
 
     } elsif (($utc_start eq "invalid") || ($band eq "invalid")) {
 
-      logMsg(0, "ERROR", "processingThread return an invalid obs/header");
+      msg(0, "ERROR", "processingThread return an invalid obs/header");
       sleep(1);
 
     } else {
@@ -163,7 +163,7 @@ sub main() {
 
         if ($utc_start eq $prev_utc_start) {
 
-          logMsg(0, "ERROR", "main: obs_end and UTC_START repeated");
+          msg(0, "ERROR", "main: obs_end and UTC_START repeated");
 
         } else {
 
@@ -177,7 +177,7 @@ sub main() {
           }
 
           if ($calibrate) {
-            logMsg(2, "INFO", "main: calibratorThread(".$utc_start.", ".$band.", ".$source.")");
+            msg(2, "INFO", "main: calibratorThread(".$utc_start.", ".$band.", ".$source.")");
             $calibrator_thread = threads->new(\&calibratorThread, $utc_start, $band, $source);
           }
         }
@@ -192,17 +192,17 @@ sub main() {
 
   }
 
-  logMsg(2, "INFO", "main: joining threads");
+  msg(2, "INFO", "main: joining threads");
   $control_thread->join();
-  logMsg(2, "INFO", "main: control_thread joined");
+  msg(2, "INFO", "main: control_thread joined");
   $bg_processing_thread->join();
-  logMsg(2, "INFO", "main: bg_processing_thread joined");
+  msg(2, "INFO", "main: bg_processing_thread joined");
   if ($calibrator_thread) {
     $calibrator_thread->join();
-    logMsg(2, "INFO", "main: calibrator_thread joined");
+    msg(2, "INFO", "main: calibrator_thread joined");
   }
 
-  logMsg(0, "INFO", "STOPPING SCRIPT");
+  msg(0, "INFO", "STOPPING SCRIPT");
   Dada::nexusLogClose($log_sock);
 
   return 0;
@@ -245,9 +245,9 @@ sub processingThread($$) {
   # Get the next filled header on the data block. Note that this may very
   # well hang for a long time - until the next header is written...
   $cmd = $bindir."/".$dada_header_cmd;
-  logMsg(2, "INFO", "Running ".$cmd);
+  msg(2, "INFO", "Running ".$cmd);
   $raw_header = `$cmd 2>&1`;
-  logMsg(2, "INFO", $cmd." returned");
+  msg(2, "INFO", $cmd." returned");
 
   # since the only way to currently stop this daemon is to send a kill
   # signal to dada_header_cmd, we should check the return value
@@ -261,34 +261,34 @@ sub processingThread($$) {
     if (defined($h{"UTC_START"}) && length($h{"UTC_START"}) > 5) {
       $utc_start  = $h{"UTC_START"};
     } else {
-      logMsg(0, "ERROR", "UTC_START [".$utc_start."] was malformed or non existent");
+      msg(0, "ERROR", "UTC_START [".$utc_start."] was malformed or non existent");
       $header_valid = 0;
     }
 
     if (defined($h{"FREQ"}) && length($h{"FREQ"}) > 0) {
       $band = $h{"FREQ"};
     } else {
-      logMsg(0, "ERROR", "Error: FREQ [".$band."] was malformed or non existent");
+      msg(0, "ERROR", "Error: FREQ [".$band."] was malformed or non existent");
       $header_valid = 0;
     }
 
     if (defined($h{"OBS_OFFSET"}) && length($h{"OBS_OFFSET"}) > 0) {
       $obs_offset = $h{"OBS_OFFSET"};
     } else {
-      logMsg(0, "ERROR", "Error: OBS_OFFSET [".$h{"OBS_OFFSET"}."] was malformed or non existent");
+      msg(0, "ERROR", "Error: OBS_OFFSET [".$h{"OBS_OFFSET"}."] was malformed or non existent");
       $header_valid = 0;
     }
     if (defined($h{"PID"}) && length($h{"PID"}) > 3) {
       $proj_id = $h{"PID"};
     } else {
-      logMsg(0, "ERROR", "Error: PID [".$proj_id."] was malformed or non existent");
+      msg(0, "ERROR", "Error: PID [".$proj_id."] was malformed or non existent");
       $header_valid = 0;
     }
 
     if (defined($h{"SOURCE"}) && length($h{"SOURCE"}) > 3) {
       $source = $h{"SOURCE"};
     } else {
-      logMsg(0, "ERROR", "Error: SOURCE [".$source."] was malformed or non existent");
+      msg(0, "ERROR", "Error: SOURCE [".$source."] was malformed or non existent");
       $header_valid = 0;
     }
 
@@ -305,18 +305,18 @@ sub processingThread($$) {
       $obs_xfer = 0;
     }
 
-    logMsg(1, "INFO", "new header: UTC_START=".$utc_start.", FREQ=".$band.", OBS_OFFSET=".$obs_offset.", OBS_XFER=".$obs_xfer." END_OF_OBS=".$end_of_obs);
+    msg(1, "INFO", "new header: UTC_START=".$utc_start.", FREQ=".$band.", OBS_OFFSET=".$obs_offset.", OBS_XFER=".$obs_xfer." END_OF_OBS=".$end_of_obs);
 
     # TESTING FOR CASPSR
     if (($obs_xfer eq "-1") && ($proc_file  =~ m/dbdisk/)) {
-      logMsg(1, "INFO", "Ignoring final transfer that had dbdisk set as procfile");
+      msg(1, "INFO", "Ignoring final transfer that had dbdisk set as procfile");
       $header_valid = 0;
     }
 
     if (!$header_valid) {
 
       $proc_cmd = "dada_dbnull -s -k ".lc($cfg{"RECEIVING_DATA_BLOCK"});
-      logMsg(0, "ERROR", "header invalid: jettesioning observation with dada_dbnull");
+      msg(0, "ERROR", "header invalid: jettesioning observation with dada_dbnull");
       $currently_processing = "invalid";
 
     } else {
@@ -325,15 +325,15 @@ sub processingThread($$) {
       if ($utc_start eq $prev_utc_start) {
 
         if ((!$end_of_obs) && ($obs_offset eq $prev_obs_offset)) {
-          logMsg(0, "ERROR", "The UTC_START and OBS_OFFSET has been repeated");
+          msg(0, "ERROR", "The UTC_START and OBS_OFFSET has been repeated");
         }  else {
-          logMsg(0, "INFO", "New xfer for ".$utc_start."/".$band." OBS_OFFSET=".$obs_offset." END_OF_OBS=".$end_of_obs);
+          msg(0, "INFO", "New xfer for ".$utc_start."/".$band." OBS_OFFSET=".$obs_offset." END_OF_OBS=".$end_of_obs);
         }
 
       # this is a new observation
       } else {
 
-        logMsg(0, "INFO", "New observation: ".$utc_start."/".$band);
+        msg(0, "INFO", "New observation: ".$utc_start."/".$band);
 
         $obs_start_file = createLocalDirectories($utc_start, $band, $proj_id, $raw_header);
 
@@ -353,7 +353,7 @@ sub processingThread($$) {
 
       # if we have been configured with a gain controller 
       if ($gain_controller ne "") {
-        logMsg(1, "INFO", "Starting level setting thread");
+        msg(1, "INFO", "Starting level setting thread");
         $digimon_thread  = threads->new(\&digimonThread, $digimon_cmd, $digimon_nchan);
       } else {
         $digimon_thread = 0;
@@ -361,43 +361,43 @@ sub processingThread($$) {
     }
 
     # run the processing command itself
-    logMsg(1, "INFO", "START ".$proc_cmd);
+    msg(1, "INFO", "START ".$proc_cmd);
     $cmd = $bindir."/".$proc_cmd;
     $cmd .= " 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/".$client_logger;
-    logMsg(2, "INFO", "cmd = $cmd");
+    msg(2, "INFO", "cmd = $cmd");
     my $return_value = system($cmd);
    
     if ($return_value != 0) {
-      logMsg(0, "ERROR", $proc_cmd." failed: ".$?." ".$return_value);
+      msg(0, "ERROR", $proc_cmd." failed: ".$?." ".$return_value);
     }
 
     # So that the background manager knows we have stopped processing
     $currently_processing = "none";
 
-    logMsg(1, "INFO", "END ".$proc_cmd);
+    msg(1, "INFO", "END ".$proc_cmd);
 
     if ($header_valid) {
 
       if ($utc_start ne $prev_utc_start) {
 
-        logMsg(2, "INFO", "joining remoteDirsThread");
+        msg(2, "INFO", "joining remoteDirsThread");
         $remote_dirs_thread->join();
-        logMsg(2, "INFO", "remoteDirsThread joined");
+        msg(2, "INFO", "remoteDirsThread joined");
 
       }
 
       # if configured with a gain controller 
       if ($gain_controller ne "") {
 
-        logMsg(2, "INFO", "Stopping gain controller");
+        msg(2, "INFO", "Stopping gain controller");
 
         # a rather inelegant way to kill digimon
         $cmd = "killall digimon";
         system($cmd);
 
-        logMsg(2, "INFO", "Waiting for level setting thread to join");
+        msg(2, "INFO", "Waiting for level setting thread to join");
         $digimon_rval = $digimon_thread->join();
-        logMsg(2, "INFO", "Waiting for level setting has joined: ".$digimon_rval);
+        msg(2, "INFO", "Waiting for level setting has joined: ".$digimon_rval);
         $digimon_thread = 0;
       }
     }
@@ -406,7 +406,7 @@ sub processingThread($$) {
 
   } else {
     if (!$quit_daemon) {
-      logMsg(2, "WARN", "dada_header_cmd failed - probably no data block");
+      msg(2, "WARN", "dada_header_cmd failed - probably no data block");
       sleep 1;
     }
     return ($utc_start, $band, $source, $obs_offset, $calibrator, $end_of_obs);
@@ -417,7 +417,7 @@ sub processingThread($$) {
 sub controlThread($$) {
 
   my ($quit_file, $pid_file) = @_;
-  logMsg(2, "INFO", "controlThread: starting");
+  msg(2, "INFO", "controlThread: starting");
 
   my $cmd = "";
   my $result = "";
@@ -431,32 +431,32 @@ sub controlThread($$) {
 
   # Kill the dada_header command
   $cmd = "ps aux | grep -v grep | grep ".$user." | grep '".$dada_header_cmd."' | awk '{print \$2}'";
-  logMsg(2, "INFO", " controlThread: ".$cmd);
+  msg(2, "INFO", " controlThread: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   $response =~ s/\n/ /;
-  logMsg(2, "INFO", "controlThread: ".$result." ".$response);
+  msg(2, "INFO", "controlThread: ".$result." ".$response);
   if (($result eq "ok") & ($response ne "")) {
     $cmd = "kill -KILL ".$response;
-    logMsg(1, "INFO", "controlThread: Killing dada_header: ".$cmd);
+    msg(1, "INFO", "controlThread: Killing dada_header: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
-    logMsg(2, "INFO", "controlThread: ".$result." ".$response);
+    msg(2, "INFO", "controlThread: ".$result." ".$response);
   }
 
   if ( -f $pid_file) {
-    logMsg(2, "INFO", "controlThread: unlinking PID file");
+    msg(2, "INFO", "controlThread: unlinking PID file");
     unlink($pid_file);
   } else {
-    logMsg(1, "WARN", "controlThread: PID file did not exist on script exit");
+    msg(1, "WARN", "controlThread: PID file did not exist on script exit");
   }
 
-  logMsg(2, "INFO", "controlThread: exiting");
+  msg(2, "INFO", "controlThread: exiting");
 
   return 0;
 }
 
 sub bgProcessingThread() {
 
-  logMsg(2, "INFO", "bgProcessingThread: starting");
+  msg(2, "INFO", "bgProcessingThread: starting");
 
   my $localhost = Dada::getHostMachineName();
 
@@ -477,7 +477,7 @@ sub bgProcessingThread() {
     my ($readable_handles) = IO::Select->select($read_set, undef, undef, 2);
     foreach $rh (@$readable_handles) {
 
-      logMsg(3, "INFO", "checking a read handle");
+      msg(3, "INFO", "checking a read handle");
 
       if ($rh == $server) {
 
@@ -486,7 +486,7 @@ sub bgProcessingThread() {
         my $hostinfo = gethostbyaddr($handle->peeraddr);
         my $hostname = $hostinfo->name;
 
-        logMsg(2, "INFO", "Accepting connection from $hostname");
+        msg(2, "INFO", "Accepting connection from $hostname");
 
         # Add this read handle to the set
         $read_set->add($handle);
@@ -499,15 +499,15 @@ sub bgProcessingThread() {
           $read_set->remove($rh);
           close($rh);
         } else {
-          logMsg(2, "INFO", "received string \"".$string."\"");
+          msg(2, "INFO", "received string \"".$string."\"");
           print $rh $currently_processing."\r\n";
-          logMsg(2, "INFO", "sent string \"".$currently_processing."\"");
+          msg(2, "INFO", "sent string \"".$currently_processing."\"");
         }
       }
     }
   }
 
-  logMsg(2, "INFO", "bgProcessingThread: exiting");
+  msg(2, "INFO", "bgProcessingThread: exiting");
 }
 
 
@@ -538,7 +538,7 @@ sub calibratorThread($$$) {
   my $n_archives = 0;
   my $n_added = 0;
 
-  logMsg(1, "INFO", "calibratorThread: Waiting 10 seconds for dspsr to finish");
+  msg(1, "INFO", "calibratorThread: Waiting 10 seconds for dspsr to finish");
 
   while ((!$quit_daemon) && ($max_wait > 0) && (!$done)) {
  
@@ -549,11 +549,11 @@ sub calibratorThread($$$) {
 
     # find out how many archives exist the tres archive
     $cmd = "psredit -q -c nsubint ".$tres_archive." | awk -F= '{print \$2}'";
-    logMsg(2, "INFO", "calibratorThread: ".$cmd);
+    msg(2, "INFO", "calibratorThread: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
-    logMsg(2, "INFO", "calibratorThread: ".$result." ".$response);
+    msg(2, "INFO", "calibratorThread: ".$result." ".$response);
     if ($result ne "ok") {
-      logMsg(0, "WARN", "calibratorThread: ".$cmd." failed: ".$response);
+      msg(0, "WARN", "calibratorThread: ".$cmd." failed: ".$response);
       $done = 2;
     } else {
       $n_added = $response;
@@ -561,11 +561,11 @@ sub calibratorThread($$$) {
 
     # find out how many archive exist on disk
     $cmd = "find ".$archives_dir."/".$utc_start."/".$band." -name '*.ar' | wc -l";
-    logMsg(2, "INFO", "calibratorThread: ".$cmd);
+    msg(2, "INFO", "calibratorThread: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
-    logMsg(2, "INFO", "calibratorThread: ".$result." ".$response);
+    msg(2, "INFO", "calibratorThread: ".$result." ".$response);
     if ($result ne "ok") {
-      logMsg(0, "WARN", "calibratorThread: ".$cmd." failed: ".$response);
+      msg(0, "WARN", "calibratorThread: ".$cmd." failed: ".$response);
       $done = 2;
     } else {
       $n_archives = $response;
@@ -583,31 +583,31 @@ sub calibratorThread($$$) {
     my $dir = $cfg{"CLIENT_CALIBRATOR_DIR"}."/".$source."/".$utc_start;
 
     $cmd = "mkdir -p ".$dir;
-    logMsg(2, "INFO", "calibratorThread: ".$cmd);
+    msg(2, "INFO", "calibratorThread: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
-    logMsg(2, "INFO", "calibratorThread: ".$result." ".$response);
+    msg(2, "INFO", "calibratorThread: ".$result." ".$response);
     if ($result ne "ok") {
-      logMsg(0, "WARN", "calibratorThread: ".$cmd." failed: ".$response);
+      msg(0, "WARN", "calibratorThread: ".$cmd." failed: ".$response);
     }
 
     $cmd = "cp ".$fres_archive." ".$dir."/".$band.".ar";
-    logMsg(2, "INFO", "calibratorThread: ".$cmd);
+    msg(2, "INFO", "calibratorThread: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
-    logMsg(2, "INFO", "calibratorThread: ".$result." ".$response);
+    msg(2, "INFO", "calibratorThread: ".$result." ".$response);
     if ($result ne "ok") {
-      logMsg(0, "WARN", "calibratorThread: ".$cmd." failed: ".$response);
+      msg(0, "WARN", "calibratorThread: ".$cmd." failed: ".$response);
     }
 
     $cmd = "pac -w -p ".$cfg{"CLIENT_CALIBRATOR_DIR"}." -u ar -u fits";
-    logMsg(2, "INFO", "calibratorThread: ".$cmd);
+    msg(2, "INFO", "calibratorThread: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
-    logMsg(2, "INFO", "calibratorThread: ".$result." ".$response);
+    msg(2, "INFO", "calibratorThread: ".$result." ".$response);
     if ($result ne "ok") {
-      logMsg(0, "WARN", "calibratorThread: ".$cmd." failed: ".$response);
+      msg(0, "WARN", "calibratorThread: ".$cmd." failed: ".$response);
     }
   }
 
-  logMsg(1, "INFO", "calibratorThread: exiting");
+  msg(1, "INFO", "calibratorThread: exiting");
 
   return 0;
 }
@@ -620,7 +620,7 @@ sub remoteDirsThread($$$$) {
 
   my ($utc_start, $band, $proj_id, $obs_start_file) = @_;
 
-  logMsg(2, "INFO", "remoteDirsThread(".$utc_start.", ".$band.", ".$proj_id.", ".$obs_start_file.")");
+  msg(2, "INFO", "remoteDirsThread(".$utc_start.", ".$band.", ".$proj_id.", ".$obs_start_file.")");
 
   createRemoteDirectories($utc_start, $band, $proj_id);
 
@@ -637,7 +637,7 @@ sub createRemoteDirectories($$$) {
 
   my ($utc_start, $band, $proj_id) = @_;
 
-  logMsg(2, "INFO", "createRemoteDirectories(".$utc_start.", ".$band.", ".$proj_id.")");
+  msg(2, "INFO", "createRemoteDirectories(".$utc_start.", ".$band.", ".$proj_id.")");
 
   my $remote_archive_dir = $cfg{"SERVER_ARCHIVE_NFS_MNT"};
   my $remote_results_dir = $cfg{"SERVER_RESULTS_NFS_MNT"};
@@ -657,18 +657,18 @@ sub createRemoteDirectories($$$) {
   # If the remote archives dir did not yet exist for some strange reason
   if (! -d $remote_archive_dir."/".$utc_start ) {
     $cmd = "mkdir -p ".$remote_archive_dir."/".$utc_start;
-    logMsg(2, "INFO", $cmd);
+    msg(2, "INFO", $cmd);
     system($cmd);
   }
 
   # Create the nfs soft link to the local archives directory 
   $cmd = "ln -s /nfs/".$localhost."/".$user."/archives/".$utc_start."/".$band.
           " ".$remote_archive_dir."/".$utc_start."/".$band;
-  logMsg(2, "INFO", $cmd);
+  msg(2, "INFO", $cmd);
   system($cmd);
 
   $cmd = "mkdir -p ".$remote_results_dir."/".$utc_start."/".$band;
-  logMsg(2, "INFO", $cmd);
+  msg(2, "INFO", $cmd);
   system($cmd);
 
   # Check whether the user is a member of the specified group
@@ -676,45 +676,45 @@ sub createRemoteDirectories($$$) {
   chomp $user_groups;
 
   if ($user_groups =~ m/$proj_id/) {
-    logMsg(2, "INFO", "Chmodding to ".$proj_id);
+    msg(2, "INFO", "Chmodding to ".$proj_id);
   } else {
-    logMsg(0, "WARN", "Project ".$proj_id." was not an ".$user." group. Using '".$user."' instead'");
+    msg(0, "WARN", "Project ".$proj_id." was not an ".$user." group. Using '".$user."' instead'");
     $proj_id = $user;
   }
 
   # Adjust permission on remote archive directory
   $dir = $remote_archive_dir."/".$utc_start;
   $cmd = "chgrp -R ".$proj_id." ".$dir;
-  logMsg(2, "INFO", $cmd);
+  msg(2, "INFO", $cmd);
   `$cmd`;
   if ($? != 0) {
-    logMsg(0, "WARN", "Failed to chgrp remote archive dir \"".
+    msg(0, "WARN", "Failed to chgrp remote archive dir \"".
                $dir."\" to \"".$proj_id."\"");
   }
 
   $cmd = "chmod -R g+s ".$dir;
-  logMsg(2, "INFO", $cmd);
+  msg(2, "INFO", $cmd);
   `$cmd`;
   if ($? != 0) {
-    logMsg(0, "WARN", "Failed to chmod remote archive dir \"".
+    msg(0, "WARN", "Failed to chmod remote archive dir \"".
                $dir."\" to \"".$proj_id."\"");
   }
 
   # Adjust permission on remote results directory
   $dir = $remote_results_dir."/".$utc_start;
   $cmd = "chgrp -R ".$proj_id." ".$dir;
-  logMsg(2, "INFO", $cmd);
+  msg(2, "INFO", $cmd);
   `$cmd`;
   if ($? != 0) {
-    logMsg(0, "WARN", "Failed to chgrp remote results dir \"".
+    msg(0, "WARN", "Failed to chgrp remote results dir \"".
                $dir."/".$utc_start."\" to \"".$proj_id."\"");
   }
 
   $cmd = "chmod -R g+s ".$dir;
-  logMsg(2, "INFO", $cmd);
+  msg(2, "INFO", $cmd);
   `$cmd`;
   if ($? != 0) {
-    logMsg(0, "WARN", "Failed to chmod remote results dir \"".
+    msg(0, "WARN", "Failed to chmod remote results dir \"".
                $dir."\" to \"".$proj_id."\"");
   }
 
@@ -737,23 +737,23 @@ sub createLocalDirectories($$$$) {
   my $archive_dir = $cfg{"CLIENT_ARCHIVE_DIR"}."/".$utc_start."/".$centre_freq;
 
   # Create the results dir
-  logMsg(2, "INFO", "Creating local results dir: ".$results_dir);
+  msg(2, "INFO", "Creating local results dir: ".$results_dir);
   $cmd = "mkdir -p ".$results_dir;
-  logMsg(2, "INFO", "createLocalDirectories: ".$cmd);
+  msg(2, "INFO", "createLocalDirectories: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
-  logMsg(2, "INFO", "createLocalDirectories: ".$result." ".$response);
+  msg(2, "INFO", "createLocalDirectories: ".$result." ".$response);
   if ($result ne "ok") {
-    logMsg(0,"ERROR", "Could not create local results dir: ".$response);
+    msg(0,"ERROR", "Could not create local results dir: ".$response);
   }
 
   # Create the archive dir
-  logMsg(2, "INFO", "Creating local results dir: ".$archive_dir);
+  msg(2, "INFO", "Creating local results dir: ".$archive_dir);
   $cmd = "mkdir -p ".$archive_dir;
-  logMsg(2, "INFO", "createLocalDirectories: ".$cmd);
+  msg(2, "INFO", "createLocalDirectories: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
-  logMsg(2, "INFO", "createLocalDirectories: ".$result." ".$response);
+  msg(2, "INFO", "createLocalDirectories: ".$result." ".$response);
   if ($result ne "ok") {
-    logMsg(0,"ERROR", "Could not create local archive dir: ".$response);
+    msg(0,"ERROR", "Could not create local archive dir: ".$response);
   }
 
   # create an obs.start file in the archive dir
@@ -769,20 +769,20 @@ sub createLocalDirectories($$$$) {
 
   # Set GID on these dirs
   $cmd = "chgrp -R $proj_id $results_dir $archive_dir";
-  logMsg(2, "INFO", "createLocalDirectories: ".$cmd);
+  msg(2, "INFO", "createLocalDirectories: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
-  logMsg(2, "INFO", "createLocalDirectories: ".$result." ".$response);
+  msg(2, "INFO", "createLocalDirectories: ".$result." ".$response);
   if ($result ne "ok") {
-    logMsg(0, "WARN", "chgrp to ".$proj_id." failed on $results_dir $archive_dir");
+    msg(0, "WARN", "chgrp to ".$proj_id." failed on $results_dir $archive_dir");
   }
 
   # Set group sticky bit on local archive dir
   $cmd = "chmod -R g+s $results_dir $archive_dir";
-  logMsg(2, "INFO", "createLocalDirectories: ".$cmd);
+  msg(2, "INFO", "createLocalDirectories: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
-  logMsg(2, "INFO", "createLocalDirectories: ".$result." ".$response);
+  msg(2, "INFO", "createLocalDirectories: ".$result." ".$response);
   if ($result ne "ok") {
-    logMsg(0, "WARN", "chmod g+s failed on $results_dir $archive_dir");
+    msg(0, "WARN", "chmod g+s failed on $results_dir $archive_dir");
   }
 
   return $file;
@@ -812,20 +812,20 @@ sub copyObsStart($$$) {
   $dir = $cfg{"SERVER_RESULTS_NFS_MNT"}."/".$utc_start."/".$centre_freq;
 
   $cmd = "cp ".$obs_start." ".$dir."/";
-  logMsg(2, "INFO", "NFS copy \"".$cmd."\"");
+  msg(2, "INFO", "NFS copy \"".$cmd."\"");
   ($result, $response) = Dada::mySystem($cmd,0);
 
   if ($result ne "ok") {
-    logMsg(0, "ERROR", "NFS copy failed: ".$obs_start." to ".$dir.", response: ".$response);
-    logMsg(0, "ERROR", "NFS cmd: ".$cmd);
+    msg(0, "ERROR", "NFS copy failed: ".$obs_start." to ".$dir.", response: ".$response);
+    msg(0, "ERROR", "NFS cmd: ".$cmd);
     if (-f $obs_start) {
-      logMsg(0, "ERROR", "File existed locally");
+      msg(0, "ERROR", "File existed locally");
     } else {
-      logMsg(0, "ERROR", "File did not exist locally");
+      msg(0, "ERROR", "File did not exist locally");
     }
   }
 
-  logMsg(2, "INFO", "Server directories perpared");
+  msg(2, "INFO", "Server directories perpared");
 
 }
 
@@ -837,20 +837,20 @@ sub digimonThread($$) {
 
   my ($cmd, $nchan) = @_;
 
-  logMsg(2, "INFO", "digimonThread: starting");
+  msg(2, "INFO", "digimonThread: starting");
 
   # Add the data block key
   $cmd .= " ".$cfg{"VIEWING_DB_KEY"};
   $cmd .= " | ".$cfg{"SCRIPTS_DIR"}."/".$gain_controller." ".$nchan;
-  logMsg(2, "INFO", "Running digimon: $cmd");
+  msg(2, "INFO", "Running digimon: $cmd");
 
   my $returnVal = system($cmd);
 
   if ($returnVal != 0) {
-    logMsg(0, "WARN", "digimonThread: digimon failed: ".$cmd." ".$returnVal);
+    msg(0, "WARN", "digimonThread: digimon failed: ".$cmd." ".$returnVal);
   }
 
-  logMsg(2, "INFO", "digimonThread: exiting");
+  msg(2, "INFO", "digimonThread: exiting");
 
   return $returnVal;
 }
@@ -862,7 +862,7 @@ sub digimonThread($$) {
 sub touchBandFinished($$) {
 
   my ($utc_start, $centre_freq) = @_;
-  logMsg(2, "INFO", "touchBandFinished(".$utc_start.", ".$centre_freq.")");
+  msg(2, "INFO", "touchBandFinished(".$utc_start.", ".$centre_freq.")");
 
   my $dir = "";
   my $cmd = "";
@@ -870,9 +870,9 @@ sub touchBandFinished($$) {
   my $response = "";
 
   $cmd = "find ".$cfg{"CLIENT_RECORDING_DIR"}." -maxdepth 1 -name '".$utc_start."*.dada' | wc -l";
-  logMsg(2, "INFO", "touchBandFinished: ".$cmd);
+  msg(2, "INFO", "touchBandFinished: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
-  logMsg(2, "INFO", "touchBandFinished: ".$result." ".$response);
+  msg(2, "INFO", "touchBandFinished: ".$result." ".$response);
 
   if (($result eq "ok") && ($response == "0")) {
 
@@ -884,9 +884,9 @@ sub touchBandFinished($$) {
     $dir = $cfg{"SERVER_RESULTS_NFS_MNT"}."/".$utc_start."/".$centre_freq;
   
     $cmd = "touch ".$dir."/band.finished";
-    logMsg(2, "INFO", "touchBandFinished: ".$cmd);
+    msg(2, "INFO", "touchBandFinished: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd ,0);
-    logMsg(2, "INFO", "touchBandFinished: ".$result." ".$response);
+    msg(2, "INFO", "touchBandFinished: ".$result." ".$response);
 
   }
   
@@ -896,7 +896,7 @@ sub touchBandFinished($$) {
 #
 # logs a message to the nexus logger and prints to stdout
 #
-sub logMsg($$$) {
+sub msg($$$) {
 
   my ($level, $type, $msg) = @_;
   if ($level <= $dl) {

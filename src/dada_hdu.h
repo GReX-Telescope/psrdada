@@ -79,6 +79,12 @@ extern "C" {
   /*! Read the next header from the struct */
   int dada_hdu_open (dada_hdu_t* hdu);
 
+  /*! Return base addresses of data block buffers, nbufs and bufsz */
+  char ** dada_hdu_db_addresses(dada_hdu_t * hdu, uint64_t * nbufs, uint64_t * bufsz);
+
+  /*! Return base addresses of header block buffers, nbufs and bufsz */
+  char ** dada_hdu_hb_addresses(dada_hdu_t * hdu, uint64_t * nbufs, uint64_t * bufsz);
+
 #ifdef __cplusplus
 	   }
 #endif

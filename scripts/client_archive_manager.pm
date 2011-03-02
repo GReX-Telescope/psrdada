@@ -108,10 +108,10 @@ sub main() {
     print STDERR "Could open log port: ".$log_host.":".$log_port."\n";
   }
 
-  logMsg(0,"INFO", "STARTING SCRIPT");
+  msg(0,"INFO", "STARTING SCRIPT");
 
   # start the control thread
-  logMsg(2, "INFO", "starting controlThread(".$quit_file.", ".$pid_file.")");
+  msg(2, "INFO", "starting controlThread(".$quit_file.", ".$pid_file.")");
   $control_thread = threads->new(\&controlThread, $quit_file, $pid_file);
 
   # Change to the dspsr output directory
@@ -125,12 +125,12 @@ sub main() {
 
     # Look for dspsr archives (both normal and pulse_ archives)
     $cmd = "find . -name \"*.ar\" | sort";
-    logMsg(2, "INFO", "main: ".$cmd);
+    msg(2, "INFO", "main: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
-    logMsg(2, "INFO", "main: ".$result." ".$response);
+    msg(2, "INFO", "main: ".$result." ".$response);
 
     if ($result ne "ok") {
-      logMsg(2, "WARN", "find command ".$cmd." failed ".$response);
+      msg(2, "WARN", "find command ".$cmd." failed ".$response);
 
     } else {
 
@@ -144,7 +144,7 @@ sub main() {
         $line =~ s/^.\///;
 
         if (!($line =~ /pulse_/)) {
-          logMsg(1, "INFO", "Processing archive ".$line);
+          msg(1, "INFO", "Processing archive ".$line);
         }
 
         ($result, $response) = processArchive($line, $archive_dir);
@@ -153,12 +153,12 @@ sub main() {
 
     # Look for 2 minute old .dada files that may have been produced in the results dir via baseband mode (i.e. P427)
     $cmd = "find . -name \"*.dada\" -cmin +1 | sort";
-    logMsg(2, "INFO", "main: ".$cmd);
+    msg(2, "INFO", "main: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
-    logMsg(2, "INFO", "main: ".$result." ".$response);
+    msg(2, "INFO", "main: ".$result." ".$response);
 
     if ($result ne "ok") {
-      logMsg(2, "WARN", "find command ".$cmd." failed ".$response);
+      msg(2, "WARN", "find command ".$cmd." failed ".$response);
 
     } else {
        @lines = split(/\n/,$response);
@@ -171,7 +171,7 @@ sub main() {
         $line =~ s/^.\///;
 
         if (!($line =~ /pulse_/)) {
-          logMsg(1, "INFO", "Processing baseband file ".$line);
+          msg(1, "INFO", "Processing baseband file ".$line);
         }
 
         ($result, $response) = processBasebandFile($line, $archive_dir);
@@ -188,7 +188,7 @@ sub main() {
   # Rejoin our daemon control thread
   $control_thread->join();
 
-  logMsg(0, "INFO", "STOPPING SCRIPT");
+  msg(0, "INFO", "STOPPING SCRIPT");
 
   Dada::nexusLogClose($log_sock);
 
@@ -204,23 +204,23 @@ sub decimateArchive($$) {
 
   my ($file, $psh_script) = @_;
 
-  logMsg(2, "INFO", "decimateArchive(".$file.", ".$psh_script.")");
+  msg(2, "INFO", "decimateArchive(".$file.", ".$psh_script.")");
   my $cmd = "";
   my $result = "";
   my $response = "";
   my $bindir = Dada::getCurrentBinaryVersion();
 
-  logMsg(2, "INFO", "Decimating archive ".$file);
+  msg(2, "INFO", "Decimating archive ".$file);
 
   # if there are more than 16 channels
   $cmd = $bindir."/".$psh_script." ".$file;
 
-  logMsg(2, "INFO", "decimateArchive: ".$cmd);
+  msg(2, "INFO", "decimateArchive: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
-  logMsg(2, "INFO", "decimateArchive ".$result." ".$response);
+  msg(2, "INFO", "decimateArchive ".$result." ".$response);
 
   if ($result ne "ok") {
-    logMsg(0, "WARN", $psh_script." failed to decimate ".$file.": ".$response);
+    msg(0, "WARN", $psh_script." failed to decimate ".$file.": ".$response);
     return ("fail", "decimation failed ".$response);
   } else {
     $file =~ s/.ar$/.lowres/;
@@ -237,7 +237,7 @@ sub processArchive($$) {
 
   my ($path, $archive_dir) = @_;
 
-  logMsg(2, "INFO", "processArchive(".$path.", ".$archive_dir.")");
+  msg(2, "INFO", "processArchive(".$path.", ".$archive_dir.")");
 
   my $result = "";
   my $response = "";
@@ -262,7 +262,7 @@ sub processArchive($$) {
   $dir =~ s/\/$//;
 
   $file = $parts[$#parts];
-  logMsg(2, "INFO", "processArchive: ".$dir."/".$file);
+  msg(2, "INFO", "processArchive: ".$dir."/".$file);
 
   # We never decimate pulse archives, or transfer them to the server
   if ($file =~ m/^pulse_/) {
@@ -273,42 +273,42 @@ sub processArchive($$) {
     $file_decimated = decimateArchive($dir."/".$file, "lowres.psh");
 
     if (-f $file_decimated) {
-      logMsg(2, "INFO", "processArchive: nfsCopy(".$file_decimated.", ".$nfs_results.", ".$dir);
+      msg(2, "INFO", "processArchive: nfsCopy(".$file_decimated.", ".$nfs_results.", ".$dir);
       ($result, $response) = nfsCopy($file_decimated, $nfs_results, $dir);
-      logMsg(2, "INFO", "processArchive: nfsCopy() ".$result." ".$response);
+      msg(2, "INFO", "processArchive: nfsCopy() ".$result." ".$response);
       if ($result ne "ok") {
-        logMsg(0, "WARN", "procesArchive: nfsCopy() failed: ".$response);
+        msg(0, "WARN", "procesArchive: nfsCopy() failed: ".$response);
       }
 
-      logMsg(2, "INFO", "processArchive: unlinking ".$file_decimated);
+      msg(2, "INFO", "processArchive: unlinking ".$file_decimated);
       unlink($file_decimated);
     } else {
-      logMsg(0, "WARN", "procesArchive: decimateArchive failed: ".$response);
+      msg(0, "WARN", "procesArchive: decimateArchive failed: ".$response);
     }
 
   }
 
-  logMsg(2, "INFO", "processArchive: moving ".$file." to archive");
+  msg(2, "INFO", "processArchive: moving ".$file." to archive");
 
   if (! -d ($archive_dir."/".$dir)) {
-    logMsg(2, "INFO", "processArchive: creating archive dir ".$archive_dir."/".$dir);
+    msg(2, "INFO", "processArchive: creating archive dir ".$archive_dir."/".$dir);
 
     $cmd = "mkdir -p ".$archive_dir."/".$dir;
-    logMsg(2, "INFO", "processArchive: ".$cmd);
+    msg(2, "INFO", "processArchive: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
-    logMsg(2, "INFO", "processArchive: ".$result." ".$response);
+    msg(2, "INFO", "processArchive: ".$result." ".$response);
     if ($result ne "ok") {
-      logMsg(0, "WARN", "failed to create archive dir: ".$response);
+      msg(0, "WARN", "failed to create archive dir: ".$response);
     }
   }
   
   $cmd = "mv ".$dir."/".$file." ".$archive_dir."/".$dir."/";
-  logMsg(2, "INFO", "processArchive: ".$cmd);
+  msg(2, "INFO", "processArchive: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
-  logMsg(2, "INFO", "processArchive: ".$result." ".$response);
+  msg(2, "INFO", "processArchive: ".$result." ".$response);
   
   if ($result ne "ok") {
-    logMsg(0, "WARN", "failed to move ".$file." to archive dir ".$response);
+    msg(0, "WARN", "failed to move ".$file." to archive dir ".$response);
   }
   
   # Add the archive to the accumulated totals
@@ -321,43 +321,41 @@ sub processArchive($$) {
 
       # The T scrunched (fres) archive
       $cmd = "cp ".$archive_dir."/".$dir."/".$file." ".$fres_archive;
-      logMsg(2, "INFO", "processArchive: ".$cmd);
+      msg(2, "INFO", "processArchive: ".$cmd);
       ($result, $response) = Dada::mySystem($cmd);
-      logMsg(2, "INFO", "processArchive: ".$result." ".$response);
+      msg(2, "INFO", "processArchive: ".$result." ".$response);
       if ($result ne "ok") {
-        logMsg(0, "WARN", $cmd." failed: ".$response);
+        msg(0, "WARN", $cmd." failed: ".$response);
       }
 
       # The F scrunched (tres) archive
       $cmd = "pam -F -e tres ".$fres_archive;
-      logMsg(2, "INFO", "processArchive: ".$cmd);
+      msg(2, "INFO", "processArchive: ".$cmd);
       ($result, $response) = Dada::mySystem($cmd);
-      logMsg(2, "INFO", "processArchive: ".$result." ".$response);
+      msg(2, "INFO", "processArchive: ".$result." ".$response);
       if ($result ne "ok") {
-        logMsg(0, "WARN", $cmd." failed: ".$response);
+        msg(0, "WARN", $cmd." failed: ".$response);
       }
 
     # Otherwise we are appending to the archive
     } else {
 
       # Add the archive to the T scrunched total
-      #$cmd = "psradd -T -o ".$fres_archive." ".$fres_archive." ".$archive_dir."/".$dir."/".$file;
       $cmd = "psradd -T --inplace ".$fres_archive." ".$archive_dir."/".$dir."/".$file;
-      logMsg(2, "INFO", "processArchive: ".$cmd);
+      msg(2, "INFO", "processArchive: ".$cmd);
       ($result, $response) = Dada::mySystem($cmd);
-      logMsg(2, "INFO", "processArchive: ".$result." ".$response);
+      msg(2, "INFO", "processArchive: ".$result." ".$response);
       if ($result ne "ok") {
-        logMsg(0, "WARN", $cmd." failed: ".$response);
+        msg(0, "WARN", $cmd." failed: ".$response);
       }
 
       # Add the archive to the F scrunched total
-      #$cmd = "psradd -jF -o ".$tres_archive." ".$tres_archive." ".$archive_dir."/".$dir."/".$file;
       $cmd = "psradd -jF --inplace ".$tres_archive." ".$archive_dir."/".$dir."/".$file;
-      logMsg(2, "INFO", "processArchive: ".$cmd);
+      msg(2, "INFO", "processArchive: ".$cmd);
       ($result, $response) = Dada::mySystem($cmd);
-      logMsg(2, "INFO", "processArchive: ".$result." ".$response);
+      msg(2, "INFO", "processArchive: ".$result." ".$response);
       if ($result ne "ok") {
-        logMsg(0, "WARN", $cmd." failed: ".$response);
+        msg(0, "WARN", $cmd." failed: ".$response);
       }
 
     }
@@ -374,7 +372,7 @@ sub processBasebandFile($$) {
 
   my ($path, $archive_dir) = @_;
     
-  logMsg(1, "INFO", "processBasebandFile(".$path.", ".$archive_dir.")");
+  msg(1, "INFO", "processBasebandFile(".$path.", ".$archive_dir.")");
 
   my $result = "";
   my $response = "";
@@ -398,12 +396,12 @@ sub processBasebandFile($$) {
   $dir =~ s/\/$//;
 
   $file = $parts[$#parts];
-  logMsg(1, "INFO", "processBasebandFile: ".$dir."/".$file);
+  msg(1, "INFO", "processBasebandFile: ".$dir."/".$file);
 
    $cmd = "mv ".$dir."/".$file." ".$archive_dir."/".$dir."/";
-  logMsg(1, "INFO", "processBasebandFile: ".$cmd);
+  msg(1, "INFO", "processBasebandFile: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
-  logMsg(2, "INFO", "processBasebandFile: ".$result." ".$response);
+  msg(2, "INFO", "processBasebandFile: ".$result." ".$response);
 
   return ($result, $response); 
 
@@ -428,21 +426,21 @@ sub nfsCopy($$$) {
   }
   
   if (! -d $nfsdir."/".$dir) {
-     logMsg(1, "INFO", "nfsCopy: ".$nfsdir."/".$dir." did not exist, creating");
+     msg(0, "WARN", "nfsCopy: ".$nfsdir."/".$dir." did not exist, creating");
     `mkdir -p $nfsdir/$dir`;
   }
      
   my $tmp_file = $file.".tmp";
   
   my $cmd = "cp ".$file." ".$nfsdir."/".$tmp_file;
-  logMsg(2, "INFO", "NFS copy \"".$cmd."\"");
+  msg(2, "INFO", "NFS copy \"".$cmd."\"");
   ($result, $response) = Dada::mySystem($cmd,0);
 
   if ($result ne "ok") {
     return ("fail", "Command was \"".$cmd."\" and response was \"".$response."\"");
   } else {
     $cmd = "mv ".$nfsdir."/".$tmp_file." ".$nfsdir."/".$file;
-    logMsg(2, "INFO", $cmd);
+    msg(2, "INFO", $cmd);
     ($result, $response) = Dada::mySystem($cmd,0);
     if ($result ne "ok") {
       return ("fail", "Command was \"".$cmd."\" and response was \"".$response."\"");
@@ -457,11 +455,11 @@ sub nfsCopy($$$) {
 
 sub controlThread($$) {
 
-  logMsg(1, "INFO", "controlThread: starting");
+  msg(1, "INFO", "controlThread: starting");
 
   my ($quit_file, $pid_file) = @_;
 
-  logMsg(2, "INFO", "controlThread(".$quit_file.", ".$pid_file.")");
+  msg(2, "INFO", "controlThread(".$quit_file.", ".$pid_file.")");
   
   # Poll for the existence of the control file
   while ((!(-f $quit_file)) && (!$quit_daemon)) {
@@ -471,7 +469,7 @@ sub controlThread($$) {
   # ensure the global is set
   $quit_daemon = 1;
 
-  logMsg(1, "INFO", "controlThread: unlinking PID file");
+  msg(1, "INFO", "controlThread: unlinking PID file");
   if (-f $pid_file) {
     unlink($pid_file);
   }
@@ -483,7 +481,7 @@ sub controlThread($$) {
 #
 # logs a message to the nexus logger and prints to stdout
 #
-sub logMsg($$$) {
+sub msg($$$) {
 
   my ($level, $type, $msg) = @_;
   if ($level <= $dl) {

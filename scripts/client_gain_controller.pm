@@ -106,13 +106,13 @@ sub main() {
   $gain_port = $cfg{"SERVER_GAIN_CONTROL_PORT"};
   $gain_sock = Dada::connectToMachine($gain_host, $gain_port, 1);
   if (!$gain_sock) {
-    logMsg(0, "ERROR", "Could not connect to the server gain manager ".
+    msg(0, "ERROR", "Could not connect to the server gain manager ".
                         $gain_host.":".$gain_port);
     close($log_sock);
     return 1;
   }
 
-  logMsg(2, "INFO", "STARTING GAIN CONTROLLER");
+  msg(2, "INFO", "STARTING GAIN CONTROLLER");
 
   # install signal handlers
   $SIG{INT} = \&sigHandle;
@@ -147,12 +147,12 @@ sub main() {
 
   # Ask the server gain manager what channel we are
   $cmd = "CHANNEL_BASE";
-  logMsg(2, "INFO", "srv0 <- ".$cmd);
+  msg(1, "INFO", "srv0 <- ".$cmd);
   print $gain_sock $cmd."\r\n";
   $chan_base = Dada::getLine($gain_sock);
-  logMsg(2, "INFO", "srv0 -> ".$chan_base);
+  msg(1, "INFO", "srv0 -> ".$chan_base);
 
-  logMsg(2, "INFO", "Asking for initial gains");
+  msg(2, "INFO", "Asking for initial gains");
 
   # Get the initial gain setting for every channel
   for ($i=0; $i < $nchan; $i++) {
@@ -161,7 +161,7 @@ sub main() {
     ($result, $pol1_gains[$i]) = get_gain($gain_sock, $chan_abs, 1);
   }
 
-  logMsg(2, "INFO", "Received initial gains");
+  msg(2, "INFO", "Received initial gains");
 
   my $ignore = "";
   my $chan = 0;
@@ -176,7 +176,7 @@ sub main() {
 
     chomp $line;
 
-    logMsg(2, "INFO", "STDIN : ".$line);
+    msg(2, "INFO", "STDIN : ".$line);
 
     # Check that we got a gain string from STDIN
     if ($line =~ /^GAIN (\d) (0|1) (0|1) (\d|\.)+$/) {
@@ -197,7 +197,7 @@ sub main() {
         $current_gain = $pol1_gains[$chan];
       }
 
-      logMsg(2, "INFO", "CHAN=".$chan.", CHAN_ABS=".$chan_abs.
+      msg(2, "INFO", "CHAN=".$chan.", CHAN_ABS=".$chan_abs.
                             ", POL=".$pol.", DIM=".$dim.", VAL=".$val);
 
       $new_gain = int($current_gain * $val);
@@ -216,21 +216,21 @@ sub main() {
       if ($new_gain != $current_gain) {
 
         if ($new_gain >= $gain_max) {
-          logMsg(0, "WARN", "Gain set to max ".$gain_max);
+          msg(0, "WARN", "Gain set to max ".$gain_max);
         }
 
         if ($new_gain <= $gain_min) {
-          logMsg(0, "WARN", "Gain set to min ".$gain_min);
+          msg(0, "WARN", "Gain set to min ".$gain_min);
         }
 
-        logMsg(2, "INFO", "gain change ".$current_gain." -> ".$new_gain);
+        msg(2, "INFO", "gain change ".$current_gain." -> ".$new_gain);
 
         $cmd = "GAIN ".$chan_abs." ".$pol." ".$new_gain;
-        logMsg(2, "INFO", "srv0 <- ".$cmd);
+        msg(2, "INFO", "srv0 <- ".$cmd);
 
         $result = set_gain($gain_sock, $chan_abs, $pol, $current_gain, $new_gain);  
 
-        logMsg(2, "INFO", "srv0 -> ".$result);
+        msg(2, "INFO", "srv0 -> ".$result);
 
         if ($pol eq 0) {
           $pol0_gains[$chan] = $result;
@@ -245,12 +245,12 @@ sub main() {
 
     } else {
 
-      logMsg(0, "WARN", "STDIN: Ignoring line ".$line);
+      msg(0, "WARN", "STDIN: Ignoring line ".$line);
 
     }
   }
 
-  logMsg(2, "INFO", "STOPPING GAIN CONTROLLER");
+  msg(2, "INFO", "STOPPING GAIN CONTROLLER");
   Dada::nexusLogClose($log_sock);
   close ($gain_sock);
 
@@ -277,7 +277,7 @@ sub get_gain($$$) {
 
 
   $cmd = "GAIN ".$chan." ".$pol;
-  logMsg(2, "INFO", "srv0 <- ".$cmd);
+  msg(2, "INFO", "srv0 <- ".$cmd);
 
   print $sock $cmd."\r\n";
 
@@ -285,22 +285,22 @@ sub get_gain($$$) {
   # OK <chan> <pol> <value>
   my $dfb_response = Dada::getLine($sock);
 
-  logMsg(2, "INFO", "srv0 -> ".$dfb_response);
+  msg(2, "INFO", "srv0 -> ".$dfb_response);
 
   ($result, $dfb_chan, $dfb_pol, $dfb_gain) = split(/ /,$dfb_response);
 
   if ($result ne "OK") {
-    logMsg(0, "WARN", "DFB3 returned an error: \"".$dfb_response."\"");
+    msg(0, "WARN", "DFB3 returned an error: \"".$dfb_response."\"");
     return ("fail", 0);
   }
 
   if ($dfb_chan ne $chan) {
-    logMsg(0, "WARN", "DFB3 returned an channel mismatch: requested ".$chan.", received ".$dfb_chan);
+    msg(0, "WARN", "DFB3 returned an channel mismatch: requested ".$chan.", received ".$dfb_chan);
     return ("fail", 0);
   }
 
   if ($dfb_pol ne $pol) {
-    logMsg(0, "WARN", "DFB3 returned an pol mismatch: requested ".$pol.", received ".$dfb_pol);
+    msg(0, "WARN", "DFB3 returned an pol mismatch: requested ".$pol.", received ".$dfb_pol);
     return ("fail", 0);
   }
 
@@ -314,7 +314,7 @@ sub set_gain($$$$$) {
 
   my $cmd = "GAIN ".$chan." ".$pol." ".$val;
 
-  # logMsg(2, "INFO", "srv0 <- ".$cmd);
+  # msg(2, "INFO", "srv0 <- ".$cmd);
   
   print $sock $cmd."\r\n";
  
@@ -323,11 +323,11 @@ sub set_gain($$$$$) {
 
   my $dfb_response = Dada::getLine($sock);
 
-  # logMsg(2, "INFO", "srv0 -> ".$dfb_response);
+  # msg(2, "INFO", "srv0 -> ".$dfb_response);
 
   if ($dfb_response ne "OK") {
 
-    logMsg(0, "WARN", "DFB3 returned an error: \"".$dfb_response);
+    msg(0, "WARN", "DFB3 returned an error: \"".$dfb_response);
     return $curr_val;
 
   } else {
@@ -347,7 +347,7 @@ sub set_gain($$$$$) {
 #
 # logs a message to the nexus logger and prints to stdout
 #
-sub logMsg($$$) {
+sub msg($$$) {
 
   my ($level, $type, $msg) = @_;
   if ($level <= $dl) {
@@ -399,7 +399,7 @@ sub sigPipeHandle($) {
   $gain_sock = 0;
   $gain_sock = Dada::connectToMachine($gain_host, $gain_port, 1);
   if (!$gain_sock) {
-    logMsg(0, "WARN", "Could not connect to the server gain manager ".
+    msg(0, "WARN", "Could not connect to the server gain manager ".
                       $gain_host.":".$gain_port);
   }
 

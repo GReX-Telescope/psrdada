@@ -65,13 +65,11 @@ $daemon = 0;
 
 sub main() {
 
-  logMsg(2, "INFO", "client_logger::".$daemon_name);
+  msg(2, "INFO", "client_logger::".$daemon_name);
 
-  # my $log_file = $cfg{"CLIENT_LOG_DIR"}."/".$daemon_name.".log";
   my $line     = "";
   my $time     = "";
   my $type     = "";
-  # my $log_fh   = 0;
 
   # install signal handlers
   $SIG{INT} = \&sigHandle;
@@ -84,7 +82,7 @@ sub main() {
     print STDERR "Could open log port: ".$log_host.":".$log_port."\n";
   }
 
-  logMsg(2, "INFO", "client_logger: begin reading from STDIN");
+  msg(2, "INFO", "client_logger: begin reading from STDIN");
 
   while (defined($line = <STDIN>)) {
 
@@ -112,21 +110,10 @@ sub main() {
     }
 
     # Always log these messages
-    logMsg(0, $type, $line, $time);
+    msg(0, $type, $line, $time);
 
-    #if (! $log_sock ) {
-    #  $log_sock = Dada::nexusLogOpen($log_host, $log_port);
-    #} 
-    #if ($log_sock) {
-    #  Dada::nexusLogMessage($log_sock, $time, $tag, $type, $daemon, $line);
-    #}
-
-    #open $log_fh, ">>".$log_file;
-    #print $log_fh "[".$time."] ".$line."\n";
-    #close $log_fh;
-   
   }
-  logMsg(2, "INFO", "client_logger: finished reading from STDIN");
+  msg(2, "INFO", "client_logger: finished reading from STDIN");
   
   return  0;
 }
@@ -134,7 +121,7 @@ sub main() {
 #
 # Logs a message to the Nexus
 #
-sub logMsg($$$;$) {
+sub msg($$$;$) {
 
   (my $level, my $type, my $message, my $time="") = @_;
 
@@ -146,7 +133,7 @@ sub logMsg($$$;$) {
       $time = Dada::getCurrentDadaTime();
     }
 
-    # open the socket if it is closted
+    # open the socket if it is closed
     if (!($log_sock)) {
       $log_sock = Dada::nexusLogOpen($log_host, $log_port);
     }

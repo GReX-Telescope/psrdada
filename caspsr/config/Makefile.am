@@ -3,7 +3,12 @@
 data_DATA = caspsr.cfg \
             caspsr.dbnull \
             caspsr.dbdisk \
-            caspsr.viewer
+            caspsr.viewer \
+            dspsr.gpu \
+            dspsr.50cmgpu \
+            dspsr.cpu
+
+include $(top_srcdir)/config/Makefile.targets
 
 EXTRA_DIST=caspsr.cfg \
 	   caspsr.dbnull \

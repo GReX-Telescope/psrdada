@@ -50,7 +50,8 @@ int      udpdb_stop_function (dada_pwc_main_t* pwcm);
 
 int      udpdb_header_valid_function (dada_pwc_main_t* pwcm);
 int      udpdb_error_function (dada_pwc_main_t* pwcm);
-uint64_t udpdb_start_new_xfer (dada_pwc_main_t *pwcm);
+uint64_t udpdb_new_xfer_function (dada_pwc_main_t *pwcm);
+int      udpdb_xfer_pending_function(dada_pwc_main_t *pwcm);
 
 
 /* Utility functions */

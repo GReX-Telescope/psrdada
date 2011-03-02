@@ -25,12 +25,14 @@
 
 #include "caspsr_def.h"
 #include "caspsr_udp.h"
+#include "caspsr_rdma.h"
 
 /* Number of UDP packets to be recived for a called to buffer_function */
 #define NUMUDPPACKETS 2000
 #define NOTRECORDING 0
 #define RECORDING 1
 #define CASPSR_DEFAULT_UDPNNIC_PORT 33108
+#define CASPSR_DISTRIB_CONTROL_PORT 33440
 
 typedef struct {
 
@@ -52,7 +54,8 @@ typedef struct {
   multilog_t* log;
   int      verbose;          /* verbosity flag */
   int      fd;               /* incoming UDP socket */
-  int      port;             /* port to receive UDP data */
+  int      udp_port;         /* port to receive UDP data */
+  int      control_port;     /* port to receive control commands */
   char *   interface;        /* NIC/Interface to open socket on */
 
   /* receivers */
@@ -87,11 +90,21 @@ typedef struct {
   int      recv_core;
   uint64_t send_sleeps;
   unsigned receive_only;
+  int      packet_reset;
+
+  /* stats reporting */
+  double   mb_rcv_ps;
+  double   mb_drp_ps;
+  double   mb_snd_ps;
+  double   mb_free;
+  double   mb_total;
 
 } udpNnic_t;
 
 int udpNnic_initialize_receivers (udpNnic_t * ctx);
+void udpNnic_reset_receivers (udpNnic_t * ctx);
 int udpNnic_dealloc_receivers(udpNnic_t * ctx);
+int udpNnic_reset_buffers(udpNnic_t * ctx);
 
 time_t udpNnic_start_function (udpNnic_t * ctx);
 int udpNnic_new_receiver(udpNnic_t * ctx);
@@ -99,6 +112,7 @@ int udpNnic_stop_function (udpNnic_t* ctx);
 
 void * receiving_thread(void * arg);
 void * sending_thread(void * arg);
+void control_thread(void * arg);
 void plotting_thread(void * arg);
 void stats_thread(void * arg);
 

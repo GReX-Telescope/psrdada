@@ -58,10 +58,8 @@ nobase_dist_webbpsr_SCRIPTS = annotate_obs.php \
 # scripts distributed as is (installed in bin/)
 nobase_dist_webcaspsr_SCRIPTS = site_definitions_i.php \
     instrument.lib.php \
-    banner_new.php \
-    status_window.php \
-    control_panel.php \
-    functions_i.php
+    functions_i.php \
+    style_log.css
 
 
 # data file (config) distributed as is
@@ -115,6 +113,8 @@ nobase_dist_web_SCRIPTS = images/apsr_logo_1x60.png \
     js/wz_tooltip.js \
     js/soundmanager2-nodebug-jsmin.js \
     js/soundmanager2.js \
+    js/AutoComplete.css \
+    js/autocomplete.js \
     sounds/tapechange.mp3 \
     sounds/tapechangeWillem.mp3 \
     sounds/a_fatal_error_has_occurred.mp3 \
@@ -122,3 +122,6 @@ nobase_dist_web_SCRIPTS = images/apsr_logo_1x60.png \
     sounds/sm2-swf-movies/soundmanager2.swf \
     plots/.empty \
     session/.empty 
+
+include $(top_srcdir)/config/Makefile.targets
+

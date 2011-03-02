@@ -29,7 +29,7 @@ if ($#ARGV!=0) {
 #
 # Global Variables
 # 
-%cfg = Caspsr->getConfig();
+%cfg = Caspsr::getConfig();
 
 #
 # Initialize module variables
@@ -39,7 +39,7 @@ $Dada::client_gain_controller::nchan = $chan;
 $Dada::client_gain_controller::gain_min = 0;
 $Dada::client_gain_controller::gain_default = 33;
 $Dada::client_gain_controller::gain_max = 100;
-$Dada::client_gain_controller::daemon_name = Dada->daemonBaseName($0);
+$Dada::client_gain_controller::daemon_name = Dada::daemonBaseName($0);
 
 
 # Autoflush STDOUT

@@ -4,7 +4,7 @@
 
 #include "ipcio.h"
 
-/* #define _DEBUG 1 */
+// #define _DEBUG 1
 
 void ipcio_init (ipcio_t* ipc)
 {
@@ -371,6 +371,219 @@ ssize_t ipcio_write (ipcio_t* ipc, char* ptr, size_t bytes)
   return towrite;
 }
 
+/* 
+ * Open next Data Block unit for "direct" read access. Returns a pointer to the
+ * DB unit and set the number of bytes in the block and the block index 
+ */
+char * ipcio_open_block_read (ipcio_t *ipc, uint64_t *curbufsz, uint64_t *block_id)
+{
+
+  if (ipc->bytes != 0)
+  {
+    fprintf (stderr, "ipcio_open_block_read: ipc->bytes != 0\n");
+    return 0;
+  }
+
+  if (ipc->curbuf)
+  {
+    fprintf(stderr, "ipcio_open_block_read: ipc->curbuf != 0\n");
+    return 0;
+  }
+
+  if (ipc -> rdwrt != 'r' && ipc -> rdwrt != 'R')
+  {
+    fprintf(stderr, "ipcio_open_block_read: ipc -> rdwrt != [rR]\n");
+    return 0;
+  }
+
+  // test for EOD
+  if (ipcbuf_eod((ipcbuf_t*)ipc))
+  {
+    fprintf(stderr, "ipcio_open_block_read: ipcbuf_eod true, returning null ptr\n");
+    return 0;
+  }
+
+  ipc->curbuf = ipcbuf_get_next_read ((ipcbuf_t*)ipc, &(ipc->curbufsz));
+
+  if (!ipc->curbuf)
+  {
+    fprintf (stderr, "ipcio_open_block_read: could not get next block rdwrt=%c\n", ipc -> rdwrt);
+    return 0;
+  }
+
+  *block_id = ipcbuf_get_read_index ((ipcbuf_t*)ipc);
+  *curbufsz = ipc->curbufsz;
+
+  ipc->bytes = 0;
+
+  return ipc->curbuf;
+}
+
+/*
+ * Close the Data Block unit from a "direct" read access, updating the number
+ * of bytes read. Return 0 on success, -1 on failure
+ */
+ssize_t ipcio_close_block_read (ipcio_t *ipc, uint64_t bytes)
+{
+
+  if (ipc->bytes != 0)
+  {
+    fprintf (stderr, "ipcio_close_block_read: ipc->bytes != 0\n");
+    return -1;
+  }
+
+  if (!ipc->curbuf)
+  {
+    fprintf (stderr, "ipcio_close_block_read: ipc->curbuf == 0\n");
+    return -1;
+  }
+
+  if (ipc -> rdwrt != 'R')
+  {
+    fprintf (stderr, "ipcio_close_block_read: ipc->rdwrt != W\n");
+    return -1;
+  }
+
+  // the reader should always have read the required number of bytes
+  if (bytes != ipc->curbufsz)
+  {
+    fprintf (stderr, "ipcio_close_block_read: WARNING! bytes [%"PRIu64"] != ipc->curbufsz [%"PRIu64"]\n", 
+              bytes, ipc->curbufsz);
+  }
+
+  // increment the bytes counter by the number of bytes used
+  ipc->bytes += bytes;
+
+  // if all the requested bytes have been read
+  if (ipc->bytes == ipc->curbufsz)
+  {
+
+    if (ipcbuf_mark_cleared ((ipcbuf_t*)ipc) < 0)
+    {
+      fprintf (stderr, "ipcio_close_block: error ipcbuf_mark_filled\n");
+      return -1;
+    }
+
+    ipc->curbuf = 0;
+    ipc->bytes = 0;
+  }
+
+  return 0;
+}
+
+
+/* 
+ * Open next Data Block unit for "direct" write access. Returns a pointer to the
+ * DB unit and set the block index 
+ */
+char * ipcio_open_block_write (ipcio_t *ipc, uint64_t *block_id)
+{
+
+  if (ipc->bytes != 0) 
+  {
+    fprintf (stderr, "ipcio_open_block_write: ipc->bytes != 0\n");
+    return 0;
+  }
+
+  if (ipc->curbuf) 
+  {
+    fprintf(stderr, "ipcio_open_block_write: ipc->curbuf != 0\n");
+    return 0;
+  }
+
+  if (ipc -> rdwrt != 'W')
+  {
+    fprintf(stderr, "ipcio_open_block_write: ipc -> rdwrt != W\n");
+    return 0;
+  } 
+
+  ipc->curbuf = ipcbuf_get_next_write ((ipcbuf_t*)ipc);
+
+  if (!ipc->curbuf)
+  {
+    fprintf (stderr, "ipcio_open_block_write: could not get next block rdwrt=%c\n", ipc -> rdwrt);
+    return 0;
+  }
+
+  *block_id = ipcbuf_get_write_index ((ipcbuf_t*)ipc);
+
+  ipc->marked_filled = 0;
+  ipc->bytes = 0;
+
+  return ipc->curbuf;
+
+}
+
+/*
+ * Close the Data Block unit from a "direct" write access, updating the number
+ * of bytes written. Return 0 on success, -1 on failure
+ */
+ssize_t ipcio_close_block_write (ipcio_t *ipc, uint64_t bytes)
+{
+
+  if (ipc->bytes != 0)
+  {
+    fprintf (stderr, "ipcio_close_block_write: ipc->bytes [%"PRIu64"] != 0\n", ipc->bytes);
+    return -1; 
+  }
+
+  if (!ipc->curbuf)
+  {
+    fprintf (stderr, "ipcio_close_block_write: ipc->curbuf == 0\n");
+    return -1;
+  }
+  
+  if (ipc->rdwrt != 'W')
+  {
+    fprintf(stderr, "ipcio_close_block_write: ipc->rdwrt != W\n");
+    return -1;
+  }
+
+  if (ipc->bytes + bytes > ipcbuf_get_bufsz((ipcbuf_t*)ipc))
+  {
+    fprintf(stderr, "ipcio_close_block_write: wrote more bytes than there was space for!\n");
+    fprintf(stderr, "ipcio_close_block_write: ipc->bytes=%"PRIu64", bytes=%"PRIu64", bufsz=%"PRIu64"\n", ipc->bytes, bytes, ipcbuf_get_bufsz((ipcbuf_t*)ipc));
+    return -1;
+  }
+
+  // increment the bytes counter by the number of bytes used
+  ipc->bytes += bytes;
+
+#ifdef DEBUG
+  if (ipc->bytes != ipcbuf_get_bufsz((ipcbuf_t*)ipc))
+  {
+    fprintf(stderr, "ipcio_close_block_write: only %"PRIu64" of %"PRIu64" bytes written, EOD?\n", bytes, ipcbuf_get_bufsz((ipcbuf_t*)ipc));
+  }
+#endif
+
+
+  // if this buffer has not yet been marked as filled
+  if (!ipc->marked_filled) 
+  {
+
+#ifdef _DEBUG
+    fprintf (stderr, "ipcio_close_block_write: buffer:%"PRIu64" mark_filled\n", ipc->buf.sync->w_buf);
+#endif
+
+    /* the buffer has been filled */
+    if (ipcbuf_mark_filled ((ipcbuf_t*)ipc, ipc->bytes) < 0) 
+    {
+      fprintf (stderr, "ipcio_close_block_write: error ipcbuf_mark_filled\n");
+      return -1;
+    }
+
+    if (ipcio_check_pending_sod (ipc) < 0) {
+      fprintf (stderr, "ipcio_close_bloc_write: error ipcio_check_pending_sod\n");
+      return -1;
+    }
+
+    ipc->marked_filled = 1;
+    ipc->curbuf = 0;
+    ipc->bytes = 0;
+  }
+  return 0;
+
+}
 
 /* read bytes from ipcbuf */
 ssize_t ipcio_read (ipcio_t* ipc, char* ptr, size_t bytes)
@@ -424,7 +637,7 @@ ssize_t ipcio_read (ipcio_t* ipc, char* ptr, size_t bytes)
     {
       if (ipc -> rdwrt == 'R' && ipcbuf_mark_cleared ((ipcbuf_t*)ipc) < 0)
       {
-        fprintf (stderr, "ipcio_write: error ipcbuf_mark_filled\n");
+        fprintf (stderr, "ipcio_read: error ipcbuf_mark_filled\n");
         return -1;
       }
 

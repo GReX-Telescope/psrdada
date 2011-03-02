@@ -97,7 +97,7 @@ sub main() {
   $server_port = $cfg{"SERVER_WEB_MONITOR_PORT"};
 
   my $control_thread = 0;
-  my $node_info_thread = 0;   #  Node Disk space, DB Info, Load info [R]
+  my $node_info_thread = 0;   # Node Disk space, DB Info, Load info [R]
   my $image_info_thread = 0;  # Current images for web display [L]
   my $curr_info_thread = 0;   # Current source information [L]
   my $status_info_thread = 0; # Current status file information [L]

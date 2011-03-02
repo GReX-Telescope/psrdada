@@ -109,7 +109,7 @@ sub main() {
     print STDERR "Could not open log port: ".$log_host.":".$log_port."\n";
   }
 
-  logMsg(0, "INFO", "STARTING SCRIPT");
+  msg(0, "INFO", "STARTING SCRIPT");
 
   # Start the daemon control thread
   $control_thread = threads->new(\&controlThread, $quit_file, $pid_file);
@@ -125,13 +125,13 @@ sub main() {
     # If we have file(s) to process
     if ($file ne "none") {
 
-      logMsg(2, "INFO", "file to process ".$file);
+      msg(2, "INFO", "file to process ".$file);
 
       # Find out how many cores are available to background process on
       my $handle = Dada::connectToMachine($proc_mng_host, $proc_mng_port);
       if ($handle) {
 
-        logMsg(2, "INFO", "connection to processing manager established");
+        msg(2, "INFO", "connection to processing manager established");
         print $handle "how many cores are available?\r\n";
         $response = Dada::getLine($handle);
 
@@ -139,28 +139,28 @@ sub main() {
         $handle->close();
 
       } else {
-        logMsg(2, "WARN", "Could not connect to processing manager ".
+        msg(2, "WARN", "Could not connect to processing manager ".
                       $proc_mng_host.":".$proc_mng_port);
       } 
 
-      logMsg(2, "INFO", "cores available: ".$ncores);
+      msg(2, "INFO", "cores available: ".$ncores);
 
       # If we have cores available to background process the files
       if ($ncores > 1) {
 
         if ($ncores > 3) {
-          logMsg(1, "INFO", "clamping number of cores from ".$ncores." to 3");
+          msg(1, "INFO", "clamping number of cores from ".$ncores." to 3");
           $ncores = 3;
         }
 
         ($result, $response) = processingThread($file, $raw_header, $ncores);
 
       } else {
-        logMsg(2, "INFO", "File awaiting processing: ".$file);
+        msg(2, "INFO", "File awaiting processing: ".$file);
       }
     }
   
-    logMsg(2, "INFO", "Sleeping for 10 seconds");
+    msg(2, "INFO", "Sleeping for 10 seconds");
     my $counter = 10;
     while ((!$quit_daemon) && ($counter > 0)) {
       sleep(1);
@@ -170,7 +170,7 @@ sub main() {
 
   $control_thread->join();
 
-  logMsg(0, "INFO", "STOPPING SCRIPT");
+  msg(0, "INFO", "STOPPING SCRIPT");
   Dada::nexusLogClose($log_sock);
 
   return 0;
@@ -191,12 +191,12 @@ sub getUnprocessedFile($) {
   my @files = ();
   
   $cmd = "find ".$dir." -maxdepth 1 -type f -name '*.dada' | sort";
-  logMsg(2, "INFO", "getUnprocessedFile: ".$cmd);
+  msg(2, "INFO", "getUnprocessedFile: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
-  logMsg(3, "INFO", "getUnprocessedFile: ".$result." ".$response);
+  msg(3, "INFO", "getUnprocessedFile: ".$result." ".$response);
 
   if ($result ne "ok") {
-    logMsg(0, "WARN", "find command ".$cmd." failed: ".$response);
+    msg(0, "WARN", "find command ".$cmd." failed: ".$response);
     return ("none", "find cmd failed");
 
   } else {
@@ -236,15 +236,15 @@ sub processingThread($$$) {
   ($result, $response) = Dada::processHeader($raw_header, $cfg{"CONFIG_DIR"});
 
   if  ($result ne "ok") {
-    logMsg(0, "ERROR", $response);
-    logMsg(0, "ERROR", "DADA header malformed, ignoring file");
+    msg(0, "ERROR", $response);
+    msg(0, "ERROR", "DADA header malformed, ignoring file");
     ($result, $response) = moveUnprocessableFile($file, $fail_dir);
 
   # Check for dada_dbdisk 
   } elsif ($response =~ m/dada_dbdisk/) {
 
-    logMsg(0, "WARN", $response);
-    logMsg(0, "WARN", "PROC_CMD contained dada_dbdisk");
+    msg(0, "WARN", $response);
+    msg(0, "WARN", "PROC_CMD contained dada_dbdisk");
     ($result, $response) = moveUnprocessableFile($file, $fail_dir);
 
   } else {
@@ -262,7 +262,7 @@ sub processingThread($$$) {
       if ($proc_cmd =~ m/dspsr/) {
         $proc_cmd =~ s/dspsr /dspsr -t $ncores /;
       } else {
-        logMsg(0, "WARN", "PROC_CMD did not contain dspsr");
+        msg(0, "WARN", "PROC_CMD did not contain dspsr");
       }
     }
     # Remove any -L 10 commands due to current dspsr bug 
@@ -272,14 +272,14 @@ sub processingThread($$$) {
       $proc_cmd =~ s/ -L 10//;
     }
 
-    logMsg(1, "INFO", "proc_cmd : ".$proc_cmd);
+    msg(1, "INFO", "proc_cmd : ".$proc_cmd);
 
     $proc_dir = $cfg{"CLIENT_RESULTS_DIR"}."/".$h{"UTC_START"}."/".$h{"FREQ"};
 
     # This should not be requried as the observation manager should be creating
     # this directory for us
     if (! -d ($proc_dir)) {
-      logMsg(0, "WARN", "The archive directory was not created by the ".
+      msg(0, "WARN", "The archive directory was not created by the ".
                "observation manager: \"".$proc_dir."\"");
       system("mkdir -p ".$proc_dir);
       system("chmod g+s ".$proc_dir);
@@ -290,29 +290,29 @@ sub processingThread($$$) {
       chomp $groups;
 
      if ($groups =~ m/$proj_id/) {
-       logMsg(2, "INFO", "chgrp to ".$proj_id);
+       msg(2, "INFO", "chgrp to ".$proj_id);
      } else {
-       logMsg(0, "WARN", "Project ".$proj_id." was not an ".$user." group. Using ".$user." instead'");
+       msg(0, "WARN", "Project ".$proj_id." was not an ".$user." group. Using ".$user." instead'");
        $proj_id = $user
      }
      system("chgrp -R ".$proj_id." ".$proc_dir);
     }
 
-    logMsg(1, "INFO", "Processing ".$file." on ".$ncores." cores");
+    msg(1, "INFO", "Processing ".$file." on ".$ncores." cores");
 
     $result = processOneFile($proc_dir, $proc_cmd);
 
-    logMsg(2, "INFO", "Result of processing: ".$result);
+    msg(2, "INFO", "Result of processing: ".$result);
 
     # reset the client archive dir
     chdir $cfg{"CLIENT_RESULTS_DIR"};
 
     if ($result eq "ok") {
-      logMsg(1, "INFO", "Processed file: ".$file);
-      logMsg(1, "INFO", "Deleting processed file");
+      msg(1, "INFO", "Processed file: ".$file);
+      msg(1, "INFO", "Deleting processed file");
       unlink($file);
     } else {
-      logMsg(0, "WARN", "Processing failed: ".$file);
+      msg(0, "WARN", "Processing failed: ".$file);
       ($result, $response) = moveUnprocessableFile($file, $fail_dir);
     }
   }
@@ -328,11 +328,11 @@ sub processOneFile($$) {
 
   # If for some reason the directory does not exist, create it
   if (!( -d $dir)) {
-    logMsg(0, "WARN", "Output dir ".$dir." did not exist, creating it");
+    msg(0, "WARN", "Output dir ".$dir." did not exist, creating it");
     `mkdir -p $dir`;
   }
 
-  logMsg(2, "INFO", "processing in dir ".$dir);
+  msg(2, "INFO", "processing in dir ".$dir);
 
   if ($pid) {
 
@@ -354,11 +354,11 @@ sub processOneFile($$) {
 
     # child process. The exec command will never return 
     chdir $dir;
-    logMsg(1, "INFO", $cmd);
+    msg(1, "INFO", $cmd);
     exec "$cmd";
   }
 
-  logMsg(2, "INFO", "Result of processing was \"".$result."\"");
+  msg(2, "INFO", "Result of processing was \"".$result."\"");
   return $result;
 
 }
@@ -370,21 +370,21 @@ sub moveUnprocessableFile($$) {
 
   my ($file, $unprocessable_dir) = @_;
 
-  logMsg(2, "INFO", "moveUnprocessableFile(".$file.", ".$unprocessable_dir.")");
+  msg(2, "INFO", "moveUnprocessableFile(".$file.", ".$unprocessable_dir.")");
 
-  logMsg(1, "INFO", "moving ".$file." ".$unprocessable_dir);
+  msg(1, "INFO", "moving ".$file." ".$unprocessable_dir);
   
   my $result = "";
   my $response = "";
   my $cmd = "";
   
   $cmd = "mv ".$file." ".$unprocessable_dir."/";
-  logMsg(2, "INFO", "moveUnprocessableFile: ".$cmd);
+  msg(2, "INFO", "moveUnprocessableFile: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
-  logMsg(2, "INFO", "moveUnprocessableFile: ".$result." ".$response);
+  msg(2, "INFO", "moveUnprocessableFile: ".$result." ".$response);
   
   if ($result ne "ok") {
-    logMsg(0, "WARN", "Could not move unprocessable file: ".$response);
+    msg(0, "WARN", "Could not move unprocessable file: ".$response);
     return ("fail", "could not move file");
   
   } else { 
@@ -397,7 +397,7 @@ sub controlThread($$) {
   
   my ($quit_file, $pid_file) = @_;
   
-  logMsg(2, "INFO", "controlThread : starting");
+  msg(2, "INFO", "controlThread : starting");
 
   my $cmd = "";
   my $result = "";
@@ -411,19 +411,19 @@ sub controlThread($$) {
   
   if ($proc_pid) {
     $cmd = "kill -KILL ".$proc_pid;
-    logMsg(1, "INFO", "controlThread: ".$cmd);
+    msg(1, "INFO", "controlThread: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
-    logMsg(2, "INFO", "controlThread: ".$result." ".$response);
+    msg(2, "INFO", "controlThread: ".$result." ".$response);
   }
   
   if ( -f $pid_file) {
-    logMsg(2, "INFO", "controlThread: unlinking PID file");
+    msg(2, "INFO", "controlThread: unlinking PID file");
     unlink($pid_file);
   } else {
-    logMsg(1, "WARN", "controlThread: PID file did not exist on script exit");
+    msg(1, "WARN", "controlThread: PID file did not exist on script exit");
   }
  
-  logMsg(2, "INFO", "controlThread: exiting");
+  msg(2, "INFO", "controlThread: exiting");
 
 }
 
@@ -434,7 +434,7 @@ sub controlThread($$) {
 sub touchBandFinished($$) {
 
   my ($utc_start, $centre_freq) = @_;
-  logMsg(2, "INFO", "touchBandFinished(".$utc_start.", ".$centre_freq.")");
+  msg(2, "INFO", "touchBandFinished(".$utc_start.", ".$centre_freq.")");
 
   my $dir = "";
   my $cmd = "";
@@ -446,9 +446,9 @@ sub touchBandFinished($$) {
   my $localhost = Dada::getHostMachineName();
 
   $cmd = "find ".$cfg{"CLIENT_RECORDING_DIR"}." -maxdepth 1 -name '".$utc_start."*.dada' | wc -l";
-  logMsg(2, "INFO", "touchBandFinished: ".$cmd);
+  msg(2, "INFO", "touchBandFinished: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
-  logMsg(2, "INFO", "touchBandFinished: ".$result." ".$response);
+  msg(2, "INFO", "touchBandFinished: ".$result." ".$response);
 
   if (($result eq "ok") && ($response == "0")) {
 
@@ -460,17 +460,17 @@ sub touchBandFinished($$) {
 
     if ($handle) {
 
-      logMsg(2, "INFO", "touchBandFinished: obs mngr connection established");
+      msg(2, "INFO", "touchBandFinished: obs mngr connection established");
 
       print $handle "is data currently being received?\r\n";
       $taking_data = Dada::getLine($handle);
-      logMsg(2, "INFO", "touchBandFinished: obs mngr replied ".$taking_data);
+      msg(2, "INFO", "touchBandFinished: obs mngr replied ".$taking_data);
       $handle->close();
       $handle = 0;
 
     } else {
       # we assume that we are not taking data
-      logMsg(0, "WARN", "Could not connect to obs mngr ".$localhost.":".
+      msg(0, "WARN", "Could not connect to obs mngr ".$localhost.":".
                          $cfg{"CLIENT_BG_PROC_PORT"});
       $taking_data = "none";
     }
@@ -485,12 +485,12 @@ sub touchBandFinished($$) {
       # Create the full nfs destinations
       $dir = $cfg{"SERVER_RESULTS_NFS_MNT"}."/".$utc_start."/".$centre_freq;
 
-      logMsg(1, "INFO", $dir."/band.finished");
+      msg(1, "INFO", $dir."/band.finished");
 
       $cmd = "touch ".$dir."/band.finished";
-      logMsg(2, "INFO", "touchBandFinished: ".$cmd);
+      msg(2, "INFO", "touchBandFinished: ".$cmd);
       ($result, $response) = Dada::mySystem($cmd ,0);
-      logMsg(2, "INFO", "touchBandFinished: ".$result." ".$response);
+      msg(2, "INFO", "touchBandFinished: ".$result." ".$response);
     }
   }
 }
@@ -499,7 +499,7 @@ sub touchBandFinished($$) {
 #
 # logs a message to the nexus logger and prints to stdout
 #
-sub logMsg($$$) {
+sub msg($$$) {
 
   my ($level, $type, $msg) = @_;
   if ($level <= $dl) {

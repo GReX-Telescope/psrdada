@@ -17,7 +17,7 @@ libpsrdada_la_SOURCES = $(psrdada_hdr) ascii_header.c multilog.c sock.c monitor.
 	dada_hdu.c dada_pwc.c dada_pwc_nexus.c dada_ni.c		\
 	dada_pwc_main.c dada_pwc_main_multi.c dada_client.c					\
 	dada_pwc_nexus_config.c dada_pwc_nexus_header_parse.c		\
-	multilog_server.c dada_udp.c dada_generator.c
+	multilog_server.c dada_udp.c dada_generator.c dada_affinity.c 
 
 include_HEADERS = ascii_header.h multilog.h sock.h monitor.h	  \
 	ipcutil.h ipcbuf.h ipcio.h disk_array.h node_array.h	  \
@@ -25,15 +25,15 @@ include_HEADERS = ascii_header.h multilog.h sock.h monitor.h	  \
 	diff_time.h nexus.h futils.h tmutil.h daemon.h dada_def.h \
 	dada_hdu.h dada_pwc.h dada_pwc_nexus.h dada_ni.h	  \
 	dada_pwc_main.h dada_pwc_main_multi.h dada_client.h udp.h \
-	dada_udp.h dada_generator.h \
-	dada_msg.h
+	dada_udp.h dada_generator.h dada_affinity.h dada_msg.h
 
 bin_PROGRAMS = dada_db dada_write_test dada_dbdisk dada_diskdb	 \
 	dada_dbnic dada_nicdb dada_dbNdb			 \
 	dada_install_header dada_pwc_command dada_pwc_demo	 \
 	dada_dbnull dada_dbmonitor dada_dbxferinfo dada_dbmetric \
-	dada_header dada_edit slow_rm dada_junkdb dada_mem_test \
-	daemon_test load_test
+	dada_header dada_edit slow_rm dada_junkdb dada_mem_test  \
+	daemon_test load_test dada_dbib dada_numdb dada_dbnum    \
+        dada_dbmeminfo
 
 bin_SCRIPTS = ipcrme loopssh
 
@@ -47,3 +47,20 @@ TESTS = test_uint64_t test_disk_array test_ipcio test_ascii_header
 LDADD = libpsrdada.la 
 
 EXTRA_DIST=ipcrme loopssh
+
+###############################################################################
+#
+# Depends on librdmacm
+#
+###############################################################################
+
+if HAVE_RDMACM
+
+libpsrdada_la_SOURCES += dada_ib.c
+include_HEADERS += dada_ib.h
+bin_PROGRAMS += dada_ibdb
+
+dada_dbib_LDADD = $(LDADD) $(RDMACM_LIBS)
+dada_ibdb_LDADD = $(LDADD) $(RDMACM_LIBS)
+
+endif

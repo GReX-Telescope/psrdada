@@ -16,7 +16,7 @@
 #include <sys/sem.h>
 #include <sys/shm.h>
 
-/* #define _DEBUG 1 */
+// #define _DEBUG 1
 
 /* semaphores */
 
@@ -375,8 +375,8 @@ int ipcbuf_lock_write (ipcbuf_t* id)
   }
 
 #ifdef _DEBUG
-  fprintf (stderr, "ipcbuf_lock_write: decrement WRITE=%d\n",
-                   semctl (id->semid, IPCBUF_WRITE, GETVAL));
+  fprintf (stderr, "ipcbuf_lock_write: decrement WRITE=%d addr=%x\n",
+                   semctl (id->semid, IPCBUF_WRITE, GETVAL), id);
 #endif
 
   /* decrement the write semaphore (only one can) */
@@ -950,8 +950,8 @@ uint64_t ipcbuf_tell (ipcbuf_t* id, uint64_t bufnum)
 
 #ifdef _DEBUG
   fprintf (stderr, 
-           "ipcbuf_tell: bufnum=%"PRIu64" s_buf=%"PRIu64" s_buf=%"PRIu64"\n",
-           bufnum, sync->s_buf[id->xfer], sync->s_byte[id->xfer]);
+           "ipcbuf_tell: bufnum=%"PRIu64" xfer=%"PRIu64", s_buf=%"PRIu64" s_byte=%"PRIu64"\n",
+           bufnum, id->xfer, sync->s_buf[id->xfer], sync->s_byte[id->xfer]);
 #endif
 
   if (bufnum <= sync->s_buf[id->xfer])
@@ -1251,9 +1251,19 @@ uint64_t ipcbuf_get_write_count (ipcbuf_t* id)
   return id->sync->w_buf;
 }
 
+uint64_t ipcbuf_get_write_index (ipcbuf_t* id)
+{
+  return id->sync->w_buf % id->sync->nbufs;
+}
+
 uint64_t ipcbuf_get_read_count (ipcbuf_t* id)
 {
   return id->sync->r_buf;
+}
+
+uint64_t ipcbuf_get_read_index (ipcbuf_t* id)
+{
+    return id->sync->r_buf % id->sync->nbufs;
 }
 
 uint64_t ipcbuf_get_nbufs (ipcbuf_t* id)

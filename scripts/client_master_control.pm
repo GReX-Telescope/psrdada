@@ -127,8 +127,8 @@ sub main() {
   }
 
   my $log_file       = $cfg{"CLIENT_LOG_DIR"}."/".$daemon_name.".log";;
-  my $pid_file       = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".pid";
-  my $quit_file      = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
+  my $pid_file       = $control_dir."/".$daemon_name.".pid";
+  my $quit_file      = $control_dir."/".$daemon_name.".quit";
   my $archive_dir    = $cfg{"CLIENT_ARCHIVE_DIR"};   # hi res archive storage
   my $results_dir    = $cfg{"CLIENT_RESULTS_DIR"};   # dspsr output directory
 
@@ -604,6 +604,7 @@ sub handleCommand($) {
   }
 
   elsif ($key eq "start_daemon") {
+
     if ($cmds[1] eq "pwcs") {
       if (defined($cfg{"PWC_DEVICE"})) {
         $cmd = "sudo /sbin/ifup ".$cfg{"PWC_DEVICE"};
@@ -1294,7 +1295,6 @@ sub controlThread($$) {
   Dada::logMsg(1, $dl, "controlThread: exiting");
 
 }
-
 
 ###############################################################################
 #
