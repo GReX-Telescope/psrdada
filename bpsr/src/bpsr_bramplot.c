@@ -123,7 +123,7 @@ int main (int argc, char **argv)
   unsigned bit_window;
   xval = (float *) malloc (sizeof(float) * IBOB_BRAM_CHANNELS);
   pol1 = (float *) malloc (sizeof(float) * IBOB_BRAM_CHANNELS);
-  pol2 = (float * )malloc (sizeof(float) * IBOB_BRAM_CHANNELS);
+  pol2 = (float *) malloc (sizeof(float) * IBOB_BRAM_CHANNELS);
 
   read(fd, &bit_window, sizeof(unsigned));
   read(fd, pol1, (sizeof(float) * IBOB_BRAM_CHANNELS));
