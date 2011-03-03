@@ -1,4 +1,6 @@
 
+if HAVE_PGPLOT
+
 lib_LTLIBRARIES = libplot4mon.la
 
 libplot4mon_la_SOURCES = plot4mon.h get_commandline.c check_file_exists.c display_help.c \
@@ -12,3 +14,4 @@ bin_PROGRAMS = plot4mon
 AM_CPPFLAGS = @PGPLOT_CFLAGS@
 LDADD = libplot4mon.la @PGPLOT_LIBS@
 
+endif
