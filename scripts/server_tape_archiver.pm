@@ -110,6 +110,13 @@ sub main() {
   $warn  = $cfg{"STATUS_DIR"}."/".$daemon_name.".warn";
   $error = $cfg{"STATUS_DIR"}."/".$daemon_name.".error";
 
+  if (-f $warn) {
+    unlink $warn;
+  }
+  if ( -f $error) {
+   unlink $error;
+  }
+
   # location of DB files
   ($db_user, $db_host, $db_dir) = split(/:/, $cfg{uc($type)."_DB_DIR"});
 

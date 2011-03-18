@@ -117,8 +117,12 @@ sub main() {
   Dada::logMsg(0, $dl ,"STARTING SCRIPT");
 
   Dada::logMsg(1, $dl, "Clearing status warn/error files");
-  unlink($warn); 
-  unlink($error); 
+  if (-f $warn) {
+    unlink($warn); 
+  }
+  if ( -f $error) {
+    unlink($error); 
+  }
 
   # Start the tape script (background daemon)
   ($user, $host, $dir) = split(/:/, $db_dir);

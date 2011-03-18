@@ -2,7 +2,7 @@ package Dada::server_pwc_monitor;
 
 ###############################################################################
 #
-# Maintains a connection to dada_pwc_commands multi log port and writes 
+# Maintains a connection to dada_pwc_command's multi log port and writes 
 # messages to the relevant <host>.pwc.[warn|error] on the receipt of 
 # these types of log messagse
 #
