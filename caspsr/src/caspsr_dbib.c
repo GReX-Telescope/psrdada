@@ -173,6 +173,15 @@ int caspsr_dbib_close (dada_client_t* client, uint64_t bytes_written)
       return -1;
     } 
 
+    // pre-post a recv for the ready message for the next xfer
+    if (dbib->verbose)
+      multilog (log, LOG_INFO, "close: dada_ib_post_recv on sync_from [ready new xfer]\n");
+    if (dada_ib_post_recv (ib_cm, ib_cm->sync_from) < 0)
+    {
+      multilog(log, LOG_ERR, "close: dada_ib_wait_recv on sync_from [ready new xfer] failed\n");
+      return -1;
+    }
+ 
     // if the transfer happened to finish correctly, then ibdb will be
     // waiting for the next block, instruct it via sync_to vals of 0
     // that the xfer is over
@@ -230,6 +239,7 @@ int64_t caspsr_dbib_send (dada_client_t* client, void * buffer, uint64_t bytes)
   }
 
   // post recv on sync from for the ready message, prior to sending header
+/*
   if (dbib->verbose)
     multilog(log, LOG_INFO, "send: post_recv on sync_from [ready]\n");
   if (dada_ib_post_recv (ib_cm, ib_cm->sync_from) < 0)
@@ -237,6 +247,7 @@ int64_t caspsr_dbib_send (dada_client_t* client, void * buffer, uint64_t bytes)
     multilog(log, LOG_ERR, "send: dada_ib_post_recv on sync_from [ready] failed\n");
     return -1;
   }
+*/
 
   // wait recv on sync from the the ready message, to ensure that ibdb is ready
   if (dbib->verbose)
@@ -519,6 +530,15 @@ dada_ib_cm_t * caspsr_dbib_ib_init (caspsr_dbib_t * ctx, dada_hdu_t * hdu, multi
     return 0;
   }
 
+  // post recv on sync from for the ready message, prior to sending header
+  if (ctx->verbose)
+    multilog(log, LOG_INFO, "ib_init: post_recv on sync_from [ready new xfer]\n");
+  if (dada_ib_post_recv (ib_cm, ib_cm->sync_from) < 0)
+  {
+    multilog(log, LOG_ERR, "ib_init: dada_ib_post_recv on sync_from [ready new xfer] failed\n");
+    return 0;
+  }
+
   // open the connection to ibdb
   if (!ctx->connected)
   {
@@ -707,18 +727,6 @@ int main (int argc, char **argv)
 
   // handle SIGINT gracefully
   signal(SIGINT, signal_handler);
-
-  /*
-  // Init IB network
-  dbib.ib_cm = caspsr_dbib_ib_init (&dbib, hdu, log);
-  if (!dbib.ib_cm)
-  {
-    multilog (log, LOG_ERR, "Failed to initialise IB resources\n");
-    dada_hdu_unlock_read (hdu);
-    dada_hdu_disconnect (hdu);
-    return EXIT_FAILURE;
-  }
-  */
 
   // Init IB network
   dbib.ib_cm = caspsr_dbib_ib_init (&dbib, hdu, log);
