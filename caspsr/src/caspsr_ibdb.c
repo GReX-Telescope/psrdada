@@ -92,26 +92,53 @@ int64_t caspsr_ibdb_recv (dada_client_t* client, void* data, uint64_t data_size)
   for (i=0; i<ibdb->n_distrib; i++)
   {
     // check that the header size matches the requested data_size
-    if (ibdb->ib_cms[i]->header_mb->size != data_size)
+    if (ib_cms[i]->header_mb->size != data_size)
     {
       multilog (client->log, LOG_ERR, "recv: [%d] header was %"PRIu64" bytes, "
-                "expected %"PRIu64"\n", i, data_size, ibdb->ib_cms[i]->header_mb);
-      return -1;
-    }
-
-    // n.b. dont have to post recv for the header, this was done in open fn
-
-    if (ibdb->verbose > 1)
-      multilog(client->log, LOG_INFO, "recv: [%d] dada_ib_wait_recv\n", i);
-
-    // wait for the transfer of the header
-    if (dada_ib_wait_recv(ib_cms[i], ibdb->ib_cms[i]->header_mb) < 0)
-    {
-      multilog(client->log, LOG_ERR, "recv: [%d] dada_ib_wait_recv failed\n", i);
+                "expected %"PRIu64"\n", i, data_size, ib_cms[i]->header_mb);
       return -1;
     }
   }
 
+    // send ready message to ibdbs to inform we are ready to receive header
+  if (ibdb->verbose)
+    multilog(log, LOG_INFO, "recv: post_send on sync_to [ready]\n");
+  for (i=0; i<ibdb->n_distrib; i++)
+  {
+    ib_cms[i]->sync_to_val[0] = 1;
+    ib_cms[i]->sync_to_val[1] = 0;
+    if (dada_ib_post_send (ib_cms[i], ib_cms[i]->sync_to) < 0)
+    {
+      multilog(log, LOG_ERR, "recv: [%d] post_send on sync_to [READY] failed\n", i);
+      return -1;
+    }
+  }
+
+  // wait for confirmation of the sending of the ready message
+  if (ibdb->verbose)
+    multilog(log, LOG_INFO, "recv: post_send on sync_to [ready]\n");
+  for (i=0; i<ibdb->n_distrib; i++)
+  {
+    if (dada_ib_wait_recv(ib_cms[i], ib_cms[i]->sync_to) < 0)
+    {
+      multilog(log, LOG_ERR, "recv: [%d] wait_recv on sync_to [READY] failed\n", i);
+      return -1;
+    }
+  }
+
+  // wait for transfer of the headers
+  if (ibdb->verbose)
+    multilog(log, LOG_INFO, "recv: wait_recv on header_mb\n");
+  for (i=0; i<ibdb->n_distrib; i++)
+  {
+    if (ibdb->verbose > 1)
+      multilog(log, LOG_INFO, "recv: [%d] dada_ib_wait_recv\n", i);
+    if (dada_ib_wait_recv(ib_cms[i], ibdb->ib_cms[i]->header_mb) < 0) 
+    {
+      multilog(log, LOG_ERR, "recv: [%d] dada_ib_wait_recv on header_mb failed\n", i);
+      return 0;
+    }
+  }
 
   // pre post recv for the number of bytes in the next send_block transfer
   for (i=0; i<ibdb->n_distrib; i++)
@@ -130,7 +157,6 @@ int64_t caspsr_ibdb_recv (dada_client_t* client, void* data, uint64_t data_size)
   {
     if (ibdb->verbose > 1)
       multilog(client->log, LOG_INFO, "recv: [%d] memcpy %"PRIu64" bytes\n", i, data_size);
-
     memcpy (data, ibdb->ib_cms[i]->header_mb->buffer, data_size);
   }
 
@@ -158,43 +184,39 @@ int64_t caspsr_ibdb_recv_block (dada_client_t* client, void* data,
   unsigned i = 0;
 
   // send the ready message to the dbib's
-  //multilog(client->log, LOG_INFO, "recv_block: SEND READY\n");
   for (i=0; i<ibdb->n_distrib; i++)
   {
     ib_cms[i]->sync_to_val[0] = 1;
     ib_cms[i]->sync_to_val[1] = 0;
-    //multilog(client->log, LOG_INFO, "recv_block: post_send [%d] on sync_to for READY\n", i);
     if (dada_ib_post_send (ib_cms[i], ib_cms[i]->sync_to) < 0)
     {
-      multilog(client->log, LOG_ERR, "recv_block: [%d] post_send on sync_to for READY failed\n", i);
-      return -1;
-    }
-  }
-  for (i=0; i<ibdb->n_distrib; i++)
-  {
-    //multilog(client->log, LOG_INFO, "recv_block: wait_recv[%d] on sync_to for READY\n", i);
-    if (dada_ib_wait_recv(ib_cms[i], ib_cms[i]->sync_to) < 0)
-    {
-      multilog(client->log, LOG_ERR, "recv_block: [%d] wait_recv on sync_from [bytes to be sent] failed\n", i);
+      multilog(client->log, LOG_ERR, "recv_block: [%d] post_send on sync_to [READY] failed\n", i);
       return -1;
     }
   }
 
+  // wait for confirmation of the ready message
+  for (i=0; i<ibdb->n_distrib; i++)
+  {
+    if (dada_ib_wait_recv(ib_cms[i], ib_cms[i]->sync_to) < 0)
+    {
+      multilog(client->log, LOG_ERR, "recv_block: [%d] wait_recv on sync_from [READY] failed\n", i);
+      return -1;
+    }
+  }
   
   // wait for the number of bytes to be received
-  //multilog(client->log, LOG_INFO, "recv_block: RECV BYTES TO BE RECVD\n");
   uint64_t total_bytes = 0;
   for (i=0; i<ibdb->n_distrib; i++)
   {
-    //multilog(client->log, LOG_INFO, "recv_block: [%d] wait_recv on sync from [bytes to be recvd]\n", i);
     if (dada_ib_wait_recv(ib_cms[i], ib_cms[i]->sync_from) < 0)
     {
-      multilog(client->log, LOG_ERR, "recv_block: [%d] wait_recv on sync_from [bytes to be recvd] failed\n", i);
+      multilog(client->log, LOG_ERR, "recv_block: [%d] wait_recv on sync_from [bytes to xfer] failed\n", i);
       return -1;
     }
 
     if (ibdb->verbose)
-      multilog(client->log, LOG_INFO, "recv_block: [%d] bytes to be recvd=%"PRIu64"\n", i, ib_cms[i]->sync_from_val[1]);
+      multilog(client->log, LOG_INFO, "recv_block: [%d] bytes to xfer=%"PRIu64"\n", i, ib_cms[i]->sync_from_val[1]);
 
     assert(ib_cms[i]->sync_from_val[0] == 2);
     total_bytes += ib_cms[i]->sync_from_val[1];
@@ -209,10 +231,10 @@ int64_t caspsr_ibdb_recv_block (dada_client_t* client, void* data,
     for (i=0; i<ibdb->n_distrib; i++)
     {
       if (ibdb->verbose)
-        multilog(client->log, LOG_INFO, "recv_block: post_recv [%d] on sync_from for bytes recvd\n", i);
+        multilog(client->log, LOG_INFO, "recv_block: [%d] post_recv on sync_from [bytes xferd]\n", i);
       if (dada_ib_post_recv(ib_cms[i], ib_cms[i]->sync_from) < 0)
       {
-        multilog(client->log, LOG_ERR, "recv_block: [%d] post_recv on sync_from for bytes recvd failed\n", i);
+        multilog(client->log, LOG_ERR, "recv_block: [%d] post_recv on sync_from [bytes xferd] failed\n", i);
         return -1;
       }
     }

@@ -229,6 +229,24 @@ int64_t caspsr_dbib_send (dada_client_t* client, void * buffer, uint64_t bytes)
     return -1;
   }
 
+  // post recv on sync from for the ready message, prior to sending header
+  if (dbib->verbose)
+    multilog(log, LOG_INFO, "send: post_recv on sync_from [ready]\n");
+  if (dada_ib_post_recv (ib_cm, ib_cm->sync_from) < 0)
+  {
+    multilog(log, LOG_ERR, "send: dada_ib_post_recv on sync_from [ready] failed\n");
+    return -1;
+  }
+
+  // wait recv on sync from the the ready message, to ensure that ibdb is ready
+  if (dbib->verbose)
+    multilog(log, LOG_INFO, "send: wait_recv on sync_from [ready]\n");
+  if (dada_ib_wait_recv(ib_cm, ib_cm->sync_from) < 0)
+  {
+    multilog(log, LOG_ERR, "send: wait_recv on sync_from [ready] failed\n");
+    return -1;
+  }
+  
   // if this is a "fake" transfer, dont post_recv for the sync_from [ready], just send header  
   if (dbib->quit)
   {
@@ -239,10 +257,10 @@ int64_t caspsr_dbib_send (dada_client_t* client, void * buffer, uint64_t bytes)
   {
     // post recv on sync_from for the ready message
     if (dbib->verbose)
-      multilog(log, LOG_INFO, "send: post_recv on sync_from for ready message\n");
+      multilog(log, LOG_INFO, "send: post_recv on sync_from [ready 2]\n");
     if (dada_ib_post_recv (ib_cm, ib_cm->sync_from) < 0)
     {
-      multilog(log, LOG_ERR, "send: dada_ib_post_recv failed\n");
+      multilog(log, LOG_ERR, "send: dada_ib_post_recv on sync_from [ready 2] failed\n");
       return -1;
     }
   }
@@ -251,16 +269,20 @@ int64_t caspsr_dbib_send (dada_client_t* client, void * buffer, uint64_t bytes)
   memcpy (ib_cm->header_mb->buffer, buffer, bytes);
 
   // send the header memory buffer to dada_ibdb
+  if (dbib->verbose)
+    multilog(log, LOG_INFO, "send: post_send on header_mb\n");
   if (dada_ib_post_send(ib_cm, ib_cm->header_mb) < 0)
   {
-    multilog(log, LOG_ERR, "send: dada_ib_post_send failed\n");
+    multilog(log, LOG_ERR, "send: dada_ib_post_send on header_mb failed\n");
     return -1;
   }
 
   // wait for send confirmation
+  if (dbib->verbose)
+    multilog(log, LOG_INFO, "send: wait_recv on header_mb\n");
   if (dada_ib_wait_recv(ib_cm, ib_cm->header_mb) < 0)
   {
-    multilog(log, LOG_ERR, "send: dada_ib_wait_recv failed\n");
+    multilog(log, LOG_ERR, "send: dada_ib_wait_recv on header_mb failed\n");
     return -1;
   }
 
