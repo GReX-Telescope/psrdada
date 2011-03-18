@@ -808,10 +808,11 @@ sub waitForState($$$) {
   }
 
   if ($ready) {
-    return ("ok", "");
+    return 0;
   } else {
-    return ("fail", $response);
+    return -1;
   }
+
 }
 
 sub runSanityChecks() {
