@@ -103,6 +103,9 @@ sub main() {
   if ( -f $error) {
     unlink ($error);
   }
+ 
+  my $cmd = "rm -f ".$cfg{"STATUS_DIR"}."/*.pwc.warn ".$cfg{"STATUS_DIR"}."/*.pwc.error";
+  ($result, $response) = Dada::mySystem($cmd);
 
   # sanity check on whether the module is good to go
   ($result, $response) = good($quit_file);
