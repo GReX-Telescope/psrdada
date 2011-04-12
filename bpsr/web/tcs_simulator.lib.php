@@ -48,34 +48,34 @@ class tcs_simulator extends bpsr_webpage
 
       function startButton() {
 
-        document.getElementById("COMMAND").value = "START";
+        document.getElementById("command").value = "start";
 
         var i = 0;
         var psr = "";
 
         updateRADEC();
 
-        i = document.getElementById("SOURCE_LIST").selectedIndex;
-        psr = document.getElementById("SOURCE_LIST").options[i].value;
+        i = document.getElementById("src_list").selectedIndex;
+        psr = document.getElementById("src_list").options[i].value;
 
-        document.getElementById("SOURCE").value = psr;
+        document.getElementById("src").value = psr;
 
         document.tcs.submit();
 
       }
 
       function stopButton() {
-        document.getElementById("COMMAND").value = "STOP";
+        document.getElementById("command").value = "stop";
         document.tcs.submit();
       }
 
       function updateRADEC() {
-        var i = document.getElementById("SOURCE_LIST").selectedIndex;
-        var psr = document.getElementById("SOURCE_LIST").options[i].value;
+        var i = document.getElementById("src_list").selectedIndex;
+        var psr = document.getElementById("src_list").options[i].value;
         var psr_ra = ras[psr];
         var psr_dec= decs[psr];
-        document.getElementById("RA").value = psr_ra;
-        document.getElementById("DEC").value = psr_dec;
+        document.getElementById("ra").value = psr_ra;
+        document.getElementById("dec").value = psr_dec;
       }
     </script>
 
@@ -95,50 +95,51 @@ class tcs_simulator extends bpsr_webpage
     <table border=0 cellpadding=5 cellspacing=0 width='100%'>
       <tr>
 
-        <td class='key'>PROC_FILE</td>
+        <td class='key'>PROC FILE</td>
         <td class='val'>
-          <select name="PROC_FILE">
+          <select name="procfil">
             <option value="SURVEY.MULTIBEAM">SURVEY.MULTIBEAM</option>
             <option value="THEDSPSR">THEDSPSR</option>
           </select>
         </td>
 
-        <td class='key'>BANDWIDTH</td>
-        <td class='val'><input type="text" name="BANDWIDTH" value="-400" size="12" readonly></td>
+        <td class='key'>BAND</td>
+        <td class='val'><input type="text" name="band" value="-400.00" size="12" readonly></td>
 
-        <td class='key'>FA</td>
-        <td class='val'><input type="text" name="FA" size="2" value="23" readonly></td>
-      
-        <td class='key'>CALFREQ</td>
-        <td class='val'><input type="text" name="CALFREQ" size="12" value="11.1230" readonly></td>
+        <td class='key'>ACC LEN</td>
+        <td class='val'><input type="text" name="acclen" size="2" value="25" readonly></td>
+
+        <td class='key'>TSCRUNCH *</td>
+        <td class='val'><input type="text" name="tscrunch" size="1" value="1" readonly></td>
 
       </tr>
       <tr>
 
         <td class='key'>SOURCE</td>
         <td class='val'>
-          <input type="hidden" id="SOURCE" name="SOURCE" value="">
-          <select id="SOURCE_LIST" name="SOURCE_LIST" onChange='updateRADEC()'>
+          <input type="hidden" id="src" name="src" value="">
+          <select id="src_list" name="src_list" onChange='updateRADEC()'>
             <option value='J0437-4715'>J0437-4715</option>
             <option value='G302.9-37.3'>G302.9-37.3</option>
           </select>
         </td>
 
         <td class='key'>RA</td>
-        <td class='val'><input type="text" id="RA" name="RA" size="12" value="04:37:00.00" readonly></td>
+        <td class='val'><input type="text" id="ra" name="ra" size="12" value="04:37:00.00" readonly></td>
 
-        <td class='key'>DEC</td>
-        <td class='val'><input type="text" id="DEC" name="DEC" size="12" value="-47:35:00.0" readonly></td>
 
         <td class='key'>NBIT</td>
-        <td class='val'><input type="text" name="NBIT" size="2" value="8" readonly></td>
+        <td class='val'><input type="text" name="nbit" size="2" value="8" readonly></td>
+
+        <td class='key'>CHANAV *</td>
+        <td class='val'><input type="text" name="chanav" size="2" value="0" readonly></td>
       
       </tr>
       <tr>
 
         <td class='key'>PID</td>
         <td class='val'>
-          <select name="PID">
+          <select name="pid">
 <?          for ($i=0; $i<count($this->groups); $i++) {
               $pid = $this->groups[$i];
               if ($pid == "P999")
@@ -150,52 +151,48 @@ class tcs_simulator extends bpsr_webpage
           </select>
         </td>
 
-        <td class='key'>RECEIVER</td>
-        <td class='val'><input type="text" name="RECEIVER" size="12" value="MULTI" readonly></td>
+        <td class='key'>DEC</td>
+        <td class='val'><input type="text" id="dec" name="dec" size="12" value="-47:35:00.0" readonly></td>
 
-        <td class='key'>CFREQ</td>
-        <td class='val'><input type="text" name="CFREQ" size="12" value="1382.00" readonly></td>
+        <td class='key'>NPROD *</td>
+        <td class='val'><input type="text" name="nprod" size="2" value="1" readonly></td>
 
-        <td class='key'>NPOL</td>
-        <td class='val'><input type="text" name="NPOL" size="2" value="2" readonly></td>
+        <td class='key'>FTMAX *</td>
+        <td class='val'><input type="text" name="ftmax" size="2" value="0" readonly></td>
       
       </tr>
       <tr>
 
         <td class='key'>LENGTH</td>
-        <td class='val'><input type="text" name="LENGTH" size="5" value=""> [s]</td>
+        <td class='val'><input type="text" name="length" size="5" value=""> [s]</td>
 
-        <td class='key'>NCHAN</td>
-        <td class='val'><input type="text" name="NCHAN" size="4" value="1024" readonly></td>
+        <td class='key'>FREQ</td>
+        <td class='val'><input type="text" name="freq" size="12" value="1382.00" readonly></td>
 
-        <td class='key'>NDIM</td>
-        <td class='val'><input type="text" name="NDIM" size="2" value="1" readonly></td>
+        <td class='key'>TCONST *</td>
+        <td class='val'><input type="text" name="tconst" size="6" value="1.0000" readonly></td>
 
-        <td class='key'>ACC_LEN</td>
-        <td class='val'><input type="text" name="ACC_LEN" size="2" value="25" readonly></td>
-      
+        <td class='key'>FSCRUNCH *</td>
+        <td class='val'><input type="text" name="fscrunch" size="1" value="1" readonly></td>
+
       </tr>
   
       <tr>
-
-        <td class='key'>MODE</td>
-        <td class='val'><input type="text" name="MODE" size="4" value="PSR" readonly></td>
-
-      </tr>
-
-      <tr>
-        <td colspan=11><hr></td>
+        <td colspan=8><hr></td>
       </tr>
       
       <tr>
-        <td colspan=11>
+        <td colspan=4>
           <div class="btns" style='text-align: center'>
             <a href="javascript:startButton()"  class="btn" > <span>Start</span> </a>
             <a href="javascript:stopButton()"  class="btn" > <span>Stop</span> </a>
           </div>
         </td>
+        <td colspan=4 style='text-align: right;'>
+          <font size="-1">* has no effect on BPSR, for future use</font>
+        </td>
     </table>
-    <input type="hidden" id="COMMAND" name="COMMAND" value="">
+    <input type="hidden" id="command" name="command" value="">
     </form>
 <?
     $this->closeBlockHeader();
@@ -241,14 +238,14 @@ class tcs_simulator extends bpsr_webpage
     }
 
     # if we have a STOP command try and stop the tcs interface
-    if ($get["COMMAND"] == "STOP") {
-      $cmd = "STOP\r\n";
+    if ($get["command"] == "stop") {
+      $cmd = "stop\r\n";
       socketWrite($sock,$cmd);
       $result = rtrim(socketRead($sock));
-      $ignore = socketRead($sock);
       $this->printTR($cmd,$result);
       $this->printTF();
       $this->printFooter();
+      socket_close($sock);
       return;
     }   
 
@@ -257,15 +254,15 @@ class tcs_simulator extends bpsr_webpage
     for ($i=0; $i<count($keys); $i++) {
 
       $k = $keys[$i];
-      if (($k != "COMMAND") && ($k != "SOURCE_LIST")) {
+      if (($k != "command") && ($k != "src_list")) {
         if ($get[$k] != "") {
           $cmd = $k." ".$get[$k]."\r\n";
           socketWrite($sock,$cmd);
           $result = rtrim(socketRead($sock),"\r\n");
-          $ignore = socketRead($sock);
           if ($result != "ok") {
             $this->printTR("HEADER command failed ", $result.": ".rtrim(socketRead($sock)));
             $this->printTR("START aborted", "");
+            socket_close($sock);
             return;
           }
           $this->printTR($cmd,$result);
@@ -276,15 +273,15 @@ class tcs_simulator extends bpsr_webpage
     }
 
     # Issue START command to server_tcs_interface 
-    $cmd = "START\r\n";
+    $cmd = "start\r\n";
     socketWrite($sock,$cmd);
     $result = rtrim(socketRead($sock),"\r\n");
     $this->printTR($cmd,$result);
-    $ignore = socketRead($sock);
     if ($result != "ok") {
       $this->printTR("START command failed", $result.": ".rtrim(socketRead($sock)));
       $this->printTF();
       $this->printFooter();
+      socket_close($sock);
       return;
     } else {
       $this->printTR("Sent START to nexus", "ok");
@@ -297,6 +294,7 @@ class tcs_simulator extends bpsr_webpage
 
     $this->printTF();
     $this->printFooter();
+    socket_close($sock);
     return;
   }
 
@@ -320,7 +318,7 @@ class tcs_simulator extends bpsr_webpage
 
 }
 
-if (isset($_GET["COMMAND"])) {
+if (isset($_GET["command"])) {
   $obj = new tcs_simulator();
   $obj->printTCSResponse($_GET);
 } else {
