@@ -18,7 +18,8 @@ dist_bin_SCRIPTS = Caspsr.pm \
                    server_caspsr_results_manager.pl \
                    server_caspsr_tcs_interface.pl \
                    server_caspsr_transfer_manager.pl \
-                   server_caspsr_web_monitor.pl
+                   server_caspsr_web_monitor.pl \
+                   zap.psh
 
 include $(top_srcdir)/config/Makefile.targets
 
