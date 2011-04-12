@@ -37,5 +37,4 @@ nobase_dist_web_SCRIPTS = definitions_i.php \
                           stats/.htaccess \
                           status/.empty \
                           support.html
-              
 
