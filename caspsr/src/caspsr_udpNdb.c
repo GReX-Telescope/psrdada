@@ -700,7 +700,8 @@ void * caspsr_udpNdb_receive_obs (void * arg)
                     seq_inc, (int) (offset_raw_seq_no % seq_inc), seq_no, prev_seq_no, 
                     (int64_t) seq_no - (int64_t) prev_seq_no);
         else
-          multilog(ctx->log, LOG_INFO, "packet reset detected\n");
+          multilog(ctx->log, LOG_INFO, "packet reset detected seq=%"PRIu64" prev=%"PRIu64"\n",
+                   seq_no, prev_seq_no);
       }
 
       if ((!ignore_packet) && (remainder != 0)) 
