@@ -30,47 +30,38 @@
 /* Number of UDP packets to be recived for a called to buffer_function */
 #define NUMUDPPACKETS 2000
 
-/* structures dmadb datatype  */
-typedef struct{
+typedef struct {
 
-  /* multilog pointers */
+  // multilog pointers
   multilog_t* log;
   multilog_t* stats_log;
 
-  int verbose;           /* verbosity flag */
+  int verbose;
     
-  //int fd;                /* udp socket file descriptor */
-  //int port;              
-  //char *socket_buffer;   /* data buffer for stioring of multiple udp packets */
-  //int datasize;          /* size of *data array */
-  //char *next_buffer;     /* buffer for a single udp packet */
-  //char *curr_buffer;     /* buffer for a single udp packet */
-  //int packet_in_buffer;  /* flag if buffer overrun occured */
-
-  /* data buffers for the buffer function to fill */
+  // data buffers for the buffer function to fill
   apsr_data_t * curr;
   apsr_data_t * next;
   apsr_data_t * temp;
 
-  /* incoming UDP data */
+  // incoming UDP data
   char          * interface;    // IP address for UDP data
   int             port;         // port for UDP data
   apsr_sock_t   * sock;         // UDP socket struct
 
-  /* statistics for packets/bytes received/lost */
+  // statistics for packets/bytes received/lost
   stats_t       * packets;
   stats_t       * bytes;
 
-  /* packet information */
+  // packet information
   unsigned got_enough;
   uint64_t packets_per_buffer;
   uint64_t packet_length;
   uint64_t payload_length;
 
-  /* thread control */
+  // thread control
   unsigned quit_threads;
 
-  /* timer control on packets/socket */
+  // timer control on packets/socket 
   uint64_t timer_count;
   uint64_t timer_max;
   int      bps;
