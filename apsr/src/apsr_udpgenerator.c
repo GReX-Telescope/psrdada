@@ -55,8 +55,8 @@ double rand_normal(double mean, double stddev);
 /* UDP socket */
 struct sockaddr_in dagram_socket;
 
-int new_gain_value = 50;  // Standard gain of 50 % 
-int current_gain = 50;
+int new_gain_value = 33;  // Standard gain of 50 % 
+int current_gain = 33;
 
 int main(int argc, char *argv[])
 {
@@ -1238,8 +1238,8 @@ time_t wait_for_start(int daemon, multilog_t* log) {
       } else {
 
         time_t remainder = utc_start_time - time(0);
-        fprintf(sockout,  "parsed %s into %d current=%d starting in %d seconds\n",
-                utc_string, (int) utc_start_time, (int) time(0), (int) remainder);
+        //fprintf(sockout,  "parsed %s into %d current=%d starting in %d seconds\n",
+        //        utc_string, (int) utc_start_time, (int) time(0), (int) remainder);
         fprintf(sockout,"ok\n");
 
         sleep(remainder-1);
