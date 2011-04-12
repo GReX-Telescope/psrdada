@@ -49,6 +49,7 @@ sub checkClientsFinished($$);
 sub processObservation($$$);
 sub processArchive($$$$);
 sub makePlotsFromArchives($$$$$$);
+sub copyLatestPlots($$$);
 
 
 #
@@ -604,6 +605,9 @@ sub processObservation($$$) {
     Dada::removeFiles($o, "phase_vs_time_".$source."*_1024x768.png", 30);
     Dada::removeFiles($o, "phase_vs_freq_".$source."*_1024x768.png", 30);
     Dada::removeFiles($o, "bandpass_".$source."*_1024x768.png", 30);
+
+    copyLatestPlots($o, $source, "200x150");
+
   }
 
 }
@@ -721,6 +725,15 @@ sub appendArchive($$$) {
     
   # save this archive to the server's archive dir for permanent archival
   $cmd = "cp --preserve=all ./".$total_t_sum." ".$cfg{"SERVER_ARCHIVE_DIR"}."/".$utc_start."/".$source."/";
+  Dada::logMsg(2, $dl, "appendArchive: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, $dl, "appendArchive: ".$result." ".$response);
+  if ($result ne "ok") {
+    Dada::logMsg(0, $dl, "appendArchive: ".$cmd." failed: ".$response);
+    return ("fail", "", "");
+  }
+
+  $cmd = "zap.psh -m ".$total_t_sum;
   Dada::logMsg(2, $dl, "appendArchive: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(3, $dl, "appendArchive: ".$result." ".$response);
@@ -1025,11 +1038,13 @@ sub makePlotsFromArchives($$$$$$) {
   Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
 
   # BANDPASS
-  # 2001-02-07 WvS added log scale (mostly for 50cm)
+  # 2011-02-07 WvS added log scale (mostly for 50cm)
   if ($res eq "1024x768") {
-    $cmd = $bin." -pb -x -lpol=0,1 -c log=1 -N2,1 -c above:c= -D ".$dir."/bp_tmp/png ".$ten_sec_archive;
+    #$cmd = $bin." -pb -x -lpol=0,1 -c log=1 -N2,1 -c above:c= -D ".$dir."/bp_tmp/png ".$ten_sec_archive;
+    $cmd = $bin." -pb -x -lpol=0,1 -N2,1 -c above:c= -D ".$dir."/bp_tmp/png ".$ten_sec_archive;
   } else {
-    $cmd = $bin." -pb -x -lpol=0,1 -c log=1 -O -D ".$dir."/bp_tmp/png ".$ten_sec_archive;
+    #$cmd = $bin." -pb -x -lpol=0,1 -c log=1 -O -D ".$dir."/bp_tmp/png ".$ten_sec_archive;
+    $cmd = $bin." -pb -x -lpol=0,1 -O -D ".$dir."/bp_tmp/png ".$ten_sec_archive;
   }
   Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
@@ -1099,6 +1114,66 @@ sub checkClientsFinished($$) {
   return ($result, $response); 
 
 }
+
+###############################################################################
+#
+# copy's the latest plot for the specified observation and source to the
+# "latest" directory
+#
+sub copyLatestPlots($$$)
+{
+  my ($o, $s, $dim) = @_;
+
+  my $cmd = "";
+  my $result = "";
+  my $response = "";
+
+  $cmd = "ls -1 ".$o."/phase_vs_flux_".$s."_*_".$dim.".png | sort | tail -n 1";
+  ($result, $response) = Dada::mySystem($cmd);
+  if ($result eq "ok") {
+    if ( -f $response) {
+      $cmd = "cp ".$response." ".$cfg{"WEB_DIR"}."/caspsr/latest/".
+             "caspsr_flux_vs_phase.png";
+      ($result, $response) = Dada::mySystem($cmd);
+    }
+  }
+
+  $cmd = "ls -1 ".$o."/phase_vs_freq_".$s."_*_".$dim.".png | sort | tail -n 1";
+  ($result, $response) = Dada::mySystem($cmd);
+  if ($result eq "ok") {
+    if ( -f $response) {
+      $cmd = "cp ".$response." ".$cfg{"WEB_DIR"}."/caspsr/latest/".
+             "caspsr_freq_vs_phase.png";
+      ($result, $response) = Dada::mySystem($cmd);
+    }
+  }
+
+  $cmd = "ls -1 ".$o."/phase_vs_time_".$s."_*_".$dim.".png | sort | tail -n 1";
+  ($result, $response) = Dada::mySystem($cmd);
+  if ($result eq "ok") {
+    if ( -f $response) {
+      $cmd = "cp ".$response." ".$cfg{"WEB_DIR"}."/caspsr/latest/".
+             "caspsr_time_vs_phase.png";
+      ($result, $response) = Dada::mySystem($cmd);
+    }
+  }
+
+  $cmd = "ls -1 ".$o."/bandpass_".$s."_*_".$dim.".png | sort | tail -n 1";
+  ($result, $response) = Dada::mySystem($cmd);
+  if ($result eq "ok") {
+    if ( -f $response) {
+      $cmd = "cp ".$response." ".$cfg{"WEB_DIR"}."/caspsr/latest/".
+             "caspsr_bandpass.png";
+      ($result, $response) = Dada::mySystem($cmd);
+    }
+  }
+
+
+  $cmd = "cp ".$o."/obs.info ".$cfg{"WEB_DIR"}."/caspsr/latest/";
+  ($result, $response) = Dada::mySystem($cmd);
+
+}
+
 
 ###############################################################################
 #
