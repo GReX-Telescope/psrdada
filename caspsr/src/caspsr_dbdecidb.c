@@ -24,6 +24,7 @@ void usage()
            " -n zone   move to the specifed nyquist zone [default 0]\n"
            " -t num    decimation factor [default 2]\n"
            " -s        1 transfer, then exit\n"
+           " -S        1 observation with multiple transfers, then exit\n"
            " -z        use zero copy transfers\n"
            " -v        verbose mode\n");
 }
@@ -68,9 +69,11 @@ typedef struct {
 
   unsigned ocnt;
 
+  unsigned quit;
+
 } caspsr_dbdecidb_t;
 
-#define CASPSR_DBDECIDB_INIT { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
+#define CASPSR_DBDECIDB_INIT { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
 
 /*! Function that opens the data transfer target */
 int dbdecidb_open (dada_client_t* client)
@@ -105,6 +108,9 @@ int dbdecidb_open (dada_client_t* client)
   ctx = (caspsr_dbdecidb_t *) client->context;
   assert (ctx != 0);
 
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "dbdecidb_open()\n");
+
   // lock writer status on the out HDU
   if (dada_hdu_lock_write (ctx->hdu) < 0)
   {
@@ -114,8 +120,10 @@ int dbdecidb_open (dada_client_t* client)
 
   // make the required adjustments to the header parameters
   if (ascii_header_get (client->header, "BANDWIDTH", "%lf", &old_bw) != 1) {
-    old_bw = 400;
-    multilog (log, LOG_WARNING, "header with no BANDWIDTH, using %lf\n", old_bw);
+    if (ascii_header_get (client->header, "BW", "%lf", &old_bw) != 1) {
+      old_bw = 400;
+      multilog (log, LOG_WARNING, "header with no BANDWIDTH, using %lf\n", old_bw);
+    }
   }
 
   if (ascii_header_get (client->header, "CFREQ", "%lf", &old_cf) != 1) {
@@ -138,6 +146,18 @@ int dbdecidb_open (dada_client_t* client)
   if (ascii_header_get (client->header, "FILE_SIZE", "%"PRIu64, &old_filesize) != 1) {
     multilog (log, LOG_INFO, "header with no FILE_SIZE, ignoring param\n");
   }
+
+  int64_t obs_xfer = 0;
+  if (ascii_header_get (client->header, "OBS_XFER", "%"PRIi64, &obs_xfer) != 1) {
+    multilog (log, LOG_WARNING, "header with no OBS_XFER\n");
+  }
+
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "open: OBS_XFER=%"PRIi64"\n", obs_xfer);
+
+  // signal main that this is the final xfer
+  if (obs_xfer == -1)
+    ctx->quit = 1;
 
   if (ctx->verbose)
     multilog (log, LOG_INFO, "parsed old BANDWIDTH=%lf, CFREQ=%lf, TSAMP=%lf, BYTES_PER_SECOND=%lf\n",
@@ -195,7 +215,7 @@ int dbdecidb_open (dada_client_t* client)
   // mark the outgoing header as filled
   if (ipcbuf_mark_filled (ctx->hdu->header_block, header_size) < 0)  {
     multilog (log, LOG_ERR, "Could not mark filled Header Block\n");
-    return EXIT_FAILURE;
+    return -1;
   }
 
   if (ctx->verbose) 
@@ -211,6 +231,7 @@ int dbdecidb_open (dada_client_t* client)
   ctx->idec = ctx->tdec;
   
   client->header_transfer = 0;
+
   return 0;
 }
 
@@ -295,8 +316,8 @@ int64_t dbdecidb_write (dada_client_t* client, void* data, uint64_t data_size)
       if (outdat && (outdat % 4 == 0))
         outdat += 4;
 
-      d[outdat] = d[indat];
-      d[outdat+4] = d[indat+4];
+      d[outdat] = d[indat];     // pol0
+      d[outdat+4] = d[indat+4]; // pol1
       outdat++;
     }
     idec++; 
@@ -314,11 +335,118 @@ int64_t dbdecidb_write (dada_client_t* client, void* data, uint64_t data_size)
   return data_size;
 }
 
+/*! Optimized write_block for tdec = 2 */
+int64_t dbdecidb_write_block_2 (dada_client_t* client, void* data, uint64_t data_size,
+                                  uint64_t block_id)
+{
+
+  // the caspsr_dbdecidb specific data
+  caspsr_dbdecidb_t* ctx = 0;
+
+  // status and error logging facility
+  multilog_t * log = 0;
+
+  assert (client != 0);
+  ctx = (caspsr_dbdecidb_t*) client->context;
+
+  assert (client->log != 0);
+  log = client->log;
+
+  assert (ctx != 0);
+  assert (ctx->hdu != 0);
+
+  if (ctx->verbose > 1)
+    multilog (log, LOG_INFO, "dbdecidb_write_block_2: write %"PRIu64" bytes, block=%"PRIu64"\n",
+                data_size, block_id);
+
+  uint64_t out_block_id;
+  uint64_t idat = 0;
+  const uint64_t ndat = data_size;
+  char * indat = (char *) data;
+  char * outdat = 0;
+  
+  if (ctx->block_open)
+    outdat = ctx->curr_block + ctx->bytes_written;
+
+  for (idat=0; idat<ndat; idat+=16)
+  {
+
+    if (!ctx->block_open)
+    {
+      if (ctx->verbose > 1)
+        multilog (log, LOG_INFO, "dbdecidb_write_block_2: ipcio_open_block_write()\n");
+  
+      ctx->curr_block = ipcio_open_block_write(ctx->hdu->data_block, &out_block_id);
+      if (!ctx->curr_block)
+      {
+        multilog (log, LOG_ERR, "dbdecidb_write_block_2: ipcio_open_block_write error %s\n", strerror(errno));
+        return -1;
+      }
+
+      ctx->block_open = 1;
+      outdat = ctx->curr_block;
+    }
+
+    // pol 0
+    outdat[0] = indat[0];
+    outdat[1] = indat[2];
+    outdat[2] = indat[8];
+    outdat[3] = indat[10];
+
+    // pol 1
+    outdat[4] = indat[4];
+    outdat[5] = indat[6];
+    outdat[6] = indat[12];
+    outdat[7] = indat[14];
+
+    // increment input by 16 samples
+    indat += 16;
+    // incremenet output by 8 samples
+    outdat += 8;
+
+    ctx->bytes_written += 8;
+
+    if (ctx->bytes_written > ctx->out_block_size)
+      multilog (log, LOG_ERR, "dbdecidb_write_block_2: output block overrun by %"PRIu64" bytes\n",ctx->bytes_written - ctx->out_block_size);
+
+    // check if the output block is now full
+    if (ctx->bytes_written >= ctx->out_block_size)
+    {
+      if (ctx->verbose > 1)
+        multilog (log, LOG_INFO, "dbdecidb_write_block_2: close_block_write(%"PRIu64"\n", ctx->bytes_written);
+      if (ipcio_close_block_write (ctx->hdu->data_block, ctx->bytes_written) < 0)
+      {
+        multilog (log, LOG_ERR, "dbdecidb_write_block_2: ipcio_close_block_write failed\n");
+        return -1;
+      }
+      ctx->block_open = 0;
+      ctx->bytes_written = 0;
+    }
+  }
+
+  ctx->bytes_in += data_size;
+  ctx->bytes_out += data_size / 2;
+
+  if (ctx->verbose > 1)
+    multilog (log, LOG_INFO, "dbdecidb_write_block_2: read %"PRIu64", wrote %"PRIu64" bytes\n", data_size, data_size / 2);
+
+  if (ctx->bytes_written > data_size / 2)
+  {
+    ctx->bytes_written = data_size / 2;
+    if (ctx->bytes_written == 0)
+      ctx->bytes_written = 1;
+  }
+
+  return data_size;
+
+}
+
+
 /*! Pointer to the function that transfers data to/from the target */
 int64_t dbdecidb_write_block (dada_client_t* client, void* data, uint64_t data_size, 
                               uint64_t block_id)
 {
- // the caspsr_dbdecidb specific data
+  // the caspsr_dbdecidb specific data
   caspsr_dbdecidb_t* ctx = 0;
 
   // status and error logging facility
@@ -426,66 +554,20 @@ int64_t dbdecidb_write_block (dada_client_t* client, void* data, uint64_t data_s
       idat += 4;
       icnt = 0;
     }
-
   }
-#if 0
-  for (indat=0; indat < data_size; indat++)
-  {
-
-    // if we need a new output block to write to
-    if (!ctx->block_open) 
-    {
-      if (ctx->verbose > 1)
-        multilog (log, LOG_INFO, "ipcio_open_block_write()\n");
-      ctx->curr_block = ipcio_open_block_write(ctx->hdu->data_block, &out_block_id);
-      if (!ctx->curr_block) 
-      {
-        multilog (log, LOG_ERR, "dbdecidb_write_block: ipcio_open_block_write error %s\n", strerror(errno));
-        return -1;
-      }
-      ctx->block_open = 1;
-    }
-
-    idec = idec % ctx->tdec;
-
-    if (indat && (indat % 4 == 0))
-      indat += 4;
-
-    if (idec == 0)
-    {
-      if (ctx->outdat && (ctx->outdat % 4 == 0))
-        ctx->outdat += 4;
-
-      ctx->curr_block[ctx->outdat] = d[indat];
-      ctx->curr_block[ctx->outdat+4] = d[indat+4];
-      ctx->outdat++;
-      ctx->bytes_written += 2;
-    }
-    idec++;
-
-    // check if the output block is now full
-    if (ctx->bytes_written == ctx->out_block_size)
-    {
-      if (ctx->verbose > 1)
-        multilog (log, LOG_INFO, "bytes_written=%"PRIu64", block_size=%"PRIu64"\n", 
-            ctx->bytes_written, ctx->out_block_size);
-      if (ipcio_close_block_write (ctx->hdu->data_block, ctx->bytes_written) < 0)
-      {
-        multilog (log, LOG_ERR, "dbdecidb_write_block: ipcio_close_block_write failed\n");
-        return -1;
-      }
-      ctx->block_open = 0;
-      ctx->outdat = 0;
-      ctx->bytes_written = 0;
-    }
-  }
-#endif
 
   ctx->bytes_in += data_size;
   ctx->bytes_out += deci_data_size;
 
   if (ctx->verbose > 1)
     multilog (log, LOG_INFO, "dbdecidb_write_block: read %"PRIu64", wrote %"PRIu64" bytes\n", data_size, deci_data_size);
+
+  if (ctx->bytes_written > data_size / 2)
+  {
+     ctx->bytes_written = data_size / 2;
+     if (ctx->bytes_written == 0)
+       ctx->bytes_written = 1;
+  }
 
   return data_size;
 
@@ -518,7 +600,10 @@ int main (int argc, char **argv)
   unsigned tdec = 2;
 
   // number of transfers
-  unsigned single_transfer = 1;
+  unsigned single_transfer = 0;
+
+  // single transfer with multiple xfers
+  unsigned quit_xfer = 0;
 
   // use zero copy transfers
   unsigned zero_copy = 0;
@@ -528,7 +613,7 @@ int main (int argc, char **argv)
 
   int arg = 0;
 
-  while ((arg=getopt(argc,argv,"dn:st:vz")) != -1)
+  while ((arg=getopt(argc,argv,"dn:sSt:vz")) != -1)
   {
     switch (arg) 
     {
@@ -539,6 +624,10 @@ int main (int argc, char **argv)
 
       case 's':
         single_transfer = 1;
+        break;
+
+      case 'S':
+        quit_xfer = 1;
         break;
 
       case 'n':
@@ -632,7 +721,6 @@ int main (int argc, char **argv)
   if (dada_hdu_lock_read (hdu) < 0)
     return EXIT_FAILURE;
 
-
   // open connection to the out/write DB
   dbdecidb.hdu = dada_hdu_create (log);
   
@@ -678,18 +766,47 @@ int main (int argc, char **argv)
   client->io_function    = dbdecidb_write;
 
   if (zero_copy)
-    client->io_block_function = dbdecidb_write_block;
+  {
+    if (tdec == 2)
+      client->io_block_function = dbdecidb_write_block_2;
+    else
+      client->io_block_function = dbdecidb_write_block;
+  }
 
   client->close_function = dbdecidb_close;
   client->direction      = dada_client_reader;
 
   client->context = &dbdecidb;
+  client->quiet = (verbose > 0) ? 0 : 1;
 
-  if (dada_client_read (client) < 0)
-    multilog (log, LOG_ERR, "Error during transfer\n");
+  while (!client->quit)
+  {
+    if (verbose)
+      multilog (log, LOG_INFO, "main: dada_client_read()\n");
 
-  if (dada_hdu_unlock_read (hdu) < 0)
-    return EXIT_FAILURE;
+    if (dada_client_read (client) < 0)
+      multilog (log, LOG_ERR, "Error during transfer\n");
+
+    if (verbose)
+      multilog (log, LOG_INFO, "main: dada_hdu_unlock_read()\n");
+    if (dada_hdu_unlock_read (hdu) < 0)
+    {
+      multilog (log, LOG_ERR, "could not unlock read on hdu\n");
+      return EXIT_FAILURE;
+    }
+
+    if (single_transfer || (quit_xfer && dbdecidb.quit))
+      client->quit = 1;
+
+    if (!client->quit)
+    {
+      if (dada_hdu_lock_read (hdu) < 0)
+      {
+        multilog (log, LOG_ERR, "could not lock read on hdu\n");
+        return EXIT_FAILURE;
+      }
+    }
+  }
 
   if (dada_hdu_disconnect (hdu) < 0)
     return EXIT_FAILURE;
