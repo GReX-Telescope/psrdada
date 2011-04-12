@@ -109,7 +109,7 @@ class state_banner extends bpsr_webpage
             <a href="javascript:popUp('results.lib.php?single=true', 'full')" class="btn"><span>Results</span></a>
             <a href="javascript:popUp('archival.lib.php?single=true', 'full')" class="btn"><span>Archival</span></a>
             <a href="javascript:popUp('control.lib.php?single=true', 'minimum')" class="btn"><span>Controls</span></a>
-            <a href="javascript:popUp('testing/', 'full')" class="btn"><span>Test</span></a>
+            <a href="javascript:popUp('tcs_simulator.lib.php?single=true', 'full')" class="btn"><span>Test</span></a>
             <a href="javascript:popUp('support.html', 'minimum')" class="btn"><span>Help</span></a>
           </div>
 <?  
