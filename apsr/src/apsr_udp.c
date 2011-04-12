@@ -66,7 +66,7 @@ void apsr_free_data(apsr_data_t * b)
     fprintf(stderr, "free_apsr_buffer: b->buffer was unexpectedly freed\n");
 }
 
-void apsr_zero_data(apsr_data_t * b)
+void apsr_zero_data (apsr_data_t * b)
 {
   char zerodchar = 'c';
   memset(&zerodchar,0,sizeof(zerodchar));
