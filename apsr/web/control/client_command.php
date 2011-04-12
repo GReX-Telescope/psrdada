@@ -103,7 +103,7 @@ printResponse($hosts, $output);
 
 if ((!$return_var) && ($flush)) {
   flush();
-  //sleep(2);
+  sleep(2);
 ?>
 <script type="text/javascript">finish()</script>
 <? } ?>
@@ -151,7 +151,9 @@ function getCommandDestinations($cmd, $name) {
   $dests["start_daemon"]         = array("pwc");
   $dests["stop_daemon"]          = array("pwc");
   $dests["init_db"]              = array("pwc", "help");
+  $dests["init_dbs"]             = array("pwc", "help");
   $dests["destroy_db"]           = array("pwc", "help");
+  $dests["destroy_dbs"]          = array("pwc", "help");
   $dests["start_pwcs"]           = array("pwc");
   $dests["stop_pwcs"]            = array("pwc");
   $dests["start_daemons"]        = array("pwc");
@@ -198,7 +200,7 @@ function determineRunningHosts($config, $dests, $host) {
   $pwcs = getConfigMachines($config, "PWC");
   $dfbs = getConfigMachines($config, "DFB");
   $help = getConfigMachines($config, "HELP");
-  $srvs = array("srv0", "srv1");
+  $srvs = array("srv0");
 
   $result = array();
 
