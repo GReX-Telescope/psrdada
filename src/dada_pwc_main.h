@@ -34,7 +34,7 @@ extern "C" {
     time_t (*start_function) (struct dada_pwc_main*, time_t utc);
 
     /*! Pointer to the function that returns a data buffer */
-    void* (*buffer_function) (struct dada_pwc_main*, uint64_t* size);
+    void* (*buffer_function) (struct dada_pwc_main*, int64_t* size);
 
     /*! Pointer to the function that fills data buffer with data */
     int64_t (*block_function) (struct dada_pwc_main*, void* data,

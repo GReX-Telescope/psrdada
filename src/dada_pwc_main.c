@@ -494,7 +494,7 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
   char* buffer = 0;
 
   /* size of the data buffer */
-  uint64_t buffer_size = 0;
+  int64_t buffer_size = 0;
 
   /* error state due to a 0 byte buffer function return */
   uint64_t data_transfer_error_state = 0;
@@ -542,9 +542,6 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
 #endif
 
       pwcm->command = dada_pwc_command_get (pwcm->pwc);
-
-      // multilog (pwcm->log, LOG_INFO, "pwcm->command.utc = %d\n",pwcm->command.utc);
-      // multilog (pwcm->log, LOG_INFO, "pwcm->pwc->utc_start = %d\n",pwcm->pwc->utc_start);
 
       /* special case for set_utc_start */
       if (pwcm->command.code == dada_pwc_set_utc_start) {
@@ -617,7 +614,7 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
           command_string = "stopping";
         else {
           multilog (pwcm->log, LOG_ERR,
-                    "dada_pwc_main_transfer data internal error = "
+                    "dada_pwc_main_transfer_data internal error = "
                     "unexpected command code %d\n", pwcm->command.code);
           return DADA_ERROR_HARD;
         }
@@ -634,9 +631,7 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
           multilog (pwcm->log, LOG_INFO, "%s in %"PRIu64" bytes\n", 
                     command_string, bytes_to_write);
 
-        }
-
-        else {
+        } else {
           /* command is immediate */
           multilog (pwcm->log, LOG_INFO, "%s immediately\n", command_string);
           transit_byte = total_bytes_written;
@@ -678,7 +673,7 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
     if (!transit_byte || bytes_to_write) {
 
 #ifdef _DEBUG
-  fprintf (stderr, "dada_pwc_main_transfer_data: call buffer function\n");
+      fprintf (stderr, "dada_pwc_main_transfer_data: call buffer function\n");
 #endif
 
       /* get the next data buffer */
@@ -756,11 +751,8 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
           }
 
           if ((data_transfer_error_state == 1) && total_bytes_written) {
-            multilog (pwcm->log, LOG_WARNING, "Warning: pwc buffer function "
-                      "returned 0 bytes. Trying to continue\n");
-            multilog (pwcm->log, LOG_WARNING, "total_bytes_written = %"PRIu64
-                      ", bytes_to_write = %"PRIu64", transit_byte = %"PRIu64"\n",
-                      total_bytes_written, bytes_to_write, transit_byte);
+            multilog (pwcm->log, LOG_INFO, "PWC buffer function "
+                      "returned 0 bytes, trying to continue\n");
           }
         }
       }
@@ -842,11 +834,11 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
 
     }
 
-    if (pwcm->verbose)
+    if (transit_byte && pwcm->verbose)
       multilog (pwcm->log, LOG_INFO, "transit=%"PRIu64" total=%"PRIu64"\n",
                 transit_byte, total_bytes_written);
 
-    // CASPSR change - total_bytes_written can now jump ahead of a transit byte
+    // total_bytes_written can jump ahead of a transit byte (with XFERS)
     if (transit_byte && (transit_byte <= total_bytes_written)) {
 
 #ifdef _DEBUG
@@ -884,14 +876,17 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
 
       else if (pwcm->command.code == dada_pwc_stop) {
 
-        // CASPSR CHANGE
-        // If we haven't stopped already due to a packet timeout, we must
-        // write the additional 1 byte transfer and set END_OF_OBS=-1
-        dada_pwc_main_process_xfer(pwcm, 2, 0);
+        if (pwcm->xfer_pending_function) 
+        {
+          // CASPSR CHANGE
+          // If we haven't stopped already due to a packet timeout, we must
+          // write the additional 1 byte transfer and set END_OF_OBS=-1
+          dada_pwc_main_process_xfer(pwcm, 2, 0);
+        }
 
-#ifdef _DEBUG
+//#ifdef _DEBUG
         multilog (pwcm->log, LOG_INFO, "stopping... entering idle state\n");
-#endif
+//#endif
         return 0;
       }
       
@@ -1132,9 +1127,7 @@ int dada_pwc_main_transfer_data_block (dada_pwc_main_t* pwcm)
           multilog (pwcm->log, LOG_INFO, "%s in %"PRIu64" bytes\n", 
                     command_string, bytes_to_write);
 
-        }
-
-        else {
+        } else {
           /* command is immediate */
           multilog (pwcm->log, LOG_INFO, "%s immediately\n", command_string);
           transit_byte = total_bytes_written;
@@ -1334,14 +1327,17 @@ int dada_pwc_main_transfer_data_block (dada_pwc_main_t* pwcm)
 
       else if (pwcm->command.code == dada_pwc_stop) {
 
-        // CASPSR CHANGE
-        // If we haven't stopped already due to a packet timeout, we must
-        // write the additional 1 byte transfer and set END_OF_OBS=-1
-        if (pwcm->verbose)
-          multilog (pwcm->log, LOG_INFO, "transfer_data_block: [STOP] "
-                    "dada_pwc_main_process_xfer(1, %"PRIu64")\n", 
-                    bytes_written_this_xfer);
-        dada_pwc_main_process_xfer (pwcm, 1, bytes_written_this_xfer);
+        if (pwcm->xfer_pending_function)
+        {
+          // CASPSR CHANGE
+          // If we haven't stopped already due to a packet timeout, we must
+          // write the additional 1 byte transfer and set END_OF_OBS=-1
+          if (pwcm->verbose)
+            multilog (pwcm->log, LOG_INFO, "transfer_data_block: [STOP] "
+                      "dada_pwc_main_process_xfer(1, %"PRIu64")\n", 
+                      bytes_written_this_xfer);
+          dada_pwc_main_process_xfer (pwcm, 1, bytes_written_this_xfer);
+        }
 
 #ifdef _DEBUG
         multilog (pwcm->log, LOG_INFO, "stopping... entering idle state\n");
