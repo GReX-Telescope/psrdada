@@ -428,6 +428,14 @@ sub processTCSCommand($$) {
 
       if ($current_state =~ m/Recording/) {
 
+        # Stop the simulator 
+        if ($use_dfb_simulator) {
+          Dada::logMsg(2, $dl, "processTCSCommand: stopDFBSimulator(".$dfb_sim_host.")");
+          ($result, $response) = &stopDFBSimulator($dfb_sim_host);
+          Dada::logMsg(2, $dl, "processTCSCommand: stopDFBSimulator() ".$result." ".$response);
+          sleep(1);
+        }
+
         # since it can take quite while to stop, issue the
         # stop command to the nexus, reply to TCS, then 
         # continue the stopping process
@@ -501,7 +509,6 @@ sub processTCSCommand($$) {
 
         if ($result eq "ok") {
 
-          Dada::logMsg(1, $dl, "UTC_START = ".$val);
           Dada::logMsg(2, $dl, "processTCSCommand: prepareObservation(".$val.")");
           ($result,$response) = prepareObservation($val);
           Dada::logMsg(2, $dl, "processTCSCommand:: prepareObservation() ".$result.":".$response);
@@ -1095,13 +1102,6 @@ sub stopInBackground() {
   my $response = "";
   my $cmd = "";
   my $i = 0;
-
-  # Stop the simulator 
-  if ($use_dfb_simulator) {
-    Dada::logMsg(2, $dl, "processTCSCommand: stopDFBSimulator(".$dfb_sim_host.")");
-    ($result, $response) = &stopDFBSimulator($dfb_sim_host);
-    Dada::logMsg(2, $dl, "processTCSCommand: stopDFBSimulator() ".$result." ".$response);
-  }
 
   nexusSockMaintain();
 
