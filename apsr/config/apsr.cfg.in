@@ -139,13 +139,12 @@ PWC_15                  apsr15
 NUM_DFB                 1
 DFB_0	                  apsr17
 
-NUM_SRV                 2
+NUM_SRV                 1
 SRV_0                   srv0
-SRV_1                   srv1
 
 # defines the number of helping nodes
 HELPER_DAEMONS          
-NUM_HELP                0
+NUM_HELP                2
 HELP_0                  apsr16
 HELP_1                  apsr17
 
