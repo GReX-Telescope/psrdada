@@ -164,12 +164,8 @@ sub main() {
 
       } else {
         Dada::logMsg(0, $dl, "main: received connection not on lock_sock");
-
       }
     }
-
-  
-
   }
 
   # Rejoin our daemon control thread
@@ -358,6 +354,7 @@ sub logMessage($$) {
       print FH $src.": ".$msg."\n";
       close FH;
     }
+    return "ok";
   } else {
     return "fail";
   }
@@ -449,7 +446,7 @@ sub good($) {
     LocalHost => $log_host,
     LocalPort => $log_port,
     Proto => 'tcp',
-    Listen => 1,
+    Listen => 16,
     Reuse => 1,
   );
   if (!$log_sock) {
