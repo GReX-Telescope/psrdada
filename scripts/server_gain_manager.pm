@@ -104,7 +104,7 @@ sub main() {
   my $initial_gain = 2000;
 
   if ($cfg{"USE_DFB_SIMULATOR"} == 1) {
-    $initial_gain = 33;
+    $initial_gain = 50;
   }
 
   # set the host/port globals for the good() test
