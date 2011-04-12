@@ -683,8 +683,8 @@ sub createRemoteDirectories($$$) {
   }
 
   # Adjust permission on remote archive directory
-  $dir = $remote_archive_dir."/".$utc_start;
-  $cmd = "chgrp -R ".$proj_id." ".$dir;
+  $dir = $remote_archive_dir."/".$utc_start."/".$band;
+  $cmd = "chgrp ".$proj_id." ".$dir;
   msg(2, "INFO", $cmd);
   `$cmd`;
   if ($? != 0) {
@@ -692,7 +692,7 @@ sub createRemoteDirectories($$$) {
                $dir."\" to \"".$proj_id."\"");
   }
 
-  $cmd = "chmod -R g+s ".$dir;
+  $cmd = "chmod g+s ".$dir;
   msg(2, "INFO", $cmd);
   `$cmd`;
   if ($? != 0) {
@@ -701,16 +701,16 @@ sub createRemoteDirectories($$$) {
   }
 
   # Adjust permission on remote results directory
-  $dir = $remote_results_dir."/".$utc_start;
-  $cmd = "chgrp -R ".$proj_id." ".$dir;
+  $dir = $remote_results_dir."/".$utc_start."/".$band;
+  $cmd = "chgrp ".$proj_id." ".$dir;
   msg(2, "INFO", $cmd);
   `$cmd`;
   if ($? != 0) {
     msg(0, "WARN", "Failed to chgrp remote results dir \"".
-               $dir."/".$utc_start."\" to \"".$proj_id."\"");
+               $dir."\" to \"".$proj_id."\"");
   }
 
-  $cmd = "chmod -R g+s ".$dir;
+  $cmd = "chmod g+s ".$dir;
   msg(2, "INFO", $cmd);
   `$cmd`;
   if ($? != 0) {
