@@ -305,6 +305,7 @@ sub connectToMachine($$;$) {
     PeerAddr => $machine,
     PeerPort => $port,
     Proto => 'tcp',
+    Timeout => 1,
   );
 
   # IF we couldn't do it /cry, sleep and try for 10 times...
@@ -318,6 +319,7 @@ sub connectToMachine($$;$) {
       PeerAddr => $machine,
       PeerPort => $port,
       Proto => 'tcp',
+      Timeout => 1,
     );
 
     $tries++;
@@ -1183,7 +1185,7 @@ sub nexusLogOpen($$) {
 
   my ($host, $port) = @_;
 
-  my $handle = connectToMachine($host, $port); 
+  my $handle = connectToMachine($host, $port, 1); 
   # So output goes their straight away
   if (!$handle) {
     print STDERR "Error: $0 could not connect to ".$host.":".$port."\n";
@@ -1758,7 +1760,7 @@ sub processHeader($$) {
       # test if the source is in the catalogue
       my $dm = getDM($source);
 
-      if ($dm eq "NA") {
+      if ($dm eq "unknown") {
         $result = "fail";
         $response = "Error: ".$source." was not in psrcat's catalogue";
       }
@@ -1815,13 +1817,20 @@ sub processHeader($$) {
 #
 sub getDM($) {
 
-  my ($source) = @_;  
+  my ($source) = @_;
 
   my $cmd = "";
   my $result = "";
   my $response = "";
   my $dm = "unknown";
   my $par_file = "";
+
+  # check if this source is a CAL
+  if (($source =~ m/^HYDRA_/) || ($source =~ /_R$/) || ($source =~ /CalDelay/))
+  {
+    $dm = "N/A CAL";
+    return $dm;
+  }
 
   # test if the source is in the catalogue
   $cmd = "psrcat -all -x -c DM ".$source." | awk '{print \$1}'";
@@ -1862,6 +1871,13 @@ sub getPeriod($) {
   my $par_file = "";
   my $result = "";
   my $response = "";
+
+  # check if this source is a CAL
+  if (($source =~ m/^HYDRA_/) || ($source =~ /_R$/)|| ($source =~ /CalDelay/))
+  {
+    $period = "N/A CAL";
+    return $period;
+  }
 
   # test if the source is in the catalogue
   $cmd = "psrcat -all -x -c 'P0' ".$source." | awk '{print \$1}'";
