@@ -7,7 +7,7 @@
 #include "dada_udp.h"
 
 /* Maximum size of a UDP packet */
-#define UDPBUFFSIZE 16384
+#define UDPBUFFSIZE 9000
 
 /* Size of header component of the data packet */
 #define UDPHEADERSIZE 24
