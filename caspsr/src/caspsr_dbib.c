@@ -335,9 +335,24 @@ int64_t caspsr_dbib_send_block(dada_client_t* client, void * buffer,
     multilog(log, LOG_ERR, "send_block: wait_recv on sync_from [ready] failed\n");
     return -1;
   }
-  assert(ib_cm->sync_from_val[0] == 1);
-  assert(ib_cm->sync_from_val[1] == 0);
-  //multilog(log, LOG_INFO, "send_block: ibdb reports ready=%"PRIu64"\n", ib_cm->sync_from_val[1]);
+
+  if (ib_cm->sync_from_val[0] != 1)
+  {
+    multilog(log, LOG_ERR, "send_block: sync_from key[%"PRIu64"] != 1 [ready]\n",
+             ib_cm->sync_from_val[0]);
+    return -1;
+  }
+
+  if (ib_cm->sync_from_val[1] != 0)
+  {
+    multilog(log, LOG_ERR, "send_block:sync_from val[%"PRIu64"] != 0 [ready]\n",
+             ib_cm->sync_from_val[1]);
+    return -1;
+  }
+
+#ifdef _DEBUG
+  multilog(log, LOG_INFO, "send_block: ibdb reports ready=%"PRIu64"\n", ib_cm->sync_from_val[1]);
+#endif
 
   // post a recv for the remote db buffer
   if (dbib->verbose)
@@ -512,7 +527,11 @@ dada_ib_cm_t * caspsr_dbib_ib_init (caspsr_dbib_t * ctx, dada_hdu_t * hdu, multi
 
   // register a local buffer for the header
   ib_cm->header = (char *) malloc(sizeof(char) * ib_cm->header_size);
-  assert(ib_cm->header);
+  if (!ib_cm->header)
+  {
+    multilog(log, LOG_ERR, "ib_init: could not allocate memory for header\n");
+    return 0;
+  }
 
   ib_cm->header_mb = dada_ib_reg_buffer(ib_cm, ib_cm->header, ib_cm->header_size, flags);
   if (!ib_cm->header_mb)

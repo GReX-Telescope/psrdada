@@ -178,7 +178,6 @@ uint64_t caspsr_pwc_ibdb_new_xfer (dada_pwc_main_t * pwcm)
 time_t caspsr_pwc_ibdb_start (dada_pwc_main_t * pwcm, time_t start_utc)
 {
   assert (pwcm != 0);
-
   caspsr_pwc_ibdb_t * ibdb = (caspsr_pwc_ibdb_t *) pwcm->context;
 
   dada_ib_cm_t ** ib_cms = ibdb->ib_cms;
@@ -246,7 +245,7 @@ time_t caspsr_pwc_ibdb_start (dada_pwc_main_t * pwcm, time_t start_utc)
 
     if (dada_ib_post_recv(ib_cms[i], ib_cms[i]->header_mb) < 0)
     {
-      multilog(pwcm->log, LOG_ERR, "open: dada_ib_post_recv failed\n");
+      multilog(pwcm->log, LOG_ERR, "open: dada_ib_post_recv on header_mb failed\n");
       return -1;
     }
   }
@@ -394,11 +393,15 @@ int64_t caspsr_pwc_ibdb_recv_block (dada_pwc_main_t* pwcm, void* data,
     if (ibdb->verbose)
       multilog(pwcm->log, LOG_INFO, "recv_block: [%d] bytes to be recvd=%"PRIu64"\n", i, ib_cms[i]->sync_from_val[1]);
 
-    assert(ib_cms[i]->sync_from_val[0] == 2);
-    total_bytes += ib_cms[i]->sync_from_val[1];
+    if (ib_cms[i]->sync_from_val[0] != 2)
+      multilog(pwcm->log, LOG_ERR, "recv_block: [%d] sync_from key[%"PRIu64"] != 2\n",
+               i, ib_cms[i]->sync_from_val[0]);
+    else 
+      total_bytes += ib_cms[i]->sync_from_val[1];
   }
 
-  if (ibdb->verbose) 
+  //if (ibdb->verbose) 
+  if (total_bytes != 256000000)
     multilog(pwcm->log, LOG_INFO, "recv_block: total bytes to be recvd=%"PRIu64"\n", total_bytes);
 
   if (total_bytes == 0)
@@ -413,7 +416,7 @@ int64_t caspsr_pwc_ibdb_recv_block (dada_pwc_main_t* pwcm, void* data,
 
     for (i=0; i<ibdb->n_distrib; i++)
     {
-      if (ibdb->verbose > 1)
+      //if (ibdb->verbose > 1)
         multilog(pwcm->log, LOG_INFO, "recv_block: post_recv on header_mb %d\n", i);
 
       if (dada_ib_post_recv(ib_cms[i], ib_cms[i]->header_mb) < 0)
@@ -486,8 +489,11 @@ int64_t caspsr_pwc_ibdb_recv_block (dada_pwc_main_t* pwcm, void* data,
         multilog(pwcm->log, LOG_ERR, "recv_block: [%d] wait_recv on sync_from for bytes sent failed\n", i);
         return -1;
       }
-      assert(ib_cms[i]->sync_from_val[0] == 3);
-      total_bytes += ib_cms[i]->sync_from_val[1];
+      if (ib_cms[i]->sync_from_val[0] != 3)
+        multilog(pwcm->log, LOG_ERR, "recv_block: [%d] sync_from key[%"PRIu64
+                 "] != 3 for bytes_sent\n", i, ib_cms[i]->sync_from_val[0]);
+      else
+        total_bytes += ib_cms[i]->sync_from_val[1];
     }
 
     // pre post recv for the number of bytes in the next send_block transfer
@@ -643,7 +649,11 @@ void * caspsr_pwc_ibdb_ib_init_thread (void * arg)
   }
 
   ib_cm->header = (char *) malloc(sizeof(char) * ib_cm->header_size);
-  assert(ib_cm->header);
+  if (!ib_cm->header)
+  {
+    multilog(log, LOG_ERR, "ib_init_thread: could not allocate memory for header\n");
+    pthread_exit((void *) &(ib_cm->cm_connected));
+  }
 
   if (ib_cm->verbose)
     multilog(log, LOG_INFO, "ib_init_thread: reg header_mb\n");
