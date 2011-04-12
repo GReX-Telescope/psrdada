@@ -6,7 +6,9 @@ data_DATA = caspsr.cfg \
             caspsr.viewer \
             dspsr.gpu \
             dspsr.50cmgpu \
-            dspsr.cpu
+            dspsr.cpu \
+            caspsr.receiving \
+            caspsr.processing
 
 include $(top_srcdir)/config/Makefile.targets
 

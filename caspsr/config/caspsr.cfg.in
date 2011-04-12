@@ -11,7 +11,8 @@ SCRIPTS_DIR               @PSRDADA_INSTALL@/bin
 CONFIG_DIR                @PSRDADA_INSTALL@/share
 WEB_DIR                   @PSRDADA_INSTALL@/web
 STATUS_DIR                @PSRDADA_INSTALL@/web/caspsr/status
-PROCESSING_DB_KEY         @PSRDADA_INSTALL@/share/caspsr.info
+RECEIVING_DB_KEY          @PSRDADA_INSTALL@/share/caspsr.receiving
+PROCESSING_DB_KEY         @PSRDADA_INSTALL@/share/caspsr.processing
 VIEWING_DB_KEY            @PSRDADA_INSTALL@/share/caspsr.viewer
 
 ###############################################################################
@@ -77,13 +78,15 @@ CLIENT_UDPDB_STATS_PORT   52012
 ################################################################################
 # Data block definitions
 
-DATA_BLOCKS               DADA 
+DATA_BLOCKS               DADA EADA
 RECEIVING_DATA_BLOCK      DADA
-PROCESSING_DATA_BLOCK     DADA
+PROCESSING_DATA_BLOCK     EADA
 
 DADA_BLOCK_NBUFS          50
 DADA_BLOCK_BUFSZ          256000000
 
+EADA_BLOCK_NBUFS          10
+EADA_BLOCK_BUFSZ          256000000
 
 ###############################################################################
 # Demultiplexer configuration
