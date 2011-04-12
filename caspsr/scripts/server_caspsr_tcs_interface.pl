@@ -131,7 +131,7 @@ sub main() {
   my $state_thread = 0;
   my $control_thread = 0;
   my $tcs_connected = 0;
-  my $rh = 0;;
+  my $rh = 0;
   my $hostname = "";
   my $cmd = "";
 
@@ -183,9 +183,6 @@ sub main() {
 
   # generate the cfg file required to launch dada_pwc_command 
   ($result, $response) = generateConfigFile($tcs_cfg_file);
-
-  # configure the ibob with the default settings for caspsr
-  # ($result, $response) = configureIbob();
 
   # Launch a persistent dada_pwc_command with the $tcs_cfg_file
   $pwcc_thread = threads->new(\&pwccThread);
@@ -340,7 +337,6 @@ sub processTCSCommand($$) {
 
       %tcs_cmds = fixTCSCommands(\%tcs_cmds);
 
-
       # Check the TCS commands for validity
       Dada::logMsg(2, $dl, "processTCSCommand: parseTCSCommands()");
       ($result, $response) = parseTCSCommands();
@@ -362,6 +358,26 @@ sub processTCSCommand($$) {
           $current_state = "Idle";
 
         } else {
+
+          # send the estimated UTC_START to TCS so that it doesn't hold up the
+          # start of other things, estimate 10 second delay
+          my $current_unix_time = time;
+          my $guess_utc_start = "";
+
+          $cmd = "dspsr_start_time -m 8 ".($current_unix_time + 5);
+          Dada::logMsg(2, $dl, "processTCSCommand: ".$cmd);
+          ($result, $response) = Dada::mySystem($cmd);
+          Dada::logMsg(2, $dl, "processTCSCommand: ".$result." ".$response);
+          if ($result eq "ok") {
+            $guess_utc_start = $response;
+          } else {
+            $guess_utc_start = Dada::printDadaUTCTime($current_unix_time + 10);
+          }
+
+          sleep(3);
+          $cmd = "start_utc ".$guess_utc_start;
+          Dada::logMsg(1, $dl, "TCS <- ".$cmd." (guess at future UTC_START)");
+          print $handle $cmd.TERMINATOR;
 
           my $max_wait = 32;
           while (($current_state ne "Stopped") && ($current_state ne "Idle") && ($max_wait > 0)) {
@@ -416,9 +432,9 @@ sub processTCSCommand($$) {
             Dada::logMsg(2, $dl, "processTCSCommand: STATE=Recording");
 
             # Tell TCS what our utc start was
-            $cmd = "start_utc ".$response;
-            Dada::logMsg(1, $dl, "TCS <- ".$cmd);
-            print $handle $cmd.TERMINATOR;
+            # $cmd = "start_utc ".$response;
+            # Dada::logMsg(1, $dl, "TCS <- ".$cmd);
+            # print $handle $cmd.TERMINATOR;
 
           }
         }
@@ -1408,8 +1424,17 @@ sub fixTCSCommands(\%) {
      $new_cmds{"CFREQ"} = "628";
   }
 
-  if (($new_cmds{"SOURCE"} =~ m/_R$/) || ($new_cmds{"SOURCE"} =~ m/HYDRA/)) {
+  if (($new_cmds{"SOURCE"} =~ m/_R$/) || ($new_cmds{"SOURCE"} =~ m/HYDRA/) || ($new_cmds{"SOURCE"} =~ m/CalDelay/)) {
     $add{"MODE"} = "CAL";
+
+    if ($new_cmds{"SOURCE"} =~ m/CalDelay/) {
+      $add{"CALFREQ"} = "200.0";
+    }
+  }
+
+  if ($new_cmds{"CFREQ"} eq "628")
+  {
+    $new_cmds{"TDEC"} = 2;
   }
 
   foreach $key (keys (%add)) {
