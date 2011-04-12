@@ -217,11 +217,11 @@ while (!$quit_daemon) {
         debugMessage(2, $machine.": \"".$string."\"");
         my $response = "";
         
-        # Connect to the DFB3 and get the gain
+        # Connect to the udp generator and get the gain
         if ( $string =~ m/^APSRGAIN (\d+) (0|1)$/) {
 
           my ($ignore, $chan, $pol) = split(/ /, $string);
-          debugMessage(2, $machine." -> ".$string);
+          debugMessage(1, $machine." -> ".$string);
 
           if (($chan >= 0) && ($chan < $nchan)) {
 
@@ -238,6 +238,7 @@ while (!$quit_daemon) {
 
           debugMessage(1, $machine." <- ".$response);
 
+        # Connect to the udp generator and set the gain
         } elsif ($string =~ m/^APSRGAIN (\d+) (0|1) (\d+)$/) {
 
           debugMessage(1, $machine." -> ".$string);
@@ -259,7 +260,7 @@ while (!$quit_daemon) {
             $response = "Error: invalid channel specified ".$chan;
           }
 
-          debugMessage(2, $machine." <- ".$response);
+          debugMessage(1, $machine." <- ".$response);
 
         } else {
           debugMessage(2, "Unknown request received");
