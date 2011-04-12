@@ -312,6 +312,11 @@ sub destroyClientSpecial($)
     ($result, $response) = Dada::remoteSshCommand($u, $h, $cmd);
     debugMessage(2, "killClientDaemons: ".$result." ".$rval." ".$response);
 
+    $cmd = "sudo killall caspsr_dbdecidb";
+    debugMessage(2, "killClientDaemons: remoteSshCommand(".$u.", ".$h.", ".$cmd.")");
+    ($result, $response) = Dada::remoteSshCommand($u, $h, $cmd);
+    debugMessage(2, "killClientDaemons: ".$result." ".$rval." ".$response);
+
     $cmd = "sudo /home/dada/linux_64/bin/dada_db -d";
     debugMessage(2, "killClientDaemons: remoteSshCommand(".$u.", ".$h.", ".$cmd.")");
     ($result, $response) = Dada::remoteSshCommand($u, $h, $cmd);
@@ -343,6 +348,16 @@ sub destroyDemuxerSpecial($)
     $h = $hosts[$i];
   
     $cmd = "sudo killall ".$cfg{"DEMUX_BINARY"};
+    debugMessage(2, "killClientDaemons: remoteSshCommand(".$u.", ".$h.", ".$cmd.")");
+    ($result, $response) = Dada::remoteSshCommand($u, $h, $cmd);
+    debugMessage(2, "killClientDaemons: ".$result." ".$rval." ".$response);
+  
+    $cmd = "sudo killall ".$cfg{"IB_ACTIVE_BINARY"};
+    debugMessage(2, "killClientDaemons: remoteSshCommand(".$u.", ".$h.", ".$cmd.")");
+    ($result, $response) = Dada::remoteSshCommand($u, $h, $cmd);
+    debugMessage(2, "killClientDaemons: ".$result." ".$rval." ".$response);
+  
+    $cmd = "sudo killall ".$cfg{"IB_INACTIVE_BINARY"};
     debugMessage(2, "killClientDaemons: remoteSshCommand(".$u.", ".$h.", ".$cmd.")");
     ($result, $response) = Dada::remoteSshCommand($u, $h, $cmd);
     debugMessage(2, "killClientDaemons: ".$result." ".$rval." ".$response);
