@@ -19,7 +19,7 @@ header("Expires: Mon, 26 Jul 1997 05:00:00 GMT"); // Date in the past
   "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
-  <link rel="STYLESHEET" type="text/css" href="style_log.css">
+  <? echo STYLESHEET_HTML; ?>
   <!-- jsProgressBarHandler prerequisites : prototype.js -->
   <script type="text/javascript" src="/js/prototype.js"></script>
   <!-- jsProgressBarHandler core -->
@@ -56,7 +56,7 @@ header("Expires: Mon, 26 Jul 1997 05:00:00 GMT"); // Date in the past
 
       /* set the values to 0 */
       if ((response.indexOf("Could not connect") == 0) || (response.indexOf("Connection reset by peer") == 0)) {
-        values = new Array(<?for ($i=0; $i< $config["NUM_PWC"]; $i++) { echo "50,50,";}?>100);
+        values = new Array(<?for ($i=0; $i< $config["NUM_PWC"]; $i++) { echo "32768,32768,";}?>65535);
       } else {
         values = response.split(" ");
       }
@@ -100,10 +100,10 @@ header("Expires: Mon, 26 Jul 1997 05:00:00 GMT"); // Date in the past
 for ($i=0; $i<count($machines); $i++) {
 
   echo $machines[$i]."_pol0 = new JS_BRAMUS.jsProgressBar($('".$machines[$i]."_pol0_bar'), 0, ";
-  echo " { width : 80, showText : false, barImage : Array( '/images/jsprogress/percentImage_back_80.png', '/images/jsprogress/percentImage_back_80.png', '/images/jsprogress/percentImage_back_80.png', '/images/jsprogress/percentImage_back_80.png') } );\n";
+  echo " { width : 80, showText : false, animate : false, barImage : Array( '/images/jsprogress/percentImage_back_80.png', '/images/jsprogress/percentImage_back_80.png', '/images/jsprogress/percentImage_back_80.png', '/images/jsprogress/percentImage_back_80.png') } );\n";
  
   echo $machines[$i]."_pol1 = new JS_BRAMUS.jsProgressBar($('".$machines[$i]."_pol1_bar'), 0, ";
-  echo " { width : 80, showText : false, barImage : Array( '/images/jsprogress/percentImage_back_80.png', '/images/jsprogress/percentImage_back_80.png', '/images/jsprogress/percentImage_back_80.png', '/images/jsprogress/percentImage_back_80.png') } );\n";
+  echo " { width : 80, showText : false, animate : false, barImage : Array( '/images/jsprogress/percentImage_back_80.png', '/images/jsprogress/percentImage_back_80.png', '/images/jsprogress/percentImage_back_80.png', '/images/jsprogress/percentImage_back_80.png') } );\n";
 
 }
 
