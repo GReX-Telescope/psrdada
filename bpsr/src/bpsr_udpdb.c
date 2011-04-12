@@ -172,18 +172,16 @@ time_t udpdb_start_function (dada_pwc_main_t* pwcm, time_t start_utc)
   return utc;
 }
 
-void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
+void* udpdb_buffer_function (dada_pwc_main_t* pwcm, int64_t* size)
 {
   
-  /* get our context, contains all required params */
   udpdb_t* udpdb = (udpdb_t*)pwcm->context;
 
-  /* logger */
   multilog_t* log = pwcm->log;
 
   // A char with all bits set to 0
-   char zerodchar = 'c'; 
-   memset(&zerodchar,0,sizeof(zerodchar));
+  char zerodchar = 'c'; 
+  memset(&zerodchar,0,sizeof(zerodchar));
 
   /* Flag to drop out of for loop */
   int quit = 0;
@@ -220,11 +218,8 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
   udpdb->mid_sequence = udpdb->min_sequence + BPSR_NUM_UDP_PACKETS;
   udpdb->max_sequence = udpdb->mid_sequence + BPSR_NUM_UDP_PACKETS;
 
-  //multilog(log, LOG_INFO, "[%"PRIu64" <-> %"PRIu64" <-> %"PRIu64"]\n",
-  //         udpdb->min_sequence,udpdb->mid_sequence,udpdb->max_sequence);
-
   /* Assume we will be able to return a full buffer */
-  *size = udpdb->datasize;
+  *size = (int64_t) udpdb->datasize;
   int64_t max_ignore = udpdb->datasize;
 
   //multilog (log, LOG_INFO, "Before while\n");
@@ -443,7 +438,7 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
     if (timeout_ocurred) {
       *size = udpdb->curr_buffer_count * BPSR_UDP_DATASIZE_BYTES;
       multilog (log, LOG_WARNING, "Suspected EOD received, returning "
-                     "%"PRIu64" bytes\n",*size);
+                     "%"PRIi64" bytes\n",*size);
     }
 
     udpdb->expected_sequence_no += BPSR_NUM_UDP_PACKETS;
@@ -816,7 +811,7 @@ int main (int argc, char **argv)
 
     while (1) {
 
-      uint64_t bsize = udpdb.datasize;
+      int64_t bsize = udpdb.datasize;
       src = (char *) udpdb_buffer_function(pwcm, &bsize);
 
       /* write data to datablock */
