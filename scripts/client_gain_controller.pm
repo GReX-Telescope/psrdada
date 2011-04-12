@@ -99,7 +99,7 @@ sub main() {
   $log_port = $cfg{"SERVER_SYS_LOG_PORT"};
   $log_sock = Dada::nexusLogOpen($log_host, $log_port);
   if (!$log_sock) {
-    print STDERR "Could open log port: ".$log_host.":".$log_port."\n";
+    print STDERR "main: could not open log port: ".$log_host.":".$log_port."\n";
   }
 
   $gain_host = $cfg{"SERVER_HOST"};
@@ -203,7 +203,6 @@ sub main() {
       $new_gain = int($current_gain * $val);
 
       # clamp the values around min/max
-
       if ($new_gain > $gain_max) {
         $new_gain = $gain_max;
       }
@@ -314,16 +313,14 @@ sub set_gain($$$$$) {
 
   my $cmd = "GAIN ".$chan." ".$pol." ".$val;
 
-  # msg(2, "INFO", "srv0 <- ".$cmd);
-  
+  msg(3, "INFO", "srv0 <- ".$cmd);
   print $sock $cmd."\r\n";
  
   # The DFB3 should return a string along the lines of
   # OK 
 
   my $dfb_response = Dada::getLine($sock);
-
-  # msg(2, "INFO", "srv0 -> ".$dfb_response);
+  msg(3, "INFO", "srv0 -> ".$dfb_response);
 
   if ($dfb_response ne "OK") {
 
@@ -338,12 +335,6 @@ sub set_gain($$$$$) {
 }
 
 
-
-
-
-
-
-
 #
 # logs a message to the nexus logger and prints to stdout
 #
@@ -354,6 +345,8 @@ sub msg($$$) {
     my $time = Dada::getCurrentDadaTime();
     if (! $log_sock ) {
       $log_sock = Dada::nexusLogOpen($log_host, $log_port);
+    } else {
+      print "[".$time."] msg: Dada::nexusLogOpen(".$log_host.", ".$log_port.") failed\n";
     }
     if ($log_sock) {
       Dada::nexusLogMessage($log_sock, $time, "sys", $type, "gain mon", $msg);
