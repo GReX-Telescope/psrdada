@@ -575,7 +575,6 @@ sub nodeInfoThread() {
     push(@machines, $cfg{"HELP_".$i});
   }
   push(@machines, "srv0");
-  push(@machines, "srv1");
 
   my $handle = 0;
 
