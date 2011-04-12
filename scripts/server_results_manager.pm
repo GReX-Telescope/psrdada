@@ -111,7 +111,7 @@ sub main() {
   Dada::logMsg(0, $dl ,"STARTING SCRIPT");
 
   # start the control thread
-  Dada::logMsg(2, "INFO", "main: controlThread(".$quit_file.", ".$pid_file.")");
+  Dada::logMsg(2, $dl, "main: controlThread(".$quit_file.", ".$pid_file.")");
   $control_thread = threads->new(\&controlThread, $quit_file, $pid_file);
 
   chdir $obs_results_dir;
@@ -457,6 +457,10 @@ sub processObservation($$) {
     Apsr::removeFiles($o, "phase_vs_flux_".$source."*_1024x768.png", 40);
     Apsr::removeFiles($o, "phase_vs_time_".$source."*_1024x768.png", 40);
     Apsr::removeFiles($o, "phase_vs_freq_".$source."*_1024x768.png", 40);
+  }
+
+  if ($#tres_plot >= 0) {
+    copyLatestPlots($o, $source, "240x180");
   }
 
   return ($#tres_plot + 1);
@@ -1045,6 +1049,46 @@ sub makePlotsFromArchives($$$$$) {
   #  $cmd = "rm -f ".$curr_plots;
   #  system($cmd);
   #}
+}
+
+sub copyLatestPlots($$$)
+{
+  my ($o, $s, $dim) = @_;
+ 
+  my $cmd = "";
+  my $result = "";
+  my $response = ""; 
+
+  $cmd = "ls -1 ".$o."/phase_vs_flux_".$s."_*_".$dim.".png | sort | tail -n 1";
+  ($result, $response) = Dada::mySystem($cmd);
+  if ($result eq "ok") {
+    if ( -f $response) {
+      $cmd = "cp ".$response." ".$cfg{"WEB_DIR"}."/apsr/latest/apsr_flux_vs_phase.png";
+      ($result, $response) = Dada::mySystem($cmd);
+    }
+  }
+
+  $cmd = "ls -1 ".$o."/phase_vs_freq_".$s."_*_".$dim.".png | sort | tail -n 1";
+  ($result, $response) = Dada::mySystem($cmd);
+  if ($result eq "ok") {
+    if ( -f $response) {
+      $cmd = "cp ".$response." ".$cfg{"WEB_DIR"}."/apsr/latest/apsr_freq_vs_phase.png";
+      ($result, $response) = Dada::mySystem($cmd);
+    }
+  }
+
+  $cmd = "ls -1 ".$o."/phase_vs_time_".$s."_*_".$dim.".png | sort | tail -n 1";
+  ($result, $response) = Dada::mySystem($cmd);
+  if ($result eq "ok") {
+    if ( -f $response) {
+      $cmd = "cp ".$response." ".$cfg{"WEB_DIR"}."/apsr/latest/apsr_time_vs_phase.png";
+      ($result, $response) = Dada::mySystem($cmd);
+    }
+  }
+
+  $cmd = "cp ".$o."/obs.info ".$cfg{"WEB_DIR"}."/apsr/latest/";
+  ($result, $response) = Dada::mySystem($cmd);
+
 }
 
 
