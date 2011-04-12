@@ -63,12 +63,17 @@ if (!$log_socket) {
   print "Could not open a connection to the nexus SRC log: $log_socket\n";
 }
 
+
+logMessage(0, "INFO", "STARTING src logging", $logfile);
+
 while (defined($line = <STDIN>)) {
 
   chomp $line;
   logMessage(0,$type,$line, $logfile);
 
 }
+
+logMessage(0, "INFO", "ENDING src logging", $logfile);
 
 exit 0;
 
