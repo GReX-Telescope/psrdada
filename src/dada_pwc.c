@@ -280,7 +280,7 @@ int dada_pwc_parse_bytes_per_second (dada_pwc_t* primary,
 
   if (ascii_header_get (header, "RESOLUTION", "%d", &resolution) < 0)
   {
-    fprintf (fptr, "failed to parse RESOLUTION - assuming 1\n");
+    //fprintf (fptr, "failed to parse RESOLUTION - assuming 1\n");
     resolution = 1;
   }
 
