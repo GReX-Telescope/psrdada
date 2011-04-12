@@ -274,7 +274,6 @@ sub currentInfoThread($) {
 
         # Determine the DM of this source
         $DM = Dada::getDM($cfg_file{"SOURCE"});
-        $DM = sprintf("%5.4f", $DM);
   
         # Determine how much data has been intergrated so far
         $integrated = 0;
@@ -586,9 +585,6 @@ sub nodeInfoThread() {
   # setup the list of machines that we will poll
   for ($i=0; $i<$cfg{"NUM_PWC"}; $i++) {
     push(@machines, $cfg{"PWC_".$i});
-  }
-  for ($i=0; $i<$cfg{"NUM_HELP"}; $i++) {
-    push(@machines, $cfg{"HELP_".$i});
   }
   for ($i=0; $i<$cfg{"NUM_DEMUX"}; $i++) {
     push(@machines, $cfg{"DEMUX_".$i});
