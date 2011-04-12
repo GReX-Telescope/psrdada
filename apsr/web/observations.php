@@ -48,7 +48,7 @@ if (isset($_GET["action"])) {
 <html>
 <head>
   <title>APSR | Observations</title>
-  <link rel="STYLESHEET" type="text/css" href="/bpsr/style.css">
+  <link rel="STYLESHEET" type="text/css" href="apsr.css">
   <link rel="shortcut icon" href="/images/favicon.ico"/>
   <style>
     .active {
@@ -295,7 +295,7 @@ echo "<br>\n";
 
 echo "Checking Swinburne archives<br>\n";
 
-$cmd = "ssh -l pulsar shrek210-evlbi \"cd /export/shrek210b/apsr/; find . -mindepth 2 -maxdepth 2 -type d -name '2*' -printf '%f\\n'\" | sort";
+$cmd = "ssh -l pulsar shrek210-gb \"cd /export/shrek210b/apsr/; find . -mindepth 2 -maxdepth 2 -type d -name '2*' -printf '%f\\n'\" | sort";
 $array = array();
 $lastline = exec($cmd, $array, $return_var);
 for ($i=0; $i<count($array); $i++) {
@@ -307,7 +307,7 @@ for ($i=0; $i<count($array); $i++) {
 $on_swin_count = count($array);
 
 # P630 data
-$cmd = "ssh -l pulsar shrek211-evlbi \"cd /export/shrek211a/apsr/; find . -mindepth 2 -maxdepth 2 -type d -name '2*' -printf '%f\\n'\" | sort";
+$cmd = "ssh -l pulsar shrek211-gb \"cd /export/shrek211a/apsr/; find . -mindepth 2 -maxdepth 2 -type d -name '2*' -printf '%f\\n'\" | sort";
 $array = array();
 $lastline = exec($cmd, $array, $return_var);
 for ($i=0; $i<count($array); $i++) {
@@ -319,7 +319,7 @@ for ($i=0; $i<count($array); $i++) {
 $on_swin_count += count($array);
 
 # P661 data
-$cmd = "ssh -l pulsar shrek211-evlbi \"cd /export/shrek211b/apsr/; find . -mindepth 2 -maxdepth 2 -type d -name '2*' -printf '%f\\n'\" | sort";
+$cmd = "ssh -l pulsar shrek211-gb \"cd /export/shrek211b/apsr/; find . -mindepth 2 -maxdepth 2 -type d -name '2*' -printf '%f\\n'\" | sort";
 $array = array();
 $lastline = exec($cmd, $array, $return_var);
 for ($i=0; $i<count($array); $i++) {
