@@ -61,13 +61,15 @@ sub setupClientType()
   my $i = 0;
   my $found = 0;
 
+  $Dada::client_master_control::primary_db = "";
+  @Dada::client_master_control::dbs = ();
+
   # if running on the server machine
   if ($cfg{"SERVER_ALIASES"} =~ m/$Dada::client_master_control::host/) {
     Dada::logMsg(2, $Dada::client_master_control::dl, "matched server alias");
     $Dada::client_master_control::host = "srv0";
     @Dada::client_master_control::daemons = split(/ /,$cfg{"SERVER_DAEMONS"});
     @Dada::client_master_control::helper_daemons = split(/ /,$cfg{"SERVER_DAEMONS_PERSIST"});
-    @Dada::client_master_control::dbs = ();
     $Dada::client_master_control::daemon_prefix = "server";
     $Dada::client_master_control::control_dir = $cfg{"SERVER_CONTROL_DIR"};
     $found = 1;
@@ -83,6 +85,7 @@ sub setupClientType()
         Dada::logMsg(2, $Dada::client_master_control::dl, "matched pwc");
         @Dada::client_master_control::daemons = split(/ /,$cfg{"CLIENT_DAEMONS"});
         @Dada::client_master_control::dbs = split(/ /,$cfg{"DATA_BLOCKS"});
+        $Dada::client_master_control::primary_db = $cfg{"PROCESSING_DATA_BLOCK"};
         @Dada::client_master_control::binaries = ();
         push @Dada::client_master_control::binaries, $cfg{"PWC_BINARY"};
         $found = 1;
@@ -101,7 +104,6 @@ sub setupClientType()
         if ($Dada::client_master_control::host =~ m/$cfg{"HELP_".$i}/) {
           Dada::logMsg(2, $Dada::client_master_control::dl, "matched helper");
           @Dada::client_master_control::daemons = ();
-          @Dada::client_master_control::dbs = ();
           @Dada::client_master_control::binaries = ();
           $found = 1;
         }
