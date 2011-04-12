@@ -23,11 +23,12 @@ time_t fake_start_function (dada_pwc_main_t* pwcm, time_t utc)
 }
 
 static char* buffer = 0;
-static uint64_t buffer_size = 0;
+static int64_t buffer_size = 0;
 
-void* fake_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
+void* fake_buffer_function (dada_pwc_main_t* pwcm, int64_t* size)
 {
-  uint64_t fake_buffer_size = pwcm->pwc->bytes_per_second;
+
+  int64_t fake_buffer_size = pwcm->pwc->bytes_per_second;
 
   /* to simulate buffer size equal to ring buffer size
      fake_buffer_size = ipcbuf_get_bufsz ((ipcbuf_t*)pwcm->data_block);
