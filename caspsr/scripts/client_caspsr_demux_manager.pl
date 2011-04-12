@@ -29,7 +29,7 @@ use Net::hostent;
 sub good($);
 sub msg($$$);
 sub runDemuxer($);
-sub recveiverThread($$);
+sub recveiverThread($$$);
 
 #
 # Global variables
@@ -204,7 +204,7 @@ sub runDemuxer($)
 ###############################################################################
 #
 # Wait for a new header to arrive on the primary datablock, and then launch
-# the NUM_RECV recivers to proces data that should be arriving on each datablock
+# the NUM_RECV receivers to proces data that should be arriving on each datablock
 #
 sub launchReceiversThread($$)
 {
@@ -280,7 +280,6 @@ sub launchReceiversThread($$)
         msg(2, "INFO", "launchReceiversThread: receiverThread(".$i_recv.", ".$i_demux.",  ".$header_valid.")");
         $recv_threads[$i] = threads->new(\&receiverThread, $i_recv, $i_demux, $header_valid);
       } 
-
       msg(2, "INFO", "launchReceiversThread: receivers running");
 
       # join the receiver_threads
@@ -382,78 +381,78 @@ sub receiverThread($$$)
 #
 sub controlThread($$) {
 
-my ($quit_file, $pid_file) = @_;
+  my ($quit_file, $pid_file) = @_;
 
-msg(2, "INFO", "controlThread: starting");
+  msg(2, "INFO", "controlThread: starting");
 
-my $cmd = "";
-my $result = "";
-my $response = "";
+  my $cmd = "";
+  my $result = "";
+  my $response = "";
 
-while ((!(-f $quit_file)) && (!$quit_daemon)) {
-  sleep(1);
-}
+  while ((!(-f $quit_file)) && (!$quit_daemon)) {
+    sleep(1);
+  }
 
-$quit_daemon = 1;
+  $quit_daemon = 1;
 
-# send an INT signal to dbib_thread
-$cmd = "pgrep dada_header";
-msg(2, "INFO", "controlThread: ".$cmd);
-($result, $response) = Dada::mySystem($cmd);
-msg(2, "INFO", "controlThread: ".$result." ".$response);
-if ($result eq "ok") {
-  $cmd = "killall -INT dada_header";
-  msg(1, "INFO", "controlThread: ".$cmd);
+  # send an INT signal to dbib_thread
+  $cmd = "pgrep dada_header";
+  msg(2, "INFO", "controlThread: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   msg(2, "INFO", "controlThread: ".$result." ".$response);
-}
+  if ($result eq "ok") {
+    $cmd = "killall -INT dada_header";
+    msg(1, "INFO", "controlThread: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    msg(2, "INFO", "controlThread: ".$result." ".$response);
+  }
 
-$cmd = "pgrep ".$cfg{"IB_ACTIVE_BINARY"};
-msg(2, "INFO", "controlThread: ".$cmd);
-($result, $response) = Dada::mySystem($cmd);
-msg(2, "INFO", "controlThread: ".$result." ".$response);
-if ($result eq "ok") {
-  $cmd = "killall -KILL ".$cfg{"IB_ACTIVE_BINARY"};
-  msg(1, "INFO", "controlThread: ".$cmd);
+  $cmd = "pgrep ".$cfg{"IB_ACTIVE_BINARY"};
+  msg(2, "INFO", "controlThread: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   msg(2, "INFO", "controlThread: ".$result." ".$response);
-}
+  if ($result eq "ok") {
+    $cmd = "killall -KILL ".$cfg{"IB_ACTIVE_BINARY"};
+    msg(1, "INFO", "controlThread: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    msg(2, "INFO", "controlThread: ".$result." ".$response);
+  }
 
-$cmd = "pgrep ".$cfg{"IB_INACTIVE_BINARY"};
-msg(2, "INFO", "controlThread: ".$cmd);
-($result, $response) = Dada::mySystem($cmd);
-msg(2, "INFO", "controlThread: ".$result." ".$response);
-if ($result eq "ok") {
-  $cmd = "killall -INT ".$cfg{"IB_INACTIVE_BINARY"};
-  msg(1, "INFO", "controlThread: ".$cmd);
+  $cmd = "pgrep ".$cfg{"IB_INACTIVE_BINARY"};
+  msg(2, "INFO", "controlThread: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   msg(2, "INFO", "controlThread: ".$result." ".$response);
-}
+  if ($result eq "ok") {
+    $cmd = "killall -INT ".$cfg{"IB_INACTIVE_BINARY"};
+    msg(1, "INFO", "controlThread: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    msg(2, "INFO", "controlThread: ".$result." ".$response);
+  }
 
-# instruct the DEMUX_BINARIES to exit forthwith
-my $host = Dada::getHostMachineName();
-my $i = 0;
-my $handle = 0;
+  # instruct the DEMUX_BINARIES to exit forthwith
+  my $host = Dada::getHostMachineName();
+  my $i = 0;
+  my $handle = 0;
 
-msg(1, "INFO", "controlThread: connectToMachine(".$host.", ".$control_port.")");
-$handle = Dada::connectToMachine($host, $control_port);
-if ($handle) {
-  msg(1, "INFO", "controlThread: ".$control_port." <- QUIT");
-  ($result, $response) = Dada::sendTelnetCommand($handle, "QUIT");
-  msg(1, "INFO", "controlThread: ".$control_port." -> ".$result." ".$response);
-  $handle->close();
-}
+  msg(1, "INFO", "controlThread: connectToMachine(".$host.", ".$control_port.")");
+  $handle = Dada::connectToMachine($host, $control_port);
+  if ($handle) {
+    msg(1, "INFO", "controlThread: ".$control_port." <- QUIT");
+    ($result, $response) = Dada::sendTelnetCommand($handle, "QUIT");
+    msg(1, "INFO", "controlThread: ".$control_port." -> ".$result." ".$response);
+    $handle->close();
+  }
 
-if ( -f $pid_file) {
-  msg(2, "INFO", "controlThread: unlinking PID file");
-  unlink($pid_file);
-} else {
-  msg(1, "WARN", "controlThread: PID file did not exist on script exit");
-}
+  if ( -f $pid_file) {
+    msg(2, "INFO", "controlThread: unlinking PID file");
+    unlink($pid_file);
+  } else {
+    msg(1, "WARN", "controlThread: PID file did not exist on script exit");
+  }
 
-msg(2, "INFO", "controlThread: exiting");
+  msg(2, "INFO", "controlThread: exiting");
 
-return 0;
+  return 0;
 }
 
 
@@ -463,18 +462,19 @@ return 0;
 #
 sub msg($$$) {
 
-my ($level, $type, $msg) = @_;
-if ($level <= $dl) {
-  my $time = Dada::getCurrentDadaTime();
-  if (! $log_sock ) {
-    #print "opening nexus log: ".$log_host.":".$log_port."\n";
-    #$log_sock = Dada::nexusLogOpen($log_host, $log_port);
+  my ($level, $type, $msg) = @_;
+
+  if ($level <= $dl) {
+    my $time = Dada::getCurrentDadaTime();
+    if (! $log_sock ) {
+      #print "opening nexus log: ".$log_host.":".$log_port."\n";
+      #$log_sock = Dada::nexusLogOpen($log_host, $log_port);
+    }
+    if ($log_sock) {
+      Dada::nexusLogMessage($log_sock, $time, "sys", $type, "demux mngr", $msg);
+    }
+    print "[".$time."] ".$msg."\n";
   }
-  if ($log_sock) {
-    Dada::nexusLogMessage($log_sock, $time, "sys", $type, "demux mngr", $msg);
-  }
-  print "[".$time."] ".$msg."\n";
-}
 }
 
 
@@ -484,19 +484,19 @@ if ($level <= $dl) {
 #
 sub sigHandle($) {
 
-my $sigName = shift;
-print STDERR $daemon_name." : Received SIG".$sigName."\n";
+  my $sigName = shift;
+  print STDERR $daemon_name." : Received SIG".$sigName."\n";
 
-# Tell threads to try and quit
-$quit_daemon = 1;
-sleep(3);
+  # Tell threads to try and quit
+  $quit_daemon = 1;
+  sleep(3);
 
-if ($log_sock) {
-  close($log_sock);
-} 
+  if ($log_sock) {
+    close($log_sock);
+  } 
 
-print STDERR $daemon_name." : Exiting\n";
-exit 1;
+  print STDERR $daemon_name." : Exiting\n";
+  exit 1;
 
 }
 
@@ -506,12 +506,12 @@ exit 1;
 #
 sub sigPipeHandle($) {
 
-my $sigName = shift;
-print STDERR $daemon_name." : Received SIG".$sigName."\n";
-$log_sock = 0;
-if ($log_host && $log_port) {
-  $log_sock = Dada::nexusLogOpen($log_host, $log_port);
-}
+  my $sigName = shift;
+  print STDERR $daemon_name." : Received SIG".$sigName."\n";
+  $log_sock = 0;
+  if ($log_host && $log_port) {
+    $log_sock = Dada::nexusLogOpen($log_host, $log_port);
+  }
 
 }
 
@@ -521,59 +521,59 @@ if ($log_host && $log_port) {
 #
 sub good($) {
 
-my ($quit_file) = @_;
+  my ($quit_file) = @_;
 
-# check the quit file does not exist on startup
-if (-f $quit_file) {
-  return ("fail", "Error: quit file ".$quit_file." existed at startup");
-}
-
-# the calling script must have set this
-if (! defined($cfg{"INSTRUMENT"})) {
-  return ("fail", "Error: package global hash cfg was uninitialized");
-}
-
-# check that demuxers have been defined in the config
-if (! defined($cfg{"NUM_DEMUX"})) {
-  return ("fail", "Error: NUM_DEMUX not defined in caspsr cfg file");
-}
-
-if ($daemon_name eq "") {
-  return ("fail", "Error: a package variable missing [daemon_name]");
-}
-
-# check for definition of demuxer variables
-if (! defined($cfg{"DEMUX_CONTROL_PORT"})) {
-  return ("fail", "Error: DEMUX_CONTROL_PORT not defined in caspsr cfg file");
-}
-
-my $i = 0;
-for ($i=0; $i<$cfg{"NUM_DEMUX"}; $i++) {
-  if (! defined($cfg{"DEMUX_UDP_PORT_".$i})) {
-    return ("fail", "Error: DEMUX_UDP_PORT_".$i." not deinfed in caspsr cfg file");
+  # check the quit file does not exist on startup
+  if (-f $quit_file) {
+    return ("fail", "Error: quit file ".$quit_file." existed at startup");
   }
-  if (! defined($cfg{"DEMUX_IB_PORT_".$i})) {
-    return ("fail", "Error: DEMUX_IB_PORT_".$i." not deinfed in caspsr cfg file");
-  }
-}
- 
-# check for definition of RECV_ variables 
-for ($i=0; $i<$cfg{"NUM_RECV"}; $i++) {
-  if (! defined($cfg{"RECV_".$i})) {
-    return ("fail", "Error: RECV_".$i." not defined in caspsr cfg file");
-  }
-  if (! defined($cfg{"RECV_DB_".$i})) {
-    return ("fail", "Error: RECV_DB_".$i." not defined in caspsr cfg file");
-  }
-}
 
-# Ensure more than one copy of this daemon is not running
-my ($result, $response) = Dada::checkScriptIsUnique(basename($0));
-if ($result ne "ok") {
-  return ($result, $response);
-}
+  # the calling script must have set this
+  if (! defined($cfg{"INSTRUMENT"})) {
+    return ("fail", "Error: package global hash cfg was uninitialized");
+  }
 
-return ("ok", "");
+  # check that demuxers have been defined in the config
+  if (! defined($cfg{"NUM_DEMUX"})) {
+    return ("fail", "Error: NUM_DEMUX not defined in caspsr cfg file");
+  }
+
+  if ($daemon_name eq "") {
+    return ("fail", "Error: a package variable missing [daemon_name]");
+  }
+
+  # check for definition of demuxer variables
+  if (! defined($cfg{"DEMUX_CONTROL_PORT"})) {
+    return ("fail", "Error: DEMUX_CONTROL_PORT not defined in caspsr cfg file");
+  }
+
+  my $i = 0;
+  for ($i=0; $i<$cfg{"NUM_DEMUX"}; $i++) {
+    if (! defined($cfg{"DEMUX_UDP_PORT_".$i})) {
+      return ("fail", "Error: DEMUX_UDP_PORT_".$i." not deinfed in caspsr cfg file");
+    }
+    if (! defined($cfg{"DEMUX_IB_PORT_".$i})) {
+      return ("fail", "Error: DEMUX_IB_PORT_".$i." not deinfed in caspsr cfg file");
+    }
+  }
+   
+  # check for definition of RECV_ variables 
+  for ($i=0; $i<$cfg{"NUM_RECV"}; $i++) {
+    if (! defined($cfg{"RECV_".$i})) {
+      return ("fail", "Error: RECV_".$i." not defined in caspsr cfg file");
+    }
+    if (! defined($cfg{"RECV_DB_".$i})) {
+      return ("fail", "Error: RECV_DB_".$i." not defined in caspsr cfg file");
+    }
+  }
+
+  # Ensure more than one copy of this daemon is not running
+  my ($result, $response) = Dada::checkScriptIsUnique(basename($0));
+  if ($result ne "ok") {
+    return ($result, $response);
+  }
+
+  return ("ok", "");
 
 }
 
