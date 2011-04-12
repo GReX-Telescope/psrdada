@@ -109,7 +109,7 @@ if ($stop == 1) {
 
   # Destroy DB's
   debugMessage(0, "Destroying Data blocks");
-  if (!(issueTelnetCommand("destroy_db",\@clihelp))) {
+  if (!(issueTelnetCommand("destroy_dbs",\@clihelp))) {
     debugMessage(0,"destroy_db failed");
   }
 
@@ -151,7 +151,7 @@ if ($start == 1) {
 
   # initalize DB's
   debugMessage(1, "Initializing Data blocks");
-  if (!(issueTelnetCommand("init_db",\@clihelp))) {
+  if (!(issueTelnetCommand("init_dbs",\@clihelp))) {
     debugMessage(0, "init_db failed");
   }
 
