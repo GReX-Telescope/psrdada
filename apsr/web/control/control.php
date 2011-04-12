@@ -116,7 +116,7 @@ for ($i=0; $i<count($array); $i++) {
         printServerDaemonControl($d, $server_daemons_info[$d]["name"], $server_daemon_status[$d], 1);
       }
       ?>
-      <tr><td colspan=2 style="vertical-align: middle; text-align: left">Start with PID</td><td align=left>
+      <tr><td colspan=2 style="vertical-align: middle; text-align: left;">Start with PID</td><td align=left>
         <select name="pid" id="pid">
     <?
     for ($i=0; $i<count($groups); $i++) {
@@ -151,13 +151,13 @@ for ($i=0; $i<count($array); $i++) {
 
     <table border=0 cellpadding=0 class="datatable">
       <tr><th colspan=4>Client Controls</th></tr>
-      <tr><td style="vertical-align: middle; text-align: right">Disk</td><td>
+      <tr><td style="vertical-align: middle; text-align: right;">Disk</td><td>
         <input type='button' value='Info' onClick="popUp('client_command.php?cmd=get_disk_info')">
         <input type='button' value='Clean Scratch' onClick="popUp('client_command.php?cmd=clean_scratch')">
         <input type='button' value='Clean Logs' onClick="popUp('client_command.php?cmd=clean_logs')">
       </td></tr>
 
-      <tr><td style="vertical-align: middle; text-align: right">Other</td><td>
+      <tr><td style="vertical-align: middle; text-align: right;">Other</td><td>
         <input type='button' value='Load Info' onClick="popUp('client_command.php?cmd=get_load_info')">
         <input type='button' value='Client Status' onClick="popUp('../client_status.php')">
       </td></tr>
@@ -258,7 +258,7 @@ function printClientHelpers($config, $control) {
 
   $help    = getConfigMachines($config, "HELP");
   $dfbs    = getConfigMachines($config, "DFB");
-  $srvs    = array("srv0", "srv1");
+  $srvs    = array("srv0");
   $hosts   = array_merge($srvs, $dfbs, $help);
 
   $d_info  = getDaemonInfo($hosts, INSTRUMENT);
@@ -324,7 +324,7 @@ function printClientDaemonControl($daemon, $name, $hosts, $statuses, $cmd) {
     echo "    <td style='vertical-align: middle'>".statusLight($s)."</td>\n";
   }
   if ($cmd != "" ) {
-    echo "    <td style='text-align: middle;'>\n";
+    echo "    <td style='text-align: center;'>\n";
     echo "      <input type='button' value='Start' onClick=\"popUp('client_command.php?cmd=start_".$cmd."&flush=1')\">\n";
     echo "      <input type='button' value='Stop' onClick=\"popUp('client_command.php?cmd=stop_".$cmd."&flush=1')\">\n";
     echo "    </td>\n";
@@ -344,9 +344,9 @@ function printClientDBControl($name, $hosts, $statuses) {
     $s = $statuses[$hosts[$i]];
     echo "    <td style='vertical-align: middle'>".statusLight($s)."</td>\n";
   }
-  echo "    <td style='text-align: middle;'>\n";
-  echo "      <input type='button' value='Create' onClick=\"popUp('client_command.php?cmd=init_db&flush=1')\">\n";
-  echo "      <input type='button' value='Del' onClick=\"popUp('client_command.php?cmd=destroy_db&flush=1')\">\n";
+  echo "    <td style='text-align: center;'>\n";
+  echo "      <input type='button' value='Create' onClick=\"popUp('client_command.php?cmd=init_dbs&flush=1')\">\n";
+  echo "      <input type='button' value='Del' onClick=\"popUp('client_command.php?cmd=destroy_dbs&flush=1')\">\n";
   echo "    </td>\n";
   echo "  </tr>\n";
 
