@@ -43,6 +43,7 @@ our @daemons;
 our @binaries;
 our @helper_daemons;
 our @dbs;
+our $primary_db;
 our $daemon_prefix;
 our $control_dir;
 our $host : shared;
@@ -78,6 +79,7 @@ $pwc_add = "";
 @daemons = ();
 @binaries = ();
 @dbs = ();
+$primary_db = "";
 @helper_daemons = ();
 $daemon_prefix = "";
 $control_dir = "";
@@ -514,7 +516,7 @@ sub handleCommand($) {
         $result = "fail";
       }
 
-      $response = $response.$tmp_response;        
+      $response = $response.$tmp_response."<BR>";
     }
 
   }
@@ -554,7 +556,7 @@ sub handleCommand($) {
       if ($tmp_result eq "fail") {
         $result = "fail";
       }
-      $response = $response.$tmp_response;
+      $response = $response.$tmp_response."<BR>";
     }
 
   }
@@ -1133,14 +1135,27 @@ sub dbThread() {
   my $blocks_total = 0;
   my $blocks_full = 0;
   my @bits = ();
+  my @dbs_to_report = ();
 
   Dada::logMsg(1, $dl, "dbThread: starting [".$sleep_time." polling]");
- 
-  for ($i=0; $i<=$#dbs; $i++) {
-    $dbs[$i] = lc($dbs[$i]);
+
+  if ($primary_db ne "") 
+  {
+    push @dbs_to_report, $primary_db;
+  }
+  else 
+  { 
+    for ($i=0; $i<=$#dbs; $i++) {
+      push @dbs_to_report, lc($dbs[$i]);
+    }
   }
 
-  if ($#dbs > -1) {
+  for ($i=0; $i<=$#dbs_to_report; $i++) {
+    Dada::logMsg(1, $dl, "dbThread: reporting on DB[".$i."] ".$dbs_to_report[$i]);
+  }
+
+
+  if ($#dbs_to_report > -1) {
 
     while (!$quit_daemon) {
 
@@ -1160,15 +1175,15 @@ sub dbThread() {
         $blocks_total = 0;
         $blocks_full = 0;
 
-        for ($i=0; $i<=$#dbs; $i++) {
+        for ($i=0; $i<=$#dbs_to_report; $i++) {
 
-          Dada::logMsg(3, $dl, "dbThread: getAllDBInfo(".$dbs[$i].")");
-          ($result,$response) = Dada::getAllDBInfo($dbs[$i]);
+          Dada::logMsg(3, $dl, "dbThread: getAllDBInfo(".$dbs_to_report[$i].")");
+          ($result,$response) = Dada::getAllDBInfo($dbs_to_report[$i]);
           Dada::logMsg(3, $dl, "dbThread: ".$result." ".$response);
-          if ($i < $#dbs) {
-            $total_response .= $dbs[$i]." ".$result." ".$response."\n";
+          if ($i < $#dbs_to_report) {
+            $total_response .= $dbs_to_report[$i]." ".$result." ".$response."\n";
           } else {
-            $total_response .= $dbs[$i]." ".$result." ".$response;
+            $total_response .= $dbs_to_report[$i]." ".$result." ".$response;
           }
           if ($result ne "ok") {
             $total_result = "fail";
@@ -1344,7 +1359,7 @@ sub good() {
   if (!$sock) {
     return ("fail", "Could not create listening socket: ".$host.":".$port);
   }
-  Dada::logMsg(1, $dl, "Opened socket on ".$host.":".$port);
+  Dada::logMsg(2, $dl, "Opened socket on ".$host.":".$port);
 
   return ("ok", "");
 
