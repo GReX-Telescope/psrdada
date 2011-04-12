@@ -39,7 +39,7 @@ $Dada::client_gain_controller::nchan = $chan;
 
 if ($cfg{"USE_DFB_SIMULATOR"} == 1) {
   $Dada::client_gain_controller::gain_min = 0;
-  $Dada::client_gain_controller::gain_default = 33;
+  $Dada::client_gain_controller::gain_default = 50;
   $Dada::client_gain_controller::gain_max = 100;
 } else {
   $Dada::client_gain_controller::gain_min = 1;
