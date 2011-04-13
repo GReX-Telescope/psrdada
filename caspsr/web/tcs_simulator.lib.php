@@ -227,6 +227,7 @@ class tcs_simulator extends caspsr_webpage
             <option value="dspsr.50cmgpu">dspsr.50cmgpu</option>
             <option value="dspsr.single.gpu">dspsr.single.gpu</option>
             <option value="dspsr.cpu">dspsr.cpu</option>
+            <option value="dspsr.skfb">dspsr.skfb</option>
             <option value="counter.test">counter.test</option>
             <option value="dbnull.caspsr">dbnull.caspsr</option>
             <option value="dbdisk.caspsr">dbdisk.caspsr</option>
@@ -319,7 +320,7 @@ class tcs_simulator extends caspsr_webpage
       $cmd = "STOP\r\n";
       socketWrite($sock,$cmd);
       $result = rtrim(socketRead($sock));
-      $ignore = socketRead($sock);
+      # $ignore = socketRead($sock);
       $this->printTR($cmd,$result);
       $this->printTF();
       $this->printFooter();
@@ -338,7 +339,7 @@ class tcs_simulator extends caspsr_webpage
           $result = rtrim(socketRead($sock),"\r\n");
           $ignore = socketRead($sock);
           if ($result != "ok") {
-            $this->printTR("HEADER command failed ", $result.": ".rtrim(socketRead($sock)));
+            $this->printTR("[".$cmd."] failed ", $result);
             $this->printTR("START aborted", "");
             return;
           }
@@ -365,10 +366,8 @@ class tcs_simulator extends caspsr_webpage
     }
 
     # now wait for the UTC_START to come back to us
-    #$this->printTR("Waiting for UTC_START to be reported", "...");
-    #$result = rtrim(socketRead($sock));
-    #$this->printTR($result, "ok");
-
+    $result = rtrim(socketRead($sock));
+    $this->printTR("", $result);
     $this->printTF();
     $this->printFooter();
     return;
