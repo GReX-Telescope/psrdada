@@ -67,6 +67,9 @@ typedef struct {
   /* length of each array */ 
   uint64_t data_size;
 
+  /* transfer/file size */
+  uint64_t transfer_size;
+
   uint64_t bytes_to_copy;
 
   time_t curr_time;
@@ -79,7 +82,7 @@ typedef struct {
 
 } dada_junkdb_t;
 
-#define DADA_JUNKDB_INIT { "", 0, 0, 0, 0, "", 0, 0, 0, 0, 0 }
+#define DADA_JUNKDB_INIT { "", 0, 0, 0, 0, "", 0, 0, 0, 0, 0, 0 }
 
 
 /*! Pointer to the function that transfers data to/from the target */
@@ -215,8 +218,15 @@ int generate_data(dada_client_t* client)
 
   client->header_size = hdr_size;
   client->optimal_bytes = 32 * 1024 * 1024;
-  client->transfer_bytes = junkdb->rate * junkdb->write_time;
+  client->transfer_bytes = junkdb->transfer_size;
   junkdb->bytes_to_copy = 0;
+
+  if (ascii_header_set(client->header, "FILE_SIZE", "%"PRIu64, junkdb->transfer_size) < 0)
+  {
+    multilog (client->log, LOG_WARNING, "Failed to set FILE_SIZE header attribute to %"PRIu64"\n",
+              junkdb->transfer_size);
+  }
+
 
   /* seed the RNG */
   srand ( time(NULL) );
@@ -397,6 +407,7 @@ int main (int argc, char **argv)
   junkdb.write_time = write_time;
   junkdb.write_gaussian = write_gaussian;
   junkdb.data_size = (uint64_t) rate * rate_base;
+  junkdb.transfer_size = write_time * junkdb.data_size;
   junkdb.header_file = strdup(header_file);
   junkdb.verbose = verbose;
   junkdb.fill_char = fill_char;
