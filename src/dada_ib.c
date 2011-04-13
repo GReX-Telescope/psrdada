@@ -672,13 +672,14 @@ int dada_ib_wait_recv(dada_ib_cm_t * ctx, dada_ib_mb_t * mb)
   struct ibv_wc    wc;
 
   int data_received = 0;
+  int erroneous_wr = 0;
 
   assert(ctx->comp_chan != 0);
   assert(ctx->cq != 0);
 
   while (!data_received) {
   
-    if (ctx->verbose > 1)
+    if (erroneous_wr || ctx->verbose > 1)
       multilog(log, LOG_INFO, "wait_recv: ibv_get_cq_event\n");
     if (ibv_get_cq_event(ctx->comp_chan, &evt_cq, &cq_context))
     {
@@ -687,7 +688,7 @@ int dada_ib_wait_recv(dada_ib_cm_t * ctx, dada_ib_mb_t * mb)
     }
 
     /* Request notification upon the next completion event */
-    if (ctx->verbose > 1)
+    if (erroneous_wr || ctx->verbose > 1)
       multilog(log, LOG_INFO, "wait_recv: ibv_req_notify_cq\n");
     if (ibv_req_notify_cq(ctx->cq, 0))
     {
@@ -695,7 +696,7 @@ int dada_ib_wait_recv(dada_ib_cm_t * ctx, dada_ib_mb_t * mb)
       return -1;
     } 
 
-    if (ctx->verbose > 1)
+    if (erroneous_wr || ctx->verbose > 1)
       multilog(log, LOG_INFO, "wait_recv: ibv_poll_cq\n");
     int ne = ibv_poll_cq(ctx->cq, 1, &wc);
     if (ne < 0) {
@@ -706,25 +707,31 @@ int dada_ib_wait_recv(dada_ib_cm_t * ctx, dada_ib_mb_t * mb)
     if (wc.status != IBV_WC_SUCCESS) 
     {
       multilog(log, LOG_WARNING, "dada_ib_wait_recv: wc.status != IBV_WC_SUCCESS "
-               "[wc.status=%s, wc.wr_id=%d, mb->wr_id=%d]\n", 
+               "[wc.status=%s, wc.wr_id=%"PRIu64", mb->wr_id=%"PRIu64"]\n", 
                ibv_wc_status_str(wc.status), wc.wr_id, mb->wr_id);
       return -1;
     }
 
     if (wc.wr_id != mb->wr_id ) 
     {
-      multilog(log, LOG_WARNING, "dada_ib_wait_recv: wr_id=%d != %d\n", wc.wr_id, mb->wr_id);
-      return -1;
+      multilog(log, LOG_WARNING, "dada_ib_wait_recv: wr_id=%"PRIu64" != %"PRIu64"\n", wc.wr_id, mb->wr_id);
+      // seeing what happens if we ignore the extra WR
+      erroneous_wr = 1;
+      //return -1;
     }
 
     if ((wc.wr_id == mb->wr_id) && (wc.status == IBV_WC_SUCCESS))
+    {
+      if (erroneous_wr || ctx->verbose > 2)
+        multilog(log, LOG_INFO, "wait_recv: wr correct\n");
       data_received = 1;
-  
+    }
+    if (erroneous_wr || ctx->verbose > 1)
+      multilog(log, LOG_INFO, "wait_recv: ibv_ack_cq_events\n"); 
+    ibv_ack_cq_events(ctx->cq, 1);
   }
 
-  ibv_ack_cq_events(ctx->cq, 1);
-
-  if (ctx->verbose > 1)
+  if (erroneous_wr || ctx->verbose > 1)
     multilog(log, LOG_INFO, "dada_ib_wait_recv: returned\n");
 
   return 0;
