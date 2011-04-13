@@ -90,7 +90,13 @@ void* monitor_thread (void* context)
         fprintf (stderr, "monitor_thread add %d\n", fileno(node->from));
 #endif
         if (feof(node->from)) {
-          fprintf(stderr, "monitor_thread: lost connection with %d\n",fileno(node->from));
+          if (node->host) 
+            multilog_fprintf (stderr, LOG_INFO, "monitor_thread: lost "
+              "connection with %s [%d]\n", node->host, fileno(node->from));
+          else
+            multilog_fprintf (stderr, LOG_INFO, "monitor_thread: lost "
+              "connection with %d\n", fileno(node->from));
+
           node->to = 0;
           node->from = 0;
           node->log = 0;
@@ -137,7 +143,10 @@ void* monitor_thread (void* context)
 
         /* If the connection dies to the pwc, reset the to/from FILE ptrs */
         if (feof(node->from)) {
-          fprintf(stderr, "lost connection with %d\n",fileno(node->from));
+          if (node->host) 
+            multilog_fprintf (stderr, LOG_INFO, "lost connection with %s [%d]\n", node->host, fileno(node->from));
+          else
+            multilog_fprintf (stderr, LOG_INFO, "lost connection with %d\n", fileno(node->from));
           node->to = 0;
           node->from = 0;
           node->log = 0;
