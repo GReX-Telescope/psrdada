@@ -32,7 +32,8 @@ bin_PROGRAMS = dada_db dada_write_test dada_dbdisk dada_diskdb	 \
 	dada_install_header dada_pwc_command dada_pwc_demo	 \
 	dada_dbnull dada_dbmonitor dada_dbxferinfo dada_dbmetric \
 	dada_header dada_edit slow_rm dada_junkdb dada_mem_test  \
-	daemon_test load_test dada_numdb dada_dbnum dada_dbmeminfo
+	daemon_test load_test dada_numdb dada_dbnum dada_dbmeminfo \
+	dspsr_start_time
 
 bin_SCRIPTS = ipcrme loopssh
 
