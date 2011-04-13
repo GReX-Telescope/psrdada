@@ -17,6 +17,21 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
+typedef struct {
+
+  // verbosity of output
+  unsigned verbose;
+
+  // flag to indicate that OBS_XFER == -1;
+  unsigned quit;
+
+  // check each header for the OBS_XFER
+  unsigned check_xfers;
+
+} dada_dbnull_t;
+
+#define DADA_DBNULL_INIT { 0, 0, 0 }
+
 void usage()
 {
   fprintf (stdout,
@@ -28,30 +43,61 @@ void usage()
      " -X mbytes  transfer size MiB [default 64]\n"
      " -o mbytes  transfer block sizei MB [default 8]\n"
      " -O mbytes  transfer block size Mi [default 8]\n"
-     " -s         quit at end of data\n"
+     " -s         1 transfer, then exit\n"
+     " -S         multiple transfers until OBS_XFER=-1, then exit\n"
      " -z         use zero copy direct shm access\n"
      " -d         run as daemon\n");
 }
 
-
 /*! Function that opens the data transfer target */
 int sock_open_function (dada_client_t* client)
 {
-  /* status and error logging facility */
-  multilog_t* log;
-
-  /* the header */
-  char* header = 0;
 
   assert (client != 0);
 
-  log = client->log;
+  // status and error logging facility
+  multilog_t* log = client->log;
   assert (log != 0);
 
-  header = client->header;
+  // contextual data for dada_dbnull
+  dada_dbnull_t * ctx = (dada_dbnull_t *) client->context;
+  assert(ctx != 0);
+
+  // DADA ascii header
+  char * header = client->header;
   assert (header != 0);
 
-  /* multilog (log, LOG_INFO, "Ready for writing %"PRIu64" bytes\n", xfer_size); */
+  // if we need to check the OBS_XFER
+  if (ctx->check_xfers)
+  {
+    int64_t obs_xfer = 0;
+    if (ascii_header_get (header, "OBS_XFER", "%"PRIi64, &obs_xfer) != 1) 
+    {
+      multilog (log, LOG_WARNING, "header with no OBS_XFER, assuming END of XFERS\n");
+      obs_xfer = -1;
+    }
+    
+    if (obs_xfer == -1)
+    {
+      if (ctx->verbose)
+        multilog (log, LOG_INFO, "open: OBS_XFER == -1\n");
+      ctx->quit = 1;
+    }
+  }
+
+  // check the FILE_SIZE of this transfer if set
+  uint64_t file_size = 0;
+  if (ascii_header_get (header, "FILE_SIZE", "%"PRIu64, &file_size) != 1)
+  {
+    multilog (log, LOG_WARNING, "header with no FILE_SIZE, transfer_bytes set to 0\n");
+    file_size = 0;
+  }
+
+  client->transfer_bytes = file_size;
+  if (ctx->verbose)
+  {
+    multilog (log, LOG_INFO, "open: transfer_bytes=%"PRIu64" bytes\n", client->transfer_bytes);
+  }
 
   client->fd = 1;
 
@@ -62,17 +108,19 @@ int sock_open_function (dada_client_t* client)
 int sock_close_function (dada_client_t* client, uint64_t bytes_written)
 {
 
-  /* status and error logging facility */
-  multilog_t* log;
-
   assert (client != 0);
 
-  log = client->log;
+  // status and error logging facility
+  multilog_t* log = client->log;
   assert (log != 0);
 
+  // contextual data for dada_dbnull
+  dada_dbnull_t * ctx = (dada_dbnull_t *) client->context;
+  assert(ctx != 0);
+
   if (bytes_written < client->transfer_bytes) {
-    if (!client->quiet)
-      multilog (log, LOG_INFO, "Transfer stopped early at %"PRIu64" bytes\n",
+    if (!client->quiet || ctx->verbose)
+      multilog (log, LOG_INFO, "close: Transfer stopped early at %"PRIu64" bytes\n",
 	              bytes_written);
   }
 
@@ -90,11 +138,14 @@ int64_t sock_send_function (dada_client_t* client,
 int64_t sock_send_block_function (dada_client_t* client,
               void* data, uint64_t data_size, uint64_t block_id)
 {
-    return data_size;
+  return data_size;
 }
 
 int main (int argc, char **argv)
 {
+
+  /* dbnull contextual struct */
+  dada_dbnull_t dbnull = DADA_DBNULL_INIT;
 
   /* DADA Header plus Data Unit */
   dada_hdu_t* hdu = 0;
@@ -115,7 +166,10 @@ int main (int argc, char **argv)
   char quiet = 0;
 
   /* Quit flag */
-  char quit = 0;
+  char single_transfer = 0;
+
+  /* Quit after receiving a transfer with OBS_XFER == -1 */
+  char multiple_xfers = 0;
 
   /* optimal mbytes to transfer in */
   int optimal_mbytes = 8;
@@ -138,7 +192,7 @@ int main (int argc, char **argv)
    * block */
   int busy_sleep = 0;
 
-  while ((arg=getopt(argc,argv,"dN:vk:o:O:qsx:X:z")) != -1)
+  while ((arg=getopt(argc,argv,"dN:vk:o:O:qsSx:X:z")) != -1)
     switch (arg) {
       
     case 'd':
@@ -174,7 +228,11 @@ int main (int argc, char **argv)
       break;
 
     case 's':
-      quit = 1;
+      single_transfer = 1;
+      break;
+
+    case 'S':
+      multiple_xfers = 1;
       break;
 
     case 'x':
@@ -217,6 +275,10 @@ int main (int argc, char **argv)
 
   client = dada_client_create ();
 
+  dbnull.check_xfers = multiple_xfers;
+  dbnull.verbose = verbose;
+
+  client->context = &dbnull;
   client->log = log;
 
   client->data_block = hdu->data_block;
@@ -235,18 +297,30 @@ int main (int argc, char **argv)
   client->optimal_bytes  = optimal_mbytes * byte_base;
   client->quiet          = quiet;
 
-  while (!client->quit) {
+  while (!client->quit) 
+  {
     
     if (dada_client_read (client) < 0)
       multilog (log, LOG_ERR, "Error during transfer\n");
 
-    if (quit)
+    if (dada_hdu_unlock_read (hdu) < 0)
+    {
+      multilog (log, LOG_ERR, "could not unlock read on hdu\n");
+      return EXIT_FAILURE;
+    }
+
+    if (single_transfer || (multiple_xfers && dbnull.quit))
       client->quit = 1;
 
+    if (!client->quit)
+    {
+      if (dada_hdu_lock_read (hdu) < 0)
+      {
+        multilog (log, LOG_ERR, "could not lock read on hdu\n");
+        return EXIT_FAILURE;
+      }
+    }
   }
-
-  if (dada_hdu_unlock_read (hdu) < 0)
-    return EXIT_FAILURE;
 
   if (dada_hdu_disconnect (hdu) < 0)
     return EXIT_FAILURE;
