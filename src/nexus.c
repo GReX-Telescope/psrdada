@@ -257,8 +257,8 @@ void* node_open_thread (void* context)
     fd = sock_open (host_name, port);
 
     if (fd < 0)  {
-      fprintf (stderr, "open_thread: Error connecting with %s on %d\n"
-	       "\tsleeping %u seconds before retrying\n",
+      multilog_fprintf (stderr, LOG_INFO, "open_thread: Error connecting "
+         "with %s on %d. Sleeping %u seconds before retrying\n",
 	       host_name, port, nexus->polling_interval);
       sleep (nexus->polling_interval);
     }
@@ -624,7 +624,7 @@ int nexus_send (nexus_t* nexus, char* command)
   for (inode = 0; inode < nexus->nnode; inode++) {
     if (nexus_recv_node (nexus, inode) < 0) {
       node_t * tmpPtr = (node_t *) nexus->nodes[inode];
-      fprintf (stderr, "%s returned 'fail' for command %s\n",
+      multilog_fprintf (stderr, LOG_INFO, "%s returned 'fail' for command %s\n",
                        tmpPtr->host, command);
       status = -1;
     }
