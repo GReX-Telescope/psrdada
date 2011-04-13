@@ -801,7 +801,7 @@ sub waitForState($$$) {
     }
 
     if (!$ready) {
-      if ($counter > 3) {
+      if (($counter > 3) && (DEBUG_LEVEL >= 1)) {
         print "waitForState: not yet ready: ".$response."\n";
       }
       sleep 1;
