@@ -81,7 +81,7 @@ int plot_stream_1D(float x[], float y[], float y1[],
   printf(" Margins : Ymargin = %f \n",marg_y); 
 
   int blank=0;
-  if (min_y == 0.00 ) { blank = 1; }
+  if (min_y == 0.00 && max_y == 0.00) { blank = 1; }
 
   // initiate plot if display device selected 
   if(cpgbeg(0, inpdev, 1, 1) != 1) return -2;
