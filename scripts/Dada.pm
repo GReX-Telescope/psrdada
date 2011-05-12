@@ -21,7 +21,7 @@ BEGIN {
   $VERSION = '1.00';
 
   @ISA         = qw(Exporter AutoLoader);
-  @EXPORT      = qw(&sendTelnetCommand &connectToMachine &getDADABinaryDir &getCurrentBinaryVersion &getDefaultBinaryVersion &setBinaryDir &getAvailableBinaryVersions &addToTime &getUnixTimeUTC &getCurrentDadaTime &printDadaTime &printTime &getPWCCState &waitForState &getLine &getLines &parseCFGLines &readCFGFile &readCFGFileIntoHash &getDADA_ROOT &getDiskInfo &getRawDisk &getDBInfo &getAllDBInfo &getLoad &getUnprocessedFiles &getServerResultsNFS &getServerArchiveNFS &constructRsyncURL &headerFormat &mySystem &killProcess &getAPSRConfigVariable &nexusLogOpen &nexusLogClose &nexusLogMessage &getHostMachineName &daemonize &commThread &logMsg &logMsgWarn &remoteSshCommand &headerToHash &daemonBaseName &getProjectGroups &processHeader &getDM &getPeriod &checkScriptIsUnique &getObsDestinations &removeFiles);
+  @EXPORT      = qw(&sendTelnetCommand &connectToMachine &getDADABinaryDir &getCurrentBinaryVersion &getDefaultBinaryVersion &setBinaryDir &getAvailableBinaryVersions &addToTime &getUnixTimeUTC &getCurrentDadaTime &printDadaTime &printTime &getPWCCState &printPWCCState &waitForState &getLine &getLines &parseCFGLines &readCFGFile &readCFGFileIntoHash &getDADA_ROOT &getDiskInfo &getRawDisk &getDBInfo &getAllDBInfo &getLoad &getUnprocessedFiles &getServerResultsNFS &getServerArchiveNFS &constructRsyncURL &headerFormat &mySystem &killProcess &getAPSRConfigVariable &nexusLogOpen &nexusLogClose &nexusLogMessage &getHostMachineName &daemonize &commThread &logMsg &logMsgWarn &remoteSshCommand &headerToHash &daemonBaseName &getProjectGroups &processHeader &getDM &getPeriod &checkScriptIsUnique &getObsDestinations &removeFiles);
   %EXPORT_TAGS = ( );
   @EXPORT_OK   = ( );
 
@@ -29,6 +29,9 @@ BEGIN {
 
 use constant DEBUG_LEVEL         => 0;
 use constant IMAGE_TYPE          => ".png";
+use constant PWCC_FATAL_ERROR    => -4;
+use constant PWCC_HARD_ERROR     => -3;
+use constant PWCC_SOFT_ERROR     => -2;
 
 
 my $DADA_ROOT = $ENV{'DADA_ROOT'};
@@ -375,82 +378,6 @@ sub getLines($) {
   return @lines;
 }
 
-
-sub getLinesSelect($$) {
-
-  (my $handle, my $timeout) = @_;
-
-  my $blocking_state = $handle->blocking;
-  my $irs_state =  $/;
-  my $read_set = 0;
-  my $rh = 0;
-  my $line = "";
-  my $result = "fail";
-  my $response = "timed out";
-  my $poll_handle = 1;
-
-  # set socket to non blocking
-  $handle->blocking(0);
-
-  $/ = "\r\n";
-
-  # add handle to a read set
-  $read_set = new IO::Select($handle);
-
-  #print "select on $handle for $timeout\n";
-  my ($readable_handles) = IO::Select->select($read_set, undef, undef, $timeout);
-  #print "select on $handle returns\n";
-
-  foreach $rh (@$readable_handles) {
-    if ($rh == $handle) {
-
-      while ($poll_handle) {
-
-        $line = $rh->getline;
-        #print "1: line = '$line'\n";
-
-        # if there was nothing at the socket
-        if ((! defined $line) || ($line eq "")) {
-
-          $poll_handle = 0;
-
-          if ($response eq "timed out") { 
-            $result = "fail";
-          } else {
-            $result = "ok";
-          }
-
-        } else {
-
-          $line =~ s/\r\n$//;
-          #print "2: line = '$line'\n";
-
-          $result = "ok";
-          if ($response eq "timed out") {
-            $response = $line;
-          } else {
-            $response .= "\n".$line;
-          }
-        } 
-      }
-    }
-  }
-
-  #print "line received = ".$response."\n";
-
-  # remove read handle from set
-  $read_set->remove($handle);
-
-  # restore the blocking state of the handle
-  $handle->blocking($blocking_state);
-
-  # restore the input record seperator
-  $/ = $irs_state;
-
-  return ($result, $response);
-
-}
-
 sub sendTelnetCommand($$;$) {
 
   (my $handle, my $command, my $timeout=1) = @_;
@@ -486,7 +413,8 @@ sub sendTelnetCommand($$;$) {
         $line =~ s/^> //;
 
         # remove a trailing \r\n if it exists
-        $line =~ s/\r\n//;
+        $line =~ s/\r\n$//;
+        $line =~ s/\n$//;
 
         if (($line eq "ok") || ($line eq "fail")) {
           $eod = 1;
@@ -495,7 +423,9 @@ sub sendTelnetCommand($$;$) {
           if ($response eq "") {
             $response = $line;
           } else {
-            $response = $response."\n".$line;
+            if ($line ne "") {
+              $response = $response."\n".$line;
+            } 
           }
         }
       }
@@ -562,6 +492,11 @@ sub getLinesSelect($$) {
 
         } else {
 
+          my $needs_newline = 0;
+          # remove any trailing carriage return + newline characters
+          if ($line =~ m/\r\n$/) {
+            $needs_newline = 1;
+          }
           $line =~ s/\r\n$//;
           #print "2: line = '$line'\n";
 
@@ -569,14 +504,18 @@ sub getLinesSelect($$) {
           if ($response eq "timed out") {
             $response = $line;
           } else {
-            $response .= "\n".$line;
+            if ($needs_newline) {
+              $response .= "\n".$line;
+            } else {
+              $response .= $line;
+            }
           }
         }
       }
     }
   }
   
-  #print "line received = ".$response."\n";
+  #print "[b] line received = ".$response."\n";
   
   # remove read handle from set
   $read_set->remove($handle);
@@ -595,6 +534,7 @@ sub getLinesSelect($$) {
 sub getPWCCState($) {
 
   (my $handle) = @_;
+
   my $result = "fail";
   my $response = "";
 
@@ -632,6 +572,64 @@ sub getPWCCState($) {
     return 0;
   }
 
+}
+
+#
+# print the nexus state as a simple string
+#
+sub printPWCCState($) 
+{
+
+  (my $handle) = @_;
+
+  my $result = "";
+  my $response = "";
+  
+  ($result, $response) = sendTelnetCommand($handle, "state");
+  
+  if ($result eq "ok") 
+  {
+    my @lines = split(/\n/, $response);
+    my $line = "";
+
+    my $pwcc_state = "";
+    my @pwcs_states = ();
+
+    my $source = "";
+    my $state = "";
+  
+    my $i = 0;
+
+    foreach $line (@lines) 
+    {
+      if (($line =~ m/^overall:/) || ($line =~ m/^PWC_/))
+      {
+        ($source, $state) = split(/: /, $line, 2);
+
+        if ($source eq "overall")
+        {
+          $pwcc_state = $state
+        }
+        else
+        {
+          $i = substr($line, 4);
+          @pwcs_states[$i] = $state;
+        }
+      }
+      else
+      {
+        # ignore
+      }
+    }
+
+    $response = $pwcc_state;
+    for ($i=0; $i<$#pwcs_states; $i++)
+    {
+      $response .= " ".$pwcs_states[$i]; 
+    }
+  }
+
+  return ($result, $response);
 }
 
 ###############################################################################
@@ -748,21 +746,27 @@ sub printDadaUTCTime($) {
 }
 
 
-sub waitForState($$$) {
+#
+# wait for the nexus to transition to the required state
+# if any of the pwcs states is in error, stop waiting and 
+# return the appropriate error value
+#
+sub waitForState($$$) 
+{
                                                                                 
   (my $required_state, my $handle, my $wait_secs) = @_;
                                                                                 
   my $pwcc;
   my $pwc;
   my @pwcs;
-  my $ready = 0;
+  my $ready = -1;
   my $counter = 0;
   my $i=0;
   my $result = "";
   my $response = "";
 
-  while ((!$ready) && ($counter < $wait_secs)) {
-
+  while (($ready == -1) && ($counter < $wait_secs)) 
+  {
     if ($counter == $wait_secs) {
       if (DEBUG_LEVEL >= 1) { 
         print "waitForState: waited ".$wait_secs.", timed out\n"; 
@@ -774,47 +778,52 @@ sub waitForState($$$) {
     }
     
     # presume that we the state change has worked                                                                            
-    $ready = 1;
+    $ready = 0;
 
     # parse the nexus' state
     ($pwcc, @pwcs) = getPWCCState($handle);
-                                                                                
-    if ($pwcc ne $required_state) {
-      if (DEBUG_LEVEL >= 1){
-        print "Waiting for PWC Controller to transition to ".$required_state."\n";
-      }
-      $ready = 0;
-    }
 
+    # check pwcc state
+    if ($pwcc eq "fatal_error") {
+      $ready = PWCC_FATAL_ERROR;
+    } elsif ($pwcc eq "hard_error") {
+      $ready = PWCC_HARD_ERROR;
+    } elsif ($pwcc eq "soft_error") {
+      $ready = PWCC_SOFT_ERROR;
+    } elsif ($pwcc ne $required_state) {
+      $ready = -1;
+    } else {
+      # pwcc is in required state
+    }
+  
     $response = "PWCC=".$pwcc." ";
                                                                                 
-    for ($i=0; $i<=$#pwcs;$i++) {
-
+    for ($i=0; $i<=$#pwcs;$i++) 
+    {
       $pwc = @pwcs[$i];
       $response .= " PWC".$i."=".$pwc;
-      if ($pwc ne $required_state) {
-        if (DEBUG_LEVEL >= 1) {
-          print "Waiting for PWC_".$i." to transition to ".$required_state."\n";
-        }
-        $ready = 0;
+
+      if ($pwc eq "fatal_error") {
+        $ready = PWCC_FATAL_ERROR;
+      } elsif ($pwc eq "hard_error") {
+        $ready = PWCC_HARD_ERROR;
+      } elsif ($pwc eq "soft_error") {
+        $ready = PWCC_SOFT_ERROR;
+      } elsif ($pwc ne $required_state) {
+        $ready = -1;
+      } else {
+        # pwc is in required state
       }
     }
 
-    if (!$ready) {
-      if (($counter > 3) && (DEBUG_LEVEL >= 1)) {
-        print "waitForState: not yet ready: ".$response."\n";
-      }
+    if ($ready == -1) 
+    {
       sleep 1;
       $counter++;
     }
   }
 
-  if ($ready) {
-    return 0;
-  } else {
-    return -1;
-  }
-
+  return $ready;
 }
 
 sub runSanityChecks() {
@@ -1004,7 +1013,7 @@ sub getUnprocessedFiles($) {
 
   (my $dir) = @_;
 
-  my $duresult = `du -sB 1048576 $dir | awk '{print \$1}' `;
+  my $duresult = `du -sB 1048576 $dir | awk '{print \$1}'`;
   chomp($duresult);
   if ($? != 0) {
     return ("fail", $duresult);
@@ -1330,29 +1339,35 @@ sub mySystem($;$) {
 }
 
 
-sub killProcess($) {
+sub killProcess($;$) {
 
-  (my $regex) = @_;
+  (my $regex, my $user="") = @_;
 
-  my $pscmd = "";
+  my $pgrep_cmd = "";
+  my $args = "";
   my $cmd = "";
   my $pids = "";
   my $result = "";
   my $response = "";
   my $fnl = 1;
 
-  $pscmd = "pgrep -f '".$regex."'";
+  $args = "-f '".$regex."'";
+  if ($user ne "")
+  {
+    $args = "-u ".$user." ".$args;
+  }
 
-  $cmd = $pscmd;
-  Dada::logMsg(2, $fnl, "killProcess: ".$cmd);
-  ($result, $response) = Dada::mySystem($cmd);
+  $pgrep_cmd = "pgrep ".$args;
+
+  Dada::logMsg(2, $fnl, "killProcess: ".$pgrep_cmd);
+  ($result, $response) = Dada::mySystem($pgrep_cmd);
   Dada::logMsg(2, $fnl, "killProcess: ".$result." ".$response);
 
   # We have one or more processes running
   if (($result eq "ok") && ($response ne "")) {
 
     # send the process the INT signal
-    $cmd = "pkill -INT -f '".$regex."'";
+    $cmd = "pkill -INT ".$args;
     Dada::logMsg(2, $fnl, "killProcess: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     Dada::logMsg(2, $fnl, "killProcess: ".$result." ".$response);
@@ -1361,15 +1376,14 @@ sub killProcess($) {
     sleep(1);
 
     # check they are gone
-    $cmd = "pgrep -f '".$regex."'";
-    Dada::logMsg(2, $fnl, "killProcess: ".$cmd);
-    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(2, $fnl, "killProcess: ".$pgrep_cmd);
+    ($result, $response) = Dada::mySystem($pgrep_cmd);
     Dada::logMsg(2, $fnl, "killProcess: ".$result." ".$response);
 
     if (($result eq "ok") && ($response ne "")) {
     
       # send the process the TERM signal
-      $cmd = "pkill -TERM -f '".$regex."'";
+      $cmd = "pkill -TERM ".$args;
       Dada::logMsg(2, $fnl, "killProcess: ".$cmd);
       ($result, $response) = Dada::mySystem($cmd);
       Dada::logMsg(2, $fnl, "killProcess: ".$result." ".$response);
@@ -1378,15 +1392,14 @@ sub killProcess($) {
       sleep(1);
     
       # check they are gone
-      $cmd = "pgrep -f '".$regex."'";
-      Dada::logMsg(2, $fnl, "killProcess: ".$cmd);
-      ($result, $response) = Dada::mySystem($cmd);
+      Dada::logMsg(2, $fnl, "killProcess: ".$pgrep_cmd);
+      ($result, $response) = Dada::mySystem($pgrep_cmd);
       Dada::logMsg(2, $fnl, "killProcess: ".$result." ".$response);
 
       if (($result eq "ok") && ($response ne "")) {
        
         # send the process the KILL signal
-        $cmd = "pkill -KILL -f '".$regex."'";
+        $cmd = "pkill -KILL ".$args;
         Dada::logMsg(2, $fnl, "killProcess: ".$cmd);
         ($result, $response) = Dada::mySystem($cmd);
         Dada::logMsg(2, $fnl, "killProcess: ".$result." ".$response);
