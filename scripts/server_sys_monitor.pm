@@ -103,10 +103,6 @@ sub main() {
   my $domain = "";
   my $result = "";
   my $response = "";
-  my @threads = ();
-
-  my $active_connections= 0;
-  my $nthreads = 0;
 
   # clear the error and warning files if they exist
   if ( -f $warn ) {
@@ -143,21 +139,11 @@ sub main() {
 
   Dada::logMsg(2, $dl, "Waiting for connection on ".$log_host.":".$log_port);
 
-  # create 2 queues, one for incoming connections, and one to release the 
-  # file handle from scope when the connection is closed 
-  my $in = new Thread::Queue;
-  my $out = new Thread::Queue;
-
-  # hash to hold file_handles -> sockets whilst they are being processed
-  my %handles = ();
-
-  my $tid = 0;
-  my @tids = ();
-  my $file_handle = 0;
+  my $read_something = 0;
+  my $poll_handle = 0;
+  my $line = "";
 
   while (!$quit_daemon) {
-
-    Dada::logMsg(3, $dl, "main: connections=".$active_connections." threads=".$nthreads); 
 
     # Get all the readable handles from the log_sock 
     my ($readable_handles) = IO::Select->select($read_set, undef, undef, 1);
@@ -170,222 +156,77 @@ sub main() {
 
         $handle = $rh->accept();
 
+        $handle->autoflush(1);
+
         # get the hostname for this connection
         $hostinfo = gethostbyaddr($handle->peeraddr);
         $hostname = $hostinfo->name;
         ($host, $domain) = split(/\./,$hostname,2);
-        Dada::logMsg(2, $dl, "accepting connection from ". $hostname);
+        Dada::logMsg(2, $dl, "accepting connection from ". $host);
 
-        # convert the socket to a filehandle and add this to the queue
-        $file_handle = fileno($handle);
-        Dada::logMsg(3, $dl, "main: enqueuing socket as file handle [".$file_handle."]");
-
-        # store host in global hash
-        $hosts_by_filehandle{$file_handle} = $host;
-
-        # add this connection to the queue
-        $in->enqueue($file_handle);
-
-        # now save the file_handle anad socket in hash so it does not go out of scope
-        $handles{$file_handle} = $handle;
+        $read_set->add($handle);
         $handle = 0;
 
-        $active_connections++;
-        Dada::logMsg(3, $dl, "main: active_connections now ".$active_connections);
-
-      } else {
-        Dada::logMsg(0, $dl, "main: received connection not on socket");
       }
-    }
+      else
+      {
 
-    # if one of the logging threads has finished with a socket, close that socket
-    # and remove it from the handles hash
-    while ($out->pending()) {
+        # get the hostname for this connection
+        $hostinfo = gethostbyaddr($rh->peeraddr);
+        $hostname = $hostinfo->name;
+        ($host, $domain) = split(/\./,$hostname,2);
+        Dada::logMsg(2, $dl, "processing message from ". $host);
 
-      # get the file handle
-      $file_handle = $out->dequeue();
-      Dada::logMsg(2, $dl, "main: closing connection from ".$hosts_by_filehandle{$file_handle});
-      Dada::logMsg(3, $dl, "main: removing handle [".$file_handle."]");
+         # set the input record seperator to \r\n
+        $/ = "\r\n";
 
-      # get the socket object from the hash and close it
-      $handle = $handles{$file_handle};
-      $handle->close();
+        # make the socket non blocking
+        $rh->blocking(0);
 
-      # remove the socket from the hash
-      delete $handles{$file_handle};
-      delete $hosts_by_filehandle{$file_handle};
-      $handle = 0;
-      $file_handle = 0;
+        $read_something = 0;
+        $poll_handle = 1;
 
-      $active_connections--;
-      Dada::logMsg(3, $dl, "main: active_connections now ".$active_connections);
-    }
+        # read as much data as we can from the socket
+        while (!$quit_daemon && $poll_handle)
+        {
+          $line = $rh->getline;
 
-    # if we have more active connections than threads, launch additional threads
-    if ($active_connections > $nthreads) 
-    {
-      Dada::logMsg(1, $dl, "main: launching new logThread [".$nthreads."]");
-      $tid = threads->new(\&logThread, $in, $out, $nthreads);
-      push @tids, $tid;
-      $nthreads++;
+          # if nothing at the socket 
+          if ((!defined $line) || ($line eq ""))
+          {
+            # stop polling
+            $poll_handle = 0;
+
+            # if we haven't read anything, the socket is shutting down
+            if (!$read_something)
+            {
+              Dada::logMsg(3, $dl, "main [".$host."]: lost connection");
+              $read_set->remove($rh);
+              $rh->close();
+            }
+          }
+          else
+          {
+            $read_something = 1;
+            $line =~ s/\r\n$//;
+            Dada::logMsg(2, $dl, "main [".$host."] <- ".$line);
+            my $result = logMessage($host, $line);
+            if ($result ne "ok")
+            {
+              Dada::logMsg(0, $dl, "main [".$host."] misformed: ".$line);
+            }
+          }
+        }
+      }
     }
   }
     
   # Rejoin our daemon control thread
   $control_thread->join();
 
-  my $i = 0;
-  for ($i=0; $i<$nthreads; $i++) {
-    $tids[$i]->join();
-  }
-
   Dada::logMsg(0, $dl, "STOPPING SCRIPT");
 
   close($log_sock);
-
-  return 0;
-
-}
-
-
-###############################################################################
-# 
-#
-#
-sub logThread($$$) {
-
-  (my $in, my $out, my $id) = @_;
-
-  Dada::logMsg(2, $dl, "logThread[".$id."] starting");
-
-  my $fh = 0;
-  my $sock;
-  my $have_connection = 0;
-
-  my $poll_handle = 1;
-  my $read_something = 0;
-  my $line = "";
-  my $quit_this_thread = 0;
-  my $read_set = 0;
-  my $rh = 0;
-  my $quit_wait = 10;
-  my $host = "";
-
-  while (!$quit_daemon) {
-
-    # main loop - waits for a item in the queue
-    while ($in->pending) {
-
-      if ($quit_daemon) {
-        if ($quit_wait > 0) {
-          Dada::logMsg(2, $dl, "logThread[".$id."]: quit_daemon=1 while in->pending=true, waiting...");
-          $quit_wait--;
-        } else {
-          Dada::logMsg(0, $dl, "logThread[".$id."]: quit_daemon=1 while in->pending=true, quitting!");
-          return 0;
-        }
-      }
-
-      # dequeue a file handle from the queue
-      $fh = $in->dequeue();
-      Dada::logMsg(3, $dl, "logThread[".$id."] dequeued socket as [".$fh."]");
-
-      # get the host for this socket from the global hash
-      $host = $hosts_by_filehandle{$fh};
-      Dada::logMsg(2, $dl, "logThread[".$id."]: connection from ". $host);
-
-      # reopen this file handle as a socket 
-      open $sock, "+<&=".$fh or warn $! and die;
-
-      $sock->autoflush(1);
-
-      # set the input record seperator to \r\n
-      $/ = "\r\n";
-
-      # make the socket non blocking
-      $sock->blocking(0);
-
-      $have_connection = 1;
-
-      Dada::logMsg(3, $dl, "logThread[".$id."]: accepting connection");
-
-      # create a read set for handle connections and data 
-      $read_set = new IO::Select();
-      $read_set->add($sock);
-
-      # whilst this connection is active
-      while (!$quit_daemon && $have_connection) 
-      {
-
-        # select on the non-blocking socket for any activity
-        my ($readable_handles) = IO::Select->select($read_set, undef, undef, 1);
-
-        $read_something = 0;
-        $poll_handle = 1;
-
-        foreach $rh (@$readable_handles) 
-        {
-          # if something has occured on the socket
-          if ($rh && ($rh == $sock)) 
-          {
-            # read whatever we can (including multiple lines)
-            while (!$quit_daemon && $poll_handle) 
-            {
-              $line = $rh->getline;
-
-              # if nothing at the socket 
-              if ((!defined $line) || ($line eq ""))
-              {
-                # stop polling
-                $poll_handle = 0;
-
-                # if we haven't read anything, the socket is shutting down
-                if (!$read_something) 
-                {
-                  Dada::logMsg(3, $dl, "logThread[".$id."]: lost connection");
-                  $sock->close();
-                  $have_connection = 0;
-                }
-              }
-              else
-              {
-                $read_something = 1;
-                $line =~ s/\r\n$//;
-                # the log_lock is explicitly unlocked when it goes out of scope
-                {
-                  lock($log_lock);
-                  Dada::logMsg(2, $dl, "logThread [".$id."] received: ".$line);
-                  my $result = logMessage($host, $line);
-                  if ($result ne "ok") 
-                  {
-                    Dada::logMsg(0, $dl, "logThread [".$id."] misformed: ".$line);
-                  }
-                }
-              }
-            }
-            Dada::logMsg(3, $dl, "logThread [".$id."] log_loop ended");
-
-          } else {
-            Dada::logMsg(0, $dl, "logThread: received data on wrong handle");
-          }
-        }
-        undef $readable_handles;
-      }
-
-      if ($quit_daemon && $have_connection)
-      {
-        Dada::logMsg(1, $dl, "logThread[".$id."]: closing socket whist have_connection since quit_daemon==1");
-        $sock->close();
-      }
-
-      Dada::logMsg(3, $dl, "logThread[".$id."]: connection now inactive");
-
-      $out->enqueue($fh);
-    } 
-    sleep (1);
-  }
-  
-  Dada::logMsg(2, $dl, "logThread[".$id."]: exiting");
 
   return 0;
 
