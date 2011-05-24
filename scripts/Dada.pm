@@ -1861,13 +1861,13 @@ sub getDM($) {
       $cmd = "grep ^DM ".$par_file." | grep -v DMEPOCH | awk '{print \$2}'";
       ($result, $response) = mySystem($cmd);
       if ($result eq "ok") {
-        $dm = $response;
+        $dm = sprintf("%5.4f",$response);
       }
     } 
 
   # we found the DM ok
   } else {
-    $dm = $response;
+    $dm = sprintf("%5.4f",$response);
   }
 
   return $dm;
