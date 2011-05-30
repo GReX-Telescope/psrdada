@@ -39,6 +39,10 @@
 #define KERNEL_BUFFER_SIZE_DEFAULT 131071
 #define STATS_INIT = {0, 0, 0, 0}
 
+#define DADA_IB_READY_KEY 1
+#define DADA_IB_BYTES_TO_XFER_KEY 2
+#define DADA_IB_BYTES_XFERRED_KEY 3
+
 typedef struct dada_ib_mb
 {
   void          * buffer;
@@ -49,7 +53,6 @@ typedef struct dada_ib_mb
 
 typedef struct dada_ib_shm_block 
 {
-  //uint64_t  buf_va;
   uintptr_t  buf_va;
   uint32_t  buf_rkey;
   uint32_t  buf_lkey;
@@ -61,9 +64,11 @@ typedef struct dada_ib_rdma_cm
   struct rdma_cm_id             * cm_id;
   struct rdma_cm_event          * event;
   struct rdma_conn_param          conn_param;
-  struct ibv_comp_channel       * comp_chan;
+  struct ibv_comp_channel       * send_comp_chan;
+  struct ibv_comp_channel       * recv_comp_chan;
   struct ibv_pd                 * pd;
-  struct ibv_cq                 * cq;
+  struct ibv_cq                 * send_cq;
+  struct ibv_cq                 * recv_cq;
   unsigned                        port;
   uint64_t                        rbuf;
   unsigned                        verbose;
@@ -74,7 +79,8 @@ typedef struct dada_ib_rdma_cm
   uint64_t                        header_size;
   char                          * header;
   dada_ib_mb_t                  * header_mb;
-  unsigned                        depth;
+  unsigned                        send_depth;
+  unsigned                        recv_depth;
   size_t                          sync_size;
   dada_ib_mb_t                  * sync_to;
   uint64_t                      * sync_to_val;
@@ -84,6 +90,8 @@ typedef struct dada_ib_rdma_cm
   int                             cm_connected;
   int                             ib_connected;
   multilog_t                    * log;
+  unsigned                        buffered_cqe;
+  unsigned                        buffered_cqe_wr_id;
 } dada_ib_cm_t;
 
 struct rdma_cm_id * dada_rdma_resolve_addr (const char * host, const char * port);
@@ -94,7 +102,7 @@ int dada_ib_listen_cm (dada_ib_cm_t * ctx, int port);
 
 int dada_ib_connect_cm (dada_ib_cm_t * ctx, const char *host, unsigned port);
 
-int dada_ib_create_verbs (dada_ib_cm_t * ctx, unsigned depth);
+int dada_ib_create_verbs (dada_ib_cm_t * ctx);
 
 dada_ib_mb_t * dada_ib_reg_buffer (dada_ib_cm_t * ctx, void * buffer,
                                    uint64_t bufsz, int access_flags);
@@ -102,17 +110,31 @@ dada_ib_mb_t * dada_ib_reg_buffer (dada_ib_cm_t * ctx, void * buffer,
 int dada_ib_reg_buffers(dada_ib_cm_t * ctx, char ** buffers, uint64_t bufsz, 
                         int access_flags);
 
-int dada_ib_create_qp (dada_ib_cm_t * ctx, unsigned send_depth, unsigned recv_depth);
+int dada_ib_create_qp (dada_ib_cm_t * ctx);
 
 int dada_ib_accept (dada_ib_cm_t * ctx);
 
 int dada_ib_connect(dada_ib_cm_t * ctx);
+
+int dada_ib_send_message(dada_ib_cm_t * ib_cm, uint64_t key, uint64_t value);
+
+int dada_ib_recv_message (dada_ib_cm_t * ib_cm, uint64_t key);
+
+int dada_ib_send_messages(dada_ib_cm_t ** ib_cms, unsigned n_ib_cms, uint64_t key, uint64_t value);
+
+int dada_ib_recv_messages (dada_ib_cm_t ** ib_cms, unsigned n_ib_cms, uint64_t key);
 
 int dada_ib_post_send (dada_ib_cm_t * ctx, dada_ib_mb_t *mb);
 
 int dada_ib_post_recv (dada_ib_cm_t * ctx, dada_ib_mb_t *mb);
 
 int dada_ib_wait_recv (dada_ib_cm_t * ctx, dada_ib_mb_t *mb);
+
+int dada_ib_wait_send(dada_ib_cm_t * ctx, dada_ib_mb_t *mb);
+
+int dada_ib_wait_cq (dada_ib_cm_t * ctx, dada_ib_mb_t * mb,
+                     struct ibv_comp_channel * comp_chan, struct ibv_cq * cq);
+
 
 int dada_ib_post_sends (dada_ib_cm_t * ctx, void * buffer, uint64_t bytes, 
                         uint64_t chunk_size, uint32_t lkey, uint32_t rkey, 

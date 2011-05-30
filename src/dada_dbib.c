@@ -23,6 +23,9 @@
 #include <errno.h>
 #include <assert.h>
 
+// globals
+int quit_signal = 0;
+
 void usage()
 {
   fprintf (stdout,
@@ -57,67 +60,37 @@ typedef struct {
 
   unsigned verbose;
 
-  char * header;
-
   /* current observation id, as defined by OBS_ID attribute */
   char obs_id [DADA_OBS_ID_MAXLEN];
 
   // Infiniband Connection Manager
   dada_ib_cm_t * ib_cm;
 
-  dada_ib_mb_t * header_mb;
-
 } dada_dbib_t;
 
-#define DADA_DBIB_INIT { "", 0, 0, 0, 0, 0, "", "", 0, 0}
+#define DADA_DBIB_INIT { "", 0, 0, 0, 0, 0, "",  0}
 
 /*! Function that opens the data transfer target */
 int dbib_open (dada_client_t* client)
 {
 
-  /* the dada_dbib specific data */
+  // the dada_dbib specific data
   assert (client != 0);
   dada_dbib_t* dbib = (dada_dbib_t*) client->context;
 
-  /* the ib communcation manager */
+  // the ib communcation manager
   assert(dbib->ib_cm != 0);
   dada_ib_cm_t * ib_cm = dbib->ib_cm;
   
-  /* the header */
+  if (dbib->verbose)
+    multilog (client->log, LOG_INFO, "caspsr_dbib_open()\n");
+
+  // the header
   assert(client->header != 0);
   char* header = client->header;
 
-  /* observation id, as defined by OBS_ID attribute */
+  // observation id, as defined by OBS_ID attribute
   char obs_id [DADA_OBS_ID_MAXLEN] = "";
-
-  /* size of each transfer in bytes, as defined by TRANSFER_SIZE attribute */
-  uint64_t xfer_size = 0;
- 
-  if (!dbib->connected)
-  {
-
-    // connect to the server and retrieve the remote datablock addresses
-    /*dbib->remote_blocks = dada_ib_connect(ib_cm, client->log);
-    if (!dbib->remote_blocks)
-    {
-      multilog(client->log, LOG_ERR, "dada_ib_connect failed\n");
-      return -1;
-    }
-    */
-    if (dada_ib_connect(ib_cm) < 0) 
-    {
-      multilog(client->log, LOG_ERR, "open: dada_ib_connect failed\n");
-      return -1;
-    }
-
-    dbib->connected = 1;
-  }
-
-  /* Get the observation ID */
-  if (ascii_header_get (header, "OBS_ID", "%s", obs_id) != 1) {
-    multilog (client->log, LOG_WARNING, "Header with no OBS_ID\n");
-    strcpy (obs_id, "UNKNOWN");
-  }
 
   // assumed that we do not know how much data will be transferred
   client->transfer_bytes = 0;
@@ -147,48 +120,48 @@ int dbib_close (dada_client_t* client, uint64_t bytes_written)
   dada_ib_cm_t * ib_cm = dbib->ib_cm;
 
   if (dbib->verbose)
-    multilog(log, LOG_INFO, "dbib_close()\n");
+    multilog(log, LOG_INFO, "dbib_close() bytes_written=%"PRIu64"\n", bytes_written);
 
-  if (bytes_written < client->transfer_bytes) {
-    multilog (log, LOG_INFO, "Transfer stopped early at %"PRIu64" bytes\n",
-	      bytes_written);
+  // IMPORTANT, if we transferred an even multiple of the db_bufsz, we need to
+  // tell ibdb that the transfer is over, if not, then it knows
+  if (bytes_written % ib_cm->bufs_size != 0)
+  {
+     if (dbib->verbose)
+         multilog (log, LOG_INFO, "close: no need to preform closing steps\n");
+  }
+  else 
+  {
 
-    if (ascii_header_set (client->header, "TRANSFER_SIZE", "%"PRIu64,
-			  bytes_written) < 0)  {
-      multilog (client->log, LOG_ERR, "Could not set TRANSFER_SIZE\n");
+    // since we posted a recv in the send_block function, we need to wait for that recv in the cleanup
+    if (dbib->verbose)
+      multilog (log, LOG_INFO, "close: recv_message on sync_from [READY]\n");
+    if (dada_ib_recv_message (ib_cm, DADA_IB_READY_KEY) < 0)
+    {
+      multilog(log, LOG_ERR, "close: recv_message on sync_from [READY] failed\n");
+      return -1;
+    }
+
+    // ibdb will be waiting for the next block, send 0 bytes to xfer as an EOD message 
+    if (dbib->verbose)
+      multilog (log, LOG_INFO, "close: sending EOD via sync_to\n");
+    if (dada_ib_send_message (ib_cm, DADA_IB_BYTES_TO_XFER_KEY, 0) < 0)
+    {
+      multilog(log, LOG_ERR, "close: send_message on sync_to [EOD] failed\n");
       return -1;
     }
   }
-
-  if (dbib->verbose)
-    multilog (log, LOG_INFO, "close: dada_ib_wait_recv sync_from\n");
-  if (dada_ib_wait_recv (ib_cm, ib_cm->sync_from) < 0)
-  {
-    multilog(log, LOG_ERR, "dada_ib_wait_recv failed\n");
-    return -1;
-  } 
-
-  /*
-  ib_cm->sync_to_val[0] = 0;
-  ib_cm->sync_to_val[1] = 0;
-  if (dada_ib_post_send(ib_cm, ib_cm->sync_to) < 0)
-  {
-    multilog(log, LOG_ERR, "dbib_send_block: dada_ib_post_send failed\n");
-    return -1;
+  
+  if (bytes_written < client->transfer_bytes) {
+    multilog (log, LOG_INFO, "Transfer stopped early at %"PRIu64" bytes\n",
+              bytes_written);
   }
 
-  // wait for confirmation of the send
-  if (dada_ib_wait_recv(ib_cm, ib_cm->sync_to) < 0)
-  {
-    multilog(log, LOG_ERR, "dbib_send_block: dada_ib_wait_recv failed\n");
-    return -1;
-  }
-  */
   return 0;
+
 }
 
-/*! transfer data to server. used for sending header only */
-int64_t dbib_send(dada_client_t* client, void * buffer, uint64_t bytes)
+/*! transfer data to ibdb. used for sending header only */
+int64_t dbib_send (dada_client_t* client, void * buffer, uint64_t bytes)
 {
 
   dada_dbib_t* dbib = (dada_dbib_t*) client->context;
@@ -197,38 +170,53 @@ int64_t dbib_send(dada_client_t* client, void * buffer, uint64_t bytes)
 
   multilog_t* log = client->log;
 
-  if (dbib->header_mb->size != bytes)
+  if (ib_cm->header_mb->size != bytes)
   {
-    multilog (log, LOG_ERR, "header was %"PRIu64" bytes, expected %"PRIu64"\n", bytes, dbib->header_mb->size);
+    multilog (log, LOG_ERR, "header was %"PRIu64" bytes, expected %"PRIu64"\n", bytes, ib_cm->header_mb->size);
     return -1;
   }
 
-  // prepost a recieve on the sync_from memory buffer
+  // wait on sync from the the ready message, to ensure that ibdb is ready
+  if (dbib->verbose)
+    multilog(log, LOG_INFO, "send: recv_message on sync_from [READY]\n");
+  if (dada_ib_recv_message (ib_cm, DADA_IB_READY_KEY) < 0)
+  {
+    multilog(log, LOG_ERR, "send: recv_message on sync_from [READY] failed\n");
+    return -1;
+  }
+
+  // post recv on sync_from for the ready message
+  if (dbib->verbose)
+    multilog(log, LOG_INFO, "send: post_recv on sync_from [READY]\n");
   if (dada_ib_post_recv (ib_cm, ib_cm->sync_from) < 0)
   {
-    multilog(log, LOG_ERR, "dbib_send_block: dada_ib_post_recv failed\n");
+    multilog(log, LOG_ERR, "send: dada_ib_post_recv on sync_from [READY] failed\n");
     return -1;
   }
 
   // copy the header to the header memory buffer
-  memcpy (dbib->header_mb->buffer, buffer, bytes);
+  memcpy (ib_cm->header_mb->buffer, buffer, bytes);
 
   // send the header memory buffer to dada_ibdb
-  if (dada_ib_post_send(ib_cm, dbib->header_mb) < 0)
+  if (dbib->verbose)
+    multilog(log, LOG_INFO, "send: post_send on header_mb\n");
+  if (dada_ib_post_send(ib_cm, ib_cm->header_mb) < 0)
   {
-    multilog(log, LOG_ERR, "dada_ib_post_send failed\n");
+    multilog(log, LOG_ERR, "send: dada_ib_post_send on header_mb failed\n");
     return -1;
   }
 
   // wait for send confirmation
-  if (dada_ib_wait_recv(ib_cm, dbib->header_mb) < 0)
+  if (dbib->verbose)
+    multilog(log, LOG_INFO, "send: wait_send on header_mb\n");
+  if (dada_ib_wait_send(ib_cm, ib_cm->header_mb) < 0)
   {
-    multilog(log, LOG_ERR, "dada_ib_wait_recv failed\n");
+    multilog(log, LOG_ERR, "send: dada_ib_wait_send on header_mb failed\n");
     return -1;
   }
 
-  if (dbib->verbose > 1)
-    multilog(log, LOG_INFO, "dbib_send: returning %"PRIu64" bytes\n", bytes);
+  if (dbib->verbose)
+    multilog(log, LOG_INFO, "send: returning %"PRIu64" bytes\n", bytes);
 
   return bytes;
 
@@ -245,61 +233,96 @@ int64_t dbib_send_block(dada_client_t* client, void * buffer, uint64_t bytes, ui
 
   multilog_t* log = client->log;
 
-  if (dbib->verbose > 1)
-    multilog(log, LOG_INFO, "dbib_send_block: buffer=%p, bytes=%"PRIu64", block_id=%"PRIu64"\n", buffer, bytes, block_id);
+  if (dbib->verbose)
+    multilog(log, LOG_INFO, "send_block: buffer=%p, bytes=%"PRIu64", block_id=%"PRIu64"\n", buffer, bytes, block_id);
 
-  int64_t start_byte;
-  uint64_t remote_block_id;
-
-  // wait for the remote block ID to be sent from dada_ibdb
-  if (dada_ib_wait_recv (ib_cm, ib_cm->sync_from) < 0)
+  // wait for ibdb's ready handshake
+  if (dbib->verbose)
+    multilog(log, LOG_INFO, "send_block: recv_message on sync_from [READY]\n");
+  if (dada_ib_recv_message (ib_cm, DADA_IB_READY_KEY) < 0)
+  { 
+    multilog (log, LOG_ERR, "send_block: recv_message on sync_from [READY] failed\n");
+    return -1;
+  }
+  if (ib_cm->sync_from_val[1] != 0)
   {
-    multilog(log, LOG_ERR, "dada_ib_wait_recv failed\n");
+    multilog (log, LOG_ERR, "send_block: recv_message on sync_from [READY] val wrong: %"PRIu64"\n",
+              ib_cm->sync_from_val[1]);
     return -1;
   }
 
-  //uint64_t remote_buf_va = ib_cm->sync_from_val[0];
+  // post a recv for the remote db buffer
+  if (dbib->verbose)
+    multilog(log, LOG_INFO, "send_block: post_recv on sync_from [BLOCK ID]\n");
+  if (dada_ib_post_recv (ib_cm, ib_cm->sync_from) < 0)
+  {
+    multilog(log, LOG_ERR, "send_block: post_recv sync_from failed [BLOCK ID]\n");
+    return -1;
+  }
+
+  if (bytes && bytes != ib_cm->bufs_size) 
+    multilog(log, LOG_INFO, "send_block: bytes=%"PRIu64", ib_cm->bufs_size=%"PRIu64"\n", bytes);
+
+  // tell ibdb how many bytes we are sending
+  if (ib_cm->verbose)
+    multilog(log, LOG_INFO, "send_block: send_message on sync_to [BYTES TO XFER]=%"PRIu64"\n", bytes);
+  if (dada_ib_send_message (ib_cm, DADA_IB_BYTES_TO_XFER_KEY, bytes) < 0)
+  {
+    multilog(log, LOG_INFO, "send_block: send_message on sync_to [BYTES TO XFER] failed\n");
+    return -1;
+  }
+
+  // wait for the remote buffer information to be sent from ibdb
+  if (dbib->verbose)
+    multilog(log, LOG_INFO, "send_block: recv_message [BLOCK ID]\n");
+  if (dada_ib_recv_message (ib_cm, 0) < 0)
+  {
+    multilog(log, LOG_ERR, "send_block: recv_message [BLOCK ID] failed\n");
+    return -1;
+  }
+
   uintptr_t remote_buf_va = (uintptr_t) ib_cm->sync_from_val[0];
   uint32_t remote_buf_rkey = (uint32_t) ib_cm->sync_from_val[1];
 
   if (dbib->verbose)
-    multilog(log, LOG_INFO, "dbib_send_block: local_block_id=%"PRIu64", remote_buf_va=%p remote_buf_rkey=%p\n", block_id, remote_buf_va, remote_buf_rkey);
+    multilog(log, LOG_INFO, "send_block: local_block_id=%"PRIu64", remote_buf_va=%p, "
+             "remote_buf_rkey=%p\n", block_id, remote_buf_va, remote_buf_rkey);
 
   // transmit the local data block to the remote end via RDMA
-  if (dada_ib_post_sends(ib_cm, buffer, bytes, dbib->chunk_size,
-                         ib_cm->local_blocks[block_id].buf_lkey,
-                         remote_buf_rkey, remote_buf_va) < 0) 
+  if (dada_ib_post_sends (ib_cm, buffer, bytes, dbib->chunk_size,
+                          ib_cm->local_blocks[block_id].buf_lkey,
+                          remote_buf_rkey, remote_buf_va) < 0)
   {
-    multilog(log, LOG_ERR, "dbib_send_block: dada_ib_post_sends failed\n");
+    multilog(log, LOG_ERR, "send_block: dada_ib_post_sends_gap failed\n");
     return -1;
   }
 
-  // prepost a recv for the remote datablock id for the next transfer
+  // prepost a recv for the next READY message
+  if (dbib->verbose)
+    multilog(log, LOG_INFO, "send_block: post_recv on sync_from [READY]\n");
   if (dada_ib_post_recv (ib_cm, ib_cm->sync_from) < 0)
   {
-    multilog(log, LOG_ERR, "dbib_send_block: dada_ib_post_recv failed\n");
+    multilog(log, LOG_ERR, "send_block: post_recv on sync_from [READU] failed\n");
     return -1;
   }
 
   if (dbib->verbose)
-    multilog(log, LOG_INFO, "dbib_send_block: sent %"PRIu64" bytes\n", bytes);
+    multilog(log, LOG_INFO, "send_block: sent %"PRIu64" bytes\n", bytes);
 
   // send the number of valid bytes transferred to dada_ibdb
-  ib_cm->sync_to_val[0] = bytes;
-  if (dada_ib_post_send(ib_cm, ib_cm->sync_to) < 0)
+  if (dbib->verbose)
+    multilog(log, LOG_INFO, "send_block: send_message on sync_to [BYTES XFERED]\n");
+  if (dada_ib_send_message (ib_cm, DADA_IB_BYTES_XFERRED_KEY, bytes) < 0)
   {
-    multilog(log, LOG_ERR, "dbib_send_block: dada_ib_post_send failed\n");
-    return -1;
-  }
-  
-  // wait for confirmation of the send
-  if (dada_ib_wait_recv(ib_cm, ib_cm->sync_to) < 0)
-  {
-    multilog(log, LOG_ERR, "dbib_send_block: dada_ib_wait_recv failed\n");
+    multilog(log, LOG_INFO, "send_block: send_message on sync_to [BYTES XFERED] failed\n");
     return -1;
   }
 
+  if (dbib->verbose)
+   multilog(log, LOG_INFO, "send_block: notified ibdb that %"PRIu64" bytes sent\n", bytes);
+
   return bytes;
+
 }
 
 /*
@@ -308,35 +331,38 @@ int64_t dbib_send_block(dada_client_t* client, void * buffer, uint64_t bytes, ui
 dada_ib_cm_t * dbib_ib_init(dada_dbib_t * ctx, dada_hdu_t * hdu, multilog_t * log)
 {
 
-  uint64_t nbufs = 0;
-  uint64_t bufsz = 0;
+  uint64_t db_nbufs = 0;
+  uint64_t db_bufsz = 0;
+  uint64_t hb_nbufs = 0;
+  uint64_t hb_bufsz = 0;
   char ** db_buffers = 0;
   char ** hb_buffers = 0;
-
-  if (ctx->verbose)
-    multilog(log, LOG_INFO, "dbib_ib_init()\n");
 
   assert (ctx != 0);
   assert (hdu != 0);
 
+  if (ctx->verbose)
+    multilog(log, LOG_INFO, "dbib_ib_init()\n");
+
   // get the datablock addresses for memory registration
-  db_buffers = dada_hdu_db_addresses(hdu, &nbufs, &bufsz);
+  db_buffers = dada_hdu_db_addresses(hdu, &db_nbufs, &db_bufsz);
+  hb_buffers = dada_hdu_hb_addresses(hdu, &hb_nbufs, &hb_bufsz);
 
   // check that the chunk size is a factor of DB size
-  if (bufsz % ctx->chunk_size != 0)
+  if (db_bufsz % ctx->chunk_size != 0)
   {
     multilog(log, LOG_ERR, "ib_init: chunk size [%d] was not a factor "
-             "of data block size [%"PRIu64"]\n", ctx->chunk_size, bufsz);
+             "of data block size [%"PRIu64"]\n", ctx->chunk_size, db_bufsz);
     return 0;
   }
 
-  ctx->chunks_per_block = bufsz / ctx->chunk_size;
+  ctx->chunks_per_block = db_bufsz / ctx->chunk_size;
+
+  if (ctx->verbose)
+    multilog(log, LOG_INFO, "ib_init: chunks_per_block=%"PRIu64"\n", ctx->chunks_per_block);
 
   // create the CM and CM channel
-  if (ctx->verbose)
-    multilog(log, LOG_INFO, "init: dada_ib_create_cm()\n");
-
-  dada_ib_cm_t * ib_cm = dada_ib_create_cm(nbufs, log);
+  dada_ib_cm_t * ib_cm = dada_ib_create_cm(db_nbufs, log);
   if (!ib_cm)
   {
     multilog(log, LOG_ERR, "ib_init: dada_ib_create_cm failed\n");
@@ -344,6 +370,12 @@ dada_ib_cm_t * dbib_ib_init(dada_dbib_t * ctx, dada_hdu_t * hdu, multilog_t * lo
   }
 
   ib_cm->verbose = ctx->verbose;
+  ib_cm->send_depth = ctx->chunks_per_block;
+  ib_cm->recv_depth = 1;
+  ib_cm->port = ctx->port;
+  ib_cm->bufs_size = db_bufsz;
+  ib_cm->header_size = hb_bufsz;
+  ib_cm->db_buffers = db_buffers;
 
   // resolve the route to the server
   if (ctx->verbose)
@@ -355,9 +387,7 @@ dada_ib_cm_t * dbib_ib_init(dada_dbib_t * ctx, dada_hdu_t * hdu, multilog_t * lo
   }
 
   // create the IB verb structures necessary
-  if (ctx->verbose)
-    multilog(log, LOG_INFO, "init: dada_ib_create_verbs(%d)\n", (ctx->chunks_per_block+1));
-  if (dada_ib_create_verbs(ib_cm, (ctx->chunks_per_block+1)) < 0)
+  if (dada_ib_create_verbs(ib_cm) < 0)
   {
     multilog(log, LOG_ERR, "ib_init: dada_ib_create_verbs failed\n");
     return 0;
@@ -365,35 +395,80 @@ dada_ib_cm_t * dbib_ib_init(dada_dbib_t * ctx, dada_hdu_t * hdu, multilog_t * lo
 
   // register each data block buffer for use with IB transport
   int flags = IBV_ACCESS_LOCAL_WRITE;
-  if (dada_ib_reg_buffers(ib_cm, db_buffers, bufsz, flags) < 0)
+  if (dada_ib_reg_buffers(ib_cm, db_buffers, db_bufsz, flags) < 0)
   {
     multilog(log, LOG_ERR, "ib_init: dada_ib_register_memory_buffers failed\n");
     return 0;
   }
 
   // register a local buffer for the header
-  hb_buffers = dada_hdu_hb_addresses(hdu, &nbufs, &bufsz);
-  ctx->header = (char *) malloc(sizeof(char) * bufsz);
-  ctx->header_mb = dada_ib_reg_buffer(ib_cm, ctx->header, bufsz, flags);
-  if (!ctx->header_mb)
+  ib_cm->header = (char *) malloc(sizeof(char) * ib_cm->header_size);
+  if (!ib_cm->header)
+  {
+    multilog(log, LOG_ERR, "ib_init: could not allocate memory for header\n");
+    return 0;
+  }
+
+  ib_cm->header_mb = dada_ib_reg_buffer(ib_cm, ib_cm->header, ib_cm->header_size, flags);
+  if (!ib_cm->header_mb)
   {
     multilog(log, LOG_ERR, "ib_init: could not register header mb\n");
     return 0;
   }
-  ctx->header_mb->wr_id = 100000;
+  ib_cm->header_mb->wr_id = 100000;
 
   // create the Queue Pair
-  if (dada_ib_create_qp (ib_cm, (ctx->chunks_per_block+1), 1) < 0)
+  if (ctx->verbose)
+    multilog(log, LOG_INFO, "ib_init: dada_ib_create_qp()\n");
+  if (dada_ib_create_qp (ib_cm) < 0)
   {
-    multilog(log, LOG_ERR, "ib_init: dada_ib_create_qp (%p, %"PRIu64", 1) failed\n", 
-             ib_cm, (ctx->chunks_per_block+1));
+    multilog(log, LOG_ERR, "ib_init: dada_ib_create_qp (%p)\n",
+             ib_cm);
     return 0;
+  }
+
+  // post recv on sync from for the ready message, prior to sending header
+  if (ctx->verbose)
+    multilog(log, LOG_INFO, "ib_init: post_recv on sync_from [ready new xfer]\n");
+  if (dada_ib_post_recv (ib_cm, ib_cm->sync_from) < 0)
+  {
+    multilog(log, LOG_ERR, "ib_init: dada_ib_post_recv on sync_from [ready new xfer] failed\n");
+    return 0;
+  }
+
+  // open the connection to ibdb
+  if (!ctx->connected)
+  {
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "ib_init: dada_ib_connect\n");
+
+    // connect to the server
+    if (dada_ib_connect(ib_cm) < 0)
+    {
+      multilog(log, LOG_ERR, "ib_init: dada_ib_connect failed\n");
+      return 0;
+    }
+    ctx->connected = 1;
+
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "ib_init: connection established\n");
+
   }
 
   return ib_cm;
 }
 
 
+/*! Simple signal handler for SIGINT */
+void signal_handler(int signalValue) {
+
+  if (quit_signal) {
+    fprintf(stderr, "received signal %d twice, hard exit\n", signalValue);
+    exit(EXIT_FAILURE);
+  }
+  quit_signal = 1;
+
+}
 
 
 int main (int argc, char **argv)
@@ -536,7 +611,7 @@ int main (int argc, char **argv)
   dbib.chunk_size = chunk_size;
   dbib.verbose = verbose;
 
-  fprintf(stderr, "dbib_ib_init()\n");
+  multilog_fprintf(stderr, LOG_INFO, "dbib_ib_init()\n");
   // Init IB network
   dbib.ib_cm = dbib_ib_init (&dbib, hdu, log);
   if (!dbib.ib_cm)
@@ -548,6 +623,7 @@ int main (int argc, char **argv)
   }
 
   fprintf(stderr, "dbib_ib_init done\n");
+  quit = 1;
   while (!client->quit)
   {
     if (dada_client_read (client) < 0)
@@ -563,18 +639,10 @@ int main (int argc, char **argv)
   if (dada_hdu_disconnect (hdu) < 0)
     return EXIT_FAILURE;
 
-  if (dada_ib_dereg_buffer(dbib.header_mb) < 0)
-  {
-    multilog(log, LOG_ERR, "dada_ib_dereg_buffer failed\n"); 
-  }
-
   if (dada_ib_client_destroy(dbib.ib_cm) < 0)
   {
-    multilog(log, LOG_ERR, "dada_ib_client_destory failed\n");
+    multilog(log, LOG_ERR, "dada_ib_client_destroy failed\n");
   }
-
-
-  free(dbib.header);
 
   return EXIT_SUCCESS;
 }

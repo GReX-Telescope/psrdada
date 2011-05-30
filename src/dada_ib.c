@@ -22,9 +22,11 @@ dada_ib_cm_t * dada_ib_create_cm (unsigned nbufs, multilog_t * log)
   ctx->cm_channel = 0;
   ctx->cm_id = 0;
   ctx->event = 0;
-  ctx->comp_chan = 0;
+  ctx->send_comp_chan = 0;
+  ctx->recv_comp_chan = 0;
   ctx->pd = 0;
-  ctx->cq = 0;
+  ctx->send_cq = 0;
+  ctx->recv_cq = 0;
   ctx->nbufs = nbufs;
   ctx->verbose = 0;
   ctx->sync_to = 0;
@@ -34,7 +36,10 @@ dada_ib_cm_t * dada_ib_create_cm (unsigned nbufs, multilog_t * log)
   ctx->cm_connected = 0;
   ctx->ib_connected = 0;
   ctx->log = log;
-  ctx->depth = 0;
+  ctx->send_depth = 0;
+  ctx->recv_depth = 0;
+  ctx->buffered_cqe = 0;
+  ctx->buffered_cqe_wr_id = 0;
 
   ctx->bufs = (dada_ib_mb_t **) malloc(sizeof(dada_ib_mb_t *) * nbufs);
   if (!ctx->bufs)
@@ -51,15 +56,6 @@ dada_ib_cm_t * dada_ib_create_cm (unsigned nbufs, multilog_t * log)
     return 0;
   }
 
-  /*
-  // create the event channel
-  ctx->cm_channel = rdma_create_event_channel();
-  if (!ctx->cm_channel)
-  {
-    multilog(log, LOG_ERR, "dada_ib_create_cm: rdma_create_event_channel failed\n");
-    return 0;
-  }*/
-
   return ctx;
 
 }
@@ -73,7 +69,7 @@ int dada_ib_listen_cm (dada_ib_cm_t * ctx, int port)
   assert(ctx);
   multilog_t * log = ctx->log;
 
-  if (ctx->verbose)
+  if (ctx->verbose > 1)
     multilog(log, LOG_INFO, "dada_ib_listen_cm()\n");
 
   // create the event channel
@@ -141,7 +137,7 @@ int dada_ib_listen_cm (dada_ib_cm_t * ctx, int port)
     return -1;
   }
 
-  if (ctx->verbose)
+  if (ctx->verbose > 1)
     multilog(log, LOG_INFO, "dada_ib_listen_cm: event->id = %d\n", event->id);
 
   ctx->cm_id = event->id;
@@ -162,7 +158,7 @@ int dada_ib_connect_cm (dada_ib_cm_t * ctx, const char *host, unsigned port)
   assert(ctx);
   multilog_t * log = ctx->log;
 
-  if (ctx->verbose)
+  if (ctx->verbose > 1)
     multilog(log, LOG_INFO, "dada_ib_connect_cm()\n");
 
   int err = 0;
@@ -222,7 +218,7 @@ int dada_ib_connect_cm (dada_ib_cm_t * ctx, const char *host, unsigned port)
     return -1;
   }
 
-  if (ctx->verbose)
+  if (ctx->verbose > 1)
     multilog(log, LOG_INFO, "connect_cm: event->event=%s\n", rdma_event_str(event->event));
 
   if (event->event != RDMA_CM_EVENT_ADDR_RESOLVED) {
@@ -247,7 +243,7 @@ int dada_ib_connect_cm (dada_ib_cm_t * ctx, const char *host, unsigned port)
     return -1;
   }
 
-  if (ctx->verbose)
+  if (ctx->verbose > 1)
     multilog(log, LOG_INFO, "connect_cm: event->event=%s\n", rdma_event_str(event->event));
 
   if (event->event != RDMA_CM_EVENT_ROUTE_RESOLVED)
@@ -263,13 +259,12 @@ int dada_ib_connect_cm (dada_ib_cm_t * ctx, const char *host, unsigned port)
 
 }
 
-int dada_ib_create_verbs(dada_ib_cm_t * ctx, unsigned depth)
+int dada_ib_create_verbs(dada_ib_cm_t * ctx)
 {
-
   assert(ctx);
   multilog_t * log = ctx->log;
 
-  if (ctx->verbose)
+  if (ctx->verbose > 1)
     multilog(log, LOG_INFO, "dada_ib_create_verbs()\n");
 
   // create a PD (protection domain). The PD limits which memory regions can be 
@@ -283,33 +278,56 @@ int dada_ib_create_verbs(dada_ib_cm_t * ctx, unsigned depth)
     return -1;
   }
 
-  // create a completion channel. This is the mechanism for receiving notifications when
-  // CQE (completion queue events) are placed on the CQ
+  // create a send and recv completion channel. This is the mechanism for 
+  // receiving notifications when CQEs are placed on the CQ
   if (ctx->verbose > 1)
-    multilog(log, LOG_INFO, "create_verbs: ibv_create_comp_channel\n");
-  ctx->comp_chan = ibv_create_comp_channel(ctx->cm_id->verbs);
-  if (!ctx->comp_chan)
+    multilog(log, LOG_INFO, "create_verbs: ibv_create_comp_channel for send and recv\n");
+  ctx->send_comp_chan = ibv_create_comp_channel(ctx->cm_id->verbs);
+  if (!ctx->send_comp_chan)
   {
-    multilog(log, LOG_ERR, "dada_ib_create_verbs: ibv_create_comp_channel failed\n");
+    multilog(log, LOG_ERR, "dada_ib_create_verbs: ibv_create_comp_channel [send] failed\n");
     return -1;
   }
+
+  ctx->recv_comp_chan = ibv_create_comp_channel(ctx->cm_id->verbs);
+  if (!ctx->recv_comp_chan)
+  {
+    multilog(log, LOG_ERR, "dada_ib_create_verbs: ibv_create_comp_channel [recv] failed\n");
+    return -1;
+  }
+
 
   // create a CQ. The CQ will hold the CQEs
   if (ctx->verbose > 1)
-    multilog(log, LOG_INFO, "create_verbs: ibv_create_cq\n");
-  ctx->cq = ibv_create_cq(ctx->cm_id->verbs, (int) depth, NULL, ctx->comp_chan, 0);
-  if (!ctx->cq)
+    multilog(log, LOG_INFO, "create_verbs: ibv_create_cq send_cq\n");
+  ctx->send_cq = ibv_create_cq(ctx->cm_id->verbs, ctx->send_depth, NULL, ctx->send_comp_chan, 0);
+  if (!ctx->send_cq)
   {
-    multilog(log, LOG_ERR, "dada_ib_create_verbs: ibv_create_cq failed\n");
+    multilog(log, LOG_ERR, "dada_ib_create_verbs: ibv_create_cq send_cq failed\n");
     return -1;
   }
 
-  // arm the notification mechanism for the CQ 
   if (ctx->verbose > 1)
-    multilog(log, LOG_INFO, "create_verbs: ibv_req_notify_cq\n");
-  if (ibv_req_notify_cq(ctx->cq, 0))
+    multilog(log, LOG_INFO, "create_verbs: ibv_create_cq recv_cq\n");
+  ctx->recv_cq = ibv_create_cq(ctx->cm_id->verbs, ctx->recv_depth, NULL, ctx->recv_comp_chan, 0);
+  if (!ctx->recv_cq)
   {
-    multilog(log, LOG_ERR, "dada_ib_create_verbs: ibv_req_notify_cq failed\n");
+    multilog(log, LOG_ERR, "dada_ib_create_verbs: ibv_create_cq recv_cq failed\n");
+    return -1;
+  }
+
+  // arm the notification mechanism for the send and recv CQs 
+  if (ctx->verbose > 1)
+    multilog(log, LOG_INFO, "create_verbs: ibv_req_notify_cq send and recv CQs\n");
+
+  if (ibv_req_notify_cq(ctx->send_cq, 0))
+  {
+    multilog(log, LOG_ERR, "dada_ib_create_verbs: ibv_req_notify_cq send_cq failed\n");
+    return -1;
+  }
+  if (ibv_req_notify_cq(ctx->recv_cq, 0))
+  {
+    multilog(log, LOG_ERR, "dada_ib_create_verbs: ibv_req_notify_cq recv_cq failed\n");
     return -1;
   }
 
@@ -415,7 +433,7 @@ int dada_ib_reg_buffers(dada_ib_cm_t * ctx, char ** buffers, uint64_t bufsz,
     ctx->local_blocks[i].buf_lkey = ctx->bufs[i]->mr->lkey;
     ctx->local_blocks[i].buf_rkey = ctx->bufs[i]->mr->rkey;
 
-    if (ctx->verbose)
+    if (ctx->verbose > 1)
       multilog (log, LOG_INFO, "reg_buffers: block[%d] buffer=%p buf_va=%p buf_lkey=%p "
                 "buf_rkey=%p\n", i, ctx->bufs[i]->buffer, ctx->local_blocks[i].buf_va, 
                 ctx->local_blocks[i].buf_lkey, ctx->local_blocks[i].buf_rkey);
@@ -429,7 +447,7 @@ int dada_ib_reg_buffers(dada_ib_cm_t * ctx, char ** buffers, uint64_t bufsz,
   assert(ctx->sync_to_val != 0);
   assert(ctx->sync_from_val != 0);
 
-  if (ctx->verbose)
+  if (ctx->verbose > 1)
     multilog(log, LOG_INFO, "reg_buffers: creating sync buffers size=%d "
              "bytes\n", ctx->sync_size);
 
@@ -461,24 +479,30 @@ int dada_ib_reg_buffers(dada_ib_cm_t * ctx, char ** buffers, uint64_t bufsz,
 /*
  *  create QP's for each connection
  */
-int dada_ib_create_qp (dada_ib_cm_t * ctx, unsigned send_depth, unsigned recv_depth)
+int dada_ib_create_qp (dada_ib_cm_t * ctx)
 {
   assert(ctx);
   multilog_t * log = ctx->log;
 
-  if (ctx->verbose)
+  if (ctx->verbose > 1)
     multilog(log, LOG_INFO, "dada_ib_create_qp()\n");
 
   struct ibv_qp_init_attr qp_attr = { };
   unsigned err = 0;
 
-  qp_attr.cap.max_send_wr  = send_depth;
+  if (ctx->verbose > 1)
+  {
+    multilog(log, LOG_INFO, "create_qp send_depth=%d recv_depth=%d\n", ctx->send_depth, ctx->recv_depth);
+    multilog(log, LOG_INFO, "create_qp send_cq=%p recv_cq=%p\n", ctx->send_cq, ctx->recv_cq);
+  }
+
+  qp_attr.cap.max_send_wr  = (int) ctx->send_depth;
+  qp_attr.cap.max_recv_wr  = (int) ctx->recv_depth;
   qp_attr.cap.max_send_sge = 1;
-  qp_attr.cap.max_recv_wr  = recv_depth;
   qp_attr.cap.max_recv_sge = 1;
 
-  qp_attr.send_cq          = ctx->cq;
-  qp_attr.recv_cq          = ctx->cq;
+  qp_attr.send_cq          = ctx->send_cq;
+  qp_attr.recv_cq          = ctx->recv_cq;
 
   qp_attr.qp_type          = IBV_QPT_RC;
   qp_attr.sq_sig_all       = 0;
@@ -504,7 +528,7 @@ int dada_ib_accept (dada_ib_cm_t * ctx)
   assert(ctx);
   multilog_t * log = ctx->log;
 
-  if (ctx->verbose)
+  if (ctx->verbose > 1)
     multilog(log, LOG_INFO, "dada_ib_accept()\n");
 
   struct rdma_cm_event * event;
@@ -559,7 +583,7 @@ int dada_ib_connect (dada_ib_cm_t * ctx)
   assert(ctx);
   multilog_t * log = ctx->log;
 
-  if (ctx->verbose)
+  if (ctx->verbose > 1)
     multilog(log, LOG_INFO, "dada_ib_connect()\n");
 
   struct rdma_conn_param conn_param = { };
@@ -589,7 +613,7 @@ int dada_ib_connect (dada_ib_cm_t * ctx)
     return -1;
   }
 
-  if (ctx->verbose)
+  if (ctx->verbose > 1)
     multilog(log, LOG_INFO, "connect: cm_event=%s attempts\n", rdma_event_str(event->event));
 
   if (event->event != RDMA_CM_EVENT_ESTABLISHED)
@@ -655,58 +679,81 @@ int dada_ib_post_recv (dada_ib_cm_t * ctx, dada_ib_mb_t *mb)
 
 }
 
+
 /*
- *  Waits for a CQE on the CC with IBV_SUCCESS and a matching wr_id
+ * Wait for a CQE on the send CC/CQ with IBV_SUCCESS and matching wr_id
+ */
+int dada_ib_wait_send (dada_ib_cm_t * ctx, dada_ib_mb_t * mb)
+{
+  return dada_ib_wait_cq (ctx, mb, ctx->send_comp_chan, ctx->send_cq);
+}
+
+/*
+ *  Waits for a CQE on the CC/CQ with IBV_SUCCESS and a matching wr_id
  */
 int dada_ib_wait_recv(dada_ib_cm_t * ctx, dada_ib_mb_t * mb)
 {
+  return dada_ib_wait_cq (ctx, mb, ctx->recv_comp_chan, ctx->recv_cq);
+}
 
+int dada_ib_wait_cq (dada_ib_cm_t * ctx, dada_ib_mb_t * mb, 
+                     struct ibv_comp_channel * comp_chan, struct ibv_cq * cq)
+{ 
   assert(ctx);
   multilog_t * log = ctx->log;
 
   if (ctx->verbose > 1)
-    multilog(log, LOG_INFO, "dada_ib_wait_recv()\n");
+    multilog(log, LOG_INFO, "dada_ib_wait_cq()\n");
 
   struct ibv_cq  * evt_cq;
   void           * cq_context;
   struct ibv_wc    wc;
 
   int data_received = 0;
-  int erroneous_wr = 0;
 
-  assert(ctx->comp_chan != 0);
-  assert(ctx->cq != 0);
+  assert(comp_chan != 0);
+  assert(cq != 0);
+
+  // check if this CQE is buffered
+  if ((ctx->buffered_cqe) && (ctx->buffered_cqe_wr_id == mb->wr_id))
+  {
+    multilog(log, LOG_INFO, "wait_cq: restoring buffered event for %"PRIu64"\n", mb->wr_id);
+    ctx->buffered_cqe_wr_id = wc.wr_id;
+    ctx->buffered_cqe = 0;
+    ctx->buffered_cqe_wr_id = 0;
+    data_received = 1;
+  }
 
   while (!data_received) {
   
-    if (erroneous_wr || ctx->verbose > 1)
-      multilog(log, LOG_INFO, "wait_recv: ibv_get_cq_event\n");
-    if (ibv_get_cq_event(ctx->comp_chan, &evt_cq, &cq_context))
+    if (ctx->verbose > 1)
+      multilog(log, LOG_INFO, "wait_cq: ibv_get_cq_event\n");
+    if (ibv_get_cq_event(comp_chan, &evt_cq, &cq_context))
     {
-      multilog(log, LOG_ERR, "wait_recv: ibv_get_cq_event failed\n");
+      multilog(log, LOG_ERR, "wait_cq: ibv_get_cq_event failed\n");
       return -1;
     }
 
-    /* Request notification upon the next completion event */
-    if (erroneous_wr || ctx->verbose > 1)
-      multilog(log, LOG_INFO, "wait_recv: ibv_req_notify_cq\n");
-    if (ibv_req_notify_cq(ctx->cq, 0))
+    // request notification for CQE's
+    if (ctx->verbose > 1)
+      multilog(log, LOG_INFO, "wait_cq: ibv_req_notify_cq\n");
+    if (ibv_req_notify_cq(cq, 0))
     {
-      multilog(log, LOG_ERR, "dada_ib_wait_recv: ibv_req_notify_cq() failed\n");
+      multilog(log, LOG_ERR, "dada_ib_wait_cq: ibv_req_notify_cq() failed\n");
       return -1;
     } 
 
-    if (erroneous_wr || ctx->verbose > 1)
-      multilog(log, LOG_INFO, "wait_recv: ibv_poll_cq\n");
-    int ne = ibv_poll_cq(ctx->cq, 1, &wc);
+    if (ctx->verbose > 1)
+      multilog(log, LOG_INFO, "wait_cq: ibv_poll_cq\n");
+    int ne = ibv_poll_cq(cq, 1, &wc);
     if (ne < 0) {
-      multilog(log, LOG_ERR, "dada_ib_wait_recv: ibv_poll_cq() failed: ne=%d\n", ne);
+      multilog(log, LOG_ERR, "wait_cq: ibv_poll_cq() failed: ne=%d\n", ne);
       return -1;
     }
 
     if (wc.status != IBV_WC_SUCCESS) 
     {
-      multilog(log, LOG_WARNING, "dada_ib_wait_recv: wc.status != IBV_WC_SUCCESS "
+      multilog(log, LOG_WARNING, "wait_cq: wc.status != IBV_WC_SUCCESS "
                "[wc.status=%s, wc.wr_id=%"PRIu64", mb->wr_id=%"PRIu64"]\n", 
                ibv_wc_status_str(wc.status), wc.wr_id, mb->wr_id);
       return -1;
@@ -714,28 +761,153 @@ int dada_ib_wait_recv(dada_ib_cm_t * ctx, dada_ib_mb_t * mb)
 
     if (wc.wr_id != mb->wr_id ) 
     {
-      multilog(log, LOG_WARNING, "dada_ib_wait_recv: wr_id=%"PRIu64" != %"PRIu64"\n", wc.wr_id, mb->wr_id);
-      // seeing what happens if we ignore the extra WR
-      erroneous_wr = 1;
-      //return -1;
+      multilog(log, LOG_WARNING, "wait_cq: wr_id=%"PRIu64" != %"PRIu64"\n", wc.wr_id, mb->wr_id);
+      uint64_t * tmpptr = (uint64_t *) mb->buffer;
+      multilog(log, LOG_WARNING, "wait_cq: wr_id=%"PRIu64" key=%"PRIu64" val=%"PRIu64"\n", wc.wr_id, tmpptr[0], tmpptr[1]);
+
+      ctx->verbose = 2;
+
+      // give up if we have to buffer more than 1 CQE
+      if (ctx->buffered_cqe)
+      {
+        multilog(log, LOG_ERR, "wait_cq: will not buffer more than 1 CQE\n");
+        multilog(log, LOG_INFO,  "wait_cq: ibv_ack_cq_events\n"); 
+        ibv_ack_cq_events(cq, 1);
+        return -1;
+      } 
+      // save this CQE and wr_id so that it can be retrieved later
+      else 
+      {
+        multilog(log, LOG_WARNING, "dada_ib_wait_cq: buffering wr_id=%"PRIu64"\n", wc.wr_id);
+        ctx->buffered_cqe = 1;
+        ctx->buffered_cqe_wr_id = wc.wr_id;
+      }
     }
 
     if ((wc.wr_id == mb->wr_id) && (wc.status == IBV_WC_SUCCESS))
     {
-      if (erroneous_wr || ctx->verbose > 2)
-        multilog(log, LOG_INFO, "wait_recv: wr correct\n");
+      if (ctx->verbose > 1)
+        multilog(log, LOG_INFO, "wait_cq: wr correct\n");
       data_received = 1;
     }
-    if (erroneous_wr || ctx->verbose > 1)
-      multilog(log, LOG_INFO, "wait_recv: ibv_ack_cq_events\n"); 
-    ibv_ack_cq_events(ctx->cq, 1);
+
+    if (ctx->verbose > 1)
+      multilog(log, LOG_INFO, "wait_cq: ibv_ack_cq_events\n"); 
+    ibv_ack_cq_events(cq, 1);
   }
 
-  if (erroneous_wr || ctx->verbose > 1)
-    multilog(log, LOG_INFO, "dada_ib_wait_recv: returned\n");
+  if (ctx->verbose > 1)
+    multilog(log, LOG_INFO, "dada_ib_wait_cq: returned\n");
 
   return 0;
 
+}
+
+/* 
+ * post send key and value as 2 64 bit values on the ib_cm's sync_to
+ * memory buffer, then wait for the data tp be sent 
+ */
+int dada_ib_send_message(dada_ib_cm_t * ib_cm, uint64_t key, uint64_t value)
+{
+
+  ib_cm->sync_to_val[0] = key;
+  ib_cm->sync_to_val[1] = value;
+
+  if (dada_ib_post_send (ib_cm, ib_cm->sync_to) < 0)
+  {
+    multilog(ib_cm->log, LOG_ERR, "send_message: post_send failed\n");
+    return -1;
+  }
+
+  if (dada_ib_wait_send (ib_cm, ib_cm->sync_to) < 0)
+  {
+    multilog(ib_cm->log, LOG_ERR, "send_message: wait_send failed\n");
+    return -1;
+  }
+
+  return 0;
+}
+
+/* post send key and values as 2 64 bit values on the ib_cms' sync_to
+  memory buffer, then wait for the data tp be sent 
+ */
+int dada_ib_send_messages(dada_ib_cm_t ** ib_cms, unsigned n_ib_cms, uint64_t key, uint64_t value)
+{
+  unsigned i = 0;
+
+  for (i=0; i< n_ib_cms; i++)
+  {
+    ib_cms[i]->sync_to_val[0] = key;
+    ib_cms[i]->sync_to_val[1] = value;
+
+    if (dada_ib_post_send (ib_cms[i], ib_cms[i]->sync_to) < 0)
+    {
+      multilog(ib_cms[i]->log, LOG_ERR, "send_message: [%d] post_send failed\n", i);
+      return -1;
+    }
+  }
+
+  for (i=0; i< n_ib_cms; i++)
+  {
+    if (dada_ib_wait_send (ib_cms[i], ib_cms[i]->sync_to) < 0)
+    {
+      multilog(ib_cms[i]->log, LOG_ERR, "send_message: [%d] wait_send failed\n", i);
+      return -1;
+    }
+  }
+
+  return 0;
+}
+
+/*
+ *  recv a control message on the ib_cm's sync_from buffer, if key 
+ *  is specified, ensure that the key matches the response
+ */
+int dada_ib_recv_message (dada_ib_cm_t * ib_cm, uint64_t key)
+{
+ 
+  if (dada_ib_wait_recv (ib_cm, ib_cm->sync_from) < 0)
+  {
+    multilog (ib_cm->log, LOG_ERR, "recv_message: wait_recv failed\n");
+    return -1;
+  }
+
+  // check the key matches
+  if ((key > 0) && (ib_cm->sync_from_val[0] != key))
+  {
+    multilog (ib_cm->log, LOG_WARNING, "recv_message: key[%"PRIu64 "] != val[%"PRIu64"]\n", 
+              key, ib_cm->sync_from_val[0]);
+    return -1;
+  }
+
+  return 0;
+}
+
+/*
+ *  recv a control message on the ib_cms' sync_from buffer, if key 
+ *  is specified, ensure that the key matches the response
+ */
+int dada_ib_recv_messages (dada_ib_cm_t ** ib_cms, unsigned n_ib_cms, uint64_t key)
+{
+  unsigned i = 0;
+  for (i=0; i< n_ib_cms; i++)
+  {
+    if (dada_ib_wait_recv (ib_cms[i], ib_cms[i]->sync_from) < 0)
+    {
+      multilog (ib_cms[i]->log, LOG_ERR, "recv_message: wait_recv failed\n");
+      return -1;
+    }
+
+    // check the key matches
+    if ((key > 0) && (ib_cms[i]->sync_from_val[0] != key))
+    {
+      multilog (ib_cms[i]->log, LOG_WARNING, "recv_message: key[%"PRIu64 "] != val[%"PRIu64"]\n",
+                key, ib_cms[i]->sync_from_val[0]);
+      return -1;
+    }
+  }
+
+  return 0;
 }
 
 
@@ -812,7 +984,6 @@ int dada_ib_post_sends(dada_ib_cm_t * ctx, void * buffer, uint64_t bytes, uint64
   send_wr.opcode     = IBV_WR_RDMA_WRITE;
   send_wr.send_flags = 0;
 
-
   chunks = bytes / chunk_size;
   if ( bytes % chunk_size != 0)
     chunks++;
@@ -872,7 +1043,7 @@ int dada_ib_post_sends_gap (dada_ib_cm_t * ctx, void * buffer,
   if ( bytes % chunk_size != 0)
     chunks++;
 
-  if (ctx->verbose)
+  if (ctx->verbose > 1)
   {
     multilog(log, LOG_INFO, "post_sends_gap: sending %"PRIu64" bytes "
              "in %"PRIu64" byte chunks\n", bytes, chunk_size);
@@ -902,7 +1073,7 @@ int dada_ib_post_sends_gap (dada_ib_cm_t * ctx, void * buffer,
     send_wr.wr.rdma.remote_addr += (chunk_size + rgap);
   }
 
-  if (ctx->verbose)
+  if (ctx->verbose > 1)
     multilog(log, LOG_INFO, "post_sends_gap: posted %"PRIu64" bytes as sent\n", bytes);
 
   return 0;
@@ -963,7 +1134,7 @@ int dada_ib_disconnect(dada_ib_cm_t * ctx)
 
   err = 0;
 
-  if (ctx->verbose)
+  if (ctx->verbose > 1)
     multilog (log, LOG_INFO, "disconnect: ibv_destroy_qp\n"); 
   if (ctx->cm_id->qp)
   {
@@ -974,14 +1145,21 @@ int dada_ib_disconnect(dada_ib_cm_t * ctx)
     ctx->cm_id->qp = 0;
   }
 
-  if (ctx->verbose)
+  if (ctx->verbose > 1)
     multilog (log, LOG_INFO, "disconnect: ibv_destroy_cq\n"); 
-  if (ctx->cq) {
-    if (ibv_destroy_cq(ctx->cq)) {
+  if (ctx->send_cq) {
+    if (ibv_destroy_cq(ctx->send_cq)) {
       multilog(log, LOG_ERR, "disconnect: failed to destroy CQ\n");
       err = 1;
     }
-    ctx->cq = 0;
+    ctx->send_cq = 0;
+  }
+  if (ctx->recv_cq) {
+    if (ibv_destroy_cq(ctx->recv_cq)) {
+      multilog(log, LOG_ERR, "disconnect: failed to destroy CQ\n");
+      err = 1;
+    }
+    ctx->recv_cq = 0;
   }
 
 
@@ -1044,16 +1222,28 @@ int dada_ib_disconnect(dada_ib_cm_t * ctx)
     free(ctx->sync_from_val);
   ctx->sync_from_val = 0;
 
-  if (ctx->comp_chan) 
+  if (ctx->send_comp_chan) 
   {
     if (ctx->verbose > 1)
       multilog (log, LOG_INFO, "disconnect: ibv_destroy_comp_channel()\n");
-    if (ibv_destroy_comp_channel(ctx->comp_chan)) 
+    if (ibv_destroy_comp_channel(ctx->send_comp_chan)) 
     {
       multilog(log, LOG_ERR, "disconnect: failed to destroy completion channel\n");
       err = 1;
     }
-    ctx->comp_chan = 0;
+    ctx->send_comp_chan = 0;
+  }
+
+  if (ctx->recv_comp_chan)
+  {
+    if (ctx->verbose > 1)
+      multilog (log, LOG_INFO, "disconnect: ibv_destroy_comp_channel()\n");
+    if (ibv_destroy_comp_channel(ctx->recv_comp_chan))
+    {
+      multilog(log, LOG_ERR, "disconnect: failed to destroy completion channel\n");
+      err = 1;
+    }
+    ctx->recv_comp_chan = 0;
   }
 
   if (ctx->pd) 
@@ -1103,7 +1293,7 @@ int dada_ib_destroy (dada_ib_cm_t * ctx)
   assert(ctx);
   multilog_t * log = ctx->log;
 
-  if (ctx->verbose)
+  if (ctx->verbose > 1)
     multilog (log, LOG_INFO, "dada_ib_destroy()\n");
 
   if (dada_ib_disconnect(ctx) < 0)
