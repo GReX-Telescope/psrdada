@@ -514,6 +514,43 @@ char * ipcio_open_block_write (ipcio_t *ipc, uint64_t *block_id)
 
 }
 
+
+/*
+ * Update the number of bytes written to a Data Block unit that was opened
+ * for "direct" write access. This does not mark the buffer as filled. 
+ */
+ssize_t ipcio_update_block_write (ipcio_t *ipc, uint64_t bytes)
+{
+  if (ipc->bytes != 0)
+  {
+    fprintf (stderr, "ipcio_update_block_write: ipc->bytes [%"PRIu64"] != 0\n", ipc->bytes);
+    return -1;
+  }
+
+  if (!ipc->curbuf)
+  {
+    fprintf (stderr, "ipcio_update_block_write: ipc->curbuf == 0\n");
+    return -1;
+  }
+
+  if (ipc->rdwrt != 'W')
+  {
+    fprintf(stderr, "ipcio_update_block_write: ipc->rdwrt != W\n");
+    return -1;
+  }
+
+  if (ipc->bytes + bytes > ipcbuf_get_bufsz((ipcbuf_t*)ipc))
+  {
+    fprintf(stderr, "ipcio_update_block_write: wrote more bytes than there was space for!\n");
+    return -1;
+  }
+
+  // increment the bytes counter by the number of bytes used
+  ipc->bytes += bytes;
+
+  return 0;
+}
+
 /*
  * Close the Data Block unit from a "direct" write access, updating the number
  * of bytes written. Return 0 on success, -1 on failure
@@ -521,51 +558,17 @@ char * ipcio_open_block_write (ipcio_t *ipc, uint64_t *block_id)
 ssize_t ipcio_close_block_write (ipcio_t *ipc, uint64_t bytes)
 {
 
-  if (ipc->bytes != 0)
-  {
-    fprintf (stderr, "ipcio_close_block_write: ipc->bytes [%"PRIu64"] != 0\n", ipc->bytes);
-    return -1; 
-  }
-
-  if (!ipc->curbuf)
-  {
-    fprintf (stderr, "ipcio_close_block_write: ipc->curbuf == 0\n");
-    return -1;
-  }
+  // update the number of bytes written
   
-  if (ipc->rdwrt != 'W')
+  if (ipcio_update_block_write (ipc, bytes) < 0)
   {
-    fprintf(stderr, "ipcio_close_block_write: ipc->rdwrt != W\n");
+    fprintf (stderr, "ipcio_close_block_write: ipcio_update_block_write failed\n");
     return -1;
   }
-
-  if (ipc->bytes + bytes > ipcbuf_get_bufsz((ipcbuf_t*)ipc))
-  {
-    fprintf(stderr, "ipcio_close_block_write: wrote more bytes than there was space for!\n");
-    fprintf(stderr, "ipcio_close_block_write: ipc->bytes=%"PRIu64", bytes=%"PRIu64", bufsz=%"PRIu64"\n", ipc->bytes, bytes, ipcbuf_get_bufsz((ipcbuf_t*)ipc));
-    return -1;
-  }
-
-  // increment the bytes counter by the number of bytes used
-  ipc->bytes += bytes;
-
-#ifdef DEBUG
-  if (ipc->bytes != ipcbuf_get_bufsz((ipcbuf_t*)ipc))
-  {
-    fprintf(stderr, "ipcio_close_block_write: only %"PRIu64" of %"PRIu64" bytes written, EOD?\n", bytes, ipcbuf_get_bufsz((ipcbuf_t*)ipc));
-  }
-#endif
-
 
   // if this buffer has not yet been marked as filled
   if (!ipc->marked_filled) 
   {
-
-#ifdef _DEBUG
-    fprintf (stderr, "ipcio_close_block_write: buffer:%"PRIu64" mark_filled\n", ipc->buf.sync->w_buf);
-#endif
-
-    /* the buffer has been filled */
     if (ipcbuf_mark_filled ((ipcbuf_t*)ipc, ipc->bytes) < 0) 
     {
       fprintf (stderr, "ipcio_close_block_write: error ipcbuf_mark_filled\n");
@@ -582,7 +585,6 @@ ssize_t ipcio_close_block_write (ipcio_t *ipc, uint64_t bytes)
     ipc->bytes = 0;
   }
   return 0;
-
 }
 
 /* read bytes from ipcbuf */
