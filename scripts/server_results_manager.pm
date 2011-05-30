@@ -457,6 +457,8 @@ sub processObservation($$) {
     Apsr::removeFiles($o, "phase_vs_flux_".$source."*_1024x768.png", 40);
     Apsr::removeFiles($o, "phase_vs_time_".$source."*_1024x768.png", 40);
     Apsr::removeFiles($o, "phase_vs_freq_".$source."*_1024x768.png", 40);
+    Apsr::removeFiles($o, "bandpass_".$source."*_240x180.png", 40);
+    Apsr::removeFiles($o, "bandpass_".$source."*_1024x768.png", 40);
   }
 
   if ($#tres_plot >= 0) {
@@ -640,6 +642,15 @@ sub processArchive($$) {
 
   if ($plot_this) {
 
+    if ( -f $dir."/last.ar") {
+      unlink ($dir."/last.ar");
+    }
+
+    # for bandpass
+    $cmd = "cp ".$total_f_sum." ".$dir."/last.ar";
+    Dada::logMsg(2, $dl, $cmd);
+    $output = `$cmd`;
+
     # If this is the first result for this observation
     if (!(-f $total_f_res)) {
 
@@ -668,7 +679,7 @@ sub processArchive($$) {
         Dada::logMsg(0, $dl, "psradd failed cmd=".$cmd);
         Dada::logMsg(0, $dl, "psradd output=".$response);
       }
-
+    
       # Fscrunc the archive
       $cmd = $bindir."/pam -F -m ".$total_f_sum;
       ($result, $response) = Dada::mySystem($cmd);
@@ -983,7 +994,7 @@ sub makePlotsFromArchives($$$$$) {
 
   #my %local_cfg = Apsr->getApsrConfig();
   my $web_style_txt = $cfg{"SCRIPTS_DIR"}."/web_style.txt";
-  my $psrplot_args = "-g ".$res." -jp";
+  my $psrplot_args = "-g ".$res;
   my $cmd = "";
   my $result = "";
   my $response = "";
@@ -1001,26 +1012,32 @@ sub makePlotsFromArchives($$$$$) {
   my $pvt  = "phase_vs_time_".$source."_".$timestamp."_".$res.".png";
   my $pvfr = "phase_vs_freq_".$source."_".$timestamp."_".$res.".png";
   my $pvfl = "phase_vs_flux_".$source."_".$timestamp."_".$res.".png";
+  my $band = "bandpass_".$source."_".$timestamp."_".$res.".png";
 
   # Combine the archives from the machine into the archive to be processed
   # PHASE vs TIME
-  $cmd = $bin." -p time -jFD -D ".$dir."/pvt_tmp/png ".$total_t_res;
+  $cmd = $bin." -jp -p time -jFD -D ".$dir."/pvt_tmp/png ".$total_t_res;
   Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$result." ".$response);
 
   # PHASE vs FREQ
-  $cmd = $bin." -p freq -jTD -D ".$dir."/pvfr_tmp/png ".$total_f_res;
+  $cmd = $bin." -jp -p freq -jTD -D ".$dir."/pvfr_tmp/png ".$total_f_res;
   Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$result." ".$response);
 
   # PHASE vs TOTAL INTENSITY
-  $cmd = $bin." -p flux -jTF -D ".$dir."/pvfl_tmp/png ".$total_f_res;
+  $cmd = $bin." -jp -p flux -jTF -D ".$dir."/pvfl_tmp/png ".$total_f_res;
   Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$result." ".$response);
 
+  # BANDPASS
+  $cmd = $bin." -pb -x -lpol=0,1 -O -c log=1 -D ".$dir."/band_tmp/png ".$dir."/last.ar";
+  Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$result." ".$response);
 
   # Get plots to delete in the destination directory
   # $cmd = "find ".$plotDir." -name '*_".$resolution.IMAGE_TYPE."' -printf '\%h/\%f '";
@@ -1031,7 +1048,8 @@ sub makePlotsFromArchives($$$$$) {
   while ($waitMax) {
     if ( (-f $dir."/pvfl_tmp") &&
          (-f $dir."/pvt_tmp") &&
-         (-f $dir."/pvfr_tmp") )
+         (-f $dir."/pvfr_tmp") &&
+         (-f $dir."/band_tmp") )
     {
       $waitMax = 0;
     } else {
@@ -1044,6 +1062,7 @@ sub makePlotsFromArchives($$$$$) {
   system("mv -f ".$dir."/pvt_tmp ".$dir."/".$pvt);
   system("mv -f ".$dir."/pvfr_tmp ".$dir."/".$pvfr);
   system("mv -f ".$dir."/pvfl_tmp ".$dir."/".$pvfl);
+  system("mv -f ".$dir."/band_tmp ".$dir."/".$band);
 
   #if ($curr_plots ne "") {
   #  $cmd = "rm -f ".$curr_plots;

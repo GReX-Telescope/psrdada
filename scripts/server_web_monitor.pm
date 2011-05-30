@@ -316,8 +316,8 @@ sub currentInfoThread($) {
         $tmp_str .= "SOURCE:::".$cfg_file{"SOURCE"}.";;;";
         $tmp_str .= "RA:::".$cfg_file{"RA"}.";;;";
         $tmp_str .= "DEC:::".$cfg_file{"DEC"}.";;;";
-        $tmp_str .= "CFREQ:::".$cfg_file{"CFREQ"}.";;;";
-        $tmp_str .= "BANDWIDTH:::".$cfg_file{"BANDWIDTH"}.";;;";
+        $tmp_str .= "CFREQ:::".sprintf("%5.1f",$cfg_file{"CFREQ"}).";;;";
+        $tmp_str .= "BANDWIDTH:::".sprintf("%5.0f",$cfg_file{"BANDWIDTH"}).";;;";
         $tmp_str .= "NUM_PWC:::".$cfg_file{"NUM_PWC"}.";;;";
         $tmp_str .= "NPOL:::".$cfg_file{"NPOL"}.";;;";
         $tmp_str .= "NBIT:::".$cfg_file{"NBIT"}.";;;";
@@ -359,7 +359,6 @@ sub imageInfoThread($) {
   my $cmd = "";
   my $image_string = "";
   my @images = ();
-  my @image_types = qw(bp ts fft dts pvf);
   my $obs = "";
   my $tmp_str = "";
 
@@ -373,6 +372,8 @@ sub imageInfoThread($) {
   my %pvfr_hi = ();
   my %pvt_lo = ();
   my %pvt_hi = ();
+  my %band_lo = ();
+  my %band_hi = ();
   my @keys = ();
   my %srcs = ();
   my @parts = ();
@@ -402,12 +403,18 @@ sub imageInfoThread($) {
       %pvfr_hi = ();
       %pvt_lo = ();
       %pvt_hi = ();
+      %band_lo = ();
+      %band_hi = ();
       %srcs = ();
 
       for ($i=0; $i<=$#images; $i++) {
         $img = $images[$i];
         @parts = split(/_/,$img);
-        $src = $parts[3];
+        if ($#parts >= 5) {
+          $src = $parts[3];
+        } else {
+          $src = $parts[1];
+        }
         $srcs{$src} = 1;
 
         if (($img =~ m/phase_vs_flux/) && ($img =~ m/240x180/)) { $pvfl_lo{$src} = $img; }
@@ -416,6 +423,8 @@ sub imageInfoThread($) {
         if (($img =~ m/phase_vs_freq/) && ($img =~ m/1024x768/)) { $pvfr_hi{$src} = $img; }
         if (($img =~ m/phase_vs_time/) && ($img =~ m/240x180/)) { $pvt_lo{$src} = $img; }
         if (($img =~ m/phase_vs_time/) && ($img =~ m/1024x768/)) { $pvt_hi{$src} = $img; }
+        if (($img =~ m/bandpass/) && ($img =~ m/240x180/)) { $band_lo{$src} = $img; }
+        if (($img =~ m/bandpass/) && ($img =~ m/1024x768/)) { $band_hi{$src} = $img; }
       }
 
       @keys = ();
@@ -428,6 +437,8 @@ sub imageInfoThread($) {
         if (! exists $pvfr_hi{$k}) { $pvfr_hi{$k} = "../../images/blankimage.gif"; }
         if (! exists $pvt_lo{$k})  { $pvt_lo{$k} = "../../images/blankimage.gif"; }
         if (! exists $pvt_hi{$k})  { $pvt_hi{$k} = "../../images/blankimage.gif"; }
+        if (! exists $band_lo{$k})  { $band_lo{$k} = "../../images/blankimage.gif"; }
+        if (! exists $band_hi{$k})  { $band_hi{$k} = "../../images/blankimage.gif"; }
       }
 
       # now update the global variables for each image type
@@ -439,9 +450,11 @@ sub imageInfoThread($) {
         $tmp_str .= "pvfl_240x180:::".$pvfl_lo{$k}.";;;";
         $tmp_str .= "pvt_240x180:::".$pvt_lo{$k}.";;;";
         $tmp_str .= "pvfr_240x180:::".$pvfr_lo{$k}.";;;";
+        $tmp_str .= "band_240x180:::".$band_lo{$k}.";;;";
         $tmp_str .= "pvfl_1024x768:::".$pvfl_hi{$k}.";;;";
         $tmp_str .= "pvt_1024x768:::".$pvt_hi{$k}.";;;";
         $tmp_str .= "pvfr_1024x768:::".$pvfr_hi{$k}.";;;";
+        $tmp_str .= "band_1024x768:::".$band_hi{$k}.";;;";
       }
 
       $image_info = $tmp_str;
@@ -531,12 +544,11 @@ sub statusInfoThread() {
       # string
       $tmp_str = "";
       while (($key, $value) = each(%warnings)){
-        $tmp_str .= $key.":::1:::".$value.";;;";
+        $tmp_str .= $key.":::1:::".$value.";;;;;;";
       }
       while (($key, $value) = each(%errors)){
-        $tmp_str .= $key.":::2:::".$value.";;;";
+        $tmp_str .= $key.":::2:::".$value.";;;;;;";
       }
-      #$tmp_str .= "\n";
 
       $status_info = $tmp_str;
 
@@ -628,7 +640,7 @@ sub nodeInfoThread() {
       # now set the global string
       $tmp_str = "";
       for ($i=0; $i<=$#machines; $i++) {
-        $tmp_str .= $machines[$i].":".$results[$i].":".$responses[$i].";;;;;;";
+        $tmp_str .= $machines[$i].":::".$results[$i].":::".$responses[$i].";;;;;;";
       }
       $node_info = $tmp_str;
 
