@@ -42,6 +42,8 @@ our $pwc_add;
 our @daemons;
 our @binaries;
 our @helper_daemons;
+our @persistent_daemons;
+our %persistent_daemons_pid_ports; 
 our @dbs;
 our $primary_db;
 our $daemon_prefix;
@@ -53,6 +55,7 @@ our %cfg;
 # non-exported package globals go here
 #
 our $quit_daemon : shared;
+our $kill_daemon : shared;
 our $port;
 our $sock;
 our $raw_disk_result : shared;
@@ -81,6 +84,8 @@ $pwc_add = "";
 @dbs = ();
 $primary_db = "";
 @helper_daemons = ();
+@persistent_daemons = ();
+%persistent_daemons_pid_ports = ();
 $daemon_prefix = "";
 $control_dir = "";
 $host = "";
@@ -90,6 +95,7 @@ $host = "";
 # initialize other variables
 #
 $quit_daemon = 0;
+$kill_daemon = 0;
 $port = 0;
 $sock = 0;
 $raw_disk_result = "ok";
@@ -240,6 +246,10 @@ sub main() {
 
   Dada::logMsg(0, $dl, "Joining threads");
 
+  # launch a thread that will kill this daemon after 10 seconds
+  $kill_daemon = 1;
+  my $kill_thread = threads->new(\&killThread, 10);
+
   for ($i=0; $i<$n_threads; $i++) {
     $tids[$i]->join();
   }
@@ -249,6 +259,10 @@ sub main() {
   $load_thread_id->join();
   $temp_thread_id->join();
   $control_thread_id->join();
+
+  # If we have come this far, cancel the killThread
+  $kill_daemon = 0;
+  $kill_thread->join();
 
   Dada::logMsg(0, $dl, "STOPPING SCRIPT");
   close($sock);
@@ -410,13 +424,7 @@ sub handleCommand($) {
   }
 
   elsif ($key eq "stop_pwcs") {
-    $cmd = "killall ".$cfg{"PWC_BINARY"};
-    ($result,$response) = Dada::mySystem($cmd);  
-    if (defined($cfg{"PWC_DEVICE"})) {
-      $cmd = "sudo /sbin/ifdown ".$cfg{"PWC_DEVICE"};
-      Dada::logMsg(1, $dl, $cmd);
-      ($result,$response) = Dada::mySystem($cmd);
-    }
+    ($result, $response) = stopPWC();
   }
 
   elsif ($key eq "stop_pwc") {
@@ -566,21 +574,16 @@ sub handleCommand($) {
       Dada::logMsg(0, $dl, "stopping master control [".$cmds[1]."]");
       $quit_daemon = 1;
     } else {
+
       if ($cmds[1] eq "pwcs") {
-        $cmd = "killall ".$cfg{"PWC_BINARY"};
-        ($result,$response) = Dada::mySystem($cmd);
-        if (defined($cfg{"PWC_DEVICE"})) {
-          $cmd = "sudo /sbin/ifdown ".$cfg{"PWC_DEVICE"};
-          Dada::logMsg(1, $dl, $cmd);
-          ($result,$response) = Dada::mySystem($cmd);
-        }
+        ($result, $response) = stopPWC(); 
       } else {
-        if ($host =~ m/srv0/)
-        {
-          ($result,$response) = stopDaemon($cmds[1], 300);
-        }
-        else
-        {
+        # dont kill persistent server daemons ever, allow them to stop on their own
+        my $dname = $cmds[1];
+        if ($cfg{"SERVER_DAEMONS_PERSIST"} =~ m/$dname/) {
+          Dada::logMsg(1, $dl, "special case for persistent server daemon");
+          ($result,$response) = stopDaemon($cmds[1], 5, 0);
+        } else {
           ($result,$response) = stopDaemon($cmds[1], 30);
         }
       }
@@ -613,7 +616,7 @@ sub handleCommand($) {
         Dada::logMsg(1, $dl, $cmd);
         ($result,$response) = Dada::mySystem($cmd);
       }
-      $cmd = $current_binary_dir."/".$cfg{"PWC_BINARY"}." ".
+      $cmd = $cfg{"PWC_BINARY"}." ".
              " -k ".lc($cfg{"RECEIVING_DATA_BLOCK"}).
              " -c ".$cfg{"PWC_PORT"}.
              " -l ".$cfg{"PWC_LOGPORT"};
@@ -718,6 +721,8 @@ sub handleCommand($) {
     $response .= $unproc_files_response.";;;";
     $response .= $temp_response;
 
+    $response =~ s/\n/ /g;
+
     if (($raw_disk_result ne "ok") || (($db_result ne "ok") && ($db_result ne "na"))|| 
         ($load_result ne "ok") || ($unproc_files_result ne "ok") ||
         ($temp_result ne "ok")) {
@@ -743,9 +748,9 @@ sub handleCommand($) {
 #   
 # stops the specified client daemon, optionally kills it after a period
 #
-sub stopDaemon($;$) {
+sub stopDaemon($;$$) {
     
-  (my $daemon, my $timeout=10) = @_;
+  (my $daemon, my $timeout=10, my $kill_after_timeout=1) = @_;
     
   my $pid_file  = $control_dir."/".$daemon.".pid";
   my $quit_file = $control_dir."/".$daemon.".quit";
@@ -773,7 +778,7 @@ sub stopDaemon($;$) {
   my $response = "daemon exited";
   
   # If the daemon is still running after the timeout, kill it
-  if ($running) {
+  if ($running && $kill_after_timeout) {
     ($result, $response) = Dada::killProcess("^perl.*".$script);
     $response = "daemon had to be killed";
     $result = "fail";
@@ -785,7 +790,7 @@ sub stopDaemon($;$) {
     Dada::logMsg(0, $dl, "Error: ".$response);
   } 
 
-  if (-f $pid_file) {
+  if (-f $pid_file && $kill_after_timeout) {
     if (unlink($pid_file) != 1) {
       $result = "fail";
       $response .= ", could not unlink pid file: ".$pid_file;
@@ -793,6 +798,44 @@ sub stopDaemon($;$) {
   }
     
   return ($result, $response);
+}
+
+sub stopPWC($$) 
+{
+  my $cmd = "";
+  my $result = "";
+  my $response = "";
+  my $handle = 0;
+
+  # try to connect to control socket and issue quit command
+  $handle = Dada::connectToMachine($host, $cfg{"PWC_PORT"});
+  if ($handle) 
+  {
+    my $ignore = <$handle>;
+
+    Dada::logMsg(2, $dl, "stopPWC: PWC <- quit");
+    ($result, $response) = Dada::sendTelnetCommand($handle, "quit");
+    Dada::logMsg(2, $dl, "stopPWC: PWC -> ".$result." ".$response);
+    $handle->close();
+    sleep(1);
+  }
+
+  # assert its gone by killing it
+  Dada::logMsg(2, $dl, "stopPWC: killProcess(^".$cfg{"PWC_BINARY"}.")");
+  ($result, $response) = Dada::killProcess("^".$cfg{"PWC_BINARY"}, $cfg{"USER"});
+  Dada::logMsg(2, $dl, "stopPWC: killProcess(^".$cfg{"PWC_BINARY"}.") ".$result." ".$response);
+  if ($result ne "ok") {
+    Dada::logMsg(0, $dl, "stopPWC: killProcess(^".$cfg{"PWC_BINARY"}.
+                ") failed: ".$response);
+  }
+  
+  if (defined($cfg{"PWC_DEVICE"})) {
+    $cmd = "sudo /sbin/ifdown ".$cfg{"PWC_DEVICE"};
+    Dada::logMsg(1, $dl, $cmd);
+    ($result,$response) = Dada::mySystem($cmd);
+  }
+
+  return ("ok", "");
 }
 
 
@@ -993,7 +1036,7 @@ sub daemonsThread() {
 
   my $result = "";
   my $response = "";
-  my $sleep_time = 5;
+  my $sleep_time = 2;
   my $sleep_counter = 0;
   my @ds = ();
   my @keys = ();
@@ -1002,6 +1045,10 @@ sub daemonsThread() {
   my $d = "";
   my $cmd = "";
   my $xml = "";
+  my $k = "";
+  my $tag = "";
+  my %pids = ();
+  my $handle = 0;
 
   Dada::logMsg(1, $dl, "daemonsThread: starting [".$sleep_time." polling]");
 
@@ -1017,11 +1064,13 @@ sub daemonsThread() {
       $sleep_counter = $sleep_time;
 
       %running = ();
+      %pids = ();
 
       foreach $d (@daemons) {
 
-        $cmd = "ps aux | grep ".$daemon_prefix."_".$d.".pl | grep perl | grep -v grep > /dev/null";
-        Dada::logMsg(3, $dl, "daemonsThread: ".$cmd);
+        #$cmd = "ps aux | grep ".$daemon_prefix."_".$d.".pl | grep perl | grep -v grep > /dev/null";
+        $cmd = "pgrep -f '^perl.*".$daemon_prefix."_".$d.".pl'";
+        Dada::logMsg(3, $dl, "daemonsThread [daemon]: ".$cmd);
         `$cmd`;
         if ($? == 0) {
           $running{$d} = 1;
@@ -1039,7 +1088,7 @@ sub daemonsThread() {
       for ($i=0; $i<=$#binaries; $i++) {
         $b = $binaries[$i];
         $cmd = "pgrep ".$b." > /dev/null";
-        Dada::logMsg(2, $dl, $cmd);
+        Dada::logMsg(3, $dl, "daemonsThread [binary]: ".$cmd);
         `$cmd`;
         if ($? == 0) {
           $running{$b} = 2;
@@ -1051,8 +1100,9 @@ sub daemonsThread() {
       # check if helper daemons are running on this host
       foreach $d (@helper_daemons) 
       {
-         $cmd = "ps aux | grep ".$daemon_prefix."_".$d.".pl | grep perl | grep -v grep > /dev/null";
-        Dada::logMsg(3, $dl, "daemonsThread: ".$cmd);
+        #$cmd = "ps aux | grep ".$daemon_prefix."_".$d.".pl | grep perl | grep -v grep > /dev/null";
+        $cmd = "pgrep -f '^perl.*".$daemon_prefix."_".$d.".pl'";
+        Dada::logMsg(3, $dl, "daemonsThread [helper]: ".$cmd);
         `$cmd`;
         if ($? == 0) {
           $running{$d} = 1;
@@ -1066,10 +1116,44 @@ sub daemonsThread() {
         }
       }
 
+      # check if persistent daemons are running, and get Project ID if they are
+      foreach $d (@persistent_daemons)
+      {
+        $cmd = "ps aux | grep ".$daemon_prefix."_".$d.".pl | grep perl | grep -v grep > /dev/null";
+        Dada::logMsg(3, $dl, "daemonsThread [persist]: ".$cmd);
+        `$cmd`;
+        if ($? == 0) {
+          $running{$d} = 1;
+        } else {
+          $running{$d} = 0;
+        }
+
+        # get the PID if they are running
+        if (defined ($persistent_daemons_pid_ports{$d}))
+        {
+          $handle = Dada::connectToMachine($host, $persistent_daemons_pid_ports{$d}, 3);
+          if ($handle) 
+          {
+            print $handle "get_pid\r\n";
+            $pids{$d} = Dada::getLine($handle);
+            $handle->close();
+          }
+          else
+          {
+            $pids{$d} = "";
+          }
+          $handle = 0;
+        }
+
+        # check to see if the PID file exists
+        if (-f $control_dir."/".$d.".pid") {
+          $running{$d}++;
+        }
+      }
+
       $result = "ok";
       $response = "";
 
-      #$xml  = "<?xml version='1.0' encoding='ISO-8859-1'?>";
       $xml  = "<daemon_info>";
       $xml .=   "<host>".$host."</host>";
       $xml .=   "<".$daemon_name.">2</".$daemon_name.">";
@@ -1077,16 +1161,29 @@ sub daemonsThread() {
       # parse the results into the response strings
       @keys = sort (keys %running);
       for ($i=0; $i<=$#keys; $i++) {
-        if ($running{$keys[$i]} != 2) {
+        $k = $keys[$i];
+        if ($running{$k} != 2) {
           $result = "fail";
         }
-        $response .= $keys[$i]." ".$running{$keys[$i]}.",";
-        if ($keys[$i] eq $cfg{"PWC_BINARY"}) {
-          $xml .= "<pwcs>".$running{$keys[$i]}."</pwcs>";
+        $response .= $k." ".$running{$k}.",";
+
+        $tag = $k;
+        if ($k eq $cfg{"PWC_BINARY"}) {
+          $tag = "pwcs";
         }
-        else {
-          $xml .= "<".$keys[$i].">".$running{$keys[$i]}."</".$keys[$i].">";
+
+        if (defined($pids{$k})) {
+          $xml .= "<".$tag." pid='".$pids{$k}."'>".$running{$k}."</".$tag.">";
+        } else {
+          $xml .= "<".$tag.">".$running{$k}."</".$tag.">";
         }
+
+        #if ($k eq $cfg{"PWC_BINARY"}) {
+        #  $xml .= "<pwcs>".$running{$k}."</pwcs>";
+        #}
+        #else {
+        #  $xml .= "<".$k.">".$running{$k}."</".$k.">";
+        #}
       }
     
       # if this client has a datablock
@@ -1141,7 +1238,7 @@ sub dbThread() {
 
   if ($primary_db ne "") 
   {
-    push @dbs_to_report, $primary_db;
+    push @dbs_to_report, lc($primary_db);
   }
   else 
   { 
@@ -1269,7 +1366,14 @@ sub tempThread() {
 
       ($result,$response) = Dada::getTempInfo();
       $temp_result = $result;
-      $temp_response = $response;
+      if ($response eq "")
+      {
+        $temp_response = 0;
+      }
+      else
+      {
+        $temp_response = $response;
+      }
 
       Dada::logMsg(2, $dl, "tempThread: ".$temp_result." ".$temp_response);
 
@@ -1299,7 +1403,8 @@ sub controlThread($$) {
   } 
   
   $quit_daemon = 1;
-  
+
+  # launch a thread that will kludgily kill this script after 5 seconds
   if ( -f $pid_file) {
     Dada::logMsg(2, $dl, "controlThread: unlinking PID file");
     unlink($pid_file);
@@ -1310,6 +1415,35 @@ sub controlThread($$) {
   Dada::logMsg(1, $dl, "controlThread: exiting");
 
 }
+
+###############################################################################
+#
+# causes daemon to exit regardless after specified time, unless it is ready to
+# exit cleanly.
+#
+sub killThread($) 
+{
+  my ($seconds_to_wait) = @_;
+
+  while (($seconds_to_wait > 0) && ($kill_daemon))
+  {
+    Dada::logMsg(2, $dl, "killThread: sleeping, ".$seconds_to_wait." seconds remaining");
+    if ($seconds_to_wait <= 5) {
+      Dada::logMsg(1, $dl, "killThread: sleeping, ".$seconds_to_wait." seconds remaining");
+    }
+  
+    sleep(1);
+    $seconds_to_wait--;
+  }
+
+  if ($kill_daemon) {
+    Dada::logMsg(1, $dl, "killThread: HARD exit");
+    exit -1;
+  } else {
+    return 0;
+  }
+}
+
 
 ###############################################################################
 #
@@ -1353,8 +1487,8 @@ sub good() {
     LocalHost => $host,
     LocalPort => $port,
     Proto => 'tcp',
-    Listen => 1,
-    Reuse => 1,
+    Listen => 3,
+    ReuseAddr => 1
   );
   if (!$sock) {
     return ("fail", "Could not create listening socket: ".$host.":".$port);
