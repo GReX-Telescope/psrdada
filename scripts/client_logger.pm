@@ -176,6 +176,9 @@ sub sigPipeHandle($) {
 
   my $sigName = shift;
   print STDERR $daemon_name." : Received SIG".$sigName."\n";
+  if ($log_sock) {
+    $log_sock->close();
+  }
   $log_sock = 0;
   if ($log_host && $log_port) {
     $log_sock = Dada::nexusLogOpen($log_host, $log_port);
