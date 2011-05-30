@@ -462,8 +462,8 @@ sub good($) {
     LocalHost => $gain_host,
     LocalPort => $gain_port,
     Proto => 'tcp',
-    Listen => 1,
-    Reuse => 1,
+    Listen => $cfg{"NUM_PWC"},
+    ReuseAddr => 1
   );
   if (!$gain_sock) {
     return ("fail", "Error: could not open socket: ".$gain_host.":".$gain_port);
@@ -474,7 +474,7 @@ sub good($) {
     LocalPort => $report_port,
     Proto => 'tcp',
     Listen => 1, 
-    Reuse => 1,
+    ReuseAddr => 1
   );
   if (!$report_sock) {
     close ($gain_sock);
