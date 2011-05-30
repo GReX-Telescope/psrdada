@@ -261,10 +261,11 @@ sub main() {
         } else {
 
           # clean the line up a little
-          $command =~ s/\r//;
-          $command =~ s/\n//;
-          $command =~ s/#(.)*$//;
-          $command =~ s/ +$//;
+          $command =~ s/\r//;     # remove all carriage returns
+          $command =~ s/\n//;     # remove all newlines
+          $command =~ s/#(.)*$//; # strip comments
+          $command =~ s/\s+$//;   # remove trailing whitespace
+          $command =~ s/\0//g;    # remove and null characters
 
           if ($command ne "") {
             # handle the command from TCS
@@ -355,7 +356,7 @@ sub processTCSCommand($$) {
       } else {
 
         # reply immediately to TCS
-        Dada::logMsg(1, $dl, "TCS <- ok");
+        Dada::logMsg(2, $dl, "TCS <- ok");
         print $handle "ok".TERMINATOR;
 
         $cmd = "bat_to_utc ".$val;
@@ -402,7 +403,11 @@ sub processTCSCommand($$) {
         }
 
         # Send response to TCS
-        Dada::logMsg(1, $dl, "TCS <- ".$result);
+        if ($result eq "ok") {
+          Dada::logMsg(2, $dl, "TCS <- ".$result);
+        } else {
+          Dada::logMsg(0, $dl, "TCS <- ".$result);
+        }
         print $handle $result.TERMINATOR;
 
         if ($result eq "ok") {
@@ -491,7 +496,7 @@ sub processTCSCommand($$) {
 
       } else {
 
-        Dada::logMsg(1, $dl, "TCS <- ok");
+        Dada::logMsg(2, $dl, "TCS <- ok");
         print $handle "ok".TERMINATOR;
 
         # If simulating, start the DFB simulator
@@ -571,7 +576,11 @@ sub processTCSCommand($$) {
 
     } else {
       print $handle $result.TERMINATOR;
-      Dada::logMsg(1, $dl, "TCS <- ".$result);
+      if ($result eq "ok") {
+        Dada::logMsg(2, $dl, "TCS <- ".$result);
+      } else {
+        Dada::logMsg(1, $dl, "TCS <- ".$result);
+      }
     }
   }
 
@@ -839,8 +848,7 @@ sub start($) {
 
   # Check we are in the IDLE state before continuing
   Dada::logMsg(2, $dl, "start: waiting for IDLE state");
-  ($result, $response) = Dada::waitForState("idle", $nexus_sock, 2);
-  if ($result ne "ok") {
+  if (Dada::waitForState("idle", $nexus_sock, 2) != 0) {
     Dada::logMsgWarn($error, "Nexus not IDLE at start of observation"); 
     return ("fail", "nexus was not in IDLE state: ".$response);
   }
@@ -850,16 +858,17 @@ sub start($) {
   $cmd = "config ".$file;
   Dada::logMsg(1, $dl, "nexus <- ".$cmd);
   ($result,$response) = Dada::sendTelnetCommand($nexus_sock, $cmd);
-  Dada::logMsg(1, $dl, "nexus -> ".$result." ".$response);
   if ($result ne "ok") { 
+    Dada::logMsg(0, $dl, "nexus -> ".$result." ".$response);
     Dada::logMsgWarn($error, "Could not configure nexus");
     return ("fail", "CONFIG command failed on nexus: ".$response)
+  } else {
+    Dada::logMsg(2, $dl, "nexus -> ".$result." ".$response);
   }
 
   # Wait for the PREPARED state
   Dada::logMsg(2, $dl, "start: waiting for PREPARED state");
-  ($result, $response) = Dada::waitForState("prepared", $nexus_sock,10);
-  if ($result ne "ok") {
+  if (Dada::waitForState("prepared", $nexus_sock,10) != 0) {
     Dada::logMsgWarn($error, "Nexus not PREPARED after config");
     return ("fail", "nexus did not enter PREPARED state: ".$response);
   }
@@ -869,17 +878,17 @@ sub start($) {
   $cmd = "start";
   Dada::logMsg(1, $dl, "nexus <- ".$cmd);
   ($result,$response) = Dada::sendTelnetCommand($nexus_sock, $cmd);
-  Dada::logMsg(1, $dl, "nexus -> ".$result." ".$response);
-
   if ($result ne "ok") {
+    Dada::logMsg(0, $dl, "nexus -> ".$result." ".$response);
     Dada::logMsgWarn($error, "Nexus could not be started: ".$response);
     return ("fail", "START command failed on nexus: ".$response);
+  } else {
+    Dada::logMsg(2, $dl, "nexus -> ".$result." ".$response);
   }
 
   # Wait for the prepared state
   Dada::logMsg(2, $dl, "start: waiting for RECORDING state");
-  ($result, $response) = Dada::waitForState("recording", $nexus_sock, 10);
-  if ($result ne "ok") {
+  if (Dada::waitForState("recording", $nexus_sock, 10) != 0) {
     Dada::logMsgWarn($error, "Nexus did not start recording");
     return ("fail", "nexus did not enter RECORDING state: ".$response);
   }
@@ -936,8 +945,9 @@ sub prepareObservation($) {
   if ($apsr_groups =~ m/$proj_id/) {
     # Do nothing
   } else {
-    Dada::logMsgWarn($warn, "PID ".$proj_id." invalid, using apsr instead"); 
-    $proj_id = "apsr";
+    Dada::logMsgWarn($warn, "PID ".$proj_id." invalid, using P000 instead"); 
+    $proj_id = "P000";
+    $tcs_cmds{"PID"} = "P000";
   }
 
   $cmd = "chgrp -R ".$proj_id." ".$results_dir;
@@ -1038,8 +1048,7 @@ sub prepareObservation($) {
 
   # Wait for the prepared state
   Dada::logMsg(2, $dl, "prepareObservation: waiting for RECORDING state");
-  ($result, $response) = Dada::waitForState("recording", $nexus_sock, 10);
-  if ($result ne "ok") {
+  if (Dada::waitForState("recording", $nexus_sock, 10) != 0) {
     Dada::logMsgWarn($error, "Nexus was not RECORDING for UTC_START command");
     return ("fail", "nexus did not enter RECORDING state: ".$response);
   }
@@ -1049,9 +1058,11 @@ sub prepareObservation($) {
   $cmd = "set_utc_start ".$utc_start;
   Dada::logMsg(1, $dl, "nexus <- ".$cmd);
   ($result,$response) = Dada::sendTelnetCommand($nexus_sock,$cmd);
-  Dada::logMsg(1, $dl, "nexus -> ".$result." ".$response);
   if ($result ne "ok") {
+    Dada::logMsg(0, $dl, "nexus -> ".$result." ".$response);
     Dada::logMsgWarn($error, "Nexus failed on setting of UTC_START");
+  } else {
+    Dada::logMsg(2, $dl, "nexus -> ".$result." ".$response);
   }
 
   return ($result, $response);
@@ -1079,11 +1090,12 @@ sub stopNexus()
 
   Dada::logMsg(1, $dl, "stopNexus: nexus <- ".$cmd);
   ($result, $response) = Dada::sendTelnetCommand($nexus_sock, $cmd);
-  Dada::logMsg(1, $dl, "stopNexus: nexus -> ".$result." ".$response);
-
   if ($result ne "ok") {
+    Dada::logMsg(0, $dl, "stopNexus: nexus -> ".$result." ".$response);
     Dada::logMsg(0, $dl, "stopNexus: ".$cmd." failed: ".$response);
     $response = $cmd." command failed on nexus";
+  } else {
+    Dada::logMsg(2, $dl, "stopNexus: nexus -> ".$result." ".$response);
   }
 
   return ($result, $response);
@@ -1106,8 +1118,7 @@ sub stopInBackground() {
   nexusSockMaintain();
 
   Dada::logMsg(2, $dl, "stopInBackground: waiting for IDLE state");
-  ($result, $response) = Dada::waitForState("idle", $nexus_sock, 10);
-  if ($result ne "ok") {
+  if (Dada::waitForState("idle", $nexus_sock, 10) != 0) {
     Dada::logMsgWarn($error, "Nexus did not return to IDLE at end of observation");
     return ("fail", "nexus was not in IDLE state: ".$response);
   }
@@ -1318,8 +1329,9 @@ sub parseTCSCommands() {
   chomp $apsr_groups;
   my $proj_id = $tcs_cmds{"PID"};
   if (!($apsr_groups =~ m/$proj_id/)) {
-    Dada::logMsg(0, $dl,  "parseTCSCommands: PID [".$proj_id."] was invalid");
-    return ("fail", "PID [".$proj_id."] was an invalid APSR Project ID");
+    Dada::logMsgWarn($warn, "PID [".$proj_id."] was not valid, using P000 instead");
+    $proj_id = "P000";
+    $tcs_cmds{"PID"} = "P000";
   }
 
   my $source   = $tcs_cmds{"SOURCE"};
