@@ -512,7 +512,7 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
   if (pwcm->new_xfer_function) {
     total_bytes_written = pwcm->new_xfer_function(pwcm);
     if (pwcm->verbose)
-      multilog (pwcm->log, LOG_INFO, "first byte expected on %"PRIu64"\n", total_bytes_written);
+      multilog (pwcm->log, LOG_INFO, "transfer_data: first byte expected on %"PRIu64"\n", total_bytes_written);
   }
 
   /* Check if the UTC_START is valid */
@@ -525,20 +525,20 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
     utc_start_set = 1;
 
 #ifdef _DEBUG
-  fprintf (stderr, "dada_pwc_main_transfer_data: enter main loop\n");
+  fprintf (stderr, "transfer_data: enter main loop\n");
 #endif
 
   while ((!dada_pwc_quit (pwcm->pwc)) && (data_transfer_error_state <= 1)) {
 
 #ifdef _DEBUG
-    fprintf (stderr, "dada_pwc_main_transfer_data: check for command\n");
+    fprintf (stderr, "transfer_data: check for command\n");
 #endif
 
     /* check to see if a new command has been registered */
     if (dada_pwc_command_check (pwcm->pwc))  {
 
 #ifdef _DEBUG
-      fprintf (stderr, "dada_pwc_main_transfer_data: get command\n");
+      fprintf (stderr, "transfer_data: get command\n");
 #endif
 
       pwcm->command = dada_pwc_command_get (pwcm->pwc);
@@ -557,8 +557,8 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
                     (struct tm*) gmtime(&(pwcm->command.utc)));
 
 #ifdef _DEBUG
-          fprintf (stderr,"dada_pwc_main_transfer_data: set UTC_START in "
-                          "header to : %s\n",utc_buffer);
+          fprintf (stderr,"transfer_data: set UTC_START in header to : %s\n",
+                   utc_buffer);
 #endif
           multilog (pwcm->log, LOG_INFO,"UTC_START = %s\n",utc_buffer);
 
@@ -574,7 +574,7 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
            * header block as filled */
 
 #ifdef _DEBUG
-          fprintf (stderr,"dada_pwc_main_transfer_data: header block filled\n");
+          fprintf (stderr,"transfer_data: header block filled\n");
 #endif
           if (pwcm->pwc->state == dada_pwc_recording) {
 
@@ -585,7 +585,7 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
 
             if (pwcm->header_valid) {
 #ifdef _DEBUG
-              multilog (pwcm->log, LOG_INFO, "dada_pwc_main_transfer_data: marking header valid\n");
+              multilog (pwcm->log, LOG_INFO, "transfer_data: marking header valid\n");
 #endif
 
               if (ipcbuf_mark_filled (pwcm->header_block,pwcm->header_size) < 0) {
@@ -613,14 +613,13 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
         else if (pwcm->command.code == dada_pwc_stop)
           command_string = "stopping";
         else {
-          multilog (pwcm->log, LOG_ERR,
-                    "dada_pwc_main_transfer_data internal error = "
+          multilog (pwcm->log, LOG_ERR, "transfer_data: internal error = "
                     "unexpected command code %d\n", pwcm->command.code);
           return DADA_ERROR_HARD;
         }
 
         if (pwcm->verbose)
-          multilog (pwcm->log, LOG_INFO, "%s byte count = %"PRIu64" bytes\n",
+          multilog (pwcm->log, LOG_INFO, "transfer_data: %s byte count = %"PRIu64" bytes\n",
                     command_string, pwcm->command.byte_count);
 
         if (pwcm->command.byte_count > total_bytes_written) {
@@ -634,6 +633,11 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
         } else {
           /* command is immediate */
           multilog (pwcm->log, LOG_INFO, "%s immediately\n", command_string);
+          if (total_bytes_written == 0)
+          {
+            multilog (pwcm->log, LOG_WARNING, "Received 0 bytes, setting to 1\n");
+            total_bytes_written = 1;
+          }
           transit_byte = total_bytes_written;
           bytes_to_write = 0;
 
@@ -673,7 +677,7 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
     if (!transit_byte || bytes_to_write) {
 
 #ifdef _DEBUG
-      fprintf (stderr, "dada_pwc_main_transfer_data: call buffer function\n");
+      fprintf (stderr, "transfer_data: call buffer function\n");
 #endif
 
       /* get the next data buffer */
@@ -697,28 +701,28 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
         if (pwcm->xfer_pending_function) 
         {
           if (pwcm->verbose)       
-            multilog (pwcm->log, LOG_INFO, "dada_pwc_main_transfer_data: buffer_size=0, checking xfer status\n");
+            multilog (pwcm->log, LOG_INFO, "transfer_data: buffer_size=0, checking xfer status\n");
           first_byte_of_xfer = dada_pwc_main_process_xfer (pwcm, 0, 0);
           if (first_byte_of_xfer == -2) 
           {
-            multilog (pwcm->log, LOG_ERR, "dada_pwc_main_process_xfer failed\n");
+            multilog (pwcm->log, LOG_ERR, "transfer_data: process_xfer failed\n");
             return DADA_ERROR_HARD;
           } 
           else if (first_byte_of_xfer == -1) 
           {
             if (pwcm->verbose)
-              multilog (pwcm->log, LOG_INFO, "dada_pwc_main_process_xfer indicates end of observation\n");
+              multilog (pwcm->log, LOG_INFO, "transfer_data: process_xfer indicates end of observation\n");
             return 0;
           }
           else if (first_byte_of_xfer == 0) 
           {
             if (pwcm->verbose)
-              multilog (pwcm->log, LOG_INFO, "dada_pwc_main_process_xfer indicates waiting for SOD on xfer\n");
+              multilog (pwcm->log, LOG_INFO, "transfer_data: process_xfer indicates waiting for SOD on xfer\n");
           }
           else
           {
             if (pwcm->verbose)
-              multilog (pwcm->log, LOG_INFO, "dada_pwc_main_process_xfer indicates next byte is %"PRIi64"\n", first_byte_of_xfer);
+              multilog (pwcm->log, LOG_INFO, "transfer_data: process_xfer indicates next byte is %"PRIi64"\n", first_byte_of_xfer);
             total_bytes_written = (uint64_t) first_byte_of_xfer;
           }
 
@@ -771,7 +775,7 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
         /* If the header is NOW valid, flag the header as filled */  
         if (pwcm->header_valid) {
 #ifdef _DEBUG
-            multilog (pwcm->log, LOG_INFO,"dada_pwc_main_transfer_data: marking header filled\n");
+            multilog (pwcm->log, LOG_INFO,"transfer_data: marking header filled\n");
 #endif
           if (ipcbuf_mark_filled (pwcm->header_block,pwcm->header_size) < 0) {
             multilog (pwcm->log, LOG_ERR, "Could not mark filled header\n");
@@ -787,18 +791,12 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
       if (transit_byte && buf_bytes > bytes_to_write)
         buf_bytes = bytes_to_write;
      
-      /* 
-      multilog (pwcm->log, LOG_INFO, "prev. buf_bytes=%"PRIu64" " 
-                " curr. buf_bytes=%"PRIu64" bytes_to_write=%"PRIu64" \n",
-                buffer_size,buf_bytes,bytes_to_write);
-      */
-
       /* write the bytes to the Data Block */
       if (pwcm->data_block) {
 
 #ifdef _DEBUG
-        fprintf (stderr, "dada_pwc_main_transfer_data: write to data block"
-                         " buffer=%p bytes=%"PRIu64"\n", buffer, buf_bytes);
+        fprintf (stderr, "transfer_data: write to data block buffer=%p bytes=%"
+                         PRIu64"\n", buffer, buf_bytes);
 #endif
 
         /* If we run out of empty buffers and don't yet have a UTC_START, 
@@ -812,7 +810,7 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
         bytes_written = ipcio_write (pwcm->data_block, buffer, buf_bytes);
 
 #ifdef _DEBUG
-        fprintf (stderr, "dada_pwc_main_transfer_data: return from write\n");
+        fprintf (stderr, "transfer_data: return from write\n");
 #endif
 
         if (bytes_written < 0 || bytes_written < buf_bytes) {
@@ -842,7 +840,7 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
     if (transit_byte && (transit_byte <= total_bytes_written)) {
 
 #ifdef _DEBUG
-      fprintf (stderr, "dada_pwc_main_transfer_data: transit state\n");
+      fprintf (stderr, "transfer_data: transit state\n");
 #endif
 
       /* The transit_byte has been reached, it is now time to change state */
@@ -884,9 +882,9 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
           dada_pwc_main_process_xfer(pwcm, 2, 0);
         }
 
-//#ifdef _DEBUG
+#ifdef _DEBUG
         multilog (pwcm->log, LOG_INFO, "stopping... entering idle state\n");
-//#endif
+#endif
         return 0;
       }
       
@@ -930,15 +928,18 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
 
       if (buf_bytes && pwcm->data_block) {
 
-        /* If we run out of empty buffers and don't yet have a UTC_START,
-         * fail */
-        if ((!utc_start_set) && (ipcio_space_left(pwcm->data_block) < buf_bytes)) {
-          multilog (pwcm->log, LOG_ERR, "Data block full and UTC_START not "
-                    "set.\n");
-          return DADA_ERROR_FATAL;
+        // If we run out of empty buffers and don't yet have a UTC_START, fail
+        if (ipcio_space_left(pwcm->data_block) < buf_bytes) 
+        {
+          if (!utc_start_set) {
+            multilog (pwcm->log, LOG_ERR, "Data block full and UTC_START not set.\n");
+            return DADA_ERROR_FATAL;
+          }
+          else
+            multilog(pwcm->log, LOG_WARNING, "Data block full, waiting for space\n");
         }
 
-        /* write the bytes to the Data Block */
+        // write the bytes to the Data Block
         if (ipcio_write (pwcm->data_block, buffer, buf_bytes) < buf_bytes) {
 
           multilog (pwcm->log, LOG_ERR, "Cannot write %"PRIu64
