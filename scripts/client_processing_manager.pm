@@ -183,7 +183,7 @@ sub processing_thread($) {
 
     if ($result ne "ok") {
       msg(0, "ERROR", $response);
-      msg(0, "ERROR", "DADA header malformed, jettesioning xfer");  
+      msg(0, "ERROR", "DADA header malformed, jettisoning xfer");  
       $proc_cmd = "dada_dbnull -s -k ".lc($cfg{"PROCESSING_DATA_BLOCK"});
 
     } elsif ($raw_header eq $prev_header) {
