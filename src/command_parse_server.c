@@ -144,7 +144,7 @@ static void* command_parse_server (void * arg)
   command_parse_server_t* server = (command_parse_server_t*) arg;
   command_parse_thread_t* parser;
 
-  server->listen_fd = 0;
+  server->listen_fd = -1;
   int comm_fd = 0;
   int port = server->port;
   FILE* fptr = 0;
@@ -156,18 +156,26 @@ static void* command_parse_server (void * arg)
   fprintf (stderr, "command_parse_server: sock_create (port=%d)\n", port);
 #endif
 
-  server->listen_fd = sock_create (&port);
-
-  if (server->listen_fd < 0 && errno == EADDRINUSE) {
-    port = 0;
+  // attempt to open create socket
+  while (server->listen_fd < 0) 
+  {
+    port = server->port;
     server->listen_fd = sock_create (&port);
-    if (server->listen_fd > -1)
-      fprintf (stderr, "command_parse_server: port=%d\n", port);
-  }
 
-  if (server->listen_fd < 0)  {
-    perror ("command_parse_server: Error creating socket");
-    return 0;
+    if (server->listen_fd < 0) 
+    {
+      fprintf (stderr, "command_parse_server: sock_create failed: %s\n", strerror(errno));
+      if (errno == EADDRINUSE) 
+      {
+        fprintf (stderr, "command_parse_server: Address In Use, sleeping 5 seconds for retry\n");
+        sleep(5);
+      }
+      else
+      {
+        fprintf (stderr, "command_parse_server: Error creating socket\n");
+        return 0;
+      }
+    }
   }
 
   while (!server->quit) {
@@ -294,7 +302,7 @@ int command_parse_serve (command_parse_server_t* server, int port)
   sighandler_t handler = 
 #endif
 
-signal (SIGPIPE, SIG_IGN);
+  signal (SIGPIPE, SIG_IGN);
 
 #if 0
   if (handler != SIG_DFL)
@@ -308,10 +316,10 @@ signal (SIGPIPE, SIG_IGN);
   server->port = port;
 
   if (pthread_create (&(server->thread), 0, command_parse_server, server) < 0)
-    {
-      perror ("command_parse_serve: Error creating new thread");
-      return -1;
-    }
+  {
+    perror ("command_parse_serve: Error creating new thread");
+    return -1;
+  }
 
   return 0;
 }
