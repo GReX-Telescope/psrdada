@@ -235,7 +235,7 @@ int64_t dada_client_io_loop_block (dada_client_t* client)
     if (bytes)
     {
 #ifdef _DEBUG
-    fprintf (stderr, "calling io_block_function addr=%p id=%"PRIu64", bytes=%"PRIi64"\n", buffer, block_id, bytes);
+      fprintf (stderr, "calling io_block_function addr=%p id=%"PRIu64", bytes=%"PRIi64"\n", buffer, block_id, bytes);
 #endif
       bytes_operated = client->io_block_function (client, buffer, bytes, block_id);
     }
