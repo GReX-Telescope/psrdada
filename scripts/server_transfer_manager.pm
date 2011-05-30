@@ -1700,6 +1700,10 @@ sub good($) {
     return ("fail", "Error: ".$cfg{"NUM_".uc($dest)."_DIRS"}." were configured. Only 1 is permitted");
   }
 
+  if (!defined($cfg{uc($dest)."_DIR_".$dest_id})) {
+    return ("fail", "Error: destiation for dest=".$dest." dest_id=".$dest_id." not configured");
+  }
+
   # get the user/host/dir for the specified destination
   ($dest_user, $dest_host, $dest_dir) = split(/:/,$cfg{uc($dest)."_DIR_".$dest_id});
 
