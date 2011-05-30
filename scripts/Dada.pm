@@ -1846,11 +1846,11 @@ sub getDM($) {
   }
 
   # test if the source is in the catalogue
-  $cmd = "psrcat -all -x -c DM ".$source." | awk '{print \$1}'";
+  $cmd = "psrcat -all -x -c DM ".$source;
   ($result, $response) = mySystem($cmd);
 
   # If we had a problem getting the DM from the catalogue
-  if (($result ne "ok") || ($response =~ m/not in catalogue/)) {
+  if (($result ne "ok") || ($response =~ m/not in catalogue/) || ($response =~ m/Unknown parameter/)) {
 
     # strip leading J or B
     $source =~ s/^[JB]//;
@@ -1867,11 +1867,12 @@ sub getDM($) {
 
   # we found the DM ok
   } else {
+    my $junk = "";
+    ($dm, $junk) = split(/ +/, $response, 2);
     $dm = sprintf("%5.4f",$response);
   }
 
   return $dm;
-
 }
 
 sub getPeriod($) {
