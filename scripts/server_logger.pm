@@ -65,6 +65,7 @@ sub main() {
   # install signal handlers
   $SIG{INT} = \&sigHandle;
   $SIG{TERM} = \&sigHandle;
+  $SIG{PIPE} = \&sigPipeHandle;
 
   msg(2, $time, "server_logger: begin reading from STDIN");
 
@@ -129,6 +130,18 @@ sub sigHandle($) {
   exit 1;
   
 }
+
+
+#
+# Handle a SIGPIPE
+#
+sub sigPipeHandle($) {
+
+  my $sigName = shift;
+  print STDERR $daemon_name." : Received SIG".$sigName."\n";
+
+}
+
 
 
 END { }
