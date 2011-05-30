@@ -212,10 +212,11 @@ int dada_hdu_unlock_write (dada_hdu_t* hdu)
     return -1;
   }
 
-  if (ipcio_close (hdu->data_block) < 0) {
-    multilog (hdu->log, LOG_ERR, "Could not unlock Data Block write\n");
-    return -1;
-  }
+  if (ipcio_is_open (hdu->data_block))
+    if (ipcio_close (hdu->data_block) < 0) {
+      multilog (hdu->log, LOG_ERR, "Could not unlock Data Block write\n");
+      return -1;
+    }
 
   if (ipcbuf_unlock_write (hdu->header_block) < 0) {
     multilog (hdu->log, LOG_ERR, "Could not unlock Header Block write\n");
