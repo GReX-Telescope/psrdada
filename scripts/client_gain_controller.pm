@@ -343,13 +343,13 @@ sub msg($$$) {
   my ($level, $type, $msg) = @_;
   if ($level <= $dl) {
     my $time = Dada::getCurrentDadaTime();
-    if (! $log_sock ) {
+    if (!$log_sock) {
       $log_sock = Dada::nexusLogOpen($log_host, $log_port);
-    } else {
-      print "[".$time."] msg: Dada::nexusLogOpen(".$log_host.", ".$log_port.") failed\n";
     }
     if ($log_sock) {
       Dada::nexusLogMessage($log_sock, $time, "sys", $type, "gain mon", $msg);
+    } else {
+      print "[".$time."] msg: Dada::nexusLogOpen(".$log_host.", ".$log_port.") failed\n";
     }
     print "[".$time."] ".$msg."\n";
   }
