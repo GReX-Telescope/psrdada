@@ -240,7 +240,7 @@ sub findCompletedBand($) {
 
   for ($i=0; $i<=$#pids; $i++) {
     if (!(exists($cfg{$pids[$i]."_DEST"}))) {
-      msg(0, "WARN", "findCompletedBand: missing config param: ".$pids[$i]."_DEST");
+      msg(2, "WARN", "findCompletedBand: missing config param: ".$pids[$i]."_DEST");
     } else {
       $pid_dests{$pids[$i]} = $cfg{$pids[$i]."_DEST"};
       msg(2, "INFO", "findCompletedBand: pid_dests{".$pids[$i]."} = ".$pid_dests{$pids[$i]});
