@@ -77,6 +77,8 @@ typedef struct {
   unsigned int expected_nbands;       // Expected number of bands
   uint64_t error_seconds;             // Number of seconds to wait for 
 
+  float wait_for_start;
+
 } udpdb_t;
 
 void check_header(header_struct header, udpdb_t *udpdb, multilog_t *log); 

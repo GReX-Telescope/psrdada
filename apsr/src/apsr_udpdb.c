@@ -16,7 +16,7 @@
 #include "apsr_def.h"
 #include "apsr_udpdb.h"
 
-#define MAX_IGNORE_PACKETS 1048576
+#define MAX_IGNORE_PACKETS 5000
 
 void usage()
 {
@@ -59,6 +59,8 @@ int apsr_udpdb_init(udpdb_t * ctx)
 
   assert(ctx->curr->buffer != 0);
   assert(ctx->next->buffer != 0);
+
+  ctx->wait_for_start = 0;
 
   return 0;  
 }
@@ -150,6 +152,7 @@ time_t udpdb_start_function (dada_pwc_main_t* pwcm, time_t start_utc)
   ctx->sock->have_packet = 0;
   ctx->got_enough = 0;
   ctx->packets_late_this_sec = 0;
+  ctx->wait_for_start = 0;
 
   // Check required header parameters
   if (ascii_header_get (pwcm->header, "NBAND", "%d", &(ctx->expected_nbands)) != 1) 
@@ -319,7 +322,7 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, int64_t* size)
       // if we are waiting for the start of data
       if ((ctx->next_seq == 0) && (ctx->bytes->received == 0)) 
       {
-        if (header.sequence != 0) 
+        if (header.sequence > 1000) 
         {
           if (max_ignore == MAX_IGNORE_PACKETS) 
           {
@@ -341,8 +344,7 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, int64_t* size)
         } 
         else 
         {
-          //if (ctx->verbose)
-            multilog (log, LOG_INFO, "first packet received seq=%"PRIu64"\n", header.sequence);
+          multilog (log, LOG_INFO, "first packet received seq=%"PRIu64"\n", header.sequence);
           ignore_packet = 0;
         }
 
@@ -383,13 +385,13 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, int64_t* size)
           ctx->next->min = ctx->curr->max + 1;
           ctx->next->max = ctx->next->min + ctx->packets_per_buffer - 1;
 
-          //if (ctx->verbose)
-          //{
+          if (ctx->verbose)
+          {
             multilog(log, LOG_INFO, "FIRST PACKET: curr [%"PRIu64" - %"PRIu64"] %"PRIu64"/%"PRIu64"\n",
                      ctx->curr->min, ctx->curr->max, ctx->curr->count, ctx->curr->size);
             multilog(log, LOG_INFO, "FIRST PACKET: next [%"PRIu64" - %"PRIu64"] %"PRIu64"/%"PRIu64"\n",
                      ctx->next->min, ctx->next->max, ctx->next->count, ctx->next->size);
-          //}
+          }
           // set the amount a data we expect to return
           *size = ctx->packets_per_buffer * ctx->packet_length;
 
@@ -538,8 +540,18 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, int64_t* size)
     if (ctx->curr->count) 
       multilog(ctx->log, LOG_INFO, "suspected EOD, returning %"PRIi64" bytes\n", *size);
     else
+    {
       if (ctx->verbose)
         multilog(ctx->log, LOG_INFO, "no data received this buffer_function\n");
+      if ((ctx->next_seq == 0) && (ctx->bytes->received == 0))
+      {
+        ctx->wait_for_start += 0.1;
+        if (ctx->wait_for_start > 10)
+        {
+          multilog(ctx->log, LOG_WARNING, "No packets received from DFB3\n");
+        }
+      }
+    }
 
   }
 
@@ -558,6 +570,8 @@ int udpdb_stop_function (dada_pwc_main_t* pwcm)
   if (ctx->packets->received) {
     percent_dropped = (float) ((double) ctx->packets->dropped / (double) ctx->packets->received) * 100.00;
   }
+
+  multilog (pwcm->log, LOG_INFO, "received %"PRIu64" bytes\n", ctx->bytes->received);
 
   if (ctx->packets->dropped > 0)
     multilog(pwcm->log, LOG_INFO, "packets dropped %"PRIu64" / %"PRIu64" = %10.8f %\n",
@@ -756,7 +770,6 @@ int main (int argc, char **argv)
 
   if (daemon) {
     if (log_file) {
-      multilog_add (log, stderr);
       be_a_daemon_with_log (log_file);
     } else
       be_a_daemon();
@@ -958,12 +971,14 @@ int main (int argc, char **argv)
       fprintf (stderr, "dada_udpdb: could not start server\n");
       return EXIT_FAILURE;
     }
-    if (verbose) fprintf (stderr, "Entering PWC main loop\n");
+    if (verbose)
+      multilog_fprintf (stderr, LOG_INFO, "Entering PWC main loop\n");
+
     if (dada_pwc_main (pwcm) < 0) {
       fprintf (stderr, "dada_udpdb: error in PWC main loop\n");
       return EXIT_FAILURE;
     }
-
+    multilog_fprintf (stderr, LOG_INFO, "Exited PWC main loop\n");
   }
 
   if (launch_stats) {
@@ -975,7 +990,7 @@ int main (int argc, char **argv)
   apsr_udpdb_dealloc(&udpdb);
 
   if (dada_hdu_unlock_write (hdu) < 0)
-      return EXIT_FAILURE;
+    return EXIT_FAILURE;
 
   if (dada_hdu_disconnect (hdu) < 0)
     return EXIT_FAILURE;
