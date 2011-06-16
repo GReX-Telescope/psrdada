@@ -14,7 +14,7 @@ use strict;         # strict mode (like -Wall)
 # Constants
 #
 
-use constant  DEBUG_LEVEL         => 1;
+use constant DL => 1;
 
 #
 # Global Variables
@@ -123,7 +123,9 @@ sub commThread($$) {
     return ("fail","Could not connect to machine ".$machine.":".$cfg{"CLIENT_MASTER_PORT"}); 
   }
 
+  Dada::logMsg(2, DL, "commThread [".$machine."] <- ".$command);
   ($result, $response) = Dada::sendTelnetCommand($handle,$command);
+  Dada::logMsg(2, DL, "commThread [".$machine."] -> ".$result." ".$response);
 
   $handle->close();
 
