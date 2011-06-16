@@ -18,6 +18,7 @@ require AutoLoader;
   &getApsrConfig
   &getApsrConfigFile
   &makePlotsFromArchives
+  &processHeader
 );
 
 $VERSION = '0.01';
@@ -149,6 +150,151 @@ sub getConfig() {
   my %config = Dada::readCFGFileIntoHash($config_file, 0);
   return %config;
 }
+
+#
+# Determine the processing command line given a raw header for APSR
+#
+sub processHeader($$) {
+
+  my ($raw_header, $config_dir) = @_;
+  
+  my $result = "ok";
+  my $response = "";
+  my $cmd = "";
+  my %h = ();
+  
+  %h = Dada::headerToHash($raw_header);
+  
+  if (($result eq "ok") && (length($h{"UTC_START"}) < 5)) {
+    $result = "fail";
+    $response .= "Error: UTC_START was malformed or non existent ";
+  }
+  
+  if (($result eq "ok") && (length($h{"OBS_OFFSET"}) < 1)) {
+    $result = "fail";
+    $response .= "Error: OBS_OFFSET was malformed or non existent";
+  }
+  
+  if (($result eq "ok") && (length($h{"PROC_FILE"}) < 1)) {
+    $result = "fail";
+    $response .=  "Error: PROC_FILE was malformed or non existent";
+  }
+  
+  if (($result eq "ok") && (length($h{"SOURCE"}) < 1)) {
+    $result = "fail"; 
+    $response .=  "Error: SOURCE was malformed or non existent";
+  }
+
+  if (($result eq "ok") && (length($h{"FREQ"}) < 1)) {
+    $result = "fail";
+    $response .=  "Error: FREQ was malformed or non existent";
+  }
+  
+  my $source = $h{"SOURCE"};
+  my $proc_cmd = "";
+  my $proc_args = "";
+  
+  # Multi pulsar mode special case
+  if ($h{"PROC_FILE"} eq "dspsr.multi") {
+    $source =~ s/^[JB]//;
+    $source =~ s/[a-zA-Z]*$//;
+
+    # find the source in multi.txt
+    $cmd = "grep ^".$source." ".$config_dir."/multi.txt";
+    my $multi_string = `$cmd`;
+
+    if ($? != 0) {
+      $result = "fail";
+      $response = "Error: ".$source." did not exist in multi.txt";
+
+    } else {
+
+      chomp $multi_string;
+      my @multis = split(/ +/,$multi_string);
+
+      # If we have a DM specified
+      if ($multis[1] ne "CAT") {
+        $proc_args .= " -D ".$multis[1];
+      }
+
+      $proc_args .= " -N ".$config_dir."/".$multis[2];
+
+      if (! -f $config_dir."/".$multis[2]) {
+        $result = "fail";
+        $response = "Error: Multi-source file: ".$config_dir.
+                    "/".$multis[2]." did not exist";
+
+      } else {
+        $cmd = "head -1 ".$config_dir."/".$multis[2];
+        $source = `$cmd`;
+        chomp $source;
+      }
+    }
+
+  # If we are writing the data to disk, dont worry about the DM
+  } elsif ($h{"PROC_FILE"} =~ m/scratch/) {
+
+    $result = "ok";
+    $response = "";
+
+  } else {
+
+    if ($h{"MODE"} eq "PSR") {
+
+      # test if the source is in the catalogue
+      my $dm = getDM($source);
+
+      if ($dm eq "unknown") {
+        $result = "fail";
+        $response = "Error: ".$source." was not in psrcat's catalogue";
+      }
+
+    }
+  }
+
+  # Add the dada header file to the proc_cmd
+  my $proc_cmd_file = $config_dir."/".$h{"PROC_FILE"};
+  my %proc_cmd_hash = Dada::readCFGFile($proc_cmd_file);
+  $proc_cmd = $proc_cmd_hash{"PROC_CMD"};
+
+  # Select command line arguements special case
+  if ($proc_cmd =~ m/SELECT/) {
+
+    my $dspsr_cmd = "dspsr_command_line.pl ".$source." ".$h{"BW"}.
+                    " ".$h{"FREQ"}." ".$h{"MODE"};
+
+    my $dspsr_options = `$dspsr_cmd`;
+
+    if ($? != 0) {
+      chomp $dspsr_options;
+      $result = "fail";
+      $response = "Error: dspsr_command_line.pl failed: ".$dspsr_options;
+
+    } else {
+      chomp $dspsr_options;
+      $proc_cmd =~ s/SELECT/$dspsr_options/;
+
+    }
+  }
+
+  $proc_cmd .= $proc_args;
+
+  if ($source =~ m/CalDelay/) {
+    if ($proc_cmd =~ m/-2c100/) {
+      # TODO put error here
+    } else {
+      $proc_cmd .= " -2c100";
+    }
+  }
+
+  if ($result eq "ok") {
+    $response = $proc_cmd;
+  }
+
+  return ($result, $response)
+
+}
+
 
 
 __END__
