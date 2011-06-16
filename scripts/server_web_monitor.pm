@@ -268,7 +268,8 @@ sub currentInfoThread($) {
       $cmd = "find ".$results_dir." -maxdepth 1 -type d -name '2*' -printf '\%f\n' | sort | tail -n 1";
       Dada::logMsg(3, $dl, "currentInfoThread: ".$cmd);
       $obs = `$cmd`;
-      chomp $obs ;
+      chomp $obs;
+
       Dada::logMsg(3, $dl, "currentInfoThread: ".$obs);
 
       if (-f $results_dir."/".$obs."/obs.info") {
