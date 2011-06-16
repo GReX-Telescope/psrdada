@@ -55,7 +55,8 @@ double rand_normal(double mean, double stddev);
 /* UDP socket */
 struct sockaddr_in dagram_socket;
 
-int new_gain_value = 33;  // Standard gain of 50 % 
+// perfect gain is 50, start on 33 so that we have somewhere to move...
+int new_gain_value = 33;  
 int current_gain = 33;
 
 int main(int argc, char *argv[])
