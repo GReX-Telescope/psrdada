@@ -31,6 +31,24 @@ function getConfigFile($fname, $quiet=FALSE) {
   return $returnArray;
 } 
 
+function updateConfigFile($fname, $new_config) {
+
+  $fptr = @fopen($fname,"w");
+
+  if ($fptr)
+  {
+    fprintf($fptr, "# Observation Summary updated by: results.lib.php\n");
+    fprintf($fptr, "# Updated: ".date(DADA_TIME_FORMAT)."\n\n");
+
+    foreach ($new_config as $key => $value)
+    {
+      fprintf($fptr, str_pad($key, 19)." ".$value."\n");
+    }
+    fclose($fptr);
+  }
+}
+
+
 function getRawTextFile($fname) {
 
   $fptr = @fopen($fname,"r");
