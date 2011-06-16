@@ -82,16 +82,15 @@ for ($i=0; $i < $cfg{"NUM_PWC"}; $i++) {
   push(@clihelp,    $cfg{"PWC_".$i});
   push(@clihelpsrv, $cfg{"PWC_".$i});
 }
-for ($i=0; $i < $cfg{"NUM_HELP"}; $i++) {
-  push(@helpers,    $cfg{"HELP_".$i});
-  push(@clihelp,    $cfg{"HELP_".$i});
-  push(@clihelpsrv, $cfg{"HELP_".$i});
+for ($i=0; $i < $cfg{"NUM_DFB"}; $i++) {
+  push(@helpers,    $cfg{"DFB_".$i});
+  push(@clihelp,    $cfg{"DFB_".$i});
+  push(@clihelpsrv, $cfg{"DFB_".$i});
 }
 for ($i=0; $i < $cfg{"NUM_SRV"}; $i++) {
   push(@servers,    $cfg{"SRV_".$i});
   push(@clihelpsrv, $cfg{"SRV_".$i});
 }
-
 
 if ($stop == 1) {
 
@@ -103,13 +102,13 @@ if ($stop == 1) {
 
   # Stop client scripts
   debugMessage(0, "Stopping client scripts");
-  if (!(issueTelnetCommand("stop_daemons",\@clihelp))) {
+  if (!(issueTelnetCommand("stop_daemons",\@clients))) {
     debugMessage(0,"stop_daemons failed");
   }
 
   # Destroy DB's
   debugMessage(0, "Destroying Data blocks");
-  if (!(issueTelnetCommand("destroy_dbs",\@clihelp))) {
+  if (!(issueTelnetCommand("destroy_dbs",\@clients))) {
     debugMessage(0,"destroy_db failed");
   }
 
@@ -125,13 +124,9 @@ if ($stop == 1) {
   if (!(issueTelnetCommand("stop_master_script",\@clihelpsrv))) {
     debugMessage(0,"stop_master_script failed");
   }
-
-  if ($cfg{"USE_DFB_SIMULATOR"} eq 1) {
-    my @arr = ();
-    push(@arr,$cfg{"DFB_SIM_HOST"});
-    issueTelnetCommand("stop_master_script",\@arr);
-  }
 }
+
+sleep(2);
 
 if ($start == 1) {
 
@@ -141,18 +136,12 @@ if ($start == 1) {
     debugMessage(0,"start_master_script failed");
   }
 
-  if ($cfg{"USE_DFB_SIMULATOR"} eq 1) {
-    my @arr = ();
-    push(@arr,$cfg{"DFB_SIM_HOST"});
-    issueTelnetCommand("start_master_script",\@arr);
-  }
-
-  sleep(2);
+  sleep(1);
 
   # initalize DB's
   debugMessage(1, "Initializing Data blocks");
-  if (!(issueTelnetCommand("init_dbs",\@clihelp))) {
-    debugMessage(0, "init_db failed");
+  if (!(issueTelnetCommand("init_dbs",\@clients))) {
+    debugMessage(0, "init_dbs failed");
   }
 
   sleep(1);
@@ -176,11 +165,6 @@ if ($start == 1) {
     debugMessage(0,"start_daemons failed");
   }
 
-  # Start client helper scripts
-  debugMessage(0, "Starting client helper scripts");
-  if (!(issueTelnetCommand("start_helper_daemons",\@helpers))) {
-    debugMessage(0,"start_helper_daemons failed");
-  }
 }
 
 # Clear the web interface status directory
