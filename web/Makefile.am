@@ -102,6 +102,12 @@ nobase_dist_web_SCRIPTS = images/apsr_logo_1x60.png \
     images/jsprogress/percentImage_back_80.png \
     images/jsprogress/percentImage_back.png \
     images/jsprogress/percentImage.png \
+    images/jsprogress/percentImage_40.png \
+    images/jsprogress/verticalPercentImage_back.png \
+    images/jsprogress/verticalPercentImage_back1.png \
+    images/jsprogress/verticalPercentImage_back4.png \
+    images/jsprogress/verticalPercentImage_box.png \
+    images/jsprogress/verticalPercentImage.png \
     images/jsprogress/icons/add.gif \
     images/jsprogress/icons/empty.gif \
     images/jsprogress/icons/fill.gif \
