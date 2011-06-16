@@ -30,12 +30,13 @@
  
  	// Default Options
 		var defaultOptions = {
-			animate		: true,										// Animate the progress? - default: true
-			showText	: true,										// show text with percentage in next to the progressbar? - default : true
-			width		  : 120,										// Width of the progressbar - don't forget to adjust your image too!!!
-			boxImage	: '/images/jsprogress/percentImage.png',			// boxImage : image around the progress bar
-			barImage	: '/images/jsprogress/percentImage_back.png',	// Image to use in the progressbar. Can be an array of images too.
-			height		: 12										// Height of the progressbar - don't forget to adjust your image too!!!
+			animate		 : true,										// Animate the progress? - default: true
+			showText	 : true,										// show text with percentage in next to the progressbar? - default : true
+			width		   : 120,										// Width of the progressbar - don't forget to adjust your image too!!!
+			boxImage	 : '/images/jsprogress/percentImage.png',			// boxImage : image around the progress bar
+			barImage	 : '/images/jsprogress/percentImage_back.png',	// Image to use in the progressbar. Can be an array of images too.
+			height		 : 12,										// Height of the progressbar - don't forget to adjust your image too!!!
+      horizontal : true
 		}
 		
  /**
@@ -67,19 +68,13 @@
 			 */
 				el				: null,								// Element where to render the progressBar in
 				id				: null,								// Unique ID of the progressbar
-				percentage		: null,								// Percentage of the progressbar
-				
-				options			: null,								// The options
-				
-				initialPos		: null,								// Initial postion of the background in the progressbar
-				pxPerPercent	: null,								// Number of pixels per 1 percent
-				
-				backIndex		: null,								// index in the array of background images currently used
-				
-				running			: null,								// is this one running (being animated) or not?
-				
+				percentage		: null,						// Percentage of the progressbar
+				options			: null,						  // The options
+				initialPos		: null,						// Initial postion of the background in the progressbar
+				pxPerPercent	: null,						// Number of pixels per 1 percent
+				backIndex		: null,							// index in the array of background images currently used
+				running			: null,						  // is this one running (being animated) or not?
 				queue			: false,							// queue of percentages to set to
-			
 			
 			/**
 			 * Constructor
@@ -104,10 +99,19 @@
 					this.running		= false;						// Set to false initially
 					this.queue			= Array();						// Set to empty Array initially
 									
-					// datamembers which are calculatef
-					this.imgWidth		= this.options.width * 2;		// define the width of the image (twice the width of the progressbar)
-					this.initialPos		= this.options.width * (-1);	// Initial postion of the background in the progressbar (0% is the middle of our image!)
-					this.pxPerPercent	= this.options.width / 100;		// Define how much pixels go into 1%
+					// datamembers which are calculate
+          if (this.options.horizontal)
+          {
+					  this.imgWidth		= this.options.width * 2;		    // define the width of the image (twice the width of the progressbar)
+					  this.initialPos		= this.options.width * (-1);	// Initial postion of the background in the progressbar (0% is the middle of our image!)
+					  this.pxPerPercent	= this.options.width / 100;		// Define how much pixels go into 1%
+          }
+          else
+          {
+					  this.imgHeight		= this.options.height * 2;		// define the height of the image (twice the heightof the progressbar)
+					  this.initialPos		= this.options.height * (-1);	// Initial postion of the background in the progressbar (0% is the middle of our image!)
+					  this.pxPerPercent	= this.options.height / 100;	// Define how much pixels go into 1%
+          }
 					
 					// enfore backimage array
 					if (this.options.barImage.constructor != Array) { 	// used to be (but doesn't work in Safari): if (this.options.barImage.constructor.toString().indexOf("Array") == -1) {
@@ -115,8 +119,14 @@
 					}
 					
 					// create the progressBar
+          var bgpos = ''
+          if (this.options.horizontal)
+            bgpos = 'background-position: ' + this.initialPos + 'px 50%;'
+          else
+            bgpos = 'background-position: 50%' + this.initialPos + 'px;'
+            
 					this.el.update(
-						'<img id="' + this.id + '_percentImage" src="' + this.options.boxImage + '" alt="0%" style="width: ' + this.options.width + 'px; height: ' + this.options.height + 'px; background-position: ' + this.initialPos + 'px 50%; background-image: url(' + this.options.barImage[this.backIndex] + '); padding: 0; margin: 0;"/>' + 
+						'<img id="' + this.id + '_percentImage" src="' + this.options.boxImage + '" alt="0%" style="width: ' + this.options.width + 'px; height: ' + this.options.height + 'px; ' + bgpos + ' background-image: url(' + this.options.barImage[this.backIndex] + '); padding: 0; margin: 0;"/>' + 
 						((this.options.showText == true)?'<span id="' + this.id + '_percentText">0%</span>':''));
 				
 					// set initial percentage
@@ -269,7 +279,13 @@
 			 */
 				_setBgPosition		: function(percentage) {
 					// adjust the background position
-						$(this.id + "_percentImage").style.backgroundPosition 	= "" + (this.initialPos + (percentage * this.pxPerPercent)) + "px 50%";
+            if (this.options.horizontal) 
+						  $(this.id + "_percentImage").style.backgroundPosition 	= "" + (this.initialPos + (percentage * this.pxPerPercent)) + "px 50%";
+            else
+            {
+						  $(this.id + "_percentImage").style.backgroundPosition 	= "50% " + (this.initialPos + ((100-percentage) * this.pxPerPercent)) + "px";
+              //alert ("initialPos="+this.initialPos+" percentage="+percentage+" pxPerPercent="+this.pxPerPercent+ "bgpos="+(this.initialPos + (percentage * this.pxPerPercent))+ " barImage.length="+this.options.barImage.length);
+            }
 												
 					// adjust the background image and backIndex
 						var newBackIndex										= Math.floor((percentage-1) / (100/this.options.barImage.length));
