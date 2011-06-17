@@ -8,7 +8,7 @@ include($instrument.".lib.php");
 class results extends caspsr_webpage 
 {
 
-  var $filter_types = array("", "SOURCE", "CFREQ", "BANDWIDTH", "PID", "UTC_START", "PROC_FILE");
+  var $filter_types = array("", "SOURCE", "CFREQ", "BANDWIDTH", "PID", "UTC_START", "PROC_FILE", "MODE");
   var $cfg = array();
 
   function results()
@@ -27,13 +27,35 @@ class results extends caspsr_webpage
   {
 ?>
     <style type="text/css">
+
+      .hidden {
+        display: none;
+      }
+
       .processing {
         background-color: #FFFFFF;
+      }
+
+      .failed {
+        background-color: #FFaaaa;
       }
 
       .finished {
         background-color: #cae2ff;
       }
+
+      .transferred{
+        background-color: #cae2ff;
+      }
+
+      .deleted{
+        background-color: #cae2ff;
+      }
+
+      .unknown{
+        background-color: #dddddd;
+      }
+
     </style>
 
     <script type='text/javascript'>
@@ -84,6 +106,17 @@ class results extends caspsr_webpage
         document.location = URL;
       }
 
+      function set_retreiving_data()
+      {
+        var i = document.getElementById("displayLength").selectedIndex;
+        var length = document.getElementById("displayLength").options[i].value;
+        for (i=0; i<length; i++)
+        {
+          document.getElementById("row_"+i).className = "hidden";
+        }
+        document.getElementById("status").innerHTML = "Retreiving data...";
+      }
+
       function toggle_images()
       {
         var i = document.getElementById("displayLength").selectedIndex;
@@ -111,6 +144,8 @@ class results extends caspsr_webpage
       function results_update_request() 
       {
         var ru_http_requset;
+
+        set_retreiving_data();
 
         // get the offset 
         var offset = getOffset();
@@ -206,11 +241,8 @@ class results extends caspsr_webpage
                   // do nothing
                 }
 
-              } else if (key == "processing") {
-                if (value == 1)
-                  document.getElementById("row_"+i).className = "processing";
-                else
-                  document.getElementById("row_"+i).className = "finished";
+              } else if (key == "state") {
+                document.getElementById("row_"+i).className = value;
   
               } else {
                 try {
@@ -228,6 +260,7 @@ class results extends caspsr_webpage
           var length = getLength();
           document.getElementById("showing_from").innerHTML = offset;
           document.getElementById("showing_to").innerHTML = (offset + length);
+          document.getElementById("status").innerHTML = "Matching Observations";
         }
       }
 
@@ -271,7 +304,7 @@ class results extends caspsr_webpage
 
     <br/>
 
-    <div>
+    <div style='vertical-align: middle;'>
       Inline Images <input type=checkbox id="inlineimages" name="inlineimages" onChange="toggle_images()"<? if($get["inlineimages"] == "true") echo " checked";?>>
     </div>
 
@@ -376,7 +409,7 @@ class results extends caspsr_webpage
   function printMainHTML($get)
   {
 
-    $this->openBlockHeader("Recent Results");
+    $this->openBlockHeader("<span id='status'>Retreiving Data...</span>");
 
     $basedir = $this->cfg["SERVER_RESULTS_DIR"];
     $archive_ext = ".ar";
@@ -474,6 +507,7 @@ class results extends caspsr_webpage
 ?>
         <th>SOURCE</th>
         <th>UTC START</th>
+        <th>MODE</th>
         <th>CFREQ</th>
         <th>BW</th>
         <th>SNR</th>
@@ -501,7 +535,7 @@ class results extends caspsr_webpage
           $mouseout = "onmouseout=\"UnTip()\"";
   
           /* If archives have been finalised and its not a brand new obs */
-          echo "  <tr id='row_".$i."' class='".(($results[$keys[$i]]["processing"] === 1) ? "processing" : "finished")."'>\n";
+          echo "  <tr id='row_".$i."' class='".$results[$keys[$i]]["state"]."'>\n";
 
           /* IMAGE */
           if ($get["inlineimages"] == "true") 
@@ -516,6 +550,9 @@ class results extends caspsr_webpage
 
           /* UTC_START */
           echo "    <td ".$bg_style."><span id='UTC_START_".$i."'>".$k."</span></td>\n";
+
+          /* MODE */
+          echo "    <td ".$bg_style."><span id='MODE_".$i."'>".$r["MODE"]."</span></td>\n";
 
           /* CFREQ */
           echo "    <td ".$bg_style."><span id='CFREQ_".$i."'>".$r["CFREQ"]."</span></td>\n";
@@ -623,6 +660,7 @@ class results extends caspsr_webpage
 
       $o = $observations[$i];
       $dir = $results_dir."/".$o;
+      $update_config = false;
 
       /* read the obs.info file into an array */
       if (file_exists($dir."/obs.info")) {
@@ -636,32 +674,31 @@ class results extends caspsr_webpage
         // these will only exist after this page has loaded and the values have been calculated once
         $all_results[$o]["INT"] = (array_key_exists("INT", $arr)) ? $arr["INT"] : "NA";
         $all_results[$o]["SNR"] = (array_key_exists("SNR", $arr)) ? $arr["SNR"] : "NA";
-        //$all_results[$o]["OBS.START"] = (array_key_exists("OBS.START", $arr)) ? $arr["OBS.START"] : "NA";
         $all_results[$o]["FRES_AR"] = (array_key_exists("FRES_AR", $arr)) ? $arr["FRES_AR"] : "NA";
         $all_results[$o]["TRES_AR"] = (array_key_exists("TRES_AR", $arr)) ? $arr["TRES_AR"] : "NA";
         $all_results[$o]["IMG"] = (array_key_exists("IMG", $arr)) ? $arr["IMG"] : "NA";
+        $all_results[$o]["MODE"] = (array_key_exists("MODE", $arr)) ? $arr["MODE"] : "";
       }
 
       # if this observation is finished check if any of the observations require updating of the obs.info
+      $finished = 0;
       if (file_exists($dir."/obs.finished")) {
+        $all_results[$o]["state"] = "finished";
+        $finished = 1;
+      } else if (file_exists($dir."/obs.processing"))  {
+        $all_results[$o]["state"] = "processing";
+      } else if (file_exists($dir."/obs.failed")) {
+        $all_results[$o]["state"] = "failed";
+      } else if (file_exists($dir."/obs.transferred")) {
+        $all_results[$o]["state"] = "transferred";
+        $finished = 1;
+      } else if (file_exists($dir."/obs.deleted")) {
+        $all_results[$o]["state"] = "deleted";
         $finished = 1;
       } else {
-        $finished = 0;
+        $all_results[$o]["state"] = "unknown";
       }
 
-      # check the obs.start filename
-      /*
-      if ($all_results[$o]["OBS.START"] == "NA") {
-
-        $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -type f -name '*obs.start' | tail -n 1";
-        $an_obs_start = exec($cmd);
-        $all_results[$observations[$i]]["obs_start"] = $an_obs_start;
-        if ($finished) {
-          system("echo 'OBS.START           ".$an_obs_start."' >> ".$results_dir."/".$o."/obs.info");
-          system("echo 'OBS.START           ".$an_obs_start."' >> ".$archive_dir."/".$o."/obs.info");
-        }
-      }
-      */
       # try to find the name of the summed tres/fres archives
       if (($all_results[$o]["FRES_AR"] == "NA") || ($all_results[$o]["TRES_AR"] == "NA")) {
 
@@ -682,12 +719,12 @@ class results extends caspsr_webpage
 
         if ($finished) {
           if ($all_results[$o]["TRES_AR"] != "NA") {
-            system("echo 'TRES_AR             ".$tres_archive."' >> ".$results_dir."/".$o."/obs.info");
-            system("echo 'TRES_AR             ".$tres_archive."' >> ".$archive_dir."/".$o."/obs.info");
+            $arr["TRES_AR"] = $tres_archive;
+            $update_config = true;
           }
           if ($all_results[$o]["FRES_AR"] != "NA") {
-            system("echo 'FRES_AR             ".$fres_archive."' >> ".$results_dir."/".$o."/obs.info");
-            system("echo 'FRES_AR             ".$fres_archive."' >> ".$archive_dir."/".$o."/obs.info");
+            $arr["FRES_AR"] = $fres_archive;
+            $update_config = true;
           }
         }
       }
@@ -697,18 +734,18 @@ class results extends caspsr_webpage
         $int = instrument::getIntergrationLength($all_results[$o]["TRES_AR"]);
         $all_results[$o]["INT"] = $int;
         if ($finished) {
-          system("echo 'INT                ".$int."' >> ".$results_dir."/".$o."/obs.info");
-          system("echo 'INT                ".$int."' >> ".$archive_dir."/".$o."/obs.info");
+          $arr["INT"] = $int;
+          $update_config = true;
         }
       }
 
       # get the SNR
-      if (($all_results[$o]["SNR"] == "NA") && ($all_results[$o]["FRES_AR"] != "NA")) {
+      if ((($all_results[$o]["SNR"] == "NA") || ($all_results[$o]["SNR"] == 0.0)) && ($all_results[$o]["FRES_AR"] != "NA")) {
         $snr = instrument::getSNR($all_results[$o]["FRES_AR"]);
         $all_results[$o]["SNR"] = $snr;
         if ($finished) {
-          system("echo 'SNR                ".$snr."' >> ".$results_dir."/".$o."/obs.info");
-          system("echo 'SNR                ".$snr."' >> ".$archive_dir."/".$o."/obs.info");
+          $arr["SNR"] = $snr;
+          $update_config = true;
         }
       }
 
@@ -722,8 +759,24 @@ class results extends caspsr_webpage
           $all_results[$o]["IMG"] = "../../../images/blankimage.gif";
         }  
         if ($finished) {
-          system("echo 'IMG                 ".$img."' >> ".$results_dir."/".$o."/obs.info");
-          system("echo 'IMG                 ".$img."' >> ".$archive_dir."/".$o."/obs.info");
+          $arr["IMG"] = $img;
+          $update_config = true;
+        }
+      }
+
+      # get the mode
+      if (($all_results[$o]["MODE"] == "") && (file_exists($dir."/obs.start")))
+      {
+        $cmd = "grep MODE ".$dir."/obs.start | tail -n 1 | awk '{print \$2}'";
+        $mode = exec($cmd, $output, $rval);
+        if (($rval == 0) && ($mode != ""))
+        {
+          $all_results[$o]["MODE"] = $mode;
+        }
+        if ($finished) 
+        {
+          $arr["MODE"] = $mode;
+          $update_config = true;
         }
       }
 
@@ -733,10 +786,10 @@ class results extends caspsr_webpage
         $all_results[$o]["annotation"] = "";
       }
 
-      if (file_exists($dir."/obs.processing")) {
-        $all_results[$o]["processing"] = 1;
-      } else {
-        $all_results[$o]["processing"] = 0;
+      # update the config file with any new changes
+      if ($update_config && (file_exists($dir."/obs.info")))
+      {
+        updateConfigFile($dir."/obs.info", $arr);
       }
     }
 
