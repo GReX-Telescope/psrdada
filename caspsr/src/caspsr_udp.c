@@ -352,7 +352,7 @@ uint64_t caspsr_start_xfer(caspsr_receiver_t * ctx)
  * receive size packets and return a pointer to the captured data, updating size
  * with the number of packets captured
  */
-void * caspsr_xfer(caspsr_receiver_t * ctx, uint64_t * size)
+void * caspsr_xfer(caspsr_receiver_t * ctx, int64_t * size)
 {
 
   ctx->got_enough = 0;
@@ -625,7 +625,7 @@ void * caspsr_xfer(caspsr_receiver_t * ctx, uint64_t * size)
   assert(ctx->curr->buffer != 0);
 
   if (ctx->verbose)
-    multilog(ctx->log, LOG_INFO, "caspsr_xfer: buffer_function returning %"PRIu64" bytes\n", *size);
+    multilog(ctx->log, LOG_INFO, "caspsr_xfer: buffer_function returning %"PRIi64" bytes\n", *size);
 
   return (void *) ctx->curr->buffer;
 

@@ -124,7 +124,7 @@ void caspsr_reset_receiver_t(caspsr_receiver_t * ctx);
 
 int      caspsr_receiver_dealloc(caspsr_receiver_t * ctx);
 uint64_t caspsr_start_xfer(caspsr_receiver_t * ctx);
-void *   caspsr_xfer(caspsr_receiver_t * ctx, uint64_t * size);
+void *   caspsr_xfer(caspsr_receiver_t * ctx, int64_t * size);
 int      caspsr_stop_xfer(caspsr_receiver_t * ctx);
 
 #endif /* __CASPSR_UDP_H */
