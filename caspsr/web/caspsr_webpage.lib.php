@@ -40,10 +40,10 @@ class caspsr_webpage
 
   }
 
-  function openBlock()
+  function openBlock($divargs="")
   {
 ?>
-    <div class="Block">
+    <div class="Block" <?echo $divargs?>>
       <div class="Block-tl"></div>
       <div class="Block-tr"><div></div></div>
       <div class="Block-bl"><div></div></div>
@@ -65,9 +65,9 @@ class caspsr_webpage
 <?
   }
 
-  function openBlockHeader($title)
+  function openBlockHeader($title, $divargs="")
   {
-    $this->openBlock();
+    $this->openBlock($divargs);
 ?>
         <div class="BlockHeader">
           <div class="header-tag-icon">

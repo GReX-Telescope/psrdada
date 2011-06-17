@@ -74,11 +74,11 @@ class current_observation extends caspsr_webpage
   }
 
   /* HTML for this page */
-  function printHTML() 
+  function printHTML($divargs="") 
   {
-    $this->openBlockHeader("Current Observation");
+    $this->openBlockHeader("Current Observation", $divargs);
 ?>
-    <table border=0 cellspacing=0 cellpadding=5>
+    <table border=0 cellspacing=0 cellpadding=0>
       <tr>
         <td>
           <table cellpadding=1 cellspacing=0 border=0>
