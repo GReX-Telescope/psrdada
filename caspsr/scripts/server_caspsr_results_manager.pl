@@ -41,12 +41,11 @@ $| = 1;
 #
 sub main();
 sub countObsStart($);
-sub getPartialArchives($);
-sub getIntermediateArchives($);
+sub getArchives($);
 sub getObsAge($$);
 sub markObsState($$$);
 sub checkClientsFinished($$);
-sub processObservation($$$);
+sub processObservation($$);
 sub processArchive($$$$);
 sub makePlotsFromArchives($$$$$$);
 sub copyLatestPlots($$$);
@@ -155,18 +154,18 @@ sub main() {
         # If we have waited 600 seconds and all clients aren't finished
         if ($t > 600) {
 
-          processObservation($o, $n_obs_starts, 1);
+          processObservation($o, $n_obs_starts);
           markObsState($o, "processing", "failed");
 
-        # newest archive was more than 20 seconds old, finish the obs.
-        } elsif ($t > 20) {
+        # newest archive was more than 32 seconds old, finish the obs.
+        } elsif ($t > 32) {
 
           Dada::logMsg(2, $dl, "main: checkClientsFinished(".$o.", ".$n_obs_starts.")");
           ($result, $response) = checkClientsFinished($o, $n_obs_starts);
           Dada::logMsg(2, $dl, "main: checkClientsFinished() ".$result." ".$response);
 
           if ($result eq "ok") {
-            processObservation($o, $n_obs_starts, 1);
+            processObservation($o, $n_obs_starts);
             markObsState($o, "processing", "finished");
             cleanResultsDir($o);
           } 
@@ -174,7 +173,7 @@ sub main() {
         # we are still receiving results from this observation
         } elsif ($t >= 0) {
 
-          processObservation($o, $n_obs_starts, 0);
+          processObservation($o, $n_obs_starts);
 
         # no archives yet received, wait
         } elsif ($t > -60) {
@@ -476,34 +475,30 @@ sub cleanResultsDir($) {
 # Process all possible archives in the observation, combining the bands
 # and plotting the most recent images. Accounts for multifold  PSRS
 #
-sub processObservation($$$) {
+sub processObservation($$) {
 
-  my ($o, $n_obs_starts, $finalise) = @_;
+  my ($o, $n_obs_starts) = @_;
 
-  Dada::logMsg(2, $dl, "processObservation(".$o.", ".$n_obs_starts.", ".$finalise.")");
+  Dada::logMsg(2, $dl, "processObservation(".$o.", ".$n_obs_starts.")");
 
   my %unprocessed = ();
-  my %intermediate = ();
-  my %unprocessed_keys = ();
   my @unprocessed_keys = ();
-  my @intermediate_keys = ();
   my $i = 0;
   my $k = "";
-  my $c = 0;
-  my $process = 0;
   my $fres_ar = "";
   my $tres_ar = "";
   my @fres_plot = ();
   my @tres_plot = ();
   my $source = "";
   my $archive = "";
+  my $file = "";
   my $cmd = "";
   my $result = "";
   my $response = "";
   my $latest_n_sec_archive = "";
 
-  # Look for the oldest partial archives that have not been processed
-  %unprocessed = getPartialArchives($o);
+  # get a list of unprocessed archives, filenames
+  %unprocessed = getArchives($o);
 
   # Sort the files into time order.
   @unprocessed_keys = sort (keys %unprocessed);
@@ -511,56 +506,33 @@ sub processObservation($$$) {
   Dada::logMsg(2, $dl, "processObservation: [".$o."] found ".($#unprocessed_keys+1)." unprocessed archives");
 
   # Process all the files, plot at the end
-  for ($i=0;(($i<=$#unprocessed_keys) && (!$quit_daemon)); $i++) {
-
+  for ($i=0;(($i<=$#unprocessed_keys) && (!$quit_daemon)); $i++) 
+  {
     # unprocessed partial archive, of form SOURCE/ARCHIVE
     $k = $unprocessed_keys[$i];
+    ($source, $archive) = split(/\//, $k);
 
-    ($source ,$archive) = split(/\//, $k);
+    $file = $unprocessed{$k};
 
-    # number of archives that match this [0..NUM_PWC]
-    $c = $unprocessed{$k};
+    Dada::logMsg(1, $dl, $o." Processing ".$source."/".$archive);
 
-    Dada::logMsg(2, $dl, "processObservation: source=".$source." archive=".$archive.", found=".$c." of ".$n_obs_starts);
+    # we can now add this archive to the total for this UTC_START/SOURCE
+    Dada::logMsg(2, $dl, "processObservation: appendArchive(".$o.", ".$source.", ".$file.")");
+    ($result, $fres_ar, $tres_ar) = appendArchive($o, $source, $file);
+    Dada::logMsg(3, $dl, "processObservation: appendArchive() ".$result);
 
-    # add the archives into the ARCHIVE_MOD second tsummed files
-    Dada::logMsg(2, $dl, "processObservation: addArchives(".$o.", ".$source.", ".$archive." ".$n_obs_starts.")");
-    ($result, $response) = addArchives($o, $source, $archive,  $n_obs_starts);
-    Dada::logMsg(2, $dl, "processObservation: addArchives() ".$result." ".$response);
+    # dont plot if nothing was produced
+    if (($fres_ar eq "") || ($tres_ar eq "")) {
+      Dada::logMsgWarn($warn, "No integrated archives produced from ".$file);
 
-    if ($result ne "ok") {
-      Dada::logMsgWarn($warn, "processObservation:addArchives failed: ".$response);
-    }
-  }
-  
-  # get a hash of the intermediate archives, the key is the SOURCE/ARCHIVE and the value indicates whether the
-  # archive is ready for appending
-  %intermediate = getIntermediateArchives($o);
+    # only add this source to the plot list once
+    } elsif (!(grep $_ eq $fres_ar, @fres_plot)) {
+      push @fres_plot, $fres_ar;
+      push @tres_plot, $tres_ar;
 
-  @intermediate_keys = sort (keys %intermediate);
-
-  # Process the intermediate archives
-  for ($i=0;(($i<=$#intermediate_keys) && (!$quit_daemon)); $i++) {
-
-    # intermediate partial archive, of form SOURCE/ARCHIVE
-    $k = $intermediate_keys[$i];
-
-    ($source ,$archive) = split(/\//, $k);
-
-    if (($intermediate{$k} == 1) || ($finalise)) {
-
-      Dada::logMsg(1, $dl, $o." Processing ".$source."/".$archive);
-
-      # we can now add this archive to the total for this UTC_START/SOURCE
-      Dada::logMsg(2, $dl, "processObservation: appendArchive(".$o.", ".$source.", ".$archive.")");
-      ($result, $fres_ar, $tres_ar) = appendArchive($o, $source, $archive);
-      Dada::logMsg(3, $dl, "processObservation: appendArchive() ".$result." ".$response);
-      if (($fres_ar ne "") && ($tres_ar ne "") && (!(grep $_ eq $fres_ar, @fres_plot))) {
-        push @fres_plot, $fres_ar;
-        push @tres_plot, $tres_ar;
-      }
+    # skip as the fres/tres is already listed
     } else {
-       Dada::logMsg(1, $dl, $o." Skipping ".$source."/".$archive." not finalised");
+       Dada::logMsg(2, $dl, "Not adding ".$fres_ar." to plot list, duplicate");
     }
   }
 
@@ -615,81 +587,6 @@ sub processObservation($$$) {
 
 ###############################################################################
 #
-# add all the files for this ARCHIVE_MOD second time period together, appending to 
-# an existing file if necessary. Returns 
-#
-sub addArchives($$$$) 
-{
-
-  my ($utc_start, $source, $archive, $n_obs_starts) = @_;
-
-  Dada::logMsg(2, $dl, "addArchives(".$utc_start.", ".$source.", ".$archive.", ".$n_obs_starts.")");
-
-  my $results_dir     = $cfg{"SERVER_RESULTS_DIR"};
-  my $result          = "";
-  my $response        = "";
-  my $cmd             = "";
-  my @archives        = ();
-  my $n_archives      = 0;
-  my $total_t_sum     = $utc_start."/".$source."/".$archive;
-
-  # Find out how many archives we actaully have from the PWC's
-  $cmd = "find ".$utc_start."/".$source." -mindepth 2 -name '".$archive."'";
-  Dada::logMsg(2, $dl, "addArchives: ".$cmd);
-  ($result, $response) = Dada::mySystem($cmd);
-  Dada::logMsg(3, $dl, "addArchives: ".$result." ".$response);
-  if ($result ne "ok") {
-    Dada::logMsgWarn($warn, "addArchives: '".$cmd."' failed: ".$response);
-    return ("fail", "find failed");
-  }
-  @archives = split(/\n/, $response);
-  $n_archives = $#archives + 1;
-
-  if ($n_archives == 0) {
-    Dada::logMsgWarn($warn, "addArchives: found 0 archives to process");
-    return ("fail", "found 0 archives to process");
-  }
-
-  Dada::logMsg(2, $dl, "addArchives: found ".$n_archives." / ".$n_obs_starts." archives");
-
-  my $i = 0;
-  my $archives_to_add = "";
-  my $tmp_ar = "";
-
-  for ($i=0; $i<$cfg{"NUM_PWC"}; $i++) {
-    $tmp_ar =  $utc_start."/".$source."/".$cfg{"PWC_".$i}."/".$archive;
-    if (-f $tmp_ar) {
-      $archives_to_add .=  $tmp_ar." ";
-    } 
-  }
-
-  Dada::logMsg(2, $dl, "addArchives: archives_to_add = ".$archives_to_add);
-
-  # combine all the archives into one for this time period
-  if ( -f $total_t_sum) {
-    $archives_to_add = $total_t_sum." ".$archives_to_add;
-  }
-  $cmd = "psradd -T -o ".$total_t_sum." ".$archives_to_add;
-  Dada::logMsg(2, $dl, "addArchives: ".$cmd);
-  ($result, $response) = Dada::mySystem($cmd);
-  Dada::logMsg(2, $dl, "addArchives: ".$result." ".$response);
-  if ($result ne "ok") {
-    Dada::logMsg(0, $dl, "addArchives: ".$cmd." failed: ".$response);
-    return ("fail", "psradd failed: ".$response);
-  }
-
-  # clean up the PWC's original archives
-  for ($i=0; $i<=$#archives; $i++) {
-    Dada::logMsg(2, $dl, "addArchives: unlinking ".$archives[$i]);
-    unlink ($archives[$i]);
-  }
-
-  return ("ok", "");
-}
-
-
-###############################################################################
-#
 # Append the ARCHIVE_MOD second summed archive to the total for this observation
 #
 sub appendArchive($$$) {
@@ -698,7 +595,7 @@ sub appendArchive($$$) {
 
   Dada::logMsg(2, $dl, "appendArchive(".$utc_start.", ".$source.", ".$archive.")");
 
-  my $total_t_sum = $utc_start."/".$source."/".$archive;
+  my $total_t_sum = $archive;
   my $source_f_res = $utc_start."/".$source."_f.tot";
   my $source_t_res = $utc_start."/".$source."_t.tot";
 
@@ -824,14 +721,12 @@ sub appendArchive($$$) {
 
 }
 
-
-
 ###############################################################################
 #
-# Returns a has of the time spliced archives in the results directory for this 
-# observation for each source
+# Returns a hash of the archives in the results directory for the specified
+# observation
 #
-sub getPartialArchives($) {
+sub getArchives($) {
 
   my ($utc_start) = @_;
 
@@ -847,11 +742,11 @@ sub getPartialArchives($) {
   my $tag = "";
   
   $cmd = "find ".$utc_start." -mindepth 3 -name \"*.ar\" -printf \"\%P\\n\"";
-  Dada::logMsg(3, $dl, "getPartialArchives: ".$cmd);
+  Dada::logMsg(3, $dl, "getArchives: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
-  Dada::logMsg(3, $dl, "getPartialArchives: ".$result." ".$response);
+  Dada::logMsg(3, $dl, "getArchives: ".$result." ".$response);
   if ($result ne "ok") {
-    Dada::logMsgWarn($warn, "getPartialArchives: ".$cmd." failed: ".$response);
+    Dada::logMsgWarn($warn, "getArchives: ".$cmd." failed: ".$response);
     return %archives;
   }
 
@@ -859,112 +754,20 @@ sub getPartialArchives($) {
 
   foreach $file (@files) {
 
-    Dada::logMsg(3, $dl, "getPartialArchives: splitting ".$file);
+    Dada::logMsg(3, $dl, "getArchives: splitting ".$file);
     ($source, $host, $archive) = split(/\//, $file, 3);
-    Dada::logMsg(3, $dl, "getPartialArchives: ".$file." -> source=".$source." host=".$host.", archive=".$archive);
+    Dada::logMsg(3, $dl, "getArchives: ".$file." -> source=".$source." host=".$host.", archive=".$archive);
     $tag = $source."/".$archive;
-
-    if (!(exists $archives{$tag})) {
-      $archives{$tag} = 1;
-      Dada::logMsg(2, $dl, "getPartialArchives: adding tag ".$tag);
-    } else {
-      Dada::logMsg(2, $dl, "getPartialArchives: incrementing tag ".$tag);
-      $archives{$tag} += 1;
-    }
-  }
-
-  return %archives;
-
-}
-
-###############################################################################
-#
-# get the intermidiate time added archives in the results directory for this
-# observation for each source
-#
-sub getIntermediateArchives($) {
-
-  my ($utc_start) = @_;
-
-  my $cmd = "";
-  my $result = "";
-  my $response = "";
-  my $file = "";
-  my @files = ();
-  my %archives = ();
-  my $source = "";
-  my $archive = "";
-  my $tag = "";
-  my $expected_length = $cfg{"ARCHIVE_MOD"};
-  my @t = ();
-  my $utc_start_unixtime = 0;
-  my $archive_unixtime = 0;
-  my $time_of_archive = "";
-  my $archive_length = 0;
-
-  # get a listing of all the intermediate archives
-  $cmd = "find ".$utc_start." -mindepth 2 -maxdepth 2 -type f -name \"*.ar\" -printf \"\%P\\n\"";
-  Dada::logMsg(3, $dl, "getIntermediateArchives: ".$cmd);
-  ($result, $response) = Dada::mySystem($cmd);
-  Dada::logMsg(3, $dl, "getIntermediateArchives: ".$result." ".$response);
-  if ($result ne "ok") {
-    Dada::logMsgWarn($warn, "getIntermediateArchives: ".$cmd." failed: ".$response);
-    return %archives;
-  }
-
-  @files = sort split(/\n/,$response);
-
-  # Determine the expected length for each archive
-  foreach $file (@files) {
-
-    Dada::logMsg(3, $dl, "getIntermediateArchives: splitting ".$file);
-    ($source, $archive) = split(/\//, $file, 2);
-    Dada::logMsg(3, $dl, "getIntermediateArchives: ".$file." -> source=".$source.", archive=".$archive);
-    $tag = $source."/".$archive;
-
-    # unix time of the utc_start
-    @t = split(/-|:/,$utc_start);
-    $utc_start_unixtime = timelocal($t[5], $t[4], $t[3], $t[2], ($t[1]-1), $t[0]);
-
-    # unix time of this archive
-    $time_of_archive = $archive;
-    $time_of_archive =~ s/\.ar$//;
-    @t = split(/-|:/,$time_of_archive);
-    $archive_unixtime = timelocal($t[5], $t[4], $t[3], $t[2], ($t[1]-1), $t[0]);
-
-    if ($archive_unixtime < $utc_start_unixtime) {
-      $expected_length = int($cfg{"ARCHIVE_MOD"}) - ($utc_start_unixtime - $archive_unixtime);
-    }
-
-    Dada::logMsg(2, $dl, "getIntermediateArchives: expected_length for ".$archive."=".$expected_length);
-
-    # check the actual length of this archive
-    $cmd = "psredit -Q -c length ".$utc_start."/".$file." | awk '{print \$2}'";
-    Dada::logMsg(3, $dl, "addArchives: ".$cmd);
-    ($result, $response) = Dada::mySystem($cmd);
-    Dada::logMsg(3, $dl, "addArchives: ".$result." ".$response);
-    if ($result ne "ok") { 
-      Dada::logMsg(0, $dl, "addArchives: ".$cmd." failed: ".$response);
-      return ("fail", "psredit failed: ".$response);
-    }
-    $archive_length = $response;
-    Dada::logMsg(2, $dl, "getIntermediateArchives: archive_length=".$archive_length);
 
     if (exists $archives{$tag}) {
-      Dada::logMsgWarn($warn, "getIntermediateArchives: duplicate archive found ".$archive);
-    }
-
-    # if the archive is the expected length, set to 1
-    if ($expected_length - $archive_length < 0.2) {
-      $archives{$tag} = 1;  
+      Dada::logMsgWarn($warn, "getArchives: ignoring duplicate tag for ".$file);
     } else {
-      $archives{$tag} = 0;
+      $archives{$tag} = $utc_start."/".$file;
+      Dada::logMsg(2, $dl, "getArchives: adding tag ".$tag);
     }
-
   }
 
   return %archives;
-
 }
 
 
@@ -1041,10 +844,10 @@ sub makePlotsFromArchives($$$$$$) {
   # 2011-02-07 WvS added log scale (mostly for 50cm)
   if ($res eq "1024x768") {
     #$cmd = $bin." -pb -x -lpol=0,1 -c log=1 -N2,1 -c above:c= -D ".$dir."/bp_tmp/png ".$ten_sec_archive;
-    $cmd = $bin." -pb -x -lpol=0,1 -N2,1 -c above:c= -D ".$dir."/bp_tmp/png ".$ten_sec_archive;
+    $cmd = $bin." -J '/home/dada/linux_64/bin/zap.psh' -pb -x -lpol=0,1 -N2,1 -c above:c= -D ".$dir."/bp_tmp/png ".$ten_sec_archive;
   } else {
     #$cmd = $bin." -pb -x -lpol=0,1 -c log=1 -O -D ".$dir."/bp_tmp/png ".$ten_sec_archive;
-    $cmd = $bin." -pb -x -lpol=0,1 -O -D ".$dir."/bp_tmp/png ".$ten_sec_archive;
+    $cmd = $bin." -J '/home/dada/linux_64/bin/zap.psh' -pb -x -lpol=0,1 -O -D ".$dir."/bp_tmp/png ".$ten_sec_archive;
   }
   Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
