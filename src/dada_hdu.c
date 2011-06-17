@@ -296,18 +296,18 @@ int dada_hdu_open (dada_hdu_t* hdu)
     if (!header_size)
     {
       if (ipcbuf_is_reader (hdu->header_block))
-	ipcbuf_mark_cleared (hdu->header_block);
+        ipcbuf_mark_cleared (hdu->header_block);
 
       if (ipcbuf_eod (hdu->header_block))
       {
-	multilog (log, LOG_INFO, "End of data on header block\n");
-	if (ipcbuf_is_reader (hdu->header_block))
-	  ipcbuf_reset (hdu->header_block);
+        multilog (log, LOG_INFO, "End of data on header block\n");
+        if (ipcbuf_is_reader (hdu->header_block))
+          ipcbuf_reset (hdu->header_block);
       }
       else
       {
-	multilog (log, LOG_ERR, "Empty header block\n");
-	return -1;
+        multilog (log, LOG_ERR, "Empty header block\n");
+        return -1;
       }
     }
   }
@@ -317,7 +317,7 @@ int dada_hdu_open (dada_hdu_t* hdu)
   /* Check that header is of advertised size */
   if (ascii_header_get (header, "HDR_SIZE", "%"PRIu64, &hdr_size) != 1) {
     multilog (log, LOG_ERR, "Header with no HDR_SIZE. Setting to %"PRIu64"\n",
-	      header_size);
+              header_size);
     hdr_size = header_size;
     if (ascii_header_set (header, "HDR_SIZE", "%"PRIu64, hdr_size) < 0) {
       multilog (log, LOG_ERR, "Error setting HDR_SIZE\n");
@@ -330,7 +330,7 @@ int dada_hdu_open (dada_hdu_t* hdu)
 
   else if (hdr_size > header_size) {
     multilog (log, LOG_ERR, "HDR_SIZE=%"PRIu64
-	      " > Header Block size=%"PRIu64"\n", hdr_size, header_size);
+              " > Header Block size=%"PRIu64"\n", hdr_size, header_size);
     multilog (log, LOG_DEBUG, "ASCII header dump\n%s", header);
     return -1;
   }
