@@ -26,8 +26,8 @@ sub usage();
 sub debugMessage($$);
 sub killServerDaemons($);
 sub killClientDaemons($$);
-sub destroyClientSpecial($);
-sub destroyDemuxerSpecial($);
+sub destroyBinaries($$);
+sub destroyDataBlocks($$);
 
 #
 # Constants
@@ -49,6 +49,7 @@ our @demux_daemons = split(/ /,$cfg{"DEMUX_DAEMONS"});
 my $cmd = "";
 my $result = "";
 my $response = "";
+my $binaries = "";
 my @clients = ();
 my @demuxers = ();
 my @all_clients = ();
@@ -117,14 +118,23 @@ debugMessage(0, "Killing Demuxer Daemons");
 debugMessage(0, "Killing GPU Daemons");
 ($result, $response) = killClientDaemons(\@clients, \@client_daemons);
 
-# kill DEMUX_BINARY (caspsr_udpNnic)
-debugMessage(0, "Destroying Demuxer SHM");
-($result, $response) = destroyDemuxerSpecial(\@demuxers);
+# kill DEMUX binaries
+$binaries = $cfg{"DEMUX_BINARY"}." ".$cfg{"IB_ACTIVE_BINARY"}." ".$cfg{"IB_INACTIVE_BINARY"}." dada_header perl";
+debugMessage(0, "Destroying Demuxer Binaries");
+($result, $response) = destroyBinaries(\@demuxers, $binaries);
 
-# kill PWC_BINARY (caspsr_udpdn) and shared memory segments on gpus
-debugMessage(0, "Destroying GPU SHM");
-($result, $response) = destroyClientSpecial(\@clients);
+# destroy DEMUX data blocks
+debugMessage(0, "Destroying Demuxer Datablocks");
+($result, $response) = destroyDataBlocks(\@demuxers, lc($cfg{"DEMUX_DATA_BLOCKS"}));
 
+# kill GPU binaries
+debugMessage(0, "Destroying GPU Binaries");
+$binaries = $cfg{"PWC_BINARY"}." dspsr caspsr_dbdecidb dada_dbnull dada_header perl";
+($result, $response) = destroyBinaries(\@clients, $binaries);
+
+# destroy GPU data blocks
+debugMessage(0, "Destroying GPU Datablocks");
+($result, $response) = destroyDataBlocks(\@clients, lc($cfg{"DATA_BLOCKS"}));
 
 # Clear the web interface status directory
 my $dir = $cfg{"STATUS_DIR"};
@@ -283,14 +293,16 @@ sub killClientDaemons($$)
 }
 
 #
-# Destroys all shared memory arrays on the client machines
+# Destroys the binaries on machines
 #
-sub destroyClientSpecial($)
+sub destroyBinaries($$)
 {
-  my ($hostsRef) = @_;
+  my ($hostsRef, $binaries_string) = @_;
 
   my @hosts = @$hostsRef;
-    
+  my @binaries = split(/ /,$binaries_string);
+
+  my $b = "";
   my $u = "caspsr";
   my $h = "";
   my $result = "";
@@ -302,67 +314,59 @@ sub destroyClientSpecial($)
   {
     $h = $hosts[$i];
 
-    $cmd = "sudo killall ".$cfg{"PWC_BINARY"};
-    debugMessage(2, "killClientDaemons: remoteSshCommand(".$u.", ".$h.", ".$cmd.")");
-    ($result, $response) = Dada::remoteSshCommand($u, $h, $cmd);
-    debugMessage(2, "killClientDaemons: ".$result." ".$rval." ".$response);
+    for ($j=0; $j<=$#binaries; $j++)
+    {
+      $b = $binaries[$j];
 
-    $cmd = "sudo killall dspsr";
-    debugMessage(2, "killClientDaemons: remoteSshCommand(".$u.", ".$h.", ".$cmd.")");
-    ($result, $response) = Dada::remoteSshCommand($u, $h, $cmd);
-    debugMessage(2, "killClientDaemons: ".$result." ".$rval." ".$response);
+      $cmd = "killall -KILL ".$b;
+      debugMessage(2, "destroyBinaries: remoteSshCommand(".$u.", ".$h.", ".$cmd.")");
+      ($result, $response) = Dada::remoteSshCommand($u, $h, $cmd);
+      debugMessage(2, "destroyBinaries: ".$result." ".$rval." ".$response);
+    }
+  }
+}
 
-    $cmd = "sudo killall caspsr_dbdecidb";
-    debugMessage(2, "killClientDaemons: remoteSshCommand(".$u.", ".$h.", ".$cmd.")");
-    ($result, $response) = Dada::remoteSshCommand($u, $h, $cmd);
-    debugMessage(2, "killClientDaemons: ".$result." ".$rval." ".$response);
 
-    $cmd = "sudo /home/dada/linux_64/bin/dada_db -d";
-    debugMessage(2, "killClientDaemons: remoteSshCommand(".$u.", ".$h.", ".$cmd.")");
+
+#
+# Destroys data_blocks on machines
+# 
+sub destroyDataBlocks($$)
+{
+  my ($hostsRef, $data_blocks) = @_;
+
+  my @hosts = @$hostsRef;
+  my @dbs = split(/ /,$data_blocks);
+
+  my $u = "caspsr";
+  my $h = "";
+  my $result = "";
+  my $response = "";
+  my $rval = "";
+  my $cmd = "";
+  my $db = "";
+
+  for ($i=0; $i<=$#hosts; $i++)
+  {
+    $h = $hosts[$i];
+
+    for ($j=0; $j<=$#dbs; $j++)
+    {
+      $db = $dbs[$j];
+
+      $cmd = "dada_db -k ".$db." -d";
+      debugMessage(2, "destroyDataBlocks: remoteSshCommand(".$u.", ".$h.", ".$cmd.")");
+      ($result, $response) = Dada::remoteSshCommand($u, $h, $cmd);
+      debugMessage(2, "destroyDataBlocks: ".$result." ".$rval." ".$response);
+    }
+
+    $cmd = "ipcrme";
+    debugMessage(2, "destroyDataBlocks: remoteSshCommand(".$u.", ".$h.", ".$cmd.")");
     ($result, $response) = Dada::remoteSshCommand($u, $h, $cmd);
-    debugMessage(2, "killClientDaemons: ".$result." ".$rval." ".$response);
+    debugMessage(2, "destroyDataBlocks: ".$result." ".$rval." ".$response);
 
   }
 
   return ("ok", "all nuked");
 }
 
-#
-# Destroys udpNnic on client machines
-# 
-sub destroyDemuxerSpecial($)
-{ 
-  my ($hostsRef) = @_;
-
-  my @hosts = @$hostsRef;
-   
-  my $u = "caspsr";
-  my $h = "";
-  my $result = "";
-  my $response = "";
-  my $rval = "";
-  my $cmd = "";
-
-  for ($i=0; $i<=$#hosts; $i++)
-  {
-    $h = $hosts[$i];
-  
-    $cmd = "sudo killall ".$cfg{"DEMUX_BINARY"};
-    debugMessage(2, "killClientDaemons: remoteSshCommand(".$u.", ".$h.", ".$cmd.")");
-    ($result, $response) = Dada::remoteSshCommand($u, $h, $cmd);
-    debugMessage(2, "killClientDaemons: ".$result." ".$rval." ".$response);
-  
-    $cmd = "sudo killall ".$cfg{"IB_ACTIVE_BINARY"};
-    debugMessage(2, "killClientDaemons: remoteSshCommand(".$u.", ".$h.", ".$cmd.")");
-    ($result, $response) = Dada::remoteSshCommand($u, $h, $cmd);
-    debugMessage(2, "killClientDaemons: ".$result." ".$rval." ".$response);
-  
-    $cmd = "sudo killall ".$cfg{"IB_INACTIVE_BINARY"};
-    debugMessage(2, "killClientDaemons: remoteSshCommand(".$u.", ".$h.", ".$cmd.")");
-    ($result, $response) = Dada::remoteSshCommand($u, $h, $cmd);
-    debugMessage(2, "killClientDaemons: ".$result." ".$rval." ".$response);
-  
-  } 
-
-  return ("ok", "all nuked");
-}  
