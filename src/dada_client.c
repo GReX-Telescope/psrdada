@@ -90,7 +90,11 @@ int64_t dada_client_io_loop (dada_client_t* client)
     else
     {
       bytes_to_transfer = client->transfer_bytes - bytes_transfered;
-      //fprintf(stderr,"transfer_bytes = %"PRIu64", bytes_transfered = %"PRIu64", bytes_to_transfer = %"PRIu64"\n",client->transfer_bytes,bytes_transfered,bytes_to_transfer);
+#ifdef _DEBUG
+      fprintf(stderr,"transfer_bytes = %"PRIu64", bytes_transfered = %"PRIu64
+                      ", bytes_to_transfer = %"PRIu64"\n",
+                      client->transfer_bytes,bytes_transfered,bytes_to_transfer);
+#endif
 
       if (buffer_size > bytes_to_transfer)
         bytes = bytes_to_transfer;
@@ -101,7 +105,12 @@ int64_t dada_client_io_loop (dada_client_t* client)
     if (client->direction == dada_client_reader) {
 
       if (ipcbuf_eod((ipcbuf_t*)client->data_block))
+      {
+#ifdef _DEBUG
+        fprintf (stderr, "io_loop: ipcbuf_eod true on data_block\n");
+#endif
         break;
+      }
 
 #ifdef _DEBUG
       fprintf (stderr, "calling ipcio_read %p %"PRIi64"\n", buffer, bytes);
@@ -142,11 +151,8 @@ int64_t dada_client_io_loop (dada_client_t* client)
         multilog (log, LOG_ERR, "ipcio_write error %s\n", strerror(errno));
         return -1;
       }
-
     }
-
     bytes_transfered += bytes;
-
   }
 
   return bytes_transfered;
@@ -270,8 +276,6 @@ int64_t dada_client_io_loop_block (dada_client_t* client)
       if (bytes_operated == 0) 
       {
         multilog (log, LOG_INFO, "dada_client_io_loop_block: end of input\n");
-        //bytes_operated = 1;
-        //break;
       }
 
       if (ipcio_close_block_write (client->data_block, (uint64_t) bytes_operated) < 0) {
@@ -281,14 +285,15 @@ int64_t dada_client_io_loop_block (dada_client_t* client)
       
       if (bytes_operated < block_size)
       {
+#ifdef _DEBUG
         multilog (log, LOG_INFO, "dada_client_io_loop_block: end of data\n");
+#endif
+        bytes_transfered += bytes_operated;
         break;
       }
-
     }
 
     bytes_transfered += bytes_operated;
-
   }
 
 #ifdef DEBUG
@@ -492,7 +497,7 @@ int dada_client_read (dada_client_t* client)
     obs_offset = 0;
   }
 
-  if (!client->quiet)
+  if ((!client->quiet) && client->transfer_bytes)
     multilog (log, LOG_INFO, "Transfering %"PRIu64" bytes in %"PRIu64
             " byte blocks\n", client->transfer_bytes, client->optimal_bytes);
 
@@ -542,10 +547,17 @@ int dada_client_write (dada_client_t* client)
 
   /* The header from the ring buffer */
   char* header = 0;
+
   uint64_t header_size = 0;
 
-  /* Byte count */
+  // number of bytes read by transfer function
   int64_t bytes_read = 0;
+
+  // Time at start and end of transfer
+  struct timeval start_loop, end_loop;
+
+  // time taken to transfer data
+  double transfer_time;
 
   assert (client != 0);
 
@@ -553,8 +565,7 @@ int dada_client_write (dada_client_t* client)
   assert (log != 0);
 
   header_size = ipcbuf_get_bufsz (client->header_block);
-  multilog (log, LOG_INFO, "header block size = %"PRIu64"\n", header_size);
-
+  //multilog (log, LOG_INFO, "header block size = %"PRIu64"\n", header_size);
 
   if (header_size) {
 
@@ -567,6 +578,8 @@ int dada_client_write (dada_client_t* client)
     client->header = header;
     client->header_size = header_size;
 
+    gettimeofday (&start_loop, NULL);
+
     // the open function of a write client should set the header_size
     // and transfer size attributes
     bytes_read = dada_client_transfer (client);
@@ -574,8 +587,15 @@ int dada_client_write (dada_client_t* client)
     if (bytes_read < 0)
       return -1;
 
-    //if (dada_client_stop (client) < 0)
-    //  return -1;
+    gettimeofday (&end_loop, NULL);
+
+    transfer_time = diff_time (start_loop, end_loop);
+
+    if (!client->quiet)
+      multilog (log, LOG_INFO, "%"PRIu64" bytes transferred in %lfs "
+                               "(%lg MB/s)\n", bytes_read, transfer_time,
+                               bytes_read/(1024*1024*transfer_time));
+
   }
 
   return 0;
