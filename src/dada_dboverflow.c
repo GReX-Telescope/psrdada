@@ -39,7 +39,10 @@ void signal_handler(int signalValue)
     fprintf(stderr, "received signal %d twice, hard exit\n", signalValue);
     exit(EXIT_FAILURE);
   }
-  quit = 1;
+  if (signalValue == SIGINT)
+    quit = 1;
+  else
+    quit = 2;
 }
 
 int main (int argc, char **argv)
@@ -85,6 +88,7 @@ int main (int argc, char **argv)
 
   // gracefully handle SIGINT
   signal(SIGINT, signal_handler);
+  signal(SIGTERM, signal_handler);
 
   log = multilog_open ("dada_dboverflow", 0);
 
@@ -114,6 +118,7 @@ int main (int argc, char **argv)
   uint64_t full_bufs = 0;
   uint64_t clear_bufs = 0;
   uint64_t bufs_read = 0;
+  uint64_t bufs_read_last = 0;
   uint64_t bufs_written = 0;
   int64_t available_bufs = 0;
 
@@ -129,6 +134,7 @@ int main (int argc, char **argv)
   }
 
   unsigned current_read_xfer = 0;
+  unsigned wait_count = 5;
 
   while (!quit) 
   {
@@ -142,6 +148,7 @@ int main (int argc, char **argv)
     else 
     {
 
+      bufs_read_last = bufs_read;
       bufs_written = ipcbuf_get_write_count (db);
       bufs_read = ipcbuf_get_read_count (db);
       full_bufs = ipcbuf_get_nfull (db);
@@ -151,13 +158,19 @@ int main (int argc, char **argv)
       if (verbose)
         multilog_fprintf(stderr, LOG_INFO, "free=%"PRIu64", full=%"PRIu64" written=%"PRIu64", read=%"PRIu64"\n", available_bufs, full_bufs, bufs_written, bufs_read);
 
-      if ((available_bufs == 0) || (full_bufs == nbufs))
+      // since we can often be stuck with 1 free buffer 
+      if ((available_bufs <= 1) && (bufs_read_last == bufs_read))
       {
-        multilog_fprintf(stderr, LOG_WARNING, "no free blocks\n");
-        quit = 2;
+        fprintf (stderr, "no free blocks, %d seconds remaining\n", wait_count);
+        if (wait_count <= 0)
+        {
+          quit = 2;
+        }
+        wait_count--;
       }
 
-      sleep(1);
+      if (!quit)
+        sleep(1);
     }
   }
 
