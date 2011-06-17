@@ -202,12 +202,12 @@ class instrument
 
     if (file_exists($archive)) {
 
-      $cmd = "psrstat -j 'zap median' -j FTp -c snr ".$archive." 2>&1 | grep snr= | awk -F= '{print \$2}'";
+      $cmd = "psrstat -q -j FTp -c snr ".$archive." 2>&1 | awk -F= '{print \$2}'";
       $script = "source /home/dada/.bashrc; ".$cmd." 2>&1";
       $string = exec($script, $output, $return_var);
       $snr = $output[0];
 
-      if (is_numeric($snr)) {
+      if (is_numeric($snr) && ($snr > 0) && ($snr < 1000000)) {
         $snr = sprintf("%5.1f",$snr);
       } else {
         $snr = 0;
