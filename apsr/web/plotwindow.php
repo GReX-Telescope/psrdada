@@ -77,7 +77,7 @@ $spec = getConfigFile(DADA_SPECIFICATION, TRUE);
 
         /* parse the data from each PSR, updating the global array */  
         for (i=0; i<npsrs; i++) {
-          base = 2 + (i*7);
+          base = 2 + (i*9);
           values = lines[base].split(":::");
           psrs[i] = values[1]; 
           if ((!(psrs_select.options[i])) || (psrs[i] != psrs_select.options[i].value)) {
@@ -119,31 +119,34 @@ $spec = getConfigFile(DADA_SPECIFICATION, TRUE);
         }
 
         /* line the lines array for the selected PSR */
-        base = (selected_psr*7) + 2;
+        base = (selected_psr*9) + 2;
 
-        for (i=1; i<=6; i++) {
-
+        for (i=1; i<=8; i++) {
           values = lines[base+i].split(":::");
           parts = values[0].split("_");
 
-          img = document.getElementById(parts[0]);
-          link = document.getElementById(parts[0]+"_a");
+          try {
+            img = document.getElementById(parts[0]);
+            link = document.getElementById(parts[0]+"_a");
 
-          if (parts[1] == "240x180") {
-            if (img.src != values[1]) {
-              img.src = values[1]
-            }
+            if (parts[1] == "240x180") {
+              if (img.src != values[1]) {
+                img.src = values[1]
+              }
 
-          // Hi res image for a "click"
-          } else {
-
-            if (values[1].indexOf("blankimage") > 0) {
-              //link.href="javascript:void(0)";
-              img.border=0
+            // Hi res image for a "click"
             } else {
-              link.href="javascript:popImage('"+values[1]+"')";
-              img.border=2
+
+              if (values[1].indexOf("blankimage") > 0) {
+                //link.href="javascript:void(0)";
+                img.border=0
+              } else {
+                link.href="javascript:popImage('"+values[1]+"')";
+                img.border=2
+              }
             }
+          } catch (e) {
+            //alert("parts[0]="+parts[0]);
           }
         } 
       }

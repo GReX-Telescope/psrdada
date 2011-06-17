@@ -293,44 +293,28 @@ echo "<br>\n";
 
 ###############################################################################
 
-echo "Checking Swinburne archives<br>\n";
+echo "Checking Swinburne archives <br>\n";
 
-$cmd = "ssh -l pulsar shrek210-gb \"cd /export/shrek210b/apsr/; find . -mindepth 2 -maxdepth 2 -type d -name '2*' -printf '%f\\n'\" | sort";
-$array = array();
-$lastline = exec($cmd, $array, $return_var);
-for ($i=0; $i<count($array); $i++) {
-  $u = $array[$i];
-  if (array_key_exists($u, $results)) {
-    $results[$u][ON_SWIN] = YES;
+$on_swin_count = 0;
+
+for ($i=0; $i<$cfg["NUM_SWIN_DIRS"]; $i++)
+{
+  $bits = split(":", $cfg["SWIN_DIR_".$i]);
+  $u = $bits[0];
+  $h = $bits[1];
+  $d = $bits[2];
+
+  $cmd = "ssh -l ".$u." ".$h." \"cd ".$d."; find . -mindepth 2 -maxdepth 2 -type d -name '2*' -printf '%f\\n'\" | sort";
+  $array = array();
+  $lastline = exec($cmd, $array, $return_var);
+  for ($j=0; $j<count($array); $j++) {
+    $u = $array[$j];
+    if (array_key_exists($u, $results)) {
+      $results[$u][ON_SWIN] = YES;
+    }
   }
+  $on_swin_count += count($array);
 }
-$on_swin_count = count($array);
-
-# P630 data
-$cmd = "ssh -l pulsar shrek211-gb \"cd /export/shrek211a/apsr/; find . -mindepth 2 -maxdepth 2 -type d -name '2*' -printf '%f\\n'\" | sort";
-$array = array();
-$lastline = exec($cmd, $array, $return_var);
-for ($i=0; $i<count($array); $i++) {
-  $u = $array[$i];
-  if (array_key_exists($u, $results)) {
-    $results[$u][ON_SWIN] = YES;
-  }
-}
-$on_swin_count += count($array);
-
-# P661 data
-$cmd = "ssh -l pulsar shrek211-gb \"cd /export/shrek211b/apsr/; find . -mindepth 2 -maxdepth 2 -type d -name '2*' -printf '%f\\n'\" | sort";
-$array = array();
-$lastline = exec($cmd, $array, $return_var);
-for ($i=0; $i<count($array); $i++) {
-  $u = $array[$i];
-  if (array_key_exists($u, $results)) {
-    $results[$u][ON_SWIN] = YES;
-  }
-}
-$on_swin_count += count($array);
-
-
 
 ###############################################################################
 
@@ -473,7 +457,7 @@ for ($i=0; $i<count($keys); $i++) {
   echo "  <tr>\n";
 
   /* COUNT */
-  echo "    <td class=\"".$class."\"><a href='/apsr/result.php?utc_start=".$o."'>".$num."</a></td>\n";
+  echo "    <td class=\"".$class."\"><a href='/apsr/result.lib.php?single=true&utc_start=".$o."'>".$num."</a></td>\n";
 
   /* UTC_START */
   echo "    <td class=\"".$class."\">".$o."</td>\n";
