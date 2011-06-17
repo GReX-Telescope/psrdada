@@ -28,6 +28,7 @@ function getConfigFile($fname, $quiet=FALSE) {
       }
     }
   }
+  fclose($fptr);
   return $returnArray;
 } 
 
@@ -63,6 +64,7 @@ function getRawTextFile($fname) {
     }
     return $returnArray;
   }
+  fclose($fptr);
 }
 
 
@@ -215,16 +217,31 @@ function openSocket($host, $port, $timeout=2) {
 
 function socketRead($socket) {
 
+  $string = "";
   if ($socket) {
-    $string = @socket_read ($socket, 8192, PHP_NORMAL_READ);
-    if ($string === FALSE) {
-      $string = "Error on socketRead()\n";
+    #echo "setting nonblock<BR>\n";
+    if (!(socket_set_nonblock($socket))) {
+      $string = "ERROR: Unable to set nonblock on socket";
+    } else {
+
+      #echo "set nonblock<BR>\n";
+      $string = @socket_read ($socket, 8192, PHP_NORMAL_READ);
+      #echo "read returned<BR>\n";
+      if ($string === FALSE) {
+        $last_error = socket_last_error();
+        $string = "ERROR: socket_read(): ".socket_strerror($last_error);
+      }
+      socket_set_block($socket);
     }
-    return $string;
   } else {
-    return "socket closed before read\n";
+    $string = "ERROR: socket closed before read";
   }
+
+  #echo "socketRead: returning ".$string."<BR>\n";
+
+  return $string;
 }
+
 
 function socketWrite($socket, $string) {
 
