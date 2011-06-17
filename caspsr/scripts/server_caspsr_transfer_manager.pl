@@ -38,7 +38,7 @@ sub checkTransferredAndOld();
 our $dl = 1;
 our $daemon_name = Dada::daemonBaseName($0);
 our %cfg = Caspsr::getConfig();
-our $pids = "P140 P361 P456 P630 P999";
+our $pids = "P140 P361 P456 P630 P794";
 our $rate_mbits = 40;
 our $quit_daemon : shared = 0;
 our $curr_obs : shared = "none";
