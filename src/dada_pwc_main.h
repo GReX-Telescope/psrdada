@@ -12,6 +12,10 @@
 #include "multilog.h"
 #include "ipcio.h"
 
+#define DADA_XFER_NORMAL 0
+#define DADA_XFER_ENDING 1
+#define DADA_OBS_ENDING 2
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -88,7 +92,7 @@ extern "C" {
   void dada_pwc_main_process_error(dada_pwc_main_t* pwcm, int rval); 
 
   /*! handle a change of xfer */
-  int64_t dada_pwc_main_process_xfer(dada_pwc_main_t* pwcm, int override_xfer_status,
+  int64_t dada_pwc_main_process_xfer(dada_pwc_main_t* pwcm, uint64_t buf_bytes,
                                      uint64_t bytes_this_xfer);
 
 

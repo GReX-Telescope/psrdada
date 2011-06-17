@@ -642,8 +642,9 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
           bytes_to_write = 0;
 
           if (pwcm->command.byte_count &&
-              pwcm->command.byte_count < total_bytes_written)
-            multilog (pwcm->log, LOG_NOTICE,
+              pwcm->command.byte_count < total_bytes_written &&
+              pwcm->verbose)
+            multilog (pwcm->log, LOG_INFO,
                       "requested transit byte=%"PRIu64" passed\n",
                       pwcm->command.byte_count);
         }
@@ -1167,14 +1168,15 @@ int dada_pwc_main_transfer_data_block (dada_pwc_main_t* pwcm)
       }
     }
 
-    // if we dont have a specific byte to stop on or we have
-    // some bytes to write
-    if (!transit_byte || bytes_to_write) {
+    buf_bytes = 0;
+
+    // if we dont have a specific byte to stop on or we have some bytes to write
+    if (!transit_byte || bytes_to_write) 
+    {
 
       // get the pointer to the next empty block and its ID
-#ifdef _DEBUG
-      fprintf (stderr, "transfer_data_block: ipcio_open_block_write()\n");
-#endif
+      if (pwcm->verbose)
+        multilog (pwcm->log, LOG_INFO, "transfer_data_block: ipcio_open_block_write()\n");
       buffer = ipcio_open_block_write (pwcm->data_block, &block_id);
       if (!buffer) 
       {
@@ -1183,9 +1185,8 @@ int dada_pwc_main_transfer_data_block (dada_pwc_main_t* pwcm)
       }
 
       // call the block function to fill the buffer with data
-#ifdef _DEBUG
-      fprintf (stderr, "transfer_data_block: block_function()\n");
-#endif
+      if (pwcm->verbose)
+        multilog (pwcm->log, LOG_INFO, "transfer_data_block: block_function(%"PRIu64", %"PRIu64")\n", block_size, block_id);
       bytes_written = pwcm->block_function (pwcm, buffer, block_size, block_id);
 
       // check the result of the block function
@@ -1193,75 +1194,80 @@ int dada_pwc_main_transfer_data_block (dada_pwc_main_t* pwcm)
       {
         multilog (pwcm->log, LOG_ERR, "transfer_data_block: block_function failed\n");
         ipcio_close_block_write (pwcm->data_block, 0);
-        return bytes_written; // TODO check this behaviuor
-      }
-
-      /* If the transit_byte is set, do not write more than the requested 
-         amount of data to the Data Block */
-      buf_bytes = bytes_written;
-
-      if (transit_byte && bytes_written > bytes_to_write)
-        buf_bytes = bytes_to_write;
-
-      if ((bytes_written == 0) && (pwcm->verbose))
-      {
-        multilog (pwcm->log, LOG_INFO, "transfer_data_block: block_function returned 0 bytes, buf_bytes=%"PRIu64"\n", buf_bytes);
-        multilog (pwcm->log, LOG_INFO, "transfer_data_block: bytes_written this xfer=%"PRIu64"\n", 
-                  bytes_written_this_xfer);
-      }
-
-      // close the block if 0 or more bytes were written
-#ifdef _DEBUG
-      fprintf (stderr, "transfer_data_block: ipcio_close_block_write(%"PRIu64")\n", (uint64_t) buf_bytes);
-#endif
-
-      if (ipcio_close_block_write (pwcm->data_block, (uint64_t) buf_bytes) < 0) {
-        multilog (pwcm->log, LOG_ERR, "transfer_data_block: ipcio_close_block_write error %s\n", strerror(errno));
         return DADA_ERROR_FATAL;
       }
 
-      // if we wrote 0 bytes, its the end of an xfer or end of obs
-      if (bytes_written == 0) {
+      // check that we did not write more than the block size
+      if (bytes_written > block_size)
+      {
+        multilog (pwcm->log, LOG_ERR, "transfer_data_block: block_function wrote %"PRIu64
+                                      " > block_size %"PRIu64"\n", bytes_written, block_size);
+        ipcio_close_block_write (pwcm->data_block, block_size);
+        return DADA_ERROR_FATAL;
+      }
 
-        // if the pwc supports multiple xfers within the 1 observation
-        if (pwcm->xfer_pending_function) 
-        {
-          if (pwcm->verbose)
-            multilog (pwcm->log, LOG_INFO, "transfer_data_block: dada_pwc_main_process_xfer(0, %"PRIu64")\n",
-                      bytes_written_this_xfer);
-          first_byte_of_xfer = dada_pwc_main_process_xfer(pwcm, 0, bytes_written_this_xfer);
+      // If the transit_byte is set, do not write more than the requested 
+      // amount of data to the Data Block
+      buf_bytes = bytes_written;
+      if (transit_byte && bytes_written > bytes_to_write)
+        buf_bytes = bytes_to_write;
 
-          // check the result of processing the XFER
-          if (first_byte_of_xfer == -2) 
-          {
-            multilog (pwcm->log, LOG_ERR, "dada_pwc_main_process_xfer failed\n");
-            return DADA_ERROR_HARD;
-          } 
-          else if (first_byte_of_xfer == -1) 
-          {
-            multilog (pwcm->log, LOG_ERR, "transfer_data_block: OBS ended, this shouldn't happen\n");
-            //return 0;
-          }
-          else if (first_byte_of_xfer == 0) 
-          {
-            multilog (pwcm->log, LOG_INFO, "transfer_data_block: waiting for SOD on xfer\n");
-          }
-          else
-          {
-            if (pwcm->verbose)
-              multilog (pwcm->log, LOG_INFO, "transfer_data_block: new XFER, next byte=%"PRIi64"\n", first_byte_of_xfer);
-            total_bytes_written = (uint64_t) first_byte_of_xfer;
-            bytes_written_this_xfer = 0;
-          }
+      if (bytes_written == 0)
+      {
+        multilog (pwcm->log, LOG_INFO, "transfer_data_block: block_function returned 0 bytes, "
+                                       "buf_bytes=%"PRIu64" bytes_written_this_xfer=%"PRIu64"\n", 
+                                       buf_bytes, bytes_written_this_xfer);
+      }
+
+      // update counters
+      total_bytes_written += buf_bytes;
+      if (bytes_to_write)
+        bytes_to_write -= buf_bytes;
+
+      if (pwcm->verbose)
+        multilog (pwcm->log, LOG_INFO, "Written %"PRIu64" bytes\n", total_bytes_written);
+
+      // if we do not support multiple XFERS within the one observation, just close the data block
+      if (!pwcm->xfer_pending_function)
+      {
+        if (pwcm->verbose)
+          multilog (pwcm->log, LOG_INFO, "transfer_data_block: ipcio_close_block_write(%"PRIu64")\n", (uint64_t) buf_bytes);
+        if (ipcio_close_block_write (pwcm->data_block, (uint64_t) buf_bytes) < 0) {
+          multilog (pwcm->log, LOG_ERR, "transfer_data_block: ipcio_close_block_write error\n");
+          return DADA_ERROR_FATAL;
         }
       }
-      
-      /* Check if we need to mark the header as valid after this - not possible
-       * if we are clocking */
+      else
+      {
+        bytes_written_this_xfer += buf_bytes;
+
+        // check on the status of the XFER
+        first_byte_of_xfer = dada_pwc_main_process_xfer (pwcm, buf_bytes, bytes_written_this_xfer);
+
+        if (first_byte_of_xfer == 0)
+        {
+          if (pwcm->verbose)
+            multilog (pwcm->log, LOG_INFO, "transfer_data_block: process_xfer reports xfer continuing\n");
+        }
+        else if (first_byte_of_xfer < 0)
+        {
+          multilog (pwcm->log, LOG_ERR, "dada_pwc_main_process_xfer failed\n");
+          return DADA_ERROR_HARD;
+        }
+        else
+        {
+          if (pwcm->verbose)
+            multilog (pwcm->log, LOG_INFO, "transfer_data_block: new XFER, next byte=%"PRIi64"\n", first_byte_of_xfer);
+          total_bytes_written = (uint64_t) first_byte_of_xfer;
+          bytes_written_this_xfer = 0;
+        }
+      }
+
+      // Check if we need to mark the header as valid after this - not possible if we are clocking
       if ((!pwcm->header_valid) && (pwcm->pwc->state == dada_pwc_recording)) {
         pwcm->header_valid = pwcm->header_valid_function(pwcm);
       
-        /* If the header is NOW valid, flag the header as filled */  
+        // If the header is NOW valid, flag the header as filled
         if (pwcm->header_valid) {
           multilog (pwcm->log, LOG_INFO,"transfer_data_block: marking header filled\n");
           if (ipcbuf_mark_filled (pwcm->header_block,pwcm->header_size) < 0) {
@@ -1270,16 +1276,6 @@ int dada_pwc_main_transfer_data_block (dada_pwc_main_t* pwcm)
           }
         }
       }
-
-      total_bytes_written += buf_bytes;
-      bytes_written_this_xfer += buf_bytes;
-
-      if (bytes_to_write)
-        bytes_to_write -= buf_bytes;
-
-      if (pwcm->verbose)
-        multilog (pwcm->log, LOG_INFO, "Written %"PRIu64" bytes\n",
-                  total_bytes_written);
 
     } else {
       if (pwcm->verbose)
@@ -1290,7 +1286,7 @@ int dada_pwc_main_transfer_data_block (dada_pwc_main_t* pwcm)
       multilog (pwcm->log, LOG_INFO, "transit=%"PRIu64" total=%"PRIu64"\n",
                 transit_byte, total_bytes_written);
 
-    // CASPSR change - total_bytes_written can now jump ahead of a transit byte
+    // total_bytes_written can jump ahead of a transit byte
     if (transit_byte && (transit_byte <= total_bytes_written)) {
 
 #ifdef _DEBUG
@@ -1328,21 +1324,12 @@ int dada_pwc_main_transfer_data_block (dada_pwc_main_t* pwcm)
 
       else if (pwcm->command.code == dada_pwc_stop) {
 
-        if (pwcm->xfer_pending_function)
-        {
-          // CASPSR CHANGE
-          // If we haven't stopped already due to a packet timeout, we must
-          // write the additional 1 byte transfer and set END_OF_OBS=-1
-          if (pwcm->verbose)
-            multilog (pwcm->log, LOG_INFO, "transfer_data_block: [STOP] "
-                      "dada_pwc_main_process_xfer(1, %"PRIu64")\n", 
-                      bytes_written_this_xfer);
-          dada_pwc_main_process_xfer (pwcm, 1, bytes_written_this_xfer);
-        }
+        if (pwcm->verbose)
+          multilog (pwcm->log, LOG_INFO, "stopping, but calling process_xfer\n");
+        int64_t result = dada_pwc_main_process_xfer (pwcm, buf_bytes, bytes_written_this_xfer);
+        multilog (pwcm->log, LOG_INFO, "process_xfer returned %"PRIi64"\n", result);
 
-#ifdef _DEBUG
         multilog (pwcm->log, LOG_INFO, "stopping... entering idle state\n");
-#endif
         return 0;
       }
       
@@ -1384,20 +1371,26 @@ int dada_pwc_main_transfer_data_block (dada_pwc_main_t* pwcm)
 int dada_pwc_main_stop_transfer (dada_pwc_main_t* pwcm)
 {
 
-  /* Reset the header so that it is not valid anymore */
+  // Reset the header so that it is not valid anymore
   pwcm->header_valid = 0;
-        
+
+  if (pwcm->verbose)
+    multilog (pwcm->log, LOG_INFO, "stop_transfer: calling stop_function()\n");
   if (pwcm->stop_function (pwcm) < 0)  {
     multilog (pwcm->log, LOG_ERR, "dada_pwc_main_stop_transfer"
               " stop function returned error code\n");
     return DADA_ERROR_HARD;
   }
 
-  /* close the Data Block */
+  if (pwcm->verbose)
+    multilog (pwcm->log, LOG_INFO, "stop_transfer: closing data_block()\n");
   if (pwcm->data_block && ipcio_close (pwcm->data_block) < 0)  {
     multilog (pwcm->log, LOG_ERR, "Could not close Data Block\n");
     return DADA_ERROR_FATAL;
   }
+
+  if (pwcm->verbose)
+    multilog (pwcm->log, LOG_INFO, "stop_transfer: setting state\n");
 
   if (pwcm->pwc->state != dada_pwc_soft_error &&
       pwcm->pwc->state != dada_pwc_hard_error &&
@@ -1456,9 +1449,125 @@ void dada_pwc_main_process_error (dada_pwc_main_t* pwcm, int rval)
  *   >0 first byte of the next xfer
  *
  */
-int64_t dada_pwc_main_process_xfer (dada_pwc_main_t* pwcm, int finalize, uint64_t bytes_this_xfer)
+int64_t dada_pwc_main_process_xfer (dada_pwc_main_t* pwcm, uint64_t buf_bytes, uint64_t bytes_this_xfer)
 {
 
+  if (pwcm->verbose)
+    multilog (pwcm->log, LOG_INFO, "process_xfer(%"PRIu64", %"PRIu64")\n", buf_bytes, bytes_this_xfer);
+
+  int xfer_status = 0;
+
+  int64_t first_byte = 0;
+
+  // check the status of the XFER
+  xfer_status = pwcm->xfer_pending_function(pwcm);
+  if (pwcm->verbose)
+    multilog (pwcm->log, LOG_INFO, "process_xfer: xfer_status=%d\n", xfer_status);
+
+  // if we are at the end of an XFER, update the current open buffer 
+  if (xfer_status == DADA_XFER_NORMAL)
+  {
+    if (pwcm->verbose)
+       multilog (pwcm->log, LOG_INFO, "process_xfer: status=XFER_NORMAL, ipcio_close_block_write(%"PRIu64")\n", buf_bytes);
+    if (ipcio_close_block_write (pwcm->data_block, buf_bytes) < 0) {
+      multilog (pwcm->log, LOG_ERR, "transfer_data_block: ipcio_close_block_write error\n");
+      return DADA_ERROR_FATAL;
+    }
+    return 0;
+  }
+  // we are at the end of OBS, dont need to do anything
+  else if (xfer_status == DADA_OBS_ENDING) 
+  {
+    if (pwcm->verbose)
+       multilog (pwcm->log, LOG_INFO, "process_xfer: status=OBS_ENDING\n");
+    return 0;
+  }
+  // we are at the end of an XFER (and perhaps the final XFER in an OBS - see bottom)
+  else
+  {
+    if (pwcm->verbose)
+      multilog (pwcm->log, LOG_INFO, "process_xfer: status=%d, ipcio_update_block_write(%"PRIu64")\n", xfer_status, buf_bytes);
+    if (ipcio_update_block_write (pwcm->data_block, (uint64_t) buf_bytes) < 0)
+    {
+      multilog (pwcm->log, LOG_ERR, "transfer_data_block: ipcio_update_block_write error\n");
+      return DADA_ERROR_FATAL;
+    }
+
+    char * last_header = (char *) malloc (sizeof(char) * pwcm->header_size);
+    if (!last_header)
+    {
+      multilog (pwcm->log, LOG_ERR, "process_xfer: malloc failed for last_header\n");
+      return -2;
+    }
+
+    // copy the current header
+    memcpy(last_header, pwcm->header, pwcm->header_size);
+
+    // close the current data/header block
+    if (pwcm->verbose)
+      multilog (pwcm->log, LOG_INFO, "process_xfer: closing header/data block\n");
+
+    if (ipcio_close (pwcm->data_block) < 0) {
+      multilog (pwcm->log, LOG_ERR, "Could not unlock Data Block write\n");
+      return -2;
+    }
+    if (ipcbuf_unlock_write (pwcm->header_block) < 0) {
+      multilog (pwcm->log, LOG_ERR, "Could not unlock Header Block write\n");
+      return -2;
+    }
+
+    // re-open the data/header block
+    if (pwcm->verbose)
+      multilog (pwcm->log, LOG_INFO, "process_xfer: opening header/data block\n");
+
+    if (ipcbuf_lock_write (pwcm->header_block) < 0) {
+      multilog (pwcm->log, LOG_ERR, "Could not lock Header Block for writing\n");
+      return -2;
+    }
+    if (ipcio_open (pwcm->data_block, 'W') < 0) {
+      multilog (pwcm->log, LOG_ERR, "Could not lock Data Block for writing\n");
+      return -2;
+    }
+
+    // get the next header block 
+    pwcm->header = ipcbuf_get_next_write (pwcm->header_block);
+
+    // copy the header_buf to the header block
+    memcpy(pwcm->header, last_header, pwcm->header_size);
+
+    // call new xfer function. This will set the OBS_XFER count, the OBS_OFFSET 
+    // and return the first byte expected of the next XFER
+    first_byte = (int64_t) pwcm->new_xfer_function(pwcm);
+    if (pwcm->verbose)
+      multilog(pwcm->log, LOG_INFO, "process_xfer: next XFER begins on byte=%"PRIu64"\n", first_byte);
+
+    // marked the header as filled
+    if (ipcbuf_mark_filled (pwcm->header_block, pwcm->header_size) < 0) {
+      multilog (pwcm->log, LOG_ERR, "process_xfer: Could not mark header block filled\n");
+      return -2;
+    }
+
+    // check the xfer status on the new xfer
+    xfer_status = pwcm->xfer_pending_function(pwcm);
+    if (pwcm->verbose)
+      multilog (pwcm->log, LOG_INFO, "process_xfer: xfer_status=%d\n", xfer_status);
+
+    if (xfer_status == DADA_OBS_ENDING)
+    {
+      if (pwcm->verbose)
+        multilog (pwcm->log, LOG_INFO, "process_xfer: OBS_ENDING, write 1 byte to empty DB\n");
+      char zerod_char = '0';
+      if (ipcio_write(pwcm->data_block, &zerod_char, 1) != 1)
+      {
+        multilog(pwcm->log, LOG_ERR, "process_xfer: failed to write 1 byte to empty datablock at end of OBS\n");
+        return -2;
+      }
+    }
+
+    return first_byte;
+  }
+
+#if 0
   // temporary header required for next xfer
   char * tmp_header = NULL;
 
@@ -1470,9 +1579,6 @@ int64_t dada_pwc_main_process_xfer (dada_pwc_main_t* pwcm, int finalize, uint64_
 
   // first byte of the next xfer
   int64_t first_byte = 0;
-
-  // flag for when the final 1 byte xfer has been written
-  int written_closing_block = 0;
 
   tmp_header = (char *) malloc (sizeof(char) * pwcm->header_size);
   if (!tmp_header) 
@@ -1647,4 +1753,5 @@ int64_t dada_pwc_main_process_xfer (dada_pwc_main_t* pwcm, int finalize, uint64_
 
   }
   return first_byte;
+#endif
 }
