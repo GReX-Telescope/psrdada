@@ -42,8 +42,6 @@ our $pwc_add;
 our @daemons;
 our @binaries;
 our @helper_daemons;
-our @persistent_daemons;
-our %persistent_daemons_pid_ports; 
 our @dbs;
 our $primary_db;
 our $daemon_prefix;
@@ -84,8 +82,6 @@ $pwc_add = "";
 @dbs = ();
 $primary_db = "";
 @helper_daemons = ();
-@persistent_daemons = ();
-%persistent_daemons_pid_ports = ();
 $daemon_prefix = "";
 $control_dir = "";
 $host = "";
@@ -800,7 +796,7 @@ sub stopDaemon($;$$) {
   return ($result, $response);
 }
 
-sub stopPWC($$) 
+sub stopPWC() 
 {
   my $cmd = "";
   my $result = "";
@@ -1108,41 +1104,6 @@ sub daemonsThread() {
           $running{$d} = 1;
         } else {
           $running{$d} = 0;
-        }
-
-        # check to see if the PID file exists
-        if (-f $control_dir."/".$d.".pid") {
-          $running{$d}++;
-        }
-      }
-
-      # check if persistent daemons are running, and get Project ID if they are
-      foreach $d (@persistent_daemons)
-      {
-        $cmd = "ps aux | grep ".$daemon_prefix."_".$d.".pl | grep perl | grep -v grep > /dev/null";
-        Dada::logMsg(3, $dl, "daemonsThread [persist]: ".$cmd);
-        `$cmd`;
-        if ($? == 0) {
-          $running{$d} = 1;
-        } else {
-          $running{$d} = 0;
-        }
-
-        # get the PID if they are running
-        if (defined ($persistent_daemons_pid_ports{$d}))
-        {
-          $handle = Dada::connectToMachine($host, $persistent_daemons_pid_ports{$d}, 3);
-          if ($handle) 
-          {
-            print $handle "get_pid\r\n";
-            $pids{$d} = Dada::getLine($handle);
-            $handle->close();
-          }
-          else
-          {
-            $pids{$d} = "";
-          }
-          $handle = 0;
         }
 
         # check to see if the PID file exists
