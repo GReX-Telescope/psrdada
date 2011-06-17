@@ -725,15 +725,15 @@ class control extends caspsr_webpage
           <img src="/caspsr/images/caspsr_logo_200x60.png" width=200 height=60>
         </div>
 <?
-        $this->printSideBarHTML();
+  $this->printSideBarHTML();
 ?>
       </div><!-- sidebar1 -->
-      <div class="content">
-<?
-        $this->printMainHTML();
-?>
-      </div> <!-- content -->
     </div> <!-- contentLayout -->
+    <div class="content">
+<?
+  $this->printMainHTML();
+?>
+    </div> <!-- content -->
   </div> <!-- main -->
 </body>
 </html>
@@ -908,7 +908,10 @@ class control extends caspsr_webpage
     # open the socket connections
     for ($i=0; $i<count($hosts); $i++) {
       $host = $hosts[$i];
-      # echo "opening ".$host.":".$port."<br>\n";
+      if ($_GET["verbose"] == "true") {
+        echo "opening ".$host.":".$port."<br>\n";
+        flush();
+      }
       list ($sockets[$i], $results[$i]) = openSocket($host, $port);
     }
 
@@ -916,10 +919,16 @@ class control extends caspsr_webpage
     for ($i=0; $i<count($results); $i++) {
       $host = $hosts[$i];
       if ($results[$i] == "ok") {
-        # echo "sending ".$cmd." to ".$host.":".$port."<br>\n";
+        if ($_GET["verbose"] == "true") {
+          echo "sending ".$cmd." to ".$host.":".$port."<br>\n";
+          flush();
+        }
         socketWrite($sockets[$i], $cmd."\r\n");
       } else {
-        # echo "open socket failed on ".$host."<br>\n";
+        if ($_GET["verbose"] == "true") {
+          echo "open socket failed on ".$host."<br>\n";
+          flush();
+        }
       }
     }
 
@@ -927,20 +936,61 @@ class control extends caspsr_webpage
     for ($i=0; $i<count($results); $i++) {
       $host = $hosts[$i];
       if ($results[$i] == "ok") {
+        if ($_GET["verbose"] == "true") {
+          echo "socketRead() on ".$host.":".$port."<br>\n";
+          flush();
+        }
         $read = socketRead($sockets[$i]);
         $responses[$i] = rtrim($read);
+        if ($_GET["verbose"] == "true") {
+          echo "socketRead() returned ".$responses[$i]." from ".$host.":".$port."<br>\n";
+          flush();
+        }
       }
     }
 
     # close the sockets
     for ($i=0; $i<count($results); $i++) {
       $host = $hosts[$i];
-      # echo "closing ".$host.":".$port."<br>\n";
+      if ($_GET["verbose"] == "true") {
+        echo "closing socket ".$host.":".$port."<br>\n";
+        flush();
+      }
       if ($results[$i] == "ok") {
         socket_close($sockets[$i]);
       }
     }
 
+    # handle persistent daemons
+    $persist_xml = "";
+    if (array_key_exists("SERVER_DAEMONS_PERSIST", $this->inst->config))
+    {
+      $server_daemons_persist = explode(" ", $this->inst->config["SERVER_DAEMONS_PERSIST"]);
+      list ($host, $domain)  = explode(".", $this->inst->config["SERVER_HOST"],2);
+      $persist_xml = "<daemon_info><host>".$host."</host>";
+      $running = array();
+      for ($i=0; $i<count($server_daemons_persist); $i++)
+      {
+        $d = $server_daemons_persist[$i];
+
+        # check if the script is running
+        $cmd = "pgrep -f '^perl.*server_".$d.".pl'";
+        $last = exec($cmd, $array, $rval);
+        if ($rval == 0)
+          $running[$d] = 1;
+        else
+          $running[$d] = 0;
+
+        # check if the PID file exists
+        if (file_exists($this->inst->config["SERVER_CONTROL_DIR"]."/".$d.".pid"))
+          $running[$d]++;
+
+        # update xml
+          $persist_xml .= "<".$d.">".$running[$d]."</".$d.">";
+      }
+      $persist_xml .= "</daemon_info>";
+    }
+          
     # produce the xml
     $xml = "<?xml version='1.0' encoding='ISO-8859-1'?>\n";
     $xml .= "<daemon_infos>\n";
@@ -951,6 +1001,8 @@ class control extends caspsr_webpage
       else
         $xml .= $responses[$i]."\n";
     }
+    if ($persist_xml != "")
+      $xml .= $persist_xml."\n";
     $xml .= "</daemon_infos>\n";
 
     header('Content-type: text/xml');
