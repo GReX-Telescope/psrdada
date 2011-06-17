@@ -63,6 +63,12 @@ typedef struct caspsr_pwc_ibdb {
   /* flag to indicate end of obs and data in buffer */
   unsigned sod;
 
+  // total bytes transferred in the observation
+  uint64_t observation_bytes;
+
+  // total bytes transferred in the XFER
+  uint64_t xfer_bytes;
+
   // Infiniband Connection Manager
   dada_ib_cm_t ** ib_cms;
 
@@ -71,7 +77,7 @@ typedef struct caspsr_pwc_ibdb {
 
 } caspsr_pwc_ibdb_t;
 
-#define CASPSR_PWC_IBDB_INIT { 0, 0, 0, 0, 0, 0, "", 0, 0, 0}
+#define CASPSR_PWC_IBDB_INIT { 0, 0, 0, 0, 0, 0, "", 0, 0, 0, 0, 0}
 
 
 // initialize Infiniband resources
@@ -84,7 +90,7 @@ void *   caspsr_pwc_ibdb_ib_init_thread (void * arg);
 time_t   caspsr_pwc_ibdb_start (dada_pwc_main_t* pwcm, time_t start_utc);
 
 // PWCM buffer function
-void *   caspsr_pwc_ibdb_recv (dada_pwc_main_t* pwcm, uint64_t* size);
+void *   caspsr_pwc_ibdb_recv (dada_pwc_main_t* pwcm, int64_t* size);
 
 // PWCM buffer_block function
 int64_t  caspsr_pwc_ibdb_recv_block (dada_pwc_main_t* pwcm, void* data,

@@ -108,8 +108,8 @@ int caspsr_dbib_open (dada_client_t* client)
 
   int64_t obs_xfer = 0;
   uint64_t obs_offset = 0;
+  uint64_t transfer_size = 0;
  
-  // Get the observation ID 
   if (ascii_header_get (header, "OBS_XFER", "%"PRIi64, &obs_xfer) != 1) {
     multilog (client->log, LOG_WARNING, "open: header with no OBS_XFER\n");
   }
@@ -122,10 +122,15 @@ int caspsr_dbib_open (dada_client_t* client)
     multilog (client->log, LOG_WARNING, "open: header with no OBS_OFFSET\n");
   }
 
-  multilog (client->log, LOG_INFO, "open: OBS_XFER=%"PRIi64", OBS_OFFSET=%"PRIu64"\n", obs_xfer, obs_offset);
+  if (ascii_header_get (header, "TRANSFER_SIZE", "%"PRIu64, &transfer_size) != 1) {
+    multilog (client->log, LOG_WARNING, "open: header with no TRANSFER_SIZE\n");
+  }
+
+  //if (dbib->verbose)
+    multilog (client->log, LOG_INFO, "open: OBS_XFER=%"PRIi64", OBS_OFFSET=%"PRIu64"\n", obs_xfer, obs_offset);
 
   // assumed that we do not know how much data will be transferred
-  client->transfer_bytes = 0;
+  client->transfer_bytes = transfer_size;
 
   // this is not used in block by block transfers
   client->optimal_bytes = 0;
@@ -157,64 +162,37 @@ int caspsr_dbib_close (dada_client_t* client, uint64_t bytes_written)
   if (dbib->quit) 
   {
     if (dbib->verbose)
-      multilog(log, LOG_INFO, "close: skipping comms on "
-               "close as dbib->quit true\n");
+      multilog(log, LOG_INFO, "close: skipping comms on close as dbib->quit true\n");
   }
   else
   {
-
-    // since we posted a recv in the send_block function, we need
-    // to wait recv on that post to clean up
-    if (dbib->verbose)
-      multilog (log, LOG_INFO, "close: dada_ib_wait_recv on sync_from [ready]\n");
-    if (dada_ib_wait_recv (ib_cm, ib_cm->sync_from) < 0)
-    {
-      multilog(log, LOG_ERR, "close: dada_ib_wait_recv on sync_from [ready] failed\n");
-      return -1;
-    } 
-
     // pre-post a recv for the ready message for the next xfer
     if (dbib->verbose)
-      multilog (log, LOG_INFO, "close: dada_ib_post_recv on sync_from [ready new xfer]\n");
+      multilog (log, LOG_INFO, "close: post_recv [READY NEW XFER]\n");
     if (dada_ib_post_recv (ib_cm, ib_cm->sync_from) < 0)
     {
-      multilog(log, LOG_ERR, "close: dada_ib_wait_recv on sync_from [ready new xfer] failed\n");
-      return -1;
-    }
- 
-    // if the transfer happened to finish correctly, then ibdb will be
-    // waiting for the next block, instruct it via sync_to vals of 0
-    // that the xfer is over
-    if (dbib->verbose)
-      multilog (log, LOG_INFO, "close: sending 0'd sync_to\n");
-    ib_cm->sync_to_val[0] = 2;
-    ib_cm->sync_to_val[1] = 0;
-    if (dada_ib_post_send(ib_cm, ib_cm->sync_to) < 0)
-    {
-      multilog(log, LOG_ERR, "close: dada_ib_post_send on sync_to failed\n");
+      multilog(log, LOG_ERR, "close: post_recv [READY NEW XFER] failed\n");
       return -1;
     }
 
-    // wait for confirmation of the send
+    // tell ibdb that the XFER it just received was the last one 
     if (dbib->verbose)
-      multilog (log, LOG_INFO, "close: dada_ib_wait_recv on sync_to\n");
-    if (dada_ib_wait_recv(ib_cm, ib_cm->sync_to) < 0)
+      multilog (log, LOG_INFO, "close: send_message [XFER CONTINUING]\n");
+    if (dada_ib_send_message (ib_cm, DADA_IB_XFER_CONTINUING_KEY, 0) < 0)
     {
-      multilog(log, LOG_ERR, "close: dada_ib_wait_recv on sync_to failed\n");
+      multilog(log, LOG_ERR, "close: send_message [XFER CONTINUING] failed\n");
       return -1;
-    }
+    } 
   }
 
-  if (bytes_written < client->transfer_bytes) {
-    multilog (log, LOG_INFO, "Transfer stopped early at %"PRIu64" bytes\n",
-              bytes_written);
-
-    if (ascii_header_set (client->header, "TRANSFER_SIZE", "%"PRIu64,
-        bytes_written) < 0)  {
-      multilog (client->log, LOG_ERR, "close: Could not set TRANSFER_SIZE\n");
-      return -1;
-    }
+  // dont print if we are processing a 1 byte "EOXFER" transfer
+  if ((bytes_written > 1) && (bytes_written < client->transfer_bytes)) {
+    multilog (log, LOG_INFO, "transfer stopped early at %"PRIu64" bytes, expecting %"PRIu64"\n",
+              bytes_written, client->transfer_bytes);
   }
+
+  if (dbib->verbose)
+    multilog (log, LOG_INFO, "close: transferred %"PRIu64" bytes\n", bytes_written);
 
   return 0;
 }
@@ -238,40 +216,29 @@ int64_t caspsr_dbib_send (dada_client_t* client, void * buffer, uint64_t bytes)
     return -1;
   }
 
-  // post recv on sync from for the ready message, prior to sending header
-/*
+  // wait for READY message so we know ibdb is ready for the HEADER
   if (dbib->verbose)
-    multilog(log, LOG_INFO, "send: post_recv on sync_from [ready]\n");
-  if (dada_ib_post_recv (ib_cm, ib_cm->sync_from) < 0)
+    multilog(log, LOG_INFO, "send: recv_message [READY]\n");
+  if (dada_ib_recv_message (ib_cm, DADA_IB_READY_KEY) < 0)
   {
-    multilog(log, LOG_ERR, "send: dada_ib_post_recv on sync_from [ready] failed\n");
-    return -1;
-  }
-*/
-
-  // wait recv on sync from the the ready message, to ensure that ibdb is ready
-  if (dbib->verbose)
-    multilog(log, LOG_INFO, "send: wait_recv on sync_from [ready]\n");
-  if (dada_ib_wait_recv(ib_cm, ib_cm->sync_from) < 0)
-  {
-    multilog(log, LOG_ERR, "send: wait_recv on sync_from [ready] failed\n");
+    multilog(log, LOG_ERR, "send: recv_message [READY] failed\n");
     return -1;
   }
   
-  // if this is a "fake" transfer, dont post_recv for the sync_from [ready], just send header  
+  // if this is a "fake" transfer, dont post_recv for the sync_from [READY], just send header  
   if (dbib->quit)
   {
     if (dbib->verbose)
-      multilog (client->log, LOG_INFO, "send: skipping post_recv on sync_from for [ready] since OBS_XFER==-1\n");
+      multilog (client->log, LOG_INFO, "send: skipping post_recv on sync_from for [READY2] since OBS_XFER==-1\n");
   }
   else 
   {
     // post recv on sync_from for the ready message
     if (dbib->verbose)
-      multilog(log, LOG_INFO, "send: post_recv on sync_from [ready 2]\n");
+      multilog(log, LOG_INFO, "send: post_recv [READY 2]\n");
     if (dada_ib_post_recv (ib_cm, ib_cm->sync_from) < 0)
     {
-      multilog(log, LOG_ERR, "send: dada_ib_post_recv on sync_from [ready 2] failed\n");
+      multilog(log, LOG_ERR, "send: post_recv [READY 2] failed\n");
       return -1;
     }
   }
@@ -281,20 +248,32 @@ int64_t caspsr_dbib_send (dada_client_t* client, void * buffer, uint64_t bytes)
 
   // send the header memory buffer to dada_ibdb
   if (dbib->verbose)
-    multilog(log, LOG_INFO, "send: post_send on header_mb\n");
-  if (dada_ib_post_send(ib_cm, ib_cm->header_mb) < 0)
+    multilog(log, LOG_INFO, "send: post_send on header_mb [HEADER]\n");
+  if (dada_ib_post_send (ib_cm, ib_cm->header_mb) < 0)
   {
-    multilog(log, LOG_ERR, "send: dada_ib_post_send on header_mb failed\n");
+    multilog(log, LOG_ERR, "send: post_send on header_mb [HEADER] failed\n");
     return -1;
   }
 
   // wait for send confirmation
   if (dbib->verbose)
-    multilog(log, LOG_INFO, "send: wait_recv on header_mb\n");
-  if (dada_ib_wait_recv(ib_cm, ib_cm->header_mb) < 0)
+    multilog(log, LOG_INFO, "send: wait_send on header_mb [HEADER]\n");
+  if (dada_ib_wait_send (ib_cm, ib_cm->header_mb) < 0)
   {
-    multilog(log, LOG_ERR, "send: dada_ib_wait_recv on header_mb failed\n");
+    multilog(log, LOG_ERR, "send: wait_send on header_mb [HEADER] failed\n");
     return -1;
+  }
+
+  if (!dbib->quit) 
+  {
+    // wait for READY message so we know ibdb is ready for main transfer loop
+    if (dbib->verbose)
+      multilog(log, LOG_INFO, "send: recv_message [READY]\n");
+    if (dada_ib_recv_message (ib_cm, DADA_IB_READY_KEY) < 0)
+    { 
+      multilog(log, LOG_ERR, "send: recv_message [READY] failed\n");
+      return -1;
+    } 
   }
 
   if (dbib->verbose)
@@ -316,8 +295,8 @@ int64_t caspsr_dbib_send_block(dada_client_t* client, void * buffer,
 
   multilog_t* log = client->log;
 
-  if (dbib->verbose)
-    multilog(log, LOG_INFO, "send_block: buffer=%p, bytes=%"PRIu64", block_id=%"PRIu64"\n", buffer, bytes, block_id);
+  if (dbib->verbose > 1)
+    multilog(log, LOG_INFO, "send_block: , bytes=%"PRIu64", block_id=%"PRIu64"\n", bytes, block_id);
 
   if (dbib->quit)
   {
@@ -327,79 +306,68 @@ int64_t caspsr_dbib_send_block(dada_client_t* client, void * buffer,
     return bytes;
   }
 
-  // wait for ibdb's ready handshake
+  // pre post a recv for the remote db buffer to be filled 
   if (dbib->verbose)
-    multilog(log, LOG_INFO, "send_block: wait_recv on sync_from [ready]\n");
-  if (dada_ib_wait_recv(ib_cm, ib_cm->sync_from) < 0)
-  {
-    multilog(log, LOG_ERR, "send_block: wait_recv on sync_from [ready] failed\n");
-    return -1;
-  }
-
-  if (ib_cm->sync_from_val[0] != 1)
-  {
-    multilog(log, LOG_ERR, "send_block: sync_from key[%"PRIu64"] != 1 [ready]\n",
-             ib_cm->sync_from_val[0]);
-    return -1;
-  }
-
-  if (ib_cm->sync_from_val[1] != 0)
-  {
-    multilog(log, LOG_ERR, "send_block:sync_from val[%"PRIu64"] != 0 [ready]\n",
-             ib_cm->sync_from_val[1]);
-    return -1;
-  }
-
-#ifdef _DEBUG
-  multilog(log, LOG_INFO, "send_block: ibdb reports ready=%"PRIu64"\n", ib_cm->sync_from_val[1]);
-#endif
-
-  // post a recv for the remote db buffer
-  if (dbib->verbose)
-    multilog(log, LOG_INFO, "send_block: post_recv on sync_from [block id]\n");
+    multilog(log, LOG_INFO, "send_block: post_recv [BLOCK ID]\n");
   if (dada_ib_post_recv (ib_cm, ib_cm->sync_from) < 0)
   {
-    multilog(log, LOG_ERR, "send_block: post_recv sync_from failed [block id]\n");
+    multilog(log, LOG_ERR, "send_block: post_recv [BLOCK ID] failed\n");
+    return -1;
+  }
+
+  // tell ibdb that the XFER is indeed continuing
+  if (ib_cm->verbose)
+    multilog(log, LOG_INFO, "send_block: send_message [XFER CONTINUING]\n");
+  if (dada_ib_send_message (ib_cm, DADA_IB_XFER_CONTINUING_KEY, 1) < 0)
+  {
+    multilog(log, LOG_INFO, "send_block: send_message [XFER CONTINUING] failed\n");
+    return -1;
+  }
+
+  // wait for the remote buffer information to be sent from ibdb
+  if (dbib->verbose)
+    multilog(log, LOG_INFO, "send_block: recv_message [BLOCK ID]\n");
+  if (dada_ib_recv_message (ib_cm, 0) < 0)
+  {
+    multilog(log, LOG_ERR, "send_block: recv_message [BLOCK ID] failed\n");
+    return -1;
+  }
+  uintptr_t remote_buf_va = (uintptr_t) ib_cm->sync_from_val[0];
+  uint32_t remote_buf_rkey = (uint32_t) ib_cm->sync_from_val[1];
+
+  if (dbib->verbose > 1)
+    multilog(log, LOG_INFO, "send_block: local_block_id=%"PRIu64", remote_buf_va=%p, "
+             "remote_buf_rkey=%p\n", block_id, remote_buf_va, remote_buf_rkey);
+
+
+  // post recv on ready key 
+  if (dbib->verbose)
+    multilog(log, LOG_INFO, "send_block: post_recv [READY]\n");
+  if (dada_ib_post_recv (ib_cm, ib_cm->sync_from) < 0)
+  {
+    multilog(log, LOG_ERR, "send_block: post_recv [READY] failed\n");
     return -1;
   }
 
   // tell ibdb how many bytes we are sending
-  ib_cm->sync_to_val[0] = 2;
-  ib_cm->sync_to_val[1] = bytes;
-  if (dbib->verbose)
-    multilog(log, LOG_INFO, "send_block: post_send on sync_to for %"PRIu64" bytes\n", bytes);
-  if (dada_ib_post_send(ib_cm, ib_cm->sync_to) < 0)
+  if (ib_cm->verbose)
+    multilog(log, LOG_INFO, "send_block: send_message [XFER BYTES]=%"PRIu64"\n", bytes);
+  if (dada_ib_send_message (ib_cm, DADA_IB_XFER_BYTES_KEY, bytes) < 0)
   {
-    multilog(log, LOG_ERR, "send_block: post_send on sync_to [bytes to send] failed\n");
+    multilog(log, LOG_INFO, "send_block: send_message [XFER BYTES] failed\n");
     return -1;
   }
 
-  // wait for confirmation of the send
+ 
+  // wait for READY message so we know ibdb is ready for the RDMA transfer
   if (dbib->verbose)
-    multilog(log, LOG_INFO, "send_block: wait_recv on sync_to\n", bytes);
-  if (dada_ib_wait_recv(ib_cm, ib_cm->sync_to) < 0)
+    multilog(log, LOG_INFO, "send_block: recv_message [READY]\n");
+  if (dada_ib_recv_message (ib_cm, DADA_IB_READY_KEY) < 0)
   {
-    multilog(log, LOG_ERR, "send_block: wait_recv on sync_to [bytes to send] failed\n");
+    multilog(log, LOG_ERR, "send_block: recv_message [READY] failed\n");
     return -1;
   }
 
-  int64_t start_byte;
-
-  // wait for the remote buffer information to be sent from ibdb
-  if (dbib->verbose)
-    multilog(log, LOG_INFO, "send_block: wait_recv on sync_from [block id]\n");
-  if (dada_ib_wait_recv (ib_cm, ib_cm->sync_from) < 0)
-  {
-    multilog(log, LOG_ERR, "send_block: dada_ib_wait_recv failed\n");
-    return -1;
-  }
-
-  uintptr_t remote_buf_va = (uintptr_t) ib_cm->sync_from_val[0];
-  uint32_t remote_buf_rkey = (uint32_t) ib_cm->sync_from_val[1];
-
-  if (dbib->verbose)
-    multilog(log, LOG_INFO, "send_block: local_block_id=%"PRIu64", remote_buf_va=%p, "
-             "remote_buf_rkey=%p\n", block_id, remote_buf_va, remote_buf_rkey);
 
   // transmit the local data block to the remote end via RDMA
   if (dada_ib_post_sends_gap (ib_cm, buffer, bytes, dbib->chunk_size,
@@ -411,40 +379,8 @@ int64_t caspsr_dbib_send_block(dada_client_t* client, void * buffer,
     return -1;
   }
 
-  // prepost a recv for the next READY message
-  if (dbib->verbose)
-    multilog(log, LOG_INFO, "send_block: post_recv on sync_from [ready]\n");
-  if (dada_ib_post_recv (ib_cm, ib_cm->sync_from) < 0)
-  {
-    multilog(log, LOG_ERR, "send_block: dada_ib_post_recv failed\n");
-    return -1;
-  }
-
-  if (dbib->verbose)
+  if (dbib->verbose > 1)
     multilog(log, LOG_INFO, "send_block: sent %"PRIu64" bytes\n", bytes);
-
-  // send the number of valid bytes transferred to dada_ibdb
-  ib_cm->sync_to_val[0] = 3;
-  ib_cm->sync_to_val[1] = bytes;
-  if (dbib->verbose)
-    multilog(log, LOG_INFO, "send_block: post_send on sync_to [bytes sent]\n");
-  if (dada_ib_post_send(ib_cm, ib_cm->sync_to) < 0)
-  {
-    multilog(log, LOG_ERR, "send_block: dada_ib_post_send failed\n");
-    return -1;
-  }
-    
-  // wait for confirmation of the send
-  if (dbib->verbose)
-    multilog(log, LOG_INFO, "send_block: wait_recv on sync_to [bytes sent]\n");
-  if (dada_ib_wait_recv(ib_cm, ib_cm->sync_to) < 0)
-  {
-    multilog(log, LOG_ERR, "send_block: dada_ib_wait_recv failed\n");
-    return -1;
-  }
-  
-  if (dbib->verbose)
-   multilog(log, LOG_INFO, "send_block: notified ibdb that %"PRIu64" bytes sent\n", bytes);
 
   return bytes;
 }
@@ -494,7 +430,8 @@ dada_ib_cm_t * caspsr_dbib_ib_init (caspsr_dbib_t * ctx, dada_hdu_t * hdu, multi
   }
 
   ib_cm->verbose = ctx->verbose;
-  ib_cm->depth = ctx->chunks_per_block+1;
+  ib_cm->send_depth = ctx->chunks_per_block;
+  ib_cm->recv_depth = 1;
   ib_cm->port = ctx->port;
   ib_cm->bufs_size = db_bufsz;
   ib_cm->header_size = hb_bufsz;
@@ -503,7 +440,6 @@ dada_ib_cm_t * caspsr_dbib_ib_init (caspsr_dbib_t * ctx, dada_hdu_t * hdu, multi
   // resolve the route to the server
   if (ctx->verbose)
     multilog(log, LOG_INFO, "ib_init: connecting to cm at %s:%d\n", ctx->host, ctx->port);
-
   if (dada_ib_connect_cm(ib_cm, ctx->host, ctx->port) < 0)
   {
     multilog(log, LOG_ERR, "ib_init: dada_ib_connect_cm failed\n");
@@ -511,7 +447,7 @@ dada_ib_cm_t * caspsr_dbib_ib_init (caspsr_dbib_t * ctx, dada_hdu_t * hdu, multi
   }
 
   // create the IB verb structures necessary
-  if (dada_ib_create_verbs(ib_cm, ib_cm->depth) < 0)
+  if (dada_ib_create_verbs(ib_cm) < 0)
   {
     multilog(log, LOG_ERR, "ib_init: dada_ib_create_verbs failed\n");
     return 0;
@@ -542,19 +478,18 @@ dada_ib_cm_t * caspsr_dbib_ib_init (caspsr_dbib_t * ctx, dada_hdu_t * hdu, multi
   ib_cm->header_mb->wr_id = 10000;
 
   // create the Queue Pair
-  if (dada_ib_create_qp (ib_cm, (ctx->chunks_per_block+1), 1) < 0)
+  if (dada_ib_create_qp (ib_cm) < 0)
   {
-    multilog(log, LOG_ERR, "ib_init: dada_ib_create_qp (%p, %"PRIu64", 1) failed\n", 
-             ib_cm, (ctx->chunks_per_block+1));
+    multilog(log, LOG_ERR, "ib_init: dada_ib_create_qp failed\n");
     return 0;
   }
 
   // post recv on sync from for the ready message, prior to sending header
   if (ctx->verbose)
-    multilog(log, LOG_INFO, "ib_init: post_recv on sync_from [ready new xfer]\n");
+    multilog(log, LOG_INFO, "ib_init: post_recv [READY NEW XFER]\n");
   if (dada_ib_post_recv (ib_cm, ib_cm->sync_from) < 0)
   {
-    multilog(log, LOG_ERR, "ib_init: dada_ib_post_recv on sync_from [ready new xfer] failed\n");
+    multilog(log, LOG_ERR, "ib_init: post_recv [READY NEW XFER] failed\n");
     return 0;
   }
 

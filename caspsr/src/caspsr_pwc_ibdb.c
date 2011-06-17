@@ -84,13 +84,13 @@ int caspsr_pwc_ibdb_xfer_pending (dada_pwc_main_t * pwcm) {
 
     // if the current xfer is ending
     if (ctx->xfer_ending)
-      xfer_state = 1;
+      xfer_state = DADA_XFER_ENDING;
     // we are at the end of the obs, and have data in the current buffer
     else if ((ctx->sod) || (ctx->xfer_count == -1))
-      xfer_state = 2;
+      xfer_state = DADA_OBS_ENDING;
     // at the start of first xfer and dont have SOD yet
     else 
-      xfer_state = 0;
+      xfer_state = DADA_XFER_NORMAL;
   }
   
   return xfer_state;
@@ -107,7 +107,7 @@ uint64_t caspsr_pwc_ibdb_new_xfer (dada_pwc_main_t * pwcm)
   assert (pwcm->context != 0);
   caspsr_pwc_ibdb_t * ctx = (caspsr_pwc_ibdb_t *) pwcm->context;
 
-  if (pwcm->verbose)
+  if (pwcm->verbose > 1)
     multilog (pwcm->log, LOG_INFO, "caspsr_pwc_ibdb_new_xfer()\n");
 
   assert (ctx->ib_cms != 0);
@@ -118,6 +118,8 @@ uint64_t caspsr_pwc_ibdb_new_xfer (dada_pwc_main_t * pwcm)
   char * xfer_header = 0;
 
   // receive the xfer header from ibdb
+  if (pwcm->verbose)
+    multilog (pwcm->log, LOG_INFO, "new_xfer: recv()\n");
   xfer_header = caspsr_pwc_ibdb_recv (pwcm, &xfer_header_size);
   if (!xfer_header)
   {
@@ -139,26 +141,15 @@ uint64_t caspsr_pwc_ibdb_new_xfer (dada_pwc_main_t * pwcm)
     return 0;
   }
 
-  // pre post recv for the number of bytes in the next send_block transfer
-  if (ctx->xfer_count != -1)
-  {
-    unsigned i = 0;
-    for (i=0; i<ctx->n_distrib; i++)
-    {
-      if (ctx->verbose)
-        multilog(pwcm->log, LOG_INFO, "new_xfer: [%d] post_recv on sync_from [bytes to xfer]\n", i);
-      if (dada_ib_post_recv(ib_cms[i], ib_cms[i]->sync_from) < 0)
-      {
-        multilog(pwcm->log, LOG_ERR, "new_xfer: [%d] dada_ib_post_recv failed [bytes to xfer]\n", i);
-        return 0;
-      }
-    }
-  }
+  if (ctx->verbose)
+    multilog(pwcm->log, LOG_INFO, "new_xfer: OBS_XFER=%"PRIi64" OBS_OFFSET=%"PRIu64"\n",
+                                  ctx->xfer_count, first_byte);
 
+  if (ctx->verbose)
+    multilog (ctx->log, LOG_INFO, "new_xfer: prev_xfer_bytes=%"PRIu64"\n", ctx->xfer_bytes);
 
-  //if (pwcm->verbose)
-    multilog (pwcm->log, LOG_INFO, "new_xfer: OBS_XFER=%"PRIi64", "
-              "OBS_OFFSET=%"PRIu64"\n", ctx->xfer_count, first_byte);
+  ctx->xfer_bytes = 0;
+  ctx->xfer_ending = 0;
 
   // write these into the pwcm's header
   if (ascii_header_set (pwcm->header, "OBS_OFFSET", "%"PRIu64, first_byte) < 0)
@@ -166,7 +157,50 @@ uint64_t caspsr_pwc_ibdb_new_xfer (dada_pwc_main_t * pwcm)
   if (ascii_header_set (pwcm->header, "OBS_XFER", "%"PRIi64, ctx->xfer_count) < 0)
     multilog (pwcm->log, LOG_WARNING, "Could not write OBS_XFER to header\n");
 
-  ctx->xfer_ending = 0;
+  // If this header is the EOBS header
+  if (ctx->xfer_count == -1)
+  {
+    multilog (pwcm->log, LOG_INFO, "new_xfer: OBS_XFER=%"PRIi64", OBS ENDING\n", ctx->xfer_count);
+    if (ctx->verbose)
+      multilog(pwcm->log, LOG_INFO, "new_xfer: observation is ending\n");
+    return first_byte;
+  }
+
+  // pre post recv on XFER CONTINUING
+  unsigned i = 0;
+  if (ctx->verbose)
+    multilog(pwcm->log, LOG_INFO, "new_xfer: post_recv on sync_from [XFER CONTINUING]\n");
+  for (i=0; i<ctx->n_distrib; i++)
+  {
+    if (ctx->verbose > 1)
+      multilog(pwcm->log, LOG_INFO, "new_xfer: [%d] post_recv on sync_from [XFER CONTINUING]\n", i);
+    if (dada_ib_post_recv(ib_cms[i], ib_cms[i]->sync_from) < 0)
+    {
+      multilog(pwcm->log, LOG_ERR, "new_xfer: [%d] dada_ib_post_recv failed [XFER CONTINUING]\n", i);
+      return 0;
+    }
+  }
+
+  // send the READY message
+  if (ctx->verbose)
+    multilog(ctx->log, LOG_INFO, "new_xfer: send_messages [READY]\n");
+  if (dada_ib_send_messages(ib_cms, ctx->n_distrib, DADA_IB_READY_KEY, 0) < 0)
+  {
+    multilog(ctx->log, LOG_ERR, "new_xfer: send_messages [READY] failed\n");
+    return 0;
+  }
+
+  // wait for the XFER CONTINUING message
+  if (ctx->verbose)
+    multilog(pwcm->log, LOG_INFO, "new_xfer: recv_messages [XFER CONTINUING]\n");
+  if (dada_ib_recv_messages(ib_cms, ctx->n_distrib, DADA_IB_XFER_CONTINUING_KEY) < 0)
+  {
+    multilog(ctx->log, LOG_ERR, "recv_block: recv_messages [XFER CONTINUING] failed\n");
+    return 0;
+  }
+
+  multilog (pwcm->log, LOG_INFO, "new_xfer: OBS_XFER=%"PRIi64", "
+            "OBS_OFFSET=%"PRIu64"\n", ctx->xfer_count, first_byte);
 
   return first_byte;
 
@@ -184,7 +218,7 @@ time_t caspsr_pwc_ibdb_start (dada_pwc_main_t * pwcm, time_t start_utc)
 
   unsigned i = 0;
 
-  if (ibdb->verbose)
+  if (ibdb->verbose > 1)
     multilog(pwcm->log, LOG_INFO, "caspsr_pwc_ibdb_start()\n");
 
   // accept the CM connection
@@ -195,7 +229,7 @@ time_t caspsr_pwc_ibdb_start (dada_pwc_main_t * pwcm, time_t start_utc)
   {
     if (!ibdb->ib_cms[i]->cm_connected) 
     {
-      if (ibdb->verbose)
+      if (ibdb->verbose > 1)
         multilog (ibdb->log, LOG_INFO, "open: caspsr_pwc_ibdb_ib_init_thread ib_cms[%d]=%p\n",
                   i, ibdb->ib_cms[i]);
 
@@ -233,7 +267,6 @@ time_t caspsr_pwc_ibdb_start (dada_pwc_main_t * pwcm, time_t start_utc)
     multilog(pwcm->log, LOG_ERR, "open: failed to init CM connections\n");
     return -1;
   }
-  /////////////////////////////////////////////////////////////////
 
   // pre-post receive for the header transfer 
   if (ibdb->verbose)
@@ -241,11 +274,11 @@ time_t caspsr_pwc_ibdb_start (dada_pwc_main_t * pwcm, time_t start_utc)
   for (i=0; i<ibdb->n_distrib; i++)
   {
     if (ibdb->verbose > 1)
-      multilog(pwcm->log, LOG_INFO, "open: post_recv on header_mb %d\n", i);
+      multilog(pwcm->log, LOG_INFO, "open: [%d] post_recv on header_mb [HEADER]\n", i);
 
     if (dada_ib_post_recv(ib_cms[i], ib_cms[i]->header_mb) < 0)
     {
-      multilog(pwcm->log, LOG_ERR, "open: dada_ib_post_recv on header_mb failed\n");
+      multilog(pwcm->log, LOG_ERR, "open: [%d] post_recv on header_mb [HEADER] failed\n", i);
       return -1;
     }
   }
@@ -268,13 +301,16 @@ time_t caspsr_pwc_ibdb_start (dada_pwc_main_t * pwcm, time_t start_utc)
     }
   }
 
+  ibdb->xfer_bytes = 0;
+  ibdb->observation_bytes = 0;
+
   return accept_result;
 
 }
 
 
 /*! pwcm buffer function [for header only] */
-void * caspsr_pwc_ibdb_recv (dada_pwc_main_t * pwcm, uint64_t * size)
+void * caspsr_pwc_ibdb_recv (dada_pwc_main_t * pwcm, int64_t * size)
 {
 
   assert (pwcm != 0);
@@ -289,53 +325,38 @@ void * caspsr_pwc_ibdb_recv (dada_pwc_main_t * pwcm, uint64_t * size)
 
   ibdb->sod = 0;
 
-  if (ibdb->verbose)
+  if (ibdb->verbose > 1)
     multilog (log, LOG_INFO, "caspsr_pwc_ibdb_recv()\n");
 
   unsigned i = 0;
 
-  // send ready message to ibdbs to inform we are ready to receive header
+  // send READY message to inform sender we are ready for the header
   if (ibdb->verbose)
-    multilog(pwcm->log, LOG_INFO, "recv: post_send on sync_to [ready]\n");
-  for (i=0; i<ibdb->n_distrib; i++)
+    multilog(pwcm->log, LOG_INFO, "recv: send_messages [READY]\n");
+  if (dada_ib_send_messages(ib_cms, ibdb->n_distrib, DADA_IB_READY_KEY, 0) < 0)
   {
-    ib_cms[i]->sync_to_val[0] = 1;
-    ib_cms[i]->sync_to_val[1] = 0;
-    if (dada_ib_post_send (ib_cms[i], ib_cms[i]->sync_to) < 0)
-    {
-      multilog(pwcm->log, LOG_ERR, "recv: [%d] post_send on sync_to [READY] failed\n", i);
-      return 0;
-    }
-  }
-
-  // wait for confirmation of the sending of the ready message
-  if (ibdb->verbose)
-    multilog(pwcm->log, LOG_INFO, "recv: post_send on sync_to [ready]\n");
-  for (i=0; i<ibdb->n_distrib; i++)
-  {
-    if (dada_ib_wait_recv(ib_cms[i], ib_cms[i]->sync_to) < 0)
-    {
-      multilog(pwcm->log, LOG_ERR, "recv: [%d] wait_recv on sync_to [READY] failed\n", i);
-      return 0;
-    }
+    multilog(pwcm->log, LOG_ERR, "recv: send_messages [READY] failed\n");
+    return 0;
   }
 
   // wait for transfer of the headers
   if (ibdb->verbose)
-    multilog(pwcm->log, LOG_INFO, "recv: wait_recv on header_mb\n");
+    multilog(pwcm->log, LOG_INFO, "recv: wait_recv [HEADER]\n");
   for (i=0; i<ibdb->n_distrib; i++)
   {
     if (ibdb->verbose > 1)
-      multilog(pwcm->log, LOG_INFO, "recv: [%d] dada_ib_wait_recv\n", i);
-    if (dada_ib_wait_recv(ib_cms[i], ibdb->ib_cms[i]->header_mb) < 0)
+      multilog(pwcm->log, LOG_INFO, "recv: [%d] wait_recv [HEADER]\n", i);
+    if (dada_ib_wait_recv(ib_cms[i], ib_cms[i]->header_mb) < 0)
     {
-      multilog(pwcm->log, LOG_ERR, "recv: [%d] dada_ib_wait_recv on header_mb failed\n", i);
+      multilog(pwcm->log, LOG_ERR, "recv: [%d] wait_recv [HEADER] failed\n", i);
       return 0;
     }
+    if (ib_cms[i]->verbose > ibdb->verbose)
+      ibdb->verbose = ib_cms[i]->verbose;
   }
 
   // use the size of the first cms header
-  *size = ibdb->ib_cms[0]->header_mb->size;
+  *size = (int64_t) ibdb->ib_cms[0]->header_mb->size;
 
   return ibdb->ib_cms[0]->header_mb->buffer;
 
@@ -353,163 +374,145 @@ int64_t caspsr_pwc_ibdb_recv_block (dada_pwc_main_t* pwcm, void* data,
 
   dada_ib_cm_t ** ib_cms = ibdb->ib_cms;
 
-  if (ibdb->verbose)
+  if (ibdb->verbose > 1)
     multilog(pwcm->log, LOG_INFO, "caspsr_pwc_ibdb_recv_block()\n");
 
   unsigned i = 0;
 
-  // send the ready message to the dbib's
+
+  // post recv for the number of bytes to be xferred
+  if (ibdb->verbose)
+    multilog(pwcm->log, LOG_INFO, "recv_block: post_recv [XFER BYTES]\n");
   for (i=0; i<ibdb->n_distrib; i++)
   {
-    ib_cms[i]->sync_to_val[0] = 1;
-    ib_cms[i]->sync_to_val[1] = 0;
-    if (dada_ib_post_send (ib_cms[i], ib_cms[i]->sync_to) < 0)
+    if (ibdb->verbose > 1)
+      multilog(pwcm->log, LOG_INFO, "recv_block: [%d] post_recv on sync_from [XFER BYTES]\n", i);
+    if (dada_ib_post_recv(ib_cms[i], ib_cms[i]->sync_from) < 0)
     {
-      multilog(pwcm->log, LOG_ERR, "recv_block: [%d] post_send on sync_to [READY] failed\n", i);
+      multilog(pwcm->log, LOG_ERR, "recv_block: [%d] post_recv on sync_from [XFER BYTES] failed\n", i);
       return -1;
     }
   }
 
-  // wait for confirmation of the sending of the ready message
+
+  // send the memory address of the block_id to be filled remotely via RDMA
+  if (ibdb->verbose)
+    multilog(pwcm->log, LOG_INFO, "recv_block: send_messages [BLOCK ID]\n");
+  // setup each memory address
   for (i=0; i<ibdb->n_distrib; i++)
   {
-    if (dada_ib_wait_recv(ib_cms[i], ib_cms[i]->sync_to) < 0)
-    {
-      multilog(pwcm->log, LOG_ERR, "recv_block: [%d] wait_recv on sync_to [READY] failed\n", i);
-      return -1;
-    }
+    ib_cms[i]->sync_to_val[0] = (uint64_t) ib_cms[i]->local_blocks[block_id].buf_va;
+    ib_cms[i]->sync_to_val[1] = (uint64_t) ib_cms[i]->local_blocks[block_id].buf_rkey;
   }
-  
+  if (dada_ib_send_messages(ib_cms, ibdb->n_distrib, UINT64_MAX, UINT64_MAX) < 0)
+  {
+    multilog(pwcm->log, LOG_ERR, "recv_block: send_messages [BLOCK ID] failed\n");
+    return -1;
+  }
+
+
   // wait for the number of bytes to be received
   uint64_t total_bytes = 0;
-  for (i=0; i<ibdb->n_distrib; i++)
+  if (ibdb->verbose)
+        multilog(pwcm->log, LOG_INFO, "recv_block: recv_messages [XFER BYTES]\n");
+  if (dada_ib_recv_messages(ib_cms, ibdb->n_distrib, DADA_IB_XFER_BYTES_KEY) < 0)
   {
-    if (dada_ib_wait_recv(ib_cms[i], ib_cms[i]->sync_from) < 0)
-    {
-      multilog(pwcm->log, LOG_ERR, "recv_block: [%d] wait_recv on sync_from [bytes to xfer] failed\n", i);
-      return -1;
-    }
-
-    if (ibdb->verbose)
-      multilog(pwcm->log, LOG_INFO, "recv_block: [%d] bytes to be recvd=%"PRIu64"\n", i, ib_cms[i]->sync_from_val[1]);
-
-    if (ib_cms[i]->sync_from_val[0] != 2)
-      multilog(pwcm->log, LOG_ERR, "recv_block: [%d] sync_from key[%"PRIu64"] != 2\n",
-               i, ib_cms[i]->sync_from_val[0]);
-    else 
-      total_bytes += ib_cms[i]->sync_from_val[1];
+    multilog(pwcm->log, LOG_ERR, "recv_block: recv_messages [XFER BYTES] failed\n");
+    return -1;
   }
 
-  //if (ibdb->verbose) 
-  if (total_bytes != 256000000)
-    multilog(pwcm->log, LOG_INFO, "recv_block: total bytes to be recvd=%"PRIu64"\n", total_bytes);
+  // count the number of bytes to be received
+  for (i=0; i<ibdb->n_distrib; i++)
+  {
+    total_bytes += ib_cms[i]->sync_from_val[1];
+    if (ibdb->verbose > 1)
+      multilog (pwcm->log, LOG_INFO, "recv_block: [%d] bytes to be recvd=%"PRIu64"\n", 
+                i, ib_cms[i]->sync_from_val[1]);
+  }
 
-  if (total_bytes == 0)
+  if ((ibdb->verbose) || (total_bytes != 256000000 && total_bytes != 0))
+      multilog(pwcm->log, LOG_INFO, "recv_block: total bytes to be recvd=%"PRIu64"\n", total_bytes);
+
+  ibdb->xfer_bytes += total_bytes;
+  ibdb->observation_bytes += total_bytes;
+
+  // post receive for the XFER continuing message
+  if (ibdb->verbose)
+    multilog(pwcm->log, LOG_INFO, "recv_block: post_recv [XFER CONTINUING]\n");
+  for (i=0; i<ibdb->n_distrib; i++)
+  {
+    if (ibdb->verbose > 1)
+      multilog(pwcm->log, LOG_INFO, "recv_block: [%d] post_recv [XFER CONTINUING]\n", i);
+    if (dada_ib_post_recv(ib_cms[i], ib_cms[i]->sync_from) < 0)
+    {
+      multilog(pwcm->log, LOG_ERR, "recv_block: [%d] post_recv [XFER CONTINUING] failed\n", i);
+      return -1;
+    }
+  }
+
+  // send READY message to start the RDMA transfer
+  if (ibdb->verbose)
+    multilog(pwcm->log, LOG_INFO, "recv_block: send_messages [READY]\n");
+  if (dada_ib_send_messages(ib_cms, ibdb->n_distrib, DADA_IB_READY_KEY, 0) < 0)
+  {
+    multilog(pwcm->log, LOG_ERR, "recv_block: send_messages [READY] failed\n");
+    return -1;
+  }
+
+  // RDMA transfer is happeing now
+
+  // wait for the XFER CONTINUING message
+  if (ibdb->verbose)
+    multilog(pwcm->log, LOG_INFO, "recv_block: recv_messages [XFER_CONTINUING]\n");
+  if (dada_ib_recv_messages(ib_cms, ibdb->n_distrib, DADA_IB_XFER_CONTINUING_KEY) < 0)
+  {
+    multilog(pwcm->log, LOG_ERR, "recv_block: recv_messages [XFER CONTINUING] failed\n");
+    return -1;
+  }
+
+  // check if the XFER is continuing [1==continue, 0=ending]
+  uint64_t xfer_continuing = 0;
+  for (i=0; i<ibdb->n_distrib; i++)
   {
     if (ibdb->verbose)
-      multilog(pwcm->log, LOG_INFO, "recv_block: setting xfer_ending=1\n");
+      multilog(pwcm->log, LOG_INFO, "recv_block: [%d] xfer_continuing val=%"PRIu64"\n", i, ib_cms[i]->sync_from_val[1]);
+    xfer_continuing += ib_cms[i]->sync_from_val[1];
+  }
+
+  // this is the final transfer in this XFER
+  if (xfer_continuing == 0)
+  {
     ibdb->xfer_ending = 1;
 
-    // pre-post receive for the header transfer 
     if (ibdb->verbose)
-      multilog(pwcm->log, LOG_INFO, "recv_block: post_recv for headers\n");
-
+      multilog(pwcm->log, LOG_INFO, "recv_block: post_recv [HEADER]\n");
     for (i=0; i<ibdb->n_distrib; i++)
     {
-      //if (ibdb->verbose > 1)
-        multilog(pwcm->log, LOG_INFO, "recv_block: post_recv on header_mb %d\n", i);
-
+      if (ibdb->verbose > 1)
+        multilog(pwcm->log, LOG_INFO, "recv_block: [%d] post_recv [HEADER]\n", i);
       if (dada_ib_post_recv(ib_cms[i], ib_cms[i]->header_mb) < 0)
       {
-        multilog(pwcm->log, LOG_ERR, "recv_block: dada_ib_post_recv on header_mb failed\n");
+        multilog(pwcm->log, LOG_ERR, "recv_block: [%d] post_recv [HEADER] failed\n");
         return -1;
       }
     }
     if (!ibdb->sod)
       ibdb->sod = 1;
   }
-
-  if (total_bytes) 
+  // the xfer is continuing as per normal
+  else if (xfer_continuing == ibdb->n_distrib)
   {
-    // pre post recv for the client's completion message for each connection
-    for (i=0; i<ibdb->n_distrib; i++)
-    {
-      if (ibdb->verbose)
-        multilog(pwcm->log, LOG_INFO, "recv_block: [%d] post_recv on sync_from for bytes recvd\n", i);
-      if (dada_ib_post_recv(ib_cms[i], ib_cms[i]->sync_from) < 0)
-      {
-        multilog(pwcm->log, LOG_ERR, "recv_block: [%d] post_recv on sync_from for bytes recvd failed\n", i);
-        return -1;
-      }
-    }
-
-    // instruct the client to fill the specified block_id remotely via RDMA
-    for (i=0; i<ibdb->n_distrib; i++)
-    {
-      ib_cms[i]->sync_to_val[0] = (uint64_t) ib_cms[i]->local_blocks[block_id].buf_va;
-      ib_cms[i]->sync_to_val[1] = (uint64_t) ib_cms[i]->local_blocks[block_id].buf_rkey;
-    }
-
-    if (ibdb->verbose > 1)
-      multilog(pwcm->log, LOG_INFO, "recv_block: data=%p, bytes=%"PRIu64", "
-               "block_id=%"PRIu64"\n", data, data_size, block_id);
-
-    // send the client the sync value (buffer ID to be filled)
-    for (i=0; i<ibdb->n_distrib; i++)
-    {
-      if (dada_ib_post_send (ib_cms[i], ib_cms[i]->sync_to) < 0)
-      {
-        multilog(pwcm->log, LOG_ERR, "recv_block: [%d] post_send on sync_to [block id] failed\n", i);
-        return -1;
-      }
-    }
-
-    // confirm that the sync value has been sent 
-    for (i=0; i<ibdb->n_distrib; i++)
-    {
-      if (dada_ib_wait_recv(ib_cms[i], ib_cms[i]->sync_to) < 0)
-      {
-        multilog(pwcm->log, LOG_ERR, "recv_block: [%d] wait_recv on sync to [block id] failed\n", i);
-        return -1;
-      }
-    }
-
-    // remote RDMA transfer is ocurring now...
-
     if (ibdb->verbose)
-      multilog(pwcm->log, LOG_INFO, "recv_block: waiting for completion "
-               "on block %"PRIu64"\n", block_id);
-
-    // accept the completion message for the "current" transfer
-    total_bytes = 0;
-    for (i=0; i<ibdb->n_distrib; i++)
-    {
-      if (dada_ib_wait_recv(ib_cms[i], ib_cms[i]->sync_from) < 0)
-      {
-        multilog(pwcm->log, LOG_ERR, "recv_block: [%d] wait_recv on sync_from for bytes sent failed\n", i);
-        return -1;
-      }
-      if (ib_cms[i]->sync_from_val[0] != 3)
-        multilog(pwcm->log, LOG_ERR, "recv_block: [%d] sync_from key[%"PRIu64
-                 "] != 3 for bytes_sent\n", i, ib_cms[i]->sync_from_val[0]);
-      else
-        total_bytes += ib_cms[i]->sync_from_val[1];
-    }
-
-    // pre post recv for the number of bytes in the next send_block transfer
-    for (i=0; i<ibdb->n_distrib; i++)
-    {
-      if (ibdb->verbose)
-        multilog(pwcm->log, LOG_INFO, "recv_block: [%d] post_recv on sync_from [bytes to xfer]\n", i);
-      if (dada_ib_post_recv(ib_cms[i], ib_cms[i]->sync_from) < 0)
-      {
-        multilog(pwcm->log, LOG_ERR, "recv_block: [%d] post_recv on sync_from [bytes to xfer] failed\n", i);
-        return -1;
-      }
-    }
+      multilog(pwcm->log, LOG_INFO, "recv_block: xfer_continuing\n");
+  }
+  // something is wrong, the clients dont agree
+  else
+  {
+    multilog(pwcm->log, LOG_ERR, "recv_block: clients mismatch on XFER CONTINUING %"PRIu64"\n", xfer_continuing); 
+    return -1; 
   }
 
-  if (ibdb->verbose)
+  if (ibdb->verbose > 1)
     multilog(pwcm->log, LOG_INFO, "recv_block: bytes transferred=%"PRIu64"\n", total_bytes);
 
   return (int64_t) total_bytes;
@@ -523,10 +526,18 @@ int caspsr_pwc_ibdb_stop (dada_pwc_main_t* pwcm)
 
   caspsr_pwc_ibdb_t * ibdb = (caspsr_pwc_ibdb_t *) pwcm->context;
 
-  if (ibdb->verbose)
+  if (ibdb->verbose > 1)
+  {
     multilog (pwcm->log, LOG_INFO, "caspsr_pwc_ibdb_stop()\n");
+    multilog (pwcm->log, LOG_INFO, "stop: last_xfer_bytes=%"PRIu64"\n",
+                                    ibdb->xfer_bytes);
+  }
 
+  multilog (pwcm->log, LOG_INFO, "received %"PRIu64" bytes\n", 
+                                 ibdb->observation_bytes);
   unsigned i=0;
+  if (ibdb->verbose)
+    multilog (pwcm->log, LOG_INFO, "stop: ib_disconnet()\n");
   for (i=0; i<ibdb->n_distrib; i++)
   {
     if (dada_ib_disconnect(ibdb->ib_cms[i]) < 0)
@@ -555,7 +566,7 @@ int caspsr_pwc_ibdb_ib_init(caspsr_pwc_ibdb_t * ctx, dada_hdu_t * hdu, multilog_
   assert (ctx != 0);
   assert (hdu != 0);
 
-  if (ctx->verbose)
+  if (ctx->verbose > 1)
     multilog(log, LOG_INFO, "caspsr_pwc_ibdb_ib_init()\n");
 
   // get the information about the data block
@@ -583,7 +594,6 @@ int caspsr_pwc_ibdb_ib_init(caspsr_pwc_ibdb_t * ctx, dada_hdu_t * hdu, multilog_
 
   for (i=0; i<ctx->n_distrib; i++)
   {
-
     if (ctx->verbose > 1)
       multilog(log, LOG_INFO, "ib_init: dada_ib_create_cm\n");
 
@@ -595,12 +605,12 @@ int caspsr_pwc_ibdb_ib_init(caspsr_pwc_ibdb_t * ctx, dada_hdu_t * hdu, multilog_
     }
 
     ctx->ib_cms[i]->verbose = ctx->verbose;
-    ctx->ib_cms[i]->depth = (ctx->chunks_per_block+1);
+    ctx->ib_cms[i]->send_depth = 1;
+    ctx->ib_cms[i]->recv_depth = 1;
     ctx->ib_cms[i]->port = ctx->port + i;
     ctx->ib_cms[i]->bufs_size = db_bufsz;
     ctx->ib_cms[i]->header_size = hb_bufsz;
     ctx->ib_cms[i]->db_buffers = db_buffers;
-
   }
 
   return 0;
@@ -613,7 +623,7 @@ void * caspsr_pwc_ibdb_ib_init_thread (void * arg)
 
   multilog_t * log = ib_cm->log;
 
-  if (ib_cm->verbose)
+  if (ib_cm->verbose > 1)
     multilog (log, LOG_INFO, "ib_init_thread: dada_ib_accept ib_cm=%p\n", ib_cm);
     
   ib_cm->cm_connected = 0;
@@ -630,10 +640,10 @@ void * caspsr_pwc_ibdb_ib_init_thread (void * arg)
   }
 
   // create the IB verb structures necessary
-  if (ib_cm->verbose)
-    multilog(log, LOG_INFO, "ib_init_thread: depth=%"PRIu64"\n", (ib_cm->depth));
+  if (ib_cm->verbose > 1)
+    multilog(log, LOG_INFO, "ib_init_thread: depth=%"PRIu64"\n", ib_cm->send_depth + ib_cm->recv_depth);
 
-  if (dada_ib_create_verbs(ib_cm, (ib_cm->depth)) < 0)
+  if (dada_ib_create_verbs(ib_cm) < 0)
   {
     multilog(log, LOG_ERR, "ib_init_thread: dada_ib_create_verbs failed\n");
     pthread_exit((void *) &(ib_cm->cm_connected));
@@ -655,7 +665,7 @@ void * caspsr_pwc_ibdb_ib_init_thread (void * arg)
     pthread_exit((void *) &(ib_cm->cm_connected));
   }
 
-  if (ib_cm->verbose)
+  if (ib_cm->verbose > 1)
     multilog(log, LOG_INFO, "ib_init_thread: reg header_mb\n");
   ib_cm->header_mb = dada_ib_reg_buffer(ib_cm, ib_cm->header, ib_cm->header_size, flags);
   if (!ib_cm->header_mb)
@@ -666,9 +676,9 @@ void * caspsr_pwc_ibdb_ib_init_thread (void * arg)
 
   ib_cm->header_mb->wr_id = 10000;
 
-  if (ib_cm->verbose)
+  if (ib_cm->verbose > 1)
     multilog(log, LOG_INFO, "ib_init_thread: dada_ib_create_qp\n");
-  if (dada_ib_create_qp (ib_cm, 1, 1) < 0)
+  if (dada_ib_create_qp (ib_cm) < 0)
   {
     multilog(log, LOG_ERR, "ib_init: dada_ib_create_qp failed\n");
     pthread_exit((void *) &(ib_cm->cm_connected));
@@ -860,6 +870,7 @@ int main (int argc, char **argv)
   pwcm->new_xfer_function     = caspsr_pwc_ibdb_new_xfer;
   pwcm->header_valid_function = caspsr_pwc_ibdb_header_valid;
   pwcm->context               = &ibdb;
+  pwcm->verbose               = verbose;
 
   hdu = dada_hdu_create (log);
 

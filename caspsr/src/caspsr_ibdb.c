@@ -119,9 +119,9 @@ int64_t caspsr_ibdb_recv (dada_client_t* client, void* data, uint64_t data_size)
     multilog(log, LOG_INFO, "recv: post_send on sync_to [ready]\n");
   for (i=0; i<ibdb->n_distrib; i++)
   {
-    if (dada_ib_wait_recv(ib_cms[i], ib_cms[i]->sync_to) < 0)
+    if (dada_ib_wait_send(ib_cms[i], ib_cms[i]->sync_to) < 0)
     {
-      multilog(log, LOG_ERR, "recv: [%d] wait_recv on sync_to [READY] failed\n", i);
+      multilog(log, LOG_ERR, "recv: [%d] wait_send on sync_to [READY] failed\n", i);
       return -1;
     }
   }
@@ -198,9 +198,9 @@ int64_t caspsr_ibdb_recv_block (dada_client_t* client, void* data,
   // wait for confirmation of the ready message
   for (i=0; i<ibdb->n_distrib; i++)
   {
-    if (dada_ib_wait_recv(ib_cms[i], ib_cms[i]->sync_to) < 0)
+    if (dada_ib_wait_send(ib_cms[i], ib_cms[i]->sync_to) < 0)
     {
-      multilog(client->log, LOG_ERR, "recv_block: [%d] wait_recv on sync_from [READY] failed\n", i);
+      multilog(client->log, LOG_ERR, "recv_block: [%d] wait_send on sync_from [READY] failed\n", i);
       return -1;
     }
   }
@@ -264,10 +264,10 @@ int64_t caspsr_ibdb_recv_block (dada_client_t* client, void* data,
     // confirm that the sync value has been sent 
     for (i=0; i<ibdb->n_distrib; i++)
     {
-      //multilog(client->log, LOG_INFO, "recv_block: wait_recv [%d] on sync_to for block id\n", i);
-      if (dada_ib_wait_recv(ib_cms[i], ib_cms[i]->sync_to) < 0)
+      //multilog(client->log, LOG_INFO, "recv_block: wait_send [%d] on sync_to for block id\n", i);
+      if (dada_ib_wait_send(ib_cms[i], ib_cms[i]->sync_to) < 0)
       {
-        multilog(client->log, LOG_ERR, "recv_block: [%d] wait_recv on sync to for block id failed\n", i);
+        multilog(client->log, LOG_ERR, "recv_block: [%d] wait_send on sync to for block id failed\n", i);
         return -1;
       }
     }
@@ -480,7 +480,8 @@ int caspsr_ibdb_ib_init(caspsr_ibdb_t * ctx, dada_hdu_t * hdu, multilog_t * log)
     }
 
     ctx->ib_cms[i]->verbose = ctx->verbose;
-    ctx->ib_cms[i]->depth = (ctx->chunks_per_block+1);
+    ctx->ib_cms[i]->send_depth = 1;
+    ctx->ib_cms[i]->recv_depth = 1;
     ctx->ib_cms[i]->port = ctx->port + i;
     ctx->ib_cms[i]->bufs_size = db_bufsz;
     ctx->ib_cms[i]->header_size = hb_bufsz;
@@ -542,9 +543,9 @@ void * caspsr_ibdb_ib_init_thread (void * arg)
 
   // create the IB verb structures necessary
   if (ib_cm->verbose)
-    multilog(log, LOG_INFO, "ib_init_thread: depth=%"PRIu64"\n", (ib_cm->depth));
+    multilog(log, LOG_INFO, "ib_init_thread: depth=%"PRIu64"\n", ib_cm->send_depth + ib_cm->recv_depth);
 
-  if (dada_ib_create_verbs(ib_cm, (ib_cm->depth)) < 0)
+  if (dada_ib_create_verbs(ib_cm) < 0)
   {
     multilog(log, LOG_ERR, "ib_init_thread: dada_ib_create_verbs failed\n");
     pthread_exit((void *) &(ib_cm->cm_connected));
@@ -575,7 +576,7 @@ void * caspsr_ibdb_ib_init_thread (void * arg)
 
   if (ib_cm->verbose)
     multilog(log, LOG_INFO, "ib_init_thread: dada_ib_create_qp\n");
-  if (dada_ib_create_qp (ib_cm, 1, 1) < 0)
+  if (dada_ib_create_qp (ib_cm) < 0)
   {
     multilog(log, LOG_ERR, "ib_init: dada_ib_create_qp failed\n");
     pthread_exit((void *) &(ib_cm->cm_connected));
