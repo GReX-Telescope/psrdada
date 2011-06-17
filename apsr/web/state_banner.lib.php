@@ -107,7 +107,7 @@ class state_banner extends apsr_webpage
             <!--<a href="javascript:popUp('archival.lib.php?single=true', 'full')" class="btn"><span>Archival</span></a>-->
             <a href="javascript:popUp('control.lib.php?single=true', 'minimum')" class="btn"><span>Controls</span></a>
             <a href="javascript:popUp('tcs_simulator.lib.php?single=true', 'full')" class="btn"><span>Test</span></a>
-            <a href="javascript:popUp('support.html', 'minimum')" class="btn"><span>Help</span></a>
+            <a href="javascript:popUp('support.lib.php?single=true', 'full')" class="btn"><span>Help</span></a>
           </div>
         </td>
 <?  

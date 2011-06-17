@@ -52,4 +52,5 @@ nobase_dist_web_SCRIPTS = definitions_i.php \
                           testing/tcs_interface.php \
                           testing/index.php \
                           testing/simulator.php \
-                          status/.empty support.html
+                          status/.empty \
+                          support.lib.php
