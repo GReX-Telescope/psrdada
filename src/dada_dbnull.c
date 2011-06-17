@@ -85,6 +85,23 @@ int sock_open_function (dada_client_t* client)
     }
   }
 
+  if (ctx->verbose)
+  {
+    uint64_t obs_offset = 0;
+    if (ascii_header_get (header, "OBS_OFFSET", "%"PRIu64, &obs_offset) != 1)
+    {
+      multilog (log, LOG_WARNING, "header with no OBS_OFFSET\n");
+    }
+
+    char utc_start[64];
+    if (ascii_header_get (header, "UTC_START", "%s", utc_start) != 1)
+    {     
+      multilog (log, LOG_WARNING, "header with no UTC_START\n");
+    }
+
+    multilog (log, LOG_INFO, "UTC_START=%s, OBS_OFFSET=%"PRIu64"\n", utc_start, obs_offset);
+  }
+
   // check the FILE_SIZE of this transfer if set
   uint64_t file_size = 0;
   if (ascii_header_get (header, "FILE_SIZE", "%"PRIu64, &file_size) != 1)
