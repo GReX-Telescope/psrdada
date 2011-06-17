@@ -163,6 +163,10 @@ int main (int argc, char **argv)
      * a proper xfer concept in it */
           
     fprintf(stderr,"\nHeader Block Xfers:\n");
+    fprintf(stderr, "IPCBUF_SODACK: %"PRIu64"\n", ipcbuf_get_sodack(hb));
+    fprintf(stderr, "IPCBUF_EODACK: %"PRIu64"\n", ipcbuf_get_eodack(hb));
+    fprintf(stderr, "sync->r_buf:   %"PRIu64"\n", hb->sync->r_buf);
+    fprintf(stderr, "sync->w_buf:   %"PRIu64"\n", hb->sync->w_buf);
     fprintf(stderr,"[%"PRIu64",%"PRIu64"]=>[%"PRIu64",%"PRIu64"] %d\n",
                    hb->sync->s_buf[0],hb->sync->s_byte[0],
                    hb->sync->e_buf[0],hb->sync->e_byte[0],hb->sync->eod[0]);
