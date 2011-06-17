@@ -95,14 +95,14 @@ sub setupClientType()
     # If we matched a PWC
     if ($found) 
     {
-      $Dada::client_master_control::pwc_add = " -d -p ".$cfg{"CLIENT_UDPDB_PORT"};
+      $Dada::client_master_control::pwc_add = " -D ".$cfg{"CLIENT_LOG_DIR"}."/apsr_udpdb.log -p ".$cfg{"CLIENT_UDPDB_PORT"};
     }
-    # check if we are a helper
+    # check if we are a DFB simulator
     else
     {
-      for ($i=0; (($i<$cfg{"NUM_HELP"}) && (!$found)); $i++) {
-        if ($Dada::client_master_control::host =~ m/$cfg{"HELP_".$i}/) {
-          Dada::logMsg(2, $Dada::client_master_control::dl, "matched helper");
+      for ($i=0; (($i<$cfg{"NUM_DFB"}) && (!$found)); $i++) {
+        if ($Dada::client_master_control::host =~ m/$cfg{"DFB_".$i}/) {
+          Dada::logMsg(2, $Dada::client_master_control::dl, "matched dfb simulator");
           @Dada::client_master_control::daemons = ();
           @Dada::client_master_control::binaries = ();
           $found = 1;
