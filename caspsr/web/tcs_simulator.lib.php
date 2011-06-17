@@ -231,6 +231,8 @@ class tcs_simulator extends caspsr_webpage
             <option value="counter.test">counter.test</option>
             <option value="dbnull.caspsr">dbnull.caspsr</option>
             <option value="dbdisk.caspsr">dbdisk.caspsr</option>
+            <option value="caspsr.20cmdbib">caspsr.20cmdbib</option>
+            <option value="caspsr.50cmdbib">caspsr.50cmdbib</option>
           </select>
         </td>
 
