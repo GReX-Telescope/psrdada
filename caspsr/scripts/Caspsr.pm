@@ -131,18 +131,22 @@ sub processHeader($$) {
 
       # test if the source is in the catalogue
       my $dm = Dada::getDM($source);
-
-      if ($dm eq "NA") {
+      if (($dm =~ m/NA/) || ($dm =~ m/unknown/)) {
         $result = "fail";
-        $response = "Error: ".$source." was not in psrcat's catalogue";
+        $response = "SOURCE ".$source." was not in catalogue";
       }
-
     }
-  
   }
   
   # Add the dada header file to the proc_cmd
+  my $localhost = Dada::getHostMachineName();
   my $proc_cmd_file = $config_dir."/".$h{"PROC_FILE"};
+
+  # Check if a custom processing file for this host exists
+  if ( -f $proc_cmd_file."_".$localhost) {
+    $proc_cmd_file .= "_".$localhost;
+  }
+
   my %proc_cmd_hash = Dada::readCFGFile($proc_cmd_file);
   $proc_cmd = $proc_cmd_hash{"PROC_CMD"};
   
