@@ -185,7 +185,7 @@ time_t udpdb_start_function (dada_pwc_main_t* pwcm, time_t start_utc)
  * Read data from the UDP socket and return a pointer to the data read
  * and set the size to the data read
  */
-void* udpdb_buffer_function (dada_pwc_main_t* pwcm, uint64_t* size)
+void* udpdb_buffer_function (dada_pwc_main_t* pwcm, int64_t* size)
 {
   udpdb_t *ctx = (udpdb_t*) pwcm->context;
   return caspsr_xfer(ctx->receiver, size);
