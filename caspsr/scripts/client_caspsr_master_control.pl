@@ -65,7 +65,6 @@ sub setupClientType()
   if ($cfg{"SERVER_ALIASES"} =~ m/$Dada::client_master_control::host/) {
     $Dada::client_master_control::host = "srv0";
     @Dada::client_master_control::daemons = split(/ /,$cfg{"SERVER_DAEMONS"});
-    @Dada::client_master_control::helper_daemons = split(/ /,$cfg{"SERVER_DAEMONS_PERSIST"});
     @Dada::client_master_control::dbs = ();
     $Dada::client_master_control::daemon_prefix = "server";
     $Dada::client_master_control::control_dir = $cfg{"SERVER_CONTROL_DIR"};
