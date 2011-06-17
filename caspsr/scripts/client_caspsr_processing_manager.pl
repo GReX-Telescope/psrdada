@@ -20,8 +20,9 @@ use File::Basename;
 # Function Prototypes
 #
 sub main();
-sub process($$$$);
-sub decimationThread($$$);
+sub process($$);
+sub decimationThread($);
+sub overflowThread($);
 
 #
 # Declare Global Variables
@@ -38,7 +39,9 @@ our $log_port;
 our $log_sock;
 our $dada_header_pid : shared;    # PID of the dada_header command for killing
 our $processor_pid : shared;      # PID of the processor (dspsr) for killing
-
+our $recv_db : shared;            # DB where data is being received over IB
+our $proc_db : shared;            # DB where data is being processed 
+our $proc_db_key : shared;        # DADA processing file for dspsr
 
 #
 # Initialize Global variables
@@ -55,6 +58,9 @@ $log_port = 0;
 $log_sock = 0;
 $dada_header_pid = 0;
 $processor_pid = 0;
+$recv_db = "";
+$proc_db = "";
+$proc_db_key = "";
 
 
 my $result = 0;
@@ -87,9 +93,6 @@ sub main() {
   my $result = "";
   my $response = "";
   my $decimation_thread = 0;
-  my $recv_db = "";
-  my $proc_db = "";
-  my $proc_db_key = "";
 
   # sanity check on whether the module is good to go
   ($result, $response) = good($quit_file);
@@ -126,6 +129,10 @@ sub main() {
   my $cmd = ""; 
   my %h = ();
   my $tdec = 1;
+
+  $recv_db = lc($cfg{"RECEIVING_DATA_BLOCK"});
+  $proc_db = lc($cfg{"PROCESSING_DATA_BLOCK"});
+  $proc_db_key = $cfg{"PROCESSING_DB_KEY"};
   
 
   # Main Loop
@@ -144,38 +151,28 @@ sub main() {
       %h = ();
       %h = Dada::headerToHash($raw_header);
       
+
+      $tdec = 1;
       # check if this transfer requires decimation and is 2 or 6
       if (defined($h{"TDEC"}) && (($h{"TDEC"} == 2) || ($h{"TDEC"} == 6)))
       {
         $tdec = $h{"TDEC"};
-        
-        # launch the decimation thread on the receiving datablock and
-        # set the processing datablock 
-        $recv_db = lc($cfg{"RECEIVING_DATA_BLOCK"});
-        $proc_db = lc($cfg{"PROCESSING_DATA_BLOCK"});
-        $proc_db_key = $cfg{"PROCESSING_DB_KEY"};
+      }
 
-        msg(1, "INFO", "main: decimationThread(".$tdec.", ".$recv_db.", ".$proc_db.")");
-        $decimation_thread = threads->new(\&decimationThread, $tdec, $recv_db, $proc_db);
-      }
-      else 
-      {
-        $tdec = 1;
-        $recv_db = lc($cfg{"RECEIVING_DATA_BLOCK"});
-        $proc_db = lc($cfg{"RECEIVING_DATA_BLOCK"});
-        $proc_db_key = $cfg{"RECEIVING_DB_KEY"};
-      }
+      msg(2, "INFO", "main: decimationThread(".$tdec.")");
+      $decimation_thread = threads->new(\&decimationThread, $tdec);
+
+      sleep(1);
 
       # continue to run the processing thread until this observation is complete
       $obs_end = 0;
       while (!$obs_end && !$quit_daemon)
       {
 
-        msg(1, "INFO", "main: process(".$prev_utc_start.", ".$prev_obs_offset.", ".$proc_db.", ".$proc_db_key.")");
-
-        ($quit_daemon, $utc_start, $obs_offset, $obs_end) = process($prev_utc_start, $prev_obs_offset, $proc_db, $proc_db_key);
-        msg(1, "INFO", "main: process quit_daemon=".$quit_daemon." utc_start=". 
-            $utc_start." obs_offset=".$obs_offset." obs_end=".$obs_end);
+        msg(2, "INFO", "main: process(".$prev_utc_start.", ".$prev_obs_offset.")");
+        ($quit_daemon, $utc_start, $obs_offset, $obs_end) = process($prev_utc_start, $prev_obs_offset);
+        msg(2, "INFO", "main: process quit_daemon=".$quit_daemon." utc_start=". 
+                       $utc_start." obs_offset=".$obs_offset." obs_end=".$obs_end);
 
         if ($utc_start eq "invalid") 
         {
@@ -196,9 +193,9 @@ sub main() {
 
       if ($decimation_thread)
       { 
-        msg(1, "INFO", "main: joining decimation_thread");
+        msg(2, "INFO", "main: joining decimation_thread");
         $result = $decimation_thread->join();
-        msg(1, "INFO", "main: decimation_thread joined");
+        msg(2, "INFO", "main: decimation_thread joined");
         $decimation_thread = 0;
         if ($result ne "ok") 
         {
@@ -229,18 +226,18 @@ sub main() {
 #
 # Run the CASPSR decimation to resmaple the input data
 #
-sub decimationThread($$$) 
+sub decimationThread($) 
 {
 
-  my ($tdec, $in_key, $out_key) = @_;
+  my ($tdec) = @_;
 
-  msg(2, "INFO", "decimationThread(".$in_key.", ".$out_key.", ".$tdec.")");
+  msg(2, "INFO", "decimationThread(".$tdec.")");
 
   my $cmd = "";
   my $result = "";
   my $response = "";
 
-  $cmd = "caspsr_dbdecidb -S -z -t ".$tdec." ".$in_key." ".$out_key;
+  $cmd = "caspsr_dbdecidb -S -z -t ".$tdec." ".$recv_db." ".$proc_db;
   $cmd .= " 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/".$client_logger." deci";
   
   msg(2, "INFO", "decimationThread: ".$cmd);
@@ -253,18 +250,73 @@ sub decimationThread($$$)
   return $result;
 }
 
+
+##############################################################################
+#
+# Run the CASPSR overflow protection thread, runs on the receiving datablock
+# as the processing datablock is not that big...
+#
+sub overflowThread($)
+{
+  my ($proc_cmd) = @_;
+
+  msg(2, "INFO", "overflowThread(".$proc_cmd.")");
+
+  my $cmd = "";
+  my $result = "";
+  my $response = "";
+  my $rval = 0;
+
+  # run the overflow monitor on the recveiving datablock
+  $cmd = "dada_dboverflow -k ".$recv_db." 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/".$client_logger;
+  msg(2, "INFO", "overflowThread: ".$cmd);
+  system($cmd);
+  $rval = $? >> 8;
+  msg(2, "INFO", "overflowThread: ".$cmd." returned ".$rval);
+
+  if ($rval == 0) 
+  {
+    msg(2, "INFO", "overflowThread: all good");
+  } 
+  else 
+  {
+    if ($rval == 1) 
+    {
+      msg(1, "INFO", "overflowThread: db was destroyed");
+    } 
+    else 
+    {
+      # kill the proc_cmd as the datablock has filled
+      msg(1, "INFO", "overflowThread: killing ".$proc_cmd);
+      ($result, $response) = Dada::killProcess("^".$proc_cmd, $user);
+      msg(1, "INFO", "overflowThread: ".$result." ".$response);
+
+      # launch the dbscrubber
+      $cmd = "dada_dbscrubber -k ".$proc_db." 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/".$client_logger;
+      msg(1, "INFO", "overflowThread: ".$cmd);
+      system($cmd);
+      my $scrub_rval = $? >> 8;
+      msg(1, "INFO", "overflowThread: dada_dbscrubber returned ".$scrub_rval);
+    }
+  }
+
+  return 0;
+}
+
 ###############################################################################
 #
 # Process an observation
 #
-sub process($$$$) {
+sub process($$) 
+{
 
-  my ($prev_utc_start, $prev_obs_offset, $proc_db, $proc_db_key) = @_;
+  my ($prev_utc_start, $prev_obs_offset) = @_;
 
   my $localhost = Dada::getHostMachineName();
   my $bindir = Dada::getCurrentBinaryVersion();
   my $processing_dir = $cfg{"CLIENT_RESULTS_DIR"};
 
+  my $overflow_thread = 0;
   my $copy_obs_start_thread = 0;
   my $utc_start = "invalid";
   my $obs_offset = "invalid";
@@ -274,9 +326,8 @@ sub process($$$$) {
   my $result = "";
   my $response = "";
   my %h = ();
-  my $end_of_obs = 1;
   my $obs_xfer = 0;
-  my $header_valid = 1;
+  my $obs_end = 1;
   my $proc_cmd = "";
 
 
@@ -289,52 +340,43 @@ sub process($$$$) {
   # check that this returned ok
   if ($? == 0) 
   {
+    msg(2, "INFO", "process: headerToHash()");
+    %h = Dada::headerToHash($raw_header);
+    $utc_start = $h{"UTC_START"};
+    $obs_offset = $h{"OBS_OFFSET"};
+
     msg(2, "INFO", "process: processHeader()");
     ($result, $response) = Caspsr::processHeader($raw_header, $cfg{"CONFIG_DIR"}); 
+    msg(2, "INFO", "process: processHeader() ".$result." ".$response);
 
     if ($result ne "ok") 
     {
+      msg(0, "INFO", "DADA header malformed, jettesioning xfer");  
       msg(0, "ERROR", $response);
-      msg(0, "ERROR", "DADA header malformed, jettesioning xfer");  
       $proc_cmd = "dada_dbnull -s -k ".$proc_db;
-    } 
+    }
     else
     {
       msg(2, "INFO", "process: DADA header correct");
 
-      msg(2, "INFO", "process: headerToHash()");
-      %h = Dada::headerToHash($raw_header);
-
-      $utc_start = $h{"UTC_START"};
-      $obs_offset = $h{"OBS_OFFSET"};
-
       $proc_cmd = $response;
-      $header_valid = 1;
 
       # check for the OBS_XFER 
       if (defined($h{"OBS_XFER"})) {
         $obs_xfer = $h{"OBS_XFER"};
-        if ($obs_xfer eq "-1") {
-          $end_of_obs = 1;
-        } else {
-          $end_of_obs = 0;
-        }
-      
-      } else {
-        $end_of_obs = 1;
-        $obs_xfer = 0;
+        $obs_end = ($obs_xfer eq "-1") ? 1 : 0;
       }
 
-      msg(2, "INFO", "new header: UTC_START=".$utc_start.", FREQ=".$h{"FREQ"}.
-                        ", OBS_OFFSET=".$obs_offset.", PROC_FILE=".$h{"PROC_FILE"}.
-                        ", OBS_XFER=".$obs_xfer." END_OF_OBS=".$end_of_obs);
+      msg(2, "INFO", "process: UTC_START=".$utc_start.", FREQ=".$h{"FREQ"}.
+                     ", OBS_OFFSET=".$obs_offset.", PROC_FILE=".$h{"PROC_FILE"}.
+                     ", OBS_XFER=".$obs_xfer." OBS_END=".$obs_end);
 
       # special case for and END of XFER
       if ($obs_xfer eq "-1") 
       {
         msg(1, "INFO", "Ignoring final [extra] transfer");
         msg(1, "INFO", "Ignoring: UTC_START=".$utc_start.", OBS_OFFSET=".$obs_offset.
-                       ", OBS_XFER=".$obs_xfer." END_OF_OBS=".$end_of_obs);
+                       ", OBS_XFER=".$obs_xfer." OBS_END=".$obs_end);
         $proc_cmd = "dada_dbnull -s -k ".$proc_db;
       } 
       else 
@@ -342,25 +384,30 @@ sub process($$$$) {
         # if we are a regular XFER
         if ($utc_start eq $prev_utc_start) 
         {
-          if ((!$end_of_obs) && ($obs_offset eq $prev_obs_offset)) 
+          # dspsr should process an entire observation, so this is an error state
+          if ($proc_cmd =~ m/dspsr/) 
           {
-            msg(0, "WARN", "The UTC_START and OBS_OFFSET has been repeated ".
-                           "obs_xfer=".$obs_xfer.", end_of_obs=".$end_of_obs);
+            msg(0, "INFO", "UTC_START repeated, jettesoning transfer");
+            $proc_cmd = "dada_dbnull -s -k ".$proc_db;
+          }
+          # the same header has been repeated, also error state
+          elsif ($obs_offset eq $prev_obs_offset)
+          {
+            msg(0, "INFO", "UTC_START and OBS_OFFSET repeated, obs_xfer=".$obs_xfer);
             $proc_cmd = "dada_dbnull -s -k ".$proc_db;
             msg(1, "INFO", "Ignoring repeat transfer");
           } 
+          # otherwise the proc command will handle this continuing xfer
           else 
           {
             msg(0, "INFO", "Continuing Obs: UTC_START=".$utc_start.  " XFER=".
-                           $obs_xfer." EOB=".$end_of_obs." OFFSET=".$obs_offset);
+                           $obs_xfer." OFFSET=".$obs_offset);
           }
-
-        }  
+        }
         # this is a new observation, setup the directories
         else
         {
-          msg(0, "INFO", "New Observation: UTC_START=".$utc_start." XFER=".
-                         $obs_xfer." EOB=".$end_of_obs);
+          msg(0, "INFO", "New Observation: UTC_START=".$utc_start." XFER=".$obs_xfer);
 
           # create the local directory and UTC_START file
           msg(2, "INFO", "process: createLocalDirectory()");
@@ -403,26 +450,62 @@ sub process($$$$) {
       }
     }
 
-    # run the processing command
-    if ((length($proc_cmd) > 80) && ($dl <= 1)) {
-      msg(1, "INFO", substr($proc_cmd, 0, 80)."...");
-    } else {
-      msg(1, "INFO", $proc_cmd);
+    # launch an overflow thread to monitor the state of the datablock. If this thread
+    # detects a full datablock on the proc_db, it will hard kill dspsr. then it will
+    # launch a dbscrubber
+
+    my $binary = "";
+    my $rest = "";
+    ($binary, $rest) = split(/ /,$proc_cmd,2);
+
+    # only launch the overflow thread if we are doing some sort of processing
+    if ($proc_cmd =~ m/dspsr/) {
+      msg(2, "INFO", "process: overflowThread(".$binary.")");
+      $overflow_thread = threads->new(\&overflowThread, $binary);
     }
 
     chdir $processing_dir;
 
-    $cmd = $bindir."/".$proc_cmd;
-    $cmd .= " 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/".$client_logger;
+    # run the command
 
-    my $returnVal = system($cmd);
+    $cmd = $proc_cmd." 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/".$client_logger."; exit \${PIPESTATUS[0]}";
 
-    if ($returnVal != 0) 
+    msg(2, "INFO", "process: ".$cmd);
+
+    msg(1, "INFO", "START: ".$binary);
+    system($cmd);
+    my $rval = $? >> 8;
+    msg(1, "INFO", "END  : ".$binary." returned ".$rval);
+
+    if ((!$quit_daemon) && ($rval != 0))
     {
-      msg(0, "WARN", "process: command failed: ".$?." ".$returnVal);
+      msg(0, "WARN", $binary." failed, discarding observation");
+    } 
+    else 
+    {
+      if ($binary =~ m/dspsr/) {
+        $obs_end = 1;
+      }
     }
 
-    msg(2, "INFO", "END ".substr($proc_cmd, 0, 60)."...");
+    if ($overflow_thread) 
+    {
+      # kill the overflowThread's processor with INT for normal and TERM for fatal
+      if ($rval == 0) 
+      {
+        $cmd = "pkill -INT -u ".$user." -f '^dada_dboverflow'";
+      }
+      else
+      {
+        $cmd = "pkill -TERM -u ".$user." -f '^dada_dboverflow'";
+      }
+      msg(2, "INFO", "process: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      msg(2, "INFO", "process: () ".$result." ".$response);
+
+      # now it should be safe to join this thread
+      $overflow_thread->join();
+    }
 
     # if we copied the obs.start file, join the thread
     if ($copy_obs_start_thread) 
@@ -432,13 +515,12 @@ sub process($$$$) {
       msg(2, "INFO", "process: copyObsStartThread joined");
     }
 
-    if (($end_of_obs) || ($proc_cmd =~ /dspsr/)) 
+    if (($obs_end) || ($binary =~ m/dspsr/))
     {
       touchPwcFinished($h{"UTC_START"});
-      $end_of_obs = 1;
     }
 
-    return (0, $utc_start, $obs_offset, $end_of_obs);
+    return (0, $utc_start, $obs_offset, $obs_end);
 
   } else {
 
@@ -446,7 +528,7 @@ sub process($$$$) {
       msg(0, "WARN", "dada_header_cmd failed");
       sleep 1;
     }
-    return (1, $utc_start, $obs_offset, $end_of_obs);
+    return (1,$utc_start, $obs_offset, $obs_end);
   }
 }
   
@@ -614,45 +696,21 @@ sub controlThread($$) {
 
   $quit_daemon = 1;
 
-  # Kill the dada_header command
-  $cmd = "pgrep -u ".$user." dada_header";
-  msg(2, "INFO", "controlThread: ".$cmd);
-  ($result, $response) = Dada::mySystem($cmd);
-  msg(2, "INFO", "controlThread: ".$response);
-  $response =~ s/\n/ /g;
-  if (($result eq "ok") && ($response ne "")) {
-    $cmd = "pkill -u ".$user." dada_header";
-    msg(1, "INFO", "controlThread: Killing dada_header: ".$cmd);
-    ($result, $response) = Dada::mySystem($cmd);
-    msg(2, "INFO", "controlThread: ".$result." ".$response);
+  my @tokill = ("dada_header", "dspsr", "caspsr_dbdecidb", "dada_dbnull");
+  my $i = 0;
+  my $regex = "";
+  
+  for ($i=0; $i<=$#tokill; $i++) 
+  {
+    $regex = "^".$tokill[$i];
+    msg(2, "INFO", "controlThread: killProcess(".$regex.", ".$user.")");
+    ($result, $response) = Dada::killProcess($regex, $user);
+    msg(2, "INFO", "controlThread: killProcess ".$result." ".$response);
+    if ($result ne "ok")
+    {
+      msg(1, "WARN", "controlThread: killProcess for ".$regex." failed: ".$response);
+    }
   }
-
-  # Kill all running dspsr commands
-  $cmd = "pgrep -u ".$user." dspsr";
-  msg(2, "INFO", "controlThread: ".$cmd);
-  ($result, $response) = Dada::mySystem($cmd);
-  $response =~ s/\n/ /g;
-  msg(2, "INFO", "controlThread: ".$response);
-  if (($result eq "ok") && ($response ne "")) {
-    $cmd = "pkill -u ".$user." dspsr";
-    msg(1, "INFO", "Killing dspsr: ".$cmd);
-    ($result, $response) = Dada::mySystem($cmd);
-    msg(2, "INFO", "controlThread: ".$result." ".$response);
-  }
-
-  # Kill all running caspsr_dbdecidb commands
-  $cmd = "pgrep -u ".$user." caspsr_dbdecidb";
-  msg(2, "INFO", "controlThread: ".$cmd);
-  ($result, $response) = Dada::mySystem($cmd);
-  $response =~ s/\n/ /g;
-  msg(2, "INFO", "controlThread: ".$response);
-  if (($result eq "ok") && ($response ne "")) {
-    $cmd = "pkill -u ".$user." caspsr_dbdecidb";
-    msg(1, "INFO", "Killing caspsr_dbdecidb: ".$cmd);
-    ($result, $response) = Dada::mySystem($cmd);
-    msg(2, "INFO", "controlThread: ".$result." ".$response);
-  }
-
 
   if ( -f $pid_file) {
     msg(2, "INFO", "controlThread: unlinking PID file");
