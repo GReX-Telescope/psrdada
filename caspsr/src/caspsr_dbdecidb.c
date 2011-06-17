@@ -99,6 +99,8 @@ int dbdecidb_open (dada_client_t* client)
   double new_bytesps = 0;
   uint64_t old_filesize = 0;
   uint64_t new_filesize = 0;
+  uint64_t old_obs_offset = 0;
+  uint64_t new_obs_offset = 0;
 
   assert (client != 0);
 
@@ -143,6 +145,11 @@ int dbdecidb_open (dada_client_t* client)
     multilog (log, LOG_WARNING, "header with no BYTES_PER_SECOND, using %lf\n", old_bytesps);
   }
 
+  if (ascii_header_get (client->header, "OBS_OFFSET", "%"PRIu64, &old_obs_offset) != 1) {
+    old_obs_offset = 0;
+    multilog (log, LOG_WARNING, "header with no OBS_OFFSET, using %"PRIu64"\n", old_obs_offset);
+  }
+
   if (ascii_header_get (client->header, "FILE_SIZE", "%"PRIu64, &old_filesize) != 1) {
     multilog (log, LOG_INFO, "header with no FILE_SIZE, ignoring param\n");
   }
@@ -160,19 +167,30 @@ int dbdecidb_open (dada_client_t* client)
     ctx->quit = 1;
 
   if (ctx->verbose)
-    multilog (log, LOG_INFO, "parsed old BANDWIDTH=%lf, CFREQ=%lf, TSAMP=%lf, BYTES_PER_SECOND=%lf\n",
-              old_bw, old_cf, old_tsamp, old_bytesps);
+    multilog (log, LOG_INFO, "parsed old BANDWIDTH=%lf, CFREQ=%lf, TSAMP=%lf,"
+                             " BYTES_PER_SECOND=%lf, OBS_OFFSET=%"PRIu64"\n", old_bw, 
+                             old_cf, old_tsamp, old_bytesps, old_obs_offset);
 
   // generate the new BANDWIDTH, CFREQ and TSAMP
-  new_bw = (old_bw / ctx->tdec) * powf(-1, ctx->nyquist_zone);
-  new_cf = old_cf + old_bw * ((1.0 / ctx->tdec) * (0.5 + ctx->nyquist_zone) - 0.5);
+  if (ctx->tdec == 1)
+  {
+    new_bw = old_bw;
+    new_cf = old_cf;
+  } 
+  else 
+  {
+    new_bw = (old_bw / ctx->tdec) * powf(-1, ctx->nyquist_zone);
+    new_cf = old_cf + old_bw * ((1.0 / ctx->tdec) * (0.5 + ctx->nyquist_zone) - 0.5);
+  }
   new_tsamp = old_tsamp * ctx->tdec;
   new_bytesps = old_bytesps / ctx->tdec;
   new_filesize = old_filesize / ctx->tdec;
+  new_obs_offset = old_obs_offset / ctx->tdec;
   
   if (ctx->verbose)
-    multilog (log, LOG_INFO, "setting new BANDWIDTH=%lf, CFREQ=%lf, TSAMP=%lf, BYTES_PER_SECOND=%lf\n",
-              new_bw, new_cf, new_tsamp, new_bytesps);
+    multilog (log, LOG_INFO, "setting new BANDWIDTH=%lf, CFREQ=%lf, TSAMP=%lf,"
+                             " BYTES_PER_SECOND=%lf, OBS_OFFSET=%"PRIu64"\n", 
+                             new_bw, new_cf, new_tsamp, new_bytesps, new_obs_offset);
 
   // get the header from the input data block
   uint64_t header_size = ipcbuf_get_bufsz (client->header_block);
@@ -189,27 +207,33 @@ int dbdecidb_open (dada_client_t* client)
   // copy the header from the in to the out
   memcpy ( header, client->header, header_size );
 
-  if (ascii_header_set (header, "CFREQ", "%lf", new_cf) < 0) {
-    multilog (log, LOG_WARNING, "failed to set CFREQ in outgoing header\n");
-  }
-  if (ascii_header_set (header, "FREQ", "%lf", new_cf) < 0) {
-    multilog (log, LOG_WARNING, "failed to set FREQ in outgoing header\n");
-  }
-  if (ascii_header_set (header, "BANDWIDTH", "%lf", new_bw) < 0) {
-    multilog (log, LOG_WARNING, "failed to set BANDWIDTH in outgoing header\n");
-  }
-  if (ascii_header_set (header, "BW", "%lf", new_bw) < 0) {
-    multilog (log, LOG_WARNING, "failed to set BW in outgoing header\n");
-  }
-  if (ascii_header_set (header, "TSAMP", "%lf", new_tsamp) < 0) {
-    multilog (log, LOG_WARNING, "failed to set TSAMP in outgoing header\n");
-  }
-  if (ascii_header_set (header, "BYTES_PER_SECOND", "%lf", new_bytesps) < 0) {
-    multilog (log, LOG_WARNING, "failed to set BYTES_PER_SECOND in outgoing header\n");
-  }
-  if (old_filesize)
-    if (ascii_header_set (header, "FILE_SIZE", "%"PRIu64, new_filesize) < 0) {
-    multilog (log, LOG_WARNING, "failed to set FILE_SIZE in outgoing header\n");
+  if (ctx->tdec != 1)
+  {
+    if (ascii_header_set (header, "CFREQ", "%lf", new_cf) < 0) {
+      multilog (log, LOG_WARNING, "failed to set CFREQ in outgoing header\n");
+    }
+    if (ascii_header_set (header, "FREQ", "%lf", new_cf) < 0) {
+      multilog (log, LOG_WARNING, "failed to set FREQ in outgoing header\n");
+    }
+    if (ascii_header_set (header, "BANDWIDTH", "%lf", new_bw) < 0) {
+      multilog (log, LOG_WARNING, "failed to set BANDWIDTH in outgoing header\n");
+    }
+    if (ascii_header_set (header, "BW", "%lf", new_bw) < 0) {
+      multilog (log, LOG_WARNING, "failed to set BW in outgoing header\n");
+    }
+    if (ascii_header_set (header, "TSAMP", "%lf", new_tsamp) < 0) {
+      multilog (log, LOG_WARNING, "failed to set TSAMP in outgoing header\n");
+    }
+    if (ascii_header_set (header, "BYTES_PER_SECOND", "%lf", new_bytesps) < 0) {
+      multilog (log, LOG_WARNING, "failed to set BYTES_PER_SECOND in outgoing header\n");
+    }
+    if (ascii_header_set (header, "OBS_OFFSET", "%"PRIu64, new_obs_offset) < 0) {
+      multilog (log, LOG_WARNING, "failed to set OBS_OFFSET in outgoing header\n");
+    }
+    if (old_filesize)
+      if (ascii_header_set (header, "FILE_SIZE", "%"PRIu64, new_filesize) < 0) {
+      multilog (log, LOG_WARNING, "failed to set FILE_SIZE in outgoing header\n");
+    }
   }
 
   // mark the outgoing header as filled
@@ -334,6 +358,94 @@ int64_t dbdecidb_write (dada_client_t* client, void* data, uint64_t data_size)
  
   return data_size;
 }
+
+int64_t dbdecidb_write_block_1 (dada_client_t* client, void* data, uint64_t data_size,
+                                uint64_t block_id)
+{
+
+  // the caspsr_dbdecidb specific data
+  caspsr_dbdecidb_t* ctx = 0;
+
+  // status and error logging facility
+  multilog_t * log = 0;
+
+  assert (client != 0);
+  ctx = (caspsr_dbdecidb_t*) client->context;
+
+  assert (client->log != 0);
+  log = client->log;
+
+  assert (ctx != 0);
+  assert (ctx->hdu != 0);
+
+  if (ctx->verbose > 1)
+    multilog (log, LOG_INFO, "dbdecidb_write_block_1: write %"PRIu64" bytes, block=%"PRIu64"\n",
+                data_size, block_id);
+
+  uint64_t out_block_id;
+  uint64_t idat = 0;
+  const uint64_t ndat = data_size;
+  char * indat = (char *) data;
+  char * outdat = 0;
+  
+  if (ctx->block_open)
+    outdat = ctx->curr_block + ctx->bytes_written;
+
+  if (!ctx->block_open)
+  {
+    if (ctx->verbose > 1)
+      multilog (log, LOG_INFO, "dbdecidb_write_block_1: ipcio_open_block_write()\n");
+  
+    ctx->curr_block = ipcio_open_block_write(ctx->hdu->data_block, &out_block_id);
+    if (!ctx->curr_block)
+    { 
+      multilog (log, LOG_ERR, "dbdecidb_write_block_1: ipcio_open_block_write error %s\n", strerror(errno));
+      return -1;
+     } 
+
+    ctx->block_open = 1;
+    outdat = ctx->curr_block;
+  }
+
+  memcpy (outdat, indat, data_size);
+  
+  ctx->bytes_written = data_size;
+
+  if (ctx->bytes_written > ctx->out_block_size)
+    multilog (log, LOG_ERR, "dbdecidb_write_block_1: output block overrun by %"PRIu64" bytes\n",ctx->bytes_written - ctx->out_block_size);
+
+  // check if the output block is now full
+  if (ctx->bytes_written >= ctx->out_block_size)
+  {
+    if (ctx->verbose > 1)
+      multilog (log, LOG_INFO, "dbdecidb_write_block_1: close_block_write(%"PRIu64"\n", ctx->bytes_written);
+    if (ipcio_close_block_write (ctx->hdu->data_block, ctx->bytes_written) < 0)
+    {
+      multilog (log, LOG_ERR, "dbdecidb_write_block_1: ipcio_close_block_write failed\n");
+      return -1;
+    }
+    ctx->block_open = 0;
+    ctx->bytes_written = 0;
+  }
+
+  ctx->bytes_in += data_size;
+  ctx->bytes_out += data_size;
+
+  if (ctx->verbose > 1)
+    multilog (log, LOG_INFO, "dbdecidb_write_block_1: read %"PRIu64", wrote %"PRIu64" bytes\n", data_size, data_size);
+
+  if (ctx->bytes_written > data_size )
+  {
+    ctx->bytes_written = data_size;
+    if (ctx->bytes_written == 0)
+      ctx->bytes_written = 1;
+  }
+
+  return data_size;
+
+}
+
+
 
 /*! Optimized write_block for tdec = 2 */
 int64_t dbdecidb_write_block_2 (dada_client_t* client, void* data, uint64_t data_size,
@@ -767,7 +879,9 @@ int main (int argc, char **argv)
 
   if (zero_copy)
   {
-    if (tdec == 2)
+    if (tdec == 1)
+      client->io_block_function = dbdecidb_write_block_1;
+    else if (tdec == 2)
       client->io_block_function = dbdecidb_write_block_2;
     else
       client->io_block_function = dbdecidb_write_block;
@@ -789,6 +903,7 @@ int main (int argc, char **argv)
 
     if (verbose)
       multilog (log, LOG_INFO, "main: dada_hdu_unlock_read()\n");
+
     if (dada_hdu_unlock_read (hdu) < 0)
     {
       multilog (log, LOG_ERR, "could not unlock read on hdu\n");
