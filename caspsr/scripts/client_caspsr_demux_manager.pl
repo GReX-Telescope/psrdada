@@ -195,6 +195,15 @@ sub runDemuxer($)
     msg(0, "ERROR", "runDemuxer ".$cmd." failed:  ".$response);
   }
 
+  my $regex = "^perl.*".$client_logger." ".$host."_udp";
+  msg(2, "INFO", "receiverThread: killProcess(".$regex.")");
+  my ($killresult, $killresponse) = Dada::killProcess($regex);
+  msg(2, "INFO", "receiverThread: killProcess: ".$result." ".$response);
+  if ($killresult ne "ok") {
+    msg(1, "INFO", "receiverThread: killProcess(".$regex.") returned ".$response);
+  }
+
+
   msg(2, "INFO", "runDemuxer(".$i_demux.") ending");
 
   return ($result, $response);
@@ -371,6 +380,15 @@ sub receiverThread($$$)
   if ($result ne "ok") {
     msg(0, "ERROR", "receiverThread: [".$i_recv."]".$cmd." failed:  ".$response);
   }
+
+  my $regex = "^perl.*".$client_logger." ".$host."_ib".$i_recv;
+  msg(2, "INFO", "receiverThread: killProcess(".$regex.")");
+  my ($killresult, $killresponse) = Dada::killProcess($regex);
+  msg(2, "INFO", "receiverThread: killProcess: ".$result." ".$response);
+  if ($killresult ne "ok") {
+    msg(1, "INFO", "receiverThread: killProcess(".$regex.") returned ".$response);
+  }
+
   return $result;
 }
 
@@ -386,6 +404,7 @@ sub controlThread($$) {
   msg(2, "INFO", "controlThread: starting");
 
   my $cmd = "";
+  my $regex = "";
   my $result = "";
   my $response = "";
 
@@ -394,40 +413,6 @@ sub controlThread($$) {
   }
 
   $quit_daemon = 1;
-
-  # send an INT signal to dbib_thread
-  $cmd = "pgrep dada_header";
-  msg(2, "INFO", "controlThread: ".$cmd);
-  ($result, $response) = Dada::mySystem($cmd);
-  msg(2, "INFO", "controlThread: ".$result." ".$response);
-  if ($result eq "ok") {
-    $cmd = "killall -INT dada_header";
-    msg(1, "INFO", "controlThread: ".$cmd);
-    ($result, $response) = Dada::mySystem($cmd);
-    msg(2, "INFO", "controlThread: ".$result." ".$response);
-  }
-
-  $cmd = "pgrep ".$cfg{"IB_ACTIVE_BINARY"};
-  msg(2, "INFO", "controlThread: ".$cmd);
-  ($result, $response) = Dada::mySystem($cmd);
-  msg(2, "INFO", "controlThread: ".$result." ".$response);
-  if ($result eq "ok") {
-    $cmd = "killall -KILL ".$cfg{"IB_ACTIVE_BINARY"};
-    msg(1, "INFO", "controlThread: ".$cmd);
-    ($result, $response) = Dada::mySystem($cmd);
-    msg(2, "INFO", "controlThread: ".$result." ".$response);
-  }
-
-  $cmd = "pgrep ".$cfg{"IB_INACTIVE_BINARY"};
-  msg(2, "INFO", "controlThread: ".$cmd);
-  ($result, $response) = Dada::mySystem($cmd);
-  msg(2, "INFO", "controlThread: ".$result." ".$response);
-  if ($result eq "ok") {
-    $cmd = "killall -INT ".$cfg{"IB_INACTIVE_BINARY"};
-    msg(1, "INFO", "controlThread: ".$cmd);
-    ($result, $response) = Dada::mySystem($cmd);
-    msg(2, "INFO", "controlThread: ".$result." ".$response);
-  }
 
   # instruct the DEMUX_BINARIES to exit forthwith
   my $host = Dada::getHostMachineName();
@@ -441,6 +426,41 @@ sub controlThread($$) {
     ($result, $response) = Dada::sendTelnetCommand($handle, "QUIT");
     msg(1, "INFO", "controlThread: ".$control_port." -> ".$result." ".$response);
     $handle->close();
+  }
+
+  $regex = "^dada_header";
+  msg(2, "INFO", "controlThread: killProcess(".$regex.")");
+  ($result, $response) = Dada::killProcess($regex);
+  msg(2, "INFO", "controlThread: killProcess: ".$result." ".$response);
+  if ($result ne "ok") {
+    msg(1, "INFO", "controlThread: killProcess(".$regex.") returned ".$response);
+  }
+  
+  $regex = "^".$cfg{"IB_ACTIVE_BINARY"};
+  msg(2, "INFO", "controlThread: killProcess(".$regex.")");
+  ($result, $response) = Dada::killProcess($regex);
+  msg(2, "INFO", "controlThread: killProcess: ".$result." ".$response);
+  if ($result ne "ok") {
+    msg(1, "INFO", "controlThread: killProcess(".$regex.") returned ".$response);
+  }
+
+  $regex = "^".$cfg{"IB_INACTIVE_BINARY"};
+  msg(2, "INFO", "controlThread: killProcess(".$regex.")");
+  ($result, $response) = Dada::killProcess($regex);
+  msg(2, "INFO", "controlThread: killProcess: ".$result." ".$response);
+  if ($result ne "ok") {
+    msg(1, "INFO", "controlThread: killProcess(".$regex.") returned ".$response);
+  }
+
+  # allow 1 second for the logger (attahced to these daemons) to quit
+  sleep(1);
+
+  $regex = "^perl.*".$client_logger;
+  msg(2, "INFO", "controlThread: killProcess(".$regex.")");
+  ($result, $response) = Dada::killProcess($regex);
+  msg(2, "INFO", "controlThread: killProcess: ".$result." ".$response);
+  if ($result ne "ok") {
+    msg(1, "INFO", "controlThread: killProcess(".$regex.") returned ".$response);
   }
 
   if ( -f $pid_file) {
