@@ -112,7 +112,7 @@ int caspsr_udpNdb_close_hdu (udpNdb_t * ctx, uint64_t bytes_written);
 int caspsr_udpNdb_open_hdu (udpNdb_t * ctx);
 int caspsr_udpNdb_new_hdu (udpNdb_t * ctx);
 int caspsr_udpNdb_open_buffer (udpNdb_t * ctx);
-int caspsr_udpNdb_close_buffer (udpNdb_t * ctx, uint64_t bytes_written);
+int caspsr_udpNdb_close_buffer (udpNdb_t * ctx, uint64_t bytes_written, unsigned eod);
 int caspsr_udpNdb_new_buffer (udpNdb_t * ctx);
 
 time_t udpNdb_start_function (udpNdb_t * ctx);

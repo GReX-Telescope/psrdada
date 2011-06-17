@@ -90,7 +90,11 @@ int caspsr_udpNdb_init_receiver (udpNdb_t * ctx)
   // create a CASPSR socket which can hold 1 UDP packet
   ctx->sock = caspsr_init_sock();
 
-  ctx->packets_this_xfer = 0;
+  // create a "zereod packet" for quick padding
+  ctx->zeroed_packet = (char *) malloc (UDP_DATA);
+  memset(ctx->zeroed_packet, 0, UDP_DATA);
+
+  //ctx->packets_this_xfer = 0;
   ctx->ooo_packets = 0;
   ctx->recv_core = 0;
   ctx->n_sleeps = 0;
@@ -115,6 +119,11 @@ int caspsr_udpNdb_init_receiver (udpNdb_t * ctx)
 int caspsr_udpNdb_destroy_receiver (udpNdb_t * ctx)
 {
   caspsr_free_sock(ctx->sock);
+
+  if (ctx->zeroed_packet)
+    free (ctx->zeroed_packet);
+  ctx->zeroed_packet = 0;
+
 }
 
 /*
@@ -167,7 +176,7 @@ time_t caspsr_udpNdb_start_function (udpNdb_t * ctx)
   size_t cleared = dada_sock_clear_buffered_packets(ctx->sock->fd, UDP_PAYLOAD);
 
   // setup the next_seq to the initial value
-  ctx->packets_this_xfer = 0;
+  //ctx->packets_this_xfer = 0;
   ctx->next_seq = 0;
   ctx->n_sleeps = 0;
   ctx->ooo_packets = 0;
@@ -218,8 +227,8 @@ int caspsr_udpNdb_close_hdu (udpNdb_t * ctx, uint64_t bytes_written)
   if (ctx->block_open) 
   {
     if ((ctx->verbose && stop_pending) || (ctx->verbose > 1))
-      multilog (ctx->log, LOG_INFO, "close_hdu: caspsr_udpNdb_close_buffer(%"PRIu64")\n", bytes_written);
-    if (caspsr_udpNdb_close_buffer (ctx, bytes_written) < 0)
+      multilog (ctx->log, LOG_INFO, "close_hdu: caspsr_udpNdb_close_buffer(%"PRIu64", 1)\n", bytes_written);
+    if (caspsr_udpNdb_close_buffer (ctx, bytes_written, 1) < 0)
     {
       multilog (ctx->log, LOG_INFO, "close_hdu: caspsr_udpNdb_close_buffer failed\n");
       return -1;
@@ -253,7 +262,8 @@ int caspsr_udpNdb_open_hdu (udpNdb_t * ctx)
   ipcbuf_t * data_block = 0; 
   uint64_t header_size;
   char * header = 0;
-
+  uint64_t transfer_size = ctx->packets_per_xfer * UDP_DATA;
+    
   if (ctx->verbose > 1)
     multilog(ctx->log, LOG_INFO, "open_hdu: dada_hdu_lock_write ihdu=%d\n", ctx->ihdu);
 
@@ -282,6 +292,9 @@ int caspsr_udpNdb_open_hdu (udpNdb_t * ctx)
 
   if (ascii_header_set (header, "HDR_SIZE", "%"PRIu64, header_size) < 0)
     multilog (ctx->log, LOG_WARNING, "Could not write HDR_SIZE to header\n");
+
+  if (ascii_header_set (header, "TRANSFER_SIZE", "%"PRIu64, transfer_size) < 0)
+    multilog (ctx->log, LOG_WARNING, "Could not write TRANSFER_SIZE to header\n");
 
   if (ctx->verbose)
     multilog(ctx->log, LOG_INFO, "open_hdu: OBS_XFER=%"PRIi64", OBS_OFFSET=%"PRIu64"\n", 
@@ -403,11 +416,11 @@ int caspsr_udpNdb_open_buffer (udpNdb_t * ctx)
 /*
  *  close a data buffer, assuming a full block has been written
  */
-int caspsr_udpNdb_close_buffer (udpNdb_t * ctx, uint64_t bytes_written)
+int caspsr_udpNdb_close_buffer (udpNdb_t * ctx, uint64_t bytes_written, unsigned eod)
 {
 
   if (ctx->verbose && stop_pending || ctx->verbose > 1)
-    multilog (ctx->log, LOG_INFO, "caspsr_udpNdb_close_buffer(%"PRIu64")\n", bytes_written);
+    multilog (ctx->log, LOG_INFO, "caspsr_udpNdb_close_buffer(%"PRIu64", %d)\n", bytes_written, eod);
 
   if (!ctx->hdu_open)
   {
@@ -421,14 +434,27 @@ int caspsr_udpNdb_close_buffer (udpNdb_t * ctx, uint64_t bytes_written)
     return -1;
   }
 
-  if (ctx->verbose > 1)
-    multilog (ctx->log, LOG_INFO, "close_buffer: ipcio_close_block_write "
-              "for %"PRIu64" bytes\n", bytes_written);
+  // log any buffers that are not full, except for the 1 byte "EOD" buffer
+  if ((bytes_written != 1) && (bytes_written != ctx->hdu_bufsz))
+    multilog (ctx->log, (eod ? LOG_INFO : LOG_WARNING), "close_buffer: "
+              "bytes_written[%"PRIu64"] != hdu_bufsz[%"PRIu64"]\n", 
+              bytes_written, ctx->hdu_bufsz);
 
-  if (ipcio_close_block_write (ctx->hdus[ctx->ihdu]->data_block, bytes_written) < 0)
+  if (eod)
   {
-    multilog (ctx->log, LOG_ERR, "close_buffer: ipcio_close_block_write failed\n");
-    return -1;
+    if (ipcio_update_block_write (ctx->hdus[ctx->ihdu]->data_block, bytes_written) < 0)
+    {
+      multilog (ctx->log, LOG_ERR, "close_buffer: ipcio_update_block_write failed\n");
+      return -1;
+    }
+  }
+  else 
+  {
+    if (ipcio_close_block_write (ctx->hdus[ctx->ihdu]->data_block, bytes_written) < 0)
+    {
+      multilog (ctx->log, LOG_ERR, "close_buffer: ipcio_close_block_write failed\n");
+      return -1;
+    }
   }
 
   ctx->current_buffer = 0;
@@ -447,7 +473,7 @@ int caspsr_udpNdb_new_buffer (udpNdb_t * ctx)
   if (ctx->verbose > 1)
     multilog (ctx->log, LOG_INFO, "caspsr_udpNdb_new_buffer()\n");
 
-  if (caspsr_udpNdb_close_buffer (ctx, ctx->hdu_bufsz) < 0)
+  if (caspsr_udpNdb_close_buffer (ctx, ctx->hdu_bufsz, 0) < 0)
   {
     multilog (ctx->log, LOG_INFO, "new_buffer: caspsr_udpNdb_close_buffer failed\n");
     return -1;
@@ -552,6 +578,10 @@ void * caspsr_udpNdb_receive_obs (void * arg)
 
   // start byte of the current UDP packet
   uint64_t packet_byte = 0;
+
+  // used to pad packets
+  uint64_t pad_start = 0;
+  uint64_t iseq = 0;
 
   int64_t byte_offset = 0;
   uint64_t seq_byte = 0;
@@ -688,20 +718,41 @@ void * caspsr_udpNdb_receive_obs (void * arg)
 
       seq_no = (offset_raw_seq_no) / seq_inc;
 
-      // "byte" that this packet corresponds to
-      //byte_offset = seq_no * UDP_DATA;
+      pad_start = seq_no;
 
-      if ((prev_seq_no) && ((seq_no - prev_seq_no) != 1))
+      if (prev_seq_no)
       {
-        if (ctx->verbose)
-          multilog(ctx->log, LOG_INFO, "receive_obs: RESET raw=%"PRIu64", fixed=%"PRIu64", "
-                   "offset=%"PRIu64", seq_inc=%"PRIu64", remainder=%d, seq=%"PRIu64", "
-                   "prev_seq=%"PRIu64", seq_diff=%"PRIi64"\n", raw_seq_no, fixed_raw_seq_no, offset_raw_seq_no,  
-                    seq_inc, (int) (offset_raw_seq_no % seq_inc), seq_no, prev_seq_no, 
-                    (int64_t) seq_no - (int64_t) prev_seq_no);
+        if (seq_no == prev_seq_no + 1)
+        {
+          // this is normal, do nothing
+        }
+        else if (seq_no < prev_seq_no)
+        {
+          // this is a normal packet reset
+          if (ctx->verbose)
+            multilog(ctx->log, LOG_INFO, "receive_obs: RESET raw=%"PRIu64", fixed=%"PRIu64", "
+                     "offset=%"PRIu64", seq_inc=%"PRIu64", remainder=%d, seq=%"PRIu64", "
+                     "prev_seq=%"PRIu64", seq_diff=%"PRIi64"\n", raw_seq_no, fixed_raw_seq_no, 
+                     offset_raw_seq_no, seq_inc, (int) (offset_raw_seq_no % seq_inc), 
+                     seq_no, prev_seq_no, (int64_t) seq_no - (int64_t) prev_seq_no);
+          else
+            multilog(ctx->log, LOG_INFO, "packet reset detected seq=%"PRIu64" prev=%"PRIu64"\n",
+                     seq_no, prev_seq_no);
+        }
         else
-          multilog(ctx->log, LOG_INFO, "packet reset detected seq=%"PRIu64" prev=%"PRIu64"\n",
-                   seq_no, prev_seq_no);
+        {
+          // this is a problematic packet sequence number jump
+          multilog(ctx->log, LOG_INFO, "receive_obs: JUMP raw=%"PRIu64", fixed=%"PRIu64", "
+                   "offset=%"PRIu64", seq_inc=%"PRIu64", remainder=%d, seq=%"PRIu64", "
+                   "prev_seq=%"PRIu64", seq_diff=%"PRIi64"\n", raw_seq_no, fixed_raw_seq_no, 
+                   offset_raw_seq_no, seq_inc, (int) (offset_raw_seq_no % seq_inc), 
+                   seq_no, prev_seq_no, (int64_t) seq_no - (int64_t) prev_seq_no);
+
+          multilog(ctx->log, LOG_WARNING, "dropped %"PRIi64" packets\n", (int64_t) seq_no - (int64_t) prev_seq_no);
+
+          // need to start padding with zero's until we catch up
+         pad_start = prev_seq_no + 1;
+        }
       }
 
       if ((!ignore_packet) && (remainder != 0)) 
@@ -756,134 +807,149 @@ void * caspsr_udpNdb_receive_obs (void * arg)
 
       have_packet = 0;
 
-      if (seq_no > ctx->next_seq)
-        ctx->ooo_packets += seq_no - ctx->next_seq;
-
-      // determine the offset for this packet in the current ring buffer
-      seq_byte = seq_no * UDP_DATA;
-
-      // check for the stopping condition
-      if (stop_byte)
+      // this loop should only be iterated once unless there is a packet jump
+      for (iseq=pad_start; iseq<=seq_no; iseq++)
       {
-        if (seq_byte >= stop_byte)
-        {
-          if (ctx->verbose)
-          {
-            multilog(ctx->log, LOG_INFO, "receive_obs: STOP seq_byte[%"PRIu64"]"
-                     " >= stop_byte[%"PRIu64"], stopping\n", seq_byte, stop_byte);
-            multilog(ctx->log, LOG_INFO, "receive_obs: STOP buffer[%"PRIu64" - "
-                     "%"PRIu64"]\n", ctx->buffer_start_byte, ctx->buffer_end_byte);
-            multilog(ctx->log, LOG_INFO, "receive_obs: STOP xfer[%"PRIu64" - "
-                     "%"PRIu64"]\n", ctx->xfer_start_byte, ctx->xfer_end_byte);
-          }
-          stop_pending = 1;
 
-          // try to determine how much data has been written
-          uint64_t bytes_just_written = 0;
-          if (seq_byte < ctx->buffer_end_byte)
-            bytes_just_written = seq_byte - ctx->buffer_start_byte;
+        if (iseq > ctx->next_seq)
+          ctx->ooo_packets += iseq - ctx->next_seq;
+
+        // determine the offset for this packet in the current ring buffer
+        seq_byte = iseq * UDP_DATA;
+
+        // check for the stopping condition
+        if (stop_byte)
+        {
+          if (seq_byte >= stop_byte)
+          {
+            if (ctx->verbose)
+            {
+              multilog(ctx->log, LOG_INFO, "receive_obs: STOP seq_byte[%"PRIu64"]"
+                       " >= stop_byte[%"PRIu64"], stopping\n", seq_byte, stop_byte);
+              multilog(ctx->log, LOG_INFO, "receive_obs: STOP buffer[%"PRIu64" - "
+                       "%"PRIu64"]\n", ctx->buffer_start_byte, ctx->buffer_end_byte);
+              multilog(ctx->log, LOG_INFO, "receive_obs: STOP xfer[%"PRIu64" - "
+                       "%"PRIu64"]\n", ctx->xfer_start_byte, ctx->xfer_end_byte);
+            }
+            stop_pending = 1;
+
+            // try to determine how much data has been written
+            uint64_t bytes_just_written = 0;
+            if (seq_byte < ctx->buffer_end_byte)
+              bytes_just_written = seq_byte - ctx->buffer_start_byte;
+            else
+              bytes_just_written = ctx->hdu_bufsz;
+
+            if (ctx->verbose)
+            {
+              multilog(ctx->log, LOG_INFO, "receive_obs: STOP hdu=%d, bytes_just_"
+                       "written=%"PRIu64" bytes_in_xfer=%"PRIu64" bytes\n", 
+                       ctx->ihdu, bytes_just_written, (seq_byte - ctx->xfer_start_byte));
+              multilog(ctx->log, LOG_INFO, "receive_obs: STOP caspsr_udpNdb_close_"
+                       "hdu(%"PRIu64")\n", bytes_just_written);
+            }
+
+            if (caspsr_udpNdb_close_hdu (ctx, bytes_just_written) < 0)
+            {
+              multilog(ctx->log, LOG_ERR, "receive_obs: caspsr_udpNdb_close_hdu failed\n");
+              thread_result = -1;
+              pthread_exit((void *) &thread_result);
+            }
+            stop_byte = 0;
+            break;
+          }
+        }
+
+        if (stop_pending) {
+          multilog(ctx->log, LOG_ERR, "receive_obs: stop_pending after break - SHOULD NOT HAPPEN!\n");
+        }
+
+        // packet arrived too late, ignore it
+        if (seq_byte < ctx->buffer_start_byte)
+        {
+          multilog (log, LOG_WARNING, "PACKET DROP seq_byte=%"PRIu64", buffer_start_byte=%"PRIu64"\n", 
+                        seq_byte, ctx->buffer_end_byte);
+          ctx->packets->dropped++;
+          ctx->bytes->dropped += UDP_DATA;
+        }
+        else
+        {
+          // the packet arrived on time, process it
+          if (seq_byte <= ctx->buffer_end_byte)
+          {
+            // no need to adjust, belongs in current block
+
+          } 
+          // the packet belongs in the next subsequent buffer of this xfer
+          else if (seq_byte < ctx->xfer_end_byte)
+          {
+            if (ctx->verbose)
+              multilog (log, LOG_INFO, "BLOCK COMPLETE hdu[%d] seq_no=%"PRIu64", "
+                        "seq_byte=%"PRIu64", buffer_end_byte=%"PRIu64"\n", 
+                        ctx->ihdu, iseq, seq_byte, ctx->buffer_end_byte);
+            if (caspsr_udpNdb_new_buffer (ctx) < 0)
+            {
+              multilog(ctx->log, LOG_ERR, "receive_obs: caspsr_udpNdb_new_buffer failed\n");
+              thread_result = -1;
+              pthread_exit((void *) &thread_result);
+            }
+          } 
+          // the packet belongs in the next xfer
+          else 
+          {
+            if (ctx->verbose)
+              multilog (log, LOG_INFO, "XFER COMPLETE hdu[%d] seq_no=%"PRIu64", "
+                        "seq_byte=%"PRIu64", xfer_end_byte=%"PRIu64"\n", 
+                        ctx->ihdu, iseq, seq_byte, ctx->xfer_end_byte);
+
+            // close current buffer, hdu, open next hdu and open first block
+            if (caspsr_udpNdb_new_hdu (ctx) < 0)
+            {
+              multilog(ctx->log, LOG_ERR, "receive_obs: caspsr_udpNdb_new_hdu failed\n");
+              thread_result = -1;
+              pthread_exit((void *) &thread_result);
+            }
+            //ctx->packets_this_xfer = 1;
+          }
+
+          if (!ctx->current_buffer)
+          {
+            multilog (log, LOG_ERR, "receive_obs: failed to move to new buffer element\n");
+          }
+
+          byte_offset = seq_byte - ctx->buffer_start_byte;
+
+          if ((byte_offset < 0) || (byte_offset > (ctx->hdu_bufsz-UDP_DATA)))
+          {
+            multilog (log, LOG_INFO, "receive_obs: ctx->hdu_bufsz=%"PRIu64"\n", ctx->hdu_bufsz);
+            multilog (log, LOG_INFO, "receive_obs: byte_offset=%"PRIi64"\n", byte_offset);
+            multilog (log, LOG_INFO, "receive_obs: seq_byte=%"PRIu64"\n", seq_byte);
+            multilog (log, LOG_INFO, "receive_obs: buffer_start_byte=%"PRIu64", buffer_end_byte=%"PRIu64"\n",
+                      ctx->buffer_start_byte, ctx->buffer_end_byte);
+
+            multilog(ctx->log, LOG_ERR, "receive_obs: packet sequence jumped too far in future\n");
+            thread_result = -1;
+            pthread_exit((void *) &thread_result);
+          }
+
+          if (iseq == seq_no)
+          {
+            // write the packet data (minus seq_no and chid) into ring buffer
+            memcpy (ctx->current_buffer + byte_offset, ctx->sock->buffer + UDP_HEADER, UDP_DATA);
+            ctx->packets->received++;
+          }
           else
-            bytes_just_written = ctx->hdu_bufsz;
-
-          if (ctx->verbose)
           {
-            multilog(ctx->log, LOG_INFO, "receive_obs: STOP hdu=%d, bytes_just_"
-                     "written=%"PRIu64" bytes_in_xfer=%"PRIu64" bytes\n", 
-                     ctx->ihdu, bytes_just_written, (seq_byte - ctx->xfer_start_byte));
-            multilog(ctx->log, LOG_INFO, "receive_obs: STOP caspsr_udpNdb_close_"
-                     "hdu(%"PRIu64")\n", bytes_just_written);
+            memcpy (ctx->current_buffer + byte_offset, ctx->zeroed_packet, UDP_DATA);
+            ctx->packets->dropped++;
           }
 
-          if (caspsr_udpNdb_close_hdu (ctx, bytes_just_written) < 0)
-          {
-            multilog(ctx->log, LOG_ERR, "receive_obs: caspsr_udpNdb_close_hdu failed\n");
-            thread_result = -1;
-            pthread_exit((void *) &thread_result);
-          }
-          stop_byte = 0;
-          break;
+          // update statistics
+          ctx->bytes->received += UDP_DATA;
+          //ctx->packets_this_xfer++;
         }
-      }
-
-      if (stop_pending) {
-        multilog(ctx->log, LOG_ERR, "receive_obs: stop_pending after break - SHOULD NOT HAPPEN!\n");
-      }
-
-      // packet arrived too late, ignore it
-      if (seq_byte < ctx->buffer_start_byte)
-      {
-        multilog (log, LOG_WARNING, "PACKET DROP seq_byte=%"PRIu64", buffer_start_byte=%"PRIu64"\n", 
-                      seq_byte, ctx->buffer_end_byte);
-        ctx->packets->dropped++;
-        ctx->bytes->dropped += UDP_DATA;
-      }
-      else
-      {
-        // the packet arrived on time, process it
-        if (seq_byte <= ctx->buffer_end_byte)
-        {
-          // no need to adjust, belongs in current block
-
-        } 
-        // the packet belongs in the next subsequent buffer of this xfer
-        else if (seq_byte < ctx->xfer_end_byte)
-        {
-          if (ctx->verbose)
-            multilog (log, LOG_INFO, "BLOCK COMPLETE hdu[%d] seq_no=%"PRIu64", "
-                      "seq_byte=%"PRIu64", buffer_end_byte=%"PRIu64"\n", 
-                      ctx->ihdu, seq_no, seq_byte, ctx->buffer_end_byte);
-          if (caspsr_udpNdb_new_buffer (ctx) < 0)
-          {
-            multilog(ctx->log, LOG_ERR, "receive_obs: caspsr_udpNdb_new_buffer failed\n");
-            thread_result = -1;
-            pthread_exit((void *) &thread_result);
-          }
-        } 
-        // the packet belongs in the next xfer
-        else 
-        {
-          if (ctx->verbose)
-            multilog (log, LOG_INFO, "XFER COMPLETE hdu[%d] seq_no=%"PRIu64", "
-                      "seq_byte=%"PRIu64", xfer_end_byte=%"PRIu64"\n", 
-                      ctx->ihdu, seq_no, seq_byte, ctx->xfer_end_byte);
-
-          // close current buffer, hdu, open next hdu and open first block
-          if (caspsr_udpNdb_new_hdu (ctx) < 0)
-          {
-            multilog(ctx->log, LOG_ERR, "receive_obs: caspsr_udpNdb_new_hdu failed\n");
-            thread_result = -1;
-            pthread_exit((void *) &thread_result);
-          }
-          ctx->packets_this_xfer = 1;
-        }
-
-        if (!ctx->current_buffer)
-        {
-          multilog (log, LOG_ERR, "receive_obs: failed to move to new buffer element\n");
-        }
-
-        byte_offset = seq_byte - ctx->buffer_start_byte;
-
-        if ((byte_offset < 0) || (byte_offset > (ctx->hdu_bufsz-UDP_DATA)))
-        {
-          multilog (log, LOG_ERR, "receive_obs: ctx->hdu_bufsz=%"PRIu64"\n", ctx->hdu_bufsz);
-          multilog (log, LOG_ERR, "receive_obs: byte_offset=%"PRIi64"\n", byte_offset);
-          multilog (log, LOG_ERR, "receive_obs: seq_byte=%"PRIu64"\n", seq_byte);
-          multilog (log, LOG_ERR, "receive_obs: buffer_start_byte=%"PRIu64", buffer_end_byte=%"PRIu64"\n",
-                    ctx->buffer_start_byte, ctx->buffer_end_byte);
-          exit(EXIT_FAILURE);
-        }
-
-        // write the packet data (minus seq_no and chid) into ring buffer
-        memcpy (ctx->current_buffer + byte_offset, ctx->sock->buffer + UDP_HEADER, UDP_DATA);
-
-        // update statistics
-        ctx->bytes->received += UDP_DATA;
-        ctx->packets->received++;
-        ctx->packets_this_xfer++;
-
-      }
-    } 
+      } 
+    }
 
     // we have ignored more than 10 packets
     if (problem_packets > 10) {
@@ -1521,7 +1587,7 @@ void control_thread (void * arg)
 
       if (rgot && !feof(sockin)) {
 
-        buffer[strlen(buffer)-1] = '\0';
+        buffer[strlen(buffer)-2] = '\0';
 
         args = buffer;
 
