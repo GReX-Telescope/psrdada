@@ -23,7 +23,7 @@ sub usage() {
 #
 $Dada::server_transfer_manager::dl = 1;
 $Dada::server_transfer_manager::daemon_name = Dada::daemonBaseName($0);
-$Dada::server_transfer_manager::rate = 100;
+$Dada::server_transfer_manager::rate = 300;
 $Dada::server_transfer_manager::server_logger = "server_apsr_logger.pl";
 $Dada::server_transfer_manager::dest_id = 0;
 
