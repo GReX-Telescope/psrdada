@@ -216,7 +216,7 @@ function printClientDaemons($config, $control) {
   $daemons = split(" ",$config["CLIENT_DAEMONS"]);
   $d_info  = getDaemonInfo($pwcs, INSTRUMENT);
   $d_names = getClientLogInformation();
-  $db_info = getDBInfo($pwcs, "eada", INSTRUMENT);
+  $db_info = getDBInfo($pwcs, "dada", INSTRUMENT);
 
   # Table headers
   echo "<tr><th></th>\n";
