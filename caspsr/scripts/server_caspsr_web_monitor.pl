@@ -39,6 +39,7 @@ our $curr_obs : shared;
 our $status_info : shared;
 our $image_info : shared;
 our $gain_info : shared;
+our $archival_info : shared;
 our $dish_image : shared;
 
 #
@@ -58,6 +59,7 @@ $curr_obs = "";
 $status_info = "";
 $image_info = "";
 $gain_info = "";
+$archival_info = "";
 $dish_image = 0x00;
 
 # Autoflush STDOUT
@@ -95,6 +97,7 @@ sub main() {
   my $curr_info_thread = 0;   # Current source information [L]
   my $status_info_thread = 0; # Current status file information [L]
   my $gain_info_thread = 0;   # Current gain information [L]
+  my $archival_info_thread = 0;   # Current archival information [L]
   my $dish_image_thread = 0;  # Current image of PKS dish
 
   my $result = "";
@@ -110,6 +113,13 @@ sub main() {
   if ($result ne "ok") {
     print STDERR $response."\n";
     return 1;
+  }
+
+  if ( -f $warn ) {
+    unlink $warn;
+  }
+  if ( -f $error) { 
+    unlink $error; 
   }
 
   # install signal handlers
@@ -137,6 +147,7 @@ sub main() {
   $status_info_thread = threads->new(\&statusInfoThread);
   $node_info_thread = threads->new(\&nodeInfoThread);
   $image_info_thread = threads->new(\&imageInfoThread, $cfg{"SERVER_RESULTS_DIR"});
+  $archival_info_thread = threads->new(\&archivalInfoThread, $cfg{"SERVER_RESULTS_DIR"});
   #$dish_image_thread = threads->new(\&dishImageThread);
   #$gain_info_thread = threads->new(\&gainInfoThread);
 
@@ -186,6 +197,8 @@ sub main() {
             $r = $status_info; 
           } elsif ($string eq "machine_info") {
             $r = $status_info.$node_info;
+          } elsif ($string eq "archival_info") {
+            $r = $archival_info;
           } elsif ($string eq "dish_image") {
             $r = $dish_image;
           } else {
@@ -215,6 +228,7 @@ sub main() {
   $status_info_thread->join();
   $node_info_thread->join();
   $image_info_thread->join();
+  $archival_info_thread->join();
   #$dish_image_thread->join();
 
   close($server_sock);
@@ -279,7 +293,6 @@ sub currentInfoThread($) {
         $integrated = 0;
         $source = $cfg_file{"SOURCE"};
         $source =~ s/^[JB]//;
-        #$source =~ s/[a-zA-Z]*$//;
 
         Dada::logMsg(2, $dl, "currentInfoThread: [".$results_dir."/".$obs."/".$source."_t.tot]");
 
@@ -289,8 +302,10 @@ sub currentInfoThread($) {
           ($result, $response) = Dada::mySystem($cmd);
           Dada::logMsg(2, $dl, "currentInfoThread: ".$result." ".$response);
           chomp $response;
-          if ($result eq "ok") {
+          if (($result eq "ok") && ($response ne "")) {
             $integrated = sprintf("%5.1f",$response);
+          } else {
+            $integrated = 0.0;
           }
         }
 
@@ -302,8 +317,10 @@ sub currentInfoThread($) {
           ($result, $response) = Dada::mySystem($cmd);
           Dada::logMsg(2, $dl, "currentInfoThread: ".$result." ".$response);
           chomp $response;
-          if ($result eq "ok") {
+          if (($result eq "ok") && ($response ne "")) {
             $snr = sprintf("%5.1f",$response);
+          } else {
+            $snr = "0.0";
           }
         }
 
@@ -354,6 +371,8 @@ sub imageInfoThread($) {
   my @images = ();
   my $obs = "";
   my $tmp_str = "";
+  my $src_list = "";
+  my @src_array = ();
 
   my $i = 0;
   my $k = 0;
@@ -389,6 +408,31 @@ sub imageInfoThread($) {
 
       if ($obs ne "") {
 
+        # get all srcs based on subdirs
+        %srcs = ();
+        $cmd = "find ".$obs." -mindepth 1 -maxdepth 1 -type d -printf '\%f\n' | sort";
+        $src_list = `$cmd`;
+        chomp $src_list;
+
+        @src_array = ();
+        @src_array = split(/\n/, $src_list);
+        for ($i=0; $i<=$#src_array; $i++)
+        {
+          $srcs{$src_array[$i]} = 1;
+        }
+
+        # also check sources based on archives
+        $cmd = "find ".$obs." -mindepth 1 -maxdepth 1 -type f -name '*_f.tot' -printf '\%f\n' | awk -F_ '{print \$1}' | sort";
+        $src_list = `$cmd`;
+        chomp $src_list;
+
+        @src_array = ();
+        @src_array = split(/\n/, $src_list);
+        for ($i=0; $i<=$#src_array; $i++)
+        {
+          $srcs{$src_array[$i]} = 1;
+        }
+
         # get all images
         $cmd = "find ".$obs." -name '*.png' | sort";
         $image_string = `$cmd`;
@@ -402,17 +446,16 @@ sub imageInfoThread($) {
         %pvt_hi = ();
         %bp_lo = ();
         %bp_hi = ();
-        %srcs = ();
 
         for ($i=0; $i<=$#images; $i++) {
           $img = $images[$i];
           @parts = split(/_/,$img);
+  
           if ($img =~ m/phase_vs/) {
             $src = $parts[3];
           } else {
             $src = $parts[1];
           }
-          $srcs{$src} = 1;
       
           if (($img =~ m/phase_vs_flux/) && ($img =~ m/240x180/)) { $pvfl_lo{$src} = $img; }
           if (($img =~ m/phase_vs_flux/) && ($img =~ m/200x150/)) { $pvfl_lo{$src} = $img; }
@@ -432,14 +475,14 @@ sub imageInfoThread($) {
         @keys = sort keys %srcs;
         for ($i=0; $i<=$#keys; $i++) {
           $k = $keys[$i];
-          if (! exists $pvfl_lo{$k}) { $pvfl_lo{$k} = "../../../images/blankimage.gif"; }
-          if (! exists $pvfl_hi{$k}) { $pvfl_hi{$k} = "../../../images/blankimage.gif"; }
-          if (! exists $pvfr_lo{$k}) { $pvfr_lo{$k} = "../../../images/blankimage.gif"; }
-          if (! exists $pvfr_hi{$k}) { $pvfr_hi{$k} = "../../../images/blankimage.gif"; }
-          if (! exists $pvt_lo{$k})  { $pvt_lo{$k} = "../../../images/blankimage.gif"; }
-          if (! exists $pvt_hi{$k})  { $pvt_hi{$k} = "../../../images/blankimage.gif"; }
-          if (! exists $bp_lo{$k})   { $bp_lo{$k} = "../../../images/blankimage.gif"; }
-          if (! exists $bp_hi{$k})   { $bp_hi{$k} = "../../../images/blankimage.gif"; }
+          if (! defined $pvfl_lo{$k}) { $pvfl_lo{$k} = "../../../images/blankimage.gif"; }
+          if (! defined $pvfl_hi{$k}) { $pvfl_hi{$k} = "../../../images/blankimage.gif"; }
+          if (! defined $pvfr_lo{$k}) { $pvfr_lo{$k} = "../../../images/blankimage.gif"; }
+          if (! defined $pvfr_hi{$k}) { $pvfr_hi{$k} = "../../../images/blankimage.gif"; }
+          if (! defined $pvt_lo{$k})  { $pvt_lo{$k} = "../../../images/blankimage.gif"; }
+          if (! defined $pvt_hi{$k})  { $pvt_hi{$k} = "../../../images/blankimage.gif"; }
+          if (! defined $bp_lo{$k})   { $bp_lo{$k} = "../../../images/blankimage.gif"; }
+          if (! defined $bp_hi{$k})   { $bp_hi{$k} = "../../../images/blankimage.gif"; }
         }
 
         # now update the global variables for each image type
@@ -772,6 +815,75 @@ sub gainInfoThread() {
   Dada::logMsg(1, $dl, "gainInfoThread: exiting");
 
 }
+
+sub archivalInfoThread() {
+
+  my ($results_dir) = @_;
+
+  Dada::logMsg(1, $dl, "archivalInfoThread: starting");
+
+  my $sleep_time = 60;
+  my $sleep_counter = 0;
+  my $cmd = "";
+  my $result = "";
+  my $response = "";
+
+  my %states = ();
+  my @lines = ();
+  my $obs = "";
+  my $file = "";
+  my $junk = "";
+  my $state = "";
+  my $i = 0;
+
+  while (!$quit_daemon) {
+
+    if ($sleep_counter > 0) {
+      sleep(1);
+      $sleep_counter--;
+
+    # The time has come to check the status warnings
+    } else {
+      $sleep_counter = $sleep_time;
+
+      $cmd = "find ".$results_dir." -mindepth 2 -maxdepth 2 -type f -name 'obs.*' | grep -v obs.info | grep -v obs.start | awk -F/ '{print \$(NF-1)\" \"\$NF}' | sort";
+      Dada::logMsg(2, $dl, "archivalInfoThread: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+
+      %states = ();
+      $states{"failed"} = 0;
+      $states{"finished"} = 0;
+      $states{"transferred"} = 0;
+      $states{"deleted"} = 0;
+
+      if ($result eq "ok") 
+      {
+        @lines = split(/\n/, $response);
+        for ($i=0; $i<=$#lines; $i++)
+        {
+          ($obs, $file) = split(/ /, $lines[$i], 2);
+          ($junk, $state) = split(/\./, $file, 2);
+
+          if (defined $states{$state}) {
+            $states{$state} += 1;
+          }
+        }
+      }
+
+      $response = "";
+      foreach $state (sort keys %states) {
+        $response .= $state.":::".$states{$state}.";;;";
+      }
+
+      Dada::logMsg(2, $dl, "archivalInfoThread: ".$response);
+      $archival_info = $response;
+    }
+  }
+
+  Dada::logMsg(1, $dl, "archivalInfoThread: exiting");
+
+}
+
 
 sub dishImageThread() {
   
