@@ -260,8 +260,8 @@ int64_t dbib_send_block(dada_client_t* client, void * buffer, uint64_t bytes, ui
     return -1;
   }
 
-  if (bytes && bytes != ib_cm->bufs_size) 
-    multilog(log, LOG_INFO, "send_block: bytes=%"PRIu64", ib_cm->bufs_size=%"PRIu64"\n", bytes);
+  if (dbib->verbose && bytes && bytes != ib_cm->bufs_size)
+    multilog(log, LOG_INFO, "send_block: bytes=%"PRIu64", ib_cm->bufs_size=%"PRIu64"\n", bytes, ib_cm->bufs_size);
 
   // tell ibdb how many bytes we are sending
   if (ib_cm->verbose)
@@ -611,7 +611,9 @@ int main (int argc, char **argv)
   dbib.chunk_size = chunk_size;
   dbib.verbose = verbose;
 
-  multilog_fprintf(stderr, LOG_INFO, "dbib_ib_init()\n");
+  if (verbose)
+    multilog(client->log, LOG_INFO, "main: dbib_ib_init()\n");
+
   // Init IB network
   dbib.ib_cm = dbib_ib_init (&dbib, hdu, log);
   if (!dbib.ib_cm)
@@ -622,19 +624,28 @@ int main (int argc, char **argv)
     return EXIT_FAILURE;
   }
 
-  fprintf(stderr, "dbib_ib_init done\n");
-  quit = 1;
   while (!client->quit)
   {
     if (dada_client_read (client) < 0)
       multilog (log, LOG_ERR, "Error during transfer\n");
 
+    if (dada_hdu_unlock_read (hdu) < 0)
+    {
+      multilog (log, LOG_ERR, "could not unlock read on hdu\n");
+      quit = 1;
+    }
+
     if (quit) 
       client->quit = 1;
+    else
+    {
+      if (dada_hdu_lock_read (hdu) < 0)
+      {
+        multilog (log, LOG_ERR, "could not lock read on hdu\n");
+        return EXIT_FAILURE;
+      }
+    }
   }
-
-  if (dada_hdu_unlock_read (hdu) < 0)
-    return EXIT_FAILURE;
 
   if (dada_hdu_disconnect (hdu) < 0)
     return EXIT_FAILURE;

@@ -42,6 +42,8 @@
 #define DADA_IB_READY_KEY 1
 #define DADA_IB_BYTES_TO_XFER_KEY 2
 #define DADA_IB_BYTES_XFERRED_KEY 3
+#define DADA_IB_XFER_BYTES_KEY 4
+#define DADA_IB_XFER_CONTINUING_KEY 5
 
 typedef struct dada_ib_mb
 {

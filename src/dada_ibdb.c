@@ -167,7 +167,7 @@ int64_t dada_ibdb_recv_block (dada_client_t* client, void* data,
   else
   {
 
-    if ((ibdb->verbose > 1) || (bytes_to_be_received != ib_cm->bufs_size))
+    if (ibdb->verbose  && (bytes_to_be_received != ib_cm->bufs_size))
       multilog(client->log, LOG_INFO, "recv_block: bytes to be recvd=%"PRIu64"\n", bytes_to_be_received);
 
     // post recv for [bytes received]
@@ -233,6 +233,7 @@ int dada_ibdb_close (dada_client_t* client, uint64_t bytes_written)
 
   if (ibdb->verbose)
     multilog (client->log, LOG_INFO, "dada_ibdb_close()\n");
+
 
   return 0;
 }
@@ -508,28 +509,49 @@ int main (int argc, char **argv)
   if (!ibdb.ib_cm)
     multilog (log, LOG_ERR, "Failed to initialise IB resources\n");
 
-  quit = 1;
-  while (!client->quit) {
-
+  while (!client->quit) 
+  {
     if (dada_client_write (client) < 0)
+    {
       multilog (log, LOG_ERR, "Error during transfer\n");
-
-    if (quit) {
-      client->quit = 1;
+      quit = 1;
     }
 
-  }
+    if (verbose)
+      multilog (client->log, LOG_INFO, "main: dada_ib_disconnect()\n");
+    if (dada_ib_disconnect(ibdb.ib_cm) < 0)
+    {
+      multilog(client->log, LOG_ERR, "dada_ib_disconnect failed\n");
+    }
 
-  if (dada_hdu_unlock_write (hdu) < 0)
-    return EXIT_FAILURE;
+    if (verbose)
+      multilog (log, LOG_INFO, "main: dada_hdu_unlock_write()\n");
+    if (dada_hdu_unlock_write (hdu) < 0)
+    {
+      multilog (log, LOG_ERR, "could not unlock read on hdu\n");
+      quit = 1;
+    }
+
+    if (quit)
+      client->quit = 1;
+    else
+    {
+      if (dada_hdu_lock_write (hdu) < 0)
+      {
+        multilog (log, LOG_ERR, "could not lock read on hdu\n");
+        return EXIT_FAILURE;
+      }
+
+      // reallocate IB resources
+      ibdb.ib_cm = dada_ibdb_ib_init (&ibdb, hdu, log);
+      if (!ibdb.ib_cm)
+        multilog (log, LOG_ERR, "Failed to initialise IB resources\n");
+    }
+  }
 
   if (dada_hdu_disconnect (hdu) < 0)
     return EXIT_FAILURE;
 
-  if (dada_ib_destroy(ibdb.ib_cm) < 0)
-  {
-    multilog(log, LOG_ERR, "dada_ib_destory failed\n");
-  }
 
   return EXIT_SUCCESS;
 }

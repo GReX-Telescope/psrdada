@@ -837,8 +837,11 @@ int dada_ib_send_messages(dada_ib_cm_t ** ib_cms, unsigned n_ib_cms, uint64_t ke
 
   for (i=0; i< n_ib_cms; i++)
   {
-    ib_cms[i]->sync_to_val[0] = key;
-    ib_cms[i]->sync_to_val[1] = value;
+    if ((key != UINT64_MAX) && (value != UINT64_MAX))
+    {
+      ib_cms[i]->sync_to_val[0] = key;
+      ib_cms[i]->sync_to_val[1] = value;
+    }
 
     if (dada_ib_post_send (ib_cms[i], ib_cms[i]->sync_to) < 0)
     {
@@ -1090,6 +1093,8 @@ int dada_ib_client_destroy(dada_ib_cm_t * ctx)
   assert(ctx);
   multilog_t * log = ctx->log;
 
+  if (ctx->verbose > 1)
+    multilog(log, LOG_INFO, "client_destroy: rdma_disconnect\n");
   err = rdma_disconnect(ctx->cm_id);
   if (err)
   {
