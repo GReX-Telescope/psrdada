@@ -20,7 +20,7 @@ VIEWING_DB_KEY            @PSRDADA_INSTALL@/share/caspsr.viewer
 #
 
 SERVER_HOST               srv0.caspsr.edu.au
-SERVER_ALIASES            apsr-srv1.atnf.csiro.au srv0.caspsr.edu.au
+SERVER_ALIASES            caspsr-srv0.atnf.csiro.au srv0.caspsr.edu.au
 SERVER_RESULTS_DIR        /lfs/data0/results/caspsr
 SERVER_ARCHIVE_DIR        /lfs/data0/archives/caspsr
 SERVER_LOG_DIR            /lfs/data0/caspsr/logs
@@ -29,7 +29,7 @@ SERVER_DAEMONS            caspsr_tcs_interface caspsr_results_manager caspsr_pwc
 SERVER_DAEMONS_PERSIST    caspsr_transfer_manager
 
 # TCS Interface configuration. Note on different interface to server
-TCS_INTERFACE_HOST        apsr-srv1.atnf.csiro.au
+TCS_INTERFACE_HOST        caspsr-srv0.atnf.csiro.au
 TCS_INTERFACE_PORT        59000       # TCS connects here
 TCS_STATE_INFO_PORT       52001       # Web interface state information
 
