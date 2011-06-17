@@ -3,6 +3,7 @@ webdir = $(prefix)/web/caspsr
 
 nobase_dist_web_SCRIPTS = admin.lib.php \
                           archival.lib.php \
+                          archival_summary.lib.php \
                           buttons.css \
                           index.php \
                           caspsr.css \
