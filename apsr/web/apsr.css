@@ -1,15 +1,33 @@
 BODY {
-  /*background: #1c1c1c;*/
+  margin: 0 auto;
+  padding: 0;
   background: #EEEEEE;
   color: black;
   font-family: arial,helvetica,sans-serif,times;
   font-size: 10pt;
   text-align: center;
+  /*background-image: url(/apsr/images/apsr_background_5x5.png);
+  background-repeat: repeat-x repeat-y;*/
 }
-                                                                                
+
+.Main
+{
+  position: absolute;
+  width: 100%;
+  left: 0;
+  top: 0;
+}
+
+div.background {
+  height: 400px;
+  width: 100%;
+  /*background-image: url(/apsr/images/apsr_background_5x400.png);
+  background-repeat: repeat-x;*/
+  z-index: 1;
+}
+
 P {
   font-family: arial,helvetica,sans-serif,times;
-  background: #EEEEEE;
   color: black;
   font-size: 10pt;
   margin-top: 2px;
@@ -94,12 +112,6 @@ table.datatable {
 
 .datatable th {
   padding: 4px 7px;
-  /*background: #E6E6E6;
-  border-width: 1px 1px 1px 0;
-  border-style: solid;
-  border-top-color: #FFF;
-  border-bottom-color: #C1C1C1;
-  border-right-color: #C1C1C1; */
   font-size: 9pt;
   font-weight: bold;
   white-space: nowrap;
@@ -151,9 +163,10 @@ a.gmail {
   font-size: 8pt;
 }
 
-TD.largetext {
+.largetext {
   font-size: 16pt;
   vertical-align: middle;
+  color: black;
 }
 
 TD.notselected {
@@ -349,7 +362,71 @@ TD.results {
   padding: 5px 20px 2px 20px;
   BORDER-RIGHT: #558844 1px solid; 
   BORDER-LEFT: #558844 1px solid;
-  BORDER-BOTTOM: #558844 1px solid
+  BORDER-BOTTOM: #558844 1px solid;
 
 }
+
+/* wrapper table to create a 'box' for each section */
+table.wrapper { 
+  padding: 0px; 
+  border-spacing: 0px;
+  margin: 0px;
+  border-style: solid solid solid solid;
+  border-color: #A60000 #A60000 #A60000 #A60000;
+  border-width: 1px 1px 1px 1px;
+  width: 100%; 
+  -moz-border-radius: 6px;
+  -webkit-border-radius: 6px;
+  /*border-radius: 6px;*/
+} 
+
+th.wrapper {
+  text-align: left;
+  border-style: solid solid solid solid;
+  border-color: #A60000 #A60000 #A60000 #A60000;
+  border-width: 0px 0px 1px 0px;
+  background: #FF7373;
+  padding: 7px;
+  font-size: 12pt;
+  color: #660000;
+  -moz-border-radius-topleft: 6px;
+  -moz-border-radius-topright: 6px;
+  -webkit-border-top-left-radius: 6px;
+  -webkit-border-top-right-radius: 6px;
+  /*border-top-left-radius: 6px;
+  border-top-right-radius: 6px;*/
+}
+
+th.wrapper span {
+  font-size: 12pt;
+}
+
+td.wrapper_bot {
+  padding: 7px;
+  background: #ffffff;
+  -moz-border-radius-bottomleft: 6px;
+  -moz-border-radius-bottomright: 6px;
+  -webkit-border-bottom-left-radius: 6px;
+  -webkit-border-bottom-right-radius: 6px;
+  /*border-bottom-left-radius: 6px;
+  border-bottom-right-radius: 6px;*/
+}
+
+td.wrapper_all {
+  padding: 7px;
+  background: #ffffff;
+  -moz-border-radius-bottomleft: 6px;
+  -moz-border-radius-bottomright: 6px;
+  -moz-border-radius-topleft: 6px;
+  -moz-border-radius-topright: 6px;
+  -webkit-border-bottom-left-radius: 6px;
+  -webkit-border-bottom-right-radius: 6px;
+  -webkit-border-top-left-radius: 6px;
+  -webkit-border-top-right-radius: 6px;
+  /*border-bottom-left-radius: 6px;
+  border-bottom-right-radius: 6px;
+  border-top-left-radius: 6px;
+  border-top-right-radius: 6px;*/
+}
+
 
