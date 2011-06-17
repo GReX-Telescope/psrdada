@@ -112,7 +112,7 @@ header("Expires: Mon, 26 Jul 1997 05:00:00 GMT"); // Date in the past
       
         if (lines[i].length > 0) {
      
-          var values = lines[i].split(":");
+          var values = lines[i].split(":::");
     
           var host = values[0];
           var result = values[1];
@@ -170,11 +170,11 @@ for ($i=0; $i<count($pwcs); $i++) {
   echo "  ".$m."_db.setPercentage(db_percent);\n";
   echo "  document.getElementById(\"".$m."_db_value\").innerHTML = \"&nbsp;\"+dbs[1]+\"&nbsp;of&nbsp;\"+dbs[0]\n";
   echo "  ".$m."_disk.setPercentage(disk_percent);\n";
-  echo "  document.getElementById(\"".$m."_disk_unproc\").innerHTML = \"&nbsp;\"+unproc_gb.toFixed(1)\n";
+  //echo "  document.getElementById(\"".$m."_disk_unproc\").innerHTML = \"&nbsp;\"+unproc_gb.toFixed(1)\n";
   echo "  document.getElementById(\"".$m."_disk_left\").innerHTML = \"&nbsp;\"+disk_gb.toFixed(1)\n";
   echo "  ".$m."_load.setPercentage(load_percent);\n";
   echo "  document.getElementById(\"".$m."_load_value\").innerHTML = \"&nbsp;\"+loads[0]\n";
-  echo "  document.getElementById(\"".$m."_gb_unproc\").innerHTML = \"&nbsp;\"+gb_unprocessed.toFixed(1)\n";
+  //echo "  document.getElementById(\"".$m."_gb_unproc\").innerHTML = \"&nbsp;\"+gb_unprocessed.toFixed(1)\n";
   echo "  document.getElementById(\"".$m."_temp_value\").innerHTML = temp\n";
   echo "}\n";
 }
@@ -183,11 +183,11 @@ for ($i=0; $i<count($servers); $i++) {
   $m = $servers[$i];
   echo "if (host == \"".$m."\") {\n";
   echo "  ".$m."_disk.setPercentage(disk_percent);\n";
-  echo "  document.getElementById(\"".$m."_disk_unproc\").innerHTML = \"&nbsp;\"+unproc_gb.toFixed(1)\n";
+  //echo "  document.getElementById(\"".$m."_disk_unproc\").innerHTML = \"&nbsp;\"+unproc_gb.toFixed(1)\n";
   echo "  document.getElementById(\"".$m."_disk_left\").innerHTML = \"&nbsp;\"+disk_gb.toFixed(1)\n";
   echo "  ".$m."_load.setPercentage(load_percent);\n";
   echo "  document.getElementById(\"".$m."_load_value\").innerHTML = \"&nbsp;\"+loads[0]\n";
-  echo "  document.getElementById(\"".$m."_gb_unproc\").innerHTML = \"&nbsp;\"+gb_unprocessed.toFixed(1)\n";
+  //echo "  document.getElementById(\"".$m."_gb_unproc\").innerHTML = \"&nbsp;\"+gb_unprocessed.toFixed(1)\n";
   echo "  document.getElementById(\"".$m."_temp_value\").innerHTML = temp\n";
   echo "}\n";
 }
@@ -196,11 +196,11 @@ for ($i=0; $i<count($helpers); $i++) {
   $m = $helpers[$i];
   echo "if (host == \"".$m."\") {\n";
   echo "  ".$m."_disk.setPercentage(disk_percent);\n";
-  echo "  document.getElementById(\"".$m."_disk_unproc\").innerHTML = \"&nbsp;\"+unproc_gb.toFixed(1)\n";
+  //echo "  document.getElementById(\"".$m."_disk_unproc\").innerHTML = \"&nbsp;\"+unproc_gb.toFixed(1)\n";
   echo "  document.getElementById(\"".$m."_disk_left\").innerHTML = \"&nbsp;\"+disk_gb.toFixed(1)\n";
   echo "  ".$m."_load.setPercentage(load_percent);\n";
   echo "  document.getElementById(\"".$m."_load_value\").innerHTML = \"&nbsp;\"+loads[0]\n";
-  echo "  document.getElementById(\"".$m."_gb_unproc\").innerHTML = \"&nbsp;\"+gb_unprocessed.toFixed(1)\n";
+  //echo "  document.getElementById(\"".$m."_gb_unproc\").innerHTML = \"&nbsp;\"+gb_unprocessed.toFixed(1)\n";
   echo "  document.getElementById(\"".$m."_temp_value\").innerHTML = temp\n";
   echo "}\n";
 }
@@ -229,14 +229,14 @@ for ($i=0; $i<count($machines); $i++) {
 
   if (in_array($machines[$i], $pwcs)) {
     echo $machines[$i]."_db = new JS_BRAMUS.jsProgressBar($('".$machines[$i]."_db_progress_bar'), 0, ";
-    echo " { width : 80, showText : false, barImage : Array( '/images/jsprogress/percentImage_back1_80.png', '/images/jsprogress/percentImage_back2_80.png', '/images/jsprogress/percentImage_back3_80.png', '/images/jsprogress/percentImage_back4_80.png') } );\n";
+    echo " { width : 80, showText : false, animate : false, barImage : Array( '/images/jsprogress/percentImage_back1_80.png', '/images/jsprogress/percentImage_back2_80.png', '/images/jsprogress/percentImage_back3_80.png', '/images/jsprogress/percentImage_back4_80.png') } );\n";
   }
 
   echo $machines[$i]."_disk = new JS_BRAMUS.jsProgressBar($('".$machines[$i]."_disk_progress_bar'), 0, ";
-  echo " { width : 80, showText : false, barImage : Array( '/images/jsprogress/percentImage_back1_80.png', '/images/jsprogress/percentImage_back2_80.png', '/images/jsprogress/percentImage_back3_80.png', '/images/jsprogress/percentImage_back4_80.png') } );\n";
+  echo " { width : 80, showText : false, animate : false, barImage : Array( '/images/jsprogress/percentImage_back1_80.png', '/images/jsprogress/percentImage_back2_80.png', '/images/jsprogress/percentImage_back3_80.png', '/images/jsprogress/percentImage_back4_80.png') } );\n";
 
   echo $machines[$i]."_load = new JS_BRAMUS.jsProgressBar($('".$machines[$i]."_load_progress_bar'), 0, ";
-  echo " { width : 80, showText : false, barImage  : Array( '/images/jsprogress/percentImage_back1_80.png', '/images/jsprogress/percentImage_back2_80.png', '/images/jsprogress/percentImage_back3_80.png', '/images/jsprogress/percentImage_back4_80.png') } );\n";
+  echo " { width : 80, showText : false, animate : false, barImage  : Array( '/images/jsprogress/percentImage_back1_80.png', '/images/jsprogress/percentImage_back2_80.png', '/images/jsprogress/percentImage_back3_80.png', '/images/jsprogress/percentImage_back4_80.png') } );\n";
 
 }
 
@@ -253,7 +253,7 @@ for ($i=0; $i<count($machines); $i++) {
   <td width=20px></td>
   <th colspan=2>Data Block</th>
   <td width=20px></td>
-  <th>Disk [GB]</th><td align=right>Used</td><td align=right>Free</td><td align=right>Total.</td>
+  <th>Disk</th><th align=right>Free</th>
 </tr>
 
 <?
@@ -298,16 +298,8 @@ for ($i=0; $i<count($machines); $i++) {
   <?  echo "<span id=\"".$machines[$i]."_disk_progress_bar\">[  Loading Progress Bar ]</span>\n";?>
   </td>
 
-  <td width="30px" align=right>
-   <? echo "<span id=\"".$machines[$i]."_disk_unproc\"></span>\n"?>
-  </td>
-
   <td width="40px" align=right>
   <?echo "<span id=\"".$machines[$i]."_disk_left\"></span>\n";?>
-  </td>
-
-  <td width="30px" align=right>
-  <?echo "<span id=\"".$machines[$i]."_gb_unproc\"></span>\n";?>
   </td>
 
 </tr>
