@@ -1,6 +1,7 @@
 
 # scripts distributed as is (installed in bin/)
 dist_bin_SCRIPTS = Apsr.pm \
+                   apsr_hard_reset.pl \
                    client_apsr_command.pl \
                    client_apsr_disk_cleaner.pl \
                    client_apsr_src_logger.pl \
