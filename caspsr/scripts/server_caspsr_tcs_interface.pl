@@ -254,7 +254,8 @@ sub main() {
           $command =~ s/\r//;
           $command =~ s/\n//;
           $command =~ s/#(.)*$//;
-          $command =~ s/ +$//;
+          $command =~ s/\s+$//;
+          $command =~ s/\0//g;      # remove all null characters
 
           if ($command ne "") {
             # handle the command from TCS
@@ -277,7 +278,7 @@ sub main() {
 
     
     if ($current_state eq "Stopped") {
-      Dada::logMsg(1, $dl, "main: stopping_thread finished, changing to IDLE");
+      Dada::logMsg(1, $dl, "nexus now in IDLE state");
       $current_state = "Idle";
     }
 
@@ -343,7 +344,7 @@ sub processTCSCommand($$) {
       Dada::logMsg(2, $dl, "processTCSCommand: parseTCSCommands() ".$result ." ".$response);
 
       # Send an immediate response to TCS so we dont get a timeout
-      Dada::logMsg(1, $dl, "TCS <- ".$result);
+      Dada::logMsg(2, $dl, "TCS <- ".$result);
       print $handle $result.TERMINATOR;
 
       if ($result ne "ok") {
@@ -471,7 +472,7 @@ sub processTCSCommand($$) {
 
         $current_state = "Stopping...";
 
-        Dada::logMsg(1, $dl, "processTCSCommand: stopInBackground()");
+        Dada::logMsg(2, $dl, "processTCSCommand: stopInBackground()");
         my $tmp_thr_id = threads->new(\&stopInBackground);
         $tmp_thr_id->detach();
 
@@ -548,10 +549,11 @@ sub processTCSCommand($$) {
       $current_state = "Error";
       print $handle $result.TERMINATOR;
       print $handle $response.TERMINATOR;
+      Dada::logMsg(1, $dl, "TCS <- ".$result);
 
     } else {
       print $handle $result.TERMINATOR;
-      Dada::logMsg(1, $dl, "TCS <- ".$result);
+      Dada::logMsg(2, $dl, "TCS <- ".$result);
     }
   }
   return ($result, $response);
@@ -770,9 +772,9 @@ sub start($) {
     $cmd = "config ".$file;
     Dada::logMsg(1, $dl, "nexus <- ".$cmd);
     ($result,$response) = Dada::sendTelnetCommand($handle,$cmd);
-    Dada::logMsg(1, $dl, "nexus -> ".$result." ".$response);
+    Dada::logMsg(2, $dl, "nexus -> ".$result." ".$response);
     if ($result ne "ok") { 
-      Dada::logMsg(0, $dl, "start: config command failed: ".$response);
+      Dada::logMsg(0, $dl, "start: config command failed: ".$result." ".$response);
       return ("fail", "CONFIG command failed on nexus: ".$response)
     }
 
@@ -785,12 +787,11 @@ sub start($) {
 
     # Send start command to the nexus
     $cmd = "start";
-    Dada::logMsg(1, $dl, "start: nexus <- ".$cmd);
+    Dada::logMsg(1, $dl, "nexus <- ".$cmd);
     ($result,$response) = Dada::sendTelnetCommand($handle,$cmd);
-    Dada::logMsg(1, $dl, "start: nexus -> ".$result." ".$response);
-
+    Dada::logMsg(2, $dl, "nexus -> ".$result." ".$response);
     if ($result ne "ok") { 
-      Dada::logMsg(0, $dl, "start: start command failed: ".$response);
+      Dada::logMsg(0, $dl, "start: start command failed: ".$result." ".$response);
       return ("fail", "START command failed on nexus: ".$response);
     }
 
@@ -805,9 +806,9 @@ sub start($) {
 
     # Instruct the ibob to rearm and get the corresponding UTC_START
     $cmd = "bibob_start_observation -m ".$cfg{"ARCHIVE_MOD"}." 192.168.0.15 7";
-    Dada::logMsg(1, $dl, "start: ".$cmd);
+    Dada::logMsg(2, $dl, "start: ".$cmd);
     ($result,$response) = Dada::mySystem($cmd);
-    Dada::logMsg(1, $dl, "start: ".$result." ".$response);
+    Dada::logMsg(2, $dl, "start: ".$result." ".$response);
     if ($result ne "ok") {
       Dada::logMsg(0, $dl, "start: ".$cmd." failed: ".$response);
       return ("fail", "bibob_start failed");
@@ -836,7 +837,7 @@ sub start($) {
       }
     }
 
-    Dada::logMsg(1, $dl, "start() ok ".$utc_start);
+    Dada::logMsg(1, $dl, "CASPSR started with UTC_START=".$utc_start);
     return ("ok", $utc_start);
   }
 
@@ -946,6 +947,7 @@ sub set_utc_start($) {
   print FH Dada::headerFormat("BANDWIDTH",$tcs_cmds{"BANDWIDTH"})."\n";
   print FH Dada::headerFormat("PROC_FILE",$tcs_cmds{"PROC_FILE"})."\n";
   print FH "\n";
+  print FH Dada::headerFormat("MODE",$tcs_cmds{"MODE"})."\n";
   print FH Dada::headerFormat("NUM_PWC",$tcs_cmds{"NUM_PWC"})."\n";
   print FH Dada::headerFormat("NBIT",$tcs_cmds{"NBIT"})."\n";
   print FH Dada::headerFormat("NPOL",$tcs_cmds{"NPOL"})."\n";
@@ -1000,9 +1002,9 @@ sub set_utc_start($) {
 
   Dada::logMsg(1, $dl, "nexus <- ".$cmd);
   ($result,$response) = Dada::sendTelnetCommand($handle,$cmd);
-  Dada::logMsg(1, $dl, "nexus -> ".$result." ".$response);
+  Dada::logMsg(2, $dl, "nexus -> ".$result." ".$response);
   if ($result ne "ok") {
-    Dada::logMsgWarn($error, "set_utc_start: nexus returned ".$response." after sending ".$cmd);
+    Dada::logMsgWarn($error, "set_utc_start: nexus returned ".$result." ".$response);
     return ("fail", $cmd." failed on nexus: ".$response);
   }
 
@@ -1010,13 +1012,13 @@ sub set_utc_start($) {
 
   # Send UTC Start to the demuxers
   $cmd = "SET_UTC_START ".$utc_start;
-  Dada::logMsg(1, $dl, "set_utc_start: demuxers <- ".$cmd);
+  Dada::logMsg(1, $dl, "demuxers <- ".$cmd);
   Dada::logMsg(2, $dl, "set_utc_start: threadedDemuxerCommand(".$cmd.")");
   ($result, $response) = threadedDemuxerCommand($cmd);
   Dada::logMsg(2, $dl, "set_utc_start: threadedDemuxerCommand() ".$result." ".$response);
-  Dada::logMsg(1, $dl, "set_utc_start: demuxers -> ".$result);
+  Dada::logMsg(2, $dl, "set_utc_start: demuxers -> ".$result);
   if ($result ne "ok") {
-    Dada::logMsgWarn($error, "set_utc_start: threadedDemuxerCommand(".$cmd.") failed with ".$response);
+    Dada::logMsgWarn($error, "set_utc_start: ".$cmd." failed with ".$result." ".$response);
     return ("fail", $cmd." failed on nexus: ".$response);
   }
   
@@ -1041,11 +1043,15 @@ sub stopDemuxers($)
   my $cmd = "UTC_STOP ".$utc_stop;
 
   # stop the demuxers on the specified time
-  Dada::logMsg(1, $dl, "stopDemuxers: demuxers <- ".$cmd);
+  Dada::logMsg(1, $dl, "demuxers <- ".$cmd);
   Dada::logMsg(2, $dl, "stopDemuxers: threadedDemuxerCommand(".$cmd.")");
   ($result, $response) = threadedDemuxerCommand($cmd);
   Dada::logMsg(2, $dl, "stopDemuxers: threadedDemuxerCommand() ".$result." ".$response);
-  Dada::logMsg(1, $dl, "stopDemuxers: demuxers -> ".$result);
+  Dada::logMsg(2, $dl, "stopDemuxers: demuxers -> ".$result);
+  if ($result ne "ok") {
+    Dada::logMsgWarn($error, "stopDemuxers: ".$cmd." failed with ".$result." ".$response);
+    return ("fail", $cmd." failed on demuxers: ".$response);
+  }
 
   return ($result, $response);
 }
@@ -1080,12 +1086,11 @@ sub stopNexus($)
   
   $cmd = "stop ".$utc_stop;
   
-  Dada::logMsg(1, $dl, "stopNexus: nexus <- ".$cmd);
+  Dada::logMsg(1, $dl, "nexus <- ".$cmd);
   ($result, $response) = Dada::sendTelnetCommand($handle, $cmd);
-  Dada::logMsg(1, $dl, "stopNexus: nexus -> ".$result." ".$response);
-
+  Dada::logMsg(2, $dl, "stopNexus: nexus -> ".$result." ".$response);
   if ($result ne "ok") { 
-    Dada::logMsg(0, $dl, "stopNexus: ".$cmd." failed: ".$response);
+    Dada::logMsg(0, $dl, "stopNexus: ".$cmd." failed: ".$result." ".$response);
     $response = $cmd." command failed on nexus";
   }
 
@@ -1123,12 +1128,12 @@ sub stopInBackground() {
   $ignore = <$handle>;
 
   # Check we are in the IDLE state before continuing
-  Dada::logMsg(1, $dl, "stopInBackground: nexus waiting for return to idle state");
+  Dada::logMsg(1, $dl, "nexus waiting for IDLE state");
   if (Dada::waitForState("idle", $handle, 40) != 0) {
     Dada::logMsgWarn($error, "stopInBackground: nexus was not in the idle state after 40 seconds");
     $current_state = "Error";
   } else {
-    Dada::logMsg(1, $dl, "stopInBackground: nexus now in idle state");
+    Dada::logMsg(2, $dl, "stopInBackground: nexus now in idle state");
     $current_state = "Stopped";
   }
 
@@ -1400,6 +1405,7 @@ sub fixTCSCommands(\%) {
   $add{"NDIM"} = "1";
   $add{"RECEIVER"} = "MULTI";
   $add{"RESOLUTION"} = "1";
+  $add{"PROC_FILE"} = "dspsr.gpu";
 
   my %new_cmds = ();
 
@@ -1435,6 +1441,14 @@ sub fixTCSCommands(\%) {
   if ($new_cmds{"CFREQ"} eq "628")
   {
     $new_cmds{"TDEC"} = 2;
+  }
+
+  my $proj_id = $new_cmds{"PID"};
+  my $caspsr_groups = `groups caspsr`;
+  chomp $caspsr_groups;
+  if (!($caspsr_groups =~ m/$proj_id/)) {
+    Dada::logMsgWarn($warn, "PID ".$proj_id." invalid, using P000 instead");
+    $new_cmds{"PID"} = "P000";
   }
 
   foreach $key (keys (%add)) {
