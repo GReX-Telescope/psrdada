@@ -171,8 +171,9 @@ class instrument
     $DM = exec($cmd, $array, $rval);
     if (($rval != 0) || ($DM == "WARNING:")) {
       $DM = "N/A";
+    } else {
+      $DM = sprintf("%5.4f",$DM);  
     }
-  
     return $DM;
   }
 
