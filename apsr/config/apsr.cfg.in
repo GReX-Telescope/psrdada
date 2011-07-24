@@ -29,7 +29,7 @@ SERVER_CONTROL_DIR      @PSRDADA_INSTALL@/control
 SERVER_RESULTS_NFS_MNT  /nfs/results/apsr
 SERVER_ARCHIVE_NFS_MNT  /nfs/archives/apsr
 SERVER_DAEMONS          apsr_pwc_monitor apsr_results_manager apsr_sys_monitor apsr_tcs_interface apsr_gain_manager apsr_web_monitor
-SERVER_DAEMONS_PERSIST  apsr_transfer_manager
+SERVER_DAEMONS_PERSIST  apsr_transfer_manager apsr_raid_pipeline
 
 # TCS Interface configuration. Note on different interface to server
 TCS_INTERFACE_HOST      apsr-srv0.atnf.csiro.au
@@ -43,8 +43,8 @@ PWCC_LOGPORT            22021
 PWC_PORT                22022
 PWC_LOGPORT             22023
 
-SERVER_WEB_MONITOR_PORT   22024
-
+SERVER_WEB_MONITOR_PORT                22024
+SERVER_apsr_transfer_manager_PID_PORT  22025
 
 # For clients to log system messages
 SERVER_SRC_LOG_PORT       22002
