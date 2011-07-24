@@ -142,7 +142,7 @@ class result extends apsr_webpage
     $keys = array_keys($this->header);
     $keys_to_ignore = array("HDR_SIZE","FILE_SIZE","HDR_VERSION","FREQ","RECV_HOST",
                             "DSB","INSTRUMENT", "TELESCOPE", "BYTES_PER_SECOND", "UTC_START",
-                            "CONFIG", "RESOLUTION");
+                            "RESOLUTION", "RECEIVER", "BW", "OBS_OFFSET", "NCHAN");
     if ($this->header["MODE"] == "PSR")
       array_push($keys_to_ignore, "CALFREQ");
 
@@ -267,10 +267,10 @@ class result extends apsr_webpage
     if ($have_hires) {
       echo "      <a href=\"/apsr/results/".$this->utc_start."/".$image_hires."\">";
     }
-    echo "      <img width=241px height=181px src=\"/apsr/results/".$this->utc_start."/".$image."\">";
+    echo "<img width=241px height=181px src=\"/apsr/results/".$this->utc_start."/".$image."\">";
 
     if ($have_hires) {
-      echo "    </a><br>\n";
+      echo "</a><br/>\n";
       echo "    Click for hi-res result\n";
     }
     echo "    </td>\n";
