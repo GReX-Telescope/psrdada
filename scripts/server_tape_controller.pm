@@ -342,7 +342,7 @@ sub pidReportThread($) {
     LocalPort => $port,
     Proto => 'tcp',
     Listen => 1,
-    Reuse => 1,
+    ReuseAddr => 1
   );
 
   if (!$sock) {
