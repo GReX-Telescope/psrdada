@@ -23,6 +23,7 @@ dist_bin_SCRIPTS = Apsr.pm \
                    server_apsr_dfb_gain_simulator.pl \
                    server_apsr_gain_manager.pl \
                    server_apsr_process_result.pl \
+                   server_apsr_raid_pipeline.pl \
                    server_apsr_results_manager.pl \
                    server_apsr_replot_result.pl \
                    server_apsr_tcs_interface.pl \

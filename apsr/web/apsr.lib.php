@@ -41,15 +41,16 @@ class apsr extends instrument
   function serverLogInfo() {
 
     $arr = array();
-    $arr["apsr_tcs_interface"] =      array("logfile" => "apsr_tcs_interface.log", "name" => "TCS Interface", "tag" => "server", "shortname" => "TCS");
-    $arr["apsr_results_manager"] =    array("logfile" => "apsr_results_manager.log", "name" => "Results Mngr", "tag" => "server", "shortname" => "Results");
-    $arr["dada_pwc_command"] =          array("logfile" => "dada_pwc_command.log", "name" => "Nexus", "tag" => "server", "shortname" => "PWCC");
-    $arr["apsr_web_monitor"] =        array("logfile" => "apsr_web_monitor.log", "name" => "Monitor", "tag" => "server", "shortname" => "Monitor");
-    $arr["apsr_pwc_monitor"] =        array("logfile" => "nexus.pwc.log", "name" => "PWC Mon", "tag" => "pwc", "shortname" => "PWC Mon");
-    $arr["apsr_sys_monitor"] =        array("logfile" => "nexus.sys.log", "name" => "SYS Mon", "tag" => "sys", "shortname" => "SYS Mon");
-    $arr["apsr_src_monitor"] =        array("logfile" => "nexus.src.log", "name" => "SRC Mon", "tag" => "src", "shortname" => "SRC Mon");
-    $arr["apsr_gain_manager"] =       array("logfile" => "apsr_gain_manager.log", "name" => "Gain Mngr", "tag" => "server", "shortname" => "Gain");
-    $arr["apsr_transfer_manager"] =   array("logfile" => "apsr_transfer_manager.log", "name" => "Transfer Manager", "tag" => "src", "shortname" => "Xfer");
+    $arr["apsr_tcs_interface"] =    array("logfile" => "apsr_tcs_interface.log", "name" => "TCS Interface", "tag" => "server", "shortname" => "TCS");
+    $arr["apsr_results_manager"] =  array("logfile" => "apsr_results_manager.log", "name" => "Results Mngr", "tag" => "server", "shortname" => "Results");
+    $arr["dada_pwc_command"] =      array("logfile" => "dada_pwc_command.log", "name" => "Nexus", "tag" => "server", "shortname" => "PWCC");
+    $arr["apsr_web_monitor"] =      array("logfile" => "apsr_web_monitor.log", "name" => "Monitor", "tag" => "server", "shortname" => "Monitor");
+    $arr["apsr_pwc_monitor"] =      array("logfile" => "nexus.pwc.log", "name" => "PWC Mon", "tag" => "pwc", "shortname" => "PWC Mon");
+    $arr["apsr_sys_monitor"] =      array("logfile" => "nexus.sys.log", "name" => "SYS Mon", "tag" => "sys", "shortname" => "SYS Mon");
+    $arr["apsr_src_monitor"] =      array("logfile" => "nexus.src.log", "name" => "SRC Mon", "tag" => "src", "shortname" => "SRC Mon");
+    $arr["apsr_gain_manager"] =     array("logfile" => "apsr_gain_manager.log", "name" => "Gain Mngr", "tag" => "server", "shortname" => "Gain");
+    $arr["apsr_transfer_manager"] = array("logfile" => "apsr_transfer_manager.log", "name" => "Transfer Manager", "tag" => "server", "shortname" => "Xfer");
+    $arr["apsr_raid_pipeline"] =    array("logfile" => "apsr_raid_pipeline.log", "name" => "RAID Pipeline", "tag" => "server", "shortname" => "Pipeline");
     return $arr;
 
   }
@@ -61,6 +62,7 @@ class apsr extends instrument
     $arr["processor"]                = array("logfile" => "nexus.src.log", "name" => "Processor", "tag" => "proc");
     $arr["apsr_gain_controller"]     = array("logfile" => "nexus.sys.log", "name" => "Gain Mon", "tag" => "gain mon");
     $arr["apsr_disk_cleaner"]        = array("logfile" => "nexus.sys.log", "name" => "Disk Cleaner", "tag" => "cleaner");
+    $arr["apsr_transfer_manager"]    = array("logfile" => "nexus.sys.log", "name" => "Transfer Mngr", "tag" => "xfer mngr");
     return $arr;
   }
 
