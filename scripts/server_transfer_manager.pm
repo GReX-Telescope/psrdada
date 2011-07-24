@@ -123,6 +123,7 @@ sub main() {
   my $result = "";
   my $response = "";
   my $control_thread = 0;
+  my $pid_report_thread = 0;
   my $obs = "";
   my $band = "";
   my $i = 0;
@@ -162,6 +163,9 @@ sub main() {
   # start the control thread
   Dada::logMsg(2, $dl, "main: controlThread(".$quit_file.", ".$pid_file.")");
   $control_thread = threads->new(\&controlThread, $quit_file, $pid_file);
+
+  # Start the PID reporting thread
+  $pid_report_thread = threads->new(\&pidReportThread, $pid);
 
   setStatus("Starting script");
 
@@ -330,6 +334,7 @@ sub main() {
 
   # rejoin threads
   $control_thread->join();
+  $pid_report_thread->join();
                                                                                 
   return 0;
 }
@@ -1624,6 +1629,86 @@ sub controlThread($$) {
 
   return 0;
 }
+
+#
+# Reports the PID the script was launched with on a socket
+#
+sub pidReportThread($) {
+
+  (my $daemon_pid) = @_;
+
+  Dada::logMsg(1, $dl, "pidReportThread: thread starting");
+
+  my $sock = 0;
+  my $host = $cfg{"SERVER_HOST"};
+  my $port = $cfg{"SERVER_".$daemon_name."_PID_PORT"};
+  my $handle = 0;
+  my $string = "";
+  my $rh = 0;
+
+  $sock = new IO::Socket::INET (
+    LocalHost => $host,
+    LocalPort => $port,
+    Proto => 'tcp',
+    Listen => 1,
+    Reuse => 1
+  );
+  
+  if (!$sock) {
+    Dada::logMsgWarn($warn, "Could not create PID reporting socket [".$host.":".$port."]: ".$!);
+
+  } else {
+
+    my $read_set = new IO::Select();
+    $read_set->add($sock);
+
+    while (!$quit_daemon) {
+
+      # Get all the readable handles from the server
+      my ($rh_set) = IO::Select->select($read_set, undef, undef, 1);
+  
+      foreach $rh (@$rh_set) {
+
+        if ($rh == $sock) { 
+
+          $handle = $rh->accept();
+          $handle->autoflush();
+          Dada::logMsg(2, $dl, "pidReportThread: Accepting connection");
+  
+          # Add this read handle to the set
+          $read_set->add($handle);
+          $handle = 0;
+    
+        } else {
+  
+          $string = Dada::getLine($rh);
+  
+          if (! defined $string) {
+            Dada::logMsg(2, $dl, "pidReportThread: Closing a connection");
+            $read_set->remove($rh);
+            close($rh);
+
+          } else {
+
+            Dada::logMsg(2, $dl, "pidReportThread: <- ".$string);
+
+            if ($string eq "get_pid") {
+              print $rh $daemon_pid."\r\n";
+              Dada::logMsg(2, $dl, "pidReportThread: -> ".$daemon_pid);
+            } else {
+              Dada::logMsgWarn($warn, "pidReportThread: received unexpected string: ".$string);
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  Dada::logMsg(1, $dl, "pidReportThread: thread exiting");
+  
+  return 0;
+}
+
   
 
 
