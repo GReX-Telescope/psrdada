@@ -167,7 +167,6 @@ sub findCompletedBand($) {
   
   msg(2, "INFO", "findCompletedBand(".$archives_dir.")");
   
-  my $found_obs = 0;
   my $result = "";
   my $response = "";
   my $obs = "none";
@@ -179,15 +178,11 @@ sub findCompletedBand($) {
   my $pid = "";       # first letter of source
   my $file = "";
   
+  my %transferred    = ();    # obs that have a band.transferred
   my %deleted        = ();    # obs that have a band.deleted
-  my %sent_to_swin   = ();    # obs that have been sent.to.swin
-  my %sent_to_parkes = ();    # obs that have been sent.to.parkes
-  my %sent_to        = ();    # obs that have been sent.to.*
-  my @pids = ();
-  my %pid_dests = ();
-  
   my @array = ();
   
+  # get a list of obs that are marked as deleted
   $cmd = "find ".$archives_dir." -maxdepth 3 -name band.deleted".
          " -printf '\%h\\n' | awk -F/ '{print \$(NF-1)\"\/\"\$NF}' | sort";
   msg(3, "INFO", "findCompletedBand: ".$cmd);
@@ -199,78 +194,44 @@ sub findCompletedBand($) {
       $deleted{$array[$i]} = 1;
     }
   } 
+
+  # get a list of obs that are marked as transferred (and not deleted)
+  $cmd = "find ".$archives_dir." -maxdepth 3 -name band.transferred".
+         " -printf '\%h\\n' | awk -F/ '{print \$(NF-1)\"\/\"\$NF}' | sort";
+  msg(3, "INFO", "findCompletedBand: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  msg(3, "INFO", "findCompletedBand: ".$result." ".$response);
+  if ($result eq "ok") {
+    @array= split(/\n/, $response);
+    for ($i=0; $i<=$#array; $i++) {
+      if (!defined($deleted{$array[$i]})) {
+        $transferred{$array[$i]} = 1;
+      }
+    }
+  } 
+
   
-  $cmd = "find ".$archives_dir." -maxdepth 3 -name sent.to.swin".
-         " -printf '\%h\\n' | awk -F/ '{print \$(NF-1)\"\/\"\$NF}' | sort";
-  msg(3, "INFO", "findCompletedBand: ".$cmd);
-  ($result, $response) = Dada::mySystem($cmd);
-  msg(3, "INFO", "findCompletedBand: ".$result." ".$response);
-  if ($result eq "ok") {
-    @array = ();
-    @array= split(/\n/, $response);
-    for ($i=0; $i<=$#array; $i++) {
-      if (!defined($deleted{$array[$i]})) {
-        $sent_to_swin{$array[$i]} = 1;
-        $sent_to{$array[$i]} = 1;
-      }
-    }
-  }
-
-  @array = ();
-  $cmd = "find ".$archives_dir." -maxdepth 3 -name sent.to.parkes".
-         " -printf '\%h\\n' | awk -F/ '{print \$(NF-1)\"\/\"\$NF}' | sort";
-  msg(3, "INFO", "findCompletedBand: ".$cmd);
-  ($result, $response) = Dada::mySystem($cmd);
-  msg(3, "INFO", "findCompletedBand: ".$result." ".$response);
-  if ($result eq "ok") {
-    @array = ();
-    @array= split(/\n/, $response);
-    for ($i=0; $i<=$#array; $i++) {
-      if (!defined($deleted{$array[$i]})) {
-        $sent_to_parkes{$array[$i]} = 1;
-        if (!defined($sent_to{$array[$i]})) {
-          $sent_to{$array[$i]} = 1;
-        }
-      }
-    }
-  }
-
-  @array = ();
-  @pids = Dada::getProjectGroups("apsr");
-
-  for ($i=0; $i<=$#pids; $i++) {
-    if (!(exists($cfg{$pids[$i]."_DEST"}))) {
-      msg(2, "WARN", "findCompletedBand: missing config param: ".$pids[$i]."_DEST");
-    } else {
-      $pid_dests{$pids[$i]} = $cfg{$pids[$i]."_DEST"};
-      msg(2, "INFO", "findCompletedBand: pid_dests{".$pids[$i]."} = ".$pid_dests{$pids[$i]});
-    }
-  }
-
-  my @keys = sort keys %sent_to;
-  my $want_swin = 0;
-  my $want_parkes = 0;
-  my $on_swin = 0;
-  my $on_parkes = 0;
+  my @keys = sort keys %transferred;
   my $space = 0;
 
   msg(2, "INFO", "findCompletedBand: ".($#keys+1)." observations to consider");
 
-  for ($i=0; ((!$quit_daemon) && (!$found_obs) && ($i<=$#keys)); $i++) {
+  for ($i=0; ((!$quit_daemon) && ($i<=$#keys)); $i++) {
 
     $k = $keys[$i];
 
     # check the type of the observation
     $file = $archives_dir."/".$k."/obs.start";
     msg(3, "INFO", "findCompletedBand: testing for existence: ". $file);
-    if (-f $file) {
-
+    if (-f $file) 
+    {
       $cmd = "grep ^SOURCE ".$file." | awk '{print \$2}'";
       msg(3, "INFO", "findCompletedBand: ".$cmd);
       ($result, $response) = Dada::mySystem($cmd);
       msg(3, "INFO", "findCompletedBand: ".$result." ".$response);
 
-      if ($result ne "ok") {
+      if ($result ne "ok") 
+      {
         msg(0, "WARN", "findCompletedBand could not extract SOURCE from obs.start");
         next;
       }
@@ -284,49 +245,26 @@ sub findCompletedBand($) {
       ($result, $response) = Dada::mySystem($cmd);
       msg(3, "INFO", "findCompletedBand: ".$result." ".$response);
 
-      if ($result ne "ok") {
+      if ($result ne "ok") 
+      {
         msg(0, "WARN", "findCompletedBand: could not extract PID from obs.start");
         next;
       }
       $pid = $response;
 
-      # determine the required destinations based on PID
-      msg(3, "INFO", "findCompletedBand: getObsDestinations(".$pid.", ".$pid_dests{$pid}.")");
-      ($want_swin, $want_parkes) = Dada::getObsDestinations($pid, $pid_dests{$pid});
-      msg(3, "INFO", "findCompletedBand: getObsDestinations want swin:".$want_swin." parkes:".$want_parkes);
+      msg(2, "INFO", "findCompletedBand: ".$k." SOURCE=".$source.", PID=".$pid);
 
-      $found_obs = 1;
+      $cmd = "du -sh ".$archives_dir."/".$k." | awk '{print \$1}'";
+      msg(2, "INFO", "findCompletedBand: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      msg(2, "INFO", "findCompletedBand: ".$result." ".$response);
+      $space = $response;
 
-      $on_swin = (defined($sent_to_swin{$k})) ? 1 : 0;
-      $on_parkes = (defined($sent_to_parkes{$k})) ? 1 : 0;
-
-      msg(2, "INFO", "findCompletedBand: ".$k." SOURCE=".$source.", PID=".$pid.
-                 ", SWIN=".$on_swin."/".$want_swin.", PARKES=".$on_parkes."/".$want_parkes);
-
-      if ($want_swin && (!$on_swin)) {
-        $found_obs = 0;
-        msg(2, "INFO", "findCompletedBand: ".$k." [".$source."] sent.to.swin missing");
-      }
-
-      if ($want_parkes && (!$on_parkes)) {
-        $found_obs = 0;
-        msg(2, "INFO", "findCompletedBand: ".$k." [".$source."] sent.to.parkes missing");
-      }
-
-      if ($found_obs) {
-
-        $cmd = "du -sh ".$archives_dir."/".$k." | awk '{print \$1}'";
-        msg(2, "INFO", "findCompletedBand: ".$cmd);
-        ($result, $response) = Dada::mySystem($cmd);
-        msg(2, "INFO", "findCompletedBand: ".$result." ".$response);
-        $space = $response;
-
-        msg(2, "INFO", "findCompletedBand: found ".$k." PID=".$pid.", SIZE=".$space);
-        ($obs, $band) = split(/\//, $k);
-
-      }
-
-    } else {
+      msg(2, "INFO", "findCompletedBand: found ".$k." PID=".$pid.", SIZE=".$space);
+      ($obs, $band) = split(/\//, $k);
+    } 
+    else 
+    {
       if (-f $archives_dir."/".$k."/obs.deleted") {
         $cmd = "touch ".$archives_dir."/".$k."/band.deleted";
         msg(2, "INFO", "findCompletedBand: ".$cmd);
