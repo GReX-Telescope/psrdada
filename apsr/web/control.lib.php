@@ -243,11 +243,9 @@ class control extends apsr_webpage
 
       }
 
-      function toggleDaemonPID(host, daemon) {
+      function toggleDaemonPersist(host, daemon) {
         var img = document.getElementById("img_"+host+"_"+daemon);
         var src = new String(img.src);
-        var i = document.getElementById(daemon+"_pid").selectedIndex;
-        var pid = document.getElementById(daemon+"_pid").options[i].value;
         var action = "";
         var url = "";
 
@@ -260,14 +258,9 @@ class control extends apsr_webpage
         else
           action = "ignore";
 
-        if ((pid == "") && (action == "start")) 
-        {
-          alert("You must select a PID to Start the daemon with");
-          action = "ignore";
-        } 
         if (action != "ignore") {
           if (action == "start")
-            url = "control.lib.php?action="+action+"&nhosts=1&host_0="+host+"&daemon="+daemon+"&args="+pid;
+            url = "control.lib.php?action="+action+"&nhosts=1&host_0="+host+"&daemon="+daemon;
           else
             url = "control.lib.php?action="+action+"&nhosts=1&host_0="+host+"&daemon="+daemon;
           //alert(url);
@@ -610,7 +603,7 @@ class control extends apsr_webpage
           {
             var xmlObj=xmlDoc.documentElement; 
 
-            var i, j, k, result, key, value, span, this_result, pids;
+            var i, j, k, result, key, value, span, this_result;
 
             var results = xmlObj.getElementsByTagName("daemon_info");
 
@@ -619,7 +612,6 @@ class control extends apsr_webpage
 
               result = results[i];
               this_result = new Array();
-              pids = new Array();
 
               for (j=0; j<result.childNodes.length; j++) 
               {
@@ -632,10 +624,6 @@ class control extends apsr_webpage
                     value = result.childNodes[j].childNodes[0].nodeValue;
                   } else {
                     value = "";
-                  }
-                  if (result.childNodes[j].getAttribute("pid") != null) {
-                    //alert(key+" childNodes["+j+"].getAttribute(pid)="+result.childNodes[j].getAttribute("pid"));
-                    pids[key] = result.childNodes[j].getAttribute("pid");
                   }
                   this_result[key] = value;
                 }
@@ -681,25 +669,6 @@ class control extends apsr_webpage
                     img.src = "/images/grey_light.png";
                   } 
                 } 
-              }
-
-              for ( key in pids ) {
-                try {
-                  var select = document.getElementById(key+"_pid");
-
-                  for (j = 0; j < select.length; j++) {
-                    if ((select[j].value == pids[key]) && (select.disabled == false))
-                      select.selectedIndex = j;
-                  }
-                  // disable changing of this select
-                  if ((this_result[key] == "2") || (this_result[key] == "1")) {
-                    select.disabled = true;
-                  } else {
-                    select.disabled = false;
-                  }
-                } catch(e) {
-                  alert("ERROR="+e);
-                }
               }
             }
           }
@@ -799,7 +768,6 @@ class control extends apsr_webpage
       $server_daemons_hash  = $this->inst->serverLogInfo();
       $host = $this->inst->config["SERVER_HOST"];
       $host = substr($host, 0, strpos($host,"."));
-      $pids = $this->inst->getPIDS();
 ?>
       <table width='100%'>
         <tr>
@@ -809,7 +777,7 @@ class control extends apsr_webpage
       for ($i=0; $i < count($server_daemons_persist); $i++) 
       {
         $d = $server_daemons_persist[$i];
-        $this->printPersistentServerDaemonControl($d, $server_daemons_hash[$d]["name"], $host, $pids);
+        $this->printPersistentServerDaemonControl($d, $server_daemons_hash[$d]["name"], $host);
       }
 ?>
             </table>
@@ -1105,6 +1073,36 @@ class control extends apsr_webpage
       }
     }
 
+    # handle persistent daemons
+    $persist_xml = "";
+    if (array_key_exists("SERVER_DAEMONS_PERSIST", $this->inst->config))
+    {
+      $server_daemons_persist = explode(" ", $this->inst->config["SERVER_DAEMONS_PERSIST"]);
+      list ($host, $domain)  = explode(".", $this->inst->config["SERVER_HOST"],2);
+      $persist_xml = "<daemon_info><host>".$host."</host>";
+      $running = array();
+      for ($i=0; $i<count($server_daemons_persist); $i++)
+      {
+        $d = $server_daemons_persist[$i];
+
+        # check if the script is running
+        $cmd = "pgrep -f '^perl.*server_".$d.".pl'";
+        $last = exec($cmd, $array, $rval);
+        if ($rval == 0)
+          $running[$d] = 1;
+        else
+          $running[$d] = 0;
+
+        # check if the PID file exists
+        if (file_exists($this->inst->config["SERVER_CONTROL_DIR"]."/".$d.".pid"))
+          $running[$d]++;
+
+        # update xml
+        $persist_xml .= "<".$d.">".$running[$d]."</".$d.">";
+      }
+      $persist_xml .= "</daemon_info>\n";
+    }
+
     # produce the xml
     $xml = "<?xml version='1.0' encoding='ISO-8859-1'?>\n";
     $xml .= "<daemon_infos>\n";
@@ -1117,6 +1115,7 @@ class control extends apsr_webpage
       else 
         $xml .= "<daemon_info><host>".$hosts[$i]."</host><apsr_master_control>0</apsr_master_control><message>".$responses[$i]."</message></daemon_info>\n";
     }
+    $xml .= $persist_xml;
     $xml .= "</daemon_infos>\n";
 
     header('Content-type: text/xml');
@@ -1172,7 +1171,50 @@ class control extends apsr_webpage
     echo $unique_id."\n";
     flush();
 
-    if (($daemon == "apsr_master_control") && ($action == "start")) {
+    # special case for starting/stopping persistent server daemons
+    if ($area == "persist") {
+
+      if ($action == "start") {
+        echo "Starting ".$daemon." on srv0\n";
+        flush();
+
+        $cmd = "ssh -x -l dada srv0 'server_".$daemon.".pl";
+        if ($args != "")
+          $cmd .= " ".$args;
+        $cmd .= "'";
+        $output = array();
+        $lastline = exec($cmd, $output, $rval);
+
+      } else if ($action == "stop") {
+        $quit_file = $this->inst->config["SERVER_CONTROL_DIR"]."/".$daemon.".quit";
+        $pid_file = $this->inst->config["SERVER_CONTROL_DIR"]."/".$daemon.".pid";
+        if (file_exists($pid_file))
+        {
+          echo "Stopping ".$daemon." on srv0\n";
+          flush();
+
+          $cmd = "touch ".$quit_file;
+          $lastline = exec($cmd, $output, $rval);
+          # wait for the PID file to be removed
+          $max_wait = 10;
+          while (file_exists($pid_file) && $max_wait > 0) {
+            sleep(1);
+            $max_wait--;
+          }
+          unlink($quit_file);
+        }
+        else
+        {
+          echo "No PID file [".$pid_file."] existed for ".$daemon." on srv0\n";
+          flush();
+        }
+      } else {
+        $html = "Unrecognized action [".$action."] for daemon [".$daemon."]\n";
+        flush();
+      }
+
+    } else if (($daemon == "apsr_master_control") && ($action == "start")) {
+
       $html = "Starting master control on";
       if ($nhosts > 2)
       {
@@ -1361,20 +1403,11 @@ class control extends apsr_webpage
     echo "  </tr>\n";
   }
 
-  function printPersistentServerDaemonControl($daemon, $name, $host, $pids) 
+  function printPersistentServerDaemonControl($daemon, $name, $host) 
   {
     echo "  <tr>\n";
     echo "    <td>".$name."</td>\n";
-    echo "    <td>".$this->statusLight($host, $daemon, "-1", "", "toggleDaemonPID")."</td>\n";
-    echo "    <td>\n";
-    echo "      <select id='".$daemon."_pid'>\n";
-    echo "        <option value=''>--</option>\n";
-    for ($i=0; $i<count($pids); $i++)
-    {
-      echo "        <option value='".$pids[$i]."'>".$pids[$i]."</option>\n";
-    } 
-    echo "      </select>\n";
-    echo "    </td>\n";
+    echo "    <td>".$this->statusLight($host, $daemon, "-1", "", "toggleDaemonPersist")."</td>\n";
     echo "  </tr>\n";
   }
 
