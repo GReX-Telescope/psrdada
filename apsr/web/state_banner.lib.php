@@ -41,7 +41,7 @@ class state_banner extends apsr_webpage
         var re = "resizeable=1";
 
         options = to+","+sc+","+l+","+st+","+mb+","+re
-        eval("page" + type + " = window.open(URL, '" + type + "', '"+options+",width=1024,height=768');");
+        eval("page" + type + " = window.open(URL, '" + type + "', '"+options+",width=1034,height=778');");
       }
 
       // handle the response from an state_banner request
@@ -54,6 +54,10 @@ class state_banner extends apsr_webpage
           {
             var lines = response.split(":::");
             document.getElementById("apsr_state").innerHTML = "State: "+lines[0];
+            var state = lines[0];
+            var state = state.replace("TCS Interface Stopped", "Offline");
+            document.title = "APSR "+ state;
+
           }
         }
       }
@@ -108,6 +112,7 @@ class state_banner extends apsr_webpage
             <a href="javascript:popUp('control.lib.php?single=true', 'minimum')" class="btn"><span>Controls</span></a>
             <a href="javascript:popUp('tcs_simulator.lib.php?single=true', 'full')" class="btn"><span>Test</span></a>
             <a href="javascript:popUp('support.lib.php?single=true', 'full')" class="btn"><span>Help</span></a>
+            <!--<a href="javascript:popUp('config_edit.lib.php?single=true&file=site.cfg', 'full')" class="btn"><span>Site Config</span></a>-->
           </div>
         </td>
 <?  
