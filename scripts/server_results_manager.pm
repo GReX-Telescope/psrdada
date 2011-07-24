@@ -149,8 +149,12 @@ sub main() {
         $t = getObsAge($o, $n_bands, "lowres");
   
         # newest archive was more than 5 minutes old, finish the obs.
-        if ($t > 300) {
-
+        if (($n_bands != 16) && ($t > 0) && ($t < 30))
+        {
+          Dada::logMsg(1, $dl, "waiting for obs to be a little older");
+        }
+        elsif ($t > 300) 
+        {
           ($result, $response) = checkBandFinished($o, $n_bands);
 
           if ($result eq "ok") {
@@ -674,7 +678,9 @@ sub processArchive($$) {
 
       # Fres Operations
       $cmd = $bindir."/psradd -T --inplace ".$total_f_res." ".$total_f_sum;
+      Dada::logMsg(2, $dl, $cmd);
       ($result, $response) = Dada::mySystem($cmd);
+      Dada::logMsg(2, $dl, $result." ".$response);
       if ($result ne "ok") {
         Dada::logMsg(0, $dl, "psradd failed cmd=".$cmd);
         Dada::logMsg(0, $dl, "psradd output=".$response);
@@ -682,7 +688,9 @@ sub processArchive($$) {
     
       # Fscrunc the archive
       $cmd = $bindir."/pam -F -m ".$total_f_sum;
+      Dada::logMsg(2, $dl, $cmd);
       ($result, $response) = Dada::mySystem($cmd);
+      Dada::logMsg(2, $dl, $result." ".$response);
       if ($result ne "ok") {
         Dada::logMsg(0, $dl, "pam failed cmd=".$cmd);
         Dada::logMsg(0, $dl, "pam output=".$response);
@@ -690,7 +698,9 @@ sub processArchive($$) {
 
       # Tres Operations
       $cmd = $bindir."/psradd --inplace ".$total_t_res." ".$total_f_sum;
+      Dada::logMsg(2, $dl, $cmd);
       ($result, $response) = Dada::mySystem($cmd);
+      Dada::logMsg(2, $dl, $result." ".$response);
       if ($result ne "ok") {
         Dada::logMsg(0, $dl, "psradd failed cmd=".$cmd);
         Dada::logMsg(0, $dl, "psradd output=".$response);
