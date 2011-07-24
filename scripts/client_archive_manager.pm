@@ -425,8 +425,9 @@ sub nfsCopy($$$) {
     `ls $nfsdir >& /dev/null`;
   }
   
+  # this can ocurr when using multifold
   if (! -d $nfsdir."/".$dir) {
-     msg(0, "WARN", "nfsCopy: ".$nfsdir."/".$dir." did not exist, creating");
+     msg(0, "INFO", "nfsCopy: ".$nfsdir."/".$dir." did not exist, creating");
     `mkdir -p $nfsdir/$dir`;
   }
      
