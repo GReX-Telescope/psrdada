@@ -1411,6 +1411,9 @@ sub addSiteConfig() {
   my $bw = 0;
   my $i = 0;
 
+  %site_cfg = ();
+  %site_cfg = Dada::readCFGFileIntoHash($cfg{"CONFIG_DIR"}."/site.cfg", 0);
+
   $tcs_cmds{"NUM_PWC"}     = NHOST;
   $tcs_cmds{"HDR_SIZE"}    = $site_cfg{"HDR_SIZE"};
 
@@ -1420,7 +1423,13 @@ sub addSiteConfig() {
 
   for ($i=0; $i<NHOST; $i++)
   {
-    $tcs_cmds{"Band".$i."_BW"} = -1 * $bw;
+    # Do not multiply by -1 for A. Brown's new filterbank (2011/WvS)
+    # $tcs_cmds{"Band".$i."_BW"} = -1 * $bw;
+    if ($site_cfg{"DSB"} eq "1") {
+      $tcs_cmds{"Band".$i."_BW"} = $bw;
+    } else {
+      $tcs_cmds{"Band".$i."_BW"} = -1 * $bw;
+    }
     $tcs_cmds{"Band".$i."_FREQ"} = $cf - ($tbw/2) + ($bw/2) + ($bw*$i);
   }
 
