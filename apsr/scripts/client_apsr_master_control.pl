@@ -69,7 +69,6 @@ sub setupClientType()
     Dada::logMsg(2, $Dada::client_master_control::dl, "matched server alias");
     $Dada::client_master_control::host = "srv0";
     @Dada::client_master_control::daemons = split(/ /,$cfg{"SERVER_DAEMONS"});
-    @Dada::client_master_control::helper_daemons = split(/ /,$cfg{"SERVER_DAEMONS_PERSIST"});
     $Dada::client_master_control::daemon_prefix = "server";
     $Dada::client_master_control::control_dir = $cfg{"SERVER_CONTROL_DIR"};
     $found = 1;
