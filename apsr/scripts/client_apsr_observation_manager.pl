@@ -699,27 +699,25 @@ sub touchBandFinished($$) {
   my $result = "";
   my $response = "";
 
-  $cmd = "find ".$cfg{"CLIENT_RECORDING_DIR"}." -maxdepth 1 -name '".$utc_start."*.dada' | wc -l";
-  msg(2, "INFO", "touchBandFinished: ".$cmd);
+  # Ensure the results directory is mounted
+  $cmd = "ls ".$cfg{"SERVER_RESULTS_NFS_MNT"}." >& /dev/null";
   ($result, $response) = Dada::mySystem($cmd);
+  
+  # Create the full nfs destinations
+  $dir = $cfg{"SERVER_RESULTS_NFS_MNT"}."/".$utc_start."/".$centre_freq;
+  
+  $cmd = "touch ".$dir."/band.finished";
+  msg(2, "INFO", "touchBandFinished: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd ,0);
+  msg(2, "INFO", "touchBandFinished: ".$result." ".$response);
+  
+  # Touch a local band.finished for the transfer manager to use
+  $dir = $cfg{"CLIENT_ARCHIVE_DIR"}."/".$utc_start."/".$centre_freq;
+  $cmd = "touch ".$dir."/band.finished";
+  msg(2, "INFO", "touchBandFinished: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd ,0);
   msg(2, "INFO", "touchBandFinished: ".$result." ".$response);
 
-  if (($result eq "ok") && ($response == "0")) {
-
-    # Ensure the results directory is mounted
-    $cmd = "ls ".$cfg{"SERVER_RESULTS_NFS_MNT"}." >& /dev/null";
-    ($result, $response) = Dada::mySystem($cmd);
-  
-    # Create the full nfs destinations
-    $dir = $cfg{"SERVER_RESULTS_NFS_MNT"}."/".$utc_start."/".$centre_freq;
-  
-    $cmd = "touch ".$dir."/band.finished";
-    msg(2, "INFO", "touchBandFinished: ".$cmd);
-    ($result, $response) = Dada::mySystem($cmd ,0);
-    msg(2, "INFO", "touchBandFinished: ".$result." ".$response);
-
-  }
-  
 }
 
 
