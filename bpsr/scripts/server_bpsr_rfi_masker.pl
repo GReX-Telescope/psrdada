@@ -166,8 +166,24 @@ $| = 1;
             next;
           }
 
-          # if not mon files appeared for 60 seconds, move rfi.processing to rfi.done
-          if ($response eq "finalize") {
+          # if there is only 1 beam/pwc no RFI masking is required
+          if ($response eq "no rfi masking needed") {
+
+            # move the processing to finished
+            Dada::logMsg(1, $dl, $o." processing -> finished [1 beam only]");
+            $cmd = "mv ".$o."/rfi.processing ".$o."/rfi.finished";
+            Dada::logMsg(2, $dl, "main: ".$cmd);
+            ($result, $response) = Dada::mySystem($cmd);
+            Dada::logMsg(2, $dl, "main: ".$result." ".$response);
+            if ($result ne "ok")
+            {
+              Dada::logMsgWarn($error, "could not rename rfi.processing to ".
+                               "rfi.finished for ".$o.": ".$response);
+              next;
+            }
+      
+           # if not mon files appeared for 60 seconds, move rfi.processing to rfi.done
+          } elsif ( $response eq "finalize") {
 
             Dada::logMsg(2, $dl, "main: finalizeRFIFiles(".$o.")");
             ($result, $response) = finalizeRFIFiles($o);
@@ -177,6 +193,10 @@ $| = 1;
               $quit_daemon = 1;
               next;
             }
+          }
+          else 
+          {
+              # no action necessary
           }
         } 
       }
@@ -295,6 +315,12 @@ sub processMonFiles($)
     return ("fail", "NUM_PWC was invalid [".$num_pwc."]");
   }
 
+  if ($num_pwc == 1) {
+    Dada::logMsg(2, $dl, "processMonFiles: NUM_PWC [".$num_pwc."] means no RFI masking");
+    return ("ok", "no rfi masking needed");
+
+  }
+
   $num_mon_files = 2 * $num_pwc;
 
   # determine the utc of the next set of mon files to be processed
@@ -321,7 +347,7 @@ sub processMonFiles($)
   Dada::logMsg(2, $dl, "processMonFiles: [".$o."] next_mon_utc=".$next_mon_utc);
 
   # count the specified mon files  
-  $cmd = "find -L ".$cfg{"SERVER_ARCHIVE_DIR"}."/".$o." -mindepth 3 -maxdepth 3 -perm -a+r -name '".$next_mon_utc.".ts?' -printf '\%f\n'";
+  $cmd = "find -L ".$cfg{"SERVER_ARCHIVE_DIR"}."/".$o." -ignore_readdir_race -mindepth 3 -maxdepth 3 -perm -a+r -name '".$next_mon_utc.".ts?' -printf '\%f\n'";
   Dada::logMsg(3, $dl, "processMonFiles: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(3, $dl, "processMonFiles: find: ".$result." ".$response);
@@ -349,14 +375,14 @@ sub processMonFiles($)
   {
 
     # get the pol0 list
-    $cmd = "find -L ".$cfg{"SERVER_ARCHIVE_DIR"}."/".$o." -mindepth 3 -maxdepth 3 ".
+    $cmd = "find -L ".$cfg{"SERVER_ARCHIVE_DIR"}."/".$o." -ignore_readdir_race -mindepth 3 -maxdepth 3 ".
            "-perm -a+r -name '".$next_mon_utc.".ts0' -printf '\%h/\%f '";
     Dada::logMsg(3, $dl, "processMonFiles: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     Dada::logMsg(3, $dl, "processMonFiles: ".$result." ".$response);
     if (($result ne "ok") || ($response =~ m/No such file or directory/))
     {
-      Dada::logMsgWarn($error, "processMonFiles: could not create list of mon files for pol0");
+      Dada::logMsgWarn($warn, "processMonFiles: could not create list of mon files for pol0");
     }
     else 
     {
@@ -364,14 +390,14 @@ sub processMonFiles($)
     }
 
     # get the pol1 list
-    $cmd = "find -L ".$cfg{"SERVER_ARCHIVE_DIR"}."/".$o." -mindepth 3 -maxdepth 3 ".
+    $cmd = "find -L ".$cfg{"SERVER_ARCHIVE_DIR"}."/".$o." -ignore_readdir_race -mindepth 3 -maxdepth 3 ".
            "-perm -a+r -name '".$next_mon_utc.".ts1' -printf '\%h/\%f '";
     Dada::logMsg(3, $dl, "processMonFiles: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     Dada::logMsg(3, $dl, "processMonFiles: ".$result." ".$response);
     if (($result ne "ok") || ($response =~ m/No such file or directory/))
     {
-      Dada::logMsgWarn($error, "processMonFiles: could not create list of mon files for pol1");
+      Dada::logMsgWarn($warn, "processMonFiles: could not create list of mon files for pol1");
     }
     else
     {
