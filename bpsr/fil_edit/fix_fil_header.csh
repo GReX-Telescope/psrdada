@@ -2,9 +2,11 @@
 set inf = $1
 set fil = $2
 set filedit=$3
+set nbeams=$4
 
 set ra_deg = `cat $inf | grep '<start_coordinate>' -A 3 | grep ra | sed -e 's:.*>\([0-9\.]*\)<.*:\1:'`
 set dec_deg = `cat $inf | grep '<start_coordinate>' -A 3 | grep dec | sed -e 's:.*>\(-*[0-9.]*\)<.*:\1:'`
+set ibeam = `cat $inf  | grep '<receiver_beam>'| sed -e 's:.*>\(-*[0-9.]*\)<.*:\1:'`
 
 set ra_tot = `echo ${ra_deg} | awk '{print $1/15}'`  #total ra hours
 set ra_h = `echo ${ra_tot} | awk '{print int($1)}' | awk '{printf "%02d",$1}'` #hours
@@ -24,6 +26,6 @@ set dec_rest = `echo ${dec_neu} ${dec_min} ${dec_sec} | awk '{print ((($1-int($1
 #echo dec = ${dec_h}:${dec_min}:${dec_sec}${dec_rest}
 set dec = ${dec_h}${dec_min}${dec_sec}${dec_rest}
 
-set cmd="$filedit  --ra $ra --dec $dec $fil"
+set cmd="$filedit  --ra $ra --dec $dec --beam $ibeam --nbeams $nbeams $fil"
 echo $cmd
 $cmd
