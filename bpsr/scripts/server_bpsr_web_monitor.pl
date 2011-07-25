@@ -276,7 +276,7 @@ sub currentInfoThread($) {
   my $sleep_time = 10;
   my $sleep_counter = 0;
 
-  my $cmd = "find ".$results_dir." -maxdepth 1 -type d -name '2*' -printf '\%f\n' | sort | tail -n 1";
+  my $cmd = "find ".$results_dir." -ignore_readdir_race -maxdepth 1 -type d -name '2*' -printf '\%f\n' | sort | tail -n 1";
   my $obs = "";
   my $tmp_str = "";
   my %cfg_file = ();
@@ -379,18 +379,18 @@ sub imageInfoThread($) {
       $sleep_counter = $sleep_time;
 
       # find the most recent directory (ls gives arg list too long)
-      $cmd = "find . -maxdepth 1 -type d -name '2*' -printf '\%f\n' | sort | tail -n 1";
+      $cmd = "find . -ignore_readdir_race -maxdepth 1 -type d -name '2*' -printf '\%f\n' | sort | tail -n 1";
       $obs = `$cmd`;
       chomp $obs;
 
       # get the listing of beam dirs
       @dirs = ();
-      $cmd = "find ".$obs." -mindepth 1 -maxdepth 1 -type d -name '??' -printf '\%f '";
+      $cmd = "find ".$obs." -ignore_readdir_race -mindepth 1 -maxdepth 1 -type d -name '??' -printf '\%f '";
       $dirs_string = `$cmd`;
       chomp $dirs_string;
 
       # get the listing of small image files
-      $cmd = "find ".$obs." -name '*_112x84.png' | sort | awk -F/ '{print \$2, \$3}'";
+      $cmd = "find ".$obs." -ignore_readdir_race -name '*_112x84.png' | sort | awk -F/ '{print \$2, \$3}'";
       $image_string = `$cmd`;
       @images = split(/\n/, $image_string);
 
@@ -506,7 +506,7 @@ sub imageInfoThread($) {
       $pvf_image_string = $tmp_str;
 
       # Now lookup the Pre Decimation Band Pass images
-      $cmd = "find stats -name '*_112x84.png' -printf '\%f\n' | sort";
+      $cmd = "find stats -ignore_readdir_race -name '*_112x84.png' -printf '\%f\n' | sort";
       $image_string = `$cmd`;
       @images = split(/\n/, $image_string);
   
@@ -610,11 +610,26 @@ sub tapeInfoThread() {
 
   my $ready_to_send = 0;
   my @obs_fin = ();
-  my %sts_list = ();
-  my %stp_list = ();
-  my $swin_ready = 0;
-  my $parkes_ready = 0;
+  my %finished_count = ();
+  my %finished_size = ();
+  my %transferred_count = ();
+  my %transferred_size = ();
+  my %beam_finished = ();
+  my $beams_finished = "";      # number of beams finished but not transferred
+  my $beams_on_raid = 0;       # number transferred to raid but not sent to swin yet
+  my $beams_archived = "";       # number transferred to raid but not sent to swin yet
   my $result = "";
+  my @bits = ();
+  my @keys = ();
+  my $obs = "";
+  my $pid = "";
+  my $cnt = 0;
+  my $sz = 0;
+  my $rval = 0;
+
+  my $o = "";
+  my $f = "";
+  my $k = "";
 
   while (!$quit_daemon) {
 
@@ -653,11 +668,14 @@ sub tapeInfoThread() {
 
         # Get information from tapes.db
         $cmd = "ssh -x -l ".$parkes_db[0]." ".$parkes_db[1]." 'cat ".$parkes_db[2]."/tapes.".$parkes_pid.".db' | awk '{print \$1,\$2,\$3,\$6}'";
+        Dada::logMsg(2, DL, "tapeInfoThread: ".$cmd);
+        
         $tmp_str = `$cmd`;
         chomp $tmp_str;
         @parkes_files_db = split(/\n/,$tmp_str);
 
         $cmd = "ssh -x -l ".$swin_db[0]." ".$swin_db[1]." 'cat ".$swin_db[2]."/tapes.".$swin_pid.".db' | awk '{print \$1,\$2,\$3,\$6}'";
+        Dada::logMsg(2, DL, "tapeInfoThread: ".$cmd);
         $tmp_str = `$cmd`;
         chomp $tmp_str;
         @swin_files_db = split(/\n/,$tmp_str);
@@ -689,100 +707,93 @@ sub tapeInfoThread() {
         Dada::logMsg(2, DL, "tapeInfoThread: percents parkes=".$parkes_percent."% swin=".$swin_percent."%");
         Dada::logMsg(2, DL, "tapeInfoThread: names parkes=".$parkes_tape." swin=".$swin_tape);
 
-        # Find out how many are ready for sending of each type
-        %stp_list = ();
-        %sts_list = ();
-        @obs_fin = ();
-
-        for ($i=0; $i<=14; $i++) {
-
-          # Get a list of "<UTC_START> sent.to.*" from apsr 00 -> 14
-          $cmd = "ssh -l bpsr apsr".sprintf("%02d",$i)." \"cd ".$cfg{"CLIENT_ARCHIVE_DIR"}."; ".
-                  "find -mindepth 3 -maxdepth 3 -type f -name 'sent.to.*' ".
-                  "-printf '\%h/\%f\\n'\" | awk -F/ '{print \$2\" \"\$4}'";
+        %finished_count = ();
+        %finished_size = ();
+        %transferred_count = ();
+        %transferred_size = ();
+        for ($i=0; (($i<=14) && (!$quit_daemon)); $i++)
+        {
+          $cmd = "ssh -l bpsr apsr".sprintf("%02d",$i)." \"web_results_helper.pl\"";
+          Dada::logMsg(2, DL, "tapeInfoThread: ".$cmd);
           ($result, $tmp_str) = Dada::mySystem($cmd);
-
-          if ($result eq "ok") {
-            @arr = split(/\n/,$tmp_str);
-
-            for ($j=0; $j<=$#arr; $j++) {
-              @arr2 = split(/ /,$arr[$j]);
-              if ($arr2[1] eq "sent.to.swin") {
-                if (!defined $sts_list{$arr2[0]}) {
-                  $sts_list{$arr2[0]} = 0;
+          if ($result eq "ok")
+          {
+            @arr = split(/\n/, $tmp_str);
+            for ($j=0; $j<=$#arr; $j++)
+            {
+              @bits = split(/ /,$arr[$j]);
+              for ($k=1; $k<=$#bits; $k++)
+              {
+                ($pid, $cnt, $sz) = split(/:/, $bits[$k]);
+                if ($bits[0] eq "FINISHED")
+                { 
+                  if (!exists($finished_count{$pid}))
+                  {
+                    $finished_count{$pid} = 0;
+                    $finished_size{$pid} = 0;
+                  }
+                  $finished_count{$pid} += $cnt;
+                  $finished_size{$pid} += $sz;
                 }
-                $sts_list{$arr2[0]} += 1;
-              } else {
-                if (!defined $stp_list{$arr2[0]}) {
-                  $stp_list{$arr2[0]} = 0;
+                if ($bits[0] eq "TRANSFERRED")
+                { 
+                  if (!exists($transferred_count{$pid}))
+                  {
+                    $transferred_count{$pid} = 0;
+                    $transferred_size{$pid} = 0;
+                  }
+                  $transferred_count{$pid} += $cnt;
+                  $transferred_size{$pid} += $sz;
                 }
-                $stp_list{$arr2[0]} += 1;
               }
             }
           }
         }
 
-        $swin_ready = 0;
-        $parkes_ready = 0;
-
-        # Now get a list of all observations that have obs.finished in them
-        $cmd = "cd ".$cfg{"SERVER_ARCHIVE_NFS_MNT"}."; find  -mindepth 2 -maxdepth 2 -name 'obs.finished' -printf '\%h\\n' | awk -F/ '{print \$2}'";
-        ($result, $tmp_str) = Dada::mySystem($cmd);
-        if ($result eq "ok") {
-          @arr = split(/\n/,$tmp_str);
-          for ($j=0; $j<=$#arr; $j++) {
-
-            # check if the PID matches
-            $cmd = "grep ^PID ".$cfg{"SERVER_ARCHIVE_NFS_MNT"}."/".$arr[$j]."/obs.info | grep ".$xfer_pid; 
-            Dada::logMsg(2, DL, "tapeInfoThread: ".$cmd);
-            ($result, $tmp_str) = Dada::mySystem($cmd);
-            if ($result eq "ok") {
-              push @obs_fin, $arr[$j];
-
-              # check the "rough" number of beams
-              $cmd = "grep ^NUM_PWC ".$cfg{"SERVER_ARCHIVE_NFS_MNT"}."/".$arr[$j]."/obs.info | awk '{print \$2}'";
-              Dada::logMsg(2, DL, "tapeInfoThread: ".$cmd);
-              ($result, $tmp_str) = Dada::mySystem($cmd);
-              if ($result eq "ok") {
-                $swin_ready += int($tmp_str);
-                $parkes_ready += int($tmp_str);
-              }
-            }
-          }
+        $beams_finished = "";
+        @keys = keys %finished_count;
+        for ($i=0; $i<=$#keys; $i++)
+        {
+          $beams_finished .= "<span>".$keys[$i].": ".$finished_count{$keys[$i]}." [".$finished_size{$keys[$i]}." MB]</span>";
+        }
+        if ($beams_finished eq "")
+        {
+          $beams_finished = "none";
         }
 
-        # Determine how many beams are sent.to.*
-        @obs_fin = sort @obs_fin;
+        Dada::logMsg(2, DL, "tapeInfoThread: beams_finished=".$beams_finished);
 
-        # TODO this is erroneous now with single beam obs...
-        #$swin_ready = 13 * ($#obs_fin+1);
-        #$parkes_ready = 13 * ($#obs_fin+1);
+        # the number of beams waiting on raid to be sent to swin [for all projID's]
+        $beams_on_raid = 0;
+        for ($i=0; $i<=$#p_users; $i++) {
+          $cmd = "ssh -x -l ".$p_users[$i]." ".$p_hosts[$i]." 'find ".$p_paths[$i]."/../swin/send -mindepth 3 -maxdepth 3 -type d' | wc -l";
+          $tmp_str = `$cmd`;
+          chomp $tmp_str;
+          $beams_on_raid += int($tmp_str);
+        }
+        Dada::logMsg(2, DL, "tapeInfoThread: obs_fin=".($#obs_fin+1).", beams_on_raid=".$beams_on_raid);
 
-        for ($i=0; $i<=$#obs_fin; $i++) {
-          if (defined $sts_list{$obs_fin[$i]}) { 
-            $swin_ready -= $sts_list{$obs_fin[$i]};
-          }
-          if (defined $stp_list{$obs_fin[$i]}) { 
-            $parkes_ready -= $stp_list{$obs_fin[$i]};
-          }
-        }
-
-        # check if each destination is actually one that will be used
-        ($want_swin, $want_parkes) = Bpsr::getObsDestinations($xfer_pid, $cfg{$xfer_pid."_DEST"});
-        if (!$want_swin) {
-          $swin_ready = 0;
-        }
-        if (!$want_parkes) {
-          $parkes_ready = 0;
-        }
-        
-        Dada::logMsg(2, DL, "tapeInfoThread: obs_fin=".($#obs_fin+1).", swin_ready=".$swin_ready.", parkes_ready=".$parkes_ready);
+         # the number of beams waiting on raid to be sent to swin [for all projID's]
+        #$beams_archived = "";
+        #for ($i=0; $i<=$#p_users; $i++) {
+        #  $cmd = "du -sh P???";
+        #  ($result, $rval, $response) = Dada::remoteSshCommand($p_users[$i], $p_hosts[$i], $cmd, $p_paths[$i]."/../archived", "awk '{print \$2\" \"\$1}'");
+        #  if (($result eq "ok") && ($rval == 0))
+        #  {
+        #    @arr = split(/\n/, $response);
+        #    for ($j=0; $j<=$#arr; $j++)
+        #    {
+        #      $beams_archived .= "<span>".$arr[$j]."</span>";
+        #    }
+        #  }
+        #}
+        #Dada::logMsg(1, DL, "tapeInfoThread: beams_archived=".$beams_archived);
 
         $num_parkes = 0;
         $num_swin = 0;
         # number of beams in staging area for PARKES_DIRS
         for ($i=0; $i<=$#p_users; $i++) {
-          $cmd = "ssh -x -l ".$p_users[$i]." ".$p_hosts[$i]." 'cd ".$p_paths[$i]."/".$parkes_pid."; find staging_area pulsars -mindepth 2 -maxdepth 2 -type d -printf \"\%f\\n\"' | wc -l";
+          $cmd = "ssh -x -l ".$p_users[$i]." ".$p_hosts[$i]." 'cd ".$p_paths[$i]."/archive/".$parkes_pid."; find . -mindepth 2 -maxdepth 2 -type d -printf \"\%f\\n\"' | wc -l";
           $tmp_str = `$cmd`;
           chomp $tmp_str;
           $num_parkes += int($tmp_str);
@@ -792,7 +803,7 @@ sub tapeInfoThread() {
 
         # number of beams in staging area for SWIN_DIRS
         for ($i=0; $i<=$#s_users; $i++) {
-          $cmd = "ssh -x -l ".$s_users[$i]." ".$s_hosts[$i]." 'cd ".$s_paths[$i]."/".$swin_pid."; find staging_area pulsars -mindepth 2 -maxdepth 2 -type d -printf \"\%f\\n\"' | wc -l";
+          $cmd = "ssh -x -l ".$s_users[$i]." ".$s_hosts[$i]." 'cd ".$s_paths[$i]."/archive/".$swin_pid."; find . -mindepth 2 -maxdepth 2 -type d -printf \"\%f\\n\"' | wc -l";
           $tmp_str = `$cmd`;
           chomp $tmp_str;
           $num_swin += int($tmp_str);
@@ -814,8 +825,8 @@ sub tapeInfoThread() {
       $tmp_str .= "SWIN_NUM:::".$num_swin.";;;";
       $tmp_str .= "SWIN_PID:::".$swin_pid.";;;";
       $tmp_str .= "XFER:::".$xfer_state.";;;";
-      $tmp_str .= "XFER_SWIN:::".$swin_ready.";;;";
-      $tmp_str .= "XFER_PARKES:::".$parkes_ready.";;;";
+      $tmp_str .= "XFER_FINISHED:::".$beams_finished.";;;";
+      $tmp_str .= "XFER_ON_RAID:::".$beams_on_raid.";;;";
       $tmp_str .= "XFER_PID:::".$xfer_pid.";;;";
 
       $tape_info_string = $tmp_str;
