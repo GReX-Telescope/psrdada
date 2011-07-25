@@ -90,9 +90,6 @@ for ($i=0; $i < $cfg{"NUM_HELP"}; $i++) {
 @helpers = Dada::array_unique(@helpers);
 @all = Dada::array_unique(@all);
 
-# stop all scripts running on the server
-debugMessage(0, "Killing Server Daemons");
-($result, $response) = killServerDaemons(\@server_daemons);
 
 # stop all scripts running on the clients 
 debugMessage(0, "Killing Client Daemons");
@@ -106,6 +103,9 @@ debugMessage(0, "Destroying Client SHM");
 debugMessage(0, "Killing Helper Daemons");
 ($result, $response) = killClientDaemons(\@helpers, \@helper_daemons);
 
+# stop all scripts running on the server
+debugMessage(0, "Killing Server Daemons");
+($result, $response) = killServerDaemons(\@server_daemons);
 
 # Clear the web interface status directory
 my $dir = $cfg{"STATUS_DIR"};
@@ -270,7 +270,7 @@ sub killClientDaemons($$)
       $d = $prefix."_".$daemons[$j].".pl";
 
       # get the pid of the daemon
-      $cmd = "ps auxwww | grep perl | grep '".$d."' | grep -v grep | awk '{print \$2}'";
+      $cmd = "pgrep -u ".$u." -f '^perl.*".$d."'";
       debugMessage(2, "killClientDaemons: remoteSshCommand(".$u.", ".$h.", ".$cmd.")");
       ($result, $rval, $response) = Dada::remoteSshCommand($u, $h, $cmd);
       debugMessage(2, "killClientDaemons: ".$result." ".$rval." ".$response);
@@ -279,9 +279,13 @@ sub killClientDaemons($$)
       {
         debugMessage(1, "killClientDaemons: could not determine PID for ".$d);
       }
+      elsif ($response eq "") 
+      {
+        debugMessage(2, "killClientDaemons: ".$d." not running");
+      }
       else
       {
-        $cmd = "kill -KILL ".$response;
+        $cmd = "pkill -KILL -u ".$u." -f '^perl.*".$d."'";
         debugMessage(2, "killClientDaemons: remoteSshCommand(".$u.", ".$h.", ".$cmd.")");
         ($result, $response) = Dada::remoteSshCommand($u, $h, $cmd);
         debugMessage(2, "killClientDaemons: ".$result." ".$rval." ".$response);
@@ -307,6 +311,7 @@ sub destroyClientSpecial($)
   my ($hostsRef) = @_;
 
   my @hosts = @$hostsRef;
+  my @dbs  = split(/ /, lc($cfg{"DATA_BLOCKS"}));
     
   my $u = "bpsr";
   my $h = "";
@@ -314,6 +319,8 @@ sub destroyClientSpecial($)
   my $response = "";
   my $rval = "";
   my $cmd = "";
+  my $i = 0;
+  my $j = 0;
 
   for ($i=0; $i<=$#hosts; $i++)
   {
@@ -334,11 +341,13 @@ sub destroyClientSpecial($)
     ($result, $response) = Dada::remoteSshCommand($u, $h, $cmd);
     debugMessage(2, "killClientDaemons: ".$result." ".$rval." ".$response);
 
-
-    $cmd = "sudo /home/dada/linux_64/bin/dada_db -d";
-    debugMessage(2, "killClientDaemons: remoteSshCommand(".$u.", ".$h.", ".$cmd.")");
-    ($result, $response) = Dada::remoteSshCommand($u, $h, $cmd);
-    debugMessage(2, "killClientDaemons: ".$result." ".$rval." ".$response);
+    for ($j=0; $j<=$#dbs; $j++) 
+    {
+      $cmd = "dada_db -d -k ".$dbs[$j];
+      debugMessage(2, "killClientDaemons: remoteSshCommand(".$u.", ".$h.", ".$cmd.")");
+      ($result, $response) = Dada::remoteSshCommand($u, $h, $cmd);
+      debugMessage(2, "killClientDaemons: ".$result." ".$rval." ".$response);
+    }
   }
 
   return ("ok", "all nuked");
