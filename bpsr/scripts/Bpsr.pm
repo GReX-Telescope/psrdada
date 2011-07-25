@@ -170,6 +170,7 @@ sub configureMultibobServer() {
     logMessage(0, "multibob hostports command failed");
     return ($result, $response);
   } else {
+    $response =~ s/\n$//;
     logMessage(1, "multibob -> ".$result." ".$response);
   }
 
@@ -201,18 +202,15 @@ sub configureMultibobServer() {
       logMessage(0, "multibob hostports command failed");
       return ($result, $response);
     }
+  }
 
-  # just issue the open command
+  logMessage(1, "multibob <- open");
+  ($result, $response) = Dada::sendTelnetCommand($handle, "open");
+  if ($result ne "ok") {
+    logMessage(0, "multibob open command failed");
+    return ($result, $response);
   } else {
-
-    logMessage(1, "multibob <- open");
-    ($result, $response) = Dada::sendTelnetCommand($handle, "open");
-    if ($result ne "ok") {
-      logMessage(0, "multibob open command failed");
-      return ($result, $response);
-    } else {
-      logMessage(1, "multibob -> ".$result." ".$response);
-    }
+    logMessage(1, "multibob -> ".$result." ".$response);
   }
 
   ($result, $response) = Bpsr::waitForMultibobState("alive", $handle, 60);
