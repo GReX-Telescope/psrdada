@@ -260,7 +260,7 @@ class control extends bpsr_webpage
         else
           action = "ignore";
 
-        if ((pid == "") && (action == "start")) 
+        if ((pid == "") && (action == "start"))
         {
           alert("You must select a PID to Start the daemon with");
           action = "ignore";
@@ -270,6 +270,44 @@ class control extends bpsr_webpage
             url = "control.lib.php?action="+action+"&nhosts=1&host_0="+host+"&daemon="+daemon+"&args="+pid;
           else
             url = "control.lib.php?action="+action+"&nhosts=1&host_0="+host+"&daemon="+daemon;
+          //alert(url);
+
+          var da_http_request;
+          if (window.XMLHttpRequest)
+            da_http_request = new XMLHttpRequest()
+          else
+            da_http_request = new ActiveXObject("Microsoft.XMLHTTP");
+    
+          da_http_request.onreadystatechange = function() 
+          {
+            handle_daemon_action_request(da_http_request)
+          }
+          da_http_request.open("GET", url, true)
+          da_http_request.send(null)
+
+          poll_update = 2000;
+          clearTimeout(poll_timeout);
+          poll_timeout = setTimeout('poll_server()', poll_update);
+        } 
+      }
+
+      function toggleDaemonPersist(host, daemon) {
+        var img = document.getElementById("img_"+host+"_"+daemon);
+        var src = new String(img.src);
+        var action = "";
+        var url = "";
+
+        if (src.indexOf("green_light.png",0) != -1)
+          action = "stop";
+        else if (src.indexOf("red_light.png",0) != -1)
+          action = "start";
+        else if (src.indexOf("yellow_light.png",0) != -1)
+          action = "stop";
+        else
+          action = "ignore";
+
+        if (action != "ignore") {
+          url = "control.lib.php?action="+action+"&nhosts=1&host_0="+host+"&daemon="+daemon;
           //alert(url);
 
           var da_http_request;
@@ -612,7 +650,7 @@ class control extends bpsr_webpage
           {
             var xmlObj=xmlDoc.documentElement; 
 
-            var i, j, k, result, key, value, span, this_result;
+            var i, j, k, result, key, value, span, this_result, pids;
 
             var results = xmlObj.getElementsByTagName("daemon_info");
 
@@ -621,6 +659,7 @@ class control extends bpsr_webpage
 
               result = results[i];
               this_result = new Array();
+              pids = new Array();
 
               for (j=0; j<result.childNodes.length; j++) 
               {
@@ -633,6 +672,10 @@ class control extends bpsr_webpage
                     value = result.childNodes[j].childNodes[0].nodeValue;
                   } else {
                     value = "";
+                  }
+                  if (result.childNodes[j].getAttribute("pid") != null) {
+                    //alert(key+" childNodes["+j+"].getAttribute(pid)="+result.childNodes[j].getAttribute("pid"));
+                    pids[key] = result.childNodes[j].getAttribute("pid");
                   }
                   this_result[key] = value;
                 }
@@ -653,19 +696,43 @@ class control extends bpsr_webpage
                   if (img == null) {
                     alert("img_"+host+"_"+key+" did not exist");
                   }
-                  if (value == "2")
+                  if (value == "2") {
                     img.src = "/images/green_light.png";
-                  else if (value == "1") 
+                  } else if (value == "1") {
                     img.src = "/images/yellow_light.png";
-                  else if (value == "0") {
+                  } else if (value == "0") {
                     if (key == "bpsr_master_control") {
                       set_daemons_to_grey(host);
                     }
                     img.src = "/images/red_light.png";
-                  } else
+                  } else {
                     img.src = "/images/grey_light.png";
-                
+                  } 
                 } 
+              }
+
+              for ( key in pids ) {
+                try {
+                  var select = document.getElementById(key+"_pid");
+
+                  // disable changing of this select
+                  if ((this_result[key] == "2") || (this_result[key] == "1")) {
+                    select.disabled = true;
+                  } else {
+                    select.disabled = false;
+                  }
+                  for (j = 0; j < select.length; j++) {
+                    if (select[j].value == pids[key]) {
+                      if (pids[key] != "") 
+                        select.selectedIndex = j;
+                      else
+                        if (select.disabled == true)
+                          select.selectedIndex = j;
+                    }
+                  }
+                } catch(e) {
+                  alert("ERROR="+e);
+                }
               }
             }
           }
@@ -774,14 +841,17 @@ class control extends bpsr_webpage
       for ($i=0; $i < count($server_daemons_persist); $i++) 
       {
         $d = $server_daemons_persist[$i];
-        $this->printPersistentServerDaemonControl($d, $server_daemons_hash[$d]["name"], $host, $pids);
+        if ($d == "bpsr_raid_pipeline")
+          $this->printPersistentServerDaemonControl($d, $server_daemons_hash[$d]["name"], $host, "NA");
+        else
+          $this->printPersistentServerDaemonControl($d, $server_daemons_hash[$d]["name"], $host, $pids);
       }
 ?>
             </table>
           </td>
         </tr>
         <tr>
-          <td height='100px' id='persist_output' valign='top'></td>
+          <td height='60px' id='persist_output' valign='top'></td>
         </tr>
       </table>
 <?
@@ -796,10 +866,9 @@ class control extends bpsr_webpage
 <?
     $this->openBlockHeader("Usage");
 ?>
-    <p>Instrument Controls [above] can be used to start/stop/restart all of the required BPSR daemons.</p>
-    <p>Click on the red/green lights to toggle the respective daemons on/off.</p>
-    <p>Use the Start/Stop buttons to turn on/off on all the machines in that section.</p>
-    <p>Messages will appear indicating activity, but it may take a few seconds for the daemon lights to turn on/off.</p>
+    <p>Instrument Controls can be used to start/stop/ the all required BPSR daemons</p>
+    <p>Click on individual lights to toggle the respective daemons on/off. Start/Stop buttons control daemons on all machines</p>
+    <p>Messages are printed indicating activity, but may take a few seconds for the daemon lights to respond</p>
 <?
     $this->closeBlockHeader();
 ?>
@@ -1035,7 +1104,6 @@ class control extends bpsr_webpage
       } else {
         # echo "open socket failed on ".$host."<br>\n";
       }
-  
     }
 
     # read the responses
@@ -1058,6 +1126,56 @@ class control extends bpsr_webpage
       }
     }
 
+    # handle persistent daemons
+    $persist_xml = "";
+    if (array_key_exists("SERVER_DAEMONS_PERSIST", $this->inst->config))
+    {
+      $server_daemons_persist = explode(" ", $this->inst->config["SERVER_DAEMONS_PERSIST"]);
+      list ($host, $domain)  = explode(".", $this->inst->config["SERVER_HOST"],2);
+      $persist_xml = "<daemon_info><host>".$host."</host>";
+      $running = array();
+      for ($i=0; $i<count($server_daemons_persist); $i++)
+      {
+        $d = $server_daemons_persist[$i];
+
+        # check if the script is running
+        $cmd = "pgrep -f '^perl.*server_".$d.".pl'";
+        $last = exec($cmd, $array, $rval);
+        if ($rval == 0)
+          $running[$d] = 1;
+        else
+          $running[$d] = 0;
+
+        # check if the PID file exists
+        if (file_exists($this->inst->config["SERVER_CONTROL_DIR"]."/".$d.".pid"))
+          $running[$d]++;
+
+        # get the PID for this persistent daemon
+        $dpid = "NA";
+        if (array_key_exists("SERVER_".$d."_PID_PORT", $this->inst->config))
+        {
+          $port = $this->inst->config["SERVER_".$d."_PID_PORT"];
+          list ($sock, $result) = openSocket($host, $port);
+          if ($result == "ok")
+          {
+            socketWrite($sock, "get_pid\r\n");
+            $read = socketRead($sock);
+            $dpid = rtrim($read);
+            socket_close($sock);
+          }
+          else
+            $dpid = "";
+        }
+
+        # update xml
+        if ($dpid != "NA")
+          $persist_xml .= "<".$d." pid='".$dpid."'>".$running[$d]."</".$d.">";
+        else
+          $persist_xml .= "<".$d.">".$running[$d]."</".$d.">";
+      }
+      $persist_xml .= "</daemon_info>\n";
+    }
+
     # produce the xml
     $xml = "<?xml version='1.0' encoding='ISO-8859-1'?>\n";
     $xml .= "<daemon_infos>\n";
@@ -1068,6 +1186,7 @@ class control extends bpsr_webpage
       else
         $xml .= $responses[$i]."\n";
     }
+    $xml .= $persist_xml;
     $xml .= "</daemon_infos>\n";
 
     header('Content-type: text/xml');
@@ -1123,7 +1242,49 @@ class control extends bpsr_webpage
     echo $unique_id."\n";
     flush();
 
-    if (($daemon == "bpsr_master_control") && ($action == "start")) {
+    # special case for starting/stopping persistent server daemons
+    if ($area == "persist") {
+
+      if ($action == "start") {
+        echo "Starting ".$daemon." on srv0\n";
+        flush();
+
+        $cmd = "ssh -x -l dada srv0 'server_".$daemon.".pl";
+        if ($args != "")
+          $cmd .= " ".$args;
+        $cmd .= "'";
+        $output = array();
+        $lastline = exec($cmd, $output, $rval);
+
+      } else if ($action == "stop") {
+        $quit_file = $this->inst->config["SERVER_CONTROL_DIR"]."/".$daemon.".quit";
+        $pid_file = $this->inst->config["SERVER_CONTROL_DIR"]."/".$daemon.".pid";
+        if (file_exists($pid_file))
+        {
+          echo "Stopping ".$daemon." on srv0\n";
+          flush();
+        
+          $cmd = "touch ".$quit_file;
+          $lastline = exec($cmd, $output, $rval);
+          # wait for the PID file to be removed
+          $max_wait = 10;
+          while (file_exists($pid_file) && $max_wait > 0) {
+            sleep(1);
+            $max_wait--;
+          }
+          unlink($quit_file);
+        } 
+        else
+        {
+          echo "No PID file [".$pid_file."] existed for ".$daemon." on srv0\n";
+          flush();
+        }
+      } else {
+        $html = "Unrecognized action [".$action."] for daemon [".$daemon."]\n";
+        flush();
+      }
+
+    } else if (($daemon == "bpsr_master_control") && ($action == "start")) {
       $html = "Starting master control on";
       if ($nhosts > 2)
       {
@@ -1316,15 +1477,23 @@ class control extends bpsr_webpage
   {
     echo "  <tr>\n";
     echo "    <td>".$name."</td>\n";
-    echo "    <td>".$this->statusLight($host, $daemon, "-1", "", "toggleDaemonPID")."</td>\n";
+    if (is_array($pids))
+      echo "    <td>".$this->statusLight($host, $daemon, "-1", "", "toggleDaemonPID")."</td>\n";
+    else
+      echo "    <td>".$this->statusLight($host, $daemon, "-1", "", "toggleDaemonPersist")."</td>\n";
     echo "    <td>\n";
-    echo "      <select id='".$daemon."_pid'>\n";
-    echo "        <option value=''>--</option>\n";
-    for ($i=0; $i<count($pids); $i++)
+    if (is_array($pids))
     {
-      echo "        <option value='".$pids[$i]."'>".$pids[$i]."</option>\n";
-    } 
-    echo "      </select>\n";
+      echo "      <select id='".$daemon."_pid'>\n";
+      echo "        <option value=''>--</option>\n";
+      for ($i=0; $i<count($pids); $i++)
+      {
+        echo "        <option value='".$pids[$i]."'>".$pids[$i]."</option>\n";
+      } 
+      echo "      </select>\n";
+    }
+    else
+      echo $pids;
     echo "    </td>\n";
     echo "  </tr>\n";
   }
