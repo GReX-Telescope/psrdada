@@ -25,7 +25,7 @@ SERVER_CONTROL_DIR      @PSRDADA_INSTALL@/control
 SERVER_RESULTS_NFS_MNT  /nfs/results/bpsr
 SERVER_ARCHIVE_NFS_MNT  /nfs/archives/bpsr
 SERVER_DAEMONS          bpsr_pwc_monitor bpsr_src_monitor bpsr_sys_monitor bpsr_tcs_interface bpsr_results_manager bpsr_multibob_manager bpsr_web_monitor bpsr_rfi_masker
-SERVER_DAEMONS_PERSIST  bpsr_transfer_manager bpsr_swin_tape_controller bpsr_parkes_tape_controller
+SERVER_DAEMONS_PERSIST  bpsr_transfer_manager bpsr_swin_tape_controller bpsr_parkes_tape_controller bpsr_raid_pipeline
 
 ###############################################################################
 #
@@ -58,6 +58,10 @@ SERVER_XFER_PID_PORT       51025
 SERVER_PARKESTAPE_PID_PORT 51026
 SERVER_SWINTAPE_PID_PORT   51027
 
+SERVER_bpsr_transfer_manager_PID_PORT  51025
+SERVER_bpsr_swin_tape_controller_PID_PORT 51027
+SERVER_bpsr_parkes_tape_controller_PID_PORT 51026
+
 ###############################################################################
 # DFB Simluator configuration
 #
@@ -73,26 +77,20 @@ IBOB_SIM_PORT             51008     # port for PWC's to connect to is simulating
 ###############################################################################
 # Tape Archive Locations
 # 
-NUM_SWIN_DIRS           4
+NUM_SWIN_DIRS           6
 SWIN_DIR_0              pulsar:shrek210-gb:/export/shrek210a/bpsr
 SWIN_DIR_1              pulsar:shrek210-gb:/export/shrek210b/bpsr
 SWIN_DIR_2              pulsar:shrek211-gb:/export/shrek211a/bpsr
 SWIN_DIR_3              pulsar:shrek211-gb:/export/shrek211b/bpsr
+SWIN_DIR_4              pulsar:shrek214-gb:/export/shrek214a/bpsr
+SWIN_DIR_5              pulsar:shrek214-gb:/export/shrek214b/bpsr
 SWIN_S4_DEVICE          /dev/nst0
 SWIN_DB_DIR             pulsar:shrek211-gb:/home/ssi/pulsar/bookkeeping/tape_archiver
-NUM_SWIN_FOLD_DIRS      2
-SWIN_FOLD_DIR_0         pulsar:shrek210-gb:/export/shrek210a/bpsr
-SWIN_FOLD_DIR_1         pulsar:shrek210-gb:/export/shrek210b/bpsr
 
-NUM_PARKES_DIRS         4
-PARKES_DIR_0            bpsr:apsr14:/lfs/data0/bpsr
-PARKES_DIR_1            bpsr:apsr15:/lfs/data0/bpsr
-PARKES_DIR_2            bpsr:apsr16:/lfs/data0/bpsr
-PARKES_DIR_3            bpsr:apsr17:/lfs/data0/bpsr
+NUM_PARKES_DIRS         1
+PARKES_DIR_0            bpsr:raid0:/lfs/raid0/bpsr/parkes
 PARKES_S4_DEVICE        /dev/nst0
 PARKES_DB_DIR           dada:jura:/home/dada/bookkeeping/tape_archiver
-NUM_PARKES_FOLD_DIRS    0
-#PARKES_FOLD_DIR_0       bpsr:apsr00:/nfs/apsr00/bpsr/from_parkes_pulsars
 
 
 ###############################################################################
@@ -151,4 +149,7 @@ P739_DEST               swin
 P682_DEST               parkes
 P140_DEST               swin
 P743_DEST               parkes
+P786_DEST               parkes
+P789_DEST               none
+P999_DEST               none
 
