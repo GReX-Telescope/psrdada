@@ -33,6 +33,16 @@ Dada::preventDuplicateDaemon(basename($0));
 use constant DAEMON_NAME        => "bpsr_disk_cleaner";
 
 #
+# The existence of these files control when a beam will be 
+# considered ready for deletion. In times of trouble, these
+# can be modified to their sent.to.* variants so that beams
+# will be deleted as soon as they have been transferred
+#
+# default should be on.tape.*
+use constant PRKS_DELETE_FILE => "on.tape.parkes";
+use constant SWIN_DELETE_FILE => "on.tape.swin";
+
+#
 # Global Variable Declarations
 #
 our $dl : shared = 1;
@@ -142,9 +152,9 @@ sub findCompletedBeam($) {
   my $file = "";
 
   my %deleted        = ();    # obs that have a beam.deleted
-  my %on_tape_swin   = ();    # obs that have been sent.to.swin
-  my %on_tape_parkes = ();    # obs that have been sent.to.parkes
-  my %on_tape        = ();    # obs that have been sent.to.*
+  my %on_tape_swin   = ();    # obs that have been on.tape.swin
+  my %on_tape_parkes = ();    # obs that have been on.tape.parkes
+  my %on_tape        = ();    # obs that have been on.tape.*
   my @pids = ();
   my %pid_dests = ();
 
@@ -162,7 +172,7 @@ sub findCompletedBeam($) {
     }
   }
 
-  $cmd = "find ".$archives_dir." -maxdepth 3 -name on.tape.swin".
+  $cmd = "find ".$archives_dir." -maxdepth 3 -name ".SWIN_DELETE_FILE.
          " -printf '\%h\\n' | awk -F/ '{print \$(NF-1)\"\/\"\$NF}' | sort";
   logMsg(3, "INFO", "findCompletedBeam: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
@@ -180,7 +190,7 @@ sub findCompletedBeam($) {
 
 
   @array = ();
-  $cmd = "find ".$archives_dir." -maxdepth 3 -name on.tape.parkes".
+  $cmd = "find ".$archives_dir." -maxdepth 3 -name ".PRKS_DELETE_FILE.
          " -printf '\%h\\n' | awk -F/ '{print \$(NF-1)\"\/\"\$NF}' | sort";
   logMsg(3, "INFO", "findCompletedBeam: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
@@ -266,12 +276,12 @@ sub findCompletedBeam($) {
 
       if ($want_swin && (!$on_swin)) {
         $found_obs = 0;
-        logMsg(2, "INFO", "findCompletedBeam: ".$k." [".$source."] on.tape.swin missing");
+        logMsg(2, "INFO", "findCompletedBeam: ".$k." [".$source."] ".SWIN_DELETE_FILE." missing");
       }
 
       if ($want_parkes && (!$on_parkes)) {
         $found_obs = 0;
-        logMsg(2, "INFO", "findCompletedBeam: ".$k." [".$source."] on.tape.parkes missing");
+        logMsg(2, "INFO", "findCompletedBeam: ".$k." [".$source."] ".PRKS_DELETE_FILE." missing");
       }
 
       if ($found_obs) {
