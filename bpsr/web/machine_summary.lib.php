@@ -360,7 +360,7 @@ class machine_summary extends bpsr_webpage
               resetOthers(set);
               if ((active_machines > 0) && (current_machines != active_machines))
               {
-                //alert("BPSR Beam Configuration has been changed");
+                alert("BPSR Beam Configuration has been changed "+active_machines+" -> "+current_machines);
                 current_machines = active_machines;
                 document.location = "/bpsr/";
               }
@@ -406,23 +406,29 @@ class machine_summary extends bpsr_webpage
 
           if (in_array($m, $this->pwcs)) {
             echo "        ".$m."_buffer = new JS_BRAMUS.jsProgressBar($('".$m."_buffer_progress_bar'), 0, ";
-            echo " { width : 40, showText : false, animate : false, barImage : Array( '/images/jsprogress/percentImage_back1_40.png', ".
-                                                                    "'/images/jsprogress/percentImage_back2_40.png', ".
-                                                                    "'/images/jsprogress/percentImage_back3_40.png', ".
-                                                                    "'/images/jsprogress/percentImage_back4_40.png') } );\n";
+            echo " { width : 40, showText : false, animate : false, ".
+                 "boxImage: '/images/jsprogress/percentImage_40.png', ".
+                 "barImage : Array( '/images/jsprogress/percentImage_back1_40.png', ".
+                 "'/images/jsprogress/percentImage_back2_40.png', ".
+                 "'/images/jsprogress/percentImage_back3_40.png', ".
+                 "'/images/jsprogress/percentImage_back4_40.png') } );\n";
           }
 
           echo "        ".$m."_load = new JS_BRAMUS.jsProgressBar($('".$m."_load_progress_bar'), 0, ";
-          echo " { width : 40, showText : false, animate : false, barImage  : Array( '/images/jsprogress/percentImage_back1_40.png', ".
-                                                                   "'/images/jsprogress/percentImage_back2_40.png', ".
-                                                                   "'/images/jsprogress/percentImage_back3_40.png', ".
-                                                                   "'/images/jsprogress/percentImage_back4_40.png') } );\n";
+          echo " { width : 40, showText : false, animate : false, ".
+               "boxImage: '/images/jsprogress/percentImage_40.png', ".
+               "barImage : Array( '/images/jsprogress/percentImage_back1_40.png', ".
+               "'/images/jsprogress/percentImage_back2_40.png', ".
+               "'/images/jsprogress/percentImage_back3_40.png', ".
+               "'/images/jsprogress/percentImage_back4_40.png') } );\n";
 
           echo "        ".$m."_disk = new JS_BRAMUS.jsProgressBar($('".$m."_disk_progress_bar'), 0, ";
-          echo " { width : 40, showText : false, animate : false, barImage  : Array( '/images/jsprogress/percentImage_back1_40.png', ".
-                                                                   "'/images/jsprogress/percentImage_back2_40.png', ".
-                                                                   "'/images/jsprogress/percentImage_back3_40.png', ".
-                                                                   "'/images/jsprogress/percentImage_back4_40.png') } );\n";
+          echo " { width : 40, showText : false, animate : false, ".
+               "boxImage: '/images/jsprogress/percentImage_40.png', ".
+               "barImage : Array( '/images/jsprogress/percentImage_back1_40.png', ".
+               "'/images/jsprogress/percentImage_back2_40.png', ".
+               "'/images/jsprogress/percentImage_back3_40.png', ".
+               "'/images/jsprogress/percentImage_back4_40.png') } );\n";
         }
 ?>
       }, false);
