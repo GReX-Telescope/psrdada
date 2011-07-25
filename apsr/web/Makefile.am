@@ -8,6 +8,7 @@ nobase_dist_web_SCRIPTS = definitions_i.php \
                           apsr.lib.php \
                           index.php \
                           control.lib.php \
+                          config_edit.lib.php \
                           custom_plot.php \
                           custom_plot.lib.php \
                           download_archives.php \
