@@ -50,6 +50,7 @@ class bpsr extends instrument
     $arr["bpsr_src_monitor"]            = array("logfile" => "nexus.src.log", "name" => "SRC", "tag" => "src", "shortname" => "SRC");
     $arr["bpsr_swin_tape_controller"]   = array("logfile" => "bpsr_swin_tape_controller.log", "name" => "Swin Tape", "tag" => "server", "shortname" => "SwinTape");
     $arr["bpsr_parkes_tape_controller"] = array("logfile" => "bpsr_parkes_tape_controller.log", "name" => "Parkes Tape", "tag" => "server", "shortname" => "ParkesTape");
+    $arr["bpsr_raid_pipeline"]          = array("logfile" => "bpsr_raid_pipeline.log", "name" => "RAID Pipeline", "tag" => "server", "shortname" => "Pipeline");
     return $arr;
 
   }
@@ -61,6 +62,7 @@ class bpsr extends instrument
     $arr["bpsr_results_monitor"]     = array("logfile" => "nexus.sys.log", "name" => "Results Mon", "tag" => "results mon");
     $arr["processor"]                = array("logfile" => "nexus.src.log", "name" => "Processor", "tag" => "proc");
     $arr["bpsr_disk_cleaner"]        = array("logfile" => "nexus.sys.log", "name" => "Disk Cleaner", "tag" => "cleaner");
+    $arr["bpsr_transfer_raid"]       = array("logfile" => "nexus.sys.log", "name" => "Transfer RAID", "tag" => "xfer");
     return $arr;
 
   }

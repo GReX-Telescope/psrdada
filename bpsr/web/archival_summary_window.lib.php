@@ -139,8 +139,8 @@ class archival_summary extends bpsr_webpage
             <td colspan=3 id="XFER_td" align="center"><span id ="XFER"></span></td> 
           </tr>
           <tr>
-            <td id="XFER_SWIN_td" align="center">Swin: <span id ="XFER_SWIN"></span></td>
-            <td id="XFER_PARKES_td" align="center">Parkes: <span id ="XFER_PARKES"></span></td>
+            <td id="XFER_FINISHED_td" align="center">Local disks: <span id ="XFER_FINISHED"></span></td>
+            <td id="XFER_ON_RAID_td" align="center">RAID disk: <span id ="XFER_ON_RAID"></span></td>
             <td></td>
           </tr>
         </table>
