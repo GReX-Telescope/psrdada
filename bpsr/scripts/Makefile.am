@@ -12,8 +12,10 @@ dist_bin_SCRIPTS = Bpsr.pm \
                    server_bpsr_src_monitor.pl \
                    server_bpsr_sys_monitor.pl \
                    server_bpsr_transfer_manager.pl \
+                   server_bpsr_transfer_checker.pl \
                    server_bpsr_tape_archiver.pl \
                    server_bpsr_parkes_tape_controller.pl \
+                   server_bpsr_raid_pipeline.pl \
                    server_bpsr_rfi_masker.pl \
                    server_bpsr_swin_tape_controller.pl \
                    server_bpsr_server_logger.pl \
@@ -26,6 +28,7 @@ dist_bin_SCRIPTS = Bpsr.pm \
                    client_ibob_level_setter.pl \
                    client_bpsr_src_logger.pl \
                    web_observations_helper.pl \
+                   web_results_helper.pl \
                    ibob_interface.pl \
                    web_style.txt \
                    merge_tcs_logs.csh \
