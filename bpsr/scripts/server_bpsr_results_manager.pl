@@ -736,6 +736,34 @@ sub markObsState($$$) {
     Dada::logMsgWarn($warn, "markObsState: expected file missing: ".$file);
   }
 
+  # touch a beam.finished in all the client beam directories
+  $cmd = "find ".$archives_dir."/".$o." -mindepth 1 -maxdepth 1 -type l -name '??' -printf '\%f\n'";
+  Dada::logMsg(2, DL, "markObsState: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(2, DL, "markObsState: ".$result." ".$response);
+  if (($result ne "ok") || ($response eq ""))
+  {
+    Dada::logMsgWarn($warn, "markObsState: could get beam list");
+  } 
+  else
+  {
+    my @beams = split(/\n/, $response);
+    my $i = 0;
+    my $b = "";
+    for ($i=0; $i<=$#beams; $i++)
+    {
+      $b = $beams[$i]; 
+      $cmd = "touch ".$archives_dir."/".$o."/".$b."/beam.finished";
+      Dada::logMsg(2, DL, "markObsState: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      Dada::logMsg(2, DL, "markObsState: ".$result." ".$response);
+      if ($result ne "ok") 
+      {
+        Dada::logMsgWarn($warn, "markObsState: could touch ".$o."/".$b."/beam.finished");
+      }
+    }
+  }
+
 }
 
 #
@@ -773,7 +801,7 @@ sub fixFilHeaders($$) {
 
     if ((-f $fil_file) && (-f $psrxml_file)) {
 
-      $cmd = "fix_fil_header.csh ".$psrxml_file." ".$fil_file." ".$fil_edit;
+      $cmd = "fix_fil_header.csh ".$psrxml_file." ".$fil_file." ".$fil_edit." ".$cfg{"NUM_PWC"};
       Dada::logMsg(2, DL, "fixFilHeaders: ".$cmd);
       ($result, $response) = Dada::mySystem($cmd);
       Dada::logMsg(2, DL, "fixFilHeaders: ".$result." ".$response);
