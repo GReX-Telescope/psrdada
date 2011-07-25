@@ -36,9 +36,13 @@ if ($result eq "ok") {
 
   chdir $cfg{"CLIENT_ARCHIVE_DIR"};
 
-  $cmd = "find . -mindepth 3 -maxdepth 3 -type f -name 'obs.start' -o -type f -name 'sent.to.*'".
-         " -o -type f -name 'error.to.*' -o -type f -name 'on.tape.*' -o -type f -name 'integrated.ar'".
-         "  -o -type f -name '*.fil' | sort";
+  $cmd = "find . -mindepth 3 -maxdepth 3 ".
+         "-type f -name 'obs.start' -printf '\%h/\%f/0\n' ".
+         "-o -type f -name 'sent.to.*' -printf '\%h/\%f/0\n' ".
+         "-o -type f -name 'error.to.*' -printf '\%h/\%f/0\n' ".
+         "-o -type f -name 'on.tape.*' -printf '\%h/\%f/0\n' ".
+         "-o -type f -name 'integrated.ar' -printf '\%h/\%f/\%s\n' ".
+         "-o -type f -name '*.fil' -printf '\%h/\%f/\%s\n' | sort";
   ($result, $response) = Dada::mySystem($cmd);
   
   if ($result eq "ok") {
