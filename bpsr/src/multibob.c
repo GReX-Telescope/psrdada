@@ -230,7 +230,10 @@ void* multibob_monitor (void* context)
 int multibob_cmd_open (void* context, FILE* fptr, char* args)
 {
   if (!context)
+  {
+    //fprintf (stderr, "multibob_cmd_open: !context returning -1\n");
     return -1;
+  }
 
   multibob_t* multibob = context;
 
