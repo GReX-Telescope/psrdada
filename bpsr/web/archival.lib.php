@@ -26,6 +26,7 @@ define(INR, 17);   # in /nfs/results/bpsr
 define(INL, 18);   # in /lfs/data0/bpsr/archives
 define(NBM, 19);   # number of beams
 define(PID, 20);   # PID of the observation
+define(BMB, 21);   # MB per beam
 
 define(STS_COUNT, 22);
 define(STP_COUNT, 23);
@@ -117,6 +118,9 @@ class archival extends bpsr_webpage
       .red {
         background-color: #FF3366;
       }
+      .clear {
+        background-color: transparent;
+      }
     
       table.results {
         margin: 0;
@@ -162,6 +166,12 @@ class archival extends bpsr_webpage
 
           var results = xmlObj.getElementsByTagName("obs");
 
+          var deleted_new_class;
+          if (document.getElementById('hide_deleted').checked == true)
+            deleted_new_class = "hidden";
+          else
+            deleted_new_class = "shown";
+
           // for each result returned in the XML DOC
           for (i=0; i<results.length; i++) {
 
@@ -185,10 +195,10 @@ class archival extends bpsr_webpage
             }
 
             utc_start = this_result["utc_start"];
-            nbeam = this_result["nbeam"];
+            nbeam = parseInt(this_result["nbeam"]);
 
             tr = document.getElementById("row_"+utc_start);
-            tr.className = "shown";
+            //tr.className = "shown";
 
             for ( key in this_result) 
             {
@@ -199,8 +209,11 @@ class archival extends bpsr_webpage
                 if (key.indexOf("state") != -1) 
                 {
                   td.innerHTML = value;
-                  if (value == "deleted")
-                    document.getElementById("state_del_"+utc_start).className = "green";
+
+                  document.getElementById("state_arch_"+utc_start).className = "clear";
+                  document.getElementById("state_xfer_"+utc_start).className = "clear";
+                  document.getElementById("state_fin_"+utc_start).className = "clear";
+                  document.getElementById("state_del_"+utc_start).className = "clear";
 
                   if ((value == "deleted") || (value == "archived"))
                     document.getElementById("state_arch_"+utc_start).className = "green";
@@ -220,9 +233,19 @@ class archival extends bpsr_webpage
                   if (value == "failed")
                     document.getElementById("state_fin_"+utc_start).className = "red";
 
+                  if (value == "deleted")
+                  {
+                    document.getElementById("state_del_"+utc_start).className = "green";
+                    tr.className = deleted_new_class;
+                  }
+                  else
+                    tr.className = "shown";
+
+
                 }
                 else if ((key.indexOf("sent_to") != -1) || (key.indexOf("on_tape") != -1))
                 {
+                  value = parseInt(value);
                   if ((nbeam == 0) || (value == -1))
                   {
                     td.innerHTML = "--";
@@ -363,6 +386,11 @@ class archival extends bpsr_webpage
     $this->openBlockHeader("Legend");
 ?>
       <table width="100%" class="legend">
+        <tr><td>SIZE</td><td>Beam Size [GB] on processing node</td></tr>
+      </table>
+
+
+      <table width="100%" class="legend">
         <tr><th colspan=3>Obs State</th></tr>
         <tr><td>F</td><td class="green">Finished</td><td class="red">Failed</td></tr>
         <tr><td>T</td><td class="yellow">Transfering</td><td class="green">Transferred</td></tr>
@@ -412,7 +440,7 @@ class archival extends bpsr_webpage
     <table width='100%' border=0 class="results">
 
       <tr>
-        <th colspan=4>
+        <th colspan=5>
         <th colspan=5>Obs State</th>
         <th colspan=2>Data</th>
         <th colspan=2>Sent To</th>
@@ -423,6 +451,7 @@ class archival extends bpsr_webpage
         <th>UTC START</th>
         <th>SOURCE</th>
         <th>PID</th>
+        <th>SIZE</th>
         <th></th>
         <th width="10px">F</th>
         <th width="10px">T</th>
@@ -444,6 +473,7 @@ class archival extends bpsr_webpage
           echo "<td id='utc_start_".$o."'></td>";
           echo "<td id='source_".$o."'></td>";
           echo "<td id='pid_".$o."'></td>";
+          echo "<td id='beamsize_".$o."' style='text-align: right;'></td>";
           echo "<td id='state_".$o."'></td>";
           echo "<td id='state_fin_".$o."'></td>";
           echo "<td id='state_xfer_".$o."'></td>";
@@ -504,6 +534,7 @@ class archival extends bpsr_webpage
 
       $source = $local[$o][SRC];
       $nbeam = $local[$o][NBM];
+      $beamsize = sprintf("%5.2f", ($local[$o][BMB]/1024));
       $sent_to_swin = $local[$o][STS_COUNT];
       $sent_to_parkes = $local[$o][STP_COUNT];
       $on_tape_swin = $local[$o][OTS_COUNT];
@@ -526,11 +557,11 @@ class archival extends bpsr_webpage
         $obs_state = "deleted";
       if (!$obs_state && ($local[$o][OBA] == 2))
         $obs_state = "archived";
-      if (!$obs_state && ($local[$o][OBX] == 2) && (($req_swin && ($on_tape_swin < $nbeam)) || (($req_parkes && ($on_tape_parkes < $nbeam)))))
+      if (!$obs_state && ($local[$o][OBX] == 2) && (($req_swin && $on_tape_swin && ($on_tape_swin < $nbeam)) || (($req_parkes && $on_tape_parkes && ($on_tape_parkes < $nbeam)))))
         $obs_state = "archiving";
       if (!$obs_state && ($local[$o][OBX] == 2))
         $obs_state = "transferred";
-      if (!$obs_state && ($local[$o][OBF] == 2) && (($req_swin && ($sent_to_swin > 0) && ($sent_to_swin < $nbeam)) || (($req_parkes && ($sent_to_parkes > 0) && ($sent_to_parkes < $nbeam)))))
+      if (!$obs_state && ($local[$o][OBF] == 2) && (($req_swin && $sent_to_swin && ($sent_to_swin < $nbeam)) || (($req_parkes && $sent_to_parkes && ($sent_to_parkes < $nbeam)))))
         $obs_state = "transferring";
       if (!$obs_state && ($local[$o][OBF] == 2))
         $obs_state = "finished";
@@ -546,6 +577,7 @@ class archival extends bpsr_webpage
       $xml .= "<state>".$obs_state."</state>\n";
       $xml .= "<pid>".$pid."</pid>\n";
       $xml .= "<nbeam>".$nbeam."</nbeam>\n";
+      $xml .= "<beamsize>".$beamsize."</beamsize>\n";
       //$xml .= "<req_swin>".$req_swin."</req_swin>\n";
       //$xml .= "<req_parkes>".$req_parkes."</req_parkes>\n";
       $xml .= "<sent_to_swin>".$sent_to_swin."</sent_to_swin>\n";
@@ -725,7 +757,7 @@ class archival extends bpsr_webpage
     # Get the remote file listings soas to not tax NFS too much
     $user = "bpsr";
     $remote = array();
-    for ($i=0; $i<=17; $i++) {
+    for ($i=0; $i<=14; $i++) {
       $host = sprintf("apsr%02d",$i);
       $temp_array = $this->getRemoteListing($user, $host, "/lfs/data0/bpsr/archives", $remote);
       $remote = $temp_array;
@@ -758,6 +790,7 @@ class archival extends bpsr_webpage
         $results[$o][OBT] = $local[$o][OBT];
         $results[$o][SRC] = $local[$o][SRC];
         $results[$o][SRV] = (substr($results[$o][SRC],0,1) == "G") ? 1 : 0;
+        $results[$o][BMB] = 0;
       }
    
       $results[$o][STS_COUNT] = 0; 
@@ -771,6 +804,7 @@ class archival extends bpsr_webpage
         $results[$o][OTS_COUNT] = $remote[$o][OTS_COUNT];
         $results[$o][OTP_COUNT] = $remote[$o][OTP_COUNT];
         $results[$o][INL]       = $remote[$o][INL];
+        $results[$o][BMB]       = $remote[$o][BMB];
       }
 
       $results[$o][INA] = 0;
@@ -781,17 +815,6 @@ class archival extends bpsr_webpage
       if (in_array($o,$obs_r)) {
         $results[$o][INR] = 2;
       }
-
-      # check for P630 as the Project ID (PID)
-      #if ($results[$o][OBI] == 2) {
-      #  $cmd = "grep ^PID /nfs/archives/bpsr/".$o."/obs.info | awk '{print $2}'";
-      #  $lastline = exec($cmd, $array, $return_val);
-      #  if ($lastline != "P630") {
-      #    echo "removing $o $lastline<BR>\n";
-      #    flush();
-      #    unset($results[$o]);
-      #  }
-      #}
 
       # now remove the obs from the remote and local arrays for memory reasons 
       unset($remote[$o]); 
@@ -821,19 +844,21 @@ class archival extends bpsr_webpage
   #   
   # SSH to the remote machine and get listing information on each of the files we need
   #   
-  function getRemoteListing($user, $host, $dir, $results) {
+  function getRemoteListing($user, $host, $dir, $results) 
+  {
     
     $array = array();
     $cmd = "ssh -l ".$user." ".$host." \"web_observations_helper.pl\"";
     $lastline = exec($cmd, $array, $return_val);
 
-    for ($i=0; $i<count($array); $i++) {
-
+    for ($i=0; $i<count($array); $i++) 
+    {
       $a = split("/", $array[$i]);
 
       $o = $a[1];
       $b = $a[2];
       $f = $a[3];
+      $s = $a[4]; # in bytes
     
       if (! array_key_exists($o, $results)) {
         $results[$o] = array();
@@ -843,6 +868,7 @@ class archival extends bpsr_webpage
         $results[$o][STP_COUNT] = 0;
         $results[$o][OTS_COUNT] = 0;
         $results[$o][OTP_COUNT] = 0;
+        $results[$o][BMB] = 0;
       }
       if (! array_key_exists($b, $results[$o])) {
         $results[$o][$b] = array();
@@ -873,13 +899,17 @@ class archival extends bpsr_webpage
         $results[$o][$b][ETP] = 1;
       } else if (($f == "integrated.ar") || (substr($f, ".fil") !== FALSE)) {
         $results[$o][INL]++;
+        $s_mb = $s / (1024*1024);
+        if ($s_mb > $results[$o][BMB]) {
+          $results[$o][BMB] = $s_mb;
+        }
       } else {
         echo "getRemoteListing: ".$a." was unmatched<BR>\n";
       }
     }
-      
+
     return $results;
-  }   
+  }
 
   #
   # Gets a listing of all the obs. files in the dir's subdirs
