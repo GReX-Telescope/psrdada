@@ -21,6 +21,11 @@
 
 #define IPCBUF_EODACK 3   /* acknowledgement of end of data */
 
+#define DBOVERFLOW_SIGINT 1
+#define DBOVERFLOW_SIGTERM 2
+#define DBOVERFLOW_DB_FULL 3
+#define DBOVERFLOW_DB_DESTROYED 4
+
 int quit = 0;
 
 void usage()
@@ -36,13 +41,13 @@ void signal_handler(int signalValue)
 {
   if (quit) 
   {
-    fprintf(stderr, "received signal %d twice, hard exit\n", signalValue);
+    fprintf(stderr, "dada_dboverlfow: repeated SIGINT/TERM, exiting\n");
     exit(EXIT_FAILURE);
   }
   if (signalValue == SIGINT)
-    quit = 1;
+    quit = DBOVERFLOW_SIGINT;
   else
-    quit = 2;
+    quit = DBOVERFLOW_SIGTERM;
 }
 
 int main (int argc, char **argv)
@@ -60,12 +65,10 @@ int main (int argc, char **argv)
   /* hexadecimal shared memory key */
   key_t dada_key = DADA_DEFAULT_BLOCK_KEY;
 
-
   int arg = 0;
 
   /* TODO the amount to conduct a busy sleep inbetween clearing each sub
    * block */
-
   while ((arg=getopt(argc,argv,"vk:")) != -1)
     switch (arg) {
 
@@ -108,12 +111,12 @@ int main (int argc, char **argv)
 
   if (dada_hdu_open_view(hdu) < 0)
   {
-    multilog_fprintf (stderr, LOG_ERR, "Could not lock Header Block for viewing\n");
+    fprintf (stderr, "dada_dboverflow: dada_hdu_open_view() failed\n");
     return EXIT_FAILURE;
   }
 
   // raw pointer to the datablock
-  ipcbuf_t *db = (ipcbuf_t *) hdu->data_block;
+  ipcbuf_t *db     = (ipcbuf_t *) hdu->data_block;
 
   uint64_t full_bufs = 0;
   uint64_t clear_bufs = 0;
@@ -138,16 +141,15 @@ int main (int argc, char **argv)
 
   while (!quit) 
   {
-  
+
     // use a semctl GETVAL operation to test for DB existence
     if ( ipcbuf_get_nfull (db) == (uint64_t) - 1)
     {
-      multilog_fprintf(stderr, LOG_ERR, "datablock destroyed, exiting\n");
-      quit = 3;
+      fprintf(stderr, "dada_dboverflow: datablock destroyed, exiting\n");
+      quit = DBOVERFLOW_DB_DESTROYED;
     }
     else 
     {
-
       bufs_read_last = bufs_read;
       bufs_written = ipcbuf_get_write_count (db);
       bufs_read = ipcbuf_get_read_count (db);
@@ -156,17 +158,24 @@ int main (int argc, char **argv)
       available_bufs = (nbufs - full_bufs);
 
       if (verbose)
-        multilog_fprintf(stderr, LOG_INFO, "free=%"PRIu64", full=%"PRIu64" written=%"PRIu64", read=%"PRIu64"\n", available_bufs, full_bufs, bufs_written, bufs_read);
+        multilog_fprintf (stderr, LOG_INFO, "free=%"PRIu64", full=%"PRIu64
+                          " written=%"PRIu64", read=%"PRIu64"\n", available_bufs, 
+                          full_bufs, bufs_written, bufs_read);
 
       // since we can often be stuck with 1 free buffer 
       if ((available_bufs <= 1) && (bufs_read_last == bufs_read))
       {
-        fprintf (stderr, "no free blocks, %d seconds remaining\n", wait_count);
+        fprintf (stderr, "dada_dboverflow: no free blocks, %d seconds remaining\n", wait_count);
         if (wait_count <= 0)
         {
-          quit = 2;
+          quit = DBOVERFLOW_DB_FULL;
         }
         wait_count--;
+      }
+      else
+      {
+        // reset the wait count if we recovered
+        wait_count = 5;
       }
 
       if (!quit)
@@ -174,14 +183,14 @@ int main (int argc, char **argv)
     }
   }
 
-  if (dada_hdu_disconnect (hdu) < 0)
-    return EXIT_FAILURE;
+  fprintf (stderr, "dada_dboverflow: quit=%d\n", quit);
 
-  if (!quit)
-    return 0;
-  else if (quit == 1)
-    return 0;
-  else
+  if (dada_hdu_disconnect (hdu) < 0)
+  {
+    fprintf (stderr, "dada_dboverflow: dada_hdu_disconnect() failed\n");
     return quit;
+  }
+
+  return quit;
 }
 
