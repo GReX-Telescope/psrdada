@@ -33,6 +33,7 @@ class archival_summary extends bpsr_webpage
 
       table.archival_summary td {
         font-size: 8pt;
+        vertical-align: top;
       }
     
       table.archival_summary span {
@@ -139,8 +140,8 @@ class archival_summary extends bpsr_webpage
             <td colspan=3 id="XFER_td" align="center"><span id ="XFER"></span></td> 
           </tr>
           <tr>
-            <td id="XFER_FINISHED_td" align="center">Local disks: <span id ="XFER_FINISHED"></span></td>
-            <td id="XFER_ON_RAID_td" align="center">RAID disk: <span id ="XFER_ON_RAID"></span></td>
+            <td id="XFER_FINISHED_td" align="center">Local: <span id ="XFER_FINISHED"></span></td>
+            <td id="XFER_ON_RAID_td" align="center">RAID: <span id ="XFER_ON_RAID"></span></td>
             <td></td>
           </tr>
         </table>
