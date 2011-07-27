@@ -22,7 +22,6 @@ use File::Basename;
 sub main();
 sub process($$);
 sub decimationThread($);
-sub overflowThread($);
 
 #
 # Declare Global Variables
@@ -131,10 +130,7 @@ sub main() {
   my $tdec = 1;
 
   $recv_db = lc($cfg{"RECEIVING_DATA_BLOCK"});
-  $proc_db = lc($cfg{"PROCESSING_DATA_BLOCK"});
-  $proc_db_key = $cfg{"PROCESSING_DB_KEY"};
   
-
   # Main Loop
   while(!$quit_daemon) 
   {
@@ -151,18 +147,22 @@ sub main() {
       %h = ();
       %h = Dada::headerToHash($raw_header);
       
-
       $tdec = 1;
       # check if this transfer requires decimation and is 2 or 6
       if (defined($h{"TDEC"}) && (($h{"TDEC"} == 2) || ($h{"TDEC"} == 6)))
       {
         $tdec = $h{"TDEC"};
+        $proc_db = lc($cfg{"PROCESSING_DATA_BLOCK"});
+        $proc_db_key = $cfg{"PROCESSING_DB_KEY"};
+        msg(2, "INFO", "main: decimationThread(".$tdec.")");
+        $decimation_thread = threads->new(\&decimationThread, $tdec);
+        sleep(1);
       }
-
-      msg(2, "INFO", "main: decimationThread(".$tdec.")");
-      $decimation_thread = threads->new(\&decimationThread, $tdec);
-
-      sleep(1);
+      else
+      {
+        $proc_db = lc($cfg{"RECEIVING_DATA_BLOCK"});
+        $proc_db_key = $cfg{"RECEIVING_DB_KEY"};
+      }
 
       # continue to run the processing thread until this observation is complete
       $obs_end = 0;
@@ -250,59 +250,6 @@ sub decimationThread($)
   return $result;
 }
 
-
-##############################################################################
-#
-# Run the CASPSR overflow protection thread, runs on the receiving datablock
-# as the processing datablock is not that big...
-#
-sub overflowThread($)
-{
-  my ($proc_cmd) = @_;
-
-  msg(2, "INFO", "overflowThread(".$proc_cmd.")");
-
-  my $cmd = "";
-  my $result = "";
-  my $response = "";
-  my $rval = 0;
-
-  # run the overflow monitor on the recveiving datablock
-  $cmd = "dada_dboverflow -k ".$recv_db." 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/".$client_logger;
-  msg(2, "INFO", "overflowThread: ".$cmd);
-  system($cmd);
-  $rval = $? >> 8;
-  msg(2, "INFO", "overflowThread: ".$cmd." returned ".$rval);
-
-  if ($rval == 0) 
-  {
-    msg(2, "INFO", "overflowThread: all good");
-  } 
-  else 
-  {
-    if ($rval == 1) 
-    {
-      msg(1, "INFO", "overflowThread: db was destroyed");
-    } 
-    else 
-    {
-      # kill the proc_cmd as the datablock has filled
-      msg(1, "INFO", "overflowThread: killing ".$proc_cmd);
-      ($result, $response) = Dada::killProcess("^".$proc_cmd, $user);
-      msg(1, "INFO", "overflowThread: ".$result." ".$response);
-
-      # launch the dbscrubber
-      $cmd = "dada_dbscrubber -k ".$proc_db." 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/".$client_logger;
-      msg(1, "INFO", "overflowThread: ".$cmd);
-      system($cmd);
-      my $scrub_rval = $? >> 8;
-      msg(1, "INFO", "overflowThread: dada_dbscrubber returned ".$scrub_rval);
-    }
-  }
-
-  return 0;
-}
-
 ###############################################################################
 #
 # Process an observation
@@ -316,7 +263,6 @@ sub process($$)
   my $bindir = Dada::getCurrentBinaryVersion();
   my $processing_dir = $cfg{"CLIENT_RESULTS_DIR"};
 
-  my $overflow_thread = 0;
   my $copy_obs_start_thread = 0;
   my $utc_start = "invalid";
   my $obs_offset = "invalid";
@@ -450,19 +396,9 @@ sub process($$)
       }
     }
 
-    # launch an overflow thread to monitor the state of the datablock. If this thread
-    # detects a full datablock on the proc_db, it will hard kill dspsr. then it will
-    # launch a dbscrubber
-
     my $binary = "";
     my $rest = "";
     ($binary, $rest) = split(/ /,$proc_cmd,2);
-
-    # only launch the overflow thread if we are doing some sort of processing
-    if ($proc_cmd =~ m/dspsr/) {
-      msg(2, "INFO", "process: overflowThread(".$binary.")");
-      $overflow_thread = threads->new(\&overflowThread, $binary);
-    }
 
     chdir $processing_dir;
 
@@ -486,25 +422,6 @@ sub process($$)
       if ($binary =~ m/dspsr/) {
         $obs_end = 1;
       }
-    }
-
-    if ($overflow_thread) 
-    {
-      # kill the overflowThread's processor with INT for normal and TERM for fatal
-      if ($rval == 0) 
-      {
-        $cmd = "pkill -INT -u ".$user." -f '^dada_dboverflow'";
-      }
-      else
-      {
-        $cmd = "pkill -TERM -u ".$user." -f '^dada_dboverflow'";
-      }
-      msg(2, "INFO", "process: ".$cmd);
-      ($result, $response) = Dada::mySystem($cmd);
-      msg(2, "INFO", "process: () ".$result." ".$response);
-
-      # now it should be safe to join this thread
-      $overflow_thread->join();
     }
 
     # if we copied the obs.start file, join the thread
