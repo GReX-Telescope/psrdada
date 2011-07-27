@@ -12,7 +12,6 @@ dist_bin_SCRIPTS = Bpsr.pm \
                    server_bpsr_src_monitor.pl \
                    server_bpsr_sys_monitor.pl \
                    server_bpsr_transfer_manager.pl \
-                   server_bpsr_transfer_checker.pl \
                    server_bpsr_tape_archiver.pl \
                    server_bpsr_parkes_tape_controller.pl \
                    server_bpsr_raid_pipeline.pl \
