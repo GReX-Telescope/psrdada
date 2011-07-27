@@ -5,6 +5,10 @@ webdir = $(prefix)/web
 webapsrdir = $(prefix)/web/apsr
 webbpsrdir = $(prefix)/web/bpsr
 webcaspsrdir = $(prefix)/web/caspsr
+webraiddir = $(prefix)/web/raid
+webraidbpsrdir = $(prefix)/web/raid/bpsr
+webraidapsrdir = $(prefix)/web/raid/apsr
+webraidcaspsrdir = $(prefix)/web/raid/caspsr
 
 dist_web_SCRIPTS = admin.html \
     dada_webpage.lib.php \
@@ -16,6 +20,12 @@ dist_web_SCRIPTS = admin.html \
     schedule.html \
     style.css \
     rac.php \
+    favicon.ico
+
+dist_webraid_SCRIPTS = dada_webpage.lib.php \
+    instrument.lib.php \
+    dada.css \
+    style.css \
     favicon.ico
 
 # scripts distributed as is (installed in bin/)
@@ -61,6 +71,20 @@ nobase_dist_webcaspsr_SCRIPTS = site_definitions_i.php \
     functions_i.php \
     style_log.css
 
+nobase_dist_webraidapsr_SCRIPTS = site_definitions_i.php \
+    instrument.lib.php \
+    functions_i.php \
+    style_log.css
+
+nobase_dist_webraidbpsr_SCRIPTS = site_definitions_i.php \
+    instrument.lib.php \
+    functions_i.php \
+    style_log.css
+
+nobase_dist_webraidcaspsr_SCRIPTS = site_definitions_i.php \
+    instrument.lib.php \
+    functions_i.php \
+    style_log.css
 
 # data file (config) distributed as is
 # dist_data_DATA = psrchive_version
@@ -121,6 +145,8 @@ nobase_dist_web_SCRIPTS = images/apsr_logo_1x60.png \
     js/soundmanager2.js \
     js/AutoComplete.css \
     js/autocomplete.js \
+    raid/index.php \
+    raid/index.lib.php \
     sounds/tapechange.mp3 \
     sounds/tapechangeWillem.mp3 \
     sounds/a_fatal_error_has_occurred.mp3 \
