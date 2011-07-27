@@ -835,7 +835,7 @@ sub makePlotsFromArchives($$$$$$) {
   Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
 
   # PHASE vs TOTAL INTENSITY
-  $cmd = $bin.$bscrunch." -jpC -p flux -jTF -D ".$dir."/pvfl_tmp/png ".$total_f_res;
+  $cmd = $bin.$bscrunch." -jpC -p flux -jTFD -D ".$dir."/pvfl_tmp/png ".$total_f_res;
   Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
