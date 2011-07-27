@@ -83,7 +83,7 @@ int dbib_open (dada_client_t* client)
   dada_ib_cm_t * ib_cm = dbib->ib_cm;
   
   if (dbib->verbose)
-    multilog (client->log, LOG_INFO, "caspsr_dbib_open()\n");
+    multilog (client->log, LOG_INFO, "dbib_open()\n");
 
   // the header
   assert(client->header != 0);
@@ -92,8 +92,40 @@ int dbib_open (dada_client_t* client)
   // observation id, as defined by OBS_ID attribute
   char obs_id [DADA_OBS_ID_MAXLEN] = "";
 
-  // assumed that we do not know how much data will be transferred
-  client->transfer_bytes = 0;
+  uint64_t transfer_size;
+  if (ascii_header_get (client->header, "TRANSFER_SIZE", "%"PRIu64, &transfer_size) != 1)
+  {
+    multilog (client->log, LOG_INFO, "open: TRANSFER_SIZE not set in header\n");
+    transfer_size = 0;
+  }
+
+  uint64_t obs_offset = 0;
+  if (ascii_header_get (client->header, "OBS_OFFSET", "%"PRIu64, &obs_offset) != 1)
+  {
+    multilog (client->log, LOG_WARNING, "open: OBS_OFFSET not set in header\n");
+    transfer_size = 0;
+  }
+
+  int64_t obs_xfer= 0;
+  if (ascii_header_get (client->header, "OBS_XFER", "%"PRIi64, &obs_xfer) != 1)
+  {
+    multilog (client->log, LOG_WARNING, "open: OBS_XFER not set in header\n");
+    obs_xfer = -2;
+  }
+
+  char utc_start[64];
+  if (ascii_header_get (client->header, "UTC_START", "%s", utc_start) != 1) 
+  {
+    multilog (client->log, LOG_WARNING, "Header with no UTC_START\n");
+    strcpy (utc_start, "UNKNOWN");
+  }
+
+  if (dbib->verbose)
+    multilog (client->log, LOG_INFO, "open: UTC_START=%s OBS_OFFSET=%"PRIu64" OBS_XFER=%"PRIi64" TRANSFER_SIZE=%"PRIu64"\n",
+              utc_start, obs_offset, obs_xfer, transfer_size);
+
+  // assume we do not know how many bytes to transfer
+  client->transfer_bytes = transfer_size;
 
   // this is not used in block by block transfers
   client->optimal_bytes = 0;
@@ -122,16 +154,9 @@ int dbib_close (dada_client_t* client, uint64_t bytes_written)
   if (dbib->verbose)
     multilog(log, LOG_INFO, "dbib_close() bytes_written=%"PRIu64"\n", bytes_written);
 
-  // IMPORTANT, if we transferred an even multiple of the db_bufsz, we need to
-  // tell ibdb that the transfer is over, if not, then it knows
-  if (bytes_written % ib_cm->bufs_size != 0)
+  // if we have transferred less than we anticipated, we will need to tell ibdb that the xfer is ending
+  if (client->transfer_bytes && (bytes_written != client->transfer_bytes)) 
   {
-     if (dbib->verbose)
-         multilog (log, LOG_INFO, "close: no need to preform closing steps\n");
-  }
-  else 
-  {
-
     // since we posted a recv in the send_block function, we need to wait for that recv in the cleanup
     if (dbib->verbose)
       multilog (log, LOG_INFO, "close: recv_message on sync_from [READY]\n");
@@ -149,6 +174,11 @@ int dbib_close (dada_client_t* client, uint64_t bytes_written)
       multilog(log, LOG_ERR, "close: send_message on sync_to [EOD] failed\n");
       return -1;
     }
+  }
+  else
+  {
+    if (dbib->verbose)
+      multilog (log, LOG_INFO, "close: no need to preform closing steps\n");
   }
   
   if (bytes_written < client->transfer_bytes) {
@@ -626,9 +656,14 @@ int main (int argc, char **argv)
 
   while (!client->quit)
   {
+
+    if (verbose)
+      multilog(client->log, LOG_INFO, "main: dada_client_read()\n");
     if (dada_client_read (client) < 0)
       multilog (log, LOG_ERR, "Error during transfer\n");
 
+    if (verbose)
+      multilog(client->log, LOG_INFO, "main: dada_unlock_read()\n");
     if (dada_hdu_unlock_read (hdu) < 0)
     {
       multilog (log, LOG_ERR, "could not unlock read on hdu\n");
@@ -639,6 +674,8 @@ int main (int argc, char **argv)
       client->quit = 1;
     else
     {
+      if (verbose)
+        multilog(client->log, LOG_INFO, "main: dada_lock_read()\n");
       if (dada_hdu_lock_read (hdu) < 0)
       {
         multilog (log, LOG_ERR, "could not lock read on hdu\n");
@@ -647,9 +684,14 @@ int main (int argc, char **argv)
     }
   }
 
+  if (verbose)
+    multilog(client->log, LOG_INFO, "main: dada_hdu_disconnect()\n");
+
   if (dada_hdu_disconnect (hdu) < 0)
     return EXIT_FAILURE;
 
+  if (verbose)
+    multilog(client->log, LOG_INFO, "main: dada_ib_client_destroy()\n");
   if (dada_ib_client_destroy(dbib.ib_cm) < 0)
   {
     multilog(log, LOG_ERR, "dada_ib_client_destroy failed\n");
