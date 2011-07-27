@@ -391,8 +391,10 @@ class machine_summary extends caspsr_webpage
     $this->closeBlockHeader();
   }
 
-  function printUpdateHTML($host, $port)
+  function printUpdateHTML($get)
   {
+    $host = $get["host"];
+    $port = $get["port"];
 
     $output = "";
 

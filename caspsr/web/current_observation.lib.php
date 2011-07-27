@@ -148,8 +148,10 @@ class current_observation extends caspsr_webpage
     $this->closeBlockHeader();
   }
 
-  function printUpdateHTML($host, $port)
+  function printUpdateHTML($get)
   {
+    $host = $get["host"];
+    $port = $get["port"];
 
     $timeout = 1;
     list ($socket, $result) = openSocket($host, $port, $timeout);

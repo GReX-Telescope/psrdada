@@ -219,8 +219,10 @@ class plot_window extends caspsr_webpage
     $this->closeBlock();
   }
 
-  function printUpdateHTML($host, $port)
+  function printUpdateHTML($get)
   {
+    $host = $get["host"];
+    $port = $get["port"];
 
     $url = "http://".$_SERVER["SERVER_NAME"].":".$_SERVER["SERVER_PORT"];
 

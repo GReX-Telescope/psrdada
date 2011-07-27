@@ -64,7 +64,12 @@ class state_update extends caspsr_webpage
       {
         if (su_http_request.readyState == 4) {
           var response = String(su_http_request.responseText)
-          document.getElementById("globalstatus").innerHTML = response
+          document.getElementById("globalstatus").innerHTML = response;
+          response = response.replace("TCS Interface Stopped", "Offline");
+          response = response.replace("Recording", "Rec");
+          response = response.replace("[", "");
+          response = response.replace("secs]", "s");
+          document.title = "CASPSR "+ response;
         }
       }
 
@@ -119,8 +124,11 @@ class state_update extends caspsr_webpage
     $this->closeBlock();
   }
 
-  function printUpdateHTML($host, $port)
+  function printUpdateHTML($get)
   {
+    $host = $get["host"];
+    $port = $get["port"];
+
     list ($socket, $result) = openSocket($host, $port);
 
     if ($result == "ok") {

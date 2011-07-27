@@ -109,8 +109,11 @@ class ganglia_window extends caspsr_webpage
 <?
   }
 
-  function printUpdateHTML($host, $port)
+  function printUpdateHTML($get)
   {
+    $host = $get["host"];
+    $port = $get["port"];
+
     #list ($socket, $result) = openSocket($host, $port);
     $result = "disabled";
     if ($result == "ok") {
@@ -133,7 +136,7 @@ class ganglia_window extends caspsr_webpage
   {
 
     if ($_GET["update"] == "true") {
-      $this->printUpdateHTML($_GET["host"], $_GET["port"]);
+      $this->printUpdateHTML($_GET);
     } else {
       $this->printHTML($_GET);
     }

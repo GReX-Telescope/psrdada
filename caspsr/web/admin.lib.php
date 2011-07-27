@@ -199,8 +199,9 @@ class rac_info extends caspsr_webpage
     
   }
 
-  function printUpdateHTML($host, $port)
+  function printUpdateHTML($get)
   {
+    $host = $get["host"];
 
     $cmd = "ssh ".$host." '/usr/local/bin/om_custom_report.csh'";
     $array=array();

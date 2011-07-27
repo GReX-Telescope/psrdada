@@ -140,7 +140,7 @@ function handleDirect($child_class)
   } else if ($_GET["update"] == "true") {
 
     $obj = new $child_class();
-    $obj->printUpdateHTML($_GET["host"], $_GET["port"]);
+    $obj->printUpdateHTML($_GET);
 
   } else {
     # do nothing :)
