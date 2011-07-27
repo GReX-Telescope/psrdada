@@ -750,12 +750,14 @@ sub tapeInfoThread() {
           }
         }
 
-        $beams_finished = "";
+        $beams_finished = "<table>";
+        #$beams_finished .= "<tr><th>ProjID</th><th>Size GB</th></tr>";
         @keys = keys %finished_count;
         for ($i=0; $i<=$#keys; $i++)
         {
-          $beams_finished .= "<span>".$keys[$i].": ".$finished_count{$keys[$i]}." [".$finished_size{$keys[$i]}." MB]</span>";
+          $beams_finished .= "<tr><td>".$keys[$i]."</td><td>".$finished_size{$keys[$i]}." GB</td></tr>";
         }
+        $beams_finished .= "</table>";
         if ($beams_finished eq "")
         {
           $beams_finished = "none";
@@ -764,13 +766,22 @@ sub tapeInfoThread() {
         Dada::logMsg(2, DL, "tapeInfoThread: beams_finished=".$beams_finished);
 
         # the number of beams waiting on raid to be sent to swin [for all projID's]
-        $beams_on_raid = 0;
-        for ($i=0; $i<=$#p_users; $i++) {
-          $cmd = "ssh -x -l ".$p_users[$i]." ".$p_hosts[$i]." 'find ".$p_paths[$i]."/../swin/send -mindepth 3 -maxdepth 3 -type d' | wc -l";
-          $tmp_str = `$cmd`;
-          chomp $tmp_str;
-          $beams_on_raid += int($tmp_str);
+        $beams_on_raid = "<table>";
+        for ($i=0; $i<=$#p_users; $i++) 
+        {
+          $cmd = "du -sb P*";
+          ($result, $rval, $response) = Dada::remoteSshCommand($p_users[$i], $p_hosts[$i], $cmd, $p_paths[$i]."/../swin/send", "awk '{print \$2\" \"\$1}'");
+          if (($result eq "ok") && ($rval == 0))
+          {
+            @arr = split(/\n/, $response);
+            for ($j=0; $j<=$#arr; $j++)
+            { 
+              @bits = split(/ /, $arr[$j]);
+              $beams_on_raid .= "<tr><td>".$bits[0]."</td><td>".sprintf("%0.2f",($bits[1] / 1073741824))." GB</td></tr>";
+            }
+          }
         }
+        $beams_on_raid .= "</table>";
         Dada::logMsg(2, DL, "tapeInfoThread: obs_fin=".($#obs_fin+1).", beams_on_raid=".$beams_on_raid);
 
          # the number of beams waiting on raid to be sent to swin [for all projID's]
