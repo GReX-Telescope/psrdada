@@ -29,6 +29,8 @@ void usage()
            " -o         use O_DIRECT flag to bypass kernel buffering\n"
            " -W         over-write exisiting files\n"
            " -s         single transfer only\n"
+           " -t bytes   set optimal bytes\n"
+           " -z         use zero copy transfers\n"
            " -d         run as daemon\n", DADA_DEFAULT_BLOCK_KEY);
 }
 
@@ -50,11 +52,13 @@ typedef struct {
 
   char o_direct;
 
+  uint64_t optimal_bytes;
+
   unsigned verbose;
 
 } dada_dbdisk_t;
 
-#define DADA_DBDISK_INIT { 0, "", 0, "", 0, 0, 0 }
+#define DADA_DBDISK_INIT { 0, "", 0, "", 0, 0, 0, 0 }
 
 /*! Function that opens the data transfer target */
 int file_open_function (dada_client_t* client)
@@ -102,87 +106,83 @@ int file_open_function (dada_client_t* client)
   header = client->header;
   assert (header != 0);
 
-  /* Get the UTC_START */
+  // get the UTC_START 
   if (ascii_header_get (client->header, "UTC_START", "%s", utc_start) != 1)
   {
     multilog (log, LOG_WARNING, "Header with no UTC_START\n");
     strcpy (utc_start, "UNKNOWN");
   }
 
-  /* Get the OBS_OFFSET */
-  if (ascii_header_get (client->header, "OBS_OFFSET", "%"PRIu64, &obs_offset) 
-      != 1)
+  // get the OBS_OFFSET
+  if (ascii_header_get (client->header, "OBS_OFFSET", "%"PRIu64, &obs_offset) != 1)
   {
     multilog (log, LOG_WARNING, "Header with no OBS_OFFSET\n");
     obs_offset = 0;
   }
 
-  /* check to see if we are still working with the same observation */
-  if ((strcmp (utc_start, dbdisk->utc_start) != 0) || 
-      (obs_offset != dbdisk->obs_offset))
+  // check to see if we are still working with the same observation
+  if ((strcmp (utc_start, dbdisk->utc_start) != 0) || (obs_offset != dbdisk->obs_offset))
   {
     dbdisk->file_number = 0;
-    multilog (log, LOG_INFO, "New UTC_START=%s, OBS_OFFSET=%"PRIu64" -> "
-              "file number=0\n", utc_start, obs_offset);
+    if (dbdisk->verbose)
+      multilog (log, LOG_INFO, "New UTC_START=%s, OBS_OFFSET=%"PRIu64" -> "
+               "file number=0\n", utc_start, obs_offset);
   }
   else
   {
     dbdisk->file_number++;
-    multilog (log, LOG_INFO, "Continue UTC_START=%s, OBS_OFFSET=%"PRIu64" -> "
-              "file number=%lu\n", utc_start, obs_offset, dbdisk->file_number);
+    if (dbdisk->verbose)
+      multilog (log, LOG_INFO, "Continue UTC_START=%s, OBS_OFFSET=%"PRIu64" -> "
+                "file number=%lu\n", utc_start, obs_offset, dbdisk->file_number);
   }
 
-  /* Set the file number to be written to the header */
+  // Set the file number to be written to the header
   if (ascii_header_set (header, "FILE_NUMBER", "%u", dbdisk->file_number) < 0)
   {
     multilog (log, LOG_ERR, "Error writing FILE_NUMBER\n");
     return -1;
   }
 
-#ifdef _DEBUG
-  fprintf (stderr, "dbdisk: copy the utc_start and obs_offset\n");
-#endif
-
-  /* set the current observation id */
+  // set the current observation id
   strcpy (dbdisk->utc_start, utc_start);
   dbdisk->obs_offset = obs_offset;
 
-#ifdef _DEBUG
-  fprintf (stderr, "dbdisk: create the file name\n");
-#endif
-
-  /* create the current file name */
+  // create the current file name
   snprintf (dbdisk->file_name, FILENAME_MAX, "%s_%016"PRIu64".%06u.dada", 
             utc_start, obs_offset, dbdisk->file_number);
 
-  /* Check if the file size is defined in the header */
+  // check if the file size is defined in the header
   if (ascii_header_get (header, "FILE_SIZE", "%"PRIu64, &file_size) != 1)
-  {
     file_size = 0;
-  }
 
-  /* Get the bytes per second from the header */
+  if (dbdisk->verbose)
+    multilog (log, LOG_INFO, "open: advertised FILE_SIZE=%"PRIu64"\n", file_size);
+
+  // get the bytes per second from the header
   if (ascii_header_get (header, "BYTES_PER_SECOND", "%"PRIu64, &bytes_ps) != 1) 
   {
     multilog (log, LOG_WARNING, "Header with no BYTES_PER_SECOND\n");
     bytes_ps = 64000000;
   }
 
-  /* Get the resolution */
+  // get the resolution
   if (ascii_header_get (header, "RESOLUTION", "%"PRIu64, &resolution) != 1)
   {
     multilog (log, LOG_INFO, "Header with no RESOLUTION\n");
     resolution = 0;
   }
 
-  /* If file_size is not defined, then use 10 * bytes_ps */
+  // if file_size is not defined, then use 10 * bytes_ps
   if (file_size == 0) 
     file_size = bytes_ps * 10;
 
-  /* If case we use O_DIRECT, must be aligned to 512 bytes */
+  // If case we use O_DIRECT, must be aligned to 512 bytes
   uint64_t byte_multiple = 512;
 
-  /* If we have RESOLUTION, include this in byte_multiple */
+  if (dbdisk->verbose)
+    multilog (log, LOG_INFO, "open: RESOULTION=%"PRIu64"\n", resolution);
+
+  // If we have RESOLUTION, include this in byte_multiple
   if (resolution > 0)
     byte_multiple *= resolution;
 
@@ -222,12 +222,13 @@ int file_open_function (dada_client_t* client)
     return -1;
   }
 
-  multilog (log, LOG_INFO, "%s opened for writing %"PRIu64" bytes\n",
-            dbdisk->file_name, file_size);
-
   client->fd = fd;
   client->transfer_bytes = file_size;
   client->optimal_bytes = 512 * optimal_bytes;
+  
+  multilog (log, LOG_INFO, "%s opened for writing %"PRIu64" bytes in %"PRIu64" chunks\n",
+            dbdisk->file_name, client->transfer_bytes, client->optimal_bytes);
+
 
   return 0;
 }
@@ -248,6 +249,9 @@ int file_close_function (dada_client_t* client, uint64_t bytes_written)
 
   log = client->log;
   assert (log != 0);
+
+  if (dbdisk->verbose)
+    multilog (log, LOG_INFO, "close: wrote %"PRIu64" bytes\n", bytes_written);
 
   if (close (client->fd) < 0)
     multilog (log, LOG_ERR, "Error closing %s: %s\n", 
@@ -275,33 +279,60 @@ int64_t file_write_function (dada_client_t* client,
 {
   dada_dbdisk_t * dbdisk = (dada_dbdisk_t*) client->context;
 
-  /* Need to check we that data_size is a 512 byte multiple if using
-   * o_direct */
-  if (dbdisk->o_direct && (data_size % 512 != 0)) {
+  if (dbdisk->verbose)
+    multilog (client->log, LOG_INFO, "write: %"PRIu64" bytes\n", data_size);
 
-    multilog (client->log, LOG_WARNING, "Using O_DIRECT and data_size not mod 512\n");
+  uint64_t written  = 0;
+  uint64_t to_write = 0;
+  uint64_t wrote    = 0;
+  
 
-    /* write all except the mod 512 bytes */
-    uint64_t end = (data_size / 512) * 512;
-    uint64_t wrote = write (client->fd, data, end);
-
-    client->fd = disk_array_reopen(dbdisk->array, client->fd, dbdisk->file_name);
-
-    if (client->fd < 0) 
+  while (written < data_size)
+  {
+    if (dbdisk->optimal_bytes)
     {
-      multilog (client->log, LOG_ERR, "Could not reopen file: fd=%d\n",client->fd);
-      return (data_size);
-
-    } else {
-
-      /* ensure O_DIRECT is now off */
-      dbdisk->o_direct = 0;
-      wrote += write (client->fd, data+wrote, data_size-wrote);
-      return wrote;
+      to_write = dbdisk->optimal_bytes;
+      if (written + to_write > data_size)
+        to_write = data_size - written;
     }
+    else
+      to_write = data_size;
 
+    // Need to check we that to_write is a 512 byte multiple if using o_direct
+    if (dbdisk->o_direct && (to_write % 512 != 0)) 
+    {
+
+      multilog (client->log, LOG_WARNING, "Using O_DIRECT and data_size not mod 512\n");
+
+      // write all except the mod 512 bytes;
+      //uint64_t end = (data_size / 512) * 512;
+      uint64_t end = (to_write / 512) * 512;
+      wrote = write (client->fd, data + written, end);
+      written += wrote;
+
+      client->fd = disk_array_reopen(dbdisk->array, client->fd, dbdisk->file_name);
+
+      if (client->fd < 0) 
+      {
+        multilog (client->log, LOG_ERR, "Could not reopen file: fd=%d\n",client->fd);
+        return written;
+      } 
+      else 
+      {
+        // ensure O_DIRECT is now off 
+        dbdisk->o_direct = 0;
+        wrote = write (client->fd, data+written, to_write-wrote);
+        written += wrote;
+        return written;
+      }
+    }
+    wrote = write (client->fd, data + written, to_write);
+    if (wrote != to_write)
+      multilog (client->log, LOG_ERR, "write: wrote[%"PRIu64"] != to_write[%"PRIu64"]\n", wrote, to_write);
+    written += wrote;
   }
-  return write (client->fd, data, data_size);
+
+  return written;
 }
 
 /*! Pointer to the function that transfers data to/from the target */
@@ -339,10 +370,11 @@ int main (int argc, char **argv)
 
   int arg = 0;
 
+  uint64_t optimal_bytes = 0;
 
   dbdisk.array = disk_array_create ();
 
-  while ((arg=getopt(argc,argv,"k:dD:ovWsz")) != -1)
+  while ((arg=getopt(argc,argv,"k:dD:ot:vWsz")) != -1)
     switch (arg) {
 
     case 'k':
@@ -366,6 +398,10 @@ int main (int argc, char **argv)
     case 'o':
       dbdisk.o_direct = 1;
       disk_array_set_overwrite (dbdisk.array, 1);
+      break;
+
+    case 't':
+      optimal_bytes = atoi(optarg);
       break;
 
     case 'v':
@@ -426,12 +462,17 @@ int main (int argc, char **argv)
   client->close_function = file_close_function;
   client->direction      = dada_client_reader;
 
+  dbdisk.optimal_bytes   = optimal_bytes;
+
   client->context = &dbdisk;
 
   while (!client->quit) {
 
     if (dada_client_read (client) < 0)
-      multilog (log, LOG_ERR, "Error during transfer\n");
+    {
+      multilog (log, LOG_ERR, "dada_client_read failed\n");
+      quit = 1;
+    }
 
     if (quit) {
       client->quit = 1;
