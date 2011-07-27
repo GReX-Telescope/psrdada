@@ -141,9 +141,16 @@ uint64_t caspsr_pwc_ibdb_new_xfer (dada_pwc_main_t * pwcm)
     return 0;
   }
 
+  uint64_t transfer_size = 0;
+  if (ascii_header_get (xfer_header, "TRANSFER_SIZE", "%"PRIu64, &transfer_size) < 0)
+    multilog (pwcm->log, LOG_WARNING, "Could not read TRANSFER_SIZE from xfer header\n");
+
+  transfer_size *= ctx->n_distrib;
+
   if (ctx->verbose)
-    multilog(pwcm->log, LOG_INFO, "new_xfer: OBS_XFER=%"PRIi64" OBS_OFFSET=%"PRIu64"\n",
-                                  ctx->xfer_count, first_byte);
+    multilog(pwcm->log, LOG_INFO, "new_xfer: OBS_XFER=%"PRIi64" OBS_OFFSET=%"PRIu64
+                                  " TRANSFER_SIZE=%"PRIu64"\n", ctx->xfer_count, 
+                                  first_byte, transfer_size);
 
   if (ctx->verbose)
     multilog (ctx->log, LOG_INFO, "new_xfer: prev_xfer_bytes=%"PRIu64"\n", ctx->xfer_bytes);
@@ -157,14 +164,21 @@ uint64_t caspsr_pwc_ibdb_new_xfer (dada_pwc_main_t * pwcm)
   if (ascii_header_set (pwcm->header, "OBS_XFER", "%"PRIi64, ctx->xfer_count) < 0)
     multilog (pwcm->log, LOG_WARNING, "Could not write OBS_XFER to header\n");
 
+
   // If this header is the EOBS header
   if (ctx->xfer_count == -1)
   {
+    transfer_size = 1;
+    if (ascii_header_set (pwcm->header, "TRANSFER_SIZE", "%"PRIi64, transfer_size) < 0)
+      multilog (pwcm->log, LOG_WARNING, "Could not write TRANSFER_SIZE to header\n");
     multilog (pwcm->log, LOG_INFO, "new_xfer: OBS_XFER=%"PRIi64", OBS ENDING\n", ctx->xfer_count);
     if (ctx->verbose)
       multilog(pwcm->log, LOG_INFO, "new_xfer: observation is ending\n");
     return first_byte;
   }
+
+  if (ascii_header_set (pwcm->header, "TRANSFER_SIZE", "%"PRIi64, transfer_size) < 0)
+    multilog (pwcm->log, LOG_WARNING, "Could not write TRANSFER_SIZE to header\n");
 
   // pre post recv on XFER CONTINUING
   unsigned i = 0;
