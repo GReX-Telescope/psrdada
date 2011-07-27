@@ -101,6 +101,8 @@ int dbdecidb_open (dada_client_t* client)
   uint64_t new_filesize = 0;
   uint64_t old_obs_offset = 0;
   uint64_t new_obs_offset = 0;
+  uint64_t old_transfer_size = 0;
+  uint64_t new_transfer_size = 0;
 
   assert (client != 0);
 
@@ -154,6 +156,11 @@ int dbdecidb_open (dada_client_t* client)
     multilog (log, LOG_INFO, "header with no FILE_SIZE, ignoring param\n");
   }
 
+  if (ascii_header_get (client->header, "TRANSFER_SIZE", "%"PRIu64, &old_transfer_size) != 1) {
+    multilog (log, LOG_INFO, "header with no TRANSFER_SIZE, ignoring param\n");
+    old_transfer_size = 0;
+  }
+
   int64_t obs_xfer = 0;
   if (ascii_header_get (client->header, "OBS_XFER", "%"PRIi64, &obs_xfer) != 1) {
     multilog (log, LOG_WARNING, "header with no OBS_XFER\n");
@@ -168,8 +175,9 @@ int dbdecidb_open (dada_client_t* client)
 
   if (ctx->verbose)
     multilog (log, LOG_INFO, "parsed old BANDWIDTH=%lf, CFREQ=%lf, TSAMP=%lf,"
-                             " BYTES_PER_SECOND=%lf, OBS_OFFSET=%"PRIu64"\n", old_bw, 
-                             old_cf, old_tsamp, old_bytesps, old_obs_offset);
+                             " BYTES_PER_SECOND=%lf, OBS_OFFSET=%"PRIu64", "
+                             " TRANSFER_SIZE=%"PRIu64"\n", old_bw, old_cf, old_tsamp, 
+                             old_bytesps, old_obs_offset, old_transfer_size);
 
   // generate the new BANDWIDTH, CFREQ and TSAMP
   if (ctx->tdec == 1)
@@ -186,11 +194,13 @@ int dbdecidb_open (dada_client_t* client)
   new_bytesps = old_bytesps / ctx->tdec;
   new_filesize = old_filesize / ctx->tdec;
   new_obs_offset = old_obs_offset / ctx->tdec;
-  
+  new_transfer_size = old_transfer_size / ctx->tdec; 
+
   if (ctx->verbose)
     multilog (log, LOG_INFO, "setting new BANDWIDTH=%lf, CFREQ=%lf, TSAMP=%lf,"
-                             " BYTES_PER_SECOND=%lf, OBS_OFFSET=%"PRIu64"\n", 
-                             new_bw, new_cf, new_tsamp, new_bytesps, new_obs_offset);
+                             " BYTES_PER_SECOND=%lf, OBS_OFFSET=%"PRIu64","
+                             " TRANSFER_SIZE=%"PRIu64"\n", new_bw, new_cf, 
+                             new_tsamp, new_bytesps, new_obs_offset, new_transfer_size);
 
   // get the header from the input data block
   uint64_t header_size = ipcbuf_get_bufsz (client->header_block);
@@ -231,9 +241,12 @@ int dbdecidb_open (dada_client_t* client)
       multilog (log, LOG_WARNING, "failed to set OBS_OFFSET in outgoing header\n");
     }
     if (old_filesize)
-      if (ascii_header_set (header, "FILE_SIZE", "%"PRIu64, new_filesize) < 0) {
-      multilog (log, LOG_WARNING, "failed to set FILE_SIZE in outgoing header\n");
-    }
+      if (ascii_header_set (header, "FILE_SIZE", "%"PRIu64, new_filesize) < 0)
+        multilog (log, LOG_WARNING, "failed to set FILE_SIZE in outgoing header\n");
+    if (old_transfer_size)
+      if (ascii_header_set (header, "TRANSFER_SIZE", "%"PRIu64, new_transfer_size) < 0)
+        multilog (log, LOG_WARNING, "failed to set TRANSFER_SIZE in outgoing header\n");
+
   }
 
   // mark the outgoing header as filled
@@ -245,15 +258,13 @@ int dbdecidb_open (dada_client_t* client)
   if (ctx->verbose) 
     multilog (log, LOG_INFO, "HDU (key=%x) opened for writing\n", ctx->key);
 
-  client->transfer_bytes = 0; 
+  client->transfer_bytes = old_transfer_size; 
   client->optimal_bytes = 64*1024*1024 * ctx->tdec;
 
-  if (ctx->verbose)
-    multilog (log, LOG_INFO, "bytes_in=%"PRIu64", bytes_out=%"PRIu64"\n",
-                    ctx->bytes_in, ctx->bytes_out );
-
   ctx->idec = ctx->tdec;
-  
+  ctx->bytes_in = 0;
+  ctx->bytes_out = 0;
+  ctx->bytes_written = 0; 
   client->header_transfer = 0;
 
   return 0;
@@ -277,6 +288,10 @@ int dbdecidb_close (dada_client_t* client, uint64_t bytes_written)
 
   log = client->log;
   assert (log != 0);
+
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "bytes_in=%"PRIu64", bytes_out=%"PRIu64"\n",
+                    ctx->bytes_in, ctx->bytes_out );
 
   if (ctx->block_open)
   {
@@ -379,7 +394,7 @@ int64_t dbdecidb_write_block_1 (dada_client_t* client, void* data, uint64_t data
   assert (ctx->hdu != 0);
 
   if (ctx->verbose > 1)
-    multilog (log, LOG_INFO, "dbdecidb_write_block_1: write %"PRIu64" bytes, block=%"PRIu64"\n",
+    multilog (log, LOG_INFO, "write_block_1: write %"PRIu64" bytes, block=%"PRIu64"\n",
                 data_size, block_id);
 
   uint64_t out_block_id;
@@ -394,12 +409,12 @@ int64_t dbdecidb_write_block_1 (dada_client_t* client, void* data, uint64_t data
   if (!ctx->block_open)
   {
     if (ctx->verbose > 1)
-      multilog (log, LOG_INFO, "dbdecidb_write_block_1: ipcio_open_block_write()\n");
+      multilog (log, LOG_INFO, "write_block_1: ipcio_open_block_write()\n");
   
     ctx->curr_block = ipcio_open_block_write(ctx->hdu->data_block, &out_block_id);
     if (!ctx->curr_block)
     { 
-      multilog (log, LOG_ERR, "dbdecidb_write_block_1: ipcio_open_block_write error %s\n", strerror(errno));
+      multilog (log, LOG_ERR, "write_block_1: ipcio_open_block_write error %s\n", strerror(errno));
       return -1;
      } 
 
@@ -412,17 +427,31 @@ int64_t dbdecidb_write_block_1 (dada_client_t* client, void* data, uint64_t data
   ctx->bytes_written = data_size;
 
   if (ctx->bytes_written > ctx->out_block_size)
-    multilog (log, LOG_ERR, "dbdecidb_write_block_1: output block overrun by %"PRIu64" bytes\n",ctx->bytes_written - ctx->out_block_size);
+    multilog (log, LOG_ERR, "write_block_1: output block overrun by %"PRIu64" bytes\n",ctx->bytes_written - ctx->out_block_size);
 
   // check if the output block is now full
   if (ctx->bytes_written >= ctx->out_block_size)
   {
-    if (ctx->verbose > 1)
-      multilog (log, LOG_INFO, "dbdecidb_write_block_1: close_block_write(%"PRIu64"\n", ctx->bytes_written);
-    if (ipcio_close_block_write (ctx->hdu->data_block, ctx->bytes_written) < 0)
+    // check if this is the end of data
+    if (client->transfer_bytes && ((ctx->bytes_in + data_size) == client->transfer_bytes))
     {
-      multilog (log, LOG_ERR, "dbdecidb_write_block_1: ipcio_close_block_write failed\n");
-      return -1;
+      if (ctx->verbose)
+        multilog (log, LOG_INFO, "write_block_1: update_block_write(%"PRIu64"\n", ctx->bytes_written);
+      if (ipcio_update_block_write (ctx->hdu->data_block, ctx->bytes_written) < 0)
+      {
+        multilog (log, LOG_ERR, "write_block_1: ipcio_update_block_write failed\n");
+        return -1;
+      }
+    }
+    else
+    {
+      if (ctx->verbose > 1)
+        multilog (log, LOG_INFO, "write_block_1: close_block_write(%"PRIu64"\n", ctx->bytes_written);
+      if (ipcio_close_block_write (ctx->hdu->data_block, ctx->bytes_written) < 0)
+      {
+        multilog (log, LOG_ERR, "write_block_1: ipcio_close_block_write failed\n");
+        return -1;
+      }
     }
     ctx->block_open = 0;
     ctx->bytes_written = 0;
@@ -432,7 +461,7 @@ int64_t dbdecidb_write_block_1 (dada_client_t* client, void* data, uint64_t data
   ctx->bytes_out += data_size;
 
   if (ctx->verbose > 1)
-    multilog (log, LOG_INFO, "dbdecidb_write_block_1: read %"PRIu64", wrote %"PRIu64" bytes\n", data_size, data_size);
+    multilog (log, LOG_INFO, "write_block_1: read %"PRIu64", wrote %"PRIu64" bytes\n", data_size, data_size);
 
   if (ctx->bytes_written > data_size )
   {
@@ -468,7 +497,7 @@ int64_t dbdecidb_write_block_2 (dada_client_t* client, void* data, uint64_t data
   assert (ctx->hdu != 0);
 
   if (ctx->verbose > 1)
-    multilog (log, LOG_INFO, "dbdecidb_write_block_2: write %"PRIu64" bytes, block=%"PRIu64"\n",
+    multilog (log, LOG_INFO, "write_block_2: write %"PRIu64" bytes, block=%"PRIu64"\n",
                 data_size, block_id);
 
   uint64_t out_block_id;
@@ -486,12 +515,12 @@ int64_t dbdecidb_write_block_2 (dada_client_t* client, void* data, uint64_t data
     if (!ctx->block_open)
     {
       if (ctx->verbose > 1)
-        multilog (log, LOG_INFO, "dbdecidb_write_block_2: ipcio_open_block_write()\n");
+        multilog (log, LOG_INFO, "write_block_2: ipcio_open_block_write()\n");
   
       ctx->curr_block = ipcio_open_block_write(ctx->hdu->data_block, &out_block_id);
       if (!ctx->curr_block)
       {
-        multilog (log, LOG_ERR, "dbdecidb_write_block_2: ipcio_open_block_write error %s\n", strerror(errno));
+        multilog (log, LOG_ERR, "write_block_2: ipcio_open_block_write error %s\n", strerror(errno));
         return -1;
       }
 
@@ -519,17 +548,30 @@ int64_t dbdecidb_write_block_2 (dada_client_t* client, void* data, uint64_t data
     ctx->bytes_written += 8;
 
     if (ctx->bytes_written > ctx->out_block_size)
-      multilog (log, LOG_ERR, "dbdecidb_write_block_2: output block overrun by %"PRIu64" bytes\n",ctx->bytes_written - ctx->out_block_size);
+      multilog (log, LOG_ERR, "write_block_2: output block overrun by %"PRIu64" bytes\n",ctx->bytes_written - ctx->out_block_size);
 
     // check if the output block is now full
     if (ctx->bytes_written >= ctx->out_block_size)
     {
-      if (ctx->verbose > 1)
-        multilog (log, LOG_INFO, "dbdecidb_write_block_2: close_block_write(%"PRIu64"\n", ctx->bytes_written);
-      if (ipcio_close_block_write (ctx->hdu->data_block, ctx->bytes_written) < 0)
+      if (client->transfer_bytes && ((ctx->bytes_in + data_size) == client->transfer_bytes))
       {
-        multilog (log, LOG_ERR, "dbdecidb_write_block_2: ipcio_close_block_write failed\n");
-        return -1;
+        if (ctx->verbose)
+          multilog (log, LOG_INFO, "write_block_2: update_block_write(%"PRIu64"\n", ctx->bytes_written);
+        if (ipcio_update_block_write (ctx->hdu->data_block, ctx->bytes_written) < 0)
+        {
+          multilog (log, LOG_ERR, "write_block_2: ipcio_update_block_write failed\n");
+          return -1;
+        }
+      }
+      else
+      {
+        if (ctx->verbose)
+          multilog (log, LOG_INFO, "write_block_2: close_block_write(%"PRIu64"\n", ctx->bytes_written);
+        if (ipcio_close_block_write (ctx->hdu->data_block, ctx->bytes_written) < 0)
+        {
+          multilog (log, LOG_ERR, "write_block_2: ipcio_close_block_write failed\n");
+          return -1;
+        }
       }
       ctx->block_open = 0;
       ctx->bytes_written = 0;
@@ -540,7 +582,7 @@ int64_t dbdecidb_write_block_2 (dada_client_t* client, void* data, uint64_t data
   ctx->bytes_out += data_size / 2;
 
   if (ctx->verbose > 1)
-    multilog (log, LOG_INFO, "dbdecidb_write_block_2: read %"PRIu64", wrote %"PRIu64" bytes\n", data_size, data_size / 2);
+    multilog (log, LOG_INFO, "write_block_2: read %"PRIu64", wrote %"PRIu64" bytes\n", data_size, data_size / 2);
 
   if (ctx->bytes_written > data_size / 2)
   {
