@@ -11,6 +11,8 @@ dist_bin_SCRIPTS = Caspsr.pm \
                    client_caspsr_src_logger.pl \
                    client_caspsr_sys_logger.pl \
                    client_caspsr_command.pl \
+                   raid_caspsr_swin_transferrer.pl \
+                   raid_caspsr_psrfits_converter.pl \
                    server_caspsr_sys_monitor.pl \
                    server_caspsr_demux_monitor.pl \
                    server_caspsr_distrib_monitor.pl \

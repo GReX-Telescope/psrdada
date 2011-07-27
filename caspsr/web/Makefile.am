@@ -1,5 +1,6 @@
 
 webdir = $(prefix)/web/caspsr
+webraiddir = $(prefix)/web/raid/caspsr
 
 nobase_dist_web_SCRIPTS = admin.lib.php \
                           archival.lib.php \
@@ -62,6 +63,45 @@ nobase_dist_web_SCRIPTS = admin.lib.php \
                           Arty/Page-BgSimpleGradient.jpg \
                           Arty/BlockHeader_1900x30.png \
                           Arty/Page-BgSimpleGradient_500x5.jpg
+
+nobase_dist_webraid_SCRIPTS = caspsr.css \
+                           caspsr.lib.php \
+                           caspsr_webpage.lib.php \
+                           raid_archival.lib.php \
+                           images/arrow_right.png \
+                           images/caspsr_favicon.ico \
+                           images/caspsr_logo.png \
+                           Arty/Arty.css \
+                           Arty/BlockContentBullets.png \
+                           Arty/Block-c.png \
+                           Arty/BlockHeader.png \
+                           Arty/Block-h.png \
+                           Arty/Block-s.png \
+                           Arty/Block-v.png \
+                           Arty/Button.png \
+                           Arty/Footer.png \
+                           Arty/Header.png \
+                           Arty/item-center.png \
+                           Arty/item-left.png \
+                           Arty/item-right.png \
+                           Arty/nav.png \
+                           Arty/PostBullets.png \
+                           Arty/Post-c.png \
+                           Arty/Post-h.png \
+                           Arty/PostQuote.png \
+                           Arty/Post-s.png \
+                           Arty/Post-v.png \
+                           Arty/rssIcon.png \
+                           Arty/Sheet-c.png \
+                           Arty/Sheet-h.png \
+                           Arty/Sheet-s.png \
+                           Arty/Sheet-v.png \
+                           Arty/subitem-bg.png \
+                           Arty/Page-BgSimpleGradient.jpg \
+                           Arty/BlockHeader_1900x30.png \
+                           Arty/Page-BgSimpleGradient_500x5.jpg
+
+
 
 include $(top_srcdir)/config/Makefile.targets
 
