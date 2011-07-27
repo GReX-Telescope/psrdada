@@ -1,5 +1,6 @@
 
 webdir = $(prefix)/web/bpsr
+raiddir = $(prefix)/web/raid/bpsr
 
 nobase_dist_web_SCRIPTS = definitions_i.php \
                           archival_summary_window.lib.php \
@@ -37,4 +38,13 @@ nobase_dist_web_SCRIPTS = definitions_i.php \
                           stats/.htaccess \
                           status/.empty \
                           support.html
+
+nobase_dist_raid_SCRIPTS = bpsr.css \
+                           bpsr.lib.php \
+                           bpsr_webpage.lib.php \
+                           raid_archival.lib.php \
+                           images/arrow_right.png \
+                           images/bpsr_favico.ico \
+                           images/bpsr_logo_1x60.png \
+                           images/bpsr_logo.png
 
