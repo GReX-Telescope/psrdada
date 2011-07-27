@@ -1,5 +1,6 @@
 
 webdir = $(prefix)/web/apsr
+webraiddir = $(prefix)/web/raid/apsr
 
 nobase_dist_web_SCRIPTS = definitions_i.php \
                           apsr.css \
@@ -55,3 +56,12 @@ nobase_dist_web_SCRIPTS = definitions_i.php \
                           testing/simulator.php \
                           status/.empty \
                           support.lib.php
+
+nobase_dist_webraid_SCRIPTS = apsr.css \
+                           apsr.lib.php \
+                           apsr_webpage.lib.php \
+                           raid_archival.lib.php \
+                           images/arrow_right.png \
+                           images/apsr_favico.ico \
+                           images/apsr_logo.png
+

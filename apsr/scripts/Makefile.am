@@ -17,6 +17,10 @@ dist_bin_SCRIPTS = Apsr.pm \
                    lowres.psh \
                    lowres_pulse.psh \
                    checkpulse.psh \
+                   raid_apsr_bands_finished.pl \
+                   raid_apsr_psrfits_converter.pl \
+                   raid_apsr_psrfits_patcher.pl \
+                   raid_apsr_swin_transferrer.pl \
                    server_apsr_auxiliary_manager.pl \
                    server_apsr_band_processor.pl \
                    server_apsr_create_plots.pl \
