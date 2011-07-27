@@ -1247,6 +1247,9 @@ sub logMsg($$$) {
 
   my ($lvl, $dlvl, $message) = @_;
 
+  # fix for lines that contain ` characters
+  $message =~ s/`/'/;
+
   if ($lvl <= $dlvl) {
     my $time = Dada::getCurrentDadaTime();
     print STDOUT "[".$time."] ".$message."\n";
@@ -1657,6 +1660,7 @@ sub daemonBaseName($) {
   $name =~ s/\.pl$//;
   $name =~ s/^.*client_//;
   $name =~ s/^.*server_//;
+  $name =~ s/^.*raid_//;
 
   return ($name);
 }
