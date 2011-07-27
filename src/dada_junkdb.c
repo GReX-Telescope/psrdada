@@ -152,64 +152,52 @@ int64_t transfer_data_block (dada_client_t* client, void* data, uint64_t data_si
 
 
 /*! Function that closes the data file */
-int release_data (dada_client_t* client, uint64_t bytes_written)
+int dada_junkdb_close (dada_client_t* client, uint64_t bytes_written)
 {
-  /* the dada_junkdb specific data */
-  dada_junkdb_t* junkdb = 0;
-
   assert (client != 0);
-  junkdb = (dada_junkdb_t*) client->context;
+
+  dada_junkdb_t* junkdb = (dada_junkdb_t*) client->context;
   assert (junkdb != 0);
 
+  if (junkdb->verbose)
+    multilog (client->log, LOG_INFO, "close: wrote %"PRIu64" bytes\n", bytes_written);
+
   free (junkdb->data);
- 
   return 0;
 }
 
 /*! Function that opens the data transfer target */
-int generate_data(dada_client_t* client)
+int dada_junkdb_open (dada_client_t* client)
 {
 
-  /* the dada_junkdb specific data */
-  dada_junkdb_t* junkdb = 0;
-  
-  /* status and error logging facility */
-  multilog_t* log;
-
-  /* the size of the header, as determined by HDR_SIZE */
-  uint64_t hdr_size = 0;
-
   assert (client != 0);
-
-  junkdb = (dada_junkdb_t*) client->context;
-
-  assert (junkdb != 0);
   assert (client->header != 0);
 
-  log = client->log;
+  dada_junkdb_t* junkdb = (dada_junkdb_t*) client->context;
+  assert (junkdb != 0);
 
+  uint64_t hdr_size = 0;
   time_t current_time = 0;
   time_t prev_time = 0;
   
-  /* read the header */
-  if (fileread (junkdb->header_file, client->header, client->header_size) < 0)  {
-    multilog (log, LOG_ERR, "Could not read header from %s\n", junkdb->header_file);
+  // read the header
+  if (fileread (junkdb->header_file, client->header, client->header_size) < 0) {
+    multilog (client->log, LOG_ERR, "Could not read header from %s\n", junkdb->header_file);
   }
 
-  if (junkdb->verbose)
+  if (junkdb->verbose > 1)
   fprintf (stderr, "===========HEADER START=============\n"
                    "%s"
                    "============HEADER END==============\n", client->header);
   junkdb->header_read = 0;
 
-  /* Get the header size */
   if (ascii_header_get (client->header, "HDR_SIZE", "%"PRIu64, &hdr_size) != 1)
   {
-    multilog (log, LOG_WARNING, "Header with no HDR_SIZE\n");
+    multilog (client->log, LOG_WARNING, "Header with no HDR_SIZE\n");
     hdr_size = DADA_DEFAULT_HEADER_SIZE;
   }
 
-  /* Ensure that the incoming header fits in the client header buffer */
+  // ensure that the incoming header fits in the client header buffer
   if (hdr_size > client->header_size) {
     multilog (client->log, LOG_ERR, "HDR_SIZE=%u > Block size=%"PRIu64"\n",
 	      hdr_size, client->header_size);
@@ -227,8 +215,10 @@ int generate_data(dada_client_t* client)
               junkdb->transfer_size);
   }
 
+  if (junkdb->verbose)
+    multilog (client->log, LOG_INFO, "open: setting filesize %"PRIu64"\n", junkdb->transfer_size);
 
-  /* seed the RNG */
+  // seed the RNG
   srand ( time(NULL) );
   junkdb->data = (char *) malloc (sizeof(char) * junkdb->data_size);
 
@@ -240,17 +230,12 @@ int generate_data(dada_client_t* client)
 
   if (junkdb->write_gaussian) 
   {
-    multilog (client->log, LOG_INFO, "generating gaussian data %"PRIu64"\n", junkdb->data_size);
+    multilog (client->log, LOG_INFO, "open: generating gaussian data %"PRIu64"\n", junkdb->data_size);
     fill_gaussian_chars(junkdb->data, junkdb->data_size, 8, 500);
-    multilog (client->log, LOG_INFO, "data generated\n");
+    multilog (client->log, LOG_INFO, "open: data generated\n");
   }
 
-
-  multilog (client->log, LOG_INFO, "data generated\n");
-
-#ifdef _DEBUG
-  multilog (client->log, LOG_INFO, "generate_data returned\n");
-#endif
+  multilog (client->log, LOG_INFO, "open: data generated\n");
 
   return 0;
 }
@@ -351,11 +336,10 @@ int main (int argc, char **argv)
         usage();
         return EXIT_FAILURE;
       }
-      fprintf(stderr, "writing for %d seconds\n", write_time);
       break;
 
     case 'v':
-      verbose=1;
+      verbose++;
       break;
 
     case 'z':
@@ -382,9 +366,6 @@ int main (int argc, char **argv)
     return(EXIT_FAILURE);
   }
   fclose(fptr);
-
-  if (verbose)
-    fprintf (stdout, "Using header file: %s\n", header_file);
 
   log = multilog_open ("dada_junkdb", 0);
 
@@ -415,13 +396,13 @@ int main (int argc, char **argv)
   client->data_block = hdu->data_block;
   client->header_block = hdu->header_block;
 
-  client->open_function = generate_data;
+  client->open_function = dada_junkdb_open;
 
   if (zero_copy)
     client->io_block_function = transfer_data_block;
 
   client->io_function = transfer_data;
-  client->close_function = release_data;
+  client->close_function = dada_junkdb_close;
   client->direction = dada_client_writer;
 
   client->context = &junkdb;
