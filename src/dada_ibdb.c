@@ -79,6 +79,8 @@ int64_t dada_ibdb_recv (dada_client_t* client, void* data, uint64_t data_size)
   if (ibdb->verbose)
     multilog (log, LOG_INFO, "dada_ibdb_recv()\n");
 
+  ibdb->xfer_ending = 0;
+
   // check that the header size matches the requested data_size
   if (ib_cm->header_mb->size != data_size)
   {
@@ -104,6 +106,16 @@ int64_t dada_ibdb_recv (dada_client_t* client, void* data, uint64_t data_size)
     multilog(client->log, LOG_ERR, "recv: wait_recv on header_mb failed\n");
     return -1;
   }
+
+  // check if the TRANSFER_SIZE header parameter is set
+  uint64_t transfer_size;
+  if (ascii_header_get (ib_cm->header_mb->buffer, "TRANSFER_SIZE", "%"PRIu64, &transfer_size) != 1)
+  {
+    transfer_size = 0;
+  }
+  client->transfer_bytes = transfer_size;
+  if (ibdb->verbose)
+    multilog(client->log, LOG_INFO, "recv: TRANSFER_SIZE=%"PRIu64"\n", transfer_size);
 
   // post recv for the number of bytes in the first xfer
   if (ibdb->verbose)
@@ -158,9 +170,11 @@ int64_t dada_ibdb_recv_block (dada_client_t* client, void* data,
   uint64_t bytes_to_be_received = ib_cm->sync_from_val[1];
   uint64_t bytes_received = 0;
 
-  // this is a signal for the end of data
+  // this is a signal for the end of data which occurs only when we have received
+  // less than client->transfer_bytes (from header var TRANSFER_SIZE)
   if (bytes_to_be_received == 0) 
   {
+    multilog(client->log, LOG_INFO, "recv_block: bytes_to_be_received = 0\n");
     ibdb->xfer_ending = 1;
     bytes_received = 0;
   }
@@ -234,6 +248,34 @@ int dada_ibdb_close (dada_client_t* client, uint64_t bytes_written)
   if (ibdb->verbose)
     multilog (client->log, LOG_INFO, "dada_ibdb_close()\n");
 
+  // this is only required when we have received EOD before we have
+  // read client->transfer_bytes
+  if ((ibdb->xfer_ending) || (client->transfer_bytes && (client->transfer_bytes != bytes_written)))
+  {
+    if (ibdb->verbose)
+      multilog(client->log, LOG_INFO, "close: send_message on sync_to [READY]\n");
+    if (dada_ib_send_message (ib_cm, DADA_IB_READY_KEY, 0) < 0) 
+    {
+      multilog(client->log, LOG_ERR, "close: send_message on sync_to [READY] failed\n");
+      return -1;
+    } 
+  
+    // get the number of bytes to be xferred
+    if (ibdb->verbose)
+      multilog(client->log, LOG_INFO, "close: recv_message on sync_from [BYTES TO XFER]\n");
+    if (dada_ib_recv_message (ib_cm, DADA_IB_BYTES_TO_XFER_KEY) < 0)
+    {
+      multilog(client->log, LOG_ERR, "close: recv_message on sync_from [BYTES TO XFER] failed\n");
+      return -1;
+    }
+
+    // this is a signal for the end of data
+    uint64_t bytes_to_be_received = ib_cm->sync_from_val[1];
+    if (bytes_to_be_received != 0) 
+    {
+      multilog(client->log, LOG_ERR, "close:  bytes_to_be_received != 0 [%"PRIu64"]\n", bytes_to_be_received);
+    } 
+  }
 
   return 0;
 }
