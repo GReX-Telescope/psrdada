@@ -23,13 +23,19 @@ use Dada;
 use Caspsr;
 
 #
+# Constants
+#
+use constant BANDWIDTH => "32768";  # KB/s
+
+
+#
 # Function declarations
 #
 sub good($);
 sub setStatus($);
 sub markState($$$);
-sub getObsToSend($);
-sub transferObs($);
+sub getObsToSend();
+sub transferObs($$$);
 sub checkTransferredAndOld();
 
 #
@@ -38,21 +44,16 @@ sub checkTransferredAndOld();
 our $dl = 1;
 our $daemon_name = Dada::daemonBaseName($0);
 our %cfg = Caspsr::getConfig();
-our $pids = "P140 P361 P456 P630 P794";
 our $rate_mbits = 40;
 our $quit_daemon : shared = 0;
 our $curr_obs : shared = "none";
 our $warn = $cfg{"STATUS_DIR"}."/".$daemon_name.".warn";
 our $error = $cfg{"STATUS_DIR"}."/".$daemon_name.".error";
 
-our $swin_user = "pulsar";
-our $swin_host = "shrek214-gb";
-our $swin_repos = "/export/shrek214a/caspsr";
-
-#
-# Constants
-#
-use constant SSH_OPTS      => "-x -o BatchMode=yes";
+our $r_user = "caspsr";
+our $r_host = "raid0";
+our $r_path = "/lfs/raid0/caspsr/finished";
+our $r_module = "caspsr_upload";
 
 
 #
@@ -67,6 +68,8 @@ my $response = "";
 my $control_thread = 0;
 my $tunnel_thread = 0;
 my $obs = "";
+my $source = "";
+my $pid = "";
 my $i = 0;
 my $cmd = "";
 my $xfer_failure = 0;
@@ -90,15 +93,13 @@ Dada::daemonize($log_file, $pid_file);
 
 Dada::logMsg(0, $dl ,"STARTING SCRIPT");
 
-sleep(10);
-
 # start the control thread
 Dada::logMsg(2, $dl, "main: controlThread(".$quit_file.", ".$pid_file.")");
 $control_thread = threads->new(\&controlThread, $quit_file, $pid_file);
 
 setStatus("Starting script");
 
-Dada::logMsg(1, $dl, "Starting Transfer Manager for ".$pids);
+Dada::logMsg(1, $dl, "Starting Transfer Manager");
 
 chdir $cfg{"SERVER_ARCHIVE_DIR"};
 
@@ -114,16 +115,14 @@ while (!$quit_daemon) {
 
   # Fine an observation to send based on the CWD
   Dada::logMsg(2, $dl, "main: getObsToSend()");
-  ($result, $response) = getObsToSend($pids);
+  ($result, $pid, $source, $obs) = getObsToSend();
   Dada::logMsg(2, $dl, "main: getObsToSend(): ".$obs);
 
   if ($result ne "ok") {
-    Dada::logMsg(2, $dl, "main: getObsToSend failed: ".$response);
+    Dada::logMsg(2, $dl, "main: getObsToSend failed");
     $quit_daemon = 1;
     next;
   }
-
-  $obs = $response;
 
   if ($obs eq "none") {
 
@@ -138,8 +137,8 @@ while (!$quit_daemon) {
 
     $curr_obs  = $obs;
 
-    Dada::logMsg(2, $dl, "main: transferObs(".$obs.")");
-    ($result, $response) = transferObs($obs);
+    Dada::logMsg(2, $dl, "main: transferObs(".$pid.", ".$source.", ".$obs.")");
+    ($result, $response) = transferObs($pid, $source, $obs);
     Dada::logMsg(2, $dl, "main: transferObs() ".$result." ".$response);
 
     if ($result eq "ok") {
@@ -148,7 +147,7 @@ while (!$quit_daemon) {
       Dada::logMsg(2, $dl, "main: markState(".$obs.", obs.finished, obs.transferred)");
       ($result, $response) = markState($obs, "obs.finished", "obs.transferred");
       Dada::logMsg(2, $dl, "main: markState() ".$result." ".$response); 
-      Dada::logMsg(1, $dl, $obs." transferring -> transferred");
+      Dada::logMsg(1, $dl, $pid."/".$source."/".$obs." transferring -> transferred ".$response);
 
       setStatus($obs." xfer success");
 
@@ -160,7 +159,7 @@ while (!$quit_daemon) {
         Dada::logMsg(2, $dl, "main: markState(".$obs.", obs.finished, obs.transfer_error)");
         ($result, $response) = markState($obs, "obs.finished", "obs.transfer_error");
         Dada::logMsg(2, $dl, "main: markState() ".$result." ".$response);
-        Dada::logMsg(1, $dl, $obs." transferring -> transfer error");
+        Dada::logMsg(1, $dl, $pid."/".$source."/".$obs." transferring -> transfer error");
 
         setStatus($obs." xfer failure");
       }
@@ -394,11 +393,9 @@ sub markState($$$) {
 # Find an observation to send, search chronologically. Look for observations that have 
 # an obs.finished in them
 #
-sub getObsToSend($) {
+sub getObsToSend() {
 
-  (my $pids) = @_;
-
-  Dada::logMsg(2, $dl, "getObsToSend(".$pids.")");
+  Dada::logMsg(2, $dl, "getObsToSend()");
 
   my $obs_to_send = "none";
 
@@ -411,6 +408,7 @@ sub getObsToSend($) {
   my $i = 0;
   my $j = 0;
   my $obs_pid = "";
+  my $source = "";
   my $proc_file = "";
   my $obs = "";
 
@@ -423,20 +421,20 @@ sub getObsToSend($) {
   Dada::logMsg(3, $dl, "getObsToSend: ".$result.":".$response);
   if ($result ne "ok") {
     Dada::logMsgWarn($warn, "getObsToSend: ".$cmd." failed: ".$response);
-    return ("ok", "none");
+    return ("ok", "none", "none", "none");
   }
 
   # If there is nothing to transfer, simply return
   @obs_finished = split(/\n/, $response);
   if ($#obs_finished == -1) {
-    return ("ok", "none");
+    return ("ok", "none", "none", "none");
   }
 
   Dada::logMsg(2, $dl, "getObsToSend: found ".($#obs_finished+1)." observations marked obs.finished");
 
   # Go through the list of finished observations, looking for something to send
-  for ($i=0; (($i<=$#obs_finished) && ($obs_to_send eq "none")); $i++) {
-
+  for ($i=0; (($i<=$#obs_finished) && ($obs_to_send eq "none")); $i++) 
+  {
     $obs = $obs_finished[$i];
     Dada::logMsg(2, $dl, "getObsToSend: checking ".$obs);
 
@@ -446,7 +444,18 @@ sub getObsToSend($) {
       next;
     }
 
-    # Find the PID 
+    # get the SOURCE
+    $cmd = "grep ^SOURCE ".$archives_dir."/".$obs."/obs.info | awk '{print \$2}'";
+    Dada::logMsg(3, $dl, "getObsToSend: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, $dl, "getObsToSend: ".$result.":".$response);
+    if (($result ne "ok") || ($response eq "")) {
+      Dada::logMsgWarn($warn, "getObsToSend: failed to parse SOURCE from obs.info [".$obs."] ".$response);
+      next;
+    }
+    $source = $response;
+
+    # get the PID 
     $cmd = "grep ^PID ".$archives_dir."/".$obs."/obs.info | awk '{print \$2}'";
     Dada::logMsg(3, $dl, "getObsToSend: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
@@ -455,21 +464,15 @@ sub getObsToSend($) {
       Dada::logMsgWarn($warn, "getObsToSend: failed to parse PID from obs.info [".$obs."] ".$response);
       next;
     }
-    $obs_pid = $response;
-
-    # If the PID doesn't match, skip it
-    if ($obs_pid =~ m/$pids/) {
-      Dada::logMsg(2, $dl, "getObsToSend: skipping ".$obs." PID mismatch [".$obs_pid." not in ".$pids."]");
-      next;
-    }
+    $pid = $response;
 
     # we have an acceptable obs to send
     $obs_to_send = $obs;
 
   }
 
-  Dada::logMsg(2, $dl, "getObsToSend: returning ".$obs_to_send);
-  return ("ok", $obs_to_send);
+  Dada::logMsg(2, $dl, "getObsToSend: returning ".$pid." ".$source." ".$obs_to_send);
+  return ("ok", $pid, $source, $obs_to_send);
 }
 
 #
@@ -504,53 +507,50 @@ sub setStatus($) {
 #
 # Transfer the specified obs 
 #
-sub transferObs($) {
+sub transferObs($$$) {
 
-  my ($obs) = @_;
+  my ($pid, $source, $obs) = @_;
 
-  Dada::logMsg(2, $dl, "transferObs(".$obs.")");
+  Dada::logMsg(2, $dl, "transferObs(".$pid.", ".$source.", ".$obs.")");
 
   my $localhost = Dada::getHostMachineName();
 
-  my $source = "";
+  my $rsync_options = "-a --no-g --chmod=go-ws --bwlimit=".BANDWIDTH.
+                      " --password-file=/home/dada/.ssh/raid_rsync_pw";
+
   my $result = "";
   my $response = "";
   my $rval = 0;
   my $cmd = "";
   my $dirs = "";
   my $files = "";
+  my @output_lines = ();
+  my @bits = ();
+  my $i = 0;
+  my $data_rate = "";
 
   if ($quit_daemon) {
     Dada::logMsg(1, $dl, "transferObs: quitting before transfer begun");
     return ("fail", "quit flag raised before transfer begun");
   }
 
-  Dada::logMsg(1, $dl, $obs." finished -> transferring");
-  Dada::logMsg(2, $dl, "Transferring ".$obs." to ".$swin_user."@".$swin_host.":".$swin_repos);
+  Dada::logMsg(1, $dl, $pid."/".$source."/".$obs." finished -> transferring");
+  Dada::logMsg(2, $dl, "Transferring ".$obs." to ".$r_user."@".$r_host.":".$r_path);
 
-  # get the source name from the obs.info file
-  $cmd = "grep ^SOURCE ".$cfg{"SERVER_ARCHIVE_DIR"}."/".$obs."/obs.info | awk '{print \$2}'";
-  Dada::logMsg(2, $dl, "transferObs: ".$cmd);
-  ($result, $response) = Dada::mySystem($cmd);
-  Dada::logMsg(2, $dl, "transferObs: ".$result.":".$response);
-  if (($result ne "ok") || ($response eq "")) {
-    Dada::logMsgWarn($warn, "transferObs: failed to parse SOURCE from obs.info [".$obs."] ".$response);
-    return ("fail", "couldn't parse SOURCE from obs.info");
-  }
-  $source = $response;
-
-  # create the source directory on the remote host
-  $cmd = "mkdir -p ".$swin_repos."/".$source."/".$obs;
-  Dada::logMsg(2, $dl, "transferObs: remoteSshCommand(".$swin_user.", ".$swin_host.", ".$cmd.")");
-  ($result, $rval, $response) = Dada::remoteSshCommand($swin_user, $swin_host, $cmd);
+  # create the required directories on the remote host
+  $cmd = "mkdir -m 0755 -p ".$r_path."/".$pid."; ".
+         "mkdir -m 0755 -p ".$r_path."/".$pid."/".$source."; ".
+         "mkdir -m 0755 -p ".$r_path."/".$pid."/".$source."/".$obs;
+  Dada::logMsg(2, $dl, "transferObs: remoteSshCommand(".$r_user.", ".$r_host.", ".$cmd.")");
+  ($result, $rval, $response) = Dada::remoteSshCommand($r_user, $r_host, $cmd);
   Dada::logMsg(2, $dl, "transferObs: remoteSshCommand() ".$result." ".$rval." ".$response);
   if ($result ne "ok") {
-    Dada::logMsgWarn($warn, "transferObs: ssh failed for ".$cmd." on ".$swin_user."@".$swin_host.": ".$response);
-    return ("fail", "ssh failure to ".$swin_user."@".$swin_host);
+    Dada::logMsgWarn($warn, "transferObs: ssh failed for ".$cmd." on ".$r_user."@".$r_host.": ".$response);
+    return ("fail", "ssh failure to ".$r_user."@".$r_host);
   } else {
     if ($rval != 0) {
       Dada::logMsg(0, $dl, "transferObs: failed to create SOURCE dir on remote archive");
-      return ("fail", "couldn't create source dir on ".$swin_user."@".$swin_host);
+      return ("fail", "couldn't create source dir on ".$r_user."@".$r_host);
     }
   }
 
@@ -558,8 +558,7 @@ sub transferObs($) {
   $files = $cfg{"SERVER_RESULTS_DIR"}."/".$obs."/obs.start ".
            $cfg{"SERVER_RESULTS_DIR"}."/".$obs."/*_f.tot ".
            $cfg{"SERVER_RESULTS_DIR"}."/".$obs."/*_t.tot";
-
-  $cmd = "rsync -a ".$files." ".$swin_user."@".$swin_host.":".$swin_repos."/".$source."/".$obs."/";
+  $cmd = "rsync ".$files." ".$r_user."@".$r_host."::".$r_module."/".$pid."/".$source."/".$obs."/ ".$rsync_options;
   Dada::logMsg(2, $dl, "transferObs: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(2, $dl, "transferObs: ".$result.":".$response);
@@ -570,35 +569,43 @@ sub transferObs($) {
 
   # transfer archives via rsync
   $files = $cfg{"SERVER_ARCHIVE_DIR"}."/".$obs."/*/2*.ar ";
-
   Dada::logMsg(2, $dl, "transferObs: Transferring archives...");
-  $cmd = "rsync -a ".$files." ".$swin_user."@".$swin_host.":".$swin_repos."/".$source."/".$obs."/";
+  $cmd = "rsync --stats ".$files." ".$r_user."@".$r_host."::".$r_module."/".$pid."/".$source."/".$obs."/ ".$rsync_options;
   Dada::logMsg(2, $dl, "transferObs: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(2, $dl, "transferObs: ".$result.":".$response);
   if ($result ne "ok") {
     Dada::logMsgWarn($warn, "transferObs: rsync failed: ".$response);
     return ("fail", "transfer failed");
-  }
-
-  # adjust file permissions on the transferred observation
-  $cmd = "chmod -R a-w ".$swin_repos."/".$source."/".$obs;
-  Dada::logMsg(2, $dl, "transferObs: remoteSshCommand(".$swin_user.", ".$swin_host.", ".$cmd.")");
-  ($result, $rval, $response) = Dada::remoteSshCommand($swin_user, $swin_host, $cmd);
-  Dada::logMsg(2, $dl, "transferObs: remoteSshCommand() ".$result." ".$rval." ".$response);
-  if ($result ne "ok") {
-    Dada::logMsgWarn($warn, "transferObs: ssh failed for ".$cmd." on ".$swin_user."@".$swin_host.": ".$response);
-    return ("fail", "ssh failure to ".$swin_user."@".$swin_host);
   } else {
-    if ($rval != 0) {
-      Dada::logMsg(0, $dl, "transferObs: failed to remove write perms on remote archive");
-      return ("fail", "couldn't remove write perms on ".$swin_user."@".$swin_host);
+    @output_lines = split(/\n/, $response);
+    for ($i=0; $i<=$#output_lines; $i++)
+    {
+      if ($output_lines[$i] =~ m/bytes\/sec/)
+      {
+        @bits = split(/[\s]+/, $output_lines[$i]);
+        $data_rate = sprintf("%3.0f", ($bits[1] / 1048576))." MB @ ".sprintf("%3.0f", ($bits[6] / 1048576))." MB/s";
+      }
     }
   }
 
-  return ("ok", "");
+  # touch remote obs.transferred
+  $cmd = "touch ".$r_path."/".$pid."/".$source."/".$obs."/obs.transferred";
+  Dada::logMsg(2, $dl, "transferObs: remoteSshCommand(".$r_user.", ".$r_host.", ".$cmd.")");
+  ($result, $rval, $response) = Dada::remoteSshCommand($r_user, $r_host, $cmd);
+  Dada::logMsg(2, $dl, "transferObs: remoteSshCommand() ".$result." ".$rval." ".$response);
+  if ($result ne "ok") {
+    Dada::logMsgWarn($warn, "transferObs: ssh failed for ".$cmd." on ".$r_user."@".$r_host.": ".$response);
+    return ("fail", "ssh failure to ".$r_user."@".$r_host);
+  } else {
+    if ($rval != 0) {
+      Dada::logMsg(0, $dl, "transferObs: failed to touch remote ".$r_path."/".$pid."/".$source."/".$obs."/obs.transferred");
+      return ("fail", "couldn't touch remote obs.transferred");
+    }
+  }
 
-} 
+  return ("ok", $data_rate);
+}
 
 
 #
@@ -615,12 +622,12 @@ sub checkDestination($) {
 
   $cmd = "df -B 1048576 -P ".$d." | tail -n 1 | awk '{print \$4}'";
 
-  Dada::logMsg(2, $dl, "checkDestinaion: remoteSshCommand(".$swin_user.", ".$swin_host.", ".$cmd.")");
-  ($result, $rval, $response) = Dada::remoteSshCommand($swin_user, $swin_host, $cmd);
+  Dada::logMsg(2, $dl, "checkDestinaion: remoteSshCommand(".$r_user.", ".$r_host.", ".$cmd.")");
+  ($result, $rval, $response) = Dada::remoteSshCommand($r_user, $r_host, $cmd);
   Dada::logMsg(2, $dl, "checkDestinaion: remoteSshCommand() ".$result." ".$rval." ".$response);
   if ($result ne "ok") {
-    Dada::logMsgWarn($warn, "checkDestinaion: ssh failed for ".$cmd." on ".$swin_user."@".$swin_host.": ".$response);
-    return ("fail", "ssh failure to ".$swin_user."@".$swin_host);
+    Dada::logMsgWarn($warn, "checkDestinaion: ssh failed for ".$cmd." on ".$r_user."@".$r_host.": ".$response);
+    return ("fail", "ssh failure to ".$r_user."@".$r_host);
   } else {
     if ($rval != 0) {
       Dada::logMsg(0, $dl, "checkDestinaion: remote check failed: ".$response);
@@ -630,7 +637,7 @@ sub checkDestination($) {
 
   # check there is 100 * 1GB free
   if (int($response) < (100*1024)) {
-    return ("fail", "less than 100 GB remaining on ".$swin_user."@".$swin_host.":".$swin_repos);
+    return ("fail", "less than 100 GB remaining on ".$r_user."@".$r_host.":".$r_path);
   }
 
   return ("ok", "");
@@ -717,25 +724,6 @@ sub good($) {
                     ", not ".Dada::getHostMachineName());
   }
 
-  # check the PID is a valid group for the specified instrument
-  my @groups = ();
-  my @pees = split(/ /,$pids);
-  my $i = 0;
-  my $j = 0;
-  my $valid_pid = 0;
-  @groups = Dada::getProjectGroups($cfg{"INSTRUMENT"});
-
-  for ($i=0; $i<=$#pees; $i++) {
-    for ($j=0; $j<=$#groups; $j++) {
-      if ($groups[$j] eq $pees[$i]) {
-        $valid_pid++;
-      }
-    }  
-  }
-  if ($valid_pid != $#pees+1) {
-    return ("fail", "Error: specified PIDs [".$pids."] were not all valid groups for ".$cfg{"INSTRUMENT"});
-  }
-
   my $result = "";
   my $response = "";
 
@@ -746,12 +734,12 @@ sub good($) {
   }
 
 
-  # Check connectivity to swin repos
+  # Check connectivity to remote repos
   my $rval = 0;
   $cmd = "uptime";
-  ($result, $rval, $response) = Dada::remoteSshCommand($swin_user, $swin_host, $cmd);
+  ($result, $rval, $response) = Dada::remoteSshCommand($r_user, $r_host, $cmd);
   if ($result ne "ok") {
-    return ("fail", "ssh failure to ".$swin_user."@".$swin_host.": ".$response);
+    return ("fail", "ssh failure to ".$r_user."@".$r_host.": ".$response);
   } else {
     if ($rval != 0) {
       return ("fail", "ssh remote command failure: ".$response);
