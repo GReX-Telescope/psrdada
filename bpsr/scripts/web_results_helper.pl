@@ -41,7 +41,9 @@ chdir $cfg{"CLIENT_ARCHIVE_DIR"};
 
   # get a PID listing for each project on local disk
   $cmd = "grep ^PID */*/obs.start | awk -F/ '{print \$1\" \"\$2\" \"\$3}' | awk '{print \$1\"/\"\$2\" \"\$4}'";
+  Dada::logMsg(2, $dl, $cmd);
   ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, $dl, $result." ".$response);
   @lines = split(/\n/, $response);
   for ($i=0; $i<=$#lines; $i++)
   {
@@ -51,7 +53,9 @@ chdir $cfg{"CLIENT_ARCHIVE_DIR"};
 
   # get a list of all beams.deleted
   $cmd = "find . -mindepth 3 -maxdepth 3 -type f -name 'beam.deleted' | awk -F/ '{print \$2\"/\"\$3}' | sort";
+  Dada::logMsg(2, $dl, $cmd);
   ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, $dl, $result." ".$response);
   if ($result ne "ok")
   {
     exit 1;
@@ -60,7 +64,9 @@ chdir $cfg{"CLIENT_ARCHIVE_DIR"};
 
   # get a list of all beams.transferred
   $cmd = "find . -mindepth 3 -maxdepth 3 -type f -name 'beam.transferred' | awk -F/ '{print \$2\"/\"\$3}' | sort";
+  Dada::logMsg(2, $dl, $cmd);
   ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, $dl, $result." ".$response);
   if ($result ne "ok")
   {
     exit 1;
@@ -78,7 +84,7 @@ chdir $cfg{"CLIENT_ARCHIVE_DIR"};
     }
     if (!$found)
     { 
-      @transferred = $line;
+      push (@transferred, $line);
       $transferred_pid .= $line."/obs.start ";
       $transferred_du .= $line." ";
     }
@@ -86,7 +92,9 @@ chdir $cfg{"CLIENT_ARCHIVE_DIR"};
 
   # get a list of all beams.finished
   $cmd = "find . -mindepth 3 -maxdepth 3 -type f -name 'beam.finished' | awk -F/ '{print \$2\"/\"\$3}' | sort";
+  Dada::logMsg(2, $dl, $cmd);
   ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, $dl, $result." ".$response);
   if ($result ne "ok")
   {
     exit 1;
@@ -99,6 +107,7 @@ chdir $cfg{"CLIENT_ARCHIVE_DIR"};
     {
       if ($line eq $deleted[$i])
       {
+        Dada::logMsg(3, $dl, $line." is marked as deleted");
         $found = 1;
       }
     }
@@ -106,13 +115,14 @@ chdir $cfg{"CLIENT_ARCHIVE_DIR"};
     {
       if ($line eq $transferred[$i]) 
       {
+        Dada::logMsg(3, $dl, $line." is marked as transferred");
         $found = 1;
       }
     }
-
     if (!$found)
     {
-      @finished = $line;
+      Dada::logMsg(3, $dl, $line." is marked as finished");
+      push (@finished, $line);
       $finished_pid .= $line."/obs.start ";
       $finished_du .= $line." ";
     }
@@ -143,7 +153,7 @@ chdir $cfg{"CLIENT_ARCHIVE_DIR"};
   @keys = keys %pid_counts;
   for ($i=0; $i<=$#keys; $i++)
   {
-    $pid_sizes{$keys[$i]} = sprintf("%0.2f", $pid_sizes{$keys[$i]} / 1048576);
+    $pid_sizes{$keys[$i]} = sprintf("%0.2f", $pid_sizes{$keys[$i]} / 1073741824);
     $finished_line .= " ".$keys[$i].":".$pid_counts{$keys[$i]}.":".$pid_sizes{$keys[$i]};
     Dada::logMsg(2, $dl, "PID=".$keys[$i]." COUNT=".$pid_counts{$keys[$i]}." SIZES=".$pid_sizes{$keys[$i]});
   } 
@@ -166,7 +176,7 @@ chdir $cfg{"CLIENT_ARCHIVE_DIR"};
   @keys = keys %pid_counts;
   for ($i=0; $i<=$#keys; $i++)
   {
-    $pid_sizes{$keys[$i]} = sprintf("%0.2f", $pid_sizes{$keys[$i]} / 1048576);
+    $pid_sizes{$keys[$i]} = sprintf("%0.2f", $pid_sizes{$keys[$i]} / 1073741824);
     $transferred_line .= " ".$keys[$i].":".$pid_counts{$keys[$i]}.":".$pid_sizes{$keys[$i]};
     Dada::logMsg(2, $dl, "PID=".$keys[$i]." COUNT=".$pid_counts{$keys[$i]}." SIZES=".$pid_sizes{$keys[$i]});
   } 
