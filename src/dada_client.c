@@ -193,7 +193,8 @@ int64_t dada_client_io_loop_block (dada_client_t* client)
   {
 
 #ifdef _DEBUG
-    fprintf(stderr, "bytes_transferred=%"PRIu64", client->transfer_bytes=%"PRIu64"\n", bytes_transfered, client->transfer_bytes);
+    fprintf(stderr, "io_loop_block: bytes_transferred=%"PRIu64", client->transfer_bytes=%"PRIu64"\n", 
+            bytes_transfered, client->transfer_bytes);
 #endif
    
     if (!client->transfer_bytes)
@@ -219,8 +220,7 @@ int64_t dada_client_io_loop_block (dada_client_t* client)
       buffer = ipcio_open_block_read (client->data_block, &bytes, &block_id);
 
       if (!buffer) {
-        fprintf(stderr, "ipcio_open_block_read error\n");
-        multilog (log, LOG_ERR, "ipcio_open_block_read error %s\n", strerror(errno));
+        multilog (log, LOG_ERR, "io_loop_block: ipcio_open_block_read error %s\n", strerror(errno));
         return -1;
       }
     }
@@ -230,8 +230,7 @@ int64_t dada_client_io_loop_block (dada_client_t* client)
       // get the pointer to the next empty block and its ID
       buffer = ipcio_open_block_write(client->data_block, &block_id);
       if (!buffer) {
-        fprintf(stderr, "ipcio_open_block_write error\n");
-        multilog (log, LOG_ERR, "ipcio_open_block_write error %s\n", strerror(errno));
+        multilog (log, LOG_ERR, "io_loop_block: ipcio_open_block_write error %s\n", strerror(errno));
         return -1;
       }
     }
@@ -241,52 +240,59 @@ int64_t dada_client_io_loop_block (dada_client_t* client)
     if (bytes)
     {
 #ifdef _DEBUG
-      fprintf (stderr, "calling io_block_function addr=%p id=%"PRIu64", bytes=%"PRIi64"\n", buffer, block_id, bytes);
+      fprintf (stderr, "io_loop_block: io_block_function() addr=%p id=%"PRIu64", bytes=%"PRIi64"\n", buffer, block_id, bytes);
 #endif
       bytes_operated = client->io_block_function (client, buffer, bytes, block_id);
     }
     else
     {
 #ifdef DEBUG
-      multilog (log, LOG_INFO, "dada_client_io_loop_block: bytes=0!\n");
+      multilog (log, LOG_INFO, "io_loop_block: bytes=0!\n");
 #endif
       bytes_operated = 0;
     }
 
 #ifdef _DEBUG
-    fprintf (stderr, "io_function returns %"PRIi64"\n", bytes_operated);
+    fprintf (stderr, "io_loop_block: io_block_function returns %"PRIi64"\n", bytes_operated);
 #endif
 
     if (bytes_operated < 0) {
-      multilog (log, LOG_ERR, "I/O error %s\n", strerror(errno));
+      multilog (log, LOG_ERR, "io_loop_block: I/O error %s\n", strerror(errno));
       break;
     }
 
-    if (client->direction == dada_client_reader) {
-
+    if (client->direction == dada_client_reader) 
+    {
       if (ipcio_close_block_read (client->data_block, (uint64_t) bytes_operated) < 0)
       {
-        fprintf(stderr, "ipcio_close_block_read failed\n");
+        multilog (log, LOG_ERR, "io_loop_block: ipcio_close_block_read failed\n");
       }
-
     }
 
-    if (client->direction == dada_client_writer) {
-
+    if (client->direction == dada_client_writer) 
+    {
       if (bytes_operated == 0) 
-      {
-        multilog (log, LOG_INFO, "dada_client_io_loop_block: end of input\n");
-      }
+        multilog (log, LOG_INFO, "io_loop_block: end of input\n");
 
-      if (ipcio_close_block_write (client->data_block, (uint64_t) bytes_operated) < 0) {
-        multilog (log, LOG_ERR, "ipcio_close_block_write error %s\n", strerror(errno));
-        return -1;
+      if (bytes_transfered + bytes_operated == client->transfer_bytes)
+      {
+        if (ipcio_update_block_write (client->data_block, (uint64_t) bytes_operated) < 0) {
+          multilog (log, LOG_ERR, "io_loop_block: ipcio_update_block_write error %s\n", strerror(errno));
+          return -1;
+        }
+      }
+      else 
+      {
+        if (ipcio_close_block_write (client->data_block, (uint64_t) bytes_operated) < 0) {
+          multilog (log, LOG_ERR, "io_loop_block: ipcio_close_block_write error %s\n", strerror(errno));
+          return -1;
+        }
       }
       
       if (bytes_operated < block_size)
       {
 #ifdef _DEBUG
-        multilog (log, LOG_INFO, "dada_client_io_loop_block: end of data\n");
+        multilog (log, LOG_INFO, "io_loop_block: end of data\n");
 #endif
         bytes_transfered += bytes_operated;
         break;
@@ -297,7 +303,7 @@ int64_t dada_client_io_loop_block (dada_client_t* client)
   }
 
 #ifdef DEBUG
-  multilog (log, LOG_INFO, "dada_client_io_loop_block: transferred %"PRIi64" bytes\n", bytes_transfered);
+  multilog (log, LOG_INFO, "io_loop_block: transferred %"PRIi64" bytes\n", bytes_transfered);
 #endif
 
   return bytes_transfered;
@@ -385,6 +391,10 @@ int64_t dada_client_transfer (dada_client_t* client)
     bytes_transfered = dada_client_io_loop_block (client);
   else
     bytes_transfered = dada_client_io_loop (client);
+
+#ifdef _DEBUG
+  multilog (log, LOG_INFO, "dada_client_transfer: io_loop transferred %"PRIu64" bytes\n", bytes_transfered);
+#endif
 
   if (client->close_function (client, bytes_transfered) < 0) {
     multilog (log, LOG_ERR, "Error calling close function\n");
@@ -503,8 +513,13 @@ int dada_client_read (dada_client_t* client)
 
   gettimeofday (&start_loop, NULL);
   
-  /* Transfer data until the end of the data stream */
-  while (!ipcbuf_eod((ipcbuf_t*)client->data_block)) {
+  // Transfer data until the end of the data stream
+  while (!ipcbuf_eod((ipcbuf_t*)client->data_block)) 
+  {
+
+#ifdef _DEBUG
+    fprintf(stderr,"dada_client_read: not EOD, setting OBS_OFFSET=%"PRIu64"\n", obs_offset);
+#endif
 
     /* Set the header offset */
     if (ascii_header_set (client->header, "OBS_OFFSET",
@@ -521,7 +536,9 @@ int dada_client_read (dada_client_t* client)
     obs_offset += bytes_written;
     total_bytes_written += bytes_written;
 
-    //fprintf(stderr,"dada_client_read: wrote %"PRIu64" bytes obs_offset = %"PRIu64"\n",bytes_written, obs_offset);
+#ifdef _DEBUG
+    fprintf(stderr,"dada_client_read: wrote %"PRIu64" bytes obs_offset = %"PRIu64"\n",bytes_written, obs_offset);
+#endif
 
   }
   gettimeofday (&end_loop, NULL);
