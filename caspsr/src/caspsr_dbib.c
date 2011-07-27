@@ -246,6 +246,14 @@ int64_t caspsr_dbib_send (dada_client_t* client, void * buffer, uint64_t bytes)
   // copy the header to the header memory buffer
   memcpy (ib_cm->header_mb->buffer, buffer, bytes);
 
+  uint64_t transfer_size = 0;
+  if (ascii_header_get (ib_cm->header_mb->buffer, "TRANSFER_SIZE", "%"PRIu64, &transfer_size) != 1) 
+    multilog (client->log, LOG_WARNING, "send: header with no TRANSFER_SIZE\n");
+  else 
+    if (dbib->verbose)
+      multilog (client->log, LOG_INFO, "send: TRANSFER_SIZE=%"PRIu64"\n", transfer_size);
+  
+
   // send the header memory buffer to dada_ibdb
   if (dbib->verbose)
     multilog(log, LOG_INFO, "send: post_send on header_mb [HEADER]\n");
