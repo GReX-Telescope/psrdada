@@ -282,7 +282,7 @@ sub launchReceiversThread($$)
       msg(2, "INFO", "launchReceiversThread: OBS_OFFSET=".$obs_offset.", OBS_XFER=".$obs_xfer);
 
       # Run the receiver threads, one for each PWC
-      msg(1, "INFO", "launchReceiversThread: starting ".$n_recv." receiver threads");
+      msg(2, "INFO", "launchReceiversThread: starting ".$n_recv." receiver threads");
       for ($i=0; $i<$n_recv; $i++)
       {
         $i_recv = $i;
@@ -309,7 +309,7 @@ sub launchReceiversThread($$)
         $recv_threads[$i] = 0;
       }
 
-      msg(1, "INFO", "launchReceiversThread: recveiver threads ended");
+      msg(2, "INFO", "launchReceiversThread: recveiver threads ended");
 
     } else {
       if (!$quit_daemon) {
@@ -419,12 +419,12 @@ sub controlThread($$) {
   my $i = 0;
   my $handle = 0;
 
-  msg(1, "INFO", "controlThread: connectToMachine(".$host.", ".$control_port.")");
+  msg(2, "INFO", "controlThread: connectToMachine(".$host.", ".$control_port.")");
   $handle = Dada::connectToMachine($host, $control_port);
   if ($handle) {
     msg(1, "INFO", "controlThread: ".$control_port." <- QUIT");
     ($result, $response) = Dada::sendTelnetCommand($handle, "QUIT");
-    msg(1, "INFO", "controlThread: ".$control_port." -> ".$result." ".$response);
+    msg(2, "INFO", "controlThread: ".$control_port." -> ".$result." ".$response);
     $handle->close();
   }
 
