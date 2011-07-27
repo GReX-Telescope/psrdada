@@ -148,10 +148,12 @@ if ($stop == 1) {
   }
 }
 
-if ($start == 1) {
-
+if (($start == 1) && ($stop == 1)) {
   sleep(5);
+}
 
+if ($start == 1) 
+{
   # Start client master script
   debugMessage(0, "Starting client master script");
   if (!(issueTelnetCommand("start_master_script",\@clihelp))) {
