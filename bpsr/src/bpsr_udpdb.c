@@ -19,6 +19,7 @@
 
 #include "bpsr_def.h"
 #include "bpsr_udpdb.h"
+#include "sock.h"
 
 void usage()
 {

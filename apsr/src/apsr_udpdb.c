@@ -15,6 +15,7 @@
 #include "apsr_udp.h"
 #include "apsr_def.h"
 #include "apsr_udpdb.h"
+#include "sock.h"
 
 #define MAX_IGNORE_PACKETS 5000
 
