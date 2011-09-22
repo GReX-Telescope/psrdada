@@ -209,8 +209,11 @@ int file_open_function (dada_client_t* client)
 
   /* Open the file */
   int flags = 0;
+
+#ifdef O_DIRECT
   if (dbdisk->o_direct)
     flags = O_DIRECT;
+#endif
 
   fd = disk_array_open (dbdisk->array, dbdisk->file_name,
         		file_size, &optimal_bytes, flags);
@@ -221,6 +224,11 @@ int file_open_function (dada_client_t* client)
               strerror (errno));
     return -1;
   }
+
+#ifndef O_DIRECT
+  if (dbdisk->o_direct)
+    fcntl (fd, F_NOCACHE, 1);
+#endif
 
   client->fd = fd;
   client->transfer_bytes = file_size;

@@ -99,7 +99,9 @@ int file_open_function (dada_diskperf_t* diskperf)
   } else {
     flags = O_WRONLY | O_CREAT | O_TRUNC;
     if (diskperf->o_direct) {
+#ifdef O_DIRECT
       flags |= O_DIRECT;
+#endif
       if (diskperf->chunk_size % 512 != 0) {
         fprintf(stderr, "chunk size must be a multiple of 512 bytes\n");
         return -1;
@@ -114,6 +116,11 @@ int file_open_function (dada_diskperf_t* diskperf)
               diskperf->file_name, strerror(errno));
     return -1;
   }
+
+#ifndef O_DIRECT
+  if (diskperf->o_direct)
+    fcntl (diskperf->fd, F_NOCACHE, 1);
+#endif
 
   /* determine the file size */
   if (diskperf->read) {
