@@ -17,7 +17,11 @@ libpsrdada_la_SOURCES = $(psrdada_hdr) ascii_header.c multilog.c sock.c monitor.
 	dada_hdu.c dada_pwc.c dada_pwc_nexus.c dada_ni.c		\
 	dada_pwc_main.c dada_pwc_main_multi.c dada_client.c					\
 	dada_pwc_nexus_config.c dada_pwc_nexus_header_parse.c		\
-	multilog_server.c dada_udp.c dada_generator.c dada_affinity.c 
+	multilog_server.c dada_udp.c dada_generator.c
+
+if HAVE_AFFINITY
+libpsrdada_la_SOURCES += dada_affinity.c
+endif
 
 include_HEADERS = ascii_header.h multilog.h sock.h monitor.h	  \
 	ipcutil.h ipcbuf.h ipcio.h disk_array.h node_array.h	  \

@@ -84,6 +84,7 @@ AC_STRUCT_TM
 #
 # Checks for library functions.
 #
+SWIN_FUNC_AFFINITY
 AC_FUNC_FORK
 AC_FUNC_MALLOC
 AC_FUNC_MEMCMP
