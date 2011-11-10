@@ -52,7 +52,9 @@ void usage()
 {
   fprintf (stdout,
      "leda_udpdb [options] header\n"
+#ifdef HAVE_AFFINITY
      " -c core      bind process to CPU core\n"
+#endif
      " -k key       hexadecimal shared memory key  [default: %x]\n"
      " -i ip        only listen on specified ip address [default: any]\n"
      " -p port      port for incoming UDP packets [default %d]\n"
@@ -76,11 +78,13 @@ int leda_init (leda_udpdb_t * ctx)
   ctx->buffer_start_byte = 0;
   ctx->buffer_end_byte = 0;
   ctx->header_written = 0;
-  
+ 
+#ifdef HAVE_AFFINITY
   // set the CPU that this thread shall run on
   if (ctx->recv_core > 0)
     if (dada_bind_thread_to_core(ctx->recv_core) < 0)
       multilog(ctx->log, LOG_WARNING, "receive_obs: failed to bind to core %d\n", ctx->recv_core);
+#endif
 
 }
 
@@ -332,7 +336,7 @@ int main (int argc, char **argv)
 
   while ((arg=getopt(argc,argv,"c:k:i:p:sv")) != -1)
     switch (arg) {
-    
+  
     case 'c':
       if (optarg)
       {
