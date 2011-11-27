@@ -68,3 +68,32 @@ dada_dbib_LDADD = $(LDADD) $(RDMACM_LIBS)
 dada_ibdb_LDADD = $(LDADD) $(RDMACM_LIBS)
 
 endif
+
+###############################################################################
+#
+# Depends on CUDA
+#
+###############################################################################
+if HAVE_CUDA
+
+lib_LTLIBRARIES += libdadacuda.la
+
+psrdada_hdr += dada_cuda.h
+
+libdadacuda_la_SOURCES = dada_cuda.cu dada_cuda.h
+
+libdadacuda_la_LIBADD = dada_cuda.lo
+
+dada_cuda.lo : dada_cuda.cu dada_cuda.h
+	@CUDA_NVCC@ -m64 -O3 -c $(srcdir)/dada_cuda.cu
+	cp $(srcdir)/dada_cuda.losave dada_cuda.lo
+
+bin_PROGRAMS += dada_dbgpu
+
+dada_dbgpu_SOURCES = dada_dbgpu.c
+dada_dbgpu_LDFLAGS = @CUDA_LIBS@ libdadacuda.la
+
+AM_CPPFLAGS = @CUDA_CFLAGS@
+
+endif
+
