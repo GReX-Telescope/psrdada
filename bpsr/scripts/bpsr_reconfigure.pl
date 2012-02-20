@@ -40,9 +40,7 @@ my $result = "";
 my $response = "";
 my @clients = ();
 my @servers = ();
-my @helpers = ();
-my @clihelp = ();     # clients and helpers
-my @clihelpsrv = ();  # clients, helpers and servers
+my @clisrv = ();  # clients and servers
 my $i=0;
 my $start = 1;
 my $stop = 1;
@@ -91,17 +89,11 @@ if (! -d $control_dir) {
 # Generate hosts lists
 for ($i=0; $i < $cfg{"NUM_PWC"}; $i++) {
   push(@clients,    $cfg{"PWC_".$i});
-  push(@clihelp,    $cfg{"PWC_".$i});
-  push(@clihelpsrv, $cfg{"PWC_".$i});
-}
-for ($i=0; $i < $cfg{"NUM_HELP"}; $i++) {
-  push(@helpers,    $cfg{"HELP_".$i});
-  push(@clihelp,    $cfg{"HELP_".$i});
-  push(@clihelpsrv, $cfg{"HELP_".$i});
+  push(@clisrv, $cfg{"PWC_".$i});
 }
 for ($i=0; $i<$cfg{"NUM_SRV"}; $i++) {
   push(@servers,    $cfg{"SRV_".$i});
-  push(@clihelpsrv, $cfg{"SRV_".$i});
+  push(@clisrv, $cfg{"SRV_".$i});
 }
 
 
@@ -143,7 +135,7 @@ if ($stop == 1) {
 
   # Stop client mastser script
   debugMessage(0, "Stopping client master script");
-  if (!(issueTelnetCommand("stop_master_script",\@clihelpsrv))) {
+  if (!(issueTelnetCommand("stop_master_script",\@clisrv))) {
     debugMessage(0,"stop_master_script failed");
   }
 }
@@ -156,7 +148,7 @@ if ($start == 1)
 {
   # Start client master script
   debugMessage(0, "Starting client master script");
-  if (!(issueTelnetCommand("start_master_script",\@clihelp))) {
+  if (!(issueTelnetCommand("start_master_script",\@clients))) {
     debugMessage(0,"start_master_script failed");
   }
 

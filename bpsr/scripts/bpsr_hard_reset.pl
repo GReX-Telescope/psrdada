@@ -39,7 +39,6 @@ use constant  DEBUG_LEVEL         => 1;
 our %cfg : shared    = Bpsr::getConfig();
 our @server_daemons  = split(/ /,$cfg{"SERVER_DAEMONS"});
 our @client_daemons  = split(/ /,$cfg{"CLIENT_DAEMONS"});
-our @helper_daemons  = ();
 
 
 #
@@ -49,7 +48,6 @@ my $cmd = "";
 my $result = "";
 my $response = "";
 my @clients = ();
-my @helpers = ();
 my @servers = ();
 my @all = ();
 my $i=0;
@@ -69,7 +67,6 @@ debugMessage(0, "Hard Stopping BPSR");
 
 push @server_daemons, "bpsr_master_control";
 push @client_daemons, "bpsr_master_control";
-push @helper_daemons, "bpsr_master_control";
 
 # Generate hosts lists
 for ($i=0; $i < $cfg{"NUM_PWC"}; $i++) {
@@ -80,14 +77,9 @@ for ($i=0; $i < $cfg{"NUM_SRV"}; $i++) {
   push(@servers, $cfg{"SRV_".$i});
   push(@all, $cfg{"SRV_".$i});
 }
-for ($i=0; $i < $cfg{"NUM_HELP"}; $i++) {
-  push(@helpers, $cfg{"HELP_".$i});
-  push(@all, $cfg{"HELP_".$i});
-}
 
 # ensure we dont have duplicates
 @clients = Dada::array_unique(@clients);
-@helpers = Dada::array_unique(@helpers);
 @all = Dada::array_unique(@all);
 
 
@@ -98,10 +90,6 @@ debugMessage(0, "Killing Client Daemons");
 # kill PWC_BINARY (bpsr_udpdb) and shared memory segments on clients
 debugMessage(0, "Destroying Client SHM");
 ($result, $response) = destroyClientSpecial(\@clients);
-
-# stop all scripts running on the helpers
-debugMessage(0, "Killing Helper Daemons");
-($result, $response) = killClientDaemons(\@helpers, \@helper_daemons);
 
 # stop all scripts running on the server
 debugMessage(0, "Killing Server Daemons");
