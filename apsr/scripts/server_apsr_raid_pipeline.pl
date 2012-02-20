@@ -55,7 +55,7 @@ $error = $cfg{"STATUS_DIR"}."/".$daemon_name.".error";
   my $response = "";
   my $r_user = "apsr";
   my $r_host = "raid0";
-  my $r_path = "/lfs/raid0/apsr/control";
+  my $r_path = "/lfs/data0/apsr/control";
 
   # Every 60 seconds, check for the existence of the script on the remote machine
   my $counter_freq = 60;
