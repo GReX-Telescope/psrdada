@@ -216,7 +216,7 @@ sub findCompletedBand($) {
 
   msg(2, "INFO", "findCompletedBand: ".($#keys+1)." observations to consider");
 
-  for ($i=0; ((!$quit_daemon) && ($i<=$#keys)); $i++) {
+  for ($i=0; ((!$quit_daemon) && ($i<=$#keys) && ($obs eq "none") && ($band eq "none")); $i++) {
 
     $k = $keys[$i];
 
