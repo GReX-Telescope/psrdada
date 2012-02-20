@@ -58,8 +58,9 @@ class result extends apsr_webpage
     # DADA Header
     $this->header = $this->inst->getDADAHeader($this->results_dir);
 
-    $this->process_link = "/apsr/processresult.php?observation=".$this->utc_start."&source=".$this->header["SOURCE"];
-    $this->process_link = str_replace("+", "%2B", $this->process_link);
+    #$this->process_link = "/apsr/processresult.php?observation=".$this->utc_start."&source=".$this->header["SOURCE"];
+    #$this->process_link = str_replace("+", "%2B", $this->process_link);
+    $this->process_link = "/apsr/process_obs.lib.php?single=true&utc_start=".$this->utc_start;
 
   }
 
@@ -184,14 +185,8 @@ class result extends apsr_webpage
     <table class="result">
       <tr>
         <td align="center">
-          <input type="button" onclick="popWindow('<?echo $this->process_link?>&action=plot')" value="Create Plots"<?echo $archives?>>&nbsp;&nbsp;&nbsp;
-          <input type="button" onclick="popWindow('<?echo $this->process_link?>&action=reprocess_low')" value="Re Process Results"<?echo $archives?>>&nbsp;&nbsp;&nbsp;
           <input type="button" onclick="popWindow('<?echo $this->process_link?>&action=annotate')" value="Annotate Obs.">&nbsp;&nbsp;&nbsp;
-        </td>
-      </tr>
-      <tr>
-        <td align=center>
-          <input type="button" onclick="popWindow('<?echo $this->process_link?>&action=delete_obs')" value="Delete Observation"<?echo $delete?>>
+          <input type="button" onclick="popWindow('<?echo $this->process_link?>&action=delete')" value="Delete Observation"<?echo $delete?>>
           <input type="button" onclick="popWindow('/apsr/custom_plot.lib.php?single=true&basedir=<?echo $this->customplot_dir?>&utc_start=<?echo $this->utc_start?>')" value="Custom Plots">
         </td>
       </tr>
@@ -208,9 +203,10 @@ class result extends apsr_webpage
     <table>
       <tr>
         <th>PSR</th>
-        <th>Phase vs Flux</th>
-        <th>Phase vs Time</th>
-        <th>Phase vs Freq</th>
+        <th width='250px'>Phase vs Flux</th>
+        <th width='250px'>Phase vs Time</th>
+        <th width='250px'>Phase vs Freq</th>
+        <th width='250px'>Bandpass</th>
       </tr>
 <?
       $psrs = array_keys($this->images);
@@ -224,6 +220,7 @@ class result extends apsr_webpage
         $this->printPlotRow($this->images[$p]["phase_vs_flux"], $this->images[$p]["phase_vs_flux_hires"]);
         $this->printPlotRow($this->images[$p]["phase_vs_time"], $this->images[$p]["phase_vs_time_hires"]);
         $this->printPlotRow($this->images[$p]["phase_vs_freq"], $this->images[$p]["phase_vs_freq_hires"]);
+        $this->printPlotRow($this->images[$p]["bandpass"],      $this->images[$p]["bandpass_hires"]);
         echo "  </tr>\n";
       }
 ?>
@@ -262,12 +259,12 @@ class result extends apsr_webpage
     if ((strlen($image_hires) > 1) && (file_exists($hires_path))) {
       $have_hires = 1;
     }
-    echo "    <td align=\"center\">\n";
+    echo "    <td align='center'>\n";
 
     if ($have_hires) {
-      echo "      <a href=\"/apsr/results/".$this->utc_start."/".$image_hires."\">";
+      echo "      <a href='/apsr/results/".$this->utc_start."/".$image_hires."'>";
     }
-    echo "<img width=241px height=181px src=\"/apsr/results/".$this->utc_start."/".$image."\">";
+    echo "<img width='241px' height='181px' src='/apsr/results/".$this->utc_start."/".$image."'>";
 
     if ($have_hires) {
       echo "</a><br/>\n";

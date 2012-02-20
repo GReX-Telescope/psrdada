@@ -23,6 +23,7 @@ nobase_dist_web_SCRIPTS = definitions_i.php \
                           plotwindow.php \
                           pgwebplot.php \
                           processresult.php \
+                          process_obs.lib.php \
                           observation_summary.lib.php \
                           oldresults.php \
                           oldresult.php \
