@@ -85,7 +85,7 @@ SWIN_DIR_3              pulsar:shrek211-gb:/export/shrek211b/bpsr
 SWIN_DIR_4              pulsar:shrek214-gb:/export/shrek214a/bpsr
 SWIN_DIR_5              pulsar:shrek214-gb:/export/shrek214b/bpsr
 SWIN_S4_DEVICE          /dev/nst0
-SWIN_DB_DIR             pulsar:shrek211-gb:/home/ssi/pulsar/bookkeeping/tape_archiver
+SWIN_DB_DIR             pulsar:shrek210-gb:/home/ssi/pulsar/bookkeeping/tape_archiver
 
 NUM_PARKES_DIRS         1
 PARKES_DIR_0            bpsr:raid0:/lfs/raid0/bpsr/parkes
@@ -133,11 +133,7 @@ IBOB_MANAGER_PORT       52013
 # Machine that runs the iBOB udp simulator
 DFB_0                   apsr16
 
-NUM_HELP                4
-HELP_0                  apsr14
-HELP_1                  apsr15
-HELP_2                  apsr16
-HELP_3                  apsr17
+NUM_HELP                0
 
 NUM_SRV                 1 
 SRV_0                   srv0
