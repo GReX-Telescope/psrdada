@@ -669,7 +669,7 @@ sub transferBand($$$) {
       Dada::logMsgWarn($warn, "transferBand: mkdir failed: ".$response);
     }
 
-    Dada::logMsg(1, $dl, $o."/".$b." transferring");
+    Dada::logMsg(2, $dl, $o."/".$b." transferring");
 
     # If this is not a multi-fold obs, there will be no source subdirectory
     if ($#sources == 0)
@@ -1010,8 +1010,8 @@ sub checkFullyDeleted() {
   
   Dada::logMsg(2, $dl, "checkFullyDeleted()");
   
-  # Find all observations marked as obs.deleted and > 30*24 hours since being modified 
-  $cmd = "find ".$cfg{"SERVER_ARCHIVE_NFS_MNT"}."  -maxdepth 2 -name 'obs.deleted' -mtime +30 -printf '\%h\\n' | awk -F/ '{print \$NF}' | sort";
+  # Find all observations marked as obs.deleted hours since being modified 
+  $cmd = "find ".$cfg{"SERVER_ARCHIVE_NFS_MNT"}."  -maxdepth 2 -name 'obs.deleted' -printf '\%h\\n' | awk -F/ '{print \$NF}' | sort";
 
   Dada::logMsg(2, $dl, "checkFullyDeleted: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
@@ -1109,26 +1109,6 @@ sub checkFullyDeleted() {
       Dada::logMsg(2, $dl, "checkFullyDeleted: ".$result." ".$response);
       return ("fail", "Failed to process ".$o);
     }
-
-    #$cmd = "mv ".$cfg{"SERVER_ARCHIVE_NFS_MNT"}."/".$o." /nfs/old_archives/apsr/".$o;
-    #Dada::logMsg(2, $dl, "checkFullyDeleted: ".$cmd);
-    #($result, $response) = Dada::mySystem($cmd);
-    #Dada::logMsg(3, $dl, "checkFullyDeleted: ".$result." ".$response);
-
-    #if ($result ne "ok") {
-    #  return ("fail", "failed to move ".$o." to old_archives");
-    #}
-
-    #$result = "ok";
-    #$response = "";
-    #$cmd = "mv ".$cfg{"SERVER_RESULTS_NFS_MNT"}."/".$o." /nfs/old_results/apsr/".$o;
-    #Dada::logMsg(2, $dl, "checkFullyDeleted: ".$cmd);
-    #($result, $response) = Dada::mySystem($cmd);
-    #Dada::logMsg(3, $dl, "checkFullyDeleted: ".$result." ".$response);
-
-    #if ($result ne "ok") {
-    #  return ("fail", "failed to move ".$o." to old_results");
-    #}
 
     Dada::logMsg(1, $dl, $o.": deleted -> old");
   
