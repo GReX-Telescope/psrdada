@@ -147,12 +147,12 @@ sub main() {
         # negative values indicate that no result has ever been received
         # and is the age of the youngest file (but -ve)
         $t = getObsAge($o, $n_bands, "lowres");
-  
-        # newest archive was more than 5 minutes old, finish the obs.
-        if (($n_bands != 16) && ($t > 0) && ($t < 30))
+ 
+        if (($n_bands != $cfg{"NUM_PWC"}) && ($t > -45) && ($t < 45))
         {
           Dada::logMsg(1, $dl, "waiting for obs to be a little older");
         }
+        # newest archive was more than 5 minutes old, finish the obs.
         elsif ($t > 300) 
         {
           ($result, $response) = checkBandFinished($o, $n_bands);
@@ -1002,7 +1002,6 @@ sub makePlotsFromArchives($$$$$) {
 
   my ($dir, $source, $total_f_res, $total_t_res, $res) = @_;
 
-  #my %local_cfg = Apsr->getApsrConfig();
   my $web_style_txt = $cfg{"SCRIPTS_DIR"}."/web_style.txt";
   my $psrplot_args = "-g ".$res;
   my $cmd = "";
@@ -1030,31 +1029,47 @@ sub makePlotsFromArchives($$$$$) {
   Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$result." ".$response);
+  if ($result ne "ok")
+  {
+    Dada::logMsg(0, $dl, "makePlotsFromArchives: ".$cmd." failed: ".$response);
+    Dada::logMsgWarn($warn, "psrplot failed for time v phase");
+  }
 
   # PHASE vs FREQ
   $cmd = $bin." -jp -p freq -jTD -D ".$dir."/pvfr_tmp/png ".$total_f_res;
   Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$result." ".$response);
+  if ($result ne "ok")
+  {
+    Dada::logMsg(0, $dl, "makePlotsFromArchives: ".$cmd." failed: ".$response);
+    Dada::logMsgWarn($warn, "psrplot failed for freq v phase");
+  }
 
   # PHASE vs TOTAL INTENSITY
   $cmd = $bin." -jp -p flux -jTF -D ".$dir."/pvfl_tmp/png ".$total_f_res;
   Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$result." ".$response);
+  if ($result ne "ok")
+  {
+    Dada::logMsg(0, $dl, "makePlotsFromArchives: ".$cmd." failed: ".$response);
+    Dada::logMsgWarn($warn, "psrplot failed for flux v phase");
+  }
 
   # BANDPASS
   $cmd = $bin." -pb -x -lpol=0,1 -O -c log=1 -D ".$dir."/band_tmp/png ".$dir."/last.ar";
   Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$result." ".$response);
-
-  # Get plots to delete in the destination directory
-  # $cmd = "find ".$plotDir." -name '*_".$resolution.IMAGE_TYPE."' -printf '\%h/\%f '";
-  # my $curr_plots = `$cmd`;
+  if ($result ne "ok")
+  {
+    Dada::logMsg(0, $dl, "makePlotsFromArchives: ".$cmd." failed: ".$response);
+    Dada::logMsgWarn($warn, "psrplot failed for bandpass");
+  }
 
   # wait for each file to "appear"
-  my $waitMax = 5;
+  my $waitMax = 8;
   while ($waitMax) {
     if ( (-f $dir."/pvfl_tmp") &&
          (-f $dir."/pvt_tmp") &&
@@ -1074,10 +1089,6 @@ sub makePlotsFromArchives($$$$$) {
   system("mv -f ".$dir."/pvfl_tmp ".$dir."/".$pvfl);
   system("mv -f ".$dir."/band_tmp ".$dir."/".$band);
 
-  #if ($curr_plots ne "") {
-  #  $cmd = "rm -f ".$curr_plots;
-  #  system($cmd);
-  #}
 }
 
 sub copyLatestPlots($$$)
@@ -1111,6 +1122,15 @@ sub copyLatestPlots($$$)
   if ($result eq "ok") {
     if ( -f $response) {
       $cmd = "cp ".$response." ".$cfg{"WEB_DIR"}."/apsr/latest/apsr_time_vs_phase.png";
+      ($result, $response) = Dada::mySystem($cmd);
+    }
+  }
+
+  $cmd = "ls -1 ".$o."/bandpass_".$s."_*_".$dim.".png | sort | tail -n 1";
+  ($result, $response) = Dada::mySystem($cmd);
+  if ($result eq "ok") {
+    if ( -f $response) {
+      $cmd = "cp ".$response." ".$cfg{"WEB_DIR"}."/apsr/latest/apsr_bandpass.png";
       ($result, $response) = Dada::mySystem($cmd);
     }
   }
