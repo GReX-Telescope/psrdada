@@ -50,6 +50,7 @@ class apsr extends instrument
     $arr["apsr_src_monitor"] =      array("logfile" => "nexus.src.log", "name" => "SRC Mon", "tag" => "src", "shortname" => "SRC Mon");
     $arr["apsr_gain_manager"] =     array("logfile" => "apsr_gain_manager.log", "name" => "Gain Mngr", "tag" => "server", "shortname" => "Gain");
     $arr["apsr_transfer_manager"] = array("logfile" => "apsr_transfer_manager.log", "name" => "Transfer Manager", "tag" => "server", "shortname" => "Xfer");
+    $arr["apsr_P778_transfer_manager"] = array("logfile" => "apsr_P778_transfer_manager.log", "name" => "P778 Transfer Manager", "tag" => "server", "shortname" => "P778 Xfer");
     $arr["apsr_raid_pipeline"] =    array("logfile" => "apsr_raid_pipeline.log", "name" => "RAID Pipeline", "tag" => "server", "shortname" => "Pipeline");
     return $arr;
 
