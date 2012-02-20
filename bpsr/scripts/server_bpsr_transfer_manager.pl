@@ -35,7 +35,11 @@ Dada::preventDuplicateDaemon(basename($0));
 #
 # Constants
 #
-use constant BANDWIDTH     => "76800";  # 75 MB/s total bandwidth
+#use constant BANDWIDTH     => "0";       # MAX bandwidth
+#use constant BANDWIDTH     => "76800";   # 75 MB/s total bandwidth
+#use constant BANDWIDTH     => "92160";   # 90 MB/s total bandwidth
+use constant BANDWIDTH     => "102400";  # 100 MB/s total bandwidth
+#use constant BANDWIDTH     => "112640";  # 110 MB/s total bandwidth
 use constant PIDFILE       => "bpsr_transfer_manager.pid";
 use constant LOGFILE       => "bpsr_transfer_manager.log";
 use constant QUITFILE      => "bpsr_transfer_manager.quit";
@@ -53,8 +57,7 @@ our $r_user = "bpsr";
 our $r_host = "raid0";
 our $r_path = "/lfs/raid0/bpsr/finished";
 our $r_module = "bpsr_upload";
-our $num_p_threads = 2;
-
+our $num_p_threads = 4;
 
 # clear the error and warning files if they exist
 if ( -f $warn ) {
@@ -379,9 +382,15 @@ sub transferThread($$$)
   my $transfer_result = 0;
   my $rval = 0;
   my $l_dir = $cfg{"CLIENT_ARCHIVE_DIR"};
-  my $bwlimit = BANDWIDTH / $num_p_threads;
+  my $bwlimit = int(BANDWIDTH / $num_p_threads);
   my $rsync_options = "-a --stats --password-file=/home/bpsr/.ssh/raid0_rsync_pw --no-g --chmod=go-ws ".
-                      "--exclude 'aux' --exclude 'beam.finished' --exclude 'beam.transferring' --bwlimit=".$bwlimit;
+                      "--exclude 'aux' --exclude 'beam.finished' --exclude 'beam.transferring' ".
+                      "--exclude '2*.bp?' --exclude '2*.bps?' --exclude '2*.ts?'";
+
+  if ($bwlimit > 1)
+  {
+    $rsync_options .= " --bwlimit=".$bwlimit;
+  }
 
   my $h = "";
   my $o = "";
@@ -482,8 +491,6 @@ sub transferThread($$$)
 
 
         # update the local file flags
-        touchLocalFile($o."/".$b, "sent.to.parkes");
-        touchLocalFile($o."/".$b, "sent.to.swin");
         touchLocalFile($o."/".$b, "beam.transferred");
   
         # update the remote file flags
@@ -711,7 +718,8 @@ sub getBeamToSend(\@)
   }
 
   # Ensure NFS mounts exist for subsequent parsing
-  $cmd = "ls /nfs/apsr??/ >& /dev/null";
+  #$cmd = "ls /nfs/apsr??/ >& /dev/null";
+  $cmd = "ls /nfs/apsr0? /nfs/apsr10 /nfs/apsr11 /nfs/apsr12 /nfs/apsr13 >& /dev/null";
   Dada::logMsg(2, $dl, "getBeamToSend: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(2, $dl, "getBeamToSend: ".$result.":".$response);
@@ -774,9 +782,9 @@ sub getBeamToSend(\@)
         next;
       }
 
-      if ((-f $o."/".$b."/sent.to.swin") && (-f $o."/".$b."/sent.to.parkes"))
+      if (-f $o."/".$b."/beam.transferred")
       {
-        Dada::logMsg(2, $dl, "getBeamToSend: skipping ".$o."/".$b.", it is marked sent.to.swin and sent.to.parkes");
+        Dada::logMsg(2, $dl, "getBeamToSend: skipping ".$o."/".$b.", it is marked beam.transferred");
         next;
       }
     
@@ -1336,8 +1344,7 @@ sub checkFullyFinished() {
 
     Dada::logMsg(2, $dl, "checkFullyFinished: checking ".$o." finished -> transferred");
 
-    # Check if all beams have been transferred successfully, if so, mark 
-    # the observation as sent.to.dest
+    # Check if all beams have been transferred successfully
     Dada::logMsg(3, $dl, "checkFullyFinished: checkAllBeams(".$o.")");
     ($result, $response) = checkAllBeams($o);
     Dada::logMsg(3, $dl, "checkFullyFinished: checkAllBeams: ".$result." ".$response);
