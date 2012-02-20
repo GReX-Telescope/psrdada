@@ -40,13 +40,20 @@ class gains extends apsr_webpage
 ?>
     <style type="text/css">
       table.gains {
-        padding: 0;
+        /*border-collapse: collapse;*/
       }
       table.gains th {
-        text-align: left;
+        font-size: 8pt;
+        font-weight: normal;
+        /*margin: 0px 10px 0px 10px;
+        border-style: none none none solid;
+        border-width: 0px 0px 0px 1px;*/
       }
       table.gains td { 
         font-size: 8pt;
+        margin: 0px;
+        border-style: none none none none;
+        border-width: 0px;
       }
       table.gains span { 
         font-size: 8pt;
@@ -152,18 +159,19 @@ class gains extends apsr_webpage
   {
 ?>
     <center>
-    <table class='gains' border=0>
+    <table class='gains' border='0'>
       <tr>
-        <td>apsr</td>
 <?
     for ($i=0; $i<count($this->machines); $i++) {
       $m = $this->machines[$i];
-      echo "<td align='center' colspan='2'>".substr($m,4,2)."</td>\n";
+      if ($i == 0)
+        echo "<td align='center' colspan='2'>".substr($m,4,2)."</td>\n";
+      else
+        echo "<th align='center' colspan='2'>".substr($m,4,2)."</th>\n";
     }
 ?>
       </tr>
       <tr>
-        <td></td>
 <?
     for ($i=0; $i<count($this->machines); $i++) {
       $m = $this->machines[$i];
@@ -176,7 +184,6 @@ class gains extends apsr_webpage
 ?>
       </tr>
       <tr>
-        <td></td>
 <?
     for ($i=0; $i<count($this->machines); $i++) {
       $m = $this->machines[$i];
