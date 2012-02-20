@@ -515,14 +515,24 @@ sub addBands($$$) {
     if (-f $archive_dir."/".$total_tres) {
       unlink($total_tres);
     }
+
     $cmd = "psradd -R -m time -jp -f ".$total_tres." ".$band_tres_files;
     debugMessage(2, "addBands: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     debugMessage(3, "addBands: ".$result." ".$response);
     if ($result ne "ok") {
-      debugMessage(0, "WARN: psradd TRES failed");
-      return ("fail", "psradd TRES failed");
-    }
+      debugMessage(0, "WARN: psradd TRES failed: ".$response);
+      if (-f $results_dir."/".$total_tres) {
+        $cmd = "cp ".$results_dir."/".$total_tres." ".$archive_dir."/".$total_tres;
+        debugMessage(2, "addBands: ".$cmd);
+        ($result, $response) = Dada::mySystem($cmd);
+        debugMessage(3, "addBands: ".$result." ".$response);
+        if ($result ne "ok") {
+          debugMessage(0, "WARN: copy results TRES failed: ".$response);
+          return ("fail", "copy results TRES failed");
+        }
+      }
+    } 
   }
 
   # create the total_fres from the band files
@@ -535,8 +545,16 @@ sub addBands($$$) {
     ($result, $response) = Dada::mySystem($cmd);
     debugMessage(3, "addBands: ".$result." ".$response);
     if ($result ne "ok") {
-      debugMessage(0, "WARN: psradd FRES failed");
-      return ("fail", "psradd FRES failed");
+      if (-f $results_dir."/".$total_fres) {
+        $cmd = "cp ".$results_dir."/".$total_fres." ".$archive_dir."/".$total_fres;
+        debugMessage(2, "addBands: ".$cmd);
+        ($result, $response) = Dada::mySystem($cmd);
+        debugMessage(3, "addBands: ".$result." ".$response);
+        if ($result ne "ok") {
+          debugMessage(0, "WARN: copy results FRES failed: ".$response);
+          return ("fail", "copy results FRES failed");
+        }
+      }
     }
   }
   
