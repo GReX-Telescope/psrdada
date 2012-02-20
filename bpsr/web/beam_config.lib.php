@@ -301,8 +301,6 @@ class beam_config extends bpsr_webpage
     echo "<pre>\n";
     # Stop BPSR backend
 
-    echo "Stopping BPSR backend\n";
-
     $script = "source /home/dada/.bashrc; bpsr_reconfigure.pl -s 2>&1";
     passthru($script, $rval);
     if ($rval != 0) {
@@ -327,7 +325,8 @@ class beam_config extends bpsr_webpage
 
     fclose($fptr);
 
-    echo "Re-starting BPSR Backend\n";
+    # Force a sleep here to ensure all socket connections are properly closed
+    sleep(10);
 
     # Start BPSR backend
     $script = "source /home/dada/.bashrc; bpsr_reconfigure.pl -i 2>&1";
