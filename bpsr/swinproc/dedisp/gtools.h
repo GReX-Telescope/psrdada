@@ -1,5 +1,6 @@
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <vector>
 using namespace std;
 // Set of tools to do various useful gsearch things
