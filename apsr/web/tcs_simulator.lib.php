@@ -215,6 +215,7 @@ class tcs_simulator extends apsr_webpage
             <option value="dspsr.singleF">dspsr.singleF</option>
             <option value="dspsr.singleM">dspsr.singleM</option>
             <option value="apsr.scratch">apsr.scratch</option>
+            <option value="P778.disk">P778.disk</option>
           </select>
         </td>
 
