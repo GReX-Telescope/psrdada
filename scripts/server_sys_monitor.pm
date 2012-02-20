@@ -101,6 +101,7 @@ sub main() {
   my $hostinfo = 0;
   my $host = "";
   my $domain = "";
+  my $cmd = "";
   my $result = "";
   my $response = "";
 
@@ -111,6 +112,8 @@ sub main() {
   if ( -f $error) {
     unlink ($error);
   }
+  $cmd = "rm -f ".$cfg{"STATUS_DIR"}."/*.src.* ".$cfg{"STATUS_DIR"}."/*.sys.*";
+  ($result, $response) = Dada::mySystem($cmd);
 
   # sanity check on whether the module is good to go
   ($result, $response) = good($quit_file);
