@@ -493,6 +493,9 @@ sub logMsg($$$) {
 
   if ($level <= $dl) {
 
+    # remove backticks in error message
+    $msg =~ s/`/'/;
+
     my $time = Dada::getCurrentDadaTime();
     if (!($log_sock)) {
       $log_sock = Dada::nexusLogOpen($log_host, $log_port);
@@ -543,8 +546,8 @@ sub sigPipeHandle($) {
 # Create the remote directories required for this observation
 #
 
-sub createRemoteDirectories($$$) {
-
+sub createRemoteDirectories($$$) 
+{
   my ($utc_start, $beam, $proj_id) = @_;
   
   my $localhost = Dada::getHostMachineName();
@@ -552,47 +555,52 @@ sub createRemoteDirectories($$$) {
   my $remote_results_dir = $cfg{"SERVER_RESULTS_NFS_MNT"};
   my $cmd = "";
   my $dir = "";
+  my $result = "";
+  my $response = "";
 
-  # Wait for remote results directory to be created...
+  my $adir = $cfg{"SERVER_ARCHIVE_NFS_MNT"}."/".$utc_start;
+  my $rdir = $cfg{"SERVER_RESULTS_NFS_MNT"}."/".$utc_start;
 
-  # Ensure each directory is automounted
-  if (!( -d  $remote_archive_dir)) {
-    `ls $remote_archive_dir >& /dev/null`;
+  # ensure each directory is automounted
+  $cmd = "ls -1d ".$cfg{"SERVER_ARCHIVE_NFS_MNT"}." ".$cfg{"SERVER_RESULTS_NFS_MNT"}." >& /dev/null";
+  `$cmd`;
+
+  # wait for remote results directory to be created...
+  my $dirs_exist = 0;
+  my $timeout = 10;
+  while ((!$dirs_exist) && ($timeout > 0)) 
+  {
+    if ((-d $adir) && (-d $rdir))
+    {
+      $dirs_exist = 1;
+    }
+    else
+    {
+      sleep(1);
+    }
+    $timeout--;
   }
-  if (!( -d  $remote_results_dir)) {
-    `ls $remote_results_dir >& /dev/null`;
+    
+  # create the nfs soft link to the local archives directory 
+  $cmd = "ln -s /nfs/".$localhost."/bpsr/archives/".$utc_start."/".$beam." ".$adir."/".$beam;
+  ($result, $response) = Dada::mySystem($cmd);
+  if ($result ne "ok") {
+    logMsg(0, "WARN", "could not create NFS soft link for ".$utc_start."/".$beam);
+  }
+  # create the remote nfs directory with g stick bit set
+  $dir = $rdir."/".$beam;
+  $cmd = "mkdir -m 2775 -p ".$dir;
+  ($result, $response) = Dada::mySystem($cmd);
+  if ($result ne "ok") {
+    logMsg(0, "WARN", "could not create ".$dir.": ".$response);
   }
 
-  # Create the nfs soft link to the local archives directory 
-  #chdir $remote_archive_dir."/".$utc_start;
-  #$cmd = "ln -s /nfs/".$localhost."/bpsr/archives/".$utc_start."/".$beam." .";
-  $cmd = "ln -s /nfs/".$localhost."/bpsr/archives/".$utc_start."/".$beam." ".$remote_archive_dir."/".$utc_start."/".$beam;
-  logMsg(2, "INFO", $cmd);
-  system($cmd);
-  
-  # Create the remote nfs directory
-  $cmd = "mkdir -p ".$remote_results_dir."/".$utc_start."/".$beam;
-  logMsg(2, "INFO", $cmd);
-  system($cmd);
-
-  # Adjust permission on remote results directory
-  $dir = $remote_results_dir."/".$utc_start."/".$beam;
+  # ensure group permissions set on rdir 
   $cmd = "chgrp -R ".$proj_id." ".$dir;
-  logMsg(2, "INFO", $cmd);
-  `$cmd`;
-  if ($? != 0) {
-    logMsg(0, "WARN", "Failed to chgrp remote results dir \"".
-               $dir."\" to \"".$proj_id."\"");
+  ($result, $response) = Dada::mySystem($cmd);
+  if ($result ne "ok") {
+    logMsg(0, "WARN", "could not chgrp ".$dir." to ".$proj_id.": ".$response);
   }
-
-  $cmd = "chmod g+s ".$dir;
-  logMsg(2, "INFO", $cmd);
-  `$cmd`;
-  if ($? != 0) {
-    logMsg(0, "WARN", "Failed to chmod remote results dir \"".
-               $dir."\" to g+s");
-  }
-
 }
 
   
@@ -603,50 +611,53 @@ sub createLocalDirectories($$$$) {
 
   (my $utc_start, my $beam, my $proj_id, my $raw_header) = @_;
 
-  my $local_archive_dir = $cfg{"CLIENT_ARCHIVE_DIR"};
+  my $base = $cfg{"CLIENT_ARCHIVE_DIR"};
   my $dir = "";
+  my $cmd = "";
+  my $result = "";
+  my $response = "";
 
-  # Create local archive directory
-  $dir = $local_archive_dir."/".$utc_start."/".$beam;
-  logMsg(2, "INFO", "Creating local output dir \"".$dir."\"");
-  `mkdir -p $dir`;
-  if ($? != 0) {
-    logMsg(0,"ERROR", "Could not create local archive dir \"".
-               $dir."\"");
+  # create local archive directory with group sticky bit set
+  $dir = $base."/".$utc_start;
+  $cmd = "mkdir -m 2775 -p ".$dir;
+  ($result, $response) = Dada::mySystem($cmd);
+  if ($result ne "ok") {
+    logMsg(0, "WARN", "Could not create ".$dir.": ".$response);
   }
 
-  $dir .= "/aux";
-  `mkdir -p $dir`;
-  if ($? != 0) {
-    logMsg(0, "WARN", "Failed to create local aux dir \"".$dir."\"");
+  # chgrp this to the specified project ID
+  $dir = $base."/".$utc_start;
+  $cmd = "chgrp ".$proj_id." ".$dir;
+  ($result, $response) = Dada::mySystem($cmd);
+  if ($result ne "ok") {
+    logMsg(0, "WARN", "Could not chgrp -R ".$dir." to ".$proj_id.": ".$response);
   }
 
-  # Set GID on local archive dir
-  $dir = $local_archive_dir."/".$utc_start;
-  `chgrp -R $proj_id $dir`;
-  if ($? != 0) {
-    logMsg(0, "WARN", "Failed to chgrp local archive dir \"".
-               $dir."\" to group \"".$proj_id."\"");
-  }
- 
-  # Set group sticky bit on local archive dir
-  `chmod g+s $dir $dir/$beam`;
-  if ($? != 0) {
-    logMsg(0, "WARN", "Failed to set sticky bit on local archive dir \"".
-               $dir."\"");
+  # create the beam subdir
+  $dir = $base."/".$utc_start."/".$beam;
+  $cmd = "mkdir -p ".$dir;
+  ($result, $response) = Dada::mySystem($cmd);
+  if ($result ne "ok") {
+    logMsg(0, "WARN", "Could not create ".$dir.": ".$response);
   }
 
-  
-  # Create an obs.start file in the processing dir:
-  logMsg(2, "INFO", "Creating obs.start");
-  $dir = $local_archive_dir."/".$utc_start."/".$beam;
-  my $obsstart_file = $dir."/obs.start";
-  open(FH,">".$obsstart_file.".tmp");
+  # create the aux subsubdir
+  $dir = $base."/".$utc_start."/".$beam."/aux";
+  $cmd = "mkdir -p ".$dir;
+  ($result, $response) = Dada::mySystem($cmd);
+  if ($result ne "ok") {
+    logMsg(0, "WARN", "Could not create ".$dir.": ".$response);
+  }
+
+  # create an obs.start file in the processing dir:
+  logMsg(2, "INFO", "createLocalDirectories: creating obs.start");
+  my $file = $base."/".$utc_start."/".$beam."/obs.start";
+  open(FH,">".$file.".tmp");
   print FH $raw_header;
   close FH;
-  rename($obsstart_file.".tmp",$obsstart_file);
+  rename($file.".tmp", $file);
 
-  return $obsstart_file;
+  return $file;
 
 }
 
@@ -664,11 +675,6 @@ sub copyUTC_STARTfile($$$) {
   my $cmd = ""; 
   my $result = "";
   my $response = "";
-
-  # Ensure each directory is automounted
-  if (!( -d  $results_dir)) {
-    `ls $results_dir >& /dev/null`;
-  }
 
   # Create the full nfs destinations
   $results_dir .= "/".$utc_start."/".$beam;
