@@ -144,7 +144,7 @@ sub main() {
         $line =~ s/^.\///;
 
         if (!($line =~ /pulse_/)) {
-          msg(1, "INFO", "Processing archive ".$line);
+          msg(1, "INFO", $line);
         }
 
         ($result, $response) = processArchive($line, $archive_dir);
@@ -456,7 +456,7 @@ sub nfsCopy($$$) {
 
 sub controlThread($$) {
 
-  msg(1, "INFO", "controlThread: starting");
+  msg(2, "INFO", "controlThread: starting");
 
   my ($quit_file, $pid_file) = @_;
 
@@ -470,11 +470,12 @@ sub controlThread($$) {
   # ensure the global is set
   $quit_daemon = 1;
 
-  msg(1, "INFO", "controlThread: unlinking PID file");
   if (-f $pid_file) {
+    msg(2, "INFO", "controlThread: unlinking PID file");
     unlink($pid_file);
   }
   
+  msg(2, "INFO", "controlThread: exiting");
   return 0;
 } 
 
