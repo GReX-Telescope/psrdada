@@ -635,7 +635,7 @@ int dada_pwc_main_transfer_data (dada_pwc_main_t* pwcm)
           multilog (pwcm->log, LOG_INFO, "%s immediately\n", command_string);
           if (total_bytes_written == 0)
           {
-            multilog (pwcm->log, LOG_WARNING, "Received 0 bytes, setting to 1\n");
+            multilog (pwcm->log, LOG_INFO, "Received 0 bytes, setting to 1\n");
             total_bytes_written = 1;
           }
           transit_byte = total_bytes_written;
