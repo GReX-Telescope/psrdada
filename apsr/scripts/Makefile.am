@@ -32,6 +32,7 @@ dist_bin_SCRIPTS = Apsr.pm \
                    server_apsr_replot_result.pl \
                    server_apsr_tcs_interface.pl \
                    server_apsr_transfer_manager.pl \
+                   server_apsr_P778_transfer_manager.pl \
                    server_apsr_pwc_monitor.pl \
                    server_apsr_sys_monitor.pl \
                    server_apsr_web_monitor.pl \
