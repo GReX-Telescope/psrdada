@@ -19,6 +19,7 @@ class results extends apsr_webpage
     apsr_webpage::apsr_webpage();
     $inst = new apsr();
     $this->cfg = $inst->config;
+    $this->title = "APSR Results";
 
     $this->length = (isset($_GET["length"])) ? $_GET["length"] : 20;
     $this->offset = (isset($_GET["offset"])) ? $_GET["offset"] : 0;
