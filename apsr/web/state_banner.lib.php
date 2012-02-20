@@ -41,7 +41,7 @@ class state_banner extends apsr_webpage
         var re = "resizeable=1";
 
         options = to+","+sc+","+l+","+st+","+mb+","+re
-        eval("page" + type + " = window.open(URL, '" + type + "', '"+options+",width=1034,height=778');");
+        eval("page" + type + " = window.open(URL, '" + type + "', '"+options+",width=1200,height=790');");
       }
 
       // handle the response from an state_banner request
