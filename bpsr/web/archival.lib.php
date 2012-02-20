@@ -5,33 +5,36 @@ include("bpsr_webpage.lib.php");
 
 ini_set("memory_limit","128M");
 
-define(OBF, 0);   # obs.finished
-define(OBT, 1);   # obs.txt
-define(OBP, 2);   # obs.problem
-define(OBX, 3);   # obs.transferred
-define(OBA, 4);   # obs.archived
-define(OBD, 5);   # obs.delted
-define(OBI, 6);   # obs.info
-define(OBS, 7);   # obs.start
-define(SRC, 8);   # souce name
-define(SRV, 9);   # flag for survey pointing 
-define(STS, 10);   # sent.to.swin
-define(STP, 11);   # sent.to.parkes
-define(OTS, 12);   # on.tape.swin
-define(OTP, 13);   # on.tape.parkes
-define(ETS, 14);   # error.to.swin
-define(ETP, 15);   # error.to.parkes
-define(INA, 16);   # in /nfs/archives/bpsr
-define(INR, 17);   # in /nfs/results/bpsr
-define(INL, 18);   # in /lfs/data0/bpsr/archives
-define(NBM, 19);   # number of beams
-define(PID, 20);   # PID of the observation
-define(BMB, 21);   # MB per beam
+define(OBP, 0);   # obs.processing
+define(OBF, 1);   # obs.finished
+define(OBT, 2);   # obs.txt
+define(OBE, 3);   # obs.problem / error
+define(OBX, 4);   # obs.transferred
+define(OBA, 5);   # obs.archived
+define(OBD, 6);   # obs.delted
+define(OBI, 7);   # obs.info
+define(OBS, 8);   # obs.start
+define(SRC, 9);   # souce name
+define(SRV, 10);   # flag for survey pointing 
+define(BTF, 11);   # beam.transferred
+define(STS, 12);   # sent.to.swin
+define(STP, 13);   # sent.to.parkes
+define(OTS, 14);   # on.tape.swin
+define(OTP, 15);   # on.tape.parkes
+define(ETS, 16);   # error.to.swin
+define(ETP, 17);   # error.to.parkes
+define(INA, 18);   # in /nfs/archives/bpsr
+define(INR, 19);   # in /nfs/results/bpsr
+define(INL, 20);   # in /lfs/data0/bpsr/archives
+define(NBM, 21);   # number of beams
+define(PID, 22);   # PID of the observation
+define(BMB, 23);   # MB per beam
 
-define(STS_COUNT, 22);
-define(STP_COUNT, 23);
-define(OTS_COUNT, 24);
-define(OTP_COUNT, 25);
+define(BTF_COUNT, 24);
+define(STS_COUNT, 25);
+define(STP_COUNT, 26);
+define(OTS_COUNT, 27);
+define(OTP_COUNT, 28);
 
 class archival extends bpsr_webpage
 {
@@ -243,6 +246,25 @@ class archival extends bpsr_webpage
 
 
                 }
+                else if (key.indexOf("beam_transferred") != -1)
+                {
+                  value = parseInt(value);
+                  if ((nbeam == 0) || (value == -1))
+                  {
+                    td.innerHTML = "--";
+                    td.className = "gray";
+                  }
+                  else if (value < nbeam)
+                  {
+                    td.innerHTML = value;
+                    td.className = "yellow";
+                  }
+                  else
+                  {
+                    td.innerHTML = value;
+                    td.className = "green";
+                  }
+                }
                 else if ((key.indexOf("sent_to") != -1) || (key.indexOf("on_tape") != -1))
                 {
                   value = parseInt(value);
@@ -405,7 +427,8 @@ class archival extends bpsr_webpage
       </table>
 
       <table width="100%" class="legend">
-        <tr><th colspan=2>Sent To</th></tr>
+        <tr><th colspan=3>Sent To</th></tr>
+        <tr><td>R</td><td>Beams transferred to RAID</td></tr>
         <tr><td>S</td><td>Beams transferred to Swin</td></tr>
         <tr><td>P</td><td>Beams transferred to Parkes</td></tr>
       </table>
@@ -443,7 +466,7 @@ class archival extends bpsr_webpage
         <th colspan=5>
         <th colspan=5>Obs State</th>
         <th colspan=2>Data</th>
-        <th colspan=2>Sent To</th>
+        <th colspan=3>Sent To</th>
         <th colspan=2>On Tape</th>
       </tr>
       <tr>
@@ -459,6 +482,7 @@ class archival extends bpsr_webpage
         <th width="10px">D</th>
         <th width="15px">N</th>
         <th width="15px">F</th>
+        <th width="15px">R</th>
         <th width="15px">S</th>
         <th width="15px">P</th>
         <th width="15px">S</th>
@@ -481,6 +505,7 @@ class archival extends bpsr_webpage
           echo "<td id='state_del_".$o."'></td>";
           echo "<td id='nbeam_".$o."'></td>";
           echo "<td id='on_local_disk_".$o."'></td>";
+          echo "<td id='beam_transferred_".$o."'></td>";
           echo "<td id='sent_to_swin_".$o."'></td>";
           echo "<td id='sent_to_parkes_".$o."'></td>";
           echo "<td id='on_tape_swin_".$o."'></td>";
@@ -535,6 +560,7 @@ class archival extends bpsr_webpage
       $source = $local[$o][SRC];
       $nbeam = $local[$o][NBM];
       $beamsize = sprintf("%5.2f", ($local[$o][BMB]/1024));
+      $beam_transferred = $local[$o][BTF_COUNT];
       $sent_to_swin = $local[$o][STS_COUNT];
       $sent_to_parkes = $local[$o][STP_COUNT];
       $on_tape_swin = $local[$o][OTS_COUNT];
@@ -551,7 +577,7 @@ class archival extends bpsr_webpage
     
       # determine obs state
       $obs_state = 0;
-      if (!$obs_state && ($local[$o][OBP] == 0))
+      if (!$obs_state && ($local[$o][OBE] == 0))
         $obs_state = "failed";
       if (!$obs_state && ($local[$o][OBD] == 2))
         $obs_state = "deleted";
@@ -565,6 +591,8 @@ class archival extends bpsr_webpage
         $obs_state = "transferring";
       if (!$obs_state && ($local[$o][OBF] == 2))
         $obs_state = "finished";
+      if (!$obs_state && ($local[$o][OBP] == 2))
+        $obs_state = "processing";
       if (!$obs_state)
         $obs_state = "unknown";
 
@@ -580,6 +608,7 @@ class archival extends bpsr_webpage
       $xml .= "<beamsize>".$beamsize."</beamsize>\n";
       //$xml .= "<req_swin>".$req_swin."</req_swin>\n";
       //$xml .= "<req_parkes>".$req_parkes."</req_parkes>\n";
+      $xml .= "<beam_transferred>".$beam_transferred."</beam_transferred>\n";
       $xml .= "<sent_to_swin>".$sent_to_swin."</sent_to_swin>\n";
       $xml .= "<sent_to_parkes>".$sent_to_parkes."</sent_to_parkes>\n";
       $xml .= "<on_tape_swin>".$on_tape_swin."</on_tape_swin>\n";
@@ -781,24 +810,27 @@ class archival extends bpsr_webpage
 
       // Check that the observation is listed in the local array
       if (array_key_exists($o, $local)) {
+        $results[$o][OBP] = $local[$o][OBP];
         $results[$o][OBF] = $local[$o][OBF];
         $results[$o][OBX] = $local[$o][OBX];
         $results[$o][OBA] = $local[$o][OBA];
         $results[$o][OBD] = $local[$o][OBD];
         $results[$o][OBI] = $local[$o][OBI];
-        $results[$o][OBP] = $local[$o][OBP];
+        $results[$o][OBE] = $local[$o][OBE];
         $results[$o][OBT] = $local[$o][OBT];
         $results[$o][SRC] = $local[$o][SRC];
         $results[$o][SRV] = (substr($results[$o][SRC],0,1) == "G") ? 1 : 0;
         $results[$o][BMB] = 0;
       }
    
+      $results[$o][BTF_COUNT] = 0; 
       $results[$o][STS_COUNT] = 0; 
       $results[$o][STP_COUNT] = 0; 
       $results[$o][OTS_COUNT] = 0; 
       $results[$o][OTP_COUNT] = 0; 
       $results[$o][INL] = 0;
       if (array_key_exists($o, $remote)) {
+        $results[$o][BTF_COUNT] = $remote[$o][BTF_COUNT];
         $results[$o][STS_COUNT] = $remote[$o][STS_COUNT];
         $results[$o][STP_COUNT] = $remote[$o][STP_COUNT];
         $results[$o][OTS_COUNT] = $remote[$o][OTS_COUNT];
@@ -864,6 +896,7 @@ class archival extends bpsr_webpage
         $results[$o] = array();
         $results[$o][OBS] = 0;
         $results[$o][INL] = 0;
+        $results[$o][BTF_COUNT] = 0;
         $results[$o][STS_COUNT] = 0;
         $results[$o][STP_COUNT] = 0;
         $results[$o][OTS_COUNT] = 0;
@@ -881,6 +914,9 @@ class archival extends bpsr_webpage
       }
       if ($f == "obs.start") {
         $results[$o][OBS]++;
+      } else if ($f == "beam.transferred") {
+        $results[$o][$b][BTF] = 1;
+        $results[$o][BTF_COUNT] += 1;
       } else if ($f == "sent.to.swin") {
         $results[$o][$b][STS] = 1;
         $results[$o][STS_COUNT] += 1;
@@ -930,9 +966,10 @@ class archival extends bpsr_webpage
 
       if (! array_key_exists($o, $results)) {
         $results[$o] = array();
+        $results[$o][OBP] = -1;
         $results[$o][OBF] = -1;
         $results[$o][OBT] = -1;
-        $results[$o][OBP] = -1;
+        $results[$o][OBE] = -1;
         $results[$o][OBX] = -1;
         $results[$o][OBA] = -1;
         $results[$o][OBD] = -1;
@@ -941,6 +978,9 @@ class archival extends bpsr_webpage
         $results[$o][ETP] = 0;
       }
 
+      if ($f == "obs.processing") {
+        $results[$o][OBP] = 2;
+      }
       if (($f == "obs.finished") || ($f == "obs.finalized")){
         $results[$o][OBF] = 2;
       }
@@ -948,7 +988,7 @@ class archival extends bpsr_webpage
         $results[$o][OBT] = 2;
       }
       if (($f == "obs.problem") || ($f == "obs.failed")) {
-        $results[$o][OBP] = 0;
+        $results[$o][OBE] = 0;
       }
       if ($f == "obs.transferred") {
         $results[$o][OBX] = 2;
