@@ -427,6 +427,10 @@ function killProcess($pname) {
 
 function makeTimeString($time_unix) {
 
+  if ($time_unix == -1) {
+    return "N/A";
+  }
+
   $ndays = gmdate("z",$time_unix);
   if ($ndays) {
     return $ndays." days, ".gmdate("H:i:s",$time_unix);
