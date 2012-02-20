@@ -217,7 +217,7 @@ class log_list extends bpsr_webpage
 
     <br>
     <br>
-    <iframe name="log_window" src="ganglia_window.lib.php" frameborder=0 width=100% height=280px>
+    <iframe name="log_window" src="ganglia_window.lib.php" frameborder=0 width=100% height=300px>
     </iframe>
 
 <?
