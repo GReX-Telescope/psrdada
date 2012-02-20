@@ -616,6 +616,7 @@ sub tapeInfoThread() {
   my %transferred_size = ();
   my %beam_finished = ();
   my $beams_finished = "";      # number of beams finished but not transferred
+  my %on_raid = ();
   my $beams_on_raid = 0;       # number transferred to raid but not sent to swin yet
   my $beams_archived = "";       # number transferred to raid but not sent to swin yet
   my $result = "";
@@ -751,36 +752,55 @@ sub tapeInfoThread() {
         }
 
         $beams_finished = "<table>";
-        #$beams_finished .= "<tr><th>ProjID</th><th>Size GB</th></tr>";
         @keys = keys %finished_count;
         for ($i=0; $i<=$#keys; $i++)
         {
           $beams_finished .= "<tr><td>".$keys[$i]."</td><td>".$finished_size{$keys[$i]}." GB</td></tr>";
         }
-        $beams_finished .= "</table>";
-        if ($beams_finished eq "")
+        if ($#keys == -1)
         {
-          $beams_finished = "none";
+          $beams_finished = "<tr><td>none</td></tr>";
         }
+        $beams_finished .= "</table>";
 
         Dada::logMsg(2, DL, "tapeInfoThread: beams_finished=".$beams_finished);
 
         # the number of beams waiting on raid to be sent to swin [for all projID's]
-        $beams_on_raid = "<table>";
+        %on_raid = ();
         for ($i=0; $i<=$#p_users; $i++) 
         {
-          $cmd = "du -sb P*";
-          ($result, $rval, $response) = Dada::remoteSshCommand($p_users[$i], $p_hosts[$i], $cmd, $p_paths[$i]."/../swin/send", "awk '{print \$2\" \"\$1}'");
+          $cmd = "du -sb finished/P* swin/send/P*";
+          ($result, $rval, $response) = Dada::remoteSshCommand($p_users[$i], $p_hosts[$i], $cmd, $p_paths[$i]."/../", "awk -F/ '{print \$1\" \"\$(NF)}' | awk '{print \$3\" \"\$1}'");
           if (($result eq "ok") && ($rval == 0))
           {
             @arr = split(/\n/, $response);
             for ($j=0; $j<=$#arr; $j++)
             { 
               @bits = split(/ /, $arr[$j]);
-              $beams_on_raid .= "<tr><td>".$bits[0]."</td><td>".sprintf("%0.2f",($bits[1] / 1073741824))." GB</td></tr>";
+              if (!exists($on_raid{$bits[0]}))
+              {
+                $on_raid{$bits[0]} = 0;
+              }
+              $on_raid{$bits[0]} += $bits[1];
+              #$beams_on_raid .= "<tr><td>".$bits[0]."</td><td>".sprintf("%0.2f",($bits[1] / 1073741824))." GB</td></tr>";
             }
           }
         }
+
+        $beams_on_raid = "<table>";
+        @keys = keys %on_raid;
+        for ($i=0; $i<=$#keys; $i++)
+        {
+          if ($on_raid{$keys[$i]} > 1000000)
+          {
+            $beams_on_raid .= "<tr><td>".$keys[$i]."</td><td>".sprintf("%0.2f", ($on_raid{$keys[$i]} / 1073741824))." GB</td></tr>";
+          }
+        }
+        if ($beams_on_raid eq "<table>")
+        {
+          $beams_on_raid = "<tr><td>none</td></tr>";
+        }
+        
         $beams_on_raid .= "</table>";
         Dada::logMsg(2, DL, "tapeInfoThread: obs_fin=".($#obs_fin+1).", beams_on_raid=".$beams_on_raid);
 
