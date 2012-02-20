@@ -9,6 +9,7 @@ class archival_summary extends bpsr_webpage
   function archival_summary()
   {
     bpsr_webpage::bpsr_webpage();
+    $this->callback_freq = 60000;
   }
 
   function javaScriptCallback()
@@ -131,17 +132,18 @@ class archival_summary extends bpsr_webpage
       <td align="center" valign="top">
         <table class='archival_summary'>
           <tr> 
-            <td colspan=3 id="XFER_PID_td">
+            <td colspan=4 id="XFER_PID_td">
               <b>Transfer Manager</b>&nbsp;&nbsp;&nbsp;
               <span id="XFER_PID"></span>
             </td>
           </tr>
           <tr> 
-            <td colspan=3 id="XFER_td" align="center"><span id ="XFER"></span></td> 
+            <td colspan=4 id="XFER_td" align="center"><span id ="XFER"></span></td> 
           </tr>
           <tr>
-            <td id="XFER_FINISHED_td" align="center">Local: <span id ="XFER_FINISHED"></span></td>
-            <td id="XFER_ON_RAID_td" align="center">RAID: <span id ="XFER_ON_RAID"></span></td>
+            <td id="XFER_FINISHED_td" align="center"><span id ="XFER_FINISHED"></span></td>
+            <td>&rarr;</td>
+            <td id="XFER_ON_RAID_td" align="center"><span id ="XFER_ON_RAID"></span></td>
             <td></td>
           </tr>
         </table>
