@@ -105,25 +105,86 @@ if ( -f $quit_file ) {
 
 $control_thread = threads->new(\&controlThread, $quit_file, $pid_file);
 
-my $mon_files_processed = 0;
-my $dspsr_files_processed = 0;
+my $processed = 0;
+my $total_processed = 0;
 
 my $sleep_total = 5;
 my $sleep_count = 0;
+my @all_obs = ();
+my @finished_obs = ();
+my $cmd = "";
+my $result = "";
+my $response = "";
+my $i = 0;
+my $j = 0;
+my $obs = "";
+my $finished = 0;
 
 # Loop until daemon control thread asks us to quit
-while (!($quit_daemon)) {
+while (!($quit_daemon)) 
+{
+    
+  @all_obs = ();
 
-  $mon_files_processed = processMonFiles();
-  $dspsr_files_processed = process_dspsr_files();
+  # get a list of all observations in the local disk
+  $cmd = "find ".$client_archive_dir." -mindepth 1 -maxdepth 1 -type d -name '2*' -printf '\%f\\n' | sort";
+  ($result, $response) = Dada::mySystem($cmd);
+  if ($result ne "ok") 
+  {
+    logMsg(0, "WARN", "find list of all obs failed: ".$response);
+  }
+  else
+  {
+    @all_obs = split(/\n/, $response);
+    logMsg(2, "INFO", "main: found ".($#all_obs+1)." obs to consider");
 
-  # If nothing is happening, have a snooze
-  if (($mon_files_processed + $dspsr_files_processed) < 1) {
+    # now get a list of all observations marked beam.finished to exclude them
+    $cmd = "find ".$client_archive_dir." -mindepth 3 -maxdepth 3 -type f ".
+           "-name 'beam.finished' | awk -F/ '{print \$(NF-2)}' | sort";
+    ($result, $response) = Dada::mySystem($cmd);
+    if ($result ne "ok") 
+    {
+      logMsg(0, "WARN", "find list of completed obs failed: ".$response);
+    }
+    else
+    {
+      @finished_obs = split(/\n/, $response);
+      logMsg(2, "INFO", "main: found ".($#all_obs+1)." obs marked finished");
 
-    $sleep_count = 0;
-    while (!$quit_daemon && ($sleep_count < $sleep_total)) {
-      sleep(1);
-      $sleep_count++;
+      $total_processed = 0;
+
+      for ($i=0; ((!$quit_daemon) && ($i<=$#all_obs)); $i++) {
+        $obs = $all_obs[$i];
+        $finished = 0;
+        for ($j=0; $j<=$#finished_obs; $j++) {
+          if ($finished_obs[$j] eq $obs) {
+            $finished= 1; 
+          } 
+        }
+
+        if (!$finished) 
+        {
+          logMsg(2, "INFO", "main: processMonFiles(".$obs.")");
+          $processed = processMonFiles($obs);
+          logMsg(2, "INFO", "main: processMonFiles processed ".$processed." files");
+          $total_processed += $processed;
+          
+          logMsg(2, "INFO", "main: processDspsrFiles(".$obs.")");
+          $processed = processDspsrFiles($obs);
+          logMsg(2, "INFO", "main: processDspsrFiles processed ".$processed." files");
+          $total_processed += $processed;
+        }
+      }
+    }
+
+    # If nothing is happening, have a snooze
+    if ($total_processed < 1) 
+    {
+      $sleep_count = 0;
+      while (!$quit_daemon && ($sleep_count < $sleep_total)) {
+        sleep(1);
+        $sleep_count++;
+      }
     }
   }
 }
@@ -148,7 +209,9 @@ exit (0);
 #
 # Look for mon files produced by the_decimator, plot them and send the plots to the server
 #
-sub processMonFiles() {
+sub processMonFiles($) 
+{
+  (my $list) = @_;
 
   my $result = "";
   my $response = "";
@@ -163,12 +226,14 @@ sub processMonFiles() {
   my @plot_files = ();
 
   # get ALL unprocessed mon files (not checking aux dirs)
-  $cmd = "find . -maxdepth 3 -regex '.*[ts|bp|bps][0|1]' -printf '\%P\n' | sort";
-  logMsg(3, "INFO", "processMonFiles: ".$cmd);
+  $cmd = "find ".$list." -mindepth 2 -maxdepth 2 -type f -regex '.*[ts|bp|bps][0|1]' | sort";
+  logMsg(2, "INFO", "processMonFiles: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   logMsg(3, "INFO", "processMonFiles: ".$result." ".$response);
 
   @mon_files = split(/\n/, $response);
+
+  logMsg(2, "INFO", "processMonFiles: found ".($#mon_files+1)." files to process");
 
   # dont bother if no mon files exist
   if ($#mon_files == -1) {
@@ -254,7 +319,7 @@ sub processMonFiles() {
 
     if ($result ne "ok") {
 
-      logMsg(0, "ERROR", "Could not move file ($file) to aux dir \"".$response."\"");
+      logMsg(0, "ERROR", "Could not move file [".$file."] to aux dir [".$response."]");
       unlink($file_dir."/".$file);
 
     } else {
@@ -285,9 +350,11 @@ sub processMonFiles() {
 #
 # process any dspsr output files produced
 #
-sub process_dspsr_files() {
+sub processDspsrFiles($) {
 
-  my $cmd = "find . -maxdepth 3 -name \"20*\.ar\" | sort";
+  (my $list) = @_;
+
+  my $cmd = "find ".$list." -mindepth 2 -maxdepth 2 -type f -name '2*\.ar' | sort";
   my $find_result = `$cmd`;
 
   my @lines = split(/\n/,$find_result);
@@ -300,7 +367,7 @@ sub process_dspsr_files() {
 
   foreach $line (@lines) {
 
-    $line = substr($line,2);
+    # $line = substr($line,2);
 
     logMsg(2, "INFO", "Processing dspsr file \"".$line."\"");
 
@@ -321,11 +388,11 @@ sub process_dspsr_files() {
     ($result, $response) = Dada::mySystem($cmd);
     if ($result ne "ok") {
 
-      logMsg(0, "ERROR", "process_dspsr_files: ".$cmd." failed: ".$response);
+      logMsg(0, "ERROR", "processDspsrFiles: ".$cmd." failed: ".$response);
 
     } else {
 
-      logMsg(2, "INFO", "process_dspsr_files: archive added");
+      logMsg(2, "INFO", "processDspsrFiles: archive added");
 
       my $plot_file = "";
       my $plot_binary = $bindir."/psrplot";
