@@ -38,6 +38,7 @@ if ($result eq "ok") {
 
   $cmd = "find . -mindepth 3 -maxdepth 3 ".
          "-type f -name 'obs.start' -printf '\%h/\%f/0\n' ".
+         "-o -type f -name 'beam.transferred' -printf '\%h/\%f/0\n' ".
          "-o -type f -name 'sent.to.*' -printf '\%h/\%f/0\n' ".
          "-o -type f -name 'error.to.*' -printf '\%h/\%f/0\n' ".
          "-o -type f -name 'on.tape.*' -printf '\%h/\%f/0\n' ".
