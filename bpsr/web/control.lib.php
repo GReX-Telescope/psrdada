@@ -67,20 +67,6 @@ class control extends bpsr_webpage
         pwc_hosts_str += "&host_"+i+"="+pwc_hosts[i];
       }
 
-      var help_hosts = new Array(<?
-      $helpers = getConfigMachines($this->inst->config, "HELP");
-      $helpers = array_unique($helpers);
-      asort($helpers);
-      echo "'".$helpers[0]."'";
-      for ($i=1; $i<count($helpers); $i++) {
-        echo ",'".$helpers[$i]."'";
-      }?>);
-
-      var help_hosts_str = "";
-      for (i=0; i<help_hosts.length; i++) {
-        help_hosts_str += "&host_"+i+"="+help_hosts[i];
-      }
-
       var stage2_wait = 20;
       var stage3_wait = 20;
       var stage4_wait = 20;
@@ -381,10 +367,6 @@ class control extends bpsr_webpage
         url = "control.lib.php?action=start&daemon=bpsr_master_control&nhosts=1&host_0=srv0"
         daemon_action_request(url);
 
-        // start the help's master control script
-        url = "control.lib.php?action=start&daemon=bpsr_master_control&nhosts="+help_hosts.length+help_hosts_str;
-        daemon_action_request(url);
-
         // start the pwc's master control script
         url = "control.lib.php?action=start&daemon=bpsr_master_control&nhosts="+pwc_hosts.length+pwc_hosts_str;
         daemon_action_request(url);
@@ -396,7 +378,7 @@ class control extends bpsr_webpage
       function startBpsrStage2()
       {
         poll_2sec_count = 0;
-        var machines = srv_hosts.concat(pwc_hosts, help_hosts);
+        var machines = srv_hosts.concat(pwc_hosts);
         var daemons = new Array("bpsr_master_control");
         var ready = checkMachinesAndDaemons(machines, daemons, "green_light.png");
         if ((!ready) && (stage2_wait > 0)) {
@@ -518,10 +500,6 @@ class control extends bpsr_webpage
         url = "control.lib.php?action=stop&daemon=bpsr_tcs_interface&nhosts=1&host_0=srv0";
         daemon_action_request(url);
 
-        // stop the help daemons master control script 
-        url = "control.lib.php?action=stop&daemon=bpsr_master_control&nhosts="+help_hosts.length+help_hosts_str;
-        daemon_action_request(url);
-
         // stop the pwc's daemons next
         url = "control.lib.php?action=stop&daemon=all&nhosts="+pwc_hosts.length+pwc_hosts_str;
         daemon_action_request(url);
@@ -537,14 +515,12 @@ class control extends bpsr_webpage
         poll_2sec_count = 0;
 
         var srv_daemons = new Array("bpsr_tcs_interface");
-        var help_daemons = new Array("bpsr_master_control");
         var pwc_daemons = new Array("bpsr_observation_manager","bpsr_results_monitor","bpsr_disk_cleaner");
 
         var srv_ready = checkMachinesAndDaemons(srv_hosts, srv_daemons, "red_light.png");
         var pwc_ready = checkMachinesAndDaemons(pwc_hosts, pwc_daemons, "red_light.png");
-        var help_ready = checkMachinesAndDaemons(help_hosts, help_daemons, "red_light.png");
 
-        if ((!(srv_ready && pwc_ready && help_ready)) && (stage2_wait > 0)) {
+        if ((!(srv_ready && pwc_ready)) && (stage2_wait > 0)) {
           stage2_wait--;
           setTimeout('stopBpsrStage2()', 1000);
           return 0;
@@ -742,7 +718,7 @@ class control extends bpsr_webpage
       function daemon_info_request() 
       {
         var di_http_request;
-        var url = "control.lib.php?update=true&nhosts="+(srv_hosts.length+pwc_hosts.length+help_hosts.length);
+        var url = "control.lib.php?update=true&nhosts="+(srv_hosts.length+pwc_hosts.length);
         var j = 0;
 
         for (i=0; i<srv_hosts.length; i++)
@@ -753,11 +729,6 @@ class control extends bpsr_webpage
         for (i=0; i<pwc_hosts.length; i++)
         {
           url += "&host_"+j+"="+pwc_hosts[i];
-          j++;
-        } 
-        for (i=0; i<help_hosts.length; i++)
-        {
-          url += "&host_"+j+"="+help_hosts[i];
           j++;
         } 
 
@@ -1025,37 +996,6 @@ class control extends bpsr_webpage
 ?>
       </td>
     </tr>
-    <tr>
-      <td>
-<?
-    $this->openBlockHeader("Helper Machines");
-
-    $helpers    = getConfigMachines($this->inst->config, "HELP");
-    $helpers = array_unique($helpers);
-    asort($helpers);
-?>
-    <table width='100%'>
-      <tr>
-        <td id="help_controls">
-          <table class='control' id="help_controls">
-            <tr>
-              <td></td>
-<?
-    for ($i=0; $i<count($helpers); $i++) {
-      echo "          <td style='text-align: center'><span title='".$helpers[$i]."'>".$i."</span></td>\n";
-    }
-?>
-              <td></td>
-            </tr>
-<?
-    # Print the master control first
-    $d = "bpsr_master_control";
-    $this->printClientDaemonControl($d, "Master Control", $helpers, "daemon&name=".$d);
-?>
-          </table>
-        </td>
-        <td width='300px' id='help_output' valign='top'></td>
-      </tr>
     </table>
 <?
 
@@ -1217,7 +1157,7 @@ class control extends bpsr_webpage
       exit(0);
     }
 
-    # determine which type of request this is (srv, pwc or help)
+    # determine which type of request this is (srv or pwc)
     if ($hosts[0] == "srv0") 
     {  
       if (strpos($this->inst->config["SERVER_DAEMONS_PERSIST"], $daemon) !== FALSE)
@@ -1229,9 +1169,6 @@ class control extends bpsr_webpage
       for ($i=0; $i<$this->inst->config["NUM_PWC"]; $i++)
         if ($this->inst->config["PWC_".$i] == $hosts[0])
           $area = "pwc";
-      for ($i=0; $i<$this->inst->config["NUM_HELP"]; $i++)
-        if ($this->inst->config["HELP_".$i] == $hosts[0])
-          $area = "help";
     }
     if ($area == "") {
       echo "ERROR: could not determine area\n";
