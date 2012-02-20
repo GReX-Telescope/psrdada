@@ -332,11 +332,15 @@ sub deleteCompletedBeam($$) {
 
   logMsg(2, "INFO", "Deleting archived files in ".$path);
 
-  if (-f $path."/slow_rm.ls") {
-    unlink $path."/slow_rm.ls";
+  # WvS - cannot create file when disks are full
+
+  my $rm_file = "/tmp/".$obs."_".$beam."_slow_rm.ls";
+
+  if (-f $rm_file) {
+    unlink $rm_file;
   }
 
-  my $cmd = "find ".$path." -name '*.fil' -o -name 'aux.tar' -o -name '*.ar' -o -name '*.png' -o -name '*.bp*' -o -name '*.ts?' -o -name 'rfi.*' > ".$path."/slow_rm.ls";
+  my $cmd = "find ".$path." -name '*.fil' -o -name 'aux.tar' -o -name '*.ar' -o -name '*.png' -o -name '*.bp*' -o -name '*.ts?' -o -name 'rfi.*' > ".$rm_file;
 
   logMsg(2, "INFO", $cmd);
   ($result, $response) = Dada::mySystem($cmd);
@@ -351,7 +355,7 @@ sub deleteCompletedBeam($$) {
   my $files = $response;
 
   $files =~ s/\n/ /g;
-  $cmd = "slow_rm -r 256 -M ".$path."/slow_rm.ls";
+  $cmd = "slow_rm -r 256 -M ".$rm_file;
 
   logMsg(2, "INFO", $cmd);
   ($result, $response) = Dada::mySystem($cmd);
@@ -373,8 +377,8 @@ sub deleteCompletedBeam($$) {
     unlink $path."/obs.deleted";
   }
 
-  if (-f $path."/slow_rm.ls") {
-    unlink $path."/slow_rm.ls";
+  if (-f $rm_file) {
+    unlink $rm_file;
   }
 
   $result = "ok";
