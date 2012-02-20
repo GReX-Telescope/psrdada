@@ -91,24 +91,11 @@ sub setupClientType()
     {
       $Dada::client_master_control::pwc_add = " -d -i ".$cfg{"PWC_IFACE"};
     }
-    # check if we are a helper
     else
     {
-      for ($i=0; (($i<$cfg{"NUM_HELP"}) && (!$found)); $i++) {
-        if ($Dada::client_master_control::host =~ m/$cfg{"HELP_".$i}/) {
-          @Dada::client_master_control::daemons = ();
-          @Dada::client_master_control::dbs = ();
-          @Dada::client_master_control::binaries = ();
-          $found = 1;
-        }
-      }
-  
-      if (!$found) {
-        @Dada::client_master_control::daemons = ();
-        @Dada::client_master_control::dbs = ();
-        @Dada::client_master_control::binaries = ();
-        $found = 1;
-      }
+      @Dada::client_master_control::daemons = ();
+      @Dada::client_master_control::dbs = ();
+      @Dada::client_master_control::binaries = ();
     }
   }
 
