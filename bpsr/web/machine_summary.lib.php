@@ -9,7 +9,6 @@ class machine_summary extends bpsr_webpage
   var $machines = array();
   var $all_machines = array();
   var $pwcs = array();
-  var $helpers = array();
   var $srvs = array();
   var $config = array();
 
@@ -35,15 +34,6 @@ class machine_summary extends bpsr_webpage
     /* generate a list of all machines */
     for ($i=0; $i<$inst->ibobs["NUM_IBOB"]; $i++) {
       array_push($this->all_machines, $inst->ibobs["10GbE_CABLE_".$i]);
-    }
-
-     /* generate a list of machines */
-    for ($i=0; $i<$this->config["NUM_HELP"]; $i++) {
-      if (!in_array($this->config["HELP_".$i], $this->helpers)) {
-        array_push($this->helpers, $this->config["HELP_".$i]);
-        array_push($this->machines, $this->config["HELP_".$i]);
-        array_push($this->all_machines, $this->config["HELP_".$i]);
-      }
     }
 
     array_push($this->all_machines, "srv0");
@@ -121,9 +111,6 @@ class machine_summary extends bpsr_webpage
 <?
       for ($i=0; $i<count($this->pwcs); $i++) { 
         echo "      data_rates[\"".$this->pwcs[$i]."\"] = 4;\n"; 
-      }
-      for ($i=0; $i<count($this->helpers); $i++) {   
-        echo "      data_rates[\"".$this->helpers[$i]."\"] = 52;\n";
       }
       echo "      data_rates[\"".$this->srvs[0]."\"] = 0;\n";
 ?>
