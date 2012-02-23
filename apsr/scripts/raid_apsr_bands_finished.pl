@@ -18,8 +18,9 @@ use Dada;
 #
 # Constants
 #
-use constant ROOT_DIR       => "/lfs/raid0/apsr";
-use constant REQUIRED_HOST  => "caspsr-raid0";
+use constant DATA_DIR       => "/lfs/raid0/apsr";
+use constant META_DIR       => "/lfs/data0/apsr";
+use constant REQUIRED_HOST  => "raid0";
 use constant REQUIRED_USER  => "apsr";
 
 
@@ -50,15 +51,15 @@ $| = 1;
 
 # Main
 {
-  my $log_file  = ROOT_DIR."/logs/".$daemon_name.".log";
-  my $pid_file  = ROOT_DIR."/control/".$daemon_name.".pid";
-  my $quit_file = ROOT_DIR."/control/".$daemon_name.".quit";
+  my $log_file  = META_DIR."/logs/".$daemon_name.".log";
+  my $pid_file  = META_DIR."/control/".$daemon_name.".pid";
+  my $quit_file = META_DIR."/control/".$daemon_name.".quit";
 
-  my $src_path  = ROOT_DIR."/finished";
-  my $dst_path  = ROOT_DIR."/swin/send";
+  my $src_path  = DATA_DIR."/finished";
+  my $dst_path  = DATA_DIR."/swin/send";
 
-  $warn         = ROOT_DIR."/logs/".$daemon_name.".warn";
-  $error        = ROOT_DIR."/logs/".$daemon_name.".error";
+  $warn         = META_DIR."/logs/".$daemon_name.".warn";
+  $error        = META_DIR."/logs/".$daemon_name.".error";
 
   my $control_thread = 0;
 
