@@ -875,7 +875,7 @@ long calculate_max(long * array, unsigned size) {
   long max = 0;
   for (i=0; i<size; i++)
   {
-    if ((i<430) || (i>480))
+    if (i<380)
       max = (array[i] > max) ? array[i] : max;
   }
   return max;
