@@ -22,6 +22,7 @@ use File::Basename;
 sub main();
 sub process($$);
 sub decimationThread($);
+sub basebandThread();
 
 #
 # Declare Global Variables
@@ -40,6 +41,7 @@ our $dada_header_pid : shared;    # PID of the dada_header command for killing
 our $processor_pid : shared;      # PID of the processor (dspsr) for killing
 our $recv_db : shared;            # DB where data is being received over IB
 our $proc_db : shared;            # DB where data is being processed 
+our $baseband_db : shared;        # DB where baseband data is read 
 our $proc_db_key : shared;        # DADA processing file for dspsr
 
 #
@@ -60,7 +62,7 @@ $processor_pid = 0;
 $recv_db = "";
 $proc_db = "";
 $proc_db_key = "";
-
+$baseband_db = "";
 
 my $result = 0;
 $result = main();
@@ -83,6 +85,7 @@ sub main() {
   $log_port          = $cfg{"SERVER_SYS_LOG_PORT"};
 
   my $control_thread = 0;
+  my $baseband_thread = 0;
   my $prev_utc_start = "";
   my $prev_obs_offset = "";
   my $utc_start = "";
@@ -129,7 +132,14 @@ sub main() {
   my %h = ();
   my $tdec = 1;
 
-  $recv_db = lc($cfg{"RECEIVING_DATA_BLOCK"});
+  $recv_db     = lc($cfg{"RECEIVING_DATA_BLOCK"});
+  $proc_db     = lc($cfg{"PROCESSING_DATA_BLOCK"});
+  $baseband_db = lc($cfg{"BASEBAND_DATA_BLOCK"});
+
+  $proc_db_key = $cfg{"PROCESSING_DB_KEY"};
+
+  # launch a thread to handle recording of baseband data
+  $baseband_thread = threads->new(\&basebandThread);
   
   # Main Loop
   while(!$quit_daemon) 
@@ -149,20 +159,14 @@ sub main() {
       
       $tdec = 1;
       # check if this transfer requires decimation and is 2 or 6
-      if (defined($h{"TDEC"}) && (($h{"TDEC"} == 2) || ($h{"TDEC"} == 6)))
+      if (defined($h{"TDEC"}) && (($h{"TDEC"} == 2)))
       {
         $tdec = $h{"TDEC"};
-        $proc_db = lc($cfg{"PROCESSING_DATA_BLOCK"});
-        $proc_db_key = $cfg{"PROCESSING_DB_KEY"};
-        msg(2, "INFO", "main: decimationThread(".$tdec.")");
-        $decimation_thread = threads->new(\&decimationThread, $tdec);
-        sleep(1);
       }
-      else
-      {
-        $proc_db = lc($cfg{"RECEIVING_DATA_BLOCK"});
-        $proc_db_key = $cfg{"RECEIVING_DB_KEY"};
-      }
+
+      msg(2, "INFO", "main: decimationThread(".$tdec.")");
+      $decimation_thread = threads->new(\&decimationThread, $tdec);
+      sleep(1);
 
       # continue to run the processing thread until this observation is complete
       $obs_end = 0;
@@ -191,16 +195,13 @@ sub main() {
         $prev_obs_offset = $obs_offset;
       }
 
-      if ($decimation_thread)
-      { 
-        msg(2, "INFO", "main: joining decimation_thread");
-        $result = $decimation_thread->join();
-        msg(2, "INFO", "main: decimation_thread joined");
-        $decimation_thread = 0;
-        if ($result ne "ok") 
-        {
-          msg(0, "WARN", "main: decimation_thread failed");
-        }
+      msg(2, "INFO", "main: joining decimation_thread");
+      $result = $decimation_thread->join();
+      msg(2, "INFO", "main: decimation_thread joined");
+      $decimation_thread = 0;
+      if ($result ne "ok") 
+      {
+        msg(0, "WARN", "main: decimation_thread failed");
       }
     }
     else
@@ -215,6 +216,8 @@ sub main() {
   msg(2, "INFO", "main: joining threads");
   $control_thread->join();
   msg(2, "INFO", "main: controlThread joined");
+  $baseband_thread->join();
+  msg(2, "INFO", "main: basebandThread joined");
 
   msg(0, "INFO", "STOPPING SCRIPT");
   Dada::nexusLogClose($log_sock);
@@ -237,8 +240,9 @@ sub decimationThread($)
   my $result = "";
   my $response = "";
 
-  $cmd = "caspsr_dbdecidb -S -z -t ".$tdec." ".$recv_db." ".$proc_db;
-  $cmd .= " 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/".$client_logger." deci";
+  $cmd = "caspsr_dbdecidb -S -z -t ".$tdec." -p ".$cfg{"CLIENT_DECIDB_PORT"}.
+         " ".$recv_db." ".$proc_db." ".$baseband_db.
+         " 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/".$client_logger." deci";
   
   msg(2, "INFO", "decimationThread: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
@@ -248,6 +252,77 @@ sub decimationThread($)
   }
 
   return $result;
+}
+
+###############################################################################
+#
+# Baseband recording thread, is always active and waits on the aux datablock
+# fada for any observations to process
+#
+sub basebandThread()
+{
+  my $cmd = "";
+  my $result = "";
+  my $response = "";
+
+  # determine the port number for the remote connection
+  my $localhost = Dada::getHostMachineName();
+  my $i = 0;
+  my $port = 0;
+  for ($i=0; $i<$cfg{"NUM_PWC"}; $i++)
+  {
+    if ($cfg{"PWC_".$i} eq $localhost)
+    {
+      $port = $cfg{"BASEBAND_RAID_PORT_".$i};
+    }
+  }
+
+  if ($port eq 0)
+  {
+    msg(0, "ERROR", "basebandThread: could not determine port number");
+    $quit_daemon = 1;
+  }
+
+  msg(2, "INFO", "basebandThread: running on port ".$port);
+
+  while (!$quit_daemon)
+  {
+    # Get the next header from the baseband data block
+    $cmd = "dada_header -k ".$baseband_db;
+    msg(2, "INFO", "basebandThread: running ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    msg(2, "INFO", "basebandThread: ".$cmd." returned");
+
+    # check that this returned ok
+    if ($result eq "ok")
+    {
+      # transfer just 1 8s XFER to raid0-ib
+      $cmd = "dada_dbib -s -c 16384 -k fada -p ".$port." raid0-ib";
+      $cmd .= " 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/".$client_logger." dbib";
+
+      #$cmd = "dada_dbnull -s -k ".$baseband_db." ".
+      #       " 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/".$client_logger." dbib";
+
+      msg(2, "INFO", "basebandThread: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      msg(2, "INFO", "basebandThread: ".$result." ".$response);
+      if ($result ne "ok") {
+        msg(0, "ERROR", "basebandThread: ".$cmd." failed:  ".$response);
+      }
+    }
+    else
+    {
+      if (!$quit_daemon) 
+      {
+        msg(0, "WARN", "basebandThread: ".$cmd." failed");
+        sleep 1;
+      }
+    }
+  }
+
+  msg(2, "INFO", "basebandThread: exiting");
+
+  return 0;
 }
 
 ###############################################################################
@@ -408,14 +483,19 @@ sub process($$)
 
     msg(2, "INFO", "process: ".$cmd);
 
-    msg(1, "INFO", "START: ".$binary);
+    msg(1, "INFO", "START: ".$proc_cmd);
     system($cmd);
     my $rval = $? >> 8;
-    msg(1, "INFO", "END  : ".$binary." returned ".$rval);
+    msg(1, "INFO", "END  : ".$proc_cmd." returned ".$rval);
 
     if ((!$quit_daemon) && ($rval != 0))
     {
       msg(0, "WARN", $binary." failed, discarding observation");
+
+      $cmd = "dada_dbscrubber -k ".$proc_db;
+      msg(0, "INFO", "process: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      msg(0, "INFO", "process: ".$result." ".$response);
     } 
     else 
     {
