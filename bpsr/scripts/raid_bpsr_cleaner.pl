@@ -2,8 +2,7 @@
 
 ###############################################################################
 #
-# Deletes observations that have been archived to the parkes tape based
-# on the required conditions
+# Deletes archived BPSR P630 observations that are > 1 week old
 #
 
 use lib $ENV{"DADA_ROOT"}."/bin";
@@ -18,8 +17,9 @@ use Dada;
 #
 # Constants
 #
-use constant ROOT_DIR         => "/lfs/raid0/bpsr";
-use constant REQUIRED_HOST    => "caspsr-raid0";
+use constant DATA_DIR         => "/lfs/raid0/bpsr";
+use constant META_DIR         => "/lfs/data0/bpsr";
+use constant REQUIRED_HOST    => "raid0";
 use constant REQUIRED_USER    => "bpsr";
 
 
@@ -50,22 +50,20 @@ $| = 1;
 
 # Main
 {
-  my $log_file   = ROOT_DIR."/logs/".$daemon_name.".log";
-  my $pid_file   = ROOT_DIR."/control/".$daemon_name.".pid";
-  my $quit_file  = ROOT_DIR."/control/".$daemon_name.".quit";
+  my $log_file   = META_DIR."/logs/".$daemon_name.".log";
+  my $pid_file   = META_DIR."/control/".$daemon_name.".pid";
+  my $quit_file  = META_DIR."/control/".$daemon_name.".quit";
 
-  my $src_path   = ROOT_DIR."/parkes/on_tape";
-  my $dst_path   = ROOT_DIR."/archived/";
+  my $src_path   = DATA_DIR."/archived";
 
-  $warn          = ROOT_DIR."/logs/".$daemon_name.".warn";
-  $error         = ROOT_DIR."/logs/".$daemon_name.".error";
+  $warn          = META_DIR."/logs/".$daemon_name.".warn";
+  $error         = META_DIR."/logs/".$daemon_name.".error";
 
   my $control_thread = 0;
 
   my $line = "";
   my $obs = "";
   my $pid = "";
-  my $source = "";
   my $beam = "";
 
   my $cmd = "";
@@ -73,12 +71,14 @@ $| = 1;
   my $response = "";
   my @finished = ();
   my @bits = ();
+  my $source = "";
   my %sources = ();
-
-  my $i = 0;
   my $obs_start_file = "";
-  my $n_beam = 0;
-  my $n_transferred = 0;
+  my $i = 0;
+  my $path = "";
+  my $mtime = 0;
+  my $curr_time = 0;
+  my $delete_obs = 0;
 
   # quick sanity check
   ($result, $response) = good($quit_file);
@@ -109,7 +109,7 @@ $| = 1;
     @finished = ();
 
     # look for all obs/beams in the src_path
-    $cmd = "find ".$src_path." -mindepth 3 -maxdepth 3 -type d -printf '\%h/\%f\n' | sort";
+    $cmd = "find ".$src_path." -mindepth 3 -maxdepth 3 -type d -printf '\%h/\%f \%T@\n' | sort";
     Dada::logMsg(2, $dl, "main: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     Dada::logMsg(3, $dl, "main: ".$result." ".$response);
@@ -120,12 +120,23 @@ $| = 1;
     else
     {
       @finished = split(/\n/, $response);
-      Dada::logMsg(2, $dl, "main: found ".($#finished+1)." on_tape observations");
+      Dada::logMsg(2, $dl, "main: found ".($#finished+1)." archived observations");
 
       for ($i=0; (!$quit_daemon && $i<=$#finished); $i++)
-      {  
+      {
         $line = $finished[$i]; 
-        @bits = split(/\//, $line);
+
+        # extract path and time
+        @bits = split(/ /, $line, 2);
+        if ($#bits != 1) 
+        {
+          Dada::logMsgWarn($warn, "main: not enough components in path");
+          next;
+        }
+        $path  = $bits[0];
+        $mtime = int($bits[1]);
+
+        @bits = split(/\//, $path);
         if ($#bits < 3)
         {
           Dada::logMsgWarn($warn, "main: not enough components in path");
@@ -136,15 +147,12 @@ $| = 1;
         $obs  = $bits[$#bits-1];
         $beam = $bits[$#bits];
 
-        Dada::logMsg(2, $dl, "main: processing ".$pid."/".$obs."/".$beam);
-
-        if (exists($sources{$obs})) 
+        if (exists($sources{$obs}))
         {
           $source = $sources{$obs};
         }
         else
         {
-
           # try to find and obs.start file
           $cmd = "find ".$src_path."/".$pid."/".$obs." -mindepth 2 -maxdepth 2 -type f -name 'obs.start' | head -n 1";
           Dada::logMsg(3, $dl, "main: ".$cmd);
@@ -170,10 +178,35 @@ $| = 1;
           $source = $response;
           $sources{$obs} = $source;
         }
-  
-        # if this is a P630 observation and the source name starts with G, its a survey
-        # pointing and the beam will just be deleted
-        if (($pid eq "P630") && ($source =~ m/^G/))
+
+        # get the current time
+        $curr_time = time;
+        $delete_obs = 0;
+
+        Dada::logMsg(2, $dl, "main: testing ".$pid."/".$obs."/".$beam." source=".$source." age=".($curr_time - $mtime)." s");
+
+        # If P630 + Survey Pointing + > 3 days old, delete
+        if (($pid eq "P630") && ($source =~ m/^G/) && ($curr_time > ($mtime + (3*24*60*60))))
+        {
+          $delete_obs = 1;
+        }
+
+        # If P630 + > 7 days old, delete
+        if( ($pid eq "P630") && ($curr_time > ($mtime + (7*24*60*60))))
+        {
+          $delete_obs = 1;
+        }
+
+        # If special control file exists, delete!
+        if (-f  $src_path."/".$pid."/".$obs."/".$beam."/raid.delete") 
+        {
+          $delete_obs = 1;
+        }
+
+        Dada::logMsg(2, $dl, "main: processing ".$pid."/".$obs."/".$beam." delete_obs=".$delete_obs);
+
+        # if this is a P630 observation and more than 1 week old, delete it
+        if ($delete_obs)
         {
           Dada::logMsg(1, $dl, $pid."/".$obs."/".$beam." deleted [".$source."]");
 
@@ -182,69 +215,18 @@ $| = 1;
           ($result, $response) = Dada::mySystem($cmd);
           Dada::logMsg(3, $dl, "main: ".$result." ".$response);
 
-        }
-        else
-        {
-          Dada::logMsg(1, $dl, $pid."/".$obs."/".$beam." archived [".$source."]");
-
-          if (! -d  $dst_path."/".$pid )
+          # check if the src_path/pid/obs directory is empty
+          $cmd = "find ".$src_path."/".$pid."/".$obs." -mindepth 1 -maxdepth 1 -type d -name '??' | wc -l";
+          Dada::logMsg(2, $dl, "main: ".$cmd);
+          ($result, $response) = Dada::mySystem($cmd);
+          Dada::logMsg(3, $dl, "main: ".$result." ".$response);
+          if (($result eq "ok") && ($response eq "0")) 
           {
-            $cmd = "mkdir -m 0755 ".$dst_path."/".$pid;
-            Dada::logMsg(3, $dl, "main: ".$cmd);
+            $cmd = "rmdir ".$src_path."/".$pid."/".$obs;
+            Dada::logMsg(2, $dl, "main: ".$cmd);
             ($result, $response) = Dada::mySystem($cmd);
             Dada::logMsg(3, $dl, "main: ".$result." ".$response);
-            if ($result ne "ok")
-            {
-              Dada::logMsgWarn($warn, "could not create dst/pid dir [".$dst_path."/".$pid."]");
-              next;
-            }
           }
-
-          if (! -d  $dst_path."/".$pid."/".$obs ) 
-          {
-            $cmd = "mkdir -m 0755 ".$dst_path."/".$pid."/".$obs;
-            Dada::logMsg(3, $dl, "main: ".$cmd);
-            ($result, $response) = Dada::mySystem($cmd);
-            Dada::logMsg(3, $dl, "main: ".$result." ".$response);
-            if ($result ne "ok")
-            {
-              Dada::logMsgWarn($warn, "could not create dst/pid/obs dir [".$dst_path."/".$pid."/".$obs."]");
-              next;
-            }
-          }
-
-          # remove any existing flags 
-          $cmd = "rm -f ".$src_path."/".$pid."/".$obs."/".$beam."/xfer.complete ".
-                          $src_path."/".$pid."/".$obs."/".$beam."/on.tape.parkes";
-          Dada::logMsg(2, $dl, "main: ".$cmd);
-          ($result, $response) = Dada::mySystem($cmd);
-          Dada::logMsg(3, $dl, "main: ".$result." ".$response);
-
-          $cmd = "mv ".$src_path."/".$pid."/".$obs."/".$beam." ".$dst_path."/".$pid."/".$obs."/";
-          Dada::logMsg(2, $dl, "main: ".$cmd);
-          ($result, $response) = Dada::mySystem($cmd);
-          Dada::logMsg(3, $dl, "main: ".$result." ".$response);
-          if ($result ne "ok")
-          {
-            Dada::logMsgWarn($warn, "failed to move beam ".$beam." to ".$dst_path."/".$pid."/".$obs."/");
-          }
-          else
-          {
-            Dada::logMsg(2, $dl, $pid."/".$obs."/".$beam." parkes/on_tape -> archived");
-          }
-        }
-
-        # check if the src_path/pid/obs directory is empty
-        $cmd = "find ".$src_path."/".$pid."/".$obs." -mindepth 1 -maxdepth 1 -type d -name '??' | wc -l";
-        Dada::logMsg(2, $dl, "main: ".$cmd);
-        ($result, $response) = Dada::mySystem($cmd);
-        Dada::logMsg(3, $dl, "main: ".$result." ".$response);
-        if (($result eq "ok") && ($response eq "0")) 
-        {
-          $cmd = "rmdir ".$src_path."/".$pid."/".$obs;
-          Dada::logMsg(2, $dl, "main: ".$cmd);
-          ($result, $response) = Dada::mySystem($cmd);
-          Dada::logMsg(3, $dl, "main: ".$result." ".$response);
         }
         #sleep(1); 
       }
