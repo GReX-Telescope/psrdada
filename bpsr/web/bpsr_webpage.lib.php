@@ -6,7 +6,7 @@ class bpsr_webpage
 {
 
   /* array of css pages requried */
-  var $css = array("bpsr.css");
+  var $css = array("/bpsr/bpsr.css");
   var $ejs = array();
   var $title = "BPSR";
   var $callback_freq = 4000;
