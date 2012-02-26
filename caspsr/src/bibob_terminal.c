@@ -67,7 +67,7 @@ int main (int argc, char** argv)
 
   r = bibob_set_host(bibob, hostname, port);
 
-  r= bibob_open(bibob);
+  r = bibob_open(bibob);
 
   unsigned done = 0;
   char command[100];
