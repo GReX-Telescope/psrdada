@@ -118,6 +118,14 @@ sub setupClientType()
         }
       }
     }
+
+    # see if we are a RAID server 
+    if (!$found && (($Dada::client_master_control::host eq "raid0") ||
+                     $Dada::client_master_control::host eq "caspsr-raid0"))
+    {
+      $found = 1;
+      $Dada::client_master_control::daemon_prefix = "raid";
+    }
   }
 
   return $found;
