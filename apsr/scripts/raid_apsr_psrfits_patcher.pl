@@ -20,8 +20,9 @@ use threads::shared;
 #
 # Constants
 #
-use constant PROCESSING_HOST  => "caspsr-raid0";
-use constant ROOT_DIR         => "/lfs/raid0/apsr";
+use constant PROCESSING_HOST  => "raid0";
+use constant DATA_DIR         => "/lfs/raid0/apsr";
+use constant META_DIR         => "/lfs/data0/apsr";
 
 
 #
@@ -48,20 +49,20 @@ our $error : shared;
 $dl = 1; 
 $quit_daemon = 0;
 $daemon_name = Dada::daemonBaseName(basename($0));
-$src_path = ROOT_DIR."/psrfits/unpatched";
-$dst_path = ROOT_DIR."/atnf/send";
-$err_path = ROOT_DIR."/psrfits/fail";
+$src_path = DATA_DIR."/psrfits/unpatched";
+$dst_path = DATA_DIR."/atnf/send";
+$err_path = DATA_DIR."/psrfits/fail_patch";
 
-$warn     = ROOT_DIR."/logs/".$daemon_name.".warn";
-$error    = ROOT_DIR."/logs/".$daemon_name.".error";
+$warn     = META_DIR."/logs/".$daemon_name.".warn";
+$error    = META_DIR."/logs/".$daemon_name.".error";
 
 #
 # Main
 #
 {
-  my $log_file = ROOT_DIR."/logs/".$daemon_name.".log";
-  my $pid_file = ROOT_DIR."/control/".$daemon_name.".pid";
-  my $quit_file = ROOT_DIR."/control/".$daemon_name.".quit";
+  my $log_file = META_DIR."/logs/".$daemon_name.".log";
+  my $pid_file = META_DIR."/control/".$daemon_name.".pid";
+  my $quit_file = META_DIR."/control/".$daemon_name.".quit";
 
   my $control_thread = 0;
 
@@ -150,8 +151,7 @@ $error    = ROOT_DIR."/logs/".$daemon_name.".error";
     }
     else
     { 
-      Dada::logMsg(1, $dl ,"main: failed to patch ".$pid."/".$src."/".$obs.": ".$response);
-      Dada::logMsg(0, $dl , $pid."/".$src."/".$obs." psrfits/unpatched -> psrfits/fail");
+      Dada::logMsg(0, $dl , $pid."/".$src."/".$obs." psrfits/unpatched -> psrfits/fail_patch [".$response."]");
       ($result, $response) = moveObs($src_path, $err_path, $pid, $src, $obs);
     }
   }
@@ -192,8 +192,8 @@ sub patchObservation($$$)
   ($result, $response, %dfb3) = getDFB3PSRFITSHeader($p, $s, $u);
   if ($result ne "ok")
   {
-    Dada::logMsg(0, $dl, "patchObservation: getDFB3PSRFITSHeader failed: ".$response);
-    return ("fail", "could not get header from DFB3 file");
+    Dada::logMsg(2, $dl, "patchObservation: getDFB3PSRFITSHeader failed: ".$response);
+    return ("fail", $response);
   }
   @keys = keys (%dfb3);
   if ($#keys != 10)
@@ -204,6 +204,7 @@ sub patchObservation($$$)
   $h{"rm"}           = $dfb3{"rm"};
   $h{"obs:observer"} = "'".$dfb3{"obs:observer"}."'";
   $h{"obs:observer"} =~ s/,/ /g;
+  $h{"obs:observer"} =~ s/;//g;
   $h{"itrf:ant_x"}   = $dfb3{"itrf:ant_x"};
   $h{"itrf:ant_y"}   = $dfb3{"itrf:ant_y"};
   $h{"itrf:ant_z"}   = $dfb3{"itrf:ant_z"};
@@ -300,7 +301,8 @@ sub getDFB3PSRFITSHeader($$$)
   my $parkes_path = "/nfs/PKCCC3_1";
   my $epping_user = "pulsar";
   my $epping_host = "herschel.atnf.csiro.au";
-  my $epping_path = "/u/kho018/Projects/fix_apsr_data";
+  #my $epping_path = "/u/kho018/Projects/fix_apsr_data";
+  my $epping_path = "/pulsar/archive21/dfb3_file_listing";
   my $max_time_diff = 60; # seconds difference between APSR and DFB3 start times
   my %header = ();
 
@@ -333,7 +335,8 @@ sub getDFB3PSRFITSHeader($$$)
   # If the ls command failed or didn't find any archives, try the same command at epping
   if (($rval != 0) || ($response eq "") || ($response =~ m/No such file or directory/))
   {
-    $cmd = "grep -h \"".$grep_string."\" dfb4_files_09_sorted.lis dfb5_files_sorted.lis | awk '{print \$1}'";
+    #$cmd = "grep -h \"".$grep_string."\" dfb4_files_09_sorted.lis dfb5_files_sorted.lis dfb3.lis.2012-01-23-13_52_47 | awk '{print \$1}'";
+    $cmd = "grep -h \"".$grep_string."\" latest.lis | awk '{print \$1}'";
     Dada::logMsg(2, $dl, "getDFB3PSRFITSHeader: ".$epping_user."@".$epping_host.":".$epping_path.";".$cmd);
     ($result, $rval, $response) = Dada::remoteSshCommand($epping_user, $epping_host, $cmd, $epping_path);
     Dada::logMsg(2, $dl, "getDFB3PSRFITSHeader: ".$result." ".$rval." ".$response);
@@ -344,8 +347,8 @@ sub getDFB3PSRFITSHeader($$$)
     }
     if (($rval != 0) || ($response eq ""))
     {
-      Dada::logMsg(0, $dl, "getDFB3PSRFITSHeader: could not find matching DFB3 archive");
-      return ("fail", "could not find DFB3 archive", %header);
+      Dada::logMsg(2, $dl, "getDFB3PSRFITSHeader: could not find matching DFB3 archive with \"".$grep_string."\"");
+      return ("fail", "no archive at epping", %header);
     }
     else
     {
@@ -385,6 +388,11 @@ sub getDFB3PSRFITSHeader($$$)
     }
   }
 
+  if ($sister_file eq "")
+  {
+    return ("fail", "no archive within ".$max_time_diff." s");
+  }
+
   $cmd = "psredit ".$sister_file." | grep -E '^rm |itrf:ant_x|itrf:ant_y|itrf:ant_z|rcvr:hand|rcvr:sa|rcvr:rph|ext:bpa|ext:bmaj|ext:bmin|obs:observer'";
 
   Dada::logMsg(2, $dl, "getDFB3PSRFITSHeader: ".$remote_user."@".$remote_host.": ".$cmd);
@@ -406,6 +414,7 @@ sub getDFB3PSRFITSHeader($$$)
   }
   else
   {
+    Dada::logMsg(0, $dl, "getDFB3PSRFITSHeader: ".$cmd);
     Dada::logMsg(0, $dl, "getDFB3PSRFITSHeader: psredit header extraction failed: ".$response);
     return ("fail", "could not extract header parameters from ".$sister_file, %header);
   }
