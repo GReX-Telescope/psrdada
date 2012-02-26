@@ -22,10 +22,7 @@ class raid_archival extends bpsr_webpage
     $this->cfg = $this->inst->config;
     $this->title = "BPSR | RAID Archival Pipeline";
 
-    $this->callback_freq = 10000; // 10 seconds
-    array_push($this->ejs, "/js/prototype.js");
-    array_push($this->ejs, "/js/jsProgressBarHandler.js");
-
+    $this->callback_freq = 4000; // 4 seconds
   }
 
   function javaScriptCallback()
@@ -41,30 +38,30 @@ class raid_archival extends bpsr_webpage
         vertical-align: top;
         text-align: center;
       }
-      table.archival {
-        border-collapse: collapse;
+      table.usage {
       }
-      table.archival th {
+      table.usage th {
         padding: 0px 5px 0px 0px; 
-        width: 40px;
-        text-align: right;
+        text-align: left;
         font-weight: normal;
       }
-      table.archival td {
+      table.usage td {
         padding: 0px 0px 0px 5px; 
-        padding: 0px; 
-        width: 40px;
+        text-align: right;
       }
-      div.list {
+
+      .list {
+        width: 160px;
         font-family: monospace;
+        text-align: center;
       }
       
     </style>
 
     <script type='text/javascript'>
 
-      var du_rates_report = 20;
-      var du_rates_count  = 20;
+      var du_rates_report = 80;
+      var du_rates_count  = 80;
 
       function handle_disk_usage_request(du_http_request) 
       {
@@ -95,11 +92,13 @@ class raid_archival extends bpsr_webpage
             {
               div = document.getElementById("archived_list");
             }
-            list = "";
+            list = "<center><table class='usage'>";
             for (j=1; j<parts.length; j++)
             {
-              list += parts[j] + "<br/>";
+              bits = parts[j].split(" ", 2);
+              list += "<tr><th>" + bits[0] + "</th><td> " + bits[1] + "</td></tr>";
             }
+            list += "</table></center>";
             div.innerHTML = list;
           }
         }
@@ -201,55 +200,30 @@ class raid_archival extends bpsr_webpage
       </tr>
 
       <tr>
-        <td>
+        <td width='80px'>
           <div><img src='images/arrow_right.png'></div>
           <div id='bpsr_rate'></div>
         </td>
 
-        <td>
-          <div id='finished_list' class='list'>
-<?
-      for ($i=0; $i<count($finished); $i++)
-      {
-        list ($pid, $size) = split(" ", $finished[$i]);
-        echo $pid."&nbsp;&nbsp;".$size."<br/>\n";
-      }
-?>
-          </div> 
+        <td id='finished_list'>
         </td>
 
-        <td>
-          <div><img src='images/arrow_right.png'></div>
-          <div id='swin_rate'></div>
+        <td width='80px'>
+          <center>
+            <div><img src='images/arrow_right.png'></div>
+            <div id='swin_rate'></div>
+          </center>
         </td>
 
-        <td>
-          <div id='archive_list' class='list'>
-<?
-      for ($i=0; $i<count($archive); $i++)
-      {
-        list ($pid, $size) = split(" ", $archive[$i]);
-        echo $pid."&nbsp;&nbsp;".$size."<br/>\n";
-      }
-?>
-          </div>
+        <td id='archive_list'>
         </td>
 
-        <td>
+        <td width='80px'>
           <div><img src='images/arrow_right.png'></div>
           <div id='prks_rate'></div>
         </td>
 
-        <td>
-          <div id='archived_list' class='list'>
-<?
-      for ($i=0; $i<count($archived); $i++)
-      {
-        list ($pid, $size) = split(" ", $archived[$i]);
-        echo $pid."&nbsp;&nbsp;".$size."<br/>\n";
-      }
-?>
-          </div>
+        <td id='archived_list'>
         </td>
       </tr>
     </table>
@@ -267,7 +241,7 @@ class raid_archival extends bpsr_webpage
     {
 
       # get information about the network interfaces
-      $cmd = "sar -n DEV | grep Average";
+      $cmd = "sar -n DEV 1 1 | grep Average";
       $output = array();
       exec($cmd, $output);
       $results = "";
@@ -276,8 +250,8 @@ class raid_archival extends bpsr_webpage
       {
         list ($junk, $dev, $rxpck, $txpck, $rxbyt, $txbyt, $rxcmp, $txcmp, $rxmcst) = split(" +", $line);
 
-        $rx_mb =  sprintf("%2.2f", ($rxbyt/1045876));
-        $tx_mb =  sprintf("%2.2f", ($txbyt/1045876));
+        $rx_mb =  sprintf("%5.2f", ($rxbyt/1045876));
+        $tx_mb =  sprintf("%5.2f", ($txbyt/1045876));
 
         // swinburne VLAN
         if ($dev == "eth1")
@@ -285,10 +259,15 @@ class raid_archival extends bpsr_webpage
           $results .= "SWIN:".$rx_mb.":".$tx_mb."\n";
         }
 
-        // PRKS / BPSR Network
-        if ($dev == "eth3")
+        // PRKS Network
+        if ($dev == "eth3") 
         {
           $results .= "PRKS:".$rx_mb.":".$tx_mb."\n";
+        }
+
+        // BPSR Network
+        if ($dev == "eth3")
+        {
           $results .= "BPSR:".$rx_mb.":".$tx_mb."\n";
         }
       }
@@ -300,44 +279,65 @@ class raid_archival extends bpsr_webpage
       $lines = array();
 
       # get a list of finished obseravations
-      $cmd = "cd /lfs/raid0/bpsr/finished; du -sh P* | awk '{print $2\" \"$1}'";
+      $cmd = "cd /lfs/raid0/bpsr; du -sb finished/P* swin/send/P* | awk -F/ '{print \$1\" \"\$(NF)}' | awk '{print \$3\" \"\$1}'";
       exec($cmd, $lines);
-
-      $results = "FINISHED";
+      $html = "FINISHED";
+      $results = array();
       for ($i=0; $i<count($lines); $i++)
       {
         list ($pid, $size) = split(" ", $lines[$i]);
-        $results .= ":".$pid."&nbsp;&nbsp;".$size;
+        if (!array_key_exists($pid, $results)) 
+          $results[$pid] = 0;
+        $results[$pid] += $size;
       }
-      $results .= "\n";
-
+      $keys = array_keys($results);
+      for ($i=0; $i<count($keys); $i++)
+      {
+        $html .= ":".$keys[$i]." ".sprintf("%0.2f",($results[$keys[$i]]/1073741824))." GB";
+      }
+      $html .= "\n";
 
       # get a list of waiting for parkes archiving
       $lines = array();
-      $cmd = "cd /lfs/raid0/bpsr/parkes/archive; du -sh P* | awk '{print $2\" \"$1}'";
+      $results = array();
+      $cmd = "cd /lfs/raid0/bpsr/parkes/archive; du -sb P* | awk '{print $2\" \"$1}'";
       exec($cmd, $lines);
-      $results .= "ARCHIVE";
       for ($i=0; $i<count($lines); $i++)
       {
         list ($pid, $size) = split(" ", $lines[$i]);
-        $results .= ":".$pid."&nbsp;&nbsp;".$size;
+        if (!array_key_exists($pid, $results))
+          $results[$pid] = 0;
+        $results[$pid] += $size;
       }
-      $results .= "\n";
+      $html .= "ARCHIVE";
+      $keys = array_keys($results);
+      for ($i=0; $i<count($keys); $i++)
+      {
+        $html .= ":".$keys[$i]." ".sprintf("%0.2f",($results[$keys[$i]]/1073741824))." GB";
+      }
+      $html .= "\n";
 
       # get a list of PIDs that have been archived
       $lines = array();
-      $cmd = "cd /lfs/raid0/bpsr/archived; du -sh P* | awk '{print $2\" \"$1}'";
+      $results = array();
+      $cmd = "cd /lfs/raid0/bpsr/archived; du -sb P* | awk '{print $2\" \"$1}'";
       exec($cmd, $lines);
-
-      $results .= "ARCHIVED";
       for ($i=0; $i<count($lines); $i++)
       {
         list ($pid, $size) = split(" ", $lines[$i]);
-        $results .= ":".$pid."&nbsp;&nbsp;".$size;
+        if (!array_key_exists($pid, $results))
+          $results[$pid] = 0;
+        $results[$pid] += $size;
       }
-      $results .= "\n";
+      $html .= "ARCHIVED";
+      $keys = array_keys($results);
+      for ($i=0; $i<count($keys); $i++)
+      {
+        $html .= ":".$keys[$i]." ".sprintf("%0.2f",($results[$keys[$i]]/1073741824))." GB";
+      }
+      $html .= "\n";
 
-      echo $results;
+      echo $html;
 
     }
   }
