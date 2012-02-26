@@ -554,6 +554,8 @@ int caspsr_pwc_ibdb_stop (dada_pwc_main_t* pwcm)
     multilog (pwcm->log, LOG_INFO, "stop: ib_disconnet()\n");
   for (i=0; i<ibdb->n_distrib; i++)
   {
+    if (ibdb->verbose > 1)
+      multilog (pwcm->log, LOG_INFO, "stop: ib_disconnect[%d]\n", i);
     if (dada_ib_disconnect(ibdb->ib_cms[i]) < 0)
     {
       multilog(ibdb->log, LOG_ERR, "dada_ib_disconnect failed\n");
