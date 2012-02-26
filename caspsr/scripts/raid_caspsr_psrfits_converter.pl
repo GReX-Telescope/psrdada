@@ -20,8 +20,9 @@ use threads::shared;
 #
 # Constants
 #
-use constant ROOT_DIR       => "/lfs/raid0/caspsr";
-use constant REQUIRED_HOST  => "caspsr-raid0";
+use constant DATA_DIR       => "/lfs/raid0/caspsr";
+use constant META_DIR       => "/lfs/data0/caspsr";
+use constant REQUIRED_HOST  => "raid0";
 use constant REQUIRED_USER  => "caspsr";
 use constant TSCRUNCH_SECONDS => 32;
 
@@ -53,14 +54,14 @@ our $error : shared;
 $dl = 1; 
 $quit_daemon = 0;
 $daemon_name = Dada::daemonBaseName(basename($0));
-$src_path = ROOT_DIR."/swin/sent";
-$dst_path = ROOT_DIR."/atnf/send";
-$tmp_path = ROOT_DIR."/psrfits/temp";
-$err_path = ROOT_DIR."/psrfits/fail";
-$fin_path = ROOT_DIR."/archived";
+$src_path = DATA_DIR."/swin/sent";
+$dst_path = DATA_DIR."/atnf/send";
+$tmp_path = DATA_DIR."/psrfits/temp";
+$err_path = DATA_DIR."/psrfits/fail";
+$fin_path = DATA_DIR."/archived";
 
-$warn     = ROOT_DIR."/logs/".$daemon_name.".warn";
-$error    = ROOT_DIR."/logs/".$daemon_name.".error";
+$warn     = META_DIR."/logs/".$daemon_name.".warn";
+$error    = META_DIR."/logs/".$daemon_name.".error";
 
 #
 # check the command line arguments
@@ -155,9 +156,9 @@ sub processLoop()
   
   my $control_thread = 0;
 
-  my $log_file = ROOT_DIR."/logs/".$daemon_name.".log";
-  my $pid_file = ROOT_DIR."/control/".$daemon_name.".pid";
-  my $quit_file = ROOT_DIR."/control/".$daemon_name.".quit";
+  my $log_file = META_DIR."/logs/".$daemon_name.".log";
+  my $pid_file = META_DIR."/control/".$daemon_name.".pid";
+  my $quit_file = META_DIR."/control/".$daemon_name.".quit";
 
   my $cmd = "";
   my $result = "";
@@ -527,8 +528,9 @@ sub fixPSRFITSHeader($$$$)
   # These are considered constants
   $h{"site"}         = "PARKES";
   $h{"be:nrcvr"}     = "2";
-  $h{"be:phase"}     = "-1";  # From DSB header parameter?
+  $h{"be:phase"}     = "+1";  # From DSB header parameter?
   $h{"be:tcycle"}    = "8";
+  $h{"be:dcc"}       = "0";
   $h{"ext:trk_mode"} = "TRACK";
   $h{"sub:nsblk"}    = "1";
 
