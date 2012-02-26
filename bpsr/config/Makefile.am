@@ -6,6 +6,7 @@ dist_data_DATA = bpsr.cfg \
                  bpsr_pwcs.cfg \
                  ibob_default.cfg \
                  ibob.cfg \
+                 roach.cfg \
                  THEDECIMATOR \
                  bpsr.scratch \
                  DSPSR.CAL \
