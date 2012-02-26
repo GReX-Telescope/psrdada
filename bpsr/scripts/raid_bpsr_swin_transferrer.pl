@@ -13,9 +13,12 @@
 #
 # Constants
 #
-use constant BANDWIDTH      => "76800";           # = 75 MB/s 
-use constant ROOT_DIR       => "/lfs/raid0/bpsr";
-use constant REQUIRED_HOST  => "caspsr-raid0";
+use constant BANDWIDTH      => "53248";           # = 52 MB/s 
+#use constant BANDWIDTH      => "66560";           # = 65 MB/s 
+#use constant BANDWIDTH      => "76800";           # = 75 MB/s 
+use constant DATA_DIR       => "/lfs/raid0/bpsr";
+use constant META_DIR       => "/lfs/data0/bpsr";
+use constant REQUIRED_HOST  => "raid0";
 use constant REQUIRED_USER  => "bpsr";
 
 use lib $ENV{"DADA_ROOT"}."/bin";
@@ -33,7 +36,7 @@ use Bpsr;
 #
 sub good($);
 sub getBeamToSend($);
-sub getDest();
+sub getDest($$$$);
 sub transferBeam($$$$$$$);
 sub moveBeam($$$$$);
 
@@ -61,17 +64,17 @@ $quit_daemon = 0;
 $transfer_kill = "";
 
 {
-  $warn  = ROOT_DIR."/logs/".$daemon_name.".warn";
-  $error = ROOT_DIR."/logs/".$daemon_name.".error";
+  $warn  = META_DIR."/logs/".$daemon_name.".warn";
+  $error = META_DIR."/logs/".$daemon_name.".error";
 
-  my $log_file    = ROOT_DIR."/logs/".$daemon_name.".log";
-  my $pid_file    = ROOT_DIR."/control/".$daemon_name.".pid";
-  my $quit_file   = ROOT_DIR."/control/".$daemon_name.".quit";
+  my $log_file    = META_DIR."/logs/".$daemon_name.".log";
+  my $pid_file    = META_DIR."/control/".$daemon_name.".pid";
+  my $quit_file   = META_DIR."/control/".$daemon_name.".quit";
 
-  my $src_path    = ROOT_DIR."/swin/send";
-  my $dst_path    = ROOT_DIR."/parkes/archive";
-  my $otp_path    = ROOT_DIR."/parkes/on_tape";   # for beams already marked on.tape.parkes
-  my $err_path    = ROOT_DIR."/swin/fail";
+  my $src_path    = DATA_DIR."/swin/send";
+  my $dst_path    = DATA_DIR."/parkes/archive";
+  my $otp_path    = DATA_DIR."/parkes/on_tape";   # for beams already marked on.tape.parkes
+  my $err_path    = DATA_DIR."/swin/fail";
 
   my $cmd = "";
   my $result = "";
@@ -87,6 +90,10 @@ $transfer_kill = "";
 
   my $counter = 0;
   my $sleeping = 0;
+
+  my $apsr_user = "dada";
+  my $apsr_host = "apsr-srv0.atnf.csiro.au";
+  my $rval = 0;
 
   # sanity check on whether the module is good to go
   ($result, $response) = good($quit_file);
@@ -130,14 +137,18 @@ $transfer_kill = "";
 
     if ($obs ne "none") 
     {
-      # find a suitable destination disk that has enough space and is not marked as READING
+      # find a suitable destination disk that has enough space and is not marked as [READ|WRIT]ING
       Dada::logMsg(2, $dl, "main: getDest()");
-      ($result, $r_user, $r_host, $r_path) = getDest();
+      ($result, $r_user, $r_host, $r_path) = getDest($src_path, $pid, $obs, $beam);
       Dada::logMsg(2, $dl, "main: getDest() ".$result. " ".$r_user."@".$r_host.":".$r_path);
 
       if ($result ne "ok") 
       {
-        Dada::logMsgWarn($warn, "could not find suitable destination");
+        if (!$sleeping)
+        {
+          Dada::logMsg(1, $dl, "Waiting for destination to become available");
+          $sleeping = 1;
+        }
       }
       else 
       {
@@ -190,11 +201,39 @@ $transfer_kill = "";
             {
               Dada::logMsgWarn($warn, "main: failed to touch ".$dst_path."/".$pid."/".$obs."/".$beam."/xfer.complete: ".$response);
             }
+
+            # touch remote sent.to.parkes file on apsr machines
+            $cmd = "touch ".$cfg{"SERVER_ARCHIVE_DIR"}."/".$obs."/".$beam."/sent.to.parkes";
+            Dada::logMsg(2, $dl, "main: ".$apsr_user."@".$apsr_host." ".$cmd);
+            ($result, $rval, $response) = Dada::remoteSshCommand($apsr_user, $apsr_host, $cmd);
+            Dada::logMsg(3, $dl, "main: ".$result." ".$rval." ".$response);
+            if ($result ne "ok")
+            {
+              Dada::logMsgWarn($warn, "main: ssh failed to ".$apsr_host.": ".$response);
+            }
+            if ($rval != 0)
+            {
+              Dada::logMsgWarn($warn, "main: could not touch ".$obs."/".$beam."/sent.to.parkes. on ".$apsr_host.": ".$response);
+            }
+          }
+
+          # touch remote sent.to.swin file on apsr machines
+          $cmd = "touch ".$cfg{"SERVER_ARCHIVE_DIR"}."/".$obs."/".$beam."/sent.to.swin";
+          Dada::logMsg(2, $dl, "main: ".$apsr_user."@".$apsr_host." ".$cmd);
+          ($result, $rval, $response) = Dada::remoteSshCommand($apsr_user, $apsr_host, $cmd);
+          Dada::logMsg(3, $dl, "main: ".$result." ".$rval." ".$response);
+          if ($result ne "ok")
+          {
+            Dada::logMsgWarn($warn, "main: ssh failed to ".$apsr_host.": ".$response);
+          }
+          if ($rval != 0)
+          {
+            Dada::logMsgWarn($warn, "main: could not touch ".$obs."/".$beam."/sent.to.swin on ".$apsr_host.": ".$response);
           }
         }
 
         # check if this observations directory is now empty
-        $cmd = "find ".$src_path."/".$pid."/".$obs." -mindepth 1 -maxdepth 1 -type d -name '??' | wc -l";
+        $cmd = "find ".$src_path."/".$pid."/".$obs." -mindepth 1 -maxdepth 1 -type d | wc -l";
         Dada::logMsg(2, $dl, "main: ".$cmd);
         ($result, $response) = Dada::mySystem($cmd);
         Dada::logMsg(3, $dl, "main: ".$result." ".$response);
@@ -214,6 +253,10 @@ $transfer_kill = "";
         Dada::logMsg(1, $dl, "Waiting for obs to transfer");
         $sleeping = 1;
       }
+    }
+
+    if ($sleeping)
+    {
       # If we did not transfer, sleep 60
       Dada::logMsg(2, $dl, "Sleeping 60 seconds");
       $counter = 12;
@@ -345,16 +388,9 @@ sub transferBeam($$$$$$$)
   } 
 
   # set the global transfer_kill pkill pattern required to kill this command
-
-  #$transfer_kill = "ssh -x -o BatchMode=yes ".$user."@".$host." \"pkill -f '^rsync bpsr\@136.186.73.173::bpsr_download'\"";
-  # ssh to the remote host and do a "pull" from our pre-configured rsync server on caspsr-raid0
-  #$cmd = "rsync bpsr\@136.186.73.173::bpsr_download/".$pid."/".$obs."/".$beam." ".$path."/archive/".$pid."/".$obs."/ ".$rsync_options;
-  #Dada::logMsg(2, $dl, "transferBeam: ".$user."@".$host." ".$cmd);
-  #($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
-  #Dada::logMsg(3, $dl, "transferBeam: ".$result." ".$response);
+  $transfer_kill = "pkill -f '^rsync ".$s_path."/".$pid."/".$obs."/".$beam."'";
 
   # determine the remote module name for the preconfigured rsync server
-  $transfer_kill = "pkill -f '^rsync ".$s_path."/".$pid."/".$obs."/".$beam."'";
   my ($junk, $prefix, $r_module, $suffix) = split(/\//, $path, 4);
   $cmd = "rsync ".$s_path."/".$pid."/".$obs."/".$beam." ".$user."@".$host."::".$r_module."/bpsr/archive/".$pid."/".$obs."/ ".$rsync_options;
   Dada::logMsg(2, $dl, "transferBeam: ".$cmd);
@@ -455,10 +491,12 @@ sub transferBeam($$$$$$$)
 #
 # check SWIN_DIRs to find an acceptable receiver for the observation
 #
-sub getDest() 
+sub getDest($$$$) 
 {
 
-  Dada::logMsg(3, $dl, "getDest()");
+  my ($src_path, $pid, $obs, $beam) = @_;
+
+  Dada::logMsg(3, $dl, "getDest(".$src_path.", ".$pid.", ".$obs.", ".$beam.")");
 
   my $result = "";
   my $rval = 0;
@@ -474,6 +512,23 @@ sub getDest()
   my $r_host = "none";
   my $r_path = "none";
 
+  my $beam_size = 0;
+  my $junk = "";
+
+  # check how big the beam is [MB]
+  $cmd = "du -s -B 1048576 ".$src_path."/".$pid."/".$obs."/".$beam." | awk '{print \$1}'";
+  Dada::logMsg(3, $dl, "getDest: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, $dl, "getDest: ".$result." ".$response);
+  if ($result ne "ok") 
+  {
+    Dada::logMsgWarn($warn, "getDest: ".$cmd." failed: ".$response);
+    return ("fail", $user, $host, $path);
+  }
+
+  $beam_size = $response;
+  Dada::logMsg(2, $dl, "getDest: beam_size=".$beam_size." MB");
+  
   for ($i=0; ($r_host eq "none" && $i<$cfg{"NUM_SWIN_DIRS"}); $i++)
   {
     ($user, $host, $path) = split(/:/,$cfg{"SWIN_DIR_".$last_dest});
@@ -496,12 +551,17 @@ sub getDest()
 
     # check there is 100 * 1GB free
     if (int($response) < (100*1024)) {
-      Dada::logMsg(1, $dl, "getDest: less than 100 GB remaining on ".$user."@".$host.":".$path);
+      Dada::logMsg(2, $dl, "getDest: less than 100 GB remaining on ".$user."@".$host.":".$path);
       next;
     }
 
-    # check if this is being used for reading
-    $cmd = "ls ".$path."../READING";
+    if (int($beam_size) > int($response)) {
+      Dada::logMsg(2, $dl, "getDest: beam_size [".$beam_size."] > space on ".$user."@".$host.":".$path." [".$response."]");
+      next;
+    }
+
+    # check if this is being used for [READ|WRIT]ING
+    $cmd = "ls ".$path."/../????ING";
     Dada::logMsg(3, $dl, "getDest: ".$user."@".$host.":".$cmd);
     ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
     Dada::logMsg(3, $dl, "getDest: ".$result." ".$rval." ".$response);
@@ -510,15 +570,15 @@ sub getDest()
       next;
     }
 
-    if ($response =~ m/No such file or directory/)
+    if (($response =~ m/No such file or directory/) || ($response =~ m/ls: No match/))
     {
-      Dada::logMsg(3, $dl, "getDest: no READING file existed in ".$path."/../READING");
+      Dada::logMsg(3, $dl, "getDest: no control files in ".$path."/../");
       Dada::logMsg(2, $dl, "getDest: found ".$user."@".$host.":".$path);
       return ("ok", $user, $host, $path);
     }
     else
     {
-      Dada::logMsg(2, $dl, "getDest: READING file existed in ".$path."/../READING, skipping");
+      Dada::logMsg(2, $dl, "getDest: control file existed in ".$path."/../, skipping");
     }
   }
   return ("fail", $user, $host, $path);
