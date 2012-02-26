@@ -6,7 +6,7 @@ PWCC_HOST                 srv0.caspsr.edu.au
 PWCC_PORT                 12345
 
 # Owner of data files produced
-USER                      dada
+USER                      caspsr
 SCRIPTS_DIR               @PSRDADA_INSTALL@/bin
 CONFIG_DIR                @PSRDADA_INSTALL@/share
 WEB_DIR                   @PSRDADA_INSTALL@/web
@@ -22,11 +22,12 @@ VIEWING_DB_KEY            @PSRDADA_INSTALL@/share/caspsr.viewer
 SERVER_HOST               srv0.caspsr.edu.au
 SERVER_ALIASES            caspsr-srv0.atnf.csiro.au srv0.caspsr.edu.au
 SERVER_RESULTS_DIR        /lfs/data0/results/caspsr
+SERVER_OLD_RESULTS_DIR    /lfs/data0/old_results/caspsr
 SERVER_ARCHIVE_DIR        /lfs/data0/archives/caspsr
 SERVER_LOG_DIR            /lfs/data0/caspsr/logs
 SERVER_CONTROL_DIR        @PSRDADA_INSTALL@/control
 SERVER_DAEMONS            caspsr_tcs_interface caspsr_results_manager caspsr_pwc_monitor caspsr_sys_monitor caspsr_demux_monitor caspsr_web_monitor
-SERVER_DAEMONS_PERSIST    caspsr_transfer_manager
+SERVER_DAEMONS_PERSIST    caspsr_transfer_manager caspsr_raid_pipeline caspsr_baseband_controller
 
 # TCS Interface configuration. Note on different interface to server
 TCS_INTERFACE_HOST        caspsr-srv0.atnf.csiro.au
@@ -65,7 +66,7 @@ CLIENT_SCRATCH_DIR        /lfs/data0/caspsr/scratch
 CLIENT_ARCHIVE_DIR        /lfs/data0/caspsr/archives
 CLIENT_RESULTS_DIR        /lfs/data0/caspsr/results
 
-CLIENT_DAEMONS            caspsr_archive_manager caspsr_processing_manager 
+CLIENT_DAEMONS            caspsr_archive_manager caspsr_processing_manager caspsr_disk_cleaner
 DEMUX_DAEMONS             caspsr_demux_manager
 
 CLIENT_UDPDB_PORT         10003     
@@ -74,19 +75,24 @@ CLIENT_PROC_LOAD_PORT     52010
 CLIENT_BG_PROC_PORT       52011
 CLIENT_NUM_CORES          8
 CLIENT_UDPDB_STATS_PORT   52012
+CLIENT_DECIDB_PORT        52013
 
 ################################################################################
 # Data block definitions
 
-DATA_BLOCKS               DADA EADA
+DATA_BLOCKS               DADA EADA FADA
 RECEIVING_DATA_BLOCK      DADA
 PROCESSING_DATA_BLOCK     EADA
+BASEBAND_DATA_BLOCK       FADA
 
 DADA_BLOCK_NBUFS          50
 DADA_BLOCK_BUFSZ          256000000
 
 EADA_BLOCK_NBUFS          10
 EADA_BLOCK_BUFSZ          256000000
+
+FADA_BLOCK_NBUFS          10
+FADA_BLOCK_BUFSZ          256000000
 
 ###############################################################################
 # Demultiplexer configuration
@@ -161,4 +167,34 @@ SRV_0                     srv0
 ARCHIVE_MOD               8
 
 NUM_SWIN_DIRS             1
-SWIN_DIR_0                pulsar:shrek214-gb:/export/shrek214a/caspsr
+SWIN_DIR_0                pulsar:shrek214-gb:/export/shrek214b/caspsr
+
+##############################################################################
+# IBOB / ROACH configuration
+#IBOB_CONTROL_IP           192.168.0.15      # IBOB mode
+#IBOB_CONTROL_PORT         7                 # IBOB mode
+
+IBOB_CONTROL_IP           caspsr-srv0       # ROACH mode
+IBOB_CONTROL_PORT         18732             # ROACH mode
+ROACH_IP                  roach01
+ROACH_PORT                7147
+ROACH_10GbE_SRC_IP_0      192.168.1.250
+ROACH_10GbE_SRC_IP_1      192.168.1.251
+ROACH_10GbE_DEST_IP_0     192.168.1.22
+ROACH_10GbE_DEST_IP_1     192.168.1.23
+ROACH_SYNC_PERIOD         4096
+ROACH_10GbE_DEVNAME_0     ten_GbE
+ROACH_10GbE_DEVNAME_1     ten_GbE1
+ROACH_BOF                 adc_to_10gbe_2011_Oct_18_1156.bof
+
+
+##############################################################################
+# Baseband recording configuration [corresponds to NUM_PWC]
+BASEBAND_RAID_DB_0        ca00
+BASEBAND_RAID_DB_1        ca01
+BASEBAND_RAID_DB_2        ca02
+BASEBAND_RAID_DB_3        ca03
+BASEBAND_RAID_PORT_0      40000
+BASEBAND_RAID_PORT_1      40001
+BASEBAND_RAID_PORT_2      40002
+BASEBAND_RAID_PORT_3      40003
