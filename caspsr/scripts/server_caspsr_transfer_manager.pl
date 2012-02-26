@@ -36,7 +36,8 @@ sub setStatus($);
 sub markState($$$);
 sub getObsToSend();
 sub transferObs($$$);
-sub checkTransferredAndOld();
+sub checkTransferred();
+sub checkDeleted();
 
 #
 # Global variables
@@ -103,11 +104,19 @@ Dada::logMsg(1, $dl, "Starting Transfer Manager");
 
 chdir $cfg{"SERVER_ARCHIVE_DIR"};
 
-Dada::logMsg(2, $dl, "main: checkTransferredAndOld()");
-($result, $response) = checkTransferredAndOld();
-Dada::logMsg(2, $dl, "main: checkTransferredAndOld() ".$result." ".$response);
+Dada::logMsg(2, $dl, "main: checkTransferred()");
+($result, $response) = checkTransferred();
+Dada::logMsg(2, $dl, "main: checkTransferred() ".$result." ".$response);
 if ($result ne "ok"){
-  Dada::logMsgWarn($warn,"checkTransferredAndOld failed");
+  Dada::logMsgWarn($warn,"checkTransferred failed");
+  $quit_daemon = 1;
+}
+
+Dada::logMsg(2, $dl, "main: checkDeleted()");
+($result, $response) = checkDeleted();
+Dada::logMsg(2, $dl, "main: checkDeleted() ".$result." ".$response);
+if ($result ne "ok"){
+  Dada::logMsgWarn($warn,"checkDeleted failed");
   $quit_daemon = 1;
 }
 
@@ -174,13 +183,21 @@ while (!$quit_daemon) {
     setStatus("Waiting for obs");
     Dada::logMsg(2, $dl, "Sleeping 60 seconds");
 
-    Dada::logMsg(2, $dl, "main: checkTransferredAndOld()");
-    checkTransferredAndOld();
-    Dada::logMsg(2, $dl, "main: checkTransferredAndOld() ".$result." ".$response);
+    Dada::logMsg(2, $dl, "main: checkTransferred()");
+    checkTransferred();
+    Dada::logMsg(2, $dl, "main: checkTransferred() ".$result." ".$response);
     if ($result ne "ok"){
-      Dada::logMsgWarn($warn, "checkTransferredAndOld failed");
+      Dada::logMsgWarn($warn, "checkTransferred failed");
       $quit_daemon = 1;
     }
+
+    Dada::logMsg(2, $dl, "main: checkDeleted()");
+    ($result, $response) = checkDeleted();
+    Dada::logMsg(2, $dl, "main: checkDeleted() ".$result." ".$response);
+    if ($result ne "ok"){
+      Dada::logMsgWarn($warn,"checkDeleted failed");
+      $quit_daemon = 1;
+    } 
   
     $counter = 12;
     while ((!$quit_daemon) && ($counter > 0)) {
@@ -208,9 +225,10 @@ exit 0;
 #
 
 #
-# Deletes srv0's copy of the 8 second archives if observation is > 1month old
+# Deletes srv0's copy of the 8 second archives if observation has been 
+# transferred and UTC_START is > 1month old
 #
-sub checkTransferredAndOld() {
+sub checkTransferred() {
 
   my $cmd = "";
   my $result = "";
@@ -219,16 +237,16 @@ sub checkTransferredAndOld() {
   my $o = "";
   my $obs_pid = "";
 
-  Dada::logMsg(2, $dl, "checkTransferredAndOld()");
+  Dada::logMsg(2, $dl, "checkTransferred()");
 
   # Find all observations marked as obs.transferred is at least 30 days old
   $cmd = "find ".$cfg{"SERVER_ARCHIVE_DIR"}." -maxdepth 2 -name 'obs.transferred' -printf '\%h\\n' | awk -F/ '{print \$NF}' | sort";
-  Dada::logMsg(2, $dl, "checkTransferredAndOld: ".$cmd);
+  Dada::logMsg(2, $dl, "checkTransferred: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
-  Dada::logMsg(3, $dl, "checkTransferredAndOld: ".$result." ".$response);
+  Dada::logMsg(3, $dl, "checkTransferred: ".$result." ".$response);
 
   if ($result ne "ok") {
-    Dada::logMsgWarn($warn, "checkTransferredAndOld: find command failed: ".$response);
+    Dada::logMsgWarn($warn, "checkTransferred: find command failed: ".$response);
     return ("fail", "find command failed: ".$response);
   }
 
@@ -241,26 +259,26 @@ sub checkTransferredAndOld() {
 
     # skip if no obs.info exists
     if (!( -f $o."/obs.info")) {
-      Dada::logMsgWarn($warn, "checkTransferredAndOld: Required file missing ".$o."/obs.info");
+      Dada::logMsgWarn($warn, "checkTransferred: Required file missing ".$o."/obs.info");
       next;
     }
 
     my @t = split(/-|:/,$o);
     my $unixtime = timelocal($t[5], $t[4], $t[3], $t[2], ($t[1]-1), $t[0]);
 
-    Dada::logMsg(2, $dl, "checkTransferredAndOld: testing ".$o." curr=".$curr_time.", unix=".$unixtime);
+    Dada::logMsg(2, $dl, "checkTransferred: testing ".$o." curr=".$curr_time.", unix=".$unixtime);
     # if UTC_START is less than 30 days old, dont delete it
     if ($unixtime + (30*24*60*60) > $curr_time) {
-      Dada::logMsg(2, $dl, "checkTransferredAndOld: Skipping ".$o.", less than 30 days old");
+      Dada::logMsg(2, $dl, "checkTransferred: Skipping ".$o.", less than 30 days old");
       next;
     }
 
     $cmd = "rm -f ".$o."/*/*.ar";
-    Dada::logMsg(2, $dl, "checkTransferredAndOld: ".$cmd);
+    Dada::logMsg(2, $dl, "checkTransferred: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
-    Dada::logMsg(3, $dl, "checkTransferredAndOld: ".$result." ".$response);
+    Dada::logMsg(3, $dl, "checkTransferred: ".$result." ".$response);
     if ($result ne "ok") {
-      Dada::logMsgWarn($warn, "checkTransferredAndOld: rm command failed: ".$response);
+      Dada::logMsgWarn($warn, "checkTransferred: rm command failed: ".$response);
       return ("fail", "find command failed: ".$response);
     }
 
@@ -276,43 +294,227 @@ sub checkTransferredAndOld() {
 
       # check that a directory for this obs existed
       $cmd = "ls -1 ".$cfg{"CLIENT_ARCHIVE_DIR"}."/".$o;
-      Dada::logMsg(2, $dl, "checkTransferredAndOld: remoteSshCommand(".$user.", ".$host.", ".$cmd.")");
+      Dada::logMsg(2, $dl, "checkTransferred: remoteSshCommand(".$user.", ".$host.", ".$cmd.")");
       ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
-      Dada::logMsg(2, $dl, "checkTransferredAndOld: remoteSshCommand() ".$result." ".$rval." ".$response);
+      Dada::logMsg(2, $dl, "checkTransferred: remoteSshCommand() ".$result." ".$rval." ".$response);
       if ($result ne "ok") {
-        Dada::logMsgWarn($warn, "checkTransferredAndOld: ssh failed ".$response);
+        Dada::logMsgWarn($warn, "checkTransferred: ssh failed ".$response);
       } else {
         if ($rval != 0) {
-          Dada::logMsg(0, $dl, "checkTransferredAndOld: no archive dir for ".$o." on ".$host);
+          Dada::logMsg(0, $dl, "checkTransferred: no archive dir for ".$o." on ".$host);
         } 
         else
         {
           # touch the obs.deleted control file
           $cmd = "touch ".$cfg{"CLIENT_ARCHIVE_DIR"}."/".$o."/obs.deleted";
-          Dada::logMsg(2, $dl, "checkTransferredAndOld: remoteSshCommand(".$user.", ".$host.", ".$cmd.")");
+          Dada::logMsg(2, $dl, "checkTransferred: remoteSshCommand(".$user.", ".$host.", ".$cmd.")");
           ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
-          Dada::logMsg(2, $dl, "checkTransferredAndOld: remoteSshCommand() ".$result." ".$rval." ".$response);
+          Dada::logMsg(2, $dl, "checkTransferred: remoteSshCommand() ".$result." ".$rval." ".$response);
           if ($result ne "ok") {
-            Dada::logMsgWarn($warn, "checkTransferredAndOld: ssh failed ".$response);
+            Dada::logMsgWarn($warn, "checkTransferred: ssh failed ".$response);
           } else {
             if ($rval != 0) {
-              Dada::logMsgWarn($warn, "checkTransferredAndOld: remote obs.deleted touch failed: ".$response);
+              Dada::logMsgWarn($warn, "checkTransferred: remote obs.deleted touch failed: ".$response);
             } 
           }
         }
       }
     }
 
-    Dada::logMsg(2, $dl, "checkTransferredAndOld: markState(".$o.", obs.transferred, obs.deleted)");
+    Dada::logMsg(2, $dl, "checkTransferred: markState(".$o.", obs.transferred, obs.deleted)");
     ($result, $response) = markState($o, "obs.transferred", "obs.deleted");
-    Dada::logMsg(2, $dl, "checkTransferredAndOld: markState() ".$result." ".$response);
+    Dada::logMsg(2, $dl, "checkTransferred: markState() ".$result." ".$response);
     if ($result ne "ok") {
-      Dada::logMsgWarn($warn, "checkTransferredAndOld: markState(".$o.", obs.transferred, obs.deleted) failed: ".$response);
+      Dada::logMsgWarn($warn, "checkTransferred: markState(".$o.", obs.transferred, obs.deleted) failed: ".$response);
     } else {
       Dada::logMsg(1, $dl, $o.": transferred -> deleted");
     }
 
   }
+  return ("ok", "");
+}
+
+#
+# checks all observations marked as deleted, and move them to the old_results 
+# dir if UTC_START > 6 months
+#
+sub checkDeleted()
+{
+
+  my $cmd = "";
+  my $result = "";
+  my $response = "";
+  my $i = 0; 
+  my $o = "";
+  my $obs_pid = "";
+    
+  Dada::logMsg(2, $dl, "checkDeleted()");
+    
+  # Find all observations marked as obs.deleted and at least 6 months old
+  $cmd = "find ".$cfg{"SERVER_ARCHIVE_DIR"}." -maxdepth 2 -name 'obs.deleted' -printf '\%h\\n' | awk -F/ '{print \$NF}' | sort";
+  Dada::logMsg(2, $dl, "checkDeleted: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, $dl, "checkDeleted: ".$result." ".$response);
+      
+  if ($result ne "ok") {
+    Dada::logMsgWarn($warn, "checkDeleted: find command failed: ".$response);
+    return ("fail", "find command failed: ".$response);
+  }     
+      
+  chomp $response;
+  my @observations = split(/\n/,$response);
+  my $curr_time = time;
+        
+  for ($i=0; (($i<=$#observations) && (!$quit_daemon)); $i++) {
+    $o = $observations[$i];
+
+    # skip if no obs.info exists
+    if (!( -f $o."/obs.info")) {
+      Dada::logMsgWarn($warn, "checkDeleted: Required file missing ".$o."/obs.info");
+      next;
+    }       
+          
+    my @t = split(/-|:/,$o);
+    my $unixtime = timelocal($t[5], $t[4], $t[3], $t[2], ($t[1]-1), $t[0]);
+            
+    Dada::logMsg(2, $dl, "checkDeleted: testing ".$o." curr=".$curr_time.", unix=".$unixtime);
+    # if UTC_START is less than 182 days old, dont delete it
+    if ($unixtime + (182*24*60*60) > $curr_time) {
+      Dada::logMsg(2, $dl, "checkDeleted: Skipping ".$o.", less than 182 days old");
+      next;
+    }
+    
+    # update the paths in obs.info for the TRES_AR and FRES_AR
+    my $obs_info_file = $cfg{"SERVER_RESULTS_DIR"}."/".$o."/obs.info";
+    Dada::logMsg(2, $dl, "checkDeleted: reading ".$obs_info_file);
+    open FH,"<$obs_info_file" or return ("fail", "could open obs.info for reading");
+    my @lines = <FH>;
+    close FH;
+
+    my $line;
+    my $int_length = 0;
+    my $snr = 0;
+
+    Dada::logMsg(2, $dl, "checkDeleted: writing adjusted ".$obs_info_file);
+    open FH,">$obs_info_file" or return ("fail", "could not open obs.info for writing");
+    foreach $line (@lines) {
+
+      if ($line =~ m/^INT/) {
+        $int_length = 1;
+      }
+      if ($line =~ m/^SNR/) {
+        $snr = 1;
+      }
+     
+      # strip old redundant lines
+      if (!(($line =~ m/OBS.START/) || ($line =~ m/TRES_AR/) || ($line =~ m/FRES_AR/)))
+      {
+        print FH $line;
+      }
+    }
+
+    # If we didn't find the integration length, then get it from the TRES file
+    if (!$int_length) 
+    {
+      $int_length = "NA";
+
+      $cmd = "find ".$cfg{"SERVER_RESULTS_DIR"}."/".$o." -name '*_t.tot' | tail -n 1";
+      Dada::logMsg(2, $dl, "checkDeleted: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      Dada::logMsg(3, $dl, "checkDeleted: ".$result." ".$response);
+      if ($result eq "ok") 
+      {
+        $cmd = "vap -c length -n ".$response." | awk '{print \$2}'";
+        Dada::logMsg(2, $dl, "checkDeleted: ".$cmd);
+        ($result, $response) = Dada::mySystem($cmd);
+        Dada::logMsg(3, $dl, "checkDeleted: ".$result." ".$response);
+        if ($result eq "ok")  
+        {
+          $int_length = $response;
+        }
+      }
+      Dada::logMsg(2, $dl, "checkDeleted: setting INT to ".$int_length);
+      print FH "INT                 ".$int_length."\n";
+    }
+
+    # If we didn't find the SNR, then get it from the FRES file
+    if (!$snr) 
+    {
+      $snr = "NA";
+
+      $cmd = "find ".$cfg{"SERVER_RESULTS_DIR"}."/".$o." -name '*_f.tot' | tail -n 1";
+      Dada::logMsg(2, $dl, "checkDeleted: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      Dada::logMsg(3, $dl, "checkDeleted: ".$result." ".$response);
+      if ($result eq "ok") 
+      {
+        $cmd = "psrstat -q -j FTp -c snr ".$response." | awk -F= '{print \$2}'";
+        Dada::logMsg(2, $dl, "checkDeleted: ".$cmd);
+        ($result, $response) = Dada::mySystem($cmd);
+        Dada::logMsg(3, $dl, "checkDeleted: ".$result." ".$response);
+        if ($result eq "ok")  
+        {
+          $snr = sprintf("%5.1f",$response);
+        }
+      }
+      Dada::logMsg(2, $dl, "checkDeleted: setting SNR to ".$snr);
+      print FH "SNR                 ".$snr."\n";
+    }
+    close FH;
+
+    # now change the state of the observation from deleted to old
+    Dada::logMsg(2, $dl, "checkDeleted: markState(".$o.", obs.deleted, obs.old)");
+    ($result, $response) = markState($o, "obs.deleted", "obs.old");
+    Dada::logMsg(2, $dl, "checkDeleted: markState() ".$result." ".$response);
+    if ($result ne "ok") {
+      Dada::logMsgWarn($warn, "checkDeleted: markState(".$o.", obs.deleted, obs.old) failed: ".$response);
+    } else {
+      Dada::logMsg(1, $dl, $o.": deleted -> old");
+    }
+
+    # move it to old_results dir
+    $cmd = "mv ".$cfg{"SERVER_RESULTS_DIR"}."/".$o." ".$cfg{"SERVER_OLD_RESULTS_DIR"}."/";
+    Dada::logMsg(2, $dl, "checkDeleted: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, $dl, "checkDeleted: ".$result." ".$response);
+    if ($result ne "ok") { 
+      Dada::logMsgWarn($warn, "checkDeleted: mv command failed: ".$response);
+      return ("fail", "mv command failed");
+    }
+
+    # delete the directory in the archives dir
+    $cmd = "rm -rf ".$cfg{"SERVER_ARCHIVE_DIR"}."/".$o;
+    Dada::logMsg(2, $dl, "checkDeleted: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, $dl, "checkDeleted: ".$result." ".$response);
+    if ($result ne "ok") {
+      Dada::logMsgWarn($warn, "checkDeleted: ".$cmd." failed: ".$response);
+      return ("fail", "could not remove archive dir");
+    }
+
+    # delete all timer and .tot archives
+    $cmd = "find ".$cfg{"SERVER_OLD_RESULTS_DIR"}."/".$o." -name '*.ar' -delete -o -name '*.tot' -delete";
+    Dada::logMsg(2, $dl, "checkDeleted: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, $dl, "checkDeleted: ".$result." ".$response);
+
+    # delete any files in subdirs 
+    $cmd = "find ".$cfg{"SERVER_OLD_RESULTS_DIR"}."/".$o." -mindepth 2 -delete";
+    Dada::logMsg(2, $dl, "checkDeleted: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, $dl, "checkDeleted: ".$result." ".$response);
+
+    # delete any subdirs
+    $cmd = "find ".$cfg{"SERVER_OLD_RESULTS_DIR"}."/".$o." -mindepth 1 -type d -delete";
+    Dada::logMsg(2, $dl, "checkDeleted: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, $dl, "checkDeleted: ".$result." ".$response);
+
+    #Dada::logMsg(2, $dl, "checkDeleted: sleep(1)");
+    #sleep(1);
+
+  }
+
   return ("ok", "");
 }
 
