@@ -18,8 +18,9 @@ use Dada;
 #
 # Constants
 #
-use constant ROOT_DIR         => "/lfs/raid0/bpsr";
-use constant REQUIRED_HOST    => "caspsr-raid0";
+use constant DATA_DIR         => "/lfs/raid0/bpsr";
+use constant META_DIR         => "/lfs/data0/bpsr";
+use constant REQUIRED_HOST    => "raid0";
 use constant REQUIRED_USER    => "bpsr";
 use constant SWIN_PROJECTS    => "P630";
 use constant PRKS_PROJECTS    => "P630 P682 P743 P786";
@@ -53,19 +54,19 @@ $| = 1;
 
 # Main
 {
-  my $log_file       = ROOT_DIR."/logs/".$daemon_name.".log";
-  my $pid_file       = ROOT_DIR."/control/".$daemon_name.".pid";
-  my $quit_file      = ROOT_DIR."/control/".$daemon_name.".quit";
+  my $log_file       = META_DIR."/logs/".$daemon_name.".log";
+  my $pid_file       = META_DIR."/control/".$daemon_name.".pid";
+  my $quit_file      = META_DIR."/control/".$daemon_name.".quit";
 
-  my $src_path       = ROOT_DIR."/finished";
-  my $swin_path      = ROOT_DIR."/swin/send";
-  my $prks_path      = ROOT_DIR."/parkes/archive";
-  my $archived_path  = ROOT_DIR."/archived";
+  my $src_path       = DATA_DIR."/finished";
+  my $swin_path      = DATA_DIR."/swin/send";
+  my $prks_path      = DATA_DIR."/parkes/archive";
+  my $archived_path  = DATA_DIR."/archived";
   my $dst_path       = "";
   my $dst            = "";
 
-  $warn              = ROOT_DIR."/logs/".$daemon_name.".warn";
-  $error             = ROOT_DIR."/logs/".$daemon_name.".error";
+  $warn              = META_DIR."/logs/".$daemon_name.".warn";
+  $error             = META_DIR."/logs/".$daemon_name.".error";
 
   my $control_thread = 0;
 
@@ -251,7 +252,7 @@ $| = 1;
         }
         else
         {
-          Dada::logMsg(1, $dl, $pid."/".$obs.": finished -> ".$dst);
+          Dada::logMsg(1, $dl, $pid."/".$obs." finished -> ".$dst);
         }
 
         # if we are going direct to the parkes archival path, touch xfer.complete
