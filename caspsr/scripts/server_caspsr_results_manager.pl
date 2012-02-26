@@ -802,6 +802,30 @@ sub makePlotsFromArchives($$$$$$) {
   my $response = "";
   my $bscrunch = "";
   my $bscrunch_t = "";
+  my $s_freq = 0;
+  my $e_freq = 0;
+
+  # determine the CFREQ
+  $cmd = "grep ^CFREQ ".$dir."/obs.info | awk '{print \$2}'";
+  ($result, $response) = Dada::mySystem($cmd);
+  if (($result eq "ok") && ($response ne ""))
+  {
+    if (($response > 500) && ($response < 800))
+    {
+      $s_freq = 700;
+      $e_freq = 765;
+    }
+    elsif (($response > 1200) && ($response < 1500))
+    {
+      $s_freq = 1200;
+      $e_freq = 1525;
+    }
+    else
+    {
+      $s_freq = 0;
+      $e_freq = 0;
+    }
+  }
 
   # If we are plotting hi-res - include
   if ($res ne "1024x768") {
@@ -809,8 +833,8 @@ sub makePlotsFromArchives($$$$$$) {
     $bscrunch = " -j 'B 256, F 256'";
     $bscrunch_t = " -j 'B 256'";
   } else {
-    $bscrunch = " -j 'B 512'";
-    $bscrunch_t = " -j 'B 512'";
+    #$bscrunch = " -j 'B 512'";
+    #$bscrunch_t = " -j 'B 512'";
   }
 
   my $bin = Dada::getCurrentBinaryVersion()."/psrplot ".$args;
@@ -830,6 +854,10 @@ sub makePlotsFromArchives($$$$$$) {
 
   # PHASE vs FREQ
   $cmd = $bin.$bscrunch." -jpC -p freq -jTD -D ".$dir."/pvfr_tmp/png ".$total_f_res;
+  if (($s_freq) && ($e_freq))
+  { 
+    $cmd .= " -c y:win=".$s_freq.":".$e_freq;
+  }
   Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
@@ -843,11 +871,13 @@ sub makePlotsFromArchives($$$$$$) {
   # BANDPASS
   # 2011-02-07 WvS added log scale (mostly for 50cm)
   if ($res eq "1024x768") {
-    #$cmd = $bin." -pb -x -lpol=0,1 -c log=1 -N2,1 -c above:c= -D ".$dir."/bp_tmp/png ".$ten_sec_archive;
     $cmd = $bin." -J '/home/dada/linux_64/bin/zap.psh' -pb -x -lpol=0,1 -N2,1 -c above:c= -D ".$dir."/bp_tmp/png ".$ten_sec_archive;
   } else {
-    #$cmd = $bin." -pb -x -lpol=0,1 -c log=1 -O -D ".$dir."/bp_tmp/png ".$ten_sec_archive;
     $cmd = $bin." -J '/home/dada/linux_64/bin/zap.psh' -pb -x -lpol=0,1 -O -D ".$dir."/bp_tmp/png ".$ten_sec_archive;
+  }
+  if (($s_freq) && ($e_freq))
+  {
+    $cmd .= " -c x:win=".$s_freq.":".$e_freq;
   }
   Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
