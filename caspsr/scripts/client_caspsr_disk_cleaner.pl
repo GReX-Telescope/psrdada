@@ -20,6 +20,7 @@ use Time::Local;
 use threads;
 use threads::shared;
 use Net::hostent;
+use Time::Local;
 use Dada;
 use Caspsr;
 
@@ -39,15 +40,14 @@ our $log_sock = 0;
 #
 sub good($);
 sub msg($$$);
-sub findCompletedObs($);
-sub deleteCompletedObs($$);
+sub findCompletedObs();
+sub deleteCompletedObs($);
 
 
 ###############################################################################
 #
 # Main
 # 
-
 
 my $log_file      = $cfg{"CLIENT_LOG_DIR"}."/".$daemon_name.".log";;
 my $pid_file      = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".pid";
@@ -75,7 +75,7 @@ $SIG{TERM} = \&sigHandle;
 $SIG{PIPE} = \&sigPipeHandle;
 
 # become a daemon
-# Dada::daemonize($log_file, $pid_file);
+Dada::daemonize($log_file, $pid_file);
 
 # Open a connection to the server_sys_monitor.pl script
 $log_sock = Dada::nexusLogOpen($log_host, $log_port);
@@ -89,31 +89,34 @@ msg(0, "INFO", "STARTING SCRIPT");
 $control_thread = threads->new(\&controlThread, $quit_file, $pid_file);
 
 # Main Loop
-while (!($quit_daemon)) {
-
-  msg(2, "INFO", "main: findCompletedObs(".$cfg{"CLIENT_ARCHIVE_DIR"}.")");
-  ($result, $response, $obs) = findCompletedObs($cfg{"CLIENT_ARCHIVE_DIR"});
+while (!($quit_daemon)) 
+{
+  msg(2, "INFO", "main: findCompletedObs()");
+  ($result, $response, $obs) = findCompletedObs();
   msg(2, "INFO", "main: findCompletedObs() ".$result." ".$response." ".$obs);
 
-  if (($result eq "ok") && ($obs ne "none")) {
-
-    msg(2, "INFO", "main: deleteCompletedObs(".$cfg{"CLIENT_ARCHIVE_DIR"}.", ".$obs.")");
-    ($result, $response) = deleteCompletedObs($cfg{"CLIENT_ARCHIVE_DIR"}, $obs);
+  if (($result eq "ok") && ($obs ne "none")) 
+  {
+    msg(2, "INFO", "main: deleteCompletedObs(".$obs.")");
+    ($result, $response) = deleteCompletedObs($obs);
     msg(2, "INFO", "main: deleteCompletedObs() ".$result." ".$response);
 
-    if ($result ne "ok") {
+    if ($result ne "ok") 
+    {
       msg(0, "ERROR", "Failed to delete ".$obs.": ".$response);
       $quit_daemon = 1;
-
-    } else {
+    } 
+    else 
+    {
       msg(1, "INFO", $obs.": transferred -> deleted");
     }
   } 
 
-  my $counter = 24;
+  my $counter = 120;
   msg(2, "INFO", "main: sleeping ".($counter*5)." seconds");
-  while ((!$quit_daemon) && ($counter > 0) && ($obs eq "none")) {
-    sleep(5);
+  while ((!$quit_daemon) && ($counter > 0) && ($obs eq "none")) 
+  {
+    sleep(1);
     $counter--;
   }
 
@@ -131,12 +134,11 @@ exit 0;
 # Find an obs that has been marked as deleted and greater than 
 # 6 months old
 #
-sub findCompletedObs($) {
+sub findCompletedObs() 
+{
+  msg(2, "INFO", "findCompletedObs()");
 
-  (my $archives_dir) = @_;
-  
-  msg(2, "INFO", "findCompletedObs(".$archives_dir.")");
-
+  my $archives_dir = $cfg{"CLIENT_ARCHIVE_DIR"};
   my $found_obs = 0;
   my $result = "";
   my $response = "";
@@ -147,7 +149,8 @@ sub findCompletedObs($) {
   
   my @deleted = ();    # obs that have been marked obs.deleted (by transfer_manager)
 
-  $cmd = "find ".$archives_dir." -mindepth 2 -maxdepth 2 -name 'obs.deleted' -printf '\%h\\n' | awk -F/ '{print \$NF}' | sort";
+  $cmd = "find ".$archives_dir." -mindepth 2 -maxdepth 2 -name 'obs.deleted' ".
+         "-printf '\%h\\n' | awk -F/ '{print \$NF}' | sort";
   msg(2, "INFO", "findCompletedObs: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   msg(3, "INFO", "findCompletedObs: ".$result." ".$response);
@@ -171,7 +174,7 @@ sub findCompletedObs($) {
     my $unixtime = timelocal($t[5], $t[4], $t[3], $t[2], ($t[1]-1), $t[0]);
 
     Dada::logMsg(2, $dl, "findCompletedObs: testing ".$o." curr=".$curr_time.", unix=".$unixtime);
-    # if UTC_START is less than 6 months old, dont delete it
+    # if UTC_START is less than 6 months [182 days] old, dont delete it
     if ($unixtime + (182*24*60*60) > $curr_time) {
       Dada::logMsg(2, $dl, "findCompletedObs: Skipping ".$o.", less than 6 months old");
       next;
@@ -193,14 +196,18 @@ sub findCompletedObs($) {
 #
 # Delete the specified obs
 #
-sub deleteCompletedObs($$) {
+sub deleteCompletedObs($) 
+{
+  my ($obs) = @_;
 
-  my ($dir, $obs) = @_;
+  msg(2, "INFO", "deleteCompletedObs(".$obs.")");
 
+  my $archives_dir = $cfg{"CLIENT_ARCHIVE_DIR"};
+  my $results_dir  = $cfg{"CLIENT_RESULTS_DIR"};
   my $cmd = "";
   my $result = "";
   my $response = "";
-  my $path = $dir."/".$obs;
+  my $path = $archives_dir."/".$obs;
 
   msg(2, "INFO", "Deleting archived files in ".$path);
 
@@ -208,7 +215,7 @@ sub deleteCompletedObs($$) {
     $cmd = "rm -f ".$path."/slow_rm.ls";
     msg(2, "INFO", "deleteCompletedObs: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
-    msg(2, "INFO", "deleteCompletedObs: ".$result." ".$response);
+    msg(3, "INFO", "deleteCompletedObs: ".$result." ".$response);
     if ($result ne "ok") {
       msg(0, "ERROR", "deleteCompletedObs: ".$cmd." failed: ".$response);
       return ("fail", "failed to delete ".$path."/slow_rm.ls");
@@ -227,29 +234,63 @@ sub deleteCompletedObs($$) {
   $cmd = "slow_rm -r 256 -M ".$path."/slow_rm.ls";
 
   msg(2, "INFO", $cmd);
-  #($result, $response) = Dada::mySystem($cmd);
-  msg(2, "INFO", "deleteCompletedObs: ".$result." ".$response);
+  ($result, $response) = Dada::mySystem($cmd);
+  msg(3, "INFO", "deleteCompletedObs: ".$result." ".$response);
   if ($result ne "ok") {
     msg(0, "ERROR", "deleteCompletedObs: ".$cmd." failed: ".$response);
     return ("fail", "failed to delete files for ".$obs);
   }
 
-  if (-f $path."/slow_rm.ls") {
-     $cmd = "rm -f ".$path."/slow_rm.ls";
+  if (-f $path."/slow_rm.ls") 
+  {
+    $cmd = "rm -f ".$path."/slow_rm.ls";
     msg(2, "INFO", "deleteCompletedObs: ".$cmd);
-    #($result, $response) = Dada::mySystem($cmd);
-    msg(2, "INFO", "deleteCompletedObs: ".$result." ".$response);
+    ($result, $response) = Dada::mySystem($cmd);
+    msg(3, "INFO", "deleteCompletedObs: ".$result." ".$response);
     if ($result ne "ok") {
       msg(0, "ERROR", "deleteCompletedObs: ".$cmd." failed: ".$response);
       return ("fail", "failed to delete ".$path."/slow_rm.ls");
     }
   }
 
+  # delete the archives dir
   $cmd = "rmdir ".$path;
   msg(2, "INFO", "deleteCompletedObs: ".$cmd);
-  #($result, $response) = Dada::mySystem($cmd);
-  msg(2, "INFO", "deleteCompletedObs: ".$result." ".$response);
+  ($result, $response) = Dada::mySystem($cmd);
+  msg(3, "INFO", "deleteCompletedObs: ".$result." ".$response);
+  if ($result ne "ok") {
+    msg(0, "ERROR", "deleteCompletedObs: ".$cmd." failed: ".$response);
+    return ("fail", "failed to delete ".$path);
+  }
 
+  $path = $results_dir."/".$obs;
+
+  if (-d $path)
+  {
+    # delete the results dir
+    $cmd = "rm -f ".$path."/*";
+    msg(2, "INFO", "deleteCompletedObs: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    msg(3, "INFO", "deleteCompletedObs: ".$result." ".$response);
+    if ($result ne "ok") {
+      msg(0, "ERROR", "deleteCompletedObs: ".$cmd." failed: ".$response);
+      return ("fail", "failed to delete results_dir files");
+    }
+
+    $cmd = "rmdir ".$path;
+    msg(2, "INFO", "deleteCompletedObs: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    msg(3, "INFO", "deleteCompletedObs: ".$result." ".$response);
+    if ($result ne "ok") {
+      msg(0, "ERROR", "deleteCompletedObs: ".$cmd." failed: ".$response);
+      return ("fail", "failed to delete ".$path);
+    }
+  } 
+  else
+  {
+    msg(0, "WARN", "deleteCompletedObs: ".$path." did not exist");
+  }
+    
   $result = "ok";
   $response = "";
 
