@@ -77,8 +77,6 @@ $utc_stop_remaining = -1;
 #
 use constant PWCC_LOGFILE       => "dada_pwc_command.log";
 use constant TERMINATOR         => "\r\n";
-use constant IBOB_CONTROL_IP    => "192.168.0.15";
-use constant IBOB_CONTROL_PORT  => "7";
 
 #
 # Function Prototypes
@@ -164,7 +162,7 @@ sub main() {
   umask 0027;
 
   Dada::logMsg(0, $dl, "Programming ibob");
-  $cmd = "cat /home/dada/ib_ibob_config.txt | bibob_terminal 192.168.0.15 7";
+  $cmd = "cat /home/dada/ib_ibob_config.txt | bibob_terminal ".$cfg{"IBOB_CONTROL_IP"}." ".$cfg{"IBOB_CONTROL_PORT"};
   Dada::logMsg(2, $dl, "main: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(2, $dl, "main: ".$result." ".$response);
@@ -449,21 +447,11 @@ sub processTCSCommand($$) {
 
       if (($current_state =~ m/Recording/) || ($current_state eq "Error")) {
 
-        # we ask the demuxers to stop the dataflow on a specific byte
-        # that is in the future.
-        my $utc_stop_unix_time = (time+5);
-
-        if ($utc_stop_unix_time < ($utc_start_unix + 32)) {
-          Dada::logMsg(1, $dl, "processTCSCommand: [stop] overriding stop time to minimum of 32 seconds");
-          $utc_stop_unix_time = $utc_start_unix + 32;
-        }
-
-        my $utc_stop_time = Dada::printDadaUTCTime($utc_stop_unix_time);
-
-        Dada::logMsg(2, $dl, "processTCSCommand: stopDemuxers(".$utc_stop_time.")");
-        ($result, $response) = stopDemuxers($utc_stop_time);
+        Dada::logMsg(2, $dl, "processTCSCommand: stopDemuxers()");
+        ($result, $response) = stopDemuxers();
         Dada::logMsg(2, $dl, "processTCSCommand: stopDistibutors() ".$result." ".$response);
-
+        my $utc_stop_time = $response;
+        
 
         # tell the nexus to stop on the same UTC_STOP time in the future
         Dada::logMsg(2, $dl, "processTCSCommand: stopNexus(".$utc_stop_time.")");
@@ -548,7 +536,6 @@ sub processTCSCommand($$) {
     if ($result eq "fail") {
       $current_state = "Error";
       print $handle $result.TERMINATOR;
-      print $handle $response.TERMINATOR;
       Dada::logMsg(1, $dl, "TCS <- ".$result);
 
     } else {
@@ -805,7 +792,7 @@ sub start($) {
     Dada::logMsg(2, $dl, "start: threadedDemuxerCommand() ".$result);
 
     # Instruct the ibob to rearm and get the corresponding UTC_START
-    $cmd = "bibob_start_observation -m ".$cfg{"ARCHIVE_MOD"}." 192.168.0.15 7";
+    $cmd = "bibob_start_observation -m ".$cfg{"ARCHIVE_MOD"}." ".$cfg{"IBOB_CONTROL_IP"}." ".$cfg{"IBOB_CONTROL_PORT"};
     Dada::logMsg(2, $dl, "start: ".$cmd);
     ($result,$response) = Dada::mySystem($cmd);
     Dada::logMsg(2, $dl, "start: ".$result." ".$response);
@@ -1031,29 +1018,65 @@ sub set_utc_start($) {
 #
 # Ask the Demuxers to Stop on the time in the future
 #
-sub stopDemuxers($)
+sub stopDemuxers()
 {
 
-  my ($utc_stop) = @_;
-
-  Dada::logMsg(2, $dl, "stopDemuxers(".$utc_stop.")");
+  Dada::logMsg(2, $dl, "stopDemuxers()");
 
   my $result = "";
   my $response = "";
-  my $cmd = "UTC_STOP ".$utc_stop;
+  my $host = "";
+  my $port = $cfg{"DEMUX_CONTROL_PORT"};
+  my @handles = ();
+  my $i = 0;
 
-  # stop the demuxers on the specified time
-  Dada::logMsg(1, $dl, "demuxers <- ".$cmd);
-  Dada::logMsg(2, $dl, "stopDemuxers: threadedDemuxerCommand(".$cmd.")");
-  ($result, $response) = threadedDemuxerCommand($cmd);
-  Dada::logMsg(2, $dl, "stopDemuxers: threadedDemuxerCommand() ".$result." ".$response);
-  Dada::logMsg(2, $dl, "stopDemuxers: demuxers -> ".$result);
-  if ($result ne "ok") {
-    Dada::logMsgWarn($error, "stopDemuxers: ".$cmd." failed with ".$result." ".$response);
-    return ("fail", $cmd." failed on demuxers: ".$response);
+  # open sockets to each demuxer
+  for ($i=0; $i<$cfg{"NUM_DEMUX"}; $i++) 
+  {
+    $host = $cfg{"DEMUX_".$i};
+    $handles[$i] = Dada::connectToMachine($host, $port);
+    if (!$handles[$i])
+    {
+      Dada::logMsgWarn($error, "stopDemuxers: could not connect to ".$host.":".$port);
+      return ("fail", "");
+    }
   }
 
-  return ($result, $response);
+  # set stopping time to 8 seconds in the future
+  my $stop_time_unix = time + 8;
+  if ($stop_time_unix < ($utc_start_unix + 32)) 
+  {
+    Dada::logMsg(1, $dl, "stopDemuxers: overriding stop time to minimum of 32 seconds");
+    $stop_time_unix = $utc_start_unix + 32;
+  }
+ 
+  my $stop_time = Dada::printDadaUTCTime($stop_time_unix);
+  my $cmd = "UTC_STOP ".$stop_time;
+
+  Dada::logMsg(1, $dl, "demuxers <- ".$cmd); 
+
+  for ($i=0; $i<$cfg{"NUM_DEMUX"}; $i++)
+  {
+    $host =  $cfg{"DEMUX_".$i};
+    Dada::logMsg(2, $dl, $host.":".$port." <- ".$cmd);
+    ($result,$response) = Dada::sendTelnetCommand($handles[$i], $cmd);
+    Dada::logMsg(2, $dl, $host.":".$port." -> ".$result." ".$response);
+    if ($result ne "ok")
+    {
+      Dada::logMsgWarn($error, "stopDemuxers: ".$host.":".$port." <- ".$cmd." returned ".$response);
+      return ("fail", "");
+    }
+  }
+
+  Dada::logMsg(1, $dl, "demuxers -> ok");
+
+  # close sockets
+  for ($i=0; $i<$cfg{"NUM_DEMUX"}; $i++)
+  {
+    $handles[$i]->close();
+  }
+
+  return ("ok", $stop_time);
 }
 
 
@@ -1093,6 +1116,7 @@ sub stopNexus($)
     Dada::logMsg(0, $dl, "stopNexus: ".$cmd." failed: ".$result." ".$response);
     $response = $cmd." command failed on nexus";
   }
+  Dada::logMsg(1, $dl, "nexus -> ".$result);
 
   $handle->close();
 
@@ -1213,6 +1237,8 @@ sub demuxerThread($$$) {
     Dada::logMsgWarn($error, "demuxerThread: ".$cmd." failed: ".$response);
     return "fail";
   }
+
+  $handle->close();
 
   return "ok";
 
@@ -1655,6 +1681,30 @@ sub utcStopCommand() {
 
 }
 
+###############################################################################
+#
+# Try to reboot CASPSR when the backend is in an erroneous state
+#
+sub rebootCaspsr() 
+{
+  my $cmd = "";
+  my $result = "";
+  my $response = "";
+
+  # first try a sane/soft stop
+  $cmd = "caspsr_reconfigure.pl -s";
+  Dada::logMsg(1, $dl , "rebootCaspsr: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(1, $dl , "rebootCaspsr: ".$result." ".$response);
+
+  # then do a hard_stop just to be sure
+  $cmd = "caspsr_hard_reset.pl";
+  Dada::logMsg(1, $dl , "rebootCaspsr: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(1, $dl , "rebootCaspsr: ".$result." ".$response);
+
+}
+
 
 ###############################################################################
 #
@@ -1748,21 +1798,21 @@ sub good($) {
   }
 
   # check IBOB connectivity
-  $cmd = "ping -q -c 1 ".IBOB_CONTROL_IP;
+  $cmd = "ping -q -c 1 ".$cfg{"IBOB_CONTROL_IP"};
   ($result, $response) = Dada::mySystem($cmd);
   if ($result ne "ok")
   {
-    return ("fail", "Could not ping IBOB at ".IBOB_CONTROL_IP." - try manual reset of IBOB");
+    return ("fail", "Could not ping IBOB at ".$cfg{"IBOB_CONTROL_IP"}." - try manual reset of IBOB");
   }
 
   # check IBOB response to commands
   $cmd = "echo 'regread ip_ctr/reg_num_ips\nquit' | bibob_terminal ".
-         IBOB_CONTROL_IP." ".IBOB_CONTROL_PORT;
+         $cfg{"IBOB_CONTROL_IP"}." ".$cfg{"IBOB_CONTROL_PORT"};
   ($result, $response) = Dada::mySystem($cmd);
   if ($result ne "ok")
   {
-    return ("fail", "Could not interact with IBOB at ".IBOB_CONTROL_IP.":".
-                    IBOB_CONTROL_PORT." - try manual reset of IBOB");
+    return ("fail", "Could not interact with IBOB at ".$cfg{"IBOB_CONTROL_IP"}.":".
+                    $cfg{"IBOB_CONTROL_PORT"}." - try manual reset of IBOB");
   }
 
   # check that the response is correct
