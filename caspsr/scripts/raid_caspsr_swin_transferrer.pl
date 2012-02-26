@@ -13,9 +13,10 @@
 #
 # Constants
 #
-use constant BANDWIDTH      => "10240";           # KB/s
-use constant ROOT_DIR       => "/lfs/raid0/caspsr";
-use constant REQUIRED_HOST  => "caspsr-raid0";
+use constant BANDWIDTH      => "50240";           # KB/s
+use constant DATA_DIR       => "/lfs/raid0/caspsr";
+use constant META_DIR       => "/lfs/data0/caspsr";
+use constant REQUIRED_HOST  => "raid0";
 use constant REQUIRED_USER  => "caspsr";
 
 use lib $ENV{"DADA_ROOT"}."/bin";
@@ -62,16 +63,16 @@ $quit_daemon = 0;
 $transfer_kill = "";
 
 {
-  $warn  = ROOT_DIR."/logs/".$daemon_name.".warn";
-  $error = ROOT_DIR."/logs/".$daemon_name.".error";
+  $warn  = META_DIR."/logs/".$daemon_name.".warn";
+  $error = META_DIR."/logs/".$daemon_name.".error";
 
-  my $log_file    = ROOT_DIR."/logs/".$daemon_name.".log";
-  my $pid_file    = ROOT_DIR."/control/".$daemon_name.".pid";
-  my $quit_file   = ROOT_DIR."/control/".$daemon_name.".quit";
+  my $log_file    = META_DIR."/logs/".$daemon_name.".log";
+  my $pid_file    = META_DIR."/control/".$daemon_name.".pid";
+  my $quit_file   = META_DIR."/control/".$daemon_name.".quit";
 
-  my $src_path    = ROOT_DIR."/finished";
-  my $dst_path    = ROOT_DIR."/swin/sent";
-  my $err_path    = ROOT_DIR."/swin/fail";
+  my $src_path    = DATA_DIR."/finished";
+  my $dst_path    = DATA_DIR."/swin/sent";
+  my $err_path    = DATA_DIR."/swin/fail";
 
   my $cmd = "";
   my $result = "";
@@ -87,6 +88,7 @@ $transfer_kill = "";
   my $r_path = "";
 
   my $counter = 0;
+  my $sleeping = 0;
 
   # sanity check on whether the module is good to go
   ($result, $response) = good($quit_file);
@@ -137,10 +139,15 @@ $transfer_kill = "";
 
       if ($result ne "ok") 
       {
-        Dada::logMsgWarn($warn, "could not find suitable destination");
+        if (!$sleeping)
+        {
+          Dada::logMsg(1, $dl, "Waiting for destination to become available");
+          $sleeping = 1;
+        }
       }
       else 
       {
+        $sleeping = 0;
 
         # create the WRITING file 
         $cmd = "touch ".$r_path."/../WRITING";
@@ -203,6 +210,15 @@ $transfer_kill = "";
       }
     }
     else
+    {
+      if (!$sleeping)
+      {
+        Dada::logMsg(1, $dl, "Waiting for observation to transfer");
+        $sleeping = 1;
+      }
+    }
+
+    if ($sleeping)
     {
       # If we did not transfer, sleep 60
       Dada::logMsg(2, $dl, "Sleeping 60 seconds");
@@ -466,8 +482,8 @@ sub getDest()
       next;
     }
 
-    # check if this is being used for reading
-    $cmd = "ls ".$path."../READING";
+    # check if this is being used for [READ|WRIT]ING
+    $cmd = "ls ".$path."/../????ING";
     Dada::logMsg(3, $dl, "getDest: ".$user."@".$host.":".$cmd);
     ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
     Dada::logMsg(3, $dl, "getDest: ".$result." ".$rval." ".$response);
@@ -476,15 +492,15 @@ sub getDest()
       next;
     }
 
-    if ($response =~ m/No such file or directory/)
+    if (($response =~ m/No such file or directory/) || ($response =~ m/ls: No match/))
     {
-      Dada::logMsg(3, $dl, "getDest: no READING file existed in ".$path."/../READING");
+      Dada::logMsg(3, $dl, "getDest: no control files in ".$path."/../");
       Dada::logMsg(2, $dl, "getDest: found ".$user."@".$host.":".$path);
       return ("ok", $user, $host, $path);
     }
     else
     {
-      Dada::logMsg(2, $dl, "getDest: READING file existed in ".$path."/../READING, skipping");
+      Dada::logMsg(2, $dl, "getDest: control file existed in ".$path."/../, skipping");
     }
   }
   return ("fail", $user, $host, $path);
