@@ -311,7 +311,7 @@ sub currentInfoThread($) {
 
         Dada::logMsg(2, $dl, "currentInfoThread: [".$results_dir."/".$obs."/".$source."_f.tot]");
         if (-f $results_dir."/".$obs."/".$source."_f.tot") {
-          $cmd = "psrstat -j 'zap median' -j FTp -c snr ".$results_dir."/".$obs.
+          $cmd = "psrstat -j FTp -j'B 256' -c snr ".$results_dir."/".$obs.
                  "/".$source."_t.tot 2>&1 | grep snr= | awk -F= '{print \$2}'";
           Dada::logMsg(2, $dl, "currentInfoThread: ".$cmd);
           ($result, $response) = Dada::mySystem($cmd);
