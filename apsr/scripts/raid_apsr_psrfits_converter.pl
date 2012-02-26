@@ -20,8 +20,9 @@ use threads::shared;
 #
 # Constants
 #
-use constant ROOT_DIR       => "/lfs/raid0/apsr";
-use constant REQUIRED_HOST  => "caspsr-raid0";
+use constant DATA_DIR       => "/lfs/raid0/apsr";
+use constant META_DIR       => "/lfs/data0/apsr";
+use constant REQUIRED_HOST  => "raid0";
 use constant REQUIRED_USER  => "apsr";
 use constant TSCRUNCH_SECONDS => 30;
 
@@ -56,14 +57,14 @@ our $error : shared;
 $dl = 1; 
 $quit_daemon = 0;
 $daemon_name = Dada::daemonBaseName(basename($0));
-$src_path = ROOT_DIR."/swin/sent";
-$dst_path = ROOT_DIR."/psrfits/unpatched";
-$tmp_path = ROOT_DIR."/psrfits/temp";
-$err_path = ROOT_DIR."/psrfits/fail_convert";
-$fin_path = ROOT_DIR."/archived";
+$src_path = DATA_DIR."/swin/sent";
+$dst_path = DATA_DIR."/psrfits/unpatched";
+$tmp_path = DATA_DIR."/psrfits/temp";
+$err_path = DATA_DIR."/psrfits/fail_convert";
+$fin_path = DATA_DIR."/archived";
 
-$warn     = ROOT_DIR."/logs/".$daemon_name.".warn";
-$error    = ROOT_DIR."/logs/".$daemon_name.".error";
+$warn     = META_DIR."/logs/".$daemon_name.".warn";
+$error    = META_DIR."/logs/".$daemon_name.".error";
 
 #
 # check the command line arguments
@@ -130,12 +131,6 @@ sub processOne($$$)
     ($result, $response) = moveObs($src_path, $err_path, $pid, $src, $obs);
     Dada::logMsg(1, $dl, "processOne: moveObs() ".$result." ".$response);
 
-    # ensure that the temp directory is cleaned...
-    $cmd = "rm -rf ".$tmp_path."/".$pid;
-    Dada::logMsg(2, $dl, "processLoop: ".$cmd);
-    ($result, $response) = Dada::mySystem($cmd);
-    Dada::logMsg(3, $dl, "processLoop: ".$response);
-
     return 1;
   }
   else
@@ -158,9 +153,9 @@ sub processLoop()
   
   my $control_thread = 0;
 
-  my $log_file = ROOT_DIR."/logs/".$daemon_name.".log";
-  my $pid_file = ROOT_DIR."/control/".$daemon_name.".pid";
-  my $quit_file = ROOT_DIR."/control/".$daemon_name.".quit";
+  my $log_file = META_DIR."/logs/".$daemon_name.".log";
+  my $pid_file = META_DIR."/control/".$daemon_name.".pid";
+  my $quit_file = META_DIR."/control/".$daemon_name.".quit";
 
   my $cmd = "";
   my $result = "";
@@ -174,6 +169,7 @@ sub processLoop()
   my $obs = "";
   my $pid = "";
   my $src = "";
+  my $waiting = 0;
   
   ($result, $response) = good($quit_file);
   if ($result ne "ok") {
@@ -207,6 +203,11 @@ sub processLoop()
     Dada::logMsg(3, $dl, "processLoop: ".$response);
     if (($result ne "ok") || ($response eq ""))
     {
+      if (!$waiting)
+      {
+        Dada::logMsg(0, $dl, "Waiting for new observations");
+        $waiting = 1;
+      } 
       Dada::logMsg(2, $dl ,"processLoop: no observations to process");
       Dada::logMsg(2, $dl, "Sleeping 60 seconds");
       my $counter = 60;
@@ -218,6 +219,7 @@ sub processLoop()
       next;
     }
 
+    $waiting = 0;
     $obs = $response;
 
     # get the PID, and SOURCE for this observation
@@ -253,13 +255,13 @@ sub processLoop()
     }
 
     # should really be based on the NUM_PWC in the obs.start
-    if ($response ne "16")
-    {
-      Dada::logMsg(1, $dl ,"processLoop: ignoring ".$pid."/".$src."/".$obs." only ".$response." bands");
-      Dada::logMsg(1, $dl, $pid."/".$src."/".$obs." swin/sent -> psrfits/fail_convert");
-      ($result, $response) = moveObs($src_path, $err_path, $pid, $src, $obs);
-      next;
-    }
+    # if ($response ne "16")
+    # {
+    #  Dada::logMsg(1, $dl ,"processLoop: ignoring ".$pid."/".$src."/".$obs." only ".$response." bands");
+    #  Dada::logMsg(1, $dl, $pid."/".$src."/".$obs." swin/sent -> psrfits/fail_convert");
+    #  ($result, $response) = moveObs($src_path, $err_path, $pid, $src, $obs);
+    #  next;
+    #}
 
     # test that we have an obs.start file that can be processed
     $cmd = "find ".$src_path."/".$pid."/".$src."/".$obs." -mindepth 2 -maxdepth 2 -type f -name 'obs.start'";
@@ -283,7 +285,7 @@ sub processLoop()
 
     if (!$quit_daemon) 
     {
-      Dada::logMsg(1, $dl, $pid."/".$src."/".$obs." converting...");
+      Dada::logMsg(2, $dl, $pid."/".$src."/".$obs." converting...");
       ($result, $response) = processObservation($pid, $src, $obs);
       if ($result ne "ok")
       {
@@ -426,10 +428,10 @@ sub processObservation($$$) {
   @bands = split(/\n/, $response);
 
   # if n_band != 16, then ignore for now
-  if (($#bands + 1) != 16) {
-    Dada::logMsg(0, $dl ,"processObservation: number of bands [".($#bands + 1)."] was not 16");
-    return ("fail", "observation only had ".($#bands + 1)." bands, required 16");
-  }
+  # if (($#bands + 1) != 16) {
+  #  Dada::logMsg(0, $dl ,"processObservation: number of bands [".($#bands + 1)."] was not 16");
+  #  return ("fail", "observation only had ".($#bands + 1)." bands, required 16");
+  #}
 
   # ensure that at least 1 archive and obs.start file exists for each band
   # foreach band Tscrunch down the tsrunch time and produce a full intergration for the band in 1 file
