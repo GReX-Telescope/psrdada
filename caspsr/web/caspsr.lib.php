@@ -34,6 +34,8 @@ class caspsr extends instrument
     $arr["caspsr_sys_monitor"] =        array("logfile" => "nexus.sys.log", "name" => "SYS Mon", "tag" => "sys", "shortname" => "SYS Mon");
     $arr["caspsr_demux_monitor"] =      array("logfile" => "demux.src.log", "name" => "DEMUX Mon", "tag" => "demux", "shortname" => "Demux Mon");
     $arr["caspsr_transfer_manager"] =   array("logfile" => "caspsr_transfer_manager.log", "name" => "Transfer Mngr", "tag" => "server", "shortname" => "Xfer");
+    $arr["caspsr_raid_pipeline"] =      array("logfile" => "caspsr_raid_pipeline.log", "name" => "RAID Pipeline", "tag" => "server", "shortname" => "RAID");
+    $arr["caspsr_baseband_controller"] = array("logfile" => "caspsr_baseband_controller.log", "name" => "Baseband Ctrlr", "tag" => "server", "shortname" => "Baseband");
     return $arr;
 
   }
@@ -42,6 +44,7 @@ class caspsr extends instrument
     $arr = array();
     $arr["caspsr_archive_manager"]      = array("logfile" => "nexus.sys.log", "name" => "Archive Mngr", "tag" => "arch mngr");
     $arr["caspsr_processing_manager"]   = array("logfile" => "nexus.sys.log", "name" => "Proc Mngr", "tag" => "proc mngr");
+    $arr["caspsr_disk_cleaner"]         = array("logfile" => "nexus.sys.log", "name" => "Disk Cleaner", "tag" => "cleaner");
     $arr["processor"]                   = array("logfile" => "nexus.src.log", "name" => "Processor", "tag" => "proc");
     return $arr;
   }
