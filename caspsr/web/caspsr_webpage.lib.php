@@ -142,7 +142,14 @@ function handleDirect($child_class)
     $obj = new $child_class();
     $obj->printUpdateHTML($_GET);
 
+  } else if (isset($_GET["action"])) {
+
+    $obj = new $child_class();
+    $obj->printActionHTML($_GET);
+
   } else {
+
+
     # do nothing :)
   }
 }
