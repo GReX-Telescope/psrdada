@@ -5,6 +5,7 @@ webraiddir = $(prefix)/web/raid/caspsr
 nobase_dist_web_SCRIPTS = admin.lib.php \
                           archival.lib.php \
                           archival_summary.lib.php \
+                          baseband.lib.php \
                           buttons.css \
                           index.php \
                           caspsr.css \
@@ -24,6 +25,8 @@ nobase_dist_web_SCRIPTS = admin.lib.php \
                           process_obs.lib.php \
                           result.lib.php \
                           results.lib.php \
+                          oldresult.lib.php \
+                          oldresults.lib.php \
                           state_update.lib.php \
                           support.lib.php \
                           control.lib.php \
