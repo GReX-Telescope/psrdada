@@ -410,7 +410,7 @@ class control extends caspsr_webpage
 
         var srv_daemons = new Array("caspsr_tcs_interface");
         var demux_daemons = new Array("caspsr_demux_manager");
-        var pwc_daemons = new Array("caspsr_processing_manager", "caspsr_archive_manager");
+        var pwc_daemons = new Array("caspsr_processing_manager", "caspsr_archive_manager", "caspsr_disk_cleaner");
 
         var srv_ready = checkMachinesAndDaemons(srv_hosts, srv_daemons, "red_light.png");
         var pwc_ready = checkMachinesAndDaemons(pwc_hosts, pwc_daemons, "red_light.png");
@@ -1033,10 +1033,10 @@ class control extends caspsr_webpage
       exit(0);
     }
 
-    # determine which type of request this is (srv, gpu or demux)
+    # determine which type of request this is (persist, srv, gpu or demux)
     if ($hosts[0] == "srv0") 
       $area = "srv";
-    if ($daemon == "caspsr_transfer_manager")
+    if (($daemon == "caspsr_transfer_manager") || ($daemon == "caspsr_raid_pipeline"))
       $area = "persist";
     else {
       for ($i=0; $i<$this->inst->config["NUM_PWC"]; $i++)
@@ -1055,7 +1055,49 @@ class control extends caspsr_webpage
     echo $unique_id."\n";
     flush();
 
-    if (($daemon == "caspsr_master_control") && ($action == "start")) {
+    # special case for starting/stopping persistent server daemons
+    if ($area == "persist") {
+
+      if ($action == "start") {
+        echo "Starting ".$daemon." on srv0\n";
+        flush();
+
+        $cmd = "ssh -x -l dada srv0 'server_".$daemon.".pl";
+        if ($args != "")
+          $cmd .= " ".$args;
+        $cmd .= "'";
+        $output = array(); 
+        $lastline = exec($cmd, $output, $rval);
+
+      } else if ($action == "stop") {
+        $quit_file = $this->inst->config["SERVER_CONTROL_DIR"]."/".$daemon.".quit";
+        $pid_file = $this->inst->config["SERVER_CONTROL_DIR"]."/".$daemon.".pid";
+        if (file_exists($pid_file))
+        {
+          echo "Stopping ".$daemon." on srv0\n";
+          flush();
+
+          $cmd = "touch ".$quit_file;
+          $lastline = exec($cmd, $output, $rval);
+          # wait for the PID file to be removed
+          $max_wait = 10;
+          while (file_exists($pid_file) && $max_wait > 0) {
+            sleep(1);
+            $max_wait--;
+          }
+          unlink($quit_file);
+        }
+        else
+        {
+          echo "No PID file [".$pid_file."] existed for ".$daemon." on srv0\n";
+          flush();
+        }
+      } else {
+        $html = "Unrecognized action [".$action."] for daemon [".$daemon."]\n";
+        flush(); 
+      }
+
+    } else if (($daemon == "caspsr_master_control") && ($action == "start")) {
       $html = "Starting ".$daemon." on";
       for ($i=0; $i<$nhosts; $i++) {
         $html .= " ".$hosts[$i];
