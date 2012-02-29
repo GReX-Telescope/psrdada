@@ -3,6 +3,7 @@
 #include "dada_def.h"
 #include "dada_msg.h"
 #include "dada_ib.h"
+#include "dada_affinity.h"
 
 #include "ascii_header.h"
 #include "daemon.h"
@@ -23,6 +24,7 @@ void usage()
 {
   fprintf (stdout,
      "dada_ibdb [options]\n"
+     " -b <core>     bind process to CPU core\n"
      " -c <bytes>    default chunk size for IB transport [default: %d]\n"
      " -d            run as daemon\n"
      " -k <key>      hexadecimal shared memory key  [default: %x]\n"
@@ -459,11 +461,19 @@ int main (int argc, char **argv)
   /* hexadecimal shared memory key */
   key_t dada_key = DADA_DEFAULT_BLOCK_KEY;
 
+  int cpu_core = -1;
+
   int arg = 0;
 
-  while ((arg=getopt(argc,argv,"c:dk:p:sv")) != -1)
+
+
+  while ((arg=getopt(argc,argv,"b:c:dk:p:sv")) != -1)
   {
     switch (arg) {
+
+    case 'b':
+      cpu_core = atoi(optarg);
+      break;
 
     case 'c':
       if (optarg)
@@ -507,6 +517,9 @@ int main (int argc, char **argv)
       
     }
   }
+
+  if (cpu_core >= 0)
+    dada_bind_thread_to_core(cpu_core);
 
   log = multilog_open ("dada_ibdb", daemon);
 
