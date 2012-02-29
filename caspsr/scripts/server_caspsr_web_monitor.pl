@@ -422,7 +422,7 @@ sub imageInfoThread($) {
         }
 
         # also check sources based on archives
-        $cmd = "find ".$obs." -mindepth 1 -maxdepth 1 -type f -name '*_f.tot' -printf '\%f\n' | awk -F_ '{print \$1}' | sort";
+        $cmd = "find ".$obs." -mindepth 1 -maxdepth 1 -type f -name '*_f.tot' -printf '\%f\n'| awk '{print substr(\$1, 0, length(\$1)-6)}' | sort";
         $src_list = `$cmd`;
         chomp $src_list;
 
@@ -449,14 +449,22 @@ sub imageInfoThread($) {
 
         for ($i=0; $i<=$#images; $i++) {
           $img = $images[$i];
-          @parts = split(/_/,$img);
-  
-          if ($img =~ m/phase_vs/) {
-            $src = $parts[3];
-          } else {
-            $src = $parts[1];
+
+          # strip of the common prefixes
+          $src = $img;
+          $src =~ s/^(.)*phase_vs_flux_//;
+          $src =~ s/^(.)*phase_vs_freq_//;
+          $src =~ s/^(.)*phase_vs_time_//;
+          $src =~ s/^(.)*bandpass_//;
+
+          @parts = split(/_/,$src);
+
+          $src = $parts[0];
+          # for CAL obs
+          if ($#parts == 3) {
+            $src .= "_".$parts[1];
           }
-      
+
           if (($img =~ m/phase_vs_flux/) && ($img =~ m/240x180/)) { $pvfl_lo{$src} = $img; }
           if (($img =~ m/phase_vs_flux/) && ($img =~ m/200x150/)) { $pvfl_lo{$src} = $img; }
           if (($img =~ m/phase_vs_flux/) && ($img =~ m/1024x768/)) { $pvfl_hi{$src} = $img; }
