@@ -307,7 +307,6 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, int64_t* size)
         {
           ignore_packet = 1;
         }
-#endif
 
         if (udpdb->received != BPSR_UDP_PAYLOAD_BYTES) {
           multilog (log, LOG_ERR, "UDP packet size was incorrect (%"PRIu64" != %d)\n", udpdb->received, BPSR_UDP_PAYLOAD_BYTES);
