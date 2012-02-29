@@ -154,11 +154,6 @@ int main (int argc, char **argv)
   uint64_t header_size = 0;
   char * header = 0;
 
-  /*
-  if (verbose > 1)
-    multilog_fprintf(stderr, LOG_INFO, "HB: ipcbuf_get_next_read()\n");
-  header = ipcbuf_get_next_read (hb, &header_size);
-  */
   if (verbose > 1)
     multilog_fprintf(stderr, LOG_INFO, "HB: ipcbuf_mark_cleared()\n");
   ipcbuf_mark_cleared (hb);
@@ -174,14 +169,6 @@ int main (int argc, char **argv)
     multilog_fprintf(stderr, LOG_INFO, "marking %"PRIu64" bytes as read\n", ipc->curbufsz);
 
   block_id = ipcbuf_get_read_index (db);
-
-  if (verbose > 1)
-    multilog_fprintf(stderr, LOG_INFO, "DB: ipcbuf_mark_cleared() read_index=%"PRIu64"\n", block_id);
-  if (ipcbuf_mark_cleared ((ipcbuf_t*)ipc) < 0)
-  {
-    multilog_fprintf (stderr, LOG_INFO, "DB: ipcbuf_mark_cleared failed\n");
-    return -1;
-  }
 
   // whilst we are not at the EOD 
   while (!quit && !ipcbuf_eod(db)) 
