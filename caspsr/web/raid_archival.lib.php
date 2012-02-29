@@ -357,7 +357,7 @@ class raid_archival extends caspsr_webpage
       # get a list of obs that have been transferred to the ATNF
       $lines = array();
       $results = array();
-      $cmd = "cd /lfs/raid0/caspsr; du -sb atnf/sent/P* | awk -F/ '{print $1\" \"$(NF)}' | awk '{print $3\" \"$1}'";
+      $cmd = "cd /lfs/raid0/caspsr; du -sb atnf/sent/P* archived/P* | awk -F/ '{print $1\" \"$(NF)}' | awk '{print $3\" \"$1}'";
       exec($cmd, $lines);
       for ($i=0; $i<count($lines); $i++)
       {
