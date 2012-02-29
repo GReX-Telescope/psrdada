@@ -10,12 +10,14 @@ class results extends caspsr_webpage
 
   var $filter_types = array("", "SOURCE", "CFREQ", "BANDWIDTH", "PID", "UTC_START", "PROC_FILE", "MODE");
   var $cfg = array();
+  var $basedir = "";
 
   function results()
   {
     caspsr_webpage::caspsr_webpage();
     $inst = new caspsr();
     $this->cfg = $inst->config;
+    $this->basedir = $this->cfg["SERVER_RESULTS_DIR"];
   }
 
   function javaScriptCallback()
@@ -411,23 +413,22 @@ class results extends caspsr_webpage
 
     $this->openBlockHeader("<span id='status'>Retreiving Data...</span>");
 
-    $basedir = $this->cfg["SERVER_RESULTS_DIR"];
     $archive_ext = ".ar";
     $cmd = "";
 
     if (($get["filter_type"] == "") && ($get["filter_value"] == "")) {
-      $cmd = "find ".$basedir." -maxdepth 2 -name 'obs.info' | wc -l";
+      $cmd = "find ".$this->basedir." -maxdepth 2 -name 'obs.info' | wc -l";
     } else {
       if ($get["filter_type"] == "UTC_START") {
-        $cmd = "find ".$basedir."/*".$get["filter_value"]."* -maxdepth 1 -name 'obs.info' | wc -l";
+        $cmd = "find ".$this->basedir."/*".$get["filter_value"]."* -maxdepth 1 -name 'obs.info' | wc -l";
       } else {
-        $cmd = "find ".$basedir." -maxdepth 2 -type f -name obs.info | xargs grep ".$get["filter_type"]." | grep ".$get["filter_value"]." | wc -l";
+        $cmd = "find ".$this->basedir." -maxdepth 2 -type f -name obs.info | xargs grep ".$get["filter_type"]." | grep ".$get["filter_value"]." | wc -l";
       }
     }
     $total_num_results = exec($cmd);
 
-    $results = $this->getResultsArray($this->cfg["SERVER_RESULTS_DIR"], $this->cfg["SERVER_ARCHIVE_DIR"],  
-                                      $archive_ext, 0, $get["length"], $get["filter_type"], $get["filter_value"]);
+    $results = $this->getResultsArray($this->basedir, $archive_ext, 0, $get["length"], 
+                                      $get["filter_type"], $get["filter_value"]);
 
     ?>
     <div style="text-align: right; padding-bottom:10px;">
@@ -528,8 +529,6 @@ class results extends caspsr_webpage
           $k = $keys[$i];
           $r = $results[$k];
           
-          #$data = getObservationImages($basedir."/".$keys[$i]);
-          
           $url = $result_url."?utc_start=".$k;
           $mousein = "onmouseover=\"Tip('<img src=\'".$results_dir."/".$k."/".$r["IMG"]."\' width=241 height=181>')\"";
           $mouseout = "onmouseout=\"UnTip()\"";
@@ -594,8 +593,8 @@ class results extends caspsr_webpage
 
     $archive_ext = ".ar";
 
-    $results = $this->getResultsArray($this->cfg["SERVER_RESULTS_DIR"], $this->cfg["SERVER_ARCHIVE_DIR"],
-                                      $archive_ext, $get["offset"], $get["length"], $get["filter_type"], $get["filter_value"]);
+    $results = $this->getResultsArray($this->basedir, $archive_ext, $get["offset"], 
+                                      $get["length"], $get["filter_type"], $get["filter_value"]);
 
     $keys = array_keys($results);
     rsort($keys);
@@ -634,7 +633,7 @@ class results extends caspsr_webpage
 
   }
 
-  function getResultsArray($results_dir, $archive_dir, $archive_ext, $offset=0, $length=0, $filter_type, $filter_value) 
+  function getResultsArray($results_dir, $archive_ext, $offset=0, $length=0, $filter_type, $filter_value) 
   {
 
     $all_results = array();
