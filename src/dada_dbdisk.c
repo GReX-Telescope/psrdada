@@ -7,6 +7,7 @@
 #include "disk_array.h"
 #include "ascii_header.h"
 #include "daemon.h"
+#include "dada_affinity.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,6 +25,7 @@ void usage()
 {
   fprintf (stdout,
            "dada_dbdisk [options]\n"
+           " -b <core>  bind process to CPU core\n"
            " -k         hexadecimal shared memory key  [default: %x]\n"
            " -D <path>  add a disk to which data will be written\n"
            " -o         use O_DIRECT flag to bypass kernel buffering\n"
@@ -380,10 +382,16 @@ int main (int argc, char **argv)
 
   uint64_t optimal_bytes = 0;
 
+  int cpu_core = -1;
+
   dbdisk.array = disk_array_create ();
 
-  while ((arg=getopt(argc,argv,"k:dD:ot:vWsz")) != -1)
+  while ((arg=getopt(argc,argv,"b:k:dD:ot:vWsz")) != -1)
     switch (arg) {
+
+    case 'b':
+      cpu_core = atoi (optarg);
+      break;
 
     case 'k':
       if (sscanf (optarg, "%x", &dada_key) != 1) {
@@ -434,6 +442,9 @@ int main (int argc, char **argv)
       return 0;
       
     }
+
+  if (cpu_core >= 0)
+    dada_bind_thread_to_core(cpu_core);
 
   log = multilog_open ("dada_dbdisk", daemon);
 
