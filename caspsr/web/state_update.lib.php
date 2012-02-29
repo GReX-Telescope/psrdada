@@ -111,7 +111,7 @@ class state_update extends caspsr_webpage
           <div class="btns" align="right">
             <a href="javascript:popUp('/ganglia/','gang')" class="btn" ><span>Ganglia</span></a>
             <a href="javascript:popUp('results.lib.php', 'results')" class="btn"><span>Results</span></a>
-            <a href="javascript:popUp('download.lib.php', 'downloads')" class="btn"><span>Downloads</span></a>
+            <a href="javascript:popUp('baseband.lib.php?single=true', 'baseband')" class="btn"><span>Baseband</span></a>
             <a href="javascript:popUp('archival.lib.php', 'archival')" class="btn"><span>Archival</span></a>
             <a href="javascript:popUp('control.lib.php', 'controls')" class="btn"><span>Controls</span></a>
             <a href="javascript:popUp('tcs_simulator.lib.php', 'test')" class="btn"><span>Test</span></a>
