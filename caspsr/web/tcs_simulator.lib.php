@@ -225,9 +225,11 @@ class tcs_simulator extends caspsr_webpage
           <select name="PROCFIL">
             <option value="dspsr.gpu">dspsr.gpu</option>
             <option value="dspsr.50cmgpu">dspsr.50cmgpu</option>
+            <option value="dspsr.nosk">dspsr.nosk</option>
             <option value="dspsr.single.gpu">dspsr.single.gpu</option>
             <option value="dspsr.cpu">dspsr.cpu</option>
             <option value="dspsr.skfb">dspsr.skfb</option>
+            <option value="dspsr.aj">dspsr.aj</option>
             <option value="counter.test">counter.test</option>
             <option value="dbnull.caspsr">dbnull.caspsr</option>
             <option value="dbdisk.caspsr">dbdisk.caspsr</option>
