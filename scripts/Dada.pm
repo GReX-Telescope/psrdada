@@ -9,6 +9,7 @@ use strict;
 use vars qw($DADA_ROOT $VERSION @ISA @EXPORT @EXPORT_OK);
 use Sys::Hostname;
 use Time::Local;
+use File::Basename;
 use POSIX qw(setsid);
 
 BEGIN {
@@ -1657,10 +1658,12 @@ sub daemonBaseName($) {
 
   my ($name) = @_;
 
+  $name = basename($name);
+
   $name =~ s/\.pl$//;
-  $name =~ s/^.*client_//;
-  $name =~ s/^.*server_//;
-  $name =~ s/^.*raid_//;
+  $name =~ s/^client_//;
+  $name =~ s/^server_//;
+  $name =~ s/^raid_//;
 
   return ($name);
 }
