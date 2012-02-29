@@ -171,11 +171,11 @@ SWIN_DIR_0                pulsar:shrek214-gb:/export/shrek214b/caspsr
 
 ##############################################################################
 # IBOB / ROACH configuration
-#IBOB_CONTROL_IP           192.168.0.15      # IBOB mode
-#IBOB_CONTROL_PORT         7                 # IBOB mode
+IBOB_CONTROL_IP           192.168.0.15      # IBOB mode
+IBOB_CONTROL_PORT         7                 # IBOB mode
 
-IBOB_CONTROL_IP           caspsr-srv0       # ROACH mode
-IBOB_CONTROL_PORT         18732             # ROACH mode
+#IBOB_CONTROL_IP           caspsr-srv0       # ROACH mode
+#IBOB_CONTROL_PORT         18732             # ROACH mode
 ROACH_IP                  roach01
 ROACH_PORT                7147
 ROACH_10GbE_SRC_IP_0      192.168.1.250
