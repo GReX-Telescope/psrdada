@@ -400,16 +400,26 @@ class instrument
   function getObsImages($dir) {
 
     # determine how many pulsars are present
-    $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -name '*_t*.tot' -printf '%f\n'";
+    $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -name '*_t*.tot' -printf '%f\n' | ".
+           "awk '{print substr($1, 0, length($1)-6)}'";
     $pulsars = array();
     $rval = 0;
     $line = exec($cmd, $pulsars, $rval);
+
+    # if no *_t.tot file, try to just use the image names
+    if (count($pulsars) == 0) {
+      $cmd = "find ".$dir." -name 'phase_vs_flux_*1024x768.png' -printf '%f\n' | ".
+             "awk '{print substr($1,15)}' | awk '{print substr($1,0, length($1)-33)}'";
+      $line = exec($cmd, $pulsars, $rval);
+    }
+
     $results = array();
 
     for ($i=0; $i<count($pulsars); $i++) {
 
-      $arr = split("_t", $pulsars[$i], 2);
-      $p = $arr[0];
+      #$arr = split("_t", $pulsars[$i], 2);
+      #$p = $arr[0];
+      $p = $pulsars[$i];
       $p_regex = str_replace("+","\+",$p);
 
       $cmd = "find ".$dir." -name '*".$p."*.png' -printf '%f\n'";
@@ -446,7 +456,6 @@ class instrument
     }
     return $results;
   }
-
 
   #
   # return a list of all the PSRS listed in this user's psrcat catalogue
