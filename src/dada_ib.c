@@ -496,8 +496,8 @@ int dada_ib_create_qp (dada_ib_cm_t * ctx)
     multilog(log, LOG_INFO, "create_qp send_cq=%p recv_cq=%p\n", ctx->send_cq, ctx->recv_cq);
   }
 
-  qp_attr.cap.max_send_wr  = (int) ctx->send_depth;
-  qp_attr.cap.max_recv_wr  = (int) ctx->recv_depth;
+  qp_attr.cap.max_send_wr  = (int) ctx->send_depth+1;
+  qp_attr.cap.max_recv_wr  = (int) ctx->recv_depth+1;
   qp_attr.cap.max_send_sge = 1;
   qp_attr.cap.max_recv_sge = 1;
 
@@ -951,6 +951,7 @@ int dada_ib_post_send (dada_ib_cm_t * ctx, dada_ib_mb_t * mb)
   if (err)
   {
     multilog(log, LOG_ERR, "dada_ib_post_send: ibv_post_send failed errno=%d strerror=%s\n", errno, strerror(errno));
+    multilog(log, LOG_INFO, "dada_ib_post_send: bad_send_wr: lkey=%p wr_id=%d\n", bad_send_wr->sg_list->lkey, bad_send_wr->wr_id);
     return -1;
   }
 
