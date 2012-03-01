@@ -1,12 +1,15 @@
 
 # scripts distributed as is (installed in bin/)
 dist_bin_SCRIPTS = Bpsr.pm \
+                   Bpsr.py \
                    bpsr_reconfigure.pl \
                    bpsr_hard_reset.pl \
+                   median_smooth.py \
                    server_bpsr_bookkeeping_archiver.pl \
                    server_bpsr_tcs_interface.pl \
                    server_bpsr_results_manager.pl \
                    server_ibob_simulator.pl \
+                   server_bpsr_ibob_emulator.py \
                    server_bpsr_multibob_manager.pl \
                    server_bpsr_pwc_monitor.pl \
                    server_bpsr_src_monitor.pl \
@@ -16,6 +19,7 @@ dist_bin_SCRIPTS = Bpsr.pm \
                    server_bpsr_parkes_tape_controller.pl \
                    server_bpsr_raid_pipeline.pl \
                    server_bpsr_rfi_masker.pl \
+                   server_bpsr_roach_manager.py \
                    server_bpsr_swin_tape_controller.pl \
                    server_bpsr_server_logger.pl \
                    server_bpsr_web_monitor.pl \
