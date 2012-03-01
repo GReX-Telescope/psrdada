@@ -1,6 +1,7 @@
 
 # scripts distributed as is (installed in bin/)
 dist_bin_SCRIPTS = Caspsr.pm \
+                   Caspsr.py \
                    caspsr_reconfigure.pl \
                    caspsr_hard_reset.pl \
                    client_caspsr_archive_manager.pl \
@@ -19,6 +20,7 @@ dist_bin_SCRIPTS = Caspsr.pm \
                    server_caspsr_sys_monitor.pl \
                    server_caspsr_demux_monitor.pl \
                    server_caspsr_distrib_monitor.pl \
+                   server_caspsr_ibob_emulator.py \
                    server_caspsr_pwc_monitor.pl \
                    server_caspsr_raid_pipeline.pl \
                    server_caspsr_results_manager.pl \
