@@ -428,12 +428,7 @@ sub getTapeStatus() {
 
   Dada::logMsg(2, $dl, "getTapeStatus()");
 
-  # Parkes robot has a different print out than the swinburne one
-  if ($robot eq 0) {
-    $cmd="mt -f ".$dev." status | grep 'file number' | awk '{print \$4}'";
-  } else {
-    $cmd="mt -f ".$dev." status | grep 'File number' | awk -F, '{print \$1}' | awk -F= '{print \$2}'";
-  }
+  $cmd="mt -f ".$dev." status | grep 'File number' | awk -F, '{print \$1}' | awk -F= '{print \$2}'";
   Dada::logMsg(3, $dl, "getTapeStatus: cmd= $cmd");
 
   my ($result,$response) = Dada::mySystem($cmd);
@@ -445,11 +440,7 @@ sub getTapeStatus() {
 
   } else {
     $filenum = $response;
-    if ($robot eq 0) {
-      $cmd="mt -f ".$dev." status | grep 'block number' | awk '{print \$4}'";
-    } else {
-      $cmd="mt -f ".$dev." status | grep 'block number' | awk -F, '{print \$2}' | awk -F= '{print \$2}'";
-    }
+    $cmd="mt -f ".$dev." status | grep 'block number' | awk -F, '{print \$2}' | awk -F= '{print \$2}'";
 
     my ($result, $response) = Dada::mySystem($cmd);
     if ($result ne "ok") {
@@ -489,7 +480,6 @@ sub loadTapeGeneral($) {
 
   Dada::logMsg(2, $dl, "Dada::tapes::loadTapeGeneral() ".$result." ".$response);
   return ($result, $response);
-
 
 }  
 
@@ -849,10 +839,10 @@ sub loadTapeManual($) {
     Dada::logMsg(0, $dl, "loadTapeManual: tape offline failed: ".$response);
   }
 
-  my $n_tries = 10;
   my $inserted_tape = "none";
+  my $first_time = 1;
 
-  while (($inserted_tape ne $tape) && ($n_tries >= 0) && (!$quit_daemon)) {
+  while (($inserted_tape ne $tape) && (!$quit_daemon)) {
 
     Dada::logMsg(3, $dl, "loadTapeManual: tapeIsLoaded() [qd=".$quit_daemon."]");
     ($result, $response) = tapeIsLoaded();
@@ -865,8 +855,13 @@ sub loadTapeManual($) {
 
     # If a tape was not loaded
     if ($response ne 1) {
+      if ($first_time) {
+        Dada::logMsg(1, $dl, "loadTapeManual: polling every 10 seconds for new tape");
+        $first_time = 0;
+      }
+
       $inserted_tape = "none";
-      Dada::logMsg(1, $dl, "loadTapeManual: sleeping 10 seconds for tape online");
+      Dada::logMsg(2, $dl, "loadTapeManual: sleeping 10 seconds for tape online");
       sleep(10);
 
     } else {
@@ -878,6 +873,7 @@ sub loadTapeManual($) {
       if ($result ne "ok") {
         Dada::logMsg(0, $dl, "loadTapeManual: tapeGetID() failed: ".$response);
         $inserted_tape = "none";
+        return ("fail", "failed to insert tape: ".$tape);
       } else {
         $inserted_tape = $response;
       }
