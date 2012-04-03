@@ -138,8 +138,6 @@ sub main() {
   $Dada::tapes::robot = $robot;
   Dada::logMsg(2, $dl, "main: setDada::tapes dl=".$Dada::tapes::dl." dev=".$Dada::tapes::dev." robot=".$Dada::tapes::robot);
 
-  
-
   # sanity check on whether the module is good to go
   ($result, $response) = good($quit_file);
   if ($result ne "ok") {
@@ -161,31 +159,17 @@ sub main() {
   my @hosts = ();
   my @users = ();
   my @paths = ();
-  my @direxts = ();
   my $user = "";
   my $host = "";
   my $path = "";
-  my $direxts = "";
   my $path_pid = "";
 
   # setup the disks
   for ($i=0; $i<$cfg{"NUM_".uc($type)."_DIRS"}; $i++) {
     ($user, $host, $path) = split(/:/,$cfg{uc($type)."_DIR_".$i},3);
-    $hosts[$j] = $host;
-    $users[$j] = $user;
-    $paths[$j] = $path;
-    $direxts[$j] = "staging_area";
-    $j++;
-  }
-
-  # add the pulsars' directory also
-  for ($i=0; $i<$cfg{"NUM_".uc($type)."_DIRS"}; $i++) {
-    ($user, $host, $path) = split(/:/,$cfg{uc($type)."_DIR_".$i},3);
-    $hosts[$j] = $host;
-    $users[$j] = $user;
-    $paths[$j] = $path;
-    $direxts[$j] = "pulsars";
-    $j++;
+    $hosts[$i] = $host;
+    $users[$i] = $user;
+    $paths[$i] = $path;
   }
 
   $j = 0;
@@ -219,6 +203,7 @@ sub main() {
 
   if ($result ne "ok") {
     Dada::logMsg(0, $dl, "main: getExpectedTape() failed: ".$response);
+    setStatus("ERROR: no tapes available, label more tapes");
     exit_script(1);
   }
 
@@ -292,6 +277,7 @@ sub main() {
   my $disks_tried = 0;
   my $give_up = 0;
   my $counter = 0;
+  my $try_to_archive = 0;
 
   while (!$quit_daemon) {
 
@@ -299,7 +285,7 @@ sub main() {
     $host = $hosts[$i];
     $user = $users[$i];
     $path = $paths[$i];
-    $path_pid = $path."/".$pid."/".$direxts[$i];
+    $path_pid = $path."/archive/".$pid;
 
     # Look for files in the @dirs
     Dada::logMsg(2, $dl, "main: getBeamToTar(".$user.", ".$host.", ".$path_pid.")");
@@ -312,47 +298,88 @@ sub main() {
       $disks_tried = 0;
 
       # lock this dir for READING
-      $cmd = "touch ".$path."/../READING";
-      Dada::logMsg(2, $dl, "main: localSshCommand(".$user.", ".$host.", ".$cmd.")");
-      ($result, $response) = localSshCommand($user, $host, $cmd);
-      Dada::logMsg(2, $dl, "main: localSshCommand() ".$result." ".$response);
+      Dada::logMsg(2, $dl, "main: touchFile(".$user.", ".$host.", ".$path."/../READING");
+      ($result, $response) = touchFile($user, $host, $path."/../READING");
+      Dada::logMsg(3, $dl, "main: touchFile() ".$result." ".$response);
 
-      if ($result ne "ok") {
-        Dada::logMsg(0, $dl, "main: could not touch READING flag in ".$path.": ".$response);
-        exit_script(1);
-      }
+      $try_to_archive = 1;
+      while (!$quit_daemon && $try_to_archive)
+      {
+        # check that the current tape is the expected one
+        my $expected_tape = getExpectedTape();
+        if ($expected_tape ne $current_tape) 
+        {
+          Dada::logMsg(2, $dl, "main: expected tape mismatch [".$expected_tape."] != [".$current_tape."]");
+          # try to get the tape loaded (robot or manual)
+          ($result, $response) = loadTape($expected_tape);
 
-      Dada::logMsg(2, $dl, "main: tarBeam(".$user.", ".$host.", ".$path_pid.", ".$obs.", ".$beam.")");
-      ($result, $response) = tarBeam($user, $host, $path_pid, $obs, $beam);
-      Dada::logMsg(2, $dl, "main: tarBeam() ".$result." ".$response);
-      $waiting = 0;
-
-      if ($result eq "ok") {
-
-        # if the completion thread has been previously launched, join it
-        if ($completed_thread ne 0) {
-          $completed_thread->join();
-	        $completed_thread = 0;
+          # if the tape could not be loaded for whatever reason, fail
+          if ($result ne "ok")
+          {
+            setStatus("ERROR: could not load ".$expected_tape);
+            Dada::logMsg(0, $dl, "could not load tape ".$expected_tape);
+            $quit_daemon = 1;
+            $try_to_archive = 0;
+          }
+          
+          $current_tape = $expected_tape;
         }
 
-        # launch the completion thread
-        $completed_thread = threads->new(\&completed_thread, $user, $host, $path_pid, $obs, $beam);
+        if ($try_to_archive)
+        {
 
-      } else {
-        setStatus("Error: ".$response);
-        Dada::logMsg(0, $dl, "main: tarBeam() failed: ".$response);
-        $give_up = 1;
-      }
+          Dada::logMsg(2, $dl, "main: tarBeam(".$user.", ".$host.", ".$path_pid.", ".$obs.", ".$beam.")");
+          ($result, $response) = tarBeam($user, $host, $path_pid, $obs, $beam);
+          Dada::logMsg(2, $dl, "main: tarBeam() ".$result." ".$response);
+          $waiting = 0;
 
-      $cmd = "rm -f ".$path."/../READING";
-      Dada::logMsg(2, $dl, "main: localSshCommand(".$user.", ".$host.", ".$cmd.")");
-      ($result, $response) = localSshCommand($user, $host, $cmd);
-      Dada::logMsg(2, $dl, "main: localSshCommand() ".$result." ".$response);
+          if ($result eq "ok") 
+          {
+            $try_to_archive = 0;
+            # if the completion thread has been previously launched, join it
+            if ($completed_thread ne 0) 
+            {
+              $completed_thread->join();
+  	          $completed_thread = 0;
+            }
 
-      if ($result ne "ok") {
-        Dada::logMsg(0, $dl, "main: could not unlink READING flag in ".$path.": ".$response);
-        $give_up = 1;
-      }
+            # launch the completion thread
+            $completed_thread = threads->new(\&completed_thread, $user, $host, $path, $pid, $obs, $beam);
+
+            # if there is only 1 dir to check, wait for the completed thread
+            if ($cfg{"NUM_".uc($type)."_DIRS"} == 1)
+            {
+              $completed_thread->join();
+	            $completed_thread = 0;
+            }
+          }
+          # see what the problem was
+          else
+          {
+            if ($response eq "beam already archived")
+            {
+              # dont need to do anything
+              $try_to_archive = 0;
+            }
+            # the only reason to keep trying is if the tape was full
+            elsif ($response eq "not enough space on tape")
+            {
+              # try again after a tape reload
+            }
+            else
+            {
+              $try_to_archive = 0;
+              $give_up = 1;
+              setStatus("Error: ".$response);
+              Dada::logMsg(0, $dl, "main: tarBeam() failed: ".$response);
+            }
+          }
+        }
+      } 
+
+      Dada::logMsg(2, $dl, "main: clearFile(".$user.", ".$host.", ".$path."/../READING");
+      ($result, $response) = clearFile($user, $host, $path."/../READING");
+      Dada::logMsg(3, $dl, "main: clearFile() ".$result." ".$response);
 
       if ($give_up) {
         exit_script(1);
@@ -363,9 +390,9 @@ sub main() {
     } else {
 
       $disks_tried++;
-      Dada::logMsg(2, $dl, "main: source [".$i."] had no beams ".$users[$i]."@".$hosts[$i].":".$paths[$i]."/".$pid."/".$direxts[$i]);
-      # If we have cycled through all the disks and no files exist 
+      Dada::logMsg(2, $dl, "main: source [".$i."] had no beams ".$users[$i]."@".$hosts[$i].":".$paths[$i]."/archive/".$pid);
 
+      # If we have cycled through all the disks and no files exist 
       if ($disks_tried > ($#hosts)) {
 
         Dada::logMsg(2, $dl, "main: tried [".$disks_tried." of ".($#hosts+1)."] disks, doing a long sleep");
@@ -445,16 +472,16 @@ sub getBeamToTar($$$) {
   my $response = "";
   my $cmd = "";
 
-  $cmd = "ls -1 ".$dir."/../../WRITING";
-  Dada::logMsg(2, $dl, "getBeamToTar: localSshCommand(".$user.", ".$host.", ".$cmd.")");
-  ($result, $response) = localSshCommand($user, $host, $cmd);
-  Dada::logMsg(2, $dl, "getBeamToTar: localSshCommand() ".$result." ".$response);
+  Dada::logMsg(2, $dl, "getBeamToTar: checkFile(".$user.", ".$host.", ". $dir."/../../WRITING");
+  ($result, $response) = checkFile($user, $host, $dir."/../../WRITING");
+  Dada::logMsg(2, $dl, "getBeamToTar: ".$result." ".$response);
 
-  # If the file existed
-  if ($result eq "ok") {
+  if (($result eq "ok") && ($response eq "file did exist"))
+  {
     Dada::logMsg(2, $dl, "getBeamToTar: ignoring dir ".$dir." as this is being written to");
-
-  } else {
+  } 
+  else 
+  {
 
     $cmd = "cd ".$dir."; find . -mindepth 3 -maxdepth 3 -name 'xfer.complete' ".
            "-printf '\%h\\n' | sort -r | tail -n 1";
@@ -498,12 +525,12 @@ sub getBeamToTar($$$) {
 #
 # tars the beam to the tape drive
 #
-sub tarBeam($$$$$) {
-
+sub tarBeam($$$$$) 
+{
   my ($user, $host, $dir, $obs, $beam) = @_;
 
   Dada::logMsg(2, $dl, "tarBeam: (".$user." , ".$host.", ".$dir.", ".$obs.", ".$beam.")");
-  Dada::logMsg(1, $dl, "tarBeam: archiving ".$obs.", beam ".$beam);
+  Dada::logMsg(1, $dl, "Archiving  ".$obs."/".$beam." from ".$host.":".$dir);
 
   my $cmd = "";
   my $result = "";
@@ -526,54 +553,20 @@ sub tarBeam($$$$$) {
   }
 
   setStatus("Archiving ".$obs." ".$beam);
+  my $tape = $current_tape;
 
-  # Check the tape is the expected one
-  my $expected_tape = getExpectedTape(); 
-
-  if ($expected_tape ne $current_tape) {
-    
-    # try to load it?
-    Dada::logMsg(2, $dl, "tarBeam: expected tape mismatch \"".$expected_tape."\" != \"".$current_tape."\"");
-
-    # try to get the tape loaded (robot or manual)
-    ($result, $response) = loadTape($expected_tape);
-
-    if ($result ne "ok") {
-      return ("fail", "Could not load tape: ".$expected_tape);
-    }
-
-    $current_tape = $expected_tape;
+  # get the size in GB for the beam
+  ($result, $response) = getBeamSize($user, $host, $dir."/".$obs."/".$beam);
+  if ($result ne "ok")
+  {
+    return ("fail", "could not determine archive size of ".$obs."/".$beam);
   }
-
-  my $tape = $expected_tape;
-
-  # Find the combined file size in bytes
-  my $rval = 0;
-  $cmd = "du -sLb ".$dir."/".$obs."/".$beam;
-  my $pipe = "awk '{print \$1}'";
-  Dada::logMsg(2, $dl, "tarBeam: remoteSshCommand(".$user.", ".$host.", ".$cmd.", \"\", ".$pipe.")");
-  ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd, "", $pipe);
-  Dada::logMsg(2, $dl, "tarBeam: remoteSshCommand() ".$result." ".$response);
-
-  if ($result ne "ok") {
-    Dada::logMsg(0, $dl, "tarBeam: ".$cmd. "failed: ".$response);
-    return ("fail", "Could not determine archive size for ".$obs."/".$beam);
-  } 
-
-  my $junk = "";
-  my $size_bytes = "";
-  ($size_bytes, $junk) = split(/ /,$response,2);
-
-  # get the upper limit on the archive size
-  Dada::logMsg(2, $dl, "tarBeam: tarSizeEst(4, ".$size_bytes.")");
-  my $size_est_bytes = tarSizeEst(4, $size_bytes);
-  my $size_est_gbytes = $size_est_bytes / (1024*1024*1024);
-  Dada::logMsg(2, $dl, "tarBeam: tarSizeEst() ".$size_est_gbytes." GB");
+  my $size_est_gbytes = $response;
 
   # check if this beam will fit on the tape
   ($result, $response) = getTapeInfo($tape);
-
-  if ($result ne "ok") {
+  if ($result ne "ok") 
+  {
     Dada::logMsg(0, $dl, "tarBeam: getTapeInfo() failed: ".$response);
     return ("fail", "could not determine tape information from database");
   } 
@@ -583,8 +576,9 @@ sub tarBeam($$$$$) {
   Dada::logMsg(2, $dl, "tarBeam: ".$free." GB left on tape");
   Dada::logMsg(2, $dl, "tarBeam: size of this beam is estimated at ".$size_est_gbytes." GB");
 
-  if ($free < $size_est_gbytes) {
-
+  # if we estimate that there is not enough spce on the tape
+  if ($free < $size_est_gbytes) 
+  {
     Dada::logMsg(0, $dl, "tarBeam: tape ".$tape." full. (".$free." < ".$size_est_gbytes.")");
 
     # Mark the current tape as full and load a new tape;
@@ -597,48 +591,7 @@ sub tarBeam($$$$$) {
       return ("fail", "Could not mark tape full");
     }
 
-    # Get the next expected tape
-    Dada::logMsg(1, $dl, "tarBeam: getExpectedTape()");
-    my $new_tape = getExpectedTape();
-    Dada::logMsg(1, $dl, "tarBeam: getExpectedTape(): ".$new_tape);
-
-    Dada::logMsg(1, $dl, "tarBeam: loadTape(".$new_tape.")");
-    ($result, $response) = loadTape($new_tape);
-    Dada::logMsg(1, $dl, "tarBeam: loadTape() ".$result." ".$response);
-
-    if ($result ne "ok") {
-      Dada::logMsg(0, $dl, "tarBeam: newTape() failed: ".$response);
-      return ("fail", "New tape was not loaded");
-    }
-
-    $tape = $new_tape; 
-    $current_tape = $tape;
-
-    # check if this beam will fit on the tape
-    Dada::logMsg(2, $dl, "tarBeam: getTapeInfo(".$tape.")");
-    ($result, $response) = getTapeInfo($tape);
-    Dada::logMsg(2, $dl, "tarBeam: getTapeInfo() ".$result." ".$response);
-
-    if ($result ne "ok") {
-      Dada::logMsg(0, $dl, "tarBeam: getTapeInfo() failed: ".$response);
-      return ("fail", "Could not determine tape information from database");
-    }
-
-    # Setup the ID information for the new tape    
-    ($id, $size, $used, $free, $nfiles, $full) = split(/:/,$response);
-
-    # If for some reason, this tape has files on it, forward seek
-    if ($nfiles > 1) {
-
-      Dada::logMsg(2, $dl, "tarBeam: tapeFSF(".($nfiles-1).")");
-      ($result, $response) = tapeFSF(($nfiles-1));
-      Dada::logMsg(2, $dl, "tarBeam: tapeFSF() ".$result." ".$response);
-                                                                                                                                                                           
-      if ($result ne "ok") {
-        Dada::logMsg(0, $dl, "tarBeam: tapeFSF failed: ".$response);
-        return ("fail", "Could not FSF seek to correct place on tape");
-      }
-    }
+    return ("fail", "not enough space on tape");
   }
 
   my $filenum = -1;
@@ -649,12 +602,13 @@ sub tarBeam($$$$$) {
     return ("fail", "Could not get tape status");
   }
 
+  # try to position the tape on the correct file
   my $ntries = 3;
-  while (($filenum ne $nfiles) || ($blocknum ne 0)) {
-
+  while (($filenum ne $nfiles) || ($blocknum ne 0)) 
+  {
     # we are not at 0 block of the next file!
-    Dada::logMsg(0, $dl, "tarBeam: WARNING: Tape out of position! (f=".$filenum.
-                  ", b=".$blocknum.") Attempt to get to right place.");
+    Dada::logMsg(0, $dl, "tarBeam: WARNING: Tape out of position! ".
+                 "(file==".$filenum."!=".$nfiles.", block==".$blocknum."!=0) Attempt to get to right place.");
 
     $cmd = "mt -f ".$dev." rewind; mt -f ".$dev." fsf $nfiles";
     ($result, $response) = Dada::mySystem($cmd);
@@ -676,14 +630,13 @@ sub tarBeam($$$$$) {
     $ntries--;
   }
 
-
-  # Try to ensure that no nc is running on the port we want to use
+  # try to ensure that no nc is running on the port we want to use
   my $nc_ready = 0;
   my $tries = 10;
   my $port = 25128;
 
-  while ( (!$nc_ready)  && ($tries > 0) && (!$quit_daemon) ) {
-
+  while ( (!$nc_ready)  && ($tries > 0) && (!$quit_daemon) ) 
+  {
     # This tries to connect to any type of service on specified port
     Dada::logMsg(2, $dl, "tarBeam: testing nc on ".$host.":".$port);
     if ($robot eq 0) {
@@ -693,11 +646,10 @@ sub tarBeam($$$$$) {
     }
     ($result, $response) = Dada::mySystem($cmd);
 
-    if ($result eq "ok") {
-      # This is an error condition!
-
+    # This is an error condition!
+    if ($result eq "ok") 
+    {
       Dada::logMsg(0, $dl, "tarBeam: something running on the NC port ".$port);
-
       if ($tries < 5) {
         Dada::logMsg(0, $dl, "tarBeam: trying to increment port number");
         $port += 1;
@@ -711,7 +663,6 @@ sub tarBeam($$$$$) {
     } else {
       Dada::logMsg(2, $dl, "tarBeam: nc will be available on ".$host.":".$port);
       $nc_ready = 1;
-
     }
   }
 
@@ -719,18 +670,20 @@ sub tarBeam($$$$$) {
   my $remote_nc_thread = threads->new(\&nc_thread, $user, $host, $dir, $obs, $beam, $port);
 
   # Allow some time for this thread to start-up, ssh and launch tar + nc
-  sleep(5);
+  sleep(2);
 
   my $localhost = Dada::getHostMachineName();
 
-  $tries=10;
-  while ($tries > 0) {
+  $tries = 10;
+  my $tar_beam_result = "";
+  my $tar_beam_response = "";
 
+  while ($tries > 0) 
+  {
     # For historical reasons, HRE(robot==0) tapes are written with a slight 
     # different command to HRA (robot==1) tapes
-    #
     if ($robot eq 0) {
-      $cmd = "nc -w 10 ".$host." ".$port." | dd of=".$dev." bs=64K";
+      $cmd = "nc -w 5 -T Maximize-Throughput ".$host." ".$port." | dd of=".$dev." bs=64K";
     } else {
       $cmd = "nc -d ".$host." ".$port." | dd of=".$dev." obs=64k";
     }
@@ -738,46 +691,77 @@ sub tarBeam($$$$$) {
     Dada::logMsg(2, $dl, "tarBeam: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
 
-    # Fatal errors, give up straight away
-    if ($response =~ m/Input\/output error/) {
+    # fatal errors, give up straight away
+    if ($response =~ m/Input\/output error/) 
+    {
       Dada::logMsg(0, $dl, "tarBeam: fatal tape error: ".$response);
+      $tar_beam_result = "fail";
+      $tar_beam_response = "input output error";
+      $tries = -1;
+    }
+
+    # the tape is unexpectedly full 
+    elsif ($response =~ m/No space left on device/)
+    {
+      Dada::logMsg(0, $dl, "tarBeam: tape unexpectedly ".$tape." full");
+      $tar_beam_result = "fail";
+      $tar_beam_response = "not enough space on tape";
       $tries = -1;
 
-    # Non fatal errors
-    } 
-    elsif (($result ne "ok") || ($response =~ m/refused/) || ($response =~ m/^0\+0 records in/)) {
+      # Mark the current tape as full and load a new tape;
+      Dada::logMsg(2, $dl, "tarBeam: updateTapesDB(".$id.", ".$size.", ".$used.", ".$free.", ".$nfiles);
+      ($result, $response) = updateTapesDB($id, $size, $used, $free, $nfiles, 1);
+      Dada::logMsg(2, $dl, "tarBeam: updateTapesDB() ".$result." ".$response);
+      if ($result ne "ok") 
+      {
+        Dada::logMsg(0, $dl, "tarBeam: updateTapesDB() failed: ".$response);
+        return ("fail", "Could not mark tape full");
+      }
+    }
+    # non fatal errors
+    elsif (($result ne "ok") || ($response =~ m/refused/) || ($response =~ m/^0\+0 records in/)) 
+    {
       Dada::logMsg(2, $dl, "tarBeam: ".$result." ".$response);
       Dada::logMsg(0, $dl, "tarBeam: failed to write archive to tape: ".$response);
       $tries--;
       $result = "fail";
       $response = "failed attempt at writing archive";
       sleep(2);
-
-    } else {
+    } 
+    # check that was written
+    else
+    {
       # Just the last line of the DD command is relvant:
       my @temp = split(/\n/, $response);
-      Dada::logMsg(1, $dl, "tarBeam: ".$result." ".$temp[2]);
+      Dada::logMsg(1, $dl, "Archived   ".$temp[2]);
       my @vals = split(/ /, $temp[2]);
       my $bytes_written = int($vals[0]);
       my $bytes_gb = $bytes_written / (1024*1024*1024);
 
-      # If we didn't write anything, its due to the nc client connecting 
+      # if we didn't write anything, its due to the nc client connecting 
       # before the nc server was ready to provide the data, simply try to reconnect
-      if ($bytes_gb == 0) {
+      if ($bytes_gb == 0) 
+      {
         Dada::logMsg(0, $dl, "tarBeam: nc server not ready, sleeping 2 seconds");
         $tries--;
         sleep(2);
 
-      # If we did write something, but it didn't match bail!
-      } elsif ( ($size_est_gbytes - $bytes_gb) > 0.01) {
+      # if we did write something, but it didn't match bail!
+      } 
+      elsif ( ($size_est_gbytes - $bytes_gb) > 0.01)
+      {
         $result = "fail";
         $response = "not enough data received by nc: ".$size_est_gbytes.
                     " - ".$bytes_gb." = ".($size_est_gbytes - $bytes_gb);
         Dada::logMsg(0, $dl, "tarBeam: ".$result." ".$response);
+        $tar_beam_result = "fail";
+        $tar_beam_response = "not enough data received";
         $tries = -1;
-
-      } else {
-
+      } 
+      # success
+      else
+      {
+        $tar_beam_result = "ok";
         Dada::logMsg(2, $dl, "tarBeam: est_size ".sprintf("%7.4f GB", $size_est_gbytes).
                       ", size = ".sprintf("%7.4f GB", $bytes_gb));
         $tries = 0;
@@ -785,9 +769,9 @@ sub tarBeam($$$$$) {
     }
   }
 
-  if ($result ne "ok") {
-
-    Dada::logMsg(0, $dl, "tarBeam: failed to write archive to tape: ".$response);
+  if ($tar_beam_result ne "ok")
+  {
+    Dada::logMsg(0, $dl, "tarBeam: failed to write archive to tape: ".$tar_beam_response);
     Dada::logMsg(0, $dl, "tarBeam: attempting to clear the current nc server command");
 
     if ($robot eq 0) {
@@ -800,7 +784,11 @@ sub tarBeam($$$$$) {
     Dada::logMsg(0, $dl, "tarBeam: ".$result." ".$response);
 
     $remote_nc_thread->detach();
-    return ("fail","Archiving failed");
+    return ("fail", $tar_beam_response);
+  }
+  else
+  {
+    $tar_beam_result = "fail";
   }
   
   Dada::logMsg(2, $dl, "tarBeam: joining nc_thread()");
@@ -892,25 +880,73 @@ sub tarBeam($$$$$) {
 
 
 #
+# get the size of a beam
+#
+sub getBeamSize($$$)
+{
+  my ($user, $host, $beam_dir) = @_;
+
+  my $cmd = "";
+  my $result = "";
+  my $rval = 0;
+  my $response = "";
+  my $pipe = "";
+
+  # Find the combined file size in bytes
+  $cmd = "du -sLb ".$beam_dir;
+  $pipe = "awk '{print \$1}'";
+  Dada::logMsg(2, $dl, "getBeamSize: remoteSshCommand(".$user.", ".$host.", ".$cmd.", \"\", ".$pipe.")");
+  ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd, "", $pipe);
+  Dada::logMsg(2, $dl, "getBeamSize: remoteSshCommand() ".$result." ".$response);
+
+  if ($result ne "ok") 
+  {
+    Dada::logMsg(0, $dl, "getBeamSize: ssh to ".$user."@".$host." failed: ".$response);
+    return ("fail", "ssh failed");
+  }
+  elsif ($rval != 0) 
+  {
+    Dada::logMsg(0, $dl, "getBeamSize: ".$user."@".$host.":".$cmd." failed: ".$response);
+    return ("fail", "du comand failed");
+  }
+  else
+  {
+    my $junk = "";
+    my $size_bytes = "";
+    ($size_bytes, $junk) = split(/ /,$response,2);
+
+    # get the upper limit on the archive size
+    Dada::logMsg(2, $dl, "getBeamSize: tarSizeEst(4, ".$size_bytes.")");
+    my $size_est_bytes = tarSizeEst(4, $size_bytes);
+    my $size_est_gbytes = $size_est_bytes / (1024*1024*1024);
+    Dada::logMsg(2, $dl, "tarBeam: tarSizeEst() ".$size_est_gbytes." GB");
+
+    return ("ok", $size_est_gbytes);
+  }
+}
+
+
+
+#
 # move a completed obs on the remote dir to the on_tape directory
 #
-sub moveCompletedBeam($$$$$$) {
+sub moveCompletedBeam($$$$$$$) {
 
-  my ($user, $host, $dir, $obs, $beam, $dest) = @_;
-  Dada::logMsg(2, $dl, "moveCompletedBeam(".$user.", ".$host.", ".$dir.", ".$obs.", ".$beam.", ".$dest.")");
+  my ($user, $host, $dir, $pid, $obs, $beam, $dest) = @_;
+  Dada::logMsg(2, $dl, "moveCompletedBeam(".$user.", ".$host.", ".$dir.", ".$pid.", ".$obs.", ".$beam.", ".$dest.")");
 
   my $result = "";
   my $response = "";
   my $cmd = "";
 
   # ensure the remote directory is created
-  $cmd = "mkdir -p ".$dir."/../".$dest."/".$obs;
+  $cmd = "mkdir -p ".$dir."/".$dest."/".$pid."/".$obs;
   Dada::logMsg(2, $dl, "moveCompletedBeam: localSshCommand(".$user.", ".$host.", ".$cmd.")");
   ($result, $response) = localSshCommand($user, $host, $cmd);
   Dada::logMsg(2, $dl, "moveCompletedBeam: localSshCommand() ".$result." ".$response);
 
    # move the beam
-  $cmd = "cd ".$dir."; mv ".$obs."/".$beam." ../".$dest."/".$obs."/";
+  $cmd = "mv ".$dir."/archive/".$pid."/".$obs."/".$beam." ".$dir."/".$dest."/".$pid."/".$obs."/";
   Dada::logMsg(2, $dl, "moveCompletedBeam: localSshCommand(".$user.", ".$host.", ".$cmd.")");
   ($result, $response) = localSshCommand($user, $host, $cmd);
   Dada::logMsg(2, $dl, "moveCompletedBeam: localSshCommand() ".$result." ".$response);
@@ -921,22 +957,20 @@ sub moveCompletedBeam($$$$$$) {
 
     # if there are no other beams in the observation directory, then we can delete it
     # old, then we can remove it also
-
-    $cmd = "find ".$dir."/".$obs."/ -mindepth 1 -type d | wc -l";
+    $cmd = "find ".$dir."/archive/".$pid."/".$obs."/ -mindepth 1 -type d | wc -l";
     Dada::logMsg(2, $dl, "moveCompletedBeam: localSshCommand(".$user.", ".$host.", ".$cmd.")");
     ($result, $response) = localSshCommand($user, $host, $cmd);
     Dada::logMsg(2, $dl, "moveCompletedBeam: localSshCommand() ".$result." ".$response);
 
     if (($result eq "ok") && ($response eq "0")) {
-
       # delete the remote directory
-      $cmd = "rmdir ".$dir."/".$obs;
+      $cmd = "rmdir ".$dir."/archive/".$pid."/".$obs;
       Dada::logMsg(2, $dl, "moveCompletedBeam: localSshCommand(".$user.", ".$host.", ".$cmd.")");
       ($result, $response) = localSshCommand($user, $host, $cmd);
       Dada::logMsg(2, $dl, "moveCompletedBeam: localSshCommand() ".$result." ".$response);
 
       if ($result ne "ok") {
-        Dada::logMsg(0, $dl, "moveCompletedBeam: could not delete ".$user."@".$host.":".$dir."/".$obs.": ".$response);
+        Dada::logMsg(0, $dl, "moveCompletedBeam: could not delete ".$user."@".$host.":".$dir."/archive/".$pid."/".$obs.": ".$response);
       }
     }
   }
@@ -1228,10 +1262,9 @@ sub readTapesDB() {
 #
 # Update the tapes database with the specified information
 #
-sub updateTapesDB($$$$$$) {
-
+sub updateTapesDB($$$$$$)
+{
   my ($id, $size, $used, $free, $nfiles, $full) = @_;
-
 
   Dada::logMsg(2, $dl, "updateTapesDB: ($id, $size, $used, $free, $nfiles, $full)");
 
@@ -1249,7 +1282,7 @@ sub updateTapesDB($$$$$$) {
   $newline .= floatPad($free, 3, 2)."  ";
   $newline .= sprintf("%06d",$nfiles)."  ";
   $newline .= $full;
-  $newline .= "    $bkid";
+  # $newline .= "    $bkid";
 
   #my $newline = $id."  ".sprintf("%05.2f",$size)."  ".sprintf("%05.2f",$used).
   #              "  ".sprintf("%05.2f",$free)."  ".$nfiles."       ".$full."\n";
@@ -1261,7 +1294,7 @@ sub updateTapesDB($$$$$$) {
   foreach $line (@lines) {
 
     if ($line =~ /^$id/) {
-      Dada::logMsg(1, $dl, "updateTapesDB: ".$newline);
+      Dada::logMsg(1, $dl, "DB update  ".$newline);
       print FH $newline."\n";
     } else {
       print FH $line;
@@ -1291,9 +1324,11 @@ sub updateFilesDB($$$$) {
   my $newline = $archive." ".$tape." ".$date." ".$fsf." ".$size;
 
   open FH, ">>".$fname or return ("fail", "Could not write to tapes db ".$fname);
-  Dada::logMsg(1, $dl, "updateFilesDB: ".$newline);
+  Dada::logMsg(2, $dl, "updateFilesDB: ".$newline);
   print FH $newline."\n";
   close FH;
+
+  Dada::logMsg(2, $dl, "updateFilesDB() ok");
 
   return ("ok", "");
 }
@@ -1454,12 +1489,6 @@ sub sigHandle($) {
   $quit_daemon = 1;
   my $dir;
 
-  # force an unlink of any READING control files on exit
-  #foreach $dir (@dirs) {
-  #  if (-f $dir."/READING") {
-  #    unlink ($dir."/READING");
-  #  }
-  #}
   sleep(3);
   print STDERR $0." : Exiting: ".Dada::getCurrentDadaTime(0)."\n";
 
@@ -1585,8 +1614,16 @@ sub nc_thread($$$$$$) {
     Dada::logMsg(0, $dl, "nc_thread: could not automount the /nfs/cluster/shrek??? raid disk");
   }
 
-  $cmd = "ssh ".$ssh_opts." -l ".$user." ".$host." \"cd ".$dir."; ".
-         "tar -b 128 -c ".$obs."/".$beam." | nc -l ".$port."\"";
+  #if ($robot eq 0) 
+  #{
+  #  $cmd = "ssh ".$ssh_opts." -l ".$user." ".$host." \"cd ".$dir."; ".
+  #         "tar -b 128 -c ".$obs."/".$beam." | throttle -M 50 | nc -l ".$port."\"";
+  #}
+  #else
+  #{
+    $cmd = "ssh ".$ssh_opts." -l ".$user." ".$host." \"cd ".$dir."; ".
+           "tar -b 128 -c ".$obs."/".$beam." | nc -l -T throughput ".$port."\"";
+  #}
 
   Dada::logMsg(2, $dl, "nc_thread: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
@@ -1717,35 +1754,20 @@ sub localSshCommand($$$) {
 #
 # deletes the beam directory off of a host
 #
-sub completed_thread($$$$$) {
+sub completed_thread($$$$$$) {
 
-  my ($user, $host, $dir, $obs, $beam) = @_;
+  my ($user, $host, $dir, $pid, $obs, $beam) = @_;
 
   my $result = "";
   my $response = "";
   my $dest = "on_tape";
 
-  if (($robot eq 1) && ($dir =~ m/pulsars/)) {
-    $dest = "on_tape_pulsars";
-  }
-
-  Dada::logMsg(2, $dl, "completed_thread: moveCompeltedBeam(".$user.", ".$host.", ".$dir.", ".$obs.", ".$beam.", ".$dest.")");
-  ($result, $response) = moveCompletedBeam($user, $host, $dir, $obs, $beam, $dest);
+  Dada::logMsg(2, $dl, "completed_thread: moveCompletedBeam(".$user.", ".$host.", ".$dir.", ".$pid." ".$obs.", ".$beam.", ".$dest.")");
+  ($result, $response) = moveCompletedBeam($user, $host, $dir, $pid, $obs, $beam, $dest);
   Dada::logMsg(2, $dl, "completed_thread: moveCompeltedBeam() ".$result." ".$response);
   if ($result ne "ok") {
     Dada::logMsg(0, $dl, "completed_thread: moveCompletedBeam() failed: ".$response);
     setStatus("Error: could not move beam: ".$obs."/".$beam);
-  }
-
-  # We delete the beam if its at parkes (no processing there, or if it is not a survey pointing
-  if (($result eq "ok") && ($robot eq 0)) {
-    Dada::logMsg(2, $dl, "completed_thread: deleteCompletedBeam(".$user.", ".$host.", ".$dir.", ".$obs.", ".$beam.", ".$dest.")");
-    ($result, $response) = deleteCompletedBeam($user, $host, $dir, $obs, $beam, $dest);
-    Dada::logMsg(2, $dl, "completed_thread: deleteCompletedBeam() ".$result." ".$response);
-    if ($result ne "ok") {
-      Dada::logMsg(0, $dl, "completed_thread: deleteCompletedBeam() failed: ".$response);
-      setStatus("Error: could not delete beam: ".$obs."/".$beam);
-    }
   }
 }
 
@@ -1781,8 +1803,32 @@ sub good($) {
     return ("fail", "files db file [".$db_dir."/".$files_db."] did not exist");
   }
 
+  # check all the destinations exist and are accessible
+  my $i = 0;
+  my $user = "";
+  my $host = "";
+  my $path = "";
+  my $fullpath = "";
+  my $result = "";
+  my $rval = 0;
+  my $response = "";
+
+  for ($i=0; $i<$cfg{"NUM_".uc($type)."_DIRS"}; $i++) {
+    if (!defined ($cfg{uc($type)."_DIR_".$i})) {
+      return ("fail", "config file error for ".uc($type)."_DIR_".$i);
+    }
+
+    ($user, $host, $path) = split(/:/,$cfg{uc($type)."_DIR_".$i},3);
+    $fullpath = $path."/archive/".$pid;
+
+    ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, "ls", $fullpath);
+    if (($result ne "ok") || ($rval ne 0)) {
+      return ("fail", "remote dir was not accessable: ".$user."@".$host.":".$fullpath.": ".$result.":".$rval.":".$response);
+    }
+  } 
+
   # Ensure more than one copy of this daemon is not running
-  my ($result, $response) = Dada::checkScriptIsUnique(basename($0));
+  ($result, $response) = Dada::checkScriptIsUnique(basename($0));
   if ($result ne "ok") {
     return ($result, $response);
   }
@@ -1853,6 +1899,123 @@ sub manualClearResponse() {
   return ("ok", "");
 }
 
+#
+# creates a control file on the remote host specified, if the number of dirs is 1, then this is ignored
+#
+sub touchFile($$$)
+{
+  (my $user, my $host, my $file) = @_;
+
+  my $cmd = "";
+  my $result = "";
+  my $rval = 0;
+  my $response = "";
+
+  if ($cfg{"NUM_".uc($type)."_DIRS"} == 1)
+  {
+    Dada::logMsg(2, $dl, "touchFile: NUM_".uc($type)."_DIRS == 1, ignoring");
+    return ("ok", "ignored as only 1 DIR configured");
+  }
+  else
+  {
+    $cmd = "touch ".$file;
+    Dada::logMsg(2, $dl, "touchFile: remoteSshCommand(".$user.", ".$host.", ".$cmd.")");
+    ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
+    Dada::logMsg(2, $dl, "touchFile: remoteSshCommand() ".$result." ".$rval." ".$response);
+
+    if ($result ne "ok") 
+    {
+      Dada::logMsgWarn($warn, "touchFile: ssh failed ".$response);
+      return ("fail", "ssh to ".$user."@".$host." failed");
+    } 
+    elsif ($rval != 0) 
+    {
+      Dada::logMsgWarn($warn, "touchFile: could not touch ".$user."@".$host.":".$file.": ".$response);
+      return ("fail", "could not touch remote file");
+    } 
+    else 
+    {
+      return ("ok", "");
+    }
+  }
+}
+
+sub clearFile($$$)
+{
+  (my $user, my $host, my $file) = @_;
+
+  my $cmd = "";
+  my $result = "";
+  my $rval = "";
+  my $response = "";
+
+  if ($cfg{"NUM_".uc($type)."_DIRS"} == 1)
+  {
+    Dada::logMsg(2, $dl, "clearFile: NUM_".uc($type)."_DIRS == 1, ignoring");
+    return ("ok", "ignored as only 1 DIR configured");
+  }
+  else
+  {
+    $cmd = "rm -f ".$file;
+    Dada::logMsg(2, $dl, "clearFile: remoteSshCommand(".$user.", ".$host.", ".$cmd.")");
+    ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
+    Dada::logMsg(2, $dl, "clearFile: remoteSshCommand() ".$result." ".$rval." ".$response);
+
+    if ($result ne "ok") 
+    {
+      Dada::logMsg(0, $dl, "clearFile: ssh to ".$user."@".$host." failed: ".$response);
+      return ("fail", "ssh to ".$user."@".$host." failed");
+    } 
+    elsif ($rval != 0)
+    {
+      Dada::logMsg(0, $dl, "clearFile: could not unlink ".$user."@".$host.":".$file.": ".$response);
+      return ("fail", "could not unlink remote file");
+    } 
+    else
+    {
+      return ("ok", "");
+    }
+  }
+}
+
+sub checkFile($$$)
+{
+  (my $user, my $host, my $file) = @_;
+
+  my $cmd = "";
+  my $result = "";
+  my $rval = 0;
+  my $response = "";
+
+  if ($cfg{"NUM_".uc($type)."_DIRS"} == 1)
+  {
+    Dada::logMsg(2, $dl, "checkFile: NUM_".uc($type)."_DIRS == 1, ignoring");
+    return ("ok", "ignored as only 1 DIR configured");
+  }
+  else
+  {
+    $cmd = "ls -1 ".$file;
+    Dada::logMsg(2, $dl, "checkFile: remoteSshCommand(".$user.", ".$host.", ".$cmd.")");
+    ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
+    Dada::logMsg(2, $dl, "checkFile: remoteSshCommand() ".$result." ".$rval." ".$response);
+
+    if ($result ne "ok")
+    {
+      Dada::logMsg(0, $dl, "checkFile: ssh to ".$user."@".$host." failed: ".$response);
+      return ("fail", "ssh to ".$user."@".$host." failed");
+    }
+    elsif ($rval != 0)
+    {
+      Dada::logMsg(2, $dl, "checkFile: file did not exist");
+      return ("ok", "file did not exist");
+    }
+    else
+    {
+      Dada::logMsg(2, $dl, "checkFile: file did exist");
+      return ("ok", "file did exist");
+    }
+  }
+}
 
 
 END { }
