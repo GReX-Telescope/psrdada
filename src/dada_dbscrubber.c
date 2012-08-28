@@ -18,7 +18,6 @@
 #include <sys/shm.h>
 
 // constants taken from ipcbuf.c
-#define IPCBUF_EODACK 3   /* acknowledgement of end of data */
 #define IPCBUF_READ   1   /* semaphore locks reader (+clear) status */
 #define IPCBUF_VIEWER  1  /* connected */
 
@@ -102,14 +101,14 @@ int main (int argc, char **argv)
 
   // check the header block's READ semaphore to see if we will be able to connect
   id = hdu->header_block;
-  int hb_read = semctl (id->semid, IPCBUF_READ, GETVAL);
+  int hb_read = semctl (id->semid_connect, IPCBUF_READ, GETVAL);
   if (verbose)
     multilog_fprintf (stderr, LOG_INFO, "main: HB IPCBUF_READ=%d\n", hb_read);
   if (hb_read == 0)
   {
     if (verbose)
       multilog_fprintf (stderr, LOG_INFO, "main: increment HB IPCBUF_READ\n");
-    if (ipc_semop (id->semid, IPCBUF_READ, 1, SEM_UNDO) < 0)
+    if (ipc_semop (id->semid_connect, IPCBUF_READ, 1, SEM_UNDO) < 0)
     {
       fprintf (stderr, "main: error increment HB IPCBUF_READ\n");
       return -1;
@@ -118,14 +117,14 @@ int main (int argc, char **argv)
 
   // check the data block's READ semaphore
   id = (ipcbuf_t *) hdu->data_block;
-  int db_read = semctl (id->semid, IPCBUF_READ, GETVAL);
+  int db_read = semctl (id->semid_connect, IPCBUF_READ, GETVAL);
   if (verbose)
     multilog_fprintf (stderr, LOG_INFO, "main: DB IPCBUF_READ=%d\n", db_read);
   if (db_read == 0)
   {
     if (verbose)
       multilog_fprintf (stderr, LOG_INFO, "main: increment DB IPCBUF_READ\n");
-    if (ipc_semop (id->semid, IPCBUF_READ, 1, SEM_UNDO) < 0)
+    if (ipc_semop (id->semid_connect, IPCBUF_READ, 1, SEM_UNDO) < 0)
     {
       fprintf (stderr, "main: error increment DB IPCBUF_READ\n");
       return -1;

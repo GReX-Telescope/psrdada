@@ -16,22 +16,24 @@ extern "C" {
 #endif
 
 #define IPCBUF_XFERS 8 /* total transfers in buffer */
+#define IPCBUF_READERS 8 /* maximum number of readers */
 
   typedef struct {
 
-    key_t  semkey;     /* semaphore key */
+    key_t  semkey_connect;                  /* semaphore key for connecting to shared memory */
+    key_t  semkey_data  [IPCBUF_READERS];   /* semaphore keys for reading/writing shared memory */
 
     uint64_t nbufs;    /* the number of buffers in the ring */
     uint64_t bufsz;    /* the size of the buffers in the ring */
 
-    uint64_t r_buf;    /* count of next buffer to read */
     uint64_t w_buf;    /* count of next buffer to write */
-
-    int r_state;       /* the state of the reader */
     int w_state;       /* the state of the writer */
-
-    uint64_t r_xfer;   /* the current read transfer number */
     uint64_t w_xfer;   /* the current write transfer number */
+
+    uint64_t r_bufs   [IPCBUF_READERS];   /* count of next buffer to read */
+    int      r_states [IPCBUF_READERS];   /* the state of the reader */
+    uint64_t r_xfers  [IPCBUF_READERS];   /* the current read transfer number */
+    unsigned n_readers;                   /* number of readers */
 
     /* the first valid buffer when sod is raised */
     uint64_t s_buf  [IPCBUF_XFERS];
@@ -52,26 +54,29 @@ extern "C" {
 
   typedef struct {
 
-    int state;         /* the state of the process: writer, reader, etc. */
+    int state;             /* the state of the process: writer, reader, etc. */
 
-    int  syncid;       /* sync struct shared memory id */
-    int  semid;        /* semaphore id */
-    int* shmid;        /* ring buffer shared memory id */
+    int syncid;            /* sync struct shared memory id */
+    int semid_connect;     /* semaphore id for shmem connect */
+    int * semid_data;      /* semaphore id for shmem data */
+    int * shmid;           /* ring buffer shared memory id */
 
-    ipcsync_t* sync;   /* pointer to sync structure in shared memory */
-    char**     buffer; /* base addresses of sub-blocks in shared memory */
-    char*      count;  /* the pending xfer count in each buffer in the ring */
-    key_t*     shmkey; /* shared memory keys */
+    ipcsync_t* sync;       /* pointer to sync structure in shared memory */
+    char**     buffer;     /* base addresses of sub-blocks in shared memory */
+    char*      count;      /* the pending xfer count in each buffer in the ring */
+    key_t*     shmkey;     /* shared memory keys */
 
-    uint64_t viewbuf;  /* count of next buffer to look at (non-reader) */
+    uint64_t viewbuf;      /* count of next buffer to look at (non-reader) */
 
-    uint64_t xfer;     /* current xfer */
+    uint64_t xfer;         /* current xfer */
 
     uint64_t soclock_buf;  /* buffer to which the SOD is relevant */
 
+    int iread;             /* reader count, -1 means writer */
+
   } ipcbuf_t;
 
-#define IPCBUF_INIT {0, -1,-1,0, 0,0,0,0, 0, 0, 0}
+#define IPCBUF_INIT {0, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1}
 
   /* ////////////////////////////////////////////////////////////////////
      
@@ -80,7 +85,7 @@ extern "C" {
      //////////////////////////////////////////////////////////////////// */
 
   /*! Initialize an ipcbuf_t struct, creating shm and sem */
-  int ipcbuf_create (ipcbuf_t*, key_t key, uint64_t nbufs, uint64_t bufsz);
+  int ipcbuf_create (ipcbuf_t*, key_t key, uint64_t nbufs, uint64_t bufsz, unsigned num_readers);
 
   /*! Connect to an already created ipcsync_t struct in shm */
   int ipcbuf_connect (ipcbuf_t*, key_t key);
@@ -180,6 +185,7 @@ extern "C" {
 
   /*! Return the number of bytes read from the ring buffer */
   uint64_t ipcbuf_get_read_count (ipcbuf_t*);
+  uint64_t ipcbuf_get_read_count_iread (ipcbuf_t* id, unsigned iread);
 
   /*! Return the Data Block index of the read buffer */
   uint64_t ipcbuf_get_read_index (ipcbuf_t* id);
@@ -204,20 +210,28 @@ extern "C" {
 
   /*! Return the number of buffers currently flagged as clear */
   uint64_t ipcbuf_get_nclear (ipcbuf_t*);
+  uint64_t ipcbuf_get_nclear_iread (ipcbuf_t*, int iread);
 
   /*! Return the number of buffers currently flagged as full */
   uint64_t ipcbuf_get_nfull (ipcbuf_t*);
+  uint64_t ipcbuf_get_nfull_iread (ipcbuf_t*, int iread);
+
+  /*! Return the number of sodacks */
+  uint64_t ipcbuf_get_sodack (ipcbuf_t* id);
+  uint64_t ipcbuf_get_sodack_iread (ipcbuf_t* id, int iread);
+
+  /*! Return the number of eodacks */
+  uint64_t ipcbuf_get_eodack (ipcbuf_t* id);
+  uint64_t ipcbuf_get_eodack_iread (ipcbuf_t* id, int iread);
+
+  /*! Return the number of readers in */
+  int ipcbuf_get_nreaders(ipcbuf_t* id);
 
   /*! Useful utility */
   void* shm_alloc (key_t key, size_t size, int flag, int* id);
 
   /*! set the start of clocking data buffer  */
   uint64_t ipcbuf_set_soclock_buf(ipcbuf_t*);
-
-  uint64_t ipcbuf_get_sodack (ipcbuf_t* id);
-
-  uint64_t ipcbuf_get_eodack (ipcbuf_t* id);
-
 
 #ifdef __cplusplus
 	   }

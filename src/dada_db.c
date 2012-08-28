@@ -9,18 +9,19 @@
 void usage ()
 {
   fprintf (stdout,
-	   "dada_db - create or destroy the DADA shared memory ring buffer\n"
-	   "\n"
-	   "USAGE: dada_db [-d] [-k key] [-n nbufs] [-b bufsz]\n"
-	   "WHERE:\n"
-	   " -k  hexadecimal shared memory key  [default: %x]\n"
-	   " -n  number of buffers in ring      [default: %"PRIu64"]\n"
-	   " -b  size of each buffer (in bytes) [default: %"PRIu64"]\n"
-	   " -d  destroy the shared memory area [default: create]\n"
-	   " -l  lock the shared memory area in physical RAM\n", 
-	   DADA_DEFAULT_BLOCK_KEY,
-	   DADA_DEFAULT_BLOCK_NUM,
-	   DADA_DEFAULT_BLOCK_SIZE);
+          "dada_db - create or destroy the DADA shared memory ring buffer\n"
+          "\n"
+          "USAGE: dada_db [-d] [-k key] [-n nbufs] [-b bufsz] [-r nreaders]\n"
+          "WHERE:\n"
+          " -k  hexadecimal shared memory key  [default: %x]\n"
+          " -n  number of buffers in ring      [default: %"PRIu64"]\n"
+          " -r  number of readers              [default: 1]\n"
+          " -b  size of each buffer (in bytes) [default: %"PRIu64"]\n"
+          " -d  destroy the shared memory area [default: create]\n"
+          " -l  lock the shared memory area in physical RAM\n", 
+          DADA_DEFAULT_BLOCK_KEY,
+          DADA_DEFAULT_BLOCK_NUM,
+          DADA_DEFAULT_BLOCK_SIZE);
 }
 
 int main (int argc, char** argv)
@@ -39,8 +40,9 @@ int main (int argc, char** argv)
   int destroy = 0;
   int lock = 0;
   int arg;
+  unsigned num_readers = 1;
 
-  while ((arg = getopt(argc, argv, "hdk:n:b:l")) != -1) {
+  while ((arg = getopt(argc, argv, "hdk:n:r:b:l")) != -1) {
 
     switch (arg)  {
     case 'h':
@@ -53,22 +55,29 @@ int main (int argc, char** argv)
 
     case 'k':
       if (sscanf (optarg, "%x", &dada_key) != 1) {
-	fprintf (stderr, "dada_db: could not parse key from %s\n", optarg);
-	return -1;
+       fprintf (stderr, "dada_db: could not parse key from %s\n", optarg);
+       return -1;
       }
       break;
 
     case 'n':
       if (sscanf (optarg, "%"PRIu64"", &nbufs) != 1) {
-	fprintf (stderr, "dada_db: could not parse nbufs from %s\n", optarg);
-	return -1;
+       fprintf (stderr, "dada_db: could not parse nbufs from %s\n", optarg);
+       return -1;
       }
       break;
 
     case 'b':
       if (sscanf (optarg, "%"PRIu64"", &bufsz) != 1) {
-	fprintf (stderr, "dada_db: could not parse bufsz from %s\n", optarg);
-	return -1;
+       fprintf (stderr, "dada_db: could not parse bufsz from %s\n", optarg);
+       return -1;
+      }
+      break;
+        
+    case 'r':
+      if (sscanf (optarg, "%d", &num_readers) != 1) {
+        fprintf (stderr, "dada_db: could not parse number of readers from %s\n", optarg);
+        return -1;
       }
       break;
 
@@ -76,6 +85,12 @@ int main (int argc, char** argv)
       lock = 1;
       break;
     }
+  }
+
+  if ((num_readers < 1) || (num_readers > 5))
+  {
+    fprintf (stderr, "Number of readers was not sensible: %d\n", num_readers);
+    return -1;
   }
 
   if (destroy) {
@@ -91,21 +106,21 @@ int main (int argc, char** argv)
     return 0;
   }
 
-  if (ipcbuf_create (&data_block, dada_key, nbufs, bufsz) < 0) {
+  if (ipcbuf_create (&data_block, dada_key, nbufs, bufsz, num_readers) < 0) {
     fprintf (stderr, "Could not create DADA data block\n");
     return -1;
   }
 
   fprintf (stderr, "Created DADA data block with"
-	   " nbufs=%"PRIu64" bufsz=%"PRIu64"\n", nbufs, bufsz);
+          " nbufs=%"PRIu64" bufsz=%"PRIu64" nread=%d\n", nbufs, bufsz, num_readers);
 
-  if (ipcbuf_create (&header, dada_key + 1, nhdrs, hdrsz) < 0) {
+  if (ipcbuf_create (&header, dada_key + 1, nhdrs, hdrsz, num_readers) < 0) {
     fprintf (stderr, "Could not create DADA header block\n");
     return -1;
   }
 
   fprintf (stderr, "Created DADA header block with nhdrs = %"PRIu64", hdrsz "
-                   "= %"PRIu64" bytes\n", nhdrs, hdrsz);
+                   "= %"PRIu64" bytes, nread=%d\n", nhdrs, hdrsz, num_readers);
 
   if (lock && ipcbuf_lock (&data_block) < 0) {
     fprintf (stderr, "Could not lock DADA data block into RAM\n");

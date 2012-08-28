@@ -20,8 +20,6 @@
 #include <sys/sem.h>
 #include <sys/shm.h>
 
-#define IPCBUF_EODACK 3   /* acknowledgement of end of data */
-
 void usage()
 {
 fprintf (stdout,
@@ -53,35 +51,40 @@ int main (int argc, char **argv)
   /* hexadecimal shared memory key */
   key_t dada_key = DADA_DEFAULT_BLOCK_KEY;
 
-
   int arg = 0;
 
-  /* TODO the amount to conduct a busy sleep inbetween clearing each sub
-   * block */
+  uint64_t full_bufs = 0;
+  uint64_t clear_bufs = 0;
+  uint64_t bufs_read = 0;
+  uint64_t bufs_written = 0;
+  int64_t available_bufs = 0;
+  int iread = 0;
 
   while ((arg=getopt(argc,argv,"dvk:")) != -1)
-    switch (arg) {
+  {
+    switch (arg)
+    {
+      case 'd':
+        daemon=1;
+        break;
 
-    case 'd':
-      daemon=1;
-      break;
+      case 'v':
+        verbose=1;
+        break;
 
-    case 'v':
-      verbose=1;
-      break;
-
-    case 'k':
-      if (sscanf (optarg, "%x", &dada_key) != 1) {
-        fprintf (stderr,"dada_dbmonitor: could not parse key from %s\n",optarg);
-        return -1;
-      }
-      break;
-      
-    default:
-      usage ();
-      return 0;
+      case 'k':
+        if (sscanf (optarg, "%x", &dada_key) != 1) {
+          fprintf (stderr,"dada_dbmonitor: could not parse key from %s\n",optarg);
+          return -1;
+        }
+        break;
+        
+      default:
+        usage ();
+        return 0;
 
     }
+  }
 
   log = multilog_open ("dada_dbmonitor", daemon);
 
@@ -95,63 +98,77 @@ int main (int argc, char **argv)
   hdu = dada_hdu_create (log);
 
   dada_hdu_set_key(hdu, dada_key);
-  
-  printf("connecting\n");
+ 
+  if (verbose)
+    fprintf (stderr, "main: connecting to HDU\n");
   if (dada_hdu_connect (hdu) < 0)
     return EXIT_FAILURE;
 
-
-  /* get a pointer to the data block */
-
-  uint64_t full_bufs = 0;
-  uint64_t clear_bufs = 0;
-  uint64_t bufs_read = 0;
-  uint64_t bufs_written = 0;
-  int64_t available_bufs = 0;
-
+  // pointers to header and data blocks
   ipcbuf_t *hb = hdu->header_block;
   ipcbuf_t *db = (ipcbuf_t *) hdu->data_block;
           
-  uint64_t bufsz = ipcbuf_get_bufsz (hb);
-  uint64_t nhbufs = ipcbuf_get_nbufs (hb);
-  uint64_t total_bytes = nhbufs * bufsz;
+  uint64_t hdr_bufsz = ipcbuf_get_bufsz (hb);
+  uint64_t hdr_nbufs = ipcbuf_get_nbufs (hb);
+  uint64_t hdr_bytes = hdr_nbufs * hdr_bufsz;
 
   fprintf(stderr,"HEADER BLOCK:\n");
-  fprintf(stderr,"Number of buffers: %"PRIu64"\n",nhbufs);
-  fprintf(stderr,"Buffer size: %"PRIu64"\n",bufsz);
-  fprintf(stderr,"Total buffer memory: %"PRIu64" KB\n",(total_bytes/(1024)));
+  fprintf(stderr,"Number of buffers: %"PRIu64"\n", hdr_nbufs);
+  fprintf(stderr,"Buffer size: %"PRIu64"\n", hdr_bufsz);
+  fprintf(stderr,"Total buffer memory: %"PRIu64" KB\n",(hdr_bytes/(1024)));
 
-  bufsz = ipcbuf_get_bufsz (db);
-  uint64_t ndbufs = ipcbuf_get_nbufs (db);
-  total_bytes = ndbufs * bufsz;
+  uint64_t data_bufsz = ipcbuf_get_bufsz (db);
+  uint64_t data_nbufs = ipcbuf_get_nbufs (db);
+  uint64_t data_bytes = data_nbufs * data_bufsz;
+  int n_readers = ipcbuf_get_nreaders (db);
 
   fprintf(stderr,"DATA BLOCK:\n");
-  fprintf(stderr,"Number of buffers: %"PRIu64"\n",ndbufs);
-  fprintf(stderr,"Buffer size: %"PRIu64"\n",bufsz);
-  fprintf(stderr,"Total buffer memory: %"PRIu64" MB\n",(total_bytes/(1024*1024)));
+  fprintf(stderr,"Number of readers: %d\n", n_readers);
+  fprintf(stderr,"Number of buffers: %"PRIu64"\n", data_nbufs);
+  fprintf(stderr,"Buffer size: %"PRIu64"\n", data_bufsz);
+  fprintf(stderr,"Total buffer memory: %"PRIu64" MB\n",(data_bytes/(1024*1024)));
 
-  fprintf(stderr,"\nFREE\tFULL\tCLEAR\tW_BUF\tR_BUF\tFREE\tFULL\tCLEAR\t"
-                 "W_BUF\tR_BUF\n");
+  fprintf(stderr,"\n");
+  fprintf(stderr,"HEADER               ");
+  if (n_readers == 1)
+    fprintf(stderr,"DATA\n");
+  else
+  {
+    for (iread=0; iread<n_readers; iread++)
+      fprintf(stderr,"DATA%d                      ", iread);
+    fprintf(stderr,"\n");
+  }
 
-  while (!quit) {
+  fprintf(stderr,"FRE FUL CLR  W  R");
 
-    bufs_written = ipcbuf_get_write_count (db);
-    bufs_read = ipcbuf_get_read_count (db);
-    full_bufs = ipcbuf_get_nfull (db);
-    clear_bufs = ipcbuf_get_nclear (db);
-    available_bufs = (ndbufs - full_bufs);
-    
-    fprintf(stderr,"%"PRIi64"\t%"PRIu64"\t%"PRIu64"\t%"PRIu64"\t%"PRIu64"\t",
-                    available_bufs, full_bufs, clear_bufs, bufs_written, bufs_read);
+  for (iread=0; iread<n_readers; iread++)
+    fprintf(stderr,"    FRE FUL CLR     W     R");
+  fprintf(stderr, "\n");
 
+  
+  while (!quit) 
+  {
     bufs_written = ipcbuf_get_write_count (hb);
     bufs_read = ipcbuf_get_read_count (hb);
     full_bufs = ipcbuf_get_nfull (hb);
     clear_bufs = ipcbuf_get_nclear (hb);
-    available_bufs = (nhbufs - full_bufs);
+    available_bufs = (hdr_nbufs - full_bufs);
     
-    fprintf(stderr,"%"PRIi64"\t%"PRIu64"\t%"PRIu64"\t%"PRIu64"\t%"PRIu64"\n",
+    fprintf(stderr,"%3"PRIi64" %3"PRIu64" %3"PRIu64" %2"PRIu64" %2"PRIu64,
                     available_bufs, full_bufs, clear_bufs, bufs_written, bufs_read);
+
+    for (iread=0; iread<n_readers; iread++)
+    {
+      bufs_written = ipcbuf_get_write_count (db);
+      bufs_read = ipcbuf_get_read_count_iread (db, iread);
+      full_bufs = ipcbuf_get_nfull_iread (db, iread);
+      clear_bufs = ipcbuf_get_nclear_iread (db, iread);
+      available_bufs = (data_nbufs - full_bufs);
+    
+      fprintf(stderr,"    %3"PRIi64" %3"PRIu64" %3"PRIu64" %5"PRIu64" %5"PRIu64,
+                    available_bufs, full_bufs, clear_bufs, bufs_written, bufs_read);
+    }
+    fprintf (stderr, "\n");
 
     sleep(1);
   }

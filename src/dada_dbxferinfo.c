@@ -118,20 +118,26 @@ int main (int argc, char **argv)
   bufsz = ipcbuf_get_bufsz (db);
   uint64_t ndbufs = ipcbuf_get_nbufs (db);
   total_bytes = ndbufs * bufsz;
+  int nreaders = ipcbuf_get_nreaders (db);
+  int iread = 0;
 
   fprintf(stderr,"DATA BLOCK:\n");
   fprintf(stderr,"Number of buffers: %"PRIu64"\n",ndbufs);
   fprintf(stderr,"Buffer size: %"PRIu64"\n",bufsz);
   fprintf(stderr,"Total buffer memory: %5.0f MB\n", ((double) total_bytes) / 
                                                        (1024.0*1024.0));
+  fprintf(stderr,"Number of readers: %d\n", nreaders);
 
   fprintf(stderr, "\n");
-  fprintf(stderr, "sync->r_buf:   %"PRIu64"\n", db->sync->r_buf);
-  fprintf(stderr, "sync->w_buf:   %"PRIu64"\n", db->sync->w_buf);
-  fprintf(stderr, "sync->w_state: %s\n", state_to_str(db->sync->w_state));
-  fprintf(stderr, "sync->r_state: %s\n", state_to_str(db->sync->r_state));
-  fprintf(stderr, "IPCBUF_SODACK: %"PRIu64"\n", ipcbuf_get_sodack(db));
-  fprintf(stderr, "IPCBUF_EODACK: %"PRIu64"\n", ipcbuf_get_eodack(db));
+  fprintf(stderr, "sync->w_buf:     %"PRIu64"\n", db->sync->w_buf);
+  fprintf(stderr, "sync->w_state:   %s\n", state_to_str(db->sync->w_state));
+  for (iread=0; iread < nreaders; iread++)
+  {
+    fprintf(stderr, "sync->r_buf[%d]:   %"PRIu64"\n", iread, db->sync->r_bufs[iread]);
+    fprintf(stderr, "sync->r_state[%d]: %s\n", iread, state_to_str(db->sync->r_states[iread]));
+    fprintf(stderr, "IPCBUF_SODACK[%d]: %"PRIu64"\n", iread, ipcbuf_get_sodack_iread(db, iread));
+    fprintf(stderr, "IPCBUF_EODACK[%d]: %"PRIu64"\n", iread, ipcbuf_get_eodack_iread(db, iread));
+  }
   
   int i=0;
 
@@ -149,10 +155,11 @@ int main (int argc, char **argv)
       fprintf(stderr, " W");
     else
       fprintf(stderr, "  ");
-    if (i == db->sync->r_xfer) 
-      fprintf(stderr, " R");
-    else 
-      fprintf(stderr, "  ");
+    for (iread=0; iread < nreaders; iread++)
+      if (i == db->sync->r_xfers[iread]) 
+        fprintf(stderr, " R%d", iread);
+      else 
+        fprintf(stderr, "  ");
 
     fprintf(stderr,"\n");
 
@@ -163,10 +170,13 @@ int main (int argc, char **argv)
      * a proper xfer concept in it */
           
     fprintf(stderr,"\nHeader Block Xfers:\n");
-    fprintf(stderr, "IPCBUF_SODACK: %"PRIu64"\n", ipcbuf_get_sodack(hb));
-    fprintf(stderr, "IPCBUF_EODACK: %"PRIu64"\n", ipcbuf_get_eodack(hb));
-    fprintf(stderr, "sync->r_buf:   %"PRIu64"\n", hb->sync->r_buf);
     fprintf(stderr, "sync->w_buf:   %"PRIu64"\n", hb->sync->w_buf);
+    for (iread=0; iread < nreaders; iread++)
+    {
+      fprintf(stderr, "sync->r_bufs[%d]: %"PRIu64"\n", iread, hb->sync->r_bufs[iread]);
+      fprintf(stderr, "SODACK[%d]: %"PRIu64"\n", iread, ipcbuf_get_sodack_iread(hb, iread));
+      fprintf(stderr, "EODACK[%d]: %"PRIu64"\n", iread, ipcbuf_get_eodack_iread(hb, iread));
+    }
     fprintf(stderr,"[%"PRIu64",%"PRIu64"]=>[%"PRIu64",%"PRIu64"] %d\n",
                    hb->sync->s_buf[0],hb->sync->s_byte[0],
                    hb->sync->e_buf[0],hb->sync->e_byte[0],hb->sync->eod[0]);
