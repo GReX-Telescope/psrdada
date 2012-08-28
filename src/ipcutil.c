@@ -60,8 +60,9 @@ int ipc_semop (int semid, short num, short op, short flag)
   semopbuf.sem_op = op;
   semopbuf.sem_flg = flag;
  
-  if (semop (semid, &semopbuf, 1) < 0)  {
-    perror ("ipc_semop: semop");
+  if (semop (semid, &semopbuf, 1) < 0) {
+    if (!(flag | IPC_NOWAIT))
+      perror ("ipc_semop: semop");
     return -1;
   }
   return 0;
