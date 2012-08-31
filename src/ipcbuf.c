@@ -814,47 +814,6 @@ int ipcbuf_lock_read (ipcbuf_t* id)
   fprintf (stderr, "ipcbuf_lock_read: decrement READ=%d\n",
                    semctl (id->semid_connect, IPCBUF_READ, GETVAL));
 #endif
-
-  /* determine the reader index based on reader state */
-#ifdef _DEBUG
-  fprintf (stderr, "ipcbuf_lock_read: id->iread=%d\n", id->iread);
-#endif
-  if (id->iread == -1)
-  {
-    for (iread = 0; iread < id->sync->n_readers; iread++)
-    {
-      //  try to decrement the Reader connected semaphore for this reader
-      if (ipc_semop (id->semid_data[iread], IPCBUF_READER_CONN, -1, IPC_NOWAIT | SEM_UNDO) < 0)
-      {
-        if ( errno == EAGAIN )
-        {
-#ifdef _DEBUG
-          fprintf (stderr, "ipcbuf_lock_read: skipping iread=%d\n", iread);
-#endif
-        }
-        else
-        {
-          fprintf (stderr, "ipcbuf_lock_read: error decrement READER_CONN\n");
-          return -1;
-        }
-      }
-      // we did decrement the READER_CONN, assign the iread
-      else
-      {
-#ifdef _DEBUG
-        fprintf (stderr, "ipcbuf_lock_read: assigning iread=%d\n", iread);
-#endif
-        id->iread = iread;
-        break;
-      }
-    }
-    if (id->iread == -1)
-    {
-      fprintf (stderr, "ipcbuf_lock_read: error could not find available read index\n");
-      return -1;
-    }
-  }
-
   /* decrement the read semaphore */
   if (ipc_semop (id->semid_connect, IPCBUF_READ, -1, SEM_UNDO) < 0)
   {
@@ -865,6 +824,48 @@ int ipcbuf_lock_read (ipcbuf_t* id)
 #ifdef _DEBUG
   fprintf (stderr, "ipcbuf_lock_read: reader status locked\n");
 #endif
+
+  /* determine the reader index based on reader state */
+#ifdef _DEBUG
+  fprintf (stderr, "ipcbuf_lock_read: id->iread=%d\n", id->iread);
+#endif
+
+  for (iread = 0; iread < id->sync->n_readers; iread++)
+  {
+#ifdef _DEBUG
+    fprintf (stderr, "ipcbuf_lock_read: BEFORE decrement [%d] READER_CONN=%d\n",
+                      iread, semctl (id->semid_data[iread], IPCBUF_READER_CONN, GETVAL));
+#endif
+    //  try to decrement the Reader connected semaihore for this reader
+    if (ipc_semop (id->semid_data[iread], IPCBUF_READER_CONN, -1, IPC_NOWAIT | SEM_UNDO) < 0)
+    {
+      if ( errno == EAGAIN )
+      {
+#ifdef _DEBUG
+        fprintf (stderr, "ipcbuf_lock_read: skipping iread=%d\n", iread);
+#endif
+      }
+      else
+      {
+        fprintf (stderr, "ipcbuf_lock_read: error decrement READER_CONN\n");
+        return -1;
+      }
+    }
+    // we did decrement the READER_CONN, assign the iread
+    else
+    {
+#ifdef _DEBUG
+      fprintf (stderr, "ipcbuf_lock_read: assigning iread=%d\n", iread);
+#endif
+      id->iread = iread;
+      break;
+    }
+  }
+  if (id->iread == -1)
+  {
+    fprintf (stderr, "ipcbuf_lock_read: error could not find available read index\n");
+    return -1;
+  }
 
   // To facilitate a reader connecting to an XFER that already has 
   // start of data raised.
@@ -880,7 +881,7 @@ int ipcbuf_lock_read (ipcbuf_t* id)
 
 #ifdef _DEBUG
   fprintf (stderr, "ipcbuf_lock_read: xfer=%"PRIu64
-           " start buf=%"PRIu64" byte=%"PRIu64"\n", id->sync->r_xfers[iread],
+           " start buf=%"PRIu64" byte=%"PRIu64"\n", id->sync->r_xfers[id->iread],
            id->sync->s_buf[id->xfer], id->sync->s_byte[id->xfer]);
 #endif
 
@@ -902,16 +903,6 @@ int ipcbuf_unlock_read (ipcbuf_t* id)
   }
 
 #ifdef _DEBUG
-  fprintf (stderr, "ipcbuf_unlock_read[%d]: increment READ=%d\n",
-                   id->iread,
-                   semctl (id->semid_connect, IPCBUF_READ, GETVAL));
-#endif
-  if (ipc_semop (id->semid_connect, IPCBUF_READ, 1, SEM_UNDO) < 0)
-  {
-    fprintf (stderr, "ipcbuf_unlock_read: error increment READ\n");
-    return -1;
-  }
-#ifdef _DEBUG
   fprintf (stderr, "ipcbuf_unlock_read[%d]: increment READER_CONN=%d\n",
                    id->iread, semctl (id->semid_data[id->iread], IPCBUF_READER_CONN, GETVAL));
 #endif
@@ -921,11 +912,24 @@ int ipcbuf_unlock_read (ipcbuf_t* id)
     return -1;
   }
 
+#ifdef _DEBUG
+  fprintf (stderr, "ipcbuf_unlock_read[%d]: increment READ=%d\n",
+                   id->iread,
+                   semctl (id->semid_connect, IPCBUF_READ, GETVAL));
+#endif
+  if (ipc_semop (id->semid_connect, IPCBUF_READ, 1, SEM_UNDO) < 0)
+  {
+    fprintf (stderr, "ipcbuf_unlock_read: error increment READ\n");
+    return -1;
+  }
+
   id->state = IPCBUF_VIEWER;
+  int iread = id->iread;
+  id->iread = -1;
 
 #ifdef _DEBUG
     fprintf (stderr, "ipcbuf_unlock_read[%d]: id->sync->r_states[%d]=%d\n",
-                     id->iread, id ->iread, id->sync->r_states[id->iread]);
+                     iread, iread, id->sync->r_states[iread]);
 #endif
 
   return 0;
