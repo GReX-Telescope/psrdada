@@ -6,7 +6,9 @@
 #ifndef DADA_UTC_H
 #define DADA_UTC_H
 
+#ifndef _XOPEN_SOURCE
 #define _XOPEN_SOURCE /* glibc2 needs this for strptime  */
+#endif
 #include <time.h>
 
 #ifdef __cplusplus
@@ -24,6 +26,9 @@ extern "C" {
 
   /*! parse a UTC time string into struct tm; return equivalent time_t */
   time_t str2utctm (struct tm* time, const char* str);
+
+  /*! convert a UTC MJD time into the struct tm */
+  time_t mjd2utctm (double mjd);
 
 #ifdef __cplusplus
 }
