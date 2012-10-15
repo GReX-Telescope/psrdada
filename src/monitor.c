@@ -92,7 +92,7 @@ void* monitor_thread (void* context)
         if (feof(node->from)) {
           if (node->host) 
             multilog_fprintf (stderr, LOG_INFO, "monitor_thread: lost "
-              "connection with %s [%d]\n", node->host, fileno(node->from));
+              "connection with %s PWC=%d FD=%d\n", node->host, node->id, fileno(node->from));
           else
             multilog_fprintf (stderr, LOG_INFO, "monitor_thread: lost "
               "connection with %d\n", fileno(node->from));
@@ -144,16 +144,16 @@ void* monitor_thread (void* context)
         /* If the connection dies to the pwc, reset the to/from FILE ptrs */
         if (feof(node->from)) {
           if (node->host) 
-            multilog_fprintf (stderr, LOG_INFO, "lost connection with %s [%d]\n", node->host, fileno(node->from));
+            multilog_fprintf (stderr, LOG_INFO, "lost connection with %s PWC=%d FD=%d\n", node->host, node->id, fileno(node->from));
           else
-            multilog_fprintf (stderr, LOG_INFO, "lost connection with %d\n", fileno(node->from));
+            multilog_fprintf (stderr, LOG_INFO, "lost connection with PWC=%d FD=%d\n", node->id, fileno(node->from));
           node->to = 0;
           node->from = 0;
           node->log = 0;
         }
 
 #ifdef _DEBUG
-        fprintf (stderr, "%u: %s", node->host, buffer);
+        fprintf (stderr, "%u [%d]: %s", node->host, node->id, buffer);
 #endif
         if (node->log) {
           fprintf(node->log,"%s",buffer);
@@ -161,12 +161,12 @@ void* monitor_thread (void* context)
         }
   
         if (pwcc_logfile) {
-          fprintf(pwcc_logfile,"%s: %s",node->host,buffer);
+          fprintf(pwcc_logfile,"%02d %s",node->id, buffer);
           fflush(pwcc_logfile);
         }
         
         if (monitor->log)
-          multilog (monitor->log, LOG_INFO, "%s: %s", node->host, buffer);
+          multilog (monitor->log, LOG_INFO, "%02d %s", node->id, buffer);
 
         if (monitor->handle_message)
           monitor->handle_message (monitor->context, inode, buffer);

@@ -60,6 +60,9 @@ extern "C" {
     /*! This prefix is used when parsing configuration from a text file */
     char* node_prefix;
 
+    /*! Add node number to all port numbers */
+    unsigned use_baseport;
+
     /*! The default port on which node is listening */
     int node_port;
 

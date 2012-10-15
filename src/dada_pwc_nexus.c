@@ -104,6 +104,9 @@ int dada_pwc_nexus_parse (nexus_t* n, const char* config)
   else
     dada_pwc_set_header_size (nexus->pwc, hdr_size);
 
+  if (ascii_header_get (config, "USE_BASEPORT", "%d", &(n->mirror->use_baseport)) < 0)
+    n->mirror->use_baseport = 0;
+
   // Get the PWCC control port from the config file
   char node_name [16];
   sprintf (node_name, "%sC_PORT", n->node_prefix);

@@ -53,6 +53,9 @@ void nexus_init (nexus_t* nexus)
   /* default polling interval */
   nexus -> polling_interval = 10;
 
+  /* default no baseport */
+  nexus -> use_baseport = 0;
+
   /* no default port */
   nexus -> node_port = 0;
 
@@ -132,10 +135,14 @@ int nexus_parse (nexus_t* n, const char* buffer)
 
   unsigned inode, nnode = 0;
 
+  // Check for use_baseport flag
+  sprintf (node_name, "USE_BASEPORT");
+  if (ascii_header_get (buffer, node_name, "%d", &(n->use_baseport)) < 0)
+    n->use_baseport = 0;
+
   // Get the PWC control port from the config file
   sprintf (node_name, "%s_PORT", n->node_prefix);
   if (ascii_header_get (buffer, node_name, "%d", &(n->node_port)) < 0) {
-    fprintf (stderr, "nexus_parse: %s not specified.", node_name);
     if (n->node_port)
       fprintf (stderr, " using default=%d\n", n->node_port);
     else {
@@ -222,6 +229,8 @@ void* node_open_thread (void* context)
 
   /* Port on which the NODE is listening */
   int port = nexus->node_port;
+  if (nexus->use_baseport)
+    port += id;
 
   int fd = -1;
   FILE* to = 0;
