@@ -37,7 +37,8 @@ bin_PROGRAMS = dada_db dada_write_test dada_dbdisk dada_diskdb	 \
 	dada_dbnull dada_dbmonitor dada_dbxferinfo dada_dbmetric \
 	dada_header dada_edit slow_rm dada_junkdb dada_mem_test  \
 	daemon_test load_test dada_numdb dada_dbnum dada_dbmeminfo \
-	dspsr_start_time dada_dboverflow dada_dbscrubber test_disk_perf
+	dspsr_start_time dada_dboverflow dada_dbscrubber test_disk_perf \
+  dada_dbcopydb dada_dbevent
 
 bin_SCRIPTS = ipcrme loopssh
 
@@ -76,24 +77,17 @@ endif
 ###############################################################################
 if HAVE_CUDA
 
-lib_LTLIBRARIES += libdadacuda.la
+include $(top_srcdir)/cuda.mk
 
-psrdada_hdr += dada_cuda.h
-
-libdadacuda_la_SOURCES = dada_cuda.cu dada_cuda.h
-
-libdadacuda_la_LIBADD = dada_cuda.lo
-
-dada_cuda.lo : dada_cuda.cu dada_cuda.h
-	@CUDA_NVCC@ -m64 -O3 -c $(srcdir)/dada_cuda.cu
-	cp $(srcdir)/dada_cuda.losave dada_cuda.lo
-
+libpsrdada_la_SOURCES += dada_cuda.cu dada_cuda.h
+include_HEADERS += dada_cuda.h
 bin_PROGRAMS += dada_dbgpu
 
-dada_dbgpu_SOURCES = dada_dbgpu.c
-dada_dbgpu_LDFLAGS = @CUDA_LIBS@ libdadacuda.la
-
 AM_CPPFLAGS = @CUDA_CFLAGS@
+
+dada_dbgpu_CFLAGS   = $(CUDA_CFLAGS)
+dada_dbgpu_LDADD    = $(CUDA_LIBS) $(top_srcdir)/src/libpsrdada.la
+dada_dbgpu_LDFLAGS  = $(CUDA_LDFLAGS)
 
 endif
 
