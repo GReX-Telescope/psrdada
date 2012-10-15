@@ -77,7 +77,7 @@ typedef struct {
   uint64_t n_sleeps;
   uint64_t ooo_packets;
 
-  unsigned recv_core;
+  int      recv_core;
 
 } udpdb_t;
 

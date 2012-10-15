@@ -158,7 +158,7 @@ int64_t leda_udpdb_recv_block (dada_client_t* client, void* data, uint64_t data_
   unsigned keep_receiving = 1;
   uint64_t bytes_received = 0;
   uint64_t seq_no = 0;
-  uint64_t ch_id = 0;
+  uint16_t ant_id = 0;
   uint64_t seq_byte = 0;
   unsigned ignore_packet = 0;
   int errsv = 0;
@@ -185,7 +185,7 @@ int64_t leda_udpdb_recv_block (dada_client_t* client, void* data, uint64_t data_
     {
 
       // receive 1 packet into the socket buffer
-      ctx->sock->got = recvfrom (ctx->sock->fd, ctx->sock->buffer, UDP_PAYLOAD, 0, NULL, NULL);
+      ctx->sock->got = recvfrom (ctx->sock->fd, ctx->sock->buf, UDP_PAYLOAD, 0, NULL, NULL);
 
       if (ctx->sock->got == UDP_PAYLOAD)
       {
@@ -228,7 +228,7 @@ int64_t leda_udpdb_recv_block (dada_client_t* client, void* data, uint64_t data_
       ctx->sock->have_packet = 0;
 
       // decode sequence number
-      leda_decode_header(ctx->sock->buffer, &seq_no, &ch_id);
+      leda_decode_header(ctx->sock->buf, &seq_no, &ant_id);
 
 #ifdef _DEBUG
       multilog (client->log, LOG_INFO, "recv_block: seq_no=%"PRIu64"\n", seq_no);
@@ -258,7 +258,7 @@ int64_t leda_udpdb_recv_block (dada_client_t* client, void* data, uint64_t data_
         if (seq_byte <= ctx->buffer_end_byte)
         {
          byte_offset = seq_byte - ctx->buffer_start_byte;
-          memcpy (data + byte_offset, ctx->sock->buffer + UDP_HEADER, UDP_DATA);
+          memcpy (data + byte_offset, ctx->sock->buf + UDP_HEADER, UDP_DATA);
           ctx->packets->received++;
           if (seq_byte == ctx->buffer_end_byte)
             keep_receiving = 0;

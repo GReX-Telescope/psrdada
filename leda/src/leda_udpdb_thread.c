@@ -137,7 +137,7 @@ int leda_udpdb_prepare (udpdb_t * ctx)
   }
 
   // set the socket size to 256 MB
-  int sock_buf_size = 16*1024*1024;
+  int sock_buf_size = 256*1024*1024;
   if (ctx->verbose)
     multilog(ctx->log, LOG_INFO, "prepare: setting buffer size to %d\n", sock_buf_size);
   dada_udp_sock_set_buffer_size (ctx->log, ctx->sock->fd, ctx->verbose, sock_buf_size);
@@ -337,6 +337,9 @@ void * leda_udpdb_receive_obs (void * arg)
 
   // decoded sequence number
   uint64_t seq_no = 0;
+  uint64_t ch_id = 0;
+  uint64_t tmp;
+  unsigned char * b = (unsigned char *) ctx->sock->buf;
 
   // decoded channel id
   uint16_t ant_id = 0;
@@ -355,7 +358,7 @@ void * leda_udpdb_receive_obs (void * arg)
 
   // for "saving" out of order packets near edges of blocks
   unsigned int temp_idx = 0;
-  unsigned int temp_max = 10;
+  unsigned int temp_max = 8;
   char * temp_buffers[temp_max][UDP_DATA];
   uint64_t temp_seq_byte[temp_max];
 
@@ -366,9 +369,9 @@ void * leda_udpdb_receive_obs (void * arg)
     multilog(log, LOG_INFO, "leda_udpdb_receive_obs()\n");
 
   // set the CPU that this thread shall run on
-  multilog(log, LOG_INFO, "receive_obs: binding to core %d\n", ctx->recv_core);
   if (ctx->recv_core >= 0)
   {
+    multilog(log, LOG_INFO, "receive_obs: binding to core %d\n", ctx->recv_core);
     if (dada_bind_thread_to_core(ctx->recv_core) < 0)
       multilog(ctx->log, LOG_WARNING, "receive_obs: failed to bind to core %d\n", ctx->recv_core);
     multilog(log, LOG_INFO, "receive_obs: bound\n");
@@ -433,11 +436,30 @@ void * leda_udpdb_receive_obs (void * arg)
     // we have a valid packet within the timeout
     if (ctx->sock->have_packet) 
     {
-      // decode sequence number
-      leda_decode_header(ctx->sock->buf, &seq_no, &ant_id);
+
+      //tmp = UINT64_C (0);
+      seq_no = UINT64_C (0);
+      for (i = 0; i < 8; i++ )
+      {
+        tmp = b[8 - i - 1];
+        seq_no |= (tmp << ((i & 7) << 3));
+      }
+
+      ch_id = UINT64_C (0);
+      for (i = 0; i < 8; i++ )
+      {
+        tmp = UINT64_C (0);
+        tmp = b[16 - i - 1];
+        ch_id |= (tmp << ((i & 7) << 3));
+      }
 
       if (ctx->num_inputs == 1)
         ant_id = 0;
+      else
+        ant_id = (uint16_t) ch_id;
+
+      // decode sequence number
+      //leda_decode_header(ctx->sock->buf, &seq_no, &ant_id);
 
       // if first packet
       if (!ctx->capture_started)
@@ -471,7 +493,7 @@ void * leda_udpdb_receive_obs (void * arg)
           if (seq_byte <= ctx->block_end_byte)
           {
             byte_offset = seq_byte - ctx->block_start_byte;
-            memcpy (ctx->block + byte_offset, ctx->sock->buf + UDP_HEADER, UDP_DATA);
+            //memcpy (ctx->block + byte_offset, ctx->sock->buf + UDP_HEADER, UDP_DATA);
             ctx->packets->received++;
             ctx->bytes->received += UDP_DATA;
             ctx->block_count++;
@@ -1253,7 +1275,6 @@ void control_thread (void * arg)
 void stats_thread(void * arg) {
 
   udpdb_t * ctx = (udpdb_t *) arg;
-
   uint64_t b_rcv_total = 0;
   uint64_t b_rcv_1sec = 0;
   uint64_t b_rcv_curr = 0;
@@ -1267,10 +1288,13 @@ void stats_thread(void * arg) {
   uint64_t s_rcv_curr = 0;
 
   uint64_t ooo_pkts = 0;
+  float gb_rcv_ps = 0;
+  float mb_rcv_ps = 0;
+  float mb_drp_ps = 0;
 
   while (!quit_threads)
   {
-            
+
     /* get a snapshot of the data as quickly as possible */
     b_rcv_curr = ctx->bytes->received;
     b_drp_curr = ctx->bytes->dropped;
@@ -1286,15 +1310,17 @@ void stats_thread(void * arg) {
     b_drp_total = b_drp_curr;
     s_rcv_total = s_rcv_curr;
 
-    ctx->mb_rcv_ps = (double) b_rcv_1sec / 1000000;
-    ctx->mb_drp_ps = (double) b_drp_1sec / 1000000;
+    mb_rcv_ps = (double) b_rcv_1sec / 1000000;
+    mb_drp_ps = (double) b_drp_1sec / 1000000;
+    gb_rcv_ps = b_rcv_1sec * 8;
+    gb_rcv_ps /= 1000000000;
 
-    // determine how much memory is free in the receivers
-    //if (ctx->verbose)
-      fprintf (stderr,"R=%4.1f, D=%4.1f [MB/s], s_s=%"PRIu64", dropped pkts=%"PRIu64"\n", ctx->mb_rcv_ps, ctx->mb_drp_ps, s_rcv_1sec, ctx->packets->dropped);
+    /* determine how much memory is free in the receivers */
+    fprintf (stderr,"R=%6.3f [Gb/s], D=%4.1f [MB/s], D=%"PRIu64" pkts, s_s=%"PRIu64"\n", gb_rcv_ps, mb_drp_ps, ctx->packets->dropped, s_rcv_1sec);
 
     sleep(1);
   }
+
 }
 
 /*
