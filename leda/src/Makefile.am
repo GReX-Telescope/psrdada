@@ -7,7 +7,7 @@ leda_hdr = leda_udp.h leda_def.h
 
 libleda_la_SOURCES = $(leda_hdr) leda_udp.c
 
-bin_PROGRAMS = leda_udpdb
+bin_PROGRAMS = leda_udpdb_thread
 
 LDADD = libleda.la $(top_builddir)/src/libpsrdada.la
 INCLUDES = -I$(top_srcdir)/src

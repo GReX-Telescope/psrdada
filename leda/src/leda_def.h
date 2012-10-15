@@ -5,6 +5,7 @@
 
 // default port to connect to udpdb command interface
 #define LEDA_DEFAULT_UDPDB_PORT   4002
+#define LEDA_DEFAULT_PWC_LOGPORT  40123
 
 #define UDP_HEADER   16             // size of header/sequence number
 #define UDP_DATA     8192           // obs bytes per packet

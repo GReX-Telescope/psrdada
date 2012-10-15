@@ -10,19 +10,21 @@
 
 #include "leda_udp.h"
 
-leda_sock_t * leda_init_sock()
+/*
+ * create a socket with the specified number of buffers
+ */
+leda_sock_t * leda_init_sock ()
 {
   leda_sock_t * b = (leda_sock_t *) malloc(sizeof(leda_sock_t));
-
   assert(b != NULL);
 
-  b->size = sizeof(char) * UDP_PAYLOAD;
-  b->buffer = (char *) malloc(b->size);
+  b->bufsz = sizeof(char) * UDP_PAYLOAD;
 
-  assert(b->buffer != NULL);
+	b->buf = (char *) malloc (b->bufsz);
+  assert(b->buf != NULL);
 
-  b->fd = 0;
   b->have_packet = 0;
+  b->fd = 0;
 
   return b;
 }
@@ -30,12 +32,14 @@ leda_sock_t * leda_init_sock()
 void leda_free_sock(leda_sock_t* b)
 {
   b->fd = 0;
-  b->size = 0;
-  b->have_packet = 0;
-  free(b->buffer);
+  b->bufsz = 0;
+  b->have_packet =0;
+  if (b->buf)
+    free (b->buf);
+  b->buf = 0;
 }
 
-void leda_decode_header (unsigned char * b, uint64_t *seq_no, uint64_t * ch_id)
+void leda_decode_header (unsigned char * b, uint64_t *seq_no, uint16_t * ant_id)
 {
   uint64_t tmp = 0;
   unsigned i = 0;
@@ -47,16 +51,17 @@ void leda_decode_header (unsigned char * b, uint64_t *seq_no, uint64_t * ch_id)
     *seq_no |= (tmp << ((i & 7) << 3));
   }
 
-  *ch_id = UINT64_C (0);
+  uint64_t ch_id = UINT64_C (0);
   for (i = 0; i < 8; i++ )
   {
     tmp = UINT64_C (0);
     tmp = b[16 - i - 1];
-    *ch_id |= (tmp << ((i & 7) << 3));
+    ch_id |= (tmp << ((i & 7) << 3));
   }
+  *ant_id = (uint16_t) ch_id;
 }
 
-void leda_encode_header (char *b, uint64_t seq_no, uint64_t ch_id)
+void leda_encode_header (char *b, uint64_t seq_no, uint16_t ant_id)
 {
   b[0] = (uint8_t) (seq_no>>56);
   b[1] = (uint8_t) (seq_no>>48);
@@ -67,6 +72,7 @@ void leda_encode_header (char *b, uint64_t seq_no, uint64_t ch_id)
   b[6] = (uint8_t) (seq_no>>8);
   b[7] = (uint8_t) (seq_no);
 
+  uint64_t ch_id = (uint64_t) ant_id;
   b[8]  = (uint8_t) (ch_id>>56);
   b[9]  = (uint8_t) (ch_id>>48);
   b[10] = (uint8_t) (ch_id>>40);

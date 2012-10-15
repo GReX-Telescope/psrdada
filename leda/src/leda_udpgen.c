@@ -76,7 +76,7 @@ int main(int argc, char *argv[])
   int verbose = 0;
 
   /* udp port to send data to */
-  int udp_port = LEDA_DEFAULT_UDPDB_PORT;
+  int dest_port = LEDA_DEFAULT_UDPDB_PORT;
 
   /* UDP socket struct */
   struct sockaddr_in dagram;
@@ -108,20 +108,34 @@ int main(int argc, char *argv[])
   /* end of transmission */
   time_t end_time;
 
-  /* Always start the sequence no nice and high */
+  // packet sequence number
   uint64_t seq_no = 0;
+
+  // antenna Identifier
+  uint16_t ant_id;
+
+  unsigned num_ant = 1;
 
   opterr = 0;
   int c;
-  while ((c = getopt(argc, argv, "n:p:r:v")) != EOF) {
+  while ((c = getopt(argc, argv, "a:hn:p:r:v")) != EOF) {
     switch(c) {
+
+      case 'a':
+        num_ant = atoi(optarg);
+        break;
+
+      case 'h':
+        usage();
+        exit(EXIT_SUCCESS);
+        break;
 
       case 'n':
         transmission_time = atoi(optarg);
         break;
 
       case 'p':
-        udp_port = atoi(optarg);
+        dest_port = atoi(optarg);
         break;
 
       case 'r':
@@ -129,7 +143,7 @@ int main(int argc, char *argv[])
         break;
 
       case 'v':
-        verbose = 1;
+        verbose++;
         break;
 
       default:
@@ -139,18 +153,19 @@ int main(int argc, char *argv[])
     }
   }
 
-  /* Check arguements */
-  if ((argc - optind) != 1) {
-    fprintf(stderr,"no dest_host was specified\n");
+  // Check arguments
+  if ((argc - optind) != 1) 
+  {
+    fprintf(stderr,"ERROR: 1 command line argument expected [destination host]\n");
     usage();
     return EXIT_FAILURE;
   }
 
-  /* destination host */
-  dest_host = (char *) argv[optind];
+  // destination host
+  dest_host = strdup(argv[optind]);
 
-  /* initialise header struct */
-  seq_no = 1000000;
+  seq_no = 0;
+  ant_id = 0;
 
   signal(SIGINT, signal_handler);
 
@@ -162,34 +177,41 @@ int main(int argc, char *argv[])
   double data_rate = (double) data_rate_mbytes;
   data_rate *= 1024*1024;
 
-  if (data_rate)
-    multilog(log, LOG_INFO, "Rate: %5.2f MB/s \n", data_rate/(1024*1024));
-  else
-    multilog(log, LOG_INFO, "Rate: fast as possible\n");
+  if (verbose)
+  {
+    multilog(log, LOG_INFO, "sending UDP data to %s:%d\n", dest_host, dest_port);
+    if (data_rate)
+      multilog(log, LOG_INFO, "data rate: %5.2f MB/s \n", data_rate/(1024*1024));
+    else
+      multilog(log, LOG_INFO, "data_rate: fast as possible\n");
+    multilog(log, LOG_INFO, "transmission length: %d seconds\n", transmission_time);
+  }
 
-  multilog(log, LOG_INFO, "sending to %s:%d\n", dest_host, udp_port);
-
-  /* create the socket for outgoing UDP data */
-  dada_udp_sock_out(&udpfd, &dagram, dest_host, udp_port, 0, "192.168.1.255");
+  // create the socket for outgoing UDP data
+  dada_udp_sock_out(&udpfd, &dagram, dest_host, dest_port, 0, "192.168.1.255");
 
   uint64_t data_counter = 0;
 
-  /* initialise data rate timing library */
+  // initialise data rate timing library 
   StopWatch wait_sw;
   RealTime_Initialise(1);
   StopWatch_Initialise(1);
 
   /* If we have a desired data rate, then we need to adjust our sleep time
    * accordingly */
-  if (data_rate > 0) {
+  if (data_rate > 0)
+  {
     packets_ps = floor(((double) data_rate) / ((double) UDP_PAYLOAD));
-    sleep_time = (1.0/packets_ps)*1000000.0;
+    sleep_time = (1.0/packets_ps) * 1000000.0;
+
+    if (verbose)
+    {
+      multilog(log, LOG_INFO, "packets/sec %"PRIu64"\n",packets_ps);
+      multilog(log, LOG_INFO, "sleep_time %f us\n",sleep_time);
+    }
   }
 
-  multilog(log,LOG_INFO,"Packets/sec = %"PRIu64"\n",packets_ps);
-  multilog(log,LOG_INFO,"sleep_time = %f\n",sleep_time);
-
-  /* Seed the random number generator */
+  // seed the random number generator with current time
   srand ( time(NULL) );
 
   uint64_t total_bytes_to_send = data_rate * transmission_time;
@@ -220,7 +242,7 @@ int main(int argc, char *argv[])
       StopWatch_Start(&wait_sw);
 
     // write the custom header into the packet
-    leda_encode_header(packet, seq_no, 0);
+    leda_encode_header(packet, seq_no, ant_id);
 
     bytes_sent = dada_sock_send(udpfd, dagram, packet, (size_t) UDP_PAYLOAD); 
 
@@ -229,15 +251,15 @@ int main(int argc, char *argv[])
                            "%"PRIu64" bytes were sent\n",UDP_PAYLOAD,
                            bytes_sent);
 
-    /* This is how much useful data we actaully sent */
+    // this is how much useful data we actaully sent
     total_bytes_sent += (bytes_sent - UDP_HEADER);
 
     data_counter++;
     prev_time = current_time;
     current_time = time(0);
     
-    if (prev_time != current_time) {
-
+    if (prev_time != current_time) 
+    {
       double complete_udp_packet = (double) bytes_sent;
       double useful_data_only = (double) (bytes_sent - UDP_HEADER);
       double complete_packet = 28.0 + complete_udp_packet;
@@ -258,11 +280,16 @@ int main(int argc, char *argv[])
                             bytes_sent);
     }
 
-    seq_no++;
+    ant_id = (ant_id + 1) % num_ant;
+    if (num_ant == 1)
+      seq_no++;
+    else if (ant_id == 0)
+      seq_no++;
+    else
+      ;
 
     if (data_rate)
       StopWatch_Delay(&wait_sw, sleep_time);
-
   }
 
   uint64_t packets_sent = seq_no;
@@ -271,6 +298,7 @@ int main(int argc, char *argv[])
   multilog(log, LOG_INFO, "Sent %"PRIu64" packets\n",packets_sent);
 
   close(udpfd);
+  free (dest_host);
 
   return 0;
 }
@@ -280,13 +308,16 @@ void signal_handler(int signalValue) {
   exit(EXIT_SUCCESS);
 }
 
-void usage() {
+void usage() 
+{
   fprintf(stdout,
-    "leda_udpgen [options] dest_host\n"
-    "\t-p n          udp port to send packets to [default %d]\n"
-    "\t-n n          number of seconds to transmit [default 5]\n"
-    "\t-v            verbose output\n"
-    "\t-r rate       transmit at rate MB/s [default 50]\n"
-    "\n\tdest_host     hostname of a machine running dada_udpdb\n\n"
+    "leda_udpgen [options] host\n"
+    "-a ant        number of antennae to simulate\n"
+    "-h            print this help text\n"
+    "-n secs       number of seconds to transmit [default 5]\n"
+    "-p port       destination udp port [default %d]\n"
+    "-r rate       transmit at rate MB/s [default 50]\n"
+    "-v            verbose output\n"
+    "host          destination host name\n\n"
     ,LEDA_DEFAULT_UDPDB_PORT);
 }
