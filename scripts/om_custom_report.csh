@@ -11,10 +11,11 @@ else
   set omreport = ""
 endif
 
-set host = `hostname -s`
 set os_arch = `uname -i`
 set kernel_ver = `uname -r`
-set os = `cat /etc/issue | head -n 1 | awk '{print $1" "$3}'`
+set os_distrib = `lsb_release -si`
+set os_version = `lsb_release -sr`
+set os = "$os_distrib $os_version"
 
 if ( $omreport != "" ) then
 
@@ -31,29 +32,29 @@ if ( $omreport != "" ) then
 
 else
 
-  set raid_fw = --
-  set raid_drv = --
-  set bios = --
-  set service_tag = --
+  set raid_fw = "-"
+  set raid_drv = "-"
+  set bios = "-"
+  set service_tag = "-"
   set rac_fw = `ipmitool mc info | grep "Firmware Revision" | awk '{print $NF}'`
-  set disk0_id = --
-  set disk0_fw = --
-  set disk1_id = --
-  set disk1_fw = --
-  set omsa_ver = --
+  set disk0_id = "-"
+  set disk0_fw = "-"
+  set disk1_id = "-"
+  set disk1_fw = "-"
+  set omsa_ver = "-"
 
 endif
 
-echo os $os
-echo kernel "$kernel_ver ($os_arch)"
-echo raid_fw $raid_fw
-echo raid_drv $raid_drv
-echo bios $bios
-echo service_tag $service_tag
-echo rac_fw $rac_fw
-echo disk0_id $disk0_id
-echo disk0_fw $disk0_fw
-echo disk1_id $disk1_id
-echo disk1_fw $disk1_fw
-echo omsa_ver $omsa_ver
+echo "<os>$os</os>"
+echo "<kernel>$kernel_ver ($os_arch)</kernel>"
+echo "<raid_fw>$raid_fw</raid_fw>"
+echo "<raid_drv>$raid_drv</raid_drv>"
+echo "<bios>$bios</bios>"
+echo "<service_tag>$service_tag</service_tag>"
+echo "<rac_fw>$rac_fw</rac_fw>"
+echo "<disk0_id>$disk0_id</disk0_id>"
+echo "<disk0_fw>$disk0_fw</disk0_fw>"
+echo "<disk1_id>$disk1_id</disk1_id>"
+echo "<disk1_fw>$disk1_fw</disk1_fw>"
+echo "<omsa_ver>$omsa_ver</omsa_ver>"
 
