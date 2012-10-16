@@ -4,7 +4,7 @@
 # Dada python module
 #
 
-import os, re, socket, datetime, threading, time, sys, atexit
+import os, re, socket, datetime, threading, time, sys, atexit, errno
 
 DADA_ROOT = os.environ.get('DADA_ROOT');
 
@@ -91,7 +91,7 @@ def openSocket(dl, host, port, attempts=10):
 
   while (attempts > 0):
 
-    logMsg(2, dl, "openSocket: attempt " + str(11-attempts))
+    logMsg(3, dl, "openSocket: attempt " + str(11-attempts))
 
     try:
       sock.connect((host, port))
@@ -104,7 +104,7 @@ def openSocket(dl, host, port, attempts=10):
       else:
         raise
     else:
-      logMsg(2, dl, "openSocket: conncected")
+      logMsg(3, dl, "openSocket: conncected")
       attempts = 0
 
   return sock
@@ -220,7 +220,7 @@ class controlThread(threading.Thread):
             (not self.quit_event.isSet()) ):
       time.sleep(1)
 
-    logMsg(1, self.dl, "controlThread: quit request detected") 
+    logMsg(2, self.dl, "controlThread: quit request detected") 
     self.quit_event.set()
     logMsg(1, self.dl, "controlThread: exiting")
 

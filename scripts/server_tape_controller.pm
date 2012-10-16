@@ -128,9 +128,9 @@ sub main() {
   ($user, $host, $dir) = split(/:/, $db_dir);
 
   # Set if a daemon is running there already
-  Dada::logMsg(2, $dl, "main: checkRemoteScript(".$user.", ".$host.")");
+  Dada::logMsg(1, $dl, "main: checkRemoteScript(".$user.", ".$host.")");
   ($result, $response) = checkRemoteScript($user, $host);
-  Dada::logMsg(2, $dl, "main: checkRemoteScript() ".$result." ".$response);
+  Dada::logMsg(1, $dl, "main: checkRemoteScript() ".$result." ".$response);
 
   if ($result ne "ok") {
     Dada::logMsgWarn($error, "could not contact ".$dest_script.", quitting");

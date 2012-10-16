@@ -11,6 +11,8 @@ use Sys::Hostname;
 use Time::Local;
 use File::Basename;
 use POSIX qw(setsid);
+use Math::Trig ':pi';
+
 
 BEGIN {
 
@@ -22,7 +24,7 @@ BEGIN {
   $VERSION = '1.00';
 
   @ISA         = qw(Exporter AutoLoader);
-  @EXPORT      = qw(&sendTelnetCommand &connectToMachine &getDADABinaryDir &getCurrentBinaryVersion &getDefaultBinaryVersion &setBinaryDir &getAvailableBinaryVersions &addToTime &getUnixTimeUTC &getCurrentDadaTime &printDadaTime &printTime &getPWCCState &printPWCCState &waitForState &getLine &getLines &parseCFGLines &readCFGFile &readCFGFileIntoHash &getDADA_ROOT &getDiskInfo &getRawDisk &getDBInfo &getAllDBInfo &getLoad &getUnprocessedFiles &getServerResultsNFS &getServerArchiveNFS &constructRsyncURL &headerFormat &mySystem &killProcess &getAPSRConfigVariable &nexusLogOpen &nexusLogClose &nexusLogMessage &getHostMachineName &daemonize &commThread &logMsg &logMsgWarn &remoteSshCommand &headerToHash &daemonBaseName &getProjectGroups &processHeader &getDM &getPeriod &checkScriptIsUnique &getObsDestinations &removeFiles);
+  @EXPORT      = qw(&sendTelnetCommand &connectToMachine &getDADABinaryDir &getCurrentBinaryVersion &getDefaultBinaryVersion &setBinaryDir &getAvailableBinaryVersions &addToTime &getUnixTimeUTC &getCurrentDadaTime &printDadaTime &printTime &getPWCCState &printPWCCState &waitForState &getLine &getLines &parseCFGLines &readCFGFile &readCFGFileIntoHash &getDADA_ROOT &getDiskInfo &getRawDisk &getDBInfo &getAllDBInfo &getDBStatus &getLoad &getUnprocessedFiles &getServerResultsNFS &getServerArchiveNFS &constructRsyncURL &headerFormat &mySystem &killProcess &getAPSRConfigVariable &nexusLogOpen &nexusLogClose &nexusLogMessage &getHostMachineName &daemonize &commThread &logMsg &logMsgWarn &remoteSshCommand &headerToHash &daemonBaseName &getProjectGroups &processHeader &getDM &getPeriod &checkScriptIsUnique &getObsDestinations &removeFiles, &getDBKey, &convertRadiansToRA, convertRadiansToDEC);
   %EXPORT_TAGS = ( );
   @EXPORT_OK   = ( );
 
@@ -1024,12 +1026,11 @@ sub getUnprocessedFiles($) {
 
 }
 
-sub getDBInfo($) {
-
+sub getDBInfo($) 
+{
   my ($key) = @_;
 
-  my $bindir = getCurrentBinaryVersion();
-  my $cmd = $bindir."/dada_dbmetric -k ".$key;
+  my $cmd = "dada_dbmetric -k ".$key;
   my $result = `$cmd 2>&1`;
   chomp $result;
   if ($? != 0) {
@@ -1040,8 +1041,8 @@ sub getDBInfo($) {
 
 }
 
-sub getAllDBInfo($) {
-
+sub getAllDBInfo($) 
+{
   my ($key_string) = @_;
 
   my @keys = split(/ /,$key_string);
@@ -1073,10 +1074,31 @@ sub getAllDBInfo($) {
   $response =~ s/\s+$//;
 
   return ($result, $response);  
-
 }
 
+#
+# return datablock size, full and free blocks for the data block specified
+#
+sub getDBStatus($)
+{
+  (my $key) = @_;
 
+  my $cmd = "";
+  my $result = ""; 
+  my $response = "";  
+
+  my $n_blocks = "0";
+  my $n_full = "0";
+  my $junk = "";
+
+  $cmd = "dada_dbmetric -k ".$key." 2>&1";
+  ($result, $response) = Dada::mySystem($cmd);
+  if ($result eq "ok") 
+  {
+    ($n_blocks, $n_full, $junk) = split(/,/, $response, 3);
+  }
+  return ($result, $n_blocks, $n_full);
+}
 
 sub getXferInfo() {
 
@@ -1215,11 +1237,11 @@ sub nexusLogClose($) {
 
 }
 
-sub nexusLogMessage($$$$$$) {
+sub nexusLogMessage($$$$$$$) {
 
-  (my $handle, my $timestamp, my $type, my $level, my $source, my $message) = @_;
+  (my $handle, my $tag, my $timestamp, my $type, my $level, my $source, my $message) = @_;
   if ($handle) {
-    print $handle $timestamp."|".$type."|".$level."|".$source."|".$message."\r\n";
+    print $handle $tag."|".$timestamp."|".$type."|".$level."|".$source."|".$message."\r\n";
   }
   $handle->flush;
   return $?;
@@ -1355,7 +1377,7 @@ sub killProcess($;$) {
   my $response = "";
   my $fnl = 1;
 
-  $args = "-f '".$regex."'";
+  $args = " -f '".$regex."'";
   if ($user ne "")
   {
     $args = "-u ".$user." ".$args;
@@ -1377,7 +1399,7 @@ sub killProcess($;$) {
     Dada::logMsg(2, $fnl, "killProcess: ".$result." ".$response);
 
     # give the process(es) a chance to exit
-    sleep(1);
+    sleep(2);
 
     # check they are gone
     Dada::logMsg(2, $fnl, "killProcess: ".$pgrep_cmd);
@@ -2028,6 +2050,78 @@ sub removeFiles($$$;$) {
 
   Dada::logMsg(2, $loglvl, "removeFiles: exiting");
 }
+
+#
+# Generate the DADA key for the datablock given the:
+#   inst_id   Letter corresponding to backend
+#   PWC_NUM   2 digit number corresponding to the PWC number
+#   db_ib     number [0-7] correspondig to DBID for instrument
+#
+sub getDBKey($$$) 
+{
+  (my $inst_id, my $pwc, my $db_ib) = @_;
+  my $dbkey = sprintf("%s%02d%x", $inst_id, $pwc, (2*$db_ib));
+  return $dbkey;
+}
+
+sub convertHoursToHHMMSS($)
+{
+  (my $hours) = @_;
+
+  if (($hours < 0) || ($hours > 90))
+  {
+    return ("fail", "input hours [".$hours."] invalid");
+  }
+
+  my $hh = int($hours);
+
+  my $minutes = 60 * ($hours - $hh);
+  my $mm = int($minutes);
+
+  my $seconds = 60 * ($minutes - $mm);
+  my $ss = int($seconds);
+
+  my $ss_remainder = $seconds - $ss;
+
+  my $response = sprintf("%02d", $hh).":".sprintf("%02d", $mm).":".sprintf("%02d", $ss).".".substr(sprintf("%0.1f", $ss_remainder),2);
+
+  return ("ok", $response);
+
+}
+
+
+sub convertRadiansToRA($)
+{
+  (my $radians) = @_;
+
+  # convert to degrees
+  my $degrees = ($radians * 180.0) / pi;
+
+  my $hours = $degrees / 15.0;
+
+  my ($result, $hhmmss) = Dada::convertHoursToHHMMSS($hours);
+
+  return ($result, $hhmmss);
+}
+
+sub convertRadiansToDEC($)
+{
+  (my $radians) = @_;
+
+  my $hours = ($radians * 180.0) / pi;
+  my $sign = ($hours < 0) ? -1 : 1;
+  $hours *= $sign;
+
+  my ($result, $hhmmss) = Dada::convertHoursToHHMMSS($hours);
+
+  if ($sign < 0)
+  {
+    $hhmmss = "-".$hhmmss;
+  }
+
+  return ($result, $hhmmss);
+}  
+
 
 END { }
 
