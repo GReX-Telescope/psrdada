@@ -21,9 +21,9 @@ void create_outputname( char inpfile[], char inpdev[], char outputfile[],
   {
     if (plotnum==0)
     {
-      if (strstr(inpfile, "bps") != NULL) strcpy(ext,".bps");
-      else if (strstr(inpfile, "bp") != NULL) strcpy(ext,".bp");
-      else if (strstr(inpfile, "ts") != NULL) strcpy(ext,".ts");
+      if (strstr(inpfile, ".bps") != NULL) strcpy(ext,".bps");
+      else if (strstr(inpfile, ".bp") != NULL) strcpy(ext,".bp");
+      else if (strstr(inpfile, ".ts") != NULL) strcpy(ext,".ts");
       else strcpy(ext,"");
     }
 

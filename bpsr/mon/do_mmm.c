@@ -15,7 +15,7 @@
 #include "plot4mon.h"
 
 void do_mmm (float timeseries[], float mmm[], 
-		long nvalues, long *totvalues4plot, float tsamp)
+    long nvalues, long *totvalues4plot, float tsamp)
 {
   long reduction_factor = MMM_REDUCTION;
   long result_nvalues = nvalues / reduction_factor;
@@ -26,24 +26,24 @@ void do_mmm (float timeseries[], float mmm[],
   float max=0, min=0, tot=0;
 
   for (i=0; i < result_nvalues; i++)
-    {
-      max = min = tot = current_reduction[0];
+  {
+    max = min = tot = current_reduction[0];
      
-      for (v=1; v < reduction_factor; v++)
-	{
-	  tot += current_reduction[v];
-	  if (current_reduction[v] > max)
-	    max = current_reduction[v];
-	  if (current_reduction[v] < min)
-	    min = current_reduction[v];
-	}
-
-      mmm[i*3+0] = min;
-      mmm[i*3+1] = tot / (float)reduction_factor;
-      mmm[i*3+2] = max;
-
-      current_reduction += reduction_factor;
+    for (v=1; v < reduction_factor; v++)
+    {
+      tot += current_reduction[v];
+      if (current_reduction[v] > max)
+        max = current_reduction[v];
+      if (current_reduction[v] < min)
+        min = current_reduction[v];
     }
+
+    mmm[i*3+0] = min;
+    mmm[i*3+1] = tot / (float)reduction_factor;
+    mmm[i*3+2] = max;
+
+    current_reduction += reduction_factor;
+  }
 
   *totvalues4plot = result_nvalues;
 }

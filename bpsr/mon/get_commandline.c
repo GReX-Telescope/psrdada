@@ -97,7 +97,7 @@ void get_commandline(int argc, char *argv[], char *inpfile0, char *inpfile1,
           } else {
             *width_pixels = width; 
             *height_pixels = height;
-            fprintf (stderr, "Pixel dimensions: %d x %d \n", width, height);
+            printf ("Pixel dimensions: %d x %d \n", width, height);
           }
       } else if (strings_compare(argv[i],"-zt")) {
         strcpy(optarg,argv[++i]);

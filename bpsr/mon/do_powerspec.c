@@ -58,7 +58,6 @@ void do_powerspec(float timeseries[], float powsp[],
         }
    }
 
-
   /* check the data range before proceeding with whitening */
   inivalue = 0; endvalue = nfft/2;
   compute_extremes(powsp,endvalue,inivalue,&max_y,&min_y);
@@ -83,5 +82,9 @@ void do_powerspec(float timeseries[], float powsp[],
 	     MAX_PERIOD, 1/MIN_PERIOD);
   printf(" whereas the Nyquist frequencies is %.1f Hz \n",
 	     0.5/tsamp);
+
+   // AJ nuke 0 channel
+   //powsp[0] = 0;
+
 }
 

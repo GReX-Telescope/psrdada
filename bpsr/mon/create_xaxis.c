@@ -22,13 +22,13 @@ void create_xaxis(char inpfile[], int plotnum, long totvaluesread,
   unsigned long nfft;
   float frqbin;
 
-  if ((strstr(inpfile,"bp")) != NULL)
+  if ((strstr(inpfile,".bp")) != NULL)
   {
     for(ii=0; ii<=nchan-1; ii++) x_read[ii]=fch1-(float)ii*chbw;
     *inivalue4plot = 0;
     *endvalue4plot = totvalues4plot;
   }
-  else if ((strstr(inpfile,"ts")) != NULL)
+  else if ((strstr(inpfile,".ts")) != NULL)
   {
     if (plotnum==0) 
      {

@@ -28,17 +28,15 @@ void work_on_data(char inpfile[], float *readstream, float *newstream,
   {
     if (dommm && (strstr(inpfile,"ts") != NULL))
     {
-         printf(" \n Doing the max min ...\n");
-	 do_mmm (readstream,newstream,
-		    totvaluesread,totvalues4plot,tsamp);
+      printf(" \n Doing the max min ...\n");
+      do_mmm (readstream,newstream, totvaluesread,totvalues4plot,tsamp);
     }
-
     else
-      {
-	for (jj=0; jj<=totvaluesread-1; jj++) 
-	  newstream[jj]=readstream[jj]/yscale;
-	*totvalues4plot=totvaluesread;
-      }
+    {
+    for (jj=0; jj<=totvaluesread-1; jj++) 
+      newstream[jj]=readstream[jj]/yscale;
+    *totvalues4plot=totvaluesread;
+    }
   }
   else if (plotnum==1) 
    {

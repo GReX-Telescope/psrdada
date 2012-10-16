@@ -38,6 +38,8 @@ int main (int argc, char *argv[])
   int  nchan,ndim,firstdump_line,work_flag,nbin_x,nsub_y;
   float xscale=1.0,yscale, tsamp, fch1, chbw;
   float *x_read, *y_read, *y_read1, *y_new, *y_new1;
+  unsigned i=0;
+  char * utc_file;
 
   // plot dimensions in pixels
   unsigned width_pixels = 0, height_pixels = 0;
@@ -77,14 +79,21 @@ int main (int argc, char *argv[])
   read_stream(ndata,inpfile0,&y_read[0],&totvaluesread);
   read_stream(ndata,inpfile1,&y_read1[0],&totvaluesread);
 
+  /*
+  utc_file = basename(inpfile0); 
+  for (i=0; (i<strlen(utc_file) && utc_file[i] != '.'); i++)
+  {
+   // do nothing  
+  }
+  utc_file[i] = '\0';
+*/
 
   /* enter the loop on the plots to be produced with the data in inpfile1 */
   while (plotnum <= work_flag) { 
-   
 
     // if time series scale x axis by tsamp
-
-    if (strstr(inpfile1,"ts") && (plotnum==0)) xscale=tsamp;
+    if (strstr(inpfile1, "ts") && (plotnum==0)) 
+      xscale=tsamp;
 
     /* perform additional work (fft,averaging,etc...) on the data if required */ 
     work_on_data(inpfile0,&y_read[0],&y_new[0],totvaluesread,
@@ -100,26 +109,38 @@ int main (int argc, char *argv[])
   //create_labels(inpfile1,plotnum,xlabel,ylabel,plottitle);
 
   // labels and title - make this new create_labels (todo)
-  if (strstr(inpfile1, "bps") != NULL) {
+  if (strstr(inpfile1, ".bps") != NULL)
+  {
     strcpy(xlabel," Frequency (MHz) ");
     strcpy(ylabel," Power level ");
+    //sprintf(plottitle, "RMS Bandpass - %s", utc_file);
     strcpy(plottitle," RMS Bandpass ");
-  } else if (strstr(inpfile1,"bp") != NULL) {
+  } 
+  else if (strstr(inpfile1,".bp") != NULL)
+  {
     strcpy(xlabel," Frequency (MHz) ");
     strcpy(ylabel," Power level ");
+    //sprintf(plottitle, "Mean Bandpass - %s", utc_file);
     strcpy(plottitle," Mean Bandpass ");
-  } else if (strstr(inpfile1,"ts") != NULL) {
-    if (plotnum == 1) {
+  } 
+  else if (strstr(inpfile1,".ts") != NULL)
+  {
+    if (plotnum == 1) 
+    {
       strcpy(xlabel," Frequency (Hz) ");
       if (dolog)
-	strcpy(ylabel," Log(Power) ");
+        strcpy(ylabel," Log(Power) ");
       else
-	strcpy(ylabel," Power ");
+        strcpy(ylabel," Power ");
       strcpy(plottitle," Zero DM FFT ");
-    } else { 
+      //sprintf(plottitle, "Zero DM FFT - %s", utc_file);
+    } 
+    else
+    {
       strcpy(xlabel," Time (seconds) ");
       strcpy(ylabel," Power level ");
-      strcpy(plottitle," Zero DM Time Series");
+      strcpy(plottitle, "Zero DM Time Series");
+      //sprintf(plottitle, "Zero DM Time Series - %s", utc_file);
     }
   }
 

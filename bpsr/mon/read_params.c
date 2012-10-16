@@ -25,7 +25,7 @@ void read_params(char inpfile[], int *nchan, float *tsamp, float *fch1,
   printf(" Reading the parameters of the file %s \n",inpfile);
 
   //if (strings_compare(inpfile,"bpm0.dat")) 
-  if ((strstr(inpfile,"bp")) != NULL)
+  if ((strstr(inpfile,".bp")) != NULL)
   {
     *fch1=1582.0;
     *chbw=0.390625;
@@ -38,7 +38,7 @@ void read_params(char inpfile[], int *nchan, float *tsamp, float *fch1,
     strcpy(add_work,"null");
   }
   //else if (strings_compare(inpfile,"time0.dat")) 
-  else if ((strstr(inpfile,"ts")) != NULL)
+  else if ((strstr(inpfile,".ts")) != NULL)
   {
     *nchan=1024;
     *tsamp=64e-6;
