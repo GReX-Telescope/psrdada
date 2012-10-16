@@ -86,7 +86,7 @@ bin_PROGRAMS += dada_dbgpu
 AM_CPPFLAGS = @CUDA_CFLAGS@
 
 dada_dbgpu_CFLAGS   = $(CUDA_CFLAGS)
-dada_dbgpu_LDADD    = $(CUDA_LIBS) $(top_srcdir)/src/libpsrdada.la
+dada_dbgpu_LDADD    = $(LDADD) $(CUDA_LIBS)
 dada_dbgpu_LDFLAGS  = $(CUDA_LDFLAGS)
 
 endif
