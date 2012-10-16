@@ -1,6 +1,6 @@
 <?PHP 
 
-include ("bpsr.lib.php");
+include("bpsr.lib.php");
 $inst = new bpsr();
 
 $host = $inst->config["SERVER_HOST"];
@@ -11,9 +11,9 @@ list ($socket, $result) = openSocket($host, $port);
 if ($result == "ok") {
 
   $bytes_written = socketWrite($socket, "node_info\r\n");
-  $read = socketRead($socket);
+  list ($result, $response) = socketRead($socket);
   socket_close($socket);
-  $string = str_replace(";;;;;;","\n",$read);
+  $string = str_replace(";;;;;;","\n",$response);
   $string = rtrim($string);
 
 } else {

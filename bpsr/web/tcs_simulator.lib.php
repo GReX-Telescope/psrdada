@@ -1,14 +1,14 @@
 <?PHP
 
-include("bpsr.lib.php");
-include("bpsr_webpage.lib.php");
+include_once("bpsr.lib.php");
+include_once("bpsr_webpage.lib.php");
 
 class tcs_simulator extends bpsr_webpage 
 {
-
   var $groups = array();
   var $psrs = array();
   var $psr_keys = array();
+  var $valid_psrs = array();
   var $inst = 0;
 
   function tcs_simulator()
@@ -18,11 +18,25 @@ class tcs_simulator extends bpsr_webpage
     $this->title = "BPSR | TCS Simulator";
     $this->inst = new bpsr();
     $this->groups = $this->inst->getPIDS();
+    array_push($this->groups, "P999");
+    array_push($this->groups, "P456");
+
+    $this->valid_psrs = array("J0437-4715", "J0534+2200", "J0610-2100", "J0613-0200",
+                              "J0711-6830", "J0737-3039A", "J0742-2822", "J0835-4510",
+                              "J0900-3144", "J0904-7459", "J1001-5939", "J1017-7156",
+                              "J1018-7154", "J1022+1001", "J1024-0719", "J1045-4509",
+                              "J1103-5355", "J1125-5825", "J1125-6014", "J1141-6545",
+                              "J1226-6202", "J1431-4717", "J1439-5501", "J1525-5544",
+                              "J1546-4552", "J1600-3053", "J1603-7202", "J1643-1224",
+                              "J1713+0747", "J1718-3718", "J1730-2304", "J1732-5049",
+                              "J1744-1134", "J1824-2452", "J1857+0943", "J1909-3744",
+                              "J1933-6211", "J1939+2134", "J2124-3358", "J2129-5721",
+                              "J2145-0750", "J2241-5236");
+
   }
 
   function printJavaScriptHead()
   {
-
     $this->psrs = $this->inst->getPsrcatPsrs();
     $this->psr_keys = array_keys($this->psrs);
 
@@ -42,9 +56,28 @@ class tcs_simulator extends bpsr_webpage
 
 
     <script type='text/javascript'>
+      var ras = { 'default':'00:00:00.00'<?
+      for ($i=0; $i<count($this->psr_keys); $i++)
+      {
+        $p = $this->psr_keys[$i];
+        if (in_array($p, $this->valid_psrs))
+        {
+          echo ",'".$p."':'".$this->psrs[$p]["RAJ"]."'";
+        }
+      }
+      ?>};
 
-      var ras = { 'J0437-4715':'04:37:00.00','G302.9-37.3':'00:52:00.666' };
-      var decs = { 'J0437-4715':'-47:35:00.0','G302.9-37.3':'-79:47:53.58' };
+      var decs = { 'default':'00:00:00.00'<?
+      for ($i=0; $i<count($this->psr_keys); $i++)
+      {
+        $p = $this->psr_keys[$i];
+        if (in_array($p, $this->valid_psrs))
+        {
+          echo ",'".$p."':'".$this->psrs[$p]["DECJ"]."'";
+        }
+      }
+      ?>};
+
 
       function startButton() {
 
@@ -98,8 +131,10 @@ class tcs_simulator extends bpsr_webpage
         <td class='key'>PROC FILE</td>
         <td class='val'>
           <select name="procfil">
+            <option value="BPSR.NULL">BPSR.NULL</option>
             <option value="SURVEY.MULTIBEAM">SURVEY.MULTIBEAM</option>
             <option value="THEDSPSR">THEDSPSR</option>
+            <option value="BPSR.SCRATCH">BPSR.SCRATCH</option>
           </select>
         </td>
 
@@ -109,8 +144,8 @@ class tcs_simulator extends bpsr_webpage
         <td class='key'>ACC LEN</td>
         <td class='val'><input type="text" name="acclen" size="2" value="25" readonly></td>
 
-        <td class='key'>TSCRUNCH *</td>
-        <td class='val'><input type="text" name="tscrunch" size="1" value="1" readonly></td>
+        <td class='key'>TSCRUNCH</td>
+        <td class='val'><input type="text" name="tscrunch" size="1" value="1"></td>
 
       </tr>
       <tr>
@@ -119,8 +154,17 @@ class tcs_simulator extends bpsr_webpage
         <td class='val'>
           <input type="hidden" id="src" name="src" value="">
           <select id="src_list" name="src_list" onChange='updateRADEC()'>
-            <option value='J0437-4715'>J0437-4715</option>
             <option value='G302.9-37.3'>G302.9-37.3</option>
+<?
+          for ($i=0; $i<count($this->psr_keys); $i++)
+          {
+            $p = $this->psr_keys[$i];
+            if (in_array($p, $this->valid_psrs))
+            {
+              echo "            <option value='".$p."'>".$p."</option>\n";
+            }
+          }
+?>
           </select>
         </td>
 
@@ -129,7 +173,7 @@ class tcs_simulator extends bpsr_webpage
 
 
         <td class='key'>NBIT</td>
-        <td class='val'><input type="text" name="nbit" size="2" value="8" readonly></td>
+        <td class='val'><input type="text" name="nbit" size="2" value="2"></td>
 
         <td class='key'>CHANAV *</td>
         <td class='val'><input type="text" name="chanav" size="2" value="0" readonly></td>
@@ -173,7 +217,23 @@ class tcs_simulator extends bpsr_webpage
         <td class='val'><input type="text" name="tconst" size="6" value="1.0000" readonly></td>
 
         <td class='key'>FSCRUNCH *</td>
-        <td class='val'><input type="text" name="fscrunch" size="1" value="1" readonly></td>
+        <td class='val'><input type="text" name="fscrunch" size="1" value="1"></td>
+
+      </tr>
+  
+      <tr>
+
+        <td class='key'>REF_BEAM</td>
+        <td class='val'><input type="text" name="refbeam" size="5" value="1"></td>
+
+        <td class='key'>NBEAM</td>
+        <td class='val'><input type="text" name="nbeam" size="2" value="13"></td>
+
+        <td class='key'>OBSERVER</td>
+        <td class='val'><input type="text" name="observer" size="6" value="TEST"></td>
+
+        <td class='key'></td>
+        <td class='val'></td>
 
       </tr>
   
@@ -241,8 +301,8 @@ class tcs_simulator extends bpsr_webpage
     if ($get["command"] == "stop") {
       $cmd = "stop\r\n";
       socketWrite($sock,$cmd);
-      $result = rtrim(socketRead($sock));
-      $this->printTR($cmd,$result);
+      list ($result, $response) = socketRead($sock);
+      $this->printTR($cmd, $response);
       $this->printTF();
       $this->printFooter();
       socket_close($sock);
@@ -257,15 +317,16 @@ class tcs_simulator extends bpsr_webpage
       if (($k != "command") && ($k != "src_list")) {
         if ($get[$k] != "") {
           $cmd = $k." ".$get[$k]."\r\n";
-          socketWrite($sock,$cmd);
-          $result = rtrim(socketRead($sock),"\r\n");
-          if ($result != "ok") {
-            $this->printTR("HEADER command failed ", $result.": ".rtrim(socketRead($sock)));
+          socketWrite($sock, $cmd);
+          list ($result, $response) = socketRead($sock);
+          if ($response != "ok") 
+          {
+            $this->printTR("HEADER command failed ", $response);
             $this->printTR("START aborted", "");
             socket_close($sock);
             return;
           }
-          $this->printTR($cmd,$result);
+          $this->printTR($cmd, $result);
         } else {
           $this->printTR($k, "Ignoring as value was empty");
         }
@@ -275,10 +336,10 @@ class tcs_simulator extends bpsr_webpage
     # Issue START command to server_tcs_interface 
     $cmd = "start\r\n";
     socketWrite($sock,$cmd);
-    $result = rtrim(socketRead($sock),"\r\n");
-    $this->printTR($cmd,$result);
-    if ($result != "ok") {
-      $this->printTR("START command failed", $result.": ".rtrim(socketRead($sock)));
+    list ($result, $response) = socketRead($sock);
+    $this->printTR($cmd, $response);
+    if ($response != "ok") {
+      $this->printTR("START command failed", $response);
       $this->printTF();
       $this->printFooter();
       socket_close($sock);
@@ -289,7 +350,7 @@ class tcs_simulator extends bpsr_webpage
 
     # now wait for the UTC_START to come back to us
     $this->printTR("Waiting for UTC_START to be reported", "...");
-    $result = rtrim(socketRead($sock));
+    list ($result, $response) = socketRead($sock);
     $this->printTR($result, "ok");
 
     $this->printTF();
@@ -299,7 +360,7 @@ class tcs_simulator extends bpsr_webpage
   }
 
   function printTR($left, $right) {
-    echo " <tr\n";
+    echo " <tr>\n";
     echo "  <td>".$left."</td>\n";
     echo "  <td>".$right."</td>\n";
     echo " </tr>\n";

@@ -1,6 +1,6 @@
 <?PHP
 
-include ("bpsr.lib.php");
+include_once("bpsr.lib.php");
 $inst = new bpsr();
 
 # get the list of configurable ibobs

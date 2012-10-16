@@ -1,40 +1,43 @@
 <?PHP
+error_reporting(E_ALL);
+ini_set("display_errors", 1);
 
-include("bpsr.lib.php");
-include("bpsr_webpage.lib.php");
+include_once("bpsr.lib.php");
+include_once("bpsr_webpage.lib.php");
 
 ini_set("memory_limit","128M");
 
-define(OBP, 0);   # obs.processing
-define(OBF, 1);   # obs.finished
-define(OBT, 2);   # obs.txt
-define(OBE, 3);   # obs.problem / error
-define(OBX, 4);   # obs.transferred
-define(OBA, 5);   # obs.archived
-define(OBD, 6);   # obs.delted
-define(OBI, 7);   # obs.info
-define(OBS, 8);   # obs.start
-define(SRC, 9);   # souce name
-define(SRV, 10);   # flag for survey pointing 
-define(BTF, 11);   # beam.transferred
-define(STS, 12);   # sent.to.swin
-define(STP, 13);   # sent.to.parkes
-define(OTS, 14);   # on.tape.swin
-define(OTP, 15);   # on.tape.parkes
-define(ETS, 16);   # error.to.swin
-define(ETP, 17);   # error.to.parkes
-define(INA, 18);   # in /nfs/archives/bpsr
-define(INR, 19);   # in /nfs/results/bpsr
-define(INL, 20);   # in /lfs/data0/bpsr/archives
-define(NBM, 21);   # number of beams
-define(PID, 22);   # PID of the observation
-define(BMB, 23);   # MB per beam
+define("OBP", 0);   # obs.processing
+define("OBF", 1);   # obs.finished
+define("OBT", 2);   # obs.txt
+define("OBE", 3);   # obs.problem / error
+define("OBX", 4);   # obs.transferred
+define("OBA", 5);   # obs.archived
+define("OBD", 6);   # obs.delted
+define("OBI", 7);   # obs.info
+define("OBS", 8);   # obs.start
+define("SRC", 9);   # souce name
+define("SRV", 10);   # flag for survey pointing 
+define("BTF", 11);   # beam.transferred
+define("STS", 12);   # sent.to.swin
+define("STP", 13);   # sent.to.parkes
+define("OTS", 14);   # on.tape.swin
+define("OTP", 15);   # on.tape.parkes
+define("ETS", 16);   # error.to.swin
+define("ETP", 17);   # error.to.parkes
+define("INA", 18);   # in /nfs/archives/bpsr
+define("INR", 19);   # in /nfs/results/bpsr
+define("INL", 20);   # in /lfs/data0/bpsr/archives
+define("NBM", 21);   # number of beams
+define("PID", 22);   # PID of the observation
+define("BMB", 23);   # MB per beam
 
-define(BTF_COUNT, 24);
-define(STS_COUNT, 25);
-define(STP_COUNT, 26);
-define(OTS_COUNT, 27);
-define(OTP_COUNT, 28);
+define("BTF_COUNT", 24);
+define("STS_COUNT", 25);
+define("STP_COUNT", 26);
+define("OTS_COUNT", 27);
+define("OTP_COUNT", 28);
+define("ONR_COUNT", 29);
 
 class archival extends bpsr_webpage
 {
@@ -56,7 +59,7 @@ class archival extends bpsr_webpage
     $this->title = "BPSR | Archival Pipeline";
 
     for ($i=0; $i<$this->cfg["NUM_SWIN_DIRS"]; $i++) {
-      $arr = split(":",$this->cfg["SWIN_DIR_".$i]);
+      $arr = explode(":",$this->cfg["SWIN_DIR_".$i]);
       $this->swin_dirs[$i] = array();
       $this->swin_dirs[$i]["user"] = $arr[0];
       $this->swin_dirs[$i]["host"] = $arr[1];
@@ -64,7 +67,7 @@ class archival extends bpsr_webpage
     }
 
     for ($i=0; $i<$this->cfg["NUM_PARKES_DIRS"]; $i++) {
-      $arr = split(":",$this->cfg["PARKES_DIR_".$i]);
+      $arr = explode(":",$this->cfg["PARKES_DIR_".$i]);
       $this->parkes_dirs[$i] = array();
       $this->parkes_dirs[$i]["user"] = $arr[0];
       $this->parkes_dirs[$i]["host"] = $arr[1];
@@ -72,13 +75,13 @@ class archival extends bpsr_webpage
     }
 
     # Get the bookkeeping db information
-    $arr = split(":",$this->cfg["SWIN_DB_DIR"]);
+    $arr = explode(":",$this->cfg["SWIN_DB_DIR"]);
     $this->swin_db["user"] = $arr[0];
     $this->swin_db["host"] = $arr[1];
     $this->swin_db["dir"]  = $arr[2];
     $this->swin_db["file"] = $arr[2]."/files.P???.db";
 
-    $arr = split(":",$this->cfg["PARKES_DB_DIR"]);
+    $arr = explode(":",$this->cfg["PARKES_DB_DIR"]);
     $this->parkes_db["user"] = $arr[0];
     $this->parkes_db["host"] = $arr[1];
     $this->parkes_db["dir"]  = $arr[2];
@@ -211,7 +214,6 @@ class archival extends bpsr_webpage
                 td = document.getElementById(key+"_"+utc_start);
                 if (key.indexOf("state") != -1) 
                 {
-                  td.innerHTML = value;
 
                   document.getElementById("state_arch_"+utc_start).className = "clear";
                   document.getElementById("state_xfer_"+utc_start).className = "clear";
@@ -246,7 +248,7 @@ class archival extends bpsr_webpage
 
 
                 }
-                else if (key.indexOf("beam_transferred") != -1)
+                else if (key.indexOf("on_raid") != -1)
                 {
                   value = parseInt(value);
                   if ((nbeam == 0) || (value == -1))
@@ -286,7 +288,10 @@ class archival extends bpsr_webpage
                 }
                 else  
                 {
-                  td.innerHTML = value;
+                  if (key.indexOf("utc_start") != -1)
+                    td.innerHTML = "<a href='/bpsr/result.lib.php?single=true&utc_start="+utc_start+"'>"+utc_start+"</a>";
+                  else
+                    td.innerHTML = value;
                 }
               } catch (e) {
                 // do nothing 
@@ -465,7 +470,7 @@ class archival extends bpsr_webpage
       <tr>
         <th colspan=5>
         <th colspan=5>Obs State</th>
-        <th colspan=2>Data</th>
+        <th colspan=1>Data</th>
         <th colspan=3>Sent To</th>
         <th colspan=2>On Tape</th>
       </tr>
@@ -481,7 +486,6 @@ class archival extends bpsr_webpage
         <th width="10px">A</th>
         <th width="10px">D</th>
         <th width="15px">N</th>
-        <th width="15px">F</th>
         <th width="15px">R</th>
         <th width="15px">S</th>
         <th width="15px">P</th>
@@ -504,8 +508,7 @@ class archival extends bpsr_webpage
           echo "<td id='state_arch_".$o."'></td>";
           echo "<td id='state_del_".$o."'></td>";
           echo "<td id='nbeam_".$o."'></td>";
-          echo "<td id='on_local_disk_".$o."'></td>";
-          echo "<td id='beam_transferred_".$o."'></td>";
+          echo "<td id='on_raid_".$o."'></td>";
           echo "<td id='sent_to_swin_".$o."'></td>";
           echo "<td id='sent_to_parkes_".$o."'></td>";
           echo "<td id='on_tape_swin_".$o."'></td>";
@@ -535,8 +538,10 @@ class archival extends bpsr_webpage
 
     $pid_dests = $this->inst->getPIDDestinations();
 
+    $raid = $this->getRaidObservations($show_pid);
+
     # get information about observations in the staging areas
-    $staged = $this->getStagedObservations();
+    # $staged = $this->getStagedObservations();
 
     # get information about observations archived to tape
     # $archived = $this->getStagingAreaInfo();
@@ -559,13 +564,12 @@ class archival extends bpsr_webpage
 
       $source = $local[$o][SRC];
       $nbeam = $local[$o][NBM];
-      $beamsize = sprintf("%5.2f", ($local[$o][BMB]/1024));
-      $beam_transferred = $local[$o][BTF_COUNT];
+      $beamsize = (array_key_exists($o, $raid)) ? sprintf("%5.2f", ($raid[$o][BMB]/(1024*1024*1024))) : "N/A";
       $sent_to_swin = $local[$o][STS_COUNT];
       $sent_to_parkes = $local[$o][STP_COUNT];
       $on_tape_swin = $local[$o][OTS_COUNT];
       $on_tape_parkes = $local[$o][OTP_COUNT];
-      $on_local_disk = $local[$o][INL];
+      $on_raid = (array_key_exists($o, $raid)) ? $raid[$o][ONR_COUNT] : 0;
 
       $req_swin = false;
       $req_parkes = false;
@@ -608,18 +612,102 @@ class archival extends bpsr_webpage
       $xml .= "<beamsize>".$beamsize."</beamsize>\n";
       //$xml .= "<req_swin>".$req_swin."</req_swin>\n";
       //$xml .= "<req_parkes>".$req_parkes."</req_parkes>\n";
-      $xml .= "<beam_transferred>".$beam_transferred."</beam_transferred>\n";
+      $xml .= "<on_raid>".$on_raid."</on_raid>\n";
       $xml .= "<sent_to_swin>".$sent_to_swin."</sent_to_swin>\n";
       $xml .= "<sent_to_parkes>".$sent_to_parkes."</sent_to_parkes>\n";
       $xml .= "<on_tape_swin>".$on_tape_swin."</on_tape_swin>\n";
       $xml .= "<on_tape_parkes>".$on_tape_parkes."</on_tape_parkes>\n";
-      $xml .= "<on_local_disk>".$on_local_disk."</on_local_disk>\n";
       $xml .= "</obs>\n";
     }
     $xml .= "</archival>\n";
    
     header('Content-type: text/xml');
     echo $xml;
+  }
+
+  function getRaidObservations($filter_pid)
+  {
+    $raid = array();
+
+    list ($socket, $result) = openSocket($this->cfg["RAID_HOST"], $this->cfg["RAID_WEB_MONITOR_PORT"]);
+    $response = "initial";
+    $array = array();
+    if ($result == "ok")
+    {
+      $bytes_written = socketWrite($socket, "in_perm_info\r\n");
+      while ($socket && ($result == "ok") && ($response != ""))
+      {
+        list ($result, $response) = socketRead($socket);
+        if ($result == "ok")
+        {
+          array_push ($array, $response);
+        }
+      }
+      if (($result == "ok") && ($socket))
+        socket_close($socket);
+      $socket = 0;
+    }
+    else
+      return $raid;
+
+    for ($i=0; $i<count($array); $i++)
+    {
+      if (strlen($array[$i]) > 5)
+      {
+        list ($p, $o, $b) = explode("/", $array[$i]);
+        if (($filter_pid != "all") && ($filter_pid != $p))
+        {
+          # skip
+        }
+        else
+        {
+          if (!array_key_exists($o, $raid))
+          {
+            $raid[$o] = array();
+            $raid[$o][ONR_COUNT] = 1;
+          }
+          else
+          {
+            $raid[$o][ONR_COUNT] += 1;
+          }
+        }
+      }
+    }
+
+    list ($socket, $result) = openSocket($this->cfg["RAID_HOST"], $this->cfg["RAID_WEB_MONITOR_PORT"]);
+    $array = array();
+    $response = "initial";
+    if ($result == "ok")
+    {
+      $bytes_written = socketWrite($socket, "beam_size_info\r\n");
+      while ($socket && ($result == "ok") && ($response != ""))
+      {
+        list ($result, $response) = socketRead($socket);
+        if ($result == "ok")
+        {
+          array_push ($array, $response);
+        }
+      }
+      if (($result == "ok") && ($socket))
+        socket_close($socket);
+      $socket = 0;
+    }
+    else
+      return $raid;
+
+    for ($i=0; $i<count($array); $i++)
+    {
+      if (strlen($array[$i]) > 5)
+      {
+        list ($o, $b) = explode(" ", $array[$i]);
+        if (array_key_exists($o, $raid))
+        {
+          $raid[$o][BMB] = $b;
+        }
+      }
+    }
+
+    return $raid;
   }
 
   function getStagedObservations()
@@ -637,11 +725,12 @@ class archival extends bpsr_webpage
       $h = $this->swin_dirs[$i]["host"];
 
       $cmd = "ssh -l ".$u." ".$h." 'cd ".$d."/P630; find pulsars staging_area -mindepth 2 -maxdepth 2 -type d' | awk -F/ '{print $2\"/\"$3}'";
+      echo $cmd."<BR>\n";
       $array = array();
       $lastline = exec($cmd, $array, $return_var);
       for ($j=0; (($return_var == 0) && ($j<count($array))); $j++) 
       {
-        list($o, $b) = split("/", $array[$j]);
+        list($o, $b) = explode("/", $array[$j]);
 
         if (!array_key_exists($o, $staged))
         {
@@ -665,11 +754,12 @@ class archival extends bpsr_webpage
       $h = $this->parkes_dirs[$i]["host"];
 
       $cmd = "ssh -l ".$u." ".$h." 'cd ".$d."/P630; find pulsars staging_area -mindepth 2 -maxdepth 2 -type d' | awk -F/ '{print $2\"/\"$3}'";
+      echo $cmd."<BR>\n";
       $array = array();
       $lastline = exec($cmd, $array, $return_var);
       for ($j=0; (($return_var == 0) && ($j<count($array))); $j++)
       {
-        list($o, $b) = split("/", $array[$j]);
+        list($o, $b) = explode("/", $array[$j]);
 
         if (!array_key_exists($o, $staged))
         {
@@ -704,7 +794,7 @@ class archival extends bpsr_webpage
     echo "returned ".count($array)." results<BR>\n"; 
     for ($i=0; $i<count($array); $i++) 
     {
-      list ($o, $b) = split("/", $array[$i]);
+      list ($o, $b) = explode("/", $array[$i]);
       # if this is a not an old observation (i.e. we have it in results
       if (in_array($o, $this->results))
       {
@@ -734,7 +824,7 @@ class archival extends bpsr_webpage
     echo "returned ".count($array)." results<BR>\n"; 
     for ($i=0; $i<count($array); $i++)
     {
-      list ($o, $b) = split("/", $array[$i]);
+      list ($o, $b) = explode("/", $array[$i]);
       # if this is a not an old observation (i.e. we have it in results
       if (in_array ($o, $this->results))
       {
@@ -759,54 +849,51 @@ class archival extends bpsr_webpage
   # see what archives exist on local disks
   function getLocalObservations($pid) 
   {
+    # get a listing of all observations in the server results dir
+    $cmd = "find ".$this->cfg["SERVER_RESULTS_DIR"]." -mindepth 2 -maxdepth 2 -type d -name '??' -printf '%h/%f\n' | awk -F/ '{print $(NF-1)\"/\"$(NF)}' | sort";
+    $list = array();
+    $lastline = exec($cmd, $list, $return_var);
 
-    $a_dir = $this->cfg["SERVER_ARCHIVE_DIR"];
-    $r_dir = $this->cfg["SERVER_RESULTS_DIR"];
+    $utc_list   = array();
+    $beam_count = array();
+
+    for ($i=0; $i<count($list); $i++)
+    {
+      list($obs, $beam) = explode("/", $list[$i]);
+      if (!in_array($obs, $utc_list))
+        array_push($utc_list, $obs);
+      if (!array_key_exists($obs, $beam_count))
+        $beam_count[$obs] = 0;
+      $beam_count[$obs]++;
+    }
+     
+    # Get the remote file listings soas to not tax NFS too much
+    #$user = "bpsr";
+    $remote = array();
+    #for ($i=0; $i<=14; $i++) {
+    #  $host = sprintf("apsr%02d",$i);
+    #  $temp_array = $this->getRemoteListing($user, $host, "/lfs/data0/bpsr/archives", $remote);
+    #  $remote = $temp_array;
+    #}
+
+    $remote = $this->getBeamResults($this->cfg["SERVER_RESULTS_DIR"]);
+
+    $local = $this->getObsDotListing($this->cfg["SERVER_RESULTS_DIR"]);
+
+    $tot = count($utc_list);
 
     $results = array();
 
-    $obs_a = getSubDirs($a_dir);
-    $obs_r = getSubDirs($r_dir);
-
-    $obs_all = array_merge($obs_a, $obs_r);
-    $obs_all = array_unique($obs_all);
-    sort($obs_all);
-
-    # Get all the obs_a subdirs count
-    $obs_a_subdir_count = array();
-    $cmd = "find ".$a_dir." -mindepth 2 -maxdepth 2 -type l | awk -F/ '{print $5\" \"$6}'";
-    $array = array();
-    $lastline = exec($cmd, $array, $return_var);
-    for ($j=0; $j<count($array); $j++) {
-      $arr = split(" ", $array[$j]);
-      if (!array_key_exists($arr[0], $obs_a_subdir_count)) $obs_a_subdir_count[$arr[0]] = 0;
-      $obs_a_subdir_count[$arr[0]] += 1;
-    }
-
-    # Get the remote file listings soas to not tax NFS too much
-    $user = "bpsr";
-    $remote = array();
-    for ($i=0; $i<=14; $i++) {
-      $host = sprintf("apsr%02d",$i);
-      $temp_array = $this->getRemoteListing($user, $host, "/lfs/data0/bpsr/archives", $remote);
-      $remote = $temp_array;
-    }
-
-    $local = $this->getObsDotListing("/nfs/archives/bpsr");
-
-    $tot = count($obs_all);
-
-    // For each observation get a list of frequency channels present
-    for ($i=0; $i<$tot; $i++) {
-
+    for ($i=0; $i<$tot; $i++) 
+    {
       // the current obs
-      $o = $obs_all[$i];
+      $o = $utc_list[$i];
 
       $results[$o] = array();
 
       $results[$o][NBM] = 0;
-      if (array_key_exists($o, $obs_a_subdir_count))
-        $results[$o][NBM] = $obs_a_subdir_count[$o];
+      if (array_key_exists($o, $beam_count))
+        $results[$o][NBM] = $beam_count[$o];
 
       // Check that the observation is listed in the local array
       if (array_key_exists($o, $local)) {
@@ -818,6 +905,7 @@ class archival extends bpsr_webpage
         $results[$o][OBI] = $local[$o][OBI];
         $results[$o][OBE] = $local[$o][OBE];
         $results[$o][OBT] = $local[$o][OBT];
+        $results[$o][PID] = $local[$o][PID];
         $results[$o][SRC] = $local[$o][SRC];
         $results[$o][SRV] = (substr($results[$o][SRC],0,1) == "G") ? 1 : 0;
         $results[$o][BMB] = 0;
@@ -828,25 +916,23 @@ class archival extends bpsr_webpage
       $results[$o][STP_COUNT] = 0; 
       $results[$o][OTS_COUNT] = 0; 
       $results[$o][OTP_COUNT] = 0; 
-      $results[$o][INL] = 0;
       if (array_key_exists($o, $remote)) {
         $results[$o][BTF_COUNT] = $remote[$o][BTF_COUNT];
         $results[$o][STS_COUNT] = $remote[$o][STS_COUNT];
         $results[$o][STP_COUNT] = $remote[$o][STP_COUNT];
         $results[$o][OTS_COUNT] = $remote[$o][OTS_COUNT];
         $results[$o][OTP_COUNT] = $remote[$o][OTP_COUNT];
-        $results[$o][INL]       = $remote[$o][INL];
         $results[$o][BMB]       = $remote[$o][BMB];
       }
 
       $results[$o][INA] = 0;
-      if (in_array($o,$obs_a)) {
-        $results[$o][INA] = 2;
-      }
+      #if (in_array($o,$obs_a)) {
+      #  $results[$o][INA] = 2;
+      #}
       $results[$o][INR] = 0;
-      if (in_array($o,$obs_r)) {
-        $results[$o][INR] = 2;
-      }
+      #if (in_array($o,$obs_r)) {
+      #  $results[$o][INR] = 2;
+      #}
 
       # now remove the obs from the remote and local arrays for memory reasons 
       unset($remote[$o]); 
@@ -854,20 +940,20 @@ class archival extends bpsr_webpage
     }
 
     # get the PID of each observation from obs.info
-    $cmd = "find /nfs/archives/bpsr/ -type f -maxdepth 2 -name 'obs.info' -print0 | xargs -0 grep ^PID | awk -F/ '{print $5\" \"$6}' | awk '{print $1\" \"$3}'";
-    $lastline = exec($cmd, $array, $return_val);
-    for ($i=0; $i<count($array); $i++) {
-      $bits = split(" ",$array[$i]);
-      $results[$bits[0]][PID] = $bits[1];
-    }
+    #$cmd = "find /nfs/archives/bpsr/ -type f -maxdepth 2 -name 'obs.info' -print0 | xargs -0 grep ^PID | awk -F/ '{print $5\" \"$6}' | awk '{print $1\" \"$3}'";
+    #$lastline = exec($cmd, $array, $return_val);
+    #for ($i=0; $i<count($array); $i++) {
+    #  $bits = explode(" ",$array[$i]);
+    #  $results[$bits[0]][PID] = $bits[1];
+    #}
 
-    if ($pid != "all") {
-      $keys = array_keys($results);
-      for ($i=0; $i<count($keys); $i++) {
-        if ($results[$keys[$i]][PID] != $pid) 
-          unset($results[$keys[$i]]);
-      }
-    }
+#    if ($pid != "all") {
+#      $keys = array_keys($results);
+#      for ($i=0; $i<count($keys); $i++) {
+#        if ($results[$keys[$i]][PID] != $pid) 
+#          unset($results[$keys[$i]]);
+#      }
+#    }
 
     return $results;
 
@@ -881,11 +967,12 @@ class archival extends bpsr_webpage
     
     $array = array();
     $cmd = "ssh -l ".$user." ".$host." \"web_observations_helper.pl\"";
+    echo $cmd."<BR>\n";
     $lastline = exec($cmd, $array, $return_val);
 
     for ($i=0; $i<count($array); $i++) 
     {
-      $a = split("/", $array[$i]);
+      $a = explode("/", $array[$i]);
 
       $o = $a[1];
       $b = $a[2];
@@ -895,7 +982,6 @@ class archival extends bpsr_webpage
       if (! array_key_exists($o, $results)) {
         $results[$o] = array();
         $results[$o][OBS] = 0;
-        $results[$o][INL] = 0;
         $results[$o][BTF_COUNT] = 0;
         $results[$o][STS_COUNT] = 0;
         $results[$o][STP_COUNT] = 0;
@@ -933,12 +1019,6 @@ class archival extends bpsr_webpage
         $results[$o][$b][ETS] = 1;
       } else if ($f == "error.to.parkes") {
         $results[$o][$b][ETP] = 1;
-      } else if (($f == "integrated.ar") || (substr($f, ".fil") !== FALSE)) {
-        $results[$o][INL]++;
-        $s_mb = $s / (1024*1024);
-        if ($s_mb > $results[$o][BMB]) {
-          $results[$o][BMB] = $s_mb;
-        }
       } else {
         echo "getRemoteListing: ".$a." was unmatched<BR>\n";
       }
@@ -952,7 +1032,7 @@ class archival extends bpsr_webpage
   #
   function getObsDotListing($dir) {
 
-    $cmd = "cd $dir; find -mindepth 2 -maxdepth 2 -type f -name 'obs.*' -o -name 'error.to.*'";
+    $cmd = "cd $dir; find -mindepth 2 -maxdepth 2 -type f -name 'obs.*' -o -name 'sent.to.*' -o -name 'on.tape.*'";
     $array = array();
     $lastline = exec($cmd, $array, $return_val);
 
@@ -960,11 +1040,12 @@ class archival extends bpsr_webpage
 
     for ($i=0; $i<count($array); $i++) {
 
-      $a = split("/", $array[$i]); 
+      $a = explode("/", $array[$i]); 
       $o = $a[1];
       $f = $a[2];
 
-      if (! array_key_exists($o, $results)) {
+      if (! array_key_exists($o, $results)) 
+      {
         $results[$o] = array();
         $results[$o][OBP] = -1;
         $results[$o][OBF] = -1;
@@ -1002,26 +1083,103 @@ class archival extends bpsr_webpage
       if ($f == "obs.info") {
         $results[$o][OBI] = 2;
       }
-      if ($f == "error.to.swin") {
-        $results[$o][ETS] = 1;
+      if ($f == "sent.to.swin") {
+        $results[$o][STS] = 2;
       }
-      if ($f == "error.to.parkes") {
-        $results[$o][ETP] = 1;
+      if ($f == "sent.to.parkes") {
+        $results[$o][STP] = 2;
+      }
+      if ($f == "on.tape.swin") {
+        $results[$o][OTS] = 2;
+      }
+      if ($f == "on.tape.parkes") {
+        $results[$o][OTP] = 2;
       }
     }
 
-    $cmd = "cd $dir; find . -maxdepth 2 -type f -name 'obs.info' -print0 | xargs -0 grep SOURCE | awk -F/ '{print $(NF-1)\" \"\$NF}' | awk '{print $1\" \"$3}'";
+    $cmd = "cd $dir; find . -maxdepth 2 -type f -name 'obs.info' -print0 | xargs -0 grep SOURCE | awk -F/ '{print $(NF-1)\" \"$(NF)}' | awk '{print $1\" \"$3}'";
     $array = array();
     $lastline = exec($cmd, $array, $return_val);
 
-    for ($i=0; $i<count($array); $i++) {
-      $a = split(" ", $array[$i]);
+    for ($i=0; $i<count($array); $i++) 
+    {
+      $a = explode(" ", $array[$i]);
       $o = $a[0];
       $s = $a[1];
       $results[$o][SRC] = $s; 
     }
 
+    # get the PID of each observation from obs.info
+    $array = array();
+    $cmd = " find $dir -type f -maxdepth 2 -name 'obs.info' -print0 | xargs -0 grep ^PID | awk -F/ '{print $(NF-1)\" \"$(NF)}' | awk '{print $1\" \"$3}'";
+    $lastline = exec($cmd, $array, $return_val);
+    for ($i=0; $i<count($array); $i++) 
+    {
+      $a = explode(" ",$array[$i]);
+      $o = $a[0];
+      $p = $a[1];
+      $results[$o][PID] = $p;
+    }
     unset($array);
+
+    return $results;
+  }
+
+  function getBeamResults($dir)
+  {
+    $cmd = "cd $dir; find -mindepth 3 -maxdepth 3 -type f -name 'sent.to.*' -o -name 'on.tape.*'";
+    $array = array();
+    $lastline = exec($cmd, $array, $return_val);
+
+    $results = array();
+
+    for ($i=0; $i<count($array); $i++)
+    {
+
+      $a = explode("/", $array[$i]);
+      $o = $a[1];
+      $b = $a[2];
+      $f = $a[3];
+
+      if (! array_key_exists($o, $results)) {
+        $results[$o] = array();
+        $results[$o][OBS] = 0;
+        $results[$o][BTF_COUNT] = 0;
+        $results[$o][STS_COUNT] = 0;
+        $results[$o][STP_COUNT] = 0;
+        $results[$o][OTS_COUNT] = 0;
+        $results[$o][OTP_COUNT] = 0;
+        $results[$o][BMB] = 0;
+      }
+      if (! array_key_exists($b, $results[$o])) {
+        $results[$o][$b] = array();
+        $results[$o][$b][STS] = 0;
+        $results[$o][$b][STP] = 0;
+        $results[$o][$b][OTS] = 0;
+        $results[$o][$b][OTP] = 0;
+        $results[$o][$b][ETS] = 0;
+        $results[$o][$b][ETP] = 0;
+      }
+      if ($f == "obs.start") {
+        $results[$o][OBS]++;
+      } else if ($f == "sent.to.swin") {
+        $results[$o][$b][STS] = 1;
+        $results[$o][STS_COUNT] += 1;
+      } else if ($f == "sent.to.parkes") {
+        $results[$o][$b][STP] = 1;
+        $results[$o][STP_COUNT] += 1;
+      } else if ($f == "on.tape.swin") {
+        $results[$o][$b][OTS] = 1;
+        $results[$o][OTS_COUNT] += 1;
+      } else if ($f == "on.tape.parkes") {
+        $results[$o][$b][OTP] = 1;
+        $results[$o][OTP_COUNT] += 1;
+      } else if ($f == "error.to.swin") {
+        $results[$o][$b][ETS] = 1;
+      } else if ($f == "error.to.parkes") {
+        $results[$o][$b][ETP] = 1;
+      }
+    }
 
     return $results;
   }

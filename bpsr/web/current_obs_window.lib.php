@@ -1,7 +1,7 @@
 <?PHP
 
-include("bpsr.lib.php");
-include("bpsr_webpage.lib.php");
+include_once("bpsr.lib.php");
+include_once("bpsr_webpage.lib.php");
 
 class current_obs extends bpsr_webpage 
 {
@@ -124,21 +124,23 @@ class current_obs extends bpsr_webpage
   {
     $host = $get["host"];
     $port = $get["port"];
+    $response = "";
 
     $timeout = 1;
     list ($socket, $result) = openSocket($host, $port, $timeout);
-    if ($result == "ok") {
-
+    if ($result == "ok") 
+    {
       $bytes_written = socketWrite($socket, "curr_obs\r\n");
-      $string = socketRead($socket);
-      socket_close($socket);
-
-    } else {
-      $string = "Could not connect to $host:$port<BR>\n";
+      list ($result, $response) = socketRead($socket);
+      if ($result == "ok")
+        socket_close($socket);
+    } 
+    else
+    {
+      $response = "Could not connect to $host:$port<BR>\n";
     }
 
-    echo $string;
-
+    echo $response;
   }
 }
 handledirect("current_obs");

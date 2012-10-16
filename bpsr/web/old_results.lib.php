@@ -1,7 +1,7 @@
 <?PHP
 
-include("bpsr.lib.php");
-include("bpsr_webpage.lib.php");
+include_once("bpsr.lib.php");
+include_once("bpsr_webpage.lib.php");
 
 class old_results extends bpsr_webpage 
 {

@@ -1,55 +1,32 @@
 <?PHP
 
-include("bpsr.lib.php");
-include("bpsr_webpage.lib.php");
+include_once("bpsr.lib.php");
+include_once("bpsr_webpage.lib.php");
 
 class log_list extends bpsr_webpage 
 {
 
-  var $server_daemons = array();
-  var $client_daemons = array();
-  var $server_log_info = array();
-  var $pwcs = array();
-  var $srvs = array();
-
+  var $log_files = array();
 
   function log_list()
   {
     bpsr_webpage::bpsr_webpage();
-    //array_push($this->css, "/bpsr/buttons.css");
 
     $inst = new bpsr();
 
-    /* setup server daemons */
-    $this->server_log_info = $inst->serverLogInfo();
-    $keys = array_keys($this->server_log_info);
-    $this->server_daemons = array();
-    for ($i=0; $i<count($keys); $i++) {
-      $k = $keys[$i];
-      if ($this->server_log_info[$k]["tag"] == "server") {
-        $this->server_daemons[$k] = $this->server_log_info[$k];
-      }
+    $log_info = $inst->serverLogInfo();
+    foreach ($log_info as $key => $value) 
+    {
+      if (strpos($inst->config["SERVER_DAEMONS"], $key) !== FALSE)
+        $this->log_files[$value["name"]] = $value["logfile"];
     }
 
-    /* setup client daemons */
-    $client_log_info = $inst->clientLogInfo();
-    $keys = array_keys($client_log_info);
-    $this->client_daemons = array();
-    for ($i=0; $i<count($keys); $i++) {
-      $k = $keys[$i];
-      if ($client_log_info[$k]["tag"] == "client") {
-        $this->client_daemons[$k] = $client_log_info[$k];
-      }
+    $log_info = $inst->clientLogInfo();
+    foreach ($log_info as $key => $value)
+    {
+      if (strpos($inst->config["CLIENT_DAEMONS"], $key) !== FALSE)
+        $this->log_files[$value["name"]] = $value["logfile"];
     }
-
-    /* generate a list of machines */
-    for ($i=0; $i<$inst->config["NUM_PWC"]; $i++) {
-      array_push($this->pwcs, $inst->config["PWC_".$i]);
-    }
-
-    array_push($this->srvs, "srv0");
- 
-
   }
 
   function printJavaScriptHead()
@@ -57,71 +34,41 @@ class log_list extends bpsr_webpage
 ?>
     <script type='text/javascript'>  
 
-      function autoScroll() {
+      function autoScroll()
+      {
         var scroll
         scroll = document.getElementById("auto_scroll").checked
         log_window.auto_scroll = scroll
       }
 
-      function Select_Value_Enable(SelectObject, Value, State) {
-        for (index = 0; index < SelectObject.length; index++) {
-          if (SelectObject[index].value == Value) {
-            SelectObject[index].disabled = State;
-            //alert("Setting " + SelectObject[index].value + ".disabled = "+State);
-          }
-        }
-      }
-
-      function clearLogWindow() {
+      function clearLogWindow()
+      {
         log_window.document.location = "ganglia_window.lib.php";
       }
 
-      function changeLogWindow() {
+      function changeLogWindow()
+      {
 
         var i
         var length    // Length of the logs
-        var daemon    // The daemon/log
-        var machine   // Machine in question
+        var logfile      // The daemon/log
         var scroll
         var filter
 
-        i = document.getElementById("source").selectedIndex
-        machine = document.getElementById("source").options[i].value
-  
         scroll = document.getElementById("auto_scroll").checked
         filter = document.getElementById("filter").value
-    
-        if (machine == "nexus") {
-<?
-          for ($i=0; $i<count($this->server_daemons); $i++) {
-            if ($this->server_log_info[$this->server_daemons[$i]]["type"] == "servver") {
-              echo "        Select_Value_Enable(document.getElementById(\"daemon\"), \"".$this->server_daemons[$i]."\", false);\n";
-            }
-          }
-?>
-        } else {
-<?
-          for ($i=0; $i<count($this->server_daemons); $i++) {
-            if ($this->server_log_info[$this->server_daemons[$i]]["type"] == "servver") {
-              echo "        Select_Value_Enable(document.getElementById(\"daemon\"), \"".$this->server_daemons[$i]."\", true);\n";
-            }
-          }
-?>
-        }
 
-        i = document.getElementById("daemon").selectedIndex
-        daemon  = document.getElementById("daemon").options[i].value
+        i = document.getElementById("logfile").selectedIndex
+        logfile = document.getElementById("logfile").options[i].value
 
-        //i = document.getElementById("loglevel").selectedIndex
-        //level  = document.getElementById("loglevel").options[i].value
         level = document.getElementById("loglevel").value;
   
         i = document.getElementById("loglength").selectedIndex
         length = document.getElementById("loglength").options[i].value
 
-        var newurl= "log_viewer.php?machine="+machine+"&daemon="+daemon+"&length="+length+"&level="+level+"&autoscroll="+scroll+"&filter="+filter;
+        var newurl= "log_viewer.php?logfile="+logfile+"&length="+length+"&level="+level+"&autoscroll="+scroll+"&filter="+filter;
+        //alert(newurl);
         log_window.document.location = newurl
-
       }
 
     </script>
@@ -132,52 +79,15 @@ class log_list extends bpsr_webpage
   function printHTML() 
   {
     $this->openBlockHeader("Logs");
-?>
-    <span>
-      Source:
-      <select id="source" onchange="changeLogWindow()">
-        <option value="srv0">srv0</option>
-        <option value="nexus">PWCs</option>
-<?
-        for ($i=0;$i<count($this->pwcs);$i++) {
-          echo "        <option value=".$this->pwcs[$i].">&nbsp;".$this->pwcs[$i]."</option>\n";
-        }
-?>
-      </select>
-    </span>&nbsp;&nbsp;
 
-    <!-- Select Log -->
+?>
     <span id="daemon_span" style="visibility: visible;">
-    Log:
-      <select id="daemon" onchange="changeLogWindow()">
-        <option value="bpsr_pwc_monitor">PWC</option>
-        <option value="bpsr_src_monitor">SRC</option>
+    Log: 
+      <select id="logfile" onchange="changeLogWindow()">
 <?
-        foreach ($this->client_daemons as $key => $value) {
-          if ($value["logfile"] == "nexus.src.log") {
-            echo "        <option value=\"".$key."\">&nbsp;&nbsp;&nbsp;&nbsp;".$value["name"]."</option>\n";
-          }
-        }
+    foreach ($this->log_files as $name => $file) 
+      echo "        <option value='".$file."'>".$name."</option>\n";
 ?>
-        <option value="bpsr_sys_monitor">SYS</option>
-<?
-        foreach ($this->client_daemons as $key => $value) {
-          if ($value["logfile"] == "nexus.sys.log") {
-            echo "        <option value=\"".$key."\">&nbsp;&nbsp;&nbsp;&nbsp;".$value["name"]."</option>\n";
-          }
-        }
-
-?>
-        <option value="srv" disabled=true visible=true>SERVER ONLY</option>
-<?
-        foreach ($this->server_log_info as $key => $value) {
-          if ($value["tag"] == "server") {
-            echo "        <option value=\"".$key."\">&nbsp;&nbsp;&nbsp;&nbsp;".$value["name"]."</option>\n";
-          }
-        }
-?>
-
-
       </select>
     </span>&nbsp;&nbsp;
 
@@ -217,7 +127,7 @@ class log_list extends bpsr_webpage
 
     <br>
     <br>
-    <iframe name="log_window" src="ganglia_window.lib.php" frameborder=0 width=100% height=300px>
+    <iframe name="log_window" src="ganglia_window.lib.php" frameborder=0 width=100% height=450px>
     </iframe>
 
 <?

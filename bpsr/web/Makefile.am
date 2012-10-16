@@ -15,6 +15,7 @@ nobase_dist_web_SCRIPTS = definitions_i.php \
                           bpsr.css \
                           bpsr.lib.php \
                           bpsr_webpage.lib.php \
+                          candidate_viewer.lib.php \
                           state_banner.lib.php \
                           control.lib.php \
                           current_obs_window.lib.php \
@@ -27,6 +28,10 @@ nobase_dist_web_SCRIPTS = definitions_i.php \
                           log_viewer.php \
                           old_results.lib.php \
                           plot_window.lib.php \
+                          transient_results.lib.php \
+                          transient_viewer.lib.php \
+                          transient_webplot.php \
+                          transient_window.lib.php \
                           images/bpsr_favico.ico \
                           images/bpsr_logo_1x60.png \
                           images/bpsr_logo.png \

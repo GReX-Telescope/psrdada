@@ -1,6 +1,9 @@
 <?PHP
 
-include("bpsr.lib.php");
+error_reporting(E_ALL);
+ini_set("display_errors", 1);
+
+include_once("bpsr.lib.php");
 
 $inst = new bpsr();
 $config = $inst->config;
@@ -10,14 +13,15 @@ header("Cache-Control: no-cache, must-revalidate"); // HTTP/1.1
 header("Expires: Mon, 26 Jul 1997 05:00:00 GMT");   // Date in the past
 
 /* parse get params */
-$machine     = (isset($_GET["machine"]) && $_GET["machine"] != "") ? $_GET["machine"] : "nexus";
-$daemon      = (isset($_GET["daemon"]) && $_GET["daemon"] != "") ? $_GET["daemon"] : "all";
+#$machine     = (isset($_GET["machine"]) && $_GET["machine"] != "") ? $_GET["machine"] : "nexus";
+#$daemon      = (isset($_GET["daemon"]) && $_GET["daemon"] != "") ? $_GET["daemon"] : "all";
+$logfile     = (isset($_GET["logfile"]) && $_GET["logfile"] != "") ? $_GET["logfile"] : "";
 $auto_scroll = (isset($_GET["autoscroll"]) && $_GET["autoscroll"] != "") ? $_GET["autoscroll"] : "false";
 $filter      = (isset($_GET["filter"]) && $_GET["filter"] != "") ? $_GET["filter"] : "";
 $length      = (isset($_GET["length"]) && $_GET["length"] != "") ? $_GET["length"] : LOG_FILE_SCROLLBACK_HOURS;
 $level       = (isset($_GET["level"]) && $_GET["level"] != "") ? $_GET["level"] : "all";
 
-$log_type    = "pwc";
+#$log_type    = "pwc";
 $log_tag     = "*";
 
 if ($length == "all") 
@@ -25,87 +29,26 @@ if ($length == "all")
 else
   $length *= (60 * 60);
 
-$server_daemons = $inst->serverLogInfo();
-$client_daemons = $inst->clientLogInfo();
-
-/* 
- * log_type -> sys, pwc, src or srv
- * daemon   -> name of the daemon that produced the log
- *
-/* Determine what type and sub type of logs we will display */
-#print_r($_GET);
-
-/* Server Logs */
-if ($machine == "nexus") {
-
-  if (array_key_exists($daemon, $server_daemons)) {
-
-    $logfile = $config["SERVER_LOG_DIR"]."/".$server_daemons[$daemon]["logfile"];
-    $log_tag = "*";
-
-  } else {
-
-    $logfile = $config["SERVER_LOG_DIR"]."/".$client_daemons[$daemon]["logfile"];
-    $log_tag = $client_daemons[$daemon]["tag"];
-
-  }
-
-/* Client specific log */
-} else {
-
-  if (array_key_exists($daemon, $client_daemons)) {
-
-    $trans = array("nexus" => $machine);
-    $logfile = $config["SERVER_LOG_DIR"]."/".strtr($client_daemons[$daemon]["logfile"],$trans);
-    $log_tag = $client_daemons[$daemon]["tag"];
-
-  } else {
-
-    # We are looking at one of the nexus.???.log files, need to replace nexus with the
-    # machine name
-
-    $trans = array("nexus" => $machine);
-    $logfile = $config["SERVER_LOG_DIR"]."/".strtr($server_daemons[$daemon]["logfile"],$trans);
-    $log_tag = "*";
-
-  }
-}
-
-#echo "<br>\n";
+// Determine what type and sub type of logs we will display
+$logfile = $config["SERVER_LOG_DIR"]."/".$logfile;
 #echo "file: ".$logfile."<BR>\n";
-#echo "grep: ".$log_tag."<BR>\n";
 #echo "length: ".$length."<BR>\n";
-
 ob_start();
 
 ?>
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
+
   <script type="text/javascript">
 
     var auto_scroll = <?echo $auto_scroll?>;
-  
-    function Select_Value_Set(SelectObject, Value) {
-      for (index = 0; index < SelectObject.length; index++) {
-        if (SelectObject[index].value == Value) {
-          SelectObject.selectedIndex = index;
-        }
-      }
-    }
-
-    // set the log source to the value provided
-    Select_Value_Set(parent.document.getElementById("source"), "<?echo $machine?>");
-    Select_Value_Set(parent.document.getElementById("loglevel"), "<?echo $level?>");
-    Select_Value_Set(parent.document.getElementById("daemon"), "<?echo $daemon?>");
-
     function looper() {
       scrollDown();
       setTimeout('looper()',250)
     }
 
     function scrollDown() {
-
       if (auto_scroll) {
         self.scrollByLines(1000);
       }
@@ -127,7 +70,7 @@ clearstatcache();
 // Open the file we wish to read - In this case the access log of our server
 if (!($fp = @fopen($fname, 'r'))) {
     // We couldn't open the file, error!
-    echo "ERROR: The $logtype file for $machine did not exist or was not readable: \n$fname\n";
+    echo "ERROR: The log file [".$logfile."] did not exist or was not readable\n";
     # ob_end_flush();
     exit();
 }
@@ -143,7 +86,7 @@ register_shutdown_function("close_log_file",$fp);
 //  line due to our seek.
 # fgets($fp);
 
-$max_time_limit = 120; //seconds;
+$max_time_limit = 20; //seconds;
 
 $atEOF = "false";
 $haveSomeLogs = "false";
@@ -152,17 +95,17 @@ $current_time_unix = time();
 $current_time_string = date(DADA_TIME_FORMAT,$current_time_unix);
 $time_pattern = '/\[\d{4}-\d{2}-\d{2}-\d{2}:\d{2}:\d{2}\]/';
 
-/* We need to find this point in the file */
+// We need to find this point in the file
 $time_to_find = ($current_time_unix - $length);
 
-
-/* Use a binary search algorithm to find this timestamp in the file */
+// Use a binary search algorithm to find this timestamp in the file
 $still_searching = 1;
 $niterations = 50;
 $min_size = 0;
 $max_size = filesize($fname);
 $mid_size = ($max_size - $min_size) / 2;
 $lasttime = 0;
+$timeunix = 0;
 
 while ($still_searching) {
 
@@ -178,26 +121,26 @@ while ($still_searching) {
   // Check the timestamp vs current time:
   if (preg_match($time_pattern,$cleanline,$matches) == 1) {
     $timestr = substr($matches[0],1,19);
-    $a = split('[-:]',$timestr);
+    $a = preg_split('/[-:]/',$timestr);
     $timeunix = mktime($a[3],$a[4],$a[5],$a[1],$a[2],$a[0]);
   }
-  // echo $current_time_string." <=> ".$timestr."\n";
+  //echo $current_time_string." <=> ".$timestr."\n";
 
   # If the time is less that we require
-  if ($timeunix < $time_to_find) {
+  if ($timeunix && $timeunix < $time_to_find) {
     $min_size = $mid_size;
     $mid_size = $mid_size + (($max_size - $min_size)/2);
   }
 
-  if ($timeunix > $time_to_find) {
+  if ($timeunix && $timeunix > $time_to_find) {
     $max_size = $mid_size;
     $mid_size = $min_size + (($mid_size - $min_size)/2); 
   }
 
-  // echo "SIZES: $min_size -> $mid_size -> $max_size\n";
+  //echo "SIZES: $min_size -> $mid_size -> $max_size\n";
  
   // if we have found the right time 
-  if ($timeunix == $time_to_find) {
+  if ($timeunix && $timeunix == $time_to_find) {
     $still_searching = 0;
   }
 
@@ -214,7 +157,7 @@ while ($still_searching) {
 
 }
 
-$lines_to_flush = 500;
+$lines_to_flush = 10;
 
 // Keep looping forever
 while ($max_time_limit > 0) {
@@ -228,7 +171,7 @@ while ($max_time_limit > 0) {
 
       $cleanline = chop($line);
 
-      /* Check the sub log type */ 
+      // Check the sub log type 
       if (($log_tag != "*")  && (strpos($cleanline, "] ".$log_tag.": ") === FALSE)) {
         $showline = false;
       }
@@ -239,10 +182,10 @@ while ($max_time_limit > 0) {
         }
       }
 
-      /* Check the timestamp vs current time */
+      // Check the timestamp vs current time
       if (preg_match($time_pattern,$cleanline,$matches) == 1) {
         $timestr = substr($matches[0],1,19);
-        $a = split('[-:]',$timestr);
+        $a = preg_split('/[-:]/',$timestr);
         $timeunix = mktime($a[3],$a[4],$a[5],$a[1],$a[2],$a[0]);
       }
 
@@ -255,7 +198,7 @@ while ($max_time_limit > 0) {
         if ($atEOF == "false") {
           $lines_to_flush--;
           if ($lines_to_flush <= 0) {
-            $lines_to_flush = 500;
+            $lines_to_flush = 10;
             ob_end_flush();
             ob_start();
             //echo "<script type=\"text/javascript\">self.scrollBy(0,500);</script>\n";

@@ -1,26 +1,25 @@
 <?PHP
 
-if (!$_BPSR_LIB_PHP) { $_BPSR_LIB_PHP = 1;
+include_once("functions_i.php");
 
-include ("functions_i.php");
+define("INSTRUMENT", "bpsr");
+define("CFG_FILE", "/home/dada/linux_64/share/bpsr.cfg");
+define("ROACH_FILE", "/home/dada/linux_64/share/roach.cfg");
+define("BEAMS_FILE", "/home/dada/linux_64/share/bpsr_active_beams.cfg");
+define("PWC_FILE", "/home/dada/linux_64/share/bpsr_pwcs.cfg");
+define("CSS_FILE", "/bpsr/bpsr.css");
 
-define(INSTRUMENT, "bpsr");
-define(CFG_FILE,  "/home/dada/linux_64/share/bpsr.cfg");
-define(IBOB_FILE, "/home/dada/linux_64/share/ibob.cfg");
-define(PWC_FILE, "/home/dada/linux_64/share/bpsr_pwcs.cfg");
-define(CSS_FILE, "/bpsr/bpsr.css");
-
-include("site_definitions_i.php");
-include("instrument.lib.php");
+include_once("site_definitions_i.php");
+include_once("instrument.lib.php");
 
 class bpsr extends instrument
 {
 
-  var $ibobs;
+  var $roach;
 
   function bpsr()
   {
-    instrument::instrument(INSTRUMENT, CFG_FILE, URL);
+    instrument::instrument(INSTRUMENT, CFG_FILE, URL_FULL);
 
     $this->css_path = CSS_FILE;
     $this->banner_image = "/bpsr/images/bpsr_logo_480x60.png";
@@ -31,7 +30,7 @@ class bpsr extends instrument
     $bpsr_pwcs = $this->configFileToHash(PWC_FILE);
     $this->config = array_merge($this->config, $bpsr_pwcs);
 
-    $this->ibobs = $this->configFileToHash(IBOB_FILE);
+    $this->roach = $this->configFileToHash(ROACH_FILE);
 
   }
 
@@ -40,8 +39,9 @@ class bpsr extends instrument
     $arr = array();
     $arr["bpsr_tcs_interface"]          = array("logfile" => "bpsr_tcs_interface.log", "name" => "TCS Interface", "tag" => "server", "shortname" => "TCS");
     $arr["bpsr_results_manager"]        = array("logfile" => "bpsr_results_manager.log", "name" => "Results Mngr", "tag" => "server", "shortname" => "Results");
-    $arr["dada_pwc_command"]            = array("logfile" => "dada_pwc_command.log", "name" => "dada_pwc_command", "tag" => "server", "shortname" => "PWCC");
+    $arr["dada_pwc_command"]            = array("logfile" => "dada_pwc_command.log", "name" => "Nexus", "tag" => "server", "shortname" => "PWCC");
     $arr["bpsr_multibob_manager"]       = array("logfile" => "bpsr_multibob_manager.log", "name" => "Multibob", "tag" => "server", "shortname" => "Multibob");
+    $arr["bpsr_roach_manager"]          = array("logfile" => "bpsr_roach_manager.log", "name" => "ROACH Mngr", "tag" => "server", "shortname" => "Roach mngr");
     $arr["bpsr_transfer_manager"]       = array("logfile" => "bpsr_transfer_manager.log", "name" => "Transfer Mngr", "tag" => "server", "shortname" =>"Xfer");
     $arr["bpsr_web_monitor"]            = array("logfile" => "bpsr_web_monitor.log", "name" => "Web Monitor", "tag" => "server", "shortname" => "Monitor");
     $arr["bpsr_rfi_masker"]             = array("logfile" => "bpsr_rfi_masker.log", "name" => "RFI Masker", "tag" => "server", "shortname" => "RFI");
@@ -189,7 +189,7 @@ class bpsr extends instrument
     } else if ($beam == "all") {
       # get a listing of the currently configured beams
       for ($i=0; $i<$this->config["NUM_PWC"]; $i++) {
-        array_push($beams, $this->getBeamForPWCHost($this->config["PWC_".$i]));
+        array_push($beams, $this->roach["BEAM_".$i]);
       }
     } else {
       $beams = array($beam);
@@ -197,9 +197,16 @@ class bpsr extends instrument
 
     foreach ($utc_starts as $u) {
 
-      #echo "bpsr.lib.php: getResults: u=".$u."<BR>\n";
-
       $dir = $results_dir."/".$u;
+
+      // find any transient candidates images
+      $img = "";
+      $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -type f -name '*.cands_1024x768.png' -printf '%f\\n' | sort -n | tail -n 1";
+      $find_result = exec($cmd, $array, $return_val);
+      if (($return_val == 0) && (strlen($find_result) > 1)) {
+        $img = "/bpsr/".$url_link."/".$u."/".$find_result;
+      }
+      $results[$u]["transients"]["cands_1024x768"] = $img;
 
       /* now find the 13 files requested */
       if ($handle = opendir($dir)) {
@@ -248,20 +255,25 @@ class bpsr extends instrument
     return $results;
   }
 
-  function getStatsResults($results_dir, $ibobs){
+  #
+  # return an array of images for the beam (or all beams) 
+  #  
+  function getStatsResults($results_dir, $beam)
+  {
 
     $dir = $results_dir."/stats";
 
     $results = array();
-    if ($ibobs == "all") {
+    if ($beam == "all") 
+    {
       for ($i=0; $i<$this->config["NUM_PWC"]; $i++) {
-        $results[$this->config["IBOB_DEST_".$i]] = array();
+        $results[$this->roach["BEAM_".$i]] = array();
       }
     } else {
-      $results[$ibobs] = array();
+      $results[$beam] = array();
     }
 
-    /* now find the 13 files requested */
+    // now find the 13 files requested
     if ($handle = opendir($dir)) {
 
       $files = array();
@@ -278,21 +290,21 @@ class bpsr extends instrument
 
       # Now ensure we have only the most recent files in the array
       foreach ($results as $key => $value) {
-        $ibob = $key;
+        $beam = $key;
         $have_low = 0;
         $have_mid = 0;
         $have_hi = 0;
 
         for ($j=0; $j<count($files); $j++) {
-          if ((strpos($files[$j], $ibob."_112x84") !== FALSE) && (!$have_low) ){
+          if ((strpos($files[$j], $beam."_112x84") !== FALSE) && (!$have_low) ){
             $have_low = 1;
             $value["pdbp_112x84"] = "/bpsr/results/stats/".$files[$j];
           }
-          if ((strpos($files[$j], $ibob."_400x300") !== FALSE) && (!$have_mid) ){
+          if ((strpos($files[$j], $beam."_400x300") !== FALSE) && (!$have_mid) ){
             $have_mid = 1;
             $value["pdbp_400x300"] = "/bpsr/results/stats/".$files[$j];
           }
-          if ((strpos($files[$j], $ibob."_1024x768") != FALSE) && (!$have_hi) ){
+          if ((strpos($files[$j], $beam."_1024x768") != FALSE) && (!$have_hi) ){
             $have_hi = 1;
             $value["pdbp_1024x768"] = "/bpsr/results/stats/".$files[$j];
           }
@@ -354,10 +366,10 @@ class bpsr extends instrument
   {
     $results = array();
 
-    if (file_exists($this->config["SERVER_ARCHIVE_DIR"]."/".$o))
-      $dir = $this->config["SERVER_ARCHIVE_DIR"]."/".$o;
-    else if (file_exists("/export/old_archives/bpsr/".$o))
-     $dir = "/export/old_archives/bpsr/".$o;
+    if (file_exists($this->config["SERVER_RESULTS_DIR"]."/".$o))
+      $dir = $this->config["SERVER_RESULTS_DIR"]."/".$o;
+    else if (file_exists($this->config["SERVER_OLDRESULTS_DIR"]."/".$o))
+      $dir = $this->config["SERVER_OLD_RESULTS_DIR"]."/".$o;
     else
       return $results;
 
@@ -374,18 +386,8 @@ class bpsr extends instrument
     else
       $state = "Unknown";
 
-    $tmp = array();
-    if ($state == "Deleted")
-      $beam_size = "N/A Deleted";
-    else if ($state == "Finished" || $state == "Transferred")
-      $beam_size = exec("du -sL -B1048576 ".$dir."/01 | awk '{print \$1}'", $tmp, $rval);
-    else if ($state == "Finished" || $state == "Transferred")
-      $beam_size = "N/A Recording...";
-    else
-      $beam_size = "Unknown";
-
     $results["ARCHIVAL_STATE"] = $state;
-    $results["BEAM_SIZE"] = $beam_size;
+    $results["BEAM_SIZE"] = "N/A";
 
     return $results;
   }
@@ -396,6 +398,7 @@ class bpsr extends instrument
   function getBeamForPWCHost($host)
   {
     $beam = 0;
+/*
     for ($i=0; $i<$this->ibobs["NUM_IBOB"]; $i++)
     {
       if ($this->ibobs["10GbE_CABLE_".$i] == $host)
@@ -403,6 +406,7 @@ class bpsr extends instrument
         $beam = $this->ibobs["BEAM_".$i];
       }
     }
+*/
     return $beam;
   }
 
@@ -416,7 +420,7 @@ class bpsr extends instrument
     $return_var = 0;
 
     $string = exec($cmd, $output, $return_var);
-    $array = split(" ",$string);
+    $array = explode(" ",$string);
     $groups = array();
     for ($i=0; $i<count($array); $i++) {
       if (strpos($array[$i], "P") === 0) {
@@ -445,5 +449,3 @@ class bpsr extends instrument
   
 
 } // END OF CLASS DEFINITION
-
-} // _BPSR_LIB_PHP

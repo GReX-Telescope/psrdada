@@ -1,13 +1,13 @@
 <?PHP
 
-include("bpsr.lib.php");
-include("bpsr_webpage.lib.php");
+include_once("bpsr.lib.php");
+include_once("bpsr_webpage.lib.php");
 
 class ganglia_window extends bpsr_webpage 
 {
 
-  var $clients_network;
-  var $clients_load;
+  var $nodes_network;
+  var $nodes_load;
   var $srvs_network;
   var $srvs_load;
 
@@ -18,10 +18,11 @@ class ganglia_window extends bpsr_webpage
     $inst = new bpsr();
 
     $gang_base =  "http://".$_SERVER["HTTP_HOST"]."/ganglia/";
-    $this->clients_network   = $gang_base."graph.php?g=network_report&z=dada_web&c=APSR%20Clients&m=&r=hour&s=descending&hc=4";
-    $this->clients_load      = $gang_base."graph.php?g=load_report&z=dada_web&c=APSR%20Clients&m=&r=hour&s=descending&hc=4";
-    $this->srvs_network = $gang_base."graph.php?g=network_report&z=dada_web&c=APSR%20Servers&h=srv0.apsr.edu.au&m=&r=hour&s=descending&hc=4";
-    $this->srvs_load    = $gang_base."graph.php?g=load_report&z=dada_web&c=APSR%20Servers&h=srv0.apsr.edu.au&m=&r=hour&s=descending&hc=4";
+    $this->nodes_network   = $gang_base."graph.php?g=network_report&z=dada_web&c=Nodes&m=&r=hour&s=descending&hc=4";
+    $this->nodes_load      = $gang_base."graph.php?g=load_report&z=dada_web&c=Nodes&m=&r=hour&s=descending&hc=4";
+    $this->nodes_gpu_load  = $gang_base."graph.php?g=gpu_load_report&z=dada_web&c=Nodes&m=&r=hour&s=descending&hc=4";
+    $this->srvs_network = $gang_base."graph.php?g=network_report&z=dada_web&c=Servers&h=hipsr-srv0.hipsr.local&m=&r=hour&s=descending&hc=4";
+    $this->srvs_load    = $gang_base."graph.php?g=load_report&z=dada_web&c=Servers&h=hipsr-srv0.hipsr.local&m=&r=hour&s=descending&hc=4";
     $this->host           = $inst->config["SERVER_HOST"];
     $this->port           = $inst->config["SERVER_WEB_MONITOR_PORT"];
   }
@@ -47,8 +48,9 @@ class ganglia_window extends bpsr_webpage
         var theTime = now.getTime();
         document.getElementById("srvs_load").src = "<?echo $this->srvs_load?>?"+theTime;
         document.getElementById("srvs_network").src = "<?echo $this->srvs_network?>?"+theTime;
-        document.getElementById("clients_load").src = "<?echo $this->clients_load?>?"+theTime;
-        document.getElementById("clients_network").src = "<?echo $this->clients_network?>?"+theTime;
+        document.getElementById("nodes_load").src = "<?echo $this->nodes_load?>?"+theTime;
+        document.getElementById("nodes_gpu_load").src = "<?echo $this->nodes_gpu_load?>?"+theTime;
+        document.getElementById("nodes_network").src = "<?echo $this->nodes_network?>?"+theTime;
         //document.getElementById("parkes_webcam").src = "http://outreach.atnf.csiro.au/visiting/parkes/webcam/parkes.med.jpg?"+theTime;
       }
 
@@ -91,8 +93,12 @@ class ganglia_window extends bpsr_webpage
       -->
     </tr>
     <tr>
-      <td><img id="clients_load" src="<?echo $this->clients_load?>"></td>
-      <td><img id="clients_network" src="<?echo $this->clients_network?>"></td>
+      <td><img id="nodes_load" src="<?echo $this->nodes_load?>"></td>
+      <td><img id="nodes_network" src="<?echo $this->nodes_network?>"></td>
+    </tr>
+    <tr>
+      <td><img id="nodes_gpu_load" src="<?echo $this->nodes_gpu_load?>"></td>
+      <td></td>
     </tr>
     </table>
 <?

@@ -1,7 +1,10 @@
 <?PHP
 
-include("bpsr.lib.php");
-include("bpsr_webpage.lib.php");
+error_reporting(E_ALL);
+ini_set("display_errors", 1);
+
+include_once("bpsr.lib.php");
+include_once("bpsr_webpage.lib.php");
 
 class control extends bpsr_webpage 
 {
@@ -10,24 +13,49 @@ class control extends bpsr_webpage
   var $pwc_dbs = array();
   var $pwc_dbs_str = "";
 
+  var $pwc_list = array();
+  var $host_list = array();
+
+  var $server_host = "";
+
   function control()
   {
     bpsr_webpage::bpsr_webpage();
     $this->inst = new bpsr();
+    $this->pwcs_dbs_str = "";
 
     $config = $this->inst->config;
-    $data_blocks = split(" ",$config["DATA_BLOCKS"]);
-    for ($i=0; $i<count($data_blocks); $i++)
+    $data_block_ids = preg_split("/\s+/", $config["DATA_BLOCK_IDS"]);
+    foreach ($data_block_ids as $dbid) 
     {
-      $key = strtolower($data_blocks[$i]);
-      $nbufs = $config[$data_blocks[$i]."_BLOCK_NBUFS"];
-      $bufsz = $config[$data_blocks[$i]."_BLOCK_BUFSZ"];
-      array_push($this->pwc_dbs, array("key" => $key, "nbufs" => $nbufs, "bufsz" => $bufsz));
-      if ($i == 0)
-        $this->pwcs_dbs_str = "\"buffer_".$key."\"";
+      array_push($this->pwc_dbs, $dbid);
+      if ($this->pwcs_dbs_str == "") 
+        $this->pwcs_dbs_str = "\"buffer_".$dbid."\"";
       else
-        $this->pwcs_dbs_str .= ", \"buffer_".$key."\"";
+        $this->pwcs_dbs_str .= ", \"buffer_".$dbid."\"";
     }
+
+    for ($i=0; $i<$config["NUM_PWC"]; $i++) 
+    {
+      $host = $config["PWC_".$i];
+
+      $exists = -1;
+      for ($j=0; $j<count($this->host_list); $j++) {
+        if (strpos($this->host_list[$j]["host"], $host) !== FALSE)
+          $exists = $j;
+      }
+      if ($exists == -1)
+        array_push($this->host_list, array("host" => $host, "span" => 1));
+      else
+        $this->host_list[$exists]["span"]++;
+
+      array_push($this->pwc_list, array("host" => $host, "span" => 1, "pwc" => $i));
+    }
+
+    $this->server_host = $this->inst->config["SERVER_HOST"];
+    if (strpos($this->server_host, ".") !== FALSE)
+      list ($this->server_host, $domain)  = explode(".", $this->server_host);
+
   }
 
   function javaScriptCallback()
@@ -53,13 +81,20 @@ class control extends bpsr_webpage
       var poll_timeout;
       var poll_update = 20000;
       var poll_2sec_count = 0;
-
-      var srv_hosts = new Array("srv0");
+      var srv_host = "<?echo $this->server_host?>";
+      var srv_hosts = new Array(srv_host);
 
       var pwc_hosts = new Array(<?
-      echo "'".$this->inst->config["PWC_0"]."'";
+      echo "'".$this->host_list[0]["host"]."'";
+      for ($i=1; $i<count($this->host_list); $i++) {
+        echo ",'".$this->host_list[$i]["host"]."'";
+      }?>);
+
+
+      var pwcs = new Array(<?
+      echo "'".$this->inst->config["PWC_0"].":0'";
       for ($i=1; $i<$this->inst->config["NUM_PWC"]; $i++) {
-        echo ",'".$this->inst->config["PWC_".$i]."'";
+        echo ",'".$this->inst->config["PWC_".$i].":".$i."'";
       }?>);
 
       var pwc_hosts_str = "";
@@ -78,8 +113,8 @@ class control extends bpsr_webpage
         daemon_info_request();
         poll_timeout = setTimeout('poll_server()', poll_update);
 
-        // revert poll_update to 20000 after 1 minute of 2 second polling
-        if (poll_update == 2000)
+        // revert poll_update to 20000 after 1 minute of 1 second polling
+        if (poll_update == 1000)
         {
           poll_2sec_count ++;
           if (poll_2sec_count == 30)
@@ -116,7 +151,7 @@ class control extends bpsr_webpage
           var i = 0;
 
           if (lines.length == 1) {
-            alert("only 1 line received: "+lines[0]);
+            //alert("only 1 line received: "+lines[0]);
 
           } else if (lines.length >= 2) {
 
@@ -176,9 +211,18 @@ class control extends bpsr_webpage
           action = "ignore";
 
         if (action != "ignore") {
-          url = "control.lib.php?action="+action+"&nhosts=1&host_0="+host+"&daemon="+daemon;
+          if (host.indexOf(":",0) != -1) {
+            parts = host.split(":");
+            host = parts[0];
+            pwc = parts[1];
+            url = "control.lib.php?action="+action+"&nhosts=1&host_0="+host+"&pwc="+pwc+"&daemon="+daemon;
+          } else {
+            url = "control.lib.php?action="+action+"&nhosts=1&host_0="+host+"&daemon="+daemon;
+          }
+
           if (args != "")
             url += "&args="+args
+
 
           var da_http_request;
           if (window.XMLHttpRequest)
@@ -193,7 +237,7 @@ class control extends bpsr_webpage
           da_http_request.open("GET", url, true)
           da_http_request.send(null)
 
-          poll_update = 2000;
+          poll_update = 1000;
           clearTimeout(poll_timeout);
           poll_timeout = setTimeout('poll_server()', poll_update);
 
@@ -223,7 +267,7 @@ class control extends bpsr_webpage
         da_http_request.open("GET", url, true)
         da_http_request.send(null)
 
-        poll_update = 2000;
+        poll_update = 1000;
         clearTimeout(poll_timeout);
         poll_timeout = setTimeout('poll_server()', poll_update);
 
@@ -271,7 +315,7 @@ class control extends bpsr_webpage
           da_http_request.open("GET", url, true)
           da_http_request.send(null)
 
-          poll_update = 2000;
+          poll_update = 1000;
           clearTimeout(poll_timeout);
           poll_timeout = setTimeout('poll_server()', poll_update);
         } 
@@ -309,7 +353,7 @@ class control extends bpsr_webpage
           da_http_request.open("GET", url, true)
           da_http_request.send(null)
 
-          poll_update = 2000;
+          poll_update = 1000;
           clearTimeout(poll_timeout);
           poll_timeout = setTimeout('poll_server()', poll_update);
         } 
@@ -335,7 +379,8 @@ class control extends bpsr_webpage
 
       // machines sure the machines[m] and daemons[m] light all matches the 
       // string in c 
-      function checkMachinesAndDaemons(m, d, c) {
+      function checkMachinesAndDaemons(m, d, c) 
+      {
         var i=0;
         var j=0;
         var ready = true;
@@ -353,18 +398,41 @@ class control extends bpsr_webpage
         }
         return ready;
       }
+
+      function checkMachinesPWCsAndDaemons(m, d, c) 
+      {
+        //var i=0;
+        var j=0;
+        var ready = true;
+        //for (i=0; i<m.length; i++) {
+          for (j=0; j<pwcs.length; j++) {
+            for (k=0; k<d.length; k++) {
+              element = document.getElementById("img_"+pwcs[j]+"_"+d[k]);
+              try {
+                if (element.src.indexOf(c) == -1) {
+                  ready = false;
+                }
+              } catch (e) {
+                alert("checkMachinesPWCsAndDameons: [img_"+pwcs[j]+"_"+d[k]+"] c="+c+" did not exist");
+              }
+            }
+          }
+        //}
+        return ready;
+      }
+
       
 
       function startBpsr() 
       {
 
-        poll_update = 2000;
+        poll_update = 1000;
         poll_2sec_count = 0;
         clearTimeout(poll_timeout);
         poll_timeout = setTimeout('poll_server()', poll_update);
 
         // start the server's master control script
-        url = "control.lib.php?action=start&daemon=bpsr_master_control&nhosts=1&host_0=srv0"
+        url = "control.lib.php?action=start&daemon=bpsr_master_control&nhosts=1&host_0="+srv_host
         daemon_action_request(url);
 
         // start the pwc's master control script
@@ -392,11 +460,8 @@ class control extends bpsr_webpage
 <?
         for ($i=0; $i<count($this->pwc_dbs); $i++)
         {
-          $key = $this->pwc_dbs[$i]["key"];
-          $nbufs = $this->pwc_dbs[$i]["nbufs"];
-          $bufsz =  $this->pwc_dbs[$i]["bufsz"];
-          $args = $nbufs."_".$bufsz;
-          echo "         url = \"control.lib.php?action=start&daemon=buffer_".$key."&args=".$args."&nhosts=\"+pwc_hosts.length+pwc_hosts_str\n";
+          $dbid = $this->pwc_dbs[$i];
+          echo "         url = \"control.lib.php?action=start&daemon=buffer_".$dbid."&nhosts=\"+pwc_hosts.length+pwc_hosts_str\n";
           echo "         daemon_action_request(url);\n";
         }
 ?>
@@ -408,10 +473,9 @@ class control extends bpsr_webpage
 
       function startBpsrStage3()
       {
-
         poll_2sec_count = 0;
         var pwc_daemons = new Array(<?echo $this->pwcs_dbs_str?>); 
-        var pwc_ready = checkMachinesAndDaemons(pwc_hosts, pwc_daemons, "green_light.png");
+        var pwc_ready = checkMachinesPWCsAndDaemons(pwc_hosts, pwc_daemons, "green_light.png");
 
         if ((!pwc_ready) && (stage3_wait > 0)) {
           stage3_wait--;
@@ -425,7 +489,7 @@ class control extends bpsr_webpage
         daemon_action_request(url);
 
         // start the server daemons 
-        url = "control.lib.php?action=start&daemon=all&nhosts=1&host_0=srv0"
+        url = "control.lib.php?action=start&daemon=all&nhosts=1&host_0="+srv_host;
         daemon_action_request(url);
 
         stage4_wait = 20;
@@ -435,10 +499,10 @@ class control extends bpsr_webpage
       function startBpsrStage4()
       {
         poll_2sec_count = 0;
-        var pwc_daemons = new Array("pwcs");
-        var pwc_ready = checkMachinesAndDaemons(pwc_hosts, pwc_daemons, "green_light.png");
+        var pwc_daemons = new Array("<?echo $this->inst->config["PWC_BINARY"]?>");
+        var pwc_ready = checkMachinesPWCsAndDaemons(pwc_hosts, pwc_daemons, "green_light.png");
 
-        var srv_daemons = new Array("bpsr_pwc_monitor", "bpsr_sys_monitor");
+        var srv_daemons = new Array("bpsr_pwc_monitor", "bpsr_src_monitor", "bpsr_sys_monitor", "bpsr_tcs_interface", "bpsr_results_manager", "bpsr_roach_manager", "bpsr_web_monitor");
         var srv_ready = checkMachinesAndDaemons(srv_hosts, srv_daemons, "green_light.png");
 
         if ((!(pwc_ready && srv_ready)) && (stage4_wait > 0)) {
@@ -460,8 +524,8 @@ class control extends bpsr_webpage
       function startBpsrStage5()
       {
         poll_2sec_count = 0;
-        var pwc_daemons = new Array("bpsr_observation_manager","bpsr_results_monitor","bpsr_disk_cleaner");
-        var pwc_ready = checkMachinesAndDaemons(pwc_hosts, pwc_daemons, "green_light.png");
+        var pwc_daemons = new Array("bpsr_observation_manager","bpsr_results_monitor","bpsr_disk_cleaner","bpsr_transfer_raid");
+        var pwc_ready = checkMachinesPWCsAndDaemons(pwc_hosts, pwc_daemons, "green_light.png");
 
         if ((!pwc_ready) && (stage5_wait > 0)) {
           stage5_wait--;
@@ -477,7 +541,7 @@ class control extends bpsr_webpage
       function hardstopBpsr()
       {
         // poll every 2 seconds during a stop
-        poll_update = 2000;
+        poll_update = 1000;
         clearTimeout(poll_timeout);
         poll_2sec_count = 0;
         poll_timeout = setTimeout('poll_server()', poll_update);
@@ -489,15 +553,14 @@ class control extends bpsr_webpage
 
       function stopBpsr()
       {
-
         // poll every 2 seconds during a stop
-        poll_update = 2000;
+        poll_update = 1000;
         poll_2sec_count = 0;
         clearTimeout(poll_timeout);
         poll_timeout = setTimeout('poll_server()', poll_update);
 
         // stop server TCS interface
-        url = "control.lib.php?action=stop&daemon=bpsr_tcs_interface&nhosts=1&host_0=srv0";
+        url = "control.lib.php?action=stop&daemon=bpsr_tcs_interface&nhosts=1&host_0="+srv_host;
         daemon_action_request(url);
 
         // stop the pwc's daemons next
@@ -511,14 +574,13 @@ class control extends bpsr_webpage
 
       function stopBpsrStage2()
       {
-
         poll_2sec_count = 0;
 
         var srv_daemons = new Array("bpsr_tcs_interface");
-        var pwc_daemons = new Array("bpsr_observation_manager","bpsr_results_monitor","bpsr_disk_cleaner");
+        var pwc_daemons = new Array("bpsr_observation_manager","bpsr_results_monitor","bpsr_disk_cleaner","bpsr_transfer_raid");
 
         var srv_ready = checkMachinesAndDaemons(srv_hosts, srv_daemons, "red_light.png");
-        var pwc_ready = checkMachinesAndDaemons(pwc_hosts, pwc_daemons, "red_light.png");
+        var pwc_ready = checkMachinesPWCsAndDaemons(pwc_hosts, pwc_daemons, "red_light.png");
 
         if ((!(srv_ready && pwc_ready)) && (stage2_wait > 0)) {
           stage2_wait--;
@@ -539,8 +601,8 @@ class control extends bpsr_webpage
       {
         poll_2sec_count = 0;
 
-        var pwc_daemons = new Array("pwcs");
-        var pwc_ready = checkMachinesAndDaemons(pwc_hosts, pwc_daemons, "red_light.png");
+        var pwc_daemons = new Array("<?echo $this->inst->config["PWC_BINARY"]?>");
+        var pwc_ready = checkMachinesPWCsAndDaemons(pwc_hosts, pwc_daemons, "red_light.png");
 
         if ((!pwc_ready) && (stage3_wait > 0)) {
           stage3_wait--;
@@ -553,14 +615,14 @@ class control extends bpsr_webpage
 <?
         for ($i=0; $i<count($this->pwc_dbs); $i++)
         {
-          $key = $this->pwc_dbs[$i]["key"];
-          echo "         url = \"control.lib.php?action=stop&daemon=buffer_".$key."&nhosts=\"+pwc_hosts.length+pwc_hosts_str;\n";
+          $dbid = $this->pwc_dbs[$i];
+          echo "         url = \"control.lib.php?action=stop&daemon=buffer_".$dbid."&nhosts=\"+pwc_hosts.length+pwc_hosts_str;\n";
           echo "         daemon_action_request(url);\n";
         }
 ?>
 
         // stop the server daemons 
-        url = "control.lib.php?action=stop&daemon=all&nhosts=1&host_0=srv0"
+        url = "control.lib.php?action=stop&daemon=all&nhosts=1&host_0="+srv_host;
         daemon_action_request(url);
 
         stage4_wait = 20;
@@ -572,11 +634,11 @@ class control extends bpsr_webpage
       {
         poll_2sec_count = 0;
 
-        var srv_daemons = new Array("bpsr_results_manager", "bpsr_pwc_monitor", "bpsr_sys_monitor", "bpsr_src_monitor", "bpsr_web_monitor", "bpsr_multibob_manager", "bpsr_rfi_masker");
+        var srv_daemons = new Array("bpsr_results_manager", "bpsr_pwc_monitor", "bpsr_sys_monitor", "bpsr_src_monitor", "bpsr_web_monitor", "bpsr_roach_manager");
         var srv_ready = checkMachinesAndDaemons(srv_hosts, srv_daemons, "red_light.png");
 
         var pwc_daemons = new Array(<?echo $this->pwcs_dbs_str?>); 
-        var pwc_ready = checkMachinesAndDaemons(pwc_hosts, pwc_daemons, "red_light.png");
+        var pwc_ready = checkMachinesPWCsAndDaemons(pwc_hosts, pwc_daemons, "red_light.png");
 
         if ((!(srv_ready && pwc_ready)) && (stage4_wait > 0)) {
           stage4_wait--;
@@ -590,7 +652,7 @@ class control extends bpsr_webpage
         daemon_action_request(url);
 
         // stop the server's master control script
-        url = "control.lib.php?action=stop&daemon=bpsr_master_control&nhosts=1&host_0=srv0"
+        url = "control.lib.php?action=stop&daemon=bpsr_master_control&nhosts=1&host_0="+srv_host
         daemon_action_request(url);
 
         stage5_wait = 20;
@@ -617,6 +679,71 @@ class control extends bpsr_webpage
         poll_update = 20000;
       }
 
+      // parse an XML entity returning an array of key/value paries
+      function parseXMLValues(xmlObj, values, pids)
+      {
+        //alert("parseXMLValues("+xmlObj.nodeName+") childNodes.length="+xmlObj.childNodes.length);
+        var j = 0;
+        for (j=0; j<xmlObj.childNodes.length; j++) 
+        {
+          if (xmlObj.childNodes[j].nodeType == 1)
+          {
+            // special case for PWCs
+            key = xmlObj.childNodes[j].nodeName;
+            if (key == "pwc") 
+            {
+              pwc_id = xmlObj.childNodes[j].getAttribute("id");
+              values[pwc_id] = new Array();
+              parseXMLValues(xmlObj.childNodes[j], values[pwc_id], pids)
+            }
+            else
+            {
+              val = "";
+              if (xmlObj.childNodes[j].childNodes.length == 1)
+              {
+                val = xmlObj.childNodes[j].childNodes[0].nodeValue; 
+              }
+              values[key] = val;
+              if (xmlObj.childNodes[j].getAttribute("pid") != null)
+              {
+                pids[key] = xmlObj.childNodes[j].getAttribute("pid");
+              }
+            }
+          }
+        }
+      }
+
+      function setDaemon(host, pwc, key, value)
+      {
+        var img_id;
+
+        if (pwc >= 0)
+          img_id = "img_"+host+":"+pwc+"_"+key;
+        else
+          img_id = "img_"+host+"_"+key;
+
+        var img  = document.getElementById(img_id);
+
+        if (img == null) {
+          alert(img_id + "  did not exist");
+        }
+        else
+        {
+          if (value == "2") {
+            img.src = "/images/green_light.png";
+          } else if (value == "1") {
+            img.src = "/images/yellow_light.png";
+          } else if (value == "0") {
+            if (key == "bpsr_master_control") {
+              set_daemons_to_grey(host);
+            }
+            img.src = "/images/red_light.png";
+          } else {
+            img.src = "/images/grey_light.png";
+          }
+        }
+      }
+
       function handle_daemon_info_request(xml_request) 
       {
         if (xml_request.readyState == 4) {
@@ -634,56 +761,34 @@ class control extends bpsr_webpage
             for (i=0; i<results.length; i++) {
 
               result = results[i];
+
               this_result = new Array();
               pids = new Array();
 
-              for (j=0; j<result.childNodes.length; j++) 
-              {
-
-                // if the child node is an element
-                if (result.childNodes[j].nodeType == 1) {
-                  key = result.childNodes[j].nodeName;
-                  // if there is a text value in the element
-                  if (result.childNodes[j].childNodes.length == 1) {
-                    value = result.childNodes[j].childNodes[0].nodeValue;
-                  } else {
-                    value = "";
-                  }
-                  if (result.childNodes[j].getAttribute("pid") != null) {
-                    //alert(key+" childNodes["+j+"].getAttribute(pid)="+result.childNodes[j].getAttribute("pid"));
-                    pids[key] = result.childNodes[j].getAttribute("pid");
-                  }
-                  this_result[key] = value;
-                }
-              }
+              parseXMLValues(result, this_result, pids);
 
               host = this_result["host"];
-              str = "";
 
-              for ( key in this_result) {
-                if (key == "host") {
+              for (key in this_result) 
+              {
+                if (key == "host") 
+                {
 
-                } else {
-                  
-                  value = this_result[key];
-                  str = str + " "+key+" -> "+value;
-
-                  var img = document.getElementById("img_"+host+"_"+key);
-                  if (img == null) {
-                    alert("img_"+host+"_"+key+" did not exist");
+                } 
+                else if (this_result[key] instanceof Array) 
+                {
+                  pwc = this_result[key];
+                  pwc_id = key;
+                  for (key in pwc)
+                  {
+                    value = pwc[key];
+                    setDaemon(host, pwc_id, key, value)
                   }
-                  if (value == "2") {
-                    img.src = "/images/green_light.png";
-                  } else if (value == "1") {
-                    img.src = "/images/yellow_light.png";
-                  } else if (value == "0") {
-                    if (key == "bpsr_master_control") {
-                      set_daemons_to_grey(host);
-                    }
-                    img.src = "/images/red_light.png";
-                  } else {
-                    img.src = "/images/grey_light.png";
-                  } 
+                } 
+                else 
+                {
+                  value = this_result[key];
+                  setDaemon(host, -1, key, value);
                 } 
               }
 
@@ -798,11 +903,10 @@ class control extends bpsr_webpage
 
     if (array_key_exists("SERVER_DAEMONS_PERSIST", $this->inst->config)) 
     {
-      $server_daemons_persist = split(" ",$this->inst->config["SERVER_DAEMONS_PERSIST"]);
+      $server_daemons_persist = explode(" ",$this->inst->config["SERVER_DAEMONS_PERSIST"]);
       $server_daemons_hash  = $this->inst->serverLogInfo();
-      $host = $this->inst->config["SERVER_HOST"];
-      $host = substr($host, 0, strpos($host,"."));
-      $pids = $this->inst->getPIDS();
+      $host = $this->server_host;
+      $pids = array("P630", "P786", "P682");
 ?>
       <table width='100%'>
         <tr>
@@ -912,9 +1016,8 @@ class control extends bpsr_webpage
     $config = $this->inst->config;
 
     $server_daemons_hash  = $this->inst->serverLogInfo();
-    $server_daemons = split(" ", $config["SERVER_DAEMONS"]);
-    $host = $config["SERVER_HOST"];
-    $host = substr($host, 0, strpos($host,"."));
+    $server_daemons = explode(" ", $config["SERVER_DAEMONS"]);
+    $host = $this->server_host;
 ?>
     <table width='100%'>
       <tr>
@@ -948,8 +1051,7 @@ class control extends bpsr_webpage
     #
     $this->openBlockHeader("Client Daemons");
 
-    $pwcs    = getConfigMachines($config, "PWC");
-    $client_daemons = split(" ",$config["CLIENT_DAEMONS"]);
+    $client_daemons = explode(" ",$config["CLIENT_DAEMONS"]);
     $client_daemons_hash =  $this->inst->clientLogInfo();
 ?>
 
@@ -958,32 +1060,47 @@ class control extends bpsr_webpage
         <td>
           <table class='control' id='pwc_controls'>
             <tr>
-              <td></td>
+              <td>Host</td>
 <?
-    for ($i=0; $i<count($pwcs); $i++) {
-      echo "          <td style='text-align: center'><span title='".$pwcs[$i]."'>".$i."</span></td>\n";
+    for ($i=0; $i<count($this->host_list); $i++) 
+    {
+      $host = $this->host_list[$i]["host"];
+      $span = $this->host_list[$i]["span"];
+      echo "          <td colspan='".$span."'>".$host."</td>\n";
+    }
+?>
+            </tr>
+            <tr>
+              <td>PWC</td>
+<?
+    for ($i=0; $i<count($this->pwc_list); $i++) 
+    {
+      $host = $this->pwc_list[$i]["host"];
+      $pwc  = $this->pwc_list[$i]["pwc"];
+      echo "          <td style='text-align: center'><span title='".$host."_".$pwc."'>".$pwc."</span></td>\n";
     }
 ?>
               <td></td>
             </tr>
 <?
 
-    $this->printClientDaemonControl("bpsr_master_control", "Master&nbsp;Control", $pwcs, "daemon&name=".$d);
+    $this->printClientDaemonControl("bpsr_master_control", "Master&nbsp;Control", $this->host_list, "daemon&name=".$d);
 
+    # Data Blocks
     for ($i=0; $i<count($this->pwc_dbs); $i++)
     {
-      $key = $this->pwc_dbs[$i]["key"];
-      $nbufs = $this->pwc_dbs[$i]["nbufs"];
-      $bufsz =  $this->pwc_dbs[$i]["bufsz"];
-      $this->printClientDBControl($key."&nbsp;DB", $pwcs, $key, $nbufs, $bufsz);
+      $id = $this->pwc_dbs[$i];
+      $this->printClientDBControl("DB&nbsp;".$id, $this->pwc_list, $id);
     }
 
-    $this->printClientDaemonControl("pwcs", "PWC", $pwcs, "pwcs");
+    # Primary Write Client
+    $this->printClientDaemonControl($this->inst->config{"PWC_BINARY"}, "PWC", $this->pwc_list, "pwcs");
+
     # Print the client daemons
     for ($i=0; $i<count($client_daemons); $i++) {
       $d = $client_daemons[$i];
       $n = str_replace(" ", "&nbsp;", $client_daemons_hash[$d]["name"]);
-      $this->printClientDaemonControl($d, $n, $pwcs, "daemon&name=".$d);
+      $this->printClientDaemonControl($d, $n, $this->pwc_list, "daemon&name=".$d);
     }
 ?>
           </table>
@@ -998,13 +1115,6 @@ class control extends bpsr_webpage
     </tr>
     </table>
 <?
-
-    $this->closeBlockHeader();
-?>
-      </td>
-    </tr>
-  </table>
-<?
   }
 
   #############################################################################
@@ -1013,17 +1123,18 @@ class control extends bpsr_webpage
   #
   function printUpdateXML($get)
   {
-
-    $host = "";
     $port = $this->inst->config["CLIENT_MASTER_PORT"];
     $cmd = "daemon_info_xml";
+    $nhosts = 0;
 
-    $nhosts = $get["nhosts"];
+    if (array_key_exists("nhosts", $get))
+      $nhosts = $get["nhosts"];
     $hosts = array();
     for ($i=0; $i<$nhosts; $i++) {
       $hosts[$i] = $get["host_".$i];
     }
 
+    $host = "";
     $sockets = array();
     $results = array();
     $responses = array();
@@ -1031,36 +1142,32 @@ class control extends bpsr_webpage
     # open the socket connections
     for ($i=0; $i<count($hosts); $i++) {
       $host = $hosts[$i];
-      # echo "opening ".$host.":".$port."<br>\n";
       list ($sockets[$i], $results[$i]) = openSocket($host, $port);
     }
 
     # write the commands
     for ($i=0; $i<count($results); $i++) {
-      $host = $hosts[$i];
       if ($results[$i] == "ok") {
-        # echo "sending ".$cmd." to ".$host.":".$port."<br>\n";
         socketWrite($sockets[$i], $cmd."\r\n");
       } else {
-        # echo "open socket failed on ".$host."<br>\n";
+        $results[$i] = "fail";
+        $responses[$i] = "";
       }
     }
 
     # read the responses
     for ($i=0; $i<count($results); $i++) {
-      $host = $hosts[$i];
-      if ($results[$i] == "ok") {
-
-        $read = socketRead($sockets[$i]);
-        $responses[$i] = rtrim($read);
-
+      if (($results[$i] == "ok") && ($sockets[$i])) {
+        list ($result, $response) = socketRead($sockets[$i]);
+        if ($result == "ok")
+          $responses[$i] = $response;
+        else
+          $responses[$i] = "";
       }
     }
 
     # close the sockets
     for ($i=0; $i<count($results); $i++) {
-      $host = $hosts[$i];
-      # echo "closing ".$host.":".$port."<br>\n";
       if ($results[$i] == "ok") {
         socket_close($sockets[$i]);
       }
@@ -1071,8 +1178,6 @@ class control extends bpsr_webpage
     if (array_key_exists("SERVER_DAEMONS_PERSIST", $this->inst->config))
     {
       $server_daemons_persist = explode(" ", $this->inst->config["SERVER_DAEMONS_PERSIST"]);
-      list ($host, $domain)  = explode(".", $this->inst->config["SERVER_HOST"],2);
-      $persist_xml = "<daemon_info><host>".$host."</host>";
       $running = array();
       for ($i=0; $i<count($server_daemons_persist); $i++)
       {
@@ -1095,12 +1200,14 @@ class control extends bpsr_webpage
         if (array_key_exists("SERVER_".$d."_PID_PORT", $this->inst->config))
         {
           $port = $this->inst->config["SERVER_".$d."_PID_PORT"];
-          list ($sock, $result) = openSocket($host, $port);
+          list ($sock, $result) = openSocket($this->inst->config["SERVER_HOST"], $port);
           if ($result == "ok")
           {
             socketWrite($sock, "get_pid\r\n");
-            $read = socketRead($sock);
-            $dpid = rtrim($read);
+            list ($result, $response) = socketRead($sock);
+            if ($result == "ok")
+              $dpid = $response;
+            else
             socket_close($sock);
           }
           else
@@ -1113,7 +1220,7 @@ class control extends bpsr_webpage
         else
           $persist_xml .= "<".$d.">".$running[$d]."</".$d.">";
       }
-      $persist_xml .= "</daemon_info>\n";
+      #$persist_xml .= "</daemon_info>\n";
     }
 
     # produce the xml
@@ -1121,12 +1228,19 @@ class control extends bpsr_webpage
     $xml .= "<daemon_infos>\n";
 
     for ($i=0; $i<count($hosts); $i++) {
-      if ($responses[$i] == "")
-        $xml .= "<daemon_info><host>".$hosts[$i]."</host><bpsr_master_control>0</bpsr_master_control></daemon_info>\n";
-      else
-        $xml .= $responses[$i]."\n";
+      $xml .= "<daemon_info>";
+
+      # if no response was available
+      if ((!array_key_exists($i, $responses)) || ($responses[$i] == ""))
+        $xml .= "<host>".$hosts[$i]."</host><bpsr_master_control>0</bpsr_master_control>";
+      else 
+        $xml .= $responses[$i];
+
+      if ($hosts[$i] == $this->server_host)
+        $xml .= $persist_xml;
+
+      $xml .="</daemon_info>\n";
     }
-    $xml .= $persist_xml;
     $xml .= "</daemon_infos>\n";
 
     header('Content-type: text/xml');
@@ -1149,7 +1263,12 @@ class control extends bpsr_webpage
       $hosts[$i] = $get["host_".$i];
     $action = $get["action"];
     $daemon = $get["daemon"];
-    $args = $get["args"];
+    $pwc = "";
+    if (array_key_exists("pwc", $get))
+      $pwc = $get["pwc"];
+    $args = "";
+    if (array_key_exists("args", $get))
+      $args = $get["args"];
     $area = "";
 
     if (($nhosts == "") || ($action == "") || ($daemon == "") || ($hosts[0] == "")) {
@@ -1158,7 +1277,7 @@ class control extends bpsr_webpage
     }
 
     # determine which type of request this is (srv or pwc)
-    if ($hosts[0] == "srv0") 
+    if ($hosts[0] == $this->server_host)
     {  
       if (strpos($this->inst->config["SERVER_DAEMONS_PERSIST"], $daemon) !== FALSE)
         $area = "persist";
@@ -1183,10 +1302,10 @@ class control extends bpsr_webpage
     if ($area == "persist") {
 
       if ($action == "start") {
-        echo "Starting ".$daemon." on srv0\n";
+        echo "Starting ".$daemon." on ".$this->server_host."\n";
         flush();
 
-        $cmd = "ssh -x -l dada srv0 'server_".$daemon.".pl";
+        $cmd = "ssh -x -l dada ".$this->server_host." 'server_".$daemon.".pl";
         if ($args != "")
           $cmd .= " ".$args;
         $cmd .= "'";
@@ -1198,7 +1317,7 @@ class control extends bpsr_webpage
         $pid_file = $this->inst->config["SERVER_CONTROL_DIR"]."/".$daemon.".pid";
         if (file_exists($pid_file))
         {
-          echo "Stopping ".$daemon." on srv0\n";
+          echo "Stopping ".$daemon." on ".$this->server_host."\n";
           flush();
         
           $cmd = "touch ".$quit_file;
@@ -1213,7 +1332,7 @@ class control extends bpsr_webpage
         } 
         else
         {
-          echo "No PID file [".$pid_file."] existed for ".$daemon." on srv0\n";
+          echo "No PID file [".$pid_file."] existed for ".$daemon." on ".$this->server_host."\n";
           flush();
         }
       } else {
@@ -1241,6 +1360,7 @@ class control extends bpsr_webpage
         } else {
           $cmd = "ssh -x -l bpsr ".$hosts[$i]." client_bpsr_master_control.pl";
         }
+
         $output = array();
         $lastline = exec($cmd, $output, $rval);
       }
@@ -1251,24 +1371,43 @@ class control extends bpsr_webpage
 
       $port = $this->inst->config["CLIENT_MASTER_PORT"];
 
-      $html = (($action == "start") ? "Starting" : "Stopping")." ";
+      $html = "";
 
+      # all daemons started or stopped
       if ($daemon == "all") {
-        $cmd = $action."_daemons";
+        $cmd = "cmd=".$action."_daemons";
+        $html .= (($action == "start") ? "Starting" : "Stopping")." ";
         $html .= "all daemons on ";
-      } else if (strpos($daemon, "buffer") !== FALSE) {
-        $bits = split("_", $daemon);
-        $key = $bits[1];
+      } 
+      # the command is in related to datablocks
+      else if (strpos($daemon, "buffer") === 0)
+      {
+        list ($junk, $db_id) = explode("_", $daemon);
         if ($action == "stop")
-          $cmd = "destroy_db ".$key;
+        {
+          $cmd = "cmd=destroy_db&args=".$db_id;
+          $html .= "Destroying DB ".$db_id." on";
+        }
         else 
-          $cmd = "init_db ".$key." ".str_replace("_", " ", $args);
-        $html .= $cmd." on";
-      } else {
-        $cmd = $action."_daemon ".$daemon;
+        {
+          $cmd = "cmd=init_db&args=".$db_id;
+          $html .= "Creating DB ".$db_id." on";
+        }
+      }
+      # the command is related to a specified daemon
+      else
+      {
+        $html .= (($action == "start") ? "Starting" : "Stopping")." ";
+        $cmd = "cmd=".$action."_daemon&args=".$daemon;
         $html .= str_replace("_", " ",$daemon)." on";
         if ($args != "")
           $cmd .= " ".$args;
+      }
+
+      # if we are only running this command on a single PWC of a host
+      if ($pwc != "")
+      {
+        $cmd .= "&pwc=".$pwc;
       }
 
       # open the socket connections
@@ -1277,12 +1416,21 @@ class control extends bpsr_webpage
       for ($i=0; $i<count($hosts); $i++) {
         $host = $hosts[$i];
         if (count($hosts) <= 2)
+        {
           $html .= " ".$host;
+          if ($pwc != "")
+            $html .= ":".$pwc;
+        }
+        
         $ntries = 5;
         $results[$i] = "not open";
         while (($results[$i] != "ok") && ($ntries > 0)) {
+          #echo "[".gettimeofday(true)."] ".$ntries.": openSocket($host,$port)<BR>\n";
+          #flush();
           list ($sockets[$i], $results[$i]) = openSocket($host, $port);
           if ($results[$i] != "ok") {
+            #echo "[".gettimeofday(true)."] ".$ntries.": openSocket($host,$port) failed - sleep(2)<BR>\n";
+            #flush();
             sleep(2);
             $ntries--;
           } else {
@@ -1297,7 +1445,11 @@ class control extends bpsr_webpage
       for ($i=0; $i<count($results); $i++) {
         $host = $hosts[$i];
         if ($results[$i] == "ok") {
+          #echo "<BR>[".gettimeofday(true)."] ".$ntries.": socketWrite($i, $cmd)<BR>\n";
+          #flush();
           socketWrite($sockets[$i], $cmd."\r\n");
+          #echo "[".gettimeofday(true)."] ".$ntries.": socketWrite($i, $cmd) done<BR>\n";
+          #flush();
         } else {
           echo "ERROR: failed to open socket to master control script for ".$host."\n";
         }
@@ -1312,15 +1464,22 @@ class control extends bpsr_webpage
           # multiple lines may be returned, final line is always an "ok" or "fail"
           $responses[$i] = "";
           while ($done > 0) {
-            $read = rtrim(socketRead($sockets[$i]));
-            if (($read == "ok") || ($read == "fail")) {
-              flush();
+            #echo "[".gettimeofday(true)."] ".$ntries.": socketRead($i)<BR>\n";
+            #flush();
+            list ($result, $response) = socketRead($sockets[$i]);
+            #echo "[".gettimeofday(true)."] ".$ntries.": socketRead($i) done<BR>\n";
+            #flush();
+            if (($response == "ok") || ($response == "fail")) {
+              #echo "[".gettimeofday(true)."] ".$ntries.": socketRead($i) read='".$read."'<BR>\n";
+              #flush();
               $done = 0;
             } else {
+              #echo "[".gettimeofday(true)."] ".$ntries.": socketRead($i) read='".$read."'<BR>\n";
+              #flush();
               $done--;
             }
-            if ($read != "")
-              $responses[$i] .= $read."\n";
+            if ($response != "")
+              $responses[$i] .= $response."\n";
           }
         }
         $responses[$i] = rtrim($responses[$i]);
@@ -1336,7 +1495,7 @@ class control extends bpsr_webpage
 
       # check the responses
       for ($i=0; $i<count($responses); $i++) {
-        $bits = split("\n", $responses[$i]);
+        $bits = explode("\n", $responses[$i]);
         if ($bits[count($bits)-1] != "ok") {
           for ($j=0; $j<count($bits)-1; $j++)
           echo $hosts[$i].": ".$bits[$j]."\n";
@@ -1441,8 +1600,15 @@ class control extends bpsr_webpage
     echo "  <tr>\n";
     echo "    <td>".$name."</td>\n";
     for ($i=0; $i<count($hosts); $i++) {
-      echo "    <td>".$this->statusLight($hosts[$i], $daemon, -1, "")."</td>\n";
-      $host_str .= $hosts[$i]." ";
+      $host = $hosts[$i]["host"];
+      $span = $hosts[$i]["span"];
+      $pwc = "";
+      if (array_key_exists("pwc", $hosts[$i])) 
+        $pwc = ":".$hosts[$i]["pwc"];
+      
+      echo "    <td colspan='".$span."' style='text-align: center;'>".$this->statusLight($host.$pwc, $daemon, -1, "")."</td>\n";
+      if (strpos($host_str, $host) === FALSE)
+        $host_str .= $host." ";
     }
     $host_str = rtrim($host_str);
     if ($cmd != "" ) {
@@ -1459,19 +1625,25 @@ class control extends bpsr_webpage
   #
   # Print the data block row
   #
-  function printClientDBControl($name, $hosts, $key, $nbufs, $bufsz) 
+  function printClientDBControl($name, $hosts, $id) 
   {
 
-    $daemon = "buffer_".$key;
-    $daemon_on = "buffer_".$key."&args=".$nbufs."_".$bufsz;
-    $daemon_off = "buffer_".$key;
+    $daemon = "buffer_".$id;
+    $daemon_on = "buffer_".$id;
+    $daemon_off = "buffer_".$id;
 
     $host_str = "";
     echo "  <tr>\n";
     echo "    <td>".$name."</td>\n";
     for ($i=0; $i<count($hosts); $i++) {
-      echo "    <td>".$this->statusLight($hosts[$i], $daemon, -1, $nbufs."_".$bufsz)."</td>\n";
-      $host_str .= $hosts[$i]." ";
+      $host = $hosts[$i]["host"];
+      $span = $hosts[$i]["span"]; 
+      $pwc = "";
+      if (array_key_exists("pwc", $hosts[$i])) 
+        $pwc = ":".$hosts[$i]["pwc"];
+      echo "    <td span='".$span."' style='text-align: center;'>".$this->statusLight($host.$pwc, $daemon, -1, "")."</td>\n";
+      if (strpos($host_str, $host) === FALSE)
+        $host_str .= $host." ";
     }
     $host_str = rtrim($host_str);
     echo "    <td style='text-align: center;'>\n";
@@ -1496,7 +1668,7 @@ class control extends bpsr_webpage
   function handleRequest()
   {
 
-    if ($_GET["update"] == "true") {
+    if (array_key_exists("update", $_GET) && ($_GET["update"] == "true")) {
       $this->printUpdateXML($_GET);
     } else if (isset($_GET["action"])) {
       $this->printActionHTML($_GET);

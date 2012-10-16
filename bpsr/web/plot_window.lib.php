@@ -1,15 +1,19 @@
 <?PHP
 
-include("bpsr.lib.php");
-include("bpsr_webpage.lib.php");
+include_once("bpsr.lib.php");
+include_once("bpsr_webpage.lib.php");
 
 class plot_window extends bpsr_webpage 
 {
+
+  var $inst = 0;
+  var $verbose = false;
 
   function plot_window()
   {
     bpsr_webpage::bpsr_webpage();
     $this->title = "BPSR Plot Window";
+    $this->verbose = isset($_GET["verbose"]);
   }
 
   function javaScriptCallback()
@@ -19,8 +23,7 @@ class plot_window extends bpsr_webpage
 
   function printJavaScriptHead()
   {
-
-    $inst = new bpsr();
+    $this->inst = new bpsr();
 
 ?>
     <script type='text/javascript'>  
@@ -55,48 +58,78 @@ class plot_window extends bpsr_webpage
         }
       }
 
-
-      function handle_plot_window_request(pw_http_request) 
+      function handle_plot_window_request(pw_xml_request) 
       {
-        if (pw_http_request.readyState == 4) {
+<?
+      if ($this->verbose)
+        echo "        var verbose = true;\n";
+      else
+        echo "        var verbose = false;\n";
+?>
 
-          var response = String(pw_http_request.responseText)
-          var lines = response.split("\n");
-          var currImg
-          var beam
-          var size
-          var type
-          var img
+        if (pw_xml_request.readyState == 4)
+        {
+          var xmlDoc = pw_xml_request.responseXML
+          if (xmlDoc != null)
+          {
+            var xmlObj=xmlDoc.documentElement;
 
-          var set = new Array();
+            var http_server = xmlObj.getElementsByTagName("http_server")[0].childNodes[0].nodeValue;
+            var url_prefix  = xmlObj.getElementsByTagName("url_prefix")[0].childNodes[0].nodeValue;
 
-          for (i=0; i < lines.length-1; i++) {
+            // determine which types of images are currently active
+            if (document.imageform.imagetype[0].checked == true) 
+              type = "bp";
 
-            values = lines[i].split(":::");
-            beam = values[0];
-            size = values[1];
-            type = values[2];
-            img  = values[3];
-          
-            currImg = document.getElementById("beam"+beam);
-            if (currImg) {
-              set.push("beam"+beam);
-              if (currImg.src != img) {
-                currImg.src = img
+            if (document.imageform.imagetype[1].checked == true) 
+              type = "ts";
+
+            if (document.imageform.imagetype[2].checked == true) 
+              type = "fft";
+
+            if (document.imageform.imagetype[3].checked == true) 
+              type = "pdbp";
+
+            if (document.imageform.imagetype[4].checked == true) 
+              type = "pvf";
+
+  
+            var set = new Array();
+            var beams = xmlObj.getElementsByTagName("beam");
+
+            var i = 0;
+            for (i=0; i<beams.length; i++)
+            {
+              var beam = beams[i];
+              var beam_name = beam.getAttribute("name");
+              var img_element = document.getElementById("beam"+beam_name);
+
+              var j = 0;
+              for (j=0; j<beam.childNodes.length; j++)
+              {
+                img = beam.childNodes[j];
+                if (img.nodeType == 1)
+                { 
+                  if (img.getAttribute("type") == type)
+                  {
+                    set.push("beam"+beam_name);
+                    img_element.src = http_server + url_prefix + img.childNodes[0].nodeValue;
+                  }
+                }
               }
             }
+
+            reset_others(set);
           }
-          reset_others(set);
         }
       }
-
+                  
       function plot_window_request() 
       {
-        var host = "<?echo $inst->config["SERVER_HOST"];?>";
-        var port = "<?echo $inst->config["SERVER_WEB_MONITOR_PORT"];?>";
+        var host = "<?echo $this->inst->config["SERVER_HOST"];?>";
+        var port = "<?echo $this->inst->config["SERVER_WEB_MONITOR_PORT"];?>";
         var url = "plot_window.lib.php?update=true&host="+host+"&port="+port;
 
-        var type = "bp";
         if (document.imageform.imagetype[0].checked == true) 
           type = "bp";
 
@@ -115,15 +148,15 @@ class plot_window extends bpsr_webpage
         url += "&type="+type+"&size=112x84&beam=all";
 
         if (window.XMLHttpRequest)
-          pw_http_request = new XMLHttpRequest();
+          pw_xml_request = new XMLHttpRequest();
         else
-          pw_http_request = new ActiveXObject("Microsoft.XMLHTTP");
+          pw_xml_request = new ActiveXObject("Microsoft.XMLHTTP");
 
-        pw_http_request.onreadystatechange = function() {
-          handle_plot_window_request(pw_http_request)
+        pw_xml_request.onreadystatechange = function() {
+          handle_plot_window_request(pw_xml_request)
         };
-        pw_http_request.open("GET", url, true);
-        pw_http_request.send(null);
+        pw_xml_request.open("GET", url, true);
+        pw_xml_request.send(null);
       }
 
     </script>
@@ -135,15 +168,15 @@ class plot_window extends bpsr_webpage
   {
 ?>
   <center>
-    <table border=0 cellspacing=0 cellpadding=5>
+    <table border=0 cellspacing=0 cellpadding=4>
 
       <tr>
         <td rowspan=3 valign="top" align='left'>
           <form name="imageform" class="smalltext">
-            <input type="radio" name="imagetype" id="imagetype" value="bp" checked onClick="plot_window_request()">Bandpass<br>
+            <input type="radio" name="imagetype" id="imagetype" value="bp" onClick="plot_window_request()">Bandpass<br>
             <input type="radio" name="imagetype" id="imagetype" value="ts" onClick="plot_window_request()">Time Series<br>
             <input type="radio" name="imagetype" id="imagetype" value="fft" onClick="plot_window_request()">Fluct. PS<br>
-            <input type="radio" name="imagetype" id="imagetype" value="pdbp" onClick="plot_window_request()">PD Bandpass<br>
+            <input type="radio" name="imagetype" id="imagetype" value="pdbp" checked onClick="plot_window_request()">PD Bandpass<br>
             <input type="radio" name="imagetype" id="imagetype" value="pvf" onClick="plot_window_request()">Phase v Freq<br>
           </form>
         </td>
@@ -195,6 +228,9 @@ class plot_window extends bpsr_webpage
         <?$this->echoBlank()?>
       </tr>
     </table>
+<!--
+    <a href="/bpsr/transient_window.lib.php?single=true" target="_popup">Transients!!!</a>
+-->
   </center>
 
 <?
@@ -205,67 +241,66 @@ class plot_window extends bpsr_webpage
     $host = $get["host"];
     $port = $get["port"];
 
-    $type = $_GET["type"];
-    $size = "112x84";
-
     $url = "http://".$_SERVER["SERVER_NAME"].":".$_SERVER["SERVER_PORT"];
 
     list ($socket, $result) = openSocket($host, $port);
 
-    if ($result == "ok") {
+    $xml = "<plot_update>";
+    $xml .= "<http_server>http://".$_SERVER["SERVER_NAME"].":".$_SERVER["SERVER_PORT"]."</http_server>"; 
+    $xml .= "<url_prefix>/bpsr/results/</url_prefix>";
 
-      $bytes_written = socketWrite($socket, $type."_img_info\r\n");
-      $string = socketRead($socket);
-      socket_close($socket);
+    $data = "";
+    $response = "initial";
 
-      # Add the require URL links to the image
-      $lines = split(";;;", $string);
-      $string = "";
-      for ($i=0; $i<count($lines)-1; $i++) {
-
-        $parts = split(":::", $lines[$i]);
-        $node = -1;
-        if ($type == "pdbp") {
-          $inst = new bpsr();
-          for ($j=0; $j<$inst->ibobs["NUM_IBOB"]; $j++) {
-            if ($parts[0] == $inst->ibobs["CONTROL_IP_".$j]) {
-              $node = $inst->ibobs["BEAM_".$j];
-            }
-          }
-        } else {
-          $node = $parts[0];
+    if ($result == "ok") 
+    {
+      $xml .= "<images>";
+      $bytes_written = socketWrite($socket, "img_info\r\n");
+      $max = 100;
+      while ($socket && ($result == "ok") && ($response != "") && ($max > 0))
+      {
+        list ($result, $response) = socketRead($socket);
+        if ($result == "ok") 
+        {
+          $data .= $response;
         }
-        if ($node != -1) {
-          $string .= $node.":::".$size.":::".$type.":::".$url."/bpsr/results/".$parts[1]."\n";;
-        } else {
-          $string .= $node.":::".$size.":::".$type.":::".$url."/images/blankimage.gif\n";
-        }
-
+        $max--;
       }
+      if (($result == "ok") && ($socket))
+        socket_close($socket);
+      $socket = 0;
+      $xml .= $data;
+      $xml .="</images>";
+    } 
 
-    } else {
-      $string = "Could not connect to $host:$port<BR>\n";
-    }
+    $xml .= "</plot_update>";
 
-    echo $string;
+    header('Content-type: text/xml');
+    echo $xml;
   }
 
   function echoBlank() 
   {
-    echo "<td ></td>\n";
+    echo "<td><img src='/images/spacer.gif' width='113px' height='42px'</td>\n";
   }
 
   function echoBeam($beam_no) 
   {
     $beam_str = sprintf("%02d", $beam_no);
+    $roach_name = "Inactive";
 
-    echo "<td rowspan=2 align=right>";
-    echo "<a border=0px href=\"javascript:popPlotWindow('beam_viewer.lib.php?single=true&beam=".$beam_str."')\">";
-    echo "<img src=\"/images/blankimage.gif\" border=0 width=113 height=85 id=\"beam".$beam_str."\" TITLE=\"Beam ".$beam_str."\" alt=\"Beam ".$beam_no."\">\n";
-    echo "</a></td>\n";
+    for ($i=0; $i<$this->inst->roach["NUM_ROACH"]; $i++)
+      if ($this->inst->roach["BEAM_".$i] == $beam_str)
+        $roach_name = $this->inst->roach["ROACH_".$i];
+
+    echo "<td rowspan=2 align=right>\n";
+    echo "          <a border=0px href=\"javascript:popPlotWindow('beam_viewer.lib.php?single=true&beam=".$beam_str."')\">";
+    echo "<img src=\"/images/blankimage.gif\" border=0 width=113 height=85 id=\"beam".$beam_str."\" TITLE=\"Beam ".$beam_str." - ".$roach_name."\" alt=\"Beam ".$beam_no."\">";
+    echo "</a>\n";
+    echo "        </td>\n";
   }
 
 }
 
-handledirect("plot_window");
+handleDirect("plot_window");
 

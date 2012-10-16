@@ -1,7 +1,7 @@
 <?PHP
 
-include("bpsr.lib.php");
-include("bpsr_webpage.lib.php");
+include_once("bpsr.lib.php");
+include_once("bpsr_webpage.lib.php");
 
 class result extends bpsr_webpage 
 {
@@ -14,14 +14,15 @@ class result extends bpsr_webpage
   var $results_dir;
   var $results_link;
   var $type;
+  var $state;
 
   function result()
   {
     bpsr_webpage::bpsr_webpage();
 
     $this->utc_start = $_GET["utc_start"];
-    $this->type = $_GET["type"];
-    $this->state = $_GET["state"] == "old" ? "old" : "normal";
+    $this->type = isset($_GET["type"]) ? $_GET["type"] : "";
+    $this->state = (isset($_GET["state"]) && $_GET["state"] == "old") ? "old" : "normal";
     $this->title = "BPSR Result: ".$this->utc_start;
     $this->inst = new bpsr();
     if ($this->state == "normal")
@@ -31,10 +32,9 @@ class result extends bpsr_webpage
     }
     else
     {
-      $this->results_dir = "/export/old_results/bpsr";
+      $this->results_dir = $this->inst->config["SERVER_OLD_RESULTS_DIR"];
       $this->results_link = "/bpsr/old_results/".$this->utc_start."/";
     }
-
   }
 
   /*
@@ -141,6 +141,15 @@ class result extends bpsr_webpage
     $data = array_pop($this->inst->getResultsInfo($this->utc_start, $this->results_dir));
     $header = $this->inst->configFileToHash($data["obs_start"]);
     $state = $this->inst->getObservationState($this->utc_start);
+
+    # try to be a little smarter about the type of image shown
+    if ($this->type == "")
+    {
+      $this->type = "bp";
+      if (strpos($obs_info["SOURCE"], "J") === 0)
+        $this->type = "pvf";
+    }
+
 ?>
     <table border=0 cellspacing=10px>
       <tr>
@@ -150,9 +159,8 @@ class result extends bpsr_webpage
     </table>
 
     <table border=0 cellspacing=10px>
-      <tr><td rowspan=2>
+      <tr><td rowspan=2 valign="top">
 <?
-
     $this->openBlockHeader("Beam View");
 ?>
   <center>
@@ -273,12 +281,23 @@ class result extends bpsr_webpage
       <tr><td>TSAMP</td><td><?echo $header["TSAMP"]?></td></tr>
       <tr><td>STATE</td><td><?echo $header["STATE"]?></td></tr>
       <tr><td>BYTES_P/S</td><td><?echo $header["BYTES_PER_SECOND"]?></td></tr>
-    <table>
+    </table>
 <?
     $this->closeBlockHeader();
-
-    echo "</td></tr></table>\n";
 ?>
+    </td></tr>
+
+    <tr><td colspan=2>
+<?
+    $this->openBlockHeader("Transient Pipeline");
+?>
+    <img src="/images/blankimage.gif" border=0 id="beamall" TITLE="Transients" alt="Transients">
+<?
+    $this->closeBlockHeader();
+?>
+    </td></tr>
+    </table>
+
     <script type="text/javascript">
       result_request();
     </script>
@@ -287,9 +306,6 @@ class result extends bpsr_webpage
 
   function printUpdateHTML($get)
   {
-    $host = $get["host"];
-    $port = $get["port"];
-
     $type = $_GET["type"];
     $size = "112x84";
     $results = array();
@@ -319,8 +335,11 @@ class result extends bpsr_webpage
         $results[$i][$type."_".$size] = "/images/blankimage.gif";
       else
         ;
+
+      $url = "";
       echo $beam.":::".$size.":::".$type.":::".$url.$results[$i][$type."_".$size]."\n";
     }
+    echo "all:::1024x768:::cand:::".$url.$results["transients"]["cands_1024x768"]."\n";
   }
 
   function echoBlank() 

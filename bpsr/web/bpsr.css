@@ -1,6 +1,6 @@
 BODY {
-  /*background: #1c1c1c;*/
-  background: #EEEEEE;
+  /*background: #EEEEEE;*/
+  background:url(/bpsr/images/bpsr_background_200x400.png) repeat;
   color: black;
   font-family: arial,helvetica,sans-serif,times;
   font-size: 10pt;
@@ -13,7 +13,7 @@ pre {
                                                                                 
 P {
   font-family: arial,helvetica,sans-serif,times;
-  background: white;
+  /*background: white;*/
   color: black;
   font-size: 10pt;
   margin-top: 2px;
@@ -64,7 +64,8 @@ table.wrapper {
   padding: 0px;
   border-spacing: 0px;
   margin: 0px;
-  border-style: solid solid solid solid;
+  /*border-style: solid solid solid solid;*/
+  border-style: none none none none;
   border-color: #0000ff #0000ff #0000ff #0000ff;
   border-width: 1px 1px 1px 1px;
   width: 100%;
@@ -72,16 +73,19 @@ table.wrapper {
 
 th.wrapper {
   text-align: left;
-  border-style: solid solid solid solid;
+  /*border-style: solid solid solid solid;*/
+  border-style: none none solid none;
   border-color: #0000ff #0000ff #0000ff #0000ff;
   border-width: 0px 0px 1px 0px;
-  background: #DDDDFF;
-  padding: 7px;
+  color: #0000ff;
+  /*background: #DDDDFF;*/
+  /*background:url(/bpsr/images/bpsr_th_background_5x40.png) repeat-x;*/
+  padding: 4px;
   font-size: 12pt;
 }
 td.wrapper {
   padding: 7px;
-  background: #ffffff;
+  /*background: #ffffff;*/
 }
 
 

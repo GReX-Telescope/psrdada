@@ -1,7 +1,7 @@
 <?PHP
 
-include("bpsr.lib.php");
-include("bpsr_webpage.lib.php");
+include_once("bpsr.lib.php");
+include_once("bpsr_webpage.lib.php");
 
 class results extends bpsr_webpage 
 {
@@ -38,6 +38,10 @@ class results extends bpsr_webpage
 
       .finished {
         background-color: #cae2ff;
+      }
+
+      .transferred {
+        background-color: #caffe2;
       }
     </style>
 
@@ -76,7 +80,7 @@ class results extends bpsr_webpage
 
         var offset = getOffset()
 
-        var URL = "results.lib.php?single=true&offset="+offset+"&length="+length+"&inline_images="+show_inline;
+        var url = "results.lib.php?single=true&offset="+offset+"&length="+length+"&inline_images="+show_inline;
 
         i = document.getElementById("filter_type").selectedIndex;
         var filter_type = document.getElementById("filter_type").options[i].value;
@@ -84,9 +88,9 @@ class results extends bpsr_webpage
         var filter_value = document.getElementById("filter_value").value;
 
         if ((filter_value != "") && (filter_type != "")) {
-          URL = URL + "&filter_type="+filter_type+"&filter_value="+filter_value;
+          url = url + "&filter_type="+filter_type+"&filter_value="+filter_value;
         }
-        document.location = URL;
+        document.location = url;
       }
 
       function toggle_images()
@@ -141,7 +145,7 @@ class results extends bpsr_webpage
         filter_type = document.getElementById("filter_type").options[i].value;
         filter_value = document.getElementById("filter_value").value;
         if ((filter_value != "") && (filter_type != "")) {
-          url = URL + "&filter_type="+filter_type+"&filter_value="+filter_value;
+          url = url + "&filter_type="+filter_type+"&filter_value="+filter_value;
         }
 
         if (window.XMLHttpRequest)
@@ -334,8 +338,9 @@ class results extends bpsr_webpage
     }
     $total_num_results = exec($cmd);
 
-    $results = $this->getResultsArray($this->cfg["SERVER_RESULTS_DIR"], $this->cfg["SERVER_ARCHIVE_DIR"],  
-                                      $this->offset, $this->length, $this->filter_type, $this->filter_value);
+    $results = $this->getResultsArray($this->cfg["SERVER_RESULTS_DIR"], 
+                                      $this->offset, $this->length, 
+                                      $this->filter_type, $this->filter_value);
 
     ?>
     <div style="text-align: right; padding-bottom:10px;">
@@ -442,7 +447,7 @@ class results extends bpsr_webpage
 
           // guess the larger image size
           $image = str_replace("112x84", "400x300", $r["IMG"]);
-          if (!file_exists($basedir."/".$k."/".$mid_image))
+          if (!file_exists($basedir."/".$k."/".$image))
              $image = $r["IMG"];
 
           $mousein = "onmouseover=\"Tip('<img src=\'".$results_dir."/".$k."/".$image."\' width=401 height=301>')\"";
@@ -456,10 +461,13 @@ class results extends bpsr_webpage
             $style = "";
           else
             $style = "display: none;";
-          echo "    <td class='processing'><img style='".$style."' id='img_".$i."' src=".$results_dir."/".$k."/".$r["IMG"]." width=64 height=48>\n";
+
+          $bg_style = "class='processing'";
+
+          echo "    <td ".$bg_style."><img style='".$style."' id='img_".$i."' src=".$results_dir."/".$k."/".$r["IMG"]." width=64 height=48>\n";
           
           // SOURCE 
-          echo "      <td ".$bg_style."><a id='link_".$i."' href='".$url."' ".$mousein." ".$mouseout.">".$r["SOURCE"]."</a></td>\n";
+          echo "    <td ".$bg_style."><a id='link_".$i."' href='".$url."' ".$mousein." ".$mouseout.">".$r["SOURCE"]."</a></td>\n";
 
           // UTC_START 
           echo "    <td ".$bg_style."><span id='UTC_START_".$i."'>".$k."</span></td>\n";
@@ -501,8 +509,9 @@ class results extends bpsr_webpage
   function printUpdateHTML($get)
   {
 
-    $results = $this->getResultsArray($this->cfg["SERVER_RESULTS_DIR"], $this->cfg["SERVER_ARCHIVE_DIR"],
-                                      $this->offset, $this->length, $this->filter_type, $this->filter_value);
+    $results = $this->getResultsArray($this->cfg["SERVER_RESULTS_DIR"],
+                                      $this->offset, $this->length, 
+                                      $this->filter_type, $this->filter_value);
 
     $keys = array_keys($results);
     rsort($keys);
@@ -541,7 +550,7 @@ class results extends bpsr_webpage
 
   }
 
-  function getResultsArray($results_dir, $archive_dir, $offset=0, $length=0, $filter_type, $filter_value) 
+  function getResultsArray($results_dir, $offset=0, $length=0, $filter_type, $filter_value) 
   {
 
     $all_results = array();
@@ -600,7 +609,6 @@ class results extends bpsr_webpage
         }
         if ($finished) {
           system("echo 'IMG                 ".$img."' >> ".$results_dir."/".$o."/obs.info");
-          system("echo 'IMG                 ".$img."' >> ".$archive_dir."/".$o."/obs.info");
         }
       }
 
@@ -617,7 +625,6 @@ class results extends bpsr_webpage
         } 
         if ($finished) {
           system("echo 'INT                 ".$int."' >> ".$results_dir."/".$o."/obs.info");
-          system("echo 'INT                 ".$int."' >> ".$archive_dir."/".$o."/obs.info");
         }
       }
 
@@ -641,14 +648,16 @@ class results extends bpsr_webpage
   {
     $image = substr($image, 3);
     $array = split("\.",$image);
-    $image_utc = $array[0];
+    $image_time_str = $array[0];
 
-    $offset = 0;
+    # if image is pvf, then it is a local time, convert to unix time
     if (strpos($image, "pvf") !== FALSE) 
-      $offset = (11*60*60);
-
+      $image_time_unix = unixTimeFromLocalTime($image_time_str);
+    else
+      $image_time_unix = unixTimeFromGMTime($image_time_str);
+     
     # add ten as the 10 second image file has a UTC referring to the first byte of the file 
-    $length = (unixTimeFromGMTime($image_utc)+(10-$offset)) - unixTimeFromGMTime($utc_start);
+    $length = $image_time_unix - unixTimeFromGMTime($utc_start);
 
     return $length;
   }

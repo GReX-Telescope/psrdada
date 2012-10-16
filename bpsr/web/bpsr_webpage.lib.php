@@ -1,7 +1,5 @@
 <?PHP
 
-if (!$_BPSR_WEBPAGE_LIB_PHP) { $_BPSR_WEBPAGE_LIB_PHP = 1;
-
 class bpsr_webpage 
 {
 
@@ -69,7 +67,7 @@ function handleDirect($child_class)
 
   // if this parameter is defined, output the HTML for the
   // specified pages
-  if ($_GET["single"] == "true") 
+  if (array_key_exists("single", $_GET) && ($_GET["single"] == "true"))
   {
     $obj = new $child_class();
 
@@ -121,7 +119,7 @@ function handleDirect($child_class)
       echo "</table>\n";
     }
 
-    if (method_exists($obj, printSideBarHTML))
+    if (method_exists($obj, "printSideBarHTML"))
     {
       echo "<table width='100%' cellpadding='10px' border=0>\n";
       echo "  <tr>\n";
@@ -142,15 +140,17 @@ function handleDirect($child_class)
     echo "</body>\n";
     echo "</html>\n";
 
-  } else if ($_GET["update"] == "true") {
+  } else if (array_key_exists("update", $_GET) && ($_GET["update"] == "true")) {
 
     $obj = new $child_class();
     $obj->printUpdateHTML($_GET);
+
+  } else  if (array_key_exists("action", $_GET) && ($_GET["action"] != "")) {
+    
+    $obj = new $child_class();
+    $obj->printActionHTML($_GET);
 
   } else {
     # do nothing :)
   }
 }
-
-} // _BPSR_WEBPAGE_LIB_PHP
-

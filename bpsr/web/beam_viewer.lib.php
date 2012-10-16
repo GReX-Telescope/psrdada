@@ -1,7 +1,7 @@
 <?PHP
 
-include("bpsr.lib.php");
-include("bpsr_webpage.lib.php");
+include_once("bpsr.lib.php");
+include_once("bpsr_webpage.lib.php");
 
 class beam_viewer extends bpsr_webpage 
 {
@@ -14,7 +14,7 @@ class beam_viewer extends bpsr_webpage
   function beam_viewer()
   {
     bpsr_webpage::bpsr_webpage();
-    $this->css = array("bpsr.css");
+
     $this->inst = new bpsr();
 
     if (isset($_GET["utc_start"]))
@@ -30,7 +30,7 @@ class beam_viewer extends bpsr_webpage
     else
       $this->beam = "01";
 
-    $this->nbeams = $this->inst->ibobs["NUM_IBOB"];
+    $this->nbeams = $this->inst->roach["NUM_ROACH"];
 
     $this->title = "BPSR | Beam Viewer | ".$this->utc_start." ".$this->beam;
 
@@ -46,37 +46,32 @@ class beam_viewer extends bpsr_webpage
 ?>
     <script type='text/javascript'>  
 
-      function handle_beam_viewer_request(bv_http_request) 
+      function handle_beam_viewer_request(bv_xml_request) 
       {
-        if (bv_http_request.readyState == 4) 
+        if (bv_xml_request.readyState == 4) 
         {
-          var response = String(bv_http_request.responseText)
-          var lines = response.split("\n");
+          var xmlDoc = bv_xml_request.responseXML;
+          if (xmlDoc != null)
+          {
+            var xmlObj=xmlDoc.documentElement;
 
-          var currImg
-          var beam
-          var size
-          var type
-          var img
+            var imgs = xmlObj.getElementsByTagName("img");
 
-          for (i=0; i < lines.length-1; i++) {
+            for (i=0; i<imgs.length; i++)
+            {
+              var type = imgs[i].getAttribute("type");
+              var res  = imgs[i].getAttribute("res");
+              var file = imgs[i].childNodes[0].nodeValue;
 
-            values = lines[i].split(":::");
-            beam = values[0];
-            size = values[1];
-            type = values[2];
-            img  = values[3];
-     
-            if (size == "112x84") {
-              // ignore 
-            } else {
-              obj = document.getElementById(type+"_"+size);
+              var ele = document.getElementById(type+"_"+res);
 
-              if ((size == "400x300") && (obj.src != img)) {
-                obj.src = img
+              if ((res == "400x300") && (ele.src != file))
+              {
+                ele.src = file;
               }
-              if ((size == "1024x768") && (obj.href != img)) {
-                obj.href = img;
+              if ((res == "1024x768") && (ele.href != file))
+              {
+                ele.href = file;
               }
             }
           }
@@ -89,15 +84,15 @@ class beam_viewer extends bpsr_webpage
         var url = "beam_viewer.lib.php?update=true&type=all&utc_start=<?echo $this->utc_start?>&beam=<?echo $this->beam?>"
 
         if (window.XMLHttpRequest)
-          bv_http_request = new XMLHttpRequest()
+          bv_xml_request = new XMLHttpRequest()
         else
-          bv_http_request = new ActiveXObject("Microsoft.XMLHTTP");
+          bv_xml_request = new ActiveXObject("Microsoft.XMLHTTP");
 
-        bv_http_request.onreadystatechange = function() {
-          handle_beam_viewer_request(bv_http_request)
+        bv_xml_request.onreadystatechange = function() {
+          handle_beam_viewer_request(bv_xml_request)
         }
-        bv_http_request.open("GET", url, true)
-        bv_http_request.send(null)
+        bv_xml_request.open("GET", url, true)
+        bv_xml_request.send(null)
       }
 
     </script>
@@ -115,13 +110,19 @@ class beam_viewer extends bpsr_webpage
 
     if (file_exists($obs_start_file))
     {
-      $header = getConfigFile($obs_start_file);
+      $header = $this->inst->configFileToHash($obs_start_file);
     }
+
+    $state["FINALIZED"] = "disabled";
+    $state["sent.to.swin"] = "disabled";
+    $state["sent.to.parkes"] = "disabled";
+    $state["on.tape.swin"] = "disabled";
+    $state["on.tape.parkes"] = "disabled";
 
     echo "<table cellpadding=10px><tr><td colspan=2>\n";
 
-
     $this->openBlockHeader("Select Beams for ".$this->utc_start);
+
 ?>
     <table border=0>
       <tr valign=middle>
@@ -241,24 +242,14 @@ class beam_viewer extends bpsr_webpage
     $beam      = $get["beam"];
     $size      = "all";
     $type      = "all";
-    $ibob      = 0;
     $inst      = $this->inst;
      
     $results_dir = $inst->config["SERVER_RESULTS_DIR"];
-
-    # find the ibob control IP that corresponds to the specified beam
-    $beam_str = sprintf("%02d",$beam);
-    for ($i=0; $i<$inst->ibobs["NUM_IBOB"]; $i++) {
-      if ($inst->ibobs["BEAM_".$i] == $beam_str) {
-        $ibob = $inst->ibobs["CONTROL_IP_".$i];
-      }
-    }
-
     $actual_obs_results = array();
     $actual_stats_results = array();
 
     # get the montioring images for this obs/beam
-    $obs_results = $inst->getResults($results_dir, $utc_start, $type, $size, $beam_str);
+    $obs_results = $inst->getResults($results_dir, $utc_start, $type, $size, $beam);
     if (is_array($obs_results))
     {
       $actual_obs_results = array_pop($obs_results);
@@ -268,28 +259,32 @@ class beam_viewer extends bpsr_webpage
         $actual_obs_results = array();
     }
 
-    # get the pdbp images for this ibob
-    $stats_results = $inst->getStatsResults($results_dir, $ibob);
+    # get the pdbp images for this beam
+    $stats_results = $inst->getStatsResults($results_dir, $beam);
     if (is_array($stats_results)) 
       $actual_stats_results = array_pop($stats_results);
 
     $results = array_merge($actual_obs_results, $actual_stats_results);
 
     $types = array("bp","ts","fft","dts","pdbp","pvf");
-    $sizes = array("112x84", "400x300", "1024x768");
+    $sizes = array("400x300", "1024x768");
 
-    $string = "";
+    $xml = "<beam_viewer>";
+
     for ($i=0; $i<count($types); $i++) {
       for ($j=0; $j<count($sizes); $j++) {
         $key = $types[$i]."_".$sizes[$j];
         if (array_key_exists($key, $results))
-          $string .= $beam_str.":::".$sizes[$j].":::".$types[$i].":::".$results[$key]."\n";
+          $xml .= "<img res='".$sizes[$j]."' type='".$types[$i]."'>".$results[$key]."</img>";
         else
-          $string .= $beam_str.":::".$sizes[$j].":::".$types[$i].":::../../images/blankimage.gif\n";
+          $xml .= "<img res='".$sizes[$j]."' type='".$types[$i]."'>../../images/blankimage.gif</img>";
       }
     }
 
-    echo $string;
+    $xml .= "</beam_viewer>";
+
+    header('Content-type: text/xml');
+    echo $xml;
   }
 
 }

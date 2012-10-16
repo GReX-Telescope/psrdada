@@ -1,7 +1,7 @@
 <?PHP
 
-include("bpsr.lib.php");
-include("bpsr_webpage.lib.php");
+include_once("bpsr.lib.php");
+include_once("bpsr_webpage.lib.php");
 
 class state_banner extends bpsr_webpage 
 {
@@ -99,18 +99,18 @@ class state_banner extends bpsr_webpage
     } 
 ?>
         </td>
-        <td width="600px" align=right>
+        <td width="520px" align=right>
 <?
     if ($this->show_buttons == "true") {
 ?>
           <div class="btns" align="right">
-            <a href="javascript:popUp('beam_config.php','full')" class="btn" ><span>Beam Configuration</span></a>
-            <a href="javascript:popUp('/ganglia/','full')" class="btn" ><span>Ganglia</span></a>
-            <a href="javascript:popUp('results.lib.php?single=true', 'full')" class="btn"><span>Results</span></a>
-            <a href="javascript:popUp('archival.lib.php?single=true', 'full')" class="btn"><span>Archival</span></a>
-            <a href="javascript:popUp('control.lib.php?single=true', 'minimum')" class="btn"><span>Controls</span></a>
-            <a href="javascript:popUp('tcs_simulator.lib.php?single=true', 'full')" class="btn"><span>Test</span></a>
-            <a href="javascript:popUp('support.html', 'minimum')" class="btn"><span>Help</span></a>
+            <a href="javascript:popUp('/ganglia/','gang')" class="btn" ><span>Ganglia</span></a>
+            <a href="javascript:popUp('results.lib.php?single=true', 'res')" class="btn"><span>Results</span></a>
+            <a href="javascript:popUp('archival.lib.php?single=true', 'arc')" class="btn"><span>Archival</span></a>
+            <a href="javascript:popUp('control.lib.php?single=true', 'ctr')" class="btn"><span>Controls</span></a>
+            <a href="javascript:popUp('tcs_simulator.lib.php?single=true', 'test')" class="btn"><span>Test</span></a>
+            <a href="javascript:popUp('transient_viewer.lib.php?single=true','tran')" class="btn" ><span>Transients</span></a>
+            <a href="javascript:popUp('support.html', 'help')" class="btn"><span>Help</span></a>
           </div>
 <?  
     }
@@ -133,20 +133,29 @@ class state_banner extends bpsr_webpage
     list ($socket, $result) = openSocket($host, $port, $timeout);
     if ($result == "ok") {
       $bytes_written = socketWrite($socket, "state\r\n");
-      $state = socketRead($socket);
-      socket_close($socket);
+      list ($result, $response) = socketRead($socket);
+      if ($result == "ok")
+      {
+        $state = $response;
+        socket_close($socket);
+      }
+      $socket = 0;
     }
 
     list ($socket, $result) = openSocket($host, $port, $timeout);
-    if ($result == "ok") {
-
+    if ($result == "ok") 
+    {
       $bytes_written = socketWrite($socket, "num_pwcs\r\n");
-      $pwcs = socketRead($socket);
-      socket_close($socket);
-
+      list ($result, $response) = socketRead($socket);
+      if ($result == "ok")
+      {
+        $num_pwcs = $response;
+        socket_close($socket);
+      }
+      $socket = 0;
     }
 
-    $string = $state.":::".$pwcs;
+    $string = $state.":::".$num_pwcs;
 
     echo $string;
 

@@ -4,6 +4,9 @@
 include("state_banner.lib.php");
 include("beam_config.lib.php");
 
+$_GET["show_state"] = "false";
+$_GET["show_buttons"] = "false";
+
 $state_banner = new state_banner();
 $beam_config = new beam_config();
 
@@ -20,6 +23,7 @@ $ejs = array_merge($ejs, $beam_config->ejs);
 $css = array_unique($css);
 $ejs = array_unique($ejs);
 
+// HTML doctype declaration
 echo $state_banner->doc_type."\n";
 ?>
 <html>
