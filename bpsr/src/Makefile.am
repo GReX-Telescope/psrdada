@@ -38,10 +38,12 @@ endif
 
 if HAVE_PGPLOT
 
-bin_PROGRAMS += bpsr_dbplot bpsr_diskplot bpsr_bramplot
+bin_PROGRAMS += bpsr_dbplot bpsr_diskplot bpsr_bramplot bpsr_dadadiskareaplot bpsr_dadadiskplot
 AM_CPPFLAGS = @PGPLOT_CFLAGS@
 bpsr_dbplot_LDADD = $(LDADD) @PGPLOT_LIBS@
 bpsr_diskplot_LDADD = $(LDADD) @PGPLOT_LIBS@
+bpsr_dadadiskplot_LDADD = $(LDADD) @PGPLOT_LIBS@
+bpsr_dadadiskareaplot_LDADD = $(LDADD) @PGPLOT_LIBS@
 bpsr_bramplot_LDADD = $(LDADD) @PGPLOT_LIBS@
 endif
 
