@@ -178,7 +178,7 @@ void* udpheader_read_function (udpheader_t* udpheader, uint64_t* size)
       sequence_no = raw_sequence_no / udpheader->sequence_incr;
 
       if (udpheader->verbose == 2) {
-        fprintf(stderr, "2: %"PRIu64" [%"PRIu64"]\n", sequence_no, raw_sequence_no);
+        fprintf(stderr, "2: %"PRIu64" [%"PRIu64"] %"PRIu64" bytes\n", sequence_no, raw_sequence_no, udpheader->received);
       }
 
       if ((sequence_no != (prevnum + 1)) && (prevnum != 0)){
