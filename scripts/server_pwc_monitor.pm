@@ -152,11 +152,6 @@ sub main() {
       $read_set = new IO::Select($handle);
     }
 
-    # create a read set for selecting on the socket
-    if ($handle) {
-      $read_set = new IO::Select($handle);
-    }
-
     while ($handle && !$quit_daemon) {
 
       $timeout = 1;
@@ -210,7 +205,7 @@ sub logMessage($) {
 
   my ($line) = @_;
 
-  my $host = "";
+  my $pwc_id = "";
   my $rest = "";
   my $time = "";
   my $msg = "";
@@ -221,18 +216,18 @@ sub logMessage($) {
   my $cmd = "";
 
   # determine the source machine
-  if ($line =~ /: \[/) {
-    ($host, $rest) =  split(/: \[/, $line, 2);
+  if ($line =~ / \[/) {
+    ($pwc_id, $rest) =  split(/ \[/, $line, 2);
     $time = substr($rest,0,19);
     $msg  = substr($rest,21);
 
     # If contains a warning message
     if ($msg =~ /WARN: /) {
-      $status_file = $status_dir."/".$host.".pwc.warn" ;
+      $status_file = $status_dir."/".sprintf("%02d",$pwc_id).".pwc.warn" ;
 
     # If contains an error message
     } elsif ($msg =~ /ERR:/) {
-      $status_file = $status_dir."/".$host.".pwc.error" ;
+      $status_file = $status_dir."/".sprintf("%02d",$pwc_id).".pwc.error" ;
 
     # If we are starting a new obs, delete the error and warn files 
     } elsif ($msg =~ /STATE = prepared/) {
@@ -258,7 +253,7 @@ sub logMessage($) {
 
       print FH $msg."\n";
       close FH;
-      Dada::logMsg(2,  $dl, "Logged: ".$host.", ".$time.", ".$msg);
+      Dada::logMsg(2,  $dl, "Logged: ".$pwc_id.", ".$time.", ".$msg);
     }
   } else {
     Dada::logMsg(0, $dl, "Odd message received: ".$line);

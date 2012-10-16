@@ -221,7 +221,7 @@ sub main() {
             $read_something = 1;
             $line =~ s/\r\n$//;
             Dada::logMsg(2, $dl, "main [".$host."] <- ".$line);
-            $in->enqueue($host.":::".$line);
+            $in->enqueue($line);
           }
         }
       }
@@ -264,14 +264,13 @@ sub loggingThread($)
   my $statusfile_dir = $cfg{"STATUS_DIR"};
   my $logfile_dir    = $cfg{"SERVER_LOG_DIR"};
   
-  my $host = "";
-  my $string = "";
   my $message = "";
   my $status_file = "";
-  my $host_log_file = "";
+  my $pwc_log_file = "";
   my $combined_log_file = "";
 
   my @bits = ();
+  my $pwc = "";
   my $time = "";
   my $tag = "";
   my $lvl = "";
@@ -283,27 +282,25 @@ sub loggingThread($)
 
     if ($in->pending)
     {
-      $string = $in->dequeue();
-
-      # extract the source host and message from the string
-      ($host, $message) = split(/:::/, $string, 2);
+      $message = $in->dequeue();
 
       # extract the message parameters
-      @bits = split(/\|/, $message, 5);
+      @bits = split(/\|/, $message, 6);
 
-      if ($#bits == 4) 
+      if ($#bits == 5) 
       {
-        $time = $bits[0];
-        $tag  = $bits[1];
-        $lvl  = $bits[2];
-        $src  = $bits[3];
-        $msg  = $bits[4];
+        $pwc  = $bits[0];
+        $time = $bits[1];
+        $tag  = $bits[2];
+        $lvl  = $bits[3];
+        $src  = $bits[4];
+        $msg  = $bits[5];
 
-        $host_log_file = $logfile_dir."/".$host.".".$tag.".log";
+        $pwc_log_file = $logfile_dir."/".$pwc.".".$tag.".log";
         $combined_log_file = $logfile_dir."/".$master_log_prefix.".".$tag.".log";
 
         if (($lvl eq "WARN") || ($lvl eq "ERROR")) {
-          $status_file = $statusfile_dir."/".$host.".".$tag.".".lc($lvl);
+          $status_file = $statusfile_dir."/".$pwc.".".$tag.".".lc($lvl);
         } else {
           $status_file = "";
         }
@@ -313,13 +310,13 @@ sub loggingThread($)
         } else {
           $message = "[".$time."] ".$src.": ".$lvl.": ".$msg;
         }
-        Dada::logMsg(3, $dl, "loggingThread: ".$host." ".$message);
+        Dada::logMsg(3, $dl, "loggingThread: ".$pwc." ".$message);
 
-        # log message to the host specific log file
-        if (-f $host_log_file) {
-          open(FH,">>".$host_log_file);
+        # log message to the PWC specific log file
+        if (-f $pwc_log_file) {
+          open(FH,">>".$pwc_log_file);
         } else {
-          open(FH,">".$host_log_file);
+          open(FH,">".$pwc_log_file);
         }
         print FH $message."\n";
         close FH;
@@ -330,7 +327,7 @@ sub loggingThread($)
         } else {
           open(FH,">".$combined_log_file);
         }
-        print FH $host." ".$message."\n";
+        print FH sprintf("%02d",$pwc)." ".$message."\n";
         close FH;
 
         # If the file is a warning or error, we create a warn/error file too
