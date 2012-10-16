@@ -21,15 +21,10 @@ use Bpsr;
 #
 Dada::preventDuplicateDaemon(basename($0));
 
-
 #
 # Constants
 #
 use constant DL           => 1;
-use constant IMAGE_TYPE   => ".png";
-use constant PIDFILE      => "bpsr_results_manager.pid";
-use constant LOGFILE      => "bpsr_results_manager.log";
-use constant QUITFILE     => "bpsr_results_manager.quit";
 
 
 #
@@ -37,9 +32,9 @@ use constant QUITFILE     => "bpsr_results_manager.quit";
 #
 our %cfg = Bpsr::getConfig();
 our $quit_daemon : shared = 0;
-our $error = $cfg{"STATUS_DIR"}."/bpsr_results_manager.error";
-our $warn  = $cfg{"STATUS_DIR"}."/bpsr_results_manager.warn";
-
+our $daemon_name : shared = Dada::daemonBaseName($0);
+our $error = $cfg{"STATUS_DIR"}."/".$daemon_name.".error";
+our $warn  = $cfg{"STATUS_DIR"}."/".$daemon_name.".warn";
 
 #
 # Signal Handlers
@@ -47,273 +42,472 @@ our $warn  = $cfg{"STATUS_DIR"}."/bpsr_results_manager.warn";
 $SIG{INT} = \&sigHandle;
 $SIG{TERM} = \&sigHandle;
 
-
-#
-# Local Variable Declarations
-#
-
-my $logfile = $cfg{"SERVER_LOG_DIR"}."/".LOGFILE;
-my $pidfile = $cfg{"SERVER_CONTROL_DIR"}."/".PIDFILE;
-
-my $bindir              = Dada::getCurrentBinaryVersion();
-my $obs_results_dir     = $cfg{"SERVER_RESULTS_DIR"};
-my $obs_archive_dir     = $cfg{"SERVER_ARCHIVE_DIR"};
-my $daemon_control_thread = 0;
-
-my $cmd;
-my $timestamp = "";
-my $fname = "";
-
-# This will have to be determined */
-my $have_new_archive = 1;
-my $node;
-my $nodedir;
-
-my %unprocessed = ();
-my $key;
-my $value;
-my $num_results = 0;
-my $current_key = 0;
-
-my $fres = "";
-my $tres = "";
-my $current_archive = "";
-my $last_archive = "";
-my $obs_dir = "";
-
-my $dir;
-my @subdirs;
-
-my @beamdirs;
-my $beamdir;
-
-my @keys;
-my %processed;
-my $i;
-my $j;
-
-my $result = "";
-my $response = "";
-my $counter = 0;
-
-# clear the error and warning files if they exist
-if ( -f $warn ) {
-  unlink ($warn);
-}
-if ( -f $error) {
-  unlink ($error);
-}
-
-# Autoflush output
-$| = 1;
-
 # Sanity check for this script
-if (index($cfg{"SERVER_ALIASES"}, $ENV{'HOSTNAME'}) < 0 ) {
+if (index($cfg{"SERVER_ALIASES"}, $ENV{'HOSTNAME'}) < 0 ) 
+{
   print STDERR "ERROR: Cannot run this script on ".$ENV{'HOSTNAME'}."\n";
   print STDERR "       Must be run on the configured server: ".$cfg{"SERVER_HOST"}."\n";
   exit(1);
 }
 
-
-# Redirect standard output and error
-Dada::daemonize($logfile, $pidfile);
-
-Dada::logMsg(0, DL, "STARTING SCRIPT");
-
-# Start the daemon control thread
-$daemon_control_thread = threads->new(\&daemonControlThread);
-
-chdir $obs_results_dir;
-
-
 #
 # Main Loop
 #
-%processed = ();
-my $curr_processing = "";
+{
 
-while (!$quit_daemon) {
+  my $log_file = $cfg{"SERVER_LOG_DIR"}."/".$daemon_name.".log";
+  my $pid_file = $cfg{"SERVER_CONTROL_DIR"}."/".$daemon_name.".pid";
+  my $obs_results_dir = $cfg{"SERVER_RESULTS_DIR"};
+  my $control_thread = 0;
+  my $coincidencer_thread = 0;
 
-  $dir = "";
-  @subdirs = ();
+  my $cmd;
+  my $dir;
+  my @subdirs;
 
-  # TODO check that directories are correctly sorted by UTC_START time
-  Dada::logMsg(2, DL, "Main While Loop, looking for data in ".$obs_results_dir);
+  my $i;
+  my $j;
 
-  # get the list of all the current observations (should only be 1)
-  $cmd = "find ".$obs_results_dir." -maxdepth 2 -type f -name 'obs.processing' ".
-         "-printf '\%h\\n' | awk  -F/ '{print \$NF}' | sort";
-  Dada::logMsg(2, DL, "main: ".$cmd);
-  ($result, $response) = Dada::mySystem($cmd);
-  Dada::logMsg(2, DL, "main: ".$result." ".$response);
+  my $result = "";
+  my $response = "";
+  my $counter = 0;
 
-  if ($result ne "ok") {
-    Dada::logMsgWarn($warn, "main: find command failed: ".$response);
+  # clear the error and warning files if they exist
+  if ( -f $warn ) {
+    unlink ($warn);
+  }
+  if ( -f $error) {
+    unlink ($error);
+  }
 
-  } elsif ($response eq "") {
-    Dada::logMsg(2, DL, "main: nothing to process");
+  # Autoflush output
+  $| = 1;
 
-  } else {
+  # Redirect standard output and error
+  Dada::daemonize($log_file, $pid_file);
 
-    @subdirs = split(/\n/, $response);
-    Dada::logMsg(2, DL, "main: found ".($#subdirs+1)." obs.processing files");
+  Dada::logMsg(0, DL, "STARTING SCRIPT");
 
-    my $h=0;
-    my $age = 0;
-    my $nfiles = 0;
-    my $adir = "";
+  chdir $cfg{"SERVER_RESULTS_DIR"};
 
-    # For each observation
-    for ($h=0; (($h<=$#subdirs) && (!$quit_daemon)); $h++) {
+  # Start the daemon control thread
+  $control_thread = threads->new(\&controlThread, $pid_file);
 
-      @beamdirs = ();
+  # start the coincidencer thread 
+  # $coincidencer_thread = threads->new(\&coincidencerThread);
 
-      $dir = $obs_results_dir."/".$subdirs[$h];
-      $dir = $subdirs[$h];
-      $adir = $obs_archive_dir."/".$subdirs[$h];
+  my $curr_processing = "";
+  
+  while (!$quit_daemon)
+  {
+    $dir = "";
+    @subdirs = ();
 
-      Dada::logMsg(2, DL, "main: testing ".$subdirs[$h]);
+    # TODO check that directories are correctly sorted by UTC_START time
+    Dada::logMsg(2, DL, "Main While Loop, looking for data in ".$obs_results_dir);
 
-      # If this observation has not been finished, archived or transferred
-      if (!( (-f $adir."/obs.archived") || (-f $adir."/obs.finished") || (-f $adir."/obs.deleted") ||
-             (-f $adir."/obs.transferred") || (!(-d $adir)) )) {
+    # get the list of all the current observations (should only be 1)
+    $cmd = "find ".$obs_results_dir." -mindepth 2 -maxdepth 2 -type f -name 'obs.processing' ".
+           "-printf '\%h\\n' | awk  -F/ '{print \$NF}' | sort";
+    Dada::logMsg(2, DL, "main: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(2, DL, "main: ".$result." ".$response);
 
-        # determine the age of the observation and number of files that can be processed in it
-        Dada::logMsg(2, DL, "main: getObsAge(".$dir.")");
-        ($age, $nfiles) = getObsAge($dir); 
-        Dada::logMsg(2, DL, "main: getObsAge() ".$age." ".$nfiles);
+    if ($result ne "ok") {
+      Dada::logMsgWarn($warn, "main: find command failed: ".$response);
 
-        # If nothing has arrived in 120 seconds, mark it as failed
-        if ($age < -120) {
+    } elsif ($response eq "") {
+      Dada::logMsg(2, DL, "main: nothing to process");
 
-          markObsState($dir, "processing", "failed");
+      Dada::logMsg(2, DL, "main: checkDeletedObs()");
+      ($result, $response) = checkDeletedObs();
+      Dada::logMsg(2, DL, "main: checkDeletedObs() ".$result ." ".$response);
 
-        # If the obs age is over five minutes, then we consider it finished
-        } elsif (($age > 60) && (! -f $dir."/rfi.processing")) {
+    } else {
 
-          Dada::logMsg(1, DL, "Finalising observation: ".$dir);
+      @subdirs = split(/\n/, $response);
+      Dada::logMsg(2, DL, "main: found ".($#subdirs+1)." obs.processing files");
 
-          # remove any old files in the archive dir
-          cleanUpObs($obs_results_dir."/".$dir);
+      my $h=0;
+      my $age = 0;
+      my $n_png_files = 0;
+      my $n_cand_files = 0;
 
-          # we need to patch the TCS logs into the file!
-          ($result, $response) = patchInTcsLogs($obs_archive_dir, $dir);
-          if ($result ne "ok") {
-            Dada::logMsgWarn($warn, "patchInTcsLogs failed for ".$dir.": ".$response);
+      # For each observation
+      for ($h=0; (($h<=$#subdirs) && (!$quit_daemon)); $h++) 
+      {
+        $dir = $subdirs[$h];
+
+        Dada::logMsg(2, DL, "main: testing ".$subdirs[$h]);
+
+        # If this observation has not been finished, archived or transferred
+        if (!( (-f $dir."/obs.archived") || (-f $dir."/obs.finished") || (-f $dir."/obs.deleted") ||
+               (-f $dir."/obs.transferred") ) ) {
+
+          # determine the age of the observation and number of files that can be processed in it
+          Dada::logMsg(2, DL, "main: getObsAge(".$dir.")");
+          ($age, $n_png_files, $n_cand_files) = getObsAge($dir); 
+          Dada::logMsg(2, DL, "main: getObsAge() ".$age." ".$n_png_files." ".$n_cand_files);
+
+          # If nothing has arrived in 120 seconds, mark it as failed
+          if ($age < -120) 
+          {
             markObsState($dir, "processing", "failed");
-            next;
-          }
+          } 
+          # If the obs age is over five minutes, then we consider it finished
+          elsif ($age > 60) 
+          {
 
-          # If the TCS log file didn't exist, we cannot do the rest of these steps
-          if ($response eq "failed to get TCS log file") {
+            Dada::logMsg(1, DL, "Finalising observation: ".$dir);
+
+            # remove any old files in the archive dir
+            cleanUpObs($obs_results_dir."/".$dir);
+
+            # we need to patch the TCS logs into the file!
+            # ($result, $response) = patchInTcsLogs($obs_archive_dir, $dir);
+            # if ($result ne "ok") {
+            #   Dada::logMsgWarn($warn, "patchInTcsLogs failed for ".$dir.": ".$response);
+            #   markObsState($dir, "processing", "failed");
+            #   next;
+            # }
+
+            # If the TCS log file didn't exist, we cannot do the rest of these steps
+            # if ($response eq "failed to get TCS log file") {
+            #   markObsState($dir, "processing", "finished");
+            #   next;
+            # }
+        
+            # copy psrxml files to special dir for mike to deal with
+            # ($result, $response) = copyPsrxmlToDb($obs_archive_dir, $dir);
+            # if ($result ne "ok") {
+            #   Dada::logMsgWarn($warn, "copyPsrxmlToDb failed for ".$dir.": ".$response);
+            #   markObsState($dir, "processing", "failed");
+            #   $quit_daemon = 1;
+            #   next;
+            # }
+
+            # only observations run with the_decimator produce .fil and .psrxml files, so 
+            # check the reponse from copyPsrxmlToDb to find out if we have psrxml files
+            # if ($response > 0) {
+
+              # fix the .fil headers from the psrxml file
+            #   ($result, $response) = fixFilHeaders($obs_archive_dir, $dir);
+            #   if ($result ne "ok") {
+            #     Dada::logMsgWarn($warn, "fixFilHeaders failed for ".$dir.": ".$response);
+            #     markObsState($dir, "processing", "failed");
+            #     $quit_daemon = 1;
+            #     next;
+            #   }
+            # }
+
+            # Otherwise all the post processing parts are ok and we can mark this obs
+            # as finished, and thereby ready for xfer
             markObsState($dir, "processing", "finished");
-            next;
-          }
-      
-          # copy psrxml files to special dir for mike to deal with
-          ($result, $response) = copyPsrxmlToDb($obs_archive_dir, $dir);
 
-          if ($result ne "ok") {
-            Dada::logMsgWarn($warn, "copyPsrxmlToDb failed for ".$dir.": ".$response);
-            markObsState($dir, "processing", "failed");
-            $quit_daemon = 1;
-            next;
-          }
+          } 
+          # Else this is an active observation, try to process the .pol
+          # files that may exist in each beam
+          else 
+          {
+            if ($n_png_files > 0) 
+            {
+              if ($dir eq $curr_processing) {
+                Dada::logMsg(2, DL, "Received ".$n_png_files." png files for ".$dir);
+              } else {
+                $curr_processing = $dir;
+                Dada::logMsg(1, DL, "Receiving png files for ".$dir);
+              }
 
-          # only observations run with the_decimator produce .fil and .psrxml files, so 
-          # check the reponse from copyPsrxmlToDb to find out if we have psrxml files
-          if ($response > 0) {
-
-            # fix the .fil headers from the psrxml file
-            ($result, $response) = fixFilHeaders($obs_archive_dir, $dir);
-            if ($result ne "ok") {
-              Dada::logMsgWarn($warn, "fixFilHeaders failed for ".$dir.": ".$response);
-              markObsState($dir, "processing", "failed");
-              $quit_daemon = 1;
-              next;
-            }
-          }
-
-          # Otherwise all the post processing parts are ok and we can mark this obs
-          # as finished, and thereby ready for xfer
-          markObsState($dir, "processing", "finished");
-
-        # Else this is an active observation, try to process the .pol
-        # files that may exist in each beam
-        } else {
-
-          if ($nfiles > 0) {
-
-            if ($dir eq $curr_processing) {
-              Dada::logMsg(2, DL, "Received ".$nfiles." png files for ".$dir);
-            } else {
-              $curr_processing = $dir;
-              Dada::logMsg(1, DL, "Receiving png files for ".$dir);
+              # Now delete all old png files
+              removeAllOldPngs($dir);
             }
 
-            # Now delete all old png files
-            removeAllOldPngs($dir);
+            if ($n_cand_files > 0)
+            {
+              if ($dir eq $curr_processing) {
+                Dada::logMsg(2, DL, "Received ".$n_cand_files." cand files for ".$dir);
+              } else {
+                $curr_processing = $dir;
+                Dada::logMsg(1, DL, "Receiving cand files for ".$dir);
+              }
+
+              ($result, $response) = processCandidates($dir);
+              removeOldPngs($dir, "cands", "1024x768");
+              removeOldPngs($dir, "dm_vs_time", "700x240");
+            }
           }
         }
-      }
-    } 
-  }
+      } 
+    }
 
-  # If we have been asked to exit, dont sleep
-  $counter = 10;
-  while ((!$quit_daemon) && ($counter > 0)) {
+    # If we have been asked to exit, dont sleep
+    $counter = 5;
+    while ((!$quit_daemon) && ($counter > 0)) {
     sleep(1);
     $counter--;
+    }
   }
 
+  # Rejoin our daemon control thread
+  $control_thread->join();
+
+  # $coincidencer_thread->join();
+                                                                                
+  Dada::logMsg(0, DL, "STOPPING SCRIPT");
+
+  exit(0);
 }
-
-# Rejoin our daemon control thread
-$daemon_control_thread->join();
-                                                                                
-Dada::logMsg(0, DL, "STOPPING SCRIPT");
-                                                                                
-
-
-exit(0);
 
 ###############################################################################
 #
 # Functions
 #
 
+sub processCandidatesNew($)
+{
+  (my $obs) = @_;
 
+  my $cmd = "";
+  my $result = "";
+  my $response = "";
 
-sub countObsStart($) {
+  my $cands_record = $cfg{"SERVER_RESULTS_DIR"}."/".$obs."/all_candidates.dat";
+  my @files = ();
+  my $file = "";
+  my $n_processed = 0;
 
-  my ($dir) = @_;
+  # for the given obs, a list of the candiate files to be parsed beams 
+  $cmd = "find ".$cfg{"SERVER_RESULTS_DIR"}."/".$obs." -mindepth 1 -maxdepth 1 -type f -name '2*_all.cand' | sort";
+  Dada::logMsg(2, DL, "processCandidates: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, DL, "processCandidates: ".$result." ".$response);
 
-  my $cmd = "find ".$dir." -name \"obs.start\" | wc -l";
-  my $find_result = `$cmd`;
-  chomp($find_result);
-  return $find_result;
-
-}
-
-sub deleteArchives($$) {
-
-  (my $dir, my $archive) = @_;
-
-  my $cmd = "rm -f ".$dir."/*/".$archive;
-  Dada::logMsg(2, DL, "Deleting processed archives ".$cmd);
-  my $response = `$cmd`;
-  if ($? != 0) {
-    Dada::logMsgWarn($warn, "rm failed: \"".$response."\"");
+  if ($result ne "ok")
+  {
+    Dada::logMsg(0, DL, "processCandidates: ".$cmd." failed: ".$response);
+    Dada::logMsgWarn($warn, "could not find candidate files");
+    return ("fail", "could not get candiate list");
   }
 
-  return 0;
+  # count the number of candidate files to each epoch
+  @files = split(/\n/, $response);
+  foreach $file ( @files )
+  {
+    # now append the .cands files to the accumulated total for this observation
+    if (-f $cands_record)
+    {
+      $cmd = "cat ".$file." >> ".$cands_record;
+    }
+    else
+    {
+      $cmd = "cp ".$file." ".$cands_record;
+    }
+    Dada::logMsg(2, DL, "processCandidates: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, DL, "processCandidates: ".$result." ".$response);
+    if ($result ne "ok")
+    {
+      Dada::logMsg(0, DL, "processCandidates: ".$cmd." failed: ".$response);
+      Dada::logMsgWarn($warn, "could not append output to record");
+      return ("fail", "could not append output to record");
+    }
 
+    # delete the intermin candidates file
+    unlink $file;
+
+    $n_processed++;
+  }
+
+  if ($n_processed > 0)
+  {
+    # generate 1024x768 large plot and candidate XML list
+    $cmd = $cfg{"SCRIPTS_DIR"}."/trans_gen_overview.py -cands_file ".$obs."/all_candidates.dat -snr_cut 6.5 -filter_cut 11 -cand_list_xml > ".$obs."/cand_list.xml";
+    Dada::logMsg(2, DL, "processCandidates: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, DL, "processCandidates: ".$result." ".$response);
+    if ($result ne "ok")
+    {
+      Dada::logMsg(0, DL, "processCandidates: ".$cmd." failed: ".$response);
+    }
+
+    my $curr_time = Dada::getCurrentDadaTime();
+    $cmd = "mv overview_1024x768.tmp.png ".$obs."/".$curr_time.".cands_1024x768.png";
+    Dada::logMsg(2, DL, "processCandidates: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, DL, "processCandidates: ".$result." ".$response);
+    if ($result ne "ok")
+    {
+      Dada::logMsg(0, DL, "processCandidates: ".$cmd." failed: ".$response);
+    }
+
+    # generate 700x 240 small plot
+    $cmd = $cfg{"SCRIPTS_DIR"}."/trans_gen_overview.py -cands_file ".$obs."/all_candidates.dat -snr_cut 7.0 -filter_cut 11 -just_time_dm -resolution 700x240";
+    Dada::logMsg(2, DL, "processCandidates: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, DL, "processCandidates: ".$result." ".$response);
+    if ($result ne "ok")
+    {
+      Dada::logMsg(0, DL, "processCandidates: ".$cmd." failed: ".$response);
+    }
+
+    $curr_time = Dada::getCurrentDadaTime();
+    $cmd = "mv overview_700x240.tmp.png ".$obs."/".$curr_time.".dm_vs_time_700x240.png";
+    Dada::logMsg(2, DL, "processCandidates: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, DL, "processCandidates: ".$result." ".$response);
+    if ($result ne "ok")
+    {
+      Dada::logMsg(0, DL, "processCandidates: ".$cmd." failed: ".$response);
+    }
+  }
 }
 
+sub processCandidates($)
+{
+  (my $obs) = @_;
 
-#
+  my $cmd = "";
+  my $result = "";
+  my $response = "";
+
+  my $beam = "";
+  my $file = "";
+  my @files = ();
+  my %cands = ();
+  my @bits = ();
+
+  my $file_prefix = "";
+  my $junk = "";
+  my $cands_record = $cfg{"SERVER_RESULTS_DIR"}."/".$obs."/all_candidates.dat";
+  my $output_file = "";
+  my $n_processed = 0;
+
+  # for the given obs, build a list of the candiate beams 
+  $cmd = "find ".$cfg{"SERVER_RESULTS_DIR"}."/".$obs." -mindepth 2 -maxdepth 2 -type f -name '2*_??.cand'";
+  Dada::logMsg(2, DL, "processCandidates: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, DL, "processCandidates: ".$result." ".$response);
+  
+  if ($result ne "ok")
+  {
+    Dada::logMsg(0, DL, "processCandidates: ".$cmd." failed: ".$response);
+    Dada::logMsgWarn($warn, "could not find candidate files");
+    return ("fail", "could not get candiate list");
+  }
+ 
+  # count the number of candidate files to each epoch
+  @files = split(/\n/, $response);
+  foreach $file ( @files )
+  {
+    @bits = split(/\//, $file);
+    
+    $beam = $bits[$#bits - 1];
+    $file = $bits[$#bits - 0];
+    ($file_prefix, $junk) = split(/_/, $file, 2); 
+
+    if (! exists($cands{$file_prefix}))
+    {
+      $cands{$file_prefix} = 0;
+    }
+    $cands{$file_prefix} += 1;
+  }
+
+  # now do some plotting
+  chdir $cfg{"SERVER_RESULTS_DIR"}."/".$obs;
+
+  @files = sort keys %cands;
+  foreach $file ( @files )
+  {
+    # TODO better logic 
+    if (($cands{$file} == $cfg{"NUM_PWC"}) || ($#files > 0))
+    {
+      $cmd = "coincidencer ./??/".$file."_??.cand";
+      Dada::logMsg(2, DL, "processCandidates: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      Dada::logMsg(3, DL, "processCandidates: ".$result." ".$response);
+      if ($result ne "ok")
+      {
+        Dada::logMsg(0, DL, "processCandidates: ".$cmd." failed: ".$response);
+        Dada::logMsgWarn($warn, "coincidencer failed to process candidates");
+        return ("fail", "could not process candidates");
+      }
+
+      # remove beam candidate files
+      $cmd = "rm -f ./??/".$file."_??.cand";
+      Dada::logMsg(2, DL, "processCandidates: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      Dada::logMsg(3, DL, "processCandidates: ".$result." ".$response);
+      if ($result ne "ok")
+      {
+        Dada::logMsg(0, DL, "processCandidates: ".$cmd." failed: ".$response);
+        Dada::logMsgWarn($warn, "could not removed processed candidates");
+        return ("fail", "could not remove processed candidates");
+      }
+      
+      $output_file = $file."_all.cand";
+
+      # now append the .cands files to the accumulated total for this observation
+      if (-f $cands_record)
+      {
+        $cmd = "cat ".$output_file." >> ".$cands_record;
+      }
+      else
+      {
+        $cmd = "cp ".$output_file." ".$cands_record;
+      }
+      Dada::logMsg(2, DL, "processCandidates: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      Dada::logMsg(3, DL, "processCandidates: ".$result." ".$response);
+      if ($result ne "ok")
+      {
+        Dada::logMsg(0, DL, "processCandidates: ".$cmd." failed: ".$response);
+        Dada::logMsgWarn($warn, "could not append output to record");
+        return ("fail", "could not append output to record");
+      }
+
+      # delete the intermin candidates file
+      unlink $output_file;
+
+      $n_processed++;
+    }
+    else
+    {
+      Dada::logMsg(2, DL, "processCandidates: skipping ".$obs."/??/".$file." as only ".$cands{$file}." candidates present");
+    }
+  }
+ 
+  if ($n_processed > 0)
+  {
+    # generate 1024x768 large plot and candidate XML list
+    $cmd = $cfg{"SCRIPTS_DIR"}."/trans_gen_overview.py -snr_cut 6.5 -filter_cut 11 -cand_list_xml > cand_list.xml";
+    Dada::logMsg(2, DL, "processCandidates: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, DL, "processCandidates: ".$result." ".$response);
+
+    my $curr_time = Dada::getCurrentDadaTime();
+    $cmd = "mv overview_1024x768.tmp.png ".$curr_time.".cands_1024x768.png";
+    Dada::logMsg(2, DL, "processCandidates: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, DL, "processCandidates: ".$result." ".$response);
+
+    # generate 700x 240 small plot
+    $cmd = $cfg{"SCRIPTS_DIR"}."/trans_gen_overview.py -snr_cut 7.0 -filter_cut 11 -just_time_dm -resolution 700x240";
+    Dada::logMsg(2, DL, "processCandidates: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, DL, "processCandidates: ".$result." ".$response);
+
+    $curr_time = Dada::getCurrentDadaTime();
+    $cmd = "mv overview_700x240.tmp.png ".$curr_time.".dm_vs_time_700x240.png";
+    Dada::logMsg(2, DL, "processCandidates: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, DL, "processCandidates: ".$result." ".$response);
+
+  }
+
+  chdir $cfg{"SERVER_RESULTS_DIR"};
+}
+
 # Handle INT AND TERM signals
-#
 sub sigHandle($) {
 
   my $sigName = shift;
@@ -325,25 +519,37 @@ sub sigHandle($) {
 
 }
                                                                                 
-sub daemonControlThread() {
+sub controlThread($) 
+{
+  (my $pid_file) = @_;
+  Dada::logMsg(2, DL, "controlThread: starting");
 
-  Dada::logMsg(2, DL, "Daemon control thread starting");
-
-  my $pidfile = $cfg{"SERVER_CONTROL_DIR"}."/".PIDFILE;
-  my $daemon_quit_file = $cfg{"SERVER_CONTROL_DIR"}."/".QUITFILE;
+  my $quit_file = $cfg{"SERVER_CONTROL_DIR"}."/".$daemon_name.".quit";
 
   # Poll for the existence of the control file
-  while ((!-f $daemon_quit_file) && (!$quit_daemon)) {
+  while ((!-f $quit_file) && (!$quit_daemon)) {
     sleep(1);
   }
 
   # set the global variable to quit the daemon
   $quit_daemon = 1;
 
-  Dada::logMsg(2, DL, "Unlinking PID file: ".$pidfile);
-  unlink($pidfile);
+  my $result = "";
+  my $response = "";
 
-  Dada::logMsg(2, DL, "Daemon control thread ending");
+  Dada::logMsg(0, DL, "controlThread: killProcess(^coincidencer)");
+  ($result, $response) = Dada::killProcess("^coincidencer");
+  Dada::logMsg(0, DL, "controlThread: ".$result." ".$response);
+
+  
+
+  if (-f $pid_file)
+  {
+    Dada::logMsg(2, DL, "controlThread: unlinking PID file: ".$pid_file);
+    unlink($pid_file);
+  }
+
+  Dada::logMsg(2, DL, "controlThread: exiting");
 
 }
 
@@ -360,6 +566,7 @@ sub getObsAge($) {
   my $response = "";
   my $num_beams = 0;
   my $num_png_files = 0;
+  my $num_cand_files = 0;
   my $age = 0;
   my $now = 0;
 
@@ -383,6 +590,15 @@ sub getObsAge($) {
 
     $num_png_files = $response;    
     Dada::logMsg(2, DL, "getObsAge: num_png_files=".$num_png_files);
+
+    # Get the number of candidate files
+    $cmd = "find ".$o." -mindepth 2 -name '2*_??.cand' -printf '\%f\\n' | wc -l";
+    Dada::logMsg(3, DL, "getObsAge: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, DL, "getObsAge: ".$result." ".$response);
+
+    $num_cand_files = $response;
+    Dada::logMsg(2, DL, "getObsAge: num_cand_files=".$num_cand_files);
 
     # If we have any png files
     if ($num_png_files > 0) {
@@ -440,25 +656,9 @@ sub getObsAge($) {
 
   }
 
-  return ($age, $num_png_files);
+  return ($age, $num_png_files, $num_cand_files);
 }
 
-
-sub deleteObservation($) {
-
-  (my $dir) = @_;
-
-  if (-d $dir) {
-
-    Dada::logMsg(1, DL, "Deleting observation: ".$dir);
-    $cmd = "rm -rf $dir";
-    `$cmd`;
-    return $?;
-  } else {
-    return 1;
-  }
-
-}
 
 #
 # Cleans up an observation, removing all old files, but leaves 1 set of image files
@@ -488,11 +688,9 @@ sub cleanUpObs($) {
   # Clean up all the old png files, except for the final ones
   Dada::logMsg(2, DL, "cleanUpObs: removing any old png files");
   removeAllOldPngs($dir);
+  removeOldPngs($dir, "cands", "1024x768");
 
 }
-
-
-
 
 #
 # Remove all old images in the sub directories
@@ -541,7 +739,8 @@ sub removeAllOldPngs($) {
   }
 }
 
-sub removeOldPngs($$$) {
+sub removeOldPngs($$$) 
+{
 
   my ($dir, $type, $res) = @_;
 
@@ -553,6 +752,7 @@ sub removeOldPngs($$$) {
   my $time = 0;
   my $file = "";
   my $line = "";
+  my $i = 0;
 
   # if there is more than one result in this category and its > 20 seconds old, delete it
   for ($i=1; $i<=$#array; $i++) {
@@ -622,6 +822,7 @@ sub copyPsrxmlToDb($$) {
 
   my ($obs_dir, $utc_name) = @_;
 
+  my $cmd = "";
   my $result = "";
   my $response = "";
   my $db_dump_dir = "/nfs/control/bpsr/header_files/";
@@ -636,6 +837,7 @@ sub copyPsrxmlToDb($$) {
   my $day = "";
   my $submitted = 0;
   my $n_psrxml_files = 0;
+  my $i = 0;
 
   # Check if this psrxml file has already been submitted
   $day = substr $utc_name, 0, 10;
@@ -684,10 +886,9 @@ sub copyPsrxmlToDb($$) {
   return ("ok", $n_psrxml_files);
 }
 
-#
 # Marks an observation as finished
-# 
-sub markObsState($$$) {
+sub markObsState($$$) 
+{
 
   my ($o, $old, $new) = @_;
 
@@ -696,7 +897,6 @@ sub markObsState($$$) {
   my $cmd = "";
   my $result = "";
   my $response = "";
-  my $archives_dir = $cfg{"SERVER_ARCHIVE_DIR"};
   my $results_dir  = $cfg{"SERVER_RESULTS_DIR"};
   my $state_change = $old." -> ".$new;
   my $old_file = "obs.".$old;
@@ -711,11 +911,6 @@ sub markObsState($$$) {
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(2, DL, "markObsState: ".$result." ".$response);
 
-  $cmd = "touch ".$archives_dir."/".$o."/".$new_file;
-  Dada::logMsg(2, DL, "markObsState: ".$cmd);
-  ($result, $response) = Dada::mySystem($cmd);
-  Dada::logMsg(2, DL, "markObsState: ".$result." ".$response);
-
   $file = $results_dir."/".$o."/".$old_file;
   if ( -f $file ) {
     $ndel = unlink ($file);
@@ -726,44 +921,52 @@ sub markObsState($$$) {
     Dada::logMsgWarn($warn, "markObsState: expected file missing: ".$file);
   }
 
-  $file = $archives_dir."/".$o."/".$old_file;
-  if ( -f $file ) {
-    $ndel = unlink ($file);
-    if ($ndel != 1) {
-      Dada::logMsgWarn($warn, "markObsState: could not unlink ".$file);
-    }
-  } else {
-    Dada::logMsgWarn($warn, "markObsState: expected file missing: ".$file);
-  }
-
   # touch a beam.finished in all the client beam directories
-  $cmd = "find ".$archives_dir."/".$o." -mindepth 1 -maxdepth 1 -type l -name '??' -printf '\%f\n'";
-  Dada::logMsg(2, DL, "markObsState: ".$cmd);
-  ($result, $response) = Dada::mySystem($cmd);
-  Dada::logMsg(2, DL, "markObsState: ".$result." ".$response);
-  if (($result ne "ok") || ($response eq ""))
-  {
-    Dada::logMsgWarn($warn, "markObsState: could get beam list");
-  } 
-  else
-  {
-    my @beams = split(/\n/, $response);
-    my $i = 0;
-    my $b = "";
-    for ($i=0; $i<=$#beams; $i++)
-    {
-      $b = $beams[$i]; 
-      $cmd = "touch ".$archives_dir."/".$o."/".$b."/beam.finished";
-      Dada::logMsg(2, DL, "markObsState: ".$cmd);
-      ($result, $response) = Dada::mySystem($cmd);
-      Dada::logMsg(2, DL, "markObsState: ".$result." ".$response);
-      if ($result ne "ok") 
-      {
-        Dada::logMsgWarn($warn, "markObsState: could touch ".$o."/".$b."/beam.finished");
-      }
-    }
-  }
+  # $cmd = "find ".$archives_dir."/".$o." -mindepth 1 -maxdepth 1 -type l -name '??' -printf '\%f\n'";
+  # Dada::logMsg(2, DL, "markObsState: ".$cmd);
+  # ($result, $response) = Dada::mySystem($cmd);
+  # Dada::logMsg(2, DL, "markObsState: ".$result." ".$response);
+  # if (($result ne "ok") || ($response eq ""))
+  # {
+  #   Dada::logMsgWarn($warn, "markObsState: could get beam list");
+  # } 
+  # else
+  # {
+  #   my @beams = split(/\n/, $response);
+  #   my $i = 0;
+  #   my $b = "";
+  #   for ($i=0; $i<=$#beams; $i++)
+  #   {
+  #     $b = $beams[$i]; 
+  #     $cmd = "touch ".$archives_dir."/".$o."/".$b."/beam.finished";
+  #     Dada::logMsg(2, DL, "markObsState: ".$cmd);
+  #    ($result, $response) = Dada::mySystem($cmd);
+  #     Dada::logMsg(2, DL, "markObsState: ".$result." ".$response);
+  #     if ($result ne "ok") 
+  #     {
+  #       Dada::logMsgWarn($warn, "markObsState: could touch ".$o."/".$b."/beam.finished");
+  #     }
+  #   }
+  # }
 
+}
+
+sub coincidencerThread()
+{
+
+  Dada::logMsg(1, DL, "coincidencerThread: starting");
+
+  my $cmd = "";
+  my $result = "";
+  my $response = "";
+
+  $cmd = "coincidencer -a ".$cfg{"SERVER_HOST"}." -p ".$cfg{"SERVER_COINCIDENCER_PORT"}.
+         " -n ".$cfg{"NUM_PWC"}." -v | server_bpsr_server_logger.pl -n coin";
+  Dada::logMsg(1, DL, "coincidencerThread: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(1, DL, "coincidencerThread: ".$result." ".$response);
+
+  Dada::logMsg(1, DL, "coincidencerThread: exiting");
 }
 
 #
@@ -819,4 +1022,109 @@ sub fixFilHeaders($$) {
 
   return ($fn_result, $response);
 }
+
+# Looks for observations that have been marked obs.deleted and moves them
+# the OLD_RESULTS_DIR if deleted && > 2 weeks old
+#
+sub checkDeletedObs() 
+{
+  my $cmd = "";
+  my $result = "";
+  my $rval = "";
+  my $response = "";
+  my @hosts = ("hipsr0", "hipsr1", "hipsr2", "hipsr3", "hipsr4", "hipsr5", "hipsr6", "hipsr7");
+  my $o = "";
+  my $host = "";
+  my $user = "bpsr";
+  my $j = 0;
+  my $i = 0;
+  my @observations = ();
+  my $n_moved = 0;
+  my $max_moved = 5;
+
+  Dada::logMsg(2, DL, "checkDeletedObs()");
+
+  # Find all observations marked as obs.deleted and > 14*24 hours since being modified 
+  $cmd = "find ".$cfg{"SERVER_RESULTS_DIR"}." -mindepth 2 -maxdepth 2 -name 'obs.deleted' -mtime +14 -printf '\%h\\n' | awk -F/ '{print \$NF}' | sort";
+  Dada::logMsg(2, DL, "checkDeletedObs: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, DL, "checkDeletedObs: ".$result." ".$response);
+
+  if ($result ne "ok")
+  {
+    Dada::logMsgWarn($warn, "checkDeletedObs: find command failed: ".$response);
+    return ("fail", "find command failed: ".$response);
+  }
+
+  chomp $response;
+  @observations = split(/\n/,$response);
+  Dada::logMsg(2, DL, "checkDeletedObs: found ".($#observations + 1)." marked obs.deleted +14 mtime");
+
+  for ($i=0; (($i<=$#observations) && (!$quit_daemon)); $i++) 
+  {
+
+    $o = $observations[$i];
+
+    # check that the source directory exists
+    if (! -d $cfg{"SERVER_RESULTS_DIR"}."/".$o)
+    {
+      Dada::logMsgWarn($warn, "checkDeletedObs: ".$o." did not exist in results dir");
+      next;
+    }
+
+    for ($j=0; $j<=$#hosts; $j++)
+    {
+      $host = $hosts[$j];
+
+      # get a list of any beam dirs on this host
+      $cmd = "find ".$cfg{"CLIENT_ARCHIVE_DIR"}." -mindepth 2 -maxdepth 2 -type d -name '".$o."' -printf '%h/%f '";
+      Dada::logMsg(2, DL, "checkDeletedObs: ".$user."@".$host.": ".$cmd);
+      ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
+      Dada::logMsg(3, DL, "checkDeletedObs: ".$result." " .$rval." ".$response);
+      if (($result ne "ok") || ($rval != 0))
+      {
+        Dada::logMsg(2, DL, "checkDeletedObs: could not find obs to delete on ".$host." for ".$o);
+        next;
+      }
+
+      # now delete the directories returned by previous command
+      $cmd = "rm -rf ".$response;
+      Dada::logMsg(2, DL, "checkDeletedObs: ".$user."@".$host.": ".$cmd);
+      ($result, $rval, $response) = Dada::remoteSshCommand("bpsr", $host, $cmd);
+      $result = "ok";
+      $rval = 0;
+      Dada::logMsg(3, DL, "checkDeletedObs: ".$result." " .$rval." ".$response);
+      if (($result ne "ok") || ($rval != 0))
+      {
+        Dada::logMsg(0, DL, "checkDeletedObs: could not delete ".$o." on ".$host);
+        next;
+      }
+
+    }
+
+    # move the results dir
+    $cmd = "mv ".$cfg{"SERVER_RESULTS_DIR"}."/".$o." ".$cfg{"SERVER_OLD_RESULTS_DIR"}."/";
+    Dada::logMsg(2, DL, "checkDeletedObs: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    $result = "ok";
+    $rval = 0;
+    Dada::logMsg(3, DL, "checkDeletedObs: ".$result." ".$response);
+    if ($result ne "ok") 
+    {
+      Dada::logMsg(1, DL, "checkDeletedObs: ".$cmd." failed: ".$response);
+      next;
+    }
+
+    Dada::logMsg(1, DL, $o.": deleted -> old");
+
+    if ($n_moved > $max_moved)
+    {
+      return ("ok", "");
+    }
+    $n_moved++ ;
+
+  }
+  return ("ok", "");
+}
+
 

@@ -31,6 +31,7 @@ use constant LOGFILE       => "bpsr_src_logger.log";
 our %cfg : shared = Bpsr::getConfig();      # Bpsr.cfg in a hash
 our $log_socket;
 our $log_fh;
+our $pwc_id : shared = "";
 
 #
 # Local Variable Declarations
@@ -38,6 +39,7 @@ our $log_fh;
 my $logfile = $cfg{"CLIENT_LOG_DIR"}."/".LOGFILE;
 my $type = "INFO";
 my $line = "";
+my $name = "proc";
 
 #
 # Register Signal handlers
@@ -48,6 +50,14 @@ $SIG{PIPE} = \&sigPipeHandle;
 
 # Auto flush output
 $| = 1;
+
+if ($#ARGV != 1)
+{
+  usage();
+  exit(1);
+}
+$pwc_id  = $ARGV[0];
+$name     = $ARGV[1];
 
 my %opts;
 getopts('e', \%opts);
@@ -89,7 +99,7 @@ sub logMessage($$$$) {
       $log_socket = Dada::nexusLogOpen($cfg{"SERVER_HOST"},$cfg{"SERVER_SRC_LOG_PORT"});
     }
     if ($log_socket) {
-      Dada::nexusLogMessage($log_socket, $time, "src", $type, "proc", $message);
+      Dada::nexusLogMessage($log_socket, $pwc_id, $time, "src", $type, $name, $message);
     }
     open $log_fh, ">>".$logfile;
     print $log_fh "[".$time."] ".$message."\n";

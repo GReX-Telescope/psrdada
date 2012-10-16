@@ -15,16 +15,24 @@ use threads::shared;
 use Dada;
 use Bpsr;
 
+sub usage() 
+{
+  print "Usage: ".basename($0)." PWC_ID\n";
+  print "   PWC_ID   The Primary Write Client ID this script will process\n";
+}
+
+
 #
 # Constants
 #
+use constant BANDWIDTH_LIMIT => "6";  # MB/s [set to 0 for no limit!]
 
 #
 # Function prototypes
 #
 sub markBeamState($$$$$);
-sub controlThread($$);
-sub good($);
+sub controlThread($);
+sub good();
 sub msg($$$);
 
 #
@@ -34,6 +42,8 @@ our $dl : shared;
 our %cfg : shared;
 our $user : shared;
 our $daemon_name : shared;
+our $pwc_id : shared;
+our $beam : shared;
 our $bwlimit;
 our $quit_daemon : shared;
 our $log_host;
@@ -46,8 +56,10 @@ our $log_sock;
 $dl = 1;
 %cfg = Bpsr::getConfig();
 $user = "bpsr";
-$bwlimit = int(70000 / int($cfg{"NUM_PWC"}));  # 70 MB/s / NUM_PWC (nomially 6.1 MB/s)
+$bwlimit = int(BANDWIDTH_LIMIT) * 1024;
 $daemon_name = Dada::daemonBaseName($0);
+$pwc_id = 0;
+$beam = 0;
 $quit_daemon = 0;
 $log_host = 0;
 $log_port = 0;
@@ -56,19 +68,53 @@ $log_sock = 0;
 # Autoflush STDOUT
 $| = 1;
 
+# Check command line arguments is 1
+if ($#ARGV != 0)
+{
+  usage();
+  exit(1);
+}
+$pwc_id  = $ARGV[0];
+
+# ensure that our pwc_id is valid 
+if (($pwc_id >= 0) &&  ($pwc_id < $cfg{"NUM_PWC"}))
+{
+  # and matches configured hostname
+  if ($cfg{"PWC_".$pwc_id} eq Dada::getHostMachineName())
+  {
+    my %roach = Bpsr::getROACHConfig();
+    # determine the relevant PWC based configuration for this script 
+    $beam = $roach{"BEAM_".$pwc_id};
+  }
+  else
+  {
+    print STDERR "PWC_ID did not match configured hostname\n";
+    usage();
+    exit(1);
+  }
+}
+else
+{
+  print STDERR "PWC_ID was not a valid integer between 0 and ".($cfg{"NUM_PWC"}-1)."\n";
+  usage();
+  exit(1);
+}
+
+# Sanity check to prevent multiple copies of this daemon running
+Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
+
 # Main
 {
 
-  my $log_file       = $cfg{"CLIENT_LOG_DIR"}."/".$daemon_name.".log";;
-  my $pid_file       = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".pid";
-  my $quit_file      = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
+  my $log_file = $cfg{"CLIENT_LOG_DIR"}."/".$daemon_name."_".$pwc_id.".log";
+  my $pid_file =  $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$pwc_id.".pid";
 
   $log_host          = $cfg{"SERVER_HOST"};
   $log_port          = $cfg{"SERVER_SYS_LOG_PORT"};
 
   my $r_user         = "bpsr";
-  my $r_host         = "raid0";
-  my $r_path         = "/lfs/raid0/bpsr/finished";
+  my $r_host         = "192.168.3.11";
+  my $r_path         = "/lfs/raid0/bpsr/upload";
   my $r_module       = "bpsr_upload";
   my $a_dir          = $cfg{"CLIENT_ARCHIVE_DIR"};
   my $r_dir          = "";
@@ -91,10 +137,15 @@ $| = 1;
   my $j = 0;
 
   my $rsync_options = "-a --password-file=/home/bpsr/.ssh/raid0_rsync_pw --stats --no-g --chmod=go-ws ".
-                      "--exclude 'aux' --exclude 'beam.finished' --bwlimit=".$bwlimit;
+                      "--exclude 'beam.finished' --exclude 'pred.tim'";
+
+  if ($bwlimit > 0) 
+  {
+    $rsync_options .= " --bwlimit=".$bwlimit;
+  }
 
   # quick sanity check
-  ($result, $response) = good($quit_file);
+  ($result, $response) = good();
   if ($result ne "ok") {
     print STDERR $response."\n";
     exit 1;
@@ -120,15 +171,15 @@ $| = 1;
   msg(0, "INFO", "STARTING SCRIPT");
 
   # start the daemon control thread
-  $control_thread = threads->new(\&controlThread, $quit_file, $pid_file);
+  $control_thread = threads->new(\&controlThread, $pid_file);
 
   # main Loop
   while ( !$quit_daemon ) 
   {
     @finished = ();
 
-    # look for observations marked beam.finished
-    $cmd = "find ".$a_dir." -mindepth 3 -maxdepth 3 -type f -name 'beam.finished' -printf '\%h\n' | awk -F/ '{print \$(NF-1)\"\/\"\$(NF)}' | sort";
+    # look for observations marked beam.finished and more than 3 minutes old
+    $cmd = "find ".$a_dir."/".$beam." -mindepth 2 -maxdepth 2 -type f -mmin +3 -name 'beam.finished' -printf '\%h\n' | awk -F/ '{print \$(NF)}' | sort";
     msg(2, "INFO", "main: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     msg(3, "INFO", "main: ".$result." ".$response);
@@ -144,11 +195,12 @@ $| = 1;
 
       for ($i=0; (!$quit_daemon &&  $i<=$#finished); $i++)
       {
-        ($o, $b) = split(/\//, $finished[$i]);
-        msg(2, "INFO", "main: processing ".$o."/".$b);
+        $o = $finished[$i];
+        $b = $beam;
+        msg(2, "INFO", "main: processing ".$b."/".$o);
 
         # get the PID
-        $cmd = "grep PID ".$a_dir."/".$o."/".$b."/obs.start | awk '{print \$2}'";
+        $cmd = "grep PID ".$a_dir."/".$b."/".$o."/obs.start | awk '{print \$2}'";
         msg(3, "INFO", "main: ".$cmd);
         ($result, $response) = Dada::mySystem($cmd);
         msg(3, "INFO", "main: ".$result." ".$response);
@@ -159,16 +211,6 @@ $| = 1;
           next;
         }
         $pid = $response;
-
-        # check the PID matches an BPSR pid
-        my $bpsr_groups = `groups bpsr`;
-        chomp $bpsr_groups;
-        if (!($bpsr_groups =~ m/$pid/)) 
-        {
-          msg(1, "WARN", "main: PID [".$pid."] was not a valid BPSR group for ".$o);
-          markBeamState($o, $b, "finished", "bad", "PID [".$pid."] was not an BPSR group");
-          next;
-        }
 
         # ensure the PID / OBS directory exists on RAID server
         $r_dir = $r_path."/".$pid."/".$o;
@@ -188,18 +230,25 @@ $| = 1;
           next;
         }
 
-        # transfer archives via rsync 
-        $cmd = "rsync ".$a_dir."/".$o."/".$b." ".$r_host."::".$r_module."/".$pid."/".$o."/ ".$rsync_options;
+        # transfer archives via rsync module [note / trailing source means dir name changes :)]
+        $cmd = "rsync ".$a_dir."/".$b."/".$o."/ ".$r_host."::".$r_module."/".$pid."/".$o."/".$b." ".$rsync_options;
         msg(2, "INFO", "main: ".$cmd);
         ($result, $response) = Dada::mySystem($cmd);
         msg(3, "INFO", "main: ".$result." ".$response);
+
+        # could be that we were asked to quit
         if ($result ne "ok")
         {
+          msg(1, "INFO", "main: rsync failed: ".$response);
+
           # clean up remote dir
           $cmd = "rm -rf ".$r_dir."/".$b;
           msg(1, "INFO", "main: remoteSsh(".$r_user.", ".$r_host.", ".$cmd.")");
           ($result, $rval, $response) = Dada::remoteSshCommand($r_user, $r_host, $cmd);
           msg(1, "INFO", "main: ".$result." ".$response);
+
+          # sometimes this quit_daemon falg is not being set in realtime...
+          sleep(1);
 
           if ($quit_daemon)
           {
@@ -216,7 +265,6 @@ $| = 1;
         }
         else 
         {
-
           # determine the data rate
           my @output_lines = split(/\n/, $response);
           my $mbytes_per_sec = 0;
@@ -244,25 +292,8 @@ $| = 1;
               msg(0, "WARN", "main: ssh failed ".$response);
             }
           }
-          # if we transferred everything ok, touch the sent.to.swin and sent.to.parkes files
-          else 
-          {
-            $cmd = "touch ".$a_dir."/".$o."/".$b."/sent.to.swin ".$a_dir."/".$o."/".$b."/sent.to.parkes";
-            msg(2, "INFO", "main: ".$cmd);
-            ($result, $response) = Dada::mySystem($cmd);
-            msg(3, "INFO", "main: ".$result." ".$response);
-            if ($result ne "ok")
-            {
-              msg(0, "WARN", "main: could not touch sent.to flags: ".$response);
-              markBeamState($o, $b, "finished", "bad", "could not touch sent.to flags");
-              msg(1, "INFO", $o.": finished -> failed");
-            }
-            else 
-            {
-              markBeamState($o, $b, "finished", "transferred", "");
-              msg(1, "INFO", $o.": finished -> transferred ".$data_rate);
-            }
-          }
+          markBeamState($o, $b, "finished", "transferred", "");
+          msg(1, "INFO", $o.": finished -> transferred ".$data_rate);
         }
       }
     }
@@ -299,7 +330,7 @@ sub markBeamState($$$$$)
 {
   my ($o, $b, $from, $to, $message) = @_;
 
-  my $dir = $cfg{"CLIENT_ARCHIVE_DIR"}."/".$o."/".$b;
+  my $dir = $cfg{"CLIENT_ARCHIVE_DIR"}."/".$b."/".$o;
   my $cmd = "";
   my $result = "";
   my $response = "";
@@ -343,23 +374,29 @@ sub markBeamState($$$$$)
 #
 # control thread to ask daemon to quit
 #
-sub controlThread($$) 
+sub controlThread($) 
 {
-  my ($quit_file, $pid_file) = @_;
+  my ($pid_file) = @_;
   msg(2, "INFO", "controlThread: starting");
+
+  my $host_quit_file = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
+  my $pwc_quit_file  =  $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$pwc_id.".quit";
 
   my $cmd = "";
   my $regex = "";
   my $result = "";
   my $response = "";
 
-  while ((!(-f $quit_file)) && (!$quit_daemon)) {
+  while ((!$quit_daemon) && (!(-f $host_quit_file)) && (!(-f $pwc_quit_file)))
+  {
     sleep(1);
   }
 
   $quit_daemon = 1;
 
-  $regex = "^rsync";
+  sleep(1);
+
+  $regex = "^rsync ".$cfg{"CLIENT_ARCHIVE_DIR"}."/".$beam;
   msg(2, "INFO", "controlThread: killProcess(".$regex.", ".$user.")");
   ($result, $response) = Dada::killProcess($regex, $user);
   msg(2, "INFO", "controlThread: killProcess ".$result." ".$response);
@@ -393,7 +430,7 @@ sub msg($$$) {
       $log_sock = Dada::nexusLogOpen($log_host, $log_port);
     }
     if ($log_sock) {
-      Dada::nexusLogMessage($log_sock, $time, "sys", $type, "xfer", $msg);
+      Dada::nexusLogMessage($log_sock, $pwc_id, $time, "sys", $type, "xfer", $msg);
     }
     print "[".$time."] ".$msg."\n";
   }
@@ -441,13 +478,18 @@ sub sigPipeHandle($) {
 #
 # Test to ensure all module variables are set before main
 #
-sub good($) {
-
-  my ($quit_file) = @_;
+sub good() {
 
   # check the quit file does not exist on startup
-  if (-f $quit_file) {
-    return ("fail", "Error: quit file ".$quit_file." existed at startup");
+  my $host_quit_file = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
+  my $pwc_quit_file  =  $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$pwc_id.".quit";
+
+  if (-f $host_quit_file) {
+    return ("fail", "Error: host quit file ".$host_quit_file." existed at startup");
+  }
+
+  if (-f $pwc_quit_file) {
+    return ("fail", "Error: pwc quit file ".$pwc_quit_file." existed at startup");
   }
 
   # the calling script must have set this
@@ -457,12 +499,6 @@ sub good($) {
 
   if ( ($daemon_name eq "") || ($user eq "") ) {
     return ("fail", "Error: a package variable missing [daemon_name, user]");
-  }
-
-  # Ensure more than one copy of this daemon is not running
-  my ($result, $response) = Dada::checkScriptIsUnique(basename($0));
-  if ($result ne "ok") {
-    return ($result, $response);
   }
 
   return ("ok", "");

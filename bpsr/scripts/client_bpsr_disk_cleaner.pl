@@ -19,122 +19,154 @@ use threads;         # standard perl threads
 use threads::shared; # standard perl threads
 use Net::hostent;
 use File::Basename;
+use Time::HiRes qw(usleep);
 
-
-#
-# Sanity check to prevent multiple copies of this daemon running
-#
-Dada::preventDuplicateDaemon(basename($0));
-
-
-#
-# Constants
-#
-use constant DAEMON_NAME        => "bpsr_disk_cleaner";
-
-#
-# The existence of these files control when a beam will be 
-# considered ready for deletion. In times of trouble, these
-# can be modified to their sent.to.* variants so that beams
-# will be deleted as soon as they have been transferred
-#
-# default should be on.tape.*
-use constant PRKS_DELETE_FILE => "on.tape.parkes";
-use constant SWIN_DELETE_FILE => "on.tape.swin";
+sub usage() 
+{
+  print "Usage: ".basename($0)." PWC_ID\n";
+  print "   PWC_ID   The Primary Write Client ID this script will process\n";
+}
 
 #
 # Global Variable Declarations
 #
-our $dl : shared = 1;
-our $quit_daemon : shared = 0;
-our %cfg : shared = Bpsr::getConfig();	# dada.cfg in a hash
-our $log_host = ""; 
-our $log_port = 0; 
-our $log_sock = 0;
+our $dl : shared;
+our $quit_daemon : shared;
+our $daemon_name : shared;
+our $pwc_id : shared;
+our $beam : shared;
+our %cfg : shared;
+our $log_host;
+our $log_port;
+our $log_sock;
 
 #
-# Local Variable Declarations
+# Initialize globals
 #
-my $log_file = "";
-my $pid_file = "";
-my $quit_file = "";
-my $control_thread = 0;
-my $result = "";
-my $response = "";
-my $obs = "";
-my $beam = "";
-
-# install signal handlers
-$SIG{INT} = \&sigHandle;
-$SIG{TERM} = \&sigHandle;
-$SIG{PIPE} = \&sigPipeHandle;
-
-$log_file = $cfg{"CLIENT_LOG_DIR"}."/".DAEMON_NAME.".log";
-$pid_file = $cfg{"CLIENT_CONTROL_DIR"}."/".DAEMON_NAME.".pid";
-$quit_file = $cfg{"CLIENT_CONTROL_DIR"}."/".DAEMON_NAME.".quit";
-
-# become a daemon
-Dada::daemonize($log_file, $pid_file);
-
-# Auto flush output
-$| = 1;
-
+$dl = 1;
+$quit_daemon = 0;
+$daemon_name = Dada::daemonBaseName($0);
+$pwc_id = 0;
+$beam = 0;
+%cfg = Bpsr::getConfig();
 $log_host = $cfg{"SERVER_HOST"};
 $log_port = $cfg{"SERVER_SYS_LOG_PORT"};
+$log_sock = 0;
 
-# Open a connection to the server_sys_monitor.pl script
-$log_sock = Dada::nexusLogOpen($log_host, $log_port);
-if (!$log_sock) {
-  print STDERR "Could open log port: ".$log_host.":".$log_port."\n";
+# Check command line arguments is 1
+if ($#ARGV != 0)
+{
+  usage();
+  exit(1);
+}
+$pwc_id  = $ARGV[0];
+
+# ensure that our pwc_id is valid 
+if (($pwc_id >= 0) &&  ($pwc_id < $cfg{"NUM_PWC"}))
+{
+  # and matches configured hostname
+  if ($cfg{"PWC_".$pwc_id} eq Dada::getHostMachineName())
+  {
+    my %roach = Bpsr::getROACHConfig();
+    # determine the relevant PWC based configuration for this script 
+    $beam = $roach{"BEAM_".$pwc_id};
+  }
+  else
+  {
+    print STDERR "PWC_ID did not match configured hostname\n";
+    usage();
+    exit(1);
+  }
+}
+else
+{
+  print STDERR "PWC_ID was not a valid integer between 0 and ".($cfg{"NUM_PWC"}-1)."\n";
+  usage();
+  exit(1);
 }
 
-logMsg(1,"INFO", "STARTING SCRIPT");
+# Sanity check to prevent multiple copies of this daemon running
+Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
 
-if (! -f $quit_file ) {
+
+#
+# Main
+#
+{
+
+  my $log_file = $cfg{"CLIENT_LOG_DIR"}."/".$daemon_name."_".$pwc_id.".log";
+  my $pid_file = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$pwc_id.".pid";
+
+  # install signal handlers
+  $SIG{INT} = \&sigHandle;
+  $SIG{TERM} = \&sigHandle;
+  $SIG{PIPE} = \&sigPipeHandle;
+
+  # become a daemon
+  Dada::daemonize($log_file, $pid_file);
+
+  # Auto flush output
+  $| = 1;
+
+  # Open a connection to the server_sys_monitor.pl script
+  $log_sock = Dada::nexusLogOpen($log_host, $log_port);
+  if (!$log_sock) {
+    print STDERR "Could open log port: ".$log_host.":".$log_port."\n";
+  }
+
+  logMsg(0, "INFO", "STARTING SCRIPT");
 
   # This thread will monitor for our daemon quit file
-  $control_thread = threads->new(\&controlThread, $quit_file, $pid_file);
+  my $control_thread = threads->new(\&controlThread, $pid_file);
+
+  my $result = "";
+  my $response = "";
+  my $obs = "";
+  my $archive_dir = $cfg{"CLIENT_ARCHIVE_DIR"}."/".$beam;
 
   # Main Loop
   while (!$quit_daemon) {
 
-    ($result, $response, $obs, $beam) = findCompletedBeam($cfg{"CLIENT_ARCHIVE_DIR"});
+    ($result, $response, $obs) = findCompletedBeam($archive_dir);
 
     if (($result eq "ok") && ($obs ne "none")) {
-      logMsg(1, "INFO", "Deleting ".$obs."/".$beam);
-      ($result, $response) = deleteCompletedBeam($cfg{"CLIENT_ARCHIVE_DIR"}, $obs, $beam);
+      logMsg(1, "INFO", "Deleting ".$beam."/".$obs);
+      ($result, $response) = deleteCompletedBeam($archive_dir, $obs);
+      if ($result ne "ok")
+      {
+        logMsg(0, "WARN", "Failed to delete ".$obs."/".$beam." ".$response);
+        $quit_daemon = 1;
+      }
+
     } else {
-      logMsg(2, "INFO", "Found no beams to delete ".$obs."/".$beam);
+      logMsg(2, "INFO", "Found no beams to delete for ".$beam);
     }
 
-    my $counter = 24;
-    logMsg(2, "INFO", "Sleeping ".($counter*5)." seconds");
-    while ((!$quit_daemon) && ($counter > 0) && ($obs eq "none")) {
-      sleep(5);
+    my $counter = 120;
+    logMsg(2, "INFO", "Sleeping ".($counter)." seconds");
+    while ((!$quit_daemon) && ($counter > 0) && ($obs eq "none")) 
+    {
+      sleep(1);
       $counter--;
     }
-
   }
 
-  logMsg(0, "INFO", "STOPPING SCRIPT");
-  Dada::nexusLogClose($log_sock);
+  logMsg(2, "INFO", "main: joining controlThread");
   $control_thread->join();
-  exit(0);
 
-} else {
+  logMsg(0, "INFO", "STOPPING SCRIPT");
 
-  logMsg(0,"INFO", "STOPPING SCRIPT");
   Dada::nexusLogClose($log_sock);
-  exit(1);
 
+  exit(0);
 }
 
 
 #
 # Find an obs/beam that has the required on.tape.* flags set
 #
-sub findCompletedBeam($) {
-
+sub findCompletedBeam($) 
+{
   (my $archives_dir) = @_;
 
   logMsg(2, "INFO", "findCompletedBeam(".$archives_dir.")");
@@ -143,7 +175,6 @@ sub findCompletedBeam($) {
   my $result = "";
   my $response = ""; 
   my $obs = "none";
-  my $beam = "none";
   my $cmd = "";
   my $i = 0;
   my $k = "";   # obs
@@ -152,16 +183,12 @@ sub findCompletedBeam($) {
   my $file = "";
 
   my %deleted        = ();    # obs that have a beam.deleted
-  my %on_tape_swin   = ();    # obs that have been on.tape.swin
-  my %on_tape_parkes = ();    # obs that have been on.tape.parkes
-  my %on_tape        = ();    # obs that have been on.tape.*
-  my @pids = ();
-  my %pid_dests = ();
+  my %transferred    = ();    # obs that have a beam.transferred
 
   my @array = ();
 
-  $cmd = "find ".$archives_dir." -maxdepth 3 -name beam.deleted".
-         " -printf '\%h\\n' | awk -F/ '{print \$(NF-1)\"\/\"\$NF}' | sort";
+  $cmd = "find ".$archives_dir." -mindepth 2 -maxdepth 2 -type f -name beam.deleted".
+         " -printf '\%h\\n' | awk -F/ '{print \$NF}' | sort";
   logMsg(3, "INFO", "findCompletedBeam: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   logMsg(3, "INFO", "findCompletedBeam: ".$result." ".$response);
@@ -172,8 +199,8 @@ sub findCompletedBeam($) {
     }
   }
 
-  $cmd = "find ".$archives_dir." -maxdepth 3 -name ".SWIN_DELETE_FILE.
-         " -printf '\%h\\n' | awk -F/ '{print \$(NF-1)\"\/\"\$NF}' | sort";
+  $cmd = "find ".$archives_dir." -mindepth 2 -maxdepth 2 -type f -name beam.transferred".
+         " -printf '\%h\\n' | awk -F/ '{print \$NF}' | sort";
   logMsg(3, "INFO", "findCompletedBeam: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   logMsg(3, "INFO", "findCompletedBeam: ".$result." ".$response);
@@ -182,59 +209,28 @@ sub findCompletedBeam($) {
     @array= split(/\n/, $response);
     for ($i=0; $i<=$#array; $i++) {
       if (!defined($deleted{$array[$i]})) {
-        $on_tape_swin{$array[$i]} = 1;
-        $on_tape{$array[$i]} = 1;
+        $transferred{$array[$i]} = 1;
       }
     }
   }
 
-
-  @array = ();
-  $cmd = "find ".$archives_dir." -maxdepth 3 -name ".PRKS_DELETE_FILE.
-         " -printf '\%h\\n' | awk -F/ '{print \$(NF-1)\"\/\"\$NF}' | sort";
-  logMsg(3, "INFO", "findCompletedBeam: ".$cmd);
-  ($result, $response) = Dada::mySystem($cmd);
-  logMsg(3, "INFO", "findCompletedBeam: ".$result." ".$response);
-  if ($result eq "ok") {
-    @array = ();
-    @array= split(/\n/, $response);
-    for ($i=0; $i<=$#array; $i++) {
-      if (!defined($deleted{$array[$i]})) {
-        $on_tape_parkes{$array[$i]} = 1;
-        if (!defined($on_tape{$array[$i]})) {
-          $on_tape{$array[$i]} = 1;
-        }
-      }
-    }
-  }
   @array = ();
 
-  @pids = Dada::getProjectGroups("bpsr");
-
-  for ($i=0; $i<=$#pids; $i++) {
-    $pid_dests{$pids[$i]} = $cfg{$pids[$i]."_DEST"};
-    logMsg(2, "INFO", "findCompletedBeam: pid_dests{".$pids[$i]."} = ".$pid_dests{$pids[$i]});
-  }
-
-  my @keys = sort keys %on_tape;
+  my @keys = sort keys %transferred;
   my $k = "";
-  my $want_swin = 0;
-  my $want_parkes = 0;
-  my $on_swin = 0;
-  my $on_parkes = 0;
   my $space = 0;
 
   logMsg(2, "INFO", "findCompletedBeam: ".($#keys+1)." observations to consider");
 
-  for ($i=0; ((!$quit_daemon) && (!$found_obs) && ($i<=$#keys)); $i++) {
-
+  for ($i=0; ((!$quit_daemon) && (!$found_obs) && ($i<=$#keys)); $i++)
+  {
     $k = $keys[$i];
 
     # check the type of the observation
     $file = $archives_dir."/".$k."/obs.start";
-    logMsg(3, "INFO", "findCompletedBeam: testing for existence: ". $file);
-    if (-f $file) {
-
+    logMsg(2, "INFO", "findCompletedBeam: testing for existence: ". $file);
+    if (-f $file)
+    {
       $cmd = "grep ^SOURCE ".$file." | awk '{print \$2}'";
       logMsg(3, "INFO", "findCompletedBeam: ".$cmd);
       ($result, $response) = Dada::mySystem($cmd);
@@ -261,31 +257,9 @@ sub findCompletedBeam($) {
       }
       $pid = $response;
 
-      # determine the required destinations based on PID
-      logMsg(3, "INFO", "findCompletedBeam: getObsDestinations(".$pid.", ".$pid_dests{$pid}.")");
-      ($want_swin, $want_parkes) = Bpsr::getObsDestinations($pid, $pid_dests{$pid});
-      logMsg(3, "INFO", "findCompletedBeam: getObsDestinations want swin:".$want_swin." parkes:".$want_parkes);
-
       $found_obs = 1;
-
-      $on_swin = (defined($on_tape_swin{$k})) ? 1 : 0;
-      $on_parkes = (defined($on_tape_parkes{$k})) ? 1 : 0;
-
-      logMsg(2, "INFO", "findCompletedBeam: ".$k." SOURCE=".$source.", PID=".$pid.
-                 ", SWIN=".$on_swin."/".$want_swin.", PARKES=".$on_parkes."/".$want_parkes);
-
-      if ($want_swin && (!$on_swin)) {
-        $found_obs = 0;
-        logMsg(2, "INFO", "findCompletedBeam: ".$k." [".$source."] ".SWIN_DELETE_FILE." missing");
-      }
-
-      if ($want_parkes && (!$on_parkes)) {
-        $found_obs = 0;
-        logMsg(2, "INFO", "findCompletedBeam: ".$k." [".$source."] ".PRKS_DELETE_FILE." missing");
-      }
-
-      if ($found_obs) {
-
+      if ($found_obs) 
+      {
         $cmd = "du -sh ".$archives_dir."/".$k." | awk '{print \$1}'";
         logMsg(2, "INFO", "findCompletedBeam: ".$cmd);
         ($result, $response) = Dada::mySystem($cmd);
@@ -293,18 +267,20 @@ sub findCompletedBeam($) {
         $space = $response;
         
         logMsg(2, "INFO", "findCompletedBeam: found ".$k." PID=".$pid.", SIZE=".$space);
-        ($obs, $beam) = split(/\//, $k);
-
+        $obs = $k;
       }
-    
-    } else {
-      if (-f $archives_dir."/".$k."/obs.deleted") {
+    }
+    else
+    {
+      if (-f $archives_dir."/".$k."/obs.deleted")
+      {
         $cmd = "touch ".$archives_dir."/".$k."/beam.deleted";
         logMsg(2, "INFO", "findCompletedBeam: ".$cmd);
         ($result, $response) = Dada::mySystem($cmd);
         logMsg(2, "INFO", "findCompletedBeam: ".$result." ".$response);
-
-      } else {
+      }
+      else
+      {
         logMsg(1, "INFO", "findCompletedBeam: file did not exist :".$file);
       }
     }
@@ -313,34 +289,34 @@ sub findCompletedBeam($) {
   $result = "ok";
   $response = "";
 
-  logMsg(2, "INFO", "findCompletedBeam ".$result.", ".$response.", ".$obs.", ".$beam);
+  logMsg(2, "INFO", "findCompletedBeam ".$result.", ".$response.", ".$obs);
 
-  return ($result, $response, $obs, $beam);
+  return ($result, $response, $obs);
 }
 
 
 #
 # Delete the specified obs/beam 
 #
-sub deleteCompletedBeam($$) {
+sub deleteCompletedBeam($$) 
+{
 
-  my ($dir, $obs, $beam) = @_;
+  my ($dir, $obs) = @_;
 
   my $result = "";
   my $response = "";
-  my $path = $dir."/".$obs."/".$beam;
+  my $path = $dir."/".$obs;
 
   logMsg(2, "INFO", "Deleting archived files in ".$path);
 
-  # WvS - cannot create file when disks are full
-
-  my $rm_file = "/tmp/".$obs."_".$beam."_slow_rm.ls";
+  my $rm_file = "/tmp/".$beam."_".$obs."_slow_rm.ls";
 
   if (-f $rm_file) {
     unlink $rm_file;
   }
 
-  my $cmd = "find ".$path." -name '*.fil' -o -name 'aux.tar' -o -name '*.ar' -o -name '*.png' -o -name '*.bp*' -o -name '*.ts?' -o -name 'rfi.*' > ".$rm_file;
+  my $cmd = "find ".$path." -name '*.fil' -o -name '*.ar' -o -name '*.png' -o -name '*.bp*' -o -name '*.ts?' -o -name '*.cand' -o -name 'rfi.*' -o -name '*.dada' > ".$rm_file;
+  # $cmd = "find ".$path." -name '*.fil' -o -name '*.ar' -o -name '*.png' -o -name 'rfi.*' -o -name '*.dada' > ".$rm_file;
 
   logMsg(2, "INFO", $cmd);
   ($result, $response) = Dada::mySystem($cmd);
@@ -363,7 +339,8 @@ sub deleteCompletedBeam($$) {
     logMsg(1, "WARN", $result." ".$response);
   }
 
-  if (-d $path."/aux") {
+  if (-d $path."/aux")
+  {
     rmdir $path."/aux";
   }
 
@@ -390,9 +367,10 @@ sub deleteCompletedBeam($$) {
 
 
 
-sub controlThread($$) {
+sub controlThread($) 
+{
 
-  my ($quit_file, $pid_file) = @_;
+  (my $pid_file) = @_;
 
   logMsg(2, "INFO", "controlThread : starting");
 
@@ -400,7 +378,11 @@ sub controlThread($$) {
   my $result = "";
   my $response = "";
 
-  while ((!$quit_daemon) && (!(-f $quit_file))) {
+  my $host_quit_file = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
+  my $pwc_quit_file  =  $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$pwc_id.".quit";
+  
+  while ((!$quit_daemon) && (! -f $host_quit_file ) && (! -f $pwc_quit_file))
+  {
     sleep(1);
   }
 
@@ -432,7 +414,7 @@ sub logMsg($$$) {
       $log_sock = Dada::nexusLogOpen($log_host, $log_port);
     }
     if ($log_sock) {
-      Dada::nexusLogMessage($log_sock, $time, "sys", $type, "cleaner", $msg);
+      Dada::nexusLogMessage($log_sock, $pwc_id, $time, "sys", $type, "cleaner", $msg);
     }
     print "[".$time."] ".$msg."\n";
   }
@@ -441,27 +423,28 @@ sub logMsg($$$) {
 sub sigHandle($) {
 
   my $sigName = shift;
-  print STDERR DAEMON_NAME." : Received SIG".$sigName."\n";
+  my $time = Dada::getCurrentDadaTime();
+  print STDERR "[".$time."] ".$daemon_name." : Received SIG".$sigName."\n";
 
   # if we CTRL+C twice, just hard exit
   if ($quit_daemon) {
-    print STDERR DAEMON_NAME." : Recevied 2 signals, Exiting\n";
+    print STDERR "[".$time."] ".$daemon_name." : Recevied 2 signals, Exiting\n";
     exit 1;
 
   # Tell threads to try and quit
   } else {
 
     $quit_daemon = 1;
-    if ($log_sock) {
-      close($log_sock);
-    }
+    #if ($log_sock) {
+    #  close($log_sock);
+    #}
   }
 }
 
 sub sigPipeHandle($) {
 
   my $sigName = shift;
-  print STDERR DAEMON_NAME." : Received SIG".$sigName."\n";
+  print STDERR $daemon_name." : Received SIG".$sigName."\n";
   $log_sock = 0;
   if ($log_host && $log_port) {
     $log_sock = Dada::nexusLogOpen($log_host, $log_port);

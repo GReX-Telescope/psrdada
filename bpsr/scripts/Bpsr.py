@@ -1,22 +1,24 @@
-#!/usr/bin/env python26
+#!/usr/bin/env python
 
 #
 # BPSR python module
 #
 
 import Dada, struct, math, median_smooth, time, matplotlib, pylab, os
+import sys, cStringIO, traceback
 import corr, numpy, fnmatch
 
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 
 def getConfig():
     
   config_file = Dada.DADA_ROOT + "/share/bpsr.cfg"
   config = Dada.readCFGFileIntoDict(config_file)
 
-  pwc_config_file = Dada.DADA_ROOT + "/share/bpsr_pwcs.cfg"
-  pwc_config = Dada.readCFGFileIntoDict(pwc_config_file)
+  #pwc_config_file = Dada.DADA_ROOT + "/share/bpsr_pwcs.cfg"
+  #pwc_config = Dada.readCFGFileIntoDict(pwc_config_file)
+  #config.update(pwc_config)
 
-  config.update(pwc_config)
   return config
 
 
@@ -41,19 +43,24 @@ def convertIPToInteger(ipaddr):
 def configureRoach(dl, acc_len, rid, cfg):
 
   roach_cfg = getROACHConfig()
-  roach_ip   = roach_cfg["ROACH_IP_"+rid]
+  roach_ip   = roach_cfg["ROACH_"+rid]
   roach_port = int(roach_cfg["ROACH_PORT"])
   roach_bof  = roach_cfg["ROACH_BOF"]
+  roach_beam  = roach_cfg["BEAM_"+rid]
 
-  roach_10gbe_src_ip    = convertIPToInteger(roach_cfg["ROACH_10GbE_SRC_IP_"+rid])
-  roach_10gbe_dest_ip   = convertIPToInteger(roach_cfg["ROACH_10GbE_DEST_IP_"+rid])
+  pol1_coeff = 16384
+  pol2_coeff = 16384
+  bit_window = 0
 
-  Dada.logMsg(2, dl, "configureRoach["+rid+"]: " + roach_cfg["ROACH_10GbE_SRC_IP_"+rid] + " -> " + str(roach_10gbe_src_ip))
-  Dada.logMsg(2, dl, "configureRoach["+rid+"]: " + roach_cfg["ROACH_10GbE_DEST_IP_"+rid] + " -> " + str(roach_10gbe_dest_ip))
+  roach_10gbe_src_ip    = convertIPToInteger(roach_cfg["ROACH_10GbE_SRC_"+rid])
+  roach_10gbe_dest_ip   = convertIPToInteger(roach_cfg["ROACH_10GbE_DEST_"+rid])
+
+  Dada.logMsg(3, dl, "["+rid+"] configureRoach: " + roach_cfg["ROACH_10GbE_SRC_"+rid] + " -> " + str(roach_10gbe_src_ip))
+  Dada.logMsg(3, dl, "["+rid+"] configureRoach: " + roach_cfg["ROACH_10GbE_DEST_"+rid] + " -> " + str(roach_10gbe_dest_ip))
 
   # Same port in src and dest
-  roach_10gbe_src_port  = int(cfg["CLIENT_UDPDB_PORT"])
-  roach_10gbe_dest_port = int(cfg["CLIENT_UDPDB_PORT"])
+  roach_10gbe_src_port  = int(cfg["PWC_UDP_PORT_"+rid])
+  roach_10gbe_dest_port = int(cfg["PWC_UDP_PORT_"+rid])
 
   # use a designated private MAC address [02:xx:xx:xx:xx:xx]
   roach_10gbe_src_mac   = (2<<40) + (2<<32) + roach_10gbe_src_ip
@@ -61,57 +68,200 @@ def configureRoach(dl, acc_len, rid, cfg):
   sync_period = 100 * acc_len * 2048
   tengbe_device = roach_cfg["ROACH_10GBE_DEVNAME"]
 
+  connected = False
+  attempts = 0
+
+  Dada.logMsg(2, dl, "["+rid+"] configureRoach: connecting to " + roach_ip + ":" + str(roach_port))
+
   # connect to ROACH FPGA
-  Dada.logMsg(2, dl, "configureRoach["+rid+"]: connecting to "+roach_ip+":"+str(roach_port))
-  fpga = corr.katcp_wrapper.FpgaClient(roach_ip, roach_port)
-  time.sleep(0.5)
-  if (fpga.is_connected()):
-    Dada.logMsg(2, dl, "configureRoach["+rid+"]: connected")
-  else:
-    Dada.logMsg(-2, dl, "configureRoach["+rid+"]: connection failed")
+  while (not connected and attempts < 5):
+
+    Dada.logMsg(3, dl, "["+rid+"] configureRoach: connection attempt " + str(attempts) + " for " + roach_ip + ":" + str(roach_port))
+    fpga = corr.katcp_wrapper.FpgaClient(roach_ip, roach_port)
+    time.sleep(0.1)
+    if (fpga.is_connected()):
+      Dada.logMsg(3, dl, "["+rid+"] configureRoach: connected to " + roach_ip + ":" + str(roach_port))
+
+    connected = fpga.is_connected()
+
+    if (not connected):
+      Dada.logMsg(0, dl, "["+rid+"] configureRoach: connection to " + roach_ip + " failed, retrying")
+      time.sleep(1.0)
+      attempts += 1
+
+  if (not connected):
+    Dada.logMsg(-2, dl, "["+rid+"] configureRoach: connection failed")
     return ("fail", 0)
-
+ 
   # program bit stream
-  Dada.logMsg(1, dl, "programming FPGA with " + roach_bof)
-  Dada.logMsg(2, dl, "configureRoach["+rid+"]: programming FPGA with " + roach_bof)
-  fpga.progdev(roach_bof)
-  Dada.logMsg(2, dl, "configureRoach["+rid+"]: programming done")
+  programmed = False
+  attempts = 0
+  while (not programmed and attempts < 5):
 
-  time.sleep(2.0)
+    Dada.logMsg(2, dl, "["+rid+"] programming FPGA with " + roach_bof)
+    Dada.logMsg(3, dl, "["+rid+"] configureRoach: programming FPGA with " + roach_bof)
+    prog_result = fpga.progdev(roach_bof)
+    if (prog_result):
+      Dada.logMsg(2, dl, "["+rid+"] configureRoach: programming done")
+    else:
+      Dada.logMsg(0, dl, "["+rid+"] configureRoach: programming FAILED")
+
+    time.sleep(0.1)
+
+    try:
+      # try to read from a register
+      #enable = fpga.read_int('enable')
+      #Dada.logMsg(3, dl, "["+rid+"] enable = " + str(enable))
+      port = fpga.read_int('reg_10GbE_destport0')
+      Dada.logMsg(3, dl, "["+rid+"] reg_10GbE_destport0 = " + str(port))
+
+      # try to write to a register
+      #enable = 0
+      #Dada.logMsg(3, dl, "["+rid+"] enable" + str(enable))
+      #fpga.write_int('enable', enable)
+      port = 8000
+      Dada.logMsg(3, dl, "["+rid+"] reg_10GbE_destport0 " + str(port))
+      fpga.write_int('reg_10GbE_destport0', port)
+
+      # if we got this far without throwing an exception, we are programmed!
+      programmed = True
+
+    except:
+
+      # give it a chance to be ready for commands
+      Dada.logMsg(1, dl, "["+rid+"] exception when trying to read/write")
+      time.sleep(1.0)
+      attempts += 1
+
+  if (not programmed):
+    Dada.logMsg(0, dl, "["+rid+"] failed to program FPGA")
+    return ("fail", fpga)
+
+  # old way of ensuring  
+  null_ip_str = "0.0.0.0"
+  null_ip   = convertIPToInteger(null_ip_str)
+  null_port = 0
+  null_acc_len = 1024
+  null_sync_period = 100 * null_acc_len * 2048
+
+  Dada.logMsg(2, dl, "["+rid+"] reg_ip " + null_ip_str)
+  fpga.write_int('reg_ip', null_ip)
+
+  Dada.logMsg(2, dl, "["+rid+"] reg_10GbE_destport0 " + str(null_port))
+  fpga.write_int('reg_10GbE_destport0', null_port)
+
+  Dada.logMsg(2, dl, "["+rid+"] acc_len " + str(null_acc_len-1))
+  fpga.write_int('reg_acclen', null_acc_len-1)
+
+  Dada.logMsg(2, dl, "["+rid+"] sync_period " + str(null_sync_period))
+  fpga.write_int('reg_sync_period', null_sync_period)
+
+  # ensure 10GbE output is disabled
+  # enable = 0
+  # Dada.logMsg(2, dl, "["+rid+"] enable " + str(enable))
+  # fpga.write_int('enable', enable)
+
+  Dada.logMsg(2, dl, "["+rid+"] reg_coeff_pol1 " + str(pol1_coeff))
+  fpga.write_int('reg_coeff_pol1', pol1_coeff)
+
+  Dada.logMsg(2, dl, "["+rid+"] reg_coeff_pol2 " + str(pol2_coeff))
+  fpga.write_int('reg_coeff_pol2', pol2_coeff)
+
+  Dada.logMsg(2, dl, "["+rid+"] reg_output_bitselect " + str(bit_window))
+  fpga.write_int('reg_output_bitselect', bit_window)
+
+  # start tgtap, which configures the 10Gbe port and begins an ARP process 
+  Dada.logMsg(2, dl, "["+rid+"] fpga.tap_start()")
   fpga.tap_start(tengbe_device,tengbe_device,roach_10gbe_src_mac,roach_10gbe_src_ip,roach_10gbe_src_port)
   time.sleep(0.5)
   gbe0_link = bool(fpga.read_int(tengbe_device))
   if gbe0_link:
-    Dada.logMsg(2, dl, "configureRoach["+rid+"]: 10GbE device now active")
+    Dada.logMsg(2, dl, "["+rid+"] configureRoach: 10GbE device now active")
   else:
-    Dada.logMsg(-1, dl, "configureRoach["+rid+"]: 10GbE device not active")
+    Dada.logMsg(-1, dl, "["+rid+"] configureRoach: 10GbE device NOT active")
+
+  # now wait until out destination IP Address has appeared in tgtaps ARP table
+  parts = roach_cfg["ROACH_10GbE_DEST_"+rid].split(".")
+  arp_line = "IP: " + parts[0].rjust(3) + "." + parts[1].rjust(3) + "." + parts[2].rjust(3) + "." + parts[3].rjust(3) + ": MAC: FF FF FF FF FF FF "
+  Dada.logMsg(3, dl, "["+rid+"] arpLine = " + arp_line)
+
+  arp_valid = False
+  attempts = 0
+  while ((not arp_valid) and attempts < 60):
+
+    arp_table = fpga.return_10gbe_arp_table(tengbe_device)
+    arp_valid = True
+    lines = arp_table.split("\n")
+    for line in lines:
+      Dada.logMsg(3, dl, "["+rid+"] testing line '" + line + "' == '" + arp_line + "'")
+      if (line == arp_line):
+        arp_valid = False
     
-  # configure 10 GbE device
-  Dada.logMsg(2, dl, "configureRoach["+rid+"]: configuring 10GbE")
-  fpga.write_int('reg_ip', roach_10gbe_dest_ip)
-  fpga.write_int('reg_10GbE_destport0', roach_10gbe_dest_port)
-  Dada.logMsg(1, dl, "configureRoach["+rid+"]: acc_len <- " + str(acc_len-1))
-  fpga.write_int('reg_acclen', acc_len-1)
-  Dada.logMsg(1, dl, "configureRoach["+rid+"]: sync_period <- " + str(sync_period))
-  fpga.write_int('reg_sync_period', sync_period)
+    if (not arp_valid):
+      Dada.logMsg(2, dl, "["+rid+"] arp not yet valid")
+      time.sleep(1.0)
+      attempts += 1
 
-  fpga.write_int('reg_coeff_pol1', 16384)
-  fpga.write_int('reg_coeff_pol2', 16384)
+  # we have got an IP -> MAC address mapping, and can proceed
+  if (attempts < 60):
 
+    Dada.logMsg(2, dl, "["+rid+"] reg_ip " + roach_cfg["ROACH_10GbE_DEST_"+rid])
+    fpga.write_int('reg_ip', roach_10gbe_dest_ip)
 
-  Dada.logMsg(2, dl, "configureRoach["+rid+"]: returning ok")
-  return ("ok", fpga)
+    Dada.logMsg(2, dl, "["+rid+"] reg_10GbE_destport0 " + str(roach_10gbe_dest_port))
+    fpga.write_int('reg_10GbE_destport0', roach_10gbe_dest_port)
+
+    Dada.logMsg(2, dl, "["+rid+"] acc_len " + str(acc_len-1))
+    fpga.write_int('reg_acclen', acc_len-1)
+
+    Dada.logMsg(2, dl, "["+rid+"] sync_period " + str(sync_period))
+    fpga.write_int('reg_sync_period', sync_period)
+
+    Dada.logMsg(1, dl, "["+rid+"] programmed " + roach_beam + ", UDP -> " + roach_cfg["ROACH_10GbE_DEST_"+rid] + ":" + str(roach_10gbe_dest_port))
+    Dada.logMsg(2, dl, "["+rid+"] configureRoach: returning ok")
+
+    return ("ok", fpga)
+
+  # the ARP process did not work, fail
+  else:
+    Dada.logMsg(1, dl, "["+rid+"] arp not valid after 60 seconds");
+    return ("fail", fpga)
 
 ###############################################################################
 #
 # arm roach to begin start of data
 #
-def armRoach(dl, fpga):
-  fpga.write_int('reg_arm',0)
-  fpga.write_int('reg_arm',1)
-  return "ok"
+def rearm(dl, fpga):
+  if (fpga != []):
+    fpga.write_int('reg_arm',0)
+    fpga.write_int('reg_arm',1)
+    return "ok"
+  else:
+    return "fail"
 
-def setLevels (dl, fpga):
+###############################################################################
+#
+# start flow of 10GbE packets
+#
+def startTX(dl, fpga):
+  if (fpga != []):
+    #fpga.write_int('enable', 1)
+    return "ok"
+  else:
+    return "fail"
+
+
+###############################################################################
+#
+# stop flow of 10GbE packets
+def stopTX(dl, fpga):
+  if (fpga != []):
+    #fpga.write_int('enable', 0)
+    return "ok"
+  else:
+    return "fail"
+
+def setLevels (dl, fpga, rid):
 
   n_attempts = 3
   
@@ -122,12 +272,13 @@ def setLevels (dl, fpga):
 
   for i in range (n_attempts):
 
+    fpga.write_int('reg_output_bitselect', bit_window)
     fpga.write_int('reg_coeff_pol1', pol1_coeff)
     fpga.write_int('reg_coeff_pol2', pol2_coeff)
 
     time.sleep(0.1)
 
-    Dada.logMsg(2, dl, "setLevels: setting coeffs ["+str(pol1_coeff)+", "+str(pol2_coeff)+"]")
+    Dada.logMsg(2, dl, "["+rid+"] setLevels: setting coeffs ["+str(pol1_coeff)+", "+str(pol2_coeff)+"]")
 
     pol1, pol2 = bramdumpRoach(dl, fpga, 1)
 
@@ -139,15 +290,15 @@ def setLevels (dl, fpga):
     pol1_max = calculate_max(smoothed_pol1)
     pol2_max = calculate_max(smoothed_pol2)
 
-    Dada.logMsg(2, dl, 'setLevels: pol1_max='+str(pol1_max)+' pol2_max='+str(pol2_max))
+    Dada.logMsg(2, dl, '['+rid+'] setLevels: pol1_max='+str(pol1_max)+' pol2_max='+str(pol2_max))
 
     # find the right bit window and coeffs
     bit_window, pol1_coeff, pol2_coeff = findBitWindow(dl, pol1_max, pol2_max, pol1_coeff, pol2_coeff)
 
-    Dada.logMsg(2, dl, 'setLevels: bit_window='+str(bit_window)+' pol1_coeff='+str(pol1_coeff)+' pol2_coeff='+str(pol2_coeff))
+    Dada.logMsg(2, dl, '['+rid+'] setLevels: bit_window='+str(bit_window)+' pol1_coeff='+str(pol1_coeff)+' pol2_coeff='+str(pol2_coeff))
 
   # now get a more sensitive estimate
-  pol1, pol2 = bramdumpRoach(dl, fpga, 32)
+  pol1, pol2 = bramdumpRoach(dl, fpga, 16)
 
   smoothed_pol1 = median_smooth.smoothList(pol1, 11, 'flat')
   smoothed_pol2 = median_smooth.smoothList(pol2, 11, 'flat')
@@ -156,17 +307,24 @@ def setLevels (dl, fpga):
   pol1_max = calculate_max(smoothed_pol1)
   pol2_max = calculate_max(smoothed_pol2)
 
-  Dada.logMsg(2, dl, 'setLevels: pol1_max='+str(pol1_max)+' pol2_max='+str(pol2_max))
+  Dada.logMsg(2, dl, '['+rid+'] setLevels: pol1_max='+str(pol1_max)+' pol2_max='+str(pol2_max))
 
   # find the right bit window and coeffs
   bit_window, pol1_coeff, pol2_coeff = findBitWindow(dl, pol1_max, pol2_max, pol1_coeff, pol2_coeff)
 
-  Dada.logMsg(2, dl, 'setLevels: bit_window='+str(bit_window)+' pol1_coeff='+str(pol1_coeff)+' pol2_coeff='+str(pol2_coeff))
+  Dada.logMsg(2, dl, '['+rid+'] setLevels: bit_window='+str(bit_window)+' pol1_coeff='+str(pol1_coeff)+' pol2_coeff='+str(pol2_coeff))
 
-  # plotLog2List(bit_window, pol1, pol2)
+  fpga.write_int('reg_output_bitselect', bit_window)
+  fpga.write_int('reg_coeff_pol1', pol1_coeff)
+  fpga.write_int('reg_coeff_pol2', pol2_coeff)
 
-  return "ok"
+  Dada.logMsg(2, dl, '['+rid+'] bit_window='+str(bit_window)+' pol1='+str(pol1_coeff)+' pol2='+str(pol2_coeff))
 
+  average_coeff = (pol1_coeff + pol2_coeff) / 2.0
+
+  Dada.logMsg(2, dl, '['+rid+'] setLevels: returning ok, ' + str(average_coeff))
+
+  return ("ok", str(average_coeff))
 
 def bramdumpRoach(dl, fpga, n_dumps=1):
 
@@ -180,8 +338,6 @@ def bramdumpRoach(dl, fpga, n_dumps=1):
   for i in range(n_dumps-1):
     tmp1 = numpy.array(struct.unpack('>512I',fpga.read('scope_output1_bram',512*4,0)))
     tmp2 = numpy.array(struct.unpack('>512I',fpga.read('scope_output2_bram',512*4,0)))
-
-
     for j in range(512):
       pol1[j] = pol1[j] + tmp1[j]
       pol2[j] = pol2[j] + tmp2[j]
@@ -194,9 +350,43 @@ def bramdumpRoach(dl, fpga, n_dumps=1):
 
 ###############################################################################
 #
+# dump the BRAM contents to a file for asynchronous plotting
+#
+def bramdiskRoach(dl, fpga, timestamp, roach_name):
+
+  Dada.logMsg(2, dl, "[" + roach_name + "] bramdiskRoach: dumping BRAM");
+
+  file_prefix = timestamp + "_" + roach_name
+
+  # get the current values for pol1 and pol2
+  pol1, pol2 = bramdumpRoach(dl, fpga, 3)
+
+  # get the current bit window
+  bit_window = fpga.read_int('reg_output_bitselect')
+
+  # file to read is 
+  bram_file = file_prefix + ".bram"
+  fptr = open(bram_file, "wb")
+
+  bit_window_bin = struct.pack("I1",bit_window)
+  pol1_binary = struct.pack("512f",*pol1)
+  pol2_binary = struct.pack("512f",*pol2)
+
+  fptr.write(bit_window_bin)
+  fptr.write(pol1_binary)
+  fptr.write(pol2_binary)
+  fptr.close()
+  
+  return 'ok'
+
+
+###############################################################################
+#
 # create 3 plot files from a bramdump of the ROACH board
 #
 def bramplotRoach(dl, fpga, timestamp, roach_name):
+
+  Dada.logMsg(2, dl, "[" + roach_name + "] bramplotRoach: dumping BRAM");
 
   file_prefix = timestamp + "_" + roach_name
 
@@ -222,6 +412,11 @@ def bramplotRoach(dl, fpga, timestamp, roach_name):
     else:
       pol2_float.append(0)
 
+  # reverse the elements in the list so the plots match the mon plots
+  # xaxis.reverse()
+  pol1_float.reverse()
+  pol2_float.reverse()
+
   ymin = 0
   ymax = 32
   xmin = 0
@@ -230,6 +425,8 @@ def bramplotRoach(dl, fpga, timestamp, roach_name):
   xres_list = [1024, 400,   112]
   yres_list = [768,  300,   84]
   pp_list   = [True, True, False]
+
+  Dada.logMsg(2, dl, "[" + roach_name + "] bramplotRoach: starting plot");
 
   for i in range(3):
 
@@ -254,7 +451,6 @@ def bramplotRoach(dl, fpga, timestamp, roach_name):
       ax.set_xlabel('Channel')
       ax.set_ylabel('Activated Bits')
     else:
-      #ax.set_axis_off()
       ax.get_xaxis().set_visible(False)
       ax.get_yaxis().set_visible(False)
 
@@ -265,7 +461,6 @@ def bramplotRoach(dl, fpga, timestamp, roach_name):
     ax.plot(xaxis, pol2_float, 'g-', label='pol 2')
 
     if (pp):
-      # add a legend
       ax.legend()
 
     # print grey frames for the inactive parts of the 32 bit number
@@ -281,16 +476,16 @@ def bramplotRoach(dl, fpga, timestamp, roach_name):
       ax.axhspan(0, 24, facecolor='grey', alpha=0.75)
 
     # hard set the x,y limits
-    matplotlib.pylab.xlim((xmin, xmax))
-    matplotlib.pylab.ylim((ymin, ymax))
+    ax.set_xlim((xmin, xmax))
+    ax.set_ylim((ymin, ymax))
 
-    dpi = fig.get_dpi()
-    Dada.logMsg(2, dl, "bramplotRoach: creating " + filename)
-    fig.savefig(filename, dpi=(dpi), facecolor='black')
+    FigureCanvas(fig).print_png(filename)
+    fig.delaxes(ax)
+    Dada.logMsg(2, dl, "[" + roach_name + "] bramplotRoach: plotting complete");
 
     # now cleanup any excess plotting files
     filematch = "*"+roach_name + "_" + str(xres) + "x" + str(yres) + ".png"
-    Dada.logMsg(2, dl, "bramplotRoach: checking " + os.getcwd() + " for matching " + filematch)
+    Dada.logMsg(3, dl, "bramplotRoach: checking " + os.getcwd() + " for matching " + filematch)
     filelist = os.listdir(os.getcwd())
     filelist.sort(reverse=True)
     count = 0
@@ -298,18 +493,16 @@ def bramplotRoach(dl, fpga, timestamp, roach_name):
       if (fnmatch.fnmatch(filename, filematch)):
         count += 1
         if (count > 3):
-          Dada.logMsg(2, dl, "bramplotRoach: cleaning file: "+filename)
+          Dada.logMsg(3, dl, "bramplotRoach: cleaning file: "+filename)
           os.remove(filename)
 
-    matplotlib.pylab.clf()
-
-  Dada.logMsg(2, dl, "bramplotRoach: plotting complete");
+  Dada.logMsg(2, dl, "[" + roach_name + "] bramplotRoach: cleanup complete");
   return "ok"
 
 def calculate_max (data):
   maxval = 0
   for i, value in enumerate(data):
-    if ((i<430) or (i > 480)):
+    if (i < 400):
       if (value > maxval):
         maxval = value
 
@@ -325,8 +518,8 @@ def findBitWindow(dl, pol1_max, pol2_max, gain1, gain2):
 
   val = (pol1_max + pol2_max) / 2.0
 
-  Dada.logMsg(2, dl, "findBitWindow: max value = "+str(val))
-  Dada.logMsg(2, dl, "findBitWindow: initial gains ["+str(gain1)+", "+str(gain2)+"]")
+  Dada.logMsg(3, dl, "findBitWindow: max value = "+str(val))
+  Dada.logMsg(3, dl, "findBitWindow: initial gains ["+str(gain1)+", "+str(gain2)+"]")
 
   current_window = 0
   desired_window = 0
@@ -351,7 +544,7 @@ def findBitWindow(dl, pol1_max, pol2_max, gain1, gain2):
   if (desired_window == 3):
     desired_window = 2
 
-  Dada.logMsg(2, dl, "findBitWindow: current_window="+str(current_window)+" desired_window="+str(desired_window))
+  Dada.logMsg(3, dl, "findBitWindow: current_window="+str(current_window)+" desired_window="+str(desired_window))
 
   if ((pol1_max == 0) or (pol2_max == 0)):
     pol1_max = 1
@@ -369,34 +562,34 @@ def findBitWindow(dl, pol1_max, pol2_max, gain1, gain2):
 
   desired_val = ((float((bitsel_max[desired_window]+1)) / 4.0))
 
-  Dada.logMsg(2, dl, "findBitWindow: desired_val="+str(desired_val))
+  Dada.logMsg(3, dl, "findBitWindow: desired_val="+str(desired_val))
 
   gain_factor1 = desired_val / float(pol1_max)
   gain_factor2 = desired_val / float(pol2_max)
 
-  Dada.logMsg(2, dl, "findBitWindow: 1 new gains ["+str(gain_factor1)+", "+str(gain_factor2)+"]")
+  Dada.logMsg(3, dl, "findBitWindow: 1 new gains ["+str(gain_factor1)+", "+str(gain_factor2)+"]")
 
   gain_factor1 = math.sqrt(gain_factor1)
   gain_factor2 = math.sqrt(gain_factor2)
 
-  Dada.logMsg(2, dl, "findBitWindow: 2 new gains ["+str(gain_factor1)+", "+str(gain_factor2)+"]")
+  Dada.logMsg(3, dl, "findBitWindow: 2 new gains ["+str(gain_factor1)+", "+str(gain_factor2)+"]")
 
   gain_factor1 *= gain1
   gain_factor2 *= gain2
 
-  Dada.logMsg(2, dl, "findBitWindow: 3 new gains ["+str(gain_factor1)+", "+str(gain_factor2)+"]")
+  Dada.logMsg(3, dl, "findBitWindow: 3 new gains ["+str(gain_factor1)+", "+str(gain_factor2)+"]")
 
   gain1 = int(gain_factor1)
   gain2 = int(gain_factor2)
 
-  Dada.logMsg(2, dl, "findBitWindow: gains "+str(gain_factor1)+" -> "+str(gain1))
-  Dada.logMsg(2, dl, "findBitWindow: gains "+str(gain_factor2)+" -> "+str(gain2))
+  Dada.logMsg(3, dl, "findBitWindow: gains "+str(gain_factor1)+" -> "+str(gain1))
+  Dada.logMsg(3, dl, "findBitWindow: gains "+str(gain_factor2)+" -> "+str(gain2))
 
   if (gain1 > 262143):
     gain1 = 262143
 
   if (gain2 > 262143):
-    gain2 = 262143
+    gain2 = 262143 
 
   return desired_window, gain1, gain2
 
@@ -493,7 +686,7 @@ def plotList(data):
 # creates a figure of the specified size
 def createFigure(xdim, ydim):
 
-  fig = pylab.figure(1, facecolor='black')
+  fig = matplotlib.figure.Figure(facecolor='black')
   dpi = fig.get_dpi()
   curr_size = fig.get_size_inches()
   xinches = float(xdim) / float(dpi)
@@ -542,6 +735,24 @@ def set_backgroundcolor(ax, color):
      lh = ax.get_legend()
      if lh != None:
          lh.legendPatch.set_facecolor(color)
+
+def capture(func, *args, **kwargs):
+    """Capture the output of func when called with the given arguments.
+
+    The function output includes any exception raised. capture returns
+    a tuple of (function result, standard output, standard error).
+    """
+    stdout, stderr = sys.stdout, sys.stderr
+    sys.stdout = c1 = cStringIO.StringIO()
+    sys.stderr = c2 = cStringIO.StringIO()
+    result = None
+    try:
+        result = func(*args, **kwargs)
+    except:
+        traceback.print_exc()
+    sys.stdout = stdout
+    sys.stderr = stderr
+    return (result, c1.getvalue(), c2.getvalue())
 
 
 

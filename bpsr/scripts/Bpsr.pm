@@ -27,6 +27,7 @@ require AutoLoader;
   &getObsDestinations
   &getConfig
   &getIBOBConfig
+  &getROACHConfig
   &getBeamForPWCHost
 );
 
@@ -129,6 +130,7 @@ sub configureMultibobServer() {
 
   my %cfg   = Bpsr::getConfig();
   my %ibobs = Bpsr::getIBOBConfig();
+  my %roaches  = Bpsr::getROACHConfig();
 
   # multibob_server runs on localhost
   my $host = Dada::getHostMachineName();
@@ -342,6 +344,14 @@ sub getIBOBConfig()
   my %config = Dada::readCFGFileIntoHash($config_file, 0);
   return %config;
 }
+
+sub getROACHConfig()
+{
+  my $config_file = $DADA_ROOT."/share/roach.cfg";
+  my %config = Dada::readCFGFileIntoHash($config_file, 0);
+  return %config;
+}
+
 
 sub getBeamForPWCHost($) 
 {

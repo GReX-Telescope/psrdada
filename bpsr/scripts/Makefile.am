@@ -30,6 +30,7 @@ dist_bin_SCRIPTS = Bpsr.pm \
                    client_bpsr_results_monitor.pl \
                    client_ibob_level_setter.pl \
                    client_bpsr_src_logger.pl \
+                   client_bpsr_transfer_raid.pl \
                    raid_bpsr_archiver.pl \
                    raid_bpsr_beams_finished.pl \
                    raid_bpsr_cleaner.pl \

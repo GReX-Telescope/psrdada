@@ -1,11 +1,12 @@
 #!/usr/bin/env perl
 ###############################################################################
 #
-# server_bpsr_transfer_manager.pl
+# server_bpsr_archival_manager.pl
 #
-# Transfers obsevation/beam to the swinburne and parkes holding areas for 
-# subsequent tape archival
+# manages observational data after it has been recorded, until data is deleted
+# from server and client nodes
 #
+# TODO: THIS IS A WORK IN PROGRESS
 
 use lib $ENV{"DADA_ROOT"}."/bin";
 
@@ -18,7 +19,6 @@ use IO::Select;     # Allows select polling on a socket
 use File::Basename;
 use threads;
 use threads::shared;
-use Thread::Queue;
 use Bpsr;
 
 sub usage() {
@@ -35,11 +35,93 @@ Dada::preventDuplicateDaemon(basename($0));
 #
 # Constants
 #
-#use constant BANDWIDTH     => "0";       # MAX bandwidth
-use constant BANDWIDTH     => "32768";   # 32 MB/s / connection
-use constant PIDFILE       => "bpsr_transfer_manager.pid";
-use constant LOGFILE       => "bpsr_transfer_manager.log";
-use constant QUITFILE      => "bpsr_transfer_manager.quit";
+use constant DL         => 2;
+
+#
+# Global declarations
+#
+our %cfg = Bpsr::getConfig();
+our $quit_daemon : shared = 0;
+our $daemon_name : shared = Dada::daemonBaseName($0);
+our $error = $cfg{"STATUS_DIR"}."/".$daemon_name.".error";
+our $warn  = $cfg{"STATUS_DIR"}."/".$daemon_name.".warn";
+
+#
+# Signal Handlers
+#
+$SIG{INT} = \&sigHandle;
+$SIG{TERM} = \&sigHandle;
+
+# Sanity check for this script
+if (index($cfg{"SERVER_ALIASES"}, $ENV{'HOSTNAME'}) < 0 )
+{
+  print STDERR "ERROR: Cannot run this script on ".$ENV{'HOSTNAME'}."\n";
+  print STDERR "       Must be run on the configured server: ".$cfg{"SERVER_HOST"}."\n";
+  exit(1);
+}
+
+#
+# Main Loop
+#
+{
+  my $log_file = $cfg{"SERVER_LOG_DIR"}."/".$daemon_name.".log";
+  my $pid_file = $cfg{"SERVER_CONTROL_DIR"}."/".$daemon_name.".pid";
+  my $control_thread = 0;
+
+  # clear the error and warning files if they exist
+  if ( -f $warn ) {
+    unlink ($warn);
+  }
+  if ( -f $error) {
+    unlink ($error);
+  }
+
+  # Autoflush output
+  $| = 1;
+
+  # Redirect standard output and error
+  Dada::daemonize($log_file, $pid_file);
+
+  Dada::logMsg(0, DL, "STARTING SCRIPT");
+
+  chdir $cfg{"SERVER_RESULTS_DIRS"};
+
+  # Start the daemon control thread
+  $control_thread = threads->new(\&controlThread, $pid_file);
+
+  my $cmd;
+  my $result = "";
+  my $response = "";
+
+  while ( !$quit_daemon )
+  {
+
+    # process any observations marked finished [finished -> transferring]
+    Dada::logMsg(2, DL, "main: processFinished()");
+    ($result, $response) = processFinished();
+    Dada::logMsg(3, DL, "main: processFinished() ".$result." ".$response);
+
+    # process any observations marked transferring [transferring -> transferred]
+    Dada::logMsg(2, DL, "main: processTransferred()");
+    ($result, $response) = processTransferred();
+    Dada::logMsg(3, DL, "main: processTransferred() ".$result." ".$response);
+
+    # after observation has been transferred, it will either be archived
+    Dada::logMsg(2, DL, "main: processArchived()");
+    ($result, $response) = processArchived();
+    Dada::logMsg(3, DL, "main: processArchived() ".$result." ".$response);
+
+    # after observation has been transferred, it will either be archived
+    Dada::logMsg(2, DL, "main: processDeleted()");
+    ($result, $response) = processDeleted();
+    Dada::logMsg(3, DL, "main: processDeleted() ".$result." ".$response);
+
+    
+
+
+
+
+
 
 #
 # Global Variables

@@ -35,20 +35,29 @@ my %pid_sizes = ();
 my $obs = "";
 my $pid = "";
 
-chdir $cfg{"CLIENT_ARCHIVE_DIR"};
-
+if (! -d $cfg{"CLIENT_ARCHIVE_DIR"})
 {
+  print "FINISHED\n";
+  print "TRANSFERRED\n";
+  exit;
+}
 
-  # get a PID listing for each project on local disk
-  $cmd = "grep ^PID */*/obs.start | awk -F/ '{print \$1\" \"\$2\" \"\$3}' | awk '{print \$1\"/\"\$2\" \"\$4}'";
-  Dada::logMsg(2, $dl, $cmd);
-  ($result, $response) = Dada::mySystem($cmd);
-  Dada::logMsg(3, $dl, $result." ".$response);
-  @lines = split(/\n/, $response);
-  for ($i=0; $i<=$#lines; $i++)
+chdir $cfg{"CLIENT_ARCHIVE_DIR"};
+{
+  my $ndirs = `ls -1d * | wc -l`;
+  if ($ndirs > 0)
   {
-    ($obs, $pid) = split(/ /, $lines[$i]);
-    $pids{$obs} = $pid;
+    # get a PID listing for each project on local disk
+    $cmd = "grep ^PID */*/obs.start | awk -F/ '{print \$1\" \"\$2\" \"\$3}' | awk '{print \$1\"/\"\$2\" \"\$4}'";
+    Dada::logMsg(2, $dl, $cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, $dl, $result." ".$response);
+    @lines = split(/\n/, $response);
+    for ($i=0; $i<=$#lines; $i++)
+    {
+      ($obs, $pid) = split(/ /, $lines[$i]);
+      $pids{$obs} = $pid;
+    }
   }
 
   # get a list of all beams.deleted

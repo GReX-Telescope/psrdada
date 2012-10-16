@@ -40,7 +40,7 @@ $daemon_name = Dada::daemonBaseName($0);
 $quit_daemon = 0;
 $warn = $cfg{"STATUS_DIR"}."/".$daemon_name.".warn";
 $error = $cfg{"STATUS_DIR"}."/".$daemon_name.".error";
-@r_scripts = ("bpsr_archiver", "bpsr_beams_finished", "bpsr_swin_transferrer", "bpsr_cleaner");
+@r_scripts = ("bpsr_archiver", "bpsr_beams_finished", "bpsr_swin_transferrer", "bpsr_cleaner", "bpsr_reporter");
 
 {
 
@@ -54,7 +54,7 @@ $error = $cfg{"STATUS_DIR"}."/".$daemon_name.".error";
   my $rval = 0;
   my $response = "";
   my $r_user = "bpsr";
-  my $r_host = "raid0";
+  my $r_host = "caspsr-raid0";
   my $r_path = "/lfs/data0/bpsr/control";
 
   # Every 60 seconds, check for the existence of the script on the remote machine

@@ -50,8 +50,8 @@ my $pwc_host = $cfg{"IBOB_SIM_HOST"};
 my $pwc_port = $cfg{"IBOB_SIM_PORT"};
 
 # Where the bpsr_udpgenerator is running
-my $ibob_host = $cfg{"DFB_SIM_HOST"};
-my $ibob_port = $cfg{"DFB_SIM_PORT"};
+my $ibob_host = $cfg{"SIM_HOST"};
+my $ibob_port = $cfg{"SIM_PORT"};
 
 my $logfile = $cfg{"SERVER_LOG_DIR"}."/".LOGFILE;
 my $pidfile = $cfg{"SERVER_CONTROL_DIR"}."/".PIDFILE;
