@@ -1,1 +1,1 @@
-PROC_CMD digifil -b 1 -B 10 -c -f 8 -t 2
+PROC_CMD digifil -b 1 -B 10 -c -f 8 -t 2 <DADA_INFO>
