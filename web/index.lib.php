@@ -3,7 +3,7 @@
 include("dada_webpage.lib.php");
 include("instrument.lib.php");
 
-define (DADA_CFG, "/home/dada/linux_64/share/dada.cfg");
+define ("DADA_CFG", "/home/dada/linux_64/share/dada.cfg");
 
 class index extends dada_webpage 
 {

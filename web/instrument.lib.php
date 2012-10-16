@@ -1,7 +1,5 @@
 <?PHP 
 
-if (!$_INSTRUMENT_LIB_PHP) { $_INSTRUMENT_LIB_PHP = 1;
-
 class instrument
 {
   /* instrument name */
@@ -34,6 +32,15 @@ class instrument
     $this->config_file = $config_file;
     $this->url = $url;
     $this->config = $this->configFileToHash($config_file);
+
+    // ensure system commands work with some basic path settings
+    $curr_path = getenv("PATH");
+    if ($curr_path == "")
+      $curr_path = "/usr/bin";
+    else
+      $curr_path .= ":/usr/bin";
+    putenv("PATH=".$curr_path);
+    
   }
 
   function configFileToHash($fname="") {
@@ -60,8 +67,9 @@ class instrument
 
         // skip blank lines
         if (strlen($line) > 0) {
-          $array = split("[ \t]+",$line,2);   // Split into keyword/value
-          $returnArray[$array[0]] = $array[1];
+          $array = preg_split('/\s+/', $line, 2);   // Split into keyword/value
+          if (count($array) == 2)
+            $returnArray[$array[0]] = $array[1];
         }
       }
     }
@@ -460,24 +468,26 @@ class instrument
   #
   # return a list of all the PSRS listed in this user's psrcat catalogue
   #
-  function getPsrcatPsrs() {
-
-    $cmd = "psrcat -all -c \"PSRJ RAJ DECJ\" -nohead | grep -v \"*             *\" | awk '{print $2,$4, $7}'";
-    $script = "source /home/dada/.bashrc; ".$cmd." 2>&1";
-    $string = exec($script, $output, $return_var);
-
+  function getPsrcatPsrs() 
+  {
     $psrs = array();
+    $prefix = ". /home/dada/.dadarc;";
+    $bin_dir = DADA_ROOT."/bin";
 
-    for ($i=0; $i<count($output); $i++) {
+    # Determine the Period (P0)
+    $cmd = $prefix." ".$bin_dir."/psrcat -all -c 'PSRJ RAJ DECJ' -nohead | grep -v '*             *' | awk '{print $2, $4, $7}'";
+
+    $output = array();
+    $string = exec($cmd, $output, $return_var);
+    for ($i=0; $i<count($output); $i++) 
+    {
       $bits = split(" ", $output[$i]);
       $psrs[$bits[0]] = array("RAJ" => $bits[1], "DECJ" => $bits[2]);
     }
 
     return $psrs;
-
   }
 
 }
 
-} // _INSTRUMENT_LIB_PHP
 ?>

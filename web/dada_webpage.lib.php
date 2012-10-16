@@ -1,7 +1,5 @@
 <?PHP
 
-if (!$_DADA_WEBPAGE_LIB_PHP) { $_DADA_WEBPAGE_LIB_PHP = 1;
-
 class dada_webpage 
 {
   /* array of css pages requried */
@@ -66,7 +64,7 @@ function handleDirect($child_class)
 
   // if this parameter is defined, output the HTML for the
   // specified pages
-  if ($_GET["single"] == "true") 
+  if (isset($_GET["single"]) && $_GET["single"] == "true") 
   {
     $obj = new $child_class();
 
@@ -74,7 +72,6 @@ function handleDirect($child_class)
     echo "<html>\n";
     echo "  <head>\n";
     echo "    <title>".$obj->title."</title>\n";
-    echo "    <link rel='shortcut icon' href='/images/dada_favico.ico'/>\n";
 
     // css and javascript includes
     for ($i=0; $i<count($obj->css); $i++)
@@ -116,12 +113,11 @@ function handleDirect($child_class)
   } else if ($_GET["update"] == "true") {
 
     $obj = new $child_class();
-    $obj->printUpdateHTML($_GET["host"], $_GET["port"]);
+    $port = isset($_GET["port"]) ? $_GET["port"] : "";
+    $host = isset($_GET["host"]) ? $_GET["host"] : "";
+    $obj->printUpdateHTML($host, $port);
 
   } else {
     # do nothing :)
   }
 }
-
-} // _DADA_WEBPAGE_LIB_PHP
-

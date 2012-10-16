@@ -1,6 +1,6 @@
 <?PHP
 
-if (!$_FUNCTIONS_I_PHP) { $_FUNCTIONS_I_PHP = 1;
+define("BLOCKING_SOCKETS", true);
 
 function getConfigFile($fname, $quiet=FALSE) {
 
@@ -23,7 +23,7 @@ function getConfigFile($fname, $quiet=FALSE) {
 
       // skip blank lines
       if (strlen($line) > 0) {
-        $array = split("[ \t]+",$line,2);   // Split into keyword/value
+        $array = preg_split("/[\s]+/",$line,2);   // Split into keyword/value
         $returnArray[$array[0]] = $array[1];
       }
     }
@@ -187,16 +187,21 @@ function getSingleStatusMessage($fname) {
 }
 
 
+/*
+ *  open a TCP/IP socket to the host:port within the timeout
+ */
 function openSocket($host, $port, $timeout=2) {
 
-  //create a socket
+  // create a socket
   $socket = socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
-  if (!(socket_set_nonblock($socket))) {
+
+  if (! socket_set_nonblock($socket))
     return array(0, "Unable to set nonblock on socket");
-  }
+
   $time = time();
 
-  while (!@socket_connect($socket, $host, $port)) {
+  while (!@socket_connect($socket, $host, $port)) 
+  {
     $err = socket_last_error($socket);
     if ($err == 115 || $err == 114) {
       if ((time() - $time) >= $timeout) {
@@ -209,37 +214,37 @@ function openSocket($host, $port, $timeout=2) {
     }
     return array(0, socket_strerror($err));
   }                                                                                                                                        
-  if (!(socket_set_block($socket))){
+  if (! socket_set_block($socket))
     return array(0, "Unable to set block on socket");
-  } 
+
   return array ($socket,"ok");
 }
 
-function socketRead($socket) {
+function socketRead($socket)
+{
+  $result = "ok";
+  $response = "";
 
-  $string = "";
-  if ($socket) {
-    #echo "setting nonblock<BR>\n";
-    if (!(socket_set_nonblock($socket))) {
-      $string = "ERROR: Unable to set nonblock on socket";
-    } else {
+  if ($socket) 
+  {
+    $response = @socket_read ($socket, 8192, PHP_NORMAL_READ);
 
-      #echo "set nonblock<BR>\n";
-      $string = @socket_read ($socket, 8192, PHP_NORMAL_READ);
-      #echo "read returned<BR>\n";
-      if ($string === FALSE) {
-        $last_error = socket_last_error();
-        $string = "ERROR: socket_read(): ".socket_strerror($last_error);
+    if ($response === FALSE)
+    {
+      $result = "fail";
+      $err_code = socket_last_error();
+      $response = socket_strerror($err_code);
+      if ($response == "Connection reset by peer")
+      {
+        socket_close($socket);
+        $socket = 0;
       }
-      socket_set_block($socket);
     }
-  } else {
-    $string = "ERROR: socket closed before read";
   }
+  else
+    $response = "socket invalid";
 
-  #echo "socketRead: returning ".$string."<BR>\n";
-
-  return $string;
+  return array($result, rtrim($response));
 }
 
 
@@ -338,9 +343,6 @@ function echoOption($value,$name,$readonly=FALSE,$selected="notAlwaysNeeded")
   if ("$selected" == "$value") {
     echo " SELECTED";
   }
-  if ($_SESSION["readonly"] == "true") {
-    echo " DISABLED";
-  }
   echo ">".$name."</option>\n";
 }
 
@@ -351,7 +353,6 @@ function getFileListing($dir,$pattern="/*/") {
   if ($handle = opendir($dir)) {
     while (false !== ($file = readdir($handle))) {
       if (($file != ".") && ($file != "..") && (preg_match($pattern,$file) > 0)) {
-      //if (($file != ".") && ($file != "..")) {
         array_push($arr,$file);
       }
     }
@@ -623,5 +624,4 @@ function getDBInfo($hosts, $key, $instrument) {
 
 }
 
-} // _FUNCTIONS_I_PHP
 ?>

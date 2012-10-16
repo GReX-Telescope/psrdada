@@ -1,7 +1,7 @@
 <?PHP
 
-include("dada_webpage.lib.php");
-include("instrument.lib.php");
+include_once("dada_webpage.lib.php");
+include_once("instrument.lib.php");
 
 class admin extends dada_webpage 
 {
@@ -39,7 +39,16 @@ class admin extends dada_webpage
   function printJavaScriptHead()
   {
 ?>
-    <script type='text/javascript'>  
+    <style type="text/css">
+      td {
+        padding-left: 5px;
+      }
+
+      th {
+        background-color: #cae2ff;
+      }
+    </style>
+    <script type='text/javascript'> 
 
       function popUp(URL, type) {
 
@@ -54,22 +63,26 @@ class admin extends dada_webpage
         eval("page" + type + " = window.open(URL, '" + type + "', '"+options+",width=1024,height=768');");
       }
 
-      function handle_admin_request(ad_http_request) 
+      function handle_admin_request(ad_xml_request) 
       {
-        if (ad_http_request.readyState == 4) {
-
-          var response = String(ad_http_request.responseText)
-          var lines = response.split("\n");
-          var bits;
-
-          bits = lines[0].split(":::");
-          host = bits[1];
-          for (i=1; i<lines.length; i++)
+        if (ad_xml_request.readyState == 4) 
+        {
+          var xmlDoc = ad_xml_request.responseXML;
+          if (xmlDoc != null)
           {
-            if (lines[i].length > 3) 
+            var xmlObj = xmlDoc.documentElement;
+            var host_report = xmlObj.getElementsByTagName("host_report");
+            var host = host_report[0].getAttribute("host");
+            var children = host_report[0].childNodes;
+            for (i=0; i<children.length; i++) 
             {
-              bits = lines[i].split(":::");
-              document.getElementById(host+"_"+bits[0]).innerHTML = bits[1];
+              node = children[i];
+              if (node.nodeType == 1)
+              {
+                key = node.nodeName;
+                val = node.childNodes[0].nodeValue;
+                document.getElementById(host+"_"+key).innerHTML = val;
+              }
             }
           }
         }
@@ -77,21 +90,21 @@ class admin extends dada_webpage
 
       function admin_request(host) 
       {
-        var ad_http_request;
+        var ad_xml_request;
         var url = "admin.lib.php?update=true&host="+host;
 
         if (window.XMLHttpRequest)
-          ad_http_request = new XMLHttpRequest()
+          ad_xml_request = new XMLHttpRequest()
         else
-          ad_http_request = new ActiveXObject("Microsoft.XMLHTTP");
+          ad_xml_request = new ActiveXObject("Microsoft.XMLHTTP");
     
-        ad_http_request.onreadystatechange = function() 
+        ad_xml_request.onreadystatechange = function() 
         {
-          handle_admin_request(ad_http_request)
+          handle_admin_request(ad_xml_request)
         }
 
-        ad_http_request.open("GET", url, true)
-        ad_http_request.send(null)
+        ad_xml_request.open("GET", url, true)
+        ad_xml_request.send(null)
 
       }
 
@@ -117,7 +130,6 @@ class admin extends dada_webpage
 
     $this->openBlockHeader("Machines");
 ?>
-
     <table width="100%">
 <?
     
@@ -141,12 +153,12 @@ class admin extends dada_webpage
       if ($this->config["RAC_".$i] != "")
         echo "        <td><a href='https://".$this->config["RAC_".$i]."/'>link</a></td>\n";
       else
-        echo "        <td></td>\n";
+        echo "        <td>-</td>\n";
 
-      if ($this->config["OMSA_".$i] != "")
+      if (array_key_exists("OMSA_".$i, $this->config) && $this->config["OMSA_".$i] != "")
         echo "        <td><a href='https://".$this->config["OMSA_".$i]."/'>link</a></td>\n";
       else
-        echo "        <td></td>\n";
+        echo "        <td>-</td>\n";
 
       for ($j=0; $j<count($keys); $j++) 
       {
@@ -166,27 +178,24 @@ class admin extends dada_webpage
 
   function printUpdateHTML($host, $port)
   {
-
-    $cmd = "ssh ".$host." 'om_custom_report.csh'";
+    $cmd = "/usr/bin/ssh ".$host." 'om_custom_report.csh'";
     $array=array();
     $last = exec($cmd, $array, $rval);
     $results = array();
 
-    $string = "host:::".$host."\n";
-
+    # produce the xml
+    $xml = "<?xml version='1.0' encoding='ISO-8859-1'?>\n";
+    $xml .= "<admin_report>";
+    $xml .= "<host_report host='".$host."'>";
     for ($i=0; $i<count($array); $i++) {
-      $line = $array[$i];
-      $arr = split(" ",$line, 2);
-      $key = $arr[0];
-      $val = $arr[1];
-      $string .= $key.":::".$val."\n";
+      $xml .= $array[$i];
     }
+    $xml .= "</host_report>";
+    $xml .= "</admin_report>";
 
-    echo $string;
-    flush();
-
+    header('Content-type: text/xml');
+    echo $xml;
   }
-
 }
 handledirect("admin");
 
