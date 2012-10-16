@@ -76,8 +76,8 @@ int udpdb_error_function (dada_pwc_main_t* pwcm) {
 
   /* If UTC_START has been received, the buffer function 
    * should be returning data */
-  if (udpdb_header_valid_function (pwcm) == 1) {
-
+  if (udpdb_header_valid_function (pwcm) == 1) 
+  {
     udpdb->error_seconds--;
     //multilog (pwcm->log, LOG_WARNING, "Error Function has %"PRIu64" error "
     //          "seconds remaining\n",udpdb->error_seconds);
@@ -221,8 +221,9 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, int64_t* size)
   udpdb->mid_sequence = udpdb->min_sequence + BPSR_NUM_UDP_PACKETS;
   udpdb->max_sequence = udpdb->mid_sequence + BPSR_NUM_UDP_PACKETS;
 
-  multilog (log, LOG_INFO, "seq range [%"PRIu64" - %"PRIu64" - %"PRIu64"]\n",
-            udpdb->min_sequence, udpdb->mid_sequence, udpdb->max_sequence);
+  if (udpdb->verbose)
+    multilog (log, LOG_INFO, "seq range [%"PRIu64" - %"PRIu64" - %"PRIu64"] datasize=%"PRIu64"\n",
+             udpdb->min_sequence, udpdb->mid_sequence, udpdb->max_sequence, udpdb->datasize);
 
   // Assume we will be able to return a full buffer
   *size = (int64_t) udpdb->datasize;
@@ -418,10 +419,6 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, int64_t* size)
         }
       }
     } 
-    else
-    {
-      multilog (log, LOG_INFO, "asked to quit early!\n");
-    }
   }
 
   if (udpdb->verbose)
@@ -444,7 +441,8 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, int64_t* size)
     }
 
     /* If the timeout ocurred, this is most likely due to end of data */
-    if (timeout_ocurred) {
+    if (timeout_ocurred) 
+    {
       *size = udpdb->curr_buffer_count * BPSR_UDP_DATASIZE_BYTES;
       multilog (log, LOG_WARNING, "Suspected EOD received, returning "
                      "%"PRIi64" bytes\n",*size);
