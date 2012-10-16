@@ -15,6 +15,8 @@ INCLUDES = -I$(top_srcdir)/src
 if HAVE_IPP
 
 bin_PROGRAMS += leda_dbupdb_ipp
+AM_CFLAGS = $(IPP_CFLAGS)
+LDADD += $(IPP_LIBS)
 
 endif
 
@@ -29,7 +31,7 @@ if COMPILE_THIRD
 
 bin_PROGRAMS += leda_udpgen
 
-AM_CFLAGS = -D$(ARCH)
+leda_udpgen_CFLAGS = -D$(ARCH)
 INCLUDES += -I$(top_srcdir)/3rdparty
 LDADD += $(top_builddir)/3rdparty/libtimers.la
 
