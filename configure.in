@@ -62,6 +62,7 @@ SWIN_LIB_CUDA
 AX_OPENMP
 SWIN_LIB_PGPLOT
 SWIN_LIB_MKL
+SWIN_LIB_IPP
 SWIN_LIB_RDMACM
 
 AC_CHECK_LIB([m], [sin])
@@ -127,8 +128,8 @@ AC_CONFIG_FILES([Makefile
 		bpsr/mon/Makefile
 		bpsr/rfi/Makefile
 		bpsr/swinproc/Makefile
-		bpsr/fil_edit/Makefile
 		bpsr/swinproc/dedisp/Makefile
+		bpsr/fil_edit/Makefile
 		bpsr/scripts/Makefile
 		bpsr/web/Makefile
 		bpsr/config/Makefile
