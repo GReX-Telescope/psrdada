@@ -154,8 +154,8 @@ int main (int argc, char **argv)
     char file_base[128];
     
     // strip the .bramdump from the end of the filename
-    strncpy(file_base, fname, (strlen(fname)-9));
-    file_base[(strlen(fname)-9)] = '\0';
+    strncpy(file_base, fname, (strlen(fname)-5));
+    file_base[(strlen(fname)-5)] = '\0';
 
     sprintf(png_file, "%s_112x84.png/png", file_base);
     createPlot(png_file, xval, pol1, pol2, 112, 84, 1, bit_window);
