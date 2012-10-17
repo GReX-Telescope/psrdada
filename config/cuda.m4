@@ -22,7 +22,7 @@ AC_DEFUN([SWIN_LIB_CUDA],
     fi
 
     if test x"$with_cuda_dir" != x; then
-      cuda_nvcc=$with_cuda_dir/bin/cuda
+      cuda_nvcc=$with_cuda_dir/bin/nvcc
     else
       AC_PATH_PROG(cuda_nvcc, nvcc, no)
     fi
@@ -89,9 +89,11 @@ AC_DEFUN([SWIN_LIB_CUDA],
 
   CUDA_LIBS="$cuda_LIBS"
   CUDA_CFLAGS="$cuda_CFLAGS"
+  CUDA_NVCC_CFLAGS="$CUDA_NVCC_FLAGS"
 
   AC_SUBST(CUDA_LIBS)
   AC_SUBST(CUDA_CFLAGS)
+  AC_SUBST(CUDA_NVCC_CFLAGS)
   AM_CONDITIONAL(HAVE_CUDA,[test "$have_cuda" = "yes"])
 
   CUFFT_LIBS="$cufft_LIBS"
