@@ -493,7 +493,7 @@ void * leda_udpdb_receive_obs (void * arg)
           if (seq_byte <= ctx->block_end_byte)
           {
             byte_offset = seq_byte - ctx->block_start_byte;
-            //memcpy (ctx->block + byte_offset, ctx->sock->buf + UDP_HEADER, UDP_DATA);
+            memcpy (ctx->block + byte_offset, ctx->sock->buf + UDP_HEADER, UDP_DATA);
             ctx->packets->received++;
             ctx->bytes->received += UDP_DATA;
             ctx->block_count++;
