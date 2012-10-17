@@ -1,13 +1,13 @@
 
-lib_LTLIBRARIES = libdedisp.la
+lib_LTLIBRARIES = libspdedisp.la
 
-libdedisp_la_SOURCES = getDMtable.C gtools.C
+libspdedisp_la_SOURCES = getDMtable.C gtools.C
 
 bin_PROGRAMS = dedisperse_all
 
 dedisperse_all_SOURCES = dedisperse_all.C dedisperse_header.c
 
-LDADD = $(top_builddir)/bpsr/swinproc/libswinproc.la libdedisp.la
+LDADD = $(top_builddir)/bpsr/swinproc/libswinproc.la libspdedisp.la
 
 dedisperse_all_LDADD = $(LDADD)
 
