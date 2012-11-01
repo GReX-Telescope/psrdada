@@ -148,9 +148,9 @@ sub main() {
         # and is the age of the youngest file (but -ve)
         $t = getObsAge($o, $n_bands, "lowres");
  
-        if (($n_bands != $cfg{"NUM_PWC"}) && ($t > -45) && ($t < 45))
+        if (($n_bands != $cfg{"NUM_PWC"}) && ($t > -45) && ($t < 0))
         {
-          Dada::logMsg(1, $dl, "waiting for obs to be a little older");
+          Dada::logMsg(1, $dl, "waiting for ".$o." to be older age=".$t);
         }
         # newest archive was more than 5 minutes old, finish the obs.
         elsif ($t > 300) 
@@ -463,10 +463,6 @@ sub processObservation($$) {
     Apsr::removeFiles($o, "phase_vs_freq_".$source."*_1024x768.png", 40);
     Apsr::removeFiles($o, "bandpass_".$source."*_240x180.png", 40);
     Apsr::removeFiles($o, "bandpass_".$source."*_1024x768.png", 40);
-  }
-
-  if ($#tres_plot >= 0) {
-    copyLatestPlots($o, $source, "240x180");
   }
 
   return ($#tres_plot + 1);
@@ -1090,56 +1086,6 @@ sub makePlotsFromArchives($$$$$) {
   system("mv -f ".$dir."/band_tmp ".$dir."/".$band);
 
 }
-
-sub copyLatestPlots($$$)
-{
-  my ($o, $s, $dim) = @_;
- 
-  my $cmd = "";
-  my $result = "";
-  my $response = ""; 
-
-  $cmd = "ls -1 ".$o."/phase_vs_flux_".$s."_*_".$dim.".png | sort | tail -n 1";
-  ($result, $response) = Dada::mySystem($cmd);
-  if ($result eq "ok") {
-    if ( -f $response) {
-      $cmd = "cp ".$response." ".$cfg{"WEB_DIR"}."/apsr/latest/apsr_flux_vs_phase.png";
-      ($result, $response) = Dada::mySystem($cmd);
-    }
-  }
-
-  $cmd = "ls -1 ".$o."/phase_vs_freq_".$s."_*_".$dim.".png | sort | tail -n 1";
-  ($result, $response) = Dada::mySystem($cmd);
-  if ($result eq "ok") {
-    if ( -f $response) {
-      $cmd = "cp ".$response." ".$cfg{"WEB_DIR"}."/apsr/latest/apsr_freq_vs_phase.png";
-      ($result, $response) = Dada::mySystem($cmd);
-    }
-  }
-
-  $cmd = "ls -1 ".$o."/phase_vs_time_".$s."_*_".$dim.".png | sort | tail -n 1";
-  ($result, $response) = Dada::mySystem($cmd);
-  if ($result eq "ok") {
-    if ( -f $response) {
-      $cmd = "cp ".$response." ".$cfg{"WEB_DIR"}."/apsr/latest/apsr_time_vs_phase.png";
-      ($result, $response) = Dada::mySystem($cmd);
-    }
-  }
-
-  $cmd = "ls -1 ".$o."/bandpass_".$s."_*_".$dim.".png | sort | tail -n 1";
-  ($result, $response) = Dada::mySystem($cmd);
-  if ($result eq "ok") {
-    if ( -f $response) {
-      $cmd = "cp ".$response." ".$cfg{"WEB_DIR"}."/apsr/latest/apsr_bandpass.png";
-      ($result, $response) = Dada::mySystem($cmd);
-    }
-  }
-
-  $cmd = "cp ".$o."/obs.info ".$cfg{"WEB_DIR"}."/apsr/latest/";
-  ($result, $response) = Dada::mySystem($cmd);
-
-}
-
 
 #
 # Checks that all the band.finished files exist. This ensures there
