@@ -134,6 +134,13 @@ class tcs_simulator extends bpsr_webpage
             <option value="BPSR.NULL">BPSR.NULL</option>
             <option value="SURVEY.MULTIBEAM">SURVEY.MULTIBEAM</option>
             <option value="THEDSPSR">THEDSPSR</option>
+            <option value="BPSR_256CH_64US_1B">BPSR_256CH_64US_1B</option>
+            <option value="BPSR_256CH_128US_1B">BPSR_256CH_128US_1B</option>
+            <option value="BPSR_128CH_64US_1B">BPSR_128CH_64US_1B</option>
+            <option value="BPSR_128CH_512US_1B">BPSR_128CH_512US_1B</option>
+            <option value="BPSR_128CH_256US_1B">BPSR_128CH_256US_1B</option>
+            <option value="BPSR_128CH_128US_1B">BPSR_128CH_128US_1B</option>
+            <option value="BPSR_128CH_1024US_1B">BPSR_128CH_1024US_1B</option>
             <option value="BPSR.SCRATCH">BPSR.SCRATCH</option>
           </select>
         </td>
