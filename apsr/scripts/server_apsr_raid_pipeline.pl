@@ -40,7 +40,7 @@ $daemon_name = Dada::daemonBaseName($0);
 $quit_daemon = 0;
 $warn = $cfg{"STATUS_DIR"}."/".$daemon_name.".warn";
 $error = $cfg{"STATUS_DIR"}."/".$daemon_name.".error";
-@r_scripts = ("apsr_bands_finished", "apsr_swin_transferrer", "apsr_psrfits_converter", "apsr_psrfits_patcher");
+@r_scripts = ("apsr_bands_finished", "apsr_swin_transferrer", "apsr_psrfits_converter", "apsr_psrfits_patcher", "apsr_cleaner");
 
 {
 
