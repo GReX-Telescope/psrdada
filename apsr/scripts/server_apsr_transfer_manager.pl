@@ -96,7 +96,7 @@ use constant BWLIMIT  => "52768";
   ($result, $response) = good($quit_file);
   if ($result ne "ok") {
     print STDERR $response."\n";
-    return 1;
+    exit 1;
   }
 
   # become a daemon
