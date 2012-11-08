@@ -518,6 +518,7 @@ sub handleCommand($)
   }
 
   elsif ($key eq "stop_daemons") {
+    Dada::logMsg(1, $dl, "handleCommand: stopDaemons(".$pwc.")");
     ($result,$response) = stopDaemons($pwc, \@daemons);
   }
 
@@ -992,8 +993,14 @@ sub startPWCs($)
       {
         $key = $dbs{$pwc}{$db_id};
 
-        $port = int($cfg{"PWC_PORT"}) + int($pwc);
-        $log_port = int($cfg{"PWC_LOGPORT"}) + int($pwc);
+        $port     = int($cfg{"PWC_PORT"});
+        $log_port = int($cfg{"PWC_LOGPORT"});
+        if ($cfg{"USE_BASEPORT"} eq "yes")
+        {
+          $port     += int($pwc);
+          $log_port += int($pwc);
+        }
+
         $udp_port = $cfg{"PWC_UDP_PORT_".$pwc};
 
         $cmd = $cfg{"PWC_BINARY"}." -c ".$port." -k ".lc($key).
@@ -1035,8 +1042,12 @@ sub stopPWCs($)
       Dada::logMsg(2, $dl, "stopPWCs: skipping ".$pwc." as not in list");
       next;
     }
-
-    $port = int($cfg{"PWC_PORT"}) + int($pwc);
+    
+    $port = int($cfg{"PWC_PORT"});
+    if ($cfg{"USE_BASEPORT"} eq "yes")
+    {
+      $port += int($pwc);
+    }
 
     # try to connect to control socket and issue quit command
     $handle = Dada::connectToMachine($host, $port);
@@ -1351,8 +1362,8 @@ sub diskThread() {
       Dada::logMsg(3, $dl, "diskThread getRawDisk(".$log_dir.") = ".$result." ".$response);
       if ($result eq "ok") 
       {
-        ($used, $available, $size) = split(/ /,$response);
-        $xml  = "<disk path='".$cfg{"CLIENT_RECORDING_DIR"}."' units='MB' size='".$size."'>".$available."</disk>";
+        ($size, $used, $available) = split(/ /,$response);
+        $xml  = "<disk path='".$cfg{"CLIENT_RECORDING_DIR"}."' units='MB' size='".$size."' used='".$used."'>".$available."</disk>";
       }
 
       $raw_disk_response = $xml;
@@ -1470,7 +1481,11 @@ sub daemonsThread() {
           $b = $binaries[$i];
           if ($b eq $cfg{"PWC_BINARY"})
           {
-            $port = int($cfg{"PWC_PORT"}) + int($pwc);
+            $port = int($cfg{"PWC_PORT"});
+            if ($cfg{"USE_BASEPORT"} eq "yes")
+            {
+              $port += int($pwc);
+            }
             $cmd = "pgrep -u ".$user." -f -l '".$b.".*-c ".$port."' | grep -v grep";
           }
           else
