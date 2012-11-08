@@ -13,11 +13,17 @@ AC_DEFUN([SWIN_LIB_IPP],
     SWIN_PACKAGE_FIND([ipp],[ipps.h])
     SWIN_PACKAGE_TRY_COMPILE([ipp],[#include <ipps.h>])
 
+    # newer version of IPP
     SWIN_PACKAGE_FIND([ipp],[libipps.so])
     SWIN_PACKAGE_TRY_LINK([ipp],[#include <ipps.h>],
                           [ippsMalloc_32f(1);],
 			  [-lipps -lippcore -lpthread])
 
+    # older verion of IPP
+   SWIN_PACKAGE_FIND([ipp],[libippsem64t.so])
+    SWIN_PACKAGE_TRY_LINK([ipp],[#include <ipps.h>],
+                          [ippsMalloc_32f(1);],
+        [-lippsem64t -lippcoreem64t -lpthread])
 
   fi
 
