@@ -24,7 +24,7 @@ BEGIN {
   $VERSION = '1.00';
 
   @ISA         = qw(Exporter AutoLoader);
-  @EXPORT      = qw(&sendTelnetCommand &connectToMachine &getDADABinaryDir &getCurrentBinaryVersion &getDefaultBinaryVersion &setBinaryDir &getAvailableBinaryVersions &addToTime &getUnixTimeUTC &getCurrentDadaTime &printDadaTime &printTime &getPWCCState &printPWCCState &waitForState &getLine &getLines &parseCFGLines &readCFGFile &readCFGFileIntoHash &getDADA_ROOT &getDiskInfo &getRawDisk &getDBInfo &getAllDBInfo &getDBStatus &getLoad &getUnprocessedFiles &getServerResultsNFS &getServerArchiveNFS &constructRsyncURL &headerFormat &mySystem &killProcess &getAPSRConfigVariable &nexusLogOpen &nexusLogClose &nexusLogMessage &getHostMachineName &daemonize &commThread &logMsg &logMsgWarn &remoteSshCommand &headerToHash &daemonBaseName &getProjectGroups &processHeader &getDM &getPeriod &checkScriptIsUnique &getObsDestinations &removeFiles, &getDBKey, &convertRadiansToRA, convertRadiansToDEC);
+  @EXPORT      = qw(&sendTelnetCommand &connectToMachine &getDADABinaryDir &getCurrentBinaryVersion &getDefaultBinaryVersion &setBinaryDir &getAvailableBinaryVersions &addToTime &getUnixTimeUTC &getCurrentDadaTime &printDadaTime &printTime &getPWCCState &printPWCCState &waitForState &getLine &getLines &parseCFGLines &readCFGFile &readCFGFileIntoHash &getDADA_ROOT &getDiskInfo &getRawDisk &getDBInfo &getAllDBInfo &getDBStatus &getLoad &getUnprocessedFiles &getServerResultsNFS &getServerArchiveNFS &constructRsyncURL &headerFormat &mySystem &killProcess &getAPSRConfigVariable &nexusLogOpen &nexusLogClose &nexusLogMessage &getHostMachineName &daemonize &commThread &logMsg &logMsgWarn &remoteSshCommand &headerToHash &daemonBaseName &getProjectGroups &processHeader &getDM &getPeriod &checkScriptIsUnique &getObsDestinations &removeFiles, &getDBKey, &convertRadiansToRA, &convertRadiansToDEC, &checkPWCID);
   %EXPORT_TAGS = ( );
   @EXPORT_OK   = ( );
 
@@ -1237,13 +1237,25 @@ sub nexusLogClose($) {
 
 }
 
-sub nexusLogMessage($$$$$$$) {
-
-  (my $handle, my $tag, my $timestamp, my $type, my $level, my $source, my $message) = @_;
-  if ($handle) {
-    print $handle $tag."|".$timestamp."|".$type."|".$level."|".$source."|".$message."\r\n";
+###############################################################################
+#
+# logs a messages to a server_logger
+#
+#   sock      TCP/IP socket
+#   source    hostname or PWC Identifier
+#   time      timestamp of message
+#   type      type of message (pwc, sys, src) 
+#   class     class of message (INFO, WARN, ERROR) 
+#   program   script or binary that generated message (e.g. obs mngr)
+#   message   message itself
+#
+sub nexusLogMessage($$$$$$$) 
+{
+  (my $sock, my $source,  my $time, my $type, my $class, my $program, my $message) = @_;
+  if ($sock) {
+    print $sock $source."|".$time."|".$type."|".$class."|".$program."|".$message."\r\n";
   }
-  $handle->flush;
+  $sock->flush;
   return $?;
 
 }
@@ -2095,7 +2107,7 @@ sub convertRadiansToRA($)
   (my $radians) = @_;
 
   # convert to degrees
-  my $degrees = ($radians * 180.0) / pi;
+  my $degrees = ($radians * 180.0) / Math::Trig::pi;
 
   my $hours = $degrees / 15.0;
 
@@ -2108,7 +2120,7 @@ sub convertRadiansToDEC($)
 {
   (my $radians) = @_;
 
-  my $hours = ($radians * 180.0) / pi;
+  my $hours = ($radians * 180.0) / Math::Trig::pi;
   my $sign = ($hours < 0) ? -1 : 1;
   $hours *= $sign;
 
@@ -2121,6 +2133,33 @@ sub convertRadiansToDEC($)
 
   return ($result, $hhmmss);
 }  
+
+sub checkPWCID($\%)
+{
+  (my $pwc_id, my  $cfg_ref) = @_;
+  my %cfg = %$cfg_ref;
+
+  # ensure that our pwc_id is valid 
+  if (($pwc_id >= 0) &&  ($pwc_id < $cfg{"NUM_PWC"}))
+  {
+    # and matches configured hostname
+    if ($cfg{"PWC_".$pwc_id} eq getHostMachineName())
+    {
+      # this is the correct condition
+      return 1;
+    }
+    else
+    {
+      print STDERR "PWC_ID did not match configured hostname\n";
+      return 0;
+    }
+  }
+  else
+  {
+    print STDERR "PWC_ID was not a valid integer between 0 and ".($cfg{"NUM_PWC"}-1)."\n";
+    return 0;
+  }
+}
 
 
 END { }
