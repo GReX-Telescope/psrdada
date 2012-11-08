@@ -42,6 +42,7 @@ PWCC_PORT               22020
 PWCC_LOGPORT            22021
 PWC_PORT                22022
 PWC_LOGPORT             22023
+USE_BASEPORT            no          # should PWC_PORT and PWC_PORT add PWC_ID to port numbers ?
 
 SERVER_WEB_MONITOR_PORT                22024
 SERVER_apsr_transfer_manager_PID_PORT  22025
@@ -62,7 +63,7 @@ SERVER_AUX_ASSIST_PORT    22007
 #
 USE_DFB_SIMULATOR       0         # 1 means tcs_interface will launch dfb sim
 DFB_SIM_BINARY          apsr_udpgenerator
-DFB_SIM_HOST            apsr17
+DFB_SIM_HOST            apsr12
 DFB_SIM_PORT            22014     # control of dfb simulator
 DFB_SIM_GAIN_PORT       22015     # control of dfb simulator
 DFB_SIM_DEST_PORT       10002	    # SHOULD mactch CLIENT_UDPDB_PORT below
@@ -95,14 +96,17 @@ CLIENT_NUM_CORES        8
 # Number of cores/processors available for processing
 CLIENT_UDPDB_STATS_PORT 22012
 
+
 ################################################################################
 # Data block definitions
-DATA_BLOCKS             DADA
-RECEIVING_DATA_BLOCK    DADA
-PROCESSING_DATA_BLOCK   DADA
+DATA_BLOCK_PREFIX       a
+DATA_BLOCK_IDS          0
+RECEIVING_DATA_BLOCK    0
+PROCESSING_DATA_BLOCK   0
 
-DADA_BLOCK_NBUFS        1000
-DADA_BLOCK_BUFSZ        4194304
+BLOCK_NBUFS_0           1024
+BLOCK_BUFSZ_0           4194304
+BLOCK_NREAD_0           1
 
 # Primary Write Client (PWC) configuration
 PWC_BINARY              apsr_udpdb
@@ -119,22 +123,34 @@ PWC_8                   apsr08
 PWC_9                   apsr09
 PWC_10                  apsr10
 PWC_11                  apsr11
-PWC_12                  apsr12
+PWC_12                  apsr16
 PWC_13                  apsr13
 PWC_14                  apsr14
 PWC_15                  apsr15
 
 NUM_DFB                 1
-DFB_0                   apsr17
+DFB_0                   apsr12
 
 NUM_SRV                 1
 SRV_0                   srv0
 
-# defines the number of helping nodes
-HELPER_DAEMONS          
-NUM_HELP                0
-HELP_0                  apsr16
-HELP_1                  apsr17
+PWC_UDP_PORT_0          10002
+PWC_UDP_PORT_1          10002
+PWC_UDP_PORT_2          10002
+PWC_UDP_PORT_3          10002
+PWC_UDP_PORT_4          10002
+PWC_UDP_PORT_5          10002
+PWC_UDP_PORT_6          10002
+PWC_UDP_PORT_7          10002
+PWC_UDP_PORT_8          10002
+PWC_UDP_PORT_9          10002
+PWC_UDP_PORT_10         10002
+PWC_UDP_PORT_11         10002
+PWC_UDP_PORT_12         10002
+PWC_UDP_PORT_13         10002
+PWC_UDP_PORT_14         10002
+PWC_UDP_PORT_15         10002
+
 
 NUM_SWIN_DIRS           6
 SWIN_DIR_0              pulsar:shrek210-gb:/export/shrek210a/apsr

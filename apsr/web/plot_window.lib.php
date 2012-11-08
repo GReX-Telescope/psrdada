@@ -187,7 +187,7 @@ class plot_window extends apsr_webpage
   <center>
  <center>
   PSR: <span id="single_psr"></span>
-  <select id="psrs" onchange="request()"></select>&nbsp;&nbsp;&nbsp;
+  <select id="psrs" onchange="plot_window_request()"></select>&nbsp;&nbsp;&nbsp;
   <span id="utc_start"></span>&nbsp;&nbsp;&nbsp;
   <span><input id="custom_plot" type=button value="View Custom Plots" onClick="popPlotWindow('custom_plot.php')"></span>
   <br> 
@@ -229,7 +229,7 @@ class plot_window extends apsr_webpage
     if ($result == "ok") {
 
       $bytes_written = socketWrite($socket, "img_info\r\n");
-      $string = socketRead($socket);
+      list ($result, $string) = socketRead($socket);
       socket_close($socket);
 
       # Add the require URL links to the image

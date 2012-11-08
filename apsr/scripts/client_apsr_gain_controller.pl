@@ -12,18 +12,20 @@ use Apsr;
 use Dada::client_gain_controller qw(%cfg);
 
 sub usage() {
-  print "Usage: ".basename($0)." chan\n";
-  print "   chan   Total number of channels on this node\n";
+  print "Usage: ".basename($0)." pwc_id chan\n";
+  print "   pwc_id   PWC index\n";
+  print "   chan     Total number of channels on this node\n";
   print "\n";
 }
 
 # Get command line
-if ($#ARGV!=0) {
+if ($#ARGV!=1) {
   usage();
   exit 1;
 }
 
-(my $chan) = @ARGV;
+$Dada::client_gain_controller::pwc_id = $ARGV[0];
+$Dada::client_gain_controller::nchan  = $ARGV[1];
   
 
 #
@@ -35,7 +37,6 @@ if ($#ARGV!=0) {
 # Initialize module variables
 #
 $Dada::client_gain_controller::dl = 1;
-$Dada::client_gain_controller::nchan = $chan;
 
 if ($cfg{"USE_DFB_SIMULATOR"} == 1) {
   $Dada::client_gain_controller::gain_min = 0;

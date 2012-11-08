@@ -135,7 +135,7 @@ class state_banner extends apsr_webpage
     list ($socket, $result) = openSocket($host, $port, $timeout);
     if ($result == "ok") {
       $bytes_written = socketWrite($socket, "state\r\n");
-      $state = socketRead($socket);
+      list ($result, $state) = socketRead($socket);
       socket_close($socket);
     }
 

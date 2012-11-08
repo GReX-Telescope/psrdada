@@ -16,6 +16,13 @@ use Net::hostent;
 use Dada;
 use Apsr;
 
+sub usage() 
+{
+  print "Usage: ".basename($0)." PWC_ID\n";
+  print "   PWC_ID   The Primary Write Client ID this script will process\n";
+}
+
+
 #
 # Function prototypes
 #
@@ -24,7 +31,6 @@ sub remoteDirsThread($$$$);
 sub jettison($);
 sub process($$$);
 sub touchBandFinished($$);
-sub good($);
 sub msg($$$);
 
 
@@ -33,9 +39,9 @@ sub msg($$$);
 #
 our $dl : shared;
 our %cfg : shared;
+our $pwc_id : shared;
 our $user : shared;
 our $daemon_name : shared;
-our $db_key;
 our $gain_controller;
 our $client_logger;
 our $quit_daemon : shared;
@@ -48,9 +54,9 @@ our $log_sock;
 #
 $dl = 1;
 %cfg = Apsr::getConfig();
+$pwc_id = 0;
 $user = "apsr";
 $daemon_name = Dada::daemonBaseName($0);
-$db_key = lc($cfg{"RECEIVING_DATA_BLOCK"});
 $gain_controller = "client_apsr_gain_controller.pl";
 $client_logger = "client_apsr_src_logger.pl";
 $quit_daemon = 0;
@@ -61,12 +67,39 @@ $log_sock = 0;
 # Autoflush STDOUT
 $| = 1;
 
+# get the PWC ID
+if ($#ARGV != 0)
+{
+  usage();
+  exit(1);
+}
+$pwc_id  = $ARGV[0];
+
+# ensure that our pwc_id is valid 
+if (!Dada::checkPWCID($pwc_id, %cfg))
+{
+  usage();
+  exit(1);
+}
+
+# set the DB key for this PWC
+my $db_key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"RECEIVING_DATA_BLOCK"});
+
 # Main
 {
+  my $cmd = "";
+  my $result = "";
+  my $response = "";
 
-  my $log_file       = $cfg{"CLIENT_LOG_DIR"}."/".$daemon_name.".log";;
-  my $pid_file       = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".pid";
-  my $quit_file      = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
+  ($result, $response) = Dada::checkScriptIsUnique(basename($0));
+  if ($result ne "ok") 
+  {
+    print STDERR "Duplicate script running\n";
+    exit 1;
+  }
+
+  my $log_file       = $cfg{"CLIENT_LOG_DIR"}."/".$daemon_name.".log";
+  my $pid_file       = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$pwc_id.".pid";
 
   $log_host          = $cfg{"SERVER_HOST"};
   $log_port          = $cfg{"SERVER_SYS_LOG_PORT"};
@@ -88,17 +121,6 @@ $| = 1;
   my $proc_dir = "";
   my $obs_start_file = "";
 
-  my $cmd = "";
-  my $result = "";
-  my $response = "";
-
-  # quick sanity check
-  ($result, $response) = good($quit_file);
-  if ($result ne "ok") {
-    print STDERR $response."\n";
-    exit 1;
-  }
-
   # install signal handles
   $SIG{INT}  = \&sigHandle;
   $SIG{TERM} = \&sigHandle;
@@ -119,7 +141,7 @@ $| = 1;
   msg(0, "INFO", "STARTING SCRIPT");
 
   # start the daemon control thread
-  $control_thread = threads->new(\&controlThread, $quit_file, $pid_file);
+  $control_thread = threads->new(\&controlThread, $pid_file);
 
   # main Loop
   while ( !$quit_daemon ) 
@@ -171,7 +193,7 @@ $| = 1;
 
         # launch the gain/level controller thread
         msg(1, "INFO", "main: starting level setting thread");
-        $gain_control_thread  = threads->new(\&gainControlThread);
+        $gain_control_thread  = threads->new(\&gainControlThread, $db_key);
 
         # process observation with the specified processing command, in the specified directory
         ($result) = process($proc_dir, $proc_cmd, $db_key);
@@ -250,14 +272,29 @@ sub process($$$)
   my $cmd = "";
   my $result = "";
 
-  # add the processing key to any dspsr command
-  if ($proc_cmd =~ m/dspsr/) 
+  # replace <DADA_INFO> tags with the matching input .info file
+  if ($proc_cmd =~ m/<DADA_INFO>/)
   {
-    $proc_cmd .= " ".$cfg{"PROCESSING_DB_KEY"};
+    my $tmp_info_file =  "/tmp/bpsr_".$db_key.".info";
+    # ensure a file exists with the write processing key
+    if (! -f $tmp_info_file)
+    {
+      open FH, ">".$tmp_info_file;
+      print FH "DADA INFO:\n";
+      print FH "key ".$db_key."\n";
+      close FH;
+    }
+    $proc_cmd =~ s/<DADA_INFO>/$tmp_info_file/;
   }
 
+  # replace <DADA_KEY> tags with the matching input key
+  $proc_cmd =~ s/<DADA_KEY>/$db_key/;
+
+  # replace <DADA_RAW_DATA> tag with processing dir
+  $proc_cmd =~ s/<DADA_DATA_PATH>/$proc_dir/;
+
   # output the result to the client logger
-  $cmd = $proc_cmd." 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/".$client_logger;
+  $cmd = $proc_cmd." 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/".$client_logger." ".$pwc_id." proc";
 
   msg(2, "INFO", "process: ".$cmd);
   chdir $cfg{"CLIENT_RESULTS_DIR"}."/".$proc_dir;
@@ -309,9 +346,9 @@ sub jettison($)
 
 
 
-sub controlThread($$) 
+sub controlThread($) 
 {
-  my ($quit_file, $pid_file) = @_;
+  my ($pid_file) = @_;
   msg(2, "INFO", "controlThread: starting");
 
   my $cmd = "";
@@ -319,7 +356,10 @@ sub controlThread($$)
   my $result = "";
   my $response = "";
 
-  while ((!(-f $quit_file)) && (!$quit_daemon)) {
+  my $host_quit_file = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
+  my $pwc_quit_file  =  $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$pwc_id.".quit";
+
+  while ((!$quit_daemon) && (! -f $host_quit_file) && (! -f $pwc_quit_file)) {
     sleep(1);
   }
 
@@ -664,16 +704,27 @@ sub copyObsStart($$$) {
 
 }
 
-
 #
 # Run the level setting cmd with the specified number of channels
 #
-sub gainControlThread() 
+sub gainControlThread($) 
 {
   msg(2, "INFO", "gainControlThread: starting");
+  (my $key) = @_;
   
+  # ensure that a .viewer file exists for this datablock{
+  my $tmp_viewer_file =  "/tmp/bpsr_".$db_key.".viewer";
+  if (! -f $tmp_viewer_file)
+  {
+    open FH, ">".$tmp_viewer_file;
+    print FH "DADA INFO:\n";
+    print FH "key ".$key."\n";
+    print FH "viewer\n";
+    close FH;
+  }
+
   my $nchan = 1;
-  my $cmd = "digimon ".$cfg{"VIEWING_DB_KEY"}." | ".$cfg{"SCRIPTS_DIR"}."/".$gain_controller." ".$nchan;
+  my $cmd = "digimon ".$tmp_viewer_file." | ".$cfg{"SCRIPTS_DIR"}."/".$gain_controller." ".$pwc_id." ".$nchan;
 
   msg(2, "INFO", "gainControlThread: ".$cmd);
 
@@ -726,7 +777,7 @@ sub touchBandFinished($$) {
 #
 sub msg($$$) {
 
-  my ($level, $type, $msg) = @_;
+  my ($level, $class, $msg) = @_;
   if ($level <= $dl) {
     my $time = Dada::getCurrentDadaTime();
     if (! $log_sock ) {
@@ -734,7 +785,7 @@ sub msg($$$) {
       $log_sock = Dada::nexusLogOpen($log_host, $log_port);
     }
     if ($log_sock) {
-      Dada::nexusLogMessage($log_sock, $time, "sys", $type, "obs mngr", $msg);
+      Dada::nexusLogMessage($log_sock, $pwc_id, $time, "sys", $class, "obs mngr", $msg);
     }
     print "[".$time."] ".$msg."\n";
   }
@@ -773,36 +824,5 @@ sub sigPipeHandle($) {
   if ($log_host && $log_port) {
     $log_sock = Dada::nexusLogOpen($log_host, $log_port);
   }
-
-}
-
-#
-# Test to ensure all module variables are set before main
-#
-sub good($) {
-
-  my ($quit_file) = @_;
-
-  # check the quit file does not exist on startup
-  if (-f $quit_file) {
-    return ("fail", "Error: quit file ".$quit_file." existed at startup");
-  }
-
-  # the calling script must have set this
-  if (! defined($cfg{"INSTRUMENT"})) {
-    return ("fail", "Error: package global hash cfg was uninitialized");
-  }
-
-  if ( ($daemon_name eq "") || ($user eq "") || ($client_logger eq "")) {
-    return ("fail", "Error: a package variable missing [daemon_name, user, client_logger]");
-  }
-
-  # Ensure more than one copy of this daemon is not running
-  my ($result, $response) = Dada::checkScriptIsUnique(basename($0));
-  if ($result ne "ok") {
-    return ($result, $response);
-  }
-
-  return ("ok", "");
 
 }

@@ -150,14 +150,14 @@ class observation_summary extends apsr_webpage
     if ($result == "ok") {
 
       $bytes_written = socketWrite($socket, "curr_obs\r\n");
-      $string = socketRead($socket);
+      list ($result, $response) = socketRead($socket);
       socket_close($socket);
 
     } else {
-      $string = "Could not connect to $host:$port<BR>\n";
+      $response = "Could not connect to $host:$port<BR>\n";
     }
 
-    echo $string;
+    echo $response;
 
   }
 }

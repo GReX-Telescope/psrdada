@@ -11,7 +11,7 @@ list ($socket, $result) = openSocket($host, $port);
 if ($result == "ok") {
 
   $bytes_written = socketWrite($socket, "curr_obs\r\n");
-  $string = socketRead($socket);
+  list ($result, $string) = socketRead($socket);
   socket_close($socket);
 
 } else {

@@ -12,7 +12,7 @@ list ($socket, $result) = openSocket($host, $port);
 if ($result == "ok") {
                                                                                                 
   $bytes_written = socketWrite($socket, "img_info\r\n");
-  $string = socketRead($socket);
+  list($result, $string) = socketRead($socket);
   socket_close($socket);
                                                                                                 
   # Add the require URL links to the image

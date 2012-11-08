@@ -1,1 +1,1 @@
-PROC_CMD dspsr -Q -t 7 -F 256:D -U minX2 -L 300 -2c0
+PROC_CMD dspsr -Q -t 7 -F 256:D -U minX2 -L 300 -2c0 <DADA_INFO>

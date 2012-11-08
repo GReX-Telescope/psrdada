@@ -458,7 +458,7 @@ class backend_state extends apsr_webpage
     if ($result == "ok") {
 
       $bytes_written = socketWrite($socket, "status_info\r\n");
-      $string = socketRead($socket);
+      ($result, $string) = socketRead($socket);
       socket_close($socket);
 
     } else {

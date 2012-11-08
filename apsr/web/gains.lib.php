@@ -217,9 +217,9 @@ class gains extends apsr_webpage
     if ($result == "ok") 
     {
       $bytes_written = socketWrite($socket, "gain_info\r\n");
-      $output = rtrim(socketRead($socket));
+      list ($result, $output) = socketRead($socket);
       socket_close($socket);
-    } 
+    }
     else 
     {
       $output = "Could not connect to $host:$port<BR>\n";

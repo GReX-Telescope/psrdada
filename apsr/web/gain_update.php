@@ -11,16 +11,16 @@ if ($config["USE_DFB_SIMULATOR"] == 1) {
 } else {
   $max_gain = 65535;
 }
-                                                                                                                                                  
+
 list ($socket, $result) = openSocket($host, $port);
-                                                                                                                                                  
-if ($result == "ok") {
-
+if ($result == "ok") 
+{
   $bytes_written = socketWrite($socket, "gain_info\r\n");
-  $string = rtrim(socketRead($socket));
+  list ($result, $string) = socketRead($socket);
   socket_close($socket);
-
-} else {
+}
+else
+{
   $string = "Could not connect to $host:$port<BR>\n";
 }
 echo $string." ".$max_gain;

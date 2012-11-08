@@ -10,24 +10,47 @@ class control extends apsr_webpage
   var $pwc_dbs = array();
   var $pwc_dbs_str = "";
 
+  var $pwc_list = array();
+  var $host_list = array();
+
+  var $server_host = "";
+
   function control()
   {
     apsr_webpage::apsr_webpage();
     $this->inst = new apsr();
+    $this->pwcs_dbs_str = "";
 
     $config = $this->inst->config;
-    $data_blocks = split(" ",$config["DATA_BLOCKS"]);
-    for ($i=0; $i<count($data_blocks); $i++)
+    $data_block_ids = preg_split("/\s+/", $config["DATA_BLOCK_IDS"]);
+    foreach ($data_block_ids as $dbid)
     {
-      $key = strtolower($data_blocks[$i]);
-      $nbufs = $config[$data_blocks[$i]."_BLOCK_NBUFS"];
-      $bufsz = $config[$data_blocks[$i]."_BLOCK_BUFSZ"];
-      array_push($this->pwc_dbs, array("key" => $key, "nbufs" => $nbufs, "bufsz" => $bufsz));
-      if ($i == 0)
-        $this->pwcs_dbs_str = "\"buffer_".$key."\"";
+      array_push($this->pwc_dbs, $dbid);
+      if ($this->pwcs_dbs_str == "")
+        $this->pwcs_dbs_str = "\"buffer_".$dbid."\"";
       else
-        $this->pwcs_dbs_str .= ", \"buffer_".$key."\"";
+        $this->pwcs_dbs_str .= ", \"buffer_".$dbid."\"";
     }
+
+    for ($i=0; $i<$config["NUM_PWC"]; $i++)
+    {
+      $host = $config["PWC_".$i];
+      $exists = -1;
+      for ($j=0; $j<count($this->host_list); $j++) {
+        if (strpos($this->host_list[$j]["host"], $host) !== FALSE)
+          $exists = $j;
+      }
+      if ($exists == -1)
+        array_push($this->host_list, array("host" => $host, "span" => 1));
+      else
+        $this->host_list[$exists]["span"]++;
+
+      array_push($this->pwc_list, array("host" => $host, "span" => 1, "pwc" => $i));
+    }
+
+    $this->server_host = $this->inst->config["SERVER_HOST"];
+    if (strpos($this->server_host, ".") !== FALSE)
+      list ($this->server_host, $domain)  = explode(".", $this->server_host);
   }
 
   function javaScriptCallback()
@@ -54,31 +77,24 @@ class control extends apsr_webpage
       var poll_update = 20000;
       var poll_2sec_count = 0;
 
-      var srv_hosts = new Array("srv0");
+      var srv_host = "<?echo $this->server_host?>";
+      var srv_hosts = new Array(srv_host);
 
       var pwc_hosts = new Array(<?
-      echo "'".$this->inst->config["PWC_0"]."'";
+      echo "'".$this->host_list[0]["host"]."'";
+      for ($i=1; $i<count($this->host_list); $i++) {
+        echo ",'".$this->host_list[$i]["host"]."'";
+      }?>);
+
+      var pwcs = new Array(<?
+      echo "'".$this->inst->config["PWC_0"].":0'";
       for ($i=1; $i<$this->inst->config["NUM_PWC"]; $i++) {
-        echo ",'".$this->inst->config["PWC_".$i]."'";
+        echo ",'".$this->inst->config["PWC_".$i].":".$i."'";
       }?>);
 
       var pwc_hosts_str = "";
       for (i=0; i<pwc_hosts.length; i++) {
         pwc_hosts_str += "&host_"+i+"="+pwc_hosts[i];
-      }
-
-      var help_hosts = new Array(<?
-      $helpers = getConfigMachines($this->inst->config, "DFB");
-      $helpers = array_unique($helpers);
-      asort($helpers);
-      echo "'".$helpers[0]."'";
-      for ($i=1; $i<count($helpers); $i++) {
-        echo ",'".$helpers[$i]."'";
-      }?>);
-
-      var help_hosts_str = "";
-      for (i=0; i<help_hosts.length; i++) {
-        help_hosts_str += "&host_"+i+"="+help_hosts[i];
       }
 
       var stage2_wait = 20;
@@ -190,7 +206,15 @@ class control extends apsr_webpage
           action = "ignore";
 
         if (action != "ignore") {
-          url = "control.lib.php?action="+action+"&nhosts=1&host_0="+host+"&daemon="+daemon;
+          if (host.indexOf(":",0) != -1) {
+            parts = host.split(":");
+            host = parts[0];
+            pwc = parts[1];
+            url = "control.lib.php?action="+action+"&nhosts=1&host_0="+host+"&pwc="+pwc+"&daemon="+daemon;
+          } else {
+            url = "control.lib.php?action="+action+"&nhosts=1&host_0="+host+"&daemon="+daemon;
+          }
+
           if (args != "")
             url += "&args="+args
 
@@ -322,6 +346,28 @@ class control extends apsr_webpage
         }
         return ready;
       }
+
+      function checkMachinesPWCsAndDaemons(m, d, c) 
+      {
+        //var i=0;
+        var j=0;
+        var ready = true;
+        //for (i=0; i<m.length; i++) {
+          for (j=0; j<pwcs.length; j++) {
+            for (k=0; k<d.length; k++) {
+              element = document.getElementById("img_"+pwcs[j]+"_"+d[k]);
+              try {
+                if (element.src.indexOf(c) == -1) {
+                  ready = false;
+                }
+              } catch (e) {
+                alert("checkMachinesPWCsAndDameons: [img_"+pwcs[j]+"_"+d[k]+"] c="+c+" did not exist");
+              }
+            }
+          }
+        //}
+        return ready;
+      }
       
       function startApsr() 
       {
@@ -335,10 +381,6 @@ class control extends apsr_webpage
         url = "control.lib.php?action=start&daemon=apsr_master_control&nhosts=1&host_0=srv0"
         daemon_action_request(url);
 
-        // start the help's master control script
-        url = "control.lib.php?action=start&daemon=apsr_master_control&nhosts="+help_hosts.length+help_hosts_str;
-        daemon_action_request(url);
-
         // start the pwc's master control script
         url = "control.lib.php?action=start&daemon=apsr_master_control&nhosts="+pwc_hosts.length+pwc_hosts_str;
         daemon_action_request(url);
@@ -350,7 +392,7 @@ class control extends apsr_webpage
       function startApsrStage2()
       {
         poll_2sec_count = 0;
-        var machines = srv_hosts.concat(pwc_hosts, help_hosts);
+        var machines = srv_hosts.concat(pwc_hosts);
         var daemons = new Array("apsr_master_control");
         var ready = checkMachinesAndDaemons(machines, daemons, "green_light.png");
         if ((!ready) && (stage2_wait > 0)) {
@@ -364,12 +406,8 @@ class control extends apsr_webpage
 <?
         for ($i=0; $i<count($this->pwc_dbs); $i++)
         {
-          $key = $this->pwc_dbs[$i]["key"];
-          $nbufs = $this->pwc_dbs[$i]["nbufs"];
-          $bufsz =  $this->pwc_dbs[$i]["bufsz"];
-          $args = $nbufs."_".$bufsz;
-          echo "         url = \"control.lib.php?action=start&daemon=buffer_".$key.
-               "&args=".$args."&nhosts=\"+pwc_hosts.length+pwc_hosts_str\n";
+          $dbid = $this->pwc_dbs[$i];
+          echo "         url = \"control.lib.php?action=start&daemon=buffer_".$dbid."&nhosts=\"+pwc_hosts.length+pwc_hosts_str\n";
           echo "         daemon_action_request(url);\n";
         }
 ?>
@@ -383,7 +421,7 @@ class control extends apsr_webpage
       {
         poll_2sec_count = 0;
         var pwc_daemons = new Array(<?echo $this->pwcs_dbs_str?>); 
-        var pwc_ready = checkMachinesAndDaemons(pwc_hosts, pwc_daemons, "green_light.png");
+        var pwc_ready = checkMachinesPWCsAndDaemons(pwc_hosts, pwc_daemons, "green_light.png");
 
         if ((!pwc_ready) && (stage3_wait > 0)) {
           stage3_wait--;
@@ -397,7 +435,7 @@ class control extends apsr_webpage
         daemon_action_request(url);
 
         // start the server daemons 
-        url = "control.lib.php?action=start&daemon=all&nhosts=1&host_0=srv0"
+        url = "control.lib.php?action=start&daemon=all&nhosts=1&host_0="+srv_host;
         daemon_action_request(url);
 
         stage4_wait = 20;
@@ -407,8 +445,8 @@ class control extends apsr_webpage
       function startApsrStage4()
       {
         poll_2sec_count = 0;
-        var pwc_daemons = new Array("pwcs");
-        var pwc_ready = checkMachinesAndDaemons(pwc_hosts, pwc_daemons, "green_light.png");
+        var pwc_daemons = new Array("<?echo $this->inst->config["PWC_BINARY"]?>");
+        var pwc_ready = checkMachinesPWCsAndDaemons(pwc_hosts, pwc_daemons, "green_light.png");
 
         var srv_daemons = new Array("apsr_pwc_monitor", "apsr_sys_monitor");
         var srv_ready = checkMachinesAndDaemons(srv_hosts, srv_daemons, "green_light.png");
@@ -433,7 +471,7 @@ class control extends apsr_webpage
       {
         poll_2sec_count = 0;
         var pwc_daemons = new Array("apsr_observation_manager","apsr_archive_manager","apsr_disk_cleaner");
-        var pwc_ready = checkMachinesAndDaemons(pwc_hosts, pwc_daemons, "green_light.png");
+        var pwc_ready = checkMachinesPWCsAndDaemons(pwc_hosts, pwc_daemons, "green_light.png");
 
         if ((!pwc_ready) && (stage5_wait > 0)) {
           stage5_wait--;
@@ -471,10 +509,6 @@ class control extends apsr_webpage
         url = "control.lib.php?action=stop&daemon=apsr_tcs_interface&nhosts=1&host_0=srv0";
         daemon_action_request(url);
 
-        // stop the help daemons master control script 
-        url = "control.lib.php?action=stop&daemon=apsr_master_control&nhosts="+help_hosts.length+help_hosts_str;
-        daemon_action_request(url);
-
         // stop the pwc's daemons next
         url = "control.lib.php?action=stop&daemon=all&nhosts="+pwc_hosts.length+pwc_hosts_str;
         daemon_action_request(url);
@@ -489,14 +523,12 @@ class control extends apsr_webpage
         poll_2sec_count = 0;
 
         var srv_daemons = new Array("apsr_tcs_interface");
-        var help_daemons = new Array("apsr_master_control");
         var pwc_daemons = new Array("apsr_observation_manager","apsr_archive_manager","apsr_disk_cleaner");
 
         var srv_ready = checkMachinesAndDaemons(srv_hosts, srv_daemons, "red_light.png");
-        var pwc_ready = checkMachinesAndDaemons(pwc_hosts, pwc_daemons, "red_light.png");
-        var help_ready = checkMachinesAndDaemons(help_hosts, help_daemons, "red_light.png");
+        var pwc_ready = checkMachinesPWCsAndDaemons(pwc_hosts, pwc_daemons, "red_light.png");
 
-        if ((!(srv_ready && pwc_ready && help_ready)) && (stage2_wait > 0)) {
+        if ((!(srv_ready && pwc_ready)) && (stage2_wait > 0)) {
           stage2_wait--;
           setTimeout('stopApsrStage2()', 1000);
           return 0;
@@ -515,8 +547,8 @@ class control extends apsr_webpage
       {
         poll_2sec_count = 0;
 
-        var pwc_daemons = new Array("pwcs");
-        var pwc_ready = checkMachinesAndDaemons(pwc_hosts, pwc_daemons, "red_light.png");
+        var pwc_daemons = new Array("<?echo $this->inst->config["PWC_BINARY"]?>");
+        var pwc_ready = checkMachinesPWCsAndDaemons(pwc_hosts, pwc_daemons, "red_light.png");
 
         if ((!pwc_ready) && (stage3_wait > 0)) {
           stage3_wait--;
@@ -529,15 +561,14 @@ class control extends apsr_webpage
 <?
         for ($i=0; $i<count($this->pwc_dbs); $i++)
         {
-          $key = $this->pwc_dbs[$i]["key"];
-          echo "         url = \"control.lib.php?action=stop&daemon=buffer_".$key.
-               "&nhosts=\"+pwc_hosts.length+pwc_hosts_str;\n";
+          $dbid = $this->pwc_dbs[$i];
+          echo "         url = \"control.lib.php?action=stop&daemon=buffer_".$dbid."&nhosts=\"+pwc_hosts.length+pwc_hosts_str;\n";
           echo "         daemon_action_request(url);\n";
         }
 ?>
 
         // stop the server daemons 
-        url = "control.lib.php?action=stop&daemon=all&nhosts=1&host_0=srv0"
+        url = "control.lib.php?action=stop&daemon=all&nhosts=1&host_0="+srv_host;
         daemon_action_request(url);
 
         stage4_wait = 20;
@@ -553,7 +584,7 @@ class control extends apsr_webpage
         var srv_ready = checkMachinesAndDaemons(srv_hosts, srv_daemons, "red_light.png");
 
         var pwc_daemons = new Array(<?echo $this->pwcs_dbs_str?>); 
-        var pwc_ready = checkMachinesAndDaemons(pwc_hosts, pwc_daemons, "red_light.png");
+        var pwc_ready = checkMachinesPWCsAndDaemons(pwc_hosts, pwc_daemons, "red_light.png");
 
         if ((!(srv_ready && pwc_ready)) && (stage4_wait > 0)) {
           stage4_wait--;
@@ -594,6 +625,71 @@ class control extends apsr_webpage
         poll_update = 20000;
       }
 
+      // parse an XML entity returning an array of key/value paries
+      function parseXMLValues(xmlObj, values, pids)
+      {
+        //alert("parseXMLValues("+xmlObj.nodeName+") childNodes.length="+xmlObj.childNodes.length);
+        var j = 0;
+        for (j=0; j<xmlObj.childNodes.length; j++) 
+        {
+          if (xmlObj.childNodes[j].nodeType == 1)
+          {
+            // special case for PWCs
+            key = xmlObj.childNodes[j].nodeName;
+            if (key == "pwc") 
+            {
+              pwc_id = xmlObj.childNodes[j].getAttribute("id");
+              values[pwc_id] = new Array();
+              parseXMLValues(xmlObj.childNodes[j], values[pwc_id], pids)
+            }
+            else
+            {
+              val = "";
+              if (xmlObj.childNodes[j].childNodes.length == 1)
+              {
+                val = xmlObj.childNodes[j].childNodes[0].nodeValue; 
+              }
+              values[key] = val;
+              if (xmlObj.childNodes[j].getAttribute("pid") != null)
+              {
+                pids[key] = xmlObj.childNodes[j].getAttribute("pid");
+              }
+            }
+          }
+        }
+      }
+
+      function setDaemon(host, pwc, key, value)
+      {
+        var img_id;
+
+        if (pwc >= 0)
+          img_id = "img_"+host+":"+pwc+"_"+key;
+        else
+          img_id = "img_"+host+"_"+key;
+
+        var img  = document.getElementById(img_id);
+
+        if (img == null) {
+          alert(img_id + "  did not exist");
+        }
+        else
+        {
+          if (value == "2") {
+            img.src = "/images/green_light.png";
+          } else if (value == "1") {
+            img.src = "/images/yellow_light.png";
+          } else if (value == "0") {
+            if (key == "apsr_master_control") {
+              set_daemons_to_grey(host);
+            }
+            img.src = "/images/red_light.png";
+          } else {
+            img.src = "/images/grey_light.png";
+          }
+        }
+      }
+
       function handle_daemon_info_request(xml_request) 
       {
         if (xml_request.readyState == 4) {
@@ -612,63 +708,57 @@ class control extends apsr_webpage
 
               result = results[i];
               this_result = new Array();
+              pids = new Array();
 
-              for (j=0; j<result.childNodes.length; j++) 
-              {
-
-                // if the child node is an element
-                if (result.childNodes[j].nodeType == 1) {
-                  key = result.childNodes[j].nodeName;
-                  // if there is a text value in the element
-                  if (result.childNodes[j].childNodes.length == 1) {
-                    value = result.childNodes[j].childNodes[0].nodeValue;
-                  } else {
-                    value = "";
-                  }
-                  this_result[key] = value;
-                }
-              }
+              parseXMLValues(result, this_result, pids);
 
               host = this_result["host"];
-              str = "";
 
-              try {
-                var td = document.getElementById(host+"_message");
-                td.innerHTML = "";
-              } catch (e) {
-                alert("host="+host+" host_message not defined");
-              } 
+              for (key in this_result) 
+              {
+                if (key == "host") 
+                {
 
-              for ( key in this_result) {
-                if (key == "host") {
-
-                } else if (key == "message") {
-
-                  value = this_result[key];
-                  td.innerHTML = value;
-
-                } else {
-                  
-                  value = this_result[key];
-                  str = str + " "+key+" -> "+value;
-
-                  var img = document.getElementById("img_"+host+"_"+key);
-                  if (img == null) {
-                    alert("img_"+host+"_"+key+" did not exist");
-                  }
-                  if (value == "2") {
-                    img.src = "/images/green_light.png";
-                  } else if (value == "1") {
-                    img.src = "/images/yellow_light.png";
-                  } else if (value == "0") {
-                    if (key == "apsr_master_control") {
-                      set_daemons_to_grey(host);
-                    }
-                    img.src = "/images/red_light.png";
-                  } else {
-                    img.src = "/images/grey_light.png";
-                  } 
                 } 
+                else if (this_result[key] instanceof Array) 
+                {
+                  pwc = this_result[key];
+                  pwc_id = key;
+                  for (key in pwc)
+                  {
+                    value = pwc[key];
+                    setDaemon(host, pwc_id, key, value)
+                  }
+                } 
+                else 
+                {
+                  value = this_result[key];
+                  setDaemon(host, -1, key, value);
+                } 
+              }
+
+              for ( key in pids ) {
+                try {
+                  var select = document.getElementById(key+"_pid");
+
+                  // disable changing of this select
+                  if ((this_result[key] == "2") || (this_result[key] == "1")) {
+                    select.disabled = true;
+                  } else {
+                    select.disabled = false;
+                  }
+                  for (j = 0; j < select.length; j++) {
+                    if (select[j].value == pids[key]) {
+                      if (pids[key] != "") 
+                        select.selectedIndex = j;
+                      else
+                        if (select.disabled == true)
+                          select.selectedIndex = j;
+                    }
+                  }
+                } catch(e) {
+                  alert("ERROR="+e);
+                }
               }
             }
           }
@@ -678,7 +768,7 @@ class control extends apsr_webpage
       function daemon_info_request() 
       {
         var di_http_request;
-        var url = "control.lib.php?update=true&nhosts="+(srv_hosts.length+pwc_hosts.length+help_hosts.length);
+        var url = "control.lib.php?update=true&nhosts="+(srv_hosts.length+pwc_hosts.length);
         var j = 0;
 
         for (i=0; i<srv_hosts.length; i++)
@@ -689,11 +779,6 @@ class control extends apsr_webpage
         for (i=0; i<pwc_hosts.length; i++)
         {
           url += "&host_"+j+"="+pwc_hosts[i];
-          j++;
-        } 
-        for (i=0; i<help_hosts.length; i++)
-        {
-          url += "&host_"+j+"="+help_hosts[i];
           j++;
         } 
 
@@ -777,7 +862,7 @@ class control extends apsr_webpage
       for ($i=0; $i < count($server_daemons_persist); $i++) 
       {
         $d = $server_daemons_persist[$i];
-        $this->printPersistentServerDaemonControl($d, $server_daemons_hash[$d]["name"], $host);
+        $this->printPersistentServerDaemonControl($d, $server_daemons_hash[$d]["name"], $host, "NA");
       }
 ?>
             </table>
@@ -879,8 +964,7 @@ class control extends apsr_webpage
 
     $server_daemons_hash  = $this->inst->serverLogInfo();
     $server_daemons = split(" ", $config["SERVER_DAEMONS"]);
-    $host = $config["SERVER_HOST"];
-    $host = substr($host, 0, strpos($host,"."));
+    $host = $this->server_host;
 ?>
     <table width='100%'>
       <tr>
@@ -925,40 +1009,47 @@ class control extends apsr_webpage
         <td>
           <table class='control' id='pwc_controls'>
             <tr>
-              <td></td>
+              <td>Host [apsrXX]</td>
 <?
-    for ($i=0; $i<count($pwcs); $i++) {
-      echo "          <td style='text-align: center'><span title='".$pwcs[$i]."'>".$i."</span></td>\n";
+    for ($i=0; $i<count($this->host_list); $i++)
+    {
+      $host = substr($this->host_list[$i]["host"], 4, 2);
+      $span = $this->host_list[$i]["span"];
+      echo "          <td colspan='".$span."'>".$host."</td>\n";
+    }
+?>
+            </tr>
+            <tr>
+              <td>PWC</td>
+<?
+    for ($i=0; $i<count($this->pwc_list); $i++)
+    {
+      $host = $this->pwc_list[$i]["host"];
+      $pwc  = $this->pwc_list[$i]["pwc"];
+      echo "          <td style='text-align: center'><span title='".$host."_".$pwc."'>".$pwc."</span></td>\n";
     }
 ?>
               <td></td>
             </tr>
 <?
+    $this->printClientDaemonControl("apsr_master_control", "Master&nbsp;Control", $this->host_list, "daemon&name=".$d);
 
-    $this->printClientDaemonControl("apsr_master_control", "Master&nbsp;Control", $pwcs, "daemon&name=".$d);
-
+    # Data Blocks
     for ($i=0; $i<count($this->pwc_dbs); $i++)
     {
-      $key = $this->pwc_dbs[$i]["key"];
-      $nbufs = $this->pwc_dbs[$i]["nbufs"];
-      $bufsz =  $this->pwc_dbs[$i]["bufsz"];
-      $this->printClientDBControl($key."&nbsp;DB", $pwcs, $key, $nbufs, $bufsz);
+      $id = $this->pwc_dbs[$i];
+      $this->printClientDBControl("DB&nbsp;".$id, $this->pwc_list, $id);
     }
 
-    $this->printClientDaemonControl("pwcs", "PWC", $pwcs, "pwcs");
+    # Primary Write Client
+    $this->printClientDaemonControl($this->inst->config{"PWC_BINARY"}, "PWC", $this->pwc_list, "pwcs");
+
     # Print the client daemons
     for ($i=0; $i<count($client_daemons); $i++) {
       $d = $client_daemons[$i];
       $n = str_replace(" ", "&nbsp;", $client_daemons_hash[$d]["name"]);
-      $this->printClientDaemonControl($d, $n, $pwcs, "daemon&name=".$d);
+      $this->printClientDaemonControl($d, $n, $this->pwc_list, "daemon&name=".$d);
     }
-
-    echo "<tr>\n";
-    echo "  <td>Messages</td>\n";
-    for ($i=0; $i<count($pwcs); $i++) {
-      echo "<td id='".$pwcs[$i]."_message'></td>\n";
-    }
-    echo "</tr>\n";
 ?>
           </table>
         </td>
@@ -966,52 +1057,6 @@ class control extends apsr_webpage
       </tr>
     </table>
 <?
-    $this->closeBlockHeader();
-?>
-      </td>
-    </tr>
-    <tr>
-      <td>
-<?
-    $this->openBlockHeader("Helper Machines");
-
-    $helpers    = getConfigMachines($this->inst->config, "DFB");
-    $helpers = array_unique($helpers);
-    asort($helpers);
-?>
-    <table width='100%'>
-      <tr>
-        <td id="help_controls">
-          <table class='control' id="help_controls">
-            <tr>
-              <td></td>
-<?
-    for ($i=0; $i<count($helpers); $i++) {
-      echo "          <td style='text-align: center'><span title='".$helpers[$i]."'>".$i."</span></td>\n";
-    }
-?>
-              <td></td>
-            </tr>
-<?
-    # Print the master control first
-    $d = "apsr_master_control";
-    $this->printClientDaemonControl($d, "Master Control", $helpers, "daemon&name=".$d);
-
-    echo "<tr>\n";
-    echo " <td>Messages</td>";
-    for  ($i=0; $i<count($helpers); $i++) {
-      echo "  <td id='".$helpers[$i]."_message'></td>\n";
-    }
-    echo "</tr>\n";
-
-?>
-          </table>
-        </td>
-        <td width='300px' id='help_output' valign='top'></td>
-      </tr>
-    </table>
-<?
-
     $this->closeBlockHeader();
 ?>
       </td>
@@ -1027,16 +1072,18 @@ class control extends apsr_webpage
   function printUpdateXML($get)
   {
 
-    $host = "";
     $port = $this->inst->config["CLIENT_MASTER_PORT"];
     $cmd = "daemon_info_xml";
+    $nhosts = 0;
 
-    $nhosts = $get["nhosts"];
+    if (array_key_exists("nhosts", $get))
+      $nhosts = $get["nhosts"];
     $hosts = array();
     for ($i=0; $i<$nhosts; $i++) {
       $hosts[$i] = $get["host_".$i];
     }
 
+    $host = "";
     $sockets = array();
     $results = array();
     $responses = array();
@@ -1044,8 +1091,7 @@ class control extends apsr_webpage
     # open the socket connections
     for ($i=0; $i<count($hosts); $i++) {
       $host = $hosts[$i];
-      # echo "opening ".$host.":".$port."<br>\n";
-      list ($sockets[$i], $results[$i]) = openSocket($host, $port, 4);
+      list ($sockets[$i], $results[$i]) = openSocket($host, $port);
     }
 
     # write the commands
@@ -1061,8 +1107,11 @@ class control extends apsr_webpage
     # read the responses
     for ($i=0; $i<count($results); $i++) {
       if (($results[$i] == "ok") && ($sockets[$i])) {
-        $read = socketRead($sockets[$i]);
-        $responses[$i] = rtrim($read);
+        list ($result, $response) = socketRead($sockets[$i]);
+        if ($result == "ok")
+          $responses[$i] = $response;
+        else
+          $responses[$i] = "";
       }
     }
 
@@ -1078,8 +1127,6 @@ class control extends apsr_webpage
     if (array_key_exists("SERVER_DAEMONS_PERSIST", $this->inst->config))
     {
       $server_daemons_persist = explode(" ", $this->inst->config["SERVER_DAEMONS_PERSIST"]);
-      list ($host, $domain)  = explode(".", $this->inst->config["SERVER_HOST"],2);
-      $persist_xml = "<daemon_info><host>".$host."</host>";
       $running = array();
       for ($i=0; $i<count($server_daemons_persist); $i++)
       {
@@ -1097,26 +1144,33 @@ class control extends apsr_webpage
         if (file_exists($this->inst->config["SERVER_CONTROL_DIR"]."/".$d.".pid"))
           $running[$d]++;
 
+        # the PID (Project ID) is NA for APSR
+        $dpid = "NA";
+
         # update xml
         $persist_xml .= "<".$d.">".$running[$d]."</".$d.">";
       }
-      $persist_xml .= "</daemon_info>\n";
     }
 
     # produce the xml
     $xml = "<?xml version='1.0' encoding='ISO-8859-1'?>\n";
-    $xml .= "<daemon_infos>\n";
+    $xml .= "<daemon_infos>";
 
     for ($i=0; $i<count($hosts); $i++) {
-      if ($results[$i] == "ok")
-        $xml .= $responses[$i]."\n";
-      else if ($responses[$i] == "")
-        $xml .= "<daemon_info><host>".$hosts[$i]."</host><apsr_master_control>0</apsr_master_control><message></message></daemon_info>\n";
-      else 
-        $xml .= "<daemon_info><host>".$hosts[$i]."</host><apsr_master_control>0</apsr_master_control><message>".$responses[$i]."</message></daemon_info>\n";
+      $xml .= "<daemon_info>";
+
+      # if no response was available
+      if ((!array_key_exists($i, $responses)) || ($responses[$i] == ""))
+        $xml .= "<host>".$hosts[$i]."</host><apsr_master_control>0</apsr_master_control>";
+      else
+        $xml .= $responses[$i];
+
+      if ($hosts[$i] == $this->server_host)
+        $xml .= $persist_xml;
+
+      $xml .="</daemon_info>";
     }
-    $xml .= $persist_xml;
-    $xml .= "</daemon_infos>\n";
+    $xml .= "</daemon_infos>";
 
     header('Content-type: text/xml');
     echo $xml;
@@ -1138,7 +1192,12 @@ class control extends apsr_webpage
       $hosts[$i] = $get["host_".$i];
     $action = $get["action"];
     $daemon = $get["daemon"];
-    $args = $get["args"];
+    $pwc = "";
+    if (array_key_exists("pwc", $get))
+      $pwc = $get["pwc"];
+    $args = "";
+    if (array_key_exists("args", $get))
+      $args = $get["args"];
     $area = "";
 
     if (($nhosts == "") || ($action == "") || ($daemon == "") || ($hosts[0] == "")) {
@@ -1146,8 +1205,8 @@ class control extends apsr_webpage
       exit(0);
     }
 
-    # determine which type of request this is (srv, pwc or help)
-    if ($hosts[0] == "srv0") 
+    # determine which type of request this is (srv or pwc)
+    if ($hosts[0] == $this->server_host) 
     {  
       if (strpos($this->inst->config["SERVER_DAEMONS_PERSIST"], $daemon) !== FALSE)
         $area = "persist";
@@ -1156,11 +1215,8 @@ class control extends apsr_webpage
     }
     else {
       for ($i=0; $i<$this->inst->config["NUM_PWC"]; $i++)
-        if ($this->inst->config["PWC_".$i] == $hosts[0])
+        if (strpos($hosts[0], $this->inst->config["PWC_".$i]) !== FALSE)
           $area = "pwc";
-      for ($i=0; $i<$this->inst->config["NUM_DFB"]; $i++)
-        if ($this->inst->config["DFB_".$i] == $hosts[0])
-          $area = "help";
     }
     if ($area == "") {
       echo "ERROR: could not determine area\n";
@@ -1234,6 +1290,7 @@ class control extends apsr_webpage
         } else {
           $cmd = "ssh -x -l apsr ".$hosts[$i]." client_apsr_master_control.pl";
         }
+
         $output = array();
         $lastline = exec($cmd, $output, $rval);
       }
@@ -1244,24 +1301,43 @@ class control extends apsr_webpage
 
       $port = $this->inst->config["CLIENT_MASTER_PORT"];
 
-      $html = (($action == "start") ? "Starting" : "Stopping")." ";
+      $html = "";
 
+      # all daemons started or stopped
       if ($daemon == "all") {
-        $cmd = $action."_daemons";
+        $cmd = "cmd=".$action."_daemons";
+        $html .= (($action == "start") ? "Starting" : "Stopping")." ";
         $html .= "all daemons on ";
-      } else if (strpos($daemon, "buffer") !== FALSE) {
-        $bits = split("_", $daemon);
-        $key = $bits[1];
+      }
+      # the command is in related to datablocks
+      else if (strpos($daemon, "buffer") === 0)
+      {
+        list ($junk, $db_id) = explode("_", $daemon);
         if ($action == "stop")
-          $cmd = "destroy_db ".$key;
-        else 
-          $cmd = "init_db ".$key." ".str_replace("_", " ", $args);
-        $html .= $cmd." on";
-      } else {
-        $cmd = $action."_daemon ".$daemon;
+        {
+          $cmd = "cmd=destroy_db&args=".$db_id;
+          $html .= "Destroying DB ".$db_id." on";
+        }
+        else
+        {
+          $cmd = "cmd=init_db&args=".$db_id;
+          $html .= "Creating DB ".$db_id." on";
+        }
+      }
+      # the command is related to a specified daemon
+      else
+      {
+        $html .= (($action == "start") ? "Starting" : "Stopping")." ";
+        $cmd = "cmd=".$action."_daemon&args=".$daemon;
         $html .= str_replace("_", " ",$daemon)." on";
         if ($args != "")
           $cmd .= " ".$args;
+      }
+
+      # if we are only running this command on a single PWC of a host
+      if ($pwc != "")
+      {
+        $cmd .= "&pwc=".$pwc;
       }
 
       # open the socket connections
@@ -1270,7 +1346,12 @@ class control extends apsr_webpage
       for ($i=0; $i<count($hosts); $i++) {
         $host = $hosts[$i];
         if (count($hosts) <= 2)
+        {
           $html .= " ".$host;
+          if ($pwc != "")
+            $html .= ":".$pwc;
+        }
+
         $ntries = 5;
         $results[$i] = "not open";
         while (($results[$i] != "ok") && ($ntries > 0)) {
@@ -1305,15 +1386,14 @@ class control extends apsr_webpage
           # multiple lines may be returned, final line is always an "ok" or "fail"
           $responses[$i] = "";
           while ($done > 0) {
-            $read = rtrim(socketRead($sockets[$i]));
-            if (($read == "ok") || ($read == "fail")) {
-              flush();
+            list ($result, $response) = socketRead($sockets[$i]);
+            if (($response == "ok") || ($response == "fail")) {
               $done = 0;
             } else {
               $done--;
             }
-            if ($read != "")
-              $responses[$i] .= $read."\n";
+            if ($response != "")
+              $responses[$i] .= $response."\n";
           }
         }
         $responses[$i] = rtrim($responses[$i]);
@@ -1403,22 +1483,46 @@ class control extends apsr_webpage
     echo "  </tr>\n";
   }
 
-  function printPersistentServerDaemonControl($daemon, $name, $host) 
+  function printPersistentServerDaemonControl($daemon, $name, $host, $pids)
   {
     echo "  <tr>\n";
     echo "    <td>".$name."</td>\n";
-    echo "    <td>".$this->statusLight($host, $daemon, "-1", "", "toggleDaemonPersist")."</td>\n";
+    if (is_array($pids))
+      echo "    <td>".$this->statusLight($host, $daemon, "-1", "", "toggleDaemonPID")."</td>\n";
+    else
+      echo "    <td>".$this->statusLight($host, $daemon, "-1", "", "toggleDaemonPersist")."</td>\n";
+    echo "    <td>\n";
+    if (is_array($pids))
+    {
+      echo "      <select id='".$daemon."_pid'>\n";
+      echo "        <option value=''>--</option>\n";
+      for ($i=0; $i<count($pids); $i++)
+      {
+        echo "        <option value='".$pids[$i]."'>".$pids[$i]."</option>\n";
+      }
+      echo "      </select>\n";
+    }
+    else
+      echo $pids;
+    echo "    </td>\n";
     echo "  </tr>\n";
   }
 
-  function printClientDaemonControl($daemon, $name, $hosts, $cmd) 
+  function printClientDaemonControl($daemon, $name, $hosts, $cmd)
   {
     $host_str = "";
     echo "  <tr>\n";
     echo "    <td>".$name."</td>\n";
     for ($i=0; $i<count($hosts); $i++) {
-      echo "    <td>".$this->statusLight($hosts[$i], $daemon, -1, "")."</td>\n";
-      $host_str .= $hosts[$i]." ";
+      $host = $hosts[$i]["host"];
+      $span = $hosts[$i]["span"];
+      $pwc = "";
+      if (array_key_exists("pwc", $hosts[$i]))
+        $pwc = ":".$hosts[$i]["pwc"];
+
+      echo "    <td colspan='".$span."' style='text-align: center;'>".$this->statusLight($host.$pwc, $daemon, -1, "")."</td>\n";
+      if (strpos($host_str, $host) === FALSE)
+        $host_str .= $host." ";
     }
     $host_str = rtrim($host_str);
     if ($cmd != "" ) {
@@ -1435,19 +1539,25 @@ class control extends apsr_webpage
   #
   # Print the data block row
   #
-  function printClientDBControl($name, $hosts, $key, $nbufs, $bufsz) 
+  function printClientDBControl($name, $hosts, $id)
   {
 
-    $daemon = "buffer_".$key;
-    $daemon_on = "buffer_".$key."&args=".$nbufs."_".$bufsz;
-    $daemon_off = "buffer_".$key;
+    $daemon = "buffer_".$id;
+    $daemon_on = "buffer_".$id;
+    $daemon_off = "buffer_".$id;
 
     $host_str = "";
     echo "  <tr>\n";
     echo "    <td>".$name."</td>\n";
     for ($i=0; $i<count($hosts); $i++) {
-      echo "    <td>".$this->statusLight($hosts[$i], $daemon, -1, $nbufs."_".$bufsz)."</td>\n";
-      $host_str .= $hosts[$i]." ";
+      $host = $hosts[$i]["host"];
+      $span = $hosts[$i]["span"];
+      $pwc = "";
+      if (array_key_exists("pwc", $hosts[$i]))
+        $pwc = ":".$hosts[$i]["pwc"];
+      echo "    <td span='".$span."' style='text-align: center;'>".$this->statusLight($host.$pwc, $daemon, -1, "")."</td>\n";
+      if (strpos($host_str, $host) === FALSE)
+        $host_str .= $host." ";
     }
     $host_str = rtrim($host_str);
     echo "    <td style='text-align: center;'>\n";
@@ -1472,7 +1582,7 @@ class control extends apsr_webpage
   function handleRequest()
   {
 
-    if ($_GET["update"] == "true") {
+    if (array_key_exists("update", $_GET) && ($_GET["update"] == "true")) {
       $this->printUpdateXML($_GET);
     } else if (isset($_GET["action"])) {
       $this->printActionHTML($_GET);

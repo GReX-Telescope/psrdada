@@ -6,6 +6,7 @@ include("apsr_webpage.lib.php");
 $_GET["single"] = "false";
 $_GET["show_buttons"] = "false";
 include("state_banner.lib.php");
+
 $_GET["single"] = "true";
 
 class tcs_simulator extends apsr_webpage 
@@ -312,26 +313,29 @@ class tcs_simulator extends apsr_webpage
     if ($get["command"] == "stop") {
       $cmd = "stop\r\n";
       socketWrite($sock,$cmd);
-      $result = rtrim(socketRead($sock));
-      $this->printTR($cmd,$result);
+      list ($result, $response) = socketRead($sock);
+      $this->printTR($cmd, $response);
       $this->printTF();
       $this->printFooter();
       socket_close($sock);
       return;
-    }   
+    }  
 
+    $keys_to_ignore = array("command", "single", "show_buttons", "source_list", "SOURCE_LIST", "MODE_LIST"); 
     # otherwise its a START command
     $keys = array_keys($get);
-    for ($i=0; $i<count($keys); $i++) {
-
+    for ($i=0; $i<count($keys); $i++) 
+    {
       $k = $keys[$i];
-      if (($k != "command") && ($k != "SOURCE_LIST") && ($k != "MODE_LIST")) {
+      if (!in_array($k, $keys_to_ignore))
+      {
         if ($get[$k] != "") {
           $cmd = $k." ".$get[$k]."\r\n";
           socketWrite($sock,$cmd);
-          $result = rtrim(socketRead($sock),"\r\n");
-          if ($result != "ok") {
-            $this->printTR("HEADER command failed ", $result.": ".rtrim(socketRead($sock)));
+          list ($result, $response) = socketRead($sock);
+          if ($response  != "ok") {
+            list ($result2, $response2) = socketRead($sock);
+            $this->printTR("HEADER command failed ", $response.": ".$response2);
             $this->printTR("START aborted", "");
             socket_close($sock);
             return;
@@ -346,10 +350,11 @@ class tcs_simulator extends apsr_webpage
     # Issue START command to server_tcs_interface 
     $cmd = "start\r\n";
     socketWrite($sock,$cmd);
-    $result = rtrim(socketRead($sock),"\r\n");
-    $this->printTR(strtoupper($cmd),$result);
+    list ($result, $response) = socketRead($sock);
+    $this->printTR(strtoupper($cmd), $response);
     if ($result != "ok") {
-      $this->printTR("START command failed", $result.": ".rtrim(socketRead($sock)));
+      list ($result2, $response2) = socketRead($sock);
+      $this->printTR("START command failed", $response.": ".$response2);
       $this->printTF();
       $this->printFooter();
       socket_close($sock);
@@ -381,12 +386,13 @@ class tcs_simulator extends apsr_webpage
     # Issue SET_UTC_START command
     $cmd = "SET_UTC_START ".$utc_start."\r\n";
     socketWrite($sock,$cmd);
-    $result = rtrim(socketRead($sock));
-
-    if ($result != "ok") {
-      $result .= "<BR>\n".rtrim(socketRead($sock));
-      $this->printTR("SET_UTC_START [".$cmd."] failed: ", $result);
-      $this->printTR(rtrim(socketRead($sock)),"");
+    list ($result, $response) = socketRead($sock);
+    if ($response != "ok") {
+      list ($result2, $response2) = socketRead($sock);
+      $response .= "<BR>\n".$response2;
+      $this->printTR("SET_UTC_START [".$cmd."] failed: ", $response);
+      list ($result, $response) = socketRead($sock);
+      $this->printTR($response,"");
       $this->stopCommand($sock);
       exit(-1);
     } else {
@@ -400,7 +406,7 @@ class tcs_simulator extends apsr_webpage
   }
 
   function printTR($left, $right) {
-    echo " <tr\n";
+    echo " <tr>\n";
     echo "  <td>".$left."</td>\n";
     echo "  <td>".$right."</td>\n";
     echo " </tr>\n";
@@ -423,9 +429,10 @@ class tcs_simulator extends apsr_webpage
     $cmd = "STOP\r\n";
     socketWrite($socket,$cmd);
 
-    $result = rtrim(socketRead($socket));
-    if ($result != "ok") {
-      $this->printTR("\"$cmd\" failed",$result.": ".rtrim(socketRead($socket)));
+    list ($result, $response) = socketRead($sock);
+    if ($response != "ok") {
+      list ($result2, $response2) = socketRead($sock);
+      $this->printTR("\"$cmd\" failed",$response.": ".$response2);
     } else {
       $this->printTR("Sent \"".$cmd."\" to nexus","ok");
     }
