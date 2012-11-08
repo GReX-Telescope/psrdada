@@ -327,8 +327,8 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, int64_t* size)
         {
           if (max_ignore == MAX_IGNORE_PACKETS) 
           {
-            multilog (log, LOG_WARNING, "first packet received had sequence "
-                      "number %d\n",header.sequence);
+            multilog (log, LOG_WARNING, "first packet received had higher than "
+                      "expected sequence number %d\n",header.sequence);
           }
 
           ignore_packet = 1;
@@ -345,7 +345,8 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, int64_t* size)
         } 
         else 
         {
-          multilog (log, LOG_INFO, "first packet received seq=%"PRIu64"\n", header.sequence);
+          if (ctx->verbose)
+            multilog (log, LOG_INFO, "first packet received seq=%"PRIu64"\n", header.sequence);
           ignore_packet = 0;
         }
 
@@ -537,8 +538,8 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, int64_t* size)
 
     *size = ctx->curr->count * ctx->packet_length;
 
-    /* if some data has been received, then this is the EOD */
-    if (ctx->curr->count) 
+    // if some data has been received, then this is the EOD
+    if (ctx->verbose && ctx->curr->count) 
       multilog(ctx->log, LOG_INFO, "suspected EOD, returning %"PRIi64" bytes\n", *size);
     else
     {
@@ -572,7 +573,8 @@ int udpdb_stop_function (dada_pwc_main_t* pwcm)
     percent_dropped = (float) ((double) ctx->packets->dropped / (double) ctx->packets->received) * 100.00;
   }
 
-  multilog (pwcm->log, LOG_INFO, "received %"PRIu64" bytes\n", ctx->bytes->received);
+  if (ctx->verbose)
+    multilog (pwcm->log, LOG_INFO, "received %"PRIu64" bytes\n", ctx->bytes->received);
 
   if (ctx->packets->dropped > 0)
     multilog(pwcm->log, LOG_INFO, "packets dropped %"PRIu64" / %"PRIu64" = %10.8f %\n",
