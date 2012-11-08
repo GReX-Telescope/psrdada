@@ -19,7 +19,7 @@ BEGIN {
   @ISA         = qw(Exporter AutoLoader);
   @EXPORT      = qw(&main);
   %EXPORT_TAGS = ( );
-  @EXPORT_OK   = qw($log_host $log_port $log_sock $dl $daemon_name $tag $dameon %cfg);
+  @EXPORT_OK   = qw($log_host $log_port $log_sock $dl $daemon_name $type $dameon %cfg);
 
 }
 
@@ -32,9 +32,10 @@ our $log_host;
 our $log_port;
 our $log_sock;
 our $dl;
+our $pwc_id;
 our $daemon_name;
 our %cfg;
-our $tag;
+our $type;
 our $daemon;
 
 #
@@ -48,9 +49,10 @@ $log_host = 0;
 $log_port = 0;
 $log_sock = 0;
 $dl = 1; 
+$pwc_id = 0;
 $daemon_name = 0;
 %cfg = ();
-$tag = 0;
+$type = 0;
 $daemon = 0;
 
 #
@@ -69,7 +71,7 @@ sub main() {
 
   my $line     = "";
   my $time     = "";
-  my $type     = "";
+  my $class     = "";
 
   # install signal handlers
   $SIG{INT} = \&sigHandle;
@@ -88,7 +90,7 @@ sub main() {
 
     chomp $line;
 
-    $type = "INFO";
+    $class = "INFO";
 
     # Try to parse the line if it has the standard format
     if ($line =~ m/^\[(\d\d\d\d)\-(\d\d)\-(\d\d)\-(\d\d):(\d\d):(\d\d)\]/) {
@@ -96,12 +98,12 @@ sub main() {
       $line = substr($line,22);
 
       if ($line =~ m/^WARN: /) {
-        $type = "WARN";
+        $class = "WARN";
         $line = substr($line,6);
       }
 
       if ($line =~ m/^ERROR: /) {
-        $type = "ERROR";
+        $class = "ERROR";
         $line = substr($line,7);
       }
   
@@ -110,7 +112,7 @@ sub main() {
     }
 
     # Always log these messages
-    msg(0, $type, $line, $time);
+    msg(0, $class, $line, $time);
 
   }
   msg(2, "INFO", "client_logger: finished reading from STDIN");
@@ -123,7 +125,7 @@ sub main() {
 #
 sub msg($$$;$) {
 
-  (my $level, my $type, my $message, my $time="") = @_;
+  (my $level, my $class, my $message, my $time="") = @_;
 
   my $log_file = $cfg{"CLIENT_LOG_DIR"}."/".$daemon_name.".log";
 
@@ -139,7 +141,7 @@ sub msg($$$;$) {
     }
 
     if ($log_sock) {
-      Dada::nexusLogMessage($log_sock, $time, $tag, $type, $daemon, $message);
+      Dada::nexusLogMessage($log_sock, $pwc_id, $time, $type, $class, $daemon, $message);
     }
 
     open FH, ">>".$log_file;

@@ -584,9 +584,6 @@ sub nodeInfoThread() {
   for ($i=0; $i<$cfg{"NUM_PWC"}; $i++) {
     push(@machines, $cfg{"PWC_".$i});
   }
-  for ($i=0; $i<$cfg{"NUM_HELP"}; $i++) {
-    push(@machines, $cfg{"HELP_".$i});
-  }
   push(@machines, "srv0");
 
   my $handle = 0;

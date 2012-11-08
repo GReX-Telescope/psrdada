@@ -270,12 +270,12 @@ sub loggingThread($)
   my $combined_log_file = "";
 
   my @bits = ();
-  my $pwc = "";
-  my $time = "";
-  my $tag = "";
-  my $lvl = "";
   my $src = "";
-  my $msg = "";
+  my $time = "";
+  my $type = "";
+  my $class = "";
+  my $program = "";
+  my $message = "";
 
   while (!$quit_daemon) 
   {
@@ -289,28 +289,35 @@ sub loggingThread($)
 
       if ($#bits == 5) 
       {
-        $pwc  = $bits[0];
-        $time = $bits[1];
-        $tag  = $bits[2];
-        $lvl  = $bits[3];
-        $src  = $bits[4];
-        $msg  = $bits[5];
+#       src       source of message (hostname or PWC ID) 
+#       time      timestamp of message
+#       type      type of message (pwc, sys, src) 
+#       class     class of message (INFO, WARN, ERROR) 
+#       program   script or binary that generated message (e.g. obs mngr)
+#       message   message itself
 
-        $pwc_log_file = $logfile_dir."/".$pwc.".".$tag.".log";
-        $combined_log_file = $logfile_dir."/".$master_log_prefix.".".$tag.".log";
+        $src     = sprintf("%02d", $bits[0]);
+        $time    = $bits[1];
+        $type    = $bits[2];
+        $class   = $bits[3];
+        $program = $bits[4];
+        $message = $bits[5];
 
-        if (($lvl eq "WARN") || ($lvl eq "ERROR")) {
-          $status_file = $statusfile_dir."/".$pwc.".".$tag.".".lc($lvl);
+        $pwc_log_file = $logfile_dir."/".$src.".".$type.".log";
+        $combined_log_file = $logfile_dir."/".$master_log_prefix.".".$type.".log";
+
+        if (($class eq "WARN") || ($class eq "ERROR")) {
+          $status_file = $statusfile_dir."/".$src.".".$type.".".lc($class);
         } else {
           $status_file = "";
         }
 
-        if ($lvl eq "INFO") {
-          $message = "[".$time."] ".$src.": ".$msg;
+        if ($class eq "INFO") {
+          $message = "[".$time."] ".$program.": ".$message;
         } else {
-          $message = "[".$time."] ".$src.": ".$lvl.": ".$msg;
+          $message = "[".$time."] ".$program.": ".$class.": ".$message;
         }
-        Dada::logMsg(3, $dl, "loggingThread: ".$pwc." ".$message);
+        Dada::logMsg(3, $dl, "loggingThread: ".$src." ".$message);
 
         # log message to the PWC specific log file
         if (-f $pwc_log_file) {
@@ -321,23 +328,23 @@ sub loggingThread($)
         print FH $message."\n";
         close FH;
 
-        # Log the message to the combined log file
+        # log the message to the combined log file
         if (-f $combined_log_file) {
           open(FH,">>".$combined_log_file);
         } else {
           open(FH,">".$combined_log_file);
         }
-        print FH sprintf("%02d",$pwc)." ".$message."\n";
+        print FH $src." ".$message."\n";
         close FH;
 
-        # If the file is a warning or error, we create a warn/error file too
+        # if the file is a warning or error, we create a warn/error file too
         if ($status_file ne "") {
           if (-f $status_file) {
             open(FH,">>".$status_file);
           } else {
             open(FH,">".$status_file);
           }
-          print FH $src.": ".$msg."\n";
+          print FH $program.": ".$message."\n";
           close FH;
         }   
       }

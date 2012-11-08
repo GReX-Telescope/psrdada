@@ -25,7 +25,7 @@ BEGIN {
 
   # your exported package globals go here,
   # as well as any optionally exported functions
-  @EXPORT_OK   = qw($dl $nchan $gain_min $gain_max $gain_default $daemon_name %cfg);
+  @EXPORT_OK   = qw($dl $pwc_id $nchan $gain_min $gain_max $gain_default $daemon_name %cfg);
 
 }
 
@@ -35,6 +35,7 @@ our @EXPORT_OK;
 # exported package globals
 #
 our $dl : shared;
+our $pwc_id : shared;
 our $nchan;
 our $gain_min;
 our $gain_max;
@@ -56,6 +57,7 @@ our $gain_sock;
 # initialize package globals
 #
 $dl = 1; 
+$pwc_id = 0;
 $nchan = 0;
 $gain_min = 0;
 $gain_max = 0;
@@ -340,14 +342,14 @@ sub set_gain($$$$$) {
 #
 sub msg($$$) {
 
-  my ($level, $type, $msg) = @_;
+  my ($level, $class, $msg) = @_;
   if ($level <= $dl) {
     my $time = Dada::getCurrentDadaTime();
     if (!$log_sock) {
       $log_sock = Dada::nexusLogOpen($log_host, $log_port);
     }
     if ($log_sock) {
-      Dada::nexusLogMessage($log_sock, $time, "sys", $type, "gain mon", $msg);
+      Dada::nexusLogMessage($log_sock, $pwc_id, $time, "sys", $class, "gain mon", $msg);
     } else {
       print "[".$time."] msg: Dada::nexusLogOpen(".$log_host.", ".$log_port.") failed\n";
     }
