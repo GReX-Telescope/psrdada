@@ -36,7 +36,7 @@
 void usage()
 {
   fprintf (stdout,
-           "leda_dbupdb7 [options] in_key out_key\n"
+           "leda_dbupdb_lookup [options] in_key out_key\n"
            " -c core   use core for thread 0, thread n uses core + n\n"
            " -n nthr   use nthr threads [defualt 1]\n"
            " -b num    bit promotion factor [default 2]\n"
