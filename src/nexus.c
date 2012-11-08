@@ -297,7 +297,7 @@ void* node_open_thread (void* context)
     char *buffer = 0;
     int buffer_size = strlen(nexus->logfile_dir) + 1 + strlen(host_name) + 5;
     buffer = malloc(buffer_size * sizeof(char));
-    sprintf(buffer,"%s/%s.pwc.log",nexus->logfile_dir,host_name);
+    sprintf(buffer,"%s/%02d.pwc.log",nexus->logfile_dir, id);
 
 #ifdef _DEBUG
     fprintf(stderr,"node->log_file = %s\n",buffer);
