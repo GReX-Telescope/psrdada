@@ -355,7 +355,7 @@ class machine_summary extends apsr_webpage
                   var log_file = "";
                   if (pwc != "server")
                   {
-                    log_file = "bpsr_" + tag + "_monitor";
+                    log_file = "apsr_" + tag + "_monitor";
                   }
                   else
                   {

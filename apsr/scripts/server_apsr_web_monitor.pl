@@ -454,82 +454,99 @@ sub statusInfoThread() {
 
   Dada::logMsg(1, $dl, "statusInfoThread: starting");
 
-  my @server_daemons = split(/ /,$cfg{"SERVER_DAEMONS"});
-  my %clients = ();
   my @files = ();
-  my %warnings= ();
-  my %errors= ();
   my @arr = ();
-  my $sleep_time = 2;
+  my $sleep_time = 10;
   my $sleep_counter = 0;
 
   my $i = 0;
-  my $host = "";
   my $statuses = "";
   my $file = "";
   my $msg = "";
-  my $source = "";
+  my $pwc = "";
+  my $tag = "";
+  my $type = "";
   my $tmp_str = "";
-  my $key = "";
-  my $value = "";
   my $cmd = "";
+  my $result = "";
+  my $response = "";
 
-  while (!$quit_daemon) {
+  my %pwc_ids = ();
+  for ($i=0; $i<$cfg{"NUM_PWC"}; $i++)
+  {
+    $pwc_ids{$cfg{"PWC_".$i}} = $i;
+    $pwc_ids{sprintf("%02d",$i)} = $i;
+  }
 
-    if ($sleep_counter > 0) {
+  while (!$quit_daemon)
+  {
+    if ($sleep_counter > 0)
+    {
       sleep(1);
       $sleep_counter--;
-
-    # The time has come to check the status warnings
-    } else {
-
+    }
+    else
+    {
       $sleep_counter = $sleep_time;
-      %warnings = ();
-      %errors = ();
+
+      $tmp_str = "";
+
       @files = ();
 
       $cmd = "ls -1 ".$status_dir;
       $statuses = `$cmd`;
+      chomp($statuses);
       @files = split(/\n/, $statuses);
 
       # get the current warnings and errors
       for ($i=0; $i<=$#files; $i++) {
         $file = $files[$i];
-        $msg = `tail -n 1 $status_dir/$file`;
-        chomp $msg;
+        ($result, $response) = Dada::mySystem("tail -n 1 ".$status_dir."/".$file);
+        if ($result eq "ok")
+        {
+          $msg = $response;
+        } 
+        else
+        {
+          $msg = "could not determine message";
+        }
 
-        $source = "";
         @arr = ();
         @arr = split(/\./,$file);
 
+        $pwc = "";
+        $tag = "";
+        $type = "";
+
         # for pwc, sys and src client errors
-        if ($#arr == 2) {
-          $source = $arr[1]."_".$arr[0];
-        } elsif ($#arr == 1) {
-          $source = $arr[0];
+        if ($#arr == 2)
+        {
+          $pwc = $pwc_ids{$arr[0]};
+          $tag = $arr[1];
+          $type = $arr[2];
+        }
+        elsif ($#arr == 1)
+        {
+          $pwc = "server";
+          $tag = $arr[0];
+          $type = $arr[1];
+        }
+        else
+        {
+          Dada::logMsg(0, $dl, "statusInfoThread: un-parseable status file: ".$file);
         }
 
-        if ($file =~ m/\.warn$/) {
-          $warnings{$source} = $msg;
+        if ($type eq "warn")
+        {
+          $tmp_str .= "<daemon_status type='warning' pwc='".$pwc."' tag='".$tag."'>".$msg."</daemon_status>";
         }
-        if ($file =~ m/\.error$/) {
-          $errors{$source} = $msg;
+        if ($type eq "error")
+        {
+          $tmp_str .= "<daemon_status type='error' pwc='".$pwc."' tag='".$tag."'>".$msg."</daemon_status>";
         }
-
-      }
-
-      # The results array is now complete, build the response
-      # string
-      $tmp_str = "";
-      while (($key, $value) = each(%warnings)){
-        $tmp_str .= $key.":::1:::".$value.";;;;;;";
-      }
-      while (($key, $value) = each(%errors)){
-        $tmp_str .= $key.":::2:::".$value.";;;;;;";
       }
 
       $status_info = $tmp_str;
-
       Dada::logMsg(2, $dl, "statusInfoThread: ".$status_info);
 
     }
