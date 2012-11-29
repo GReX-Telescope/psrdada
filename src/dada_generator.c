@@ -214,3 +214,56 @@ double rand_normal(double mean, double stddev) {
    }
 }
 
+
+/*
+ * return the binary string of an unsigned int
+ */
+char * int8_to_binary_string(int8_t value) {
+
+  char * string = (char *) malloc(sizeof(char)*9);
+  unsigned int c;
+  unsigned int displayMask = 1 << 7;
+
+  for (c=1; c<= 8; c++) {
+    string[c-1] = value & displayMask ? '1' : '0';
+    value <<= 1;
+  }
+  string[8] = '\0';
+  return string;
+}
+
+/*
+ * return the binary string of a int16_t
+ */
+char * int16_to_binary_string(int16_t value) {
+
+  char * string = (char *) malloc(sizeof(char)*17);
+  unsigned int c;
+  unsigned int displayMask = 1 << 15;
+
+  for (c=1; c<= 16; c++) {
+    string[c-1] = value & displayMask ? '1' : '0';
+    value <<= 1;
+  }
+  string[16] = '\0';
+  return string;
+}
+
+/*
+ * return the binary string of a int16_t
+ */
+char * int_to_binary_string(int value) {
+
+  char * string = (char *) malloc(sizeof(char)*33);
+  unsigned int c;
+  unsigned int displayMask = 1 << 31;
+
+  for (c=1; c<= 32; c++) {
+    string[c-1] = value & displayMask ? '1' : '0';
+    value <<= 1;
+  }
+  string[32] = '\0';
+  return string;
+}
+
+
