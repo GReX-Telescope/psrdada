@@ -16,6 +16,15 @@
 #include <sys/mman.h>
 #include <sched.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 int dada_bind_thread_to_core(int core);
+
+#ifdef __cplusplus
+}
+#endif
+
 
 #endif /* __DADA_AFFINITY_H */
