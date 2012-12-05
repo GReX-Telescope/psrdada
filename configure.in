@@ -60,7 +60,9 @@ SWIN_LIB_PGPLOT
 SWIN_LIB_CUDA
 
 AX_OPENMP
+SWIN_LIB_FFTW
 SWIN_LIB_PGPLOT
+SWIN_LIB_IPP
 SWIN_LIB_MKL
 SWIN_LIB_IPP
 SWIN_LIB_RDMACM
@@ -144,6 +146,7 @@ AC_CONFIG_FILES([Makefile
     gmrt/src/Makefile
     leda/Makefile
     leda/src/Makefile
+    hispec/src/Makefile
 		3rdparty/Makefile])
 
 #		puma2/Makefile # Removed since tim.h is missing
