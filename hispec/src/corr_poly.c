@@ -875,9 +875,9 @@ int openFiles(char *infilename, char *outfilename, int prod_type, FILE **fin, FI
 
 void parse_cmdline(int argc, char * const argv[]) {
 #if USE_DADA
-    char optstring[]="dc:k:o:n:a:p:w:W:b:m:y:r:z";
+    char optstring[]="dc:k:o:n:a:g:p:w:W:b:m:y:r:z";
 #else
-    char optstring[]="dc:i:o:n:a:p:w:W:b:m:y:r:z";
+    char optstring[]="dc:i:o:n:a:g:p:w:W:b:m:y:r:z";
 #endif
     int c;
     
