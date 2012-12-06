@@ -342,7 +342,7 @@ int readDataToGPU(int nchan, int ninp, int windowBlocks, int nbatch, int bits_pe
   dim3 threads( 128, 1, 1 );
   dim3 blocks( nchan * 2 / 128, nbatch, ninp );
   
-  /* cuda_inp_buf needs to be offset by (windowBlocks-1) chunks due to the algorithm design */
+  /* cuda_inp_buf needs to be offset by (windowBlocks-1) chunks due to the circular queue design */
   gettimeofday( &thetime, NULL );
   if( wordtype == 0 )
     unpackUnsignedData_kernel<<< blocks, threads >>>(cudaBuffer, &cuda_inp_buf[(windowBlocks-1) * nchan * 2]);
@@ -508,8 +508,13 @@ void do_CUDA_CMAC(int nchan, int ninp, int ncross, int nbatch, int prod_type, cu
   }
 }
 
+/* Write the results into a buffer of output, size set to
+ yaxis_size, the whole output will be written to a file everytime 
+ it obtains nrows_per_refresh output. yaxis_size must be divisible
+ by rows_per_refresh */
 void writeGPUOutput(FILE *fout_ac, FILE *fout_cc, int ninp, int nchan, 
-    int ncross, int naver, int prod_type, int nbatch, int isLast, float normaliser, 
+    int ncross, int naver, int prod_type, int nbatch, int isLast, 
+    float normaliser, int yaxis_size, int rows_per_refresh,
     cufftComplex *cuda_cross_corr, float *cuda_auto_corr)
 {
   int i;
@@ -517,37 +522,69 @@ void writeGPUOutput(FILE *fout_ac, FILE *fout_cc, int ninp, int nchan,
   static complex float *ctemp_buf;
   static float *temp_buf = NULL;
 
-  static FILE *fp;
+  static int row = 0;
+  static int rowBlock= 0;
+  static int nrowBlocks = yaxis_size / rows_per_refresh;
+  static FILE *ftemp_ac;
+  static FILE *ftemp_cc;
+
+  char filename[BUFSIZ];
+
+  //static FILE *fp;
 
   int numThreads = 32;
+
   if( init )
   {
-    fp = fopen( "temp.csv", "w" );
+    //fp = fopen( "temp.csv", "w" );
 
     init = 0;
-    ctemp_buf = (complex float *)malloc( nchan * ncross * sizeof(float) );
-    temp_buf = (float *)malloc( nchan * ninp * sizeof(float) );
+    ctemp_buf = (complex float *)malloc( yaxis_size * nchan * ncross * sizeof(float) );
+    temp_buf = (float *)malloc( yaxis_size * nchan * ninp * sizeof(float) );
   }
 
   dim3 threads(numThreads, 1, 1);
   dim3 blocks(nchan / numThreads, ninp, 1);
 
+  /* Keep track of which row is it now */
+  /* rowBlock is used to keep track of which block of data is getting printed out, when row = 10-19, rowBlock = 1 (if rows_per_refresh = 10) */
+  rowBlock = row / rows_per_refresh; 
+  
   if( prod_type == 'A' || prod_type == 'B' )
   {
     /* Normalisation, number of points are obtained from the threads and blocks number */
     normalise_float_kernel<<< blocks, threads >>>(cuda_auto_corr, normaliser);
     
     /* Extract the real numbers, for auto correlation only */
-    cudaMemcpy( temp_buf, cuda_auto_corr, nchan * ninp * sizeof(float), cudaMemcpyDeviceToHost );
+    cudaMemcpy( &temp_buf[row*nchan*ninp], cuda_auto_corr, nchan * ninp * sizeof(float), cudaMemcpyDeviceToHost );
     
-    for( i = 0; i < nchan * ninp; i++ )
+    /*for( i = 0; i < nchan * ninp; i++ )
     {
       fprintf( fp, "%e ", 10 * log(temp_buf[i]) );
     }
-    fprintf( fp, "\n" );
-
-    fwrite( temp_buf, sizeof(float), nchan * ninp, fout_ac );
+    fprintf( fp, "\n" );*/
+    fwrite( &temp_buf[row*nchan*ninp], sizeof(float), nchan * ninp, fout_ac );
     cudaMemset( cuda_auto_corr, 0, (nchan) * ninp * sizeof(float) );
+  
+    /* output auto correlation results to a file with time stamp */
+    if( row % rows_per_refresh == 0 )
+    {
+      time_stamp(filename);
+      /* ac extension to mean auto correlation */
+      sprintf( filename, "%s.ac", filename );
+
+      ftemp_ac = fopen( filename, "w" );
+
+      for( i = (rowBlock+1)%nrowBlocks; i != rowBlock; i = (i+1)%nrowBlocks )
+      {
+	fwrite( &temp_buf[i*rows_per_refresh*nchan*ninp], sizeof(float), 
+	    rows_per_refresh*nchan*ninp, ftemp_ac );
+      }
+
+
+      fclose(ftemp_ac);
+    }
+
   }
 
   else if( prod_type == 'C' || prod_type == 'B' )
@@ -556,10 +593,29 @@ void writeGPUOutput(FILE *fout_ac, FILE *fout_cc, int ninp, int nchan,
     blocks.y = ncross;
     normalise_complex_kernel<<< blocks, threads >>>(cuda_cross_corr, normaliser);
     
-    cudaMemcpy( ctemp_buf, cuda_cross_corr, (nchan) * ncross * sizeof(complex float), cudaMemcpyDeviceToHost );
+    cudaMemcpy( &ctemp_buf[row*nchan*ncross], cuda_cross_corr, (nchan) * ncross * sizeof(complex float), cudaMemcpyDeviceToHost );
 
-    fwrite( ctemp_buf, sizeof(complex float), nchan * ncross, fout_cc );
+    fwrite( &ctemp_buf[row*nchan*ncross], sizeof(complex float), nchan * ncross, fout_cc );
     cudaMemset( cuda_cross_corr, 0, (nchan) * ncross * sizeof(cufftComplex) );
+
+    /* output cross correlation results to a file with time stamp */
+    if( row % rows_per_refresh == 0 )
+    {
+      time_stamp(filename);
+      /* ac extension to mean auto correlation */
+      sprintf( filename, "%s.cc", filename );
+
+      ftemp_cc = fopen( filename, "w" );
+
+      for( i = (rowBlock+1)%nrowBlocks; i != rowBlock; i = (i+1)%nrowBlocks )
+      {
+	fwrite( &ctemp_buf[i*rows_per_refresh*nchan*ninp], sizeof(float), 
+	    rows_per_refresh*nchan*ninp, ftemp_cc );
+      }
+
+
+      fclose(ftemp_cc);
+    }
   }
 
   else
@@ -567,6 +623,8 @@ void writeGPUOutput(FILE *fout_ac, FILE *fout_cc, int ninp, int nchan,
     fprintf( stderr, "Invalid prod type: %c\n", (char) prod_type );
     exit(1);
   }
+
+  row = (row+1) % yaxis_size;
 
   /* When this is the last output, free the memory */
   if( isLast )
@@ -582,4 +640,21 @@ float elapsed_time(struct timeval *start){
     gettimeofday(&now,NULL);
     return 1.e3f*(float)(now.tv_sec-start->tv_sec) +
         1.e-3f*(float)(now.tv_usec-start->tv_usec);
+}
+
+/* return a string representation of local time stamp, in the format of
+ yyyy-mm-dd-hh:mm:ss */
+void time_stamp(char *str)
+{
+  struct tm *tm;
+  time_t current;
+
+  time(&current);
+
+  tm = localtime(&current);
+
+  /* Assume that the char array is large enough */
+  sprintf( str, "%d-%.2d-%.2d-%.2d:%.2d:%.2d", 
+      1900 + tm->tm_year, tm->tm_mon, tm->tm_mday, 
+      tm->tm_hour, tm->tm_min, tm->tm_sec, str );
 }

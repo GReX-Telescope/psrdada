@@ -133,7 +133,6 @@ int ninp=DEFAULT_NINP;  /* input of inputs */
 int debug=0;            /* turn debugging info on */
 int naver=DEFAULT_NAV;  /* number of input spectra to accumulate before writing an average */
 int prod_type='A';      /* correlation product type: B: both, C: cross, A: auto */
-char inputtype = 'R';  /* input type: R: real, C: complex */
 int wordtype=0,bits_per_samp=0;
 char infilename[BUFSIZ], outfilename[BUFSIZ];
 static fftwf_plan *plans;
@@ -142,6 +141,9 @@ key_t dada_key = DADA_DEFAULT_BLOCK_KEY;
 char windowType = 'q';	/* The type of window function for polyphase filter */
 int windowBlocks = DEFAULT_WINDOW_BLOCK;  /* Default number of blocks of window */
 char polyMethod[BUFSIZ] = "weighted-overlap-add"; /* Polyphase method */
+int complexinput = 0; /* 0 for non-complex input, 1 for complex input */
+int yaxis_size = 128;
+int rows_per_refresh = 16;
 
 #ifndef M_PI
 double M_PI;
@@ -178,9 +180,13 @@ int main(int argc, char * const argv[])
   /* Variables for CUDA GPU executions */
   int nbatch = DEFAULT_NBATCH;  /* Determine how many data chunks to be processed per step */
   float *cuda_inp_buf;
+  cufftComplex *cuda_complexinp_buf;
+
   float *cuda_window_buf;
   
   float *cuda_poly_buf;	
+  cufftComplex *cuda_complexpoly_buf;
+
   cufftComplex *cuda_ft_buf;
   
   /* Outputs of the correlator, auto and cross separated for more efficient processing */
@@ -259,7 +265,11 @@ int main(int argc, char * const argv[])
   }
   /* Allocate GPU memory, then initialise or copy data */
 
-  /* This input buffer needs to have a different size due to the algorithm design */
+  /* This input buffer needs to have a different size 
+   * due to the algorithm design, essentially have 
+   * nbatch + windowBlocks - 1 blocks of input saved */
+  if( !complexinput )
+  {
   cudaMalloc( (void **)&cuda_inp_buf, 
       nchan * 2 * ninp * (nbatch + windowBlocks-1) * sizeof(float) );
   cudaMemset( cuda_inp_buf, 0, 
@@ -267,6 +277,11 @@ int main(int argc, char * const argv[])
 
   cudaMalloc( (void **)&cuda_poly_buf, nchan * 2 * ninp * nbatch * sizeof(float) );
   cudaMemset( cuda_poly_buf, 0, nchan * 2 * ninp * nbatch * sizeof(float) );
+  }
+  else
+  {
+
+  }
 
   cudaMalloc( (void **)&cuda_ft_buf, (nchan+1) * ninp * nbatch * sizeof(cufftComplex) );
   cudaMemset( cuda_ft_buf, 0, (nchan+1) * ninp * nbatch * sizeof(cufftComplex) );
@@ -399,7 +414,7 @@ int main(int argc, char * const argv[])
 #if USE_GPU
       /* write output from GPU */
       writeGPUOutput(fout_ac, fout_cc, ninp, nchan, ncross, iter, prod_type, 
-                     nbatch, filedone, normaliser, cuda_cross_corr, cuda_auto_corr);
+                     nbatch, filedone, normaliser, yaxis_size, rows_per_refresh, cuda_cross_corr, cuda_auto_corr);
 #else
       /* CPU output writing */
       writeOutput(fout_ac,fout_cc,ninp,nchan,iter,prod_type,corr_buf,normaliser);
@@ -859,9 +874,9 @@ int openFiles(char *infilename, char *outfilename, int prod_type, FILE **fin, FI
 
 void parse_cmdline(int argc, char * const argv[]) {
 #if USE_DADA
-    char optstring[]="dc:k:o:n:a:p:w:W:b:m:z";
+    char optstring[]="dc:k:o:n:a:p:w:W:b:m:y:r:z";
 #else
-    char optstring[]="dc:i:o:n:a:p:w:W:b:m:z";
+    char optstring[]="dc:i:o:n:a:p:w:W:b:m:y:r:z";
 #endif
     int c;
     
@@ -924,8 +939,14 @@ void parse_cmdline(int argc, char * const argv[]) {
 	    case 'm':
 		strcpy(polyMethod, optarg);
 		break;
+	    case 'y':
+		yaxis_size = atoi(optarg);
+		break;
+	    case 'r':
+		rows_per_refresh = atoi(optarg);
+		break;
 	    case 'z':
-		inputtype = 'C';
+		complexinput = 1;
 		break;
             default:
                 fprintf(stderr,"unknown option %c\n",c);
@@ -936,6 +957,13 @@ void parse_cmdline(int argc, char * const argv[]) {
     if(wordtype==2 || wordtype==3) bits_per_samp = 4;
     if(bits_per_samp != 8) {
       fprintf(stderr,"ERROR: only byte word types currently supported\n");
+      exit(1);
+    }
+
+    /* Check for the compatibility of the monitoring graph parameters */
+    if( yaxis_size < rows_per_refresh || yaxis_size % rows_per_refresh != 0 )
+    {
+      fprintf( stderr, "Error: yaxis_size: %d, must be larger than and divisible by rows_per_refresh: %d\n", yaxis_size, rows_per_refresh );
       exit(1);
     }
 }
@@ -969,7 +997,7 @@ void print_usage(char * const argv[]) {
     fprintf( stderr, "\t   \th: Hamming window with sinc function\n" );
 
     fprintf(stderr,"\t-d \twrite debug and runtime info to stderr\n");
-    fprintf( stderr, "\t-z \texpect complex type input\n" );
+    fprintf( stderr, "\t-z \texpect complex type input (implementation not yet completed)\n" );
     exit(0);
 }
 
