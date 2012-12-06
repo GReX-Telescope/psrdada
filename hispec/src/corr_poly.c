@@ -70,6 +70,7 @@ appropriate number of bits.
 #if USE_DADA
 #include <ipcio.h>
 #include <dada_hdu.h>
+#include <dada_def.h>
 #include <multilog.h>
 #endif
 
@@ -115,7 +116,7 @@ int readData(int nchan,int ninp,FILE *fpin,float **inp_buf);
 int readDataTail(int nchan, int ninp, FILE *fpin, float **inp_buf, int tail);
 
 #if USE_DADA
-int openFiles(char *infilename, char *outfilename, int prod_type, dada_hdu_t **hdu, FILE **fout_ac, FILE **fout_cc);
+int openFiles(key_t dada_key, char *outfilename, int prod_type, dada_hdu_t **hdu, FILE **fout_ac, FILE **fout_cc);
 #else
 int openFiles(char *infilename, char *outfilename, int prod_type, FILE **fin, FILE **fout_ac, FILE **fout_cc);
 #endif
@@ -136,6 +137,7 @@ char inputtype = 'R';  /* input type: R: real, C: complex */
 int wordtype=0,bits_per_samp=0;
 char infilename[BUFSIZ], outfilename[BUFSIZ];
 static fftwf_plan *plans;
+key_t dada_key = DADA_DEFAULT_BLOCK_KEY;
 
 char windowType = 'q';	/* The type of window function for polyphase filter */
 int windowBlocks = DEFAULT_WINDOW_BLOCK;  /* Default number of blocks of window */
@@ -202,7 +204,11 @@ int main(int argc, char * const argv[])
     fprintf(stderr,"Num inp:\t%d. Num corr products: %d\n",ninp,ncorr);
     fprintf(stderr,"Num chan:\t%d\n",nchan);
     fprintf(stderr,"Correlation product type:\t%c\n",prod_type);
+#if USE_DADA
+    fprintf(stderr,"DADA key: \t%x\n", dada_key);
+#else
     fprintf(stderr,"infile: \t%s\n",infilename);
+#endif
     fprintf(stderr,"outfile:\t%s\n",outfilename);
     if( windowType == 'q' )
       fprintf( stderr, "Window type: \tQuadrature Mirror Filter\n" );
@@ -214,7 +220,7 @@ int main(int argc, char * const argv[])
   
   /* open input and output files */
 #if USE_DADA
-  openFiles(infilename, outfilename, prod_type, &hdu, &fout_ac, &fout_cc );
+  openFiles(dada_key, outfilename, prod_type, &hdu, &fout_ac, &fout_cc );
   char *header = 0;
   uint64_t header_size = 0;
   header = ipcbuf_get_next_read( hdu->header_block, &header_size );
@@ -764,30 +770,29 @@ int readDataTail(int nchan,int ninp,FILE *fpin, float **inp_buf, int tail) {
 
 /* open the input and output files */
 #if USE_DADA
-int openFiles(char *infilename, char *outfilename, int prod_type, dada_hdu_t **hdu, FILE **fout_ac, FILE **fout_cc) {
+int openFiles(key_t dada_key, char *outfilename, int prod_type, dada_hdu_t **hdu, FILE **fout_ac, FILE **fout_cc) {
 #else
 int openFiles(char *infilename, char *outfilename, int prod_type, FILE **fin, FILE **fout_ac, FILE **fout_cc) {
 #endif
     char tempfilename[FILENAME_MAX];
-#if USE_DADA
-    key_t hdu_key = 0;
-    char *key_string = "dada";
-    sscanf( key_string, "%x", &hdu_key );
-#endif
+#if !USE_DADA
     if (infilename == NULL) {
         fprintf(stderr,"No input file specified\n");
         exit(1);
     }
+#endif
     if (outfilename == NULL) {
         fprintf(stderr,"No output file specified\n");
         exit(1);
     }
-    
+ 
+#if !USE_DADA   
     /* sanity check to see if there was a typo on the command line */
     if (infilename[0] != '-' && (strcmp(infilename,outfilename)==0)) {
         fprintf(stderr,"Input and output file names are the same. You really don't want to do that.\n");
         exit(1);
-    }    
+    }
+#endif
     
     /* sanity check: can only use stdout for one type of output */
     if((prod_type=='B') && strcmp(outfilename,"-")==0) {
@@ -799,7 +804,7 @@ int openFiles(char *infilename, char *outfilename, int prod_type, FILE **fin, FI
     multilog_t *mlog = multilog_open( "corr_poly_gpu_dada", 0 );
     multilog_add( mlog, stderr );
     *hdu = dada_hdu_create(mlog);
-    dada_hdu_set_key( *hdu, hdu_key );
+    dada_hdu_set_key( *hdu, dada_key);
     if( dada_hdu_connect(*hdu) < 0 ) 
     {
       fprintf( stderr, "dada connect error\n" );
@@ -853,7 +858,11 @@ int openFiles(char *infilename, char *outfilename, int prod_type, FILE **fin, FI
 
 
 void parse_cmdline(int argc, char * const argv[]) {
+#if USE_DADA
+    char optstring[]="dc:k:o:n:a:p:w:W:b:m:z";
+#else
     char optstring[]="dc:i:o:n:a:p:w:W:b:m:z";
+#endif
     int c;
     
     while ((c=getopt(argc,argv,optstring)) != -1) {
@@ -886,9 +895,17 @@ void parse_cmdline(int argc, char * const argv[]) {
                     print_usage(argv);
                 }
                 break;
+#if USE_DADA
+            case 'k':
+                if (sscanf(optarg, "%x", &dada_key) != 1)
+                  fprintf(stderr, "bad dada key: %s\n", optarg);
+                  print_usage(argv);
+                break;
+#else
             case 'i':
                 strcpy(infilename, optarg);
                 break;
+#endif
             case 'd':
                 debug=1;
                 break;
@@ -930,7 +947,11 @@ void print_usage(char * const argv[]) {
     fprintf(stderr,"\t-c num\t\tspecify number of freq channels. default: %d\n",DEFAULT_NCHAN);
     fprintf(stderr,"\t-n num\t\tspecify number of input streams. detault: %d\n",DEFAULT_NINP);
     fprintf(stderr,"\t-a num\t\tspecify min number of averages before output. Default: %d\n",DEFAULT_NAV);
+#if USE_DADA
+    fprintf(stderr,"\t-k key\t\tPSRDADA hexidecimal shared memory key [default %x]\n", DADA_DEFAULT_BLOCK_KEY);
+#else
     fprintf(stderr,"\t-i filename\tinput file name. use '-' for stdin\n");
+#endif
     fprintf(stderr,"\t-o filename\toutput file name. use '-' for stdout\n");
 
     fprintf(stderr,"\t-w wordtype\tspecify type of input data. Default: %d\n",UNSIGNED_BYTE);
