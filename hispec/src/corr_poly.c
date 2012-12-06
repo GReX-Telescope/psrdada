@@ -144,6 +144,7 @@ char polyMethod[BUFSIZ] = "weighted-overlap-add"; /* Polyphase method */
 int complexinput = 0; /* 0 for non-complex input, 1 for complex input */
 int yaxis_size = 128;
 int rows_per_refresh = 16;
+int cuda_device_num = 0;
 
 #ifndef M_PI
 double M_PI;
@@ -193,7 +194,7 @@ int main(int argc, char * const argv[])
   float *cuda_auto_corr = NULL;
   cufftComplex *cuda_cross_corr = NULL;
 
-  //cudaSetDevice(1);
+  cudaSetDevice(cuda_device_num);
   /*************************************/
 #endif
   
@@ -924,6 +925,9 @@ void parse_cmdline(int argc, char * const argv[]) {
             case 'd':
                 debug=1;
                 break;
+	    case 'g':
+		cuda_device_num = atoi(optarg);
+		break;
             case 'o':
                 strcpy(outfilename, optarg);
                 break;
@@ -975,6 +979,7 @@ void print_usage(char * const argv[]) {
     fprintf(stderr,"\t-c num\t\tspecify number of freq channels. default: %d\n",DEFAULT_NCHAN);
     fprintf(stderr,"\t-n num\t\tspecify number of input streams. detault: %d\n",DEFAULT_NINP);
     fprintf(stderr,"\t-a num\t\tspecify min number of averages before output. Default: %d\n",DEFAULT_NAV);
+    fprintf( stderr, "\t-g num\t\tspecify which GPU to be used for processing.\n" );
 #if USE_DADA
     fprintf(stderr,"\t-k key\t\tPSRDADA hexidecimal shared memory key [default %x]\n", DADA_DEFAULT_BLOCK_KEY);
 #else
@@ -997,6 +1002,8 @@ void print_usage(char * const argv[]) {
     fprintf( stderr, "\t   \th: Hamming window with sinc function\n" );
 
     fprintf(stderr,"\t-d \twrite debug and runtime info to stderr\n");
+    fprintf( stderr, "\t-y yaxis_size\tspecify the size of y-axis when doing waterfall plotting\n" );
+    fprintf( stderr, "\t-r rows_per_refresh\tspecify the stepping size for waterfall plotting\n" );
     fprintf( stderr, "\t-z \texpect complex type input (implementation not yet completed)\n" );
     exit(0);
 }

@@ -581,7 +581,6 @@ void writeGPUOutput(FILE *fout_ac, FILE *fout_cc, int ninp, int nchan,
 	    rows_per_refresh*nchan*ninp, ftemp_ac );
       }
 
-
       fclose(ftemp_ac);
     }
 
@@ -609,7 +608,7 @@ void writeGPUOutput(FILE *fout_ac, FILE *fout_cc, int ninp, int nchan,
 
       for( i = (rowBlock+1)%nrowBlocks; i != rowBlock; i = (i+1)%nrowBlocks )
       {
-	fwrite( &ctemp_buf[i*rows_per_refresh*nchan*ninp], sizeof(float), 
+	fwrite( &ctemp_buf[i*rows_per_refresh*nchan*ninp], sizeof(cufftComplex), 
 	    rows_per_refresh*nchan*ninp, ftemp_cc );
       }
 
