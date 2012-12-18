@@ -10,6 +10,13 @@ bin_PROGRAMS = hispec_udpdb
 LDADD = libhispec.la $(top_builddir)/src/libpsrdada.la
 AM_CFLAGS = -DUSE_DADA=1
 
+if HAVE_PGPLOT
+
+bin_PROGRAMS += hispec_waterfall_plot
+hispec_waterfall_plot_LDADD = $(LDADD) @PGPLOT_LIBS@
+
+endif
+
 if HAVE_FFTW3
 
 bin_PROGRAMS += corr_poly

@@ -11,8 +11,8 @@
 #define HISPEC_DEFAULT_UDPDB_STATS  51012
 
 /* Number of UDP packets to be recived for a called to buffer_function
- * 4 MB = 4096 * 1024 */
-#define HISPEC_NUM_UDP_PACKETS      1024
+ * 32 MB = 2048 * 16384*/
+#define HISPEC_NUM_UDP_PACKETS      16384
 
 #endif
 

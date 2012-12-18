@@ -199,10 +199,11 @@ int main(int argc, char * const argv[])
 #endif
   
   /* process command line args */
-  if (argc <2) print_usage(argv);
+  if (argc < 2) 
+    print_usage(argv);
   parse_cmdline(argc,argv);
 
-  naver = 16;/*SAMPLING_RATE / nchan / 2;*/
+  //naver = 16;/*SAMPLING_RATE / nchan / 2;*/
   
   ncorr = ninp*(ninp+1)/2;  /* Number of all correlation */
   ncross = ncorr - ninp; /* Number of cross correlation */
@@ -914,8 +915,10 @@ void parse_cmdline(int argc, char * const argv[]) {
 #if USE_DADA
             case 'k':
                 if (sscanf(optarg, "%x", &dada_key) != 1)
+                {
                   fprintf(stderr, "bad dada key: %s\n", optarg);
                   print_usage(argv);
+                }
                 break;
 #else
             case 'i':

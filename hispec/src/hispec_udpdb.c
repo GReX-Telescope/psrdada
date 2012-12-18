@@ -153,7 +153,8 @@ time_t udpdb_start_function (dada_pwc_main_t* pwcm, time_t start_utc)
   udpdb->next_buffer_count = 0;
   
   // setup the expected sequence no to the initial value
-  udpdb->expected_sequence_no = 1;
+  udpdb->sequence_incr = 512 * 25;
+  udpdb->expected_sequence_no = 0;
   udpdb->prev_seq = 1;
 
   // Set the current machines name in the header block as RECV_HOST 
@@ -162,6 +163,7 @@ time_t udpdb_start_function (dada_pwc_main_t* pwcm, time_t start_utc)
   ascii_header_set (pwcm->header, "RECV_HOST", "%s", myhostname);
   
   // create a udp socket for recv
+  multilog (log, LOG_INFO, "udpdb_start_function: listening on %s:%d\n", udpdb->interface, udpdb->port);
   udpdb->fd = dada_udp_sock_in (log, udpdb->interface, udpdb->port, udpdb->verbose);
   if (udpdb->fd < 0)
   {
@@ -216,8 +218,6 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, int64_t* size)
   // switch the buffer counters
   udpdb->curr_buffer_count = udpdb->next_buffer_count;
   udpdb->next_buffer_count = 0;
-
-  multilog (log, LOG_INFO, "buffer_function: datasize=%"PRIu64"\n", udpdb->datasize);
 
   // 0 the next buffer 
   memset(udpdb->next_buffer, zerodchar, udpdb->datasize);
@@ -282,12 +282,16 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, int64_t* size)
 
       decode_header((unsigned char *) udpdb->socket_buffer, &pkt_hdr);
 
-      if (udpdb->verbose > 1)
-        multilog (log, LOG_INFO, "PKT: version=%d beam_id=%d, pkt_cnt=%"PRIu32", diode_state=%d freq_state=%d\n", 
-                  pkt_hdr.version, pkt_hdr.beam_id, pkt_hdr.pkt_cnt, pkt_hdr.diode_state, pkt_hdr.freq_state);
-
       // Decode the packet's header
+#ifdef TEST_MODE
+      udpdb->curr_sequence_no = (uint64_t) pkt_hdr.pkt_cnt / udpdb->sequence_incr;
+#else
       udpdb->curr_sequence_no = (uint64_t) pkt_hdr.pkt_cnt;
+#endif
+
+      if (udpdb->verbose > 1)
+        multilog (log, LOG_INFO, "PKT: version=%d beam_id=%d, seq_no=%"PRIu64", diode_state=%d freq_state=%d\n", 
+                  pkt_hdr.version, pkt_hdr.beam_id, udpdb->curr_sequence_no, pkt_hdr.diode_state, pkt_hdr.freq_state);
 
       //multilog (log, LOG_INFO, "seq=%"PRIu64"\n", udpdb->curr_sequence_no);
 

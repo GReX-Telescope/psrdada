@@ -47,6 +47,7 @@ typedef struct
   uint64_t received;     /* number of bytes received */
 
   // Sequence numbers
+  uint64_t sequence_incr;
   uint64_t expected_sequence_no;
   uint64_t curr_sequence_no;
   uint64_t min_sequence;

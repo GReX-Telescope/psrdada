@@ -1,0 +1,1 @@
+PROC_CMD  corr_poly -k <DADA_KEY> -o <DADA_UTC_START> -g <DADA_GPU_ID> -a 1024
