@@ -146,7 +146,12 @@ AC_CONFIG_FILES([Makefile
     gmrt/src/Makefile
     leda/Makefile
     leda/src/Makefile
+    hispec/Makefile
+    hispec/config/Makefile
+    hispec/config/hispec.cfg
+    hispec/scripts/Makefile
     hispec/src/Makefile
+    hispec/web/Makefile
 		3rdparty/Makefile])
 
 #		puma2/Makefile # Removed since tim.h is missing
