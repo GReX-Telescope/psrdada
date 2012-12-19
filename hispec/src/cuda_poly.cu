@@ -4,7 +4,7 @@
 #endif
 #include <sys/time.h>
 #include <cufft.h>
-#include <complex.h>
+//#include <complex.h>
 
 #include "cuda_poly.h"
 
@@ -519,7 +519,7 @@ void writeGPUOutput(FILE *fout_ac, FILE *fout_cc, int ninp, int nchan,
 {
   int i;
   static int init = 1;
-  static complex float *ctemp_buf;
+  static float2 *ctemp_buf;
   static float *temp_buf = NULL;
 
   static int row = 0;
@@ -539,7 +539,7 @@ void writeGPUOutput(FILE *fout_ac, FILE *fout_cc, int ninp, int nchan,
     //fp = fopen( "temp.csv", "w" );
 
     init = 0;
-    ctemp_buf = (complex float *)malloc( yaxis_size * nchan * ncross * sizeof(float) );
+    ctemp_buf = (float2 *)malloc( yaxis_size * nchan * ncross * sizeof(float2) );
     temp_buf = (float *)malloc( yaxis_size * nchan * ninp * sizeof(float) );
   }
 
@@ -592,9 +592,9 @@ void writeGPUOutput(FILE *fout_ac, FILE *fout_cc, int ninp, int nchan,
     blocks.y = ncross;
     normalise_complex_kernel<<< blocks, threads >>>(cuda_cross_corr, normaliser);
     
-    cudaMemcpy( &ctemp_buf[row*nchan*ncross], cuda_cross_corr, (nchan) * ncross * sizeof(complex float), cudaMemcpyDeviceToHost );
+    cudaMemcpy( &ctemp_buf[row*nchan*ncross], cuda_cross_corr, (nchan) * ncross * sizeof(float2), cudaMemcpyDeviceToHost );
 
-    fwrite( &ctemp_buf[row*nchan*ncross], sizeof(complex float), nchan * ncross, fout_cc );
+    fwrite( &ctemp_buf[row*nchan*ncross], sizeof(float2), nchan * ncross, fout_cc );
     cudaMemset( cuda_cross_corr, 0, (nchan) * ncross * sizeof(cufftComplex) );
 
     /* output cross correlation results to a file with time stamp */

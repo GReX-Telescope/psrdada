@@ -10,12 +10,26 @@ bin_PROGRAMS = hispec_udpdb
 LDADD = libhispec.la $(top_builddir)/src/libpsrdada.la
 AM_CFLAGS = -DUSE_DADA=1
 
+
+#############################################################################
+#
+# Depends on PGPLOT
+#
+#############################################################################
+
 if HAVE_PGPLOT
 
 bin_PROGRAMS += hispec_waterfall_plot
+AM_CFLAGS += @PGPLOT_CFLAGS@
 hispec_waterfall_plot_LDADD = $(LDADD) @PGPLOT_LIBS@
 
 endif
+
+#############################################################################
+#
+# Depends on FFTW3
+#
+#############################################################################
 
 if HAVE_FFTW3
 
@@ -23,6 +37,12 @@ bin_PROGRAMS += corr_poly
 
 LDADD += $(FFTW_LIBS)
 AM_CFLAGS += $(FFTW_CFLAGS)
+
+#############################################################################
+#
+# Also Depends on CUDA
+#
+#############################################################################
 
 if HAVE_CUDA
 
