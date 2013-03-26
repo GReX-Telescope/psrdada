@@ -10,8 +10,8 @@
 /*
  * prints the binary representatino of a char
  */
-char * char_to_binary_string(char value) {
-  
+char * char_to_binary_string(char value) 
+{
   char * string = (char *) malloc(sizeof(char)*9);
   char c;
   char displayMask = 1 << 7;
@@ -23,6 +23,20 @@ char * char_to_binary_string(char value) {
   string[8] = '\0';
   return string;
 }
+
+void char_to_bstring (char * string, char value)
+{
+  char c;
+  char displayMask = 1 << 7;
+
+  for (c=1; c<= 8; c++)
+  {
+    string[c-1] = value & displayMask ? '1' : '0';
+    value <<= 1;
+  }
+  string[8] = '\0';
+}
+
 
 /*
  * return the binary string of an unsigned int

@@ -15,6 +15,7 @@ extern "C" {
 
 double rand_normal(double mean, double stddev);
 char * char_to_binary_string(char value);
+void char_to_bstring (char * string, char value);
 char * unsigned_to_binary_string(unsigned int value);
 void fill_gaussian_chars(char *data, int size, int nbits, int gain);
 void fill_cal_chars(char *data, int size, int nbits, int gain);
