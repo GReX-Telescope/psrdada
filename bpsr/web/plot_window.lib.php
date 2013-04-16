@@ -293,7 +293,7 @@ class plot_window extends bpsr_webpage
       if ($this->inst->roach["BEAM_".$i] == $beam_str)
         $roach_name = $this->inst->roach["ROACH_".$i];
 
-    echo "<td rowspan=2 align=right>\n";
+    echo "<td rowspan=2 align=right id=\"td_beam_".$beam_no."\">\n";
     echo "          <a border=0px href=\"javascript:popPlotWindow('beam_viewer.lib.php?single=true&beam=".$beam_str."')\">";
     echo "<img src=\"/images/blankimage.gif\" border=0 width=113 height=85 id=\"beam".$beam_str."\" TITLE=\"Beam ".$beam_str." - ".$roach_name."\" alt=\"Beam ".$beam_no."\">";
     echo "</a>\n";
