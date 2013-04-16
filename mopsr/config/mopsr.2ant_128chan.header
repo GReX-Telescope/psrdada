@@ -7,11 +7,11 @@ HDR_SIZE        4096
 BW              100           # bandwidth in MHz
 FREQ            800           # centre frequency in MHz
 
-TELESCOPE       MGO 
+TELESCOPE       MOST
 RECEIVER        MULTI
 
 INSTRUMENT      MOPSR         # determines the unpacker used in the benchmark
-SOURCE          J0437-4715
+SOURCE          B0833-45
 MODE            PSR
 
 NCHAN           128 
@@ -21,8 +21,6 @@ NDIM            2
 NPOL            1
 CHANBW          0.961538462   # Effective 100 / 104
 
-TSAMP           1.28          # micro seconds
+TSAMP           1.08          # micro seconds
 
 OBS_OFFSET      0
-UTC_START       2010-06-24-05:00:00
-RESOLUTION      8184
