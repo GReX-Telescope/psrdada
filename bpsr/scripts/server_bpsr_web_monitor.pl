@@ -123,7 +123,7 @@ our $image_string : shared      = "";
   # Current tape/xfer information [L]
   my $tape_info_thread = 0;
 
-  # Current beam information [L] from pavo
+  # Current beam information [L] from TCS host
   my $beam_info_thread = 0;
 
   # Launch monitoring threads
@@ -300,6 +300,8 @@ sub currentInfoThread($)
         $tmp_str .= "PID:::".$cfg_file{"PID"}.";;;";
         $tmp_str .= "UTC_START:::".$cfg_file{"UTC_START"}.";;;";
         $tmp_str .= "PROC_FILE:::".$cfg_file{"PROC_FILE"}.";;;";
+        $tmp_str .= "REF_BEAM:::".$cfg_file{"REF_BEAM"}.";;;";
+        $tmp_str .= "NBEAM:::".$cfg_file{"NBEAM"}.";;;";
         $tmp_str .= "INTERGRATED:::0;;;";
  
         Dada::logMsg(3, DL, $tmp_str); 
@@ -325,7 +327,7 @@ sub imageInfoThread($)
 
   Dada::logMsg(1, DL, "imageInfoThread: starting");
 
-  my $sleep_time = 10;
+  my $sleep_time = 4;
   my $sleep_counter = 0;
 
   my $cmd = "";
@@ -858,6 +860,13 @@ sub statusInfoThread()
   my $tmp_str = "";
   my $cmd = "";
 
+  my %pwc_ids = ();
+  for ($i=0; $i<$cfg{"NUM_PWC"}; $i++)
+  {
+    $pwc_ids{$cfg{"PWC_".$i}} = $i;
+    $pwc_ids{sprintf("%02d",$i)} = $i;
+  }
+
   while (!$quit_daemon) 
   {
     if ($sleep_counter > 0) 
@@ -894,7 +903,7 @@ sub statusInfoThread()
         # for pwc, sys and src client errors
         if ($#arr == 2) 
         {
-          $pwc = $arr[0];
+          $pwc = $pwc_ids{$arr[0]};
           $tag = $arr[1];
           $type = $arr[2];
         } 
@@ -1007,7 +1016,7 @@ sub nodeInfoThread()
 
 #
 # Maintains beam information about current observation, retrieving relevant data from
-# TCS log file on pavo
+# TCS log file on TCS host
 #
 sub beamInfoThread() 
 {
@@ -1022,9 +1031,9 @@ sub beamInfoThread()
   my $rval = 0;
   my $response = "";
 
-  my $tcs_host = "pavo.atnf.csiro.au";
-  my $tcs_user = "pulsar";
-  my $tcs_path = "/psr1/tcs/logs";
+  my $tcs_host = "joffrey.atnf.csiro.au";
+  my $tcs_user = "pksobs";
+  my $tcs_path = "/home/pksobs/tcs/logs/";
 
   my $obs = "";
   my $beam_obs = "";
@@ -1124,8 +1133,10 @@ sub beamInfoThread()
           $decjs{$beam} = $response;
           $xml .= "<beam_info beam='".$beam."' raj='".$rajs{$beam}."' decj='".$decjs{$beam}."'>\n";
 
-          # get a PSRCAT listing
-          $cmd = 'psrcat -c "JNAME DM RAJ DECJ S1400" -o short -nohead -nonumber -boundary "1 '.$rajs{$beam}.' '.$decjs{$beam}.' 0.2333333"';
+          # get a PSRCAT listing. FWHM = 14 arcmin = 0.233333 degrees, prefer 1/e rather than 1/2 which means 16.8 arcmin -> 0.28
+          # $cmd = 'psrcat -c "JNAME DM RAJ DECJ S1400" -o short -nohead -nonumber -boundary "1 '.$rajs{$beam}.' '.$decjs{$beam}.' 0.28"';
+          # so we get absolutely all sources, use radius of 1
+          $cmd = 'psrcat -c "JNAME DM RAJ DECJ S1400" -o short -nohead -nonumber -boundary "1 '.$rajs{$beam}.' '.$decjs{$beam}.' 1"';
           Dada::logMsg(2, DL, "beamInfoThread: ".$cmd);
           ($result, $response) = Dada::mySystem($cmd);
           Dada::logMsg(3, DL, "beamInfoThread: ".$result." ".$response);
