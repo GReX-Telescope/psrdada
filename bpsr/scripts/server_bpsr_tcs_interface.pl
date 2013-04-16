@@ -49,6 +49,7 @@ our %roach : shared;
 our $current_state : shared;
 our $pwcc_running : shared;
 our $quit_threads : shared;
+our $n_beam : shared;
 our $pwcc_host;
 our $pwcc_port;
 our $client_master_port;
@@ -66,6 +67,7 @@ $daemon_name = Dada::daemonBaseName($0);
 $current_state = "Idle";
 $pwcc_running = 0;
 $quit_threads = 0;
+$n_beam = "N/A";
 $pwcc_host = $cfg{"PWCC_HOST"};
 $pwcc_port = $cfg{"PWCC_PORT"};
 $client_master_port = $cfg{"CLIENT_MASTER_PORT"};
@@ -427,12 +429,20 @@ $pwcc_thread = 0;
           } else {
 
             # we have already replied to the start command      
-            if ($lckey eq "start") {
-
-            } else {
-
+            if ($lckey eq "start") 
+            {
+            }
+            else
+            {
               print $handle $result.TERMINATOR;
-              Dada::logMsg(1, $dl, "TCS <- ".$result);
+              if ($result eq "ok")
+              {
+                Dada::logMsg(2, $dl, "TCS <- ".$result);
+              }
+              else
+              {
+                Dada::logMsg(1, $dl, "TCS <- ".$result);
+              }
             }
           }
         }
@@ -558,6 +568,12 @@ sub state_reporter_thread($$)
           {
             print $rh $cfg{"NUM_PWC"}."\r\n";
             Dada::logMsg(3, $dl, "state_reporter: -> ".$cfg{"NUM_PWC"});
+          }
+
+          if ($result eq "num_beams")
+          {
+            print $rh $n_beam."\r\n";
+            Dada::logMsg(3, $dl, "state_reporter: -> ".$n_beam);
           }
         }
       }
@@ -821,6 +837,9 @@ sub set_utc_start($\%) {
   print FH Dada::headerFormat("NDIM",$tcs_cmds{"NDIM"})."\n";
   print FH Dada::headerFormat("NCHAN",$tcs_cmds{"NCHAN"})."\n";
   print FH Dada::headerFormat("PROC_FILE",$tcs_cmds{"PROC_FILE"})."\n";
+  print FH "\n";
+  print FH Dada::headerFormat("NBEAM",$tcs_cmds{"NBEAM"})."\n";
+  print FH Dada::headerFormat("REF_BEAM",$tcs_cmds{"REF_BEAM"})."\n";
   close FH;
 
   # Create the obs.processing files
@@ -1355,7 +1374,6 @@ sub setActiveBeamsTCS(\%\%)
   
   # defaults
   my $ref_beam = "01";
-  my $n_beam = 13;
   my $i = 0;
 
   if ( exists($tcs_cmds{"REF_BEAM"}) && ($tcs_cmds{"REF_BEAM"} > 0) )
@@ -1365,6 +1383,10 @@ sub setActiveBeamsTCS(\%\%)
   if ( exists($tcs_cmds{"NBEAM"}) && ($tcs_cmds{"NBEAM"} > 0) )
   {
     $n_beam = $tcs_cmds{"NBEAM"};
+  }
+  else
+  {
+    $n_beam = "N/A";
   }
 
   # initally, set all beams to on
