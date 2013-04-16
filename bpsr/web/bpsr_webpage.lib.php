@@ -7,7 +7,7 @@ class bpsr_webpage
   var $css = array("/bpsr/bpsr.css");
   var $ejs = array();
   var $title = "BPSR";
-  var $callback_freq = 4000;
+  var $callback_freq = 10000;
   var $doc_type = "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\" \"http://www.w3.org/TR/html4/loose.dtd'>";
   var $show_logo = 0;
   var $logo_text = "";
