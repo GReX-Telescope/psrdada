@@ -1,6 +1,10 @@
 <?PHP
 
-define ("RESULTS_DIR", "/data/bpsr/results");
+if (isset($_GET["results"]) && ($_GET["results"] == "old"))
+  define ("RESULTS_DIR", "/data/bpsr/old_results");
+else
+  define ("RESULTS_DIR", "/data/bpsr/results");
+
 define ("SCRIPTS_DIR", "/home/dada/linux_64/bin");
 
 putenv("PATH=/bin:/usr/bin:".SCRIPTS_DIR);
