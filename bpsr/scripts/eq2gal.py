@@ -8,7 +8,7 @@ dec= sys.argv[2]
 radec=ephem.Equatorial(radians(float(ra)),radians(float(dec)))
 g = ephem.Galactic(radec)
 
-gl = g.long
+gl = g.lon
 gb = g.lat
 
 print degrees(gl),degrees(gb)
