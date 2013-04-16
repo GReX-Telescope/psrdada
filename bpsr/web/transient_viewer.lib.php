@@ -5,6 +5,7 @@ include_once("bpsr_webpage.lib.php");
 
 class transient_viewer extends bpsr_webpage 
 {
+  var $results_dir;
 
   var $utc_start;
 
@@ -32,8 +33,12 @@ class transient_viewer extends bpsr_webpage
 
     $this->utc_start = isset($_GET["utc_start"]) ? $_GET["utc_start"] : "";
 
+    $this->results_dir = $this->inst->config["SERVER_RESULTS_DIR"];
+    if (isset($_GET["results"]) && ($_GET["results"] == "old"))
+      $this->results_dir = $this->inst->config["SERVER_OLD_RESULTS_DIR"];
+
     if ($this->utc_start != "")
-      $this->update_required = (file_exists($this->inst->config["SERVER_RESULTS_DIR"]."/".$this->utc_start."/obs.processing"));
+      $this->update_required = (file_exists($this->results_dir."/".$this->utc_start."/obs.processing"));
     else
       $this->update_required = true;
   }
@@ -276,7 +281,6 @@ class transient_viewer extends bpsr_webpage
         var host = "<?echo $this->inst->config["SERVER_HOST"];?>";
         var port = "<?echo $this->inst->config["SERVER_WEB_MONITOR_PORT"];?>";
         var url  = "transient_viewer.lib.php?update=true";
-
         var url_args = "&host="+host+"&port="+port+"&beam_infos=true&cand_list=true";
 
         url_args += "&snr_cut="+snr_cut
@@ -286,6 +290,15 @@ class transient_viewer extends bpsr_webpage
 
         if (utc_start != "")
           url_args = url_args + "&utc_start="+utc_start;
+
+ <?
+        if (isset($_GET["results"]) && ($_GET["results"] == "old"))
+        {
+?>
+        url_args += "&results=old";
+<?
+        }
+?>
 
         var default_cands = ( (snr_cut == default_snr_cut) && 
                              (beam_mask == default_beam_mask) && 
@@ -457,7 +470,7 @@ class transient_viewer extends bpsr_webpage
     # get the the UTC_START of the current observation   
     if (($utc_start == ""))
     {
-      $cmd = "find ".$this->inst->config["SERVER_RESULTS_DIR"]." -mindepth 2 -maxdepth 2 -type f -name 'all_candidates.dat' -printf '%h\n' | sort | tail -n 1 | awk -F/ '{print \$NF}'";
+      $cmd = "find ".$this->results_dir." -mindepth 2 -maxdepth 2 -type f -name 'all_candidates.dat' -printf '%h\n' | sort | tail -n 1 | awk -F/ '{print \$NF}'";
       $output = array();
       $utc_start = exec($cmd, $output, $rval);
     }
@@ -526,7 +539,7 @@ class transient_viewer extends bpsr_webpage
       }
       else
       {
-        $xml_file = $this->inst->config["SERVER_RESULTS_DIR"]."/".$utc_start."/beaminfo.xml";
+        $xml_file = $this->results_dir."/".$utc_start."/beaminfo.xml";
         if (file_exists($xml_file))
         {
           $data = file_get_contents($xml_file);
@@ -566,7 +579,7 @@ class transient_viewer extends bpsr_webpage
       else
       {
         $cmd = $this->inst->config["SCRIPTS_DIR"]."/trans_gen_overview.py -cand_list_xml";
-        $cmd .= " -cands_file ".$this->inst->config["SERVER_RESULTS_DIR"]."/".$utc_start."/all_candidates.dat";
+        $cmd .= " -cands_file ".$this->results_dir."/".$utc_start."/all_candidates.dat";
         if (isset($get["filter_cut"]) && ($get["filter_cut"] != ""))
           $cmd .= " -filter_cut ".$get["filter_cut"];
         if (isset($get["beam_mask"]) && ($get["beam_mask"] != ""))
