@@ -5,6 +5,7 @@ webdir = $(prefix)/web
 webapsrdir = $(prefix)/web/apsr
 webbpsrdir = $(prefix)/web/bpsr
 webcaspsrdir = $(prefix)/web/caspsr
+webhispecdir = $(prefix)/web/hispec
 webraiddir = $(prefix)/web/raid
 webraidbpsrdir = $(prefix)/web/raid/bpsr
 webraidapsrdir = $(prefix)/web/raid/apsr
@@ -67,6 +68,11 @@ nobase_dist_webbpsr_SCRIPTS = annotate_obs.php \
 
 # scripts distributed as is (installed in bin/)
 nobase_dist_webcaspsr_SCRIPTS = site_definitions_i.php \
+    instrument.lib.php \
+    functions_i.php \
+    style_log.css
+
+nobase_dist_webhispec_SCRIPTS = site_definitions_i.php \
     instrument.lib.php \
     functions_i.php \
     style_log.css
