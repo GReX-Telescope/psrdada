@@ -218,7 +218,10 @@ int main(int argc, char *argv[])
 
   // assume 10GbE speeds
   if (data_rate == 0)
-    total_bytes_to_send = 1*1024*1024*1024 * transmission_time;
+  {
+    total_bytes_to_send = 10 * transmission_time;
+    total_bytes_to_send *= 1024*1024*1024;
+  }
 
   size_t bytes_sent = 0;
   uint64_t total_bytes_sent = 0;
@@ -236,6 +239,10 @@ int main(int argc, char *argv[])
 
   unsigned int s_off = 0;
 
+  size_t numbytes;
+  size_t socksize = sizeof(struct sockaddr);
+  struct sockaddr * addr = (struct sockaddr *) &dagram;
+
   while (total_bytes_sent < total_bytes_to_send) 
   {
     if (data_rate)
@@ -244,7 +251,9 @@ int main(int argc, char *argv[])
     // write the custom header into the packet
     leda_encode_header(packet, seq_no, ant_id);
 
-    bytes_sent = dada_sock_send(udpfd, dagram, packet, (size_t) UDP_PAYLOAD); 
+    // aj inlineing stuff for performance
+    //bytes_sent = dada_sock_send(udpfd, dagram, packet, (size_t) UDP_PAYLOAD); 
+    bytes_sent = sendto(udpfd, packet, UDP_PAYLOAD, 0, addr, socksize);
 
     if (bytes_sent != UDP_PAYLOAD) 
       multilog(log,LOG_ERR,"Error. Attempted to send %d bytes, but only "

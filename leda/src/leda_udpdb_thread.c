@@ -43,6 +43,7 @@ int quit_threads = 0;
 int start_pending = 0;
 int stop_pending = 0;
 int recording = 0;
+time_t utc_start = 0;
 uint64_t stop_byte = 0;
 
 void usage()
@@ -51,7 +52,7 @@ void usage()
      "leda_udpdb [options]\n"
      " -b core          bind process to run on CPU core\n"
      " -c port          port for 'telnet' control commands\n"
-     " -f header_file   ascii header file[default %x]\n"
+     " -f header_file   ascii header file\n"
      " -k key           shared memory key [default %x]\n"
      " -i iface         interface for UDP packets [default all interfaces]\n"
      " -n inputs        number of inputs / antennae [default 1]\n"
@@ -183,7 +184,6 @@ time_t leda_udpdb_start (udpdb_t * ctx, char * obs_header)
   // note to jkocz: here you could connect to ROACH'es and reg_arm, that way we
   // can insert the UTC_START into the DADA metadata if desirable
 
-
   // set any additional parameters that need setting
   uint64_t obs_offset = 0;
   if (ascii_header_set (header, "OBS_OFFSET", "%"PRIu64, obs_offset) < 0)
@@ -191,6 +191,16 @@ time_t leda_udpdb_start (udpdb_t * ctx, char * obs_header)
 
   if (ascii_header_set (header, "HDR_SIZE", "%"PRIu64, header_size) < 0)
     multilog (ctx->log, LOG_WARNING, "Could not write HDR_SIZE to header\n");
+
+  // if our utc_start global has been set by the command thread
+  if (utc_start)
+  {
+    char buffer[64];
+    strftime (buffer, 64, DADA_TIMESTR, localtime(&utc_start));
+    if (ascii_header_set (header, "UTC_START", "%s", buffer) < 0)
+      multilog (ctx->log, LOG_WARNING, "Could not write UTC_START to header\n");
+
+  }
 
   if (ctx->verbose > 1)
     multilog (ctx->log, LOG_INFO, "header=%s\n", header);
@@ -358,7 +368,7 @@ void * leda_udpdb_receive_obs (void * arg)
 
   // for "saving" out of order packets near edges of blocks
   unsigned int temp_idx = 0;
-  unsigned int temp_max = 8;
+  unsigned int temp_max = 50;
   char * temp_buffers[temp_max][UDP_DATA];
   uint64_t temp_seq_byte[temp_max];
 
@@ -453,9 +463,9 @@ void * leda_udpdb_receive_obs (void * arg)
         ch_id |= (tmp << ((i & 7) << 3));
       }
 
-      if (ctx->num_inputs == 1)
-        ant_id = 0;
-      else
+      //if (ctx->num_inputs == 1)
+      //  ant_id = 0;
+      //else
         ant_id = (uint16_t) ch_id;
 
       // decode sequence number
@@ -464,7 +474,7 @@ void * leda_udpdb_receive_obs (void * arg)
       // if first packet
       if (!ctx->capture_started)
       {
-        ctx->block_start_byte = seq_no * UDP_DATA;
+        ctx->block_start_byte = ctx->num_inputs * seq_no * UDP_DATA;
         ctx->block_end_byte   = (ctx->block_start_byte + ctx->hdu_bufsz) - UDP_DATA;
         ctx->capture_started = 1;
 
@@ -476,6 +486,9 @@ void * leda_udpdb_receive_obs (void * arg)
       if (ctx->capture_started)
       {
         seq_byte = (ctx->num_inputs * seq_no * UDP_DATA) + (ant_id * UDP_DATA);
+        if (ctx->verbose > 2)
+           multilog(ctx->log, LOG_INFO, "seq_byte=%"PRIu64", num_inputs=%d, seq_no=%"PRIu64", ant_id =%d, UDP_DATA=%d\n",seq_byte,ctx->num_inputs,seq_no,ant_id, UDP_DATA);
+
 
         ctx->last_seq = seq_no;
         ctx->last_byte = seq_byte;
@@ -501,6 +514,8 @@ void * leda_udpdb_receive_obs (void * arg)
           // packet belongs in subsequent block
           else
           {
+            if (ctx->verbose)
+	       multilog (log, LOG_INFO, "receive_obs: received packet for subsequent buffer: temp_idx=%d, ant_id=%d, seq_no=%"PRIu64"\n",temp_idx,ant_id,seq_no);
             //multilog (log, LOG_INFO, "receive_obs: received packet for subsequent buffer: temp_idx=%d\n",temp_idx);
             if (temp_idx < temp_max)
             {
@@ -613,7 +628,7 @@ void * leda_udpdb_receive_obs (void * arg)
 
     if (stop_pending) 
     {
-      multilog(ctx->log, LOG_ERR, "receive_obs: stop_pending after break - SHOULD NOT HAPPEN!\n");
+      multilog(ctx->log, LOG_ERR, "receive_obs: stop_pending after break - no data received?\n");
     }
   }
 
@@ -722,7 +737,7 @@ int main (int argc, char **argv)
   /* receiving thread */
   pthread_t receiving_thread_id;
 
-  while ((arg=getopt(argc,argv,"b:c:df:i:k:l:n:o:p:t:vh")) != -1) {
+  while ((arg=getopt(argc,argv,"b:c:df:i:k:l:n:p:t:vh")) != -1) {
     switch (arg) {
 
     case 'b':
@@ -766,10 +781,6 @@ int main (int argc, char **argv)
       num_inputs = atoi(optarg);
       break;
 
-    case 'o':
-      control_port = atoi(optarg);
-      break;
-
     case 'p':
       inc_port = atoi (optarg);
       break;
@@ -803,12 +814,12 @@ int main (int argc, char **argv)
   }
 
   // check the command line arguments
-  if (!control_port)
+  if (header_file != NULL)
   {
     obs_header = (char *) malloc(sizeof(char) * DADA_DEFAULT_HEADER_SIZE);
     if (!obs_header)
     {
-      fprintf (stderr, "could not allocate memory\n");
+      fprintf (stderr, "ERROR: could not allocate memory\n");
       return (EXIT_FAILURE);
     }
     
@@ -820,7 +831,6 @@ int main (int argc, char **argv)
       return (EXIT_FAILURE);
     }
   }
-    
 
   int i = 0;
   int rval = 0;
@@ -922,7 +932,7 @@ int main (int argc, char **argv)
 
     // wait for a START command before initialising receivers
     while (!start_pending && !quit_threads && control_port) 
-      sleep(1);
+      usleep(100000);
 
     if (quit_threads)
       break;
@@ -962,6 +972,7 @@ int main (int argc, char **argv)
     if (verbose) 
       multilog(log, LOG_INFO, "joining leda_udpdb_receive_obs thread\n");
     pthread_join (receiving_thread_id, &result);
+    multilog(log, LOG_INFO, "joined leda_udpdb_receive_obs thread\n");
 
     if (verbose) 
       multilog(log, LOG_INFO, "udpdb_stop_function\n");
@@ -1019,7 +1030,6 @@ void control_thread (void * arg)
   const char* whitespace = " \r\t\n";
   char * command = 0;
   char * args = 0;
-  time_t utc_start = 0;
 
   FILE *sockin = 0;
   FILE *sockout = 0;
@@ -1093,7 +1103,8 @@ void control_thread (void * arg)
 
       rgot = fgets (buffer, bufsize, sockin);
 
-      if (rgot && !feof(sockin)) {
+      while (rgot && !feof(sockin)) 
+      {
 
         buffer[strlen(buffer)-2] = '\0';
 
@@ -1141,6 +1152,8 @@ void control_thread (void * arg)
             {
               if (ctx->verbose)
                 multilog(ctx->log, LOG_INFO, "control_thread: parsed UTC_START as %d\n", utc);
+
+              // set global utc_start to parsed value, used when START command arrives
               utc_start = utc;
               fprintf(sockout, "ok\r\n");
               multilog(ctx->log, LOG_INFO, "set_utc_start %s\n", args);
@@ -1157,7 +1170,7 @@ void control_thread (void * arg)
           start_pending = 1;
           while (recording != 1) 
           {
-            sleep(1);
+            usleep(100000);
           }
           start_pending = 0;
           fprintf(sockout, "ok\r\n");
@@ -1229,6 +1242,7 @@ void control_thread (void * arg)
             multilog(ctx->log, LOG_INFO, "control_thread: STOP command received, stopping immediately\n");
 
           stop_pending = 2;
+          stop_byte = (ctx->last_byte > 0 ) ? ctx->last_byte : 1;
           while (recording != 0)
           {
             sleep(1);
@@ -1247,6 +1261,8 @@ void control_thread (void * arg)
           multilog(ctx->log, LOG_INFO, "control_thread: QUIT command received, exiting\n");
           quit_threads = 1;
           fprintf(sockout, "ok\r\n");
+          close(fd);
+          break;
         }
 
         // UNRECOGNISED COMMAND
@@ -1255,10 +1271,13 @@ void control_thread (void * arg)
           multilog(ctx->log, LOG_WARNING, "control_thread: unrecognised command: %s\n", buffer);
           fprintf(sockout, "fail\r\n");
         }
+
+        // try to read the next line of input
+        rgot = fgets (buffer, bufsize, sockin);
       }
+      close(fd);
     }
 
-    close(fd);
   }
   close(listen_fd);
 

@@ -159,7 +159,7 @@ int main (int argc, char **argv)
   int fd = dada_udp_sock_in (log, interface, inc_port, verbose);
 
   // set the socket size to 16 MB
-  int sock_buf_size = 16*1024*1024;
+  int sock_buf_size = 256*1024*1024;
   multilog(log, LOG_INFO, "start_function: setting buffer size to %d\n", sock_buf_size);
   dada_udp_sock_set_buffer_size (log, fd, verbose, sock_buf_size);
 
@@ -229,7 +229,8 @@ int main (int argc, char **argv)
         {
           bytes->received += pkt_size;
           packets->received += 1;
-          memcpy (dst, buffer, pkt_size);
+          // disabled memcpy for testing speed of capture
+          //memcpy (dst, buffer, pkt_size);
         } 
         else if (seq_no <= prev_seq_no)
         {
