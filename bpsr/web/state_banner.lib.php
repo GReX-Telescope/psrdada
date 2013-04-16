@@ -54,7 +54,7 @@ class state_banner extends bpsr_webpage
           {
             var lines = response.split(":::");
             document.getElementById("bpsr_state").innerHTML = "State: "+lines[0];
-            document.getElementById("bpsr_pwcs").innerHTML = "Beams: "+lines[1];
+            document.getElementById("bpsr_beams").innerHTML = "Beams: "+lines[1];
           }
         }
       }
@@ -94,7 +94,7 @@ class state_banner extends bpsr_webpage
     if ($this->show_state == "true") {
 ?>
           <span id="bpsr_state" class="largetext"></span><br>
-          <span id="bpsr_pwcs" class="largetext"></span>
+          <span id="bpsr_beams" class="largetext"></span>
 <?
     } 
 ?>
@@ -127,7 +127,7 @@ class state_banner extends bpsr_webpage
     $port = $get["port"];
 
     $state = "TCS Interface Stopped";
-    $num_pwcs = "NA";
+    $num_beams = "NA";
 
     $timeout = 1;
     list ($socket, $result) = openSocket($host, $port, $timeout);
@@ -145,17 +145,17 @@ class state_banner extends bpsr_webpage
     list ($socket, $result) = openSocket($host, $port, $timeout);
     if ($result == "ok") 
     {
-      $bytes_written = socketWrite($socket, "num_pwcs\r\n");
+      $bytes_written = socketWrite($socket, "num_beams\r\n");
       list ($result, $response) = socketRead($socket);
       if ($result == "ok")
       {
-        $num_pwcs = $response;
+        $num_beams = $response;
         socket_close($socket);
       }
       $socket = 0;
     }
 
-    $string = $state.":::".$num_pwcs;
+    $string = $state.":::".$num_beams;
 
     echo $string;
 
