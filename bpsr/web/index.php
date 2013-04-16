@@ -56,16 +56,27 @@ $ejs = array_unique($ejs);
 
   <script type="text/javascript">
 
+    var tape_update = 60;
+
     function poll_server() 
     {
       <? echo $state_banner->javaScriptCallback()."\n";?>
       <? echo $current_obs->javaScriptCallback()."\n";?>
       <? echo $plot_window->javaScriptCallback()."\n"; ?>
-      <? echo $archival_summary->javaScriptCallback()."\n"; ?>
       <? echo $transient_window->javaScriptCallback()."\n"; ?>
       <? echo $machine_summary->javaScriptCallback()."\n"; ?>
       <? echo $log_list->javaScriptCallback()."\n"; ?>
-      setTimeout('poll_server()', 4000);
+
+      if (tape_update >= 60)
+      {
+        <? echo $archival_summary->javaScriptCallback()."\n"; ?>
+        tape_update = 0;
+      }
+      else
+      {
+        tape_update += 10;
+      }
+      setTimeout('poll_server()', 10000);
     }
 
   </script>
