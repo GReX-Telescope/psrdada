@@ -586,7 +586,7 @@ sub transientThread($$)
   # added 4096 to give an extra 2^12th bin for junk events
   #$cmd = "heimdall -k ".$key." -gpu_id ".$gpu_id." -beam ".$beam." -output_dir ".$processing_dir;
   $cmd = "heimdall -dm 0 1500 -boxcar_max 4096 -min_tscrunch_width 8 -k ".$key." -gpu_id ".$gpu_id.
-         " -beam ".$beam." -output_dir ".$processing_dir;
+         " -zap_chans 0 150 -zap_chans 335 338 -zap_chans 181 183 -max_giant_rate 20000 -beam ".$beam." -output_dir ".$processing_dir;
   logMsg(1, "INFO", "START ".$cmd);
 
   my $full_cmd = "cd ".$processing_dir."; ".$cmd."  2>&1 | ".$cfg{"SCRIPTS_DIR"}."/client_bpsr_src_logger.pl ".$pwc_id." tran";
