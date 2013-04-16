@@ -41,6 +41,7 @@ PWCC_PORT               50100
 PWCC_LOGPORT            50101
 PWC_PORT                50200
 PWC_LOGPORT             50300
+USE_BASEPORT            yes
 
 
 # For clients to log system messages
