@@ -10,6 +10,7 @@ webraiddir = $(prefix)/web/raid
 webraidbpsrdir = $(prefix)/web/raid/bpsr
 webraidapsrdir = $(prefix)/web/raid/apsr
 webraidcaspsrdir = $(prefix)/web/raid/caspsr
+webmopsrdir = $(prefix)/web/mopsr
 
 dist_web_SCRIPTS = admin.html \
     dada_webpage.lib.php \
@@ -91,6 +92,12 @@ nobase_dist_webraidcaspsr_SCRIPTS = site_definitions_i.php \
     instrument.lib.php \
     functions_i.php \
     style_log.css
+
+nobase_dist_webmopsr_SCRIPTS = site_definitions_i.php \
+    instrument.lib.php \
+    functions_i.php \
+    style_log.css
+
 
 # data file (config) distributed as is
 # dist_data_DATA = psrchive_version
