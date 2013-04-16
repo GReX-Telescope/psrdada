@@ -150,6 +150,7 @@ AC_CONFIG_FILES([Makefile
     mopsr/scripts/Makefile
     mopsr/config/Makefile
     mopsr/src/Makefile
+    mopsr/web/Makefile
     hispec/Makefile
     hispec/config/Makefile
     hispec/config/hispec.cfg
