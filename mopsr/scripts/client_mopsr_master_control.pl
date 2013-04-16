@@ -82,13 +82,13 @@ sub setupClientType()
     $Dada::client_master_control::log_dir = $cfg{"CLIENT_LOG_DIR"};
     $Dada::client_master_control::user = $cfg{"USER"};
 
-		# Ensure the required directories exist
-		my $cmd = "";
-		my $dir = "";
-		my $result = "";
-		my $response = "";
-		my @dirs = ($cfg{"CLIENT_LOCAL_DIR"}, $cfg{"CLIENT_CONTROL_DIR"}, $cfg{"CLIENT_LOG_DIR"}, 
-							  $cfg{"CLIENT_ARCHIVE_DIR"}, $cfg{"CLIENT_RECORDING_DIR"}, $cfg{"CLIENT_SCRATCH_DIR"});
+    # Ensure the required directories exist
+    my $cmd = "";
+    my $dir = "";
+    my $result = "";
+    my $response = "";
+    my @dirs = ($cfg{"CLIENT_LOCAL_DIR"}, $cfg{"CLIENT_CONTROL_DIR"}, $cfg{"CLIENT_LOG_DIR"}, 
+                $cfg{"CLIENT_ARCHIVE_DIR"}, $cfg{"CLIENT_RECORDING_DIR"}, $cfg{"CLIENT_SCRATCH_DIR"});
 
     for ($i=0; ($i<$cfg{"NUM_PWC"}); $i++)
     {
@@ -98,19 +98,19 @@ sub setupClientType()
       }
     }
 
-		foreach $dir ( @dirs )
-		{
-			if (! -d $dir)
-			{
-				$cmd = "mkdir -m 0755 ".$dir;
-				($result, $response) = Dada::mySystem($cmd);
-				if ($result ne "ok")
-				{
-					print STDERR "Could not create ".$dir.": ".$response."\n";
-					return 0;
-				}
-			}
-		}
+    foreach $dir ( @dirs )
+    {
+      if (! -d $dir)
+      {
+        $cmd = "mkdir -m 0755 ".$dir;
+        ($result, $response) = Dada::mySystem($cmd);
+        if ($result ne "ok")
+        {
+          print STDERR "Could not create ".$dir.": ".$response."\n";
+          return 0;
+        }
+      }
+    }
 
     # see how many PWCs are running on this host
     for ($i=0; ($i<$cfg{"NUM_PWC"}); $i++) 
