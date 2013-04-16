@@ -97,26 +97,7 @@ class candidate_viewer extends bpsr_webpage
 ?>
     <img src="<?echo $cand_url?>">
 <?
-    #$this->getMonFiles();
     $this->closeBlockHeader();
-  }
-
-  function getMonFiles()
-  {
-    // mon files are stored on the hipsr nodes until the beam is marked as old
-    $host = "hipsr0";
-    $user = "bpsr";
-
-    $cmd = "rsync -av ".$user."@".$host.":/data/bpsr/archives/".$this->beam."/".$this->utc_start."/aux/".$this->mon_file_time."\* /tmp/";
-    $results = array();
-    $last_list = exec($cmd, $results, $rval);
-    print_r($results);
-
-    $cmd = $this->inst->config["SCRIPTS_DIR"]."/plot4mon /tmp/".$this->mon_file_time.".ts? -mmm";
-    echo $cmd."<BR>\n";
-    $results = array();
-    $last_list = exec($cmd, $results, $rval);
-    print_r($results);
   }
 
   # get the candidate plot from the gpu cand server
