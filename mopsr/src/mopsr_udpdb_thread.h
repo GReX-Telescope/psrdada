@@ -39,7 +39,7 @@ typedef struct {
   multilog_t *      log;                // DADA logging interface
   int               verbose;            // verbosity flag 
 
-  mopsr_sock_t *     sock;               // UDP socket for data capture
+  mopsr_sock_t *    sock;               // UDP socket for data capture
   int               port;               // port to receive UDP data 
   int               control_port;       // port to receive control commands
   char *            interface;          // IP Address to accept packets on 
@@ -57,7 +57,10 @@ typedef struct {
 
   // packets
   unsigned          capture_started;      // flag for start of UDP data
+  unsigned          pkt_size;             // bytes used in packet (may be less if antenna ignored)
   uint64_t          packets_per_buffer;   // number of UDP packets per datablock buffer
+  uint64_t          bytes_per_second;     // based on header params
+  unsigned          nsecs;
 
   /* Packet and byte statistics */
   stats_t * packets;

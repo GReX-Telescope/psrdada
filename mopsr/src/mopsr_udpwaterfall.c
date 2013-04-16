@@ -1,5 +1,5 @@
 /*
- * mopsr_udpplot
+ * mopsr_udpwaterfall
  *
  * Simply listens on a specified port for udp packets encoded
  * in the MOPSR format
@@ -51,11 +51,17 @@ typedef struct {
   // pgplot device
   char * device;
 
-  // identifying code for antenna number
+  // identifying code for antenna numbres
   unsigned int ant_code;
 
-  // number of antennae
+  // the antenna to plot
+  unsigned int antenna;
+
+  // number of antenna in each packet
   unsigned int nant;
+
+  // number of samples per plot
+  unsigned int nsamps;
 
   // number of channels
   unsigned int nchan;
@@ -68,48 +74,44 @@ typedef struct {
 
   unsigned int verbose;
 
-  float * x_points;
-
-  float ** y_points;
+  float *  data;
 
   uint64_t num_integrated;
 
-  uint64_t to_integrate;
-
   unsigned int plot_log;
 
-  float ymin;
+  unsigned int zap;
 
-  float ymax;
+} udpwaterfall_t;
 
-} udpplot_t;
+int udpwaterfall_init (udpwaterfall_t * ctx);
+int udpwaterfall_prepare (udpwaterfall_t * ctx);
+int udpwaterfall_destroy (udpwaterfall_t * ctx);
 
-int udpplot_init (udpplot_t * ctx);
-int udpplot_prepare (udpplot_t * ctx);
-int udpplot_destroy (udpplot_t * ctx);
-
-void integrate_packet (udpplot_t * ctx, char * buffer, unsigned int size);
-void dump_packet (udpplot_t * ctx, char * buffer, unsigned int size);
-void print_packet (udpplot_t * ctx, char * buffer, unsigned int size);
-void print_detected_packet (udpplot_t * ctx, char * buffer, unsigned int size);
-void plot_packet (udpplot_t * ctx);
+void integrate_packet (udpwaterfall_t * ctx, char * buffer, unsigned int size);
+void dump_packet (udpwaterfall_t * ctx, char * buffer, unsigned int size);
+void print_packet (udpwaterfall_t * ctx, char * buffer, unsigned int size);
+void plot_packet (udpwaterfall_t * ctx);
 
 int quit_threads = 0;
 
 void usage()
 {
   fprintf (stdout,
-     "mopsr_udpplot [options]\n"
+     "mopsr_udpwaterfall [options]\n"
      " -h             print help text\n"
+     " -a ant         antenna index to display [default 0]\n"
      " -i interface   ip/interface for inc. UDP packets [default all]\n"
      " -l             plot logarithmically\n"
      " -p port        port on which to listen [default %d]\n"
      " -s secs        sleep this many seconds between plotting [default 0.5]\n"
+     " -t samps       number of time samples to display [default 128]\n"
+     " -z             zap preconfigured channels\n"
      " -v             verbose messages\n",
      MOPSR_DEFAULT_UDPDB_PORT);
 }
 
-int udpplot_prepare (udpplot_t * ctx)
+int udpwaterfall_prepare (udpwaterfall_t * ctx)
 {
   if (ctx->verbose > 1)
     multilog(ctx->log, LOG_INFO, "mopsr_udpdb_prepare()\n");
@@ -118,42 +120,23 @@ int udpplot_prepare (udpplot_t * ctx)
     multilog(ctx->log, LOG_INFO, "prepare: clearing packets at socket\n");
   size_t cleared = dada_sock_clear_buffered_packets(ctx->sock->fd, UDP_PAYLOAD);
 
-  udpplot_reset(ctx);
+  udpwaterfall_reset(ctx);
 }
 
-int udpplot_reset (udpplot_t * ctx)
+int udpwaterfall_reset (udpwaterfall_t * ctx)
 {
-  unsigned ichan;
-  for (ichan=0; ichan < ctx->nchan; ichan++)
-    ctx->x_points[ichan] = (float) ichan;
-
-  unsigned iant;
-  for (iant=0; iant < ctx->nant; iant++)
-  {
-    ctx->y_points[iant] = (float *) malloc (sizeof(float) * ctx->nchan);
-    for (ichan=0; ichan < ctx->nchan; ichan++)
-      ctx->y_points[iant][ichan] = 0;
-  }
+  unsigned idat;
+  unsigned ndat = ctx->nchan * ctx->nsamps;
+  for (idat=0; idat < ndat; idat++)
+    ctx->data[idat] = 0;
   ctx->num_integrated = 0;
 }
 
-int udpplot_destroy (udpplot_t * ctx)
+int udpwaterfall_destroy (udpwaterfall_t * ctx)
 {
-  unsigned int iant;
-  for (iant=0; iant<ctx->nant; iant++)
-  {
-    if (ctx->y_points[iant])
-      free(ctx->y_points[iant]);
-    ctx->y_points[iant] = 0;
-  }
-
-  if (ctx->y_points)
-    free(ctx->y_points);
-  ctx->y_points = 0;
-
-  if (ctx->x_points)
-    free(ctx->x_points);
-  ctx->x_points = 0;
+  if (ctx->data)
+    free(ctx->data);
+  ctx->data = 0;
 
   if (ctx->sock)
   {
@@ -167,7 +150,7 @@ int udpplot_destroy (udpplot_t * ctx)
  * Close the udp socket and file
  */
 
-int udpplot_init (udpplot_t * ctx)
+int udpwaterfall_init (udpwaterfall_t * ctx)
 {
   if (ctx->verbose > 1)
     multilog (ctx->log, LOG_INFO, "mopsr_udpdb_init_receiver()\n");
@@ -195,13 +178,8 @@ int udpplot_init (udpplot_t * ctx)
     multilog(ctx->log, LOG_INFO, "prepare: setting non_block\n");
   sock_nonblock(ctx->sock->fd);
 
-  ctx->x_points = (float *) malloc (sizeof(float) * ctx->nchan);
-  ctx->y_points = (float **) malloc(sizeof(float *) * ctx->nant);
-  unsigned int iant;
-  for (iant=0; iant < ctx->nant; iant++)
-  {
-    ctx->y_points[iant] = (float *) malloc (sizeof(float) * ctx->nchan);
-  }
+  unsigned ndat = ctx->nchan * ctx->nsamps;
+  ctx->data = (float *) malloc (sizeof(float) * ndat);
 
   return 0;
 }
@@ -225,12 +203,16 @@ int main (int argc, char **argv)
   char * device = "/xs";
 
   /* actual struct with info */
-  udpplot_t udpplot;
+  udpwaterfall_t udpwaterfall;
 
   /* Pointer to array of "read" data */
   char *src;
 
   unsigned int nant = 2;
+
+  unsigned int antenna = 0;
+
+  unsigned int nsamps = 128;
 
   unsigned int nchan = 128;
 
@@ -238,11 +220,13 @@ int main (int argc, char **argv)
 
   double sleep_time = 1000000;
 
-  while ((arg=getopt(argc,argv,"a:D:i:ln:p:s:vh")) != -1) {
+  unsigned int zap = 0;
+
+  while ((arg=getopt(argc,argv,"a:D:i:ln:p:s:t:vzh")) != -1) {
     switch (arg) {
 
     case 'a':
-      nant = atoi(optarg);
+      antenna = atoi(optarg);
       break;
 
     case 'D':
@@ -271,8 +255,16 @@ int main (int argc, char **argv)
       sleep_time *= 1000000;
       break;
 
+    case 't':
+      nsamps = atoi (optarg);
+      break;
+
     case 'v':
       verbose++;
+      break;
+
+    case 'z':
+      zap = 1;
       break;
 
     case 'h':
@@ -288,28 +280,24 @@ int main (int argc, char **argv)
 
   assert ((MOPSR_UDP_DATASIZE_BYTES + MOPSR_UDP_COUNTER_BYTES) == MOPSR_UDP_PAYLOAD_BYTES);
 
-  multilog_t* log = multilog_open ("mopsr_udpplot", 0);
+  multilog_t* log = multilog_open ("mopsr_udpwaterfall", 0);
   multilog_add (log, stderr);
 
-  udpplot.log = log;
-  udpplot.verbose = verbose;
+  udpwaterfall.log = log;
+  udpwaterfall.verbose = verbose;
 
-  udpplot.interface = strdup(interface);
-  udpplot.port = port;
+  udpwaterfall.interface = strdup(interface);
+  udpwaterfall.port = port;
 
-  udpplot.ant_code = 0;
-  udpplot.nchan = nchan;
-  udpplot.nant = nant;
+  udpwaterfall.ant_code = 0;
+  udpwaterfall.nant = nant;
+  udpwaterfall.nchan = nchan;
+  udpwaterfall.nsamps = nsamps;
+  udpwaterfall.antenna = antenna;
 
-  udpplot.num_integrated = 0;
-  udpplot.to_integrate = 1;
+  udpwaterfall.plot_log = plot_log;
+  udpwaterfall.zap = zap;
 
-  udpplot.plot_log = plot_log;
-  udpplot.ymin = 100000;
-  udpplot.ymax = -100000;
-
-
-  // initialise data rate timing library 
   StopWatch wait_sw;
   RealTime_Initialise(1);
   StopWatch_Initialise(1);
@@ -324,14 +312,14 @@ int main (int argc, char **argv)
   cpgask(0);
 
   // allocate require resources, open socket
-  if (udpplot_init (&udpplot) < 0)
+  if (udpwaterfall_init (&udpwaterfall) < 0)
   {
     fprintf (stderr, "ERROR: Could not create UDP socket\n");
     exit(1);
   }
 
   // cloear packets ready for capture
-  udpplot_prepare (&udpplot);
+  udpwaterfall_prepare (&udpwaterfall);
 
   uint64_t seq_no = 0;
   uint64_t prev_seq_no = 0;
@@ -339,7 +327,12 @@ int main (int argc, char **argv)
   int errsv = 0;
   uint64_t timeouts = 0;
   uint64_t timeout_max = 1000000;
-  udpplot_t * ctx = &udpplot;
+
+  udpwaterfall_t * ctx = &udpwaterfall;
+
+  uint64_t frames_per_packet = UDP_DATA / (ctx->nant * ctx->nchan * 2);
+
+  multilog(log, LOG_INFO, "main: frames_per_packet=%"PRIu64"\n", frames_per_packet);
 
   while (!quit_threads) 
   {
@@ -350,7 +343,8 @@ int main (int argc, char **argv)
       // receive 1 packet into the socket buffer
       got = recvfrom ( ctx->sock->fd, ctx->sock->buf, UDP_PAYLOAD, 0, NULL, NULL );
 
-      if ((got == UDP_PAYLOAD) || (got + 8 == UDP_PAYLOAD))
+      //if ((got == UDP_PAYLOAD) || (got + 8 == UDP_PAYLOAD))
+      if (got == UDP_PAYLOAD)
       {
         ctx->sock->have_packet = 1;
         timeouts = 0;
@@ -389,35 +383,31 @@ int main (int argc, char **argv)
     {
       StopWatch_Start(&wait_sw);
 
-      mopsr_decode_header (ctx->sock->buf, &seq_no, &(ctx->ant_code));
+      mopsr_decode_header(ctx->sock->buf, &seq_no, &(ctx->ant_code));
 
-      //if (ctx->verbose > 1) 
+      if (ctx->verbose > 1) 
         multilog (ctx->log, LOG_INFO, "main: seq_no= %"PRIu64" difference=%"PRIu64" packets\n", seq_no, (seq_no - prev_seq_no));
       prev_seq_no = seq_no;
 
       // integrate packet into totals
       integrate_packet (ctx, ctx->sock->buf + UDP_HEADER, UDP_DATA);
-      ctx->num_integrated++;
+      ctx->num_integrated += frames_per_packet;
 
-      if (ctx->verbose)
+      //if (ctx->verbose)
+      //  print_packet (ctx, ctx->sock->buf + UDP_HEADER, (ctx->nchan * ctx->nsamps * 2));
+      if (ctx->num_integrated >= ctx->nsamps)
       {
-        print_detected_packet (ctx, ctx->sock->buf + UDP_HEADER, (ctx->nchan * ctx->nant * 2));
-        print_packet (ctx, ctx->sock->buf + UDP_HEADER, (10 * ctx->nant * 2));
-      }
-
-      if (ctx->num_integrated >= ctx->to_integrate)
-      {
+        //multilog (ctx->log, LOG_INFO, "main: plot_packet\n");
         plot_packet (ctx);
-        udpplot_reset (ctx);
-      }
+        udpwaterfall_reset (ctx);
+        StopWatch_Delay(&wait_sw, sleep_time);
 
-      StopWatch_Delay(&wait_sw, sleep_time);
-
-      if (ctx->verbose)
-        multilog(ctx->log, LOG_INFO, "main: clearing packets at socket\n");
-      size_t cleared = dada_sock_clear_buffered_packets(ctx->sock->fd, UDP_PAYLOAD);
-      if (ctx->verbose)
-        multilog(ctx->log, LOG_INFO, "main: cleared %d packets\n", cleared);
+        if (ctx->verbose)
+          multilog(ctx->log, LOG_INFO, "main: clearing packets at socket\n");
+        size_t cleared = dada_sock_clear_buffered_packets(ctx->sock->fd, UDP_PAYLOAD);
+        if (ctx->verbose)
+          multilog(ctx->log, LOG_INFO, "main: cleared %d packets\n", cleared);
+      } 
     }
   }
 
@@ -427,55 +417,7 @@ int main (int argc, char **argv)
 
 }
 
-void print_packet (udpplot_t * ctx, char * buffer, unsigned int size)
-{
-  char ant0r[9];
-  char ant0i[9];
-  char ant1r[9];
-  char ant1i[9];
-
-  unsigned ibyte = 0;
-  fprintf(stderr, "chan\tant0real ant0imag ant1real ant1imag\n");
-  for (ibyte=0; ibyte<size; ibyte += 4)
-  {
-    char_to_bstring (ant0r, buffer[ibyte+0]);
-    char_to_bstring (ant0i, buffer[ibyte+1]);
-    char_to_bstring (ant1r, buffer[ibyte+2]);
-    char_to_bstring (ant1i, buffer[ibyte+3]);
-    fprintf (stderr, "%d\t%s %s %s %s\t%d\t%d\t%d\t%d\n", ibyte/4, ant0r, ant0i, ant1r, ant1i, (int8_t) buffer[ibyte+0], (int8_t) buffer[ibyte+1], (int8_t) buffer[ibyte+2], (int8_t) buffer[ibyte+3]);
-  }
-}
-
-void print_detected_packet (udpplot_t * ctx, char * buffer, unsigned int size)
-{
-  int8_t * ptr = (int8_t *) buffer;
-
-  unsigned int ichan, iant;
-  for (ichan=0; ichan<ctx->nchan; ichan++)
-  {
-    for (iant=0; iant<2; iant++)
-    {
-      int re = (int) ptr[0];
-      int im = (int) ptr[1];
-      float po = (float) ((re*re) + (im*im));
-      if (ctx->verbose)
-        multilog (ctx->log, LOG_INFO, "[%d][%d] = %f\n", ichan, iant, po);
-      ptr += 2;
-    }
-  }
-}
-
-
-void dump_packet (udpplot_t * ctx, char * buffer, unsigned int size)
-{
-  int flags = O_WRONLY | O_CREAT | O_TRUNC;
-  int perms = S_IRUSR | S_IRGRP;
-  int fd = open ("packet.raw", flags, perms);
-  ssize_t n_wrote = write (fd, buffer, size);
-  close (fd);
-}
-
-void integrate_packet (udpplot_t * ctx, char * buffer, unsigned int size)
+void integrate_packet (udpwaterfall_t * ctx, char * buffer, unsigned int size)
 {
   if (ctx->verbose)
     multilog (ctx->log, LOG_INFO, "integrate_packet()\n");
@@ -490,66 +432,135 @@ void integrate_packet (udpplot_t * ctx, char * buffer, unsigned int size)
 
   int8_t * in = (int8_t *) buffer;
   int re, im;
+  float frame_sum = 0;
+
   for (iframe=0; iframe < nframe; iframe++)
   {
+    frame_sum = 0;
+    if (ctx->verbose > 1)
+      multilog (ctx->log, LOG_INFO, "integrating frame %d\n", iframe);
     for (ichan=0; ichan < ctx->nchan; ichan++)
     {
+      if (ctx->verbose > 1)
+        multilog (ctx->log, LOG_INFO, "integrating integrating chan %d\n", ichan);
       for (iant=0; iant < ctx->nant; iant++)
       {
-        re = (int) in[0];
-        im = (int) in[1];
-        ctx->y_points[iant][ichan] += (float) ((re*re) + (im*im));
+        if (ctx->verbose > 1)
+          multilog (ctx->log, LOG_INFO, "integrating integrating ant%d\n", iant);
+        if (iant == ctx->antenna )
+        {
+          re = (int) in[0];
+          im = (int) in[1];
+          int f = ctx->num_integrated + iframe;
+          ctx->data[ichan * ctx->nsamps + f] = (float) ((re*re) + (im*im));
+          frame_sum += ctx->data[ichan * ctx->nsamps + f];
+        }
         in += 2;
       }
     }
   }
+  if (ctx->verbose)
+    multilog (ctx->log, LOG_INFO, "integrate_packet: done\n");
 }
 
-void plot_packet (udpplot_t * ctx)
+void plot_packet (udpwaterfall_t * ctx)
 {
   if (ctx->verbose)
     multilog (ctx->log, LOG_INFO, "plot_packet()\n");
 
-  unsigned ichan = 0;
-  unsigned iant = 0;
-  unsigned iframe = 0;
+  int zap = ctx->zap;
   float xmin = 0.0;
   float xmax = (float) ctx->nchan;
-
-  // calculate limits
-  for (iant=0; iant < ctx->nant; iant++)
-  {
-    for (ichan=0; ichan < ctx->nchan; ichan++)
-    {
-      if (ctx->plot_log)
-        ctx->y_points[iant][ichan] = (ctx->y_points[iant][ichan] > 0) ? log10(ctx->y_points[iant][ichan]) : 0;
-      if (ctx->y_points[iant][ichan] > ctx->ymax) ctx->ymax = ctx->y_points[iant][ichan];
-      if (ctx->y_points[iant][ichan] < ctx->ymin) ctx->ymin = ctx->y_points[iant][ichan];
-    }
-  }
-  if (ctx->verbose)
-    multilog (ctx->log, LOG_INFO, "plot_packet: ctx->ymin=%f, ctx->ymax=%f\n", ctx->ymin, ctx->ymax);
+  float v;
 
   cpgbbuf();
   cpgsci(1);
-  if (ctx->plot_log)
+
+  char label[64];
+  sprintf (label, "Waterfall for Ant %u", mopsr_get_ant_number (ctx->ant_code, ctx->antenna));
+
+  cpgenv(0, ctx->nsamps, 0, ctx->nchan, 0, 0);
+  cpglab("Integration", "Channel", label);
+
+  float heat_l[] = {0.0, 0.2, 0.4, 0.6, 1.0};
+  float heat_r[] = {0.0, 0.5, 1.0, 1.0, 1.0};
+  float heat_g[] = {0.0, 0.0, 0.5, 1.0, 1.0};
+  float heat_b[] = {0.0, 0.0, 0.0, 0.3, 1.0};
+  float contrast = 1.0;
+  float brightness = 0.5;
+
+  cpgctab (heat_l, heat_r, heat_g, heat_b, 5, contrast, brightness);
+
+  cpgsci(1);
+
+  float length = (1.08 * ctx->nsamps) / 1000000;
+
+  float x_min = 0;
+  float x_max = ctx->nsamps;
+
+  float y_min = 0;
+  float y_max = ctx->nchan;
+
+  float x_res = (x_max-x_min)/ctx->nsamps;
+  float y_res = (y_max-y_min)/ctx->nchan;
+
+  float xoff = 0;
+  float trf[6] = { xoff + x_min - 0.5*x_res, x_res, 0.0,
+                   y_min - 0.5*y_res,        0.0, y_res };
+
+  int ndat = ctx->nchan * ctx->nsamps;
+  float z_min = 100000000000;
+  float z_max = 1;
+  float z_avg = 0;
+
+  if (ctx->plot_log && z_min > 0)
+    z_min = logf(z_min);
+  if (ctx->plot_log && z_max > 0)
+    z_max = logf(z_max);
+
+  unsigned int ichan, isamp;
+  unsigned int i;
+  unsigned int ndat_avg = 0;
+  for (ichan=0; ichan<ctx->nchan; ichan++)
   {
-    cpgenv(xmin, xmax, ctx->ymin, 1.1 * ctx->ymax, 0, 20);
-    cpglab("Channel", "log\\d10\\u(Power)", "Bandpass"); 
-  }
-  else
-  {
-    cpgenv(xmin, xmax, ctx->ymin, 1.1*ctx->ymax, 0, 0);
-    cpglab("Channel", "Power", "Bandpass"); 
+    for (isamp=0; isamp<ctx->nsamps; isamp++)
+    {
+      i = ichan * ctx->nsamps + isamp;
+      if (ctx->plot_log && ctx->data[i] > 0)
+        ctx->data[i] = logf(ctx->data[i]);
+        if ((!zap) || (zap && ichan != 0))
+        {
+          if (ctx->data[i] > z_max) z_max = ctx->data[i];
+          if (ctx->data[i] < z_min) z_min = ctx->data[i];
+        }
+        z_avg += ctx->data[i];
+        ndat_avg++;
+    }
   }
 
-  char ant_label[8];
-  for (iant=0; iant < ctx->nant; iant++)
+  z_avg /= (float) ndat_avg;
+
+  if (ctx->verbose)
+    multilog (ctx->log, LOG_INFO, "plot: z_min=%f z_max=%f z_avg=%f\n", z_min, z_max, z_avg);
+
+  if (zap)
   {
-    sprintf(ant_label, "Ant %u", mopsr_get_ant_number (ctx->ant_code, iant));
-    cpgsci(iant + 2);
-    cpgmtxt("T", 1.5 + (1.0 * iant), 0.0, 0.0, ant_label);
-    cpgline(ctx->nchan, ctx->x_points, ctx->y_points[iant]);
+    for (ichan=0; ichan<ctx->nchan; ichan++)
+    {
+      for (isamp=0; isamp<ctx->nsamps; isamp++)
+      {
+        i = ichan * ctx->nsamps + isamp;
+        if (ichan == 0)
+          ctx->data[i] = z_avg;
+        if (ichan == 0)
+          ctx->data[i] = 0;
+        //if ((ichan > 105 && ichan < 115) || ichan==127)
+        //if (ichan > 105)
+        //  ctx->data[i] = z_avg;
+      }
+    }
   }
+  
+  cpgimag(ctx->data, ctx->nsamps, ctx->nchan, 1, ctx->nsamps, 1, ctx->nchan, z_min, z_max, trf);
   cpgebuf();
 }

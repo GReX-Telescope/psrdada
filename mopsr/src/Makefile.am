@@ -1,11 +1,11 @@
 
 lib_LTLIBRARIES = libmopsr.la
 
-mopsr_hdr = mopsr_udp.h mopsr_def.h
+mopsr_hdr = mopsr_udp.h mopsr_def.h mopsr_util.h
 
-libmopsr_la_SOURCES = $(mopsr_hdr) mopsr_udp.c
+libmopsr_la_SOURCES = $(mopsr_hdr) mopsr_udp.c mopsr_util.c
 
-bin_PROGRAMS = mopsr_udpheader mopsr_udpdb_thread
+bin_PROGRAMS = mopsr_udpheader mopsr_udpdb_thread 
 
 INCLUDES = -I$(top_srcdir)/src
 LDADD = libmopsr.la $(top_builddir)/src/libpsrdada.la
@@ -33,9 +33,10 @@ endif
 
 if HAVE_PGPLOT
 
-bin_PROGRAMS += mopsr_dbplotbp
+bin_PROGRAMS += mopsr_dbplotbp mopsr_dbmonitor 
 AM_CPPFLAGS = @PGPLOT_CFLAGS@
 mopsr_dbplotbp_LDADD = $(LDADD) @PGPLOT_LIBS@
+mopsr_dbmonitor_LDADD = $(LDADD) @PGPLOT_LIBS@
 
 endif
 
@@ -47,13 +48,19 @@ endif
 
 if COMPILE_THIRD
 
-bin_PROGRAMS += mopsr_udpgen mopsr_udpplot mopsr_udpfftplot
+bin_PROGRAMS += mopsr_udpgen mopsr_udpplot mopsr_udpfftplot mopsr_udpwaterfall mopsr_udphist mopsr_udptimeseries
 
 mopsr_udpgen_CFLAGS = -D$(ARCH)
 mopsr_udpplot_CFLAGS = -D$(ARCH)
+mopsr_udpwaterfall_CFLAGS = -D$(ARCH)
 mopsr_udpfftplot_CFLAGS = -D$(ARCH) -I$(HOME)/linux_64/include
+mopsr_udphist_CFLAGS = -D$(ARCH)
+mopsr_udptimeseries_CFLAGS = -D$(ARCH)
 mopsr_udpplot_LDADD = $(LDADD) @PGPLOT_LIBS@
+mopsr_udpwaterfall_LDADD = $(LDADD) @PGPLOT_LIBS@
 mopsr_udpfftplot_LDADD = $(LDADD) @PGPLOT_LIBS@ -L$(HOME)/linux_64/lib -lfftw3f
+mopsr_udphist_LDADD = $(LDADD) @PGPLOT_LIBS@
+mopsr_udptimeseries_LDADD = $(LDADD) @PGPLOT_LIBS@
 
 INCLUDES += -I$(top_srcdir)/3rdparty
 LDADD += $(top_builddir)/3rdparty/libtimers.la

@@ -93,6 +93,7 @@ void* udpheader_read_function (udpheader_t* ctx, uint64_t* size)
 
   // Flag to drop out of for loop
   uint64_t seq_no = 0;
+  unsigned int ant_id = 0;
 
   // Assume we will be able to return a full buffer
   *size = 0;
@@ -101,6 +102,14 @@ void* udpheader_read_function (udpheader_t* ctx, uint64_t* size)
   int errsv = 0;
   uint64_t timeouts = 0;
   uint64_t timeout_max = 1000000;
+
+  unsigned int nchan = 8;
+  unsigned int nant = 16;
+  unsigned int ant_stride = nant * 2;
+  unsigned int nframe = UDP_DATA / (nchan * ant_stride);
+  unsigned int iframe;
+  unsigned int ichan;
+  char buf[UDP_DATA];
 
   if (ctx->verbose)
     multilog(ctx->log, LOG_INFO, "read: entering main loop for %d byte packets from fd=%d\n", UDP_PAYLOAD, ctx->sock->fd);
@@ -155,7 +164,7 @@ void* udpheader_read_function (udpheader_t* ctx, uint64_t* size)
 
     if (ctx->sock->have_packet)
     {
-      mopsr_decode_header(ctx->sock->buf, &seq_no);
+      mopsr_decode_header(ctx->sock->buf, &seq_no, &ant_id);
 
       if ((ctx->verbose > 1) && (ctx->packets->received < 10))
         multilog (ctx->log, LOG_INFO, "PKT: %"PRIu64"\n", seq_no);
@@ -165,7 +174,7 @@ void* udpheader_read_function (udpheader_t* ctx, uint64_t* size)
       {
         ctx->capture_started = 1;
         if (ctx->verbose)
-          multilog (ctx->log, LOG_INFO, "receive_obs: START [%"PRIu64"]\n", seq_no);
+          multilog (ctx->log, LOG_INFO, "receive_obs: START seq_no=%"PRIu64" ant_id=%u\n", seq_no, ant_id);
         ctx->packets->received ++;
         ctx->bytes->received += UDP_DATA;
       }
@@ -175,7 +184,23 @@ void* udpheader_read_function (udpheader_t* ctx, uint64_t* size)
         {
           // this is normal, do nothing
           ctx->packets->received ++;
-          ctx->bytes->received += (UDP_DATA + 8 + 28);
+          ctx->bytes->received += UDP_DATA;
+
+          char * in  = ctx->sock->buf + UDP_HEADER;
+          char * out = buf;
+          uint64_t bytes_copied = 0;
+
+          // reorder the data in 32 byte chunks
+          for (iframe=0; iframe<nframe; iframe++)
+          {
+            for (ichan=0; ichan<nchan; ichan++)
+            {
+              out = buf + (ichan * nframe) + (iframe * ant_stride);
+              memcpy (out, in, ant_stride);
+              in += ant_stride;
+              bytes_copied += ant_stride;
+            }
+          }
         }
         else if (seq_no > ctx->prev_seq_no + 1)
         {
@@ -393,7 +418,7 @@ void stats_thread(void * arg) {
     gb_rcv_ps /= 1000000000;
 
     /* determine how much memory is free in the receivers */
-    fprintf (stderr,"R=%6.3f [Gb/s], D=%4.1f [MB/s], D=%"PRIu64" pkts, s_s=%"PRIu64"\n", gb_rcv_ps, mb_drp_ps, ctx->packets->dropped, s_rcv_1sec);
+    fprintf (stderr,"R=%6.5f [Gib/s], D=%4.1f [MiB/s], D=%"PRIu64" pkts, s_s=%"PRIu64"\n", gb_rcv_ps, mb_drp_ps, ctx->packets->dropped, s_rcv_1sec);
 
     sleep(1);
   }

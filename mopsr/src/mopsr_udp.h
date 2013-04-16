@@ -34,9 +34,11 @@ mopsr_sock_t * mopsr_init_sock ();
 
 void mopsr_free_sock(mopsr_sock_t* b);
 
-void mopsr_decode_header (unsigned char * b, uint64_t *seq_no);
+void mopsr_decode_header (unsigned char * b, uint64_t *seq_no, unsigned int * ant_id);
 
 void mopsr_encode_header (unsigned char * b, uint64_t seq_no);
+
+unsigned int mopsr_get_ant_number (unsigned int id, unsigned int index);
 
 
 #define MOPSR_UDP_COUNTER_BYTES  8          // size of header/sequence number

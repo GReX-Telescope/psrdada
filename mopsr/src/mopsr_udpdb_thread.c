@@ -18,6 +18,8 @@
 #include <config.h>
 #endif
 
+#define ANT0ONLY
+
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE 1
 #endif
@@ -37,6 +39,8 @@
 
 /* debug mode */
 #define _DEBUG 1
+
+#define TEMP_PACKETS 1
 
 /* global variables */
 int quit_threads = 0;
@@ -180,10 +184,6 @@ time_t mopsr_udpdb_start (udpdb_t * ctx, char * obs_header)
   // copy the current observation's header to the header block
   memcpy (header, obs_header, header_size);
 
-  // note to jkocz: here you could connect to ROACH'es and reg_arm, that way we
-  // can insert the UTC_START into the DADA metadata if desirable
-
-
   // set any additional parameters that need setting
   uint64_t obs_offset = 0;
   if (ascii_header_set (header, "OBS_OFFSET", "%"PRIu64, obs_offset) < 0)
@@ -191,6 +191,82 @@ time_t mopsr_udpdb_start (udpdb_t * ctx, char * obs_header)
 
   if (ascii_header_set (header, "HDR_SIZE", "%"PRIu64, header_size) < 0)
     multilog (ctx->log, LOG_WARNING, "Could not write HDR_SIZE to header\n");
+
+  // get NBIT, NCHAN, NDIM, NPOL, NANT & TSAMP to determine bytes to acquire
+  unsigned int nbit, nchan, ndim, npol, nant;
+  float tsamp;
+  if (ascii_header_get (obs_header, "NBIT", "%d", &nbit) != 1)
+  {
+    multilog (ctx->log, LOG_ERR, "Could not get NBIT from header\n");
+    return -1;
+  }
+  if (ascii_header_get (obs_header, "NCHAN", "%d", &nchan) != 1)
+  {
+    multilog (ctx->log, LOG_ERR, "Could not get NCHAN from header\n");
+    return -1;
+  }
+  if (ascii_header_get (obs_header, "NDIM", "%d", &ndim) != 1)
+  {
+    multilog (ctx->log, LOG_ERR, "Could not get NDIM from header\n");
+    return -1;
+  }
+  if (ascii_header_get (obs_header, "NPOL", "%d", &npol) != 1)
+  {
+    multilog (ctx->log, LOG_ERR, "Could not get NPOL from header\n");
+    return -1;
+  }
+  if (ascii_header_get (obs_header, "NANT", "%d", &nant) != 1)
+  {
+    multilog (ctx->log, LOG_ERR, "Could not get NANT from header\n");
+    return -1;
+  }
+
+  if (ascii_header_get (obs_header, "TSAMP", "%f", &tsamp) != 1)
+  {
+    multilog (ctx->log, LOG_ERR, "Could not get TSAMP from header\n");
+    return -1;
+  }
+
+#ifdef ANT0ONLY
+  multilog (ctx->log, LOG_INFO, "start: overriding NANT to 1\n");
+  nant = 1;
+  if (ascii_header_set (header, "NANT", "%d", nant) < 0)
+    multilog (ctx->log, LOG_WARNING, "Could not write NANTto header\n");
+#endif
+
+  // determine data rate
+  unsigned int bits_per_sample = nbit * nchan * ndim * npol * nant;
+  unsigned int bytes_per_sample = bits_per_sample / 8;
+  uint64_t samples_per_second = (uint64_t) (1000000 / tsamp);
+  uint64_t bytes_per_second = samples_per_second * bytes_per_sample;
+
+  multilog (ctx->log, LOG_INFO, "bytes/sample=%d samples/sec=%"PRIu64", bytes/sec="
+            "%"PRIu64"\n", bytes_per_sample, samples_per_second, bytes_per_second);
+
+  ctx->bytes_per_second = bytes_per_second;
+
+  if (ctx->nsecs > 0)
+  {
+    uint64_t file_size = (ctx->bytes_per_second * ctx->nsecs) + header_size;
+    if (ascii_header_set (header, "FILE_SIZE", "%"PRIu64, file_size) < 0)
+      multilog (ctx->log, LOG_WARNING, "Could not write FILE_SIZEto header\n");
+  }
+
+  // write current UTC_START to the header as an rough guide...
+  char utc_time[64];
+  time_t current = time(0);
+  time_t start = current + 1;
+
+  // busy sleep until start time
+  while (current < start)
+    current = time(0);
+
+  strftime (utc_time, 64, DADA_TIMESTR, gmtime(&start));
+
+  if (ascii_header_set (header, "UTC_START", "%s", utc_time) < 0)
+    multilog (ctx->log, LOG_WARNING, "Could not write UTC_START to header\n");
+
+  multilog (ctx->log, LOG_INFO, "UTC_START=%s\n", utc_time);
 
   if (ctx->verbose > 1)
     multilog (ctx->log, LOG_INFO, "header=%s\n", header);
@@ -313,8 +389,8 @@ int mopsr_udpdb_new_buffer (udpdb_t * ctx)
   }
 
   // increment buffer byte markers
-  ctx->block_start_byte = ctx->block_end_byte + UDP_DATA;
-  ctx->block_end_byte = ctx->block_start_byte + ( ctx->packets_per_buffer - 1) * UDP_DATA;
+  ctx->block_start_byte = ctx->block_end_byte + ctx->pkt_size;
+  ctx->block_end_byte = ctx->block_start_byte + ( ctx->packets_per_buffer - 1) * ctx->pkt_size;
 
   if (ctx->verbose > 1)
     multilog(ctx->log, LOG_INFO, "new_buffer: buffer_bytes [%"PRIu64" - %"PRIu64"]\n", 
@@ -338,7 +414,6 @@ void * mopsr_udpdb_receive_obs (void * arg)
   // decoded sequence number
   uint64_t seq_no = 0;
   uint64_t tmp;
-  unsigned char * b = (unsigned char *) ctx->sock->buf;
 
   // data received from a recv_from call
   size_t got = 0;
@@ -356,7 +431,7 @@ void * mopsr_udpdb_receive_obs (void * arg)
   // for "saving" out of order packets near edges of blocks
   unsigned int temp_idx = 0;
   unsigned int temp_max = 8;
-  char * temp_buffers[temp_max][UDP_DATA];
+  char * temp_buffers[temp_max][ctx->pkt_size];
   uint64_t temp_seq_byte[temp_max];
 #endif
 
@@ -380,12 +455,20 @@ void * mopsr_udpdb_receive_obs (void * arg)
 
   // open first hdu and first buffer
   ctx->block_start_byte = 0;
-  ctx->block_end_byte = ctx->block_start_byte + ( ctx->packets_per_buffer - 1) * UDP_DATA;
+  ctx->block_end_byte = ctx->block_start_byte + ( ctx->packets_per_buffer - 1) * ctx->pkt_size;
 
   // TODO move the opening of the first block here ?
   //
   uint64_t timeouts = 0;
   uint64_t timeout_max = 1000000;
+  unsigned int just_dropped = 0;
+
+  unsigned char * b = (unsigned char *) ctx->sock->buf;
+
+#ifdef ANT0ONLY
+  char out[ctx->pkt_size];
+  char * in = ctx->sock->buf + UDP_HEADER;
+#endif
 
   // Continue to receive packets
   while (!quit_threads && !stop_pending) 
@@ -430,11 +513,11 @@ void * mopsr_udpdb_receive_obs (void * arg)
       }
     }
     timeouts = 0;
+    just_dropped = 0;
 
     // we have a valid packet within the timeout
     if (ctx->sock->have_packet) 
     {
-
       // decode sequence number
       seq_no = UINT64_C (0);
       for (i = 0; i < 8; i++ )
@@ -447,19 +530,21 @@ void * mopsr_udpdb_receive_obs (void * arg)
       // if first packet
       if (!ctx->capture_started)
       {
-        ctx->block_start_byte = seq_no * UDP_DATA;
-        ctx->block_end_byte   = (ctx->block_start_byte + ctx->hdu_bufsz) - UDP_DATA;
+        ctx->block_start_byte = seq_no * ctx->pkt_size;
+        ctx->block_end_byte   = (ctx->block_start_byte + ctx->hdu_bufsz) - ctx->pkt_size;
         ctx->capture_started = 1;
 
-        if (ctx->verbose)
+        if (ctx->bytes_to_acquire > 0)
+          stop_byte =  ctx->block_start_byte + ctx->bytes_to_acquire;
+
+        //if (ctx->verbose)
           multilog (ctx->log, LOG_INFO, "receive_obs: START [%"PRIu64
                     " - %"PRIu64"]\n", ctx->block_start_byte, ctx->block_end_byte);
       }
 
       if (ctx->capture_started)
       {
-        seq_byte = seq_no * UDP_DATA;
-
+        seq_byte = seq_no * ctx->pkt_size;
         ctx->last_seq = seq_no;
         ctx->last_byte = seq_byte;
 
@@ -468,8 +553,8 @@ void * mopsr_udpdb_receive_obs (void * arg)
         {
           multilog (ctx->log, LOG_INFO, "receive_obs: seq_byte [%"PRIu64"] < block_start_byte [%"PRIu64"]\n", seq_byte, ctx->block_start_byte);
           ctx->packets->dropped++;
-          ctx->bytes->dropped += UDP_DATA;
-          sleep(1);
+          ctx->bytes->dropped += ctx->pkt_size;
+          //sleep(1);
         }
         else
         {
@@ -477,9 +562,20 @@ void * mopsr_udpdb_receive_obs (void * arg)
           if (seq_byte <= ctx->block_end_byte)
           {
             byte_offset = seq_byte - ctx->block_start_byte;
-            memcpy (ctx->block + byte_offset, ctx->sock->buf + UDP_HEADER, UDP_DATA);
+#ifdef ANT0ONLY
+            in = ctx->sock->buf + UDP_HEADER;
+            for (i=0; i<ctx->pkt_size; i+=2) 
+            {
+              out[i+0] = in[i+0]; // ReAnt0
+              out[i+1] = in[i+1]; // ImAnt0
+              in += 2;
+            }
+            memcpy (ctx->block + byte_offset, out, ctx->pkt_size);
+#else
+            memcpy (ctx->block + byte_offset, ctx->sock->buf + UDP_HEADER, ctx->pkt_size);
+#endif
+            ctx->bytes->received += ctx->pkt_size;
             ctx->packets->received++;
-            ctx->bytes->received += UDP_DATA;
             ctx->block_count++;
           }
           // packet belongs in subsequent block
@@ -490,15 +586,17 @@ void * mopsr_udpdb_receive_obs (void * arg)
             if (temp_idx < temp_max)
             {
               // save packet to temp buffer
-              memcpy (temp_buffers[temp_idx], ctx->sock->buf, UDP_DATA);
+              memcpy (temp_buffers[temp_idx], ctx->sock->buf, ctx->pkt_size);
               temp_seq_byte[temp_idx] = seq_byte;
               temp_idx++;
             }
             else
             {
+#else
+              just_dropped = 1;
 #endif
               ctx->packets->dropped++;
-              ctx->bytes->dropped += UDP_DATA;
+              ctx->bytes->dropped += ctx->pkt_size;
 #ifdef TEMP_PACKETS
             }
 #endif
@@ -515,7 +613,7 @@ void * mopsr_udpdb_receive_obs (void * arg)
                     "block_count=%"PRIu64", temp_idx=%d\n", seq_no, 
                     ctx->block_count, temp_idx);
 #else
-      if (ctx->block_count >= ctx->packets_per_buffer)
+      if ((ctx->block_count >= ctx->packets_per_buffer) || just_dropped)
       {
         if (ctx->verbose)
           multilog (log, LOG_INFO, "BLOCK COMPLETE seq_no=%"PRIu64", "
@@ -527,7 +625,7 @@ void * mopsr_udpdb_receive_obs (void * arg)
         if (dropped)
         {
           ctx->packets->dropped += dropped;
-          ctx->bytes->dropped += (dropped * UDP_DATA);
+          ctx->bytes->dropped += (dropped * ctx->pkt_size);
         }
 
         // get a new buffer and write any temp packets saved 
@@ -549,15 +647,15 @@ void * mopsr_udpdb_receive_obs (void * arg)
           byte_offset = seq_byte - ctx->block_start_byte;
           if (byte_offset < ctx->hdu_bufsz)
           {
-            memcpy (ctx->block + byte_offset, temp_buffers[i], UDP_DATA);
+            memcpy (ctx->block + byte_offset, temp_buffers[i], ctx->pkt_size);
             ctx->block_count++;
             ctx->packets->received++;
-            ctx->bytes->received += UDP_DATA;
+            ctx->bytes->received += ctx->pkt_size;
           }
           else
           {
             ctx->packets->dropped++;
-            ctx->bytes->dropped += UDP_DATA;
+            ctx->bytes->dropped += ctx->pkt_size;
           }
         }
         temp_idx = 0;
@@ -846,7 +944,9 @@ int main (int argc, char **argv)
   udpdb.interface = strdup(interface);
   udpdb.control_port = control_port;
   udpdb.packets_per_buffer = 0;
+  udpdb.pkt_size = 0;
   udpdb.bytes_to_acquire = -1;
+  udpdb.nsecs = nsecs;
   udpdb.num_inputs = num_inputs;
 
   multilog (log, LOG_INFO, "main: dada_create_hdu()\n");
@@ -868,17 +968,25 @@ int main (int argc, char **argv)
   // determine block size of the data block
   udpdb.hdu_bufsz = ipcbuf_get_bufsz ((ipcbuf_t *) hdu->data_block);
 
+#ifdef ANT0ONLY
+  udpdb.pkt_size = UDP_DATA/2;
+#else
+  udpdb.pkt_size = UDP_DATA;
+#endif
+  udpdb.packets_per_buffer = udpdb.hdu_bufsz / udpdb.pkt_size;
+
   // determine number of packets per block, must 
-  if (udpdb.hdu_bufsz % UDP_DATA != 0)
+  if (udpdb.hdu_bufsz % udpdb.pkt_size!= 0)
   {
     multilog (log, LOG_ERR, "data block size for [%"PRIu64"] was not "
-              "a multiple of the UDP_DATA size [%d]\n", udpdb.hdu_bufsz, UDP_DATA);
+              "a multiple of the pkt_size [%d]\n", udpdb.hdu_bufsz, udpdb.pkt_size);
     return EXIT_FAILURE;
   }
-  udpdb.packets_per_buffer = udpdb.hdu_bufsz / UDP_DATA;
+
   if (udpdb.verbose)
-    multilog (udpdb.log, LOG_INFO, "main: HDU bufsz=%"PRIu64", UDP_DATA=%d, packets_per_buffer=%"PRIu64"\n", 
-                                  udpdb.hdu_bufsz, UDP_DATA, udpdb.packets_per_buffer);
+    multilog (udpdb.log, LOG_INFO, "main: HDU bufsz=%"PRIu64", pkt_size=%d, "
+              "packets_per_buffer=%"PRIu64"\n", udpdb.hdu_bufsz, udpdb.pkt_size, 
+              udpdb.packets_per_buffer);
 
 
   if (verbose)
@@ -938,10 +1046,10 @@ int main (int argc, char **argv)
     }
 
     /* set the total number of bytes to acquire */
-    udpdb.bytes_to_acquire = 1600 * 1000 * 1000 * (int64_t) nsecs;
+    udpdb.bytes_to_acquire = udpdb.bytes_per_second * (int64_t) nsecs;
 
-    if (verbose)
-    { 
+    //if (verbose)
+    {
       if (udpdb.bytes_to_acquire) 
         multilog(log, LOG_INFO, "bytes_to_acquire = %"PRIu64" Million Bytes, nsecs=%d\n", udpdb.bytes_to_acquire/1000000, nsecs);
       else

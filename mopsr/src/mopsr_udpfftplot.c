@@ -54,6 +54,9 @@ typedef struct {
   // pgplot device
   char * device;
 
+  // identifying code for antenna's in packet
+  unsigned int ant_code;
+
   // number of antennae
   unsigned int nant;
 
@@ -69,6 +72,9 @@ typedef struct {
   // number of dimensions [should always be 2]
   unsigned int ndim;
 
+  // which antenna to display [-1 for both]
+  int antenna;
+
   // size of the UDP packet
   unsigned int resolution;
 
@@ -82,6 +88,8 @@ typedef struct {
 
   float ** fft_out;
 
+  unsigned int fft_count;
+
   uint64_t num_integrated;
 
   uint64_t to_integrate;
@@ -92,6 +100,10 @@ typedef struct {
 
   float ymax;
 
+  float base_freq;
+
+  int zap_dc;
+
   fftwf_plan plan;
 
 } udpplot_t;
@@ -100,12 +112,10 @@ int udpplot_init (udpplot_t * ctx);
 int udpplot_prepare (udpplot_t * ctx);
 int udpplot_destroy (udpplot_t * ctx);
 
-void detect (udpplot_t * ctx);
-void integrate_packet (udpplot_t * ctx, char * buffer, unsigned int size);
-void fft_packet (udpplot_t * ctx, char * buffer, unsigned int size);
-void dump_packet (udpplot_t * ctx, char * buffer, unsigned int size);
-void print_packet (udpplot_t * ctx, char * buffer, unsigned int size);
-void plot_packet (udpplot_t * ctx);
+void append_packet (udpplot_t * ctx, char * buffer, unsigned int size);
+void detect_data (udpplot_t * ctx);
+void fft_data (udpplot_t * ctx);
+void plot_data (udpplot_t * ctx);
 
 int quit_threads = 0;
 
@@ -113,14 +123,17 @@ void usage()
 {
   fprintf (stdout,
      "mopsr_udpplot [options]\n"
-     " -h             print help text\n"
+     " -a ant         antenna to display [default all]\n"
+     " -b freq        frequency of first channel [default 800 MHz]\n"
      " -i interface   ip/interface for inc. UDP packets [default all]\n"
      " -l             plot logarithmically\n"
      " -f nfft        Nfft on each coarse channel [default 16, max 16]\n"
      " -p port        port on which to listen [default %d]\n"
      " -s secs        sleep this many seconds between plotting [default 0.5]\n"
-     " -t num         Number of packets to integrate in each plot [default 0.5]\n"
-     " -v             verbose messages\n",
+     " -t num         Number of FFTs to integrate into each plot [default 8]\n"
+     " -z             zap DC channel [0]\n"
+     " -v             verbose messages\n"
+     " -h             print help text\n",
      MOPSR_DEFAULT_UDPDB_PORT);
 }
 
@@ -139,8 +152,13 @@ int udpplot_prepare (udpplot_t * ctx)
 int udpplot_reset (udpplot_t * ctx)
 {
   unsigned ichan;
+  float percent_chan;
   for (ichan=0; ichan < ctx->nchan_out; ichan++)
-    ctx->x_points[ichan] = (float) ichan;
+  {
+    percent_chan = (float) ichan / (float) ctx->nchan_out;
+    percent_chan *= 100; // MHz
+    ctx->x_points[ichan] = ctx->base_freq + percent_chan;
+  }
 
   unsigned iant;
   unsigned ifft;
@@ -161,6 +179,7 @@ int udpplot_reset (udpplot_t * ctx)
     }
   }
   ctx->num_integrated = 0;
+  ctx->fft_count = 0;
 }
 
 int udpplot_destroy (udpplot_t * ctx)
@@ -310,13 +329,23 @@ int main (int argc, char **argv)
 
   double sleep_time = 1000000;
 
-  unsigned int to_integrate = 1;
+  float base_freq = 800.0;
 
-  while ((arg=getopt(argc,argv,"a:D:f:i:ln:p:s:t:vh")) != -1) {
+  unsigned int to_integrate = 8;
+
+  int antenna = -1;
+
+  unsigned zap_dc = 0;
+
+  while ((arg=getopt(argc,argv,"a:b:D:f:i:lp:s:t:vzh")) != -1) {
     switch (arg) {
 
     case 'a':
-      nant = atoi(optarg);
+      antenna = atoi(optarg);
+      break;
+
+    case 'b':
+      base_freq = atof(optarg);
       break;
 
     case 'D':
@@ -336,10 +365,6 @@ int main (int argc, char **argv)
       plot_log = 1;
       break;
 
-    case 'n':
-      nchan = atoi (optarg);
-      break;
-
     case 'p':
       port = atoi (optarg);
       break;
@@ -355,6 +380,10 @@ int main (int argc, char **argv)
 
     case 'v':
       verbose++;
+      break;
+
+    case 'z':
+      zap_dc = 1;
       break;
 
     case 'h':
@@ -383,14 +412,19 @@ int main (int argc, char **argv)
   udpplot.nfft = nfft;
   udpplot.nchan_out = nchan * nfft;
   udpplot.nant = nant;
+  udpplot.ant_code = 0;
 
+  udpplot.antenna = antenna;
+
+  udpplot.zap_dc = zap_dc;
   udpplot.num_integrated = 0;
+  udpplot.fft_count = 0;
   udpplot.to_integrate = to_integrate;
 
   udpplot.plot_log = plot_log;
   udpplot.ymin = 100000;
   udpplot.ymax = -100000;
-
+  udpplot.base_freq = base_freq;
 
   // initialise data rate timing library 
   StopWatch wait_sw;
@@ -424,6 +458,8 @@ int main (int argc, char **argv)
   uint64_t timeout_max = 1000000;
 
   udpplot_t * ctx = &udpplot;
+
+  StopWatch_Start(&wait_sw);
 
   while (!quit_threads) 
   {
@@ -472,24 +508,28 @@ int main (int argc, char **argv)
     if (ctx->sock->have_packet)
     {
 
-      mopsr_decode_header(ctx->sock->buf, &seq_no);
+      mopsr_decode_header(ctx->sock->buf, &seq_no, &(ctx->ant_code));
 
       if (ctx->verbose) 
         multilog (ctx->log, LOG_INFO, "main: seq_no=%"PRIu64" difference=%"PRIu64" packets\n", seq_no, (seq_no - prev_seq_no));
       prev_seq_no = seq_no;
 
-      // integrate packet into totals
-      fft_packet (ctx, ctx->sock->buf + UDP_HEADER, UDP_DATA);
-      detect (ctx);
-      ctx->num_integrated++;
+      // append packet to fft input
+      append_packet (ctx, ctx->sock->buf + UDP_HEADER, UDP_DATA);
 
-      if (ctx->verbose > 1)
-        print_packet (ctx, ctx->sock->buf + UDP_HEADER, (ctx->nchan_in * ctx->nant * 2));
+      if (ctx->fft_count >= ctx->nfft)
+      {
+        fft_data (ctx);
+        detect_data (ctx);
+
+        ctx->num_integrated ++;
+        ctx->fft_count = 0;
+      }
 
       if (ctx->num_integrated >= ctx->to_integrate)
       {
-        StopWatch_Start(&wait_sw);
-        plot_packet (ctx);
+        multilog (ctx->log, LOG_INFO, "plotting %d FFTs in %d channels\n", ctx->num_integrated, ctx->nchan_out);
+        plot_data (ctx);
         udpplot_reset (ctx);
         StopWatch_Delay(&wait_sw, sleep_time);
 
@@ -498,6 +538,7 @@ int main (int argc, char **argv)
           size_t cleared = dada_sock_clear_buffered_packets(ctx->sock->fd, UDP_PAYLOAD);
         if (ctx->verbose)
           multilog(ctx->log, LOG_INFO, "main: cleared %d packets\n", cleared);
+        StopWatch_Start(&wait_sw);
       }
     }
   }
@@ -505,37 +546,40 @@ int main (int argc, char **argv)
   cpgclos();
 
   return EXIT_SUCCESS;
-
 }
 
-void print_packet (udpplot_t * ctx, char * buffer, unsigned int size)
+// copy data from packet in the fft input buffer
+void append_packet (udpplot_t * ctx, char * buffer, unsigned int size)
 {
-  char ant0r[9];
-  char ant0i[9];
-  char ant1r[9];
-  char ant1i[9];
+  if (ctx->verbose > 1)
+    multilog (ctx->log, LOG_INFO, "append_packet()\n");
 
-  unsigned ibyte = 0;
-  fprintf(stderr, "chan\tant0imag ant0real ant1imag ant1real\n");
-  for (ibyte=0; ibyte<size; ibyte += 4)
+  unsigned ichan, iant, ifft;
+  int8_t * in = (int8_t *) buffer;
+
+  unsigned int nframes   = size / (ctx->nchan_in * ctx->nant * MOPSR_NDIM);
+  unsigned int start_fft = ctx->fft_count;
+  unsigned int end_fft   = start_fft + nframes;
+
+  if (end_fft > ctx->nfft)
+    end_fft = ctx->nfft;
+
+  for (ifft=start_fft; ifft < end_fft; ifft++)
   {
-    char_to_bstring (ant0i, buffer[ibyte+0]);
-    char_to_bstring (ant0r, buffer[ibyte+1]);
-    char_to_bstring (ant1i, buffer[ibyte+2]);
-    char_to_bstring (ant1r, buffer[ibyte+3]);
-    fprintf (stderr, "%d\t%s %s %s %s\t%d\t%d\t%d\t%d\n", ibyte/4, ant0i, ant0r, ant1i, ant1r, (int8_t) buffer[ibyte+0], (int8_t) buffer[ibyte+1], (int8_t) buffer[ibyte+2], (int8_t) buffer[ibyte+3]);
+    for (ichan=0; ichan < ctx->nchan_in; ichan++)
+    {
+      for (iant=0; iant < ctx->nant; iant++)
+      {
+        ctx->fft_in[iant][ichan][(2*ifft) + 0] = (float) in[0];   // re
+        ctx->fft_in[iant][ichan][(2*ifft) + 1] = (float) in[1];   // im
+        in += 2;
+      }
+    }
+    ctx->fft_count++;
   }
 }
 
-void dump_packet (udpplot_t * ctx, char * buffer, unsigned int size)
-{
-  int flags = O_WRONLY | O_CREAT | O_TRUNC;
-  int perms = S_IRUSR | S_IRGRP;
-  int fd = open ("packet.raw", flags, perms);
-  ssize_t n_wrote = write (fd, buffer, size);
-  close (fd);
-}
-
+#if 0
 void fft_packet (udpplot_t * ctx, char * buffer, unsigned int size)
 {
   if (ctx->verbose > 1)
@@ -552,8 +596,8 @@ void fft_packet (udpplot_t * ctx, char * buffer, unsigned int size)
     {
       for (iant=0; iant < ctx->nant; iant++)
       {
-        ctx->fft_in[iant][ichan][(2*ifft) + 0] = (float) in[1];   // re
-        ctx->fft_in[iant][ichan][(2*ifft) + 1] = (float) in[0];   // im
+        ctx->fft_in[iant][ichan][(2*ifft) + 0] = (float) in[0];   // re
+        ctx->fft_in[iant][ichan][(2*ifft) + 1] = (float) in[1];   // im
         in += 2;
       }
     }
@@ -563,47 +607,41 @@ void fft_packet (udpplot_t * ctx, char * buffer, unsigned int size)
   float * dest;
   for (iant=0; iant < ctx->nant; iant++)
   {
-    for (ichan=0; ichan < ctx->nchan_in; ichan++)
+    if ((ctx->antenna < 0) || (ctx->antenna == iant))
     {
-      src = ctx->fft_in[iant][ichan]; 
-      dest = ctx->fft_out[iant] + (ichan * ctx->nfft * 2);
+      for (ichan=0; ichan < ctx->nchan_in; ichan++)
+      {
+        src = ctx->fft_in[iant][ichan]; 
+        dest = ctx->fft_out[iant] + (ichan * ctx->nfft * 2);
 
-      fftwf_execute_dft (ctx->plan, (fftwf_complex*) src, (fftwf_complex*) dest);
+        fftwf_execute_dft (ctx->plan, (fftwf_complex*) src, (fftwf_complex*) dest);
+      }
     }
   }
 }
+#endif
 
-void integrate_packet (udpplot_t * ctx, char * buffer, unsigned int size)
+void fft_data (udpplot_t * ctx)
 {
-  if (ctx->verbose)
-    multilog (ctx->log, LOG_INFO, "integrate_packet()\n");
-
-  unsigned ichan = 0;
-  unsigned iant = 0;
-  unsigned iframe = 0;
-  unsigned nframe = size / (ctx->nant * ctx->nchan_in * 2);
-
-  if (ctx->verbose)
-    multilog (ctx->log, LOG_INFO, "integrate_packet: assigning floats, checking min/max: nframe=%d\n", nframe);
-
-  int8_t * in = (int8_t *) buffer;
-  int a, b;
-  for (iframe=0; iframe < nframe; iframe++)
+  unsigned int iant, ichan;
+  float * src;
+  float * dest;
+  for (iant=0; iant < ctx->nant; iant++)
   {
-    for (ichan=0; ichan < ctx->nchan_in; ichan++)
+    if ((ctx->antenna < 0) || (ctx->antenna == iant))
     {
-      for (iant=0; iant < ctx->nant; iant++)
+      for (ichan=0; ichan < ctx->nchan_in; ichan++)
       {
-        a = (int) in[1];
-        b = (int) in[0];
-        ctx->y_points[iant][ichan] += (float) ((a*a) + (b*b));
-        in += 2;
+        src = ctx->fft_in[iant][ichan]; 
+        dest = ctx->fft_out[iant] + (ichan * ctx->nfft * 2);
+
+        fftwf_execute_dft (ctx->plan, (fftwf_complex*) src, (fftwf_complex*) dest);
       }
     }
   }
 }
 
-void detect (udpplot_t * ctx)
+void detect_data (udpplot_t * ctx)
 {
   unsigned iant = 0;
   unsigned ichan = 0;
@@ -611,17 +649,22 @@ void detect (udpplot_t * ctx)
 
   for (iant=0; iant < ctx->nant; iant++)
   {
-    for (ichan=0; ichan < ctx->nchan_out; ichan++)
+    if ((ctx->antenna < 0) || (ctx->antenna == iant))
     {
-      a = ctx->fft_out[iant][(2*ichan)+0];
-      b = ctx->fft_out[iant][(2*ichan)+1];
-      ctx->y_points[iant][ichan] += ((a*a) + (b*b));
+      for (ichan=0; ichan < ctx->nchan_out; ichan++)
+      {
+        a = ctx->fft_out[iant][(2*ichan)+0];
+        b = ctx->fft_out[iant][(2*ichan)+1];
+        ctx->y_points[iant][ichan] += ((a*a) + (b*b));
+        if (ctx->zap_dc && ichan == 0)
+          ctx->y_points[iant][ichan] = 0;
+      }
     }
   }
 }
 
 
-void plot_packet (udpplot_t * ctx)
+void plot_data (udpplot_t * ctx)
 {
   if (ctx->verbose)
     multilog (ctx->log, LOG_INFO, "plot_packet()\n");
@@ -629,18 +672,21 @@ void plot_packet (udpplot_t * ctx)
   unsigned ichan = 0;
   unsigned iant = 0;
   unsigned iframe = 0;
-  float xmin = 0.0;
-  float xmax = (float) ctx->nchan_out;
+  float xmin = ctx->x_points[0] - 5;
+  float xmax = ctx->x_points[ctx->nchan_out-1] + 5;
 
   // calculate limits
   for (iant=0; iant < ctx->nant; iant++)
   {
-    for (ichan=0; ichan < ctx->nchan_out; ichan++)
+    if ((ctx->antenna < 0) || (ctx->antenna == iant))
     {
-      if (ctx->plot_log)
-        ctx->y_points[iant][ichan] = (ctx->y_points[iant][ichan] > 0) ? log10(ctx->y_points[iant][ichan]) : 0;
-      if (ctx->y_points[iant][ichan] > ctx->ymax) ctx->ymax = ctx->y_points[iant][ichan];
-      if (ctx->y_points[iant][ichan] < ctx->ymin) ctx->ymin = ctx->y_points[iant][ichan];
+      for (ichan=0; ichan < ctx->nchan_out; ichan++)
+      {
+        if (ctx->plot_log)
+          ctx->y_points[iant][ichan] = (ctx->y_points[iant][ichan] > 0) ? log10(ctx->y_points[iant][ichan]) : 0;
+        if (ctx->y_points[iant][ichan] > ctx->ymax) ctx->ymax = ctx->y_points[iant][ichan];
+        if (ctx->y_points[iant][ichan] < ctx->ymin) ctx->ymin = ctx->y_points[iant][ichan];
+      }
     }
   }
   if (ctx->verbose)
@@ -651,21 +697,24 @@ void plot_packet (udpplot_t * ctx)
   if (ctx->plot_log)
   {
     cpgenv(xmin, xmax, ctx->ymin, 1.1 * ctx->ymax, 0, 20);
-    cpglab("Channel", "log\\d10\\u(Power)", "Bandpass"); 
+    cpglab("Freq", "log\\d10\\u(Power)", "Bandpass"); 
   }
   else
   {
     cpgenv(xmin, xmax, ctx->ymin, 1.1*ctx->ymax, 0, 0);
-    cpglab("Channel", "Power", "Bandpass"); 
+    cpglab("Freq", "Power", "Bandpass"); 
   }
 
   char ant_label[8];
   for (iant=0; iant < ctx->nant; iant++)
   {
-    sprintf(ant_label, "Ant %d", iant);
-    cpgsci(iant + 2);
-    cpgmtxt("T", 1.5 + (1.0 * iant), 0.0, 0.0, ant_label);
-    cpgline(ctx->nchan_out, ctx->x_points, ctx->y_points[iant]);
+    if ((ctx->antenna < 0) || (ctx->antenna == iant))
+    {
+      sprintf(ant_label, "Ant %u", mopsr_get_ant_number (ctx->ant_code, iant));
+      cpgsci(iant + 2);
+      cpgmtxt("T", 1.5 + (1.0 * iant), 0.0, 0.0, ant_label);
+      cpgline(ctx->nchan_out, ctx->x_points, ctx->y_points[iant]);
+    }
   }
   cpgebuf();
 }

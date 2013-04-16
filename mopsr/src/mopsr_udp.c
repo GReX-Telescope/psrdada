@@ -1,6 +1,6 @@
 /***************************************************************************
  *  
- *    Copyright (C) 2011 by Andrew Jameson
+ *    Copyright (C) 2013 by Andrew Jameson
  *    Licensed under the Academic Free License version 2.1
  * 
  ****************************************************************************/
@@ -41,7 +41,7 @@ void mopsr_free_sock(mopsr_sock_t* b)
 /*
  * test design has 64 bits constart, then 64 bits seq no
  */
-void mopsr_decode_header (unsigned char * b, uint64_t *seq_no)
+void mopsr_decode_header (unsigned char * b, uint64_t *seq_no, unsigned int * ant_id)
 {
   uint64_t tmp = 0;
   unsigned i = 0;
@@ -53,6 +53,10 @@ void mopsr_decode_header (unsigned char * b, uint64_t *seq_no)
     tmp = b[16 - i - 1];
     *seq_no |= (tmp << ((i & 7) << 3));
   }
+
+
+  // antenna ID is encoded in last nibble of first 8bytes
+  *ant_id = (unsigned int) (b[7] & 0x0f);
 }
 
 void mopsr_encode_header (unsigned char *b, uint64_t seq_no)
@@ -66,4 +70,11 @@ void mopsr_encode_header (unsigned char *b, uint64_t seq_no)
   b[14] = (uint8_t) (seq_no>>8);
   b[15] = (uint8_t) (seq_no);
 }
+
+unsigned int mopsr_get_ant_number (unsigned int id, unsigned int index)
+{
+  return ((2 * id) + index);
+}
+
+
 
