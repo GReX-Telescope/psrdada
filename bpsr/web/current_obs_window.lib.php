@@ -99,6 +99,8 @@ class current_obs extends bpsr_webpage
         <td><span id ="RA"></span></td>
         <th>Acc Length</th>
         <td><span id="ACC_LEN"></span></td>
+        <th>REF BEAM</th>
+        <td><span id="REF_BEAM"></span></td>
       </tr>
       <tr>
         <th>UTC_START</th>
@@ -107,6 +109,8 @@ class current_obs extends bpsr_webpage
         <td><span id ="DEC"></span></td>
         <th>BW</th>
         <td><span id ="BANDWIDTH"></span>&nbsp;MHz</td>
+        <th>NBEAM</th>
+        <td><span id="NBEAM"></span></td>
       </tr>
       <tr>
         <th>CFREQ</th>
@@ -115,6 +119,8 @@ class current_obs extends bpsr_webpage
         <td><span id ="PROC_FILE"></span></td>
         <th>Project ID</th>
         <td><span id ="PID"></span></td>
+        <th></th>
+        <td></td>
       </tr>
     </table>
 <?
