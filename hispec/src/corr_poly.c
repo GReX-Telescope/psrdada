@@ -140,6 +140,7 @@ key_t dada_key = DADA_DEFAULT_BLOCK_KEY;
 
 char windowType = 'q';	/* The type of window function for polyphase filter */
 int windowBlocks = DEFAULT_WINDOW_BLOCK;  /* Default number of blocks of window */
+int windowSize = 0;
 char polyMethod[BUFSIZ] = "weighted-overlap-add"; /* Polyphase method */
 int complexinput = 0; /* 0 for non-complex input, 1 for complex input */
 int yaxis_size = 128;
@@ -182,12 +183,10 @@ int main(int argc, char * const argv[])
   int nbatch = DEFAULT_NBATCH;  /* Determine how many data chunks to be processed per step */
   float *cuda_inp_buf;
   cufftComplex *cuda_complexinp_buf;
-
   float *cuda_window_buf;
   
   float *cuda_poly_buf;	
   cufftComplex *cuda_complexpoly_buf;
-
   cufftComplex *cuda_ft_buf;
   
   /* Outputs of the correlator, auto and cross separated for more efficient processing */
@@ -242,17 +241,22 @@ int main(int argc, char * const argv[])
   openFiles(infilename,outfilename,prod_type, &finp,&fout_ac,&fout_cc);
 #endif
 
-  /* Setup window function */
-  window_buf = (float *)calloc( nchan * 2 * windowBlocks, sizeof(float) );
-  make_window( window_buf, 16, nchan, windowBlocks, windowType );
-
+  if( !complexinput )
+    windowSize = nchan * 2;
+  else
+    /* Complex input will need window with half the size */
+    windowSize = nchan;
+    
+  window_buf = (float *)calloc( windowSize * windowBlocks, sizeof(float) );
+  make_window( window_buf, 16, windowSize, windowBlocks, windowType );
+  
   /* Calculate the sum of window for normalisation, which I (shinkee) don't quite understand */
-  for( i = 0; i < nchan * 2 * windowBlocks; i++ )
+  for( i = 0; i < windowSize * windowBlocks; i++ )
     sumOfWindow += window_buf[i];
   if(debug)
     fprintf( stderr, "Sum of window: %e\n", sumOfWindow );
 
-  for( i = 0; i < nchan * 2 * windowBlocks; i++ )
+  for( i = 0; i < windowSize * windowBlocks; i++ )
   {
     window_buf[i] = window_buf[i] * nchan * 2 / sumOfWindow;
   }
@@ -272,19 +276,35 @@ int main(int argc, char * const argv[])
    * nbatch + windowBlocks - 1 blocks of input saved */
   if( !complexinput )
   {
-  cudaMalloc( (void **)&cuda_inp_buf, 
-      nchan * 2 * ninp * (nbatch + windowBlocks-1) * sizeof(float) );
-  cudaMemset( cuda_inp_buf, 0, 
-      nchan * 2 * ninp * (nbatch + windowBlocks-1) * sizeof(float) );
+    cudaMalloc( (void **)&cuda_inp_buf, 
+       nchan * 2 * ninp * (nbatch + windowBlocks-1) * sizeof(float) );
+    cudaMemset( cuda_inp_buf, 0, 
+       nchan * 2 * ninp * (nbatch + windowBlocks-1) * sizeof(float) );
 
-  cudaMalloc( (void **)&cuda_poly_buf, nchan * 2 * ninp * nbatch * sizeof(float) );
-  cudaMemset( cuda_poly_buf, 0, nchan * 2 * ninp * nbatch * sizeof(float) );
+    cudaMalloc( (void **)&cuda_poly_buf, nchan * 2 * ninp * nbatch * sizeof(float) );
+    cudaMemset( cuda_poly_buf, 0, nchan * 2 * ninp * nbatch * sizeof(float) );
+
   }
   else
   {
+    cudaMalloc( (void **)&cuda_complexinp_buf,
+	nchan * ninp * (nbatch + windowBlocks-1) *
+	sizeof(cufftComplex) );
+    cudaMemset( cuda_complexinp_buf, 0, 
+	nchan * ninp * (nbatch + windowBlocks-1) * 
+	sizeof(cufftComplex) );
 
+    cudaMalloc( (void **)&cuda_complexpoly_buf, 
+	nchan * ninp * nbatch * sizeof(cufftComplex) );
+    cudaMemset( cuda_complexpoly_buf, 0, 
+	nchan * ninp * nbatch * sizeof(cufftComplex) );
   }
+  
+  /* Copy the window coefficient */
+  cudaMalloc( (void **)&cuda_window_buf, windowSize * windowBlocks * sizeof(float) );
+  cudaMemcpy( cuda_window_buf, window_buf, windowSize * windowBlocks * sizeof(float), cudaMemcpyHostToDevice );
 
+  /* Data buffer for the fourier transform */
   cudaMalloc( (void **)&cuda_ft_buf, (nchan+1) * ninp * nbatch * sizeof(cufftComplex) );
   cudaMemset( cuda_ft_buf, 0, (nchan+1) * ninp * nbatch * sizeof(cufftComplex) );
 
@@ -303,11 +323,9 @@ int main(int argc, char * const argv[])
     cudaMemset( cuda_cross_corr, 0, (nchan) * ncross * sizeof(cufftComplex) );
   }
 
-  cudaMalloc( (void **)&cuda_window_buf, nchan * 2 * windowBlocks * sizeof(float) );
-  cudaMemcpy( cuda_window_buf, window_buf, nchan * 2 * windowBlocks * sizeof(float),
-      cudaMemcpyHostToDevice );
 
 #else
+  /* Without GPU */
   /* allocate buffers */
   /* for input and FFT results */
   inp_buf = (float **) calloc(ninp,sizeof(float *));
@@ -346,6 +364,7 @@ int main(int argc, char * const argv[])
     
 #if USE_GPU
     /* If using GPU, read data straight into GPU memory */
+
 #if USE_DADA
     res = readDataToGPU( nchan, ninp, windowBlocks, nbatch, bits_per_samp, hdu, 
 	cuda_inp_buf, debug, wordtype );
@@ -355,6 +374,7 @@ int main(int argc, char * const argv[])
 #endif
     if( res != 0 )
       filedone = 1;
+
 #else
     /* Read data into CPU memory */
     res = readDataTail(nchan, ninp,finp,inp_buf, 
@@ -371,11 +391,18 @@ int main(int argc, char * const argv[])
       /***************************************************/
       /* GPU correlator execution */
       /***************************************************/
-      gpu_corr( nchan, ninp, ncross, windowBlocks, nbatch, prod_type, polyMethod, 
-	  cuda_inp_buf, cuda_window_buf, cuda_poly_buf, cuda_ft_buf, 
-	  cuda_cross_corr, cuda_auto_corr,
-	  &poly_time, &fft_time, &cmac_time );
-
+      if( !complexinput )
+	gpu_corr( nchan, ninp, ncross, windowBlocks, nbatch, prod_type, 
+	    polyMethod, cuda_inp_buf, cuda_window_buf, cuda_poly_buf, 
+	    cuda_ft_buf, cuda_cross_corr, cuda_auto_corr,
+	    &poly_time, &fft_time, &cmac_time );
+      else
+	gpu_corr_complex( nchan, ninp, ncross, windowBlocks, 
+	    nbatch, prod_type, 
+	    polyMethod, cuda_complexinp_buf, cuda_window_buf, 
+	    cuda_complexpoly_buf, 
+	    cuda_ft_buf, cuda_cross_corr, cuda_auto_corr,
+	    &poly_time, &fft_time, &cmac_time );
 
       /* Only the GPU execution will be batched up */
       iter += nbatch;
@@ -415,8 +442,10 @@ int main(int argc, char * const argv[])
 
 #if USE_GPU
       /* write output from GPU */
-      writeGPUOutput(fout_ac, fout_cc, ninp, nchan, ncross, iter, prod_type, 
-                     nbatch, filedone, normaliser, yaxis_size, rows_per_refresh, cuda_cross_corr, cuda_auto_corr);
+      writeGPUOutput(fout_ac, fout_cc, ninp, nchan, ncross, iter, 
+	  prod_type, nbatch, filedone, normaliser, 
+	  yaxis_size, rows_per_refresh, 
+	  cuda_cross_corr, cuda_auto_corr);
 #else
       /* CPU output writing */
       writeOutput(fout_ac,fout_cc,ninp,nchan,iter,prod_type,corr_buf,normaliser);

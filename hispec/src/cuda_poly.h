@@ -11,6 +11,14 @@ void gpu_corr( int nchan, int ninp, int ncross, int windowBlocks,
     cufftComplex *cuda_cross_corr, float *cuda_auto_corr,
     float *poly_time, float *fft_time, float *cmac_time );
 
+void gpu_corr_complex( int nchan, int ninp, int ncross, 
+    int windowBlocks, int nbatch, 
+    int prod_type, char *polyMethod, cufftComplex *cuda_complexinp_buf, 
+    float *cuda_window_buf, cufftComplex *cuda_copmlexpoly_buf, 
+    cufftComplex *cuda_ft_buf, cufftComplex *cuda_cross_corr, 
+    float *cuda_auto_corr,
+    float *poly_time, float *fft_time, float *cmac_time );
+
 float elapsed_time(struct timeval *start);
 
 void time_stamp(char *str);
@@ -28,6 +36,13 @@ void writeGPUOutput(FILE *fout_ac, FILE *fout_cc, int ninp, int nchan, int ncros
 /* Function prototypes */
 void polyphase_gpu(int ninp, int windowBlocks, int size, int batch,
     char *polyMethod, float *cuda_poly_buf, float *cuda_inp_buf, float *cuda_window_buf);
+
+void complex_polyphase_gpu(int ninp, int windowBlocks, int size, 
+    int nbatch, char *polyMethod, 
+    cufftComplex *cuda_poly_buf, cufftComplex *cuda_inp_buf, 
+    float *cuda_window_buf);
+
+void do_complex_CUFFT(int nchan, int ninp, int nbatch, cufftComplex *cuda_poly_buf, cufftComplex *cuda_ft_buf);
 
 void do_CUFFT(int nchan, int ninp, int nbatch, float *cuda_poly_buf, cufftComplex *cuda_ft_buf);
 

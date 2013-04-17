@@ -284,7 +284,7 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, int64_t* size)
 
       // Decode the packet's header
 #ifdef TEST_MODE
-      udpdb->curr_sequence_no = (uint64_t) pkt_hdr.pkt_cnt / udpdb->sequence_incr;
+      udpdb->curr_sequence_no = (int) pkt_hdr.pkt_cnt / udpdb->sequence_incr;
 #else
       udpdb->curr_sequence_no = (uint64_t) pkt_hdr.pkt_cnt;
 #endif

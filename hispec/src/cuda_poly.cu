@@ -35,6 +35,35 @@ __global__ void overlap_add_kernel(float *out, float *in, float *window, int win
   }
 }
 
+__global__ void complex_overlap_add_kernel(cufftComplex *out, 
+    cufftComplex *in, float *window, int windowBlocks)
+{
+  int i;
+
+  int size = blockDim.x * gridDim.x;
+
+  int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+  int batch = blockIdx.y;
+  int nbatch = gridDim.y;
+
+  int inp = blockIdx.z;
+
+
+  for( i = 0; i < windowBlocks; i++ )
+  {
+    out[inp*nbatch*size + batch*size + index].x = 
+      out[inp*nbatch*size + batch*size + index].x + 
+      window[i*size + index] * 
+      in[inp*(nbatch+windowBlocks-1)*size + (batch+i)*size + index].x;
+    out[inp*nbatch*size + batch*size + index].y = 
+      out[inp*nbatch*size + batch*size + index].y + 
+      window[i*size + index] * 
+      in[inp*(nbatch+windowBlocks-1)*size + (batch+i)*size + index].y;
+  }
+}
+
+
 #if 0 /* Newer but somehow slower method */
 __global__ void overlap_add_kernel(float *out, float *in, float *window)
 {
@@ -80,6 +109,10 @@ __global__ void oversample_decimate_kernel(float *out, float *in, float *window,
 
 }
 
+__global__ void complex_oversample_decimate_kernel(cufftComplex *out, cufftComplex *in, float *window, int windowBlocks)
+{
+
+}
 
 /* Kernel for reading unsigned data into GPU */
 __global__ void unpackUnsignedData_kernel(unsigned char *buf, float *out)
@@ -232,8 +265,9 @@ __global__ void normalise_float_kernel(float *buf, float normaliser)
 
 
 /* GPU correlator, will replace the CPU correlator if GPU is enabled */
-void gpu_corr( int nchan, int ninp, int ncross, int windowBlocks, int nbatch,
-    int prod_type, char *polyMethod, float *cuda_inp_buf, float *cuda_window_buf, 
+void gpu_corr( int nchan, int ninp, int ncross, 
+    int windowBlocks, int nbatch, int prod_type, char *polyMethod, 
+    float *cuda_inp_buf, float *cuda_window_buf, 
     float *cuda_poly_buf, cufftComplex *cuda_ft_buf, 
     cufftComplex *cuda_cross_corr, float *cuda_auto_corr,
     float *poly_time, float *fft_time, float *cmac_time )
@@ -260,6 +294,37 @@ void gpu_corr( int nchan, int ninp, int ncross, int windowBlocks, int nbatch,
   cudaThreadSynchronize();
   *cmac_time += elapsed_time(&thetime);
 }
+
+void gpu_corr_complex( int nchan, int ninp, int ncross, 
+    int windowBlocks, int nbatch, int prod_type, char *polyMethod, 
+    cufftComplex *cuda_complexinp_buf, float *cuda_window_buf, 
+    cufftComplex *cuda_complexpoly_buf, cufftComplex *cuda_ft_buf, 
+    cufftComplex *cuda_cross_corr, float *cuda_auto_corr,
+    float *poly_time, float *fft_time, float *cmac_time )
+{
+  struct timeval thetime;
+
+  /* Multiply the data with the window function */
+  gettimeofday(&thetime, NULL);
+  complex_polyphase_gpu( ninp, windowBlocks, nchan, nbatch, polyMethod, 
+      cuda_complexpoly_buf, cuda_complexinp_buf, cuda_window_buf);
+  cudaDeviceSynchronize();
+  *poly_time += elapsed_time(&thetime);
+
+  /* Perform CUDA FFT */
+  gettimeofday(&thetime, NULL);
+  do_complex_CUFFT(nchan, ninp, nbatch, cuda_complexpoly_buf, cuda_ft_buf);
+  cudaDeviceSynchronize();
+  *fft_time += elapsed_time(&thetime);
+
+  /* Perform CMAC */
+  gettimeofday(&thetime, NULL);
+  do_CUDA_CMAC(nchan, ninp, ncross, nbatch, prod_type, 
+      cuda_ft_buf, cuda_cross_corr, cuda_auto_corr);
+  cudaDeviceSynchronize();
+  *cmac_time += elapsed_time(&thetime);
+}
+
 
 /* Reads memory into GPU in batch */
 #if USE_DADA
@@ -455,6 +520,59 @@ void polyphase_gpu(int ninp, int windowBlocks, int size, int nbatch,
     fprintf( stderr, "Invalid polyphase method: %s\n", polyMethod );
     exit(1);
   }
+}
+
+/* Complex polyphase output using the method of choice */
+void complex_polyphase_gpu(int ninp, int windowBlocks, int size, 
+    int nbatch, char *polyMethod, 
+    cufftComplex *cuda_poly_buf, cufftComplex *cuda_inp_buf, 
+    float *cuda_window_buf)
+{
+  /* Hard coded number for determining the parallelism of the method */
+  int numThreads = 128;
+  cudaMemset( cuda_poly_buf, 0, ninp * size * nbatch * sizeof(cufftComplex) );
+
+  /* Polyphase calculation by adding up the weighted time segments */
+  if( strcmp(polyMethod, "weighted-overlap-add") == 0 )
+  {
+    /* Thread numbers should be multiple of 32 for best efficiency */
+    /* Assume also windowBlocks is a power of 2 */
+    dim3 threads( numThreads, 1, 1 );
+    dim3 blocks( size / numThreads, nbatch, ninp );
+    complex_overlap_add_kernel<<< blocks, threads >>>(cuda_poly_buf, 
+	cuda_inp_buf, cuda_window_buf, windowBlocks);
+  }
+
+  /* Polyphase calculation by performing FFT at higher sample rate and decimate */
+  /* FIXME: Not yet implemented */
+  else if( strcmp(polyMethod, "oversample-decimate") == 0 )
+  {
+    dim3 threads( numThreads, 1, 1 );
+    dim3 blocks( size / numThreads, nbatch, ninp );
+    complex_oversample_decimate_kernel<<< blocks, threads >>>(cuda_poly_buf, cuda_inp_buf, 
+	cuda_window_buf, windowBlocks);
+  }
+  else
+  {
+    fprintf( stderr, "Invalid polyphase method: %s\n", polyMethod );
+    exit(1);
+  }
+}
+
+/* CUDA FFT, will perform parallel execution if ninp > 1 */
+void do_complex_CUFFT(int nchan, int ninp, int nbatch, cufftComplex *cuda_poly_buf, cufftComplex *cuda_ft_buf)
+{
+  static cufftHandle plan;
+  static int doneplan = 0;
+
+  if( !doneplan ) 
+  {
+    /* Setup the FFT plan for CUDA, it will do parallel FFT if ninp > 1 */
+    cufftPlan1d( &plan, nchan, CUFFT_C2C, ninp * nbatch );
+    doneplan = 1;
+  }
+
+  cufftExecC2C( plan, cuda_poly_buf, cuda_ft_buf, CUFFT_FORWARD );
 }
 
 /* CUDA FFT, will perform parallel execution if ninp > 1 */
