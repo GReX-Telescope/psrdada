@@ -130,8 +130,26 @@ __global__ void unpackUnsignedData_kernel(unsigned char *buf, float *out)
     (float)( buf[batch*npoints*ninp + index*ninp + inp] - 128 );
 }
 
+/* Unpack complex data into GPU memory */
+__global__ void unpackUnsignedComplexData_kernel(unsigned char *buf, cufftComplex *out)
+{
+  int npoints = blockDim.x * gridDim.x;
+  int index = blockIdx.x * blockDim.x + threadIdx.x;
+  
+  int nbatch = gridDim.y;
+  int batch = blockIdx.y; 
+  
+  int ninp = gridDim.z;
+  int inp = blockIdx.z; 
+
+  out[inp*nbatch*npoints + batch*npoints + index].x = 
+    (float)( buf[batch*npoints*2*ninp + index*ninp*2 + inp*2] - 128 );
+  out[inp*nbatch*npoints + batch*npoints + index].y =
+    (float)( buf[batch*npoints*2*ninp + index*ninp*2 + inp*2 + 1] - 128 );
+}
+
 /* Kernel for reading signed data into GPU */
-/* FIXME */
+/* FIXME possibly buggy */
 __global__ void unpackSignedData_kernel(unsigned char *buf, float *out)
 {
   int npoints = blockDim.x * gridDim.x;
@@ -145,6 +163,26 @@ __global__ void unpackSignedData_kernel(unsigned char *buf, float *out)
 
   out[inp*nbatch*npoints + batch*npoints + index] = 
     ( (char *)buf )[batch*npoints*ninp + index*ninp + inp];
+}
+
+/* Unpack signed complex data */
+/* FIXME possibly buggy */
+__global__ void unpackSignedComplexData_kernel(unsigned char *buf, cufftComplex *out)
+{
+  int npoints = blockDim.x * gridDim.x;
+  int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+  int nbatch = gridDim.y;
+  int batch = blockIdx.y;
+
+  int ninp = gridDim.z;
+  int inp = blockIdx.z;
+
+  out[inp*nbatch*npoints + batch*npoints + index].x = 
+    ( (char *)buf )[batch*npoints*2*ninp + index*ninp*2 + inp*2];
+  out[inp*nbatch*npoints + batch*npoints + index].y = 
+    ( (char *)buf )[batch*npoints*2*ninp + index*ninp*2 + inp*2 + 1];
+
 }
 
 /* Kernel for performing CMAC auto correlation */
@@ -415,7 +453,110 @@ int readDataToGPU(int nchan, int ninp, int windowBlocks, int nbatch, int bits_pe
   else if( wordtype == 1 )
     unpackSignedData_kernel<<< blocks, threads >>>(cudaBuffer, &cuda_inp_buf[(windowBlocks-1) * nchan * 2]);
 
-  cudaThreadSynchronize();
+  cudaDeviceSynchronize();
+  unpackTime += elapsed_time(&thetime);
+  totalTime += elapsed_time(&starttime);
+
+  //fprintf( stderr, "File read: %f, cudaMemcpy: %f, data unpack: %f, total: %f\n", 
+    //  fileReadTime, cudaCopyTime, unpackTime, totalTime );
+
+  return 0;
+}
+
+/* Reads complex data input */
+#if USE_DADA
+int readComplexDataToGPU(int nchan, int ninp, int windowBlocks, int nbatch, int bits_per_samp, dada_hdu_t *hdu, cufftComplex *cuda_inp_buf, int debug, int wordtype)
+#else
+int readComplexDataToGPU(int nchan, int ninp, int windowBlocks, int nbatch, int bits_per_samp, FILE *fpin, cufftComplex *cuda_inp_buf, int debug, int wordtype)
+#endif
+{
+  int i;
+  static int init = 0, ntoread = 0;
+  static unsigned char *buffer = NULL;
+  static unsigned char *cudaBuffer;
+
+  int nread;
+  struct timeval starttime;
+
+  gettimeofday( &starttime, NULL );
+
+  if( init == 0 )
+  {
+    ntoread = ninp * nchan * 2 * nbatch * bits_per_samp / 8;
+    init = 1;
+    buffer = (unsigned char *)malloc(ntoread);
+    cudaMalloc( (void **)&cudaBuffer, ntoread );
+    if( debug )
+      fprintf( stderr, "size of read buffer: %d bytes\n", ntoread );
+  }
+
+  struct timeval thetime;
+  float fileReadTime=0, cudaCopyTime=0, totalTime=0, unpackTime=0;
+
+  gettimeofday( &thetime, NULL );
+#if USE_DADA
+  nread = ipcio_read( hdu->data_block, (char *)buffer, ntoread );
+#else
+  nread = fread( buffer, 1, ntoread, fpin );
+#endif
+  fileReadTime += elapsed_time(&thetime);
+  
+
+  if( nread < ntoread ) 
+  {
+    free( buffer );
+    cudaFree( cudaBuffer );
+    return 1; 
+  }
+
+  /* Call the appropriate function base of wordtype */
+  /* Experiments show that CUDA kernel is slower than CPU with ninp == 1.
+   * Still need to test with ninp > 1 */
+  
+  /*if( ninp == 1 && nbatch == 1 )
+  {
+    for( chan = 0; chan < nchan * 2; chan++ )
+    {
+      temp[chan] = (float)(buffer[chan] - 128);
+    }
+    cudaMemcpy(&cuda_inp_buf[nchan*2*tail], temp, nchan * 2 * sizeof(float), 
+	cudaMemcpyHostToDevice);
+  }
+
+  else*/
+
+  gettimeofday( &thetime, NULL );
+  cudaMemcpy( cudaBuffer, buffer, ntoread, cudaMemcpyHostToDevice );
+  /* Copy the last (windowBlocks-1) chunks to the beginning for each stream.
+   * Do it after the first reading.
+   */
+  if( init == 1 )
+  {
+    for( i = 0; i < ninp; i++ )
+      cudaMemcpy( &cuda_inp_buf[i * (nbatch+windowBlocks-1) * nchan], 
+	  &cuda_inp_buf[i*(nbatch+windowBlocks-1)*nchan + (nbatch)*nchan], 
+	  (windowBlocks-1) * nchan * sizeof(cufftComplex), cudaMemcpyDeviceToDevice );
+  }
+  cudaCopyTime += elapsed_time(&thetime);
+  
+  /* Thread number should be multiple of 32 for best efficiency */
+  /* Assume nchan to be power of 2 */
+  dim3 threads( 128, 1, 1 );
+  dim3 blocks( nchan/ 128, nbatch, ninp );
+  
+  /* cuda_inp_buf needs to be offset by (windowBlocks-1) 
+     chunks due to the circular queue design.
+     The first (windowBlocks-1) chunks are supposed to be 
+     previously processed.
+   */
+  gettimeofday( &thetime, NULL );
+  if( wordtype == 0 )
+    unpackUnsignedComplexData_kernel<<< blocks, threads >>>(cudaBuffer, &cuda_inp_buf[(windowBlocks-1) * nchan]);
+  /* FIXME: Not sure about the correctness of signed data unpacking */
+  else if( wordtype == 1 )
+    unpackSignedComplexData_kernel<<< blocks, threads >>>(cudaBuffer, &cuda_inp_buf[(windowBlocks-1) * nchan]);
+
+  cudaDeviceSynchronize();
   unpackTime += elapsed_time(&thetime);
   totalTime += elapsed_time(&starttime);
 
