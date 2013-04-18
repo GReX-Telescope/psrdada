@@ -368,23 +368,22 @@ int main(int argc, char * const argv[])
     if( !complexinput )
     {
 #if USE_DADA
-    res = readDataToGPU( nchan, ninp, windowBlocks, nbatch, bits_per_samp, hdu, 
-	cuda_inp_buf, debug, wordtype );
+      res = readDataToGPU( nchan, ninp, windowBlocks, nbatch, bits_per_samp, hdu, 
+	  cuda_inp_buf, debug, wordtype );
 #else
-    res = readDataToGPU( nchan, ninp, windowBlocks, nbatch, bits_per_samp, finp, 
-	cuda_inp_buf, debug, wordtype );
+      res = readDataToGPU( nchan, ninp, windowBlocks, nbatch, bits_per_samp, finp, 
+	  cuda_inp_buf, debug, wordtype );
 #endif
     }
     else
     {
 #if USE_DADA
-    res = readComplexDataToGPU( nchan, ninp, windowBlocks, nbatch, bits_per_samp, hdu, 
-	cuda_inp_buf, debug, wordtype );
+      res = readComplexDataToGPU( nchan, ninp, windowBlocks, nbatch, bits_per_samp, hdu, 
+	  cuda_complexinp_buf, debug, wordtype );
 #else
-    res = readComplexDataToGPU( nchan, ninp, windowBlocks, nbatch, bits_per_samp, finp, 
-	cuda_inp_buf, debug, wordtype );
+      res = readComplexDataToGPU( nchan, ninp, windowBlocks, nbatch, bits_per_samp, finp, 
+	  cuda_complexinp_buf, debug, wordtype );
 #endif
-
     }
     if( res != 0 )
       filedone = 1;
