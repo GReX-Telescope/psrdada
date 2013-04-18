@@ -567,16 +567,16 @@ void make_window(float *window_buf, int ntaps, int nchan, int windowBlocks, char
       0.276414e-1,-0.2589756e-2,
       -0.5054526e-2,0.1050167e-2};
     float fulltap[ntaps];
-    complex float *tapfft;
-    complex float *windowTemp;
+    fftwf_complex *tapfft;
+    fftwf_complex *windowTemp;
     float *temp;
     
     int numPoints = 2 * nchan * windowBlocks;
     int shiftIndex;
 
     /* Allocate the temporary array for the window function initilized to 0's */
-    tapfft = (complex float *)calloc( ntaps/2 + 1, sizeof(complex float) );
-    windowTemp = (complex float *)calloc( numPoints/2 + 1, sizeof(complex float) );
+    tapfft = (fftwf_complex *)calloc( ntaps/2 + 1, sizeof(fftwf_complex) );
+    windowTemp = (fftwf_complex *)calloc( numPoints/2 + 1, sizeof(fftwf_complex) );
     temp = (float *)malloc( numPoints * sizeof(float) );
 
     for( i = 0; i < ntaps/2; i++ )
@@ -590,7 +590,7 @@ void make_window(float *window_buf, int ntaps, int nchan, int windowBlocks, char
     perform_forward_fft(fulltap, tapfft, ntaps);
 
     /* Put the taps into an array with intended size and prepare for inverse fft */     
-    memcpy(windowTemp, tapfft, (ntaps/2+1) * sizeof(complex float));
+    memcpy(windowTemp, tapfft, (ntaps/2+1) * sizeof(fftwf_complex));
     perform_inverse_fft(windowTemp, temp, numPoints);
 
     /* Normalisation, multiplied by numPoints / ntaps for loss of amplitude in 
@@ -615,9 +615,13 @@ void make_window(float *window_buf, int ntaps, int nchan, int windowBlocks, char
     }
     
     /* Free up the memory */
-    free(tapfft);
     free(temp);
-    free(windowTemp);
+    
+    /* FIXME: Bug, not sure why, these complex type variables 
+     * cannot be freed 
+     */
+    //free(tapfft);
+    //free(windowTemp);
   }
   /* Use the hamming/hanning window function */
   else if( windowType == 'h' )
