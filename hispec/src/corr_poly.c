@@ -365,6 +365,8 @@ int main(int argc, char * const argv[])
 #if USE_GPU
     /* If using GPU, read data straight into GPU memory */
 
+    if( !complexinput )
+    {
 #if USE_DADA
     res = readDataToGPU( nchan, ninp, windowBlocks, nbatch, bits_per_samp, hdu, 
 	cuda_inp_buf, debug, wordtype );
@@ -372,6 +374,18 @@ int main(int argc, char * const argv[])
     res = readDataToGPU( nchan, ninp, windowBlocks, nbatch, bits_per_samp, finp, 
 	cuda_inp_buf, debug, wordtype );
 #endif
+    }
+    else
+    {
+#if USE_DADA
+    res = readComplexDataToGPU( nchan, ninp, windowBlocks, nbatch, bits_per_samp, hdu, 
+	cuda_inp_buf, debug, wordtype );
+#else
+    res = readComplexDataToGPU( nchan, ninp, windowBlocks, nbatch, bits_per_samp, finp, 
+	cuda_inp_buf, debug, wordtype );
+#endif
+
+    }
     if( res != 0 )
       filedone = 1;
 

@@ -29,6 +29,12 @@ int readDataToGPU(int nchan, int ninp, int windowBlocks, int nbatch, int bits_pe
 int readDataToGPU(int nchan, int ninp, int windowBlocks, int nbatch, int bits_per_samp, FILE *fpin, float *cuda_inp_buf, int debug, int wordtype);
 #endif
 
+#if USE_DADA
+int readComplexDataToGPU(int nchan, int ninp, int windowBlocks, int nbatch, int bits_per_samp, dada_hdu_t *hdu, cufftComplex *cuda_inp_buf, int debug, int wordtype);
+#else
+int readComplexDataToGPU(int nchan, int ninp, int windowBlocks, int nbatch, int bits_per_samp, FILE *fpin, cufftComplex *cuda_inp_buf, int debug, int wordtype);
+#endif
+
 int unpackDigitisedDataToGPU(int nchan, int ninp, int windowBlocks, int nbatch, int bits_per_samp, unsigned char *digitised_data, float *cuda_inp_buf, int debug, int wordtype);
 
 void writeGPUOutput(FILE *fout_ac, FILE *fout_cc, int ninp, int nchan, int ncross, int naver, int prod_type, int nbatch, int isLast, float normaliser, int yaxis_size, int rows_per_refresh, cufftComplex *cuda_cross_corr, float *cuda_auto_corr);
