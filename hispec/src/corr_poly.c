@@ -495,12 +495,21 @@ int main(int argc, char * const argv[])
 #else
   fclose(finp);
 #endif
-  if(fout_ac !=NULL) fclose(fout_ac);
-  if(fout_cc !=NULL) fclose(fout_cc);
+  /* Again, unfreeable memory or uncloseable files for some reason */
+  //if(fout_ac !=NULL) fclose(fout_ac);
+  //if(fout_cc !=NULL) fclose(fout_cc);
 #if USE_GPU
   /* Free GPU memory */
-  cudaFree(cuda_inp_buf);
-  cudaFree(cuda_poly_buf);
+  if( !complexinput )
+  {
+    cudaFree(cuda_inp_buf);
+    cudaFree(cuda_poly_buf);
+  }
+  else
+  {
+    cudaFree( cuda_complexinp_buf );
+    cudaFree( cuda_complexpoly_buf );
+  }
   cudaFree(cuda_ft_buf);
   if( cuda_auto_corr != NULL ) cudaFree(cuda_auto_corr);
   if( cuda_cross_corr != NULL ) cudaFree(cuda_cross_corr);
