@@ -104,7 +104,7 @@ enum wordtypes {UNSIGNED_BYTE, SIGNED_BYTE, UNSIGNED_4BIT, SIGNED_4BIT};
 void perform_forward_fft(float *in, fftwf_complex *out, int size);
 void perform_inverse_fft(fftwf_complex *in, float *out, int size);
 
-void make_window(float *window_buf, int ntaps, int nchan, int windowBlocks, char windowType);
+void make_window(float *window_buf, int ntaps, int windowSize, int windowBlocks, char windowType);
 
 void cpu_corr();
 void polyphase_cpu(float **out, float **in, float *window, int size, int windowBlocks, int ninp, int qHead);
@@ -133,7 +133,7 @@ int ninp=DEFAULT_NINP;  /* input of inputs */
 int debug=0;            /* turn debugging info on */
 int naver=DEFAULT_NAV;  /* number of input spectra to accumulate before writing an average */
 int prod_type='A';      /* correlation product type: B: both, C: cross, A: auto */
-int wordtype=0,bits_per_samp=0;
+int wordtype=1,bits_per_samp=0;
 char infilename[BUFSIZ], outfilename[BUFSIZ];
 static fftwf_plan *plans;
 key_t dada_key = DADA_DEFAULT_BLOCK_KEY;
@@ -562,7 +562,7 @@ void perform_inverse_fft(fftwf_complex *in, float *out, int size)
 /*
  * Create the window function for FFT
  */
-void make_window(float *window_buf, int ntaps, int nchan, int windowBlocks, char windowType)
+void make_window(float *window_buf, int ntaps, int windowSize, int windowBlocks, char windowType)
 {
   int i;
 
@@ -580,7 +580,7 @@ void make_window(float *window_buf, int ntaps, int nchan, int windowBlocks, char
     fftwf_complex *windowTemp;
     float *temp;
     
-    int numPoints = 2 * nchan * windowBlocks;
+    int numPoints = windowSize * windowBlocks;
     int shiftIndex;
 
     /* Allocate the temporary array for the window function initilized to 0's */
@@ -638,8 +638,8 @@ void make_window(float *window_buf, int ntaps, int nchan, int windowBlocks, char
     /* hamming window function */
     float *hamming;
     float *sincfunc;
-    int M = nchan * 2 * windowBlocks; /* Total number of window points */
-    int N = nchan * 2; /* Intended FFT length */
+    int M = windowSize * windowBlocks; /* Total number of window points */
+    int N = windowSize; /* Intended FFT length */
 
     /* Quite an inefficient way to do it, but it is easier to plot/debug */
     hamming = (float *)malloc( M * sizeof(float) );

@@ -13,7 +13,7 @@
 #include "dada_udp.h"
 #include "dada_generator.h"
 
-#define TEST_MODE 0
+//#define TEST_MODE 0
 
 #ifdef TEST_MODE
 

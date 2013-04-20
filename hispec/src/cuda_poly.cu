@@ -115,7 +115,8 @@ __global__ void complex_oversample_decimate_kernel(cufftComplex *out, cufftCompl
 }
 
 /* Kernel for reading unsigned data into GPU */
-__global__ void unpackUnsignedData_kernel(unsigned char *buf, float *out)
+/* For format where the data from different inputs interleave each other */
+/*__global__ void unpackUnsignedData_kernel(unsigned char *buf, float *out)
 {
   int npoints = blockDim.x * gridDim.x;
   int index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -128,6 +129,22 @@ __global__ void unpackUnsignedData_kernel(unsigned char *buf, float *out)
 
   out[inp*nbatch*npoints + batch*npoints + index] = 
     (float)( buf[batch*npoints*ninp + index*ninp + inp] - 128 );
+}*/
+
+/* For format where data from different inputs do not interleave */
+__global__ void unpackUnsignedData_kernel(unsigned char *buf, float *out)
+{
+  int npoints = blockDim.x * gridDim.x;
+  int index = blockIdx.x * blockDim.x + threadIdx.x;
+  
+  int nbatch = gridDim.y;
+  int batch = blockIdx.y; 
+  
+  int ninp = gridDim.z;
+  int inp = blockIdx.z; 
+
+  out[inp*nbatch*npoints + batch*npoints + index] = 
+    (float)( buf[batch*ninp*npoints + inp*npoints + index] - 128 );
 }
 
 /* Unpack complex data into GPU memory */
@@ -150,7 +167,8 @@ __global__ void unpackUnsignedComplexData_kernel(unsigned char *buf, cufftComple
 
 /* Kernel for reading signed data into GPU */
 /* FIXME possibly buggy */
-__global__ void unpackSignedData_kernel(unsigned char *buf, float *out)
+/* For interleave data between inputs */
+/*__global__ void unpackSignedData_kernel(char *buf, float *out)
 {
   int npoints = blockDim.x * gridDim.x;
   int index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -163,7 +181,24 @@ __global__ void unpackSignedData_kernel(unsigned char *buf, float *out)
 
   out[inp*nbatch*npoints + batch*npoints + index] = 
     ( (char *)buf )[batch*npoints*ninp + index*ninp + inp];
+}*/
+
+/* For format where data from different inputs do not interleave */
+__global__ void unpackSignedData_kernel(char *buf, float *out)
+{
+  int npoints = blockDim.x * gridDim.x;
+  int index = blockIdx.x * blockDim.x + threadIdx.x;
+  
+  int nbatch = gridDim.y;
+  int batch = blockIdx.y; 
+  
+  int ninp = gridDim.z;
+  int inp = blockIdx.z; 
+
+  out[inp*nbatch*npoints + batch*npoints + index] = 
+    (float)( buf[batch*ninp*npoints + inp*npoints + index] );
 }
+
 
 /* Unpack signed complex data */
 /* FIXME possibly buggy */
@@ -373,8 +408,8 @@ int readDataToGPU(int nchan, int ninp, int windowBlocks, int nbatch, int bits_pe
 {
   int i;
   static int init = 0, ntoread = 0;
-  static unsigned char *buffer = NULL;
-  static unsigned char *cudaBuffer;
+  static char *buffer = NULL;
+  static char *cudaBuffer;
 
   int nread;
   struct timeval starttime;
@@ -384,8 +419,7 @@ int readDataToGPU(int nchan, int ninp, int windowBlocks, int nbatch, int bits_pe
   if( init == 0 )
   {
     ntoread = ninp * nchan * 2 * nbatch * bits_per_samp / 8;
-    init = 1;
-    buffer = (unsigned char *)malloc(ntoread);
+    buffer = (char *)malloc(ntoread);
     cudaMalloc( (void **)&cudaBuffer, ntoread );
     if( debug )
       fprintf( stderr, "size of read buffer: %d bytes\n", ntoread );
@@ -396,7 +430,7 @@ int readDataToGPU(int nchan, int ninp, int windowBlocks, int nbatch, int bits_pe
 
   gettimeofday( &thetime, NULL );
 #if USE_DADA
-  nread = ipcio_read( hdu->data_block, (char *)buffer, ntoread );
+  nread = ipcio_read( hdu->data_block, buffer, ntoread );
 #else
   nread = fread( buffer, 1, ntoread, fpin );
 #endif
@@ -442,14 +476,14 @@ int readDataToGPU(int nchan, int ninp, int windowBlocks, int nbatch, int bits_pe
   
   /* Thread number should be multiple of 32 for best efficiency */
   /* Assume nchan to be power of 2 */
-  dim3 threads( 128, 1, 1 );
-  dim3 blocks( nchan * 2 / 128, nbatch, ninp );
+  dim3 threads( 256, 1, 1 );
+  dim3 blocks( nchan * 2 / 256, nbatch, ninp );
   
   /* cuda_inp_buf needs to be offset by (windowBlocks-1) chunks due to the circular queue design */
   gettimeofday( &thetime, NULL );
   if( wordtype == 0 )
-    unpackUnsignedData_kernel<<< blocks, threads >>>(cudaBuffer, &cuda_inp_buf[(windowBlocks-1) * nchan * 2]);
-  /* FIXME: Not sure about the correctness of signed data unpacking */
+    unpackUnsignedData_kernel<<< blocks, threads >>>((unsigned char*)cudaBuffer, &cuda_inp_buf[(windowBlocks-1) * nchan * 2]);
+
   else if( wordtype == 1 )
     unpackSignedData_kernel<<< blocks, threads >>>(cudaBuffer, &cuda_inp_buf[(windowBlocks-1) * nchan * 2]);
 
@@ -459,6 +493,7 @@ int readDataToGPU(int nchan, int ninp, int windowBlocks, int nbatch, int bits_pe
 
   //fprintf( stderr, "File read: %f, cudaMemcpy: %f, data unpack: %f, total: %f\n", 
     //  fileReadTime, cudaCopyTime, unpackTime, totalTime );
+  init = 1;
 
   return 0;
 }
@@ -572,7 +607,7 @@ int unpackDigitisedDataToGPU(int nchan, int ninp, int windowBlocks, int nbatch, 
 {
   int i;
   static int init = 0, ntoread = 0;
-  static unsigned char *cudaBuffer;
+  static char *cudaBuffer;
   //static unsigned char *buffer;
   static int numThreads = 64;
 
@@ -614,7 +649,7 @@ int unpackDigitisedDataToGPU(int nchan, int ninp, int windowBlocks, int nbatch, 
   /* cuda_inp_buf needs to be offset by (windowBlocks-1) chunks due to the algorithm design */
   gettimeofday( &thetime, NULL );
   if( wordtype == 0 )
-    unpackUnsignedData_kernel<<< blocks, threads >>>(cudaBuffer, &cuda_inp_buf[(windowBlocks-1) * nchan * 2]);
+    unpackUnsignedData_kernel<<< blocks, threads >>>((unsigned char*)cudaBuffer, &cuda_inp_buf[(windowBlocks-1) * nchan * 2]);
   /* FIXME: Not sure about the correctness of signed data unpacking */
   else if( wordtype == 1 )
     unpackSignedData_kernel<<< blocks, threads >>>(cudaBuffer, &cuda_inp_buf[(windowBlocks-1) * nchan * 2]);
@@ -795,8 +830,6 @@ void writeGPUOutput(FILE *fout_ac, FILE *fout_cc, int ninp, int nchan,
 
   if( init )
   {
-    //fp = fopen( "temp.csv", "w" );
-
     init = 0;
     ctemp_buf = (float2 *)malloc( yaxis_size * nchan * ncross * sizeof(float2) );
     temp_buf = (float *)malloc( yaxis_size * nchan * ninp * sizeof(float) );
