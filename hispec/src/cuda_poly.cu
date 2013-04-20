@@ -160,9 +160,9 @@ __global__ void unpackUnsignedComplexData_kernel(unsigned char *buf, cufftComple
   int inp = blockIdx.z; 
 
   out[inp*nbatch*npoints + batch*npoints + index].x = 
-    (float *)(buf[batch*npoints*2*ninp + inp*npoints*2 + index*2] - 128);
+    (float)(buf[batch*npoints*2*ninp + inp*npoints*2 + index*2] - 128);
   out[inp*nbatch*npoints + batch*npoints + index].y = 
-    (float *)(buf[batch*npoints*2*ninp + inp*npoints*2 + index*2 + 1] - 128);
+    (float)(buf[batch*npoints*2*ninp + inp*npoints*2 + index*2 + 1] - 128);
 }
 
 /* Kernel for reading signed data into GPU */
@@ -213,9 +213,9 @@ __global__ void unpackSignedComplexData_kernel(char *buf, cufftComplex *out)
   int inp = blockIdx.z;
 
   out[inp*nbatch*npoints + batch*npoints + index].x = 
-    (float *)buf[batch*npoints*2*ninp + inp*npoints*2 + index*2];
+    (float)buf[batch*npoints*2*ninp + inp*npoints*2 + index*2];
   out[inp*nbatch*npoints + batch*npoints + index].y = 
-    (float *)buf[batch*npoints*2*ninp + inp*npoints*2 + index*2 + 1];
+    (float)buf[batch*npoints*2*ninp + inp*npoints*2 + index*2 + 1];
 
 }
 
@@ -517,7 +517,7 @@ int readComplexDataToGPU(int nchan, int ninp, int windowBlocks, int nbatch, int 
   if( init == 0 )
   {
     ntoread = ninp * nchan * 2 * nbatch * bits_per_samp / 8;
-    buffer = (unsigned char *)malloc(ntoread);
+    buffer = (char *)malloc(ntoread);
     cudaMalloc( (void **)&cudaBuffer, ntoread );
     if( debug )
       fprintf( stderr, "size of read buffer: %d bytes\n", ntoread );
