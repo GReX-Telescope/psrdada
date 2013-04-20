@@ -329,9 +329,10 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, int64_t* size)
         }
 
         if (udpdb->received != HISPEC_UDP_PAYLOAD_BYTES) {
-          multilog (log, LOG_ERR, "UDP packet size was incorrect (%"PRIu64" != %d)\n", udpdb->received, HISPEC_UDP_PAYLOAD_BYTES);
-          *size = DADA_ERROR_HARD;
-          break;
+          multilog (log, LOG_WARNING, "UDP packet size was incorrect (%"PRIu64" != %d)\n", udpdb->received, HISPEC_UDP_PAYLOAD_BYTES);
+	  ignore_packet = 1;
+          //*size = DADA_ERROR_HARD;
+          //break;
         }
       }
 
