@@ -160,9 +160,9 @@ __global__ void unpackUnsignedComplexData_kernel(unsigned char *buf, cufftComple
   int inp = blockIdx.z; 
 
   out[inp*nbatch*npoints + batch*npoints + index].x = 
-    (float)( buf[batch*npoints*2*ninp + index*ninp*2 + inp*2] - 128 );
-  out[inp*nbatch*npoints + batch*npoints + index].y =
-    (float)( buf[batch*npoints*2*ninp + index*ninp*2 + inp*2 + 1] - 128 );
+    (float *)(buf[batch*npoints*2*ninp + inp*npoints*2 + index*2] - 128);
+  out[inp*nbatch*npoints + batch*npoints + index].y = 
+    (float *)(buf[batch*npoints*2*ninp + inp*npoints*2 + index*2 + 1] - 128);
 }
 
 /* Kernel for reading signed data into GPU */
@@ -201,8 +201,7 @@ __global__ void unpackSignedData_kernel(char *buf, float *out)
 
 
 /* Unpack signed complex data */
-/* FIXME possibly buggy */
-__global__ void unpackSignedComplexData_kernel(unsigned char *buf, cufftComplex *out)
+__global__ void unpackSignedComplexData_kernel(char *buf, cufftComplex *out)
 {
   int npoints = blockDim.x * gridDim.x;
   int index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -214,9 +213,9 @@ __global__ void unpackSignedComplexData_kernel(unsigned char *buf, cufftComplex 
   int inp = blockIdx.z;
 
   out[inp*nbatch*npoints + batch*npoints + index].x = 
-    ( (char *)buf )[batch*npoints*2*ninp + index*ninp*2 + inp*2];
+    (float *)buf[batch*npoints*2*ninp + inp*npoints*2 + index*2];
   out[inp*nbatch*npoints + batch*npoints + index].y = 
-    ( (char *)buf )[batch*npoints*2*ninp + index*ninp*2 + inp*2 + 1];
+    (float *)buf[batch*npoints*2*ninp + inp*npoints*2 + index*2 + 1];
 
 }
 
@@ -507,8 +506,8 @@ int readComplexDataToGPU(int nchan, int ninp, int windowBlocks, int nbatch, int 
 {
   int i;
   static int init = 0, ntoread = 0;
-  static unsigned char *buffer = NULL;
-  static unsigned char *cudaBuffer;
+  static char *buffer = NULL;
+  static char *cudaBuffer;
 
   int nread;
   struct timeval starttime;
@@ -518,7 +517,6 @@ int readComplexDataToGPU(int nchan, int ninp, int windowBlocks, int nbatch, int 
   if( init == 0 )
   {
     ntoread = ninp * nchan * 2 * nbatch * bits_per_samp / 8;
-    init = 1;
     buffer = (unsigned char *)malloc(ntoread);
     cudaMalloc( (void **)&cudaBuffer, ntoread );
     if( debug )
@@ -530,7 +528,7 @@ int readComplexDataToGPU(int nchan, int ninp, int windowBlocks, int nbatch, int 
 
   gettimeofday( &thetime, NULL );
 #if USE_DADA
-  nread = ipcio_read( hdu->data_block, (char *)buffer, ntoread );
+  nread = ipcio_read( hdu->data_block, buffer, ntoread );
 #else
   nread = fread( buffer, 1, ntoread, fpin );
 #endif
@@ -576,8 +574,8 @@ int readComplexDataToGPU(int nchan, int ninp, int windowBlocks, int nbatch, int 
   
   /* Thread number should be multiple of 32 for best efficiency */
   /* Assume nchan to be power of 2 */
-  dim3 threads( 128, 1, 1 );
-  dim3 blocks( nchan/ 128, nbatch, ninp );
+  dim3 threads( 256, 1, 1 );
+  dim3 blocks( nchan/ 256, nbatch, ninp );
   
   /* cuda_inp_buf needs to be offset by (windowBlocks-1) 
      chunks due to the circular queue design.
@@ -586,7 +584,7 @@ int readComplexDataToGPU(int nchan, int ninp, int windowBlocks, int nbatch, int 
    */
   gettimeofday( &thetime, NULL );
   if( wordtype == 0 )
-    unpackUnsignedComplexData_kernel<<< blocks, threads >>>(cudaBuffer, &cuda_inp_buf[(windowBlocks-1) * nchan]);
+    unpackUnsignedComplexData_kernel<<< blocks, threads >>>((unsigned char *)cudaBuffer, &cuda_inp_buf[(windowBlocks-1) * nchan]);
   /* FIXME: Not sure about the correctness of signed data unpacking */
   else if( wordtype == 1 )
     unpackSignedComplexData_kernel<<< blocks, threads >>>(cudaBuffer, &cuda_inp_buf[(windowBlocks-1) * nchan]);
@@ -597,6 +595,8 @@ int readComplexDataToGPU(int nchan, int ninp, int windowBlocks, int nbatch, int 
 
   //fprintf( stderr, "File read: %f, cudaMemcpy: %f, data unpack: %f, total: %f\n", 
     //  fileReadTime, cudaCopyTime, unpackTime, totalTime );
+
+  init = 1;
 
   return 0;
 }
