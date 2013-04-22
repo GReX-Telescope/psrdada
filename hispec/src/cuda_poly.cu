@@ -847,8 +847,9 @@ void writeGPUOutput(FILE *fout_ac, FILE *fout_cc, int ninp, int nchan,
     /* Normalisation, number of points are obtained from the threads and blocks number */
     normalise_float_kernel<<< blocks, threads >>>(cuda_auto_corr, normaliser);
     
-    /* Extract the real numbers, for auto correlation only */
-    cudaMemcpy( &temp_buf[row*nchan*ninp], cuda_auto_corr, nchan * ninp * sizeof(float), cudaMemcpyDeviceToHost );
+    /* Copy the intended output from GPU memory, and shifted */
+    cudaMemcpy( &temp_buf[row*nchan*ninp], &cuda_auto_corr[nchan/2], nchan * ninp / 2 * sizeof(float), cudaMemcpyDeviceToHost );
+    cudaMemcpy( &temp_buf[row*nchan*ninp + nchan/2], &cuda_auto_corr, nchan * ninp / 2 * sizeof(float), cudaMemcpyDeviceToHost );
     
     /*for( i = 0; i < nchan * ninp; i++ )
     {

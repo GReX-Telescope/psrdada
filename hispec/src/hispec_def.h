@@ -12,7 +12,11 @@
 
 /* Number of UDP packets to be recived for a called to buffer_function
  * 32 MB = 2048 * 16384*/
+#ifdef TEST_MODE
 #define HISPEC_NUM_UDP_PACKETS      16384
+#else
+#define HISPEC_NUM_UDP_PACKETS      8192
+#endif
 
 #endif
 
