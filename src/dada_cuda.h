@@ -12,13 +12,14 @@
 #ifndef __DADA_CUDA_H
 #define __DADA_CUDA_H
 
+#include <cuda_runtime.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 #include "dada_hdu.h"
 #include "ipcbuf.h"
-#include <cuda_runtime.h>
 
 typedef enum { 
   PINNED, 
