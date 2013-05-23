@@ -5,6 +5,6 @@ if HAVE_PGPLOT
 SUBDIRS += mon
 endif
 
-if HAVE_MKL
+if HAVE_MKL_DFTI
 SUBDIRS += rfi
 endif
