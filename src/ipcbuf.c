@@ -66,7 +66,7 @@ static void fsleep (double seconds)
 */
 int ipcsync_get (ipcbuf_t* id, key_t key, uint64_t nbufs, int flag)
 {
-  int required = sizeof(ipcsync_t) + nbufs + sizeof(key_t) * nbufs;
+  size_t required = sizeof(ipcsync_t) + nbufs + sizeof(key_t) * nbufs;
 
   if (!id)
   {

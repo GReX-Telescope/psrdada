@@ -16,7 +16,7 @@
 /*!
   Returns a shared memory block and its shmid
 */
-void* ipc_alloc (key_t key, int size, int flag, int* shmid)
+void* ipc_alloc (key_t key, size_t size, int flag, int* shmid)
 {
   void* buf = 0;
   int id = 0;
