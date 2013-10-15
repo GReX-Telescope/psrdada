@@ -328,22 +328,28 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, int64_t* size)
           ignore_packet = 1;
         }
 
-        if (udpdb->received != HISPEC_UDP_PAYLOAD_BYTES) {
-          multilog (log, LOG_WARNING, "UDP packet size was incorrect (%"PRIu64" != %d)\n", udpdb->received, HISPEC_UDP_PAYLOAD_BYTES);
-	  ignore_packet = 1;
-          //*size = DADA_ERROR_HARD;
-          //break;
-        }
+
+      }
+      if (udpdb->received != HISPEC_UDP_PAYLOAD_BYTES) {
+	multilog (log, LOG_WARNING, "UDP packet size was incorrect (%"PRIu64" != %d)\n", udpdb->received, HISPEC_UDP_PAYLOAD_BYTES);
+	ignore_packet = 1;
+	udpdb->curr_sequence_no = udpdb->expected_sequence_no-HISPEC_NUM_UDP_PACKETS;
+	//*size = DADA_ERROR_HARD;
+	//break;
       }
 
       // If we are still waiting dor the start of data
       if (ignore_packet) {
+	multilog( log, LOG_WARNING, "Ignoring packet\n" );
 
         max_ignore -= HISPEC_UDP_PAYLOAD_BYTES;
         if (max_ignore < 0) 
           quit = 1;
 
       } else {
+
+	/* Skip every packets with wrong size, stop doing any padding or warning */
+#if 0
 
         // If the packet we received was too small, pad it
         if (udpdb->received < HISPEC_UDP_PAYLOAD_BYTES) {
@@ -364,7 +370,7 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, int64_t* size)
           multilog (log, LOG_WARNING, "Long packet received, truncated to %"PRIu64
                                       " bytes\n", HISPEC_UDP_DATASIZE_BYTES);
         }
-
+#endif
         // Now try to slot the packet into the appropraite buffer
         data_received += HISPEC_UDP_DATASIZE_BYTES;
 

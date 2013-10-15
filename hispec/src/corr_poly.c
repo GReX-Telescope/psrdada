@@ -258,7 +258,7 @@ int main(int argc, char * const argv[])
 
   for( i = 0; i < windowSize * windowBlocks; i++ )
   {
-    window_buf[i] = window_buf[i] * nchan * 2 / sumOfWindow;
+    window_buf[i] = window_buf[i] * nchan / sumOfWindow;
   }
   /* Finish normalising the window */
 

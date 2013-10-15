@@ -376,6 +376,28 @@ void gpu_corr_complex( int nchan, int ninp, int ncross,
 {
   struct timeval thetime;
 
+  static FILE *fp;
+  static int init = 0;
+  static cufftComplex *temp1;
+  fp = fopen( "afterunpacked.csv", "a" );
+  if( init == 0 )
+  {
+    temp1 = (cufftComplex *)calloc( nchan * nbatch, sizeof(cufftComplex) );
+    init = 1;
+  }
+
+  cudaMemcpy( temp1, cuda_complexinp_buf, nchan * nbatch * 
+      sizeof(cufftComplex), cudaMemcpyDeviceToHost );
+
+  int i;
+  for( i = 0; i < nchan * nbatch; i++ )
+  {
+    fprintf( fp, "%f\n", temp1[i].x );
+    fprintf( fp, "%f\n", temp1[i].y );
+  }
+
+  fclose(fp);
+
   /* Multiply the data with the window function */
   gettimeofday(&thetime, NULL);
   complex_polyphase_gpu( ninp, windowBlocks, nchan, nbatch, polyMethod, 
@@ -557,6 +579,13 @@ int readComplexDataToGPU(int nchan, int ninp, int windowBlocks, int nbatch, int 
   }
 
   else*/
+  FILE *fp = fopen( "beforeunpacked.csv", "a" );
+  printf( "Print beforeunpack\n" );
+
+  for( i = 0; i < nchan * 2 * nbatch; i++ )
+    fprintf( fp, "%f\n", (float)buffer[i] );
+
+  fclose(fp);
 
   gettimeofday( &thetime, NULL );
   cudaMemcpy( cudaBuffer, buffer, ntoread, cudaMemcpyHostToDevice );
@@ -849,7 +878,7 @@ void writeGPUOutput(FILE *fout_ac, FILE *fout_cc, int ninp, int nchan,
     
     /* Copy the intended output from GPU memory, and shifted */
     cudaMemcpy( &temp_buf[row*nchan*ninp], &cuda_auto_corr[nchan/2], nchan * ninp / 2 * sizeof(float), cudaMemcpyDeviceToHost );
-    cudaMemcpy( &temp_buf[row*nchan*ninp + nchan/2], &cuda_auto_corr, nchan * ninp / 2 * sizeof(float), cudaMemcpyDeviceToHost );
+    cudaMemcpy( &temp_buf[row*nchan*ninp + nchan/2], cuda_auto_corr, nchan * ninp / 2 * sizeof(float), cudaMemcpyDeviceToHost );
     
     /*for( i = 0; i < nchan * ninp; i++ )
     {
