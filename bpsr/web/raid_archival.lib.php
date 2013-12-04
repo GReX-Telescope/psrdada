@@ -279,7 +279,7 @@ class raid_archival extends bpsr_webpage
       $lines = array();
 
       # get a list of finished obseravations
-      $cmd = "cd /lfs/raid0/bpsr; du -sb finished/P* swin/send/P* | awk -F/ '{print \$1\" \"\$(NF)}' | awk '{print \$3\" \"\$1}'";
+      $cmd = "cd /lfs/raid0/bpsr; du -sbL finished/P* swin/send/P* | awk -F/ '{print \$1\" \"\$(NF)}' | awk '{print \$3\" \"\$1}'";
       exec($cmd, $lines);
       $html = "FINISHED";
       $results = array();
@@ -300,7 +300,7 @@ class raid_archival extends bpsr_webpage
       # get a list of waiting for parkes archiving
       $lines = array();
       $results = array();
-      $cmd = "cd /lfs/raid0/bpsr/parkes/archive; du -sb P* | awk '{print $2\" \"$1}'";
+      $cmd = "cd /lfs/raid0/bpsr/parkes/archive; du -sbL P* | awk '{print $2\" \"$1}'";
       exec($cmd, $lines);
       for ($i=0; $i<count($lines); $i++)
       {
@@ -320,7 +320,7 @@ class raid_archival extends bpsr_webpage
       # get a list of PIDs that have been archived
       $lines = array();
       $results = array();
-      $cmd = "cd /lfs/raid0/bpsr/archived; du -sb P* | awk '{print $2\" \"$1}'";
+      $cmd = "cd /lfs/raid0/bpsr/archived; du -sbL P* | awk '{print $2\" \"$1}'";
       exec($cmd, $lines);
       for ($i=0; $i<count($lines); $i++)
       {
