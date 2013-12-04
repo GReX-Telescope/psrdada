@@ -67,7 +67,7 @@ bin_PROGRAMS += dada_ibdb dada_dbib dada_udheader dada_dbud
 
 LDADD += $(RDMACM_LIBS)
 
-if HAVE_THIRD
+if COMPILE_THIRD
 
 bin_PROGRAMS += dada_udgen
 dada_udgen_CFLAGS = -I$(top_srcdir)/3rdparty -D$(ARCH)
