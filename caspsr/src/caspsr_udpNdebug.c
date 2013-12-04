@@ -249,38 +249,37 @@ void * receiving_thread (void * arg)
       /* check the remainder of the sequence number, for errors in global offset */
       remainder = offset_raw_seq_no % seq_inc;
 
-      //if (offset_raw_seq_no < 0) 
-      //  remainder = seq_inc - offset_raw_seq_no;
-      //else
-      //  remainder = offset_raw_seq_no % seq_inc;
-
       if (ctx->next_seq == 0) {
       }
 
       if (remainder == 0) {
         // do nothing
       } 
-      else if (remainder < 10) 
+      else if  (remainder < (seq_inc / 2))
       {
-        multilog(ctx->log, LOG_WARNING, "adjusting global offset from %"PRIi64" to %"PRIi64"\n", global_offset, (global_offset - remainder));
+        multilog(ctx->log, LOG_WARNING, "receive_obs: adjusting global offset from %"PRIi64" to "
+                 "%"PRIi64"\n", global_offset, (global_offset - remainder));
         global_offset -= remainder;
+        fixed_raw_seq_no = raw_seq_no + global_offset;
+        offset_raw_seq_no = fixed_raw_seq_no - seq_offset;
+        remainder = offset_raw_seq_no % seq_inc;
       }
-      else if (remainder >= (seq_inc - 10))
+      else if (remainder >= seq_inc / 2)
       {
-        multilog(ctx->log, LOG_WARNING, "adjusting global offset from %"PRIi64" to %"PRIi64"\n", global_offset, (global_offset + (seq_inc - remainder)));
+        multilog(ctx->log, LOG_WARNING, "receive_obs: adjusting global offset from %"PRIi64" "
+                 "to %"PRIi64"\n", global_offset, (global_offset + (seq_inc - remainder)));
         global_offset += (seq_inc - remainder);
-      } else {
+        fixed_raw_seq_no = raw_seq_no + global_offset;
+        offset_raw_seq_no = fixed_raw_seq_no - seq_offset;
+        remainder = offset_raw_seq_no % seq_inc;
+      }
+      else
+      {
+        // the offset was too great to "fix"
         multilog(ctx->log, LOG_WARNING, "remainder too large to adjust %d\n", remainder);
       }
 
-      fixed_raw_seq_no = raw_seq_no + global_offset;
-      offset_raw_seq_no = fixed_raw_seq_no - seq_offset;
-      remainder = offset_raw_seq_no % seq_inc;
-
-      if (remainder == 0) 
-        seq_no = (offset_raw_seq_no) / seq_inc;
-      else
-        seq_no = (offset_raw_seq_no-remainder) / seq_inc;
+      seq_no = (offset_raw_seq_no) / seq_inc;
 
       ch_id = UINT64_C (0);
       for (i = 0; i < 8; i++ )
