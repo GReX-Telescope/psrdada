@@ -55,7 +55,7 @@ typedef struct {
 
 } caspsr_dbnum_t;
 
-#define CASPSR_DBNUM_INIT { 0, 0, 0, 0, 0, 0}
+#define CASPSR_DBNUM_INIT { 0, 0, 0, 0, 0, 0 }
 
 /*! Pointer to the function that transfers data from the target */
 int64_t caspsr_dbnum_io (dada_client_t* client, void* data, uint64_t data_size)
@@ -197,7 +197,7 @@ int64_t caspsr_dbnum_io_block (dada_client_t* client,
     }
 
     // check the value
-    if (seq != dbnum->index)
+    if ((seq) && (seq != dbnum->index))
     {
       dbnum->seq_errors++;
       local_errors++;
@@ -209,7 +209,6 @@ int64_t caspsr_dbnum_io_block (dada_client_t* client,
     }
 
     dbnum->index++;
-
   }
 
   if (dbnum->verbose)
