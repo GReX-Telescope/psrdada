@@ -10,7 +10,7 @@ casper_hdr = bibob.h caspsr_def.h mulbibob.h caspsr_rdma.h
 
 libcaspsr_la_SOURCES = $(casper_hdr) bibob.c mulbibob.c start_observation.c
 
-bin_PROGRAMS = bibob_terminal caspsr_udpthreaded caspsr_udpNdb caspsr_udpgen bibob_start_observation caspsr_udpNdebug caspsr_dbnum caspsr_udptester caspsr_dbdecidb
+bin_PROGRAMS = bibob_terminal caspsr_udpthreaded caspsr_udpNdb caspsr_udpgen bibob_start_observation caspsr_udpNdebug caspsr_dbnum caspsr_dbnum_demux caspsr_disknumcheck caspsr_udptester caspsr_dbdecidb
 
 
 LDADD = libcaspsr.la $(top_builddir)/src/libpsrdada.la 
@@ -59,8 +59,9 @@ endif
 
 if HAVE_PGPLOT
 
-bin_PROGRAMS += mulbibob_server
+bin_PROGRAMS += mulbibob_server caspsr_disknumplot
 AM_CPPFLAGS = @PGPLOT_CFLAGS@
 mulbibob_server_LDADD = $(LDADD) @PGPLOT_LIBS@
+caspsr_disknumplot_LDADD = $(LDADD) @PGPLOT_LIBS@
 endif
 

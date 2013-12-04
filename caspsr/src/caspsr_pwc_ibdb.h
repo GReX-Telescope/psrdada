@@ -57,8 +57,11 @@ typedef struct caspsr_pwc_ibdb {
   /* xfer counter */
   int64_t xfer_count;
 
-  /* flag to indicate that the xfer is near ending */
+  // flag to indicate that the xfer is near ending
   unsigned xfer_ending;
+
+  // flag to indicate that the obs is near ending
+  unsigned obs_ending; 
 
   /* flag to indicate end of obs and data in buffer */
   unsigned sod;
@@ -69,6 +72,9 @@ typedef struct caspsr_pwc_ibdb {
   // total bytes transferred in the XFER
   uint64_t xfer_bytes;
 
+  // expected / max size of the XFER (may be less than this)
+  uint64_t xfer_size;
+
   // Infiniband Connection Manager
   dada_ib_cm_t ** ib_cms;
 
@@ -77,7 +83,7 @@ typedef struct caspsr_pwc_ibdb {
 
 } caspsr_pwc_ibdb_t;
 
-#define CASPSR_PWC_IBDB_INIT { 0, 0, 0, 0, 0, 0, "", 0, 0, 0, 0, 0}
+#define CASPSR_PWC_IBDB_INIT { 0, 0, 0, 0, 0, 0, "", 0, 0, 0, 0, 0, 0, 0, 0 }
 
 
 // initialize Infiniband resources
