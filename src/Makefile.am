@@ -65,10 +65,15 @@ libpsrdada_la_SOURCES += dada_ib.c dada_ib_datagram.c
 include_HEADERS += dada_ib.h dada_ib_datagram.h
 bin_PROGRAMS += dada_ibdb dada_dbib dada_udheader dada_dbud
 
-dada_dbib_LDADD = $(LDADD) $(RDMACM_LIBS)
-dada_ibdb_LDADD = $(LDADD) $(RDMACM_LIBS)
-dada_dbud_LDADD = $(LDADD) $(RDMACM_LIBS)
-dada_udheader_LDADD = $(LDADD) $(RDMACM_LIBS)
+LDADD += $(RDMACM_LIBS)
+
+if HAVE_THIRD
+
+bin_PROGRAMS += dada_udgen
+dada_udgen_CFLAGS = -I$(top_srcdir)/3rdparty -D$(ARCH)
+dada_udgen_LDFLAGS = $(LDADD) $(top_builddir)/3rdparty/libtimers.la
+
+endif
 
 endif
 
