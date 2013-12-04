@@ -94,7 +94,6 @@ int caspsr_udpNdb_init_receiver (udpNdb_t * ctx)
   ctx->zeroed_packet = (char *) malloc (UDP_DATA);
   memset(ctx->zeroed_packet, 0, UDP_DATA);
 
-  //ctx->packets_this_xfer = 0;
   ctx->ooo_packets = 0;
   ctx->recv_core = 0;
   ctx->n_sleeps = 0;
@@ -176,7 +175,6 @@ time_t caspsr_udpNdb_start_function (udpNdb_t * ctx)
   size_t cleared = dada_sock_clear_buffered_packets(ctx->sock->fd, UDP_PAYLOAD);
 
   // setup the next_seq to the initial value
-  //ctx->packets_this_xfer = 0;
   ctx->next_seq = 0;
   ctx->n_sleeps = 0;
   ctx->ooo_packets = 0;
@@ -192,6 +190,9 @@ time_t caspsr_udpNdb_start_function (udpNdb_t * ctx)
     return -1;
   }
 
+  char localhost[HOST_NAME_MAX] = "unknown";
+  gethostname(localhost,HOST_NAME_MAX);
+
   int tmp = 0;
   if (ascii_header_set (ctx->obs_header, "HDR_SIZE", "%d", ctx->header_size) < 0)
     multilog (ctx->log, LOG_WARNING, "Could not write HDR_SIZE to header\n");
@@ -199,7 +200,7 @@ time_t caspsr_udpNdb_start_function (udpNdb_t * ctx)
     multilog (ctx->log, LOG_WARNING, "Could not write OBS_OFFSET to header\n");
   if (ascii_header_set (ctx->obs_header, "OBS_XFER", "%"PRIi64, ctx->obs_xfer) < 0)
     multilog (ctx->log, LOG_WARNING, "Could not write OBS_XFER to header\n");
-  if (ascii_header_set (ctx->obs_header, "RECV_HOST", "%s", "demux0") < 0)
+  if (ascii_header_set (ctx->obs_header, "RECV_HOST", "%s", localhost) < 0)
     multilog (ctx->log, LOG_WARNING, "Could not write RECV_HOST to header\n");
   if (ascii_header_set (ctx->obs_header, "I_DISTRIB", "%d", ctx->i_distrib) < 0)
     multilog (ctx->log, LOG_WARNING, "Could not write I_DISTRIB to header\n");
@@ -748,7 +749,16 @@ void * caspsr_udpNdb_receive_obs (void * arg)
                    offset_raw_seq_no, seq_inc, (int) (offset_raw_seq_no % seq_inc), 
                    seq_no, prev_seq_no, (int64_t) seq_no - (int64_t) prev_seq_no);
 
-          multilog(ctx->log, LOG_WARNING, "dropped %"PRIi64" packets\n", (int64_t) seq_no - (int64_t) prev_seq_no);
+          uint64_t total_dropped = ctx->packets->dropped + (int64_t) seq_no - (int64_t) prev_seq_no;
+          double   dropped_data = (double) total_dropped * (double) UDP_DATA;
+          if (dropped_data > 1e12)
+            multilog(ctx->log, LOG_WARNING, "dropped %"PRIi64" pkts, %6.2f TB\n", total_dropped, dropped_data / 1e12);
+          else if (dropped_data > 1e9)
+            multilog(ctx->log, LOG_WARNING, "dropped %"PRIi64" pkts, %6.2f GB\n", total_dropped, dropped_data / 1e9);
+          else if (dropped_data > 1e6)
+            multilog(ctx->log, LOG_WARNING, "dropped %"PRIi64" pkts, %6.2f MB\n", total_dropped, dropped_data / 1e6);
+          else
+            multilog(ctx->log, LOG_WARNING, "dropped %"PRIi64" pkts, %6.0f B\n", total_dropped, dropped_data);
 
           // need to start padding with zero's until we catch up
          pad_start = prev_seq_no + 1;
@@ -880,7 +890,7 @@ void * caspsr_udpNdb_receive_obs (void * arg)
             // no need to adjust, belongs in current block
 
           } 
-          // the packet belongs in the next subsequent buffer of this xfer
+          // the packet belongs in a subsequent buffer of this xfer
           else if (seq_byte < ctx->xfer_end_byte)
           {
             if (ctx->verbose)
@@ -909,7 +919,6 @@ void * caspsr_udpNdb_receive_obs (void * arg)
               thread_result = -1;
               pthread_exit((void *) &thread_result);
             }
-            //ctx->packets_this_xfer = 1;
           }
 
           if (!ctx->current_buffer)
@@ -946,7 +955,6 @@ void * caspsr_udpNdb_receive_obs (void * arg)
 
           // update statistics
           ctx->bytes->received += UDP_DATA;
-          //ctx->packets_this_xfer++;
         }
       } 
     }
