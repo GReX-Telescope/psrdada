@@ -24,10 +24,12 @@ void usage()
 {
   fprintf (stdout,
 	   "dada_diskdb [options]\n"
+     " -h   print this help text\n"
      " -k   hexadecimal shared memory key  [default: %x]\n"
      " -f   file to write to the ring buffer \n"
      " -s   single file then exit\n"
-     " -d   run as daemon\n", DADA_DEFAULT_BLOCK_KEY);
+     " -d   run as daemon\n"
+     " -z   use zero copy shm access\n", DADA_DEFAULT_BLOCK_KEY);
 }
 
 typedef struct {
@@ -263,8 +265,12 @@ int main (int argc, char **argv)
 
   diskdb.array = disk_array_create ();
 
-  while ((arg=getopt(argc,argv,"k:df:vsz")) != -1)
+  while ((arg=getopt(argc,argv,"hk:df:vsz")) != -1)
     switch (arg) {
+
+    case 'h':
+      usage();
+      return 0;
 
     case 'k':
       if (sscanf (optarg, "%x", &dada_key) != 1) {
