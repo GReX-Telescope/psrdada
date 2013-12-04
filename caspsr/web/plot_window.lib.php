@@ -1,9 +1,9 @@
 <?PHP
 
-include("caspsr_webpage.lib.php");
-include("definitions_i.php");
-include("functions_i.php");
-include($instrument.".lib.php");
+include_once("caspsr_webpage.lib.php");
+include_once("definitions_i.php");
+include_once("functions_i.php");
+include_once($instrument.".lib.php");
 
 class plot_window extends caspsr_webpage 
 {
@@ -86,7 +86,7 @@ class plot_window extends caspsr_webpage
 
             /* parse the data from each PSR, updating the global array */  
             for (i=0; i<npsrs; i++) {
-              base = 2 + (i*9);
+              base = 2 + (i*11);
               values = lines[base].split(":::");
               psrs[i] = values[1]; 
               if ((!(psrs_select.options[i])) || (psrs[i] != psrs_select.options[i].value)) {
@@ -127,9 +127,9 @@ class plot_window extends caspsr_webpage
             }
 
             /* line the lines array for the selected PSR */
-            base = (selected_psr*9) + 2;
+            base = (selected_psr*11) + 2;
 
-            for (i=1; i<=8; i++) {
+            for (i=1; i<=12; i++) {
 
               values = lines[base+i].split(":::");
               parts = values[0].split("_");
@@ -137,7 +137,7 @@ class plot_window extends caspsr_webpage
               img = document.getElementById(parts[0]);
               link = document.getElementById(parts[0]+"_a");
 
-              if ((parts[1] == "240x180") || (parts[1] == "200x150")) {
+              if ((parts[1] == "240x180") || (parts[1] == "200x150") || (parts[1] == "200x75")) {
                 if (img.src != values[1]) {
                   img.src = values[1]
                 }
@@ -187,28 +187,42 @@ class plot_window extends caspsr_webpage
 ?>
     <table border=0 width="100%" cellspacing=0 cellpadding=0>
     <tr>
-      <td align="center" style='padding-top: 10px;'>
+      <td align="center" style='padding-top: 5px;'>
         <a id="pvfl_a" href="about:blank"><img id="pvfl" src="/images/blankimage.gif" alt="No Data Available" width=201px height=151px></a>
       </td>
     </tr>
-    <tr height=10px><td></td></tr>
+    <tr height=2px><td></td></tr>
     <tr>
-      <td align="center" style='padding-top: 10px;'>
+      <td align="center" style='padding-top: 5px;'>
         <a id="pvt_a" href="about:blank"><img id="pvt" src="/images/blankimage.gif"alt="No Data Available" width=201px height=151px></a>
       </td>
     </tr>
-    <tr height=10px><td></td></tr>
+    <tr height=2px><td></td></tr>
     <tr>
-      <td align="center" style='padding-top: 10px;'>
+      <td align="center" style='padding-top: 5px;'>
         <a id="pvfr_a" href="about:blank"><img id="pvfr" src="/images/blankimage.gif" alt="No Data Available" width=201px height=151px></a>
       </td>
     </tr>
-    <tr height=10px><td></td></tr>
+    <tr height=2px><td></td></tr>
     <tr>
-      <td align="center" style='padding-top: 10px; padding-bottom: 10px;'>
+      <td align="center" style='padding-top: 5px;'>
         <a id="bp_a" href="about:blank"><img id="bp" src="/images/blankimage.gif" alt="No Data Available" width=201px height=151px></a>
       </td>
     </tr>
+    <tr height=2px><td></td></tr>
+    <tr>
+      <td align="center" style='padding-top: 5px; padding-bottom: 5px;'>
+        <a id="snrt_a" href="about:blank"><img id="snrt" src="/images/blankimage.gif" alt="No Data Available" width=200px height=75px></a>
+      </td>
+    </tr>
+    <tr height=2px><td></td></tr>
+    <tr>
+      <td align="center" style='padding-top: 5px; padding-bottom: 5px;'>
+        <a id="snrh_a" href="about:blank"><img id="snrh" src="/images/blankimage.gif" alt="No Data Available" width=200px height=75px></a>
+      </td>
+    </tr>
+
+
     </table>
     <center>
     <span id="single_psr"></span>
@@ -233,11 +247,11 @@ class plot_window extends caspsr_webpage
     if ($result == "ok") {
 
       $bytes_written = socketWrite($socket, "img_info\r\n");
-      $string = socketRead($socket);
+      list ($result, $response) = socketRead($socket);
       socket_close($socket);
 
       # Add the require URL links to the image
-      $lines = split(";;;", $string);
+      $lines = split(";;;", $response);
       $string = "";
 
       for ($i=0; $i<count($lines)-1; $i++) {

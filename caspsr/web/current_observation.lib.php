@@ -1,9 +1,9 @@
 <?PHP
 
-include("caspsr_webpage.lib.php");
-include("definitions_i.php");
-include("functions_i.php");
-include($instrument.".lib.php");
+include_once("caspsr_webpage.lib.php");
+include_once("definitions_i.php");
+include_once("functions_i.php");
+include_once($instrument.".lib.php");
 
 class current_observation extends caspsr_webpage 
 {
@@ -158,15 +158,14 @@ class current_observation extends caspsr_webpage
     if ($result == "ok") {
 
       $bytes_written = socketWrite($socket, "curr_obs\r\n");
-      $string = socketRead($socket);
+      list ($result, $response) = socketRead($socket);
       socket_close($socket);
 
     } else {
-      $string = "Could not connect to $host:$port<BR>\n";
+      $response = "Could not connect to $host:$port<BR>\n";
     }
 
-    echo $string;
-
+    echo $response;
   }
 }
 handledirect("current_observation");

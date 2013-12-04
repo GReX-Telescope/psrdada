@@ -8,8 +8,8 @@ $c = "source /home/dada/.bashrc; ".$cmd." -D /null 2>&1";
 $lastline = exec($c, $output, $return_val);
 
 # If an error ocurred, generate a PHP image containing the error text
-if (($lastline != "") || (count($output) > 0)) {
-
+if (($lastline != "") || (count($output) > 0)) 
+{
   #$text = "1234567890123456789012345678901234567890\n";
   $text = "";
   for ($i=0; $i<count($output); $i++) {

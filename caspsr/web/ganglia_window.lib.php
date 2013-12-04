@@ -1,9 +1,9 @@
 <?PHP
 
-include("caspsr_webpage.lib.php");
-include("definitions_i.php");
-include("functions_i.php");
-include($instrument.".lib.php");
+include_once("caspsr_webpage.lib.php");
+include_once("definitions_i.php");
+include_once("functions_i.php");
+include_once($instrument.".lib.php");
 
 class ganglia_window extends caspsr_webpage 
 {
@@ -50,16 +50,41 @@ class ganglia_window extends caspsr_webpage
         setTimeout('poll_server()', 5000);
       } 
 
+      function newImage(old_image_id, new_image_url)
+      {
+        var new_image = new Image();
+        new_image.id = old_image_id;
+        new_image.src = new_image_url;
+        new_image.onload = function() 
+        {
+          var old_img = document.getElementById(old_image_id);
+          var old_img_width = old_img.width;
+          var old_img_height = old_img.height;
+          new_image.width = old_img_width;
+          new_image.height = old_img_height;
+          old_img.parentNode.insertBefore(new_image, old_img);
+          old_img.parentNode.removeChild(old_img);
+        }
+      }
+
       function update_images() {
         var now = new Date();
         var theTime = now.getTime();
         //document.getElementById("demuxs_load").src = "<?echo $this->demuxs_load?>?"+theTime;
-        document.getElementById("demuxs_network").src = "<?echo $this->demuxs_network?>?"+theTime;
-        document.getElementById("demuxs_ibnetwork").src = "<?echo $this->demuxs_ibnetwork?>?"+theTime;
         //document.getElementById("gpus_load").src = "<?echo $this->gpus_load?>?"+theTime;
-        document.getElementById("gpus_gpuload").src = "<?echo $this->gpus_gpuload?>?"+theTime;
-        document.getElementById("gpus_ibnetwork").src = "<?echo $this->gpus_ibnetwork?>?"+theTime;
-        document.getElementById("parkes_webcam").src = "ganglia_window.lib.php?update=true&host=<?echo $this->host?>&port=<?echo $this->port?>&"+theTime;
+
+        newImage ("demuxs_network", "<?echo $this->demuxs_network?>?"+theTime);
+        newImage ("demuxs_ibnetwork", "<?echo $this->demuxs_ibnetwork?>?"+theTime);
+        newImage ("gpus_gpuload", "<?echo $this->gpus_gpuload?>?"+theTime);
+        newImage ("gpus_ibnetwork", "<?echo $this->gpus_ibnetwork?>?"+theTime);
+        newImage ("parkes_webcam", "ganglia_window.lib.php?update=true&host=<?echo $this->host?>&port=<?echo $this->port?>&"+theTime);
+
+
+        //document.getElementById("demuxs_network").src = "<?echo $this->demuxs_network?>?"+theTime;
+        //document.getElementById("demuxs_ibnetwork").src = "<?echo $this->demuxs_ibnetwork?>?"+theTime;
+        //document.getElementById("gpus_gpuload").src = "<?echo $this->gpus_gpuload?>?"+theTime;
+        //document.getElementById("gpus_ibnetwork").src = "<?echo $this->gpus_ibnetwork?>?"+theTime;
+        //document.getElementById("parkes_webcam").src = "ganglia_window.lib.php?update=true&host=<?echo $this->host?>&port=<?echo $this->port?>&"+theTime;
       }
 
     </script>
@@ -93,7 +118,7 @@ class ganglia_window extends caspsr_webpage
     <table cellpadding=5px>
     <tr>
       <td rowspan=2>
-        <img id="parkes_webcam" src="http://outreach.atnf.csiro.au/visiting/parkes/webcam/parkes_med.jpg" border=none width='304px' height='228px'>
+        <img id="parkes_webcam" src="/images/blankimage.gif" border=none width='304px' height='228px'>
       </td>
       <!--<td><img id="demuxs_load" src="<?echo $this->demuxs_load?>"></td>-->
       <td><img id="demuxs_network" src="<?echo $this->demuxs_network?>"></td>
@@ -114,12 +139,14 @@ class ganglia_window extends caspsr_webpage
     $host = $get["host"];
     $port = $get["port"];
 
-    #list ($socket, $result) = openSocket($host, $port);
-    $result = "disabled";
+    readfile("http://outreach.atnf.csiro.au/visiting/parkes/webcam/parkes_med.jpg");
+    return;
+
+    list ($socket, $result) = openSocket($host, $port);
     if ($result == "ok") {
       $bytes_written = socketWrite($socket, "dish_image\r\n");
-      $header_one = socketRead($socket);
-      $header_two = socketRead($socket);
+      list ($result, $header_one) = socketRead($socket);
+      list ($result, $header_two) = socketRead($socket);
       $arr = explode(":",$header_two);
       $arr2 = explode(" ",$arr[1]);
       $size = $arr2[1];
@@ -128,7 +155,7 @@ class ganglia_window extends caspsr_webpage
       header($header_two);
       echo $read;
     } else {
-      readfile("http://outreach.atnf.csiro.au/visiting/parkes/webcam/parkes_med.jpg");
+      #readfile("http://outreach.atnf.csiro.au/visiting/parkes/webcam/parkes_med.jpg");
     }
   }
 

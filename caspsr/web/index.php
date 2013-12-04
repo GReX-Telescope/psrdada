@@ -1,11 +1,11 @@
 <?PHP
 
-include("current_observation.lib.php");
-include("machine_summary.lib.php");
-include("state_update.lib.php");
-include("log_list.lib.php");
-include("plot_window.lib.php");
-include("archival_summary.lib.php");
+include_once("current_observation.lib.php");
+include_once("machine_summary.lib.php");
+include_once("state_update.lib.php");
+include_once("log_list.lib.php");
+include_once("plot_window.lib.php");
+include_once("archival_summary.lib.php");
 
 $state_update = new state_update();
 $current_observation = new current_observation();

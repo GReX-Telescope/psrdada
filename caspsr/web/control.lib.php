@@ -1,50 +1,90 @@
 <?PHP
 
-include("caspsr_webpage.lib.php");
-include("definitions_i.php");
-include("functions_i.php");
-include($instrument.".lib.php");
+include_once("caspsr.lib.php");
+include_once("caspsr_webpage.lib.php");
+include_once("definitions_i.php");
+include_once("functions_i.php");
 
 class control extends caspsr_webpage 
 {
 
   var $inst = "";
+
   var $pwc_dbs = array();
   var $pwc_dbs_str = "";
+
   var $demux_dbs = array();
   var $demux_dbs_str = "";
+
+  var $pwc_list = array();
+  var $demux_list = array();
+  var $host_list = array();
+
+  var $server_host = "";
 
   function control()
   {
     caspsr_webpage::caspsr_webpage();
     $this->inst = new caspsr();
+    $this->pwcs_dbs_str = "";
 
     $config = $this->inst->config;
-    $data_blocks = split(" ",$config["DATA_BLOCKS"]);
-    for ($i=0; $i<count($data_blocks); $i++)
+    $data_block_ids = explode(" ",$config["DATA_BLOCK_IDS"]);
+    foreach ($data_block_ids as $dbid)
     {
-      $key = strtolower($data_blocks[$i]);
-      $nbufs = $config[$data_blocks[$i]."_BLOCK_NBUFS"];
-      $bufsz = $config[$data_blocks[$i]."_BLOCK_BUFSZ"];
-      array_push($this->pwc_dbs, array("key" => $key, "nbufs" => $nbufs, "bufsz" => $bufsz));
-      if ($i == 0)
-        $this->pwcs_dbs_str = "\"buffer_".$key."\"";
+      array_push($this->pwc_dbs, $dbid);
+      if ($this->pwcs_dbs_str == "")
+        $this->pwcs_dbs_str = "\"buffer_".$dbid."\"";
       else
-        $this->pwcs_dbs_str .= ", \"buffer_".$key."\"";
+        $this->pwcs_dbs_str .= ", \"buffer_".$dbid."\"";
     }
 
-    $data_blocks = split(" ",$config["DEMUX_DATA_BLOCKS"]);
-    for ($i=0; $i<count($data_blocks); $i++)
+    $data_block_ids = explode(" ",$config["DEMUX_BLOCK_IDS"]);
+    foreach ($data_block_ids as $dbid)
     {
-      $key = strtolower($data_blocks[$i]);
-      $nbufs = $config["DEMUX_".strtoupper($key)."_NBUFS"];
-      $bufsz = $config["DEMUX_".strtoupper($key)."_BUFSZ"];
-      array_push($this->demux_dbs, array("key" => $key, "nbufs" => $nbufs, "bufsz" => $bufsz));
-      if ($i == 0)
-        $this->demux_dbs_str = "\"buffer_".$key."\"";
+      array_push($this->demux_dbs, $dbid);
+      if ($this->demux_dbs_str == "")
+        $this->demux_dbs_str = "\"buffer_".$dbid."\"";
       else
-        $this->demux_dbs_str .= ", \"buffer_".$key."\"";
+        $this->demux_dbs_str .= ", \"buffer_".$dbid."\"";
     }
+
+    for ($i=0; $i<$config["NUM_PWC"]; $i++)
+    {
+      $host = $config["PWC_".$i];
+      $exists = -1;
+      for ($j=0; $j<count($this->host_list); $j++) {
+        if (strpos($this->host_list[$j]["host"], $host) !== FALSE)
+          $exists = $j;
+      }
+      if ($exists == -1)
+        array_push($this->host_list, array("host" => $host, "span" => 1, "type" => "pwc"));
+      else
+        $this->host_list[$exists]["span"]++;
+
+      array_push($this->pwc_list, array("host" => $host, "span" => 1, "pwc" => $i));
+    }
+
+    for ($i=0; $i<$config["NUM_DEMUX"]; $i++)
+    {
+      $host = $config["DEMUX_".$i];
+      $exists = -1;
+      for ($j=0; $j<count($this->host_list); $j++) {
+        if (strpos($this->host_list[$j]["host"], $host) !== FALSE)
+          $exists = $j;
+      }
+      if ($exists == -1)
+        array_push($this->host_list, array("host" => $host, "span" => 1, "type" => "demux"));
+      else
+        $this->host_list[$exists]["span"]++;
+
+      array_push($this->demux_list, array("host" => $host, "span" => 1, "demux" => $i));
+    }
+
+    $this->server_host = $this->inst->config["SERVER_HOST"];
+    if (strpos($this->server_host, ".") !== FALSE)
+      list ($this->server_host, $domain)  = explode(".", $this->server_host);
+
   }
 
   function javaScriptCallback()
@@ -56,27 +96,57 @@ class control extends caspsr_webpage
 ?>
     <script type='text/javascript'>
 
-      var srv_hosts = new Array("srv0");
+      // by default, only poll/update every 20 seconds
+      var poll_timeout;
+      var poll_update = 20000;
+      var poll_2sec_count = 0;
+
+      var srv_host = "<? echo $this->server_host?>";
+      var srv_hosts = new Array(srv_host);
 
       var pwc_hosts = new Array(<?
-      echo "'".$this->inst->config["PWC_0"]."'";
-      for ($i=1; $i<$this->inst->config["NUM_PWC"]; $i++) {
-        echo ",'".$this->inst->config["PWC_".$i]."'";
+      $first = false;
+      for ($i=0; $i<count($this->host_list); $i++)
+      {
+        if ($this->host_list[$i]["type"] == "pwc")
+        {
+          if ($first)
+            echo ",";
+          echo "'".$this->host_list[$i]["host"]."'";
+          $first = true;
+        }
       }?>);
+
+      var demux_hosts = new Array(<?
+      $first = false;
+      for ($i=0; $i<count($this->host_list); $i++)
+      {
+        if ($this->host_list[$i]["type"] == "demux")
+        {
+          if ($first)
+            echo ",";
+          echo "'".$this->host_list[$i]["host"]."'";
+          $first = true;
+        }
+      }?>);
+
+      var pwcs = new Array(<?
+      echo "'".$this->inst->config["PWC_0"].":0'";
+      for ($i=1; $i<$this->inst->config["NUM_PWC"]; $i++) {
+        echo ",'".$this->inst->config["PWC_".$i].":".$i."'";
+      }?>);
+
+      var demuxs = new Array(<?
+      echo "'".$this->inst->config["DEMUX_0"].":0'";
+      for ($i=1; $i<$this->inst->config["NUM_DEMUX"]; $i++) {
+        echo ",'".$this->inst->config["DEMUX_".$i].":".$i."'";
+      }?>);
+
 
       var pwc_hosts_str = "";
       for (i=0; i<pwc_hosts.length; i++) {
         pwc_hosts_str += "&host_"+i+"="+pwc_hosts[i];
       }
-
-      var demux_hosts = new Array(<?
-      $demuxers    = getConfigMachines($this->inst->config, "DEMUX");
-      $demuxers = array_unique($demuxers);
-      asort($demuxers);
-      echo "'".$demuxers[0]."'";
-      for ($i=1; $i<count($demuxers); $i++) {
-        echo ",'".$demuxers[$i]."'";
-      }?>);
 
       var demux_hosts_str = "";
       for (i=0; i<demux_hosts.length; i++) {
@@ -87,11 +157,22 @@ class control extends caspsr_webpage
       var stage3_wait = 20;
       var stage4_wait = 20;
 
-
       function poll_server()
       {
+        document.getElementById("poll_update_secs").innerHTML= (poll_update / 1000);
         daemon_info_request();
-        setTimeout('poll_server()', 2000);
+        poll_timeout = setTimeout('poll_server()', poll_update);
+
+        // revert poll_update to 20000 after 1 minute of 2 second polling
+        if (poll_update == 1000)
+        {
+          poll_2sec_count ++;
+          if (poll_2sec_count == 60)
+          {
+            poll_update = 20000;
+            poll_2sec_count = 0;
+          }
+        }
       }
 
       function set_daemons_to_grey(host)
@@ -180,7 +261,15 @@ class control extends caspsr_webpage
           action = "ignore";
 
         if (action != "ignore") {
-          url = "control.lib.php?action="+action+"&nhosts=1&host_0="+host+"&daemon="+daemon;
+          if (host.indexOf(":",0) != -1) {
+            parts = host.split(":");
+            host = parts[0];
+            pwc = parts[1];
+            url = "control.lib.php?action="+action+"&nhosts=1&host_0="+host+"&pwc="+pwc+"&daemon="+daemon;
+          } else {
+            url = "control.lib.php?action="+action+"&nhosts=1&host_0="+host+"&daemon="+daemon;
+          }
+
           if (args != "")
             url += "&args="+args
 
@@ -196,6 +285,11 @@ class control extends caspsr_webpage
           }
           da_http_request.open("GET", url, true)
           da_http_request.send(null)
+    
+          poll_update = 1000;
+          clearTimeout(poll_timeout);
+          poll_timeout = setTimeout('poll_server()', poll_update);
+
         } 
       }
 
@@ -221,7 +315,54 @@ class control extends caspsr_webpage
 
         da_http_request.open("GET", url, true)
         da_http_request.send(null)
+
+        poll_update = 1000;
+        clearTimeout(poll_timeout);
+        poll_timeout = setTimeout('poll_server()', poll_update);
+
       }
+
+      function toggleDaemonPersist(host, daemon) {
+        var img = document.getElementById("img_"+host+"_"+daemon);
+        var src = new String(img.src);
+        var action = "";
+        var url = "";
+
+        if (src.indexOf("green_light.png",0) != -1)
+          action = "stop";
+        else if (src.indexOf("red_light.png",0) != -1)
+          action = "start";
+        else if (src.indexOf("yellow_light.png",0) != -1)
+          action = "stop";
+        else
+          action = "ignore";
+
+        if (action != "ignore") {
+          if (action == "start")
+            url = "control.lib.php?action="+action+"&nhosts=1&host_0="+host+"&daemon="+daemon;
+          else
+            url = "control.lib.php?action="+action+"&nhosts=1&host_0="+host+"&daemon="+daemon;
+          //alert(url);
+
+          var da_http_request;
+          if (window.XMLHttpRequest)
+            da_http_request = new XMLHttpRequest()
+          else
+            da_http_request = new ActiveXObject("Microsoft.XMLHTTP");
+    
+          da_http_request.onreadystatechange = function() 
+          {
+            handle_daemon_action_request(da_http_request)
+          }
+          da_http_request.open("GET", url, true)
+          da_http_request.send(null)
+
+          poll_update = 1000;
+          clearTimeout(poll_timeout);
+          poll_timeout = setTimeout('poll_server()', poll_update);
+        } 
+      }
+
 
       function daemon_action_request(url) 
       {
@@ -261,9 +402,52 @@ class control extends caspsr_webpage
         return ready;
       }
       
+      function checkMachinesPWCsAndDaemons(m, d, c) 
+      {
+        var j=0;
+        var ready = true;
+        for (j=0; j<pwcs.length; j++) {
+          for (k=0; k<d.length; k++) {
+            element = document.getElementById("img_"+pwcs[j]+"_"+d[k]);
+            try {
+              if (element.src.indexOf(c) == -1) {
+                ready = false;
+              }
+            } catch (e) {
+              alert("checkMachinesPWCsAndDameons: [img_"+pwcs[j]+"_"+d[k]+"] c="+c+" did not exist");
+            }
+          }
+        }
+        return ready;
+      }
+
+      function checkMachinesDemuxersAndDaemons(m, d, c) 
+      {
+        var j=0;
+        var ready = true;
+        for (j=0; j<demuxs.length; j++) {
+          for (k=0; k<d.length; k++) {
+            element = document.getElementById("img_"+demuxs[j]+"_"+d[k]);
+            try {
+              if (element.src.indexOf(c) == -1) {
+                ready = false;
+              }
+            } catch (e) {
+              alert("checkMachinesDemuxersAndDameons: [img_"+demuxs[j]+"_"+d[k]+"] c="+c+" did not exist");
+            }
+          }
+        }
+        return ready;
+      }
+
 
       function startCaspsr() 
       {
+
+        poll_update = 1000;
+        poll_2sec_count = 0;
+        clearTimeout(poll_timeout);
+        poll_timeout = setTimeout('poll_server()', poll_update);
 
         // start the server's master control script
         url = "control.lib.php?action=start&daemon=caspsr_master_control&nhosts=1&host_0=srv0"
@@ -283,6 +467,7 @@ class control extends caspsr_webpage
 
       function startCaspsrStage2()
       {
+        poll_2sec_count = 0;
         var machines = srv_hosts.concat(pwc_hosts, demux_hosts);
         var daemons = new Array("caspsr_master_control");
         var ready = checkMachinesAndDaemons(machines, daemons, "green_light.png");
@@ -297,11 +482,8 @@ class control extends caspsr_webpage
 <?
         for ($i=0; $i<count($this->pwc_dbs); $i++)
         {
-          $key = $this->pwc_dbs[$i]["key"];
-          $nbufs = $this->pwc_dbs[$i]["nbufs"];
-          $bufsz =  $this->pwc_dbs[$i]["bufsz"];
-          $args = $nbufs."_".$bufsz;
-          echo "         url = \"control.lib.php?action=start&daemon=buffer_".$key."&args=".$args."&nhosts=\"+pwc_hosts.length+pwc_hosts_str\n";
+          $dbid = $this->pwc_dbs[$i];
+          echo "         url = \"control.lib.php?action=start&daemon=buffer_".$dbid."&nhosts=\"+pwc_hosts.length+pwc_hosts_str\n";
           echo "         daemon_action_request(url);\n";
         }
 ?>
@@ -310,11 +492,8 @@ class control extends caspsr_webpage
         <?
         for ($i=0; $i<count($this->demux_dbs); $i++)
         {
-          $key = $this->demux_dbs[$i]["key"];
-          $nbufs = $this->demux_dbs[$i]["nbufs"];
-          $bufsz =  $this->demux_dbs[$i]["bufsz"];
-          $args = $nbufs."_".$bufsz;
-          echo "         url = \"control.lib.php?action=start&daemon=buffer_".$key."&args=".$args."&nhosts=\"+demux_hosts.length+demux_hosts_str\n";
+          $dbid = $this->demux_dbs[$i];
+          echo "         url = \"control.lib.php?action=start&daemon=buffer_".$dbid."&nhosts=\"+demux_hosts.length+demux_hosts_str\n";
           echo "         daemon_action_request(url);\n";
         }
 ?>
@@ -326,12 +505,12 @@ class control extends caspsr_webpage
 
       function startCaspsrStage3()
       {
-
+        poll_2sec_count = 0;
         var pwc_daemons = new Array(<?echo $this->pwcs_dbs_str?>); 
         var demux_daemons = new Array(<?echo $this->demux_dbs_str?>); 
      
-        var pwc_ready = checkMachinesAndDaemons(pwc_hosts, pwc_daemons, "green_light.png");
-        var demux_ready = checkMachinesAndDaemons(demux_hosts, demux_daemons, "green_light.png");
+        var pwc_ready = checkMachinesPWCsAndDaemons(pwc_hosts, pwc_daemons, "green_light.png");
+        var demux_ready = checkMachinesDemuxersAndDaemons(demux_hosts, demux_daemons, "green_light.png");
 
         if ((!(pwc_ready && demux_ready)) && (stage3_wait > 0)) {
           stage3_wait--;
@@ -354,9 +533,9 @@ class control extends caspsr_webpage
 
       function startCaspsrStage4()
       {
-
-        var pwc_daemons = new Array("pwcs");
-        var pwc_ready = checkMachinesAndDaemons(pwc_hosts, pwc_daemons, "green_light.png");
+        poll_2sec_count = 0;
+        var pwc_daemons = new Array("<?echo $this->inst->config["PWC_BINARY"]?>");
+        var pwc_ready = checkMachinesPWCsAndDaemons(pwc_hosts, pwc_daemons, "green_light.png");
 
         var srv_daemons = new Array("caspsr_pwc_monitor", "caspsr_sys_monitor", "caspsr_demux_monitor");
         var srv_ready = checkMachinesAndDaemons(srv_hosts, srv_daemons, "green_light.png");
@@ -380,6 +559,12 @@ class control extends caspsr_webpage
 
       function hardStopCaspsr()
       {
+        // poll every 2 seconds during a stop
+        poll_update = 1000;
+        poll_2sec_count = 0;
+        clearTimeout(poll_timeout);
+        poll_timeout = setTimeout('poll_server()', poll_update);
+
         // stop server TCS interface
         url = "control.lib.php?script=caspsr_hard_reset.pl";
         popUp(url);
@@ -387,9 +572,14 @@ class control extends caspsr_webpage
 
       function stopCaspsr()
       {
+        // poll every 2 seconds during a stop
+        poll_update = 1000;
+        poll_2sec_count = 0;
+        clearTimeout(poll_timeout);
+        poll_timeout = setTimeout('poll_server()', poll_update);
 
         // stop server TCS interface
-        url = "control.lib.php?action=stop&daemon=caspsr_tcs_interface&nhosts=1&host_0=srv0";
+        url = "control.lib.php?action=stop&daemon=caspsr_tcs_interface&nhosts=1&host_0="+srv_host;
         daemon_action_request(url);
 
         // stop the demux daemons next
@@ -407,14 +597,14 @@ class control extends caspsr_webpage
 
       function stopCaspsrStage2()
       {
-
+        poll_2sec_count = 0;
         var srv_daemons = new Array("caspsr_tcs_interface");
         var demux_daemons = new Array("caspsr_demux_manager");
         var pwc_daemons = new Array("caspsr_processing_manager", "caspsr_archive_manager", "caspsr_disk_cleaner");
 
         var srv_ready = checkMachinesAndDaemons(srv_hosts, srv_daemons, "red_light.png");
-        var pwc_ready = checkMachinesAndDaemons(pwc_hosts, pwc_daemons, "red_light.png");
-        var demux_ready = checkMachinesAndDaemons(demux_hosts, demux_daemons, "red_light.png");
+        var pwc_ready = checkMachinesPWCsAndDaemons(pwc_hosts, pwc_daemons, "red_light.png");
+        var demux_ready = checkMachinesDemuxersAndDaemons(demux_hosts, demux_daemons, "red_light.png");
 
         if ((!(srv_ready && pwc_ready && demux_ready)) && (stage2_wait > 0)) {
           stage2_wait--;
@@ -427,12 +617,12 @@ class control extends caspsr_webpage
         url = "control.lib.php?action=stop&daemon=pwcs&nhosts="+pwc_hosts.length+pwc_hosts_str;
         daemon_action_request(url);
 
-         // destroy the demux's datablocks
+        // destroy the demux's datablocks
 <?
         for ($i=0; $i<count($this->demux_dbs); $i++)
         {
-          $key = $this->demux_dbs[$i]["key"];
-          echo "         url = \"control.lib.php?action=stop&daemon=buffer_".$key."&nhosts=\"+demux_hosts.length+demux_hosts_str;\n";
+          $dbid = $this->demux_dbs[$i];
+          echo "         url = \"control.lib.php?action=stop&daemon=buffer_".$dbid."&nhosts=\"+demux_hosts.length+demux_hosts_str;\n";
           echo "         daemon_action_request(url);\n";
         }
 ?>
@@ -443,12 +633,12 @@ class control extends caspsr_webpage
 
       function stopCaspsrStage3()
       {
-
+        poll_2sec_count = 0;
         var demux_daemons = new Array(<?echo $this->demux_dbs_str?>);
-        var pwc_daemons = new Array("pwcs");
+        var pwc_daemons = new Array("<?echo $this->inst->config["PWC_BINARY"]?>");
 
-        var demux_ready = checkMachinesAndDaemons(demux_hosts, demux_daemons, "red_light.png");
-        var pwc_ready = checkMachinesAndDaemons(pwc_hosts, pwc_daemons, "red_light.png");
+        var demux_ready = checkMachinesDemuxersAndDaemons(demux_hosts, demux_daemons, "red_light.png");
+        var pwc_ready = checkMachinesPWCsAndDaemons(pwc_hosts, pwc_daemons, "red_light.png");
 
         if ((!(pwc_ready && demux_ready)) && (stage3_wait > 0)) {
           stage3_wait--;
@@ -461,14 +651,14 @@ class control extends caspsr_webpage
 <?
         for ($i=0; $i<count($this->pwc_dbs); $i++)
         {
-          $key = $this->pwc_dbs[$i]["key"];
-          echo "         url = \"control.lib.php?action=stop&daemon=buffer_".$key."&nhosts=\"+pwc_hosts.length+pwc_hosts_str;\n";
+          $dbid = $this->pwc_dbs[$i];
+          echo "         url = \"control.lib.php?action=stop&daemon=buffer_".$dbid."&nhosts=\"+pwc_hosts.length+pwc_hosts_str;\n";
           echo "         daemon_action_request(url);\n";
         }
 ?>
 
         // stop the server daemons 
-        url = "control.lib.php?action=stop&daemon=all&nhosts=1&host_0=srv0"
+        url = "control.lib.php?action=stop&daemon=all&nhosts=1&host_0="+srv_host
         daemon_action_request(url);
 
         // stop the demux's master control script
@@ -482,14 +672,17 @@ class control extends caspsr_webpage
     
       function stopCaspsrStage4()
       {
-
+        poll_2sec_count = 0;
         var srv_daemons = new Array("caspsr_results_manager", "caspsr_pwc_monitor", "caspsr_sys_monitor", "caspsr_demux_monitor", "caspsr_web_monitor");
         var srv_ready = checkMachinesAndDaemons(srv_hosts, srv_daemons, "red_light.png");
 
         var pwc_daemons = new Array(<?echo $this->pwcs_dbs_str?>); 
-        var pwc_ready = checkMachinesAndDaemons(pwc_hosts, pwc_daemons, "red_light.png");
+        var pwc_ready = checkMachinesPWCsAndDaemons(pwc_hosts, pwc_daemons, "red_light.png");
 
-        if ((!(srv_ready && pwc_ready)) && (stage4_wait > 0)) {
+        var demux_daemons = new Array("caspsr_master_control");
+        var demux_ready = checkMachinesAndDaemons(demux_hosts, demux_daemons, "red_light.png");
+
+        if ((!(srv_ready && pwc_ready && demux_ready)) && (stage4_wait > 0)) {
           stage4_wait--;
           setTimeout('stopCaspsrStage4()', 1000);
           return 0;
@@ -506,67 +699,161 @@ class control extends caspsr_webpage
 
       }
 
+      function stopCaspsrStage5()
+      {
+        poll_2sec_count = 0;
+        var srv_daemons = new Array("caspsr_master_control");
+        var srv_ready = checkMachinesAndDaemons(srv_hosts, srv_daemons, "red_light.png");
+
+        var pwc_daemons = new Array("caspsr_master_control");
+        var pwc_ready = checkMachinesAndDaemons(pwc_hosts, pwc_daemons, "red_light.png");
+
+        if ((!(srv_ready && pwc_ready)) && (stage5_wait > 0)) {
+          stage5_wait--;
+          setTimeout('stopCaspsrStage5()', 1000);
+          return 0;
+        }
+        stage5_wait = 0;
+
+        // revert to 20 second polling
+        poll_update = 20000;
+      }
+
+      // parse an XML entity returning an array of key/value paries
+      function parseXMLValues(xmlObj, values, pids)
+      {
+        //alert("parseXMLValues("+xmlObj.nodeName+") childNodes.length="+xmlObj.childNodes.length);
+        var j = 0;
+        for (j=0; j<xmlObj.childNodes.length; j++) 
+        {
+          if (xmlObj.childNodes[j].nodeType == 1)
+          {
+            // special case for PWCs
+            key = xmlObj.childNodes[j].nodeName;
+            if (key == "pwc") 
+            {
+              pwc_id = xmlObj.childNodes[j].getAttribute("id");
+              values[pwc_id] = new Array();
+              parseXMLValues(xmlObj.childNodes[j], values[pwc_id], pids)
+            }
+            else
+            {
+              val = "";
+              if (xmlObj.childNodes[j].childNodes.length == 1)
+              {
+                val = xmlObj.childNodes[j].childNodes[0].nodeValue; 
+              }
+              values[key] = val;
+              if (xmlObj.childNodes[j].getAttribute("pid") != null)
+              {
+                pids[key] = xmlObj.childNodes[j].getAttribute("pid");
+              }
+            }
+          }
+        }
+      }
+
+      function setDaemon(host, pwc, key, value)
+      {
+        var img_id;
+
+        if (pwc >= 0)
+          img_id = "img_"+host+":"+pwc+"_"+key;
+        else
+          img_id = "img_"+host+"_"+key;
+
+        var img  = document.getElementById(img_id);
+
+        if (img == null) {
+          alert(img_id + "  did not exist");
+        }
+        else
+        {
+          if (value == "2") {
+            img.src = "/images/green_light.png";
+          } else if (value == "1") {
+            img.src = "/images/yellow_light.png";
+          } else if (value == "0") {
+            if (key == "caspsr_master_control") {
+              set_daemons_to_grey(host);
+            }
+            img.src = "/images/red_light.png";
+          } else {
+            img.src = "/images/grey_light.png";
+          }
+        }
+      }
+
       function handle_daemon_info_request(xml_request) 
       {
         if (xml_request.readyState == 4) {
 
           var xmlDoc=xml_request.responseXML;
-          var xmlObj=xmlDoc.documentElement; 
+          if (xmlDoc != null)
+          {
+            var xmlObj=xmlDoc.documentElement; 
 
-          var i, j, k, result, key, value, span, this_result;
+            var i, j, k, result, key, value, span, this_result;
 
-          var results = xmlObj.getElementsByTagName("daemon_info");
+            var results = xmlObj.getElementsByTagName("daemon_info");
 
-          // for each result returned in the XML DOC
-          for (i=0; i<results.length; i++) {
+            // for each result returned in the XML DOC
+            for (i=0; i<results.length; i++) {
 
-            result = results[i];
-            this_result = new Array();
+              result = results[i];
+              this_result = new Array();
+              pids = new Array();
 
-            for (j=0; j<result.childNodes.length; j++) 
-            {
+              parseXMLValues(result, this_result, pids);
 
-              // if the child node is an element
-              if (result.childNodes[j].nodeType == 1) {
-                key = result.childNodes[j].nodeName;
-                // if there is a text value in the element
-                if (result.childNodes[j].childNodes.length == 1) {
-                  value = result.childNodes[j].childNodes[0].nodeValue;
-                } else {
-                  value = "";
-                }
-                this_result[key] = value;
-              }
-            }
+              host = this_result["host"];
 
-            host = this_result["host"];
-            str = "";
+              for (key in this_result) 
+              {
+                if (key == "host") 
+                {
 
-            for ( key in this_result) {
-              if (key == "host") {
-
-              } else {
-                
-                value = this_result[key];
-                str = str + " "+key+" -> "+value;
-
-                var img = document.getElementById("img_"+host+"_"+key);
-                if (img == null) {
-                  alert("img_"+host+"_"+key+" did not exist");
-                }
-                if (value == "2")
-                  img.src = "/images/green_light.png";
-                else if (value == "1") 
-                  img.src = "/images/yellow_light.png";
-                else if (value == "0") {
-                  if (key == "caspsr_master_control") {
-                    set_daemons_to_grey(host);
+                } 
+                else if (this_result[key] instanceof Array) 
+                {
+                  pwc = this_result[key];
+                  pwc_id = key;
+                  for (key in pwc)
+                  {
+                    value = pwc[key];
+                    setDaemon(host, pwc_id, key, value)
                   }
-                  img.src = "/images/red_light.png";
-                } else
-                  img.src = "/images/grey_light.png";
-              
-              } 
+                } 
+                else 
+                {
+                  value = this_result[key];
+                  setDaemon(host, -1, key, value);
+                } 
+              }
+
+              for ( key in pids ) {
+                try {
+                  var select = document.getElementById(key+"_pid");
+
+                  // disable changing of this select
+                  if ((this_result[key] == "2") || (this_result[key] == "1")) {
+                    select.disabled = true;
+                  } else {
+                    select.disabled = false;
+                  }
+                  for (j = 0; j < select.length; j++) {
+                    if (select[j].value == pids[key]) {
+                      if (pids[key] != "") 
+                        select.selectedIndex = j;
+                      else
+                        if (select.disabled == true)
+                          select.selectedIndex = j;
+                    }
+                  }
+                } catch(e) {
+                  alert("ERROR="+e);
+                }
+              }
             }
           }
         }
@@ -641,6 +928,8 @@ class control extends caspsr_webpage
     <input type='button' value='Start' onClick="startCaspsr()">
     <input type='button' value='Stop' onClick="stopCaspsr()">
     <input type='button' value='Hard Stop' onClick="hardStopCaspsr()">
+    <br/>
+    <font size='-1'>[<span id="poll_update_secs"></span> sec updates]</font>
 <?
     $this->closeBlockHeader();
 
@@ -649,8 +938,6 @@ class control extends caspsr_webpage
     {
       $server_daemons_persist = split(" ",$this->inst->config["SERVER_DAEMONS_PERSIST"]);
       $server_daemons_hash  = $this->inst->getServerLogInfo();
-      $host = $this->inst->config["SERVER_HOST"];
-      $host = substr($host, 0, strpos($host,"."));
 ?>
       <table width='100%'>
         <tr>
@@ -660,7 +947,7 @@ class control extends caspsr_webpage
       for ($i=0; $i < count($server_daemons_persist); $i++)
       {
         $d = $server_daemons_persist[$i];
-        $this->printServerDaemonControl($d, $server_daemons_hash[$d]["name"], $host);
+        $this->printServerDaemonControl($d, $server_daemons_hash[$d]["name"], $this->server_host);
       }
 ?>
             </table>
@@ -753,18 +1040,16 @@ class control extends caspsr_webpage
 
     $server_daemons_hash  = $this->inst->getServerLogInfo();
     $server_daemons = split(" ", $config["SERVER_DAEMONS"]);
-    $host = $config["SERVER_HOST"];
-    $host = substr($host, 0, strpos($host,"."));
 ?>
     <table width='100%'>
       <tr>
         <td>
           <table id="srv_controls">
 <?
-    $this->printServerDaemonControl("caspsr_master_control", "Master Control", $host);
+    $this->printServerDaemonControl("caspsr_master_control", "Master Control", $this->server_host);
     for ($i=0; $i < count($server_daemons); $i++) {
       $d = $server_daemons[$i];
-      $this->printServerDaemonControl($d, $server_daemons_hash[$d]["name"], $host);
+      $this->printServerDaemonControl($d, $server_daemons_hash[$d]["name"], $this->server_host);
     }
 ?>
           </table>
@@ -783,7 +1068,6 @@ class control extends caspsr_webpage
     #
     $this->openBlockHeader("GPU Daemons");
 
-    $pwcs    = getConfigMachines($config, "PWC");
     $client_daemons = split(" ",$config["CLIENT_DAEMONS"]);
     $client_daemons_hash =  $this->inst->getClientLogInfo();
 ?>
@@ -793,32 +1077,35 @@ class control extends caspsr_webpage
         <td>
           <table id='gpu_controls'>
             <tr>
-              <td></td>
+              <td>Host [gpuX]</td>
 <?
-    for ($i=0; $i<count($pwcs); $i++) {
-      echo "          <td style='text-align: center'><span title='".$pwcs[$i]."'>".$i."</span></td>\n";
+    for ($i=0; $i<count($this->pwc_list); $i++)
+    {
+      $host = $this->pwc_list[$i]["host"];
+      $pwc  = $this->pwc_list[$i]["pwc"];
+      echo "          <td style='text-align: center'><span title='".$host."_".$pwc."'>".$pwc."</span></td>\n";
     }
 ?>
               <td></td>
             </tr>
 <?
+    $this->printClientDaemonControl("caspsr_master_control", "Master Control", $this->host_list, "daemon&name=".$d, "pwc");
 
-    $this->printClientDaemonControl("caspsr_master_control", "Master Control", $pwcs, "daemon&name=".$d);
-
+    # pwc data blocks
     for ($i=0; $i<count($this->pwc_dbs); $i++)
     {
-      $key = $this->pwc_dbs[$i]["key"];
-      $nbufs = $this->pwc_dbs[$i]["nbufs"];
-      $bufsz =  $this->pwc_dbs[$i]["bufsz"];
-      $this->printClientDBControl($key." DB", $pwcs, $key, $nbufs, $bufsz);
+      $id = $this->pwc_dbs[$i];
+      $this->printClientDBControl("DB&nbsp;".$id, $this->pwc_list, $id, "pwc");
     }
 
-    $this->printClientDaemonControl("pwcs", "PWC", $pwcs, "pwcs");
-    # Print the client daemons
+    # Primary Write Client   
+    $this->printClientDaemonControl($this->inst->config{"PWC_BINARY"}, "PWC", $this->pwc_list, "pwcs", "pwc");
+
+    # pwc client daemons
     for ($i=0; $i<count($client_daemons); $i++) {
       $d = $client_daemons[$i];
-      $n = $client_daemons_hash[$d]["name"];
-      $this->printClientDaemonControl($d, $n, $pwcs, "daemon&name=".$d);
+      $n = str_replace(" ", "&nbsp;", $client_daemons_hash[$d]["name"]);
+      $this->printClientDaemonControl($d, $n, $this->pwc_list, "daemon&name=".$d, "pwc");
     }
 ?>
           </table>
@@ -835,9 +1122,6 @@ class control extends caspsr_webpage
 
     $demuxer_daemons = split(" ",$this->inst->config["DEMUX_DAEMONS"]);
     $demuxer_daemons_hash = $this->inst->getDemuxLogInfo();
-    $demuxers    = getConfigMachines($this->inst->config, "DEMUX");
-    $demuxers = array_unique($demuxers);
-    asort($demuxers);
 ?>
     <table width='100%'>
       <tr>
@@ -846,30 +1130,32 @@ class control extends caspsr_webpage
             <tr>
               <td></td>
 <?
-    for ($i=0; $i<count($demuxers); $i++) {
-      echo "          <td style='text-align: center'><span title='".$demuxers[$i]."'>".$i."</span></td>\n";
+    for ($i=0; $i<count($this->demux_list); $i++)
+    {
+      $host = $this->demux_list[$i]["host"];
+      $demux  = $this->demux_list[$i]["demux"];
+      echo "          <td style='text-align: center'><span title='".$host."_".$demux."'>".$demux."</span></td>\n";
     }
 ?>
               <td></td>
             </tr>
 <?
-    # Print the master control first
+    # demuxer master control
     $d = "caspsr_master_control";
-    $this->printClientDaemonControl($d, "Master Control", $demuxers, "daemon&name=".$d);
+    $this->printClientDaemonControl("caspsr_master_control", "Master Control", $this->host_list, "daemon&name=".$d, "demux");
 
+    # demuxer data blocks
     for ($i=0; $i<count($this->demux_dbs); $i++)
     {
-      $key = $this->demux_dbs[$i]["key"];
-      $nbufs = $this->demux_dbs[$i]["nbufs"];
-      $bufsz =  $this->demux_dbs[$i]["bufsz"];
-      $this->printClientDBControl($key." DB", $demuxers, $key, $nbufs, $bufsz);
+      $id = $this->demux_dbs[$i];
+      $this->printClientDBControl("DB&nbsp;".$id, $this->demux_list, $id, "demux");
     }
 
-    # Print the client daemons
+    # demuxer daemons
     for ($i=0; $i<count($demuxer_daemons); $i++) {
       $d = $demuxer_daemons[$i];
-      $n = $demuxer_daemons_hash[$d]["name"];
-      $this->printClientDaemonControl($d, $n, $demuxers, "daemon&name=".$d);
+      $n = str_replace(" ", "&nbsp;", $demuxer_daemons_hash[$d]["name"]);
+      $this->printClientDaemonControl($d, $n, $this->demux_list, "daemon&name=".$d, "demux");
     }
 ?>
           </table>
@@ -890,20 +1176,21 @@ class control extends caspsr_webpage
   function printUpdateXML($get)
   {
 
-    $host = "";
     $port = $this->inst->config["CLIENT_MASTER_PORT"];
     $cmd = "daemon_info_xml";
+    $nhosts = 0;
 
-    $nhosts = $get["nhosts"];
+    if (array_key_exists("nhosts", $get))
+      $nhosts = $get["nhosts"];
     $hosts = array();
     for ($i=0; $i<$nhosts; $i++) {
       $hosts[$i] = $get["host_".$i];
     }
 
+    $host = "";
     $sockets = array();
     $results = array();
     $responses = array();
-
 
     # open the socket connections
     for ($i=0; $i<count($hosts); $i++) {
@@ -940,8 +1227,11 @@ class control extends caspsr_webpage
           echo "socketRead() on ".$host.":".$port."<br>\n";
           flush();
         }
-        $read = socketRead($sockets[$i]);
-        $responses[$i] = rtrim($read);
+        list ($result, $response) = socketRead($sockets[$i]);
+        if ($result == "ok")
+          $responses[$i] = $response;
+        else
+          $responses[$i] = "";
         if ($_GET["verbose"] == "true") {
           echo "socketRead() returned ".$responses[$i]." from ".$host.":".$port."<br>\n";
           flush();
@@ -956,7 +1246,7 @@ class control extends caspsr_webpage
         echo "closing socket ".$host.":".$port."<br>\n";
         flush();
       }
-      if ($results[$i] == "ok") {
+      if (($results[$i] == "ok") && ($sockets[$i])) {
         socket_close($sockets[$i]);
       }
     }
@@ -966,8 +1256,6 @@ class control extends caspsr_webpage
     if (array_key_exists("SERVER_DAEMONS_PERSIST", $this->inst->config))
     {
       $server_daemons_persist = explode(" ", $this->inst->config["SERVER_DAEMONS_PERSIST"]);
-      list ($host, $domain)  = explode(".", $this->inst->config["SERVER_HOST"],2);
-      $persist_xml = "<daemon_info><host>".$host."</host>";
       $running = array();
       for ($i=0; $i<count($server_daemons_persist); $i++)
       {
@@ -985,25 +1273,32 @@ class control extends caspsr_webpage
         if (file_exists($this->inst->config["SERVER_CONTROL_DIR"]."/".$d.".pid"))
           $running[$d]++;
 
+        # the PID (Project ID) is NA
+        $dpid = "NA";
+
         # update xml
-          $persist_xml .= "<".$d.">".$running[$d]."</".$d.">";
+        $persist_xml .= "<".$d.">".$running[$d]."</".$d.">";
       }
-      $persist_xml .= "</daemon_info>";
     }
           
     # produce the xml
     $xml = "<?xml version='1.0' encoding='ISO-8859-1'?>\n";
-    $xml .= "<daemon_infos>\n";
+    $xml .= "<daemon_infos>";
 
     for ($i=0; $i<count($hosts); $i++) {
-      if ($responses[$i] == "")
-        $xml .= "<daemon_info><host>".$hosts[$i]."</host><caspsr_master_control>0</caspsr_master_control></daemon_info>\n";
+       $xml .= "<daemon_info>";
+      
+      if ((!array_key_exists($i, $responses)) || ($responses[$i] == ""))
+        $xml .= "<host>".$hosts[$i]."</host><caspsr_master_control>0</caspsr_master_control>";
       else
-        $xml .= $responses[$i]."\n";
+        $xml .= $responses[$i];
+
+      if ($hosts[$i] == $this->server_host)
+        $xml .= $persist_xml;
+
+      $xml .="</daemon_info>";
     }
-    if ($persist_xml != "")
-      $xml .= $persist_xml."\n";
-    $xml .= "</daemon_infos>\n";
+    $xml .= "</daemon_infos>";
 
     header('Content-type: text/xml');
     echo $xml;
@@ -1025,7 +1320,12 @@ class control extends caspsr_webpage
       $hosts[$i] = $get["host_".$i];
     $action = $get["action"];
     $daemon = $get["daemon"];
-    $args = $get["args"];
+    $pwc = "";
+    if (array_key_exists("pwc", $get))
+      $pwc = $get["pwc"];
+    $args = "";
+    if (array_key_exists("args", $get))
+      $args = $get["args"];
     $area = "";
 
     if (($nhosts == "") || ($action == "") || ($daemon == "") || ($hosts[0] == "")) {
@@ -1034,11 +1334,15 @@ class control extends caspsr_webpage
     }
 
     # determine which type of request this is (persist, srv, gpu or demux)
-    if ($hosts[0] == "srv0") 
-      $area = "srv";
-    if (($daemon == "caspsr_transfer_manager") || ($daemon == "caspsr_raid_pipeline"))
-      $area = "persist";
-    else {
+    if ($hosts[0] == $this->server_host) 
+    {
+      if (strpos($this->inst->config["SERVER_DAEMONS_PERSIST"], $daemon) !== FALSE)
+        $area = "persist";
+      else
+        $area = "srv";
+    }
+    else
+    {
       for ($i=0; $i<$this->inst->config["NUM_PWC"]; $i++)
         if ($this->inst->config["PWC_".$i] == $hosts[0])
           $area = "gpu";
@@ -1062,7 +1366,7 @@ class control extends caspsr_webpage
         echo "Starting ".$daemon." on srv0\n";
         flush();
 
-        $cmd = "ssh -x -l dada srv0 'server_".$daemon.".pl";
+        $cmd = "ssh -x -l dada ".$this->server_host." 'server_".$daemon.".pl";
         if ($args != "")
           $cmd .= " ".$args;
         $cmd .= "'";
@@ -1074,7 +1378,7 @@ class control extends caspsr_webpage
         $pid_file = $this->inst->config["SERVER_CONTROL_DIR"]."/".$daemon.".pid";
         if (file_exists($pid_file))
         {
-          echo "Stopping ".$daemon." on srv0\n";
+          echo "Stopping ".$daemon." on ".$this->server_host."\n";
           flush();
 
           $cmd = "touch ".$quit_file;
@@ -1089,7 +1393,7 @@ class control extends caspsr_webpage
         }
         else
         {
-          echo "No PID file [".$pid_file."] existed for ".$daemon." on srv0\n";
+          echo "No PID file [".$pid_file."] existed for ".$daemon." on ".$this->server_host."\n";
           flush();
         }
       } else {
@@ -1099,8 +1403,15 @@ class control extends caspsr_webpage
 
     } else if (($daemon == "caspsr_master_control") && ($action == "start")) {
       $html = "Starting ".$daemon." on";
-      for ($i=0; $i<$nhosts; $i++) {
-        $html .= " ".$hosts[$i];
+      if ($nhosts > 2)
+      {
+        $html .= " ".$hosts[0]." - ".$hosts[$nhosts-1];
+      }
+      else
+      {
+        for ($i=0; $i<$nhosts; $i++) {
+          $html .= " ".$hosts[$i];
+        }
       }
       echo $html."\n";
       flush();
@@ -1120,28 +1431,56 @@ class control extends caspsr_webpage
 
       $port = $this->inst->config["CLIENT_MASTER_PORT"];
 
-      $html = (($action == "start") ? "Starting" : "Stopping")." ";
-
+      $html = "";
+      # all daemons started or stopped
       if ($daemon == "all") {
-        $cmd = $action."_daemons";
+        $cmd = "cmd=".$action."_daemons";
+        $html .= (($action == "start") ? "Starting" : "Stopping")." ";
         $html .= "all daemons on ";
-      } else if (strpos($daemon, "buffer") !== FALSE) {
-        $bits = split("_", $daemon);
-        $key = $bits[1];
+      } 
+      # the command is in related to datablocks
+      else if (strpos($daemon, "buffer") !== FALSE)
+      {
+        list ($junk, $db_id) = explode("_", $daemon);
         if ($action == "stop")
-          $cmd = "destroy_db ".$key;
-        else 
-          $cmd = "init_db ".$key." ".str_replace("_", " ", $args);
-        $html .= $cmd." on";
-      } else {
-        $cmd = $action."_daemon ".$daemon;
-        $html .= $daemon." on";
+        {
+          $cmd = "cmd=destroy_db&args=".$db_id;
+          $html .= "Destroying DB ".$db_id." on";
+        }
+        else
+        {
+          $cmd = "cmd=init_db&args=".$db_id;
+          $html .= "Creating DB ".$db_id." on";
+        }
+      }
+      # the command is related to a specified daemon
+      else
+      {
+        $html .= (($action == "start") ? "Starting" : "Stopping")." ";
+        $cmd = "cmd=".$action."_daemon&args=".$daemon;
+        $html .= str_replace("_", " ",$daemon)." on";
+        if ($args != "")
+          $cmd .= " ".$args;
+      }
+
+      # if we are only running this command on a single PWC of a host
+      if ($pwc != "")
+      {
+        $cmd .= "&pwc=".$pwc;
       }
 
       # open the socket connections
+      if (count($hosts) > 2)
+        $html .= " ".$hosts[0]." - ".$hosts[count($hosts)-1];
       for ($i=0; $i<count($hosts); $i++) {
         $host = $hosts[$i];
-        $html .= " ".$host;
+        if (count($hosts) <= 2)
+        {
+          $html .= " ".$host;
+          if ($pwc != "")
+            $html .= ":".$pwc;
+        }
+
         $ntries = 5;
         $results[$i] = "not open";
         while (($results[$i] != "ok") && ($ntries > 0)) {
@@ -1176,15 +1515,14 @@ class control extends caspsr_webpage
           # multiple lines may be returned, final line is always an "ok" or "fail"
           $responses[$i] = "";
           while ($done > 0) {
-            $read = rtrim(socketRead($sockets[$i]));
-            if (($read == "ok") || ($read == "fail")) {
-              flush();
+            list ($result, $response) = socketRead($sockets[$i]);
+            if (($response == "ok") || ($response == "fail")) {
               $done = 0;
             } else {
               $done--;
             }
-            if ($read != "")
-              $responses[$i] .= $read."\n";
+            if ($response != "")
+              $responses[$i] .= $response."\n";
           }
         }
         $responses[$i] = rtrim($responses[$i]);
@@ -1284,49 +1622,97 @@ class control extends caspsr_webpage
     echo "  </tr>\n";
   }
 
-  function printClientDaemonControl($daemon, $name, $hosts, $cmd) 
+  function printPersistentServerDaemonControl($daemon, $name, $host, $pids)
+  {
+    echo "  <tr>\n";
+    echo "    <td>".$name."</td>\n"; 
+    if (is_array($pids))
+      echo "    <td>".$this->statusLight($host, $daemon, "-1", "", "toggleDaemonPID")."</td>\n";
+    else
+      echo "    <td>".$this->statusLight($host, $daemon, "-1", "", "toggleDaemonPersist")."</td>\n";
+    echo "    <td>\n";
+    if (is_array($pids))
+    {
+      echo "      <select id='".$daemon."_pid'>\n";
+      echo "        <option value=''>--</option>\n";
+      for ($i=0; $i<count($pids); $i++)
+      {
+        echo "        <option value='".$pids[$i]."'>".$pids[$i]."</option>\n";
+      }
+      echo "      </select>\n";
+    }
+    else
+      echo $pids;
+    echo "    </td>\n";
+    echo "  </tr>\n";
+  } 
+
+  function printClientDaemonControl($daemon, $name, $hosts, $cmd, $type)
   {
     $host_str = "";
     echo "  <tr>\n";
-    echo "    <td style='vertical-align: middle'>".$name."</td>\n";
-    for ($i=0; $i<count($hosts); $i++) {
-      echo "    <td style='vertical-align: middle'>".$this->statusLight($hosts[$i], $daemon, -1, "")."</td>\n";
-      $host_str .= $hosts[$i]." ";
+    echo "    <td>".$name."</td>\n";
+    for ($i=0; $i<count($hosts); $i++)
+    {
+      if ((!array_key_exists("type", $hosts[$i])) || ($hosts[$i]["type"] == $type))
+      {
+        $host = $hosts[$i]["host"];
+        $span = $hosts[$i]["span"];
+        $pwc = "";
+        if (array_key_exists($type, $hosts[$i]))
+          $pwc = ":".$hosts[$i][$type];
+
+        echo "    <td colspan='".$span."' style='text-align: center;'>".$this->statusLight($host.$pwc, $daemon, -1, "")."</td>\n";
+        if (strpos($host_str, $host) === FALSE)
+          $host_str .= $host." ";
+      }
     }
     $host_str = rtrim($host_str);
     if ($cmd != "" ) {
       echo "    <td style='text-align: center;'>\n";
       echo "      <input type='button' value='Start' onClick=\"toggleDaemons('start', '".$daemon."', '".$host_str."')\">\n";
+      echo "    </td>\n";
+      echo "    <td>\n";
       echo "      <input type='button' value='Stop' onClick=\"toggleDaemons('stop', '".$daemon."', '".$host_str."')\">\n";
       echo "    </td>\n";
     }
     echo "  </tr>\n";
   }
 
+  
+
   #
   # Print the data block row
   #
-  function printClientDBControl($name, $hosts, $key, $nbufs, $bufsz) 
+  function printClientDBControl($name, $hosts, $id, $type)
   {
 
-    $daemon = "buffer_".$key;
-    $daemon_on = "buffer_".$key."&args=".$nbufs."_".$bufsz;
-    $daemon_off = "buffer_".$key;
+    $daemon = "buffer_".$id;
+    $daemon_on = "buffer_".$id;
+    $daemon_off = "buffer_".$id;
 
     $host_str = "";
     echo "  <tr>\n";
-    echo "    <td style='vertical-align: middle'>".$name."</td>\n";
+    echo "    <td>".$name."</td>\n";
     for ($i=0; $i<count($hosts); $i++) {
-      echo "    <td style='vertical-align: middle'>".$this->statusLight($hosts[$i], $daemon, -1, $nbufs."_".$bufsz)."</td>\n";
-      $host_str .= $hosts[$i]." ";
+      $host = $hosts[$i]["host"];
+      $span = $hosts[$i]["span"];
+      $pwc = "";
+      if (array_key_exists($type, $hosts[$i]))
+        $pwc = ":".$hosts[$i][$type];
+      echo "    <td span='".$span."' style='text-align: center;'>".$this->statusLight($host.$pwc, $daemon, -1, "")."</td>\n";
+      if (strpos($host_str, $host) === FALSE)
+        $host_str .= $host." ";
     }
     $host_str = rtrim($host_str);
     echo "    <td style='text-align: center;'>\n";
     echo "      <input type='button' value='Init' onClick=\"toggleDaemons('start', '".$daemon_on."', '".$host_str."')\">\n";
+    echo "    </td>\n";
+    echo "    <td>\n";
     echo "      <input type='button' value='Dest' onClick=\"toggleDaemons('stop', '".$daemon_off."', '".$host_str."')\">\n";
     echo "    </td>\n";
     echo "  </tr>\n";
-
+  
   }
 
   function generateHash()

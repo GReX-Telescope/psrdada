@@ -9,6 +9,7 @@ class caspsr_webpage
   var $css = array("Arty/Arty.css");
   var $ejs = array();
   var $title = "CASPSR";
+  var $callback_freq = 4000;
 
   function caspsr_webpage() 
   {
@@ -113,7 +114,7 @@ function handleDirect($child_class)
       echo "    function poll_server()\n";
       echo "    {\n";
       echo "      ".$obj->javaScriptCallback()."\n";
-      echo "      setTimeout('poll_server()', 4000);\n";
+      echo "      setTimeout('poll_server()', ".$obj->callback_freq.");\n";
       echo "    }\n";
       echo "  </script>\n";
     }

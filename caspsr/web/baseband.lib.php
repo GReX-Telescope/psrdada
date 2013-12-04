@@ -1,14 +1,13 @@
 <?PHP
 
-include("caspsr.lib.php");
-include("caspsr_webpage.lib.php");
-include("functions_i.php");
+include_once("caspsr.lib.php");
+include_once("caspsr_webpage.lib.php");
+include_once("functions_i.php");
 
 class baseband extends caspsr_webpage
 {
   var $inst = 0;
   var $cfg = array();
-  var $dbkeys = array("eada", "fada");
 
   function baseband()
   {
@@ -16,7 +15,7 @@ class baseband extends caspsr_webpage
     $this->inst = new caspsr();
     $this->cfg = $this->inst->config;
     $this->title = "CASPSR | Baseband Record Controller";
-    $this->callback_freq = 3000; // 5 seconds
+    $this->callback_freq = 2000; // 10 seconds
   }
 
   function javaScriptCallback()
@@ -76,7 +75,6 @@ class baseband extends caspsr_webpage
               parts = lines[i].split(":::");
               host = parts[0];
               msg  = parts[1];
-
               if (msg.indexOf("Could not connect to") == -1) 
               {
                 bits = msg.split(" ");
@@ -96,115 +94,40 @@ class baseband extends caspsr_webpage
         }
       }
 
-      function controlDB(key, action)
+      function baseband_action_request (stream, action)
       {
         var backend_state = document.getElementById("img_caspsr_baseband").src;
 
-        var i = 0;
-        var host = "";
-        var img = "";
-        var src = "";
-        var url = "";
+        if (backend_state.indexOf("green_light.png",0) == -1)
+        {
+          alert ("Cannot change baseband recorded state if RAID Recording Deamon is inactive");
+          return;
+        }
 
+        if (stream.indexOf("auxiliary",0) == -1)
+        {
+          alert ("Can only change the state of the BASEBAND data stream");
+          return;
+        }
+
+        var url = "baseband.lib.php?action="+action+"&n_hosts="+hosts.length;
         for (i=0; i<hosts.length; i++)
         {
-          host = hosts[i];
-          img = document.getElementById("img_"+host+"_"+key);
-          src = new String(img.src);
-
-          if (src.indexOf("grey_light.png") != -1)
-          {
-            alert("Ignoring command as "+host+" was disabled");
-            action = "ignore";
-            return;
-          }
-
-          if ((action == "ACTIVATE") && ((src.indexOf("green_light.png") != -1) || (src.indexOf("yellow_light.png") != -1)))
-          {
-            alert("Ignoring Start as "+host+" was active");
-            action = "ignore";
-            return;
-          }
-
-          if ((action == "DEACTIVATE") && (src.indexOf("red_light.png") != -1))
-          {
-            alert("Ignoring Stop as "+host+" was inactive");
-            action = "ignore";
-            return;
-          }
+          url += "&host_"+i+"="+hosts[i];
         }
-        if (action != "ignore")
-        {
-          // check that the backend state is ok for starting on fada
-          if ((action == "ACTIVATE") && (key == "fada") && (backend_state.indexOf("green_light.png",0) == -1))
-          {
-            alert("Cannot start Recorder if Baseband Recording Daemon is not running");
-            return;
-          }
 
-          url = "baseband.lib.php?action="+action+"&n_hosts="+hosts.length+"&key="+key;
-          for (i=0; i<hosts.length; i++)
-          {
-            url += "&host_"+i+"="+hosts[i];
-          }
-
-          var ba_http_request;
-          if (window.XMLHttpRequest)
-            ba_http_request = new XMLHttpRequest()
-          else
-            ba_http_request = new ActiveXObject("Microsoft.XMLHTTP");
-    
-          ba_http_request.onreadystatechange = function() 
-          {
-            handle_baseband_action_request(ba_http_request)
-          }
-          ba_http_request.open("GET", url, true)
-          ba_http_request.send(null)
-
-        }
-      }
-
-      function toggleDB(host, key)
-      {
-        var backend_state = document.getElementById("img_caspsr_baseband").src;
-
-        var img = document.getElementById("img_"+host+"_"+key);
-        var src = new String(img.src);
-        var action = "";
-        var url = "";
-
-        if (src.indexOf("green_light.png",0) != -1)
-          action = "DEACTIVATE";
-        else if (src.indexOf("red_light.png",0) != -1)
-          action = "ACTIVATE";
-        else if (src.indexOf("yellow_light.png",0) != -1)
-          action = "DEACTIVATE";
+        var ba_http_request;
+        if (window.XMLHttpRequest)
+          ba_http_request = new XMLHttpRequest()
         else
-          action = "ignore";
-
-
-        if (action != "ignore") 
+          ba_http_request = new ActiveXObject("Microsoft.XMLHTTP");
+  
+        ba_http_request.onreadystatechange = function() 
         {
-          // check that the backend state is ok for starting on fada
-          if ((action == "ACTIVATE") && (key == "fada") && (backend_state.indexOf("green_light.png",0) == -1))
-          {
-            alert("Cannot start Recorder if Baseband Recording Daemon is not running");
-            return;
-          }
-          url = "baseband.lib.php?action="+action+"&n_hosts=1&host_0="+host+"&key="+key;
-          var ba_http_request;
-          if (window.XMLHttpRequest)
-            ba_http_request = new XMLHttpRequest()
-          else
-            ba_http_request = new ActiveXObject("Microsoft.XMLHTTP");
-    
-          ba_http_request.onreadystatechange = function() 
-          {
-            handle_baseband_action_request(ba_http_request)
-          }
-          ba_http_request.open("GET", url, true)
-          ba_http_request.send(null)
-        } 
+          handle_baseband_action_request(ba_http_request)
+        }
+        ba_http_request.open("GET", url, true)
+        ba_http_request.send(null)
       }
 
       function handle_baseband_request(b_http_request) 
@@ -235,49 +158,46 @@ class baseband extends caspsr_webpage
               // if we were able to connect to dbdecidb
               if (msg.indexOf("Could not connect to") == -1) 
               {
+                // 0 == primary/auxiliary, 1 == state
                 bits = msg.split(" ");
-                // 0 == host, 1 == curr_state, 2 == new_state
-
                 td = document.getElementById("state_"+host+"_"+bits[0]);
                 img = document.getElementById("img_"+host+"_"+bits[0]);
 
-                if (bits[1] == "active" && bits[2] == "active")
+                state = bits[1];
+                command = bits[2];
+              
+                if ((state != "inactive") && (command != "disable"))
                 {
-                  td.innerHTML = "Active";
+                  td.innerHTML = "Active "+state;
                   img.src = "/images/green_light.png";
                 }
-                else if (bits[1] == "inactive" && bits[2] == "active")
+                else if ((state != "inactive") && (command == "disable"))
                 {
-                  td.innerHTML = "Queued to start";
+                  td.innerHTML = state+", queued to stop";
                   img.src = "/images/yellow_light.png";
                 }
-                else if (bits[1] == "active" && bits[2] == "inactive")
+                else if ((state == "inactive") && (command != "disable"))
                 {
-                  td.innerHTML = "Queued to stop";
+                  td.innerHTML = "queued to start " + command;
                   img.src = "/images/yellow_light.png";
                 }
-                else if (bits[1] == "inactive" && bits[2] == "inactive")
+                else if ((state == "inactive") && (command == "disable"))
                 {
                   td.innerHTML = "Inactive";
                   img.src = "/images/red_light.png";
                 }
                 else
                 {
-                  td.innerHTML = "Unknown ["+bits[1]+", "+bits[2]+"]";
+                  td.innerHTML = "Unknown [" + state + ", " + command + "]";
                   img.src = "/images/grey_light.png";
                 }
               }
               else
               {
-<?
-      for ($i=0; $i<count($this->dbkeys); $i++)
-      {
-        echo "                td = document.getElementById('state_'+host+'_".$this->dbkeys[$i]."');\n";
-        echo "                td.innerHTML = 'Not Running';\n";
-        echo "                img = document.getElementById('img_'+host+'_".$this->dbkeys[$i]."');\n";
-        echo "                img.src = '/images/grey_light.png';\n";
-      }
-?>
+                td = document.getElementById('state_'+host+'_primary');
+                td.innerHTML = 'Not Running';
+                td = document.getElementById('state_'+host+'_auxiliary');
+                td.innerHTML = 'Not Running';
               }
             }
           }
@@ -314,6 +234,8 @@ class baseband extends caspsr_webpage
 ?>
     <center>
 
+    <p>Remeber to fully turn off BPSR backed on HIPSR!!!</p>
+
     <table width='500px' border=0>
       <tr><td style='vertical-align: middle;'>
         <b>RAID Recording Daemon</b>
@@ -324,55 +246,48 @@ class baseband extends caspsr_webpage
 
     <br/>
 
-    <table width='500px'>
+    <table width='700px'border=0 cellpadding=5>
       <tr>
         <th>PWC</th>
-        <th>Processor [DB eada]</th>
-        <th>Recorder [DB fada]</th>
+        <th>DSPSR</th>
+        <th>BASEBAND [full or events]</th>
       </tr>
 <?
     for ($i=0; $i<$this->cfg["NUM_PWC"]; $i++)
     {
       $h = $this->cfg["PWC_".$i];
       echo "      <tr>\n";
-      echo "        <td>".$h."</td>\n"; 
-      for ($j=0; $j<count($this->dbkeys); $j++)
-      {
-        echo "        <td>\n";
-        $k = $this->dbkeys[$j];
-        //echo "          ".$this->statusLight($h, $k, -1, "toggleDB")."\n";
-        echo "          ".$this->statusLight($h, $k, -1, "")."\n";
-        echo "          &nbsp;&nbsp;&nbsp;<span id='state_".$h."_".$k."'>N/A</span>\n";
-        echo "        </td>\n";
-      }
-      echo "      </tr>\n"; 
+      echo "        <td>".$h."</td>\n";
+
+      echo "        <td>".$this->statusLight($h, "primary", -1, "").
+           "&nbsp;&nbsp;<span id='state_".$h."_primary'>N/A</span></td>\n";
+      
+      echo "        <td>".$this->statusLight($h, "auxiliary", -1, "").
+           "&nbsp;&nbsp;<span id='state_".$h."_auxiliary'>N/A</span></td>\n";
+
+      echo  "     </tr>\n";
     }
 ?>
       <tr>
-        <td></td>
-<?
-      for ($j=0; $j<count($this->dbkeys); $j++)
-      {
-        echo "        <td>\n";
-        echo "          <input type='button' value='Start' onClick='controlDB(\"".$this->dbkeys[$j]."\",\"ACTIVATE\")'>\n";
-        echo "          <input type='button' value='Stop' onClick='controlDB(\"".$this->dbkeys[$j]."\",\"DEACTIVATE\")'>\n";
-        echo "        </td>\n";
-      }
-?>
+        <td colspan=3 align=center>
+          <input type='button' value='Start Full Baseband' onClick='baseband_action_request("auxiliary", "baseband")'>
+          <input type='button' value='Start Baseband Events' onClick='baseband_action_request("auxiliary", "events")'>
+          <input type='button' value='Stop Baseband' onClick='baseband_action_request("auxiliary", "disable")'>
+        </td>
       </tr>
 
       <tr>
-        <td colspan=<?echo (1 + count($this->dbkeys))?>>
+        <td colspan=3>
           <br/>
           Usage:
           <ol>
             <li>Ensure all <b>Persistent Server Daemons</b> on APSR, BPSR &amp; CASPSR are stopped
             <li>Start CASPSR's <b>Baseband Ctrlr</b> Persistent Server Daemon
-            <li>Click the <i>Recorder [DB fada]</i>'s Start/Stop buttons to control baseband recording
-            <li>Click the <i>Processor [DB eada]</i>'s Start/Stop buttons to control dspsr 
+            <li>Click the relevant Start button to begin
           </ol>
         </td>
       </tr>
+
     </table>
 
     </center>
@@ -411,19 +326,19 @@ class baseband extends caspsr_webpage
 
       if ($result == "ok") 
       {
-        $bytes_written = socketWrite($socket, "STATE\r\n");
+        $bytes_written = socketWrite($socket, "state\r\n");
         $max = 30;
         while (!$eod && $max > 0)
         {
-          $read = socketRead($socket);
-          if ($read == "ERROR: socket closed before read")
+          list ($result, $response) = socketRead($socket);
+          if ($response == "ERROR: socket closed before read")
             $eod = 1;
-          if (strlen($read) > 1)
+          if (strlen($response) > 1)
           {
-            if ((strpos($read, "ok") !== FALSE) || (strpos($read, "fail") != FALSE))
+            if ((strpos($response, "ok") !== FALSE) || (strpos($response, "fail") != FALSE))
               $eod = 1;
             else
-              $output .= $host.":::".rtrim($read)."\n";
+              $output .= $host.":::".$response."\n";
           }
           $max--;
         }
@@ -442,37 +357,34 @@ class baseband extends caspsr_webpage
   {
     $port = $this->cfg["CLIENT_DECIDB_PORT"];
     $action = $get["action"];
-    $key = $get["key"];
-    $cmd = $action." ".$key;
 
     for ($i=0; $i<$get["n_hosts"]; $i++)
     {
       $host = $get["host_".$i];
       list ($socket, $result) = openSocket($host, $port);
-
       $eod = 0;
 
       if ($result == "ok")
       {
-        $bytes_written = socketWrite($socket, $cmd."\r\n");
+        $bytes_written = socketWrite($socket, $action."\r\n");
         $max = 30;
         while (!$eod && $max > 0)
         {
-          $read = socketRead($socket);
-          if ($read == "ERROR: socket closed before read")
+          list ($result, $response) = socketRead($socket);
+          if ($response == "ERROR: socket closed before read")
             $eod = 1;
-          if (strlen($read) > 1)
+          if (strlen($response) > 1)
           {
-            if ((strpos($read, "ok") !== FALSE) || (strpos($read, "fail") != FALSE))
+            if ((strpos($response, "ok") !== FALSE) || (strpos($response, "fail") != FALSE))
               $eod = 1;
             else
-              $output .= $host.":::".$key." ".$read."\n";
+              $output .= $host.":::".$response."\n";
           }
           $max--;
         }
         socket_close($socket);
       } else {
-        $output .= $host.":::".$key." Could not connect to $host:$port\n";
+        $output .= $host.":::".$action." Could not connect to $host:$port\n";
       }
     }
     echo $output;

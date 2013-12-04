@@ -1,6 +1,6 @@
 <?PHP
 
-include "caspsr_webpage.lib.php";
+include_once "caspsr_webpage.lib.php";
 
 class result_index extends caspsr_webpage
 {

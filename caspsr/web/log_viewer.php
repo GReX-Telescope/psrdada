@@ -1,8 +1,8 @@
 <?PHP
 
-include("definitions_i.php");
-include("functions_i.php");
-include($instrument.".lib.php");
+include_once("definitions_i.php");
+include_once("functions_i.php");
+include_once($instrument.".lib.php");
 
 $inst = new $instrument();
 $config = $inst->config;

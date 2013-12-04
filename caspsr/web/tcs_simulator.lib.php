@@ -1,9 +1,9 @@
 <?PHP
 
-include("caspsr_webpage.lib.php");
-include("definitions_i.php");
-include("functions_i.php");
-include($instrument.".lib.php");
+include_once("caspsr_webpage.lib.php");
+include_once("definitions_i.php");
+include_once("functions_i.php");
+include_once($instrument.".lib.php");
 
 class tcs_simulator extends caspsr_webpage 
 {
@@ -27,6 +27,9 @@ class tcs_simulator extends caspsr_webpage
 
     $this->psrs = $this->inst->getPsrcatPsrs();
     $this->psr_keys = array_keys($this->psrs);
+    array_push ($this->psr_keys, "J1705-1908");
+    $this->psrs["J1705-1908"]["RAJ"] = "17:05:27.1399999999905";
+    $this->psrs["J1705-1908"]["DECJ"] = "-19:08:02.5899999999903";
 
 ?>
     <script type='text/javascript'>
@@ -62,17 +65,16 @@ class tcs_simulator extends caspsr_webpage
 
         updateRADEC();
 
-        i = document.getElementById("SOURCE_LIST").selectedIndex;
-        psr = document.getElementById("SOURCE_LIST").options[i].value;
+        i = document.getElementById("src_list").selectedIndex;
+        psr = document.getElementById("src_list").options[i].value;
 
-        i = document.getElementById("MODE_LIST").selectedIndex;
-        mode = document.getElementById("MODE_LIST").options[i].value;
-        document.getElementById("MODE").value = mode;
+        i = document.getElementById("mode_list").selectedIndex;
+        mode = document.getElementById("mode_list").options[i].value;
 
         if ((mode == "CAL") || (mode == "LEVCAL")) {
-          document.getElementById("SOURCE").value = psr + "_R";
+          document.getElementById("src").value = psr + "_R";
         } else {
-          document.getElementById("SOURCE").value = psr;
+          document.getElementById("src").value = psr;
         }
 
         document.tcs.submit();
@@ -85,12 +87,12 @@ class tcs_simulator extends caspsr_webpage
       }
 
       function updateRADEC() {
-        var i = document.getElementById("SOURCE_LIST").selectedIndex;
-        var psr = document.getElementById("SOURCE_LIST").options[i].value;
+        var i = document.getElementById("src_list").selectedIndex;
+        var psr = document.getElementById("src_list").options[i].value;
         var psr_ra = ras[psr];
         var psr_dec= decs[psr];
-        document.getElementById("RA").value = psr_ra;
-        document.getElementById("DEC").value = psr_dec;
+        document.getElementById("ra").value = psr_ra;
+        document.getElementById("dec").value = psr_dec;
       }
     </script>
 
@@ -148,35 +150,32 @@ class tcs_simulator extends caspsr_webpage
     <table border=0 cellpadding=5 cellspacing=0 width='100%'>
       <tr>
 
-        <td>CALFREQ</td>
-        <td><input type="text" name="CALFREQ" size="12" value="11.123000"></td>
+        <td>band</td>
+        <td>
+          <select name="band">
+            <option value="-400">-400</option>
+            <option value="400">400</option>
+            <option value="64">64</option>
+          </select>
+        </td>
 
         <td width=20px>&nbsp;</td>
 
-        <td>CFREQ</td>
-        <td><input type="text" name="CFREQ" size="12" value="1382.00000"></td>
-
-        <td width=20px>&nbsp;</td>
-
-        <td>BANDWIDTH</td>
-        <td><select name="BANDWIDTH">
-              <option value="-400.0000">-400.0000</option>
-              <option value="400.0000">400.0000</option>
-              <option value="64">64</option>
-            </select>
-
-        <td width=20px>&nbsp;</td>
-
-        <td>NDIM</td>
-        <td><input type="text" name="NDIM" size="2" value="1" readonly></td>
+        <td>observer</td>
+        <td><input type="text" name="observer" size="4" value="test"></td>
       
+        <td width=20px>&nbsp;</td>
+
+        <td>nbeam</td>
+        <td><input type="text" name="nbeam" size="2" value="1"></td>
+
       </tr>
       <tr>
 
-        <td>SOURCE</td>
+        <td>src</td>
         <td>
-          <input type="hidden" id="SOURCE" name="SOURCE" value="">
-          <select id="SOURCE_LIST" name="SOURCE_LIST" onChange='updateRADEC()'>
+          <input type="hidden" id="src" name="src" value="">
+          <select id="src_list" name="src_list" onChange='updateRADEC()'>
 <? 
           for ($i=0; $i<count($this->psr_keys); $i++) {
             echo "          <option value='".$this->psr_keys[$i]."'>".$this->psr_keys[$i]."</option>\n";
@@ -187,30 +186,30 @@ class tcs_simulator extends caspsr_webpage
 
         <td width=20px>&nbsp;</td>
 
-        <td>RA</td>
-        <td><input type="text" id="RA" name="RA" size="12" value="04:37:00.00" readonly></td>
+        <td>ra</td>
+        <td><input type="text" id="ra" name="ra" size="12" value="04:37:00.00" readonly></td>
 
         <td width=20px>&nbsp;</td>
 
-        <td>DEC</td>
-        <td><input type="text" id="DEC" name="DEC" size="12" value="-47:35:00.0" readonly></td>
+        <td>dec</td>
+        <td><input type="text" id="dec" name="dec" size="12" value="-47:35:00.0" readonly></td>
 
-        <td width=20px>&nbsp;</td>
-
-        <td>NBIT</td>
-        <td><input type="text" name="NBIT" size="2" value="8" readonly></td>
-      
       </tr>
       <tr>
 
-        <td>RECEIVER</td>
-        <td><input type="text" name="RECEIVER" size="12" value="MULTI" readonly></td>
+        <td>receiver</td>
+        <td>
+          <select name="receiver">
+            <option value="MULTI">MULTI</option>
+            <option value="1050CM">1050CM</option>
+          </select>
+        </td>
 
         <td width=20px>&nbsp;</td>
 
-        <td>PID</td>
+        <td>pid</td>
         <td>
-          <select name="PID">
+          <select name="pid">
 <?          for ($i=0; $i<count($this->groups); $i++) {
               echo "            <option value=".$this->groups[$i].">".$this->groups[$i]."</option>\n";
             } 
@@ -220,9 +219,9 @@ class tcs_simulator extends caspsr_webpage
 
         <td width=20px>&nbsp;</td>
 
-        <td>PROCFIL</td>
+        <td>procfil</td>
         <td>
-          <select name="PROCFIL">
+          <select name="procfil">
             <option value="dspsr.gpu">dspsr.gpu</option>
             <option value="dspsr.50cmgpu">dspsr.50cmgpu</option>
             <option value="dspsr.nosk">dspsr.nosk</option>
@@ -238,32 +237,43 @@ class tcs_simulator extends caspsr_webpage
           </select>
         </td>
 
-        <td width=20px>&nbsp;</td>
-
-        <td>NPOL</td>
-        <td><input type="text" name="NPOL" size="2" value="2" readonly></td>
-      
       </tr>
       <tr>
 
-        <td>MODE</td>
+        <td>obsval</td>
+        <td><input type="text" name="obsval" size="16" value="120.000"> [s]</td>
+
+        <td>&nbsp;</td>
+      
+        <td>obsunit</td>
+        <td><input type="text" name="obsunit" size="16" value="SECONDS"></td>
+
+        <td>&nbsp;</td>
+
+        <td>refbeam</td>
+        <td><input type="text" name="refbeam" size="2" value="1"></td>
+      
+      </tr>
+
+      <tr>
+        <td>mode</td>
         <td>
-          <input type="hidden" id="MODE" name="MODE" value="">
-          <select id="MODE_LIST" name="MODE_LIST">
-            <option value="PSR">PSR</option>
+          <select id="mode_list" name="mode_list">
+            <option value="PSR" selected>PSR</option>
             <option value="CAL">CAL</option>
             <option value="LEVCAL">LEVCAL</option>
           </select>
-        </td>
 
-        <td width=20px>&nbsp;</td>
+        <td>&nbsp;</td>
 
-        <td>LENGTH</td>
-        <td><input type="text" name="LENGTH" size="5" value=""> [s]</td>
+        <td>freq</td>
+        <td><input type="text" name="freq" size="16" value="1382.000000"></td>
+
+
 
         <td colspan=6>&nbsp;</td>
-      
       </tr>
+
       <tr>
         <td colspan=11><hr></td>
       </tr>
@@ -323,8 +333,8 @@ class tcs_simulator extends caspsr_webpage
     if ($get["COMMAND"] == "STOP") {
       $cmd = "STOP\r\n";
       socketWrite($sock,$cmd);
-      $result = rtrim(socketRead($sock));
-      # $ignore = socketRead($sock);
+      $result = rtrim($this->sRead($sock));
+      # $ignore = $this->sRead($sock);
       $this->printTR($cmd,$result);
       $this->printTF();
       $this->printFooter();
@@ -336,12 +346,12 @@ class tcs_simulator extends caspsr_webpage
     for ($i=0; $i<count($keys); $i++) {
 
       $k = $keys[$i];
-      if (($k != "COMMAND") && ($k != "SOURCE_LIST") && ($k != "MODE_LIST")) {
+      if (($k != "COMMAND") && ($k != "src_list") && ($k != "mode_list")) {
         if ($get[$k] != "") {
           $cmd = $k." ".$get[$k]."\r\n";
           socketWrite($sock,$cmd);
-          $result = rtrim(socketRead($sock),"\r\n");
-          $ignore = socketRead($sock);
+          $result = rtrim($this->sRead($sock),"\r\n");
+          $ignore = $this->sRead($sock);
           if ($result != "ok") {
             $this->printTR("[".$cmd."] failed ", $result);
             $this->printTR("START aborted", "");
@@ -357,11 +367,11 @@ class tcs_simulator extends caspsr_webpage
     # Issue START command to server_tcs_interface 
     $cmd = "START\r\n";
     socketWrite($sock,$cmd);
-    $result = rtrim(socketRead($sock),"\r\n");
+    $result = rtrim($this->sRead($sock),"\r\n");
     $this->printTR($cmd,$result);
-    $ignore = socketRead($sock);
+    $ignore = $this->sRead($sock);
     if ($result != "ok") {
-      $this->printTR("START command failed", $result.": ".rtrim(socketRead($sock)));
+      $this->printTR("START command failed", $result.": ".rtrim($this->sRead($sock)));
       $this->printTF();
       $this->printFooter();
       return;
@@ -370,7 +380,7 @@ class tcs_simulator extends caspsr_webpage
     }
 
     # now wait for the UTC_START to come back to us
-    $result = rtrim(socketRead($sock));
+    $result = rtrim($this->sRead($sock));
     $this->printTR("", $result);
     $this->printTF();
     $this->printFooter();
@@ -378,7 +388,7 @@ class tcs_simulator extends caspsr_webpage
   }
 
   function printTR($left, $right) {
-    echo " <tr\n";
+    echo " <tr>\n";
     echo "  <td>".$left."</td>\n";
     echo "  <td>".$right."</td>\n";
     echo " </tr>\n";
@@ -397,17 +407,57 @@ class tcs_simulator extends caspsr_webpage
     echo "</table>\n";
   }
 
+  function getRAForSource($source)
+  {
+    $cmd = "psrcat -all -c \"PSRJ RAJ DECJ\" ".$source." -nohead | grep -v \"*             *\" | awk '{print $2,$4, $7}'";
+    $script = "source /home/dada/.bashrc; ".$cmd." 2>&1";
+    $string = exec($script, $output, $return_var);
+
+    $ra = "00:00:00.000";
+    if ($rval == 0 && count($output) == 1 && strpos("WARNING", $output[0]) !== FALSE)
+    {
+      $bits = split(" ", $output[0]);
+      $ra = $bits[1];
+    }
+    return $ra;
+  }
+
+  function getDECForSource($source)
+    {
+    $cmd = "psrcat -all -c \"PSRJ RAJ DECJ\" ".$source." -nohead | grep -v \"*             *\" | awk '{print $2,$4, $7}'";
+    $script = "source /home/dada/.bashrc; ".$cmd." 2>&1";
+    $string = exec($script, $output, $return_var);
+
+    $dec = "00:00:00.000";
+    if ($rval == 0 && count($output) == 1 && strpos("WARNING", $output[0]) !== FALSE)
+    {
+      $bits = split(" ", $output[0]);
+      $dec = $bits[2];
+    }
+    return $dec;
+  }
 
 
   function handleRequest()
   {
-
-    if (isset($_GET["COMMAND"])) {
+    $action = isset($_GET["action"]) ? $_GET["action"] : "";
+    $source = isset($_GET["source"]) ? $_GET["source"] : "";
+    if (($action == "get_ra") && ($source != ""))
+      echo $this->getRAForSource($source);
+    else if (($action == "get_dec") && ($source != ""))
+      echo $this->getDECForSource($source);
+    else if (isset($_GET["COMMAND"]))
       $this->printTCSResponse($_GET);
-    } else {
+    else
       $this->printHTML($_GET);
-    }
   }
+
+  function sRead($handle)
+  {
+    list ($result, $response) = socketRead($handle);
+    return $response;  
+  }
+  
 
 }
 $obj = new tcs_simulator();

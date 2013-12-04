@@ -7,8 +7,8 @@ define(INSTRUMENT, "caspsr");
 define(CFG_FILE, "/home/dada/linux_64/share/caspsr.cfg");
 define(CSS_FILE, "caspsr/caspsr.css");
 
-include("site_definitions_i.php");
-include("instrument.lib.php");
+include_once("site_definitions_i.php");
+include_once("instrument.lib.php");
 
 class caspsr extends instrument
 {

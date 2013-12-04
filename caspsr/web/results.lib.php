@@ -1,9 +1,9 @@
 <?PHP
 
-include("caspsr_webpage.lib.php");
-include("definitions_i.php");
-include("functions_i.php");
-include($instrument.".lib.php");
+include_once("caspsr_webpage.lib.php");
+include_once("definitions_i.php");
+include_once("functions_i.php");
+include_once($instrument.".lib.php");
 
 class results extends caspsr_webpage 
 {
@@ -47,11 +47,11 @@ class results extends caspsr_webpage
       }
 
       .transferred{
-        background-color: #cae2ff;
+        background-color: #caffe2;
       }
 
       .deleted{
-        background-color: #cae2ff;
+        background-color: #cacaca;
       }
 
       .unknown{
@@ -327,12 +327,11 @@ class results extends caspsr_webpage
 
     <div>
     <table>
-      <tr><td colspan=2 align=center>Legend</td></tr>
-      <tr><td>CFREQ</td><td>Centre frequency of the observation [MHz]</td></tr>
-      <tr><td>BW</td><td>Total bandwidth [MHz]</td></tr>
-      <tr><td>LENGTH</td><td>Total intergration received [seconds]</td></tr>
-      <tr><td>White</td><td>Newer results, may still be updated</td></tr>
-      <tr><td>Blue</td><td>Finalised results, no new archives received for 5 minutes</td></tr>
+      <tr><td align=center>Legend</td></tr>
+      <tr><td class='processing'>Observation currently recording</td></tr>
+      <tr><td class='finished'>Observation finished, still on local disk</td></tr>
+      <tr><td class='transferred'>Observation transferred to RAID disk</td></tr>
+      <tr><td class='deleted'>Observation data deleted from local disk</td></tr>
     </table>
 
     </div>

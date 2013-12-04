@@ -1,7 +1,7 @@
 <?PHP
 
-include("caspsr.lib.php");
-include("caspsr_webpage.lib.php");
+include_once("caspsr.lib.php");
+include_once("caspsr_webpage.lib.php");
 
 class raid_archival extends caspsr_webpage
 {

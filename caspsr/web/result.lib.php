@@ -1,9 +1,9 @@
 <?PHP
 
-include("caspsr_webpage.lib.php");
-include("definitions_i.php");
-include("functions_i.php");
-include($instrument.".lib.php");
+include_once("caspsr_webpage.lib.php");
+include_once("definitions_i.php");
+include_once("functions_i.php");
+include_once($instrument.".lib.php");
 
 class result extends caspsr_webpage 
 {
@@ -196,15 +196,31 @@ class result extends caspsr_webpage
 
     $imgs = $this->inst->getObsImages($this->obs_results_dir);
     $source_info = $this->inst->getObsSources($this->obs_results_dir);
-    echo "    <table>\n";
+    echo "    <table cellpadding=0 cellspacing=0>\n";
     $psrs = array_keys($imgs);
     for ($i=0; $i<count($psrs); $i++) {
       $p = $psrs[$i];
       echo "      <tr>\n";
-      $this->printPlotCell($imgs[$p]["phase_vs_flux"], $imgs[$p]["phase_vs_flux_hires"]);
-      $this->printPlotCell($imgs[$p]["phase_vs_time"], $imgs[$p]["phase_vs_time_hires"]);
-      $this->printPlotCell($imgs[$p]["phase_vs_freq"], $imgs[$p]["phase_vs_freq_hires"]);
-      $this->printPlotCell($imgs[$p]["bandpass"], $imgs[$p]["bandpass_hires"]);
+      echo "        <td rowspan=2>\n";
+      $this->printPlotImg($imgs[$p]["phase_vs_flux"], $imgs[$p]["phase_vs_flux_hires"], "201", "151");
+      echo "        </td>\n";
+      echo "        <td rowspan=2>\n";
+      $this->printPlotImg($imgs[$p]["phase_vs_time"], $imgs[$p]["phase_vs_time_hires"], "201", "151");
+      echo "        </td>\n";
+      echo "        <td rowspan=2>\n";
+      $this->printPlotImg($imgs[$p]["phase_vs_freq"], $imgs[$p]["phase_vs_freq_hires"], "201", "151");
+      echo "        </td>\n";
+      echo "        <td rowspan=2>\n";
+      $this->printPlotImg($imgs[$p]["bandpass"], $imgs[$p]["bandpass_hires"], "201", "151");
+      echo "        </td>\n";
+      echo "        <td>\n";
+      $this->printPlotImg($imgs[$p]["snr_track"], $imgs[$p]["snr_track_hires"], "200", "75");
+      echo "        </td>\n";
+      echo "      </tr>\n";
+      echo "      <tr>\n";
+      echo "        <td>\n";
+      $this->printPlotImg($imgs[$p]["snr_hist"], $imgs[$p]["snr_hist_hires"], "200", "75");
+      echo "        </td>\n";
       echo "      </tr>\n";
     }
     echo "    </table>\n";
@@ -243,7 +259,7 @@ class result extends caspsr_webpage
 
 
 ?>
-    <table width='100%' 
+    <table width='100%'>
 <?
     if (count($keys) == 0) {
       echo "      <tr><td colspan=2><font color=red>obs.start file did not exist</font></td></tr>\n";
@@ -334,32 +350,21 @@ class result extends caspsr_webpage
     }
   }
 
-  function printPlotCell($image, $image_hires) 
+  function printPlotImg($image, $image_hires, $w, $h) 
   {
-
-
     $have_hires = 0;
     $hires_path = $this->obs_results_dir."/".$image_hires;
     if ((strlen($image_hires) > 1) && (file_exists($hires_path))) {
       $have_hires = 1;
     } 
 
-    echo "    <td align='center'>\n"; 
-
     if ($have_hires) {
-      echo "      <a href=\"/caspsr/results/".$this->utc_start."/".$image_hires."\">";
+      echo "      <a href='/caspsr/results/".$this->utc_start."/".$image_hires."'>";
     }
-      
-    echo "      <img src=\"/caspsr/results/".$this->utc_start."/".$image."\">";
-    //echo "      <img width=241px height=181px src=\"/caspsr/results/".$this->utc_start."/".$image."\">";
-    //echo "      <img width=200px height=150px src=\"/caspsr/results/".$this->utc_start."/".$image."\">";
-
-    if ($have_hires) {
-      echo "    </a><br>\n";
-      echo "    Click for hi-res result\n";
-    }
-
-    echo "    </td>\n";
+    if ($image != "")
+      echo "      <img src='/caspsr/results/".$this->utc_start."/".$image."' width='".$w."px' height='".$h."px'>";
+    else
+     echo "      <img src='/images/blankimage.gif' width='".$w."px' height='".$h."px'>";
 
   }
 
