@@ -514,7 +514,6 @@ char * ipcio_open_block_write (ipcio_t *ipc, uint64_t *block_id)
 
 }
 
-
 /*
  * Update the number of bytes written to a Data Block unit that was opened
  * for "direct" write access. This does not mark the buffer as filled. 
@@ -553,13 +552,12 @@ ssize_t ipcio_update_block_write (ipcio_t *ipc, uint64_t bytes)
 
 /*
  * Close the Data Block unit from a "direct" write access, updating the number
- * of bytes written. Return 0 on success, -1 on failure
+ * of bytes written. Return 0 on success, -ve on failure
  */
 ssize_t ipcio_close_block_write (ipcio_t *ipc, uint64_t bytes)
 {
 
   // update the number of bytes written
-  
   if (ipcio_update_block_write (ipc, bytes) < 0)
   {
     fprintf (stderr, "ipcio_close_block_write: ipcio_update_block_write failed\n");
@@ -572,12 +570,12 @@ ssize_t ipcio_close_block_write (ipcio_t *ipc, uint64_t bytes)
     if (ipcbuf_mark_filled ((ipcbuf_t*)ipc, ipc->bytes) < 0) 
     {
       fprintf (stderr, "ipcio_close_block_write: error ipcbuf_mark_filled\n");
-      return -1;
+      return -2;
     }
 
     if (ipcio_check_pending_sod (ipc) < 0) {
       fprintf (stderr, "ipcio_close_bloc_write: error ipcio_check_pending_sod\n");
-      return -1;
+      return -3;
     }
 
     ipc->marked_filled = 1;
