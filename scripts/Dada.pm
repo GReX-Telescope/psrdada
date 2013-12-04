@@ -24,7 +24,7 @@ BEGIN {
   $VERSION = '1.00';
 
   @ISA         = qw(Exporter AutoLoader);
-  @EXPORT      = qw(&sendTelnetCommand &connectToMachine &getDADABinaryDir &getCurrentBinaryVersion &getDefaultBinaryVersion &setBinaryDir &getAvailableBinaryVersions &addToTime &getUnixTimeUTC &getCurrentDadaTime &printDadaTime &printTime &getPWCCState &printPWCCState &waitForState &getLine &getLines &parseCFGLines &readCFGFile &readCFGFileIntoHash &getDADA_ROOT &getDiskInfo &getRawDisk &getDBInfo &getAllDBInfo &getDBStatus &getLoad &getUnprocessedFiles &getServerResultsNFS &getServerArchiveNFS &constructRsyncURL &headerFormat &mySystem &killProcess &getAPSRConfigVariable &nexusLogOpen &nexusLogClose &nexusLogMessage &getHostMachineName &daemonize &commThread &logMsg &logMsgWarn &remoteSshCommand &headerToHash &daemonBaseName &getProjectGroups &processHeader &getDM &getPeriod &checkScriptIsUnique &getObsDestinations &removeFiles, &getDBKey, &convertRadiansToRA, &convertRadiansToDEC, &checkPWCID);
+  @EXPORT      = qw(&sendTelnetCommand &connectToMachine &getDADABinaryDir &getCurrentBinaryVersion &getDefaultBinaryVersion &setBinaryDir &getAvailableBinaryVersions &addToTime &getUnixTimeUTC &getCurrentDadaTime &printDadaTime &printTime &getPWCCState &printPWCCState &waitForState &getLine &getLines &parseCFGLines &readCFGFile &readCFGFileIntoHash &getDADA_ROOT &getDiskInfo &getRawDisk &getDBInfo &getAllDBInfo &getDBStatus &getLoad &getUnprocessedFiles &getServerResultsNFS &getServerArchiveNFS &constructRsyncURL &headerFormat &mySystem &killProcess &getAPSRConfigVariable &nexusLogOpen &nexusLogClose &nexusLogMessage &getHostMachineName &daemonize &commThread &logMsg &logMsgWarn &remoteSshCommand &headerToHash &daemonBaseName &getProjectGroups &processHeader &getDM &getPeriod &checkScriptIsUnique &getObsDestinations &removeFiles, &createDir, &getDBKey, &convertRadiansToRA, &convertRadiansToDEC, &checkPWCID, &inCatalogue);
   %EXPORT_TAGS = ( );
   @EXPORT_OK   = ( );
 
@@ -1866,6 +1866,40 @@ sub processHeader($$) {
 
 }
 
+
+sub inCatalogue($)
+{
+  my ($source) = @_;
+
+  my ($cmd, $result, $response);
+
+  # test if the source is in the catalogue
+  $cmd = "psrcat -all -x -c DM ".$source;
+  ($result, $response) = mySystem($cmd);
+
+  # If we had a problem getting the DM from the catalogue
+  if ($result ne "ok")
+  {
+    return ("fail", "psrcat failed");
+  } 
+  elsif ($response=~ m/not in catalogue/)
+  {
+    return ("fail", "source not in catalogue");
+  }
+  elsif ($response =~ m/Unknown parameter/)
+  {
+    return ("fail", "unknown parameter");
+  }
+  elsif ($response =~ m/\*   /)
+  {
+    return ("fail", "no DM in catalogue");
+  }
+  else
+  {
+    return ("ok", "");
+  } 
+}
+
 #
 # Get the DM from either psrcat or tempo's tzpar dir
 #
@@ -2064,6 +2098,37 @@ sub removeFiles($$$;$) {
 }
 
 #
+# recursively creates a directory with specified mask
+#
+sub createDir($$)
+{
+  (my $new_dir, my $mask) = @_;
+
+  $new_dir =~ s/^\///;
+
+  my @parts = split(/\//, $new_dir);
+  my $i = 0;
+  my $path = "";
+  my $result = "ok";
+  my $response = "dir created";
+  my $ok = 1;
+
+  for ($i=0; $i<=$#parts; $i++)
+  {
+    $path .= "/".$parts[$i];
+    if (! -d $path)
+    {
+      if (! mkdir($path, $mask))
+      {
+        $result = "fail";
+        $response = "could not create dir";
+      } 
+    }
+  }
+  return ($result, $response);
+}
+
+#
 # Generate the DADA key for the datablock given the:
 #   inst_id   Letter corresponding to backend
 #   PWC_NUM   2 digit number corresponding to the PWC number
@@ -2100,7 +2165,6 @@ sub convertHoursToHHMMSS($)
   return ("ok", $response);
 
 }
-
 
 sub convertRadiansToRA($)
 {
@@ -2160,7 +2224,6 @@ sub checkPWCID($\%)
     return 0;
   }
 }
-
 
 END { }
 
