@@ -18,6 +18,7 @@ dist_bin_SCRIPTS = Apsr.pm \
                    lowres_pulse.psh \
                    checkpulse.psh \
                    raid_apsr_bands_finished.pl \
+                   raid_apsr_cleaner.pl \
                    raid_apsr_psrfits_converter.pl \
                    raid_apsr_psrfits_patcher.pl \
                    raid_apsr_swin_transferrer.pl \

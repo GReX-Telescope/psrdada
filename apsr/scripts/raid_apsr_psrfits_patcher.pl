@@ -298,7 +298,8 @@ sub getDFB3PSRFITSHeader($$$)
   # try to find a file that is similar at lagavulin:/nfs/PKCCC3_1
   my $parkes_user = "pulsar";
   my $parkes_host = "lagavulin.atnf.csiro.au";
-  my $parkes_path = "/nfs/PKCCC3_1";
+  my $parkes_p1 = "/nfs/PKCCC3_1";
+  my $parkes_p2 = "/nfs/PKCCC3_2";
   my $epping_user = "pulsar";
   my $epping_host = "herschel.atnf.csiro.au";
   #my $epping_path = "/u/kho018/Projects/fix_apsr_data";
@@ -322,7 +323,7 @@ sub getDFB3PSRFITSHeader($$$)
   Dada::logMsg(2, $dl, "getDFB3PSRFITSHeader: fs_string=".$fs_string." grep_string=".$grep_string);
 
   # Search the parkes disks for a matching file
-  $cmd = "ls -1 ".$parkes_path."/".$fs_string;
+  $cmd = "ls -1 ".$parkes_p1."/".$fs_string." ".$parkes_p2."/".$fs_string;
   Dada::logMsg(2, $dl, "getDFB3PSRFITSHeader: ".$parkes_user."@".$parkes_host.": ".$cmd);
   ($result, $rval, $response) = Dada::remoteSshCommand($parkes_user, $parkes_host, $cmd);
   Dada::logMsg(2, $dl, "getDFB3PSRFITSHeader: ".$result." ".$rval." ".$response);
@@ -394,6 +395,10 @@ sub getDFB3PSRFITSHeader($$$)
   }
 
   $cmd = "psredit ".$sister_file." | grep -E '^rm |itrf:ant_x|itrf:ant_y|itrf:ant_z|rcvr:hand|rcvr:sa|rcvr:rph|ext:bpa|ext:bmaj|ext:bmin|obs:observer'";
+  if ($remote_host eq $parkes_host)
+  {
+    $cmd = "source /nfs/psr1/.login; ".$cmd;
+  }
 
   Dada::logMsg(2, $dl, "getDFB3PSRFITSHeader: ".$remote_user."@".$remote_host.": ".$cmd);
   ($result, $rval, $response) = Dada::remoteSshCommand($remote_user, $remote_host, $cmd);

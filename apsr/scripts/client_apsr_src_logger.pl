@@ -53,7 +53,7 @@ $| = 1;
 #
 sub usage()
 {
-  print STDERR "Usage: ".Dada::daemonBaseName($0)." pwc_id tag\n";
+  print STDERR "Usage: ".Dada::daemonBaseName($0)." pwc_id daemon\n";
   print STDERR "   pwc_id    integer of the PWC\n";
   print STDERR "   daemon    short name of program generating output\n";
 }

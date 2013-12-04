@@ -57,11 +57,11 @@ our $error : shared;
 $dl = 1; 
 $quit_daemon = 0;
 $daemon_name = Dada::daemonBaseName(basename($0));
-$src_path = DATA_DIR."/swin/sent";
+$src_path = DATA_DIR."/ready";
 $dst_path = DATA_DIR."/psrfits/unpatched";
 $tmp_path = DATA_DIR."/psrfits/temp";
 $err_path = DATA_DIR."/psrfits/fail_convert";
-$fin_path = DATA_DIR."/archived";
+$fin_path = DATA_DIR."/swin/send";
 
 $warn     = META_DIR."/logs/".$daemon_name.".warn";
 $error    = META_DIR."/logs/".$daemon_name.".error";
@@ -249,7 +249,7 @@ sub processLoop()
     if ($result ne "ok") 
     {
       Dada::logMsg(0, $dl ,"processLoop: test 16 bands [".$cmd."] failed: ".$response);
-      Dada::logMsg(1, $dl, $pid."/".$src."/".$obs." swin/sent -> psrfits/fail_convert");
+      Dada::logMsg(1, $dl, $pid."/".$src."/".$obs." ready -> psrfits/fail_convert");
       ($result, $response) = moveObs($src_path, $err_path, $pid, $src, $obs);
       next;
     }
@@ -258,7 +258,7 @@ sub processLoop()
     # if ($response ne "16")
     # {
     #  Dada::logMsg(1, $dl ,"processLoop: ignoring ".$pid."/".$src."/".$obs." only ".$response." bands");
-    #  Dada::logMsg(1, $dl, $pid."/".$src."/".$obs." swin/sent -> psrfits/fail_convert");
+    #  Dada::logMsg(1, $dl, $pid."/".$src."/".$obs." ready -> psrfits/fail_convert");
     #  ($result, $response) = moveObs($src_path, $err_path, $pid, $src, $obs);
     #  next;
     #}
@@ -271,14 +271,14 @@ sub processLoop()
     if ($result ne "ok") 
     {
       Dada::logMsg(0, $dl ,"processLoop: ".$cmd." failed: ".$response);
-      Dada::logMsg(1, $dl, $pid."/".$src."/".$obs." swin/sent -> psrfits/fail_convert");
+      Dada::logMsg(1, $dl, $pid."/".$src."/".$obs." ready -> psrfits/fail_convert");
       ($result, $response) = moveObs($src_path, $err_path, $pid, $src, $obs);
       next;
     }
     if ($response eq "") 
     {
       Dada::logMsg(1, $dl ,"processLoop: ignoring ".$pid."/".$src."/".$obs." no obs.start files");
-      Dada::logMsg(1, $dl, $pid."/".$src."/".$obs." swin/sent -> psrfits/fail_convert");
+      Dada::logMsg(1, $dl, $pid."/".$src."/".$obs." ready -> psrfits/fail_convert");
       ($result, $response) = moveObs($src_path, $err_path, $pid, $src, $obs);
       next;
     }
@@ -290,7 +290,7 @@ sub processLoop()
       if ($result ne "ok")
       {
         Dada::logMsg(1, $dl, "Failed to process ".$pid."/".$src."/".$obs.": ".$response);
-        Dada::logMsg(1, $dl, $pid."/".$src."/".$obs." swin/sent -> psrfits/fail_convert");
+        Dada::logMsg(1, $dl, $pid."/".$src."/".$obs." ready -> psrfits/fail_convert");
         ($result, $response) = moveObs($src_path, $err_path, $pid, $src, $obs);
 
         # ensure that the temp directory is cleaned...
@@ -304,7 +304,7 @@ sub processLoop()
       else
       {
         Dada::logMsg(2, $dl, "Processed ".$src_path."/".$pid."/".$src."/".$obs);
-        Dada::logMsg(1, $dl, $pid."/".$src."/".$obs." swin/sent -> psrfits/unpatched");
+        Dada::logMsg(1, $dl, $pid."/".$src."/".$obs." ready -> psrfits/unpatched");
         ($result, $response) = moveObs($src_path, $fin_path, $pid, $src, $obs);
       }
     }
@@ -564,8 +564,6 @@ sub processObservation($$$) {
 
   # add the 16 bands together
   $cmd = "psradd -R -o ".$tmp_path."/".$p."/".$s."/".$u."/obs.it ".$tmp_path."/".$p."/".$s."/".$u."/*/band.it";
-  # chdir $tmp_path."/".$p."/".$s."/".$u;
-  # $cmd = "psradd -R -o ./obs.it ./*/band.it";
   Dada::logMsg(2, $dl, "processObservation: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(3, $dl, "processObservation: ".$response);
@@ -576,7 +574,6 @@ sub processObservation($$$) {
 
   # convert the timer archive to a psrfits archive
   $cmd = "psrconv ".$tmp_path."/".$p."/".$s."/".$u."/obs.it";
-  # $cmd = "psrconv ./obs.it";
   Dada::logMsg(2, $dl, "processObservation: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(2, $dl, "processObservation: ".$response);
@@ -587,7 +584,6 @@ sub processObservation($$$) {
 
   # add missing headers to the psrfits file
   $cmd = "psredit -m -c be:config=".$c.",obs:projid=".$p." ".$tmp_path."/".$p."/".$s."/".$u."/obs.".$ext;
-  # $cmd = "psredit -m -c be:config=".$c.",obs:projid=".$p." ./obs.".$ext;
   Dada::logMsg(2, $dl, "processObservation: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(3, $dl, "processObservation: ".$response);

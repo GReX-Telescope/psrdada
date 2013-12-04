@@ -2,8 +2,7 @@
 
 ###############################################################################
 #
-# Waits for all bands to be transferred to RAID disk before inserting 
-# observation into archival pipeline
+# Deletes archived APSR P630 observations that are > 1 week old
 #
 
 use lib $ENV{"DADA_ROOT"}."/bin";
@@ -18,10 +17,14 @@ use Dada;
 #
 # Constants
 #
-use constant DATA_DIR       => "/lfs/raid0/apsr";
-use constant META_DIR       => "/lfs/data0/apsr";
-use constant REQUIRED_HOST  => "raid0";
-use constant REQUIRED_USER  => "apsr";
+use constant DATA_DIR         => "/lfs/raid0/apsr";
+use constant META_DIR         => "/lfs/data0/apsr";
+use constant REQUIRED_HOST    => "raid0";
+use constant REQUIRED_USER    => "apsr";
+
+use constant APSR_USER        => "dada";
+use constant APSR_HOST        => "apsr-srv0.atnf.csiro.au";
+use constant APSR_PATH        => "/lfs/data0/apsr";
 
 
 #
@@ -51,33 +54,36 @@ $| = 1;
 
 # Main
 {
-  my $log_file  = META_DIR."/logs/".$daemon_name.".log";
-  my $pid_file  = META_DIR."/control/".$daemon_name.".pid";
-  my $quit_file = META_DIR."/control/".$daemon_name.".quit";
+  my $log_file   = META_DIR."/logs/".$daemon_name.".log";
+  my $pid_file   = META_DIR."/control/".$daemon_name.".pid";
+  my $quit_file  = META_DIR."/control/".$daemon_name.".quit";
 
-  my $src_path  = DATA_DIR."/finished";
-  my $dst_path  = DATA_DIR."/ready";
+  my $timer_path = DATA_DIR."/archived";
+  my $atnf_path  = DATA_DIR."/atnf/sent";
 
-  $warn         = META_DIR."/logs/".$daemon_name.".warn";
-  $error        = META_DIR."/logs/".$daemon_name.".error";
+  $warn          = META_DIR."/logs/".$daemon_name.".warn";
+  $error         = META_DIR."/logs/".$daemon_name.".error";
 
   my $control_thread = 0;
 
   my $line = "";
-  my $obs = "";
   my $src = "";
+  my $obs = "";
   my $pid = "";
+  my $parent_path = "";
 
   my $cmd = "";
   my $result = "";
   my $response = "";
-  my @finished = ();
+  my $rval = 0;
+  my @archived = ();
   my @bits = ();
-
   my $i = 0;
-  my $obs_start_file = "";
-  my $n_band = 0;
-  my $n_transferred = 0;
+  my $j = 0;
+  my $path = "";
+  my $mtime = 0;
+  my $curr_time = 0;
+  my $delete_obs = 0;
 
   # quick sanity check
   ($result, $response) = good($quit_file);
@@ -105,11 +111,11 @@ $| = 1;
   # main Loop
   while ( !$quit_daemon ) 
   {
-    @finished = ();
+    @archived = ();
 
-    # look for all observations in the src_path
-    $cmd = "find ".$src_path." -mindepth 3 -maxdepth 3 -type d -printf '\%h/\%f\n'";
-    Dada::logMsg(3, $dl, "main: ".$cmd);
+    # look for all obs in the timer and atnf paths
+    $cmd = "find ".$timer_path." ".$atnf_path." -mindepth 3 -maxdepth 3 -printf '\%h/\%f \%T@\n' | sort";
+    Dada::logMsg(2, $dl, "main: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     Dada::logMsg(3, $dl, "main: ".$result." ".$response);
     if ($result ne "ok")
@@ -118,99 +124,98 @@ $| = 1;
     }
     else
     {
-      @finished = split(/\n/, $response);
-      Dada::logMsg(2, $dl, "main: found ".($#finished+1)." finished observations");
+      @archived = split(/\n/, $response);
+      Dada::logMsg(2, $dl, "main: found ".($#archived+1)." archived observations");
 
-      for ($i=0; $i<=$#finished; $i++)
-      {  
-        $line = $finished[$i]; 
-        @bits = split(/\//, $line);
-        if ($#bits < 2)
+      for ($i=0; (!$quit_daemon && $i<=$#archived); $i++)
+      {
+        $line = $archived[$i]; 
+
+        # extract path and time
+        @bits = split(/ /, $line, 2);
+        if ($#bits != 1) 
+        {
+          Dada::logMsgWarn($warn, "main: not enough components in path");
+          next;
+        }
+        $path  = $bits[0];
+        $mtime = int($bits[1]);
+
+        @bits = split(/\//, $path);
+        if ($#bits < 3)
         {
           Dada::logMsgWarn($warn, "main: not enough components in path");
           next;
         }
 
+        $parent_path = $bits[0];
+        for ($j=1; $j<($#bits-2); $j++)
+        {
+          $parent_path .= "/".$bits[$j];
+        }
         $pid = $bits[$#bits-2];
         $src = $bits[$#bits-1];
         $obs = $bits[$#bits];
 
-        Dada::logMsg(2, $dl, "main: processing ".$src."/".$obs);
-        Dada::logMsg(3, $dl, "main: pid=".$pid." src=".$src." obs=".$obs);
+        # get the current time
+        $curr_time = time;
+        $delete_obs = 0;
 
-        # try to find and obs.start file
-        $cmd = "find ".$src_path."/".$pid."/".$src."/".$obs." -mindepth 2 -maxdepth 2 -type f -name 'obs.start' | head -n 1";
-        Dada::logMsg(3, $dl, "main: ".$cmd);
-        ($result, $response) = Dada::mySystem($cmd);
-        Dada::logMsg(3, $dl, "main: ".$result." ".$response);
-        if (($result ne "ok") || ($response eq ""))
-        {
-          Dada::logMsg(2, $dl, "main: could not find an obs.start file");
-          next;
-        }
-        $obs_start_file = $response;
+        Dada::logMsg(2, $dl, "main: testing ".$pid."/".$src."/".$obs." age=".($curr_time - $mtime)." s");
 
-        # extract the number of bands
-        $cmd = "grep NBAND ".$obs_start_file." | awk '{print \$2}'";
-        Dada::logMsg(3, $dl, "main: ".$cmd);
-        ($result, $response) = Dada::mySystem($cmd);
-        Dada::logMsg(3, $dl, "main: ".$result." ".$response);
-        if (($result ne "ok") || ($response eq ""))
+        # If 12 weeks old, delete
+        if ($curr_time > ($mtime + (12*7*24*60*60)))
         {
-          Dada::logMsgWarn($warn, "could not parse NBAND from ".$obs_start_file);
-          next;
-        }
-        $n_band = $response;
-      
-        # check if all 16 sub bands have been transferred
-        $cmd = "find ".$src_path."/".$pid."/".$src."/".$obs." -mindepth 2 -maxdepth 2 -type f -name 'band.transferred' | wc -l";
-        Dada::logMsg(3, $dl, "main: ".$cmd);
-        ($result, $response) = Dada::mySystem($cmd);
-        Dada::logMsg(3, $dl, "main: ".$result." ".$response);
-        if ($result ne "ok")
-        {
-          Dada::logMsgWarn($warn, "could not count number of band.finished files for ".$src."/".$obs);
-          $n_transferred = 0;
-          next;
-        }
-        $n_transferred = $response;
-
-        if ($n_transferred != $n_band)
-        {
-          Dada::logMsg(2, $dl, "main: only ".$n_transferred." of ".$n_band." bands found for ".$src."/".$obs);
-          next;
+          $delete_obs = 1;
         }
 
-        if (! -d  $dst_path."/".$pid."/".$src ) 
+        Dada::logMsg(2, $dl, "main: processing ".$parent_path."/".$pid."/".$src.
+                             "/".$obs." delete_obs=".$delete_obs);
+
+        # if we are to delete this obs
+        if ($delete_obs)
         {
-          $cmd = "mkdir -p ".$dst_path."/".$pid."/".$src;
-          Dada::logMsg(3, $dl, "main: ".$cmd);
+          Dada::logMsg(1, $dl, $pid."/".$src."/".$obs." deleted");
+
+          # ensure permissions allow us to delete this obs
+          $cmd = "chmod -R u+w ".$parent_path."/".$pid."/".$src."/".$obs;
+          Dada::logMsg(2, $dl, "main: ".$cmd);
           ($result, $response) = Dada::mySystem($cmd);
           Dada::logMsg(3, $dl, "main: ".$result." ".$response);
           if ($result ne "ok")
           {
-            Dada::logMsgWarn($warn, "could not create dst dir for ".$src."/".$obs);
-            next;
+            Dada::logMsgWarn($warn, "main: ".$cmd." failed: ".$response);
           }
-        }
 
-        # if we have reached this point move the observation to the dst_path
-        $cmd = "mv ".$src_path."/".$pid."/".$src."/".$obs." ".$dst_path."/".$pid."/".$src."/".$obs;
-        Dada::logMsg(2, $dl, "main: ".$cmd);
-        ($result, $response) = Dada::mySystem($cmd);
-        Dada::logMsg(3, $dl, "main: ".$result." ".$response);
-        if ($result ne "ok")
-        {
-          Dada::logMsgWarn($warn, "failed to move obseravation to dst_dir for ".$src."/".$obs);
-        }
-        else
-        {
-          Dada::logMsg(1, $dl, $pid."/".$src."/".$obs.": finished -> ready");
+          # delete the directory
+          $cmd = "rm -rf ".$parent_path."/".$pid."/".$src."/".$obs;
+          Dada::logMsg(2, $dl, "main: ".$cmd);
+          ($result, $response) = Dada::mySystem($cmd);
+          Dada::logMsg(3, $dl, "main: ".$result." ".$response);
+          if ($result ne "ok")
+          {
+            Dada::logMsgWarn($warn, "main: ".$cmd." failed: ".$response);
+          }
+
+          # check if the parent_path/pid/src directory is empty
+          $cmd = "find ".$parent_path."/".$pid."/".$src."/ -mindepth 1 -maxdepth 1 | wc -l";
+          Dada::logMsg(2, $dl, "main: ".$cmd);
+          ($result, $response) = Dada::mySystem($cmd);
+          Dada::logMsg(3, $dl, "main: ".$result." ".$response);
+          if (($result eq "ok") && ($response eq "0"))
+          {
+            $cmd = "rmdir ".$parent_path."/".$pid."/".$src;
+            Dada::logMsg(2, $dl, "main: ".$cmd);
+            ($result, $response) = Dada::mySystem($cmd);
+            Dada::logMsg(3, $dl, "main: ".$result." ".$response);
+          }
         }
       }
     }
 
-    my $counter = 10;
+    @archived = ();
+
+    my $counter = 60;
     Dada::logMsg(2, $dl, "main: sleeping ".($counter)." seconds");
     while ((!$quit_daemon) && ($counter > 0)) 
     {
