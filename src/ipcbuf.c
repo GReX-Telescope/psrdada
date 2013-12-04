@@ -810,6 +810,12 @@ int ipcbuf_lock_read (ipcbuf_t* id)
     return -1;
   }
 
+  if (id->iread != -1)
+  {
+    fprintf (stderr, "ipcbuf_lock_read: iread initialized unexpectedly\n");
+    return -1;
+  }
+
 #ifdef _DEBUG
   fprintf (stderr, "ipcbuf_lock_read: decrement READ=%d\n",
                    semctl (id->semid_connect, IPCBUF_READ, GETVAL));
@@ -830,19 +836,45 @@ int ipcbuf_lock_read (ipcbuf_t* id)
   fprintf (stderr, "ipcbuf_lock_read: id->iread=%d\n", id->iread);
 #endif
 
-  for (iread = 0; iread < id->sync->n_readers; iread++)
+  // order the reader's based on xfer number
+  uint64_t xfers_val [IPCBUF_READERS];
+  unsigned xfers_pos [IPCBUF_READERS];
+  unsigned ipos = 0;
+  for (ipos=0; ipos < id->sync->n_readers; ipos++)
   {
+    xfers_val[ipos] = UINT64_MAX;
+    for (iread = 0; iread < id->sync->n_readers; iread++)
+    {
+      if (id->sync->r_bufs[iread] < xfers_val[ipos])
+      {
+        char used = 0;
+        unsigned ipos2;
+        for (ipos2=0; ipos2<ipos; ipos2++)
+          if (xfers_pos[ipos2] == iread)
+            used=1;
+        if (!used)
+        {
+          xfers_val[ipos] = id->sync->r_bufs[iread];
+          xfers_pos[ipos] = iread;
+        }
+      }
+    }
+  }
+
+  for (iread = 0; ((id->iread == -1) && (iread < id->sync->n_readers)); iread++)
+  {
+    unsigned oldest_iread = xfers_pos[iread];
 #ifdef _DEBUG
     fprintf (stderr, "ipcbuf_lock_read: BEFORE decrement [%d] READER_CONN=%d\n",
-                      iread, semctl (id->semid_data[iread], IPCBUF_READER_CONN, GETVAL));
+                      oldest_iread, semctl (id->semid_data[oldest_iread], IPCBUF_READER_CONN, GETVAL));
 #endif
-    //  try to decrement the Reader connected semaihore for this reader
-    if (ipc_semop (id->semid_data[iread], IPCBUF_READER_CONN, -1, IPC_NOWAIT | SEM_UNDO) < 0)
+    //  try to decrement the reader connected semaphore for this reader
+    if (ipc_semop (id->semid_data[oldest_iread], IPCBUF_READER_CONN, -1, IPC_NOWAIT | SEM_UNDO) < 0)
     {
       if ( errno == EAGAIN )
       {
 #ifdef _DEBUG
-        fprintf (stderr, "ipcbuf_lock_read: skipping iread=%d\n", iread);
+        fprintf (stderr, "ipcbuf_lock_read: skipping oldest_read=%d\n", oldest_iread);
 #endif
       }
       else
@@ -855,10 +887,9 @@ int ipcbuf_lock_read (ipcbuf_t* id)
     else
     {
 #ifdef _DEBUG
-      fprintf (stderr, "ipcbuf_lock_read: assigning iread=%d\n", iread);
+      fprintf (stderr, "ipcbuf_lock_read: assigning id->iread=%d\n", oldest_iread);
 #endif
-      id->iread = iread;
-      break;
+      id->iread = oldest_iread;
     }
   }
   if (id->iread == -1)
@@ -902,6 +933,11 @@ int ipcbuf_unlock_read (ipcbuf_t* id)
     return -1;
   }
 
+  if ((id->iread < 0) || (id->iread >= id->sync->n_readers))
+  {
+    fprintf (stderr, "ipcbuf_lock_read: iread not initialized\n");
+    return -1;
+  }
 #ifdef _DEBUG
   fprintf (stderr, "ipcbuf_unlock_read[%d]: increment READER_CONN=%d\n",
                    id->iread, semctl (id->semid_data[id->iread], IPCBUF_READER_CONN, GETVAL));
@@ -961,7 +997,7 @@ char* ipcbuf_get_next_read_work (ipcbuf_t* id, uint64_t* bytes, int flag)
       return NULL;
     }
 #ifdef _DEBUG
-    fprintf (stderr, "ipcbuf_get_next_read: decrement[%d] FULL worked!\n");
+    fprintf (stderr, "ipcbuf_get_next_read: decrement[%d] FULL worked!\n", iread);
 #endif
 
     if (id->state == IPCBUF_READER)
@@ -1495,12 +1531,12 @@ uint64_t ipcbuf_get_nfull_iread (ipcbuf_t* id, int iread)
 
 uint64_t ipcbuf_get_nclear (ipcbuf_t* id)
 {
-  return  ipcbuf_get_nclear_iread (id, -1);
+  return ipcbuf_get_nclear_iread (id, -1);
 }
 
 uint64_t ipcbuf_get_nclear_iread (ipcbuf_t* id, int iread)
 {
-  if (iread > 0)
+  if (iread >= 0)
     return semctl (id->semid_data[iread], IPCBUF_CLEAR, GETVAL);
   else if (id->iread == -1)
     return semctl (id->semid_data[0], IPCBUF_CLEAR, GETVAL);
@@ -1525,7 +1561,7 @@ uint64_t ipcbuf_get_sodack (ipcbuf_t* id)
 }
 uint64_t ipcbuf_get_sodack_iread (ipcbuf_t* id, int iread)
 {
-  if (iread > 0)
+  if (iread >= 0)
     return semctl (id->semid_data[iread], IPCBUF_SODACK, GETVAL);
   else if (id->iread == -1)
     return semctl (id->semid_data[0], IPCBUF_SODACK, GETVAL);
@@ -1551,7 +1587,7 @@ uint64_t ipcbuf_get_eodack (ipcbuf_t* id)
 
 uint64_t ipcbuf_get_eodack_iread (ipcbuf_t* id, int iread)
 {
-  if (iread > 0)
+  if (iread >= 0)
     return semctl (id->semid_data[iread], IPCBUF_EODACK, GETVAL);
   else if (id->iread == -1)
     return semctl (id->semid_data[0], IPCBUF_EODACK, GETVAL);
@@ -1575,6 +1611,36 @@ int ipcbuf_get_nreaders (ipcbuf_t* id)
   return id->sync->n_readers;
 }
 
+int ipcbuf_get_reader_conn (ipcbuf_t* id)
+{
+  return ipcbuf_get_reader_conn_iread (id, -1);
+}
+
+int ipcbuf_get_reader_conn_iread (ipcbuf_t* id, int iread)
+{
+  if (iread >= 0)
+    return semctl (id->semid_data[iread], IPCBUF_READER_CONN, GETVAL);
+  else if (id->iread == -1)
+    return semctl (id->semid_data[0], IPCBUF_READER_CONN, GETVAL);
+  else
+  {
+    unsigned i=0;
+    uint64_t min_reader_conn = 1;
+    uint64_t reader_conn = 0;
+    for (i = 0; i < id->sync->n_readers; i++)
+    {
+      reader_conn = semctl (id->semid_data[i], IPCBUF_READER_CONN, GETVAL);
+      if (reader_conn < min_reader_conn)
+        min_reader_conn = reader_conn;
+    }
+    return reader_conn;
+  }
+}
+
+int ipcbuf_get_read_semaphore_count (ipcbuf_t* id)
+{
+  return semctl (id->semid_connect, IPCBUF_READ, GETVAL);
+}
 
 /* Sets the buffer at which clocking began.  */
 uint64_t ipcbuf_set_soclock_buf (ipcbuf_t* id)

@@ -228,6 +228,13 @@ extern "C" {
   /*! Return the number of readers in */
   int ipcbuf_get_nreaders(ipcbuf_t* id);
 
+  /*! Return whether reader connected, 0 == connected */
+  int ipcbuf_get_reader_conn (ipcbuf_t* id);
+  int ipcbuf_get_reader_conn_iread (ipcbuf_t* id, int iread);
+
+  /*! Return the current read semaphore count */
+  int ipcbuf_get_read_semaphore_count (ipcbuf_t* id);
+
   /*! Useful utility */
   void* shm_alloc (key_t key, size_t size, int flag, int* id);
 
