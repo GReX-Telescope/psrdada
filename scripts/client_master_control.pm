@@ -1030,6 +1030,7 @@ sub stopPWCs($)
   my $handle = 0;
   my $port = 0;
   my $pwc = 0;
+  Dada::logMsg(2, $dl, "stopPWCs(".$pwc_to_stop.")");
 
   foreach $pwc (keys %dbs)
   {
@@ -1065,6 +1066,12 @@ sub stopPWCs($)
     {
       Dada::logMsg(2, $dl, "stopPWCs: skipping ".$pwc." as not in list");
       next;
+    }
+
+    $port = int($cfg{"PWC_PORT"});
+    if ($cfg{"USE_BASEPORT"} eq "yes")
+    {
+      $port += int($pwc);
     }
 
     # assert its gone by killing it
