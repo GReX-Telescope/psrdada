@@ -178,8 +178,11 @@ int file_open_function (dada_client_t* client)
   if (file_size == 0) 
     file_size = bytes_ps * 10;
 
+  uint64_t byte_multiple = 1;
+
   // If case we use O_DIRECT, must be aligned to 512 bytes
-  uint64_t byte_multiple = 512;
+  if (dbdisk->o_direct)
+    byte_multiple = 512;
 
   if (dbdisk->verbose)
     multilog (log, LOG_INFO, "open: RESOULTION=%"PRIu64"\n", resolution);
