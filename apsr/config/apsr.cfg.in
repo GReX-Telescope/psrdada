@@ -152,13 +152,8 @@ PWC_UDP_PORT_14         10002
 PWC_UDP_PORT_15         10002
 
 
-NUM_SWIN_DIRS           6
-SWIN_DIR_0              pulsar:shrek210-gb:/export/shrek210a/apsr
-SWIN_DIR_1              pulsar:shrek210-gb:/export/shrek210b/apsr
-SWIN_DIR_2              pulsar:shrek211-gb:/export/shrek211a/apsr
-SWIN_DIR_3              pulsar:shrek211-gb:/export/shrek211b/apsr
-SWIN_DIR_4              pulsar:shrek214-gb:/export/shrek214a/apsr
-SWIN_DIR_5              pulsar:shrek214-gb:/export/shrek214b/apsr
+NUM_SWIN_DIRS           1
+SWIN_DIR_0              pulsar:tapeserv01:/projects/p002_swin/apsr
 
 NUM_PARKES_DIRS         1
 PARKES_DIR_0            dada:jura:/data/JURA_1/apsr
