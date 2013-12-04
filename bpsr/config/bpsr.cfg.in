@@ -79,15 +79,10 @@ IBOB_SIM_PORT             51008      # port for PWC's to connect to is simulatin
 ###############################################################################
 # Tape Archive Locations
 # 
-NUM_SWIN_DIRS           6
-SWIN_DIR_0              pulsar:shrek210-gb:/export/shrek210a/bpsr
-SWIN_DIR_1              pulsar:shrek210-gb:/export/shrek210b/bpsr
-SWIN_DIR_2              pulsar:shrek211-gb:/export/shrek211a/bpsr
-SWIN_DIR_3              pulsar:shrek211-gb:/export/shrek211b/bpsr
-SWIN_DIR_4              pulsar:shrek214-gb:/export/shrek214a/bpsr
-SWIN_DIR_5              pulsar:shrek214-gb:/export/shrek214b/bpsr
+NUM_SWIN_DIRS           1
+SWIN_DIR_0              pulsar:tapeserv01:/projects/p002_swin/bpsr
 SWIN_S4_DEVICE          /dev/nst0
-SWIN_DB_DIR             pulsar:shrek210-gb:/home/ssi/pulsar/bookkeeping/tape_archiver
+SWIN_DB_DIR             pulsar:tapeserv01:/home/pulsar/bookkeeping/tape_archiver
 
 NUM_PARKES_DIRS         1
 PARKES_DIR_0            bpsr:caspsr-raid0.atnf.CSIRO.AU:/lfs/raid0/bpsr/parkes
