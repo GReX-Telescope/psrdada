@@ -186,7 +186,7 @@ sub main() {
         $hostinfo = gethostbyaddr($rh->peeraddr);
         $hostname = $hostinfo->name;
         ($host, $domain) = split(/\./,$hostname,2);
-        Dada::logMsg(3, $dl, "main [".$host."] processing message");
+        Dada::logMsg(2, $dl, "main [".$host."] processing message");
 
          # set the input record seperator to \r\n
         $/ = "\r\n";
@@ -264,7 +264,7 @@ sub loggingThread($)
   my $statusfile_dir = $cfg{"STATUS_DIR"};
   my $logfile_dir    = $cfg{"SERVER_LOG_DIR"};
   
-  my $message = "";
+  my $line = "";
   my $status_file = "";
   my $pwc_log_file = "";
   my $combined_log_file = "";
@@ -296,7 +296,7 @@ sub loggingThread($)
 #       program   script or binary that generated message (e.g. obs mngr)
 #       message   message itself
 
-        $src     = sprintf("%02d", $bits[0]);
+        $src     = $bits[0];
         $time    = $bits[1];
         $type    = $bits[2];
         $class   = $bits[3];
@@ -313,11 +313,11 @@ sub loggingThread($)
         }
 
         if ($class eq "INFO") {
-          $message = "[".$time."] ".$program.": ".$message;
+          $line = "[".$time."] ".$program.": ".$message;
         } else {
-          $message = "[".$time."] ".$program.": ".$class.": ".$message;
+          $line = "[".$time."] ".$program.": ".$class.": ".$message;
         }
-        Dada::logMsg(3, $dl, "loggingThread: ".$src." ".$message);
+        Dada::logMsg(3, $dl, "loggingThread: ".$src." ".$line);
 
         # log message to the PWC specific log file
         if (-f $pwc_log_file) {
@@ -325,7 +325,7 @@ sub loggingThread($)
         } else {
           open(FH,">".$pwc_log_file);
         }
-        print FH $message."\n";
+        print FH $line."\n";
         close FH;
 
         # log the message to the combined log file
@@ -334,7 +334,7 @@ sub loggingThread($)
         } else {
           open(FH,">".$combined_log_file);
         }
-        print FH $src." ".$message."\n";
+        print FH $src." ".$line."\n";
         close FH;
 
         # if the file is a warning or error, we create a warn/error file too
@@ -344,7 +344,7 @@ sub loggingThread($)
           } else {
             open(FH,">".$status_file);
           }
-          print FH $program.": ".$message."\n";
+          print FH $program.": ".$line."\n";
           close FH;
         }   
       }
@@ -454,7 +454,7 @@ sub good($) {
     return ("fail", "master_log_prefix was not set");
   } 
 
-  my $n_listen = $cfg{"NUM_PWC"} * 2;
+  my $n_listen = $cfg{"NUM_PWC"} * 4;
 
   $log_sock = new IO::Socket::INET (
     LocalHost => $log_host,
