@@ -22,8 +22,8 @@ sub usage();
 # Initialize module variables
 #
 $Dada::client_logger::dl = 1;
-$Dada::client_logger::log_host = $cfg{"SERVER_HOST"};
-$Dada::client_logger::log_port = $cfg{"SERVER_SYS_LOG_PORT"};
+$Dada::client_logger::log_host = "raid0";
+$Dada::client_logger::log_port = "39921";
 $Dada::client_logger::log_sock = 0;
 $Dada::client_logger::daemon_name = Dada::daemonBaseName($0);
 $Dada::client_logger::type = "src";
@@ -37,11 +37,6 @@ if ($#ARGV != 0)
 }
 
 $Dada::client_logger::daemon = $ARGV[0];
-if ($Dada::client_logger::daemon =~ m/demux/)
-{
-  $Dada::client_logger::log_port = $cfg{"SERVER_DEMUX_LOG_PORT"};
-}
-
 
 # Autoflush STDOUT and STDERR
 my $ofh = select STDOUT;

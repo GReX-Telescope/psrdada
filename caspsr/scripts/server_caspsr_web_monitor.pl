@@ -148,7 +148,7 @@ sub main() {
   $node_info_thread = threads->new(\&nodeInfoThread);
   $image_info_thread = threads->new(\&imageInfoThread, $cfg{"SERVER_RESULTS_DIR"});
   $archival_info_thread = threads->new(\&archivalInfoThread, $cfg{"SERVER_RESULTS_DIR"});
-  #$dish_image_thread = threads->new(\&dishImageThread);
+  $dish_image_thread = threads->new(\&dishImageThread);
   #$gain_info_thread = threads->new(\&gainInfoThread);
 
   # Sleep for a few seconds to allow the threads to start and collect
@@ -229,7 +229,7 @@ sub main() {
   $node_info_thread->join();
   $image_info_thread->join();
   $archival_info_thread->join();
-  #$dish_image_thread->join();
+  $dish_image_thread->join();
 
   close($server_sock);
                                                                                 
@@ -311,7 +311,7 @@ sub currentInfoThread($) {
 
         Dada::logMsg(2, $dl, "currentInfoThread: [".$results_dir."/".$obs."/".$source."_f.tot]");
         if (-f $results_dir."/".$obs."/".$source."_f.tot") {
-          $cmd = "psrstat -j FTp -j'B 256' -c snr ".$results_dir."/".$obs.
+          $cmd = "psrstat -j FTp -c snr ".$results_dir."/".$obs.
                  "/".$source."_t.tot 2>&1 | grep snr= | awk -F= '{print \$2}'";
           Dada::logMsg(2, $dl, "currentInfoThread: ".$cmd);
           ($result, $response) = Dada::mySystem($cmd);
@@ -386,6 +386,10 @@ sub imageInfoThread($) {
   my %pvt_hi = ();
   my %bp_lo = ();
   my %bp_hi = ();
+  my %snrt_lo = ();
+  my %snrt_hi = ();
+  my %snrh_lo = ();
+  my %snrh_hi = ();
   my @keys = ();
   my %srcs = ();
   my @parts = ();
@@ -446,6 +450,10 @@ sub imageInfoThread($) {
         %pvt_hi = ();
         %bp_lo = ();
         %bp_hi = ();
+        %snrt_lo = ();
+        %snrt_hi = ();
+        %snrh_lo = ();
+        %snrh_hi = ();
 
         for ($i=0; $i<=$#images; $i++) {
           $img = $images[$i];
@@ -456,6 +464,8 @@ sub imageInfoThread($) {
           $src =~ s/^(.)*phase_vs_freq_//;
           $src =~ s/^(.)*phase_vs_time_//;
           $src =~ s/^(.)*bandpass_//;
+          $src =~ s/^(.)*snr_track_//;
+          $src =~ s/^(.)*snr_hist_//;
 
           @parts = split(/_/,$src);
 
@@ -477,6 +487,10 @@ sub imageInfoThread($) {
           if (($img =~ m/bandpass/)      && ($img =~ m/240x180/)) { $bp_lo{$src} = $img; }
           if (($img =~ m/bandpass/)      && ($img =~ m/200x150/)) { $bp_lo{$src} = $img; }
           if (($img =~ m/bandpass/)      && ($img =~ m/1024x768/)) { $bp_hi{$src} = $img; }
+          if (($img =~ m/snr_track/)     && ($img =~ m/200x75/)) { $snrt_lo{$src} = $img; }
+          if (($img =~ m/snr_track/)     && ($img =~ m/1024x768/)) { $snrt_hi{$src} = $img; }
+          if (($img =~ m/snr_hist/)     && ($img =~ m/200x75/)) { $snrh_lo{$src} = $img; }
+          if (($img =~ m/snr_hist/)     && ($img =~ m/1024x768/)) { $snrh_hi{$src} = $img; }
         }
 
         @keys = ();
@@ -491,6 +505,10 @@ sub imageInfoThread($) {
           if (! defined $pvt_hi{$k})  { $pvt_hi{$k} = "../../../images/blankimage.gif"; }
           if (! defined $bp_lo{$k})   { $bp_lo{$k} = "../../../images/blankimage.gif"; }
           if (! defined $bp_hi{$k})   { $bp_hi{$k} = "../../../images/blankimage.gif"; }
+          if (! defined $snrt_lo{$k})  { $snrt_lo{$k} = "../../../images/blankimage.gif"; }
+          if (! defined $snrt_hi{$k})  { $snrt_hi{$k} = "../../../images/blankimage.gif"; }
+          if (! defined $snrh_lo{$k})  { $snrh_lo{$k} = "../../../images/blankimage.gif"; }
+          if (! defined $snrh_hi{$k})  { $snrh_hi{$k} = "../../../images/blankimage.gif"; }
         }
 
         # now update the global variables for each image type
@@ -503,10 +521,14 @@ sub imageInfoThread($) {
           $tmp_str .= "pvt_200x150:::".$pvt_lo{$k}.";;;";
           $tmp_str .= "pvfr_200x150:::".$pvfr_lo{$k}.";;;";
           $tmp_str .= "bp_200x150:::".$bp_lo{$k}.";;;";
+          $tmp_str .= "snrt_200x75:::".$snrt_lo{$k}.";;;";
+          $tmp_str .= "snrh_200x75:::".$snrh_lo{$k}.";;;";
           $tmp_str .= "pvfl_1024x768:::".$pvfl_hi{$k}.";;;";
           $tmp_str .= "pvt_1024x768:::".$pvt_hi{$k}.";;;";
           $tmp_str .= "pvfr_1024x768:::".$pvfr_hi{$k}.";;;";
           $tmp_str .= "bp_1024x768:::".$bp_hi{$k}.";;;";
+          $tmp_str .= "snrt_1024x768:::".$snrt_hi{$k}.";;;";
+          $tmp_str .= "snrh_1024x768:::".$snrh_hi{$k}.";;;";
         }
 
         $image_info = $tmp_str;
@@ -529,24 +551,19 @@ sub statusInfoThread() {
 
   Dada::logMsg(1, $dl, "statusInfoThread: starting");
 
-  my @server_daemons = split(/ /,$cfg{"SERVER_DAEMONS"});
-  my %clients = ();
   my @files = ();
-  my %warnings= ();
-  my %errors= ();
   my @arr = ();
-  my $sleep_time = 2;
+  my $sleep_time = 4;
   my $sleep_counter = 0;
 
   my $i = 0;
-  my $host = "";
   my $statuses = "";
   my $file = "";
   my $msg = "";
-  my $source = "";
+  my $pwc = "";
+  my $tag = "";
+  my $type = "";
   my $tmp_str = "";
-  my $key = "";
-  my $value = "";
   my $cmd = "";
 
   while (!$quit_daemon) {
@@ -559,55 +576,57 @@ sub statusInfoThread() {
     } else {
 
       $sleep_counter = $sleep_time;
-      %warnings = ();
-      %errors = ();
+      $tmp_str = "";
       @files = ();
 
       $cmd = "ls -1 ".$status_dir;
       $statuses = `$cmd`;
+      chomp($statuses);
       @files = split(/\n/, $statuses);
 
       # get the current warnings and errors
-      for ($i=0; $i<=$#files; $i++) {
+      for ($i=0; $i<=$#files; $i++) 
+      {
         $file = $files[$i];
         $msg = `tail -n 1 $status_dir/$file`;
         chomp $msg;
 
-        $source = "";
         @arr = ();
         @arr = split(/\./,$file);
 
+        $pwc = "";
+        $tag = "";
+        $type = "";
+
         # for pwc, sys and src client errors
-        if ($#arr == 2) {
-          $source = $arr[1]."_".$arr[0];
-        } elsif ($#arr == 1) {
-          $source = $arr[0];
+        if ($#arr == 2)
+        {
+          $pwc = $arr[0];
+          $tag = $arr[1];
+          $type = $arr[2];
+        }
+        elsif ($#arr == 1)
+        {
+          $pwc = "server";
+          $tag = $arr[0];
+          $type = $arr[1];
+        }
+        else
+        {
+          Dada::logMsg(0, $dl, "statusInfoThread: un-parseable status file: ".$file);
         }
 
-        if ($file =~ m/\.warn$/) {
-          $warnings{$source} = $msg;
+        if ($type eq "warn")
+        {
+          $tmp_str .= "<daemon_status type='warning' pwc='".$pwc."' tag='".$tag."'>".$msg."</daemon_status>";
         }
-        if ($file =~ m/\.error$/) {
-          $errors{$source} = $msg;
+        if ($type eq "error")
+        {
+          $tmp_str .= "<daemon_status type='error' pwc='".$pwc."' tag='".$tag."'>".$msg."</daemon_status>";
         }
-
       }
-
-      # The results array is now complete, build the response
-      # string
-      $tmp_str = "";
-      while (($key, $value) = each(%warnings)){
-        $tmp_str .= $key.":::1:::".$value.";;;;;;";
-      }
-      while (($key, $value) = each(%errors)){
-        $tmp_str .= $key.":::2:::".$value.";;;;;;";
-      }
-      #$tmp_str .= "\n";
-
       $status_info = $tmp_str;
-
       Dada::logMsg(2, $dl, "statusInfoThread: ".$status_info);
-
     }
   }
 
@@ -643,23 +662,18 @@ sub nodeInfoThread() {
   push(@machines, "srv0");
   @machines = Dada::array_unique(@machines);
   @machines = sort @machines;
-
   my $handle = 0;
-  my @bits = ();
-  my $db_full;
-  my $db_blocks;
-  my $stop_obs = 0;
-  my $tcs_state_sock = 0;
-  my $tcs_sock = 0;
 
-  while (!$quit_daemon) {
-
-    if ($sleep_counter > 0) {
+  while (!$quit_daemon) 
+  {
+    if ($sleep_counter > 0) 
+    {
       sleep(1);
       $sleep_counter--;
-                                                                                                          
+    } 
     # The time has come to check the status warnings
-    } else {
+    else 
+    {
       $sleep_counter = $sleep_time;
 
       @results = ();
@@ -672,98 +686,29 @@ sub nodeInfoThread() {
         Dada::logMsg(3, $dl, "nodeInfoThread: connection: ".$handle);
 
         # ensure our file handle is valid
-        if (!$handle) {
-
-          $response = "0 0 0;;;0 0;;;0.00,0.00,0.00;;;0.0;;;0.0";
-          # check if offline, or scripts not running
-          $handle = Dada::connectToMachine($machines[$i], 22, 0);
-          if (!$handle) {
-            $result = "offline";
-          } else {
-            $result = "stopped";
-            $handle->close();
-          }
-        } else {
+        if (!$handle)
+        {
+          $result = "fail";
+          $response = "<status><host>".$machines[$i]."</host></status>";
+        }
+        else
+        {
           ($result, $response) = Dada::sendTelnetCommand($handle, "get_status");
           $handle->close();
         }
-        if ($result ne "ok") {
-          $response = "0 0 0;;;0 0;;;0.00,0.00,0.00;;;0.0;;;0.0";
-        }
-        Dada::logMsg(2, $dl, "nodeInfoThread: result was: ".$result." ".$response);
 
         $results[$i] = $result;
         $responses[$i] = $response;
-
-        # check if any of the datablocks was over 50% full
-        @bits = split(/;;;/, $response);
-        ($db_blocks, $db_full) = split(/ /,$bits[1]);
-        if ($machines[$i] =~ m/gpu/) {
-          Dada::logMsg(2, $dl, "nodeInfoThread: ".$machines[$i]." db_blocks=".$db_blocks.", db_full=".$db_full);
-          if (($db_blocks > 0) && ($db_full > ($db_blocks * 0.5))) {
-            Dada::logMsg(1, $dl, $machines[$i]." datablock over 50% full: ".$db_full." / ".$db_blocks);
-            $stop_obs = 1;
-            Dada::logMsg(1, $dl, $machines[$i]." STOP OBS DISABLED");
-            $stop_obs = 0;
-          }
-        }
       }
-
       # now set the global string
-      $tmp_str = "";
+      $tmp_str = "<node_statuses>";
       for ($i=0; $i<=$#machines; $i++) {
-        $tmp_str .= $machines[$i].":::".$results[$i].":::".$responses[$i].";;;;;;";
+        $tmp_str .= $responses[$i];
       }
+      $tmp_str .= "</node_statuses>";
       $node_info = $tmp_str;
-
-      Dada::logMsg(2, $dl, "nodeInfoThread: ".$node_info);
-
-      # if we are trying to stop the current observation due to a full datablock
-      if ($stop_obs) {
-
-        $tcs_state_sock = Dada::connectToMachine($cfg{"SERVER_HOST"}, $cfg{"TCS_STATE_INFO_PORT"});
-        if (!$tcs_state_sock) {
-          Dada::logMsgWarn($warn, "nodeInfoThread: could not connect to TCS Interface state info port");
-        } else {
-
-          Dada::logMsg(2, $dl, "nodeInfoThread: TCS <- state");
-          print $tcs_state_sock "state\n";
-          $result = "ok";
-          $response = Dada::getLine($tcs_state_sock);
-          Dada::logMsg(2, $dl, "nodeInfoThread: TCS -> ".$result." ".$response);
-
-          if ($result ne "ok") {
-            Dada::logMsgWarn($warn, "nodeInfoThread: error response from TCS Interface state info port: ".$response); 
-          } else {
-            # If we are recording, issue the stop command
-            
-            if ($response =~ m/^Recording/) {
-              $tcs_sock =  Dada::connectToMachine($cfg{"TCS_INTERFACE_HOST"}, $cfg{"TCS_INTERFACE_PORT"});
-              if (!$tcs_sock) {
-                Dada::logMsgWarn($warn, "nodeInfoThread: could not connect to TCS Interface");
-              } else {
-                Dada::logMsgWarn($warn, "Stopping Observation due to datablock > 50% full");
-                Dada::logMsg(2, $dl, "nodeInfoThread: TCS <- stop");
-                ($result, $response) = Dada::sendTelnetCommand($tcs_sock, "stop");
-                Dada::logMsg(2, $dl, "nodeInfoThread: TCS -> ".$result." ".$response);
-                if ($result ne "ok") {  
-                  Dada::logMsgWarn($warn, "nodeInfoThread: error response from TCS Interface: ".$response);
-                }
-                $tcs_sock->close();
-              }
-            } elsif ($response =~ m/^Idle/) {
-              $stop_obs = 0;
-            } elsif ($response =~ m/^Stop/) {
-              # we are Stopping or Stopped
-            } else {
-              Dada::logMsgWarn($warn, "nodeInfoThread: TCS in odd state: ".$response);
-            }
-          }
-          $tcs_state_sock->close();
-        }
-      }
     }
-  }  
+  }
 
   Dada::logMsg(1, $dl, "nodeInfoThread: exiting");
 
@@ -912,15 +857,17 @@ sub dishImageThread() {
   my $data = 0x00;
   my $bytes_read = 0;
 
-  while (!$quit_daemon) {
-
-    if ($sleep_counter > 0) {
+  while (!$quit_daemon)
+  {
+    if ($sleep_counter > 0)
+    {
       sleep(1);
       $sleep_counter--;
 
     # The time has come to check the status warnings
-    } else {
-
+    } 
+    else
+    {
       $sleep_counter = $sleep_time;
       Dada::logMsg(2, $dl, "dishImageThread: getting new image");
   

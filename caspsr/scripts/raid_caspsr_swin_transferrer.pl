@@ -53,7 +53,7 @@ our $transfer_kill : shared;
 #
 # initialize globals
 #
-$dl = 1; 
+$dl = 1;
 $daemon_name = Dada::daemonBaseName(basename($0));
 %cfg = Caspsr::getConfig();
 $last_dest = 0;
@@ -70,8 +70,8 @@ $transfer_kill = "";
   my $pid_file    = META_DIR."/control/".$daemon_name.".pid";
   my $quit_file   = META_DIR."/control/".$daemon_name.".quit";
 
-  my $src_path    = DATA_DIR."/finished";
-  my $dst_path    = DATA_DIR."/swin/sent";
+  my $src_path    = DATA_DIR."/swin/send";
+  my $dst_path    = DATA_DIR."/archived";
   my $err_path    = DATA_DIR."/swin/fail";
 
   my $cmd = "";
@@ -132,7 +132,7 @@ $transfer_kill = "";
 
     if ($obs ne "none") 
     {
-      # find a suitable destination disk that has enough space and is not marked as READING
+      # find a suitable destination disk that has enough space
       Dada::logMsg(2, $dl, "main: getDest()");
       ($result, $r_user, $r_host, $r_path) = getDest();
       Dada::logMsg(2, $dl, "main: getDest() ".$result. " ".$r_user."@".$r_host.":".$r_path);
@@ -149,22 +149,6 @@ $transfer_kill = "";
       {
         $sleeping = 0;
 
-        # create the WRITING file 
-        $cmd = "touch ".$r_path."/../WRITING";
-        Dada::logMsg(2, $dl, "main: ".$cmd);
-        ($result, $rval, $response) = Dada::remoteSshCommand($r_user, $r_host, $cmd);
-        Dada::logMsg(3, $dl, "main: ".$result." ".$response);
-        if ($result ne "ok") 
-        {
-          Dada::logMsgWarn($warn, "main: ssh for ".$r_user."@".$r_host." failed: ".$response);
-          return ("fail", "ssh failed: ".$response);
-        } 
-        if ($rval != 0)
-        {
-          Dada::logMsgWarn($warn, "main: failed to touch remote WRITING file");
-          return ("fail", "could not touch remote WRITING file");
-        }
-
         # transfer the observation
         Dada::logMsg(2, $dl, "main: transferObs() ".$pid."/".$src."/".$obs." to ".$r_user."@".$r_host."/".$r_path);
         ($result, $response) = transferObs($src_path, $pid, $src, $obs, $r_user, $r_host, $r_path);
@@ -180,7 +164,7 @@ $transfer_kill = "";
           else
           {
             Dada::logMsgWarn($warn, "main: transferObs failed: ".$response);
-            Dada::logMsg(1, $dl, $pid."/".$src."/".$obs." finished -> swin/fail");
+            Dada::logMsg(1, $dl, $pid."/".$src."/".$obs." swin/send -> swin/fail");
             Dada::logMsg(2, $dl, "main: moveObs(".$src_path.", ".$err_path.", ".$pid.", ".$src.", ".$obs.")");
             ($result, $response) = moveObs($src_path, $err_path, $pid, $src, $obs);
             Dada::logMsg(2, $dl, "main: moveObs ".$result." ".$response);
@@ -188,24 +172,10 @@ $transfer_kill = "";
         } 
         else
         {
-          Dada::logMsg(1, $dl, $pid."/".$src."/".$obs." finished -> swin/sent ".$response);
+          Dada::logMsg(1, $dl, $pid."/".$src."/".$obs." swin/send -> archived ".$response);
           Dada::logMsg(2, $dl, "main: moveObs(".$src_path.", ".$dst_path.", ".$pid.", ".$src.", ".$obs.")");
           ($result, $response) = moveObs($src_path, $dst_path, $pid, $src, $obs);
           Dada::logMsg(2, $dl, "main: moveObs ".$result." ".$response);
-        }
-
-        # remove the WRITING file
-        $cmd = "rm -f ".$r_path."/../WRITING";
-        Dada::logMsg(2, $dl, "main: ".$cmd);
-        ($result, $rval, $response) = Dada::remoteSshCommand($r_user, $r_host, $cmd);
-        Dada::logMsg(3, $dl, "main: ".$result." ".$response);
-        if ($result ne "ok")
-        {
-          Dada::logMsgWarn($warn, "ssh for ".$r_user."@".$r_host." failed: ".$response);
-        }
-        if ($rval != 0)
-        {
-          Dada::logMsgWarn($warn, "failed to remove remote WRITING file");
         }
       }
     }
@@ -329,9 +299,23 @@ sub transferObs($$$$$$$)
   my $rsync_options = "-a --stats --no-g --chmod=go-ws --bwlimit ".BANDWIDTH.
                       " --exclude 'obs.transferred' --password-file=/home/caspsr/.ssh/shrek_rsync_pw";
 
-  # create the remote destination direectory
+  # extract the centre frequency of the observation from the obs.start file
+  $cmd = "grep ^CFREQ ".$s_path."/".$pid."/".$src."/".$obs."/obs.start | awk '{printf \"\%d\",\$2}'";
+  Dada::logMsg(2, $dl, "transferObs: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, $dl, "getObsToSend: ".$result." ".$response);
+  if ($result ne "ok")
+  {
+    Dada::logMsgWarn($warn, "transferObs: ".$cmd." failed: ".$response);
+    return ("fail", "could not determine CFREQ");
+  }
+  my $cfreq = $response;
+
+  # create the remote destination direectories
   $cmd = "mkdir -m 0755 -p ".$path."/".$pid."; ".
-         "mkdir -m 0755 -p ".$path."/".$pid."/".$src;
+         "mkdir -m 0755 -p ".$path."/".$pid."/".$src."; ".
+         "mkdir -m 0755 -p ".$path."/".$pid."/".$src."/".$obs;
+        
   Dada::logMsg(2, $dl, "transferObs: ".$cmd);
   ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
   Dada::logMsg(3, $dl, "transferObs: ".$result." ".$response);
@@ -352,7 +336,7 @@ sub transferObs($$$$$$$)
   $transfer_kill = "pkill -f '^rsync ".$s_path."/".$pid."/".$src."/".$obs."' -u caspsr";
 
   # rsync the observation
-  $cmd = "rsync ".$s_path."/".$pid."/".$src."/".$obs." ".$user."@".$host."::".$r_module."/caspsr/".$pid."/".$src."/ ".$rsync_options;
+  $cmd = "rsync ".$s_path."/".$pid."/".$src."/".$obs."/ ".$user."@".$host."::".$r_module."/caspsr/".$pid."/".$src."/".$obs."/".$cfreq." ".$rsync_options;
   Dada::logMsg(2, $dl, "transferObs: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(3, $dl, "transferObs: ".$result." ".$response);
@@ -482,26 +466,8 @@ sub getDest()
       next;
     }
 
-    # check if this is being used for [READ|WRIT]ING
-    $cmd = "ls ".$path."/../????ING";
-    Dada::logMsg(3, $dl, "getDest: ".$user."@".$host.":".$cmd);
-    ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
-    Dada::logMsg(3, $dl, "getDest: ".$result." ".$rval." ".$response);
-    if ($result ne "ok") {
-      Dada::logMsgWarn($warn, "getDest: ssh to ".$user."@".$host." failed: ".$response);
-      next;
-    }
-
-    if (($response =~ m/No such file or directory/) || ($response =~ m/ls: No match/))
-    {
-      Dada::logMsg(3, $dl, "getDest: no control files in ".$path."/../");
-      Dada::logMsg(2, $dl, "getDest: found ".$user."@".$host.":".$path);
-      return ("ok", $user, $host, $path);
-    }
-    else
-    {
-      Dada::logMsg(2, $dl, "getDest: control file existed in ".$path."/../, skipping");
-    }
+    Dada::logMsg(2, $dl, "getDest: found ".$user."@".$host.":".$path);
+    return ("ok", $user, $host, $path);
   }
   return ("fail", $user, $host, $path);
 }

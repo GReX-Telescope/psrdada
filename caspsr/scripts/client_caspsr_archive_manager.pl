@@ -18,6 +18,19 @@ use threads;
 use threads::shared;
 use Dada;
 
+sub usage() 
+{
+  print "Usage: ".basename($0)." PWC_ID\n";
+  print "   PWC_ID   The Primary Write Client ID this script will process\n";
+}
+
+#
+# Function Prototypes
+#
+sub good();
+sub processArchive($$);
+sub msg($$$);
+
 
 #
 # Global Variables
@@ -25,7 +38,9 @@ use Dada;
 our $dl : shared;
 our $daemon_name : shared;
 our %cfg : shared;
+our $hostname : shared;
 our $quit_daemon : shared;
+our $pwc_id : shared;
 our $log_host;
 our $log_port;
 our $log_sock;
@@ -34,40 +49,30 @@ our $log_sock;
 #
 # Initialize module variables
 #
-%cfg = Caspsr::getConfig();
 $dl = 1;
+$daemon_name = Dada::daemonBaseName($0);
+%cfg = Caspsr::getConfig();
+$hostname = Dada::getHostMachineName();
+$quit_daemon = 0;
+$pwc_id = $ARGV[0];
 $log_host = $cfg{"SERVER_HOST"};
 $log_port = $cfg{"SERVER_SYS_LOG_PORT"};
 $log_sock = 0;
-$daemon_name = Dada::daemonBaseName($0);
-$quit_daemon = 0;
 
-
-#
-# Function Prototypes
-#
-sub main();
-
+# ensure that our pwc_id is valid 
+if (!Dada::checkPWCID($pwc_id, %cfg))
+{
+  usage();
+  exit(1);
+}
 
 # Autoflush STDOUT
 $| = 1;
 
-my $result = 0;
-$result = main();
-
-exit($result);
-
-
-###############################################################################
-#
-# package functions
-# 
-
-sub main() {
+{
 
   my $log_file       = $cfg{"CLIENT_LOG_DIR"}."/".$daemon_name.".log";;
-  my $pid_file       = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".pid";
-  my $quit_file      = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
+  my $pid_file       = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$pwc_id.".pid";
   my $archive_dir    = $cfg{"CLIENT_ARCHIVE_DIR"};   # hi res archive storage
   my $results_dir    = $cfg{"CLIENT_RESULTS_DIR"};   # hi res archive output
 
@@ -85,10 +90,10 @@ sub main() {
   my $sleep_counter = 0;
 
   # sanity check on whether the module is good to go
-  ($result, $response) = good($quit_file);
+  ($result, $response) = good();
   if ($result ne "ok") {
     print STDERR $response."\n";
-    return 1;
+    exit 1;
   }
 
   # install signal handlers
@@ -105,11 +110,11 @@ sub main() {
     print STDERR "Could open log port: ".$log_host.":".$log_port."\n";
   }
 
-  msg(0,"INFO", "STARTING SCRIPT");
+  msg(0, "INFO", "STARTING SCRIPT");
 
   # start the control thread
-  msg(2, "INFO", "starting controlThread(".$quit_file.", ".$pid_file.")");
-  $control_thread = threads->new(\&controlThread, $quit_file, $pid_file);
+  msg(2, "INFO", "starting controlThread(".$pid_file.")");
+  $control_thread = threads->new(\&controlThread, $pid_file);
 
   # Change to the dspsr output directory
   chdir $results_dir;
@@ -164,10 +169,9 @@ sub main() {
 
   Dada::nexusLogClose($log_sock);
 
-  return 0;
+  exit 0;
 
 }
-
 
 ###############################################################################
 #
@@ -279,16 +283,19 @@ sub rsyncCopy($$$$)
 #
 # monitor for quit requests
 #
-sub controlThread($$) {
+sub controlThread($) {
 
   msg(2, "INFO", "controlThread: starting");
 
-  my ($quit_file, $pid_file) = @_;
+  my ($pid_file) = @_;
 
-  msg(2, "INFO", "controlThread(".$quit_file.", ".$pid_file.")");
+  msg(2, "INFO", "controlThread(".$pid_file.")");
+
+  my $host_quit_file = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
+  my $pwc_quit_file  =  $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$pwc_id.".quit";
   
-  # Poll for the existence of the control file
-  while ((!(-f $quit_file)) && (!$quit_daemon)) {
+  # poll for the existence of the control file
+  while ((!$quit_daemon) && (! -f $host_quit_file) && (! -f $pwc_quit_file)) {
     sleep(1);
   }
 
@@ -310,14 +317,14 @@ sub controlThread($$) {
 #
 sub msg($$$) {
 
-  my ($level, $type, $msg) = @_;
+  my ($level, $class, $msg) = @_;
   if ($level <= $dl) {
     my $time = Dada::getCurrentDadaTime();
     if (! $log_sock ) {
       $log_sock = Dada::nexusLogOpen($log_host, $log_port);
     }
     if ($log_sock) {
-      Dada::nexusLogMessage($log_sock, $time, "sys", $type, "arch mngr", $msg);
+      Dada::nexusLogMessage($log_sock, $hostname, $time, "sys", $class, "arch mngr", $msg);
     }
     print "[".$time."] ".$msg."\n";
   }
@@ -367,13 +374,14 @@ sub sigPipeHandle($) {
 #
 # Test to ensure all module variables are set before main
 #
-sub good($) {
+sub good() {
 
-  my ($quit_file) = @_;
-
+  my $host_quit_file = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
+  my $pwc_quit_file  =  $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$pwc_id.".quit";
+  
   # check the quit file does not exist on startup
-  if (-f $quit_file) {
-    return ("fail", "Error: quit file ".$quit_file." existed at startup");
+  if ((-f $host_quit_file) || (-f $pwc_quit_file)) {
+    return ("fail", "Error: quit file existed at startup");
   }
 
   # the calling script must have set this

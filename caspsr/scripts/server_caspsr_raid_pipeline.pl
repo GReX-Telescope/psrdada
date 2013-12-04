@@ -40,7 +40,7 @@ $daemon_name = Dada::daemonBaseName($0);
 $quit_daemon = 0;
 $warn = $cfg{"STATUS_DIR"}."/".$daemon_name.".warn";
 $error = $cfg{"STATUS_DIR"}."/".$daemon_name.".error";
-@r_scripts = ("caspsr_swin_transferrer", "caspsr_psrfits_converter");
+@r_scripts = ("caspsr_swin_transferrer", "caspsr_psrfits_converter", "caspsr_cleaner");
 
 {
 

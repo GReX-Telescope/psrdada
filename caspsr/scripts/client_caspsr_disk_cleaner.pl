@@ -24,6 +24,21 @@ use Time::Local;
 use Dada;
 use Caspsr;
 
+sub usage() 
+{
+  print "Usage: ".basename($0)." PWC_ID\n";
+  print "   PWC_ID   The Primary Write Client ID this script will process\n";
+}
+
+#
+# Function declarations
+#
+sub good();
+sub msg($$$);
+sub findCompletedObs();
+sub deleteCompletedObs($);
+
+
 #
 # Global variables
 #
@@ -31,105 +46,104 @@ our $dl : shared = 1;
 our $daemon_name : shared = Dada::daemonBaseName($0);
 our %cfg : shared = Caspsr::getConfig();
 our $quit_daemon : shared = 0;
+our $pwc_id : shared = $ARGV[0];
+our $hostname : shared = Dada::getHostMachineName();
 our $log_host = 0;
 our $log_port = 0;
 our $log_sock = 0;
 
-#
-# Function declarations
-#
-sub good($);
-sub msg($$$);
-sub findCompletedObs();
-sub deleteCompletedObs($);
-
-
-###############################################################################
-#
-# Main
-# 
-
-my $log_file      = $cfg{"CLIENT_LOG_DIR"}."/".$daemon_name.".log";;
-my $pid_file      = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".pid";
-my $quit_file     = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
-
-$log_host         = $cfg{"SERVER_HOST"};
-$log_port         = $cfg{"SERVER_SYS_LOG_PORT"};
-
-my $control_thread = 0;
-my $result = "";
-my $response = "";
-my $cmd = "";
-my $obs = "";
-
-# sanity check on whether the module is good to go
-($result, $response) = good($quit_file);
-if ($result ne "ok") {
-  print STDERR $response."\n";
-  return 1;
-}
-
-# install signal handles
-$SIG{INT}  = \&sigHandle;
-$SIG{TERM} = \&sigHandle;
-$SIG{PIPE} = \&sigPipeHandle;
-
-# become a daemon
-Dada::daemonize($log_file, $pid_file);
-
-# Open a connection to the server_sys_monitor.pl script
-$log_sock = Dada::nexusLogOpen($log_host, $log_port);
-if (!$log_sock) {
-  print STDERR "Could not open log port: ".$log_host.":".$log_port."\n";
-}
-
-msg(0, "INFO", "STARTING SCRIPT");
-
-# Start the daemon control thread
-$control_thread = threads->new(\&controlThread, $quit_file, $pid_file);
-
-# Main Loop
-while (!($quit_daemon)) 
+# ensure that our pwc_id is valid 
+if (!Dada::checkPWCID($pwc_id, %cfg))
 {
-  msg(2, "INFO", "main: findCompletedObs()");
-  ($result, $response, $obs) = findCompletedObs();
-  msg(2, "INFO", "main: findCompletedObs() ".$result." ".$response." ".$obs);
+  usage();
+  exit(1);
+}
 
-  if (($result eq "ok") && ($obs ne "none")) 
-  {
-    msg(2, "INFO", "main: deleteCompletedObs(".$obs.")");
-    ($result, $response) = deleteCompletedObs($obs);
-    msg(2, "INFO", "main: deleteCompletedObs() ".$result." ".$response);
+# Autoflush STDOUT
+$| = 1;
 
-    if ($result ne "ok") 
-    {
-      msg(0, "ERROR", "Failed to delete ".$obs.": ".$response);
-      $quit_daemon = 1;
-    } 
-    else 
-    {
-      msg(1, "INFO", $obs.": transferred -> deleted");
-    }
-  } 
+{
+  my $log_file      = $cfg{"CLIENT_LOG_DIR"}."/".$daemon_name.".log";;
+  my $pid_file      = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$pwc_id.".pid";
 
-  my $counter = 120;
-  msg(2, "INFO", "main: sleeping ".($counter*5)." seconds");
-  while ((!$quit_daemon) && ($counter > 0) && ($obs eq "none")) 
-  {
-    sleep(1);
-    $counter--;
+  $log_host         = $cfg{"SERVER_HOST"};
+  $log_port         = $cfg{"SERVER_SYS_LOG_PORT"};
+
+  my $control_thread = 0;
+  my $result = "";
+  my $response = "";
+  my $cmd = "";
+  my $obs = "";
+
+  # sanity check on whether the module is good to go
+  ($result, $response) = good();
+  if ($result ne "ok") {
+    print STDERR $response."\n";
+    return 1;
   }
 
+  # install signal handles
+  $SIG{INT}  = \&sigHandle;
+  $SIG{TERM} = \&sigHandle;
+  $SIG{PIPE} = \&sigPipeHandle;
+
+  # become a daemon
+  Dada::daemonize($log_file, $pid_file);
+
+  # Open a connection to the server_sys_monitor.pl script
+  $log_sock = Dada::nexusLogOpen($log_host, $log_port);
+  if (!$log_sock) {
+    print STDERR "Could not open log port: ".$log_host.":".$log_port."\n";
+  }
+
+  msg(0, "INFO", "STARTING SCRIPT");
+
+  # Start the daemon control thread
+  $control_thread = threads->new(\&controlThread, $pid_file);
+
+  # Main Loop
+  while (!($quit_daemon)) 
+  {
+    msg(2, "INFO", "main: findCompletedObs()");
+    ($result, $response, $obs) = findCompletedObs();
+    msg(2, "INFO", "main: findCompletedObs() ".$result." ".$response." ".$obs);
+
+    if (($result eq "ok") && ($obs ne "none")) 
+    {
+      msg(2, "INFO", "main: deleteCompletedObs(".$obs.")");
+      ($result, $response) = deleteCompletedObs($obs);
+      msg(2, "INFO", "main: deleteCompletedObs() ".$result." ".$response);
+
+      if ($result ne "ok") 
+      {
+        msg(0, "ERROR", "Failed to delete ".$obs.": ".$response);
+        $quit_daemon = 1;
+      } 
+      else 
+      {
+        msg(1, "INFO", $obs.": transferred -> deleted");
+      }
+    } 
+
+    my $counter = 120;
+    msg(2, "INFO", "main: sleeping ".($counter*5)." seconds");
+    while ((!$quit_daemon) && ($counter > 0) && ($obs eq "none")) 
+    {
+      sleep(1);
+      $counter--;
+    }
+
+  }
+
+  $control_thread->join();
+
+  msg(0, "INFO", "STOPPING SCRIPT");
+  Dada::nexusLogClose($log_sock);
+
+  exit 0;
 }
 
-$control_thread->join();
-
-msg(0, "INFO", "STOPPING SCRIPT");
-Dada::nexusLogClose($log_sock);
-
-exit 0;
-
-
+###############################################################################
 #
 # Find an obs that has been marked as deleted and greater than 
 # 6 months old
@@ -297,17 +311,21 @@ sub deleteCompletedObs($)
   return ($result, $response);
 }
 
-sub controlThread($$) {
+sub controlThread($) {
   
-  my ($quit_file, $pid_file) = @_;
+  my ($pid_file) = @_;
   
   msg(2, "INFO", "controlThread : starting");
 
   my $cmd = "";
   my $result = "";
   my $response = "";
-  
-  while ((!$quit_daemon) && (!(-f $quit_file))) {
+
+  my $host_quit_file = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
+  my $pwc_quit_file  =  $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$pwc_id.".quit";
+
+  # poll for the existence of the control file
+  while ((!$quit_daemon) && (! -f $host_quit_file) && (! -f $pwc_quit_file)) {
     sleep(1);
   }
   
@@ -328,16 +346,17 @@ sub controlThread($$) {
 #
 # logs a message to the nexus logger and prints to stdout
 #
-sub msg($$$) {
-
-  my ($level, $type, $msg) = @_;
-  if ($level <= $dl) {
+sub msg($$$)
+{
+  my ($level, $class, $msg) = @_;
+  if ($level <= $dl)
+  {
     my $time = Dada::getCurrentDadaTime();
     if (! $log_sock ) {
       $log_sock = Dada::nexusLogOpen($log_host, $log_port);
     }
     if ($log_sock) {
-      Dada::nexusLogMessage($log_sock, $time, "sys", $type, "cleaner", $msg);
+      Dada::nexusLogMessage($log_sock, $hostname, $time, "sys", $class, "cleaner", $msg);
     }
     print "[".$time."] ".$msg."\n";
   }
@@ -382,13 +401,14 @@ sub sigPipeHandle($) {
 #
 # Test to ensure all module variables are set before main
 #
-sub good($) {
+sub good() {
 
-  my ($quit_file) = @_;
+  my $host_quit_file = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
+  my $pwc_quit_file  =  $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$pwc_id.".quit";
 
   # check the quit file does not exist on startup
-  if (-f $quit_file) {
-    return ("fail", "Error: quit file ".$quit_file." existed at startup");
+  if ((-f $host_quit_file) || (-f $pwc_quit_file)) {
+    return ("fail", "Error: quit file existed at startup");
   }
 
   # the calling script must have set this

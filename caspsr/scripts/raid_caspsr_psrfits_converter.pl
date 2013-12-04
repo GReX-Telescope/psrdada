@@ -54,11 +54,11 @@ our $error : shared;
 $dl = 1; 
 $quit_daemon = 0;
 $daemon_name = Dada::daemonBaseName(basename($0));
-$src_path = DATA_DIR."/swin/sent";
+$src_path = DATA_DIR."/finished";
 $dst_path = DATA_DIR."/atnf/send";
 $tmp_path = DATA_DIR."/psrfits/temp";
 $err_path = DATA_DIR."/psrfits/fail";
-$fin_path = DATA_DIR."/archived";
+$fin_path = DATA_DIR."/swin/send";
 
 $warn     = META_DIR."/logs/".$daemon_name.".warn";
 $error    = META_DIR."/logs/".$daemon_name.".error";
@@ -198,17 +198,17 @@ sub processLoop()
   {
     Dada::logMsg(2, $dl, "Searching for unprocessed observations...");
 
-    # get a listing of all observations in the src_path
-    $cmd = "find ".$src_path." -mindepth 3 -maxdepth 3 -type d -printf '\%f\n' | sort | head -n 1";
-    Dada::logMsg(2, $dl, "processLoop: ".$cmd);
+    # find the oldest observation (based on UTC_START) to send
+    $cmd = "find ".$src_path." -mindepth 4 -maxdepth 4 -type f -name 'obs.transferred'  -printf '\%h\n' | awk -F/ '{print \$(NF)}' | sort | head -n 1";
+    Dada::logMsg(3, $dl, "getObsToSend: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
-    Dada::logMsg(3, $dl, "processLoop: ".$response);
-    if (($result ne "ok") || ($response eq ""))
+    Dada::logMsg(3, $dl, "getObsToSend: ".$result." ".$response);
+    if (($result ne "ok") || ($response eq "" ))
     {
       Dada::logMsg(2, $dl ,"processLoop: no observations to process");
       Dada::logMsg(2, $dl, "Sleeping 60 seconds");
       my $counter = 60;
-      while ((!$quit_daemon) && ($counter > 0)) 
+      while ((!$quit_daemon) && ($counter > 0))
       {
         sleep(1);
         $counter--;
@@ -242,7 +242,7 @@ sub processLoop()
     if ($result ne "ok")
     {
       Dada::logMsg(1, $dl, "Failed to process ".$pid."/".$src."/".$obs.": ".$response);
-      Dada::logMsg(1, $dl, $pid."/".$src."/".$obs." swin/sent -> psrfits/fail");
+      Dada::logMsg(1, $dl, $pid."/".$src."/".$obs." finished -> psrfits/fail");
       ($result, $response) = moveObs($src_path, $err_path, $pid, $src, $obs);
 
       # ensure that the temp directory is cleaned...
@@ -256,7 +256,7 @@ sub processLoop()
     else
     {
       Dada::logMsg(2, $dl, "Processed ".$src_path."/".$pid."/".$src."/".$obs);
-      Dada::logMsg(1, $dl, $pid."/".$src."/".$obs." swin/sent -> atnf/send");
+      Dada::logMsg(1, $dl, $pid."/".$src."/".$obs." finished -> atnf/send");
      ($result, $response) = moveObs($src_path, $fin_path, $pid, $src, $obs);
     }
   }

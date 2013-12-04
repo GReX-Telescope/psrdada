@@ -61,74 +61,113 @@ sub setupClientType()
   my $i = 0;
   my $found = 0;
 
+  $Dada::client_master_control::primary_db = "";
+  @Dada::client_master_control::dbs = ();
+  @Dada::client_master_control::pwcs = ();
+
   # if running on the server machine
   if ($cfg{"SERVER_ALIASES"} =~ m/$Dada::client_master_control::host/) {
     $Dada::client_master_control::host = "srv0";
+    $Dada::client_master_control::user = "dada";
     @Dada::client_master_control::daemons = split(/ /,$cfg{"SERVER_DAEMONS"});
-    @Dada::client_master_control::dbs = ();
     $Dada::client_master_control::daemon_prefix = "server";
     $Dada::client_master_control::control_dir = $cfg{"SERVER_CONTROL_DIR"};
+    $Dada::client_master_control::log_dir = $cfg{"SERVER_LOG_DIR"};
+    push (@Dada::client_master_control::pwcs, "server");
     $found = 1;
   }
+  # check for PWC or DEMUX
   else
   {
     $Dada::client_master_control::daemon_prefix = "client";
     $Dada::client_master_control::control_dir = $cfg{"CLIENT_CONTROL_DIR"};
+    $Dada::client_master_control::log_dir = $cfg{"CLIENT_LOG_DIR"};
+    $Dada::client_master_control::user = $cfg{"USER"};
 
+    my $index = -1;
     # see if we are a PWC
-    for ($i=0; (($i<$cfg{"NUM_PWC"}) && (!$found)); $i++) {
-      if ($Dada::client_master_control::host =~ m/$cfg{"PWC_".$i}/) {
+    for ($i=0; (($i<$cfg{"NUM_PWC"}) && (!$found)); $i++) 
+    {
+      if ($Dada::client_master_control::host =~ m/$cfg{"PWC_".$i}/)
+      {
+        $found = 1;
+        $index = $i;
+        Dada::logMsg(2, $Dada::client_master_control::dl, "matched pwc");
+
         @Dada::client_master_control::daemons = split(/ /,$cfg{"CLIENT_DAEMONS"});
-        @Dada::client_master_control::dbs = split(/ /,$cfg{"DATA_BLOCKS"});
         @Dada::client_master_control::binaries = ();
         push @Dada::client_master_control::binaries, $cfg{"PWC_BINARY"};
-        $found = 1;
-      }
-    }
-    
-    # If we matched a PWC
-    if ($found) 
-    {
-      $Dada::client_master_control::pwc_add = " -d ";
-      my $add_string = "";
-    
-      # Raw IB mode
-      if (defined $cfg{"IB_CHUNK_SIZE"}) {
-        $add_string = " -p ".$cfg{"DEMUX_IB_PORT_0"}." -C ".$cfg{"IB_CHUNK_SIZE"}." ".$cfg{"NUM_DEMUX"};
-      } else {
-        $add_string = " -p ".$cfg{"CLIENT_UDPDB_PORT"}." ".$i." ".$cfg{"NUM_RECV"}." ".($cfg{"NUM_DEMUX"} * $cfg{"PKTS_PER_XFER"})." 0";
-      }
 
-      if ($add_string ne "") {
-        $Dada::client_master_control::pwc_add .= " ".$add_string;
-      }
+        # add to list of PWCs on this host
+        push (@Dada::client_master_control::pwcs, $i);
 
-      if (defined $cfg{"HELPER_DAEMONS"}) {
-        @Dada::client_master_control::helper_daemons = split(/ /,$cfg{"HELPER_DAEMONS"});
-      }
-    }
+        $Dada::client_master_control::pwc_add = " -d ";
+        my $add_string = "";
 
-    # see if we are a DEMUX
-    if (defined $cfg{"NUM_DEMUX"}) {
-      for ($i=0; (($i<$cfg{"NUM_DEMUX"}) && (!$found)); $i++) {
-        if ($Dada::client_master_control::host =~ m/$cfg{"DEMUX_".$i}/) {
-          @Dada::client_master_control::daemons = split(/ /,$cfg{"DEMUX_DAEMONS"});
-          @Dada::client_master_control::dbs = split(/ /,$cfg{"DEMUX_DATA_BLOCKS"});
-          $found = 1;
+        # Raw IB mode
+        if (defined $cfg{"IB_CHUNK_SIZE"}) {
+          $add_string = " -p ".$cfg{"DEMUX_IB_PORT_0"}." -C ".$cfg{"IB_CHUNK_SIZE"}." ".$cfg{"NUM_DEMUX"};
+        } else {
+          $add_string = " -p ".$cfg{"CLIENT_UDPDB_PORT"}." ".$i." ".$cfg{"NUM_RECV"}." ".($cfg{"NUM_DEMUX"} * $cfg{"PKTS_PER_XFER"})." 0";
+        }
+
+        if ($add_string ne "") {
+          $Dada::client_master_control::pwc_add .= " ".$add_string;
         }
       }
     }
 
-    # see if we are a RAID server 
-    if (!$found && (($Dada::client_master_control::host eq "raid0") ||
-                     $Dada::client_master_control::host eq "caspsr-raid0"))
+    for ($i=0; (($i<$cfg{"NUM_DEMUX"}) && (!$found)); $i++) 
     {
-      $found = 1;
-      $Dada::client_master_control::daemon_prefix = "raid";
+      if ($Dada::client_master_control::host =~ m/$cfg{"DEMUX_".$i}/)
+      {
+        $found = 1;
+        $index = $i;
+
+        @Dada::client_master_control::daemons = split(/ /,$cfg{"DEMUX_DAEMONS"});
+        @Dada::client_master_control::binaries = ();
+        push (@Dada::client_master_control::pwcs, $i);
+
+        # rewrite configuration datablocks
+        $cfg{"DATA_BLOCK_PREFIX"} = $cfg{"DEMUX_BLOCK_PREFIX"};
+        $cfg{"DATA_BLOCK_IDS"}    = $cfg{"DEMUX_BLOCK_IDS"};
+        my @dbs = split(/ /,$cfg{"DATA_BLOCK_IDS"});
+        my $j = 0;
+        for ($j=0; $j<=$#dbs; $j++)
+        {
+          $cfg{"BLOCK_NBUFS_".$j} = $cfg{"DEMUX_BLOCK_NBUFS_".$j};
+          $cfg{"BLOCK_BUFSZ_".$j} = $cfg{"DEMUX_BLOCK_BUFSZ_".$j};
+          $cfg{"BLOCK_NREAD_".$j} = $cfg{"DEMUX_BLOCK_NREAD_".$j};
+        }
+      }
     }
+
+    # if we are a PWC or DEMUX, setup relevant datablocks
+    if ($found)
+    {
+      # determine data blocks on this host
+      my @ids = split(/ /,$cfg{"DATA_BLOCK_IDS"});
+      my $key = "";
+      my $id = 0;
+      foreach $id (@ids)
+      {
+        $key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $index, $id);
+        # check nbufs and bufsz
+        if ((!defined($cfg{"BLOCK_BUFSZ_".$id})) || (!defined($cfg{"BLOCK_NBUFS_".$id}))) {
+          return 0;
+        }
+        $Dada::client_master_control::dbs{$index}{$id} = $key;
+      }
+    }
+  }
+  # see if we are a RAID server 
+  if (!$found && (($Dada::client_master_control::host eq "raid0") ||
+                   $Dada::client_master_control::host eq "caspsr-raid0"))
+  {
+    $found = 1;
+    $Dada::client_master_control::daemon_prefix = "raid";
   }
 
   return $found;
-
 }
 

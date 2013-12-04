@@ -70,7 +70,8 @@ $error = $cfg{"STATUS_DIR"}."/".$daemon_name.".error";
 
   # sanity check on whether the module is good to go
   ($result, $response) = good($quit_file);
-  if ($result ne "ok") {
+  if ($result ne "ok")
+  {
     print STDERR $response."\n";
     exit 1;
   }
@@ -456,8 +457,8 @@ sub sigPipeHandle($) {
 #
 # Test to ensure all module variables are set before main
 #
-sub good($) {
-
+sub good($) 
+{
   my ($quit_file) = @_;
 
   # check the quit file does not exist on startup
@@ -483,11 +484,9 @@ sub good($) {
   }
 
   # Ensure that no transfer managers are currently running for APSR, BPSR or CASPSR
-  
   my @backends = ("dada:apsr-srv0:/home/dada/linux_64/control/apsr_transfer_manager.pid", 
                   "dada:apsr-srv0:/home/dada/linux_64/control/apsr_raid_pipeline.pid", 
-                  "dada:apsr-srv0:/home/dada/linux_64/control/bpsr_transfer_manager.pid",
-                  "dada:apsr-srv0:/home/dada/linux_64/control/bpsr_raid_pipeline.pid",
+                  "dada:hipsr-srv0.atnf.csiro.au:/home/dada/linux_64/control/bpsr_raid_pipeline.pid",
                   "dada:caspsr-srv0:/home/dada/linux_64/control/caspsr_transfer_manager.pid",
                   "dada:caspsr-srv0:/home/dada/linux_64/control/caspsr_raid_pipeline.pid");
   my $running_scripts = "";
@@ -499,6 +498,8 @@ sub good($) {
   my $f = "";
   my $cmd = "";
   my $rval = 0;
+  my @scripts = ();
+  my $file = "";
   for ($i=0; $i<=$#backends; $i++)
   {
     ($u, $h, $f) = split(/:/, $backends[$i]);
@@ -513,14 +514,18 @@ sub good($) {
     }
     if ($rval == 0)
     {
-      $script = basename($f);
-      $script =~ s/\.pid$//;
-      $script =~ s/\./ /g;
-      $running_scripts .= $script." ";
+      @scripts = split(/\n/, $response);
+      foreach $file ( @scripts )
+      {
+        $script = basename($file);
+        $script =~ s/\.pid$//;
+        $script =~ s/\./ /g;
+        $running_scripts .= $script." ";
+      }
     }
   }
   if ($running_scripts ne "")
-  { 
+  {
     return ("fail", "found scripts running: ".$running_scripts);
   }
 

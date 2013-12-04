@@ -16,13 +16,22 @@ use IO::Select;      # Allows select polling on a socket
 use Net::hostent;
 use File::Basename;
 
+sub usage() 
+{
+  print "Usage: ".basename($0)." PWC_ID\n";
+  print "   PWC_ID   The Primary Write Client ID this script will process\n";
+}
+
 #
 # Function Prototypes
 #
-sub main();
+sub good();
+sub msg($$$);
 sub process($$);
 sub decimationThread($);
 sub basebandThread();
+sub auxiliaryThread();
+sub auxiliaryControlThread();
 
 #
 # Declare Global Variables
@@ -30,61 +39,65 @@ sub basebandThread();
 our $user;
 our $dl : shared;
 our $daemon_name : shared;
-our $dada_header_cmd;
 our $client_logger;
 our %cfg : shared;
+our $pwc_id : shared;
+our $hostname : shared;
 our $quit_daemon : shared;
 our $log_host;
 our $log_port;
 our $log_sock;
-our $dada_header_pid : shared;    # PID of the dada_header command for killing
-our $processor_pid : shared;      # PID of the processor (dspsr) for killing
 our $recv_db : shared;            # DB where data is being received over IB
 our $proc_db : shared;            # DB where data is being processed 
 our $baseband_db : shared;        # DB where baseband data is read 
-our $proc_db_key : shared;        # DADA processing file for dspsr
+our $baseband_port : shared;      # port for baseband recorder
+our $auxiliary_command : shared;  # Command from auxiliaryControlThread 
+our $auxiliary_state : shared;    # state of the auxiliaryThread 
+our $primary_state : shared;    # state of the auxiliaryThread 
 
 #
 # Initialize Global variables
 #
-%cfg = Caspsr::getConfig();
 $user = "caspsr";
 $dl = 1;
 $daemon_name = Dada::daemonBaseName($0);
-$dada_header_cmd = "dada_header -k ".lc($cfg{"PROCESSING_DATA_BLOCK"});
 $client_logger = "client_caspsr_src_logger.pl";
+%cfg = Caspsr::getConfig();
+$pwc_id = $ARGV[0];
+$hostname = Dada::getHostMachineName();
 $quit_daemon = 0;
 $log_host = 0;
 $log_port = 0;
 $log_sock = 0;
-$dada_header_pid = 0;
-$processor_pid = 0;
 $recv_db = "";
 $proc_db = "";
-$proc_db_key = "";
 $baseband_db = "";
+$baseband_port = "";
+$auxiliary_command = "disable";
+$auxiliary_state = "inactive";
+$primary_state = "inactive";
 
-my $result = 0;
-$result = main();
+# ensure that our pwc_id is valid 
+if (!Dada::checkPWCID($pwc_id, %cfg))
+{
+  usage();
+  exit(1);
+}
 
-exit($result);
+# Autoflush STDOUT
+$| = 1;
 
-
-###############################################################################
-#
-# package functions
-# 
-
-sub main() {
-
-  my $log_file       = $cfg{"CLIENT_LOG_DIR"}."/".$daemon_name.".log";;
-  my $pid_file       = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".pid";
-  my $quit_file      = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
+{
+  my $log_file       = $cfg{"CLIENT_LOG_DIR"}."/".$daemon_name.".log";
+  my $pid_file       = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$pwc_id.".pid";
 
   $log_host          = $cfg{"SERVER_HOST"};
   $log_port          = $cfg{"SERVER_SYS_LOG_PORT"};
 
   my $control_thread = 0;
+  my $decimation_thread = 0;
+  my $auxiliary_thread = 0;
+  my $auxiliary_control_thread = 0;
   my $baseband_thread = 0;
   my $prev_utc_start = "";
   my $prev_obs_offset = "";
@@ -94,13 +107,12 @@ sub main() {
   my $quit = 0;
   my $result = "";
   my $response = "";
-  my $decimation_thread = 0;
 
   # sanity check on whether the module is good to go
-  ($result, $response) = good($quit_file);
+  ($result, $response) = good();
   if ($result ne "ok") {
     print STDERR "ERROR failed to start: ".$response."\n";
-    return 1;
+    exit 1;
   }
 
   # install signal handlers
@@ -119,34 +131,31 @@ sub main() {
 
   msg(0,"INFO", "STARTING SCRIPT");
 
-  # set umask so that 
-  #  files : -rw-r-----
-  #   dirs : drwxr-x---
-  umask 0027;
-
   # start the control thread
-  $control_thread = threads->new(\&controlThread, $quit_file, $pid_file);
+  $control_thread = threads->new(\&controlThread, $pid_file);
 
   my $raw_header = "";
   my $cmd = ""; 
   my %h = ();
   my $tdec = 1;
 
-  $recv_db     = lc($cfg{"RECEIVING_DATA_BLOCK"});
-  $proc_db     = lc($cfg{"PROCESSING_DATA_BLOCK"});
-  $baseband_db = lc($cfg{"BASEBAND_DATA_BLOCK"});
+  my $aj_test = 0;
 
-  $proc_db_key = $cfg{"PROCESSING_DB_KEY"};
+  $recv_db     = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"RECEIVING_DATA_BLOCK"});
+  $proc_db     = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"PROCESSING_DATA_BLOCK"});
+  $baseband_db = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"BASEBAND_DATA_BLOCK"});
 
-  # launch a thread to handle recording of baseband data
+  # launch a thread to handle recording of event driven baseband data
   $baseband_thread = threads->new(\&basebandThread);
-  
-  # Main Loop
-  while(!$quit_daemon) 
-  {
 
+  # launch a thread to handle auxiliary processing of processing data block
+  $auxiliary_control_thread = threads->new(\&auxiliaryControlThread);
+  
+  # main Loop
+  while (!$quit_daemon) 
+  {
     # wait for the next header on the receiving data_block
-    $cmd =  "dada_header -k ".lc($cfg{"RECEIVING_DATA_BLOCK"});
+    $cmd =  "dada_header -k ".$recv_db;
     msg(2, "INFO", "main: ".$cmd);
     $raw_header = `$cmd 2>&1`;
     msg(2, "INFO", $cmd." returned");
@@ -166,7 +175,12 @@ sub main() {
 
       msg(2, "INFO", "main: decimationThread(".$tdec.")");
       $decimation_thread = threads->new(\&decimationThread, $tdec);
+
       sleep(1);
+
+      # launch an auxiliary thread to process the auxiliary stream of just this observation
+      # this thread should return after encountering the OBS_XFER == -1 (1 byte) xfer
+      $auxiliary_thread = threads->new(\&auxiliaryThread);
 
       # continue to run the processing thread until this observation is complete
       $obs_end = 0;
@@ -195,19 +209,39 @@ sub main() {
         $prev_obs_offset = $obs_offset;
       }
 
-      msg(2, "INFO", "main: joining decimation_thread");
-      $result = $decimation_thread->join();
-      msg(2, "INFO", "main: decimation_thread joined");
-      $decimation_thread = 0;
-      if ($result ne "ok") 
+      if ($decimation_thread)
       {
-        msg(0, "WARN", "main: decimation_thread failed");
+        msg(2, "INFO", "main: joining decimation_thread");
+        $result = $decimation_thread->join();
+        msg(2, "INFO", "main: decimation_thread joined");
+        $decimation_thread = 0;
+        if ($result ne "ok") 
+        {
+          msg(0, "WARN", "main: decimation_thread failed");
+        }
+      }
+
+      if ($auxiliary_thread)
+      {
+        msg(2, "INFO", "main: joining auxiliary_thread");
+        $result = $auxiliary_thread->join();
+        msg(2, "INFO", "main: auxiliary_thread joined");
+        $auxiliary_thread = 0;
+        if ($result ne "ok")
+        {
+          msg(0, "WARN", "main: auxiliary_thread failed");
+        }
       }
     }
     else
     {
-      if (!$quit_daemon) {
-        msg(0, "WARN", "dada_header_cmd failed");
+      if ($quit_daemon)
+      {
+        msg(2, "INFO", "dada_header -k ".$recv_db." failed, but quit_daemon true");
+      }
+      else
+      {
+        msg(0, "WARN", "dada_header -k ".$recv_db." failed: ".$response);
         sleep 1;
       }
     }
@@ -216,22 +250,25 @@ sub main() {
   msg(2, "INFO", "main: joining threads");
   $control_thread->join();
   msg(2, "INFO", "main: controlThread joined");
+
   $baseband_thread->join();
   msg(2, "INFO", "main: basebandThread joined");
+
+  $auxiliary_control_thread->join();
+  msg(2, "INFO", "main: auxiliaryControlThread joined");
 
   msg(0, "INFO", "STOPPING SCRIPT");
   Dada::nexusLogClose($log_sock);
 
-  return 0;
+  exit 0;
 }
 
 ###############################################################################
 #
-# Run the CASPSR decimation to resmaple the input data
+# Run the CASPSR decimation to resmaple the input data [if required]
 #
 sub decimationThread($) 
 {
-
   my ($tdec) = @_;
 
   msg(2, "INFO", "decimationThread(".$tdec.")");
@@ -240,13 +277,12 @@ sub decimationThread($)
   my $result = "";
   my $response = "";
 
-  $cmd = "caspsr_dbdecidb -S -z -t ".$tdec." -p ".$cfg{"CLIENT_DECIDB_PORT"}.
-         " ".$recv_db." ".$proc_db." ".$baseband_db.
+  $cmd = "caspsr_dbdecidb -S -z -t ".$tdec." ".$recv_db." ".$proc_db.
          " 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/".$client_logger." deci";
-  
+
   msg(2, "INFO", "decimationThread: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
-  msg(2, "INFO", "decimationThread: ".$result." ".$response);
+  msg(3, "INFO", "decimationThread: ".$result." ".$response);
   if ($result ne "ok") {
     msg(0, "ERROR", "decimationThread: ".$cmd." failed:  ".$response);
   }
@@ -264,6 +300,9 @@ sub basebandThread()
   my $cmd = "";
   my $result = "";
   my $response = "";
+  my %h = ();
+  my $obs_offset = "";
+  my $obs_xfer = "";
 
   # determine the port number for the remote connection
   my $localhost = Dada::getHostMachineName();
@@ -296,14 +335,24 @@ sub basebandThread()
     # check that this returned ok
     if ($result eq "ok")
     {
-      # transfer just 1 8s XFER to raid0-ib
-      $cmd = "dada_dbib -s -c 16384 -k fada -p ".$port." raid0-ib";
+      %h = Dada::headerToHash($response);
+      $obs_xfer = $h{"OBS_XFER"};
+      $obs_offset = $h{"OBS_OFFSET"};
+      msg(1, "INFO", "basebandThread: processing XFER=".$obs_xfer." OFFSET=".$obs_offset);
+
+      # if this is the final "1 byte" transfer, just ignoring it
+      if ($obs_xfer eq "-1")
+      {
+        $cmd = "dada_dbnull -s -k ".$baseband_db;
+      }
+      # transfer just 1 XFER to raid0-ib
+      else
+      {
+        $cmd = "dada_dbib -s -c 16384 -k ".$baseband_db." -p ".$port." raid0-ib";
+      }
       $cmd .= " 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/".$client_logger." dbib";
 
-      #$cmd = "dada_dbnull -s -k ".$baseband_db." ".
-      #       " 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/".$client_logger." dbib";
-
-      msg(2, "INFO", "basebandThread: ".$cmd);
+      msg(1, "INFO", "basebandThread: ".$cmd);
       ($result, $response) = Dada::mySystem($cmd);
       msg(2, "INFO", "basebandThread: ".$result." ".$response);
       if ($result ne "ok") {
@@ -323,6 +372,226 @@ sub basebandThread()
   msg(2, "INFO", "basebandThread: exiting");
 
   return 0;
+}
+
+
+###############################################################################
+#
+# control the processing of the auxiliary data stream the processing data block
+#
+# only process 1 observation [multiple XFERs], then return
+#
+sub auxiliaryThread()
+{
+  msg(2, "INFO", "auxiliaryThread: starting");
+
+  my $cmd = "";
+  my $result = "";
+  my $response = "";
+  my %h = ();
+  my $obs_offset = "";
+  my $obs_xfer = "";
+  my $end_thread = 0;
+
+  # we can run 3 programs on the auxiliary stream of the processing data block:
+  #   ignore:         dada_dbnull -z -s -k proc_db  
+  #   full baseband:  dada_dbib -s -c 16384 -k proc_db -p [port]
+  #   event baseband: dada_dbevent proc_db base_db
+
+  while ((!$quit_daemon) && (!$end_thread))
+  {
+    # get the next header from the processing data block
+    $cmd = "dada_header -k ".$proc_db;
+    msg(2, "INFO", "auxiliaryThread: running ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    msg(3, "INFO", "auxiliaryThread: ".$cmd." returned");
+
+    # check that this returned ok
+    if ($result eq "ok")
+    {
+      %h = Dada::headerToHash($response);
+      $obs_xfer = $h{"OBS_XFER"};
+      $obs_offset = $h{"OBS_OFFSET"};
+      msg(2, "INFO", "auxiliaryThread: processing XFER=".$obs_xfer." OFFSET=".$obs_offset);
+
+      if ($obs_xfer eq "-1")
+      {
+        $cmd = "dada_dbnull -s -k ".$proc_db;
+        $auxiliary_state = "inactive";
+        $end_thread = 1;
+      }
+      elsif ($auxiliary_command eq "baseband")
+      {
+        $cmd = "dada_dbib -s -c 16384 -k ".$proc_db." -p ".$baseband_port." raid0-ib";
+        $auxiliary_state = "baseband";
+      } 
+      elsif ($auxiliary_command eq "events")
+      {
+        $cmd = "dada_dbevent -s -k ".$proc_db." ".$baseband_db;
+        $auxiliary_state = "events";
+      } 
+      else
+      {
+        $cmd = "dada_dbnull -q -s -k ".$proc_db;
+        $auxiliary_state = "inactive";
+      }
+
+      $cmd .= " 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/".$client_logger." aux";
+
+      msg(2, "INFO", "auxiliaryThread: running ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      msg(3, "INFO", "auxiliaryThread: ".$cmd." returned");
+
+    }
+    else
+    {
+      if (!$quit_daemon)
+      {
+        msg(1, "WARN", "auxiliaryThread: dada_header failed: ".$response);
+        return "fail";
+      } 
+      else
+      {
+        msg(2, "INFO", "auxiliaryThread: dada_header failed, but quit_daemon true: ".$response);
+      }
+    }
+  }
+
+  msg(2, "INFO", "auxiliaryThread: exiting");
+  return "ok";
+}
+
+###############################################################################
+#
+# listen on port for auxiliary thread control commands
+#
+sub auxiliaryControlThread()
+{
+  msg(2, "INFO", "auxiliaryControlThread: starting");
+  my $cmd = "";
+  my $result = "";
+  my $response = "";
+
+  my $localhost = Dada::getHostMachineName();
+  my $aux_port = $cfg{"CLIENT_DECIDB_PORT"};
+
+  my $aux_sock = new IO::Socket::INET (
+    LocalHost => $localhost,
+    LocalPort => $aux_port,
+    Proto => 'tcp',
+    Listen => 1,
+    Reuse => 1
+  );
+
+  if (!$aux_sock) 
+  {
+    msg(1, "INFO",  "could not create listening socket: ".$localhost.":".$aux_port);
+    return -1;
+  }
+
+  my $read_set = new IO::Select();
+  $read_set->add($aux_sock);
+
+  my $rh = 0;
+  my $peeraddr = 0;
+  my $handle = 0;
+  my $hostinfo = 0;
+  my $hostname = "";
+  my $command = "";
+
+  while (! $quit_daemon)
+  {
+    my ($readable_handles) = IO::Select->select($read_set, undef, undef, 1);
+    foreach $rh (@$readable_handles)
+    {
+      if ($rh == $aux_sock)
+      {
+        $handle = $rh->accept();
+        $handle->autoflush(1);
+        $read_set->add($handle);
+
+        $peeraddr = $handle->peeraddr;
+        $hostinfo = gethostbyaddr($peeraddr);
+        $hostname = $hostinfo->name;
+
+        msg(2, "INFO", "accepting connection from ".$hostname);
+      }
+      else
+      {
+        $command = <$rh>;
+        if (! defined $command)
+        {
+          msg(2, "INFO", "client disconneted");
+          $read_set->remove($rh);
+          $rh->close();
+        }
+        else
+        {
+
+          # clean the line up a little
+          $command =~ s/\r//;
+          $command =~ s/\n//;
+          $command =~ s/#(.)*$//;
+          $command =~ s/\s+$//;
+          $command =~ s/\0//g;      # remove all null characters
+
+
+          if ($command eq "baseband")
+          {
+            msg(1, "INFO", "enabling full baseband recording");
+            $auxiliary_command = "baseband";
+            msg(2, "INFO", "-> auxiliary Enabling full baseband recording...");
+            print $rh "auxiliary Enabling full baseband recording...\n";
+
+            print $rh "ok\r\n";
+          }
+          elsif ($command eq "events")
+          {
+            msg(1, "INFO", "enabling baseband event recording");
+            $auxiliary_command = "events";
+            msg(2, "INFO", "-> auxiliary Enabling baseband event recording...");
+            print $rh "auxiliary Enabling baseband event recording...\r\n";
+
+            print $rh "ok\r\n";
+          }
+          elsif ($command eq "disable")
+          {
+            msg(1, "INFO", "disabling all recording");
+            $auxiliary_command = "disable";
+
+            msg(2, "INFO", "-> auxiliary Disabling all baseband recording...");
+            print $rh "auxiliary Disabling all baseband recording...\r\n";
+
+            print $rh "ok\r\n";
+          }
+          elsif ($command eq "state")
+          {
+            msg(2, "INFO", "<- ".$command);
+
+            msg(2, "INFO", "-> primary ".$primary_state." fold");
+            print $rh "primary ".$primary_state." fold\r\n";
+            msg(2, "INFO", "-> auxiliary ".$auxiliary_state." ".$auxiliary_command);
+            print $rh "auxiliary ".$auxiliary_state." ".$auxiliary_command."\r\n";
+
+            print $rh "ok\r\n";
+          }
+          elsif ($command eq "")
+          {
+            msg(1, "INFO", "empty command");
+            print $rh "fail\r\n";
+          }
+          else
+          {
+            msg(1, "INFO", "unrecognized event [".$command."], disabling all recording");
+            $auxiliary_command = "disable";
+            print $rh "unrecognised event [".$command."]\r\n";
+            print $rh "fail\r\n";
+          }
+        }
+      }
+    }
+  }
+  msg(2, "INFO", "auxiliaryControlThread: exiting");
 }
 
 ###############################################################################
@@ -374,7 +643,7 @@ sub process($$)
     {
       msg(0, "INFO", "DADA header malformed, jettesioning xfer");  
       msg(0, "ERROR", $response);
-      $proc_cmd = "dada_dbnull -s -k ".$proc_db;
+      $proc_cmd = "dada_dbnull -S -k ".$proc_db;
     }
     else
     {
@@ -409,13 +678,13 @@ sub process($$)
           if ($proc_cmd =~ m/dspsr/) 
           {
             msg(0, "INFO", "UTC_START repeated, jettesoning transfer");
-            $proc_cmd = "dada_dbnull -s -k ".$proc_db;
+            $proc_cmd = "dada_dbnull -S -k ".$proc_db;
           }
           # the same header has been repeated, also error state
           elsif ($obs_offset eq $prev_obs_offset)
           {
             msg(0, "INFO", "UTC_START and OBS_OFFSET repeated, obs_xfer=".$obs_xfer);
-            $proc_cmd = "dada_dbnull -s -k ".$proc_db;
+            $proc_cmd = "dada_dbnull -S -k ".$proc_db;
             msg(1, "INFO", "Ignoring repeat transfer");
           } 
           # otherwise the proc command will handle this continuing xfer
@@ -428,19 +697,37 @@ sub process($$)
         # this is a new observation, setup the directories
         else
         {
-          msg(0, "INFO", "New Observation: UTC_START=".$utc_start." XFER=".$obs_xfer);
+          msg(0, "INFO", "New Observation: UTC_START=".$utc_start." XFER=".$obs_xfer." OBS_OFFSET=".$obs_offset);
 
           # create the local directory and UTC_START file
           msg(2, "INFO", "process: createLocalDirectory()");
-          ($result, $response) = createLocalDirectory($utc_start, $h{"PID"}, $raw_header);
+          ($result, $response) = createLocalDirectory($utc_start, $raw_header);
           msg(2, "INFO", "process: ".$result." ".$response);
 
-          # if we are the first PWC, send the obs.start to the server in background thread 
+          # send the obs.start to the server in background thread 
           msg(2, "INFO", "process: copyObsStartThread(".$utc_start.")");
           $copy_obs_start_thread = threads->new(\&copyObsStartThread, $utc_start);
         }
 
         $processing_dir .= "/".$utc_start;
+
+        # replace <DADA_INFO> tags with the matching input .info file
+        if ($proc_cmd =~ m/<DADA_INFO>/)
+        {
+          my $tmp_info_file =  "/tmp/caspsr_".$proc_db.".info";
+          # ensure a file exists with the write processing key
+          if (! -f $tmp_info_file)
+          {
+            open FH, ">".$tmp_info_file;
+            print FH "DADA INFO:\n";
+            print FH "key ".$proc_db."\n";
+            close FH;
+          }
+          $proc_cmd =~ s/<DADA_INFO>/$tmp_info_file/;
+        }
+
+        # replace <DADA_KEY> tags with the matching input key
+        $proc_cmd =~ s/<DADA_KEY>/$proc_db/;
 
         if ($proc_cmd =~ m/dspsr/) 
         {
@@ -454,18 +741,11 @@ sub process($$)
               $proc_cmd .= " -L ".$archive_mod;
             }
           }
-          $proc_cmd .= " ".$proc_db_key;
 
           if ($proc_cmd =~ m/-tdec 2/)
           {
             msg(0, "INFO", "process: removing -tdec 2 from proc_cmd");
             $proc_cmd =~ s/-tdec 2//;
-          }
-
-          if (($proc_cmd =~ m/-k dada/) && ($proc_db ne "dada"))
-          {
-            msg(0, "INFO", "process: changing -k dada to -k ".$proc_db);
-            $proc_cmd =~ s/-k dada/-k $proc_db/;
           }
         }
       }
@@ -479,27 +759,30 @@ sub process($$)
 
     # run the command
 
-    $cmd = $proc_cmd." 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/".$client_logger."; exit \${PIPESTATUS[0]}";
+    $cmd = $proc_cmd." 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/".$client_logger." proc; exit \${PIPESTATUS[0]}";
 
     msg(2, "INFO", "process: ".$cmd);
+
+    $primary_state = "fold";
 
     msg(1, "INFO", "START: ".$proc_cmd);
     system($cmd);
     my $rval = $? >> 8;
     msg(1, "INFO", "END  : ".$proc_cmd." returned ".$rval);
 
+    $primary_state = "inactive";
+
     if ((!$quit_daemon) && ($rval != 0))
     {
-      msg(0, "WARN", $binary." failed, discarding observation");
-
-      $cmd = "dada_dbscrubber -k ".$proc_db;
-      msg(0, "INFO", "process: ".$cmd);
-      ($result, $response) = Dada::mySystem($cmd);
-      msg(0, "INFO", "process: ".$result." ".$response);
+      msg(0, "WARN", $binary." failed, should restart backend!");
+      # $cmd = "dada_dbscrubber -k ".$proc_db;
+      # msg(0, "INFO", "process: ".$cmd);
+      # ($result, $response) = Dada::mySystem($cmd);
+      # msg(0, "INFO", "process: ".$result." ".$response);
     } 
     else 
     {
-      if ($binary =~ m/dspsr/) {
+      if (($binary =~ m/dspsr/) || ($binary =~ m/caspsr_dbnum/)) {
         $obs_end = 1;
       }
     }
@@ -522,7 +805,7 @@ sub process($$)
   } else {
 
     if (!$quit_daemon) {
-      msg(0, "WARN", "dada_header_cmd failed");
+      msg(0, "WARN", "dada_header -k ".$proc_db." failed");
       sleep 1;
     }
     return (1,$utc_start, $obs_offset, $obs_end);
@@ -534,11 +817,11 @@ sub process($$)
 #
 # Create the local directory required for this observation
 #
-sub createLocalDirectory($$$) {
+sub createLocalDirectory($$) {
 
-  my ($utc_start, $proj_id, $raw_header) = @_;
+  my ($utc_start, $raw_header) = @_;
 
-  msg(2, "INFO", "createLocalDirectory(".$utc_start.", ".$proj_id.", raw_header)");
+  msg(2, "INFO", "createLocalDirectory(".$utc_start.", raw_header)");
 
   my $cmd = "";
   my $result = "";
@@ -565,15 +848,6 @@ sub createLocalDirectory($$$) {
   msg(2, "INFO", "createLocalDirectory: ".$result." ".$response);
   if ($result ne "ok") {
     msg(0, "WARN", "chmod g+s failed on ".$archive_dir." ".$results_dir);
-  }
-
-  # Set GID on the directory
-  $cmd = "chgrp -R ".$proj_id." ".$archive_dir." ".$results_dir;
-  msg(2, "INFO", "createLocalDirectory: ".$cmd);
-  ($result, $response) = Dada::mySystem($cmd);
-  msg(2, "INFO", "createLocalDirectory: ".$result." ".$response);
-  if ($result ne "ok") {
-    msg(0, "WARN", "chgrp to ".$proj_id." failed on ".$archive_dir." ".$results_dir);
   }
 
   # create an obs.start file in the archive dir
@@ -606,6 +880,10 @@ sub copyObsStartThread($) {
     msg(0, "ERROR", "copyObsStartThread: obs.start file [".$local_file."] did not exist");
     return ("fail", "obs.start file did not exist");
   }
+
+  # wait at least 10 seconds to be sure the directories are created on the server
+  msg(2, "INFO", "copyObsStartThread: sleep(10)");
+  sleep(10);
 
   $cmd = "scp -B ".$local_file." dada\@srv0:".$remote_file;
   msg(2, "INFO", "copyObsStartThread: ".$cmd);
@@ -676,18 +954,21 @@ sub touchPwcFinished($) {
 #
 # Control thread to handle quit requests
 #
-sub controlThread($$) {
+sub controlThread($) {
 
-  my ($quit_file, $pid_file) = @_;
+  my ($pid_file) = @_;
 
-  msg(2, "INFO", "controlThread: starting (".$quit_file.", ".$pid_file.")");
+  msg(2, "INFO", "controlThread: starting (".$pid_file.")");
 
   my $cmd = "";
   my $result = "";
   my $response = "";
 
-  # poll for the existence of the quit_file or the global quit variable
-  while ((!(-f $quit_file)) && (!$quit_daemon)) {
+  my $host_quit_file = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
+  my $pwc_quit_file  =  $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$pwc_id.".quit";
+
+  # poll for the existence of the control file
+  while ((!$quit_daemon) && (! -f $host_quit_file) && (! -f $pwc_quit_file)) {
     sleep(1);
   }
 
@@ -732,7 +1013,7 @@ sub msg($$$) {
       $log_sock = Dada::nexusLogOpen($log_host, $log_port);
     }
     if ($log_sock) {
-      Dada::nexusLogMessage($log_sock, $time, "sys", $type, "proc mngr", $msg);
+      Dada::nexusLogMessage($log_sock, $hostname, $time, "sys", $type, "proc mngr", $msg);
     }
     print "[".$time."] ".$msg."\n";
   }
@@ -781,13 +1062,14 @@ sub sigPipeHandle($) {
 #
 # Test to ensure all module variables are set before main
 #
-sub good($) {
+sub good() {
 
-  my ($quit_file) = @_;
+  my $host_quit_file = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
+  my $pwc_quit_file  =  $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$pwc_id.".quit";
 
   # check the quit file does not exist on startup
-  if (-f $quit_file) {
-    return ("fail", "Error: quit file ".$quit_file." existed at startup");
+  if ((-f $host_quit_file) || (-f $pwc_quit_file)) {
+    return ("fail", "Error: quit file existed at startup");
   }
 
   # the calling script must have set this
@@ -796,14 +1078,30 @@ sub good($) {
   }
 
   # check required gloabl parameters
-  if ( ($user eq "") || ($dada_header_cmd eq "") || ($client_logger eq "")) {
-    return ("fail", "Error: a package variable missing [user, dada_header_cmd, client_logger]");
+  if ( ($user eq "") || ($client_logger eq "")) {
+    return ("fail", "Error: a package variable missing [user, client_logger]");
   }
 
   # Ensure more than one copy of this daemon is not running
   my ($result, $response) = Dada::checkScriptIsUnique(basename($0));
   if ($result ne "ok") {
     return ($result, $response);
+  }
+
+  $baseband_port = "";
+  my $localhost = Dada::getHostMachineName();
+  my $i=0;
+  for ($i=0; $i<$cfg{"NUM_PWC"}; $i++)
+  {
+    if ($cfg{"PWC_".$i} eq $localhost)
+    {
+      $baseband_port = $cfg{"BASEBAND_RAID_PORT_".$i};
+    }
+  }
+
+  if ($baseband_port eq "")
+  {
+    return ("fail", "Error: could not determine baseband port number");
   }
 
   return ("ok", "");

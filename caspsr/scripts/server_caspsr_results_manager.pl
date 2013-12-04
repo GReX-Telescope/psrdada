@@ -47,7 +47,7 @@ sub markObsState($$$);
 sub checkClientsFinished($$);
 sub processObservation($$);
 sub processArchive($$$$);
-sub makePlotsFromArchives($$$$$$);
+sub makePlotsFromArchives($$$$$);
 sub copyLatestPlots($$$);
 
 
@@ -103,10 +103,6 @@ sub main() {
   
   Dada::logMsg(0, $dl, "STARTING SCRIPT");
 
-  # set the 
-  umask 0027;
-  my $umask_val = umask;
-
   # start the control thread
   Dada::logMsg(2, $dl, "main: controlThread(".$quit_file.", ".$pid_file.")");
   $control_thread = threads->new(\&controlThread, $quit_file, $pid_file);
@@ -118,7 +114,7 @@ sub main() {
     # TODO check that directories are correctly sorted by UTC_START time
     Dada::logMsg(2, $dl, "main: looking for obs.processing in ".$obs_results_dir);
 
-    # Only get observations that are marked as procesing
+    # Only get observations that are marked as processing
     $cmd = "find ".$obs_results_dir." -maxdepth 2 -name 'obs.processing' ".
            "-printf '\%h\\n' | awk -F/ '{print \$NF}' | sort";
 
@@ -184,6 +180,7 @@ sub main() {
 
         } else {
           Dada::logMsg(0, $dl, "main: processing->failed else case");
+          processObservation($o, $n_obs_starts);
           markObsState($o, "processing", "failed");
         }
 
@@ -466,6 +463,10 @@ sub cleanResultsDir($) {
     Dada::removeFiles($o, "phase_vs_time_".$source."*_1024x768.png", 0);
     Dada::removeFiles($o, "phase_vs_freq_".$source."*_1024x768.png", 0);
     Dada::removeFiles($o, "bandpass_".$source."*_1024x768.png", 0);
+    Dada::removeFiles($o, "snr_track_".$source."*_1024x768.png", 0);
+    Dada::removeFiles($o, "snr_track_".$source."*_200x75.png", 0);
+    Dada::removeFiles($o, "snr_hist_".$source."*_1024x768.png", 0);
+    Dada::removeFiles($o, "snr_hist_".$source."*_200x75.png", 0);
   }
 
 }
@@ -475,8 +476,8 @@ sub cleanResultsDir($) {
 # Process all possible archives in the observation, combining the bands
 # and plotting the most recent images. Accounts for multifold  PSRS
 #
-sub processObservation($$) {
-
+sub processObservation($$) 
+{
   my ($o, $n_obs_starts) = @_;
 
   Dada::logMsg(2, $dl, "processObservation(".$o.", ".$n_obs_starts.")");
@@ -503,7 +504,7 @@ sub processObservation($$) {
   # Sort the files into time order.
   @unprocessed_keys = sort (keys %unprocessed);
 
-  Dada::logMsg(2, $dl, "processObservation: [".$o."] found ".($#unprocessed_keys+1)." unprocessed archives");
+  Dada::logMsg(2, $dl, "processObservation: ".$o." found ".($#unprocessed_keys+1)." unprocessed archives");
 
   # Process all the files, plot at the end
   for ($i=0;(($i<=$#unprocessed_keys) && (!$quit_daemon)); $i++) 
@@ -536,14 +537,15 @@ sub processObservation($$) {
     }
   }
 
-  # If we produce at least one archive from appendArchive()
-  for ($i=0; $i<=$#tres_plot; $i++) {
 
+  # If we produce at least one archive from appendArchive()
+  for ($i=0; $i<=$#tres_plot; $i++) 
+  {
     # determine the source name for this archive
     $cmd = "vap -n -c name ".$tres_plot[$i]." | awk '{print \$2}'";
     Dada::logMsg(2, $dl, "processObservation: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
-    Dada::logMsg(2, $dl, "processObservation: ".$result." ".$response);
+    Dada::logMsg(3, $dl, "processObservation: ".$result." ".$response);
     if ($result ne "ok") {
       Dada::logMsgWarn($warn, "processObservation: failed to determine source name: ".$response);
       $source = "UNKNOWN";
@@ -553,21 +555,8 @@ sub processObservation($$) {
     }
     $source =~ s/^[JB]//;
 
-    # we want to plot the bandpass from just the most recent ARCHIVE_MOD second archive that has been copied
-    # to the servers ARCHIVE dir.
-    $cmd = "find ".$cfg{"SERVER_ARCHIVE_DIR"}."/".$o."/".$source." -name '*.ar' | sort -n | tail -n 1";
-    Dada::logMsg(2, $dl, "processObservation: ".$cmd);
-    ($result, $response) = Dada::mySystem($cmd);
-    Dada::logMsg(2, $dl, "processObservation: ".$result." ".$response);
-    if ($result eq "ok") {
-      $latest_n_sec_archive = $response;
-    } else {
-      $latest_n_sec_archive = "";
-    }
-
-    Dada::logMsg(2, $dl, "processObservation: plotting [".$i."] (".$o.", ".$source.", ".$fres_plot[$i].", ".$tres_plot[$i].")");
-    makePlotsFromArchives($o, $source, $fres_plot[$i], $tres_plot[$i], "200x150", $latest_n_sec_archive);
-    makePlotsFromArchives($o, $source, $fres_plot[$i], $tres_plot[$i], "1024x768", $latest_n_sec_archive);
+    makePlotsFromArchives($o, $source, $fres_plot[$i], $tres_plot[$i], "200x150");
+    makePlotsFromArchives($o, $source, $fres_plot[$i], $tres_plot[$i], "1024x768");
   
     Dada::removeFiles($o, "phase_vs_flux_".$source."*_200x150.png", 30);
     Dada::removeFiles($o, "phase_vs_time_".$source."*_200x150.png", 30);
@@ -577,11 +566,11 @@ sub processObservation($$) {
     Dada::removeFiles($o, "phase_vs_time_".$source."*_1024x768.png", 30);
     Dada::removeFiles($o, "phase_vs_freq_".$source."*_1024x768.png", 30);
     Dada::removeFiles($o, "bandpass_".$source."*_1024x768.png", 30);
-
-    copyLatestPlots($o, $source, "200x150");
-
+    Dada::removeFiles($o, "snr_track_".$source."*_1024x768.png", 30);
+    Dada::removeFiles($o, "snr_track_".$source."*_200x75.png", 30);
+    Dada::removeFiles($o, "snr_hist_".$source."*_1024x768.png", 30);
+    Dada::removeFiles($o, "snr_hist_".$source."*_200x75.png", 30);
   }
-
 }
 
 
@@ -595,9 +584,13 @@ sub appendArchive($$$) {
 
   Dada::logMsg(2, $dl, "appendArchive(".$utc_start.", ".$source.", ".$archive.")");
 
-  my $total_t_sum = $archive;
-  my $source_f_res = $utc_start."/".$source."_f.tot";
-  my $source_t_res = $utc_start."/".$source."_t.tot";
+  my $total_t_sum    = $archive;
+  my $source_f_res   = $utc_start."/".$source."_f.tot";
+  my $source_t_res   = $utc_start."/".$source."_t.tot";
+  my $last_10s_ar    = $utc_start."/".$source."_last10.ar";
+  my $sixty_four_log = $utc_start."/".$source."_64.log";
+  my $temp_ar        = $utc_start."/temp.ar";
+
 
   my $cmd = "";
   my $result = "";
@@ -639,6 +632,15 @@ sub appendArchive($$$) {
     return ("fail", "", "");
   }
 
+  $cmd = "cp ./".$total_t_sum." ".$last_10s_ar;
+  Dada::logMsg(2, $dl, "appendArchive: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, $dl, "appendArchive: ".$result." ".$response);
+  if ($result ne "ok") {
+    Dada::logMsg(0, $dl, "appendArchive: ".$cmd." failed: ".$response);
+    return ("fail", "", "");
+  }
+
   # If this is the first result for this observation
   if (!(-f $source_f_res)) {
 
@@ -671,15 +673,14 @@ sub appendArchive($$$) {
       Dada::logMsg(0, $dl, "appendArchive: ".$cmd." failed: ".$response);
       return ("fail", "", "");
     }
-  
+
+  } 
   # we are appending to the sources f and t res archives
-  } else {
-
-    # create the new source_f_res archive [we will rename later]
-    my $temp_ar = $utc_start."/temp.ar";
-
-    # Add the new archive to the FRES total [tsrunching it]
-    $cmd = "psradd -T -o ".$temp_ar." ".$source_f_res." ".$total_t_sum;
+  else 
+  {
+    # add the new archive to the FRES total [tsrunching it]
+    # $cmd = "psradd -T -o ".$temp_ar." ".$source_f_res." ".$total_t_sum;
+    $cmd = "psradd -T -inplace ".$source_f_res." ".$total_t_sum;
     Dada::logMsg(2, $dl, "appendArchive: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     Dada::logMsg(3, $dl, "appendArchive: ".$result." ".$response);
@@ -687,8 +688,8 @@ sub appendArchive($$$) {
       Dada::logMsg(0, $dl, "appendArchive: ".$cmd." failed: ".$response);
       return ("fail", "", "");
     }
-    unlink($source_f_res);
-    rename($temp_ar, $source_f_res);
+    # unlink($source_f_res);
+    # rename($temp_ar, $source_f_res);
 
     # Fscrunc the archive for adding to the TRES
     $cmd = "pam -F -m ".$total_t_sum;
@@ -701,21 +702,74 @@ sub appendArchive($$$) {
     }
 
     # Add the Fscrunched archive to the TRES total 
-    $cmd = "psradd -o ".$temp_ar." ".$source_t_res." ".$total_t_sum;
+    # $cmd = "psradd -o ".$temp_ar." ".$source_t_res." ".$total_t_sum;
+    $cmd = "psradd -inplace ".$source_t_res." ".$total_t_sum;
     ($result, $response) = Dada::mySystem($cmd);
     if ($result ne "ok") {
       Dada::logMsg(0, $dl, "appendArchive: ".$cmd." failed: ".$response);
       return ("fail", "", "");
     }
 
-    unlink($source_t_res);
-    rename($temp_ar, $source_t_res);
-
+    # unlink($source_t_res);
+    # rename($temp_ar, $source_t_res);
   }
 
-  # clean up the current archive
-  unlink($total_t_sum);
-  Dada::logMsg(2, $dl, "appendArchive: unlinking ".$total_t_sum);
+  # If this source looks like a CAL
+  if (( $source =~ m/_R$/ ) || ( $source =~ m/^HYDRA/ ))
+  {
+    Dada::logMsg(2, $dl, "appendArchive: skipping SNR histogram as ".$source." is a CAL");
+  }
+  else
+  {
+
+    # get the snr and length of last 64 seconds
+    $cmd = "last_64s_snr.psh ".$source_t_res;
+    Dada::logMsg(2, $dl, "appendArchive: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, $dl, "appendArchive: ".$result." ".$response);
+
+    my $sixty_four_nsubint = "";
+    my $sixty_four_length = "";
+    my $sixty_four_snr = "";
+    my $sixty_four_freq = "";
+    my $sixty_four_bw = "";
+
+    my @lines = ();
+    my $line = "";
+    my @bits = ();
+
+    if ($result ne "ok") 
+    {
+       Dada::logMsg(0, $dl, "appendArchive: ".$cmd." failed: ".$response);
+    }
+    else
+    {
+      @lines = split(/\n/, $response);
+      foreach $line (@lines)
+      {
+        Dada::logMsg(3, $dl, "appendArchive: line=".$line);
+        @bits = split(/=/, $line);
+        if ($bits[0] =~ /nsubint/) { $sixty_four_nsubint = $bits[1]; }
+        if ($bits[0] =~ /length/)  { $sixty_four_length  = $bits[1]; }
+        if ($bits[0] =~ /snr/)     { $sixty_four_snr     = $bits[1]; }
+        if ($bits[0] =~ /bw/)      { $sixty_four_bw      = $bits[1]; }
+        if ($bits[0] =~ /freq/)    { $sixty_four_freq   = $bits[1]; }
+      }
+    }
+      
+    if ($sixty_four_nsubint eq "8")
+    {
+      # update this observations log
+      open FH, ">>".$sixty_four_log;
+      Dada::logMsg(2, $dl, "appendArchive: writing snr=".$sixty_four_snr." length=". $sixty_four_length." freq=". $sixty_four_freq." bw=".$sixty_four_bw);
+      print FH "snr=".$sixty_four_snr." length=". $sixty_four_length." freq=". $sixty_four_freq." bw=".$sixty_four_bw."\n";
+      close FH;
+    }
+  }
+
+  # move this total_t_sum last_10s.tot"
+  Dada::logMsg(2, $dl, "appendArchive: deleting ".$total_t_sum);
+  unlink ($total_t_sum);
 
   return ("ok", $source_f_res, $source_t_res);
 
@@ -791,10 +845,14 @@ sub countObsStart($) {
 #
 # Create plots for use in the web interface
 #
-sub makePlotsFromArchives($$$$$$) {
+sub makePlotsFromArchives($$$$$) 
+{
 
-  my ($dir, $source, $total_f_res, $total_t_res, $res, $ten_sec_archive) = @_;
+  my ($dir, $source, $total_f_res, $total_t_res, $res) = @_;
 
+  Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$dir." ".$source." ".$res);
+
+  my $ten_sec_archive = $dir."/".$source."_last10.ar";
   my $web_style_txt = $cfg{"SCRIPTS_DIR"}."/web_style.txt";
   my $args = "-g ".$res;
   my $cmd = "";
@@ -817,8 +875,8 @@ sub makePlotsFromArchives($$$$$$) {
     }
     elsif (($response > 1200) && ($response < 1500))
     {
-      $s_freq = 1200;
-      $e_freq = 1525;
+      #$s_freq = 1205;
+      #$e_freq = 1525;
     }
     else
     {
@@ -850,7 +908,11 @@ sub makePlotsFromArchives($$$$$$) {
   $cmd = $bin.$bscrunch_t." -jpC -p time -jFD -D ".$dir."/pvt_tmp/png ".$total_t_res;
   Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
-  Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$result." ".$response);
+  Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+  if ($result ne "ok") 
+  {
+    Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd." failed: ".$response);
+  }
 
   # PHASE vs FREQ
   $cmd = $bin.$bscrunch." -jpC -p freq -jTD -D ".$dir."/pvfr_tmp/png ".$total_f_res;
@@ -861,19 +923,27 @@ sub makePlotsFromArchives($$$$$$) {
   Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+  if ($result ne "ok") 
+  {
+    Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd." failed: ".$response);
+  }
 
   # PHASE vs TOTAL INTENSITY
   $cmd = $bin.$bscrunch." -jpC -p flux -jTFD -D ".$dir."/pvfl_tmp/png ".$total_f_res;
   Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+  if ($result ne "ok") 
+  {
+    Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd." failed: ".$response);
+  }
 
   # BANDPASS
   # 2011-02-07 WvS added log scale (mostly for 50cm)
   if ($res eq "1024x768") {
-    $cmd = $bin." -J '/home/dada/linux_64/bin/zap.psh' -pb -x -lpol=0,1 -N2,1 -c above:c= -D ".$dir."/bp_tmp/png ".$ten_sec_archive;
+    $cmd = $bin." -pb -x -lpol=0,1 -N2,1 -c above:c= -D ".$dir."/bp_tmp/png ".$ten_sec_archive;
   } else {
-    $cmd = $bin." -J '/home/dada/linux_64/bin/zap.psh' -pb -x -lpol=0,1 -O -D ".$dir."/bp_tmp/png ".$ten_sec_archive;
+    $cmd = $bin." -pb -x -lpol=0,1 -O -D ".$dir."/bp_tmp/png ".$ten_sec_archive;
   }
   if (($s_freq) && ($e_freq))
   {
@@ -882,28 +952,80 @@ sub makePlotsFromArchives($$$$$$) {
   Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+  if ($result ne "ok") 
+  {
+    Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd." failed: ".$response);
+  }
 
+  # SNR Database thingy
+  # get the freq
+  $cmd = "psrstat -Q -c freq ".$ten_sec_archive." | awk '{print \$2}'";
+  Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+  if ($result ne "ok")
+  {
+    Dada::logMsg(0, $dl, "makePlotsFromArchives: ".$cmd." failed: ".$response);
+  }
+  my $cfreq = $response;
 
-  # wait for each file to "appear"
-  my $waitMax = 5;
-  while ($waitMax) {
-    if ( (-f $dir."/pvfl_tmp") &&
-         (-f $dir."/pvt_tmp") &&
-         (-f $dir."/pvfr_tmp") &&
-         (-f $dir."/bp_tmp") )
+  # if we have a histogram log file
+  if ( -f $dir."/".$source."_64.log" ) 
+  {
+    $cmd = "realtime_hist.py ".$dir." ".$source." ".$cfreq;
+    Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+    if ($result ne "ok")
     {
-      $waitMax = 0;
-    } else {
-      $waitMax--;
-      sleep(1);
+      Dada::logMsg(0, $dl, "makePlotsFromArchives: ".$cmd." failed: ".$response);
     }
   }
 
-  # rename the plot files to their correct names
-  system("mv -f ".$dir."/pvt_tmp ".$dir."/".$pvt);
-  system("mv -f ".$dir."/pvfr_tmp ".$dir."/".$pvfr);
-  system("mv -f ".$dir."/pvfl_tmp ".$dir."/".$pvfl);
-  system("mv -f ".$dir."/bp_tmp ".$dir."/".$bp);
+  # wait for each file to "appear"
+  my @files = ($dir."/pvfl_tmp", $dir."/pvt_tmp", $dir."/pvfr_tmp", $dir."/bp_tmp");
+  my $file = "";
+  my $waitMax = 3;
+  my $done = 0;
+
+  while ($waitMax > 0) 
+  {
+    $done = 1;
+    foreach $file ( @files )
+    {
+      if (!(-f $file))
+      {
+        Dada::logMsg(2, $dl, "makePlotsFromArchives: waiting for ".$file);
+        $done = 0;
+      }
+    }
+
+    if ($done)
+    {
+      Dada::logMsg(2, $dl, "makePlotsFromArchives: done!");
+      $waitMax = -1;
+    }
+    else
+    {
+      Dada::logMsg(2, $dl, "makePlotsFromArchives: waiting");
+      sleep(1);
+      $waitMax --;
+    }
+  }
+    
+  if ($waitMax == 0)
+  {
+    Dada::logMsg(2, $dl, "makePlotsFromArchives: timed out waiting for pgplot !!");
+  }
+  else
+  {
+    # rename the plot files to their correct names
+    system("mv -f ".$dir."/pvt_tmp ".$dir."/".$pvt); 
+    system("mv -f ".$dir."/pvfr_tmp ".$dir."/".$pvfr);
+    system("mv -f ".$dir."/pvfl_tmp ".$dir."/".$pvfl);
+    system("mv -f ".$dir."/bp_tmp ".$dir."/".$bp);
+  }
+  Dada::logMsg(2, $dl, "makePlotsFromArchives: all done");
 
 }
 
@@ -947,66 +1069,6 @@ sub checkClientsFinished($$) {
   return ($result, $response); 
 
 }
-
-###############################################################################
-#
-# copy's the latest plot for the specified observation and source to the
-# "latest" directory
-#
-sub copyLatestPlots($$$)
-{
-  my ($o, $s, $dim) = @_;
-
-  my $cmd = "";
-  my $result = "";
-  my $response = "";
-
-  $cmd = "ls -1 ".$o."/phase_vs_flux_".$s."_*_".$dim.".png | sort | tail -n 1";
-  ($result, $response) = Dada::mySystem($cmd);
-  if ($result eq "ok") {
-    if ( -f $response) {
-      $cmd = "cp ".$response." ".$cfg{"WEB_DIR"}."/caspsr/latest/".
-             "caspsr_flux_vs_phase.png";
-      ($result, $response) = Dada::mySystem($cmd);
-    }
-  }
-
-  $cmd = "ls -1 ".$o."/phase_vs_freq_".$s."_*_".$dim.".png | sort | tail -n 1";
-  ($result, $response) = Dada::mySystem($cmd);
-  if ($result eq "ok") {
-    if ( -f $response) {
-      $cmd = "cp ".$response." ".$cfg{"WEB_DIR"}."/caspsr/latest/".
-             "caspsr_freq_vs_phase.png";
-      ($result, $response) = Dada::mySystem($cmd);
-    }
-  }
-
-  $cmd = "ls -1 ".$o."/phase_vs_time_".$s."_*_".$dim.".png | sort | tail -n 1";
-  ($result, $response) = Dada::mySystem($cmd);
-  if ($result eq "ok") {
-    if ( -f $response) {
-      $cmd = "cp ".$response." ".$cfg{"WEB_DIR"}."/caspsr/latest/".
-             "caspsr_time_vs_phase.png";
-      ($result, $response) = Dada::mySystem($cmd);
-    }
-  }
-
-  $cmd = "ls -1 ".$o."/bandpass_".$s."_*_".$dim.".png | sort | tail -n 1";
-  ($result, $response) = Dada::mySystem($cmd);
-  if ($result eq "ok") {
-    if ( -f $response) {
-      $cmd = "cp ".$response." ".$cfg{"WEB_DIR"}."/caspsr/latest/".
-             "caspsr_bandpass.png";
-      ($result, $response) = Dada::mySystem($cmd);
-    }
-  }
-
-
-  $cmd = "cp ".$o."/obs.info ".$cfg{"WEB_DIR"}."/caspsr/latest/";
-  ($result, $response) = Dada::mySystem($cmd);
-
-}
-
 
 ###############################################################################
 #

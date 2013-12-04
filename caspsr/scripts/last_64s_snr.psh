@@ -1,0 +1,10 @@
+#!/usr/bin/env psrsh
+
+if ( $nsubint > 8 ) extract {$nsubint-8}-{$nsubint-1}
+edit nsubint
+tscrunch
+pscrunch
+edit length
+edit snr
+edit bw
+edit freq

@@ -23,10 +23,17 @@ use IO::Socket;      # Standard perl socket library
 use IO::Select;      # Allows select polling on a socket
 use Net::hostent;
 
+sub usage() 
+{
+  print "Usage: ".basename($0)." DEMUX_ID\n";
+  print "   DEMUX_ID   The Demuxer ID this script will process\n";
+}
+
+
 #
 # Prototypes
 #
-sub good($);
+sub good();
 sub msg($$$);
 sub runDemuxer($);
 sub recveiverThread($$$);
@@ -37,6 +44,8 @@ sub recveiverThread($$$);
 our $dl;
 our $daemon_name;
 our %cfg;
+our $demux_id : shared;
+our $hostname : shared;
 our $client_logger : shared;
 our $control_port : shared;
 our $quit_daemon : shared;
@@ -50,6 +59,8 @@ our $log_sock;
 $dl = 1;
 $daemon_name = 0;
 %cfg = Caspsr::getConfig();
+$demux_id = $ARGV[0];
+$hostname = Dada::getHostMachineName();
 $client_logger = "client_caspsr_src_logger.pl";
 $control_port = 0;
 $quit_daemon = 0;
@@ -57,99 +68,94 @@ $log_host = 0;
 $log_port = 0;
 $log_sock = 0;
 
+# ensure that our demux_id is valid 
+if (!Caspsr::checkDemuxID($demux_id, %cfg))
+{
+  usage();
+  exit(1);
+}
+
 
 ###############################################################################
 #
 # Main 
 # 
-
-$daemon_name = Dada::daemonBaseName($0);
-
-my $log_file       = $cfg{"CLIENT_LOG_DIR"}."/".$daemon_name.".log";;
-my $pid_file       = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".pid";
-my $quit_file      = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
-
-$log_host          = $cfg{"SERVER_HOST"};
-$log_port          = $cfg{"SERVER_DEMUX_LOG_PORT"};
-
-my $n_recv         = $cfg{"NUM_RECV"};
-my $control_thread = 0;
-my $stats_thread = 0;
-my $result = "";
-my $response = "";
-
-# sanity check on whether the module is good to go
-($result, $response) = good($quit_file);
-if ($result ne "ok") {
-  print STDERR $response."\n";
-  return 1;
-}
-
-# install signal handles
-$SIG{INT}  = \&sigHandle;
-$SIG{TERM} = \&sigHandle;
-$SIG{PIPE} = \&sigPipeHandle;
-
-# become a daemon
-Dada::daemonize($log_file, $pid_file);
-
-# Open a connection to the server_sys_monitor.pl script
-$log_sock = Dada::nexusLogOpen($log_host, $log_port);
-if (!$log_sock) {
-  print STDERR "Could not open log port: ".$log_host.":".$log_port."\n";
-}
-
-logMsg(0, "INFO", "STARTING SCRIPT");
-
-# Start the daemon control thread
-$control_thread = threads->new(\&controlThread, $quit_file, $pid_file);
-
-my $i=0;
-my $i_demux = 0;
-my $host = Dada::getHostMachineName();
-my $recv_thread = 0;
-my $recv_result = "";
-
-# determine the number of this demuxer
-for ($i=0; $i<$cfg{"NUM_DEMUX"}; $i++)
 {
-  if ($host eq $cfg{"DEMUX_".$i}) 
-  {
-    $i_demux = $i;
+  $daemon_name = Dada::daemonBaseName($0);
+
+  my $log_file       = $cfg{"CLIENT_LOG_DIR"}."/".$daemon_name.".log";;
+  my $pid_file       = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$demux_id.".pid";
+
+  $log_host          = $cfg{"SERVER_HOST"};
+  $log_port          = $cfg{"SERVER_DEMUX_LOG_PORT"};
+
+  my $n_recv         = $cfg{"NUM_RECV"};
+  my $control_thread = 0;
+  my $stats_thread = 0;
+  my $result = "";
+  my $response = "";
+
+  # sanity check on whether the module is good to go
+  ($result, $response) = good();
+  if ($result ne "ok") {
+    print STDERR $response."\n";
+    return 1;
   }
+
+  # install signal handles
+  $SIG{INT}  = \&sigHandle;
+  $SIG{TERM} = \&sigHandle;
+  $SIG{PIPE} = \&sigPipeHandle;
+
+  # become a daemon
+  Dada::daemonize($log_file, $pid_file);
+
+  # Open a connection to the server_sys_monitor.pl script
+  $log_sock = Dada::nexusLogOpen($log_host, $log_port);
+  if (!$log_sock) {
+    print STDERR "Could not open log port: ".$log_host.":".$log_port."\n";
+  }
+
+  logMsg(0, "INFO", "STARTING SCRIPT");
+
+  # Start the daemon control thread
+  $control_thread = threads->new(\&controlThread, $pid_file);
+
+  my $i=0;
+  my $recv_thread = 0;
+  my $recv_result = "";
+
+  # Main Loop
+  while (!($quit_daemon))
+  {
+    msg(2, "INFO", "main: launchReceiversThread(".$n_recv.", ".$demux_id.")");
+    $recv_thread = threads->new(\&launchReceiversThread, $n_recv, $demux_id);
+
+    # Run caspsr_udpNdb on this machine
+    msg(2, "INFO", "main: runDemuxer(".$demux_id.")"); 
+    ($result, $response) = runDemuxer($demux_id);
+    msg(2, "INFO", "main: runDemuxer() ".$result." ".$response);
+
+    $recv_result = $recv_thread->join();
+    if ($recv_result ne "ok") {
+      msg(0, "ERROR", "main: launchReceiversThread failed");
+      $quit_daemon = 1;
+    } 
+
+    msg(1, "INFO", "main: launchReceiversThread ended");
+
+    sleep(1);
+  }
+
+  logMsg(2, "INFO", "main: joining threads");
+  $control_thread->join();
+  logMsg(2, "INFO", "main: control_thread joined");
+
+  logMsg(0, "INFO", "STOPPING SCRIPT");
+  Dada::nexusLogClose($log_sock);
+
+  exit(0);
 }
-
-# Main Loop
-while (!($quit_daemon)) {
-
-  msg(2, "INFO", "main: launchReceiversThread(".$n_recv.", ".$i_demux.")");
-  $recv_thread = threads->new(\&launchReceiversThread, $n_recv, $i_demux);
-
-  # Run caspsr_udpNdb on this machine
-  msg(2, "INFO", "main: runDemuxer(".$i_demux.")"); 
-  ($result, $response) = runDemuxer($i_demux);
-  msg(2, "INFO", "main: runDemuxer() ".$result." ".$response);
-
-  $recv_result = $recv_thread->join();
-  if ($recv_result ne "ok") {
-    msg(0, "ERROR", "main: launchReceiversThread failed");
-    $quit_daemon = 1;
-  } 
-
-  msg(1, "INFO", "main: launchReceiversThread ended");
-
-  sleep(1);
-
-}
-
-logMsg(2, "INFO", "main: joining threads");
-$control_thread->join();
-logMsg(2, "INFO", "main: control_thread joined");
-
-logMsg(0, "INFO", "STOPPING SCRIPT");
-Dada::nexusLogClose($log_sock);
-
-exit(0);
 
 ###############################################################################
 # 
@@ -157,7 +163,6 @@ exit(0);
 #
 sub runDemuxer($) 
 {
-
   my ($i_demux) = @_;
 
   msg(2, "INFO", "runDemuxer(".$i_demux.")");
@@ -170,22 +175,21 @@ sub runDemuxer($)
   
   my $binary       = $cfg{"DEMUX_BINARY"};
   my $pks_per_xfer = $cfg{"PKTS_PER_XFER"};
-  my $n_demux    = $cfg{"NUM_DEMUX"};
+  my $n_demux      = $cfg{"NUM_DEMUX"};
   my $udp_port     = $cfg{"DEMUX_UDP_PORT_".$i_demux};
-  my $host         = Dada::getHostMachineName();
 
   my $i = 0;
   my $db_keys = "";
   # get the list of datablocks to write to
   for ($i=0; $i<$cfg{"NUM_RECV"}; $i++)
   {
-    $db_keys .= " ".$cfg{"RECV_DB_".$i};
+    $db_keys .= " ".Dada::getDBKey($cfg{"DEMUX_BLOCK_PREFIX"}, $demux_id, $cfg{"RECV_DBID_".$i});
   }
 
   $cmd  = $binary." -n ".$pks_per_xfer." -o ".$control_port.
           " -p ".$udp_port." ".$i_demux." ".$n_demux.$db_keys;
 
-  $cmd .= " 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/".$client_logger." ".$host."_udp";
+  $cmd .= " 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/".$client_logger." ".$hostname."_udp";
 
   msg(1, "INFO", "runDemuxer: running ".$binary." ".$i_demux.", listening on port ".$udp_port);
 
@@ -195,7 +199,7 @@ sub runDemuxer($)
     msg(0, "ERROR", "runDemuxer ".$cmd." failed:  ".$response);
   }
 
-  my $regex = "^perl.*".$client_logger." ".$host."_udp";
+  my $regex = "^perl.*".$client_logger." ".$hostname."_udp";
   msg(2, "INFO", "receiverThread: killProcess(".$regex.")");
   my ($killresult, $killresponse) = Dada::killProcess($regex);
   msg(2, "INFO", "receiverThread: killProcess: ".$result." ".$response);
@@ -217,19 +221,20 @@ sub runDemuxer($)
 #
 sub launchReceiversThread($$)
 {
-  
   my ($n_recv, $i_demux) = @_;
 
   msg(2, "INFO", "launchReceiversThread(".$n_recv.", ".$i_demux.")");
 
-  my $first_db_key = $cfg{"RECV_DB_0"};
+  my $first_db_key = Dada::getDBKey($cfg{"DEMUX_BLOCK_PREFIX"}, $demux_id, $cfg{"RECV_DBID_0"});
   my $cmd = "";
+  my $result = "";
   my $raw_header = "";
   my %h = ();
   my $header_valid = 0;
   my $obs_offset = "";
   my $obs_xfer = "";
   my $i_recv = 0;
+  my $i = 0;
 
   my @recv_threads = ();
   my @recv_results = ();
@@ -300,7 +305,7 @@ sub launchReceiversThread($$)
           msg(2, "INFO", "launchReceiversThread: joining recv_thread ".$i);
           $recv_results[$i] = $recv_threads[$i]->join();
           msg(2, "INFO", "launchReceiversThread: recv_thread ".$i." joined: ".$recv_results[$i]);
-          if ($result ne "ok")
+          if ($recv_results[$i] ne "ok")
           {
             msg(0, "ERROR", "launchReceiversThread: recv_thread[".$i."] failed");
             $quit_daemon = 1;
@@ -340,6 +345,7 @@ sub receiverThread($$$)
   my $response = "";
   my $i = 0;
   my %h = ();
+  my $host = "";
 
   my $active_bin   = $cfg{"IB_ACTIVE_BINARY"};
   my $inactive_bin = $cfg{"IB_INACTIVE_BINARY"};
@@ -347,7 +353,7 @@ sub receiverThread($$$)
   my $chunk_size   = $cfg{"IB_CHUNK_SIZE"};
   my $n_demux      = $cfg{"NUM_DEMUX"};
   my $ib_dest      = $cfg{"RECV_".$i_recv};   # IPoIB hostname
-  my $db_key       = $cfg{"RECV_DB_".$i_recv};
+  my $db_key       = Dada::getDBKey($cfg{"DEMUX_BLOCK_PREFIX"}, $demux_id, $cfg{"RECV_DBID_".$i_recv});
 
   # check that a PWC matches this IB_DEST
   my $is_active = 0;
@@ -363,6 +369,7 @@ sub receiverThread($$$)
     $cmd = "dada_dbnull -s -k ".$db_key;
   } else {
     if ($is_active) {
+      #$cmd = "caspsr_dbnum_demux -g 2 -k ".$db_key." ".$i_demux." ".$chunk_size;
       $cmd = $active_bin." -S -c ".$chunk_size." -p ".$ib_port." -k ".$db_key." ".$ib_dest." ".$i_demux." ".$n_demux;
     } else {
       msg(0, "INFO", "[".$i_recv."] Jettesioning data destined for ".$ib_dest." since not PWC configured");
@@ -370,18 +377,18 @@ sub receiverThread($$$)
     }
   }
 
-  $cmd .= " 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/".$client_logger." ".$host."_ib".$i_recv;
+  $cmd .= " 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/".$client_logger." ".$hostname."_ib".$i_recv;
 
   my $short_cmd = substr($cmd, 0, 50)."...";
     
-  msg(2, "INFO", "receiverThread: [".$i_recv."] START ".$short_cmd);
+  msg(2, "INFO", "receiverThread: [".$i_recv."] START ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   msg(2, "INFO", "receiverThread: [".$i_recv."] END   ".$result." ".$response);
   if ($result ne "ok") {
     msg(0, "ERROR", "receiverThread: [".$i_recv."]".$cmd." failed:  ".$response);
   }
 
-  my $regex = "^perl.*".$client_logger." ".$host."_ib".$i_recv;
+  my $regex = "^perl.*".$client_logger." ".$hostname."_ib".$i_recv;
   msg(2, "INFO", "receiverThread: killProcess(".$regex.")");
   my ($killresult, $killresponse) = Dada::killProcess($regex);
   msg(2, "INFO", "receiverThread: killProcess: ".$result." ".$response);
@@ -389,6 +396,7 @@ sub receiverThread($$$)
     msg(1, "INFO", "receiverThread: killProcess(".$regex.") returned ".$response);
   }
 
+  msg(2, "INFO", "receiverThread: returning ".$result);
   return $result;
 }
 
@@ -397,9 +405,9 @@ sub receiverThread($$$)
 #
 # Control Thread. Handles signals to exit
 #
-sub controlThread($$) {
+sub controlThread($) {
 
-  my ($quit_file, $pid_file) = @_;
+  my ($pid_file) = @_;
 
   msg(2, "INFO", "controlThread: starting");
 
@@ -408,19 +416,22 @@ sub controlThread($$) {
   my $result = "";
   my $response = "";
 
-  while ((!(-f $quit_file)) && (!$quit_daemon)) {
+  my $host_quit_file = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
+  my $demux_quit_file  =  $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$demux_id.".quit";
+  
+  # poll for the existence of the control file
+  while ((!$quit_daemon) && (! -f $host_quit_file) && (! -f $demux_quit_file)) {
     sleep(1);
   }
 
   $quit_daemon = 1;
 
   # instruct the DEMUX_BINARIES to exit forthwith
-  my $host = Dada::getHostMachineName();
   my $i = 0;
   my $handle = 0;
 
-  msg(2, "INFO", "controlThread: connectToMachine(".$host.", ".$control_port.")");
-  $handle = Dada::connectToMachine($host, $control_port);
+  msg(2, "INFO", "controlThread: connectToMachine(".$hostname.", ".$control_port.")");
+  $handle = Dada::connectToMachine($hostname, $control_port);
   if ($handle) {
     msg(1, "INFO", "controlThread: ".$control_port." <- QUIT");
     ($result, $response) = Dada::sendTelnetCommand($handle, "QUIT");
@@ -487,11 +498,10 @@ sub msg($$$) {
   if ($level <= $dl) {
     my $time = Dada::getCurrentDadaTime();
     if (! $log_sock ) {
-      #print "opening nexus log: ".$log_host.":".$log_port."\n";
       #$log_sock = Dada::nexusLogOpen($log_host, $log_port);
     }
     if ($log_sock) {
-      Dada::nexusLogMessage($log_sock, $time, "sys", $type, "demux mngr", $msg);
+      Dada::nexusLogMessage($log_sock, $hostname, $time, "sys", $type, "demux mngr", $msg);
     }
     print "[".$time."] ".$msg."\n";
   }
@@ -539,13 +549,14 @@ sub sigPipeHandle($) {
 #
 # Test to ensure all variables are set 
 #
-sub good($) {
+sub good() {
 
-  my ($quit_file) = @_;
-
+  my $host_quit_file = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
+  my $demux_quit_file  =  $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$demux_id.".quit";
+  
   # check the quit file does not exist on startup
-  if (-f $quit_file) {
-    return ("fail", "Error: quit file ".$quit_file." existed at startup");
+  if ((-f $host_quit_file) || (-f $demux_quit_file)) {
+    return ("fail", "Error: quit file existed at startup");
   }
 
   # the calling script must have set this
@@ -582,8 +593,8 @@ sub good($) {
     if (! defined($cfg{"RECV_".$i})) {
       return ("fail", "Error: RECV_".$i." not defined in caspsr cfg file");
     }
-    if (! defined($cfg{"RECV_DB_".$i})) {
-      return ("fail", "Error: RECV_DB_".$i." not defined in caspsr cfg file");
+    if (! defined($cfg{"RECV_DBID_".$i})) {
+      return ("fail", "Error: RECV_DBID_".$i." not defined in caspsr cfg file");
     }
   }
 

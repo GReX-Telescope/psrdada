@@ -18,6 +18,12 @@ use IO::Socket;      # Standard perl socket library
 use IO::Select;      # Allows select polling on a socket
 use Net::hostent;
 
+sub usage() 
+{
+  print "Usage: ".basename($0)." DEMUX_ID\n";
+  print "   DEMUX_ID   The Demuxer ID this script will process\n";
+}
+
 #
 # Prototypes
 #
@@ -30,6 +36,8 @@ sub msg($$$);
 our $dl;
 our $daemon_name;
 our %cfg;
+our $demux_id : shared;
+our $hostname : shared;
 our $client_logger : shared;
 our @threads;
 our @stats_threads;
@@ -48,6 +56,8 @@ our $log_sock;
 $dl = 1; 
 $daemon_name = 0;
 %cfg = Caspsr::getConfig();
+$demux_id = $ARGV[0];
+$hostname = Dada::getHostMachineName();
 $client_logger = "client_caspsr_src_logger.pl";
 @threads = ();
 @stats_threads = ();
@@ -60,94 +70,102 @@ $log_host = 0;
 $log_port = 0;
 $log_sock = 0;
 
+# ensure that our demux_id is valid 
+if (!Caspsr::checkDemuxID($demux_id, %cfg))
+{
+  usage();
+  exit(1);
+}
+
 
 ###############################################################################
 #
 # Main 
 # 
+{
+  $daemon_name = Dada::daemonBaseName($0);
 
-$daemon_name = Dada::daemonBaseName($0);
+  my $log_file       = $cfg{"CLIENT_LOG_DIR"}."/".$daemon_name.".log";;
+  my $pid_file       = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".pid";
+  my $quit_file      = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
 
-my $log_file       = $cfg{"CLIENT_LOG_DIR"}."/".$daemon_name.".log";;
-my $pid_file       = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".pid";
-my $quit_file      = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
+  $log_host          = $cfg{"SERVER_HOST"};
+  $log_port          = $cfg{"SERVER_DEMUX_LOG_PORT"};
 
-$log_host          = $cfg{"SERVER_HOST"};
-$log_port          = $cfg{"SERVER_DEMUX_LOG_PORT"};
+  my $control_thread = 0;
+  my $stats_thread = 0;
+  my $result = "";
+  my $response = "";
 
-my $control_thread = 0;
-my $stats_thread = 0;
-my $result = "";
-my $response = "";
-
-# sanity check on whether the module is good to go
-($result, $response) = good($quit_file);
-if ($result ne "ok") {
-  print STDERR $response."\n";
-  return 1;
-}
-
-# install signal handles
-$SIG{INT}  = \&sigHandle;
-$SIG{TERM} = \&sigHandle;
-$SIG{PIPE} = \&sigPipeHandle;
-
-# become a daemon
-Dada::daemonize($log_file, $pid_file);
-
-# Open a connection to the server_sys_monitor.pl script
-$log_sock = Dada::nexusLogOpen($log_host, $log_port);
-if (!$log_sock) {
-  print STDERR "Could not open log port: ".$log_host.":".$log_port."\n";
-}
-
-logMsg(0, "INFO", "STARTING SCRIPT");
-
-# Start the daemon control thread
-$control_thread = threads->new(\&controlThread, $quit_file, $pid_file);
-
-# Main Loop
-while (!($quit_daemon)) {
-
-  # Run the demuxer threads for each instance of the demuxer
-  msg(1, "INFO", "main: starting demuxer threads");
-  my $i=0;
-  for ($i=0; $i<=$#threads; $i++) {
-    msg(2, "INFO", "main: demuxerThread(".$indexes[$i].", ".$udp_ports[$i].", ".$control_ports[$i].")");
-    $threads[$i] = threads->new(\&demuxerThread, $indexes[$i], $udp_ports[$i], $control_ports[$i]);
-
-    # msg(2, "INFO", "main: statsThread(".$indexes[$i].", ".$control_ports[$i].")");
-    # $stats_threads[$i] = threads->new(\&statsThread, $indexes[$i], $control_ports[$i]);
+  # sanity check on whether the module is good to go
+  ($result, $response) = good($quit_file);
+  if ($result ne "ok") {
+    print STDERR $response."\n";
+    return 1;
   }
 
-  msg(2, "INFO", "main: joining demuxer threads");
-  for ($i=0; $i<=$#threads; $i++) {
-    $results[$i] = $threads[$i]->join();
-    if ($results[$i] ne "ok") {
-      msg(0, "ERROR", "main: demuxerThread[".$i."] failed");
-      $quit_daemon = 1;
+  # install signal handles
+  $SIG{INT}  = \&sigHandle;
+  $SIG{TERM} = \&sigHandle;
+  $SIG{PIPE} = \&sigPipeHandle;
+
+  # become a daemon
+  Dada::daemonize($log_file, $pid_file);
+
+  # Open a connection to the server_sys_monitor.pl script
+  $log_sock = Dada::nexusLogOpen($log_host, $log_port);
+  if (!$log_sock) {
+    print STDERR "Could not open log port: ".$log_host.":".$log_port."\n";
+  }
+
+  logMsg(0, "INFO", "STARTING SCRIPT");
+
+  # Start the daemon control thread
+  $control_thread = threads->new(\&controlThread, $quit_file, $pid_file);
+
+  # Main Loop
+  while (!($quit_daemon)) {
+
+    # Run the demuxer threads for each instance of the demuxer
+    msg(1, "INFO", "main: starting demuxer threads");
+    my $i=0;
+    for ($i=0; $i<=$#threads; $i++) {
+      msg(2, "INFO", "main: demuxerThread(".$indexes[$i].", ".$udp_ports[$i].", ".$control_ports[$i].")");
+      $threads[$i] = threads->new(\&demuxerThread, $indexes[$i], $udp_ports[$i], $control_ports[$i]);
+
+      # msg(2, "INFO", "main: statsThread(".$indexes[$i].", ".$control_ports[$i].")");
+      # $stats_threads[$i] = threads->new(\&statsThread, $indexes[$i], $control_ports[$i]);
     }
+
+    msg(2, "INFO", "main: joining demuxer threads");
+    for ($i=0; $i<=$#threads; $i++) {
+      $results[$i] = $threads[$i]->join();
+      if ($results[$i] ne "ok") {
+        msg(0, "ERROR", "main: demuxerThread[".$i."] failed");
+        $quit_daemon = 1;
+      }
+    }
+    msg(1, "INFO", "main: demuxer threads ended");
+
+    # msg(2, "INFO", "main: joining stats threads");
+    # for ($i=0; $i<=$#threads; $i++) {
+    #   $stats_threads[$i]->join();
+    # }
+    # msg(1, "INFO", "main: stats threads ended");
+
+    sleep(1);
+
   }
-  msg(1, "INFO", "main: demuxer threads ended");
 
-  # msg(2, "INFO", "main: joining stats threads");
-  # for ($i=0; $i<=$#threads; $i++) {
-  #   $stats_threads[$i]->join();
-  # }
-  # msg(1, "INFO", "main: stats threads ended");
+  logMsg(2, "INFO", "main: joining threads");
+  $control_thread->join();
+  logMsg(2, "INFO", "main: control_thread joined");
 
-  sleep(1);
+  logMsg(0, "INFO", "STOPPING SCRIPT");
+  Dada::nexusLogClose($log_sock);
 
+  exit(0);
 }
-
-logMsg(2, "INFO", "main: joining threads");
-$control_thread->join();
-logMsg(2, "INFO", "main: control_thread joined");
-
-logMsg(0, "INFO", "STOPPING SCRIPT");
-Dada::nexusLogClose($log_sock);
-
-exit(0);
 
 ###############################################################################
 # 
@@ -278,7 +296,7 @@ sub controlThread($$) {
 #
 sub msg($$$) {
 
-  my ($level, $type, $msg) = @_;
+  my ($level, $class, $msg) = @_;
   if ($level <= $dl) {
     my $time = Dada::getCurrentDadaTime();
     if (! $log_sock ) {
@@ -286,7 +304,7 @@ sub msg($$$) {
       #$log_sock = Dada::nexusLogOpen($log_host, $log_port);
     }
     if ($log_sock) {
-      Dada::nexusLogMessage($log_sock, $time, "sys", $type, "obs mngr", $msg);
+      Dada::nexusLogMessage($log_sock, $hostname, $time, "sys", $class, "obs mngr", $msg);
     }
     print "[".$time."] ".$msg."\n";
   }

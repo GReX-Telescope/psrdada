@@ -152,11 +152,11 @@ sub processHeader($$) {
   
   $proc_cmd .= $proc_args;
   if ($source =~ m/CalDelay/) {
-    if ($proc_cmd =~ m/-2c100/) {
-      # TODO put error here
-    } else {
-      $proc_cmd .= " -2c100";
-    }
+    #if ($proc_cmd =~ m/-2c100/) {
+    #  # TODO put error here
+    #} else {
+    #  $proc_cmd .= " -2c100";
+    #}
   }
 
   # if a CAL or LEVCAL adjust -F512:D to -F512:1024
@@ -172,4 +172,32 @@ sub processHeader($$) {
   return ($result, $response)
 
 }
+
+sub checkDemuxID($\%)
+{
+  (my $demux_id, my $cfg_ref) = @_;
+  my %cfg = %$cfg_ref;
+
+  # ensure that our demux_id is valid 
+  if (($demux_id >= 0) &&  ($demux_id < $cfg{"NUM_DEMUX"}))
+  {
+    # and matches configured hostname
+    if ($cfg{"DEMUX_".$demux_id} eq getHostMachineName())
+    {
+      # this is the correct condition
+      return 1;
+    }
+    else
+    {
+      print STDERR "DEMUX_ID did not match configured hostname\n";
+      return 0;
+    }
+  }
+  else
+  {
+    print STDERR "DEMUX_ID was not a valid integer between 0 and ".($cfg{"NUM_DEMUX"}-1)."\n";
+    return 0;
+  }
+}
+
 

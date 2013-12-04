@@ -15,6 +15,7 @@
 #
 use constant META_DIR       => "/lfs/data0/caspsr";
 use constant REQUIRED_HOST  => "raid0";
+use constant LOG_PORT       => "39921";
 use constant REQUIRED_USER  => "caspsr";
 
 use lib $ENV{"DADA_ROOT"}."/bin";
@@ -24,6 +25,7 @@ use warnings;
 use File::Basename;
 use threads;
 use threads::shared;
+use Thread::Queue;
 use Dada;
 use Caspsr;
 
@@ -39,18 +41,26 @@ our $dl;
 our $daemon_name;
 our %cfg;
 our $quit_daemon : shared;
+our $log_host : shared;
+our $log_sock;
+our $log_port : shared;
+our $client_logger;
 our $warn;
 our $error;
 
 #
 # initialize globals
 #
-$dl = 2; 
+$dl = 2;
 $daemon_name = Dada::daemonBaseName(basename($0));
 %cfg = Caspsr::getConfig();
 $warn = ""; 
 $error = ""; 
 $quit_daemon = 0;
+$log_host = REQUIRED_HOST;
+$log_port = LOG_PORT;
+$log_sock = 0;
+$client_logger = "client_caspsr_baseband_logger.pl";
 
 {
   $warn  = META_DIR."/logs/".$daemon_name.".warn";
@@ -91,9 +101,21 @@ $quit_daemon = 0;
     unlink ($error);
   }
 
+  # create a thread queue to handle the incoming log messages for the
+  # logging thread to handle
+  my $in = new Thread::Queue;
+
   # start the control thread
   Dada::logMsg(2, $dl, "main: controlThread(".$quit_file.", ".$pid_file.")");
   $control_thread = threads->new(\&controlThread, $quit_file, $pid_file);
+
+  # start the logging thread
+  Dada::logMsg(2, $dl, "starting loggingThread");
+  my $logging_thread = threads->new(\&loggingThread, $log_file, $in);
+
+  # start the comms thread
+  Dada::logMsg(2, $dl, "starting CommsThread");
+  my $comms_thread = threads->new(\&commsThread, $in);
 
   Dada::logMsg(1, $dl, "Starting CASPSR Baseband Recorder");
 
@@ -101,8 +123,7 @@ $quit_daemon = 0;
   my @hosts =  ("gpu0",  "gpu2",  "gpu1",  "gpu3");
   my @dbkeys = ("ca00",  "ca20",  "ca10",  "ca30");
   my @ports =  ("40000", "40002", "40001", "40003");
-  my @disks =  ("/lfs/raid0/caspsr/baseband", "/lfs/raid1/caspsr/baseband", 
-                "/lfs/raid0/caspsr/baseband", "/lfs/raid1/caspsr/baseband");
+  my @disks =  ("/lfs/raid0/caspsr/baseband", "/lfs/raid0/caspsr/baseband", "/lfs/raid1/caspsr/baseband", "/lfs/raid1/caspsr/baseband");
 
   my $db_nbufs = 4;
   my $db_bufsz = 256000000;
@@ -167,7 +188,9 @@ $quit_daemon = 0;
 
   # rejoin threads
   $control_thread->join();
-                                                                                
+  $comms_thread->join();
+  $logging_thread->join();
+
   exit 0;
 }
 
@@ -195,27 +218,23 @@ sub dbdiskThread($$$$)
     Dada::logMsg(2, $dl ,"dbdiskThread [".$gpu."] ".$result." ".$response);
   }
 
-  $cmd = "dada_dbdisk -b ".$core." -k ".$dbkey." -D ".$path."/".$gpu." -t 23068672 -z";
+  $cmd = "dada_dbdisk -b ".$core." -k ".$dbkey." -D ".$path."/".$gpu." -t 23068672 -z -o ".
+         "2>&1 | ".$cfg{"SCRIPTS_DIR"}."/".$client_logger." disk_".$gpu;
 
-  #if (($gpu eq "gpu0") || ($gpu eq "gpu1"))
-  #{
-  #  $cmd = "dada_dbnull -k ".$dbkey." -z";
-  #} 
-  #else
-  #{
-  #  $cmd = "dada_dbdisk -b ".$core." -k ".$dbkey." -D ".$path."/".$gpu." -t 23068672 -z";
-  #}
+  # run this command directly, soas output is printed to log file
+  Dada::logMsg(1, $dl ,"dbdiskThread [".$gpu."] ".$cmd);
   Dada::logMsg(1, $dl ,"dbdiskThread [".$gpu."] ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(2, $dl ,"dbdiskThread [".$gpu."] ".$result." ".$response);
 
-  Dada::logMsg(1, $dl ,"dbdiskThread [".$gpu."] exiting");
-  if ($result eq "ok")
+  if ($? == 0)
   {
+    Dada::logMsg(2, $dl ,"dbdiskThread [".$gpu."] ok");
     return 0;
   }
   else
-  { 
+  {
+    Dada::logMsg(2, $dl ,"dbdiskThread [".$gpu."] failed");
     return -1;
   }
 }
@@ -231,7 +250,8 @@ sub ibdbThread($$$$)
   my $result = "";
   my $response = "";
   
-  $cmd = "dada_ibdb -b ".$core." -c 16384 -k ".$dbkey." -p ".$port;
+  $cmd = "dada_ibdb -b ".$core." -c 16384 -k ".$dbkey." -p ".$port." ".
+         "2>&1 | ".$cfg{"SCRIPTS_DIR"}."/".$client_logger." ibdb_".$gpu;
   Dada::logMsg(1, $dl ,"ibdbThread [".$gpu."] ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(2, $dl ,"ibdbThread [".$gpu."] ".$result." ".$response);
@@ -294,6 +314,165 @@ sub controlThread($$)
   return 0;
 }
   
+
+###############################################################################
+#
+# listens on the required socket
+#
+sub commsThread($) 
+{
+  my ($in) = @_;
+  Dada::logMsg(1, $dl, "commsThread: starting");
+
+  my ($rh, $read_set, $handle, $domain);
+
+  # create a read set for handle connections and data 
+  $read_set = new IO::Select();
+  $read_set->add($log_sock);
+
+  Dada::logMsg(1, $dl, "commsThread: waiting for connections on ".$log_host.":".$log_port);
+  
+  my $read_something = 0;
+  my $poll_handle = 0;
+  my $line = "";
+  
+  while (!$quit_daemon) 
+  {
+    # Get all the readable handles from the log_sock 
+    my ($readable_handles) = IO::Select->select($read_set, undef, undef, 1);
+  
+    foreach $rh (@$readable_handles)
+    {
+      # if it is the main socket then we have an incoming connection and
+      # we should accept() it and then add the new socket to the $Read_Handles_Object
+      if ($rh == $log_sock) {
+
+        $handle = $rh->accept();
+
+        $handle->autoflush(1);
+
+        # get the hostname for this connection
+        Dada::logMsg(3, $dl, "commsThread: accepting connection");
+
+        $read_set->add($handle);
+        $handle = 0;
+
+      }
+      else
+      {
+  
+        # get the hostname for this connection
+        Dada::logMsg(3, $dl, "commsThread: processing message");
+
+         # set the input record seperator to \r\n
+        $/ = "\r\n";
+  
+        # make the socket non blocking
+        $rh->blocking(0);
+
+        $read_something = 0;
+        $poll_handle = 1;
+
+        # read as much data as we can from the socket
+        while (!$quit_daemon && $poll_handle)
+        {
+          $line = $rh->getline;
+
+          # if nothing at the socket 
+          if ((!defined $line) || ($line eq ""))
+          {
+            # stop polling
+            $poll_handle = 0;
+
+            # if we haven't read anything, the socket is shutting down
+            if (!$read_something)
+            {
+              $read_set->remove($rh);
+              $rh->close();
+            }
+          }
+          else
+          {
+            $read_something = 1;
+            $line =~ s/\r\n$//;
+            Dada::logMsg(3, $dl, "commsThread: <- ".$line);
+            $in->enqueue($line);
+          }
+        }
+      }
+    }
+  }
+  Dada::logMsg(1, $dl, "commsThread: exiting");
+}
+
+
+###############################################################################
+#
+# Dequeues messages from the log queue and write them to the relevant logfiles
+#
+sub loggingThread($$) 
+{
+  my ($log_file, $in) = @_;
+
+  Dada::logMsg(2, $dl, "loggingThread: starting");
+
+  my $line = "";
+  my $status_file = "";
+
+  my @bits = ();
+  my $src = "";
+  my $time = "";
+  my $type = "";
+  my $class = "";
+  my $program = "";
+  my $message = "";
+
+  while (!$quit_daemon)
+  {
+    if ($in->pending)
+    {
+      $message = $in->dequeue();
+
+      Dada::logMsg(3, $dl, "loggingThread: dequeued message [".$message."]");
+      # extract the message parameters
+      @bits = split(/\|/, $message, 6);
+
+      if ($#bits == 5) 
+      {
+#       src       source of message (hostname or PWC ID) 
+#       time      timestamp of message
+#       type      type of message (pwc, sys, src) 
+#       class     class of message (INFO, WARN, ERROR) 
+#       program   script or binary that generated message (e.g. obs mngr)
+#       message   message itself
+
+        $src     = $bits[0];
+        $time    = $bits[1];
+        $type    = $bits[2];
+        $class   = $bits[3];
+        $program = $bits[4];
+        $message = $bits[5];
+
+        if ($class eq "INFO") {
+          $line = "[".$time."] ".$program.": ".$message;
+        } else {
+          $line = "[".$time."] ".$program.": ".$class.": ".$message;
+        }
+
+        print STDOUT $line."\n";
+      }
+    }
+    else
+    {
+      Dada::logMsg(3, $dl, "loggingThread: no messages pending");
+      sleep(1);
+    }
+  }
+  
+  Dada::logMsg(2, $dl, "loggingThread: exiting");
+  return 0;
+}
+
 
 
 #
@@ -379,6 +558,18 @@ sub good($) {
   {
     return ("fail", "found scripts running: ".$running_scripts);
   }
+
+  my $n_listen = $cfg{"NUM_PWC"} * 3;
+  $log_sock = new IO::Socket::INET (
+    LocalHost => $log_host,
+    LocalPort => $log_port,
+    Proto => 'tcp',
+    Listen => $n_listen,
+    ReuseAddr => 1
+  ); 
+  if (!$log_sock) { 
+    return ("fail", "Could not create listening socket: ".$log_host.":".$log_port);
+  } 
 
   return ("ok", "");
 }
