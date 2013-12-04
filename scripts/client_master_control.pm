@@ -968,7 +968,6 @@ sub startPWCs($)
   my $key = "";
   my $port = "";
   my $log_port = "";
-  my $udp_port = "";
   my $cmd = "";
   my $result = "ok";
   my $response = "";
@@ -1001,10 +1000,7 @@ sub startPWCs($)
           $log_port += int($pwc);
         }
 
-        $udp_port = $cfg{"PWC_UDP_PORT_".$pwc};
-
-        $cmd = $cfg{"PWC_BINARY"}." -c ".$port." -k ".lc($key).
-                                  " -l ".$log_port." -p ".$udp_port." ".$pwc_add;
+        $cmd = $cfg{"PWC_BINARY"}." -c ".$port." -k ".lc($key)." -l ".$log_port." ".$pwc_add;
 
         Dada::logMsg(2, $dl, "startPWCs: pwc=".$pwc." running ".$cmd);
         ($resu ,$resp) = Dada::mySystem($cmd);
