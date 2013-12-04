@@ -210,7 +210,7 @@ sub main() {
     Dada::logMsg(1, $dl, "main: stopping ".$dest_script);
 
     $cmd = "touch \$DADA_ROOT/control/".Dada::daemonBaseName($dest_script).".quit";
-    Dada::logMsg(2, $dl, "main: sshViaProxy(".$user.", ".$host.",". $cmd.")");
+    Dada::logMsg(1, $dl, "main: sshViaProxy(".$user.", ".$host.",". $cmd.")");
     ($result, $response) = sshViaProxy($user, $host, $cmd);
     Dada::logMsg(2, $dl, "main: sshViaProxy() ".$result." ".$response);
 
