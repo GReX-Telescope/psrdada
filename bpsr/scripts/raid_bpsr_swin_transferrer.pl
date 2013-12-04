@@ -13,13 +13,17 @@
 #
 # Constants
 #
-use constant BANDWIDTH      => "53248";           # = 52 MB/s 
-#use constant BANDWIDTH      => "66560";           # = 65 MB/s 
-#use constant BANDWIDTH      => "76800";           # = 75 MB/s 
-use constant DATA_DIR       => "/lfs/raid0/bpsr";
-use constant META_DIR       => "/lfs/data0/bpsr";
-use constant REQUIRED_HOST  => "raid0";
-use constant REQUIRED_USER  => "bpsr";
+#use constant BANDWIDTH        => "76800";           # = 75 MB/s 
+#use constant BANDWIDTH        => "53248";           # = 52 MB/s 
+use constant BANDWIDTH        => "90000";           # = 52 MB/s 
+use constant DATA_DIR         => "/lfs/raid0/bpsr";
+use constant META_DIR         => "/lfs/data0/bpsr";
+use constant REQUIRED_HOST    => "raid0";
+use constant REQUIRED_USER    => "bpsr";
+
+use constant BPSR_USER        => "dada";
+use constant BPSR_HOST        => "hipsr-srv0.atnf.csiro.au";
+use constant BPSR_PATH        => "/data/bpsr";
 
 use lib $ENV{"DADA_ROOT"}."/bin";
 
@@ -54,7 +58,7 @@ our $transfer_kill : shared;
 #
 # initialize globals
 #
-$dl = 1; 
+$dl = 1;
 $daemon_name = Dada::daemonBaseName(basename($0));
 %cfg = Bpsr::getConfig();
 $last_dest = 0;
@@ -72,8 +76,8 @@ $transfer_kill = "";
   my $quit_file   = META_DIR."/control/".$daemon_name.".quit";
 
   my $src_path    = DATA_DIR."/swin/send";
-  my $dst_path    = DATA_DIR."/parkes/archive";
-  my $otp_path    = DATA_DIR."/parkes/on_tape";   # for beams already marked on.tape.parkes
+  my $dst_path    = DATA_DIR."/swin/sent";
+  # my $otp_path    = DATA_DIR."/parkes/on_tape";   # for beams already marked on.tape.parkes
   my $err_path    = DATA_DIR."/swin/fail";
 
   my $cmd = "";
@@ -91,8 +95,6 @@ $transfer_kill = "";
   my $counter = 0;
   my $sleeping = 0;
 
-  my $apsr_user = "dada";
-  my $apsr_host = "apsr-srv0.atnf.csiro.au";
   my $rval = 0;
 
   # sanity check on whether the module is good to go
@@ -153,7 +155,7 @@ $transfer_kill = "";
       else 
       {
         $sleeping = 0;
-        Dada::logMsg(1, $dl, $pid."/".$obs."/".$beam." -> ".$r_host);
+        Dada::logMsg(2, $dl, $pid."/".$obs."/".$beam." -> ".$r_host);
         Dada::logMsg(2, $dl, "main: transferBeam() ".$pid."/".$obs."/".$beam." to ".$r_user."@".$r_host.":".$r_path);
         ($result, $response) = transferBeam($src_path, $pid, $obs, $beam, $r_user, $r_host, $r_path);
         Dada::logMsg(2, $dl, "main: transferBeam() ".$result." ".$response);
@@ -168,7 +170,7 @@ $transfer_kill = "";
           else
           {
             Dada::logMsgWarn($warn, "main: transferBeam failed: ".$response);
-            Dada::logMsg(1, $dl, $pid."/".$obs."/".$beam." swin/send -> swin/fail");
+            Dada::logMsg(1, $dl, $pid."/".$obs."/".$beam." -> ".$r_host." + swin/fail");
             Dada::logMsg(2, $dl, "main: moveBeam(".$src_path.", ".$err_path.", ".$pid.", ".$obs.", ".$beam.")");
             ($result, $response) = moveBeam($src_path, $err_path, $pid, $obs, $beam);
             Dada::logMsg(2, $dl, "main: moveBeam ".$result." ".$response);
@@ -176,64 +178,72 @@ $transfer_kill = "";
         } 
         else
         {
-          Dada::logMsg(2, $dl, "main: checking for existence of ".$src_path."/".$pid."/".$obs."/".$beam."/on.tape.parkes");
+          Dada::logMsg(1, $dl, $pid."/".$obs."/".$beam." -> ".$r_host." + swin/sent [".$response."]");
+          Dada::logMsg(2, $dl, "main: moveBeam(".$src_path.", ".$dst_path.", ".$pid.", ".$obs.", ".$beam.")");
+          ($result, $response) = moveBeam($src_path, $dst_path, $pid, $obs, $beam);
+          Dada::logMsg(2, $dl, "main: moveBeam ".$result." ".$response);
+
+
+          #Dada::logMsg(2, $dl, "main: checking for existence of ".$src_path."/".$pid."/".$obs."/".$beam."/on.tape.parkes");
           # if this beam as already been marked as on tape at parkes
-          if ( -f $src_path."/".$pid."/".$obs."/".$beam."/on.tape.parkes")
-          {
-            Dada::logMsg(1, $dl, $pid."/".$obs."/".$beam." -> parkes/on_tape [".$response."]");
-            Dada::logMsg(2, $dl, "main: moveBeam(".$src_path.", ".$otp_path.", ".$pid.", ".$obs.", ".$beam.")");
-            ($result, $response) = moveBeam($src_path, $otp_path, $pid, $obs, $beam);
-            Dada::logMsg(2, $dl, "main: moveBeam ".$result." ".$response);
-          }
-          else
-          {
-            Dada::logMsg(1, $dl, $pid."/".$obs."/".$beam." -> parkes/archive [".$response."]");
-            Dada::logMsg(2, $dl, "main: moveBeam(".$src_path.", ".$dst_path.", ".$pid.", ".$obs.", ".$beam.")");
-            ($result, $response) = moveBeam($src_path, $dst_path, $pid, $obs, $beam);
-            Dada::logMsg(2, $dl, "main: moveBeam ".$result." ".$response);
+          #if ( -f $src_path."/".$pid."/".$obs."/".$beam."/on.tape.parkes")
+          #{
+          #  Dada::logMsg(1, $dl, $pid."/".$obs."/".$beam." -> parkes/on_tape [".$response."]");
+          #  Dada::logMsg(2, $dl, "main: moveBeam(".$src_path.", ".$otp_path.", ".$pid.", ".$obs.", ".$beam.")");
+          #  ($result, $response) = moveBeam($src_path, $otp_path, $pid, $obs, $beam);
+          #  Dada::logMsg(2, $dl, "main: moveBeam ".$result." ".$response);
+          #}
+          #else
+          #{
+          #  Dada::logMsg(1, $dl, $pid."/".$obs."/".$beam." -> parkes/archive [".$response."]");
+          #  Dada::logMsg(2, $dl, "main: moveBeam(".$src_path.", ".$dst_path.", ".$pid.", ".$obs.", ".$beam.")");
+          #  ($result, $response) = moveBeam($src_path, $dst_path, $pid, $obs, $beam);
+          #  Dada::logMsg(2, $dl, "main: moveBeam ".$result." ".$response);
 
-            # then touch the local xfer.complete so that the parkes tape archiver knows it can go [if not fail]
-            $cmd = "touch ".$dst_path."/".$pid."/".$obs."/".$beam."/xfer.complete";
-            Dada::logMsg(2, $dl, "main: ".$cmd);
-            ($result, $response) = Dada::mySystem($cmd);
-            Dada::logMsg(3, $dl, "main: ".$result." ".$response);
-            if ($result ne "ok")
-            {
-              Dada::logMsgWarn($warn, "main: failed to touch ".$dst_path."/".$pid."/".$obs."/".$beam."/xfer.complete: ".$response);
-            }
+          #  # then touch the local xfer.complete so that the parkes tape archiver knows it can go [if not fail]
+          #  $cmd = "touch ".$dst_path."/".$pid."/".$obs."/".$beam."/xfer.complete";
+          #  Dada::logMsg(2, $dl, "main: ".$cmd);
+          #  ($result, $response) = Dada::mySystem($cmd);
+          #  Dada::logMsg(3, $dl, "main: ".$result." ".$response);
+          #  if ($result ne "ok")
+          #  {
+          #    Dada::logMsgWarn($warn, "main: failed to touch ".$dst_path."/".$pid."/".$obs."/".$beam."/xfer.complete: ".$response);
+          #  }
 
-            # touch remote sent.to.parkes file on apsr machines
-            $cmd = "touch ".$cfg{"SERVER_ARCHIVE_DIR"}."/".$obs."/".$beam."/sent.to.parkes";
-            Dada::logMsg(2, $dl, "main: ".$apsr_user."@".$apsr_host." ".$cmd);
-            ($result, $rval, $response) = Dada::remoteSshCommand($apsr_user, $apsr_host, $cmd);
-            Dada::logMsg(3, $dl, "main: ".$result." ".$rval." ".$response);
-            if ($result ne "ok")
-            {
-              Dada::logMsgWarn($warn, "main: ssh failed to ".$apsr_host.": ".$response);
-            }
-            if ($rval != 0)
-            {
-              Dada::logMsgWarn($warn, "main: could not touch ".$obs."/".$beam."/sent.to.parkes. on ".$apsr_host.": ".$response);
-            }
-          }
+          #  # touch remote sent.to.parkes file on bpsr server
+          #  $cmd = "touch ".BPSR_PATH."/results/".$obs."/".$beam."/sent.to.parkes";
+          #  Dada::logMsg(2, $dl, "main: ".BPSR_USER."@".BPSR_HOST." ".$cmd);
+          #  ($result, $rval, $response) = Dada::remoteSshCommand(BPSR_USER, BPSR_HOST, $cmd);
+          #  Dada::logMsg(3, $dl, "main: ".$result." ".$rval." ".$response);
+          #  if ($result ne "ok")
+          #  {
+          #    Dada::logMsgWarn($warn, "main: ssh failed to ".BPSR_HOST.": ".$response);
+          #  }
+          #  if ($rval != 0)
+          #  {
+          #    Dada::logMsgWarn($warn, "main: could not touch ".$obs."/".$beam."/sent.to.parkes. on ".BPSR_HOST.": ".$response);
+          #  }
+          #}
 
           # touch remote sent.to.swin file on apsr machines
-          $cmd = "touch ".$cfg{"SERVER_ARCHIVE_DIR"}."/".$obs."/".$beam."/sent.to.swin";
-          Dada::logMsg(2, $dl, "main: ".$apsr_user."@".$apsr_host." ".$cmd);
-          ($result, $rval, $response) = Dada::remoteSshCommand($apsr_user, $apsr_host, $cmd);
+          $cmd = "touch ".BPSR_PATH."/results/".$obs."/".$beam."/sent.to.swin";
+          Dada::logMsg(2, $dl, "main: ".BPSR_USER."@".BPSR_HOST." ".$cmd);
+          ($result, $rval, $response) = Dada::remoteSshCommand(BPSR_USER, BPSR_HOST, $cmd);
           Dada::logMsg(3, $dl, "main: ".$result." ".$rval." ".$response);
           if ($result ne "ok")
           {
-            Dada::logMsgWarn($warn, "main: ssh failed to ".$apsr_host.": ".$response);
+            Dada::logMsgWarn($warn, "main: ssh failed to ".BPSR_HOST.": ".$response);
           }
           if ($rval != 0)
           {
-            Dada::logMsgWarn($warn, "main: could not touch ".$obs."/".$beam."/sent.to.swin on ".$apsr_host.": ".$response);
+            $response =~ s/`//;
+            $response =~ s/'//;
+            Dada::logMsgWarn($warn, "main: could not touch ".$obs."/".$beam."/sent.to.swin on ".BPSR_HOST.": ".$response);
           }
         }
 
         # check if this observations directory is now empty
-        $cmd = "find ".$src_path."/".$pid."/".$obs." -mindepth 1 -maxdepth 1 -type d | wc -l";
+        $cmd = "find ".$src_path."/".$pid."/".$obs." -mindepth 1 -maxdepth 1 -type l | wc -l";
         Dada::logMsg(2, $dl, "main: ".$cmd);
         ($result, $response) = Dada::mySystem($cmd);
         Dada::logMsg(3, $dl, "main: ".$result." ".$response);
@@ -304,7 +314,7 @@ sub getBeamToSend($)
   my $i = 0;
   my $found_obs = 0;
 
-  $cmd = "find ".$dir." -mindepth 3 -maxdepth 3 -type d | sort";
+  $cmd = "find ".$dir." -mindepth 3 -maxdepth 3 -type l | sort";
   Dada::logMsg(3, $dl, "getBeamToSend: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(3, $dl, "getBeamToSend: ".$result." ".$response);
@@ -350,26 +360,26 @@ sub transferBeam($$$$$$$)
   my $result = "";
   my $response = "";
   my $rval = 0;
-  my $rsync_options = "-a --stats --no-g --chmod=go-ws --exclude 'beam.finished' --exclude 'beam.transferred'".
+  my $rsync_options = "-a --stats --no-g --no-l -L --chmod=go-ws --exclude 'beam.finished' --exclude 'beam.transferred'".
                       " --exclude 'sent.to.swin' --exclude 'sent.to.parkes' --exclude 'on.tape.swin'".
-                      " --exclude 'on.tape.parkes' --bwlimit=".BANDWIDTH.
+                      " --exclude 'on.tape.parkes' --exclude 'xfer.complete' --bwlimit=".BANDWIDTH.
                       " --password-file=/home/bpsr/.ssh/shrek_rsync_pw";
 
   # create the WRITING file
-  $cmd = "touch ".$path."/../WRITING";
-  Dada::logMsg(2, $dl, "transferBeam: ".$cmd);
-  ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
-  Dada::logMsg(3, $dl, "transferBeam: ".$result." ".$response);
-  if ($result ne "ok") 
-  {
-    Dada::logMsgWarn($warn, "transferBeam: ssh for ".$user."@".$host." failed: ".$response);
-    return ("fail", "ssh failed: ".$response);
-  }
-  if ($rval != 0) 
-  {
-    Dada::logMsgWarn($warn, "transferBeam: failed to touch remote WRITING file");
-    return ("fail", "could not touch remote WRITING file");
-  }
+  #$cmd = "touch ".$path."/../WRITING";
+  #Dada::logMsg(2, $dl, "transferBeam: ".$cmd);
+  #($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
+  #Dada::logMsg(3, $dl, "transferBeam: ".$result." ".$response);
+  #if ($result ne "ok") 
+  #{
+  #  Dada::logMsgWarn($warn, "transferBeam: ssh for ".$user."@".$host." failed: ".$response);
+  #  return ("fail", "ssh failed: ".$response);
+  #}
+  #if ($rval != 0) 
+  #{
+  #  Dada::logMsgWarn($warn, "transferBeam: failed to touch remote WRITING file");
+  #  return ("fail", "could not touch remote WRITING file");
+  #}
 
   # create the archive/PID/OBS directory
   $cmd = "mkdir -m 0755 -p ".$path."/archive/".$pid."/".$obs;
@@ -470,20 +480,20 @@ sub transferBeam($$$$$$$)
   }
 
   # remove the WRITING file
-  $cmd = "rm -f ".$path."/../WRITING";
-  Dada::logMsg(2, $dl, "transferBeam: ".$cmd);
-  ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
-  Dada::logMsg(3, $dl, "transferBeam: ".$result." ".$response);
-  if ($result ne "ok")
-  {
-    Dada::logMsgWarn($warn, "transferBeam: ssh for ".$user."@".$host." failed: ".$response);
-    return ("fail", "ssh failed: ".$response);
-  }
-  if ($rval != 0)
-  {
-    Dada::logMsgWarn($warn, "transferBeam: failed to remove remote WRITING file");
-    return ("fail", "could not remove remote WRITING file");
-  }
+  #$cmd = "rm -f ".$path."/../WRITING";
+  #Dada::logMsg(2, $dl, "transferBeam: ".$cmd);
+  #($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
+  #Dada::logMsg(3, $dl, "transferBeam: ".$result." ".$response);
+  #if ($result ne "ok")
+  #{
+  #  Dada::logMsgWarn($warn, "transferBeam: ssh for ".$user."@".$host." failed: ".$response);
+  #  return ("fail", "ssh failed: ".$response);
+  #}
+  #if ($rval != 0)
+  #{
+  #  Dada::logMsgWarn($warn, "transferBeam: failed to remove remote WRITING file");
+  #  return ("fail", "could not remove remote WRITING file");
+  #}
 
   return ($xfer_result, $xfer_response);
 }
@@ -516,7 +526,7 @@ sub getDest($$$$)
   my $junk = "";
 
   # check how big the beam is [MB]
-  $cmd = "du -s -B 1048576 ".$src_path."/".$pid."/".$obs."/".$beam." | awk '{print \$1}'";
+  $cmd = "du -sL -B 1048576 ".$src_path."/".$pid."/".$obs."/".$beam." | awk '{print \$1}'";
   Dada::logMsg(3, $dl, "getDest: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(3, $dl, "getDest: ".$result." ".$response);
@@ -560,26 +570,28 @@ sub getDest($$$$)
       next;
     }
 
-    # check if this is being used for [READ|WRIT]ING
-    $cmd = "ls ".$path."/../????ING";
-    Dada::logMsg(3, $dl, "getDest: ".$user."@".$host.":".$cmd);
-    ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
-    Dada::logMsg(3, $dl, "getDest: ".$result." ".$rval." ".$response);
-    if ($result ne "ok") {
-      Dada::logMsgWarn($warn, "getDest: ssh to ".$user."@".$host." failed: ".$response);
-      next;
-    }
+    return ("ok", $user, $host, $path);
 
-    if (($response =~ m/No such file or directory/) || ($response =~ m/ls: No match/))
-    {
-      Dada::logMsg(3, $dl, "getDest: no control files in ".$path."/../");
-      Dada::logMsg(2, $dl, "getDest: found ".$user."@".$host.":".$path);
-      return ("ok", $user, $host, $path);
-    }
-    else
-    {
-      Dada::logMsg(2, $dl, "getDest: control file existed in ".$path."/../, skipping");
-    }
+    # check if this is being used for [READ|WRIT]ING
+    # $cmd = "ls ".$path."/../????ING";
+    # Dada::logMsg(3, $dl, "getDest: ".$user."@".$host.":".$cmd);
+    # ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
+    # Dada::logMsg(3, $dl, "getDest: ".$result." ".$rval." ".$response);
+    # if ($result ne "ok") {
+    #   Dada::logMsgWarn($warn, "getDest: ssh to ".$user."@".$host." failed: ".$response);
+    #   next;
+    # }
+
+    # if (($response =~ m/No such file or directory/) || ($response =~ m/ls: No match/))
+    # {
+    #  Dada::logMsg(3, $dl, "getDest: no control files in ".$path."/../");
+    #  Dada::logMsg(2, $dl, "getDest: found ".$user."@".$host.":".$path);
+    #  return ("ok", $user, $host, $path);
+    #}
+    #else
+    #{
+    #  Dada::logMsg(2, $dl, "getDest: control file existed in ".$path."/../, skipping");
+    #}
   }
   return ("fail", $user, $host, $path);
 }
@@ -598,20 +610,16 @@ sub moveBeam($$$$$)
   my $response = "";
 
   # check that the required PID / SOURCE dir exists in the destination
-  if ( ! -d ($to."/".$pid."/".$obs) ) 
+  Dada::logMsg(2, $dl, "moveBeam: createDir(".$to."/".$pid."/".$obs.", 0755)");
+  ($result, $response) = Dada::createDir($to."/".$pid."/".$obs, 0755);
+  Dada::logMsg(3, $dl, "moveBeam: ".$result." ".$response);
+  if ($result ne "ok")
   {
-    $cmd = "mkdir -m 0755 -p ".$to."/".$pid."/".$obs;
-    Dada::logMsg(2, $dl, "moveBeam: ".$cmd);
-    ($result, $response) = Dada::mySystem($cmd);
-    Dada::logMsg(3, $dl, "moveBeam: ".$result." ".$response);
-    if ($result ne "ok")
-    {
-      Dada::logMsgWarn($warn, "moveBeam: failed to create dir ".$to."/".$pid."/".$obs.": ".$response);
-      return ("fail", "could not create dest dir");
-    } 
+    Dada::logMsgWarn($warn, "moveBeam: failed to create dir ".$to."/".$pid."/".$obs.": ".$response);
+    return ("fail", "could not create dest dir");
   }
 
-  # move the observation to to
+  # move soft link for the beam from from to to
   $cmd = "mv ".$from."/".$pid."/".$obs."/".$beam." ".$to."/".$pid."/".$obs."/";
   Dada::logMsg(2, $dl, "moveBeam: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);

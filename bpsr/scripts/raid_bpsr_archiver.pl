@@ -2,7 +2,8 @@
 
 ###############################################################################
 #
-# Handles observations that have been archived onto parkes tapes. Deletes P630
+# Handles observations that have been moved to either sent/swin and/or 
+# parkes/on_tape. Once a beams pointings have been moved to th
 # survey pointings [source= ^G*]  and archives all other pointings
 #
 
@@ -18,15 +19,22 @@ use Dada;
 #
 # Constants
 #
-use constant DATA_DIR       => "/lfs/raid0/bpsr";
-use constant META_DIR       => "/lfs/data0/bpsr";
-use constant REQUIRED_HOST  => "raid0";
-use constant REQUIRED_USER  => "bpsr";
+use constant DATA_DIR         => "/lfs/raid0/bpsr";
+use constant META_DIR         => "/lfs/data0/bpsr";
+use constant REQUIRED_HOST    => "raid0";
+use constant REQUIRED_USER    => "bpsr";
 
+use constant BPSR_USER        => "dada";
+use constant BPSR_HOST        => "hipsr-srv0.atnf.csiro.au";
+use constant BPSR_PATH        => "/data/bpsr";
+
+use constant SWIN_PROJECTS    => "P456 P630 P786 P813 P848 P789 P855";
+use constant PRKS_PROJECTS    => "P630 P682 P743";
 
 #
 # Function prototypes
 #
+sub checkDirEmpty($);
 sub controlThread($$);
 sub good($);
 
@@ -51,32 +59,40 @@ $| = 1;
 
 # Main
 {
-  my $log_file   = META_DIR."/logs/".$daemon_name.".log";
-  my $pid_file   = META_DIR."/control/".$daemon_name.".pid";
-  my $quit_file  = META_DIR."/control/".$daemon_name.".quit";
+  my $log_file      = META_DIR."/logs/".$daemon_name.".log";
+  my $pid_file      = META_DIR."/control/".$daemon_name.".pid";
+  my $quit_file     = META_DIR."/control/".$daemon_name.".quit";
 
-  my $src_path   = DATA_DIR."/parkes/on_tape";
-  my $dst_path   = DATA_DIR."/archived";
+  my $prks_src_path = DATA_DIR."/parkes/on_tape";
+  my $swin_src_path = DATA_DIR."/swin/sent";
+  my $dst_path      = DATA_DIR."/archived";
+  my $perm_path     = DATA_DIR."/perm";
 
-  $warn          = META_DIR."/logs/".$daemon_name.".warn";
-  $error         = META_DIR."/logs/".$daemon_name.".error";
+  $warn             = META_DIR."/logs/".$daemon_name.".warn";
+  $error            = META_DIR."/logs/".$daemon_name.".error";
 
   my $control_thread = 0;
 
   my $line = "";
   my $obs = "";
   my $pid = "";
-  my $source = "";
   my $beam = "";
+
+  my $src_path = "";
+  my $area = "";
 
   my $cmd = "";
   my $result = "";
   my $response = "";
+  my $rval = 0;
   my @finished = ();
+  my %combined = ();
+  my %to_check = ();
+  my @to_check_keys = ();
   my @bits = ();
-  my %sources = ();
 
   my $i = 0;
+  my $j = 0;
   my $obs_start_file = "";
   my $n_beam = 0;
   my $n_transferred = 0;
@@ -84,6 +100,10 @@ $| = 1;
   my $curr_time = 0;
   my $path = "";
   my $mtime = 0;
+
+  my $archive = 0;
+  my $other_path = "";
+  my $other_area = "";
 
   # quick sanity check
   ($result, $response) = good($quit_file);
@@ -112,9 +132,11 @@ $| = 1;
   while ( !$quit_daemon ) 
   {
     @finished = ();
+    %to_check = ();
+    @to_check_keys = ();
 
     # look for all obs/beams in the src_path
-    $cmd = "find ".$src_path." -mindepth 3 -maxdepth 3 -type d -printf '\%h/\%f\n' | sort";
+    $cmd = "find ".$swin_src_path." ".$prks_src_path." -mindepth 3 -maxdepth 3 -type l -printf '\%h/\%f\n' | sort";
     Dada::logMsg(2, $dl, "main: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     Dada::logMsg(3, $dl, "main: ".$result." ".$response);
@@ -125,104 +147,189 @@ $| = 1;
     else
     {
       @finished = split(/\n/, $response);
+      %combined = ();
+
       Dada::logMsg(2, $dl, "main: found ".($#finished+1)." on_tape observations");
 
       for ($i=0; (!$quit_daemon && $i<=$#finished); $i++)
-      {  
+      {
         $line = $finished[$i]; 
         @bits = split(/\//, $line);
-        if ($#bits < 3)
+        if ($#bits < 5)
         {
           Dada::logMsgWarn($warn, "main: not enough components in path");
           next;
         }
-
-        $pid  = $bits[$#bits-2];
-        $obs  = $bits[$#bits-1];
-        $beam = $bits[$#bits];
-
-        Dada::logMsg(2, $dl, "main: processing ".$pid."/".$obs."/".$beam);
-
-        if (exists($sources{$obs})) 
+     
+        $src_path = ""; 
+        for ($j=1; $j<($#bits-4); $j++)
         {
-          $source = $sources{$obs};
+          $src_path .= "/".$bits[$j];
         }
-        else
+        $area     = $bits[$#bits-4]."/".$bits[$#bits-3];
+        $pid      = $bits[$#bits-2];
+        $obs      = $bits[$#bits-1];
+        $beam     = $bits[$#bits];
+
+        # for multi area projects, setup the "other" area
+        $other_path = $swin_src_path;
+        $other_area = "swin/sent";
+        if ($area eq "swin/sent") 
         {
+          $other_path = $prks_src_path;
+          $other_area = "parkes/on_tape";
+        }
 
-          # try to find and obs.start file
-          $cmd = "find ".$src_path."/".$pid."/".$obs." -mindepth 2 -maxdepth 2 -type f -name 'obs.start' | head -n 1";
-          Dada::logMsg(3, $dl, "main: ".$cmd);
-          ($result, $response) = Dada::mySystem($cmd);
-          Dada::logMsg(3, $dl, "main: ".$result." ".$response);
-          if (($result ne "ok") || ($response eq ""))
-          {
-            Dada::logMsg(2, $dl, "main: could not find and obs.start file");
-            next;
-          }
-          $obs_start_file = $response;
+        # count this obs
+        if (!exists($combined{$obs."/".$beam}))
+        {
+          $combined{$obs."/".$beam} = 0;
+        }
+        $combined{$obs."/".$beam} += 1;
 
-          # determine the source
-          $cmd = "grep SOURCE ".$obs_start_file." | awk '{print \$2}'";
-          Dada::logMsg(3, $dl, "main: ".$cmd);
-          ($result, $response) = Dada::mySystem($cmd);
-          Dada::logMsg(3, $dl, "main: ".$result." ".$response);
-          if (($result ne "ok") || ($response eq ""))
-          {
-            Dada::logMsgWarn($warn, "could not extact SOURCE from ".$obs_start_file);
-            next;
-          }
-          $source = $response;
-          $sources{$obs} = $source;
+        Dada::logMsg(3, $dl, "main: processing ".$pid."/".$obs."/".$beam." area=".$area." count=".$combined{$obs."/".$beam});
+
+        $archive = 1;
+
+        # check if both sources are required and available
+        if ((SWIN_PROJECTS =~ m/$pid/) && (PRKS_PROJECTS =~ m/$pid/) && ($combined{$obs."/".$beam} < 2))
+        {
+          $archive = 0;
         }
   
-        if (! -d  $dst_path."/".$pid )
+        # if we meet the criteria to archive
+        if ($archive)
         {
-          $cmd = "mkdir -m 0755 ".$dst_path."/".$pid;
-          Dada::logMsg(3, $dl, "main: ".$cmd);
+          Dada::logMsg(2, $dl, "main: archive ".$pid."/".$obs." src_path=".$src_path." area=".$area);
+
+          if (!exists($to_check{$pid."/".$obs}))
+          {
+            $to_check{$pid."/".$obs} = 0;
+          }
+          $to_check{$pid."/".$obs} += 1;
+
+          # ensure dst pid/obs dir exists
+          Dada::logMsg(2, $dl, "main: createDir(".$dst_path."/".$pid."/".$obs.", 0755)");
+          ($result, $response) = Dada::createDir($dst_path."/".$pid."/".$obs, 0755);
+          Dada::logMsg(3, $dl, "main: ".$result." ".$response);
+          if ($result ne "ok")
+          {
+            Dada::logMsgWarn($warn, "could not create dir [".$dst_path."/".$pid."/".$obs."]");
+            next;
+          }
+
+          # remove any existing flags 
+          $cmd = "rm -f ".$src_path."/".$pid."/".$obs."/".$beam."/xfer.complete ".
+                          $src_path."/".$pid."/".$obs."/".$beam."/on.tape.parkes";
+          Dada::logMsg(2, $dl, "main: ".$cmd);
+          ($result, $response) = Dada::mySystem($cmd);
+          Dada::logMsg(3, $dl, "main: ".$result." ".$response);
+
+          $cmd = "mv ".$src_path."/".$area."/".$pid."/".$obs."/".$beam." ".$dst_path."/".$pid."/".$obs."/";
+          Dada::logMsg(2, $dl, "main: ".$cmd);
           ($result, $response) = Dada::mySystem($cmd);
           Dada::logMsg(3, $dl, "main: ".$result." ".$response);
           if ($result ne "ok")
           {
-            Dada::logMsgWarn($warn, "could not create dst/pid dir [".$dst_path."/".$pid."]");
-            next;
+            Dada::logMsgWarn($warn, "failed to move beam ".$beam." to ".$dst_path."/".$pid."/".$obs."/");
           }
-        }
-
-        if (! -d  $dst_path."/".$pid."/".$obs ) 
-        {
-          $cmd = "mkdir -m 0755 ".$dst_path."/".$pid."/".$obs;
-          Dada::logMsg(3, $dl, "main: ".$cmd);
-          ($result, $response) = Dada::mySystem($cmd);
-          Dada::logMsg(3, $dl, "main: ".$result." ".$response);
-          if ($result ne "ok")
+          else
           {
-            Dada::logMsgWarn($warn, "could not create dst/pid/obs dir [".$dst_path."/".$pid."/".$obs."]");
-            next;
+            if ($combined{$obs."/".$beam} == 2)
+            {
+              Dada::logMsg(1, $dl, $pid."/".$obs."/".$beam." ".$area." + ".$other_area." -> archived");
+            }
+            else
+            {
+              Dada::logMsg(1, $dl, $pid."/".$obs."/".$beam." ".$area." -> archived");
+            }
           }
-        }
 
-        # remove any existing flags 
-        $cmd = "rm -f ".$src_path."/".$pid."/".$obs."/".$beam."/xfer.complete ".
-                        $src_path."/".$pid."/".$obs."/".$beam."/on.tape.parkes";
-        Dada::logMsg(2, $dl, "main: ".$cmd);
-        ($result, $response) = Dada::mySystem($cmd);
-        Dada::logMsg(3, $dl, "main: ".$result." ".$response);
-
-        $cmd = "mv ".$src_path."/".$pid."/".$obs."/".$beam." ".$dst_path."/".$pid."/".$obs."/";
-        Dada::logMsg(2, $dl, "main: ".$cmd);
-        ($result, $response) = Dada::mySystem($cmd);
-        Dada::logMsg(3, $dl, "main: ".$result." ".$response);
-        if ($result ne "ok")
-        {
-          Dada::logMsgWarn($warn, "failed to move beam ".$beam." to ".$dst_path."/".$pid."/".$obs."/");
+          # handle the other area if it exists
+          if ($combined{$obs."/".$beam} == 2)
+          {
+            # delete the soft links and parent dir
+            $cmd = "rm -f ".$other_path."/".$pid."/".$obs."/".$beam;
+            Dada::logMsg(2, $dl, "main: ".$cmd);
+            ($result, $response) = Dada::mySystem($cmd);
+            Dada::logMsg(3, $dl, "main: ".$result." ".$response);
+            if ($result ne "ok")
+            {
+              Dada::logMsg(0, $dl, "main: ".$cmd." failed: ".$response);
+            }
+          }
+          sleep(1); 
         }
         else
         {
-          Dada::logMsg(1, $dl, $pid."/".$obs."/".$beam." parkes/on_tape -> archived");
+          Dada::logMsg(3, $dl, "main: skipping archival of ".$pid."/".$obs."/".$beam);
+        }
+      }
+    }
+
+    # now check if dirs are empty
+    @to_check_keys = sort keys %to_check;
+    for ($i=0; $i<=$#to_check_keys; $i++)
+    {
+      ($pid, $obs) = split(/\//, $to_check_keys[$i]);
+    
+      # check if all the expected beams have now been archived
+      my $perm_beams = "";
+      my $dst_beams = "";
+
+      $cmd = "find ".$perm_path."/".$pid."/".$obs." -maxdepth 1 -type d -name '??' | wc -l";
+      Dada::logMsg(2, $dl, "main: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      Dada::logMsg(3, $dl, "main: ".$result." ".$response);
+      if ($result eq "ok")
+      {
+        $perm_beams = $response;
+      }
+
+      $cmd = "find ".$dst_path."/".$pid."/".$obs." -maxdepth 1 -type l -name '??' | wc -l";
+      Dada::logMsg(2, $dl, "main: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      Dada::logMsg(3, $dl, "main: ".$result." ".$response);
+      if ($result eq "ok")
+      {
+        $dst_beams = $response;
+      }
+
+      # if we have some beams and the number of archived beams eq total beams, touch obs.archived on hipsr server
+      if (($perm_beams ne "") && ($perm_beams eq $dst_beams))
+      {
+        # touch the relevant file in the SERVER_RESULTS_DIR
+        $cmd = "touch ".BPSR_PATH."/results/".$obs."/obs.archived";
+        Dada::logMsg(2, $dl, "main: ".BPSR_USER."@".BPSR_HOST.":".$cmd);
+        ($result, $rval, $response) = Dada::remoteSshCommand(BPSR_USER, BPSR_HOST, $cmd);
+        if (($result ne "ok") || ($rval != 0))
+        {
+          Dada::logMsg(0, $dl, "main: ".$cmd." failed : ".$response);
         }
 
-        sleep(1); 
+        if (SWIN_PROJECTS =~ m/$pid/)
+        {
+          Dada::logMsg(2, $dl, "main: checkDirEmpty(".$swin_src_path."/".$pid."/".$obs.")");
+          ($result, $response) = checkDirEmpty($swin_src_path."/".$pid."/".$obs);
+          Dada::logMsg(3, $dl, "main: checkDirEmpty() ".$result." ".$response);
+          if ($result ne "ok")
+          {
+            Dada::logMsg(0, $dl, "main: checkDirEmpty failed: ".$response);
+            next;
+          }
+        }
+
+        if (PRKS_PROJECTS =~ m/$pid/)
+        {
+          Dada::logMsg(2, $dl, "main: checkDirEmpty(".$prks_src_path."/".$pid."/".$obs.")");
+          ($result, $response) = checkDirEmpty($prks_src_path."/".$pid."/".$obs);
+          Dada::logMsg(3, $dl, "main: checkDirEmpty() ".$result." ".$response);
+          if ($result ne "ok")
+          {
+            Dada::logMsg(0, $dl, "main: checkDirEmpty failed: ".$response);
+            next;
+          }
+        }
       }
     }
 
@@ -234,57 +341,6 @@ $| = 1;
       $counter--;
     }
 
-    # get a list of all directories in src_path
-    $cmd = "find ".$src_path." -mindepth 2 -maxdepth 2 -type d -printf '\%h/\%f \%T@\n'";
-    Dada::logMsg(2, $dl, "main: ".$cmd);
-    ($result, $response) = Dada::mySystem($cmd);
-    Dada::logMsg(3, $dl, "main: ".$result." ".$response);
-    if ($result eq "ok")
-    {
-      @finished = split(/\n/, $response);
-      $curr_time = time;
-      for ($i=0; (!$quit_daemon && $i<=$#finished); $i++)
-      {
-        $line = $finished[$i];
-
-        # extract path and time
-        @bits = split(/ /, $line, 2);
-        if ($#bits != 1) 
-        {
-          Dada::logMsgWarn($warn, "main: not enough components in path");
-          next;
-        }
-        $path  = $bits[0];
-        $mtime = int($bits[1]);
-
-        # if the last modification time for this directory > 1 hr
-        if ($curr_time > ($mtime + (60)))
-        {
-          @bits = split(/\//, $path);
-          if ($#bits < 3)
-          {
-            Dada::logMsgWarn($warn, "main: not enough components in path");
-            next;
-          }
-
-          $pid  = $bits[$#bits-1];
-          $obs  = $bits[$#bits];
-
-          # check if the src_path/pid/obs directory is empty
-          $cmd = "find ".$src_path."/".$pid."/".$obs." -mindepth 1 -maxdepth 1 -type d -name '??' | wc -l";
-          Dada::logMsg(2, $dl, "main: ".$cmd);
-          ($result, $response) = Dada::mySystem($cmd);
-          Dada::logMsg(3, $dl, "main: ".$result." ".$response);
-          if (($result eq "ok") && ($response eq "0"))
-          {
-            $cmd = "rmdir ".$src_path."/".$pid."/".$obs;
-            Dada::logMsg(2, $dl, "main: ".$cmd);
-            ($result, $response) = Dada::mySystem($cmd);
-            Dada::logMsg(3, $dl, "main: ".$result." ".$response);
-          }
-        }
-      }
-    }
   }
 
   Dada::logMsg(2, $dl, "main: joining threads");
@@ -300,6 +356,54 @@ exit 0;
 #
 # Functions
 #
+
+#
+# check if the directory is empty
+#
+sub checkDirEmpty($)
+{
+  (my $dir) = @_;
+
+  my $cmd = "";
+  my $result = "";
+  my $response = "";
+
+  if (! -d $dir)
+  {
+    Dada::logMsg(0, $dl, "checkDirEmpty: ".$dir." dir did not exist");
+    return ("fail", "dir did not exist")
+  }
+
+  # ensure there is nothing in this dir and that 
+  $cmd = "find -L ".$dir." -mindepth 1 | wc -l";
+  Dada::logMsg(2, $dl, "checkDirEmpty: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, $dl, "checkDirEmpty: ".$result." ".$response);
+  if ($result ne "ok")
+  {
+    Dada::logMsg(0, $dl, "checkDirEmpty: ".$cmd." failed: ".$response);
+    return ("fail", "find command faild");
+  }
+
+  if ($response eq "0")
+  {
+    $cmd = "rmdir ".$dir;
+    Dada::logMsg(2, $dl, "checkDirEmpty: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, $dl, "checkDirEmpty: ".$result." ".$response);
+    if ($result ne "ok")
+    {
+      Dada::logMsg(0, $dl, "checkDirEmpty: ".$cmd." failed: ".$response);
+      return ("fail", "could not delete ".$dir);
+    }
+  }
+  else
+  {
+    Dada::logMsg(0, $dl, "checkDirEmpty: skipping ".$dir." as not empty");
+  }
+  return ("ok", "");
+}
+
 
 #
 # control thread to ask daemon to quit

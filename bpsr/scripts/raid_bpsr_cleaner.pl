@@ -22,6 +22,10 @@ use constant META_DIR         => "/lfs/data0/bpsr";
 use constant REQUIRED_HOST    => "raid0";
 use constant REQUIRED_USER    => "bpsr";
 
+use constant BPSR_USER        => "dada";
+use constant BPSR_HOST        => "hipsr-srv0.atnf.csiro.au";
+use constant BPSR_PATH        => "/data/bpsr";
+
 
 #
 # Function prototypes
@@ -55,6 +59,7 @@ $| = 1;
   my $quit_file  = META_DIR."/control/".$daemon_name.".quit";
 
   my $src_path   = DATA_DIR."/archived";
+  my $perm_path  = DATA_DIR."/perm";
 
   $warn          = META_DIR."/logs/".$daemon_name.".warn";
   $error         = META_DIR."/logs/".$daemon_name.".error";
@@ -69,6 +74,7 @@ $| = 1;
   my $cmd = "";
   my $result = "";
   my $response = "";
+  my $rval = 0;
   my @finished = ();
   my @bits = ();
   my $source = "";
@@ -109,7 +115,7 @@ $| = 1;
     @finished = ();
 
     # look for all obs/beams in the src_path
-    $cmd = "find ".$src_path." -mindepth 3 -maxdepth 3 -type d -printf '\%h/\%f \%T@\n' | sort";
+    $cmd = "find ".$src_path." -mindepth 3 -maxdepth 3 -type l -printf '\%h/\%f \%T@\n' | sort";
     Dada::logMsg(2, $dl, "main: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     Dada::logMsg(3, $dl, "main: ".$result." ".$response);
@@ -154,7 +160,7 @@ $| = 1;
         else
         {
           # try to find and obs.start file
-          $cmd = "find ".$src_path."/".$pid."/".$obs." -mindepth 2 -maxdepth 2 -type f -name 'obs.start' | head -n 1";
+          $cmd = "find -L ".$src_path."/".$pid."/".$obs." -mindepth 2 -maxdepth 2 -type f -name 'obs.start' | head -n 1";
           Dada::logMsg(3, $dl, "main: ".$cmd);
           ($result, $response) = Dada::mySystem($cmd);
           Dada::logMsg(3, $dl, "main: ".$result." ".$response);
@@ -192,31 +198,67 @@ $| = 1;
         }
 
         # If P630 + > 7 days old, delete
-        if( ($pid eq "P630") && ($curr_time > ($mtime + (7*24*60*60))))
+        if (($pid eq "P630") && ($curr_time > ($mtime + (7*24*60*60))))
         {
           $delete_obs = 1;
         }
 
-        # If special control file exists, delete!
-        if (-f  $src_path."/".$pid."/".$obs."/".$beam."/raid.delete") 
+        # If P786 && >31 days old, delete
+        if (($pid eq "P786") && ($curr_time > ($mtime + (31*24*60*60))))
+        { 
+          $delete_obs = 1;
+        }
+
+        if ((($pid eq "P789") || ($pid eq "P456")) && ($curr_time > ($mtime + (5*60))))
+        {
+          $delete_obs = 1;
+        }
+
+        if (($pid eq "P855") && ($curr_time > ($mtime + (7*24*60*60))))
+        {
+          $delete_obs = 1;
+        }
+
+        # If special control file exists, delete
+        if ( -f $src_path."/".$pid."/".$obs."/".$beam."/raid.delete") 
         {
           $delete_obs = 1;
         }
 
         Dada::logMsg(2, $dl, "main: processing ".$pid."/".$obs."/".$beam." delete_obs=".$delete_obs);
 
-        # if this is a P630 observation and more than 1 week old, delete it
+        # if we are to delete this obs
         if ($delete_obs)
         {
           Dada::logMsg(1, $dl, $pid."/".$obs."/".$beam." deleted [".$source."]");
 
-          $cmd = "rm -rf ".$src_path."/".$pid."/".$obs."/".$beam;
+          # delete the persistent beam directory
+          $cmd = "rm -rf ".$perm_path."/".$pid."/".$obs."/".$beam;
           Dada::logMsg(2, $dl, "main: ".$cmd);
           ($result, $response) = Dada::mySystem($cmd);
           Dada::logMsg(3, $dl, "main: ".$result." ".$response);
 
+          # delete the soft link to the beam directory
+          $cmd = "rm -f ".$src_path."/".$pid."/".$obs."/".$beam;
+          Dada::logMsg(2, $dl, "main: ".$cmd);
+          ($result, $response) = Dada::mySystem($cmd);
+          Dada::logMsg(3, $dl, "main: ".$result." ".$response);
+
+          # check if the perm_path/pid/obs directory is empty
+          $cmd = "find ".$perm_path."/".$pid."/".$obs." -mindepth 1 -maxdepth 1 -type d -name '??' | wc -l";
+          Dada::logMsg(2, $dl, "main: ".$cmd);
+          ($result, $response) = Dada::mySystem($cmd);
+          Dada::logMsg(3, $dl, "main: ".$result." ".$response);
+          if (($result eq "ok") && ($response eq "0"))
+          {
+            $cmd = "rmdir ".$perm_path."/".$pid."/".$obs;
+            Dada::logMsg(2, $dl, "main: ".$cmd);
+            ($result, $response) = Dada::mySystem($cmd);
+            Dada::logMsg(3, $dl, "main: ".$result." ".$response);
+          }
+
           # check if the src_path/pid/obs directory is empty
-          $cmd = "find ".$src_path."/".$pid."/".$obs." -mindepth 1 -maxdepth 1 -type d -name '??' | wc -l";
+          $cmd = "find ".$src_path."/".$pid."/".$obs." -mindepth 1 -maxdepth 1 -type l -name '??' | wc -l";
           Dada::logMsg(2, $dl, "main: ".$cmd);
           ($result, $response) = Dada::mySystem($cmd);
           Dada::logMsg(3, $dl, "main: ".$result." ".$response);
@@ -227,8 +269,21 @@ $| = 1;
             ($result, $response) = Dada::mySystem($cmd);
             Dada::logMsg(3, $dl, "main: ".$result." ".$response);
           }
+
+          # touch an obs.deleted file on the hipsr server
+          $cmd = "touch ".BPSR_PATH."/results/".$obs."/obs.deleted";
+          Dada::logMsg(2, $dl, "main: ".$cmd);
+          ($result, $rval, $response) = Dada::remoteSshCommand(BPSR_USER, BPSR_HOST, $cmd);
+          Dada::logMsg(3, $dl, "main: ".$result." ".$response);
+          if ($result ne "ok")
+          {
+            Dada::logMsg(0, $dl, "ssh failure to ".BPSR_USER."@".BPSR_HOST.": ".$response);
+          }
+          if ($rval != 0)
+          {
+            Dada::logMsg(0, $dl, "could not touch ".BPSR_PATH."/results/".$obs."/obs.deleted");
+          }
         }
-        #sleep(1); 
       }
     }
 

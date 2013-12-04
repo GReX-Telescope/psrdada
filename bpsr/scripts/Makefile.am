@@ -4,7 +4,9 @@ dist_bin_SCRIPTS = Bpsr.pm \
                    Bpsr.py \
                    bpsr_reconfigure.pl \
                    bpsr_hard_reset.pl \
+                   eq2gal.py \
                    median_smooth.py \
+                   merge_tcs_logs.csh \
                    server_bpsr_bookkeeping_archiver.pl \
                    server_bpsr_tcs_interface.pl \
                    server_bpsr_results_manager.pl \
@@ -34,6 +36,7 @@ dist_bin_SCRIPTS = Bpsr.pm \
                    raid_bpsr_archiver.pl \
                    raid_bpsr_beams_finished.pl \
                    raid_bpsr_cleaner.pl \
+                   raid_bpsr_reporter.pl \
                    raid_bpsr_swin_transferrer.pl \
                    web_observations_helper.pl \
                    web_results_helper.pl \
