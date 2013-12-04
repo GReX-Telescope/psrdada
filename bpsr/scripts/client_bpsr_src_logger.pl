@@ -74,7 +74,7 @@ if (!$log_socket) {
 }
 
 
-logMessage(0, "INFO", "STARTING src logging", $logfile);
+logMessage(2, "INFO", "STARTING src logging", $logfile);
 
 while (defined($line = <STDIN>)) {
 
@@ -83,7 +83,7 @@ while (defined($line = <STDIN>)) {
 
 }
 
-logMessage(0, "INFO", "ENDING src logging", $logfile);
+logMessage(2, "INFO", "ENDING src logging", $logfile);
 
 exit 0;
 
