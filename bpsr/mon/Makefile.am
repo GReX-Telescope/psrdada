@@ -11,7 +11,7 @@ libplot4mon_la_SOURCES = plot4mon.h get_commandline.c check_file_exists.c displa
         set_dimensions.c do_mmm.c
 
 bin_PROGRAMS = plot4mon
-AM_CPPFLAGS = @PGPLOT_CFLAGS@
+AM_CPPFLAGS = @PGPLOT_CFLAGS@ -DPLOT4MON_QUIET
 LDADD = libplot4mon.la @PGPLOT_LIBS@
 
 endif

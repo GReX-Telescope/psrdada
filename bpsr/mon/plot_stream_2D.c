@@ -48,10 +48,12 @@ int plot_stream_2D(float plotarray[], int nbin_x, int nsub_y, float yscale,
   /*
    * Reporting number of values and extremes of the plot
    */
+#ifndef PLOT4MON_QUIET
   printf("\n About to plot %ld values using pgplot \n", nvalues);
   printf(" 2D margins : X going from 0 to %d \n",nbin_x); 
   printf("            : Y going from 0 to %d \n",nsub_y); 
   printf(" Extremes: VALUEmin = %f     VALUEmax = %f \n",min_value,max_value);
+#endif
   /*
    * Call cpgbeg to initiate PGPLOT and open the output device; 
    */
@@ -83,6 +85,8 @@ int plot_stream_2D(float plotarray[], int nbin_x, int nsub_y, float yscale,
    * Finally, call cpgend to terminate things properly.
    */
   cpgend();
+#ifndef PLOT4MON_QUIET
   printf(" Plotting completed \n");
+#endif
   return 0;
 }

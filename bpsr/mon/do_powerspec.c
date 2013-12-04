@@ -16,6 +16,10 @@
 
 #include "plot4mon.h"
 
+#ifdef PLOT4MON_QUIET
+static int plot4mon_polcount = 0;
+#endif
+
 void do_powerspec(float timeseries[], float powsp[], 
 		  long nvalues, long *totvalues4plot, float tsamp)
 {
@@ -73,7 +77,7 @@ void do_powerspec(float timeseries[], float powsp[],
     }
 
   /* calculate the one sided (hence the factor 2) power spectral density */
-
+#ifndef PLOT4MON_QUIET
   printf(" Created and whitened the power spectrum over ");
   printf("a 2^%d=%ld sample timeseries\n",exponent-1,nfft);
   printf(" from the %ld-th to the %ld-th spectral bin, corresponding to \n",
@@ -82,7 +86,8 @@ void do_powerspec(float timeseries[], float powsp[],
 	     MAX_PERIOD, 1/MIN_PERIOD);
   printf(" whereas the Nyquist frequencies is %.1f Hz \n",
 	     0.5/tsamp);
-
+#endif
+ 
    // AJ nuke 0 channel
    //powsp[0] = 0;
 

@@ -25,7 +25,9 @@ FILE *pn2file;
      printf(" Error opening %s for reading  \n",inpfile); 
      exit(-1); 
   }
+#ifndef PLOT4MON_QUIET
   printf(" Reading the data of the file %s... \n",inpfile);   
+#endif
 
 /* "i" runs on the location of the values in the array readstream */
   totnread=0;
@@ -42,6 +44,8 @@ FILE *pn2file;
   }
   fclose(pn2file);
   *totvaluesread=totnread/sizeof(float);  // tot number of read values
+#ifndef PLOT4MON_QUIET
   printf(" Read %ld %d-bytes long values from %s \n",
           *totvaluesread,sizeof(float),inpfile);  
+#endif
 }

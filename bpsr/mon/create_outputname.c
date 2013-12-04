@@ -53,6 +53,8 @@ void create_outputname( char inpfile[], char inpdev[], char outputfile[],
     outputfile[0] = '1' + plotnum;
     outputfile[1] = '\0';
     strcat(outputfile,inpdev);
+#ifndef PLOT4MON_QUIET
     printf(" The output file will be directed to %s screen \n",outputfile);
+#endif
   }
 }

@@ -66,8 +66,9 @@ void get_commandline(int argc, char *argv[], char *inpfile0, char *inpfile1,
     printf(" Exiting...\n");
     exit(-1);
   }
-
+#ifndef PLOT4MON_QUIET
   printf("\nData files: %s %s \n",inpfile0,inpfile1); 
+#endif
 
   /* now parse any remaining command line parameters */
   if (argc>nfiles) {
@@ -108,7 +109,9 @@ void get_commandline(int argc, char *argv[], char *inpfile0, char *inpfile1,
           } else {
             *zoomt_begin = zbegin; 
             *zoomt_end = zend;
+#ifndef PLOT4MON_QUIET
             fprintf (stderr, "Zoomed time interval: %f --> %f sec \n", *zoomt_begin, *zoomt_end);
+#endif
             if (zbegin>=zend){
                fprintf(stderr, "Final time smaller than inital time! \n");
 	       exit(-2);
@@ -123,7 +126,9 @@ void get_commandline(int argc, char *argv[], char *inpfile0, char *inpfile1,
           } else {
             *zoomf_begin = zbegin; 
             *zoomf_end = zend;
+#ifndef PLOT4MON_QUIET
             fprintf (stderr, "Zoomed freq interval: %f --> %f Hz \n", *zoomf_begin, *zoomf_end);
+#endif
             if (zbegin>=zend){
                fprintf(stderr, "Upper freq smaller than lower freq! \n");
 	       exit(-2);
@@ -140,7 +145,9 @@ void get_commandline(int argc, char *argv[], char *inpfile0, char *inpfile1,
         printf("dolog set to %d \n",*dolog);
       } else if (strings_compare(argv[i],"-mmm")) {
         *dommm = 1;
+#ifndef PLOT4MON_QUIET
         printf("dommm set to %d \n",*dommm);
+#endif
       } else if (strings_compare(argv[i],"-h")) {
         /* print the help on line */
 	display_help(argv[0]);

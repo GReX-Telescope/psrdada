@@ -22,7 +22,9 @@ void read_params(char inpfile[], int *nchan, float *tsamp, float *fch1,
                  float *chbw, int *ndim, float *yscale, 
 		 int *firstdump_line, int *work_flag, char add_work[])
 {
+#ifndef PLOT4MON_QUIET
   printf(" Reading the parameters of the file %s \n",inpfile);
+#endif
 
   //if (strings_compare(inpfile,"bpm0.dat")) 
   if ((strstr(inpfile,".bp")) != NULL)
@@ -73,6 +75,7 @@ void read_params(char inpfile[], int *nchan, float *tsamp, float *fch1,
     *work_flag=0;
     strcpy(add_work,"null");
   }
+#ifndef PLOT4MON_QUIET
   printf(" \n");
   printf(" Number of channels  = %d \n",*nchan);
   printf(" Frequency channel 1 = %f MHz \n",*fch1);
@@ -83,4 +86,5 @@ void read_params(char inpfile[], int *nchan, float *tsamp, float *fch1,
   printf(" First dump plotted [yes=1,no=0] = %d \n",*firstdump_line);
   printf(" Number of plots produced        = %d \n",*work_flag+1);
   printf(" \n");
+#endif
 }

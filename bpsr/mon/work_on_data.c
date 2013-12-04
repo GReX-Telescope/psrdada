@@ -9,6 +9,8 @@
 
 #include "plot4mon.h"
 
+static int printed_utc = 0;
+
 void work_on_data(char inpfile[], float *readstream, float *newstream, 
 		  long totvaluesread, long *totvalues4plot, float tsamp,
 		  float yscale, int plotnum, char add_work[], 
@@ -18,7 +20,9 @@ void work_on_data(char inpfile[], float *readstream, float *newstream,
 
   if (dolog == 1)
    {
+#ifndef PLOT4MON_QUIET
      printf(" \n taking log of bandpass \n");
+#endif
      for (jj=0; jj<=totvaluesread-1; jj++) { 
 	if ( readstream[jj] != 0.0 ) readstream[jj]=log(readstream[jj]); }
      *totvalues4plot=totvaluesread;
@@ -28,8 +32,10 @@ void work_on_data(char inpfile[], float *readstream, float *newstream,
   {
     if (dommm && (strstr(inpfile,"ts") != NULL))
     {
+#ifndef PLOT4MON_QUIET
       printf(" \n Doing the max min ...\n");
-      do_mmm (readstream,newstream, totvaluesread,totvalues4plot,tsamp);
+#endif
+	    do_mmm (readstream,newstream, totvaluesread,totvalues4plot,tsamp);
     }
     else
     {
@@ -42,13 +48,26 @@ void work_on_data(char inpfile[], float *readstream, float *newstream,
    {
       if (strings_compare(add_work,"fft"))
        {
+#ifndef PLOT4MON_QUIET
          printf(" \n Doing the power spectrum...\n");
+#else
+  if (!printed_utc)
+  {
+    char c = inpfile[20];
+    inpfile[19] = '\0';
+    fprintf(stderr, "%s\t", inpfile);
+    printed_utc = 1;
+    inpfile[19] = c;
+  }
+#endif
 	 do_powerspec(&readstream[0],&newstream[0],
 		      totvaluesread,totvalues4plot,tsamp);
 
 	 if (dolog == 1)
 	   {
+#ifndef PLOT4MON_QUIET
 	     printf(" \n taking log of fluctuation power spectrum \n");
+#endif
 	     for (jj=0; jj<*totvalues4plot; jj++) { 
 	       if ( newstream[jj] > 1.0 )
 		 {
@@ -58,8 +77,9 @@ void work_on_data(char inpfile[], float *readstream, float *newstream,
 		 newstream[jj]=0;
 	     }
 	   }
-
+#ifndef PLOT4MON_QUIET
 	 printf(" Obtained a power spectrum with %ld bins \n",*totvalues4plot);
+#endif
        } 
       else
        {

@@ -74,11 +74,13 @@ int plot_stream_1D(float x[], float y[], float y1[],
   /*
    * Reporting number of values and extremes of the plot
    */
+#ifndef PLOT4MON_QUIET
   printf("\n About to plot %ld values using pgplot \n", nvalues);
   printf(" Extremes: Xmin = %f     Xmax = %f \n",min_x,max_x);
   printf("           Ymin = %f     Ymax = %f \n",min_y,max_y);
   printf(" Margins : Xmargin = %f \n",marg_x); 
   printf(" Margins : Ymargin = %f \n",marg_y); 
+#endif
 
   int blank=0;
   if (min_y == 0.00 && max_y == 0.00) { blank = 1; }
