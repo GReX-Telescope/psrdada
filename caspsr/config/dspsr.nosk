@@ -1,0 +1,1 @@
+PROC_CMD dspsr -q --repeat --cuda=0,1 -F512:D --fft-bench -minram 512 -L 8 --Lmin 0 <DADA_INFO>

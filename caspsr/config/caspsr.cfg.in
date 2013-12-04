@@ -40,6 +40,7 @@ PWCC_PORT                 52020
 PWCC_LOGPORT              52021
 PWC_PORT                  52022
 PWC_LOGPORT               52023
+USE_BASEPORT              no
 
 SERVER_WEB_MONITOR_PORT   52024
 
@@ -80,19 +81,41 @@ CLIENT_DECIDB_PORT        52013
 ################################################################################
 # Data block definitions
 
-DATA_BLOCKS               DADA EADA FADA
-RECEIVING_DATA_BLOCK      DADA
-PROCESSING_DATA_BLOCK     EADA
-BASEBAND_DATA_BLOCK       FADA
+DATA_BLOCK_PREFIX         c
+DATA_BLOCK_IDS            0 1 2
 
-DADA_BLOCK_NBUFS          50
-DADA_BLOCK_BUFSZ          256000000
+RECEIVING_DATA_BLOCK      0
+PROCESSING_DATA_BLOCK     1
+BASEBAND_DATA_BLOCK       2
 
-EADA_BLOCK_NBUFS          10
-EADA_BLOCK_BUFSZ          256000000
+BLOCK_NBUFS_0             20
+BLOCK_BUFSZ_0             256000000
+BLOCK_NREAD_0             1
 
-FADA_BLOCK_NBUFS          10
-FADA_BLOCK_BUFSZ          256000000
+BLOCK_NBUFS_1             50
+BLOCK_BUFSZ_1             256000000
+BLOCK_NREAD_1             2
+
+BLOCK_NBUFS_2             5
+BLOCK_BUFSZ_2             256000000
+BLOCK_NREAD_2             1
+
+# DATA_BLOCKS               DADA EADA FADA
+# RECEIVING_DATA_BLOCK      DADA
+# PROCESSING_DATA_BLOCK     EADA
+# BASEBAND_DATA_BLOCK       FADA
+
+# DADA_BLOCK_NBUFS          20
+# DADA_BLOCK_BUFSZ          256000000
+# DADA_BLOCK_NREAD          1
+
+# EADA_BLOCK_NBUFS          50
+# EADA_BLOCK_BUFSZ          256000000
+# EADA_BLOCK_NREAD          2
+
+# FADA_BLOCK_NBUFS          5
+# FADA_BLOCK_BUFSZ          256000000
+# FADA_BLOCK_NREAD          1
 
 ###############################################################################
 # Demultiplexer configuration
@@ -114,16 +137,35 @@ DEMUX_IB_PORT_1           56073
 # means 8 seconds per xfer for 2 DEMUXS
 PKTS_PER_XFER             781250
 
-DEMUX_DATA_BLOCKS         CADA DADA EADA FADA
-DEMUX_CADA_NBUFS          50
-DEMUX_CADA_BUFSZ          128000000
-DEMUX_DADA_NBUFS          50
-DEMUX_DADA_BUFSZ          128000000
-DEMUX_EADA_NBUFS          50
-DEMUX_EADA_BUFSZ          128000000
-DEMUX_FADA_NBUFS          50
-DEMUX_FADA_BUFSZ          128000000
+DEMUX_BLOCK_PREFIX        d
+DEMUX_BLOCK_IDS           0 1 2 3
 
+DEMUX_BLOCK_NBUFS_0             50
+DEMUX_BLOCK_BUFSZ_0             128000000
+DEMUX_BLOCK_NREAD_0             1
+DEMUX_BLOCK_NBUFS_1             50
+DEMUX_BLOCK_BUFSZ_1             128000000
+DEMUX_BLOCK_NREAD_1             1
+DEMUX_BLOCK_NBUFS_2             50
+DEMUX_BLOCK_BUFSZ_2             128000000
+DEMUX_BLOCK_NREAD_2             1
+DEMUX_BLOCK_NBUFS_3             50
+DEMUX_BLOCK_BUFSZ_3             128000000
+DEMUX_BLOCK_NREAD_3             1
+
+#DEMUX_DATA_BLOCKS         CADA DADA EADA FADA
+#DEMUX_CADA_NBUFS          50
+#DEMUX_CADA_BUFSZ          128000000
+#DEMUX_CADA_NREAD          1
+#DEMUX_DADA_NBUFS          50
+#DEMUX_DADA_BUFSZ          128000000
+#DEMUX_DADA_NREAD          1
+#DEMUX_EADA_NBUFS          50
+#DEMUX_EADA_BUFSZ          128000000
+#DEMUX_EADA_NREAD          1
+#DEMUX_FADA_NBUFS          50
+#DEMUX_FADA_BUFSZ          128000000
+#DEMUX_FADA_NREAD          1
 
 ###############################################################################
 # Receiver configuration [where the demuxers send their data]
@@ -138,10 +180,10 @@ RECV_2                    gpu2-ib
 RECV_3                    gpu3-ib
 
 # datablocks to write each RECV's xfers to
-RECV_DB_0                 cada
-RECV_DB_1                 dada
-RECV_DB_2                 eada
-RECV_DB_3                 fada
+RECV_DBID_0               0
+RECV_DBID_1               1
+RECV_DBID_2               2
+RECV_DBID_3               3
 
 ###############################################################################
 # IB configuration
@@ -167,7 +209,7 @@ SRV_0                     srv0
 ARCHIVE_MOD               8
 
 NUM_SWIN_DIRS             1
-SWIN_DIR_0                pulsar:shrek214-gb:/export/shrek214b/caspsr
+SWIN_DIR_0                pulsar:tapeserv01:/projects/p002_swin/caspsr
 
 ##############################################################################
 # IBOB / ROACH configuration

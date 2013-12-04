@@ -5,7 +5,9 @@ data_DATA = caspsr.cfg \
             caspsr.dbdisk \
             caspsr.viewer \
             dspsr.gpu \
+            dspsr.nosk \
             dspsr.50cmgpu \
+            dspsr.50cmnosk\
             dspsr.cpu \
             caspsr.receiving \
             caspsr.processing
