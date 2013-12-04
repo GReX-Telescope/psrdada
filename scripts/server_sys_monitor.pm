@@ -348,6 +348,10 @@ sub loggingThread($)
           close FH;
         }   
       }
+      else
+      {
+        Dada::logMsg(1, $dl, "loggingThread: ignoring message [".$message."]");
+      }
     } 
     else
     {
@@ -454,7 +458,7 @@ sub good($) {
     return ("fail", "master_log_prefix was not set");
   } 
 
-  my $n_listen = $cfg{"NUM_PWC"} * 4;
+  my $n_listen = $cfg{"NUM_PWC"} * 10;
 
   $log_sock = new IO::Socket::INET (
     LocalHost => $log_host,
