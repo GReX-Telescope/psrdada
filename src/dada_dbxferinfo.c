@@ -131,6 +131,24 @@ int main (int argc, char **argv)
   fprintf(stderr, "\n");
   fprintf(stderr, "sync->w_buf:     %"PRIu64"\n", db->sync->w_buf);
   fprintf(stderr, "sync->w_state:   %s\n", state_to_str(db->sync->w_state));
+
+  fprintf(stderr, "Reader\tr_buf\tSOD\tEOD\tRSEM\tCONN\tFULL\tCLEAR\tr_state\n");
+  for (iread=0; iread < nreaders; iread++)
+  {
+    fprintf (stderr, "%d\t%"PRIu64"\t%"PRIu64"\t%"PRIu64"\t%d\t%d\t%"PRIu64"\t%"PRIu64"\t%s\n",
+              iread,
+              db->sync->r_bufs[iread],
+              ipcbuf_get_sodack_iread(db, iread),
+              ipcbuf_get_eodack_iread(db, iread),
+              ipcbuf_get_read_semaphore_count (db), 
+              ipcbuf_get_reader_conn_iread (db, iread),
+              ipcbuf_get_nfull_iread(db, iread),
+              ipcbuf_get_nclear_iread(db, iread),
+              state_to_str(db->sync->r_states[iread]));
+  }
+
+
+  /*
   for (iread=0; iread < nreaders; iread++)
   {
     fprintf(stderr, "sync->r_buf[%d]:   %"PRIu64"\n", iread, db->sync->r_bufs[iread]);
@@ -138,7 +156,7 @@ int main (int argc, char **argv)
     fprintf(stderr, "IPCBUF_SODACK[%d]: %"PRIu64"\n", iread, ipcbuf_get_sodack_iread(db, iread));
     fprintf(stderr, "IPCBUF_EODACK[%d]: %"PRIu64"\n", iread, ipcbuf_get_eodack_iread(db, iread));
   }
-  
+  */
   int i=0;
 
   fprintf(stderr, "\n");
@@ -156,7 +174,7 @@ int main (int argc, char **argv)
     else
       fprintf(stderr, "  ");
     for (iread=0; iread < nreaders; iread++)
-      if (i == db->sync->r_xfers[iread]) 
+      if (i == db->sync->r_xfers[iread] % IPCBUF_XFERS) 
         fprintf(stderr, " R%d", iread);
       else 
         fprintf(stderr, "  ");
