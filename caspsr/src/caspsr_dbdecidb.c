@@ -154,8 +154,8 @@ int dbdecidb_open (dada_client_t* client)
   if (ctx->verbose)
     multilog (log, LOG_INFO, "open: parsed old BANDWIDTH=%lf, CFREQ=%lf, TSAMP=%lf,"
                              " BYTES_PER_SECOND=%lf, OBS_OFFSET=%"PRIu64", "
-                             " TRANSFER_SIZE=%"PRIu64"\n", old.bw, old.cf, old.tsamp, 
-                             old.bytesps, old.obs_offset, old.transfer_size);
+                             " TRANSFER_SIZE=%"PRIu64" OBS_XFER=%"PRIi64"\n", old.bw, old.cf, old.tsamp, 
+                             old.bytesps, old.obs_offset, old.transfer_size, old.obs_xfer);
 
   // generate the new BANDWIDTH, CFREQ and TSAMP
   if (ctx->tdec == 1)
@@ -173,12 +173,14 @@ int dbdecidb_open (dada_client_t* client)
   new.filesize = old.filesize / ctx->tdec;
   new.obs_offset = old.obs_offset / ctx->tdec;
   new.transfer_size = old.transfer_size / ctx->tdec; 
+  new.obs_xfer = old.obs_xfer;
 
   if (ctx->verbose)
     multilog (log, LOG_INFO, "open: setting new BANDWIDTH=%lf, CFREQ=%lf, TSAMP=%lf,"
                              " BYTES_PER_SECOND=%lf, OBS_OFFSET=%"PRIu64","
-                             " TRANSFER_SIZE=%"PRIu64"\n", new.bw, new.cf, 
-                             new.tsamp, new.bytesps, new.obs_offset, new.transfer_size);
+                             " TRANSFER_SIZE=%"PRIu64" OBS_XFER=%"PRIi64"\n", new.bw, new.cf, 
+                             new.tsamp, new.bytesps, new.obs_offset, new.transfer_size,
+                             new.obs_xfer);
 
   // get the header from the input data block
   uint64_t header_size = ipcbuf_get_bufsz (client->header_block);
