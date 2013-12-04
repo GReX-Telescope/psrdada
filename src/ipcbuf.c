@@ -1410,6 +1410,24 @@ int ipcbuf_sod (ipcbuf_t* id)
   return id->state == IPCBUF_READING || id->state == IPCBUF_WRITING;
 }
 
+// return the total bytes written for the current XFER in id
+uint64_t ipcbuf_get_write_byte_xfer (ipcbuf_t* id)
+{
+  if (id->sync->eod[id->xfer])
+    return id->sync->e_byte[id->xfer];
+  else
+    return ipcbuf_tell (id, id->sync->w_buf);
+}
+
+uint64_t ipcbuf_get_write_count_xfer (ipcbuf_t* id)
+{
+  if (id->sync->w_xfer == id->xfer)
+    return id->sync->w_buf;
+  else
+    return id->sync->e_byte[id->xfer];
+}
+
+
 uint64_t ipcbuf_get_write_count (ipcbuf_t* id)
 {
   return id->sync->w_buf;

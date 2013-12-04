@@ -177,13 +177,14 @@ extern "C" {
   /*! Test if the current buffer is the last buffer containing data */
   int ipcbuf_eod (ipcbuf_t*);
 
-  /*! Return the number of bytes written to the ring buffer */
+  /*! Return the number of bufferswritten to the ring buffer */
   uint64_t ipcbuf_get_write_count (ipcbuf_t*);
-
-  /*! Return the Data Block index of the write buffer */
   uint64_t ipcbuf_get_write_index (ipcbuf_t* id);
 
-  /*! Return the number of bytes read from the ring buffer */
+  uint64_t ipcbuf_get_write_byte_xfer (ipcbuf_t* id);
+  uint64_t ipcbuf_get_write_count_xfer (ipcbuf_t* id);
+
+  /*! Return the number of buffersread from the ring buffer */
   uint64_t ipcbuf_get_read_count (ipcbuf_t*);
   uint64_t ipcbuf_get_read_count_iread (ipcbuf_t* id, unsigned iread);
 
