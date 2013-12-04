@@ -31,7 +31,7 @@ typedef struct {
 
 stats_t * init_stats_t();
 
-void reset_stats_t(stats_t * s);
+void reset_stats_t (stats_t * s);
 
 size_t dada_sock_recv(int fd, char* buffer, size_t size, int flags);
 

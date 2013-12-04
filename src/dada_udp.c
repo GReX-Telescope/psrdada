@@ -18,10 +18,10 @@ stats_t * init_stats_t()
 
 void reset_stats_t(stats_t * s)
 {
-    s->received = 0;
-    s->dropped = 0;
-    s->received_per_sec = 0;
-    s->dropped_per_sec = 0;
+  s->received = 0;
+  s->dropped = 0;
+  s->received_per_sec = 0;
+  s->dropped_per_sec = 0;
 }
 
 /*
