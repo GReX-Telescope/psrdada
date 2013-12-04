@@ -24,7 +24,16 @@ BEGIN {
   $VERSION = '1.00';
 
   @ISA         = qw(Exporter AutoLoader);
-  @EXPORT      = qw(&sendTelnetCommand &connectToMachine &getDADABinaryDir &getCurrentBinaryVersion &getDefaultBinaryVersion &setBinaryDir &getAvailableBinaryVersions &addToTime &getUnixTimeUTC &getCurrentDadaTime &printDadaTime &printTime &getPWCCState &printPWCCState &waitForState &getLine &getLines &parseCFGLines &readCFGFile &readCFGFileIntoHash &getDADA_ROOT &getDiskInfo &getRawDisk &getDBInfo &getAllDBInfo &getDBStatus &getLoad &getUnprocessedFiles &getServerResultsNFS &getServerArchiveNFS &constructRsyncURL &headerFormat &mySystem &killProcess &getAPSRConfigVariable &nexusLogOpen &nexusLogClose &nexusLogMessage &getHostMachineName &daemonize &commThread &logMsg &logMsgWarn &remoteSshCommand &headerToHash &daemonBaseName &getProjectGroups &processHeader &getDM &getPeriod &checkScriptIsUnique &getObsDestinations &removeFiles, &createDir, &getDBKey, &convertRadiansToRA, &convertRadiansToDEC, &checkPWCID, &inCatalogue);
+  @EXPORT      = qw(
+    &sendTelnetCommand &connectToMachine &getDADABinaryDir &getCurrentBinaryVersion &getDefaultBinaryVersion 
+    &setBinaryDir &getAvailableBinaryVersions &addToTime &addToTimeFractional &getUnixTimeUTC &getCurrentDadaTime 
+    &printDadaTime &printTime &getPWCCState &printPWCCState &waitForState &getLine &getLines &parseCFGLines 
+    &readCFGFile &readCFGFileIntoHash &getDADA_ROOT &getDiskInfo &getRawDisk &getDBInfo &getAllDBInfo &getDBStatus 
+    &getLoad &getUnprocessedFiles &getServerResultsNFS &getServerArchiveNFS &constructRsyncURL &headerFormat 
+    &mySystem &killProcess &getAPSRConfigVariable &nexusLogOpen &nexusLogClose &nexusLogMessage &getHostMachineName 
+    &daemonize &commThread &logMsg &logMsgWarn &remoteSshCommand &headerToHash &daemonBaseName &getProjectGroups 
+    &processHeader &getDM &getPeriod &checkScriptIsUnique &getObsDestinations &removeFiles &createDir &getDBKey
+    &getPWCKeys &convertRadiansToRA &convertRadiansToDEC &checkPWCID &sendEmail &inCatalogue);
   %EXPORT_TAGS = ( );
   @EXPORT_OK   = ( );
 
@@ -658,6 +667,36 @@ sub addToTime($$) {
   return $year."-".$mon."-".$mday."-".$hour.":".$min.":".$sec;
 
 }
+
+
+sub addToTimeFractional($$) {
+
+  (my $time, my $toadd) = @_;
+
+  my @t = split(/-|:/,$time);
+
+  my $unixtime = timelocal($t[5], $t[4], $t[3], $t[2], ($t[1]-1), $t[0]);
+
+  my $toadd_int = POSIX::floor($toadd);
+  my $toadd_frac = $toadd - $toadd_int;
+  print "toadd=$toadd toadd_int=$toadd_int toadd_frac=$toadd_frac\n";
+
+  my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime ($unixtime + $toadd_int);
+
+  $year += 1900;
+  $mon++;
+  $mon = sprintf("%02d", $mon);
+  $mday = sprintf("%02d", $mday);
+  $hour = sprintf("%02d", $hour);
+  $min = sprintf("%02d", $min);
+  $sec += $toadd_frac;
+  $sec = sprintf("%06.3f", $sec);
+
+  print "result=".$year."-".$mon."-".$mday."-".$hour.":".$min.":".$sec;
+  return $year."-".$mon."-".$mday."-".$hour.":".$min.":".$sec;
+
+}
+
 
 ###############################################################################
 
@@ -1427,7 +1466,7 @@ sub killProcess($;$) {
       Dada::logMsg(2, $fnl, "killProcess: ".$result." ".$response);
 
       # give the process(es) a chance to exit
-      sleep(1);
+      sleep(2);
     
       # check they are gone
       Dada::logMsg(2, $fnl, "killProcess: ".$pgrep_cmd);
@@ -2141,6 +2180,13 @@ sub getDBKey($$$)
   return $dbkey;
 }
 
+sub getPWCKeys($$)
+{
+  (my $inst_id, my $pwc) = @_;
+  my $dbkey = sprintf("%s%02d", $inst_id, $pwc);
+  return $dbkey;
+}
+
 sub convertHoursToHHMMSS($)
 {
   (my $hours) = @_;
@@ -2223,6 +2269,70 @@ sub checkPWCID($\%)
     print STDERR "PWC_ID was not a valid integer between 0 and ".($cfg{"NUM_PWC"}-1)."\n";
     return 0;
   }
+}
+
+sub sendEmail($$$$$$)
+{
+  my ($to_email, $cc_emails, $subject, $message, $from_email, $from_name) = @_;
+
+  my $mailer;
+  if ( -f "/usr/sbin/sendmail" )
+  {
+    $mailer = "/usr/sbin/sendmail";
+  }
+  elsif ( -f "/usr/sbin/exim" )
+  {
+    $mailer = "/usr/sbin/exim";
+  }
+  else
+  {
+    return ("fail", "could not find MTA");
+  }
+
+  my $sendmail = $mailer." -t -f".$from_email;
+
+  my $reply_to = "Reply-to: ".$from_email."\n";
+  my $from     = "From: ".$from_name." <".$from_email.">\n";
+  my $send_to  = "To: ".$to_email."\n";
+  my $sub      = "Subject: ".$subject."\n";
+  my $cc_to    = "";
+
+  if ($cc_emails ne "")
+  {
+    $cc_to = "Cc: ";
+    my @cc_list = split(/[, ]/, $cc_emails);
+    my $cc;
+    foreach $cc (@cc_list)
+    {
+      if ($cc_to eq "")
+      {
+        $cc_to = "Cc: ".$cc;
+      }
+      else
+      {
+        $cc_to .= ", ".$cc;
+      }
+    }
+    $cc_to .= "\n";
+  }
+     
+  my $msg = "";
+  $msg .= "Content-type:text/plain; charset=iso-8859-1\n\n";
+  $msg .= $message;
+
+  print $sendmail."\n";
+
+  open (SENDMAIL, "|$sendmail") or die "Cannot open $sendmail: $!";
+  print SENDMAIL $reply_to;
+  print SENDMAIL $from;
+  print SENDMAIL $sub;
+  print SENDMAIL $send_to;
+  if ($cc_to ne "")
+  {
+    print SENDMAIL $cc_to;
+  }
+  print SENDMAIL $msg;
+  close(SENDMAIL);
 }
 
 END { }
