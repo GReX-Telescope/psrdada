@@ -1428,6 +1428,30 @@ int ipcbuf_unlock (ipcbuf_t* id)
 
 }
 
+// Initialize each buffer
+int ipcbuf_page (ipcbuf_t* id)
+{
+  uint64_t ibuf = 0;
+  if (id->syncid < 0 || id->shmid == 0)
+    return -1;
+
+  void * empty = malloc(id->sync->bufsz);
+  if (!empty)
+  {
+    fprintf (stderr, "ipcbuf_page: failed to malloc %"PRIu64" bytes\n", id->sync->bufsz);
+    return -1;
+  }
+  memset (empty, 0, id->sync->bufsz);
+  for (ibuf = 0; ibuf < id->sync->nbufs; ibuf++)
+  {
+    memcpy (id->buffer[ibuf], empty, id->sync->bufsz); 
+  }
+  free (empty);
+
+  return 0;
+}
+
+
 
 int ipcbuf_eod (ipcbuf_t* id)
 {

@@ -11,17 +11,17 @@ void usage ()
   fprintf (stdout,
           "dada_db - create or destroy the DADA shared memory ring buffer\n"
           "\n"
-          "USAGE: dada_db [-d] [-k key] [-n nbufs] [-b bufsz] [-r nreaders]\n"
-          "WHERE:\n"
-          " -k  hexadecimal shared memory key  [default: %x]\n"
-          " -n  number of buffers in ring      [default: %"PRIu64"]\n"
-          " -r  number of readers              [default: 1]\n"
+          "Usage: dada_db [-d] [-k key] [-n nbufs] [-b bufsz] [-r nreaders]\n"
           " -b  size of each buffer (in bytes) [default: %"PRIu64"]\n"
           " -d  destroy the shared memory area [default: create]\n"
-          " -l  lock the shared memory area in physical RAM\n", 
+          " -k  hexadecimal shared memory key  [default: %x]\n"
+          " -l  lock the shared memory area in physical RAM\n"
+          " -n  number of buffers in ring      [default: %"PRIu64"]\n"
+          " -p  page all blocks into RAM\n"
+          " -r  number of readers              [default: 1]\n",
+          DADA_DEFAULT_BLOCK_SIZE,
           DADA_DEFAULT_BLOCK_KEY,
-          DADA_DEFAULT_BLOCK_NUM,
-          DADA_DEFAULT_BLOCK_SIZE);
+          DADA_DEFAULT_BLOCK_NUM);
 }
 
 int main (int argc, char** argv)
@@ -37,12 +37,13 @@ int main (int argc, char** argv)
   ipcbuf_t data_block = IPCBUF_INIT;
   ipcbuf_t header = IPCBUF_INIT;
 
+  int page = 0;
   int destroy = 0;
   int lock = 0;
   int arg;
   unsigned num_readers = 1;
 
-  while ((arg = getopt(argc, argv, "hdk:n:r:b:l")) != -1) {
+  while ((arg = getopt(argc, argv, "hdk:n:r:b:lp")) != -1) {
 
     switch (arg)  {
     case 'h':
@@ -83,6 +84,10 @@ int main (int argc, char** argv)
 
     case 'l':
       lock = 1;
+      break;
+
+    case 'p':
+      page = 1;
       break;
     }
   }
@@ -129,6 +134,16 @@ int main (int argc, char** argv)
 
   if (lock && ipcbuf_lock (&header) < 0) {
     fprintf (stderr, "Could not lock DADA header block into RAM\n");
+    return -1;
+  }
+
+  if (page && ipcbuf_page (&header) < 0) {
+    fprintf (stderr, "Could not page DADA header block into RAM\n");
+    return -1;
+  }
+
+  if (page && ipcbuf_page (&data_block) < 0) {
+    fprintf (stderr, "Could not page DADA data block into RAM\n");
     return -1;
   }
 

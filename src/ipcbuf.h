@@ -209,6 +209,9 @@ extern "C" {
   /*! Unlock the shared memory from physical RAM (allow swap) */
   int ipcbuf_unlock (ipcbuf_t*);
 
+  /*! Initialise all buffer's to 0's, pageing them into RAM */
+  int ipcbuf_page (ipcbuf_t* id);
+
   /*! Return the number of buffers currently flagged as clear */
   uint64_t ipcbuf_get_nclear (ipcbuf_t*);
   uint64_t ipcbuf_get_nclear_iread (ipcbuf_t*, int iread);
