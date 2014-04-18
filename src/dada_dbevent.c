@@ -68,14 +68,6 @@ typedef struct {
 
   size_t work_buffer_size;
 
-  uint64_t curr_write_buf;
-
-  uint64_t prev_write_buf;
-
-  uint64_t curr_read_buf;
-
-  time_t * write_times;
-
   uint64_t in_nbufs;
 
   uint64_t in_bufsz;
@@ -99,7 +91,7 @@ typedef struct {
 
 } event_t;
 
-#define DADA_DBEVENT_INIT { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
+#define DADA_DBEVENT_INIT { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
 
 static int sort_events (const void *p1, const void *p2)
 {
@@ -110,7 +102,8 @@ static int sort_events (const void *p1, const void *p2)
   return 0;
 }
 
-int check_write_timestamps(dada_dbevent_t * dbevent);
+int check_read_offset (dada_dbevent_t * dbevent);
+//int check_write_timestamps (dada_dbevent_t * dbevent);
 
 int64_t calculate_byte_offset (dada_dbevent_t * dbevent, char * time_str_secs, char * time_str_frac);
 
@@ -285,6 +278,9 @@ int main (int argc, char **argv)
     multilog (log, LOG_ERR, "could not open socket: %s\n", strerror(errno));
     quit = 2;
   }
+  else
+    multilog (log, LOG_INFO, "listening on port %d for dump requests\n", port);
+
 
   fd_set fds;
   struct timeval timeout;
@@ -367,13 +363,6 @@ int main (int argc, char **argv)
   // get the number and size of buffers in the input data block
   dbevent.in_nbufs = ipcbuf_get_nbufs (db);
   dbevent.in_bufsz = ipcbuf_get_bufsz (db);
-  dbevent.write_times = (time_t *) malloc (sizeof(time_t) * dbevent.in_nbufs);
-  for (ibuf=0; ibuf < dbevent.in_nbufs; ibuf++)
-    dbevent.write_times[ibuf] = 0;
-
-  dbevent.curr_write_buf = ipcbuf_get_write_count (db);
-  dbevent.prev_write_buf = ipcbuf_get_read_count (db);
-  dbevent.curr_read_buf  = 0;
 
   uint64_t bytes = 0;
   uint64_t block_id = 0;
@@ -399,8 +388,8 @@ int main (int argc, char **argv)
     else if (fds_read == 0)
     {
       if (verbose > 1)
-        multilog (log, LOG_INFO, "main: check_write_timestamps()\n");
-      int64_t n_skipped = check_write_timestamps (&dbevent);
+        multilog (log, LOG_INFO, "main: check_read_offset ()\n");
+      int64_t n_skipped = check_read_offset (&dbevent);
       if (n_skipped < 0)
         multilog (log, LOG_WARNING, "check_db_times failed\n");
       if (verbose > 1)
@@ -426,25 +415,44 @@ int main (int argc, char **argv)
     if (verbose > 1)
       multilog (log, LOG_INFO, "input datablock %5.2f percent full\n", percent_full);
 
+    int64_t read_offset, remainder, seek_byte, seeked_byte;
+
     while (!quit && percent_full > input_data_block_threshold)
     {
-      multilog (log, LOG_INFO, "ipcio_open_block_read()\n");
-      buffer = ipcio_open_block_read (dbevent.in_hdu->data_block, &bytes, &block_id);
-      if (!buffer)
-      {
-        multilog (log, LOG_ERR, "ipcio_open_block_read failed\n");
-        quit = 1;
-      }
+      if (verbose)
+        multilog (log, LOG_INFO, "percent_full=%5.2f threshold=%5.2f\n", percent_full, input_data_block_threshold);
+      // since we are too full, seek forward 1 block 
+      read_offset = ipcio_tell (dbevent.in_hdu->data_block);
+
+      // if the current read offset is a full block, make it so
+      remainder = read_offset % dbevent.in_bufsz;
+
+      if (remainder != 0)
+        seek_byte = (int64_t) dbevent.in_bufsz - remainder;
       else
+        seek_byte = (int64_t) dbevent.in_bufsz;
+
+      if ((seek_byte < 0) || (seek_byte > dbevent.in_bufsz))
+        multilog (log, LOG_WARNING, "main: seek_byte limits warning: %"PRIi64"\n", seek_byte);
+
+      if (verbose)
+        multilog (log, LOG_INFO, "main: ipcio_seek(%"PRIu64", SEEK_CUR)\n", seek_byte);
+
+      // seek forward (from curr pos) to the next full block boundary
+      seeked_byte = ipcio_seek (dbevent.in_hdu->data_block, seek_byte, SEEK_CUR);
+      if (seeked_byte < 0)
       {
-        if (verbose > 1)
-          multilog (log, LOG_INFO, "ipcio reading block %"PRIu64" of size %"PRIu64"\n", block_id, bytes);
-        multilog (log, LOG_INFO, "ipcio_close_block_read()\n");
-        ipcio_close_block_read (dbevent.in_hdu->data_block, bytes);
-        percent_full = ipcio_percent_full (dbevent.in_hdu->data_block) * 100;
-        if (verbose > 1)
-          multilog (log, LOG_INFO, "input datablock reduced to %5.2f percent full\n", percent_full);
+        multilog (log, LOG_INFO, "main: ipcio_seek failed\n");
+        quit = 1; 
       }
+ 
+      // sleep a short space to allow writer to write!
+      usleep(10000);
+
+      // update the percentage full for the data block
+      percent_full = ipcio_percent_full (dbevent.in_hdu->data_block) * 100;
+      if (verbose)
+        multilog (log, LOG_INFO, "input datablock reduced to %5.2f percent full\n", percent_full);
     }
 
     if (ipcbuf_eod (db))
@@ -467,7 +475,6 @@ int main (int argc, char **argv)
     }
   }
 
-  free (dbevent.write_times);
   free (dbevent.work_buffer);
   if (dbevent.header)
     free (dbevent.header);
@@ -494,66 +501,46 @@ int main (int argc, char **argv)
 }
 
 
-int check_write_timestamps (dada_dbevent_t * dbevent)
+int check_read_offset (dada_dbevent_t * dbevent)
 {
   multilog_t * log = dbevent->log;
 
-  uint64_t buf;
+  const uint64_t max_delay_bytes = dbevent->input_maximum_delay * dbevent->bytes_per_second;
 
-  // flag to check there are no old buffers left
-  unsigned old_buffers = 1;
+  unsigned have_old_buffers = 1;
 
-  int64_t n_skipped = 0;
-
-  // get the most recently written buffer [for this xfer]
-  dbevent->curr_write_buf = ipcbuf_get_write_count ((ipcbuf_t *) dbevent->in_hdu->data_block);
-
-  if (dbevent->verbose > 1)
-    multilog (log, LOG_INFO, "check_write_timestamps: curr_write_buf=%"PRIu64"\n", dbevent->curr_write_buf);
-
-  // update all write times for bufs written since the last call to this function
-  while (dbevent->prev_write_buf < dbevent->curr_write_buf)
-  {
-    buf = dbevent->prev_write_buf % dbevent->in_nbufs;
-    dbevent->write_times[buf] = time(0);
-    if (dbevent->verbose > 1)
-      multilog (log, LOG_INFO, "check_write_timestamps: write_times[%"PRIu64"] = %d\n", 
-                buf, dbevent->write_times[buf]);
-    dbevent->prev_write_buf ++; 
-  }
- 
-  time_t read_time;
-  time_t read_time_diff;
-
-  // also check for end of data
+  // check for end of data before doing anything
   if (ipcbuf_eod ((ipcbuf_t *) dbevent->in_hdu->data_block))
-  {
-    old_buffers = 0;
-  }
- 
-  while (old_buffers > 0)
-  {
-      // now determine the current read buffer
-    dbevent->curr_read_buf = ipcbuf_get_read_count ((ipcbuf_t *) dbevent->in_hdu->data_block);
-    buf = dbevent->curr_read_buf % dbevent->in_nbufs;
+    have_old_buffers = 0;
 
-    read_time = dbevent->write_times[buf];
-    read_time_diff = time(0) - read_time;
-   
-    if (dbevent->verbose > 1)
-      multilog (log, LOG_INFO, "check_write_timestamps: read_buf=%"PRIu64", time=%d, diff=%d\n",
-                  dbevent->curr_read_buf, read_time, read_time_diff);
- 
-    // if the current write buffer is greater than our current read buffer and the read buffers input delay
-    // exceeds the maximum, then we wil read it and check the next one
-    if (read_time && (dbevent->curr_write_buf > dbevent->curr_read_buf) && (read_time_diff > dbevent->input_maximum_delay))
+  // get the time and byte offset for the time
+  const time_t now = time(0);
+  const time_t obs_offset = (now - dbevent->utc_start);
+  if (dbevent->verbose)
+    multilog (dbevent->log, LOG_INFO, "check_read_offset: now=%ld utc_start=%ld obs_offset=%ld\n", now, dbevent->utc_start, obs_offset);
+  const uint64_t now_byte_offset = (uint64_t) obs_offset * dbevent->bytes_per_second;
+
+  uint64_t read_offset, remainder, seek_byte;
+  int64_t seeked_byte;
+  unsigned n_skipped = 0;
+
+  while (have_old_buffers)
+  {
+    // get the current read offset in bytes
+    read_offset = ipcio_tell (dbevent->in_hdu->data_block);
+
+    // if the current read offset + the maximum allowed delay is still less than 
+    // the current byte offset, then we MUST read while it is not
+    if (read_offset + max_delay_bytes < now_byte_offset)
     {
-      uint64_t read_byte = ipcio_tell (dbevent->in_hdu->data_block);
-      uint64_t remainder = read_byte % dbevent->in_bufsz;
-      uint64_t seek_byte = 0;
+      if (dbevent->verbose)
+        multilog (dbevent->log, LOG_INFO, "check_read_offset: read_offset[%"PRIu64"] + max_delay_bytes[%"PRIu64"] < now_byte_offset[%"PRIu64"]\n", read_offset, max_delay_bytes, now_byte_offset);
+
+      remainder = read_offset % dbevent->in_bufsz;
+      seek_byte = 0;
 
       if (dbevent->verbose > 1)
-        multilog (dbevent->log, LOG_INFO, "check_write_timestamps: read_byte=%"PRIu64" remaineder=%"PRIu64"\n", read_byte, remainder);
+        multilog (dbevent->log, LOG_INFO, "check_read_offset: read_offset=%"PRIu64" remainder=%"PRIu64"\n", read_offset, remainder);
 
       // check for a partially read block
       if (remainder != 0)
@@ -566,28 +553,33 @@ int check_write_timestamps (dada_dbevent_t * dbevent)
         seek_byte = dbevent->in_bufsz;
       }
 
+      if ((seek_byte < 0) || (seek_byte > dbevent->in_bufsz))
+      {
+        multilog (dbevent->log, LOG_WARNING, "check_read_offset: seek_byte limits warning: %"PRIi64"\n", seek_byte);
+      }
+
       if (dbevent->verbose)
-        multilog (dbevent->log, LOG_INFO, "check_write_timestamps: ipcio_seek(%"PRIu64", SEEK_CUR)\n", seek_byte);
-      int64_t seeked_byte = ipcio_seek (dbevent->in_hdu->data_block, seek_byte, SEEK_CUR);
+        multilog (dbevent->log, LOG_INFO, "check_read_offset: ipcio_seek(%"PRIu64", SEEK_CUR)\n", seek_byte);
+      seeked_byte = ipcio_seek (dbevent->in_hdu->data_block, seek_byte, SEEK_CUR);
       if (seeked_byte < 0)
       {
-        multilog (dbevent->log, LOG_INFO, "check_write_timestamps: ipcio_seek failed\n");
+        multilog (dbevent->log, LOG_INFO, "check_read_offset: ipcio_seek failed\n");
         return -1;
       }
       n_skipped ++;
     }
-    // the current read buffer is not too old, drop out of this loop
     else
-      old_buffers = 0;
-
+      have_old_buffers = 0;
+  
     // also check for end of data
     if (ipcbuf_eod ((ipcbuf_t *) dbevent->in_hdu->data_block))
     {
-      old_buffers = 0;
+      have_old_buffers = 0;
     }
   }
+
   if (dbevent->verbose)
-    multilog (dbevent->log, LOG_INFO, "check_write_timestamps: skipped %"PRIi64" blocks\n", n_skipped);
+    multilog (dbevent->log, LOG_INFO, "check_read_offset: skipped %"PRIi64" blocks\n", n_skipped);
 
   return n_skipped;
 }
@@ -673,8 +665,8 @@ int receive_events (dada_dbevent_t * dbevent, int listen_fd)
 
     rgot = fgets (buffer, buffer_size, sockin);
 
-    if (dbevent->verbose > 1)
-       multilog (log, LOG_INFO, " <- %s\n", buffer);
+    //if (dbevent->verbose > 1)
+    multilog (log, LOG_INFO, " <- %s", buffer);
 
     // ignore comments
     comment = strchr( buffer, '#' );
@@ -784,7 +776,8 @@ int receive_events (dada_dbevent_t * dbevent, int listen_fd)
         // start overlap
         if (events[i].start_byte < events[i-1].end_byte)
         {
-          multilog (dbevent->log, LOG_INFO, "amalgamating event idx %d into %d\n", i-1, i);
+          if (dbevent->verbose)
+            multilog (dbevent->log, LOG_INFO, "amalgamating event idx %d into %d\n", i-1, i);
           events[i].start_byte = events[i-1].start_byte;
           events[i-1].start_byte = 0;
 
@@ -801,7 +794,8 @@ int receive_events (dada_dbevent_t * dbevent, int listen_fd)
       {
         if ((events[i].start_byte == 0) && (events[i].end_byte == 0))
         {
-          multilog (dbevent->log, LOG_INFO, "ignoring event[%d], start_byte == end_byte == 0\n");
+          if (dbevent->verbose)
+            multilog (dbevent->log, LOG_INFO, "ignoring event[%d], start_byte == end_byte == 0\n", i);
           continue;
         }
 
@@ -810,7 +804,7 @@ int receive_events (dada_dbevent_t * dbevent, int listen_fd)
 
         if (events[i].start_byte < current_byte)
         {
-          multilog (dbevent->log, LOG_WARNING, "skipping events[%d], current_byte [%"PRIu64"] past event start_byte [%"PRIu64"]\n", current_byte, events[i].start_byte);
+          multilog (dbevent->log, LOG_WARNING, "skipping events[%d], current_byte [%"PRIu64"] past event start_byte [%"PRIu64"]\n", i, current_byte, events[i].start_byte);
           events_missed++;
           continue;
         }
@@ -826,7 +820,8 @@ int receive_events (dada_dbevent_t * dbevent, int listen_fd)
           continue;
         }
 
-        multilog (dbevent->log, LOG_INFO, "seeked_byte=%"PRIi64"\n", seeked_byte);
+        if (dbevent->verbose)
+          multilog (dbevent->log, LOG_INFO, "seeked_byte=%"PRIi64"\n", seeked_byte);
 
         // determine how much to read
         size_t to_read = events[i].end_byte - events[i].start_byte;
@@ -835,16 +830,20 @@ int receive_events (dada_dbevent_t * dbevent, int listen_fd)
         if (dbevent->work_buffer_size < to_read)
         {
           dbevent->work_buffer_size = to_read;
-          multilog (dbevent->log, LOG_INFO, "reallocating work_buffer [%p] to %d bytes\n", 
-                    dbevent->work_buffer, dbevent->work_buffer_size);
+          if (dbevent->verbose)
+            multilog (dbevent->log, LOG_INFO, "reallocating work_buffer [%p] to %d bytes\n", 
+                      dbevent->work_buffer, dbevent->work_buffer_size);
           dbevent->work_buffer = realloc (dbevent->work_buffer, dbevent->work_buffer_size);
-          multilog (dbevent->log, LOG_INFO, "reallocated work_buffer [%p]\n", dbevent->work_buffer);
+          if (dbevent->verbose)
+            multilog (dbevent->log, LOG_INFO, "reallocated work_buffer [%p]\n", dbevent->work_buffer);
         }
          
         // read the event from the input buffer 
-        multilog (dbevent->log, LOG_INFO, "reading %d bytes from input HDU into work buffer\n", to_read);
+        if (dbevent->verbose)
+          multilog (dbevent->log, LOG_INFO, "reading %d bytes from input HDU into work buffer\n", to_read);
         ssize_t bytes_read = ipcio_read (dbevent->in_hdu->data_block, dbevent->work_buffer, to_read);
-        multilog (dbevent->log, LOG_INFO, "read %d bytes from input HDU into work buffer\n", bytes_read);
+        if (dbevent->verbose)
+          multilog (dbevent->log, LOG_INFO, "read %d bytes from input HDU into work buffer\n", bytes_read);
         if (bytes_read < 0)
         {
           multilog (dbevent->log, LOG_WARNING, "receive_events: ipcio_read on input HDU failed\n");
@@ -891,7 +890,7 @@ int receive_events (dada_dbevent_t * dbevent, int listen_fd)
         }
       }
 
-      multilog (dbevent->log, LOG_INFO, "events: recorded=%d missed=%d\n", events_recorded, events_missed);
+      multilog (dbevent->log, LOG_INFO, "recorded=%d missed=%d\n", events_recorded, events_missed);
     }
   }
 
