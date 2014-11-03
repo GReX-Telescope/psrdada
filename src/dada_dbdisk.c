@@ -181,8 +181,10 @@ int file_open_function (dada_client_t* client)
   uint64_t byte_multiple = 1;
 
   // If case we use O_DIRECT, must be aligned to 512 bytes
+#ifdef O_DIRECT
   if (dbdisk->o_direct)
     byte_multiple = 512;
+#endif
 
   if (dbdisk->verbose)
     multilog (log, LOG_INFO, "open: RESOULTION=%"PRIu64"\n", resolution);
@@ -219,6 +221,10 @@ int file_open_function (dada_client_t* client)
   if (dbdisk->o_direct)
     flags = O_DIRECT;
 #endif
+
+  if (dbdisk->verbose)
+    multilog (log, LOG_INFO, "open: dbdisk->file_name=%s file_size=%"
+              PRIu64"\n", dbdisk->file_name, file_size);
 
   fd = disk_array_open (dbdisk->array, dbdisk->file_name,
         		file_size, &optimal_bytes, flags);
