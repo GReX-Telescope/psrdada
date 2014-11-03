@@ -7,6 +7,6 @@ if COMPILE_THIRD
 SUBDIRS += 3rdparty
 endif
 
-SUBDIRS	+= src web scripts config apsr bpsr caspsr gmrt leda
+SUBDIRS	+= src web scripts config apsr bpsr caspsr gmrt leda mopsr
 
 EXTRA_DIST = cudalt.py
