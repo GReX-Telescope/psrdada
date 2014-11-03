@@ -51,6 +51,8 @@ float dada_cuda_device_transfer ( void * from, void * to, size_t bufsz, memory_m
 
 int dada_cuda_profiler_init (dada_cuda_profile_t * timer);
 
+void check_error_stream (const char* method, cudaStream_t stream);
+
 #ifdef __cplusplus
 }
 #endif
