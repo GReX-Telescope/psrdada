@@ -83,12 +83,27 @@ sub getObsDestinations($$) {
 
 }
 
-sub getConfig() 
+sub getConfig(;$) 
 {
+  (my $sub_type) = @_;
+  if ($sub_type eq "")
+  {
+    $sub_type = "aq";
+  }
+
   my $config_file = $DADA_ROOT."/share/mopsr.cfg";
   my %config = Dada::readCFGFileIntoHash($config_file, 0);
 
-  return %config;
+  my $ct_config_file = $DADA_ROOT."/share/mopsr_cornerturn.cfg";
+  my %ct_config = Dada::readCFGFileIntoHash($ct_config_file, 0);
+
+  my %combined = (%config, %ct_config);
+
+  my $sub_config_file = $DADA_ROOT."/share/mopsr_".$sub_type.".cfg";
+  my %sub_config = Dada::readCFGFileIntoHash($sub_config_file, 0);
+  %combined = (%combined, %sub_config);
+
+  return %combined;
 }
 
 __END__

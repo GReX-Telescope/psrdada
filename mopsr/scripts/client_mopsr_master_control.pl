@@ -14,7 +14,7 @@ use Dada::client_master_control qw(%cfg);
 # Function prototypes
 #
 sub setupClientType();
-
+sub usage();
 
 #
 # Global Variables
@@ -26,7 +26,6 @@ sub setupClientType();
 #
 $Dada::client_master_control::dl = 1;
 $Dada::client_master_control::daemon_name = Dada::daemonBaseName($0);
-$Dada::client_master_control::pwc_add = " -d ";
 
 my $client_setup = setupClientType();
 if (! $client_setup) 
@@ -49,6 +48,11 @@ exit($result);
 #
 # Funtions
 
+sub usage()
+{
+  print STDERR "usage: $0\n";
+}
+
 
 # 
 # Determine what type of host we are, and if we have any datablocks
@@ -56,31 +60,37 @@ exit($result);
 #
 sub setupClientType() 
 {
-
   my $host = Dada::getHostMachineName();
   my $i = 0;
   my $found = 0;
 
-  @Dada::client_master_control::dbs = ();
-  @Dada::client_master_control::pwcs = ();
+  %Dada::client_master_control::pwcs = ();
 
   # if running on the server machine
-  if ($cfg{"SERVER_ALIASES"} =~ m/$host/) {
+  if ($cfg{"SERVER_ALIASES"} =~ m/$host/)
+  {
     $Dada::client_master_control::host = $host;
     $Dada::client_master_control::user = "dada";
-    @Dada::client_master_control::daemons = split(/ /,$cfg{"SERVER_DAEMONS"});
     $Dada::client_master_control::daemon_prefix = "server";
+    $Dada::client_master_control::pwcs{"server"} = ();
+    $Dada::client_master_control::pwcs{"server"}{"daemons"} = [split(/ /,$cfg{"SERVER_DAEMONS"})];
+    $Dada::client_master_control::pwcs{"server"}{"dbs"} = ();
+    $Dada::client_master_control::pwcs{"server"}{"state"} = "server";
+    $Dada::client_master_control::num_pwc = 0;
     $Dada::client_master_control::control_dir = $cfg{"SERVER_CONTROL_DIR"};
     $Dada::client_master_control::log_dir = $cfg{"SERVER_LOG_DIR"};
-    push (@Dada::client_master_control::pwcs, "server");
+
     $found = 1;
   }
   else
   {
+    # override host == localhost, since server & client running on same machine
+    $Dada::client_master_control::host = $host;
     $Dada::client_master_control::daemon_prefix = "client";
     $Dada::client_master_control::control_dir = $cfg{"CLIENT_CONTROL_DIR"};
     $Dada::client_master_control::log_dir = $cfg{"CLIENT_LOG_DIR"};
-    $Dada::client_master_control::user = $cfg{"USER"};
+    $Dada::client_master_control::user = "mpsr";
+    $Dada::client_master_control::num_pwc = $cfg{"NUM_PWC"};
 
     # Ensure the required directories exist
     my $cmd = "";
@@ -118,47 +128,51 @@ sub setupClientType()
       if ($host =~ m/$cfg{"PWC_".$i}/) 
       {
         # add to list of PWCs on this host
+        $Dada::client_master_control::pwcs{$i} = ();
+
+        my $state    = $cfg{"PWC_STATE_".$i};
+
+        # hash for the data blocks for this PWC
+        $Dada::client_master_control::pwcs{$i}{"dbs"} = ();
+        $Dada::client_master_control::pwcs{$i}{"daemons"} = ();
+        $Dada::client_master_control::pwcs{$i}{"state"} = $state;
+
+        # add to list of PWCs on this host
         push (@Dada::client_master_control::pwcs, $i);
 
-        # determine data blocks for this PWC
-        my @ids = split(/ /,$cfg{"DATA_BLOCK_IDS"});
-        my $key = "";
-        my $id = 0;
-        foreach $id (@ids) 
+        # only active or passive clients will have DBs
+        if (($state eq "active") || ($state eq "passive"))
         {
-          $key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $i, $id);
-          # check nbufs and bufsz
-          if ((!defined($cfg{"BLOCK_BUFSZ_".$id})) || (!defined($cfg{"BLOCK_NBUFS_".$id}))) {
-            return 0;
-          }
-          $Dada::client_master_control::dbs{$i}{$id} = $key;
-        }
+          # determine data blocks for this PWC
+          my @ids = split(/ /,$cfg{"DATA_BLOCK_IDS"});
+          my $key = "";
+          my $id = 0;
+          foreach $id (@ids) 
+          {
+            $key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $i, $cfg{"NUM_PWC"}, $id);
+            # check nbufs and bufsz
+            if ((!defined($cfg{"BLOCK_BUFSZ_".$id})) || (!defined($cfg{"BLOCK_NBUFS_".$id}))) {
+              return 0;
+            }
+            $Dada::client_master_control::pwcs{$i}{"dbs"}{$id} = $key;
+            # print "DB id=".$id." key=".$key."\n";	
+          } 
 
-        if (!$found) 
-        {
-          @Dada::client_master_control::daemons = split(/ /,$cfg{"CLIENT_DAEMONS"});
-          @Dada::client_master_control::binaries = ();
-          push @Dada::client_master_control::binaries, $cfg{"PWC_BINARY"};
-          $found = 1;
+          $Dada::client_master_control::pwcs{$i}{"daemons"} = [split(/ /,$cfg{"CLIENT_DAEMONS"})];
         }
+        elsif ($state eq "inactive")
+        {
+          $Dada::client_master_control::pwcs{$i}{"daemons"} = [split(/ /,$cfg{"CLIENT_DAEMONS_INACTIVE"})];
+        }
+        else
+        {
+        
+        }
+        $found = 1;
       }
     }
-    
-    # If we matched a PWC
-    if ($found) 
-    {
-      $Dada::client_master_control::pwc_add = " -d ";
-    }
-    else
-    {
-      @Dada::client_master_control::daemons = ();
-      @Dada::client_master_control::dbs = ();
-      @Dada::client_master_control::binaries = ();
-    }
-    $Dada::client_master_control::host = Dada::getHostMachineName();
   }
 
   return $found;
-
 }
 

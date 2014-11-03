@@ -1,0 +1,5 @@
+#!/usr/bin/env psrsh
+
+fscrunch 4
+bscrunch 1
+
