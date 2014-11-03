@@ -13,6 +13,7 @@ inline void start_profiling(const cudaEvent_t& start_event,
   cudaEventRecord(start_event, stream);
 
 }
+
 inline float stop_profiling(const cudaEvent_t& start_event,
                             const cudaEvent_t& stop_event,
                             const cudaStream_t& stream=0)
@@ -185,3 +186,24 @@ int dada_cuda_profiler_init (dada_cuda_profile_t * timer)
   timer->elapsed = 0;
   return 0;
 }
+
+void check_error_stream (const char* method, cudaStream_t stream)
+{
+  if (!stream)
+  {
+    fprintf (stderr, "called check_error_stream on invalid stream\n");
+    exit (1);
+  }
+  else
+  {
+    cudaStreamSynchronize (stream);
+
+    cudaError error = cudaGetLastError();
+    if (error != cudaSuccess)
+    {
+      fprintf (stderr,  "method=%s, cudaGetLastError=%s\n", method, cudaGetErrorString (error));
+      exit (1);
+    }
+  }
+}
+
