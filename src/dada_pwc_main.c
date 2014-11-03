@@ -220,7 +220,7 @@ int dada_pwc_main_prepare (dada_pwc_main_t* pwcm)
     }
     else if (pwcm->command.code == dada_pwc_start)
     {
-#ifdef _DEBUG            
+#ifdef _DEBUG
       multilog (pwcm->log, LOG_INFO, "Start recording data\n");
 #endif
 
@@ -274,12 +274,8 @@ int dada_pwc_main_start_transfer (dada_pwc_main_t* pwcm)
 
   time_t utc = pwcm->start_function (pwcm, pwcm->command.utc);
 
-  unsigned buffer_size = 64;
-  static char* buffer = 0;
-
-  if (!buffer)
-    buffer = malloc (buffer_size);
-  assert (buffer != 0);
+  const unsigned int buffer_size = 32;
+  char buffer[buffer_size];
 
   if (utc < 0) {
     multilog (pwcm->log, LOG_ERR, "start_function returned invalid UTC\n");
@@ -289,10 +285,12 @@ int dada_pwc_main_start_transfer (dada_pwc_main_t* pwcm)
   /* If the start function, cannot provide the utc start, 0 
    * indicates that the UTC will be provided by the command
    * interface */
-  if (utc == 0) 
-    buffer = "UNKNOWN";
+  if (utc == 0)
+    sprintf (buffer, "%s", "UNKNOWN");
   else 
+  {
     strftime (buffer, buffer_size, DADA_TIMESTR, gmtime (&utc));
+  }
 
   multilog (pwcm->log, LOG_INFO, "UTC_START = %s\n", buffer);
 
@@ -1038,11 +1036,18 @@ int dada_pwc_main_transfer_data_block (dada_pwc_main_t* pwcm)
 
       pwcm->command = dada_pwc_command_get (pwcm->pwc);
 
-      // multilog (pwcm->log, LOG_INFO, "pwcm->command.utc = %d\n",pwcm->command.utc);
-      // multilog (pwcm->log, LOG_INFO, "pwcm->pwc->utc_start = %d\n",pwcm->pwc->utc_start);
+#ifdef _DEBUG
+      multilog (pwcm->log, LOG_INFO, "pwcm->command.utc = %d\n",pwcm->command.utc);
+      multilog (pwcm->log, LOG_INFO, "pwcm->pwc->utc_start = %d\n",pwcm->pwc->utc_start);
+#endif
 
       /* special case for set_utc_start */
       if (pwcm->command.code == dada_pwc_set_utc_start) {
+#ifdef _DEBUG
+        multilog (pwcm->log, LOG_INFO, "pwcm->command.code = dada_pwc_set_utc_start\n");
+        multilog (pwcm->log, LOG_INFO, "pwcm->command.utc = %d\n", pwcm->command.utc);
+        multilog (pwcm->log, LOG_INFO, "pwcm->command.byte_count = %"PRIu64"\n", pwcm->command.byte_count);
+#endif
 
         assert(pwcm->command.utc > 0);
 
@@ -1293,7 +1298,7 @@ int dada_pwc_main_transfer_data_block (dada_pwc_main_t* pwcm)
 
     } else {
       if (pwcm->verbose)
-        multilog (pwcm->log, LOG_INFO, "transfer_data_block: tranist byte was set, block_function ignored\n");
+        multilog (pwcm->log, LOG_INFO, "transfer_data_block: transit byte was set, block_function ignored\n");
     }
 
     if (pwcm->verbose)
@@ -1338,9 +1343,14 @@ int dada_pwc_main_transfer_data_block (dada_pwc_main_t* pwcm)
 
       else if (pwcm->command.code == dada_pwc_stop) {
 
-        if (pwcm->verbose)
-          multilog (pwcm->log, LOG_INFO, "stopping, but calling process_xfer\n");
-        int64_t result = dada_pwc_main_process_xfer (pwcm, buf_bytes, bytes_written_this_xfer);
+        if (pwcm->xfer_pending_function)
+        {
+          if (pwcm->verbose)
+            multilog (pwcm->log, LOG_INFO, "stopping, but calling process_xfer\n");
+          int64_t result = dada_pwc_main_process_xfer (pwcm, buf_bytes, bytes_written_this_xfer);
+          multilog (pwcm->log, LOG_INFO, "process_xfer returned %"PRIi64"\n", result);
+        }
+
         multilog (pwcm->log, LOG_INFO, "stopping... entering idle state\n");
         return 0;
       }
