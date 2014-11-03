@@ -4,11 +4,15 @@ include_once("functions_i.php");
 
 define("INSTRUMENT", "mopsr");
 define("CFG_FILE", "/home/dada/linux_64/share/mopsr.cfg");
-define("PWC_FILE", "/home/dada/linux_64/share/mopsr_pwcs.cfg");
+define("AQ_FILE",  "/home/dada/linux_64/share/mopsr_aq.cfg");
+define("BF_FILE",  "/home/dada/linux_64/share/mopsr_bf.cfg");
+define("CNR_FILE", "/home/dada/linux_64/share/mopsr_cornerturn.cfg");
+define("SP_FILE",  "/home/dada/linux_64/share/mopsr_signal_paths.txt");
 define("CSS_FILE", "/mopsr/mopsr.css");
 
 include_once("site_definitions_i.php");
 include_once("instrument.lib.php");
+date_default_timezone_set('Australia/Sydney');
 
 class mopsr extends instrument
 {
@@ -20,23 +24,57 @@ class mopsr extends instrument
     $this->banner_image = "/mopsr/images/mopsr_logo_480x60.png";
     $this->banner_image_repeat = "/mopsr/images/mopsr_logo_1x60.png";
     $this->fav_icon = "/mopsr/images/mopsr_favicon.ico";
+
+    $cornerturn_cfg  = $this->configFileToHash(CNR_FILE);
+    $this->config = array_merge($this->config, $cornerturn_cfg);
+
+    $aq_cfg  = $this->configFileToHash(AQ_FILE);
+    $this->config = array_merge($this->config, $aq_cfg);
   }
 
   function serverLogInfo()
   {
     $arr = array();
+    $arr["mopsr_tmc_interface"]          = array("logfile" => "mopsr_tmc_interface.log", "name" => "TMC Interface", "tag" => "server", "shortname" => "TMC");
     $arr["mopsr_results_manager"]        = array("logfile" => "mopsr_results_manager.log", "name" => "Results Mngr", "tag" => "server", "shortname" => "Results");
+    $arr["mopsr_results_manager_tb"]     = array("logfile" => "mopsr_results_manager_tb.log", "name" => "Results Mngr TB", "tag" => "server", "shortname" => "Results");
     $arr["mopsr_web_monitor"]            = array("logfile" => "mopsr_web_monitor.log", "name" => "Web Monitor", "tag" => "server", "shortname" => "Monitor");
+    $arr["mopsr_event_monitor"]          = array("logfile" => "mopsr_event_monitor.log", "name" => "Event Monitor", "tag" => "server", "shortname" => "EMon");
+
     $arr["mopsr_pwc_monitor"]            = array("logfile" => "nexus.pwc.log", "name" => "PWC", "tag" => "pwc", "shortname" => "PWC");
     $arr["mopsr_sys_monitor"]            = array("logfile" => "nexus.sys.log", "name" => "SYS", "tag" => "sys", "shortname" => "SYS");
     $arr["mopsr_src_monitor"]            = array("logfile" => "nexus.src.log", "name" => "SRC", "tag" => "src", "shortname" => "SRC");
+    $arr["mopsr_bf_sys_monitor"]         = array("logfile" => "bfs.sys.log", "name" => "BF SYS", "tag" => "sys", "shortname" => "BF_SYS");
+    $arr["mopsr_bf_src_monitor"]         = array("logfile" => "bfs.src.log", "name" => "BF SRC", "tag" => "src", "shortname" => "BF_SRC");
+
+    $arr["mopsr_ib_receiver"]            = array("logfile" => "mopsr_ib_receiver.log", "name" => "IB Rcv", "tag" => "ib_rcv", "shortname" => "IB_Rcv");
+    $arr["mopsr_rx_monitor"]             = array("logfile" => "mopsr_ib_receiver.log", "name" => "RX Mon", "tag" => "rx_mon", "shortname" => "RX_Mon");
     return $arr;
   }
 
   function clientLogInfo() {
 
     $arr = array();
-    $arr["mopsr_results_monitor"] = array("logfile" => "nexus.sys.log", "name" => "Results Mon", "tag" => "results mon");
+    $arr["mopsr_observation_manager"] = array("logfile" => "nexus.sys.log", "name" => "Obs Mngr", "tag" => "obs mngr");
+    $arr["mopsr_results_monitor"]     = array("logfile" => "nexus.sys.log", "name" => "Results Mon", "tag" => "results mon");
+    $arr["mopsr_archive_manager"]     = array("logfile" => "nexus.sys.log", "name" => "Archive Mngr", "tag" => "archive mngr");
+    $arr["mopsr_pwc"]                 = array("logfile" => "nexus.pwc.log", "name" => "PWC", "tag" => "pwc");
+    $arr["mopsr_mux_send"]            = array("logfile" => "nexus.sys.log", "name" => "Mux Send", "tag" => "mux send");
+    $arr["mopsr_aqdsp"]               = array("logfile" => "nexus.sys.log", "name" => "AQDSP", "tag" => "aqdsp");
+    $arr["mopsr_aq_diskdb"]           = array("logfile" => "nexus.sys.log", "name" => "AQ DiskDB", "tag" => "diskdb");
+    $arr["mopsr_superb"]              = array("logfile" => "nexus.sys.log", "name" => "Superb Mon", "tag" => "superb");
+    $arr["mopsr_dbsplitdb"]           = array("logfile" => "nexus.sys.log", "name" => "DB split", "tag" => "split");
+    $arr["mopsr_dbantsdb"]            = array("logfile" => "nexus.sys.log", "name" => "Select Ants", "tag" => "ants");
+    $arr["mopsr_dspsr"]               = array("logfile" => "nexus.sys.log", "name" => "DSPSR", "tag" => "proc");
+    $arr["mopsr_proc"]                = array("logfile" => "nexus.sys.log", "name" => "Generic Proc", "tag" => "proc");
+    $arr["mopsr_dumper"]              = array("logfile" => "nexus.sys.log", "name" => "Dumper", "tag" => "dump");
+
+    $arr["mopsr_mux_recv"]            = array("logfile" => "bfs.sys.log", "name" => "Mux Recv", "tag" => "mux recv");
+    $arr["mopsr_bf_transpose"]        = array("logfile" => "bfs.sys.log", "name" => "Transpose", "tag" => "bf xpose");
+    $arr["mopsr_bf_process"]          = array("logfile" => "bfs.sys.log", "name" => "Proc", "tag" => "bf proc");
+    $arr["mopsr_bf_archive_manager"]  = array("logfile" => "bfs.sys.log", "name" => "Archive Mngr", "tag" => "archive mngr");
+    $arr["mopsr_bf_results_mon"]      = array("logfile" => "bfs.src.log", "name" => "Results Mon", "tag" => "results mon");
+
     return $arr;
 
   }
@@ -75,6 +113,158 @@ class mopsr extends instrument
     }
 
     return $status;
+  }
+
+  #
+  # Over-ride baseclass method
+  #
+  function getObsImages($dir)
+  {
+    # determine how many antenna / beam 
+    $rval = 0;
+    $ants = array();
+    $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -n";
+    $line = exec($cmd, $ants, $rval);
+
+    $results = array();
+    foreach ($ants as $ant)
+    {
+      $images = array();
+      $cmd = "find ".$dir." -name '????-??-??-??:??:??.".$ant.".??.*x*.png' -printf '%f\n' | sort -n";
+      $line = exec($cmd, $images, $rval);
+        
+      if ($line != "")
+      {
+        $results[$ant] = array();
+        foreach ($images as $image)
+        {
+          list ($utc, $ant2, $type, $res, $ext) = explode (".", $image);
+          $results[$ant][$type."_".$res] = $image;
+        }
+      }
+    }
+    
+    return $results;
+
+  }
+
+  function getObsSources($dir) 
+  {
+    # determine how many pulsars are present
+    $rval = 0;
+    $ants = array();
+    $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -type d -printf '%f\n'";
+    $line = exec($cmd, $ants, $rval);
+
+    $results = array();
+    foreach ($ants as $ant)
+    {
+      $tots = array();
+      $cmd = "find ".$dir."/".$ant." -mindepth 1 -maxdepth 1 -type f -name '*.tot' -printf '%f\n'";
+      $line = exec($cmd, $tots, $rval);
+
+      $results[$ant] = array();
+      foreach ($tots as $tot)
+      {
+        $arr = split("_", $tot, 3);
+        if (count($arr) == 3)
+          $s = $arr[0]."_".$arr[1];
+        else
+          $s = $arr[0];
+
+        if (!array_key_exists($s, $results[$ant]))
+          $results[$ant][$s] = array();
+
+        if (strpos($tot, "_t") !== FALSE) 
+        {
+          $results[$ant][$s]["int"]     = $this->getIntergrationLength($dir."/".$ant."/".$tot);
+          $results[$ant][$s]["src"]     = $this->getArchiveName($dir."/".$ant."/".$tot);
+          $results[$ant][$s]["dm"]      = instrument::getSourceDM($results[$ant][$s]["src"]);
+          $results[$ant][$s]["p0"]      = instrument::getSourcePeriodMS($results[$ant][$s]["src"]);
+          $results[$ant][$s]["nsubint"] = $this->getNumSubints($dir."/".$ant."/".$tot);
+        }
+
+        if (strpos($tot, "_f") !== FALSE) 
+        {
+          $results[$ant][$s]["snr"]     = instrument::getSNR($dir."/".$ant."/".$tot);
+        }
+      }
+    }
+
+    return $results;
+  }
+
+  function addToRA($ra, $min)
+  {
+    $parts = split(":", $ra);
+    $hh = $mm = $ss = 0;
+    if (count($parts) >= 1)
+      $hh = $parts[0];
+    if (count($parts) >= 2)
+      $mm = $parts[1];
+    if (count($parts) == 3)
+      $ss = $parts[2];
+
+    $hours = $hh + ($mm/60) + ($ss / 3600);
+
+    $hours += ($min / 60);
+
+    $hh = floor($hours);
+
+    $minutes = 60 * ($hours - $hh);
+    $mm = floor($minutes);
+
+    $seconds = 60 * ($minutes - $mm);
+    $ss = floor($seconds);
+
+    $ss_remainder = $seconds - $ss;
+
+    $new_ra = sprintf("%02d", $hh).":".sprintf("%02d", $mm).":".sprintf("%02d", $ss).".".substr(sprintf("%0.1f", $ss_remainder),2);
+
+    return ($new_ra);
+  }
+
+  function addToDEC ($dec, $min)
+  {
+    $parts = split(":", $dec);
+    $dd = $mm = $ss = 0;
+    if (count($parts) >= 1)
+      $dd = $parts[0];
+    if (count($parts) >= 2)
+      $mm = $parts[1];
+    if (count($parts) == 3)
+      $ss = $parts[2];
+
+    $degrees = $dd + ($mm / 60) + ($ss / 3600);
+
+    $degrees += ($min / 60);
+
+    $dd = floor($degrees);
+
+    $minutes = 60 * ($degrees - $dd);
+    $mm = floor($minutes);
+
+    $seconds = 60 * ($minutes - $mm);
+    $ss = floor($seconds);
+
+    $ss_remainder = $seconds - $ss;
+
+    $new_dec = sprintf("%02d", $dd).":".sprintf("%02d", $mm).":".sprintf("%02d", $ss).".".substr(sprintf("%0.1f", $ss_remainder),2);
+
+    return ($new_dec);
+  }
+
+  function readSignalPaths()
+  {
+    $hash = $this->configFileToHash(SP_FILE);
+
+    $sps = array();
+    foreach ($hash as $key => $val)
+    {
+      $pfb = str_replace(" ", "_", $val);
+      $sps[$pfb] = $key;
+    }
+    return $sps;
   }
 
 } // END OF CLASS DEFINITION

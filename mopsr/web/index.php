@@ -86,13 +86,13 @@ $ejs = array_unique($ejs);
   echo "  <tr>\n";
   echo "    <td style='vertical-align: top;' width='630px'>\n";
 
-  $current_obs->openBlockHeader("Observation Summary");
+  $current_obs->openBlockHeader("Observation Configuration");
     $current_obs->printHTML();
   $current_obs->closeBlockHeader();
 
   echo "<img src='/images/spacer.gif' width='1px' height='10px'>\n";
 
-  $plot_window->openBlockHeader("Diagnostic Plots");
+  $plot_window->openBlockHeader("Observation Pulsar Plots");
     $plot_window->printHTML();      
   $plot_window->closeBlockHeader();
 

@@ -9,6 +9,7 @@ class mopsr_webpage
   var $doc_type = "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\" \"http://www.w3.org/TR/html4/loose.dtd'>";
   var $show_logo = 0;
   var $logo_text = "";
+  var $sidebar_width = "250";
 
   function mopsr_webpage() 
   {
@@ -73,7 +74,7 @@ function handleDirect($child_class)
     echo "<html>\n";
     echo "  <head>\n";
     echo "    <title>".$obj->title."</title>\n";
-    echo "    <link rel='shortcut icon' href='/mopsr/images/mopsr_favico.ico'/>\n";
+    echo "    <link rel='shortcut icon' href='/mopsr/images/mopsr_favicon.ico'/>\n";
 
     // css and javascript includes
     for ($i=0; $i<count($obj->css); $i++)
@@ -121,7 +122,7 @@ function handleDirect($child_class)
     {
       echo "<table width='100%' cellpadding='10px' border=0>\n";
       echo "  <tr>\n";
-      echo "    <td style='vertical-align: top; width: 250px'>\n";
+      echo "    <td style='vertical-align: top; width: ".$obj->sidebar_width."px'>\n";
       $obj->printSideBarHTML();
       echo "    </td>\n";
       echo "    <td style='vertical-align: top;'>\n";

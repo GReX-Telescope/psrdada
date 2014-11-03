@@ -6,35 +6,49 @@ include_once("mopsr_webpage.lib.php");
 class antenna_monitor extends mopsr_webpage 
 {
   var $inst = 0;
-  var $verbose = false;
+
+  var $img_size = "160x120";
+
+  var $modules = array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
+
+  var $plot_types = array("bp", "ts", "wf", "hg");
+  var $plot_titles = array("bp" => "Bandpass", "ts" => "TimeSeries", "wf" => "Waterfall", "hg" => "Histogram");
+
+  var $update_secs = 5;
+
 
   function antenna_monitor()
   {
     mopsr_webpage::mopsr_webpage();
     $this->title = "MOPSR Antenna Monitor";
-    $this->verbose = isset($_GET["verbose"]);
+
+    $this->callback_freq = $this->update_secs * 1000;
+    $this->inst = new mopsr();
   }
 
   function javaScriptCallback()
   {
-    //return "antenna_monitor_request();";
+    return "antenna_monitor_request();";
   }
 
   function printJavaScriptHead()
   {
-    $this->inst = new mopsr();
 
 ?>
     <script type='text/javascript'>  
 
-      var npsrs = 0;
-      var utc_start = "";
-      var psrs = new Array();
-
-      function popPlotWindow(URL) {
-        day = new Date();
-        id = day.getTime();
-        eval("page" + id + " = window.open(URL, '" + id + "', 'toolbar=1,scrollbars=1,location=1,statusbar=0,menubar=1,resizable=1,width=1400,height=870');");
+      function reset_others(excluded) 
+      {
+        var imgs = document.getElementsByTagName('img');
+        var i=0;
+        for (i=0; i< imgs.length; i++) 
+        {
+          if (excluded.indexOf(imgs[i].id) == -1)
+          {
+            imgs[i].height = "0";
+            imgs[i].src = "";
+          }
+        }
       }
 
       function popImage(URL) {
@@ -43,119 +57,82 @@ class antenna_monitor extends mopsr_webpage
         eval("page" + id + " = window.open(URL, '" + id + "', 'toolbar=0,scrollbars=0,location=1,statusbar=0,menubar=0,resizable=1,width=1080,height=800');");
       }
 
-      function reset_others(excluded) 
+      function handle_antenna_monitor_request(am_xml_request) 
       {
-
-        var imgs = document.getElementsByTagName('img');
-        var i=0;
-        var tmpstr = "resetting ";
-        for (i=0; i< imgs.length; i++) {
-          if ((imgs[i].id.indexOf("beam") == 0) && (excluded.indexOf(imgs[i].id) == -1)) {
-            imgs[i].src = "/mopsr/images/mopsr_beam_disabled_240x180.png";
-            tmpstr += "id="+imgs[i].id+",";
-          }
-        }
-      }
-
-      function handle_antenna_monitor_request(pw_xml_request) 
-      {
-<?
-      if ($this->verbose)
-        echo "        var verbose = true;\n";
-      else
-        echo "        var verbose = false;\n";
-?>
-
-        if (pw_xml_request.readyState == 4)
+        if (am_xml_request.readyState == 4)
         {
-          var xmlDoc = pw_xml_request.responseXML
+          var xmlDoc = am_xml_request.responseXML
           if (xmlDoc != null)
           {
             var xmlObj=xmlDoc.documentElement;
 
+            var i, j, k, img_id, img_url;
+            var excluded = Array();
+
+            var xmlObj=xmlDoc.documentElement;
+
             var http_server = xmlObj.getElementsByTagName("http_server")[0].childNodes[0].nodeValue;
             var url_prefix  = xmlObj.getElementsByTagName("url_prefix")[0].childNodes[0].nodeValue;
+            var img_prefix  = xmlObj.getElementsByTagName("img_prefix")[0].childNodes[0].nodeValue;
+            var udp_monitor_error = xmlObj.getElementsByTagName("error")[0];
 
-            // determine which types of images are currently active
-            if (document.imageform.imagetype[0].checked == true) 
-              type = "bp";
+            try {
+              document.getElementById("udp_monitor_error").innerHTML = "[" + udp_monitor_error.childNodes[0].nodeValue + "]";
+            } catch (e) {
 
-            if (document.imageform.imagetype[1].checked == true) 
-              type = "ts";
+            }
 
-            if (document.imageform.imagetype[2].checked == true) 
-              type = "fft";
-
-            if (document.imageform.imagetype[3].checked == true) 
-              type = "pdbp";
-
-            if (document.imageform.imagetype[4].checked == true) 
-              type = "pvf";
-
-  
-            var set = new Array();
-            var beams = xmlObj.getElementsByTagName("beam");
-
-            var i = 0;
-            for (i=0; i<beams.length; i++)
+            var pfbs = xmlObj.getElementsByTagName ("pfb");
+            var inputs;
+            var images;
+            for (i=0; i<pfbs.length; i++)
             {
-              var beam = beams[i];
-              var beam_name = beam.getAttribute("name");
-              var img_element = document.getElementById("beam"+beam_name);
-
-              var j = 0;
-              for (j=0; j<beam.childNodes.length; j++)
+              pfb_id = pfbs[i].getAttribute("id");
+              inputs = pfbs[i].childNodes;
+              for (j=0; j<inputs.length; j++)
               {
-                img = beam.childNodes[j];
-                if (img.nodeType == 1)
-                { 
-                  if (img.getAttribute("type") == type)
+                input_id = inputs[j].getAttribute("id");
+                images = inputs[j].childNodes;
+                for (k=0; k<images.length; k++)
+                {
+                  image = images[k];
+                  if (image.nodeType == 1)
                   {
-                    set.push("beam"+beam_name);
-                    img_element.src = http_server + url_prefix + img.childNodes[0].nodeValue;
+                    image_type = image.getAttribute("type");
+                    img_url = http_server + "/" + url_prefix + "/" + img_prefix + "/" + image.childNodes[0].nodeValue;
+                    image_width = image.getAttribute("width");
+                    img_id = image_type + "_" + input_id;
+                    if (image_width < 300)
+                    {
+                      excluded.push(img_id);
+                      document.getElementById (img_id).src = img_url;
+                      document.getElementById (img_id).height = parseInt(image.getAttribute("height"));
+                    }
+                    else
+                      document.getElementById (img_id).href = "javascript:popImage('"+img_url+"')";
                   }
                 }
               }
             }
-
-            reset_others(set);
+            reset_others(excluded);
           }
         }
       }
                   
       function antenna_monitor_request() 
       {
-        var host = "<?echo $this->inst->config["SERVER_HOST"];?>";
-        var port = "<?echo $this->inst->config["SERVER_WEB_MONITOR_PORT"];?>";
-        var url = "antenna_monitor.lib.php?update=true&host="+host+"&port="+port;
-
-        if (document.imageform.imagetype[0].checked == true) 
-          type = "bp";
-
-        if (document.imageform.imagetype[1].checked == true) 
-          type = "ts";
-
-        if (document.imageform.imagetype[2].checked == true) 
-          type = "fft";
-
-        if (document.imageform.imagetype[3].checked == true) 
-          type = "pdbp";
-
-        if (document.imageform.imagetype[4].checked == true) 
-          type = "pvf";
-
-        url += "&type="+type+"&size=112x84&beam=all";
+        var url = "antenna_monitor.lib.php?update=true";
 
         if (window.XMLHttpRequest)
-          pw_xml_request = new XMLHttpRequest();
+          am_xml_request = new XMLHttpRequest();
         else
-          pw_xml_request = new ActiveXObject("Microsoft.XMLHTTP");
+          am_xml_request = new ActiveXObject("Microsoft.XMLHTTP");
 
-        pw_xml_request.onreadystatechange = function() {
-          handle_antenna_monitor_request(pw_xml_request)
+        am_xml_request.onreadystatechange = function() {
+          handle_antenna_monitor_request(am_xml_request)
         };
-        pw_xml_request.open("GET", url, true);
-        pw_xml_request.send(null);
+        am_xml_request.open("GET", url, true);
+        am_xml_request.send(null);
       }
 
     </script>
@@ -168,51 +145,56 @@ class antenna_monitor extends mopsr_webpage
 ?>
   <center>
 
-    <table border=0 cellspacing=0 cellpadding=4>
+<?
+    list ($xres, $yres) = split("x", $this->img_size);
+    echo "<table>\n";
+    echo "<tr><td>ID</td>";
+    foreach ($this->plot_types as $plot)
+    {
+      echo "<th>".$this->plot_titles[$plot]."</th>";
+    }
+    echo "</tr>\n";
 
-      <tr>
-        <td> <img id='bandpass' src='/images/blankimage.gif' width=400px height=200px /> </td>
-        <td> <img id='histogram' src='/images/blankimage.gif' width=400px height=200px /> </td>
-        <td rowspan=2 valign='top'> 
-          <table class='result'>
-            <tr> <th> Antenna ID </th>    <td>East13 Blue</td> </tr>
-            <tr> <th> PFB ID </th>        <td>PFB_A 12</td> </tr>
-            <tr> <th> Histogram Mean</th> <td>4.982</td> </tr>
-          </table>
-        </td>
-      </tr>
-
-      <tr>
-        <td> <img id='waterfall' src='/images/blankimage.gif' width=400px height=300px /> </td>
-        <td> <img id='timeseries' src='/images/blankimage.gif' width=400px height=300px /> </td>
-      </tr>
-
-    </table>
-
+    foreach ( $this->modules as $module )
+    {
+      echo "<tr>\n";
+      echo   "<td id='".$module."_id'></td>\n";
+      foreach ($this->plot_types as $plot)
+      {
+        echo "<td>\n";
+        echo "<a id='".$plot."_".$module."_link'>";
+        echo "<img id='".$plot."_".$module."' src='/images/blackimage.gif' width='".$xres."px' height='0px'/>";
+        echo "</a>";
+        echo "</td>\n";
+      }
+      echo "</tr>\n";
+    }
+    echo "</table>\n";
+?>
   </center>
 <?
   }
 
   function printUpdateHTML($get)
   {
-    $host = $get["host"];
-    $port = $get["port"];
-
+    $host = $this->inst->config["SERVER_HOST"];
+    $port = $this->inst->config["SERVER_WEB_MONITOR_PORT"];
     $url = "http://".$_SERVER["SERVER_NAME"].":".$_SERVER["SERVER_PORT"];
 
     list ($socket, $result) = openSocket($host, $port);
 
-    $xml = "<plot_update>";
-    $xml .= "<http_server>http://".$_SERVER["SERVER_NAME"].":".$_SERVER["SERVER_PORT"]."</http_server>"; 
-    $xml .= "<url_prefix>/mopsr/results/</url_prefix>";
+    $xml  = "<antenna_update>";
+    $xml .=   "<http_server>http://".$_SERVER["SERVER_NAME"].":".$_SERVER["SERVER_PORT"]."</http_server>"; 
+    $xml .=   "<url_prefix>mopsr</url_prefix>";
+    $xml .=   "<img_prefix>monitor/udp</img_prefix>";
+    $xml .=   "<socket_connection host='".$host."' port='".$port."'/>"; 
 
     $data = "";
     $response = "initial";
 
     if ($result == "ok") 
     {
-      $xml .= "<images>";
-      $bytes_written = socketWrite($socket, "img_info\r\n");
+      $bytes_written = socketWrite($socket, "udp_monitor_info\r\n");
       $max = 100;
       while ($socket && ($result == "ok") && ($response != "") && ($max > 0))
       {
@@ -227,36 +209,17 @@ class antenna_monitor extends mopsr_webpage
         socket_close($socket);
       $socket = 0;
       $xml .= $data;
-      $xml .="</images>";
     } 
+    else
+    {
+      $xml .= "<error>".$result."</error>";
+    }
 
-    $xml .= "</plot_update>";
+    $xml .= "</antenna_update>";
 
     header('Content-type: text/xml');
     echo $xml;
   }
-
-  function echoBlank() 
-  {
-    echo "<td><img src='/images/spacer.gif' width='113px' height='42px'</td>\n";
-  }
-
-  function echoBeam($beam_no) 
-  {
-    $beam_str = sprintf("%02d", $beam_no);
-    $roach_name = "Inactive";
-
-    for ($i=0; $i<$this->inst->roach["NUM_ROACH"]; $i++)
-      if ($this->inst->roach["BEAM_".$i] == $beam_str)
-        $roach_name = $this->inst->roach["ROACH_".$i];
-
-    echo "<td rowspan=2 align=right>\n";
-    echo "          <a border=0px href=\"javascript:popPlotWindow('beam_viewer.lib.php?single=true&beam=".$beam_str."')\">";
-    echo "<img src=\"/images/blankimage.gif\" border=0 width=113 height=85 id=\"beam".$beam_str."\" TITLE=\"Beam ".$beam_str." - ".$roach_name."\" alt=\"Beam ".$beam_no."\">";
-    echo "</a>\n";
-    echo "        </td>\n";
-  }
-
 }
 
 handleDirect("antenna_monitor");

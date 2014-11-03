@@ -17,7 +17,6 @@ class machine_summary extends mopsr_webpage
   // mapping of HOST to type 
   var $machines = array();
   var $config = array();
-  var $roach = array();
 
   var $verbose = false;
 
@@ -37,6 +36,7 @@ class machine_summary extends mopsr_webpage
     for ($i=0; $i<$this->config["NUM_PWC"]; $i++) 
     {
       $host = $this->config["PWC_".$i];
+      $host = str_replace("mpsr-", "", $host);
       $this->pwcs[$i] = $host;
       $this->machines[$host] = "pwc";
     }
@@ -49,7 +49,7 @@ class machine_summary extends mopsr_webpage
       $this->db_ids = array($this->config["RECEIVING_DATA_BLOCK"]);
 
     list ($server_host, $server_domain) = explode(".", $this->config["SERVER_HOST"], 2);
-    $server_host = str_replace("-", "_", $server_host);
+    $server_host = str_replace("mpsr-", "", $server_host);
     $this->machines[$server_host] = "server";
   }
 
@@ -245,7 +245,7 @@ class machine_summary extends mopsr_webpage
               for (i=0; i<node_statuses.length; i++) 
               {
                 host = node_statuses[i].getAttribute("host");
-                host = host.replace("-","_");
+                host = host.replace("mpsr-","");
 
                 pwcs_per_host[host] = 0;
 
@@ -275,7 +275,8 @@ class machine_summary extends mopsr_webpage
                     }
                     else if (key == "disk") 
                     {
-                      var disk_used = parseFloat(node.childNodes[0].nodeValue);
+                      var disk_used = parseFloat(node.getAttribute("used"));
+                      var disk_free = parseFloat(node.childNodes[0].nodeValue);
                       var disk_size = parseFloat(node.getAttribute("size"));
                       var disk_free = (disk_size - disk_used);
                       var disk_percent = Math.floor((disk_used / disk_size) * 100);
@@ -321,34 +322,22 @@ class machine_summary extends mopsr_webpage
               for (var host in pwcs_per_host)
               {
                 var free_space = parseFloat(disk_free_per_host[host]);
-                if (pwcs_per_host[host] > 0)
+                var free_space_str = "";
+                if (free_space < 1024)
                 {
-                  var npwc = pwcs_per_host[host];
-                  var t = new Date();
-                  t.setTime((free_space / (4.0 * npwc)) * 1000);
-                  var time_left = PadDigits(t.getUTCDate()-1,2)+":"+PadDigits(t.getUTCHours(),2)+":"+PadDigits(t.getUTCMinutes(),2);
-                  document.getElementById(host+"_disk_value").innerHTML = "&nbsp;"+time_left;
-                } 
-                else
-                {
-                  var free_space_str = "";
-                  if (free_space < 1024)
-                  {
-                    free_space_str = free_space.toFixed(2) + " MB";
-                  }
-                  else if (free_space < 1024 * 1024)
-                  {
-                    free_space = free_space / 1024;
-                    free_space_str = free_space.toFixed(2) + " GB";
-                  }
-                  else 
-                  {
-                    free_space = free_space / (1024 * 1024);
-                    free_space_str = free_space.toFixed(2) + " TB";
-                  }
-        
-                  document.getElementById(host+"_disk_value").innerHTML = "&nbsp;" + free_space_str;
+                   free_space_str = free_space.toFixed(1) + " MB";
                 }
+                else if (free_space < 1024 * 1024)
+                {
+                  free_space = free_space / 1024;
+                  free_space_str = free_space.toFixed(1) + " GB";
+                }
+                else 
+                {
+                   free_space = free_space / (1024 * 1024);
+                  free_space_str = free_space.toFixed(1) + " TB";
+                }
+                document.getElementById(host+"_disk_value").innerHTML = "&nbsp;" + free_space_str;
               }
 
               // process daemon_status tags next
@@ -477,16 +466,19 @@ class machine_summary extends mopsr_webpage
         // pwcs have buffer bar
         foreach ($this->pwcs as $p => $host)
         {
-          foreach ($this->db_ids as $db_id)
+          if (($this->config["PWC_STATE_".$p] == "active") || ($this->config["PWC_STATE_".$p] == "passive"))
           {
-            $tag = $host."_".$p."_".$db_id;
-            echo "        ".$tag."_buffer = new JS_BRAMUS.jsProgressBar($('".$tag."_buffer_progress_bar'), 0, ";
-            echo " { width : 40, showText : false, animate : false, ".
-                 "boxImage: '/images/jsprogress/percentImage_40.png', ".
-                 "barImage : Array( '/images/jsprogress/percentImage_back1_40.png', ".
-                 "'/images/jsprogress/percentImage_back2_40.png', ".
-                 "'/images/jsprogress/percentImage_back3_40.png', ".
+            foreach ($this->db_ids as $db_id)
+            {
+              $tag = $host."_".$p."_".$db_id;
+              echo "        ".$tag."_buffer = new JS_BRAMUS.jsProgressBar($('".$tag."_buffer_progress_bar'), 0, ";
+              echo " { width : 40, showText : false, animate : false, ".
+                   "boxImage: '/images/jsprogress/percentImage_40.png', ".
+                   "barImage : Array( '/images/jsprogress/percentImage_back1_40.png', ".
+                   "'/images/jsprogress/percentImage_back2_40.png', ".
+                   "'/images/jsprogress/percentImage_back3_40.png', ".
                  "'/images/jsprogress/percentImage_back4_40.png') } );\n";
+            }
           }
         }
 
@@ -508,7 +500,8 @@ class machine_summary extends mopsr_webpage
         <th colspan=2>Load</th>
         <th colspan=2>Disk</th>
         <th>T &deg;C</th>
-        <th colspan=2>Beam</th>
+        <th></th>
+        <th colspan=1>PFB</th>
 <? if ($this->verbose) { ?>
         <th colspan=2>Prim DB</th>
         <th colspan=2>Aux  DB</th>
@@ -556,7 +549,7 @@ class machine_summary extends mopsr_webpage
       echo "      <span id='".$m."_disk_progress_bar'>[ ... ]</span>\n";
       echo "     </td>\n";
 
-      echo "     <td width='40px' class='gap' align='left' rowspan='$rs'>\n";
+      echo "     <td width='50px' class='gap' align='left' rowspan='$rs'>\n";
       echo "      <span id='".$m."_disk_value'></span>\n";
       echo "     </td>\n";
 
@@ -576,6 +569,8 @@ class machine_summary extends mopsr_webpage
         else
           $class = "gap";
 
+        $has_db  = ((strpos($mp, "server") === FALSE) && (($this->config["PWC_STATE_".$mp] == "active") || ($this->config["PWC_STATE_".$mp] == "passive")));
+
         // Status Lights for each PWC
         $linkid = $mp."_a";
         $imgid = $mp."_img";
@@ -583,10 +578,10 @@ class machine_summary extends mopsr_webpage
         echo "      ".$this->overallStatusLight($status, $mp, $linkid, $imgid)."\n";
         echo "     </td>\n";
  
-        // PWC IDs [BEAM]       
+        // PWC IDs [PFB]       
         echo "     <td width='30px' class='".$class."'>";
         if (strpos($mp, "server") === FALSE)
-          echo "      <div>".$this->roach["BEAM_".$mp]."</div>\n";
+          echo "      <div>".$this->config["PWC_PFB_ID_".$mp]."</div>\n";
         else
           echo "&nbsp;";
         echo "     </td>";
@@ -596,7 +591,7 @@ class machine_summary extends mopsr_webpage
 
         // datablock buffers progress bar
         echo "     <td width='40px' style='vertical-align: middle;'>\n";
-        if (strpos($mp, "server") === FALSE)
+        if ($has_db)
         {
           $tag = $m."_".$mp."_".$db_id;
           echo "      <div id='".$tag."_buffer1'>\n";
@@ -609,7 +604,7 @@ class machine_summary extends mopsr_webpage
 
         // datablock buffers str value
         echo "     <td width='40px' style='vertical-align: middle;'>\n";
-        if (strpos($mp, "server") === FALSE)
+        if ($has_db)
         {
           $tag = $m."_".$mp."_".$db_id;
           echo "      <div id='".$tag."_buffer2' style='text-align: right;'>\n";
@@ -624,7 +619,7 @@ class machine_summary extends mopsr_webpage
         if ($this->verbose)
         {
           echo "     <td width='40px' style='vertical-align: middle; padding-left: 10px;'>\n";
-          if (strpos($mp, "server") === FALSE)
+          if ($has_db)
           {
             foreach ($this->db_ids as $db_id)
             {
@@ -642,7 +637,7 @@ class machine_summary extends mopsr_webpage
           echo "     </td>\n";
 
           echo "     <td width='40px' style='vertical-align: middle;'>\n";
-          if (strpos($mp, "server") === FALSE)
+          if ($has_db)
           {
             foreach ($this->db_ids as $db_id)
             {

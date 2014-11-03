@@ -5,16 +5,17 @@ include_once("mopsr_webpage.lib.php");
 
 class current_obs extends mopsr_webpage 
 {
+  var $inst;
 
   function current_obs()
   {
     mopsr_webpage::mopsr_webpage();
+    $this->inst = new mopsr();
   }
 
   function javaScriptCallback()
   {
-    //return "current_obs_request();";
-    return "";
+    return "current_obs_request();";
   }
 
   function printJavaScriptHead()
@@ -68,10 +69,7 @@ class current_obs extends mopsr_webpage
       // generate an obsevartaion info request
       function current_obs_request() 
       {
-        var host = "<?echo $inst->config["SERVER_HOST"];?>";
-        var port = "<?echo $inst->config["SERVER_WEB_MONITOR_PORT"];?>";
-        var url = "current_obs_window.lib.php?update=true&host="+host+"&port="+port;
-
+        var url = "current_obs_window.lib.php?update=true";
         if (window.XMLHttpRequest)
           co_http_request = new XMLHttpRequest();
         else
@@ -92,24 +90,30 @@ class current_obs extends mopsr_webpage
   function printHTML() 
   {
 ?>
-    <table class='curr_obs'>
+    <table class='curr_obs' width='100%'>
+      <tr>
+        <th>SOURCE</th>
+        <td><span id ="SOURCE"></span></td>
+        <th>UTC_START</th>
+        <td><span id ="UTC_START"></span></td>
+        <th>FREQ</th>
+        <td><span id ="FREQ"></span>&nbsp;MHz</td>
+      </tr>
       <tr>
         <th>RA</th>
         <td><span id ="RA"></span></td>
-        <th>Acc Length</th>
-        <td><span id="ACC_LEN"></span></td>
-      </tr>
-      <tr>
-        <th>UTC_START</th>
-        <td><span id ="UTC_START"></span></td>
-        <th>DEC</th>
-        <td><span id ="DEC"></span></td>
-      </tr>
-      <tr>
-        <th>CFREQ</th>
-        <td><span id ="CFREQ"></span>&nbsp;MHz</td>
         <th>PROC_FILE</th>
         <td><span id ="PROC_FILE"></span></td>
+        <th>BW</th>
+        <td><span id ="BW"></span>&nbsp;MHz</td>
+      </tr>
+      <tr>
+        <th>DEC</th>
+        <td><span id ="DEC"></span></td>
+        <th>OBSERVER</th>
+        <td><span id="OBSERVER"></span></td>
+        <th>NANT</th>
+        <td><span id ="NANT"></span></td>
       </tr>
     </table>
 <?
@@ -117,11 +121,12 @@ class current_obs extends mopsr_webpage
 
   function printUpdateHTML($get)
   {
-    $host = $get["host"];
-    $port = $get["port"];
+    $host = $this->inst->config["SERVER_HOST"];
+    $port = $this->inst->config["SERVER_WEB_MONITOR_PORT"];
+    $timeout = 1;
+
     $response = "";
 
-    $timeout = 1;
     list ($socket, $result) = openSocket($host, $port, $timeout);
     if ($result == "ok") 
     {

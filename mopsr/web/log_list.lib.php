@@ -43,7 +43,7 @@ class log_list extends mopsr_webpage
 
       function clearLogWindow()
       {
-        log_window.document.location = "ganglia_window.lib.php";
+        log_window.document.location = "antenna_monitor.lib.php?single=true";
       }
 
       function changeLogWindow()
@@ -78,7 +78,7 @@ class log_list extends mopsr_webpage
   /* HTML for this page */
   function printHTML() 
   {
-    $this->openBlockHeader("Logs");
+    $this->openBlockHeader("Logs &amp; PFB Diagnostic Plots");
 
 ?>
     <span id="daemon_span" style="visibility: visible;">
@@ -127,7 +127,7 @@ class log_list extends mopsr_webpage
 
     <br>
     <br>
-    <iframe name="log_window" src="ganglia_window.lib.php" frameborder=0 width=100% height=450px>
+    <iframe name="log_window" src="ganglia_window.lib.php?single=true" frameborder=0 width=100% height=500px>
     </iframe>
 
 <?

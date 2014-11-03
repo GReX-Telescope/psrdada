@@ -12,8 +12,8 @@ define(RESULTS_DIR,     WEB_BASE."/results");
 
 /* Config files */
 define(SYS_CONFIG,         DADA_ROOT."/share/mopsr.cfg");
-define(DADA_CONFIG,        DADA_ROOT."/share/mopsr_tcs.cfg");
-define(DADA_SPECIFICATION, DADA_ROOT."/share/mopsr_tcs.spec");
+define(DADA_CONFIG,        DADA_ROOT."/share/mopsr_tmc.cfg");
+define(DADA_SPECIFICATION, DADA_ROOT."/share/mopsr_tmc.spec");
 
 /* Time/date configuration */
 define(DADA_TIME_FORMAT,  "Y-m-d-H:i:s");
@@ -26,10 +26,6 @@ define(STATUS_ERROR, "2");
                                                                                                                                                                                                             
 define(LOG_FILE_SCROLLBACK_HOURS,6);
 define(LOG_FILE_SCROLLBACK_SECS,LOG_FILE_SCROLLBACK_HOURS*60*60);
-                                                                                                                                                                                                            
-# Ports
-define(TCS_CONTROL_PORT, "59000");
-define(TCS_CONTROL_HOST, "srv0.apsr.edu.au");
                                                                                                                                                                                                             
 define(STYLESHEET_HTML,     "<link rel=\"STYLESHEET\" type=\"text/css\" href=\"/mopsr/style.css\">");
 define(STYLESHEET_LOG_HTML, "<link rel=\"STYLESHEET\" type=\"text/css\" href=\"/mopsr/style.css\">");

@@ -1,5 +1,5 @@
 BODY {
-  background: #EEEEEE;
+  background: #FFFFFF;
   color: black;
   font-family: arial,helvetica,sans-serif,times;
   font-size: 10pt;
@@ -65,7 +65,7 @@ table.wrapper {
   margin: 0px;
   /*border-style: solid solid solid solid;*/
   border-style: none none none none;
-  border-color: #0000ff #0000ff #0000ff #0000ff;
+  border-color: #005700 #005700 #005700 #005700;
   border-width: 1px 1px 1px 1px;
   width: 100%;
 }
@@ -74,9 +74,9 @@ th.wrapper {
   text-align: left;
   /*border-style: solid solid solid solid;*/
   border-style: none none solid none;
-  border-color: #0000ff #0000ff #0000ff #0000ff;
+  border-color: #005700 #005700 #005700 #005700;
   border-width: 0px 0px 1px 0px;
-  color: #0000ff;
+  color: #005700;
   /*background: #DDDDFF;*/
   /*background:url(/mopsr/images/mopsr_th_background_5x40.png) repeat-x;*/
   padding: 4px;
@@ -206,7 +206,7 @@ TD.largetext {
 TD.notselected {
   text-align: center;
   vertical-align: middle;
-  background: #EEEEEE;
+  background: #FFFFFF;
   font-size: 8pt;
 }
 
@@ -219,7 +219,7 @@ TD.selected {
 
 TD.notselected_logwin {
   text-align: center;
-  background: #EEEEEE;
+  background: #FFFFFF;
   padding: 5px 5px 5px 5px;
   color: green;
 }
