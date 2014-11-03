@@ -148,6 +148,61 @@ int dada_ib_listen_cm (dada_ib_cm_t * ctx, int port)
 
 }
 
+/* 
+ *  creates event channel and binds a port to the CM_ID ready for a rdma_listen call
+ */
+int dada_ib_bind_cm (dada_ib_cm_t * ctx, int port)
+{
+  assert(ctx);
+  multilog_t * log = ctx->log;
+
+  if (ctx->verbose > 1)
+    multilog(log, LOG_INFO, "dada_ib_bind_cm()\n");
+
+  // create the event channel
+  assert(ctx->cm_channel == 0);
+  ctx->cm_channel = rdma_create_event_channel();
+  if (!ctx->cm_channel)
+  {
+    multilog(log, LOG_ERR, "dada_ib_bind_cm: rdma_create_event_channel failed\n");
+    return -1;
+  }
+
+  int err = 0;
+  struct rdma_cm_id    * listen_id;
+  struct rdma_cm_event * event;
+  struct sockaddr_in     sin;
+
+  // ensure the cm_id is not set
+  assert(ctx->cm_id == 0);
+
+  if (ctx->verbose > 1)
+    multilog(log, LOG_INFO, "dada_ib_bind_cm: rdma_create_id\n");
+  err = rdma_create_id(ctx->cm_channel, &listen_id, NULL, RDMA_PS_TCP);
+  if (err)
+  {
+    multilog(log, LOG_ERR, "dada_ib_bind_cm: rdma_create_id failed [%d]\n", err);
+    return -1;
+  }
+
+  sin.sin_family      = AF_INET;
+  sin.sin_port        = htons(port);
+  sin.sin_addr.s_addr = INADDR_ANY;
+
+  // Bind to local port and listen for connection request 
+  if (ctx->verbose > 1)
+    multilog(log, LOG_INFO, "dada_ib_bind_cm: rdma_bind_addr on port %d\n", port);
+  err = rdma_bind_addr(listen_id, (struct sockaddr *) &sin);
+  if (err)
+  {
+    multilog(log, LOG_ERR, "dada_ib_bind_cm: rdma_bind_addr failed [%d]\n", err);
+    return -1;
+  }
+
+  ctx->cm_id = listen_id;
+  return 0;
+}
+
 
 /*
  *  Connect to the IB CM on the server
@@ -360,7 +415,7 @@ dada_ib_mb_t * dada_ib_reg_buffer (dada_ib_cm_t * ctx, void * buffer,
   if (!mr->mr)
   {
     multilog(log, LOG_ERR, "dada_ib_reg_buffer: ibv_reg_mr failed buffer=%p, "
-                           "buf_size=%"PRIu64"\n", buffer, bufsz);
+                           "buf_size=%"PRIu64" err=%s\n", buffer, bufsz, strerror(errno));
     free(mr);
     return 0;
   }
@@ -545,7 +600,7 @@ int dada_ib_accept (dada_ib_cm_t * ctx)
   err = rdma_accept(ctx->cm_id, &conn_param);
   if (err)
   {
-    multilog(log, LOG_ERR, "accept: rdma_accept failed [%d]\n", err);
+    multilog(log, LOG_ERR, "accept: rdma_accept failed [%d] %s\n", err, strerror(errno));
     return -1;
   }
 
@@ -567,6 +622,7 @@ int dada_ib_accept (dada_ib_cm_t * ctx)
 
   if (ctx->verbose)
     multilog(log, LOG_INFO, "accept: connection established\n");
+  ctx->ib_connected = 1;
 
   rdma_ack_cm_event(event);
 
@@ -586,10 +642,10 @@ int dada_ib_connect (dada_ib_cm_t * ctx)
   if (ctx->verbose > 1)
     multilog(log, LOG_INFO, "dada_ib_connect()\n");
 
+  int connected = 0;
   struct rdma_conn_param conn_param = { };
   struct rdma_cm_event * event;
   int err = 0;
-  int connected = 0;
 
   conn_param.responder_resources = 1;
   conn_param.initiator_depth = 1;
@@ -600,7 +656,7 @@ int dada_ib_connect (dada_ib_cm_t * ctx)
   err = rdma_connect(ctx->cm_id, &conn_param);
   if (err)
   {
-    multilog(log, LOG_ERR, "connect: rdma_connect failed: err=%d, str=%s\n", err, strerror(err));
+    multilog(log, LOG_ERR, "connect: rdma_connect failed: err=%d, str=%s\n", err, strerror(errno));
     return -1;
   }
 
@@ -618,7 +674,7 @@ int dada_ib_connect (dada_ib_cm_t * ctx)
 
   if (event->event != RDMA_CM_EVENT_ESTABLISHED)
     multilog(log, LOG_WARNING, "connect: rdma_get_cm_event returned %s event, expected "
-                               "RDMA_CM_EVENT_ESTABLISHED\n", rdma_event_str(event->event));
+                             "RDMA_CM_EVENT_ESTABLISHED\n", rdma_event_str(event->event));
   else
     connected = 1;
 
@@ -631,6 +687,7 @@ int dada_ib_connect (dada_ib_cm_t * ctx)
   }
   else
   {
+    ctx->ib_connected = 1;
     if (ctx->verbose)
       multilog(log, LOG_INFO, "connect: connection established\n");
     return 0;
@@ -1084,11 +1141,10 @@ int dada_ib_post_sends_gap (dada_ib_cm_t * ctx, void * buffer,
 }
 
 /*
- * disconnect from the server 
+ * Just disconnect the RDMA connection
  */
-int dada_ib_client_destroy(dada_ib_cm_t * ctx)
+int dada_ib_rdma_disconnect (dada_ib_cm_t * ctx)
 {
-
   int err = 0;
 
   assert(ctx);
@@ -1099,9 +1155,25 @@ int dada_ib_client_destroy(dada_ib_cm_t * ctx)
   err = rdma_disconnect(ctx->cm_id);
   if (err)
   {
-    multilog(log, LOG_ERR, "client_destroy: rdma_disconnect failed\n");
+    multilog(log, LOG_ERR, "client_destroy: rdma_disconnect failed: %s\n", strerror(errno));
     return -1;
   }
+  ctx->ib_connected = 0;
+}
+
+/*
+ * disconnect from the server 
+ */
+int dada_ib_client_destroy (dada_ib_cm_t * ctx)
+{
+  if (ctx->ib_connected)
+  {
+    if (dada_ib_rdma_disconnect (ctx) < 0)
+    {
+      multilog(ctx->log, LOG_ERR, "client_destroy: rdma_disconnect failed\n");
+      return -1;
+    }
+  } 
 
   return dada_ib_destroy(ctx);
 }
@@ -1110,7 +1182,7 @@ int dada_ib_client_destroy(dada_ib_cm_t * ctx)
 /*
  * Disconnect the IB connection  
  */
-int dada_ib_disconnect(dada_ib_cm_t * ctx)
+int dada_ib_disconnect (dada_ib_cm_t * ctx)
 {
 
   assert(ctx);
@@ -1120,23 +1192,24 @@ int dada_ib_disconnect(dada_ib_cm_t * ctx)
   int err;
 
   ctx->cm_connected = 0;
-  ctx->ib_connected = 0;
+  if (ctx->ib_connected)
+  {
+    err = rdma_get_cm_event(ctx->cm_channel, &event);
+    if (err)
+    { 
+      multilog(log, LOG_ERR, "disconnect: rdma_get_cm_event failed [%d]\n", err);
+      return -1;
+    } 
 
-  err = rdma_get_cm_event(ctx->cm_channel, &event);
-  if (err)
-  { 
-    multilog(log, LOG_ERR, "disconnect: rdma_get_cm_event failed [%d]\n", err);
-    return -1;
-  } 
+    if (event->event != RDMA_CM_EVENT_DISCONNECTED)
+    { 
+      multilog(log, LOG_ERR, "disconnect: rdma_get_cm_event returned %s event, expected "
+                             "RDMA_CM_EVENT_DISCONNECTED\n", rdma_event_str(event->event));
+      return -1;
+    } 
 
-  if (event->event != RDMA_CM_EVENT_DISCONNECTED)
-  { 
-    multilog(log, LOG_ERR, "disconnect: rdma_get_cm_event returned %s event, expected "
-                           "RDMA_CM_EVENT_DISCONNECTED\n", rdma_event_str(event->event));
-    return -1;
-  } 
-
-  rdma_ack_cm_event(event);
+    rdma_ack_cm_event(event);
+  }
 
   err = 0;
 

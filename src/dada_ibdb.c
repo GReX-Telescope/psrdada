@@ -176,7 +176,8 @@ int64_t dada_ibdb_recv_block (dada_client_t* client, void* data,
   // less than client->transfer_bytes (from header var TRANSFER_SIZE)
   if (bytes_to_be_received == 0) 
   {
-    multilog(client->log, LOG_INFO, "recv_block: bytes_to_be_received = 0\n");
+    if (ibdb->verbose)
+      multilog(client->log, LOG_INFO, "recv_block: bytes_to_be_received = 0\n");
     ibdb->xfer_ending = 1;
     bytes_received = 0;
   }
@@ -252,7 +253,7 @@ int dada_ibdb_close (dada_client_t* client, uint64_t bytes_written)
 
   // this is only required when we have received EOD before we have
   // read client->transfer_bytes
-  if ((ibdb->xfer_ending) || (client->transfer_bytes && (client->transfer_bytes != bytes_written)))
+  if ((!ibdb->xfer_ending) || (client->transfer_bytes && (client->transfer_bytes != bytes_written)))
   {
     if (ibdb->verbose)
       multilog(client->log, LOG_INFO, "close: send_message on sync_to [READY]\n");

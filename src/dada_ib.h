@@ -150,6 +150,7 @@ int dada_ib_client_destroy (dada_ib_cm_t * ctx);
 
 int dada_ib_destroy (dada_ib_cm_t * ctx);
 
+int dada_ib_rdma_disconnect (dada_ib_cm_t * ctx);
 int dada_ib_disconnect (dada_ib_cm_t * ctx);
 
 

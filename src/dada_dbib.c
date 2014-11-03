@@ -155,7 +155,7 @@ int dbib_close (dada_client_t* client, uint64_t bytes_written)
     multilog(log, LOG_INFO, "dbib_close() bytes_written=%"PRIu64"\n", bytes_written);
 
   // if we have transferred less than we anticipated, we will need to tell ibdb that the xfer is ending
-  if (client->transfer_bytes && (bytes_written != client->transfer_bytes)) 
+  if ((client->transfer_bytes == 0) || (client->transfer_bytes && (bytes_written != client->transfer_bytes)))
   {
     // since we posted a recv in the send_block function, we need to wait for that recv in the cleanup
     if (dbib->verbose)
