@@ -21,6 +21,8 @@ AC_DEFUN([SWIN_LIB_GSL],
 [
   AC_PROVIDE([SWIN_LIB_GSL])
 
+  SWIN_PACKAGE_OPTIONS([gsl])
+
   AC_MSG_CHECKING([for GSL libary installation])
 
   AC_PATH_PROG(GSL_CONFIG, gsl-config, no)
