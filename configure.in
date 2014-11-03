@@ -65,6 +65,7 @@ SWIN_LIB_PGPLOT
 SWIN_LIB_IPP
 SWIN_LIB_MKL
 SWIN_LIB_IPP
+SWIN_LIB_GSL
 SWIN_LIB_RDMACM
 
 AC_CHECK_LIB([m], [sin])
@@ -149,7 +150,9 @@ AC_CONFIG_FILES([Makefile
     mopsr/Makefile
     mopsr/scripts/Makefile
     mopsr/config/Makefile
+    mopsr/config/mopsr.cfg
     mopsr/src/Makefile
+    mopsr/sla/Makefile
     mopsr/web/Makefile
     hispec/Makefile
     hispec/config/Makefile
