@@ -1,5 +1,5 @@
 
-SUBDIRS = scripts config
+SUBDIRS = scripts config sla
 
 # source code for mopsr heavily dependent on PGPLOT and FFTW3
 if HAVE_PGPLOT
