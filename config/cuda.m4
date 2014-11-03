@@ -67,7 +67,7 @@ AC_DEFUN([SWIN_LIB_CUDA],
       AC_DEFINE([HAVE_CUFFT],[1],[Define if the CUFFT library is present])
       [$1]
     else
-      AC_MSG_WARN([dspsr will not run on GPU])
+      AC_MSG_WARN([psrdada will not run on GPU])
       [$2]
     fi
 
