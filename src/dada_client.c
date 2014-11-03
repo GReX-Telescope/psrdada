@@ -142,7 +142,7 @@ int64_t dada_client_io_loop (dada_client_t* client)
     if (client->direction == dada_client_writer) {
 
       if (bytes == 0) {
-        multilog (log, LOG_INFO, "end of input\n");
+        //multilog (log, LOG_INFO, "end of input\n");
         break;
       }
 
