@@ -225,6 +225,7 @@ int disk_array_open (disk_array_t* array, char* filename, uint64_t filesize,
   for (idisk = 0; idisk < array->ndisk; idisk++) {
     if (get_available (array->disks[idisk].path) > filesize)
     {
+      
       if (!fullname)
         fullname = malloc (FILENAME_MAX);
 
@@ -242,6 +243,9 @@ int disk_array_open (disk_array_t* array, char* filename, uint64_t filesize,
 
       break;
     }
+    else
+      fprintf (stderr, "disk_array_open: disk %s did not contain "
+               "enough space for file\n", array->disks[idisk].path);
   }
   pthread_mutex_unlock (&(array->mutex));
 
