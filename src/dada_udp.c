@@ -264,15 +264,14 @@ size_t dada_sock_send(int fd, struct sockaddr_in addr, char *data, size_t size) 
 /*
  * clear any packets that are buffered at the socket
  */
-size_t dada_sock_clear_buffered_packets(int fd, size_t size) 
+size_t dada_sock_clear_buffered_packets (int fd, size_t size) 
 {
-
   size_t bytes_cleared = 0;
   size_t bytes_read = 0;
   unsigned keep_reading = 1;
   int errsv;
 
-  char * buffer = (char *) malloc(sizeof(char) * size);
+  char * buffer = (char *) malloc(size);
   if (!buffer) {
     fprintf(stderr, "dada_sock_clear_buffered_packets: malloc %d bytes failed\n", size);
     return -1;
@@ -297,7 +296,6 @@ size_t dada_sock_clear_buffered_packets(int fd, size_t size)
       fprintf(stderr, "dada_sock_clear_buffered_packets: received %d byte packet, expected %d\n", bytes_read, size);
       keep_reading = 0;
     }
-
   }
   free(buffer);
   return bytes_cleared;
