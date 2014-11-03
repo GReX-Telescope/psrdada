@@ -5,8 +5,6 @@
  * 
  ****************************************************************************/
 
-//#define PGPLOT_DEBUG 1
-
 #include "dada_client.h"
 #include "dada_hdu.h"
 #include "dada_def.h"
@@ -26,9 +24,6 @@
 #include <byteswap.h>
 #include <complex.h>
 #include <float.h>
-#ifdef PGPLOT_DEBUG
-#include <cpgplot.h>
-#endif
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -525,33 +520,6 @@ int64_t dbupdb_write_block (dada_client_t* client, void* in_data, uint64_t in_da
         // now whilst this is in cache, FFT (in-place)
         fftwf_execute_dft (ctx->plan_fwd, (fftwf_complex*) ctx->fft_in, (fftwf_complex*) ctx->fft_mid1);
 
-#ifdef PGPLOT_DEBUG
-        fft_ptr = (float *) ctx->fft_mid1;
-        fft_offset = 0;
-        half_fft = nfft / 2;
-
-        // second half (flipped B)
-        for (ipt=0; ipt < half_fft; ipt++)
-        {
-          basechan = ichan * nfft;
-          newchan  = (ipt + half_fft);
-          detected[basechan + newchan] += (fft_ptr[fft_offset] * fft_ptr[fft_offset]) + (fft_ptr[fft_offset+1] * fft_ptr[fft_offset+1]);
-          fft_offset += 2;
-        }
-  
-        if (nfft != ctx->nfft_fwd)
-          fft_offset += (2 * (ctx->nfft_fwd - ctx->nfft_bwd));
-
-        // first half (flipped A)
-        for (ipt=half_fft; ipt < nfft; ipt++)
-        {
-          basechan = ichan * nfft;
-          newchan  = (ipt - half_fft);
-          detected[basechan + newchan] += (fft_ptr[fft_offset] * fft_ptr[fft_offset]) + (fft_ptr[fft_offset+1] * fft_ptr[fft_offset+1]);
-          fft_offset += 2;
-        }
-#endif
-
         // memcpy B from input to ouput
         memcpy (ctx->fft_mid2, ctx->fft_mid1, half_bwd_bytes);
 
@@ -580,51 +548,6 @@ int64_t dbupdb_write_block (dada_client_t* client, void* in_data, uint64_t in_da
       }
     }
   }
-
-#if PGPLOT_DEBUG
-  // now do a pgplot
-  float ymin = FLT_MAX;
-  float ymax = -FLT_MAX;
-
-  multilog (log, LOG_INFO, "plot_packet: ndat=%d\n", ndat);
-
-  // calculate limits
-  for (idat=0; idat <ndat; idat++)
-  {
-    if (detected[idat] > ymax) ymax = detected[idat];
-    if (detected[idat] < ymin) ymin = detected[idat];
-    xpoints[idat] = idat;
-  }
-
-  float xmin = 0;
-  float xmax = (float) ndat;
-  xmax = 3 * nfft;
-  ymin = 0;
-
-  multilog (log, LOG_INFO, "plot_packet: xmin=%f, xmax=%f, ymin=%f, ymax=%f\n", xmin, xmax, ymin, ymax);
-
-  cpgbbuf();
-  cpgenv(xmin, xmax, ymin, ymax, 0, 0);
-  cpglab("Freq", "Power", "Bandpass");
-  cpgline(ndat, xpoints, detected);
-
-  float line_x[2];
-  float line_y[2];
-  line_y[0] = ymin;
-  line_y[1] = ymin + (ymax - ymin) / 2 ;
-
-  cpgsls(2);
-  for (ichan=0; ichan < ctx->nchan; ichan++)
-  {
-    line_x[0] = line_x[1] = (float) ichan * nfft;
-    cpgline(2, line_x, line_y);
-  }
-  cpgsls(1);
-
-
-  cpgebuf();
-
-#endif
 
   //multilog (log, LOG_INFO, "write_block: in_data_size=%"PRIu64" bytes_to_write=%"PRIu64" bytes_read=%"PRIu64"\n", in_data_size, bytes_to_write, bytes_read);
 
@@ -818,15 +741,6 @@ int main (int argc, char **argv)
   client->context = &dbupdb;
   client->quiet = (verbose > 0) ? 0 : 1;
 
-#ifdef PGPLOT_DEBUG
-  if (cpgopen("?") != 1)
-  {
-    multilog(log, LOG_INFO, "mopsr_dbplot: error opening plot device\n");
-    exit(1);
-  }
-  cpgask(1);
-#endif
-
   while (!client->quit)
   {
     if (verbose)
@@ -860,9 +774,6 @@ int main (int argc, char **argv)
   if (dada_hdu_disconnect (hdu) < 0)
     return EXIT_FAILURE;
 
-#ifdef PGPLOT_DEBUG
-  cpgclos();
-#endif
   return EXIT_SUCCESS;
 }
 

@@ -1,5 +1,5 @@
 /*
- * mopsr_udpplot
+ * mopsr_dbundersampledb
  *
  * Simply listens on a specified port for udp packets encoded
  * in the MOPSR format
@@ -106,23 +106,23 @@ typedef struct {
 
   fftwf_plan plan;
 
-} udpplot_t;
+} dbundersampledb_t;
 
-int udpplot_init (udpplot_t * ctx);
-int udpplot_prepare (udpplot_t * ctx);
-int udpplot_destroy (udpplot_t * ctx);
+int dbundersampledb_init (dbundersampledb_t * ctx);
+int dbundersampledb_prepare (dbundersampledb_t * ctx);
+int dbundersampledb_destroy (dbundersampledb_t * ctx);
 
-void append_packet (udpplot_t * ctx, char * buffer, unsigned int size);
-void detect_data (udpplot_t * ctx);
-void fft_data (udpplot_t * ctx);
-void plot_data (udpplot_t * ctx);
+void append_packet (dbundersampledb_t * ctx, char * buffer, unsigned int size);
+void detect_data (dbundersampledb_t * ctx);
+void fft_data (dbundersampledb_t * ctx);
+void plot_data (dbundersampledb_t * ctx);
 
 int quit_threads = 0;
 
 void usage()
 {
   fprintf (stdout,
-     "mopsr_udpplot [options]\n"
+     "mopsr_dbundersampledb [options]\n"
      " -a ant         antenna to display [default all]\n"
      " -b freq        frequency of first channel [default 800 MHz]\n"
      " -i interface   ip/interface for inc. UDP packets [default all]\n"
@@ -137,7 +137,7 @@ void usage()
      MOPSR_DEFAULT_UDPDB_PORT);
 }
 
-int udpplot_prepare (udpplot_t * ctx)
+int dbundersampledb_prepare (dbundersampledb_t * ctx)
 {
   if (ctx->verbose > 1)
     multilog(ctx->log, LOG_INFO, "mopsr_udpdb_prepare()\n");
@@ -146,10 +146,10 @@ int udpplot_prepare (udpplot_t * ctx)
     multilog(ctx->log, LOG_INFO, "prepare: clearing packets at socket\n");
   size_t cleared = dada_sock_clear_buffered_packets(ctx->sock->fd, UDP_PAYLOAD);
 
-  udpplot_reset(ctx);
+  dbundersampledb_reset(ctx);
 }
 
-int udpplot_reset (udpplot_t * ctx)
+int dbundersampledb_reset (dbundersampledb_t * ctx)
 {
   unsigned ichan;
   float percent_chan;
@@ -182,7 +182,7 @@ int udpplot_reset (udpplot_t * ctx)
   ctx->fft_count = 0;
 }
 
-int udpplot_destroy (udpplot_t * ctx)
+int dbundersampledb_destroy (dbundersampledb_t * ctx)
 {
 
   fftwf_destroy_plan (ctx->plan);
@@ -235,7 +235,7 @@ int udpplot_destroy (udpplot_t * ctx)
  * Close the udp socket and file
  */
 
-int udpplot_init (udpplot_t * ctx)
+int dbundersampledb_init (dbundersampledb_t * ctx)
 {
   if (ctx->verbose > 1)
     multilog (ctx->log, LOG_INFO, "mopsr_udpdb_init_receiver()\n");
@@ -314,7 +314,7 @@ int main (int argc, char **argv)
   char * device = "/xs";
 
   /* actual struct with info */
-  udpplot_t udpplot;
+  dbundersampledb_t dbundersampledb;
 
   /* Pointer to array of "read" data */
   char *src;
@@ -399,32 +399,32 @@ int main (int argc, char **argv)
 
   assert ((MOPSR_UDP_DATASIZE_BYTES + MOPSR_UDP_COUNTER_BYTES) == MOPSR_UDP_PAYLOAD_BYTES);
 
-  multilog_t* log = multilog_open ("mopsr_udpplot", 0);
+  multilog_t* log = multilog_open ("mopsr_dbundersampledb", 0);
   multilog_add (log, stderr);
 
-  udpplot.log = log;
-  udpplot.verbose = verbose;
+  dbundersampledb.log = log;
+  dbundersampledb.verbose = verbose;
 
-  udpplot.interface = strdup(interface);
-  udpplot.port = port;
+  dbundersampledb.interface = strdup(interface);
+  dbundersampledb.port = port;
 
-  udpplot.nchan_in = nchan;
-  udpplot.nfft = nfft;
-  udpplot.nchan_out = nchan * nfft;
-  udpplot.nant = nant;
-  udpplot.ant_code = 0;
+  dbundersampledb.nchan_in = nchan;
+  dbundersampledb.nfft = nfft;
+  dbundersampledb.nchan_out = nchan * nfft;
+  dbundersampledb.nant = nant;
+  dbundersampledb.ant_code = 0;
 
-  udpplot.antenna = antenna;
+  dbundersampledb.antenna = antenna;
 
-  udpplot.zap_dc = zap_dc;
-  udpplot.num_integrated = 0;
-  udpplot.fft_count = 0;
-  udpplot.to_integrate = to_integrate;
+  dbundersampledb.zap_dc = zap_dc;
+  dbundersampledb.num_integrated = 0;
+  dbundersampledb.fft_count = 0;
+  dbundersampledb.to_integrate = to_integrate;
 
-  udpplot.plot_log = plot_log;
-  udpplot.ymin = 100000;
-  udpplot.ymax = -100000;
-  udpplot.base_freq = base_freq;
+  dbundersampledb.plot_log = plot_log;
+  dbundersampledb.ymin = 100000;
+  dbundersampledb.ymax = -100000;
+  dbundersampledb.base_freq = base_freq;
 
   // initialise data rate timing library 
   StopWatch wait_sw;
@@ -441,14 +441,14 @@ int main (int argc, char **argv)
   cpgask(0);
 
   // allocate require resources, open socket
-  if (udpplot_init (&udpplot) < 0)
+  if (dbundersampledb_init (&dbundersampledb) < 0)
   {
     fprintf (stderr, "ERROR: Could not create UDP socket\n");
     exit(1);
   }
 
   // cloear packets ready for capture
-  udpplot_prepare (&udpplot);
+  dbundersampledb_prepare (&dbundersampledb);
 
   uint64_t seq_no = 0;
   uint64_t prev_seq_no = 0;
@@ -457,7 +457,7 @@ int main (int argc, char **argv)
   uint64_t timeouts = 0;
   uint64_t timeout_max = 1000000;
 
-  udpplot_t * ctx = &udpplot;
+  dbundersampledb_t * ctx = &dbundersampledb;
 
   StopWatch_Start(&wait_sw);
 
@@ -530,7 +530,7 @@ int main (int argc, char **argv)
       {
         multilog (ctx->log, LOG_INFO, "plotting %d FFTs in %d channels\n", ctx->num_integrated, ctx->nchan_out);
         plot_data (ctx);
-        udpplot_reset (ctx);
+        dbundersampledb_reset (ctx);
         StopWatch_Delay(&wait_sw, sleep_time);
 
         if (ctx->verbose)
@@ -549,7 +549,7 @@ int main (int argc, char **argv)
 }
 
 // copy data from packet in the fft input buffer
-void append_packet (udpplot_t * ctx, char * buffer, unsigned int size)
+void append_packet (dbundersampledb_t * ctx, char * buffer, unsigned int size)
 {
   if (ctx->verbose > 1)
     multilog (ctx->log, LOG_INFO, "append_packet()\n");
@@ -580,7 +580,7 @@ void append_packet (udpplot_t * ctx, char * buffer, unsigned int size)
 }
 
 #if 0
-void fft_packet (udpplot_t * ctx, char * buffer, unsigned int size)
+void fft_packet (dbundersampledb_t * ctx, char * buffer, unsigned int size)
 {
   if (ctx->verbose > 1)
     multilog (ctx->log, LOG_INFO, "fft_packet()\n");
@@ -621,7 +621,7 @@ void fft_packet (udpplot_t * ctx, char * buffer, unsigned int size)
 }
 #endif
 
-void fft_data (udpplot_t * ctx)
+void fft_data (dbundersampledb_t * ctx)
 {
   unsigned int iant, ichan;
   float * src;
@@ -641,7 +641,7 @@ void fft_data (udpplot_t * ctx)
   }
 }
 
-void detect_data (udpplot_t * ctx)
+void detect_data (dbundersampledb_t * ctx)
 {
   unsigned iant = 0;
   unsigned ichan = 0;
@@ -664,7 +664,7 @@ void detect_data (udpplot_t * ctx)
 }
 
 
-void plot_data (udpplot_t * ctx)
+void plot_data (dbundersampledb_t * ctx)
 {
   if (ctx->verbose)
     multilog (ctx->log, LOG_INFO, "plot_packet()\n");

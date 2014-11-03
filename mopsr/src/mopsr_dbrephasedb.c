@@ -25,9 +25,6 @@
 #include <byteswap.h>
 #include <complex.h>
 #include <float.h>
-#ifdef PGPLOT_DEBUG
-#include <cpgplot.h>
-#endif
 #include <cuda_runtime.h>
 
 #include <sys/types.h>

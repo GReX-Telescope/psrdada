@@ -1,8 +1,4 @@
 /*
- * Open data block as a viewer, read some data and then optionally:
- *   write filterbank data to file
- *   create png files
- *   plot multiple pgplot issues
  */
 
 #include <stdio.h>
