@@ -516,6 +516,12 @@ int check_read_offset (dada_dbevent_t * dbevent)
   // get the time and byte offset for the time
   const time_t now = time(0);
   const time_t obs_offset = (now - dbevent->utc_start);
+  if (obs_offset <= 0)
+  {
+    multilog (dbevent->log, LOG_INFO, "check_read_offset: now <= obs_offset\n");
+    return (0);
+  }
+
   if (dbevent->verbose)
     multilog (dbevent->log, LOG_INFO, "check_read_offset: now=%ld utc_start=%ld obs_offset=%ld\n", now, dbevent->utc_start, obs_offset);
   const uint64_t now_byte_offset = (uint64_t) obs_offset * dbevent->bytes_per_second;
