@@ -40,7 +40,6 @@ void usage()
      " -s                single transfer only\n"
      " -v                verbose output\n"
      " -h                print this usage\n",
-     DADA_IB_DEFAULT_CHUNK_SIZE, 
      DADA_DEFAULT_BLOCK_KEY);
 }
 
@@ -170,7 +169,6 @@ mopsr_conn_t * mopsr_parse_cornerturn_cfg (const char * config_file, mopsr_ibdb_
 /*! Function that opens the data transfer target */
 int mopsr_ibdb_open (dada_client_t* client)
 {
-
   // the mopsr_ibdb specific data
   assert (client != 0);
   mopsr_ibdb_t* ctx = (mopsr_ibdb_t*) client->context;
@@ -186,22 +184,8 @@ int mopsr_ibdb_open (dada_client_t* client)
   assert(client->header != 0);
   char * header = client->header;
 
-  uint64_t obs_offset = 0;
-  uint64_t transfer_size = 0;
- 
-  if (ascii_header_get (header, "OBS_OFFSET", "%"PRIu64, &obs_offset) != 1) {
-    multilog (client->log, LOG_WARNING, "open: header with no OBS_OFFSET\n");
-  }
-
-  if (ascii_header_get (header, "TRANSFER_SIZE", "%"PRIu64, &transfer_size) != 1) {
-    multilog (client->log, LOG_WARNING, "open: header with no TRANSFER_SIZE\n");
-  }
-
-  if (ctx->verbose)
-    multilog (client->log, LOG_INFO, "open: OBS_OFFSET=%"PRIu64"\n", obs_offset);
-
   // assumed that we do not know how much data will be transferred
-  client->transfer_bytes = transfer_size;
+  client->transfer_bytes = 0;
 
   // this is not used in block by block transfers
   client->optimal_bytes = 0;

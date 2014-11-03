@@ -18,7 +18,8 @@
 #include <config.h>
 #endif
 
-#define ANT0ONLY
+//#define ANT0ONLY
+//#define ANT1ONLY
 
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE 1
@@ -227,7 +228,7 @@ time_t mopsr_udpdb_start (udpdb_t * ctx, char * obs_header)
     return -1;
   }
 
-#ifdef ANT0ONLY
+#if defined (ANT0ONLY) || defined(ANT1ONLY)
   multilog (ctx->log, LOG_INFO, "start: overriding NANT to 1\n");
   nant = 1;
   if (ascii_header_set (header, "NANT", "%d", nant) < 0)
@@ -465,7 +466,9 @@ void * mopsr_udpdb_receive_obs (void * arg)
 
   unsigned char * b = (unsigned char *) ctx->sock->buf;
 
-#ifdef ANT0ONLY
+  mopsr_hdr_t hdr;
+
+#if defined(ANT0ONLY) || defined(ANT1ONLY)
   char out[ctx->pkt_size];
   char * in = ctx->sock->buf + UDP_HEADER;
 #endif
@@ -518,19 +521,12 @@ void * mopsr_udpdb_receive_obs (void * arg)
     // we have a valid packet within the timeout
     if (ctx->sock->have_packet) 
     {
-      // decode sequence number
-      seq_no = UINT64_C (0);
-      for (i = 0; i < 8; i++ )
-      {
-        tmp = b[16 - i - 1];
-        seq_no |= (tmp << ((i & 7) << 3));
-      }
-      // mopsr_decode_header(ctx->sock->buf, &seq_no);
+      mopsr_decode (ctx->sock->buf, &hdr);
 
       // if first packet
       if (!ctx->capture_started)
       {
-        ctx->block_start_byte = seq_no * ctx->pkt_size;
+        ctx->block_start_byte = hdr.seq_no * ctx->pkt_size;
         ctx->block_end_byte   = (ctx->block_start_byte + ctx->hdu_bufsz) - ctx->pkt_size;
         ctx->capture_started = 1;
 
@@ -544,8 +540,8 @@ void * mopsr_udpdb_receive_obs (void * arg)
 
       if (ctx->capture_started)
       {
-        seq_byte = seq_no * ctx->pkt_size;
-        ctx->last_seq = seq_no;
+        seq_byte = hdr.seq_no * ctx->pkt_size;
+        ctx->last_seq = hdr.seq_no;
         ctx->last_byte = seq_byte;
 
         // if packet arrived too late, ignore
@@ -562,12 +558,18 @@ void * mopsr_udpdb_receive_obs (void * arg)
           if (seq_byte <= ctx->block_end_byte)
           {
             byte_offset = seq_byte - ctx->block_start_byte;
-#ifdef ANT0ONLY
+#if defined(ANT0ONLY) || defined(ANT1ONLY)
             in = ctx->sock->buf + UDP_HEADER;
             for (i=0; i<ctx->pkt_size; i+=2) 
             {
+#ifdef ANT0ONLY
               out[i+0] = in[i+0]; // ReAnt0
               out[i+1] = in[i+1]; // ImAnt0
+#endif
+#ifdef ANT1ONLY
+              out[i+0] = in[i+2]; // ReAnt1
+              out[i+1] = in[i+3]; // ImAnt1
+#endif
               in += 2;
             }
             memcpy (ctx->block + byte_offset, out, ctx->pkt_size);
@@ -610,14 +612,14 @@ void * mopsr_udpdb_receive_obs (void * arg)
       {
         if (ctx->verbose)
           multilog (log, LOG_INFO, "BLOCK COMPLETE seq_no=%"PRIu64", "
-                    "block_count=%"PRIu64", temp_idx=%d\n", seq_no, 
+                    "block_count=%"PRIu64", temp_idx=%d\n", hdr.seq_no, 
                     ctx->block_count, temp_idx);
 #else
       if ((ctx->block_count >= ctx->packets_per_buffer) || just_dropped)
       {
         if (ctx->verbose)
           multilog (log, LOG_INFO, "BLOCK COMPLETE seq_no=%"PRIu64", "
-                    "block_count=%"PRIu64"\n", seq_no, 
+                    "block_count=%"PRIu64"\n", hdr.seq_no, 
                     ctx->block_count);
 #endif
 
@@ -967,8 +969,7 @@ int main (int argc, char **argv)
 
   // determine block size of the data block
   udpdb.hdu_bufsz = ipcbuf_get_bufsz ((ipcbuf_t *) hdu->data_block);
-
-#ifdef ANT0ONLY
+#if defined(ANT0ONLY) || defined(ANT1ONLY)
   udpdb.pkt_size = UDP_DATA/2;
 #else
   udpdb.pkt_size = UDP_DATA;

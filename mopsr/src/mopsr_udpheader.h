@@ -19,36 +19,28 @@
 #include <netinet/in.h>
 #include <signal.h>
 
-/* Number of UDP packets to be recived for a called to buffer_function */
-#define NUMUDPPACKETS 2000
-#define NOTRECORDING 0
-#define RECORDING 1
-
-
 /* structures dmadb datatype  */
 typedef struct {
 
-  multilog_t * log;
+  multilog_t *    log;
 
-  int port;
-  mopsr_sock_t * sock;
+  unsigned        ninputs;
+  char **         interfaces;  
+  int *           ports;
+  mopsr_sock_t ** socks;
 
-  uint64_t n_sleeps;
-  int capture_started;
-  int verbose;
+  uint64_t        n_sleeps;
+  int             capture_started;
+  int             verbose;
 
-  stats_t * packets;
-  stats_t * bytes;
+  stats_t *       packets;
+  stats_t *       bytes;
 
-  char * interface;
-  time_t prev_time;
-  time_t curr_time;
+  time_t          prev_time;
+  time_t          curr_time;
 
-  uint64_t seq_incr;
-  uint64_t seq_max;
-  uint64_t prev_seq_no;
-
-  unsigned plot_log;
+  uint64_t        seq_incr;
+  uint64_t        seq_max;
 
 } udpheader_t;
 

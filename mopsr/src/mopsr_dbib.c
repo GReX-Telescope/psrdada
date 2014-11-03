@@ -194,21 +194,16 @@ int mopsr_dbib_open (dada_client_t* client)
   char * header = client->header;
 
   uint64_t obs_offset = 0;
-  uint64_t transfer_size = 0;
  
   if (ascii_header_get (header, "OBS_OFFSET", "%"PRIu64, &obs_offset) != 1) {
     multilog (client->log, LOG_WARNING, "open: header with no OBS_OFFSET\n");
-  }
-
-  if (ascii_header_get (header, "TRANSFER_SIZE", "%"PRIu64, &transfer_size) != 1) {
-    multilog (client->log, LOG_WARNING, "open: header with no TRANSFER_SIZE\n");
   }
 
   if (ctx->verbose)
     multilog (client->log, LOG_INFO, "open: OBS_OFFSET=%"PRIu64"\n", obs_offset);
 
   // assumed that we do not know how much data will be transferred
-  client->transfer_bytes = transfer_size;
+  client->transfer_bytes = 0;
 
   // this is not used in block by block transfers
   client->optimal_bytes = 0;
@@ -316,7 +311,8 @@ int64_t mopsr_dbib_recv (dada_client_t* client, void * buffer, uint64_t bytes)
   for (i=0; i<ctx->n_dst; i++)
   {
     if (ascii_header_get (ib_cms[i]->header_mb->buffer, "TRANSFER_SIZE", "%"PRIu64, &transfer_size) != 1) 
-      multilog (client->log, LOG_WARNING, "send: header with no TRANSFER_SIZE\n");
+      if (ctx->verbose)
+        multilog (client->log, LOG_INFO, "send: header with no TRANSFER_SIZE\n");
     else 
       if (ctx->verbose)
         multilog (client->log, LOG_INFO, "send: TRANSFER_SIZE=%"PRIu64"\n", transfer_size);
@@ -688,7 +684,7 @@ void * mopsr_dbib_init_thread (void * arg)
   int flags = IBV_ACCESS_LOCAL_WRITE;
   if (dada_ib_reg_buffers(ib_cm, ib_cm->db_buffers, ib_cm->bufs_size, flags) < 0)
   {
-    multilog(log, LOG_ERR, "ib_init_thread: dada_ib_register_memory_buffers failed\n");
+    multilog(log, LOG_ERR, "ib_init_thread: dada_ib_register_memory_buffers failed for %s:%d\n", conn->host, conn->port);
     pthread_exit((void *) &(ib_cm->cm_connected));
   }
 
@@ -700,6 +696,8 @@ void * mopsr_dbib_init_thread (void * arg)
     pthread_exit((void *) &(ib_cm->cm_connected));
   }
 
+  if (ib_cm->verbose)
+    multilog(log, LOG_INFO, "ib_init_thread: dada_ib_reg_buffer(header)\n");
   ib_cm->header_mb = dada_ib_reg_buffer(ib_cm, ib_cm->header, ib_cm->header_size, flags);
   if (!ib_cm->header_mb)
   {
@@ -725,12 +723,12 @@ void * mopsr_dbib_init_thread (void * arg)
   }
 
   if (ib_cm->verbose)
-    multilog (log, LOG_INFO, "ib_init_thread: dada_ib_connect\n");
+    multilog (log, LOG_INFO, "ib_init_thread: dada_ib_connect()\n");
 
   // connect to the receiver 
   if (dada_ib_connect(ib_cm) < 0)
   {
-    multilog(log, LOG_ERR, "ib_init_thread: dada_ib_connect failed\n");
+    multilog(log, LOG_ERR, "ib_init_thread: dada_ib_connect failed to %s:%d\n"conn->host, conn->port);
     pthread_exit((void *) &(ib_cm->cm_connected));
   }
 

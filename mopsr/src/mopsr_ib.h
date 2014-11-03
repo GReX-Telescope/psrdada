@@ -9,34 +9,17 @@
 #define __MOPSR_IB_H
 
 #include "dada_ib.h"
+#include "ascii_header.h"
+
 #include "mopsr_def.h"
 
-/*
-typedef struct {
-
-  unsigned int host_id;
-
-  unsigned int chan_start;
-
-  unsigned int chan_end;
-
-} mopsr_ibdst_t;
-
-typedef struct {
-
-  unsigned int host_id;
-
-  unsigned int ant_start;
-
-  unsigned int ant_end;
-
-} mopsr_ibsrc_t;
-*/
 typedef struct {
 
   dada_ib_cm_t * ib_cm;
 
   char host[64]; 
+
+  char ib_host[64]; 
 
   int port;
 
@@ -56,8 +39,8 @@ typedef struct {
   // cornerturn information
   mopsr_conn_t * conn_info;
 
-  // number of IB receivers
-  unsigned int n_dst;
+  // IB Connection Managers
+  dada_ib_cm_t ** ib_cms;
 
   // total number of antenna [e.g. 352]
   unsigned int nant;
@@ -65,11 +48,8 @@ typedef struct {
   // total number of input channels [e.g. 39]
   unsigned int nchan;
 
-  // first antenna in input
-  unsigned int ant_first;
-
-  // last antenna in input
-  unsigned int ant_last;
+  // number of IB connections
+  unsigned int nconn;
 
   unsigned verbose;
 
@@ -78,45 +58,13 @@ typedef struct {
   // quit signal for exiting after 1 observation
   int quit;
 
-  // IB Connection Managers
-  dada_ib_cm_t ** ib_cms;
+  char obs_ending;
 
-} mopsr_dbib_t;
+} mopsr_ib_t;
 
-#define MOPSR_DBIB_INIT { 0, 0, 0, 0, 0, 0, 0, 0, "", 0, 0 }
+#define MOPSR_IB_INIT { 0, 0, 0, 0, 0, 0, 0, "", 0, 0 }
 
-typedef struct {
-
-  // multilog inteface
-  multilog_t * log;
-
-  // cornerturn information
-  mopsr_conn_t * conn_info;
-
-  // number of IB receivers
-  unsigned int n_src;
-
-  // total number of antenna [e.g. 352]
-  unsigned int nant;
-
-  // total number of input channels [e.g. 39]
-  unsigned int nchan;
-
-  // channel for this instance 
-  unsigned int chan;
-
-  unsigned verbose;
-
-  char * header;
-
-  // quit signal for exiting after 1 observation
-  int quit;
-
-  // IB Connection Managers
-  dada_ib_cm_t ** ib_cms;
-
-} mopsr_ibdb_t;
-
-#define MOPSR_IBDB_INIT {  0, 0, 0, 0, 0, 0, 0, "", 0, 0 }
+mopsr_conn_t * mopsr_setup_cornerturn_send (const char * config_file, mopsr_ib_t * ctx, unsigned int send_id);
+mopsr_conn_t * mopsr_setup_cornerturn_recv (const char * config_file, mopsr_ib_t * ctx, unsigned int channel);
 
 #endif //  MOPSR_IB_H

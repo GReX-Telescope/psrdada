@@ -75,6 +75,10 @@ typedef struct {
 
   float ymax;
 
+  size_t pkt_size;
+
+  size_t data_size;
+
 } udptimeseries_t;
 
 int udptimeseries_init (udptimeseries_t * ctx);
@@ -106,7 +110,7 @@ int udptimeseries_prepare (udptimeseries_t * ctx)
 
   if (ctx->verbose)
     multilog(ctx->log, LOG_INFO, "prepare: clearing packets at socket\n");
-  size_t cleared = dada_sock_clear_buffered_packets(ctx->sock->fd, UDP_PAYLOAD);
+  size_t cleared = dada_sock_clear_buffered_packets(ctx->sock->fd, ctx->pkt_size);
 
   udptimeseries_reset(ctx);
 }
@@ -146,6 +150,11 @@ int udptimeseries_init (udptimeseries_t * ctx)
   // create a MOPSR socket which can hold variable num of UDP packet
   ctx->sock = mopsr_init_sock();
 
+  ctx->sock->bufsz = 9000;
+  free (ctx->sock->buf);
+  ctx->sock->buf = (char *) malloc (ctx->sock->bufsz);
+  assert(ctx->sock->buf != NULL);
+
   // open socket
   if (ctx->verbose)
     multilog(ctx->log, LOG_INFO, "init: creating udp socket on %s:%d\n", ctx->interface, ctx->port);
@@ -161,11 +170,32 @@ int udptimeseries_init (udptimeseries_t * ctx)
     multilog(ctx->log, LOG_INFO, "init: setting buffer size to %d\n", sock_buf_size);
   dada_udp_sock_set_buffer_size (ctx->log, ctx->sock->fd, ctx->verbose, sock_buf_size);
 
+  // get a packet to determine the packet size and type of data
+  ctx->pkt_size = recvfrom (ctx->sock->fd, ctx->sock->buf, 9000, 0, NULL, NULL);
+  size_t data_size = ctx->pkt_size - UDP_HEADER;
+  multilog (ctx->log, LOG_INFO, "init: pkt_size=%ld data_size=%ld\n", ctx->pkt_size, data_size);
+  ctx->data_size = ctx->pkt_size - UDP_HEADER;
+
+  // decode the header
+  multilog (ctx->log, LOG_INFO, "init: decoding packet\n");
+  mopsr_hdr_t hdr;
+  if (ctx->data_size == 8192)
+    mopsr_decode_v2 (ctx->sock->buf, &hdr);
+  else
+    mopsr_decode (ctx->sock->buf, &hdr);
+
+  multilog (ctx->log, LOG_INFO, "init: nchan=%u nant=%u nframe=%u\n", hdr.nchan, hdr.nant, hdr.nframe);
+
+  ctx->nchan = hdr.nchan;
+  ctx->nant = hdr.nant;
+
   // set the socket to non-blocking
   if (ctx->verbose)
     multilog(ctx->log, LOG_INFO, "init: setting non_block\n");
   sock_nonblock(ctx->sock->fd);
 
+  if (ctx->verbose)
+    multilog(ctx->log, LOG_INFO, "init: allocating %d bytes for ctx->timeseries\n", sizeof(float) * ctx->nsamps * MOPSR_NDIM);
   ctx->timeseries = (float *) malloc (sizeof(float) * ctx->nsamps * MOPSR_NDIM);
   return 0;
 }
@@ -194,21 +224,21 @@ int main (int argc, char **argv)
   /* Pointer to array of "read" data */
   char *src;
 
-  unsigned int nant = 2;
+  int nant = -1;
 
   unsigned int nsamps = 2048;
 
-  unsigned int nchan = 128;
+  int nchan = -1;
 
   double sleep_time = 1000000;
 
   unsigned int zap = 0;
 
-  unsigned int antenna = 0;
+  int antenna = 0;
 
-  unsigned int channel = 0;
+  int channel = 0;
 
-  while ((arg=getopt(argc,argv,"a:c:D:i:n:p:q:s:t:vh")) != -1) {
+  while ((arg=getopt(argc,argv,"a:c:d:D:i:n:p:q:s:t:vh")) != -1) {
     switch (arg) {
 
     case 'a':
@@ -271,8 +301,17 @@ int main (int argc, char **argv)
   udptimeseries.interface = strdup(interface);
   udptimeseries.port = port;
 
-  udptimeseries.nchan = nchan;
-  udptimeseries.nant = nant;
+  // allocate require resources, open socket
+  if (udptimeseries_init (&udptimeseries) < 0)
+  {
+    fprintf (stderr, "ERROR: Could not create UDP socket\n");
+    exit(1);
+  }
+
+  if (nchan > 0)
+    udptimeseries.nchan = nchan;
+  if (nant > 0)
+    udptimeseries.nant = nant;
   udptimeseries.nsamps = nsamps;
 
   udptimeseries.antenna = antenna;
@@ -281,11 +320,13 @@ int main (int argc, char **argv)
   mopsr_util_t opts;
   opts.ant_code = 0;
   opts.ant = antenna;
-  opts.chan = channel;
-  opts.nchan = nchan;
-  opts.nant = nant;
-  opts.ymin = -128;
-  opts.ymax = 128;
+  opts.nchan = udptimeseries.nchan;
+  opts.nant = udptimeseries.nant;
+  opts.chans[0] = channel;
+  opts.chans[1] = channel;
+  opts.ymin = 0;
+  opts.ymax = 0;
+  opts.plot_plain = 0;
 
   StopWatch wait_sw;
   RealTime_Initialise(1);
@@ -300,13 +341,6 @@ int main (int argc, char **argv)
   }
   cpgask(0);
 
-  // allocate require resources, open socket
-  if (udptimeseries_init (&udptimeseries) < 0)
-  {
-    fprintf (stderr, "ERROR: Could not create UDP socket\n");
-    exit(1);
-  }
-
   // cloear packets ready for capture
   udptimeseries_prepare (&udptimeseries);
 
@@ -320,7 +354,8 @@ int main (int argc, char **argv)
   udptimeseries_t * ctx = &udptimeseries;
   unsigned int timeseries_offset;
 
-  uint64_t frames_per_packet = UDP_DATA / (ctx->nant * ctx->nchan * 2);
+  uint64_t frames_per_packet = ctx->data_size / (ctx->nant * ctx->nchan * 2);
+  mopsr_hdr_t hdr;
 
   while (!quit_threads) 
   {
@@ -329,9 +364,9 @@ int main (int argc, char **argv)
     while (!ctx->sock->have_packet && !quit_threads)
     {
       // receive 1 packet into the socket buffer
-      got = recvfrom ( ctx->sock->fd, ctx->sock->buf, UDP_PAYLOAD, 0, NULL, NULL );
+      got = recvfrom ( ctx->sock->fd, ctx->sock->buf, ctx->pkt_size, 0, NULL, NULL );
 
-      if ((got == UDP_PAYLOAD) || (got + 8 == UDP_PAYLOAD))
+      if (got == ctx->pkt_size) 
       {
         ctx->sock->have_packet = 1;
         timeouts = 0;
@@ -356,7 +391,7 @@ int main (int argc, char **argv)
       }
       else // we received a packet of the WRONG size, ignore it
       {
-        multilog (log, LOG_ERR, "main: received %d bytes, expected %d\n", got, UDP_PAYLOAD);
+        multilog (log, LOG_ERR, "main: received %d bytes, expected %d\n", got, ctx->pkt_size);
         quit_threads = 1;
       }
     }
@@ -370,7 +405,7 @@ int main (int argc, char **argv)
     {
       StopWatch_Start(&wait_sw);
 
-      mopsr_decode_header(ctx->sock->buf, &seq_no, &(opts.ant_code));
+      mopsr_decode (ctx->sock->buf, &hdr);
 
       if (ctx->verbose > 1) 
         multilog (ctx->log, LOG_INFO, "main: seq_no= %"PRIu64" difference=%"PRIu64" packets\n", seq_no, (seq_no - prev_seq_no));
@@ -378,21 +413,26 @@ int main (int argc, char **argv)
 
       // integrate packet into totals
       timeseries_offset = ctx->num_integrated * MOPSR_NDIM;
+
+      multilog (ctx->log, LOG_INFO, "main: timeseries_offset=%u channel=%u antenna=%u nchan=%u nant=%u\n", 
+                timeseries_offset, ctx->channel, ctx->antenna, ctx->nchan, ctx->nant);
+
       mopsr_extract_channel (ctx->timeseries + timeseries_offset, 
-                             ctx->sock->buf + UDP_HEADER, UDP_DATA, 
+                             ctx->sock->buf + UDP_HEADER, ctx->data_size, 
                              ctx->channel, ctx->antenna, 
                              ctx->nchan, ctx->nant);
       ctx->num_integrated += frames_per_packet;
 
       if (ctx->num_integrated >= ctx->nsamps)
       {
-        mopsr_plot_time_series (ctx->timeseries, ctx->num_integrated, &opts);
+        multilog(ctx->log, LOG_INFO, "plotting %d of %d\n", ctx->num_integrated, ctx->nsamps);
+        mopsr_plot_time_series (ctx->timeseries, ctx->channel, ctx->num_integrated, &opts);
         udptimeseries_reset (ctx);
         StopWatch_Delay(&wait_sw, sleep_time);
 
         if (ctx->verbose)
           multilog(ctx->log, LOG_INFO, "main: clearing packets at socket\n");
-        size_t cleared = dada_sock_clear_buffered_packets(ctx->sock->fd, UDP_PAYLOAD);
+        size_t cleared = dada_sock_clear_buffered_packets(ctx->sock->fd, ctx->pkt_size);
         if (ctx->verbose)
           multilog(ctx->log, LOG_INFO, "main: cleared %d packets\n", cleared);
       } 

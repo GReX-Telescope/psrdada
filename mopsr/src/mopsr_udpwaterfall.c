@@ -208,7 +208,7 @@ int main (int argc, char **argv)
   /* Pointer to array of "read" data */
   char *src;
 
-  unsigned int nant = 2;
+  unsigned int nant = 4;
 
   unsigned int antenna = 0;
 
@@ -289,7 +289,7 @@ int main (int argc, char **argv)
   udpwaterfall.interface = strdup(interface);
   udpwaterfall.port = port;
 
-  udpwaterfall.ant_code = 0;
+  udpwaterfall.ant_code = 1;
   udpwaterfall.nant = nant;
   udpwaterfall.nchan = nchan;
   udpwaterfall.nsamps = nsamps;
@@ -428,7 +428,7 @@ void integrate_packet (udpwaterfall_t * ctx, char * buffer, unsigned int size)
   unsigned nframe = size / (ctx->nant * ctx->nchan * 2);
 
   if (ctx->verbose)
-    multilog (ctx->log, LOG_INFO, "integrate_packet: assigning floats, checking min/max: nframe=%d\n", nframe);
+    multilog (ctx->log, LOG_INFO, "integrate_packet: assigning floats, size=%u nant=%u nchan=%u checking min/max: nframe=%d\n", size, ctx->nant, ctx->nchan, nframe);
 
   int8_t * in = (int8_t *) buffer;
   int re, im;

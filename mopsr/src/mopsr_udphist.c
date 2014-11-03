@@ -29,6 +29,7 @@
 #include "dada_def.h"
 #include "mopsr_def.h"
 #include "mopsr_udp.h"
+#include "mopsr_util.h"
 #include "multilog.h"
 #include "futils.h"
 #include "sock.h"
@@ -99,10 +100,6 @@ int udphist_prepare (udphist_t * ctx);
 int udphist_destroy (udphist_t * ctx);
 
 //void integrate_packet (udphist_t * ctx, char * buffer, unsigned int size);
-void hist_packet (udphist_t * ctx, char * buffer, unsigned int size);
-void dump_packet (udphist_t * ctx, char * buffer, unsigned int size);
-void print_packet (udphist_t * ctx, char * buffer, unsigned int size);
-void plot_packet (udphist_t * ctx);
 
 int quit_threads = 0;
 
@@ -264,11 +261,11 @@ int main (int argc, char **argv)
   /* Pointer to array of "read" data */
   char *src;
 
-  unsigned int nant = 2;
+  unsigned int nant = 16;
 
-  unsigned int nsamps = 128;
+  unsigned int nsamps = 6;
 
-  unsigned int nchan = 128;
+  unsigned int nchan = 40;
 
   unsigned int chan_loop = 0;
 
@@ -276,7 +273,7 @@ int main (int argc, char **argv)
 
   unsigned int zap = 0;
 
-  int antenna = -1;
+  int antenna = 0;
 
   int channel = -1;
 
@@ -377,13 +374,13 @@ int main (int argc, char **argv)
   StopWatch_Initialise(1);
 
   if (verbose)
-    multilog(log, LOG_INFO, "mopsr_dbplot: using device %s\n", device);
+    multilog(log, LOG_INFO, "mopsr_udphist: using device %s\n", device);
 
   if (cpgopen(device) != 1) {
-    multilog(log, LOG_INFO, "mopsr_dbplot: error opening plot device\n");
+    multilog(log, LOG_INFO, "mopsr_udphist: error opening plot device\n");
     exit(1);
   }
-  cpgask(0);
+  cpgask(1);
 
   // allocate require resources, open socket
   if (udphist_init (&udphist) < 0)
@@ -392,10 +389,9 @@ int main (int argc, char **argv)
     exit(1);
   }
 
-  // cloear packets ready for capture
+  // clear packets ready for capture
   udphist_prepare (&udphist);
 
-  uint64_t seq_no = 0;
   uint64_t prev_seq_no = 0;
   size_t got = 0;
   int errsv = 0;
@@ -403,8 +399,42 @@ int main (int argc, char **argv)
   uint64_t timeout_max = 1000000;
 
   udphist_t * ctx = &udphist;
+  mopsr_util_t opts;
+  mopsr_hdr_t hdr;
 
-  uint64_t frames_per_packet = UDP_DATA / (ctx->nant * ctx->nchan * 2);
+  opts.lock_flag  = -1;
+  opts.plot_log   = 0;
+  opts.zap        = 0;
+  opts.ant        = -1;
+  opts.chans[0]   = -1;
+  opts.chans[1]   = 127;
+  if (channel != -1)
+  {
+    opts.chans[0]   = channel;
+    opts.chans[1]   = channel;
+  }
+  opts.nbin       = 256;
+  opts.ndim       = 2;
+  opts.ant_code   = 0;
+  opts.ant_id     = 0;
+  opts.plot_plain = 0;
+  opts.nchan      = nchan;
+  opts.nant       = nant;
+  opts.ant        = antenna;
+
+  size_t   frame_size = ctx->nant * ctx->nchan * opts.ndim; 
+  uint64_t frames_per_packet = UDP_DATA / frame_size;
+
+  multilog(log, LOG_INFO, "mopsr_udphist: nsamps=%u frame_size=%ld frames_per_packet=%"PRIu64"\n", nsamps, frame_size, frames_per_packet);
+
+  unsigned int npackets = nsamps / frames_per_packet;
+  if (nsamps % frames_per_packet)
+    npackets++;
+
+  multilog(log, LOG_INFO, "mopsr_udphist: npackets=%u\n", npackets);
+
+  char * data = (char *) malloc (UDP_DATA * npackets);
+  unsigned int * histogram = (unsigned int *) malloc (sizeof(unsigned int) * opts.ndim * opts.nbin);
 
   while (!quit_threads) 
   {
@@ -454,23 +484,29 @@ int main (int argc, char **argv)
     {
       StopWatch_Start(&wait_sw);
 
-      mopsr_decode_header(ctx->sock->buf, &seq_no, &(ctx->ant_code));
+      mopsr_decode (ctx->sock->buf, &hdr);
+
+      if ((antenna == 0) || (antenna == 1))
+      {
+        opts.ant_id = mopsr_get_ant_number (hdr.ant_id, antenna);
+      }
+      else
+      {
+        opts.ant_id = mopsr_get_ant_number (hdr.ant_id2, antenna % 2);
+      }
 
       if (ctx->verbose > 1) 
-        multilog (ctx->log, LOG_INFO, "main: seq_no= %"PRIu64" difference=%"PRIu64" packets\n", seq_no, (seq_no - prev_seq_no));
-      prev_seq_no = seq_no;
+        multilog (ctx->log, LOG_INFO, "main: seq_no= %"PRIu64" difference=%"PRIu64" packets\n", hdr.seq_no, (hdr.seq_no - prev_seq_no));
+      prev_seq_no = hdr.seq_no;
 
-      // integrate packet into totals
-      //integrate_packet (ctx, ctx->sock->buf + UDP_HEADER, UDP_DATA);
-      hist_packet (ctx, ctx->sock->buf + UDP_HEADER, UDP_DATA);
+      memcpy ( data + (ctx->num_integrated * frame_size), ctx->sock->buf + UDP_HEADER, UDP_DATA);
       ctx->num_integrated += frames_per_packet;
 
-      //if (ctx->verbose)
-      //  print_packet (ctx, ctx->sock->buf + UDP_HEADER, (ctx->nchan * ctx->nsamps * 2));
       if (ctx->num_integrated >= ctx->nsamps)
       {
-        //multilog (ctx->log, LOG_INFO, "main: plot_packet\n");
-        plot_packet (ctx);
+        mopsr_form_histogram (histogram, data, ctx->num_integrated * frame_size, &opts);
+        mopsr_plot_histogram (histogram, &opts);
+
         udphist_reset (ctx);
         StopWatch_Delay(&wait_sw, sleep_time);
         if (ctx->channel_loop)
@@ -487,36 +523,14 @@ int main (int argc, char **argv)
 
   cpgclos();
 
+  if (data)
+    free(data);
+
+  if (histogram)
+    free (histogram);
+
   return EXIT_SUCCESS;
 
-}
-
-void print_packet (udphist_t * ctx, char * buffer, unsigned int size)
-{
-  char ant0r[9];
-  char ant0i[9];
-  char ant1r[9];
-  char ant1i[9];
-
-  unsigned ibyte = 0;
-  fprintf(stderr, "chan\tant0imag ant0real ant1imag ant1real\n");
-  for (ibyte=0; ibyte<size; ibyte += 4)
-  {
-    char_to_bstring (ant0i, buffer[ibyte+0]);
-    char_to_bstring (ant0r, buffer[ibyte+1]);
-    char_to_bstring (ant1i, buffer[ibyte+2]);
-    char_to_bstring (ant1r, buffer[ibyte+3]);
-    fprintf (stderr, "%d\t%s %s %s %s\t%d\t%d\t%d\t%d\n", ibyte/4, ant0i, ant0r, ant1i, ant1r, (int8_t) buffer[ibyte+0], (int8_t) buffer[ibyte+1], (int8_t) buffer[ibyte+2], (int8_t) buffer[ibyte+3]);
-  }
-}
-
-void dump_packet (udphist_t * ctx, char * buffer, unsigned int size)
-{
-  int flags = O_WRONLY | O_CREAT | O_TRUNC;
-  int perms = S_IRUSR | S_IRGRP;
-  int fd = open ("packet.raw", flags, perms);
-  ssize_t n_wrote = write (fd, buffer, size);
-  close (fd);
 }
 
 void hist_packet (udphist_t * ctx, char * buffer, unsigned int size)
@@ -577,8 +591,13 @@ void plot_packet (udphist_t * ctx)
   int ibin;
   int ichan, iant;
 
+  if (ctx->verbose)
+    multilog (ctx->log, LOG_INFO, "plot_packet: getting limits\n");
+
   for (ibin=0; ibin<ctx->nbin; ibin++)
   {
+    if (ctx->verbose)
+      multilog (ctx->log, LOG_INFO, "plot_packet: getting limits\n");
     for (iant=0; iant<ctx->nant; iant++)
     {
       re[iant][ibin] = 0;
@@ -609,6 +628,10 @@ void plot_packet (udphist_t * ctx)
       }
     }
   }
+
+  if (ctx->verbose)
+    multilog (ctx->log, LOG_INFO, "plot_packet: plotting\n");
+
   cpgbbuf();
   cpgsci(1);
 
@@ -618,7 +641,7 @@ void plot_packet (udphist_t * ctx)
   else
     sprintf(label, "Complex Histogram for Channel %d", ctx->channel);
 
-  cpgenv(-128, 127, 0, ctx->ymax * 1.1, 0, 0);
+  cpgenv(-128, 128, 0, ctx->ymax * 1.1, 0, 0);
   cpglab("State", "Count", label);
 
   int colour = 2;

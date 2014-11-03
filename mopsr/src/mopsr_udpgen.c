@@ -208,6 +208,8 @@ int main(int argc, char *argv[])
 
   unsigned int s_off = 0;
 
+  mopsr_hdr_t hdr;
+
   while (total_bytes_sent < total_bytes_to_send) 
   {
     if (data_rate)
@@ -220,8 +222,10 @@ int main(int argc, char *argv[])
     // copy the pseudo random data of gausian noise
     memcpy (packet + UDP_HEADER, g_array + index, UDP_DATA);
 
+    hdr.seq_no = seq_no;
+
     // write the custom header into the packet
-    mopsr_encode_header(packet, seq_no);
+    mopsr_encode (packet, &hdr);
 
     bytes_sent = dada_sock_send(udpfd, dagram, packet, (size_t) UDP_PAYLOAD); 
 
