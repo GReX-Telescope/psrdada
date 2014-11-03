@@ -12,7 +12,7 @@
 #include <stdarg.h>
 #include <string.h>
 
-#define STRLEN 128
+#define STRLEN 4096
 
 static char* whitespace = " \t\n";
 
