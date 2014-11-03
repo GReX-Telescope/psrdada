@@ -10,6 +10,16 @@ extern "C" {
 #include "mopsr_delays.h"
 #include <cuda_runtime.h>
 
+#ifdef __CUDA_ARCH__
+# if (__CUDA_ARCH__ >= 300)
+# define HAVE_CUDA_SHUFFLE 1
+# else
+# define HAVE_CUDA_SHUFFLE 0
+# endif
+#else
+# define HAVE_CUDA_SHUFFLE 0
+#endif
+
 typedef struct {
 
   // buffer on GPU where samples reside

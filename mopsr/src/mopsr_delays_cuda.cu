@@ -903,6 +903,7 @@ __global__ void mopsr_skcompute_kernel (cuFloatComplex * in, cuFloatComplex * su
   }
 }
 
+#if HAVE_CUDA_SHUFFLE
 __inline__ __device__
 float warpReduceSumF(float val) {
   for (int offset = warpSize/2; offset > 0; offset /= 2) 
@@ -958,6 +959,7 @@ int blockReduceSumI(int val) {
 
   return val;
 }
+#endif
 
 //
 // take the S1 and S2 values in sums.x and sums.y that were computed 
@@ -1085,8 +1087,10 @@ __global__ void mopsr_skmask_kernel (float * in, int8_t * out, cuFloatComplex * 
     s1_thread /= (2 * M);
 
     // compute the sum of the sums[].x for all the block
+#if HAVE_CUDA_SHUFFLE
     s1_thread = blockReduceSumF (s1_thread);
     s1_count = blockReduceSumI (s1_count);
+#endif
 
     // sync here to be sure the smask is now updated
     __syncthreads();
