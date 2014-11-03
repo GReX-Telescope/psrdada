@@ -27,6 +27,7 @@ void usage()
      " -h   print this help text\n"
      " -k   hexadecimal shared memory key  [default: %x]\n"
      " -f   file to write to the ring buffer \n"
+     " -o bytes  number of bytes to seek into the file\n"
      " -s   single file then exit\n"
      " -d   run as daemon\n"
      " -z   use zero copy shm access\n", DADA_DEFAULT_BLOCK_KEY);
@@ -49,12 +50,17 @@ typedef struct {
   /* file offset from start of data, as defined by FILE_NUMBER attribute */
   unsigned file_number;
 
+  /* number of bytes to artificially seek into the file */
+  uint64_t seek_bytes;
+
   /* remove files after they have been transferred to the Data Block */
   char remove_files;
 
+  char header_read;
+
 } dada_diskdb_t;
 
-#define DADA_DISKDB_INIT { 0, "", 0, "", 0, 0 }
+#define DADA_DISKDB_INIT { 0, "", 0, "", 0, 0, 0, 0 }
 
 /* Number of files to load */
 static int n_files = 0;
@@ -69,7 +75,19 @@ int64_t file_read_function (dada_client_t* client,
 #ifdef _DEBUG
   fprintf (stderr, "file_read_function %p %"PRIu64"\n", data, data_size);
 #endif
-
+  dada_diskdb_t* ctx = (dada_diskdb_t*) client->context;
+  if (ctx->header_read == 0)
+    ctx->header_read = 1;
+  else
+  {
+    if (ctx->seek_bytes > 0)
+    {
+      fprintf (stderr, "file_read_function: seeking %"PRIu64" bytes into the file\n", ctx->seek_bytes);
+      off_t offset = (off_t) ctx->seek_bytes;
+      lseek (client->fd, offset, SEEK_CUR);
+      ctx->seek_bytes = 0;
+    }
+  }
   return read (client->fd, data, data_size);
 }
 
@@ -204,7 +222,7 @@ fprintf (stderr, "read HEADER START\n%sHEADER END\n", client->header);
 
   client->header_size = hdr_size;
   client->optimal_bytes = 1024 * 1024;
-  client->transfer_bytes = file_size;
+  client->transfer_bytes = (file_size - diskdb->seek_bytes);
 
   /* Get the observation ID */
   if (ascii_header_get (client->header, "UTC_START", "%s", utc_start) != 1) {
@@ -265,7 +283,7 @@ int main (int argc, char **argv)
 
   diskdb.array = disk_array_create ();
 
-  while ((arg=getopt(argc,argv,"hk:df:vsz")) != -1)
+  while ((arg=getopt(argc,argv,"hk:df:o:vsz")) != -1)
     switch (arg) {
 
     case 'h':
@@ -274,7 +292,7 @@ int main (int argc, char **argv)
 
     case 'k':
       if (sscanf (optarg, "%x", &dada_key) != 1) {
-        fprintf (stderr,"dada_dbmonitor: could not parse key from %s\n",optarg);
+        fprintf (stderr,"dada_diskdb: could not parse key from %s\n",optarg);
         return -1;
       }
       break;
@@ -286,6 +304,13 @@ int main (int argc, char **argv)
     case 'f':
       strcpy (diskdb.filename[n_files], optarg);
       n_files++;
+      break;
+
+    case 'o':
+      if (sscanf (optarg, "%"PRIu64, &(diskdb.seek_bytes)) != 1) {
+        fprintf (stderr,"dada_diskdb: could not parse seek bytes from %s\n",optarg);
+        return -1;
+      }
       break;
 
     case 'v':
