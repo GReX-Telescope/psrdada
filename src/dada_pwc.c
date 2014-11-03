@@ -247,7 +247,8 @@ int dada_pwc_parse_bytes_per_second (dada_pwc_t* primary,
   unsigned npol;  /* number of polarizations */
   unsigned nbit;  /* nubmer of bits per sample */
   unsigned ndim;  /* number of dimensions */
-  unsigned nchan;  /* number of dimensions */
+  unsigned nant;  /* number of antenna */
+  unsigned nchan; /* number of channels */
 
   uint64_t bits_per_second = 0;
   int resolution = 1;
@@ -278,6 +279,12 @@ int dada_pwc_parse_bytes_per_second (dada_pwc_t* primary,
     nchan = 1;
   }
 
+  if (ascii_header_get (header, "NANT", "%d", &nant) < 0)
+  {
+    fprintf (fptr, "failed to parse NANT - assuming 1\n");
+    nant = 1;
+  }
+
   if (ascii_header_get (header, "RESOLUTION", "%d", &resolution) < 0)
   {
     //fprintf (fptr, "failed to parse RESOLUTION - assuming 1\n");
@@ -296,7 +303,7 @@ int dada_pwc_parse_bytes_per_second (dada_pwc_t* primary,
   }
 
   /* IMPORTANT: TSAMP is the sampling period in microseconds */
-  bits_per_second = primary->bits_per_sample * nchan * ((uint64_t)(1e6/sampling_interval));
+  bits_per_second = primary->bits_per_sample * nchan * nant * ((uint64_t)(1e6/sampling_interval));
 
   primary->bytes_per_second = bits_per_second / 8;
 
@@ -816,7 +823,7 @@ int dada_pwc_set_state (dada_pwc_t* primary, int new_state, time_t utc)
     break;
     
   default:
-    fprintf (stderr, "current state is UNDEFINED\n");
+    fprintf (stderr, "current state is UNDEFINED, new state=%d\n", new_state);
     return -1;
 
   }
