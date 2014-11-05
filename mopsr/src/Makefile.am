@@ -5,7 +5,8 @@ mopsr_hdr = mopsr_udp.h mopsr_def.h mopsr_util.h mopsr_delays.h
 
 libmopsr_la_SOURCES = $(mopsr_hdr) mopsr_udp.c mopsr_util.c mopsr_delays.c
 
-INCLUDES = -I$(top_srcdir)/src
+INCLUDES = -I$(top_srcdir)/src -I$(top_srcdir)/mopsr/sla
+
 # add pgplot and fftw configuration 
 
 AM_CFLAGS = @PGPLOT_CFLAGS@ @FFTW_CFLAGS@ -D$(ARCH)

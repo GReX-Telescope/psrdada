@@ -185,10 +185,12 @@ int main(int argc, char** argv)
 
   void * d_in;
   void * d_fbs;
+  void * d_phasors;
   void * h_in;
   void * h_out;
   float * h_ant_factors;
   float * h_sin_thetas;
+  float * h_phasors;
 
   error = cudaMallocHost( &h_in, in_block_size); 
   if (error != cudaSuccess)
@@ -238,6 +240,22 @@ int main(int argc, char** argv)
     h_sin_thetas[ibeam] = sinf((fraction * 4) - 2);
   }
 
+  size_t phasors_size = nant * nbeam * sizeof(float) * 2;
+  error = cudaMallocHost( (void **) &(h_phasors), phasors_size);
+  if (error != cudaSuccess)
+  {
+    fprintf(stderr, "alloc: could not allocate %ld bytes of device memory\n", phasors_size);
+    return -1;
+  }
+
+  unsigned nbeamant = nbeam * nant;
+  unsigned i=0;
+  for (i=0; i<nbeamant; i++)
+  {
+    h_phasors[i]          = (float) i;
+    h_phasors[i+nbeamant] = (float) i;
+  }
+
   if (verbose)
     fprintf(stderr, "alloc: allocating %ld bytes of device memory for d_in\n", in_block_size);
   error = cudaMalloc( &(d_in), in_block_size);
@@ -260,7 +278,28 @@ int main(int argc, char** argv)
     return -1;
   }
 
+  if (verbose)
+    fprintf(stderr, "alloc: allocating %ld bytes of device memory for d_fbs\n", phasors_size);
+  error = cudaMalloc( &(d_phasors), phasors_size);
+  if (verbose)
+    fprintf(stderr, "alloc: d_fbs=%p\n", d_phasors);
+  if (error != cudaSuccess)
+  {
+    fprintf(stderr, "alloc: could not allocate %ld bytes of device memory\n", phasors_size);
+    return -1;
+  }
+
   cudaStreamSynchronize(stream);
+
+  if (verbose > 1)
+    fprintf(stderr, "io_block: cudaMemcpyAsync block H2D %ld: (%p <- %p)\n", phasors_size, d_phasors, h_phasors);
+  error = cudaMemcpyAsync (d_phasors, h_phasors, phasors_size, cudaMemcpyHostToDevice, stream);
+  if (error != cudaSuccess)
+  {
+    fprintf(stderr, "cudaMemcpyAsyc H2D failed: %s (%p <- %p)\n", cudaGetErrorString(error),
+              d_phasors, h_phasors);
+    return -1;
+  }
 
   // copy the whole block to the GPU
   if (verbose > 1)
@@ -274,7 +313,8 @@ int main(int argc, char** argv)
   }
 
   // form the tiled, detected and integrated fan beamsa
-  mopsr_tile_beams (stream, d_in, d_fbs, h_sin_thetas, h_ant_factors, in_block_size, nbeam, nant, tdec);
+  //mopsr_tile_beams (stream, d_in, d_fbs, h_sin_thetas, h_ant_factors, in_block_size, nbeam, nant, tdec);
+  mopsr_tile_beams_precomp (stream, d_in, d_fbs, d_phasors, in_block_size, nbeam, nant, tdec);
 
   if (verbose > 1)
     fprintf(stderr, "io_block: cudaMemcpyAsync(%p, %p, %"PRIu64", D2H)\n",
@@ -297,6 +337,10 @@ int main(int argc, char** argv)
     cudaFree (d_fbs);
   d_fbs = 0;
 
+  if (d_phasors)
+    cudaFree (d_phasors);
+  d_phasors = 0;
+
   if (h_ant_factors)
     cudaFreeHost(h_ant_factors);
   h_ant_factors= 0;
@@ -308,6 +352,10 @@ int main(int argc, char** argv)
   if (h_out)
     cudaFreeHost(h_out);
   h_out = 0;
+
+  if (h_phasors)
+    cudaFreeHost(h_phasors);
+  h_phasors = 0;
 
   if (h_sin_thetas)
     cudaFreeHost(h_sin_thetas);
