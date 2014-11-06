@@ -41,7 +41,7 @@ int main(int argc, char** argv)
   int nbeam = 512;
   unsigned ndim = 2;
   unsigned nsamp = 64;
-  unsigned tdec = 32;
+  unsigned tdec = 64;
 
   char verbose = 0;
 
@@ -188,6 +188,7 @@ int main(int argc, char** argv)
   void * d_phasors;
   void * h_in;
   void * h_out;
+  void * h_out_cpu;
   float * h_ant_factors;
   float * h_sin_thetas;
   float * h_phasors;
@@ -198,6 +199,17 @@ int main(int argc, char** argv)
     fprintf(stderr, "alloc: could not allocate %ld bytes of pinned host memory\n", in_block_size);
     return -1;
   }
+  int8_t * ptr = (int8_t *) h_in;
+  for (iant=0; iant<nant; iant++)
+  {
+    for (isamp=0; isamp<nsamp; isamp++)
+    {
+      ptr[0] = (int8_t) iant + 1;
+      ptr[1] = (int8_t) isamp + 1;
+      ptr += 2;
+      //fprintf (stderr, "[%d][%d] = %d + i%d\n", iant, isamp, iant+1, isamp+1);
+    }
+  }
 
   error = cudaMallocHost( &h_out, ou_block_size);
   if (error != cudaSuccess)
@@ -205,6 +217,8 @@ int main(int argc, char** argv)
     fprintf(stderr, "alloc: could not allocate %ld bytes of pinned host memory\n", ou_block_size);
     return -1;
   }
+
+  h_out_cpu = malloc(ou_block_size);
 
   // allocte CPU memory for each re-phasor
   size_t ant_factors_size = sizeof(float) * nant;
@@ -248,12 +262,19 @@ int main(int argc, char** argv)
     return -1;
   }
 
-  unsigned nbeamant = nbeam * nant;
-  unsigned i=0;
-  for (i=0; i<nbeamant; i++)
+  unsigned nbeamant = nant * nbeam;
+  float * phasors_ptr = (float *) h_phasors;
+  unsigned re, im;
+  for (ibeam=0; ibeam<nbeam; ibeam++)
   {
-    h_phasors[i]          = (float) i;
-    h_phasors[i+nbeamant] = (float) i;
+    for (iant=0; iant<nant; iant++)
+    {
+      re = (ibeam + iant + 2);
+      im = (ibeam + iant + 3);
+
+      h_phasors[ibeam * nant + iant] = (float) re;
+      h_phasors[(ibeam * nant + iant) + nbeamant] = (float) im;
+    }
   }
 
   if (verbose)
@@ -301,30 +322,56 @@ int main(int argc, char** argv)
     return -1;
   }
 
-  // copy the whole block to the GPU
-  if (verbose > 1)
-    fprintf(stderr, "io_block: cudaMemcpyAsync block H2D %ld: (%p <- %p)\n", in_block_size, d_in, h_in);
-  error = cudaMemcpyAsync (d_in, h_in, in_block_size, cudaMemcpyHostToDevice, stream);
-  if (error != cudaSuccess)
+  unsigned itrial;
+  for (itrial=0; itrial<1; itrial++)
   {
-    fprintf(stderr, "cudaMemcpyAsyc H2D failed: %s (%p <- %p)\n", cudaGetErrorString(error),
-              d_in, h_in);
-    return -1;
-  }
+//#if USE_GPU
+    // copy the whole block to the GPU
+    if (verbose > 1)
+      fprintf(stderr, "io_block: cudaMemcpyAsync block H2D %ld: (%p <- %p)\n", in_block_size, d_in, h_in);
+    error = cudaMemcpyAsync (d_in, h_in, in_block_size, cudaMemcpyHostToDevice, stream);
+    if (error != cudaSuccess)
+    {
+      fprintf(stderr, "cudaMemcpyAsyc H2D failed: %s (%p <- %p)\n", cudaGetErrorString(error),
+                d_in, h_in);
+      return -1;
+    }
 
-  // form the tiled, detected and integrated fan beamsa
-  //mopsr_tile_beams (stream, d_in, d_fbs, h_sin_thetas, h_ant_factors, in_block_size, nbeam, nant, tdec);
-  mopsr_tile_beams_precomp (stream, d_in, d_fbs, d_phasors, in_block_size, nbeam, nant, tdec);
+    // form the tiled, detected and integrated fan beamsa
+    //mopsr_tile_beams (stream, d_in, d_fbs, h_sin_thetas, h_ant_factors, in_block_size, nbeam, nant, tdec);
+    mopsr_tile_beams_precomp (stream, d_in, d_fbs, d_phasors, in_block_size, nbeam, nant, tdec);
 
-  if (verbose > 1)
-    fprintf(stderr, "io_block: cudaMemcpyAsync(%p, %p, %"PRIu64", D2H)\n",
-              h_out, d_fbs, ou_block_size);
-  error = cudaMemcpyAsync ( h_out, d_fbs, ou_block_size,
-                            cudaMemcpyDeviceToHost, stream);
-  if (error != cudaSuccess)
-  {
-    fprintf(stderr, "cudaMemcpyAsync D2H failed: %s\n", cudaGetErrorString(error));
-    return -1;
+    if (verbose > 1)
+      fprintf(stderr, "io_block: cudaMemcpyAsync(%p, %p, %"PRIu64", D2H)\n",
+                h_out, d_fbs, ou_block_size);
+    error = cudaMemcpyAsync ( h_out, d_fbs, ou_block_size,
+                              cudaMemcpyDeviceToHost, stream);
+    if (error != cudaSuccess)
+    {
+      fprintf(stderr, "cudaMemcpyAsync D2H failed: %s\n", cudaGetErrorString(error));
+      return -1;
+    }
+//#else
+
+    cudaStreamSynchronize(stream);
+
+    mopsr_tile_beams_cpu (h_in, h_out_cpu, h_phasors, in_block_size, nbeam, nant, tdec);
+
+    unsigned nchunk = nsamp / 64;
+    float * gpu = (float *) h_out;
+    float * cpu = (float *) h_out_cpu;
+
+    unsigned ichunk;
+    for (ibeam=0; ibeam<nbeam; ibeam++)
+    {
+      for (ichunk=0; ichunk<nchunk; ichunk++)
+      {
+        fprintf (stderr, "[%d][%d] cpu=%f gpu=%f\n",ibeam, ichunk, cpu[ibeam*nchunk+ichunk], gpu[ichunk*nbeam+ibeam]);
+      }
+    }
+  
+
+//#endif
   }
 
   cudaStreamSynchronize(stream);
@@ -364,4 +411,74 @@ int main(int argc, char** argv)
   free (modules);
 
   return 0;
+}
+
+// simpler CPU version
+int mopsr_tile_beams_cpu (void * h_in, void * h_out, void * h_phasors, uint64_t nbytes, unsigned nbeam, unsigned nant, unsigned tdec)
+{
+  unsigned ndim = 2;
+
+  // data is ordered in ST order
+  uint64_t nsamp = nbytes / (nant * ndim);
+
+  float * phasors = (float *) h_phasors;
+
+  int16_t * in16 = (int16_t *) h_in;
+  float * ou     = (float *) h_out;
+
+  int16_t val16;
+  int8_t * val8 = (int8_t *) &val16;
+
+  const unsigned nbeamant = nbeam * nant;
+  const unsigned ant_stride = nsamp;
+  complex float val, beam_sum, phasor, steered;
+  float beam_power;
+
+  // intergrate 32 samples together
+  const unsigned ndat = tdec;
+  unsigned nchunk = nsamp / tdec;
+
+  //fprintf (stderr, "[C][S][A]\n");
+  unsigned ibeam, ichunk, idat, isamp, iant;
+  for (ibeam=0; ibeam<nbeam; ibeam++)
+  {
+    //fprintf (stderr, "ibeam=%d\n", ibeam);
+    isamp = 0;
+    for (ichunk=0; ichunk<nchunk; ichunk++)
+    {
+      beam_power = 0;
+      for (idat=0; idat<ndat; idat++)
+      {
+        beam_sum = 0 + 0 * I;
+        for (iant=0; iant<nant; iant++)
+        {
+          //fprintf (stderr, "[%d][%d][%d][%d]\n", ibeam, ichunk, idat, iant);
+
+          // unpack this sample and antenna
+          val16 = in16[iant*nsamp + isamp];
+          val = ((float) val8[0]) + ((float) val8[1]) * I;
+
+          // the required phase rotation for this beam and antenna
+          phasor = phasors[ibeam * nant + iant] + phasors[(ibeam * nant) + iant + nbeamant] * I;
+
+          steered = val * phasor;
+
+          //if (ibeam == 0)
+          //  fprintf (stderr, "[%d][%d][%d] val=(%f + i%f) phasor=(%f + i%f) steered=(%f + i%f)\n", ichunk, isamp, iant, 
+          //          creal(val), cimag(val),
+          //          creal(phasor), cimag(phasor),
+          //          creal(steered), cimag(steered));
+
+          // add the steered tied array beam to the total
+          beam_sum += steered;
+        }
+        //fprintf (stderr, "[%d] isamp sum = (%f + i%f)\n", isamp, creal(beam_sum), cimag(beam_sum));
+        beam_power += (creal(beam_sum) * creal(beam_sum)) + (cimag(beam_sum) * cimag(beam_sum));
+        isamp++;
+      }
+
+      ou[ibeam*nchunk+ichunk] = beam_power;
+      //fprintf (stderr, "[%d][%d] = %f\n", ibeam, ichunk, beam_power);
+    }
+  }
 }

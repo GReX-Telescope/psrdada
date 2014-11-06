@@ -776,3 +776,56 @@ int64_t bfdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
   ctx->bytes_read += bytes;
   return (int64_t) bytes;
 }
+
+// simpler CPU version
+int mopsr_tile_beams_cpu (void * h_in, void * h_out, void * h_phasors, uint64_t nbytes, mopsr_bfdsp_t* ctx)
+{
+  // data is ordered in ST order
+  uint64_t nsamp = nbytes / (ctx->nant * ctx->ndim);
+
+  complex float * phasors = (complex float *) h_phasors;
+
+  int16_t * in16 = (int16_t *) h_in;
+  float * ou     = (float *) h_out;
+
+  int16_t val16;
+  int8_t * val8 = (int8_t *) &val16;
+
+  const unsigned ant_stride = nsamp;
+  complex float val, beam_sum, phasor;
+  float beam_power;
+
+  // intergrate 32 samples together
+  const unsigned ndat = 32;
+  unsigned nchunk = nsamp / ndat;
+
+  unsigned ibeam, ichunk, idat, isamp, iant;
+  for (ibeam=0; ibeam<ctx->nbeam; ibeam++)
+  {
+    isamp = 0;
+    for (ichunk=0; ichunk<nchunk; ichunk++)
+    {
+      beam_power = 0;
+      for (idat=0; idat<ndat; idat++)
+      {
+        beam_sum = 0 + 0 * I;
+        for (iant=0; iant<ctx->nant; iant++)
+        {
+          // unpack this sample and antenna
+          val16 = in16[iant*nsamp + isamp];
+          val = ((float) val8[0]) + ((float) val8[1]) * I;
+
+          // the required phase rotation for this beam and antenna
+          phasor = phasors[ibeam * ctx->nant + iant]; 
+        
+          // add the steered tied array beam to the total
+          beam_sum = (val * phasor) + beam_sum;
+        }
+        beam_power += (creal(beam_sum) * creal(beam_sum)) + (cimag(beam_sum) * cimag(beam_sum));
+        isamp++;
+      }
+
+      ou[ibeam*nchunk+ichunk] = beam_power;
+    }
+  }
+}
