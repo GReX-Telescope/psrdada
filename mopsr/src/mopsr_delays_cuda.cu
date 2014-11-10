@@ -976,6 +976,7 @@ __global__ void mopsr_skmask_kernel (float * in, int8_t * out, cuFloatComplex * 
   // maximum to be 16384 samples (20.97152 ms)
   unsigned sk_idx_max = 20;
 
+  // 3 sigma
   const float sk_low[20]  = { 0, 0, 0, 0, 0,
                               0.387702, 0.492078, 0.601904, 0.698159, 0.775046,
                               0.834186, 0.878879, 0.912209, 0.936770, 0.954684,
@@ -985,6 +986,7 @@ __global__ void mopsr_skmask_kernel (float * in, int8_t * out, cuFloatComplex * 
                               1.216950, 1.146930, 1.100750, 1.069730, 1.048570,
                               1.033980, 1.023850, 1.016780, 1.011820, 1.008340 };
 /*
+  // 4 sigma
   const float sk_low[20]  = { 0, 0, 0, 0, 0,
                               0.274561, 0.363869, 0.492029, 0.613738, 0.711612,
                               0.786484, 0.843084, 0.885557, 0.917123, 0.940341,
