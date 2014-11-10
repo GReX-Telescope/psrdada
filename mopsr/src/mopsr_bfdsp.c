@@ -24,9 +24,11 @@
 #include <complex.h>
 #include <float.h>
 
+#define USE_GPU
+
 void usage ()
 {
-	fprintf(stdout, "mopsr_bfdsp [options] inkey outkey\n"
+	fprintf(stdout, "mopsr_bfdsp [options] inkey outkey bays.txt modules.txt\n"
     "\n"
     "  Apply DSP operations to MOPSR BF pipeine:\n"
     "    Tied-Array beam (nyquist)\n"
@@ -36,7 +38,7 @@ void usage ()
     "  outkey            PSRDADA hexideciaml key for input output Fan beams\n"
     "\n"
     "  -d <id>           use GPU device with id [default 0]\n"
-    "  -b nbeam          create nbeam fan beams [default 352]\n"
+    "  -b nbeam          create nbeam fan beams [default NANT]\n"
     "  -t key,ra,dec     create a tied array beam on PSRDADA key at RA and DEC\n"
     "  -v                verbose output\n"
     "  *                 optional\n");
@@ -109,9 +111,9 @@ int main(int argc, char** argv)
   }
 
   // check and parse the command line arguments
-  if (argc-optind != 2)
+  if (argc-optind != 4)
   {
-    fprintf(stderr, "ERROR: 2 arguments are required\n");
+    fprintf(stderr, "ERROR: 4 arguments are required\n");
     usage();
     exit(EXIT_FAILURE);
   }
@@ -133,9 +135,6 @@ int main(int argc, char** argv)
 
   // read the modules file that describes the array
   char * modules_file = argv[optind+3];
-
-  // read the signal path file that describes what is connected to what
-  char * signal_path_file = argv[optind+4];
 
   log = multilog_open ("mopsr_bfdsp", 0); 
 
@@ -167,7 +166,7 @@ int main(int argc, char** argv)
 
   ctx.log = log;
 
-  if (bfdsp_init (&ctx, in_hdu, out_hdu, bays_file, modules_file, signal_path_file) < 0)
+  if (bfdsp_init (&ctx, in_hdu, out_hdu, bays_file, modules_file) < 0)
   {
     fprintf (stderr, "ERROR: failed to initalise data structures\n");
     return EXIT_FAILURE;
@@ -238,7 +237,7 @@ int main(int argc, char** argv)
 }
 
 /*! Perform initialization */
-int bfdsp_init ( mopsr_bfdsp_t* ctx, dada_hdu_t * in_hdu, dada_hdu_t * out_hdu, char * bays_file, char * modules_file, char * signal_paths_file)
+int bfdsp_init ( mopsr_bfdsp_t* ctx, dada_hdu_t * in_hdu, dada_hdu_t * out_hdu, char * bays_file, char * modules_file)
 {
   multilog_t * log = ctx->log;
 
@@ -297,12 +296,14 @@ int bfdsp_init ( mopsr_bfdsp_t* ctx, dada_hdu_t * in_hdu, dada_hdu_t * out_hdu, 
   // input block must be a multiple of the output block in bytes
   ctx->in_block_size = ipcbuf_get_bufsz ((ipcbuf_t *) in_hdu->data_block);
   ctx->ou_block_size = ipcbuf_get_bufsz ((ipcbuf_t *) out_hdu->data_block);
-  if (ctx->in_block_size / ctx->tdec != ctx->ou_block_size)
-  {
-    multilog (log, LOG_ERR, "bfdsp_init: input block size / dec != outout block size: input [%"PRIu64"], ouput [%"PRIu64"]\n",
-              ctx->in_block_size, ctx->ou_block_size);
-    return -1;
-  }
+
+  // the ratio 
+  //if (ctx->in_block_size *  / ctx->tdec != ctx->ou_block_size)
+  //{
+  //  multilog (log, LOG_ERR, "bfdsp_init: input block size / dec != outout block size: input [%"PRIu64"], ouput [%"PRIu64"]\n",
+  //            ctx->in_block_size, ctx->ou_block_size);
+  //  return -1;
+  //}
 
   ctx->out_hdu = out_hdu;
 
@@ -322,7 +323,27 @@ int bfdsp_init ( mopsr_bfdsp_t* ctx, dada_hdu_t * in_hdu, dada_hdu_t * out_hdu, 
     return -1;
   }
 
-  ctx->d_in = ctx->d_fbs = 0;
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "init: initating %ld bytes of device memory for d_in\n", ctx->in_block_size);
+  error = cudaMalloc( &(ctx->d_in), ctx->in_block_size);
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "init: d_in=%p\n", ctx->d_in);
+  if (error != cudaSuccess)
+  {
+    multilog (log, LOG_ERR, "init: could not allocate %ld bytes of device memory\n", ctx->in_block_size);
+    return -1;
+  }
+
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "init: allocating %ld bytes of device memory for d_fbs\n", ctx->ou_block_size);
+  error = cudaMalloc( &(ctx->d_fbs), ctx->ou_block_size);
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "init: d_fbs=%p\n", ctx->d_fbs);
+  if (error != cudaSuccess)
+  {
+    multilog (log, LOG_ERR, "init: could not allocate %ld bytes of device memory\n", ctx->ou_block_size);
+    return -1;
+  }
 
   if (ctx->verbose)
      multilog (log, LOG_INFO, "init: completed\n");
@@ -335,6 +356,9 @@ int bfdsp_alloc (mopsr_bfdsp_t * ctx)
 {
   multilog_t * log = ctx->log;
 
+  unsigned iant, ibeam;
+
+  /*
   // allocte CPU memory for each re-phasor
   size_t dist_size = sizeof(float) * ctx->nant;
   cudaError_t error = cudaMallocHost( (void **) &(ctx->h_ant_factors), dist_size);
@@ -359,28 +383,84 @@ int bfdsp_alloc (mopsr_bfdsp_t * ctx)
   unsigned ibeam;
   for (ibeam=0; ibeam<ctx->nbeam; ibeam++)
     ctx->h_sin_thetas[ibeam] = ibeam * 0.1;
+  */
 
+  ctx->phasors_size = ctx->nant * ctx->nbeam * sizeof(complex float);
   if (ctx->verbose)
-    multilog (log, LOG_INFO, "alloc: allocating %ld bytes of device memory for d_in\n", ctx->in_block_size);
-  error = cudaMalloc( &(ctx->d_in), ctx->in_block_size);
-  if (ctx->verbose)
-    multilog (log, LOG_INFO, "alloc: d_in=%p\n", ctx->d_in);
+    multilog (log, LOG_INFO, "alloc: allocating %ld bytes of pinned host memory for phasors\n", ctx->phasors_size);
+  cudaError_t error = cudaMallocHost( (void **) &(ctx->h_phasors), ctx->phasors_size);
   if (error != cudaSuccess)
   {
-    multilog (log, LOG_ERR, "alloc: could not allocate %ld bytes of device memory\n", ctx->in_block_size);
+    multilog (log, LOG_ERR, "alloc: could not allocate %ld bytes of pinned host memory\n", ctx->phasors_size);
     return -1;
   }
 
   if (ctx->verbose)
-    multilog (log, LOG_INFO, "alloc: allocating %ld bytes of device memory for d_fbs\n", ctx->ou_block_size);
-  error = cudaMalloc( &(ctx->d_fbs), ctx->ou_block_size);
-  if (ctx->verbose)
-    multilog (log, LOG_INFO, "alloc: d_fbs=%p\n", ctx->d_fbs);
+    multilog (log, LOG_INFO, "alloc: allocating %ld bytes of device memory for phasors\n", ctx->phasors_size);
+  error = cudaMalloc( (void **) &(ctx->d_phasors), ctx->phasors_size);
+  if (error != cudaSuccess)
+  {     
+    multilog (log, LOG_ERR, "alloc: could not allocate %ld bytes of device memory\n", ctx->phasors_size);
+    return -1;    
+  } 
+
+  // compute the phasors for each beam and antenna
+  double C = 2.99792458e8;
+  double dist, fraction, sin_md, geometric_delay, theta, angle_rads;
+  const unsigned nbeamant = ctx->nbeam * ctx->nant;
+  unsigned idx;
+
+  double range = (4.0 / 352) * ctx->nbeam;
+
+  for (ibeam=0; ibeam<ctx->nbeam; ibeam++)
+  {
+    fraction = (double) ibeam / (double) (ctx->nbeam-1);
+    angle_rads = ((fraction * range) - (range/2)) * DD2R;
+    sin_md = sin(angle_rads);
+
+    // the h_dist will be -2 * PI * FREQ * dist / C
+    for (iant=0; iant<ctx->nant; iant++)
+    {
+      geometric_delay = (sin_md * ctx->modules[iant]->dist) / C;
+      theta = -2 * M_PI * ctx->channel.cfreq * 1000000 * geometric_delay;
+
+      idx = ibeam * ctx->nant + iant;
+      ctx->h_phasors[idx]          = (float) cos(theta);
+      ctx->h_phasors[idx+nbeamant] = (float) sin(theta);
+      //fprintf (stderr, "[%d][%d] freq=%lf delay=%le angle=%lf degrees, theta=%lf (%e, i%e)\n", ibeam, iant, ctx->channel.cfreq, geometric_delay, angle_rads / DD2R, theta, ctx->h_phasors[idx], ctx->h_phasors[idx+nbeamant]);
+    }
+  }
+
+#ifdef USE_GPU
+ 
+  if (ctx->verbose > 1)
+    multilog (log, LOG_INFO, "alloc: cudaMemcpyAsync block H2D %ld: (%p <- %p)\n", ctx->phasors_size, ctx->d_phasors, ctx->h_phasors);
+  error = cudaMemcpyAsync ((void *) ctx->d_phasors, (void *) ctx->h_phasors, ctx->phasors_size, cudaMemcpyHostToDevice, ctx->stream);
   if (error != cudaSuccess)
   {
-    multilog (log, LOG_ERR, "alloc: could not allocate %ld bytes of device memory\n", ctx->ou_block_size);
+    multilog (log, LOG_ERR, "cudaMemcpyAsyc H2D failed: %s (%p <- %p)\n", cudaGetErrorString(error),
+              ctx->d_phasors, ctx->h_phasors);
     return -1;
   }
+ 
+#endif
+
+/*
+  size_t beams_size = sizeof(float) * nbeam;
+  error = cudaMallocHost( (void **) &(h_sin_thetas), beams_size);
+  if (error != cudaSuccess)
+  {
+    fprintf(stderr, "alloc: could not allocate %ld bytes of device memory\n", beams_size);
+    return -1;
+  }
+
+  // assume that the beams tile from -2 degrees to + 2 degrees in even steps 
+  for (ibeam=0; ibeam<nbeam; ibeam++)
+  {
+    float fraction = (float) ibeam / (float) (nbeam-1);
+    h_sin_thetas[ibeam] = sinf((fraction * 4) - 2);
+  }
+*/
 
   cudaStreamSynchronize(ctx->stream);
 
@@ -392,7 +472,7 @@ int bfdsp_dealloc (mopsr_bfdsp_t * ctx)
 {
   // ensure no operations are pending
   cudaStreamSynchronize(ctx->stream);
-
+/*
   if (ctx->h_ant_factors)
     cudaFreeHost(ctx->h_ant_factors);
   ctx->h_ant_factors = 0;
@@ -400,6 +480,11 @@ int bfdsp_dealloc (mopsr_bfdsp_t * ctx)
   if (ctx->h_sin_thetas)
     cudaFreeHost (ctx->h_sin_thetas);
   ctx->h_sin_thetas = 0;
+*/
+
+  if (ctx->h_phasors)
+    cudaFreeHost (ctx->h_phasors);
+  ctx->h_phasors = 0;
 
   if (ctx->d_in)
     cudaFree (ctx->d_in);
@@ -408,6 +493,10 @@ int bfdsp_dealloc (mopsr_bfdsp_t * ctx)
   if (ctx->d_fbs)
     cudaFree (ctx->d_fbs);
    ctx->d_fbs = 0;
+
+  if (ctx->d_phasors)
+    cudaFree (ctx->d_phasors);
+  ctx->d_phasors = 0;
 
   return 0;
 }
@@ -473,6 +562,8 @@ int bfdsp_open (dada_client_t* client)
   }
   if (ctx->nbeam == -1)
     ctx->nbeam = ctx->nant;
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "open: NBEAM=%d\n", ctx->nbeam);
 
   if (ascii_header_get (client->header, "TSAMP", "%lf", &(ctx->tsamp)) != 1)
   {
@@ -605,6 +696,43 @@ int bfdsp_open (dada_client_t* client)
   int64_t transfer_size = 0;
   ascii_header_get (client->header, "TRANSFER_SIZE", "%"PRIi64, &transfer_size);
 
+  // extract the module identifiers
+  ctx->modules = (mopsr_module_t **) malloc (sizeof(mopsr_module_t *) * ctx->nant);
+  char module_list[3072];
+  if (ascii_header_get (client->header, "ANTENNAE", "%s", module_list) != 1)
+  {
+    multilog (log, LOG_ERR, "open: could not read ANTENNAE from header\n");
+    return -1;
+  }
+
+  unsigned iant, imod;
+  for (iant=0; iant<ctx->nant; iant++)
+    ctx->modules[iant] = 0;
+
+  const char *sep = ",";
+  char * saveptr;
+  char * str = strtok_r(module_list, sep, &saveptr);
+  iant=0;
+  while (str && iant<ctx->nant)
+  {
+    for (imod=0; imod<ctx->nmodules; imod++)
+    {
+      if (strcmp(str, ctx->all_modules[imod].name) == 0)
+      {
+        if (ctx->verbose)
+          multilog (log, LOG_INFO, "open: matched iant=%d to imod=%d [%s]\n", iant, imod, str);
+        ctx->modules[iant] = &(ctx->all_modules[imod]);
+      }
+    }
+    if (ctx->modules[iant] == 0)
+    {
+      multilog (log, LOG_ERR, "open: could not find a module that matched %s\n", str);
+      return -1;
+    }
+    iant++;
+    str = strtok_r(NULL, sep, &saveptr);
+  }
+
   // allocate the observation specific memory
   if (ctx->verbose)
     multilog (log, LOG_INFO, "open: allocating observation specific memory\n");
@@ -643,6 +771,36 @@ int bfdsp_open (dada_client_t* client)
   }
   ctx->bytes_read += obs_offset;
 
+  if (ascii_header_set (header, "ORDER", "%s", "TS") < 0)
+  {
+    multilog (log, LOG_ERR, "open: could not set ORDER in outgoing header\n");
+    return -1;
+  }
+
+  if (ascii_header_set (header, "NANT", "%d", 1) < 0)
+  {
+    multilog (log, LOG_ERR, "open: could not set NANT=1 in outgoing header\n");
+    return -1;
+  }
+
+  if (ascii_header_set (header, "NDIM", "%d", 1) < 0)
+  {
+    multilog (log, LOG_ERR, "open: could not set NDIM=1 in outgoing header\n");
+    return -1;
+  }
+
+  if (ascii_header_set (header, "NBIT", "%d", 32) < 0)
+  {     
+    multilog (log, LOG_ERR, "open: could not set NBIT=32 in outgoing header\n");
+    return -1;    
+  }                 
+
+  if (ascii_header_set (header, "NBEAM", "%d", ctx->nbeam) < 0)
+  {
+    multilog (log, LOG_ERR, "open: could not set NBEAM=%d in outgoing header\n", ctx->nbeam);
+    return -1;    
+  }                 
+
   if (ctx->verbose)
     multilog (log, LOG_INFO, "open: marking output header filled\n");
 
@@ -665,6 +823,7 @@ int bfdsp_open (dada_client_t* client)
   return 0;
 
 }
+
 
 int bfdsp_close (dada_client_t* client, uint64_t bytes_written)
 {
@@ -731,8 +890,8 @@ int64_t bfdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
   cudaError_t error;
   uint64_t out_block_id;
   unsigned ichan, iant;
-  uint64_t bytes_out = bytes / ctx->tdec;;
 
+#ifdef USE_GPU 
   // copy the whole block to the GPU
   if (ctx->verbose > 1)
     multilog (log, LOG_INFO, "io_block: cudaMemcpyAsync block H2D %ld: (%p <- %p)\n", bytes, ctx->d_in, buffer);
@@ -744,20 +903,31 @@ int64_t bfdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
     return -1;
   }
 
-  // form the tiled, detected and integrated fan beamsa
-  mopsr_tile_beams (ctx->stream, ctx->d_in, ctx->d_fbs, ctx->h_sin_thetas, ctx->h_ant_factors,
-                    bytes, ctx->nbeam, ctx->nant, ctx->tdec);
+  // form the tiled, detected and integrated fan beams
+  // mopsr_tile_beams (ctx->stream, ctx->d_in, ctx->d_fbs, ctx->h_sin_thetas, ctx->h_ant_factors,
+  //                  bytes, ctx->nbeam, ctx->nant, ctx->tdec);
+
+  // form the tiled, detected and integrated tied array beams
+  mopsr_tile_beams_precomp (ctx->stream, ctx->d_in, ctx->d_fbs, ctx->d_phasors, ctx->in_block_size, ctx->nbeam, ctx->nant, ctx->tdec);
+#endif
 
   // copy back to output buffer
   if (!ctx->block_open)
   {
+
     ctx->curr_block = ipcio_open_block_write (ctx->out_hdu->data_block, &out_block_id);
+    if (ctx->verbose > 1)
+      multilog (log, LOG_INFO, "io_block: opened output block %"PRIu64" %p\n", out_block_id, (void *) ctx->curr_block);
     ctx->block_open = 1;
   }
 
+#ifndef USE_GPU
+  mopsr_tile_beams_cpu (buffer, ctx->curr_block, ctx->h_phasors, ctx->in_block_size, ctx->nbeam, ctx->nant, 64);
+#else
+
   if (ctx->verbose > 1)
     multilog (log, LOG_INFO, "io_block: cudaMemcpyAsync(%p, %p, %"PRIu64", D2H)\n",
-              (void *) ctx->curr_block, ctx->d_fbs, bytes_out);
+              (void *) ctx->curr_block, ctx->d_fbs, ctx->ou_block_size);
   error = cudaMemcpyAsync ( (void *) ctx->curr_block, ctx->d_fbs, ctx->ou_block_size, 
                             cudaMemcpyDeviceToHost, ctx->stream);
   if (error != cudaSuccess)
@@ -770,20 +940,29 @@ int64_t bfdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
   if (ctx->verbose > 1)
     multilog (log, LOG_INFO, "io_block: cudaStreamSynchronize()\n");
   cudaStreamSynchronize(ctx->stream);
+#endif
 
-  ipcio_close_block_write (ctx->out_hdu->data_block, bytes_out);
+  if (ctx->block_open)
+  {
+    if (ctx->verbose > 1)
+      multilog (log, LOG_INFO, "io_block: closing output data block for %"PRIu64" bytes\n", ctx->ou_block_size);
+    ipcio_close_block_write (ctx->out_hdu->data_block, ctx->ou_block_size);
+    ctx->block_open = 0;
+  }
 
   ctx->bytes_read += bytes;
   return (int64_t) bytes;
 }
 
 // simpler CPU version
-int mopsr_tile_beams_cpu (void * h_in, void * h_out, void * h_phasors, uint64_t nbytes, mopsr_bfdsp_t* ctx)
+int mopsr_tile_beams_cpu (void * h_in, void * h_out, void * h_phasors, uint64_t nbytes, unsigned nbeam, unsigned nant, unsigned tdec)
 {
-  // data is ordered in ST order
-  uint64_t nsamp = nbytes / (ctx->nant * ctx->ndim);
+  unsigned ndim = 2;
 
-  complex float * phasors = (complex float *) h_phasors;
+  // data is ordered in ST order
+  unsigned nsamp = (unsigned) (nbytes / (nant * ndim));
+
+  float * phasors = (float *) h_phasors;
 
   int16_t * in16 = (int16_t *) h_in;
   float * ou     = (float *) h_out;
@@ -791,16 +970,19 @@ int mopsr_tile_beams_cpu (void * h_in, void * h_out, void * h_phasors, uint64_t 
   int16_t val16;
   int8_t * val8 = (int8_t *) &val16;
 
+  const unsigned nbeamant = nbeam * nant;
   const unsigned ant_stride = nsamp;
-  complex float val, beam_sum, phasor;
+  complex float val, beam_sum, phasor, steered;
   float beam_power;
 
-  // intergrate 32 samples together
-  const unsigned ndat = 32;
-  unsigned nchunk = nsamp / ndat;
+  // intergrate samples together
+  const unsigned ndat = tdec;
+  unsigned nchunk = nsamp / tdec;
+
+  //fprintf (stderr, "nsamp=%u, nchunk=%u\n", nsamp, nchunk);
 
   unsigned ibeam, ichunk, idat, isamp, iant;
-  for (ibeam=0; ibeam<ctx->nbeam; ibeam++)
+  for (ibeam=0; ibeam<nbeam; ibeam++)
   {
     isamp = 0;
     for (ichunk=0; ichunk<nchunk; ichunk++)
@@ -809,23 +991,24 @@ int mopsr_tile_beams_cpu (void * h_in, void * h_out, void * h_phasors, uint64_t 
       for (idat=0; idat<ndat; idat++)
       {
         beam_sum = 0 + 0 * I;
-        for (iant=0; iant<ctx->nant; iant++)
+        for (iant=0; iant<nant; iant++)
         {
           // unpack this sample and antenna
           val16 = in16[iant*nsamp + isamp];
           val = ((float) val8[0]) + ((float) val8[1]) * I;
 
           // the required phase rotation for this beam and antenna
-          phasor = phasors[ibeam * ctx->nant + iant]; 
-        
+          phasor = phasors[ibeam * nant + iant] + phasors[(ibeam * nant) + iant + nbeamant] * I;
+          steered = val * phasor;
           // add the steered tied array beam to the total
-          beam_sum = (val * phasor) + beam_sum;
+          beam_sum += steered;
+          //beam_sum += val;
         }
+
         beam_power += (creal(beam_sum) * creal(beam_sum)) + (cimag(beam_sum) * cimag(beam_sum));
         isamp++;
       }
-
-      ou[ibeam*nchunk+ichunk] = beam_power;
+      ou[ichunk*nbeam + ibeam] = beam_power;
     }
   }
 }

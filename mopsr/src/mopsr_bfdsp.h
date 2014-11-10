@@ -37,15 +37,14 @@ typedef struct {
   void *  d_fbs;           // fan beam output on GPU
 
   unsigned     nant;
-  float *      h_ant_factors;     // antenna distances
+  //float *      h_ant_factors;     // antenna distances
 
   int          nbeam;
-  float *      h_sin_thetas;    // angle from boresite to beam
+  //float *      h_sin_thetas;    // angle from boresite to beam
 
   // rephasors required for each FB
   size_t phasors_size;
-
-  complex float * h_phasors;
+  float * h_phasors;
   void * d_phasors;  
  
   unsigned tdec;           // time decimation factor
@@ -95,7 +94,7 @@ typedef struct {
 
   int nmodules;
   mopsr_module_t * all_modules;       // every module in the array (read from file)
-  mopsr_module_t * modules;           // modules we are using (nant)
+  mopsr_module_t ** modules;          // modules we are using (nant)
 
   mopsr_source_t   source;
 
@@ -123,7 +122,7 @@ void usage(void);
 
 // application specific memory management
 int bfdsp_init (mopsr_bfdsp_t* ctx, dada_hdu_t *in, dada_hdu_t *out, 
-                char * bays_file, char * modules_file, char * signal_paths_file);
+                char * bays_file, char * modules_file);
 int bfdsp_destroy (mopsr_bfdsp_t * ctx, dada_hdu_t * in, dada_hdu_t * out);
 
 // observation specific memory management

@@ -355,6 +355,7 @@ int main(int argc, char** argv)
 
     cudaStreamSynchronize(stream);
 
+    /*
     mopsr_tile_beams_cpu (h_in, h_out_cpu, h_phasors, in_block_size, nbeam, nant, tdec);
 
     unsigned nchunk = nsamp / 64;
@@ -369,7 +370,7 @@ int main(int argc, char** argv)
         fprintf (stderr, "[%d][%d] cpu=%f gpu=%f\n",ibeam, ichunk, cpu[ibeam*nchunk+ichunk], gpu[ichunk*nbeam+ibeam]);
       }
     }
-  
+    */
 
 //#endif
   }
@@ -438,11 +439,9 @@ int mopsr_tile_beams_cpu (void * h_in, void * h_out, void * h_phasors, uint64_t 
   const unsigned ndat = tdec;
   unsigned nchunk = nsamp / tdec;
 
-  //fprintf (stderr, "[C][S][A]\n");
   unsigned ibeam, ichunk, idat, isamp, iant;
   for (ibeam=0; ibeam<nbeam; ibeam++)
   {
-    //fprintf (stderr, "ibeam=%d\n", ibeam);
     isamp = 0;
     for (ichunk=0; ichunk<nchunk; ichunk++)
     {
@@ -452,33 +451,20 @@ int mopsr_tile_beams_cpu (void * h_in, void * h_out, void * h_phasors, uint64_t 
         beam_sum = 0 + 0 * I;
         for (iant=0; iant<nant; iant++)
         {
-          //fprintf (stderr, "[%d][%d][%d][%d]\n", ibeam, ichunk, idat, iant);
-
           // unpack this sample and antenna
           val16 = in16[iant*nsamp + isamp];
           val = ((float) val8[0]) + ((float) val8[1]) * I;
 
           // the required phase rotation for this beam and antenna
           phasor = phasors[ibeam * nant + iant] + phasors[(ibeam * nant) + iant + nbeamant] * I;
-
           steered = val * phasor;
-
-          //if (ibeam == 0)
-          //  fprintf (stderr, "[%d][%d][%d] val=(%f + i%f) phasor=(%f + i%f) steered=(%f + i%f)\n", ichunk, isamp, iant, 
-          //          creal(val), cimag(val),
-          //          creal(phasor), cimag(phasor),
-          //          creal(steered), cimag(steered));
-
           // add the steered tied array beam to the total
           beam_sum += steered;
         }
-        //fprintf (stderr, "[%d] isamp sum = (%f + i%f)\n", isamp, creal(beam_sum), cimag(beam_sum));
         beam_power += (creal(beam_sum) * creal(beam_sum)) + (cimag(beam_sum) * cimag(beam_sum));
         isamp++;
       }
-
       ou[ibeam*nchunk+ichunk] = beam_power;
-      //fprintf (stderr, "[%d][%d] = %f\n", ibeam, ichunk, beam_power);
     }
   }
 }
