@@ -1172,6 +1172,23 @@ int aqdsp_open (dada_client_t* client)
     return -1;
   }
 
+  // write the antenna to the output header
+  char ant_list[4096];
+  char * ant_ptr = ant_list;
+
+  strncpy(ant_ptr, ctx->modules[0].name,5);
+  ant_ptr += 5;
+  for (iant=1; iant<ctx->nant; iant++)
+  {
+    sprintf (ant_ptr, ",%s", ctx->modules[iant].name);
+    ant_ptr += 6;
+  }
+  if (ascii_header_set (header, "ANTENNAE", "%s", ant_list) < 0)
+  {
+    multilog (log, LOG_ERR, "open: could not set ANTENNAE in outgoing header\n");
+    return -1;
+  }
+
   if (ctx->verbose)
     multilog (log, LOG_INFO, "open: marking output header filled\n");
 
