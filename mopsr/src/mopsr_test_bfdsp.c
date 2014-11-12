@@ -39,9 +39,10 @@ int main(int argc, char** argv)
 
   unsigned nant = 352;
   int nbeam = 512;
-  unsigned ndim = 2;
-  unsigned nsamp = 64;
-  unsigned tdec = 64;
+  const unsigned ndim = 2;
+  uint64_t nsamp = 64;
+  const unsigned tdec = 512;
+  const unsigned nchan_out = 4;
 
   char verbose = 0;
 
@@ -68,7 +69,7 @@ int main(int argc, char** argv)
         return 0;
 
       case 't':
-        nsamp = atoi (optarg);
+        nsamp = (uint64_t) atoi (optarg);
         break;
 
       case 'v':
@@ -179,9 +180,9 @@ int main(int argc, char** argv)
   unsigned nbyte_ou = sizeof(float);
 
   uint64_t in_block_size = nsamp * nant * ndim * nbyte_in;
-  uint64_t ou_block_size = (nsamp * nbeam * nbyte_ou) / tdec;
+  uint64_t ou_block_size = (nsamp * nbeam * nbyte_ou * nchan_out) / tdec;
 
-  fprintf (stderr, "nant=%u nsamp=%"PRIu64" in_block_size=%"PRIu64" ou_block_size=%"PRIu64"\n", nant, nsamp, in_block_size, ou_block_size);
+  fprintf (stderr, "nant=%u nbeam=%u nchan_out=%u tdec=%u nsamp=%"PRIu64" in_block_size=%"PRIu64" ou_block_size=%"PRIu64"\n", nant, nbeam, nchan_out, tdec, nsamp, in_block_size, ou_block_size);
 
   void * d_in;
   void * d_fbs;
