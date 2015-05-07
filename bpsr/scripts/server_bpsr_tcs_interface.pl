@@ -811,7 +811,7 @@ sub set_utc_start($\%) {
   Dada::logMsg(2, $dl, "Setting up results dir: ".$results_dir);
 
   $cmd = "mkdir -m 0755 -p ".$results_dir;
-  my ($resu, $resp) = Dada::mySystem($cmd,0);
+  my ($resu, $resp) = Dada::mySystem($cmd);
   if ($resu != "ok") {
     Dada::logMsgWarn($warn, "Failed to create the server results directory (".$results_dir.") \"".$resp."\"");
   }

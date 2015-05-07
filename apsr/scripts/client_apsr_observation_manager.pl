@@ -688,7 +688,7 @@ sub copyObsStart($$$) {
 
   $cmd = "cp ".$obs_start." ".$dir."/";
   msg(2, "INFO", "NFS copy \"".$cmd."\"");
-  ($result, $response) = Dada::mySystem($cmd,0);
+  ($result, $response) = Dada::mySystem($cmd);
 
   if ($result ne "ok") {
     msg(0, "ERROR", "NFS copy failed: ".$obs_start." to ".$dir.", response: ".$response);
@@ -759,14 +759,14 @@ sub touchBandFinished($$) {
   
   $cmd = "touch ".$dir."/band.finished";
   msg(2, "INFO", "touchBandFinished: ".$cmd);
-  ($result, $response) = Dada::mySystem($cmd ,0);
+  ($result, $response) = Dada::mySystem($cmd);
   msg(2, "INFO", "touchBandFinished: ".$result." ".$response);
   
   # Touch a local band.finished for the transfer manager to use
   $dir = $cfg{"CLIENT_ARCHIVE_DIR"}."/".$utc_start."/".$centre_freq;
   $cmd = "touch ".$dir."/band.finished";
   msg(2, "INFO", "touchBandFinished: ".$cmd);
-  ($result, $response) = Dada::mySystem($cmd ,0);
+  ($result, $response) = Dada::mySystem($cmd);
   msg(2, "INFO", "touchBandFinished: ".$result." ".$response);
 
 }

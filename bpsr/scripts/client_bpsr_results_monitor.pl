@@ -363,7 +363,7 @@ sub processMonFiles($)
 
     # move both pols of the mon files to the aux dir
     $cmd  = "mv ".$file_dir."/".$pol0_file." ".$file_dir."/".$pol1_file." ".$file_dir."/aux/";
-    ($result, $response) = Dada::mySystem($cmd,0);
+    ($result, $response) = Dada::mySystem($cmd);
 
     if ($result ne "ok") 
     {
@@ -515,7 +515,7 @@ sub processTransientCandidates($)
 
     # move both pols of the mon files to the aux dir
     $cmd  = "mv ".$line." ".$aux_dir."/";
-    ($result, $response) = Dada::mySystem($cmd,0);
+    ($result, $response) = Dada::mySystem($cmd);
   }
  
   return ($#files+1);
@@ -749,7 +749,7 @@ sub sendToServer($$)
   $cmd = "rsync -p ".$local_files." dada@".$cfg{"SERVER_HOST"}.":".$remote_dir."/";
 
   logMsg(2, "INFO", "sendToServer: ".$cmd);
-  ($result, $response) = Dada::mySystem($cmd,0);
+  ($result, $response) = Dada::mySystem($cmd);
   logMsg(3, "INFO", "sendToServer: ".$result." ".$response);
 
   if ($result ne "ok")

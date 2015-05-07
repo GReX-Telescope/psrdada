@@ -25,8 +25,8 @@ libgmrt_la_SOURCES += $(gmrt_hdr) gmrt_corr_dada.c gmrt_corr_lib.c gmrt_corr_cud
 bin_PROGRAMS += gmrt_correlator
 
 gmrt_correlator_SOURCES = gmrt_correlator.C
-gmrt_correlator_LDFLAGS = @CUFFT_LIBS@ 
-AM_CPPFLAGS = @CUFFT_CFLAGS@
+gmrt_correlator_LDADD = $(LDADD) @CUDA_LIBS@ @CUFFT_LIBS@
+AM_CFLAGS = @CUFFT_CFLAGS@ @CUDA_CFLAGS@
 
 endif
 

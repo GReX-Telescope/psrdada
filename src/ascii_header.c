@@ -27,7 +27,8 @@ char* ascii_header_find (const char* header, const char* keyword)
     // fprintf (stderr, "found=%s", key);
 
     // if preceded by a new line, return the found key
-    if ((*(key-1) == '\n') || (*(key-1) == '\\'))
+    if ( ((*(key-1) == '\n') || (*(key-1) == '\\')) && 
+         ((*(key+strlen(keyword)) == '\t') || (*(key+strlen(keyword)) == ' ')))
       break;
 
     // otherwise, search again, starting one byte later
@@ -118,5 +119,32 @@ int ascii_header_get (const char* header, const char* keyword,
   va_end (arguments);
 
   return ret;
+}
+
+int ascii_header_del (char * header, const char * keyword)
+{
+  /* find the keyword (also the delete from point) */
+  char * key = ascii_header_find (header, keyword);
+
+  /* if the keyword is present, find the first '#' or '\n' to follow it */
+  if (key) 
+  {
+    char * eol = key + strcspn (key, "\n") + 1;
+
+    // make a copy of everything after the end of the key we are deleting
+    char * dup = strdup (eol);
+
+    if (dup) 
+    {
+      key[0] = '\0';
+      strcat (header, dup);
+      free (dup);
+      return 0;
+    }
+    else
+      return -1;
+  }
+  else
+    return -1;
 }
 

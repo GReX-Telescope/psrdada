@@ -123,7 +123,7 @@ class instrument
 
   function getArchiveName($archive) {
 
-    $prefix = "source /home/dada/.bashrc;";
+    $prefix = "source /home/dada/.dadarc;";
     $bin_dir = DADA_ROOT."/bin";
 
     $cmd = $prefix." ".$bin_dir."/vap -c 'name' ".$archive." | tail -n 1  | awk '{print \$2}'";
@@ -137,7 +137,7 @@ class instrument
 
   function getNumSubints($archive) {
   
-    $prefix = "source /home/dada/.bashrc;";
+    $prefix = "source /home/dada/.dadarc;";
     $bin_dir = DADA_ROOT."/bin";
   
     $cmd = $prefix." ".$bin_dir."/psredit -Q -c nsubint ".$archive." | awk '{print \$2}'";
@@ -151,7 +151,7 @@ class instrument
 
   function getSourcePeriodMS($source) {
   
-    $prefix = "source /home/dada/.bashrc;";
+    $prefix = "source /home/dada/.dadarc;";
     $bin_dir = DADA_ROOT."/bin";
   
     # Determine the Period (P0)
@@ -162,7 +162,7 @@ class instrument
       $P0 = "N/A";
     } else { 
       $P0 *= 1000;
-      $P0 = sprintf("%5.4f",$P0);
+      $P0 = sprintf("%5.2f",$P0);
     }
   
     return $P0;
@@ -171,7 +171,7 @@ class instrument
 
   function getSourceDM($source) {
   
-    $prefix = "source /home/dada/.bashrc;";
+    $prefix = "source /home/dada/.dadarc;";
     $bin_dir = DADA_ROOT."/bin";
   
     $cmd = $prefix." ".$bin_dir."/psrcat -all -x -c \"DM\" ".$source." | awk '{print \$1}'";
@@ -180,7 +180,7 @@ class instrument
     if (($rval != 0) || ($DM == "WARNING:")) {
       $DM = "N/A";
     } else {
-      $DM = sprintf("%5.4f",$DM);  
+      $DM = sprintf("%5.2f",$DM);  
     }
     return $DM;
   }
@@ -190,7 +190,7 @@ class instrument
     if (file_exists($archive)) {
 
       $cmd = "vap -c length -n ".$archive." | awk '{print $2}'";
-      $script = "source /home/dada/.bashrc; ".$cmd." 2>&1";
+      $script = "source /home/dada/.dadarc; ".$cmd." 2>&1";
       $string = exec($script, $output, $return_var);
       $int_length = $output[0];
 
@@ -212,7 +212,7 @@ class instrument
     if (file_exists($archive)) {
 
       $cmd = "psrstat -q -j FTp -c snr ".$archive." 2>&1 | awk -F= '{print \$2}'";
-      $script = "source /home/dada/.bashrc; ".$cmd." 2>&1";
+      $script = "source /home/dada/.dadarc; ".$cmd." 2>&1";
       $string = exec($script, $output, $return_var);
       $snr = $output[0];
 
@@ -473,6 +473,9 @@ class instrument
     $psrs = array();
     $prefix = ". /home/dada/.dadarc;";
     $bin_dir = DADA_ROOT."/bin";
+
+
+    
 
     # Determine the Period (P0)
     $cmd = $prefix." ".$bin_dir."/psrcat -all -c 'PSRJ RAJ DECJ' -nohead | grep -v '*             *' | awk '{print $2, $4, $7}'";

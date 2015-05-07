@@ -887,7 +887,7 @@ sub copyObsStartThread($) {
 
   $cmd = "scp -B ".$local_file." dada\@srv0:".$remote_file;
   msg(2, "INFO", "copyObsStartThread: ".$cmd);
-  ($result, $response) = Dada::mySystem($cmd, 0);
+  ($result, $response) = Dada::mySystem($cmd);
   msg(2, "INFO", "copyObsStartThread: ".$result." ".$response);
   if ($result ne "ok") {
     msg(0, "ERROR", "copyObsStartThread: scp [".$cmd."] failed: ".$response);
@@ -896,7 +896,7 @@ sub copyObsStartThread($) {
 
   $cmd = "cp ".$local_file." ".$cfg{"CLIENT_ARCHIVE_DIR"}."/".$utc_start."/";
   msg(2, "INFO", "copyObsStartThread: ".$cmd);
-  ($result, $response) = Dada::mySystem($cmd, 0);
+  ($result, $response) = Dada::mySystem($cmd);
   msg(2, "INFO", "copyObsStartThread: ".$result." ".$response);
   if ($result ne "ok") {
     msg(0, "ERROR", "copyObsStartThread: cp [".$cmd."] failed: ".$response);
@@ -930,7 +930,7 @@ sub touchPwcFinished($) {
     # touch the local file
     $cmd = "touch ".$fname;
     msg(2, "INFO", "touchPwcFinished: ".$cmd);
-    ($result, $response) = Dada::mySystem($cmd, 0);
+    ($result, $response) = Dada::mySystem($cmd);
     msg(2, "INFO", "touchPwcFinished: ".$result." ".$response);
     if ($result ne "ok") {
       msg(0, "ERROR", "touchPwcFinished: ".$cmd." failed: ".$response);
@@ -939,7 +939,7 @@ sub touchPwcFinished($) {
   
     $cmd = "ssh -o BatchMode=yes -l dada srv0 'touch ".$cfg{"SERVER_RESULTS_DIR"}."/".$utc_start."/".$fname."'";
     msg(2, "INFO", "touchPwcFinished: ".$cmd);
-    ($result, $response) = Dada::mySystem($cmd, 0);
+    ($result, $response) = Dada::mySystem($cmd);
     msg(2, "INFO", "touchPwcFinished: ".$result." ".$response);
     if ($result ne "ok") {
       msg(0, "ERROR", "touchPwcFinished: ".$cmd." failed: ".$response);

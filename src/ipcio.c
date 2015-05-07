@@ -2,6 +2,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef HAVE_CUDA
+#include <cuda_runtime.h>
+#endif
+
 #include "ipcio.h"
 
 // #define _DEBUG 1
@@ -576,7 +580,7 @@ ssize_t ipcio_close_block_write (ipcio_t *ipc, uint64_t bytes)
 
     if (ipcio_check_pending_sod (ipc) < 0)
     {
-      fprintf (stderr, "ipcio_close_bloc_write: error ipcio_check_pending_sod\n");
+      fprintf (stderr, "ipcio_close_block_write: error ipcio_check_pending_sod\n");
       return -3;
     }
 
@@ -589,7 +593,7 @@ ssize_t ipcio_close_block_write (ipcio_t *ipc, uint64_t bytes)
 
 #if HAVE_CUDA
 /* read bytes from ipcbuf, writing to device memory via H2D transfer*/
-ssize_t ipcio_read_cuda (ipcio_t* ipc, char* ptr, size_t bytes, cudaStream_t stream)
+ssize_t ipcio_read_cuda (ipcio_t* ipc, char* ptr, size_t bytes, void * cuda_stream)
 {
   size_t space = 0;
   size_t toread = bytes;
@@ -599,6 +603,8 @@ ssize_t ipcio_read_cuda (ipcio_t* ipc, char* ptr, size_t bytes, cudaStream_t str
     fprintf (stderr, "ipcio_read: invalid ipcio_t (rdwrt=%c)\n", ipc->rdwrt);
     return -1;
   }
+
+  cudaStream_t stream = (cudaStream_t) *cuda_stream;
 
   while (!ipcbuf_eod((ipcbuf_t*)ipc))
   {

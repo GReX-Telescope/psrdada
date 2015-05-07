@@ -489,7 +489,7 @@ sub touchBandFinished($$) {
 
       $cmd = "touch ".$dir."/band.finished";
       msg(2, "INFO", "touchBandFinished: ".$cmd);
-      ($result, $response) = Dada::mySystem($cmd ,0);
+      ($result, $response) = Dada::mySystem($cmd);
       msg(2, "INFO", "touchBandFinished: ".$result." ".$response);
     }
   }

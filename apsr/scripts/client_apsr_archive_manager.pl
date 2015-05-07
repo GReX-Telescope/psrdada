@@ -434,14 +434,14 @@ sub nfsCopy($$$)
   
   my $cmd = "cp ".$file." ".$nfsdir."/".$tmp_file;
   msg(2, "INFO", "NFS copy \"".$cmd."\"");
-  ($result, $response) = Dada::mySystem($cmd,0);
+  ($result, $response) = Dada::mySystem($cmd);
 
   if ($result ne "ok") {
     return ("fail", "Command was \"".$cmd."\" and response was \"".$response."\"");
   } else {
     $cmd = "mv ".$nfsdir."/".$tmp_file." ".$nfsdir."/".$file;
     msg(2, "INFO", $cmd);
-    ($result, $response) = Dada::mySystem($cmd,0);
+    ($result, $response) = Dada::mySystem($cmd);
     if ($result ne "ok") {
       return ("fail", "Command was \"".$cmd."\" and response was \"".$response."\"");
     } else {

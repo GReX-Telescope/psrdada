@@ -45,6 +45,9 @@ int ascii_header_set (char* header, const char* keyword,
 int ascii_header_get (const char* header, const char* keyword,
 		      const char* code, ...);
 
+/* delete the key from the header */
+int ascii_header_del (char * header, const char * keyword);
+
 #ifdef __cplusplus
 }
 #endif

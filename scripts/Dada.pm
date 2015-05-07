@@ -9,10 +9,13 @@ use strict;
 use vars qw($DADA_ROOT $VERSION @ISA @EXPORT @EXPORT_OK);
 use Sys::Hostname;
 use Time::Local;
+use Time::HiRes qw(usleep);
 use File::Basename;
 use POSIX qw(setsid);
+use POSIX ":sys_wait_h";
 use Math::Trig ':pi';
-
+use IPC::Cmd qw[can_run run run_forked];
+use IPC::Open3;
 
 BEGIN {
 
@@ -24,16 +27,7 @@ BEGIN {
   $VERSION = '1.00';
 
   @ISA         = qw(Exporter AutoLoader);
-  @EXPORT      = qw(
-    &sendTelnetCommand &connectToMachine &getDADABinaryDir &getCurrentBinaryVersion &getDefaultBinaryVersion 
-    &setBinaryDir &getAvailableBinaryVersions &addToTime &addToTimeFractional &getUnixTimeUTC &getCurrentDadaTime 
-    &printDadaTime &printTime &getPWCCState &printPWCCState &waitForState &getLine &getLines &parseCFGLines 
-    &readCFGFile &readCFGFileIntoHash &getDADA_ROOT &getDiskInfo &getRawDisk &getDBInfo &getAllDBInfo &getDBStatus 
-    &getLoad &getUnprocessedFiles &getServerResultsNFS &getServerArchiveNFS &constructRsyncURL &headerFormat 
-    &mySystem &killProcess &getAPSRConfigVariable &nexusLogOpen &nexusLogClose &nexusLogMessage &getHostMachineName 
-    &daemonize &commThread &logMsg &logMsgWarn &remoteSshCommand &headerToHash &daemonBaseName &getProjectGroups 
-    &processHeader &getDM &getPeriod &checkScriptIsUnique &getObsDestinations &removeFiles &createDir &getDBKey
-    &getPWCKeys &convertRadiansToRA &convertRadiansToDEC &checkPWCID &sendEmail &inCatalogue);
+  @EXPORT      = qw(&sendTelnetCommand &connectToMachine &getDADABinaryDir &getCurrentBinaryVersion &getDefaultBinaryVersion &setBinaryDir &getAvailableBinaryVersions &addToTime &addToTimeFractional &getUnixTimeUTC &getUnixTimeLocal &getCurrentDadaTime &printDadaTime &printTime &getPWCCState &printPWCCState &waitForState &getLine &getLines &parseCFGLines &readCFGFile &readCFGFileIntoHash &getDADA_ROOT &getDiskInfo &getRawDisk &getDBInfo &getAllDBInfo &getDBStatus &getLoad &getUnprocessedFiles &getServerResultsNFS &getServerArchiveNFS &constructRsyncURL &headerFormat &myShell &mySystem &mySystemPiped &killProcess &getAPSRConfigVariable &nexusLogOpen &nexusLogClose &nexusLogMessage &getHostMachineName &daemonize &commThread &logMsg &logMsgWarn &remoteSshCommand &headerToHash &daemonBaseName &getProjectGroups &processHeader &getDM &getPeriod &checkScriptIsUnique &getObsDestinations &removeFiles &createDir &getDBKey &getPWCKeys &convertRadiansToRA &convertRadiansToDEC &checkPWCID &mkdirRecursive &sendEmail &inCatalogue nexusSrcLog &fileSrcLog);
   %EXPORT_TAGS = ( );
   @EXPORT_OK   = ( );
 
@@ -45,6 +39,7 @@ use constant PWCC_FATAL_ERROR    => -4;
 use constant PWCC_HARD_ERROR     => -3;
 use constant PWCC_SOFT_ERROR     => -2;
 
+$IPC::Cmd::USE_IPC_RUN = 1;
 
 my $DADA_ROOT = $ENV{'DADA_ROOT'};
 if ($DADA_ROOT eq "") {
@@ -668,6 +663,7 @@ sub addToTime($$) {
 
 }
 
+#######################################################################
 
 sub addToTimeFractional($$) {
 
@@ -675,13 +671,16 @@ sub addToTimeFractional($$) {
 
   my @t = split(/-|:/,$time);
 
-  my $unixtime = timelocal($t[5], $t[4], $t[3], $t[2], ($t[1]-1), $t[0]);
+  my $time_secs_int  = POSIX::floor($t[5]);
+  my $time_secs_frac = $t[5] - $time_secs_int;
 
-  my $toadd_int = POSIX::floor($toadd);
-  my $toadd_frac = $toadd - $toadd_int;
-  print "toadd=$toadd toadd_int=$toadd_int toadd_frac=$toadd_frac\n";
+  my $unixtime = timelocal($time_secs_int, $t[4], $t[3], $t[2], ($t[1]-1), $t[0]);
 
-  my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime ($unixtime + $toadd_int);
+  my $unixtime_tot = ($unixtime + $time_secs_frac) + $toadd;
+  my $unixtime_int = POSIX::floor($unixtime_tot);
+  my $unixtime_frac = $unixtime_tot - $unixtime_int;
+
+  my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime ($unixtime_int);
 
   $year += 1900;
   $mon++;
@@ -689,10 +688,10 @@ sub addToTimeFractional($$) {
   $mday = sprintf("%02d", $mday);
   $hour = sprintf("%02d", $hour);
   $min = sprintf("%02d", $min);
-  $sec += $toadd_frac;
+  $sec += $unixtime_frac;
   $sec = sprintf("%06.3f", $sec);
 
-  print "result=".$year."-".$mon."-".$mday."-".$hour.":".$min.":".$sec;
+  # print "result=".$year."-".$mon."-".$mday."-".$hour.":".$min.":".$sec;
   return $year."-".$mon."-".$mday."-".$hour.":".$min.":".$sec;
 
 }
@@ -700,8 +699,8 @@ sub addToTimeFractional($$) {
 
 ###############################################################################
 
-sub getUnixTimeUTC($) {
-
+sub getUnixTimeUTC($) 
+{
   (my $time) = @_;
 
   my @t = split(/-|:/,$time);
@@ -710,6 +709,20 @@ sub getUnixTimeUTC($) {
 
   return $unixtime;
 }
+
+###############################################################################
+
+sub getUnixTimeLocal($) 
+{
+  (my $time) = @_;
+
+  my @t = split(/-|:/,$time);
+
+  my $unixtime = timelocal($t[5], $t[4], $t[3], $t[2], ($t[1]-1), $t[0]);
+
+  return $unixtime;
+}
+
 
 ###############################################################################
 
@@ -1130,7 +1143,7 @@ sub getDBStatus($)
   my $n_full = "0";
   my $junk = "";
 
-  $cmd = "dada_dbmetric -k ".$key." 2>&1";
+  $cmd = "dada_dbmetric -k ".$key;
   ($result, $response) = Dada::mySystem($cmd);
   if ($result eq "ok") 
   {
@@ -1201,7 +1214,7 @@ sub getTempInfo() {
   if ( -f "/usr/bin/omreport" ) {
 
     $cmd = "/usr/bin/omreport chassis temps | grep \"^Reading\" | awk '{print \$(NF-1)}'";
-    ($result, $response) = Dada::mySystem($cmd);
+    ($result, $response) = Dada::myShell($cmd);
     if ($result eq "ok") {
       $temp_str = $response;
     }
@@ -1209,7 +1222,7 @@ sub getTempInfo() {
   } elsif ( -f "/opt/dell/srvadmin/bin/omreport" ) {
 
     $cmd = "/opt/dell/srvadmin/bin/omreport chassis temps | grep \"^Reading\" | tail -n 1 | awk '{print \$(NF-1)}'";
-    ($result, $response) = Dada::mySystem($cmd);
+    ($result, $response) = Dada::myShell($cmd);
     if ($result eq "ok") {
       $temp_str = $response;
     }
@@ -1217,7 +1230,7 @@ sub getTempInfo() {
   } elsif ( -f "/usr/bin/ipmitool") {
     
     $cmd = "/usr/bin/ipmitool sensor get 'System Temp' | grep \"Sensor Reading\" | awk -F: '{print \$2}' | awk '{print \$1}'";
-    ($result, $response) = Dada::mySystem($cmd);
+    ($result, $response) = Dada::myShell($cmd);
     if ($result eq "ok") {
       $temp_str = $response.".0";
     }
@@ -1388,33 +1401,233 @@ sub headerFormat($$) {
   return $header_string;
 }
 
-sub mySystem($;$) {
 
-  (my $cmd, my $background=0) = @_;
+sub myShell($)
+{
+  (my $cmd) = @_;
 
   my $rVal = 0;
   my $result = "ok";
   my $response = "";
   my $realcmd = $cmd." 2>&1";
 
-  if ($background) { $realcmd .= " &"; }
-
   $response = `$realcmd`;
   $rVal = $?;
   $/ = "\n";
-  #if ($response =~ /\n$/) {
-    chomp $response;
-  #}
+  chomp $response;
 
   # If the command failed
   if ($rVal != 0) {
-    $result = "fail"
+    $result = "fail";
   }
 
   return ($result,$response);
-
 }
 
+#
+# New attempt at a more reliable system command
+#
+sub mySystem($)
+{
+  my ($cmd) = @_;
+
+  #if (($cmd =~ m/\$/) || ($cmd =~ m/\|/) || ($cmd =~ m/\&/))
+  {
+    return myShell($cmd);
+  }
+
+  my ($binary, $rest) = split(/ /, $cmd, 2);
+  my $full_path = can_run($binary) or warn $binary." is not installed!";
+
+  my $response;
+  my $result = scalar run ( command => $cmd,
+                            verbose => 0,
+                            buffer => \$response,
+                            timeout => 0);
+
+  # remove trailing newlines from response
+  chomp ($response);
+  if ($response eq undef)
+  {
+    $response = "";
+  }
+
+  if ($result)
+  {
+    return ("ok", $response);
+  }
+  else
+  {
+    return ("fail", $response);
+  }
+}
+
+
+#
+# specialised command for real-time piping of STDOUT and STDERR to
+# a socket 
+#
+sub mySystemPiped($$$$$$$)
+{
+  my ($cmd, $file, $sock, $type, $id, $daemon, $tag) = @_;
+
+  my ($cmd_in, $cmd_out, $cmd_err);
+
+  my $pid = open3 ($cmd_in, $cmd_out, $cmd_err, $cmd);
+
+  # close STDIN for the cmd
+  close ($cmd_in);
+
+  my $sel = IO::Select->new();
+  $sel->add($cmd_out);
+  $sel->add($cmd_err);
+
+  my ($line, $i);
+  my $saved_stdout = "";
+  my $saved_stderr = "";
+
+  while (my @ready = $sel->can_read()) 
+  {
+    foreach my $handle (@ready)
+    {
+      #if ($handle == $cmd_out)
+      {
+        my $bytes_read = sysread($handle, my $buf='', 1024);
+        if ($bytes_read == -1) {
+          # warn("Error reading from child's STDOUT: $!\n");
+          $sel->remove($handle);
+          next;
+        }
+        if ($bytes_read == 0) 
+        {
+          #print("Child's STDOUT closed\n");
+          $sel->remove($handle);
+          next;
+        }
+        else
+        {
+          my @lines = split(/\n/, $buf);
+          my $nlines = $#lines + 1;
+          if (!($buf =~ m/\n$/))
+          {
+            $nlines -= 1;
+          }
+          for ($i=0; $i<$nlines; $i++)
+          {
+            $line = $lines[$i];
+            #print "line[".$i."]='".$line."'\n";
+
+            if (($handle == $cmd_out) && ($saved_stdout ne ""))
+            {
+              $line = $saved_stdout.$line;
+              $saved_stdout = "";
+            }
+            if (($handle == $cmd_err) && ($saved_stderr ne ""))
+            {
+              $line = $saved_stderr.$line;
+              $saved_stderr = "";
+            }
+            nexusPipeLog($line, $sock, $file, $type, $id, $daemon, $tag);
+          }
+          if (!($buf =~ m/\n$/))
+          {
+            if ($handle == $cmd_out)
+            {
+              $saved_stdout = $lines[$nlines];
+            }
+            if ($handle == $cmd_err)
+            {
+              $saved_stderr = $lines[$nlines];
+            }
+          } 
+        }
+      }
+    }
+  }
+
+  waitpid( $pid, 0 );
+  my $cmd_exit_status = $? >> 8;
+
+  if ($cmd_exit_status == 0) 
+  {
+    return ("ok", "");
+  }
+  else
+  {
+    return ("fail", $cmd_exit_status);
+  }
+}
+
+sub nexusPipeLog($$$$$$$)
+{
+  my ($line, $sock, $file, $type, $id, $daemon, $tag) = @_;
+
+  my $class = "INFO";
+
+  my ($time);
+
+  # Try to parse the line if it has the standard format
+  if ($line =~ m/^\[(\d\d\d\d)\-(\d\d)\-(\d\d)\-(\d\d):(\d\d):(\d\d)\]/)
+  {
+    $time = substr($line,1,19);
+    $line = substr($line,22);
+
+    if ($line =~ m/^WARN: /)
+    {
+      $class = "WARN";
+      $line = substr($line,6);
+    }
+
+    if ($line =~ m/^ERROR: /)
+    {
+      $class = "ERROR";
+      $line = substr($line,7);
+    }
+  }
+  else
+  {
+    $time = getCurrentDadaTime();
+  }
+
+  if ($sock)
+  {
+    nexusLogMessage($sock, $id, $time, $type, $class, $daemon, $line);
+  }
+
+  if ($file)
+  {
+    open FH, ">>".$file;
+    print FH "[".$time."] ".$line."\n";
+    close FH;
+  }
+}
+
+sub mySystemPipedOld($$)
+{
+  my ($cmd, $coderef) = @_;
+
+  my ($binary, $rest) = split(/ /, $cmd, 2);
+  my $full_path = can_run($binary) or warn $binary." is not installed!";
+
+  my $hashref =  run_forked ($cmd, { timeout => 0,
+                                     stderr_handler => $coderef,
+                                     stdout_handler => $coderef,
+                                     discard_output => 1,
+                                     terminate_on_parent_sudden_death => 1 } );
+
+  my ($result, $response);
+  if ($$hashref{'exit_code'} == 0)
+  {
+    $result = "ok";
+    $response = "";
+  }
+  else
+  {
+    $result = "fail";
+    $response = $$hashref{'err_msg'};
+  }
+  return ($result, $response);
+}
 
 sub killProcess($;$) {
 
@@ -1437,7 +1650,7 @@ sub killProcess($;$) {
   $pgrep_cmd = "pgrep ".$args;
 
   Dada::logMsg(2, $fnl, "killProcess: ".$pgrep_cmd);
-  ($result, $response) = Dada::mySystem($pgrep_cmd);
+  ($result, $response) = Dada::myShell($pgrep_cmd);
   Dada::logMsg(2, $fnl, "killProcess: ".$result." ".$response);
 
   # We have one or more processes running
@@ -1446,15 +1659,15 @@ sub killProcess($;$) {
     # send the process the INT signal
     $cmd = "pkill -INT ".$args;
     Dada::logMsg(2, $fnl, "killProcess: ".$cmd);
-    ($result, $response) = Dada::mySystem($cmd);
+    ($result, $response) = Dada::myShell($cmd);
     Dada::logMsg(2, $fnl, "killProcess: ".$result." ".$response);
 
     # give the process(es) a chance to exit
-    sleep(2);
+    usleep(100000);
 
     # check they are gone
     Dada::logMsg(2, $fnl, "killProcess: ".$pgrep_cmd);
-    ($result, $response) = Dada::mySystem($pgrep_cmd);
+    ($result, $response) = Dada::myShell($pgrep_cmd);
     Dada::logMsg(2, $fnl, "killProcess: ".$result." ".$response);
 
     if (($result eq "ok") && ($response ne "")) {
@@ -1462,15 +1675,15 @@ sub killProcess($;$) {
       # send the process the TERM signal
       $cmd = "pkill -TERM ".$args;
       Dada::logMsg(2, $fnl, "killProcess: ".$cmd);
-      ($result, $response) = Dada::mySystem($cmd);
+      ($result, $response) = Dada::myShell($cmd);
       Dada::logMsg(2, $fnl, "killProcess: ".$result." ".$response);
 
       # give the process(es) a chance to exit
-      sleep(2);
+      usleep(100000);
     
       # check they are gone
       Dada::logMsg(2, $fnl, "killProcess: ".$pgrep_cmd);
-      ($result, $response) = Dada::mySystem($pgrep_cmd);
+      ($result, $response) = Dada::myShell($pgrep_cmd);
       Dada::logMsg(2, $fnl, "killProcess: ".$result." ".$response);
 
       if (($result eq "ok") && ($response ne "")) {
@@ -1478,7 +1691,7 @@ sub killProcess($;$) {
         # send the process the KILL signal
         $cmd = "pkill -KILL ".$args;
         Dada::logMsg(2, $fnl, "killProcess: ".$cmd);
-        ($result, $response) = Dada::mySystem($cmd);
+        ($result, $response) = Dada::myShell($cmd);
         Dada::logMsg(2, $fnl, "killProcess: ".$result." ".$response);
       
         if (($result eq "ok") && ($response ne ""))  {
@@ -2171,12 +2384,14 @@ sub createDir($$)
 # Generate the DADA key for the datablock given the:
 #   inst_id   Letter corresponding to backend
 #   PWC_NUM   2 digit number corresponding to the PWC number
+#   NUM_PWC   number of pwcs
 #   db_ib     number [0-7] correspondig to DBID for instrument
 #
-sub getDBKey($$$) 
+sub getDBKey($$$$) 
 {
-  (my $inst_id, my $pwc, my $db_ib) = @_;
-  my $dbkey = sprintf("%s%02d%x", $inst_id, $pwc, (2*$db_ib));
+  (my $inst_id, my $pwc, my $num_pwc, my $db_ib) = @_;
+  my $index = ($db_ib * $num_pwc) + $pwc;
+  my $dbkey = sprintf("%s%03x", $inst_id, (2 * $index));
   return $dbkey;
 }
 
@@ -2269,6 +2484,35 @@ sub checkPWCID($\%)
     print STDERR "PWC_ID was not a valid integer between 0 and ".($cfg{"NUM_PWC"}-1)."\n";
     return 0;
   }
+}
+
+sub mkdirRecursive ($$)
+{
+  (my $path, my $perms) = @_; 
+
+  my @bits = split(/\//, $path);
+  my ($bit, $cmd, $result, $response);
+  my $tocheck = "";
+
+  foreach $bit (@bits)
+  {
+    $tocheck .= "/".$bit;
+    if (! -d $tocheck )
+    {
+      mkdir $tocheck, $perms;
+      if ($? != 0)
+      {
+        return ("fail", "mkdir ".$tocheck.", ".$perms." failed");
+      }
+      #$cmd = "mkdir -m ".$perms." ".$tocheck;
+      #($result, $response) = Dada::mySystem($cmd);
+      #if ($result ne "ok")
+      #{
+      #  return ($result, $response);
+      #}
+    }
+  }
+  return ("ok", "");
 }
 
 sub sendEmail($$$$$$)

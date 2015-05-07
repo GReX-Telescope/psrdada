@@ -6,6 +6,9 @@ int main ()
   char header[4096] = 
   "VERSION 4.5         # the header version\n"
   "CALFREQ 1.234       # the modulation frequency of the diode\n"
+  "DATA_0  0\n"
+  "DATA_1  1\n"
+  "DATA_10 10\n"
   "FREQ    1400.5      # the radio frequency in MHz\n";
 
   double frequency = 0.0;
@@ -23,6 +26,18 @@ int main ()
     fprintf (stderr, "test_ascii_header: failed to parse FREQ = %lf\n", frequency);
     return -1;
   }
+
+  fprintf (stderr, "=====================================================\n");
+  fprintf (stderr, "%s", header);
+
+  if (ascii_header_del (header, "DATA_1") < 0)
+  { 
+    fprintf (stderr, "test_ascii_header: failed to delete DATA_1\n");
+    return -1;
+  }
+
+  fprintf (stderr, "=====================================================\n");
+  fprintf (stderr, "%s", header);
 
   return 0;
 }

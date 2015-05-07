@@ -4,6 +4,7 @@
  */
 
 #include <math.h>
+#include <stdio.h>
 
 #include "dada_generator.h"
 
@@ -60,7 +61,7 @@ char * unsigned_to_binary_string(unsigned int value) {
  */
 void fill_gaussian_chars(char *data, int size, int nbits, int gain) {
 
-  float max = powf(2, nbits);
+  float max = powf(2, (nbits-1));
   
   int val;
   int twos;
@@ -119,6 +120,17 @@ void fill_gaussian_unsigned(unsigned int *data, int size, int nbits, int gain) {
   }
 }
 
+void fill_gaussian_float (float * data, int nvals, float stddev)
+{
+  printf ("data=%p nvals=%d stddev=%f\n", data, nvals, stddev);
+  int i;
+  for (i=0; i < nvals; i++) 
+  {
+    data[i] = (float) rand_normal (0, (double) stddev);
+    //printf ("data[%d] = %f (0, %f)\n", i, data[i], stddev);
+  }
+}
+
 
 /*
  * Fill char array of length size with a cal signal _--_ 
@@ -157,6 +169,7 @@ void fill_cal_chars(char *data, int size, int nbits, int gain) {
     data[i] = (char) val;
   }
 }
+
 
 /*
  * fill an unsigned int  array with gaussian noise 

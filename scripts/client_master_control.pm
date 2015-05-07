@@ -2,14 +2,16 @@ package Dada::client_master_control;
 
 use lib $ENV{"DADA_ROOT"}."/bin";
 
+$ENV{"THREADS_IP_MASK"} = 1;
+
 use strict;
 use warnings;
+use threads;
+use threads::shared;
 use IO::Socket;
 use IO::Select;
 use Net::hostent;
 use File::Basename;
-use threads;
-use threads::shared;
 use Thread::Queue;
 use Dada;
 
@@ -28,7 +30,7 @@ BEGIN {
 
   # your exported package globals go here,
   # as well as any optionally exported functions
-  @EXPORT_OK   = qw($dl $daemon_name $pwc_add %cfg);
+  @EXPORT_OK   = qw($dl $daemon_name %cfg);
 
 }
 
@@ -39,12 +41,8 @@ our @EXPORT_OK;
 #
 our $dl;
 our $daemon_name;
-our $pwc_add;
-our @daemons;
-our @binaries;
-our @helper_daemons;
-our @pwcs;
-our %dbs;
+our %pwcs;
+our $num_pwc;
 our $primary_db;
 our $daemon_prefix;
 our $control_dir;
@@ -80,13 +78,9 @@ our $temp_response : shared;
 #
 $dl = 1; 
 $daemon_name = 0;
-$pwc_add = "";
-@daemons = ();
-@binaries = ();
-@pwcs = ();
-%dbs = ();
+%pwcs = ();
+$num_pwc = 0;
 $primary_db = "";
-@helper_daemons = ();
 $daemon_prefix = "";
 $control_dir = "";
 $log_dir = "";
@@ -145,12 +139,13 @@ sub main() {
   my $results_dir    = $cfg{"CLIENT_RESULTS_DIR"};   # dspsr output directory
 
   # determine type of each daemon
-  my $i=0;
-  my $d = "";
-  for ($i=0; $i<=$#daemons; $i++) 
+  my ($i, $d, $pwc);
+  foreach $pwc ( keys %pwcs )
   {
-    $d = $daemons[$i];
-    Dada::logMsg(2, $dl, "main: daemon[".$i."] = ".$d);
+    foreach $d ( @{ $pwcs{$pwc}{"daemons"} } )
+    {
+      Dada::logMsg(2, $dl, "main: pwc=".$pwc." daemon=".$d);
+    }
   }
 
   # install signal handlers
@@ -190,7 +185,7 @@ sub main() {
   my %handles = ();
 
   # number of worker threads to handle multiple connections
-  my $n_threads = 3;
+  my $n_threads = 6;
   my @tids = ();
   my $tid = 0;
   my $file_handle = 0;
@@ -260,13 +255,20 @@ sub main() {
 
   for ($i=0; $i<$n_threads; $i++) {
     $tids[$i]->join();
+    Dada::logMsg(0, $dl, "worker thread ".$i." of ".$n_threads." joined");
   }
   $disk_thread_id->join();
+  Dada::logMsg(0, $dl, "disk_thread joined");
   $daemons_thread_id->join();
+  Dada::logMsg(0, $dl, "daemons_thread joined");
   $db_thread_id->join();
+  Dada::logMsg(0, $dl, "db_thread joined");
   $load_thread_id->join();
+  Dada::logMsg(0, $dl, "load_thread joined");
   $temp_thread_id->join();
+  Dada::logMsg(0, $dl, "temp_thread joined");
   $control_thread_id->join();
+  Dada::logMsg(0, $dl, "control_thread joined");
 
   # If we have come this far, cancel the killThread
   $kill_daemon = 0;
@@ -500,30 +502,24 @@ sub handleCommand($)
     }
     else
     {
-      if (($args eq "pwcs") || ($args eq $cfg{"PWC_BINARY"}))
-      {
-        ($result, $response) = stopPWCs($pwc); 
-      } 
-      else 
-      {
-        # dont kill persistent server daemons ever, allow them to stop on their own
-        if ($cfg{"SERVER_DAEMONS_PERSIST"} =~ m/$args/) {
-          Dada::logMsg(1, $dl, "special case for persistent server daemon");
-          ($result,$response) = stopDaemon($pwc, $args, 5, 0);
-        } else {
-          ($result,$response) = stopDaemon($pwc, $args, 30);
-        }
+      # dont kill persistent server daemons ever, allow them to stop on their own
+      if (defined ($cfg{"SERVER_DAEMONS_PERSIST"}) && ($cfg{"SERVER_DAEMONS_PERSIST"} =~ m/$args/)) {
+        Dada::logMsg(1, $dl, "special case for persistent server daemon");
+        ($result,$response) = stopDaemon($pwc, $args, 5, 0);
+      } else {
+        ($result,$response) = stopDaemon($pwc, $args, 30);
       }
     }
   }
 
-  elsif ($key eq "stop_daemons") {
+  elsif ($key eq "stop_daemons") 
+  {
     Dada::logMsg(1, $dl, "handleCommand: stopDaemons(".$pwc.")");
-    ($result,$response) = stopDaemons($pwc, \@daemons);
+    ($result,$response) = stopDaemons($pwc);
   }
 
   elsif ($key eq "stop_helper_daemons") {
-    ($result,$response) = stopDaemons($pwc, \@helper_daemons);
+    ($result,$response) = stopDaemons($pwc);
   }
 
   elsif ($key eq "daemon_info") 
@@ -536,47 +532,42 @@ sub handleCommand($)
     $response = $daemons_response_xml;
   }
 
-  elsif ($key eq "start_daemon") {
-
-    if (($args eq "pwcs") || ($args eq $cfg{"PWC_BINARY"}))
+  elsif ($key eq "start_daemon")
+  {
+    if (length($args) < 1)
     {
-      ($result, $response) = startPWCs($pwc)
-    } 
-    else 
+      $result = "fail";
+      $response = "argument required";
+    }
+    else
     {
-      if (length($args) < 1)
-      {
-        $result = "fail";
-        $response = "argument required";
-      }
-      else
-      {
-        my $custom_args = "";
-        my @custom_daemons = ();
+      my $custom_args = "";
+      my @custom_daemons = ();
 
-        # if there are space separate arguements
-        if ($args =~ m/ /)
-        {
-          my $d = "";
-          ($d, $custom_args) = split(/ /, $args, 2);
-        }
-        else 
-        {
-          @custom_daemons = ($args);
-        }
-        ($result, $response) = startDaemons($pwc, \@custom_daemons, $custom_args);
+      # if there are space separate arguements
+      if ($args =~ m/ /)
+      {
+        my $d = "";
+        ($d, $custom_args) = split(/ /, $args, 2);
+        $args = $d;
       }
+
+      Dada::logMsg(2, $dl, "handleCommand: startDamemons(".$pwc.", ".$args.", ".$custom_args.")");
+      ($result, $response) = startDaemons($pwc, $args, $custom_args);
+      Dada::logMsg(3, $dl, "handleCommand() ".$result." ".$response);
     }
   }
 
   elsif ($key eq "start_daemons") 
   {
-    ($result, $response) = startDaemons($pwc, \@daemons, "");
+    Dada::logMsg(2, $dl, "handleCommand: startDamemons(".$pwc.", daemons, )");
+    ($result, $response) = startDaemons($pwc, "daemons", "");
   }
 
   elsif ($key eq "start_helper_daemons") 
   {
-    ($result, $response) = startDaemons($pwc, \@helper_daemons, "");
+    Dada::logMsg(2, $dl, "handleCommand: startDamemons(".$pwc.", helper_daemons, )");
+    ($result, $response) = startDaemons($pwc, "helper_daemons", "");
   }
 
   elsif ($key eq "dfbsimulator") 
@@ -587,7 +578,7 @@ sub handleCommand($)
 
   elsif ($key eq "system") 
   {
-    ($result,$response) = Dada::mySystem($args, 0);  
+    ($result,$response) = Dada::mySystem($args);  
   }
 
   elsif ($key eq "get_disk_info") 
@@ -655,8 +646,6 @@ sub handleCommand($)
   elsif ($key eq "get_status") 
   {
     my $xml = "";
-    my $host = Dada::getHostMachineName();
-
     $xml = "<node_status host='".$host."'>";
     $xml .= $raw_disk_response;
     $xml .= $db_response_xml;
@@ -703,11 +692,11 @@ sub getDBList($)
   my $key = "";
   my $pwc = "";
 
-  foreach $db_id (@db_ids)
+  foreach $pwc (keys %pwcs)
   {
-    foreach $pwc (@pwcs) 
+    foreach $db_id ( keys %{ $pwcs{$pwc}{"dbs"} } )
     {
-      $key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc, $db_id);
+      $key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc, $num_pwc, $db_id);
       if ($db_keys == "")
       {
         $db_keys = $key;
@@ -739,34 +728,43 @@ sub initDBs($\@)
   my $result = "ok";
   my $response = "";
 
-  foreach $pwc (keys %dbs) 
+  foreach $pwc (keys %pwcs)
   {
-    if (($pwc_to_init >= 0) && ($pwc_to_init != $pwc)) {
+    if (($pwc_to_init >= 0) && ($pwc_to_init != $pwc)) 
+    {
       Dada::logMsg(2, $dl, "initDBs: skipping ".$pwc." as not in list");
       next;
     }
 
-    foreach $db_id ( keys %{ $dbs{$pwc} } ) 
+    # get the list of configure DB's for this PWC
+    foreach $db_id ( keys %{ $pwcs{$pwc}{"dbs"} } )
     {
       $valid_db_id = 0; 
       foreach $id ( @db_ids) 
       {
-        # only can have DB ids between 0 and 7
-        if (($id =~ m/[0-7]/) && ($db_id == $id))
+        if ($db_id == $id)
         {
           $valid_db_id = 1;
         }
       }
-
-      if ($valid_db_id) 
+  
+      if ($valid_db_id)
       {
-        my $key = $dbs{$pwc}{$db_id};
+        my $key = $pwcs{$pwc}{"dbs"}{$db_id};
         my $bufsz = $cfg{"BLOCK_BUFSZ_".$db_id};
         my $nbufs = $cfg{"BLOCK_NBUFS_".$db_id};
         my $nread = $cfg{"BLOCK_NREAD_".$db_id};
         my $cmd = "dada_db -k ".lc($key)." -b ".$bufsz." -n ".$nbufs." -r ".$nread." -l";
-        Dada::logMsg(2, $dl, "initDBs: pwc=".$pwc." cmd=".$cmd);
+        if (defined $cfg{"BLOCK_PAGE_".$db_id})
+        {
+          if ($cfg{"BLOCK_PAGE_".$db_id} eq "true")
+          {
+            $cmd .= " -p";
+          }
+        }
+        Dada::logMsg(1, $dl, "initDBs: pwc=".$pwc." cmd=".$cmd);
         my ($tmp_result,$tmp_response) = Dada::mySystem($cmd);
+        Dada::logMsg(2, $dl, "initDBs: ".$tmp_result." ".$tmp_response);
 
         if ($tmp_result eq "fail") {
           $result = "fail";
@@ -778,7 +776,7 @@ sub initDBs($\@)
 
   if ($response eq "") 
   {
-    $result = "fail";
+    $result = "ok";
     $response = "No matching DBs found";
   }
   return ($result, $response);
@@ -802,19 +800,19 @@ sub destroyDBs($\@)
   my $result = "ok";
   my $response = "";
 
-  foreach $pwc (keys %dbs) 
+  foreach $pwc (keys %pwcs) 
   {
     if (($pwc_to_destroy >= 0) && ($pwc_to_destroy != $pwc)) {
       Dada::logMsg(2, $dl, "destroyDBs: skipping ".$pwc." as not in list");
       next;
     }
-    foreach $db_id ( keys %{ $dbs{$pwc} } ) 
+    foreach $db_id ( keys %{ $pwcs{$pwc}{"dbs"} } ) 
     {
       $valid_db_id = 0;
       foreach $id (@db_ids)
       {
         # only can have DB ids between 0 and 7
-        if (($id =~ m/[0-7]/) && ($db_id == $id))
+        if ($db_id == $id)
         {
           $valid_db_id = 1;
         }
@@ -822,7 +820,7 @@ sub destroyDBs($\@)
 
       if ($valid_db_id) 
       {
-        my $key = $dbs{$pwc}{$db_id};
+        my $key = $pwcs{$pwc}{"dbs"}{$db_id};
         my $cmd = "dada_db -k ".lc($key)." -d";
         Dada::logMsg(2, $dl, "destroyDBs: pwc=".$pwc." cmd=".$cmd);
         my ($tmp_result,$tmp_response) = Dada::mySystem($cmd);
@@ -835,7 +833,7 @@ sub destroyDBs($\@)
   } 
   if ($response eq "") 
   {
-    $result = "fail";
+    $result = "ok";
     $response = "No matching DBs found";
   }
   return ($result, $response);
@@ -898,8 +896,8 @@ sub stopDaemon($$;$$)
   while ($running && ($counter > 0)) 
   {
     Dada::logMsg(2, $dl, "stopDaemon: ".$ps_cmd);
-    ($result, $response) = Dada::mySystem($ps_cmd);
-    Dada::logMsg(2, $dl, "stopDaemon: ".$result." ".$response);
+    ($result, $response) = Dada::myShell($ps_cmd);
+    Dada::logMsg(3, $dl, "stopDaemon: ".$result." ".$response);
     if ($result eq "ok")
     {
       Dada::logMsg(0, $dl, "daemon ".$daemon." still running");
@@ -952,144 +950,6 @@ sub stopDaemon($$;$$)
   return ($result, $response);
 }
 
-
-###############################################################################
-#
-# startPWC : starts all pwcs that run on this host
-#
-sub startPWCs($) 
-{
-
-  (my $pwc_to_start) = @_;
-  Dada::logMsg(2, $dl, "startPWCs(".$pwc_to_start.")");
-
-  my $pwc = "";
-  my $db_id = "";
-  my $key = "";
-  my $port = "";
-  my $log_port = "";
-  my $cmd = "";
-  my $result = "ok";
-  my $response = "";
-  my $resu = "";
-  my $resp = "";
-
-  foreach $pwc (keys %dbs)
-  {
-    if (($pwc_to_start >= 0) && ($pwc_to_start != $pwc))
-    {
-      Dada::logMsg(2, $dl, "startPWCs: skipping ".$pwc." as not in list");
-      next;
-    }
-
-    Dada::logMsg(2, $dl, "startPWCs: pwc=".$pwc);
-    foreach $db_id ( keys %{ $dbs{$pwc} } )
-    {
-
-      Dada::logMsg(2, $dl, "startPWCs: pwc=".$pwc." db_ib=".$db_id." testing == ".$cfg{"RECEIVING_DATA_BLOCK"});
-      # get the receiving datablock IDs only
-      if ($db_id == $cfg{"RECEIVING_DATA_BLOCK"})
-      {
-        $key = $dbs{$pwc}{$db_id};
-
-        $port     = int($cfg{"PWC_PORT"});
-        $log_port = int($cfg{"PWC_LOGPORT"});
-        if ($cfg{"USE_BASEPORT"} eq "yes")
-        {
-          $port     += int($pwc);
-          $log_port += int($pwc);
-        }
-
-        $cmd = $cfg{"PWC_BINARY"}." -c ".$port." -k ".lc($key)." -l ".$log_port." ".$pwc_add;
-
-        Dada::logMsg(2, $dl, "startPWCs: pwc=".$pwc." running ".$cmd);
-        ($resu ,$resp) = Dada::mySystem($cmd);
-        Dada::logMsg(2, $dl, "startPWCs: pwc=".$pwc." ".$resu." ".$resp);
-        if ($resu eq "fail") {
-          $result = "fail";
-        }
-        $response = $response.$resp."<BR>";
-      }
-    }
-  }
-  return ($result, $response);
-}
-
-
-#
-# stopPWCs: stop all PWCs that run on this host
-#
-sub stopPWCs($) 
-{
-
-  (my $pwc_to_stop) = @_;
-
-  my $cmd = "";
-  my $result = "";
-  my $response = "";
-  my $handle = 0;
-  my $port = 0;
-  my $pwc = 0;
-  Dada::logMsg(2, $dl, "stopPWCs(".$pwc_to_stop.")");
-
-  foreach $pwc (keys %dbs)
-  {
-    if (($pwc_to_stop >= 0) && ($pwc_to_stop != $pwc))
-    {
-      Dada::logMsg(2, $dl, "stopPWCs: skipping ".$pwc." as not in list");
-      next;
-    }
-    
-    $port = int($cfg{"PWC_PORT"});
-    if ($cfg{"USE_BASEPORT"} eq "yes")
-    {
-      $port += int($pwc);
-    }
-
-    # try to connect to control socket and issue quit command
-    $handle = Dada::connectToMachine($host, $port);
-    if ($handle) 
-    {
-      my $ignore = <$handle>;
-
-      Dada::logMsg(2, $dl, "stopPWCs: PWC <- quit");
-      ($result, $response) = Dada::sendTelnetCommand($handle, "quit");
-      Dada::logMsg(2, $dl, "stopPWCs: PWC -> ".$result." ".$response);
-      $handle->close();
-      sleep(1);
-    }
-  }
-
-  foreach $pwc (keys %dbs)
-  {
-    if (($pwc_to_stop > 0) && ($pwc_to_stop != $pwc))
-    {
-      Dada::logMsg(2, $dl, "stopPWCs: skipping ".$pwc." as not in list");
-      next;
-    }
-
-    $port = int($cfg{"PWC_PORT"});
-    if ($cfg{"USE_BASEPORT"} eq "yes")
-    {
-      $port += int($pwc);
-    }
-
-    # assert its gone by killing it
-    my $regex = "^".$cfg{"PWC_BINARY"}." -c ".$port;
-    #my $user  = $cfg{"USER"};
-
-    Dada::logMsg(2, $dl, "stopPWCs: killProcess(".$regex.", ".$user.")");
-    ($result, $response) = Dada::killProcess($regex, $user);
-    Dada::logMsg(2, $dl, "stopPWCs: killProcess(".$regex.", ".$user.") ".$result." ".$response);
-    if ($result ne "ok") {
-      Dada::logMsg(0, $dl, "stopPWCs: killProcess(".$regex.", ".$user.") failed: ".$response);
-    }
-  }
-  
-  return ("ok", "");
-}
-
-
 sub stopDaemons($\@) {
 
   (my $pwc_to_stop, my $ref) = @_;
@@ -1097,78 +957,100 @@ sub stopDaemons($\@) {
 
   my $threshold = 20;
   my $all_stopped = 0;
-  my $quit_file = "";
-  my $d = "";
-  my $cmd = "";
-  my $result = "";
-  my $response = "";
-  my $script = "";
-  my $pgrep = "";
 
   my $d_add = "";
   my $p_add = "";
+  my ($quit_file, $d, $cmd, $result, $response, $script, $pgrep, $pwc);
+  my @pwcs_to_stop = ();
+
   if ($pwc_to_stop >= 0) 
   {
     $d_add = "_".$pwc_to_stop;
     $p_add = " ".$pwc_to_stop;
+    push @pwcs_to_stop, $pwc_to_stop;
+  }
+  else
+  {
+    foreach $pwc (keys %pwcs)
+    {
+      push @pwcs_to_stop, $pwc;
+    }
   }
 
-  # Touch the quit files for each daemon
-  foreach $d (@ds) 
+  # give asynchronous message to each daemon to quit
+  foreach $pwc (@pwcs_to_stop)
   {
-    $quit_file = $control_dir."/".$d.$d_add.".quit";
-    $cmd = "touch ".$quit_file;
-    system($cmd);
+    foreach $d ( @{ $pwcs{$pwc}{"daemons"} } )
+    {
+      $quit_file = $control_dir."/".$d.$d_add.".quit";
+      $cmd = "touch ".$quit_file;
+      system($cmd);
+    }
   }
 
   # daemon can be perl or python
   while ((!$all_stopped) && ($threshold > 0)) 
   {
     $all_stopped = 1;
-    foreach $d (@ds)
+
+    foreach $pwc (@pwcs_to_stop)
     {
-      # determine the type of daemon (perl, python or unknown)
-      ($result, $response) = getDaemonName($d);
-      if ($result ne "ok")
+      foreach $d ( @{ $pwcs{$pwc}{"daemons"} } )
       {
-        return ("fail", $response);
-      }
-      $script = $response;
-
-      # determine the pgrep command to run for this script
-      if ($script =~ m/.pl$/)
-      {
-        $pgrep = "^perl.*".$script;
-      }
-      elsif ($script =~ m/.py$/)
-      {
-        $pgrep = "^python.*".$script;
-      }
-      else
-      {
-        return ("fail", "could not identify suffix for ".$d)
-      }
-
-      $cmd = "pgrep -u ".$user." -l -f '".$pgrep.$p_add."'";
-      ($result, $response) = Dada::mySystem($cmd);
-      if ($result eq "ok")
-      {
-        Dada::logMsg(1, $dl, $d.$d_add." is still running");
-        $all_stopped = 0;
-        if ($threshold < 10) 
+        # determine the type of daemon (perl, python or unknown)
+        ($result, $response) = getDaemonName($d);
+        if ($result ne "ok")
         {
-          ($result, $response) = Dada::killProcess($pgrep, $user);
+          return ("fail", $response);
+        }
+        $script = $response;
+
+        # determine the pgrep command to run for this script
+        if ($script =~ m/.pl$/)
+        {
+          $pgrep = "^perl.*".$script;
+        }
+        elsif ($script =~ m/.py$/)
+        {
+          $pgrep = "^python.*".$script;
+        }
+        else
+        {
+          return ("fail", "could not identify suffix for ".$d)
+        }
+
+        $cmd = "pgrep -u ".$user." -l -f '".$pgrep.$p_add."'";
+        ($result, $response) = Dada::myShell($cmd);
+        if ($result eq "ok")
+        {
+          Dada::logMsg(1, $dl, $d.$d_add." is still running");
+          $all_stopped = 0;
+          if ($threshold < 10) 
+          {
+            ($result, $response) = Dada::killProcess($pgrep, $user);
+          }
         }
       }
     }
-    $threshold--;
-    sleep(1);
+
+    if (!$all_stopped)
+    {
+      $threshold--;
+      sleep(1);
+    }
   }
 
-  # Clean up the quit files
-  foreach $d (@ds) {
-    $quit_file = $control_dir."/".$d.$d_add.".quit";
-    unlink($quit_file);
+  # clean up the quit files
+  foreach $pwc (@pwcs_to_stop)
+  {
+    foreach $d ( @{ $pwcs{$pwc}{"daemons"} } )
+    {
+      $quit_file = $control_dir."/".$d.$d_add.".quit";
+      if (-f $quit_file)
+      {
+        unlink($quit_file);
+      }
+    }
   }
 
   # If we had to resort to a "kill", send an warning message back
@@ -1189,11 +1071,9 @@ sub stopDaemons($\@) {
 
 }
 
+sub startDaemons($$$) {
 
-sub startDaemons($\@$) {
-
-  (my $pwc_to_start, my $ref, my $args) = @_;
-  my @ds = @$ref;
+  (my $pwc_to_start, my $type, my $args) = @_;
 
   my $d = ""; 
   my $cmd = "";
@@ -1203,86 +1083,56 @@ sub startDaemons($\@$) {
   my $daemon_result = "";
   my $daemon_response = "";
 
-  foreach $pwc (@pwcs)
+  foreach $pwc (keys %pwcs)
   {
     if (($pwc_to_start >= 0) && ($pwc_to_start != $pwc)) 
     {
-       Dada::logMsg(1, $dl, "startDaemons: skipping ".$pwc." as not in list");
+       Dada::logMsg(2, $dl, "startDaemons: skipping ".$pwc." as not in list");
        next;
     }
-    foreach $d (@ds) 
+    # if this is a preconfigured daemon group
+    if (exists( $pwcs{$pwc}{$type}))
     {
-      # determine the type of daemon (perl, python or unknown)
-      ($daemon_result, $daemon_response) = getDaemonName($d);
-      if ($daemon_result eq "ok")
+      foreach $d ( @{ $pwcs{$pwc}{$type} } )
       {
-        $cmd = $daemon_response." ".$pwc." ".$args;
-        Dada::logMsg(1, $dl, "startDaemons: ".$cmd);
-        ($daemon_result, $daemon_response) = Dada::mySystem($cmd);
-        Dada::logMsg(1, $dl, "startDaemons: ".$daemon_result.":".$daemon_response);
+        # determine the type of daemon (perl, python or unknown)
+        ($daemon_result, $daemon_response) = getDaemonName($d);
+        if ($daemon_result eq "ok")
+        {
+          $cmd = $daemon_response." ".$pwc." ";
+          Dada::logMsg(2, $dl, "startDaemons: ".$cmd);
+          ($daemon_result, $daemon_response) = Dada::mySystem($cmd);
+          Dada::logMsg(3, $dl, "startDaemons: ".$daemon_result.":".$daemon_response);
+        }
+        else
+        {
+          $result = "fail";
+          $response .= "could not find matching daemon";
+        }
       }
-      else
+    }
+    else
+    {
+      foreach $d ( @{ $pwcs{$pwc}{"daemons"}} )
       {
-        $result = "fail";
-        $response .= "could not find matching daemon";
+        if ($d eq $type)
+        {
+          ($daemon_result, $daemon_response) = getDaemonName($type);
+          if ($daemon_result eq "ok")
+          {
+            $cmd = $daemon_response." ".$pwc." ".$args;
+            Dada::logMsg(2, $dl, "startDaemons: ".$cmd);
+            ($daemon_result, $daemon_response) = Dada::mySystem($cmd);
+            Dada::logMsg(3, $dl, "startDaemons: ".$daemon_result.":".$daemon_response);
+          }
+          else
+          {
+            $result = "fail";
+            $response .= "could not find matching daemon";
+          }
+        }
       }
     }
-  }
-
-  return ($result, $response);
-
-}
-
-sub getDaemonInfo(\@) {
-
-  my ($ref) = @_;
-  my @ds = @$ref;
-
-  my $d = "";
-  my $cmd;
-  my %array = ();
-  my $i = 0;
-
-  foreach $d (@ds) {
-
-    # Check to see if the process is running
-    $cmd = "ps aux | grep ".$daemon_prefix."_".$d.".pl | grep -v grep > /dev/null";
-    Dada::logMsg(2, $dl, "getDaemonInfo: ".$cmd);
-    `$cmd`;
-    if ($? == 0) {
-      $array{$d} = 1;
-    } else {
-      $array{$d} = 0;
-    }
-
-    # check to see if the PID file exists
-    if (-f $control_dir."/".$d.".pid") {
-      $array{$d}++;
-    }
-  }
-
-  # If custom binaries should be running on this host, check them
-  for ($i=0; $i<=$#binaries; $i++) {
-    $b = $binaries[$i];
-    $cmd = "pgrep ".$b." > /dev/null";
-    Dada::logMsg(2, $dl, $cmd);
-    `$cmd`;
-    if ($? == 0) {
-      $array{$b} = 2;
-    } else {
-      $array{$b} = 0;
-    }
-  }
-
-  my $result = "ok";
-  my $response = "";
-
-  my @keys = sort (keys %array);
-  for ($i=0; $i<=$#keys; $i++) {
-    if ($array{$keys[$i]} != 2) {
-      $result = "fail";
-    }
-    $response .= $keys[$i]." ".$array{$keys[$i]}.",";
   }
 
   return ($result, $response);
@@ -1299,7 +1149,7 @@ sub getDaemonName($)
 
   $cmd = "ls -1 ".$cfg{"SCRIPTS_DIR"}."/".$daemon_prefix."_".$d.".p?";
   Dada::logMsg(2, $dl, "getDaemonName: ".$cmd);
-  ($result, $response) = Dada::mySystem($cmd);
+  ($result, $response) = Dada::myShell($cmd);
   Dada::logMsg(3, $dl, "getDaemonName: ".$result." ".$response);
   if ($result eq "ok")
   {
@@ -1406,23 +1256,27 @@ sub daemonsThread() {
   my %pgreps = ();
 
   # determine pgrep command for each daemon
-  foreach $d (@daemons)
+  foreach $pwc (keys %pwcs)
   {
-    # determine the type of daemon (perl or python)
-    ($result, $response) = getDaemonName($d);
-    if ($result eq "ok")
+    foreach $d ( @{ $pwcs{$pwc}{"daemons"} } )
     {
-      if ($response =~ m/.pl$/)
+      # determine the type of daemon (perl or python)
+
+      ($result, $response) = getDaemonName($d);
+      Dada::logMsg(1, $dl, "daemonsThread: ".$d." -> ".$response);
+      if ($result eq "ok")
       {
-        $pgreps{$d} = "^perl.*".$response;
-      }
-      if ($response=~ m/.py$/)
-      {
-        $pgreps{$d} = "^python.*".$response;
+        if ($response =~ m/.pl$/)
+        {
+          $pgreps{$d} = "^perl.*".$response;
+        }
+        if ($response=~ m/.py$/)
+        {
+          $pgreps{$d} = "^python.*".$response;
+        }
       }
     }
   }
-
 
   Dada::logMsg(1, $dl, "daemonsThread: starting [".$sleep_time." polling]");
 
@@ -1441,81 +1295,54 @@ sub daemonsThread() {
       %running = ();
       %pids = ();
 
-      foreach $pwc (@pwcs) 
+      foreach $pwc (keys %pwcs)
       {
-        foreach $d (@daemons) 
+        foreach $d ( @{ $pwcs{$pwc}{"daemons"}} )
         {
-
-          $cmd = "pgrep -u ".$user." -f -l '".$pgreps{$d}."'";
-          # for clients, all daemons must be launched with a PWC_ID argument
-          if ($pwc ne "server") 
+          if (exists($pgreps{$d}))
           {
-            $cmd = "pgrep -u ".$user." -f -l '".$pgreps{$d}." ".$pwc."'";
-          }
-          Dada::logMsg(3, $dl, "daemonsThread [daemon]: ".$cmd);
-          ($result, $response) = Dada::mySystem($cmd);
-          if (($result eq "ok") && ($response ne "")) 
-          {
-            $pwc_running{$pwc}{$d} = 1;
-          } 
-          else 
-          {
-            $pwc_running{$pwc}{$d} = 0;
-          }
-
-          # check to see if the PID file exists
-          if (($pwc ne "server") && (-f $control_dir."/".$d."_".$pwc.".pid"))
-          {
-            $pwc_running{$pwc}{$d} += 1;
-          }
-          if (($pwc eq "server") && (-f $control_dir."/".$d.".pid"))
-          {
-            $pwc_running{$pwc}{$d} += 1;
-          }
-
-        }
-      }
-
-      # If custom binaries should be running on this host, check them e.g. PWC_BINARY
-      foreach $pwc ( @pwcs )
-      {
-        for ($i=0; $i<=$#binaries; $i++) 
-        {
-          $b = $binaries[$i];
-          if ($b eq $cfg{"PWC_BINARY"})
-          {
-            $port = int($cfg{"PWC_PORT"});
-            if ($cfg{"USE_BASEPORT"} eq "yes")
+            $cmd = "pgrep -u ".$user." -f -l '".$pgreps{$d}."'";
+            # for clients, all daemons must be launched with a PWC_ID argument
+            if ($pwc ne "server") 
             {
-              $port += int($pwc);
+              $cmd = "pgrep -u ".$user." -f -l '".$pgreps{$d}." ".$pwc."'";
             }
-            $cmd = "pgrep -u ".$user." -f -l '".$b.".*-c ".$port."' | grep -v grep";
+            Dada::logMsg(3, $dl, "daemonsThread [daemon]: ".$cmd);
+            ($result, $response) = Dada::myShell($cmd);
+            if (($result eq "ok") && ($response ne "")) 
+            {
+              $pwc_running{$pwc}{$d} = 1;
+            } 
+            else 
+            {
+              $pwc_running{$pwc}{$d} = 0;
+            }
+
+            # check to see if the PID file exists
+            if (($pwc ne "server") && (-f $control_dir."/".$d."_".$pwc.".pid"))
+            {
+              $pwc_running{$pwc}{$d} += 1;
+            }
+            if (($pwc eq "server") && (-f $control_dir."/".$d.".pid"))
+            {
+              $pwc_running{$pwc}{$d} += 1;
+            }
           }
           else
           {
-            # this doesn't currently distinguish between PWCs !
-            $cmd = "pgrep -l ".$b;
-          }
-
-          Dada::logMsg(3, $dl, "daemonsThread [binary]: ".$cmd);
-          ($result, $response) = Dada::mySystem($cmd);
-          Dada::logMsg(3, $dl, "daemonsThread [binary]: ".$result." ".$response);
-          if (($result eq "ok") && ($response ne "")) {
-            $pwc_running{$pwc}{$b} = 2;
-          } else {
-            $pwc_running{$pwc}{$b} = 0;
+            $pwc_running{$pwc}{$d} = 0;
           }
         }
       }
 
       # check if helper daemons are running on this host
-      foreach $pwc ( @pwcs )
+      foreach $pwc (keys %pwcs)
       {
-        foreach $d (@helper_daemons) 
+        foreach $d ( @{$pwcs{$pwc}{"helper_daemons"}} )
         {
           $cmd = "pgrep -f '^perl.*".$daemon_prefix."_".$d.".pl ".$pwc."'";
           Dada::logMsg(3, $dl, "daemonsThread [helper]: ".$cmd);
-          ($result, $response) = Dada::mySystem($cmd);
+          ($result, $response) = Dada::myShell($cmd);
           if (($result eq "ok") && ($response ne "")) {
             $pwc_running{$pwc}{$d} = 1;
           } else {
@@ -1539,11 +1366,11 @@ sub daemonsThread() {
       $xml .=   "<".$daemon_name.">2</".$daemon_name.">";
 
       # for each host there can be multiple PWCs
-      foreach $pwc (@pwcs) 
+      foreach $pwc (keys %pwcs)
       {
         if ($pwc ne "server") 
         {
-          $xml .=   "<pwc id='".$pwc."'>";
+          $xml .=   "<pwc id='".$pwc."' state='".$pwcs{$pwc}{"state"}."'>";
         }
 
         # add daemons and pwcs to the XML output
@@ -1564,9 +1391,9 @@ sub daemonsThread() {
         if ($db_result ne "na")
         {
           $db_id = "";
-          foreach $db_id ( keys %{ $dbs{$pwc} } ) 
+          foreach $db_id ( keys %{ $pwcs{$pwc}{"dbs"} } )
           {
-            $db_key = lc($dbs{$pwc}{$db_id});
+            $db_key = lc($pwcs{$pwc}{"dbs"}{$db_id});
             if ($db_response =~ m/$db_key:ok/)
             {
               $xml .= "<buffer_".$db_id.">2</buffer_".$db_id.">";
@@ -1606,7 +1433,7 @@ sub dbThread()
   my $response = "";
   my $total_result = "";
   my $total_response = "";
-  my $sleep_time = 2;
+  my $sleep_time = 5;
   my $sleep_counter = 0;
   my $i = 0; 
   my $blocks_total = 0;
@@ -1629,17 +1456,17 @@ sub dbThread()
   }
   else 
   { 
-    my $pwc = "";
-    foreach $pwc (keys %dbs) {
-      my $db_id = "";
-      foreach $db_id ( keys %{ $dbs{$pwc} } ) {
-        my $key = $dbs{$pwc}{$db_id};
+    foreach $pwc (keys %pwcs) {
+      foreach $db_id ( keys %{ $pwcs{$pwc}{"dbs"} } )
+      {
+        my $key = $pwcs{$pwc}{"dbs"}{$db_id};
         push @dbs_to_report, lc($key);
       }
     }  
   }
 
-  for ($i=0; $i<=$#dbs_to_report; $i++) {
+  for ($i=0; $i<=$#dbs_to_report; $i++) 
+  {
     Dada::logMsg(1, $dl, "dbThread: reporting on DB[".$i."] ".$dbs_to_report[$i]);
   }
 
@@ -1660,11 +1487,11 @@ sub dbThread()
         $result = "";
         $response = "";
 
-        foreach $pwc (keys %dbs)
+        foreach $pwc (keys %pwcs)
         {
-          foreach $db_id ( keys %{ $dbs{$pwc} } ) 
+          foreach $db_id ( keys %{ $pwcs{$pwc}{"dbs"} } )
           {
-            $key = $dbs{$pwc}{$db_id};
+            $key = $pwcs{$pwc}{"dbs"}{$db_id};
             ($result, $nblocks, $nfull) = Dada::getDBStatus($key);
             $response .= $key.":".$result." ";
             $xml .= "<datablock pwc_id='".$pwc."' db_id='".$db_id."' key='".$key."' size='".$nblocks."'>".$nfull."</datablock>";
@@ -1894,6 +1721,7 @@ sub good() {
     return ("fail", "Error: a package variable missing [daemon_name]");
   }
 
+  Dada::logMsg(0, $dl, "Listening on ".$host.":".$port);
   # open a socket for listening connections
   $sock = new IO::Socket::INET (
     LocalHost => $host,

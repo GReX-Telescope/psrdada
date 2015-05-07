@@ -33,7 +33,7 @@ BEGIN {
   @ISA         = qw(Exporter AutoLoader);
   @EXPORT      = qw(&main);
   %EXPORT_TAGS = ( );
-  @EXPORT_OK   = qw($dl $log_host $log_port $daemon_name $master_log_prefix %cfg);
+  @EXPORT_OK   = qw($dl $log_host $log_port $daemon_name $master_log_node_prefix $master_log_prefix %cfg);
 
 }
 
@@ -46,6 +46,7 @@ our $dl;
 our $log_host;
 our $log_port;
 our $daemon_name;
+our $master_log_node_prefix;
 our $master_log_prefix;
 our %cfg;
 
@@ -67,6 +68,7 @@ $log_port = 0;
 $log_sock = 0;
 $log_lock = 0;
 $daemon_name = 0;
+$master_log_node_prefix= "";
 $master_log_prefix= "";
 %cfg = ();
 
@@ -122,6 +124,12 @@ sub main() {
     return 1;
   }
 
+  # add a delimiting period to the end of the node prefix
+  if ($master_log_node_prefix ne "")
+  {
+    $master_log_node_prefix .= "."; 
+  }
+
   # install signal handlers
   $SIG{INT} = \&sigHandle;
   $SIG{TERM} = \&sigHandle;
@@ -171,8 +179,16 @@ sub main() {
 
         # get the hostname for this connection
         $hostinfo = gethostbyaddr($handle->peeraddr);
-        $hostname = $hostinfo->name;
-        ($host, $domain) = split(/\./,$hostname,2);
+        if (defined $hostinfo)
+        {
+          $hostname = $hostinfo->name;
+          ($host, $domain) = split(/\./,$hostname,2);
+        }
+        else
+        {
+          $host = "localhost";
+        }
+
         Dada::logMsg(2, $dl, "main [".$host."] accepting connection");
 
         $read_set->add($handle);
@@ -181,12 +197,18 @@ sub main() {
       }
       else
       {
-
         # get the hostname for this connection
         $hostinfo = gethostbyaddr($rh->peeraddr);
-        $hostname = $hostinfo->name;
-        ($host, $domain) = split(/\./,$hostname,2);
-        Dada::logMsg(2, $dl, "main [".$host."] processing message");
+        if (defined $hostinfo)
+        {
+          $hostname = $hostinfo->name;
+          ($host, $domain) = split(/\./,$hostname,2);
+        }
+        else
+        {
+          $host = "localhost";
+        }
+        Dada::logMsg(3, $dl, "main [".$host."] processing message");
 
          # set the input record seperator to \r\n
         $/ = "\r\n";
@@ -275,7 +297,6 @@ sub loggingThread($)
   my $type = "";
   my $class = "";
   my $program = "";
-  my $message = "";
 
   while (!$quit_daemon) 
   {
@@ -303,11 +324,11 @@ sub loggingThread($)
         $program = $bits[4];
         $message = $bits[5];
 
-        $pwc_log_file = $logfile_dir."/".$src.".".$type.".log";
+        $pwc_log_file = $logfile_dir."/".$master_log_node_prefix.$src.".".$type.".log";
         $combined_log_file = $logfile_dir."/".$master_log_prefix.".".$type.".log";
 
         if (($class eq "WARN") || ($class eq "ERROR")) {
-          $status_file = $statusfile_dir."/".$src.".".$type.".".lc($class);
+          $status_file = $statusfile_dir."/".$master_log_node_prefix.$src.".".$type.".".lc($class);
         } else {
           $status_file = "";
         }

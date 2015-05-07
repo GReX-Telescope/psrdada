@@ -10,10 +10,6 @@
 
 #include "ipcbuf.h"
 
-#ifdef HAVE_CUDA
-#include <cuda_runtime.h>
-#endif
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -77,7 +73,8 @@ extern "C" {
 
 #if HAVE_CUDA
   /*! read bytes from ipcbuf directly to cuda device memory */
-  ssize_t ipcio_read_cuda (ipcio_t* ipc, char* ptr, size_t bytes, cudaStream_t stream);
+  //ssize_t ipcio_read_cuda (ipcio_t* ipc, char* ptr, size_t bytes, cudaStream_t stream);
+  ssize_t ipcio_read_cuda (ipcio_t* ipc, char* ptr, size_t bytes, void * cuda_stream);
 #endif
 
   /*! seek into ipcbuf - valid only for reading for now */

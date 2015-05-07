@@ -158,6 +158,7 @@ nobase_dist_web_SCRIPTS = images/apsr_logo_1x60.png \
     js/soundmanager2.js \
     js/AutoComplete.css \
     js/autocomplete.js \
+    js/sidereal.js \
     raid/index.php \
     raid/index.lib.php \
     sounds/tapechange.mp3 \

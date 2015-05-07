@@ -227,7 +227,7 @@ function socketRead($socket)
 
   if ($socket) 
   {
-    $response = @socket_read ($socket, 65536, PHP_NORMAL_READ);
+    $response = @socket_read ($socket, 262144, PHP_NORMAL_READ);
 
     if ($response === FALSE)
     {
