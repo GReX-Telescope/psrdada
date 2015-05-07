@@ -5,7 +5,7 @@ HDR_VERSION     1.0
 HDR_SIZE        4096
 
 BW              100           # bandwidth in MHz
-FREQ            800           # centre frequency in MHz
+FREQ            850           # centre frequency in MHz
 
 TELESCOPE       MOST
 RECEIVER        MULTI
@@ -19,7 +19,7 @@ NANT            2
 NBIT            8
 NDIM            2
 NPOL            1
-CHANBW          0.961538462   # Effective 100 / 104
+CHANBW          0.9259259259   # Effective 100 / 108
 
 TSAMP           1.08          # micro seconds
 

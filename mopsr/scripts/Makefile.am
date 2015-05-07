@@ -9,6 +9,8 @@ dist_bin_SCRIPTS = Mopsr.pm \
                    power_mon8.psh \
                    server_mopsr_bf_src_monitor.pl \
                    server_mopsr_bf_sys_monitor.pl \
+                   server_mopsr_bp_src_monitor.pl \
+                   server_mopsr_bp_sys_monitor.pl \
                    server_mopsr_event_monitor.pl \
                    server_mopsr_ib_receiver.pl \
                    server_mopsr_baseband_logger.pl \
@@ -22,18 +24,27 @@ dist_bin_SCRIPTS = Mopsr.pm \
                    sn_mods.py \
                    client_mopsr_aqdsp.pl \
                    client_mopsr_aq_diskdb.pl \
+                   client_mopsr_bfdsp.pl \
 									 client_mopsr_dbsplitdb.pl \
                    client_mopsr_dbantsdb.pl \
                    client_mopsr_dumper.pl \
 									 client_mopsr_dspsr.pl \
                    client_mopsr_master_control.pl \
 								   client_mopsr_bf_archive_manager.pl \
+									 client_mopsr_bf_diskdb.pl \
                    client_mopsr_bf_master_control.pl \
                    client_mopsr_bf_process.pl \
                    client_mopsr_bf_src_logger.pl \
                    client_mopsr_bf_results_mon.pl \
                    client_mopsr_bf_transpose.pl \
                    client_mopsr_archive_manager.pl \
+									 client_mopsr_bp_master_control.pl \
+									 client_mopsr_bp_digifil.pl \
+									 client_mopsr_bp_send.pl \
+									 client_mopsr_bp_split.pl \
+									 client_mopsr_bp_recv.pl \
+									 client_mopsr_bp_integrate.pl \
+									 client_mopsr_bp_process.pl \
                    client_mopsr_mux_send.pl \
                    client_mopsr_mux_recv.pl \
                    client_mopsr_proc.pl \
@@ -42,7 +53,8 @@ dist_bin_SCRIPTS = Mopsr.pm \
                    client_mopsr_superb.pl \
                    client_mopsr_pwc.pl \
                    client_mopsr_aqdsp_observation_manager.pl \
-                   client_mopsr_src_logger.pl
+                   client_mopsr_src_logger.pl \
+									 mopsr_pkt_reset.pl
 
 include $(top_srcdir)/config/Makefile.targets
 

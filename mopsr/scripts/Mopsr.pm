@@ -23,6 +23,7 @@ require AutoLoader;
   &clientCommand
   &getObsDestinations
   &getConfig
+  &getCornerturnConfig
 );
 
 $VERSION = '0.01';
@@ -104,6 +105,25 @@ sub getConfig(;$)
   %combined = (%combined, %sub_config);
 
   return %combined;
+}
+
+
+sub getCornerturnConfig($)
+{
+  (my $type) = @_;
+
+  my $config_file = $DADA_ROOT."/share/mopsr_".$type."_cornerturn.cfg";
+  my %config = ();
+  if (-f $config_file)
+  {
+    %config = Dada::readCFGFileIntoHash($config_file, 0);
+  }
+  else
+  {
+    print "ERROR: cornerturn config file [".$config_file."] did not exist\n";
+  }
+
+  return %config;
 }
 
 __END__

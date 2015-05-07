@@ -170,12 +170,12 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
       logMsg (0, "INFO", "UTC_START=".$header{"UTC_START"}." NCHAN=".$header{"NCHAN"}." NANT=".$header{"NANT"});
 
       # Add the dada header file to the proc_cmd
-      $proc_cmd_file = $cfg{"CONFIG_DIR"}."/".$header{"PROC_FILE"};
+      $proc_cmd_file = $cfg{"CONFIG_DIR"}."/".$header{"BF_PROC_FILE"};
 
-      logMsg(2, "INFO", "Full path to PROC_FILE: ".$proc_cmd_file);
+      logMsg(2, "INFO", "Full path to BF_PROC_FILE: ".$proc_cmd_file);
       if ( ! ( -f $proc_cmd_file ) ) 
       {
-        logMsg(0, "ERROR", "PROC_FILE did not exist: ".$proc_cmd_file);
+        logMsg(0, "ERROR", "BF_PROC_FILE did not exist: ".$proc_cmd_file);
         $proc_cmd = "dada_dbnull -z -s -k ".$in_db_key;
       }
       elsif ($cfg{"BF_STATE_".$chan_id} eq "active")

@@ -33,7 +33,7 @@ void * mopsr_ibdb_init_thread (void * arg);
 void usage()
 {
   fprintf (stdout,
-    "mopsr_ibdb [options] channel cornerturn.cfg\n"
+    "mopsr_ibdb_FST [options] channel cornerturn.cfg\n"
     " -k <key>          hexadecimal shared memory key  [default: %x]\n"
     " -s                single transfer only\n"
     " -v                verbose output\n"
@@ -48,7 +48,7 @@ int mopsr_ibdb_open (dada_client_t* client)
 {
   // the mopsr_ibdb specific data
   assert (client != 0);
-  mopsr_ib_t* ctx = (mopsr_ib_t*) client->context;
+  mopsr_bf_ib_t* ctx = (mopsr_bf_ib_t*) client->context;
 
   // the ib communcation managers
   assert(ctx->ib_cms != 0);
@@ -70,7 +70,7 @@ int mopsr_ibdb_open (dada_client_t* client)
 int mopsr_ibdb_close (dada_client_t* client, uint64_t bytes_written)
 {
   // the mopsr_ibdb specific data
-  mopsr_ib_t* ctx = (mopsr_ib_t*) client->context;
+  mopsr_bf_ib_t* ctx = (mopsr_bf_ib_t*) client->context;
 
   // status and error logging facility
   multilog_t* log = client->log;
@@ -118,7 +118,7 @@ int mopsr_ibdb_close (dada_client_t* client, uint64_t bytes_written)
 /*! data transfer function, for just the header */
 int64_t mopsr_ibdb_recv (dada_client_t* client, void * buffer, uint64_t bytes)
 {
-  mopsr_ib_t * ctx = (mopsr_ib_t *) client->context;
+  mopsr_bf_ib_t * ctx = (mopsr_bf_ib_t *) client->context;
 
   dada_ib_cm_t ** ib_cms = ctx->ib_cms;
 
@@ -240,8 +240,48 @@ int64_t mopsr_ibdb_recv (dada_client_t* client, void * buffer, uint64_t bytes)
     }
   }
 
+  // write the antennae list to the output header
+  if (ctx->verbose)
+    multilog(ctx->log, LOG_INFO, "recv: construct module list: nant=%d\n", new_nant);
+  unsigned iant = 0;
+  char module_list[112];  // 16 * 6 chars
+  char full_list[2112];   // 352 * 6chars
+  while (iant < new_nant)
+  {
+    // find the connection which contains iant
+    for (i=0; i<ctx->nconn; i++)
+    {
+      if (iant >= ctx->conn_info[i].ant_first && iant <= ctx->conn_info[i].ant_last)
+      {
+        if (ascii_header_get (ctx->ib_cms[i]->header_mb->buffer, "ANTENNAE", "%s", module_list) != 1)
+        {
+          multilog (log, LOG_ERR, "recv: could not read ANTENNAE from header\n");
+          return -1;
+        }
+        if (iant == 0)
+        {
+          strcpy(full_list, module_list);
+        }
+        else
+        {
+          strcat(full_list,","); 
+          strcat(full_list,module_list);
+        }
+
+        iant += ((ctx->conn_info[i].ant_last - ctx->conn_info[i].ant_first) + 1);
+      }
+    }
+  }
+
+  if (ascii_header_set (buffer, "ANTENNAE", "%s", full_list) < 0)
+  {
+    multilog (log, LOG_ERR, "recv: failed to set ATNENNAE=%s in header\n", full_list);
+    return -1;
+  }
+
   if (ctx->verbose)
     multilog(ctx->log, LOG_INFO, "recv: post_recv [BYTES TO XFER]\n");
+  // find the connection which contains iant
   for (i=0; i<ctx->nconn; i++)
   {
     if (ctx->verbose > 1)
@@ -262,7 +302,7 @@ int64_t mopsr_ibdb_recv (dada_client_t* client, void * buffer, uint64_t bytes)
 int64_t mopsr_ibdb_recv_block (dada_client_t* client, void * buffer, 
                                uint64_t data_size, uint64_t block_id)
 {
-  mopsr_ib_t * ctx = (mopsr_ib_t*) client->context;
+  mopsr_bf_ib_t * ctx = (mopsr_bf_ib_t*) client->context;
 
   dada_ib_cm_t ** ib_cms = ctx->ib_cms;
 
@@ -397,7 +437,7 @@ int64_t mopsr_ibdb_recv_block (dada_client_t* client, void * buffer,
 /*
  * required initialization of IB device and associate verb structs
  */
-int mopsr_ibdb_ib_init (mopsr_ib_t * ctx, dada_hdu_t * hdu, multilog_t * log)
+int mopsr_ibdb_ib_init (mopsr_bf_ib_t * ctx, dada_hdu_t * hdu, multilog_t * log)
 {
   if (ctx->verbose > 1)
     multilog (ctx->log, LOG_INFO, "mopsr_ibdb_ib_init()\n");
@@ -466,7 +506,7 @@ int mopsr_ibdb_ib_init (mopsr_ib_t * ctx, dada_hdu_t * hdu, multilog_t * log)
   return 0;
 }
 
-int mopsr_ibdb_destroy (mopsr_ib_t * ctx) 
+int mopsr_ibdb_destroy (mopsr_bf_ib_t * ctx) 
 {
   unsigned i=0;
   int rval = 0;
@@ -483,11 +523,11 @@ int mopsr_ibdb_destroy (mopsr_ib_t * ctx)
   return rval;
 }
 
-int mopsr_ibdb_open_connections (mopsr_ib_t * ctx, multilog_t * log)
+int mopsr_ibdb_open_connections (mopsr_bf_ib_t * ctx, multilog_t * log)
 {
   dada_ib_cm_t ** ib_cms = ctx->ib_cms;
 
-  mopsr_conn_t * conns = ctx->conn_info;
+  mopsr_bf_conn_t * conns = ctx->conn_info;
 
   if (ctx->verbose > 1)
     multilog(ctx->log, LOG_INFO, "mopsr_ibdb_open_connections()\n");
@@ -596,7 +636,7 @@ int mopsr_ibdb_open_connections (mopsr_ib_t * ctx, multilog_t * log)
  */
 void * mopsr_ibdb_init_thread (void * arg)
 {
-  mopsr_conn_t * conn = (mopsr_conn_t *) arg;
+  mopsr_bf_conn_t * conn = (mopsr_bf_conn_t *) arg;
 
   dada_ib_cm_t * ib_cm = conn->ib_cm;
 
@@ -685,7 +725,7 @@ void signal_handler(int signalValue)
 int main (int argc, char **argv)
 {
   /* DADA Data Block to Node configuration */
-  mopsr_ib_t ctx = MOPSR_IB_INIT;
+  mopsr_bf_ib_t ctx = MOPSR_IB_INIT;
 
   /* DADA Header plus Data Unit */
   dada_hdu_t* hdu = 0;

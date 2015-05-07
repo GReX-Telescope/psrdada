@@ -16,7 +16,9 @@
 #include <complex.h>
 
 // degrees to radians
+#ifndef DD2R
 #define DD2R (M_PI/180.0)
+#endif
 
 // arc seconds to degrees
 #define AS2D 1.0/(60.0*60.0)
@@ -26,8 +28,12 @@
 #define MOLONGLO_DEC_BASELINE  -0.113297  * DD2R
 
 // constants for the site
-#define MOLONGLO_LATITUDE     -( 35 + 22/60.0 + 18.97/3600.0) * DD2R /* radians */
-#define MOLONGLO_LONGITUDE     (149 + 25/60.0 + 25.25/3600.0) * DD2R /* radians */
+#define MOLONGLO_LATITUDE     -( 35 + 22/60.0 + 14.5452 / 3600.0) * DD2R /* radians */
+#define MOLONGLO_LONGITUDE     (149 + 25/60.0 + 28.7682 / 3600.0) * DD2R /* radians */
+
+//#define MOLONGLO_LATITUDE     -( 35 + 22/60.0 + 18.97/3600.0) * DD2R /* radians */
+//#define MOLONGLO_LONGITUDE     (149 + 25/60.0 + 25.25/3600.0) * DD2R /* radians */
+
 #define MOLONGLO_MODULE_LENGTH  4.42
 #define MOLONGLO_HALF_MODULE_LENGTH  2.21
 #define MOLONGLO_AZIMUTH_CORR  (4.9 * AS2D * DD2R)
@@ -120,11 +126,13 @@ int calculate_delays (unsigned nbay, mopsr_bay_t * bays,
                       mopsr_delay_t ** delays, char apply_instrumental,
                       char apply_geometric, char is_tracking, double tsamp);
 
-void calc_app_position (double RA, double DEC, struct timeval timestamp, double * RA_app, double * DEC_app);
+int cal_app_pos_iau (double RA, double DEC, struct tm * utc, double * RA_app, double * DEC_app);
+
+int calc_observed_pos (double rc, double dc, struct tm * utc, double dut1, double * RA_obs, double * DEC_obs, double * sha);
 
 double mjd_from_utc (struct tm * utc);
-
 double lmst_from_mjd (double mjd);
+double last_from_mjd (double mjd);
 
 int mopsr_delays_plot (unsigned nmod, unsigned nchan, mopsr_delay_t ** delays, struct timeval timestamp);
 
@@ -132,14 +140,9 @@ int mopsr_delays_hhmmss_to_rad (char * hhmmss, double * rads);
 
 int mopsr_delays_ddmmss_to_rad (char * ddmmss, double * rads);
 
-double peckham_delay(double ha_baseline, double dec_baseline,
-             double ha_source, double dec_source);
-double calc_peckham_delay (double RA, double DEC, struct timeval timestamp);
-
 double jer_delay(double ha_source, double dec_source,
              double tilt, double skew, double latitude);
 double calc_jer_delay (double RA, double DEC, struct timeval timestamp);
-double calc_jer_delay2 (double RA_curr, double DEC_curr, struct timeval timestamp);
 
 
 #endif

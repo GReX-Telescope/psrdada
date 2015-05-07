@@ -154,7 +154,6 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
   $file = "/data/mopsr/scratch/".$pfb_id."/2014-07-22-02:36:19_0000025920798720.000000.dada";
   $file = "/data/mopsr/scratch/".$pfb_id."/2014-07-22-02:36:19_0000038881198080.000000.dada";
   $file = "/mnt/baseband/collections/3C273/PFB/2014-06-23-05:10:12/".$pfb_id."/2014-06-23-05:10:12_0000012950962176.000000.dada";
-  $file = "/mnt/baseband/collections/3C273/PFB/2014-03-05-15:34:30/".$pfb_id."/2014-03-05-15:34:30_0000000000000000.000000.dada";
   $file = "/data/mopsr/scratch/".$pfb_id."/2014-09-18-22:36:39_0000012960399360.000000.dada";
   $file = "/data/mopsr/scratch/".$pfb_id."/2014-09-18-22:36:39_0000025920798720.000000.dada";
   $file = "/data/mopsr/scratch/".$pfb_id."/2014-09-18-22:36:39_0000000000000000.000000.dada";
@@ -181,9 +180,18 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
   $file = "/data/mopsr/scratch/".$pfb_id."/2014-10-13-21:11:48_0000000000000000.000000.dada";
   $file = "/data/mopsr/scratch/".$pfb_id."/2014-10-14-21:12:30_0000000000000000.000000.dada";
   $file = "/data/mopsr/scratch/".$pfb_id."/2014-10-14-21:13:09_0000000000000000.000000.dada";
+  $file = "/data/mopsr/scratch/".$pfb_id."/2014-12-02-04:17:55_0000000000000000.000000.dada";
+  $file = "/data/mopsr/scratch/".$pfb_id."/2015-01-13-11:43:12_0000000000000000.000000.dada";
+  $file = "/data/mopsr/rawdata/".$pfb_id."/2015-01-13-21:48:36_0000230827249920.000000.dada";   # SNR 21
+  $file = "/data/mopsr/rawdata/".$pfb_id."/2015-01-13-21:48:36_0000231358874880.000000.dada";   # SNR 85
+  $file = "/data/mopsr/scratch/".$pfb_id."/2015-01-21-11:06:15_0000000000000000.000000.dada";   
+  $file = "/mnt/baseband/collections/Vela/2014-10-01-21:49:13/".$pfb_id."/2014-10-01-21:49:13_0000000000000000.000000.dada";
   $file = "/data/mopsr/scratch/".$pfb_id."/2014-10-01-21:49:13_0000000000000000.000000.dada";
-  $file = "/data/mopsr/scratch/".$pfb_id."/2014-10-30-19:56:28_0000000000000000.000000.dada";
-
+  $file = "/mnt/baseband/collections/3C273/PFB/2014-10-31-01:21:31/".$pfb_id."/2014-10-31-01:21:31_0000000000000000.000000.dada";
+  $file = "/mnt/baseband/collections/3C273/PFB/2014-10-07-01:22:57/".$pfb_id."/2014-10-07-01:22:57_0000000000000000.000000.dada";
+  $file = "/data/mopsr/scratch/".$pfb_id."/2015-03-10-21:07:28_0000000000000000.000000.dada";
+  $file = "/data/mopsr/scratch/".$pfb_id."/2015-03-11-11:20:58_0000000000000000.000000.dada";
+  $file = "/data/mopsr/scratch/".$pfb_id."/2015-04-24-12:21:01_0000000000000000.000000.dada";
 
 
   if (-f $file )

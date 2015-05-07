@@ -127,6 +127,9 @@ typedef struct {
 
   char zap_dc;
 
+  int schan;
+  int echan;
+
   mopsr_hdr_t hdr;
 
 } udpcorr_t;
@@ -154,6 +157,8 @@ void usage()
      " ant2           second antenna in pair\n"
      " -b nbatch      number of fft batches to integrate into each dump\n"
      " -d             dual side band data [default no]\n"
+     " -e schan       start channel for Fscrunched plots [default 0]\n"
+     " -f echan       end channel for Fscrunched plots [default nchan-1]\n"
      " -i interface   ip/interface for inc. UDP packets [default all]\n"
      " -n npt         number of points in each fft [default 8]\n"
      " -p port        port on which to listen [default %d]\n"
@@ -277,6 +282,14 @@ int udpcorr_init (udpcorr_t * ctx)
   ctx->nchan_out = ctx->npt * ctx->nchan_in;
   ctx->nsamp = ctx->npt * ctx->nbatch;
 
+  if (ctx->echan == -1)
+    ctx->echan = hdr.nchan -1;
+  if (ctx->schan == -1)
+    ctx->schan = 0;
+
+  if (ctx->verbose)
+    multilog(ctx->log, LOG_INFO, "init: schan=%d echan=%d\n", ctx->schan, ctx->echan);
+
   // set the socket to non-blocking
   if (ctx->verbose)
     multilog(ctx->log, LOG_INFO, "init: setting non_block\n");
@@ -376,7 +389,10 @@ int main (int argc, char **argv)
   udpcorr.verbose = 0;
   udpcorr.zap_dc = 0;
 
-  while ((arg=getopt(argc,argv,"b:dD:i:n:op:r:s:t:vw:zh")) != -1) 
+  udpcorr.schan = -1;
+  udpcorr.echan = -1;
+
+  while ((arg=getopt(argc,argv,"b:de:f:D:i:n:op:r:s:t:vw:zh")) != -1) 
   {
     switch (arg)
     {
@@ -386,6 +402,14 @@ int main (int argc, char **argv)
 
       case 'd':
         udpcorr.dsb = 1;
+        break;
+
+      case 'e':
+        udpcorr.schan = atoi(optarg);
+        break;
+
+      case 'f':
+        udpcorr.echan = atoi(optarg);
         break;
 
       case 'D':
@@ -686,50 +710,53 @@ int udpcorr_correlate (udpcorr_t * ctx)
   {
     for (ibatch=0; ibatch<ctx->nbatch; ibatch++)
     {
-      // extract the batch and channel from input array
-      if (ctx->verbose > 1)
-        multilog(ctx->log, LOG_INFO, "correlate: extract(%d, %d)\n", ibatch, ichan);
-      udpcorr_extract(ctx, ibatch, ichan);
-
-      // unpack the npts 
-      if (ctx->verbose > 1)
-        multilog(ctx->log, LOG_INFO, "correlate: unpack()\n");
-      udpcorr_unpack (ctx);
-
-      if (ctx->verbose > 1)
-        multilog(ctx->log, LOG_INFO, "correlate: fft\n");
-
-      fftwf_execute_dft (ctx->plan_fwd, ctx->fwd1_in, ctx->fwd1_out);
-      fftwf_execute_dft (ctx->plan_fwd, ctx->fwd2_in, ctx->fwd2_out);
-
-      if (ctx->verbose > 1)
-        multilog(ctx->log, LOG_INFO, "correlate: conj\n");
-
-      if (ctx->zap_dc)
+      if ((ichan >= ctx->schan) && (ichan <= ctx->echan))
       {
-        ctx->fwd1_out[0] = 0;
-        ctx->fwd2_out[0] = 0;
-      }
+        // extract the batch and channel from input array
+        if (ctx->verbose > 1)
+          multilog(ctx->log, LOG_INFO, "correlate: extract(%d, %d)\n", ibatch, ichan);
+        udpcorr_extract(ctx, ibatch, ichan);
 
-      for (ipt=0; ipt<ctx->npt; ipt++)
-      {
-        if (ctx->dsb)
-          shift = (ipt + (ctx->npt/2)) % ctx->npt;
-        else
-          shift = ipt;
+        // unpack the npts 
+        if (ctx->verbose > 1)
+          multilog(ctx->log, LOG_INFO, "correlate: unpack()\n");
+        udpcorr_unpack (ctx);
 
-        // compute cross correlation
-        val = conj(ctx->fwd1_out[shift]) * ctx->fwd2_out[shift];
-        ctx->sum[(ichan*ctx->npt) + ipt] += val;
-        ctx->sum_all[(ichan*ctx->npt) + ipt] += val;
+        if (ctx->verbose > 1)
+          multilog(ctx->log, LOG_INFO, "correlate: fft\n");
 
-        re = creal(ctx->fwd1_out[shift]);
-        im = cimag(ctx->fwd1_out[shift]);
-        ac1 += (re * re) + (im * im);
+        fftwf_execute_dft (ctx->plan_fwd, ctx->fwd1_in, ctx->fwd1_out);
+        fftwf_execute_dft (ctx->plan_fwd, ctx->fwd2_in, ctx->fwd2_out);
 
-        re = creal(ctx->fwd2_out[shift]);
-        im = cimag(ctx->fwd2_out[shift]);
-        ac2 += (re * re) + (im * im);
+        if (ctx->verbose > 1)
+          multilog(ctx->log, LOG_INFO, "correlate: conj\n");
+
+        if (ctx->zap_dc)
+        {
+          ctx->fwd1_out[0] = 0;
+          ctx->fwd2_out[0] = 0;
+        }
+
+        for (ipt=0; ipt<ctx->npt; ipt++)
+        {
+          if (ctx->dsb)
+            shift = (ipt + (ctx->npt/2)) % ctx->npt;
+          else
+            shift = ipt;
+
+          // compute cross correlation
+          val = conj(ctx->fwd1_out[shift]) * ctx->fwd2_out[shift];
+          ctx->sum[(ichan*ctx->npt) + ipt] += val;
+          ctx->sum_all[(ichan*ctx->npt) + ipt] += val;
+
+          re = creal(ctx->fwd1_out[shift]);
+          im = cimag(ctx->fwd1_out[shift]);
+          ac1 += (re * re) + (im * im);
+
+          re = creal(ctx->fwd2_out[shift]);
+          im = cimag(ctx->fwd2_out[shift]);
+          ac2 += (re * re) + (im * im);
+        }
       }
     }
   }
@@ -755,7 +782,6 @@ int udpcorr_correlate (udpcorr_t * ctx)
   re = creal(fsum);
   im = cimag(fsum);
   ctx->amps_t[ctx->idump] = sqrtf((re * re) + (im * im));
-  //ctx->amps_t[ctx->idump] = sqrt(sum);
   ctx->phases_t[ctx->idump] = atan2f(im, re);
   ctx->ac1[ctx->idump] = ac1;
   ctx->ac2[ctx->idump] = ac2;
@@ -764,9 +790,9 @@ int udpcorr_correlate (udpcorr_t * ctx)
   if (ctx->idump > 1)
     plot_cc_time(ctx, 200);
 
-  /*
   plot_cc_freq(ctx, "Cross Corr vs Freq - current dump", "1/xs");
 
+  /*
   for (ipt=0; ipt<ctx->nchan_out; ipt++)
   {
     re = creal(ctx->sum_all[ipt]);

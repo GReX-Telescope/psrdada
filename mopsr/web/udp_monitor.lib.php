@@ -245,8 +245,6 @@ class udp_monitor extends mopsr_webpage
         echo "    <option value='".$opt."'>".$opt."</option>\n";
     }
     echo "   </select>\n";
-
-
 ?>
     <table border=0 class='udp_monitor'>
       <tr><th>Board</th><th colspan='<?echo $this->modules_per_pfb?>'>Modules</th></tr>
@@ -439,6 +437,13 @@ class udp_monitor extends mopsr_webpage
 
     }
     return $to_use;
+  }
+
+  function readPreferredModules ()
+  {
+    $file = $this->inst->config["CONFIG_DIR"]."/preferred_modules.txt";
+    
+
   }
 }
 

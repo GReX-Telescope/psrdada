@@ -494,6 +494,7 @@ int main (int argc, char **argv)
       {
         opts.ant_id = mopsr_get_ant_number (hdr.ant_id2, antenna % 2);
       }
+      opts.ant_id = mopsr_get_new_ant_number (antenna);
 
       if (ctx->verbose > 1) 
         multilog (ctx->log, LOG_INFO, "main: seq_no= %"PRIu64" difference=%"PRIu64" packets\n", hdr.seq_no, (hdr.seq_no - prev_seq_no));

@@ -4,7 +4,7 @@
 # Simple MOPSR processing script
 #
 #   Runs the antenna splitter on dada datablock
-#   Runs the PROC_FILE on each of the output data blocks
+#   Runs the AQ_PROC_FILE on each of the output data blocks
 # 
 # Author:   Andrew Jameson
 # 

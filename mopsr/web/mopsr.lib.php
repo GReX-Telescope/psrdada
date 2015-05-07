@@ -6,6 +6,7 @@ define("INSTRUMENT", "mopsr");
 define("CFG_FILE", "/home/dada/linux_64/share/mopsr.cfg");
 define("AQ_FILE",  "/home/dada/linux_64/share/mopsr_aq.cfg");
 define("BF_FILE",  "/home/dada/linux_64/share/mopsr_bf.cfg");
+define("BP_FILE",  "/home/dada/linux_64/share/mopsr_bp.cfg");
 define("CNR_FILE", "/home/dada/linux_64/share/mopsr_cornerturn.cfg");
 define("SP_FILE",  "/home/dada/linux_64/share/mopsr_signal_paths.txt");
 define("CSS_FILE", "/mopsr/mopsr.css");
@@ -46,6 +47,8 @@ class mopsr extends instrument
     $arr["mopsr_src_monitor"]            = array("logfile" => "nexus.src.log", "name" => "SRC", "tag" => "src", "shortname" => "SRC");
     $arr["mopsr_bf_sys_monitor"]         = array("logfile" => "bfs.sys.log", "name" => "BF SYS", "tag" => "sys", "shortname" => "BF_SYS");
     $arr["mopsr_bf_src_monitor"]         = array("logfile" => "bfs.src.log", "name" => "BF SRC", "tag" => "src", "shortname" => "BF_SRC");
+    $arr["mopsr_bp_sys_monitor"]         = array("logfile" => "bps.sys.log", "name" => "BP SYS", "tag" => "sys", "shortname" => "BP_SYS");
+    $arr["mopsr_bp_src_monitor"]         = array("logfile" => "bps.src.log", "name" => "BP SRC", "tag" => "src", "shortname" => "BP_SRC");
 
     $arr["mopsr_ib_receiver"]            = array("logfile" => "mopsr_ib_receiver.log", "name" => "IB Rcv", "tag" => "ib_rcv", "shortname" => "IB_Rcv");
     $arr["mopsr_rx_monitor"]             = array("logfile" => "mopsr_ib_receiver.log", "name" => "RX Mon", "tag" => "rx_mon", "shortname" => "RX_Mon");
@@ -73,7 +76,17 @@ class mopsr extends instrument
     $arr["mopsr_bf_transpose"]        = array("logfile" => "bfs.sys.log", "name" => "Transpose", "tag" => "bf xpose");
     $arr["mopsr_bf_process"]          = array("logfile" => "bfs.sys.log", "name" => "Proc", "tag" => "bf proc");
     $arr["mopsr_bf_archive_manager"]  = array("logfile" => "bfs.sys.log", "name" => "Archive Mngr", "tag" => "archive mngr");
+    $arr["mopsr_bfdsp"]               = array("logfile" => "bfs.sys.log", "name" => "BFDSP", "tag" => "bfdsp");
     $arr["mopsr_bf_results_mon"]      = array("logfile" => "bfs.src.log", "name" => "Results Mon", "tag" => "results mon");
+
+    # Beam Processor Scripts
+    $arr["mopsr_bp_send"]             = array("logfile" => "bps.sys.log", "name" => "BP Send", "tag" => "bp send");
+    $arr["mopsr_bp_recv"]             = array("logfile" => "bps.sys.log", "name" => "BP Recv", "tag" => "bp recv");
+    $arr["mopsr_bp_split"]            = array("logfile" => "bps.sys.log", "name" => "BP Split", "tag" => "bp split");
+    $arr["mopsr_bp_digifil"]          = array("logfile" => "bps.sys.log", "name" => "BP Digifil", "tag" => "bp proc");
+    $arr["mopsr_bp_integrate"]        = array("logfile" => "bps.sys.log", "name" => "BP Int", "tag" => "bpint");
+    $arr["mopsr_bp_process"]          = array("logfile" => "bps.sys.log", "name" => "BP Proc", "tag" => "bp proc");
+    $arr["mopsr_bp_results_mon"]      = array("logfile" => "bps.sys.log", "name" => "BP Results", "tag" => "bp results");
 
     return $arr;
 
@@ -130,7 +143,7 @@ class mopsr extends instrument
     foreach ($ants as $ant)
     {
       $images = array();
-      $cmd = "find ".$dir." -name '????-??-??-??:??:??.".$ant.".??.*x*.png' -printf '%f\n' | sort -n";
+      $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -type f -name '????-??-??-??:??:??.".$ant.".??.*x*.png' -printf '%f\n' | sort -n";
       $line = exec($cmd, $images, $rval);
         
       if ($line != "")

@@ -389,7 +389,7 @@ sub parseXMLCommand($)
         # check all the meta-data has been supplied
         my %required = ( 'signal_parameters' => ['bandwidth', 'centre_frequency', 'nant', 'nchan', 'ndim', 'npol', 'nbit'],
                          'pfb_parameters' => ['oversampling_ratio', 'sampling_time', 'channel_bandwidth', 'dual_sideband', 'resolution'],
-                         'observation_parameters' => ['observer', 'processing_file', 'mode', 'type', 'config'],
+                         'observation_parameters' => ['observer', 'aq_processing_file', 'bf_processing_file', 'bp_processing_file', 'mode', 'type', 'config'],
                          'source_parameters' => ['name', 'ra', 'dec' ] );
         my ($set, $param);
         foreach $set (keys %required) 
@@ -931,7 +931,9 @@ sub createLocalDirs($)
   print FH Dada::headerFormat("NDIM",      $spec{"NDIM"})."\n";
   print FH Dada::headerFormat("NCHAN",     $spec{"NCHAN"})."\n";
   print FH Dada::headerFormat("NANT",      $spec{"NANT"})."\n";
-  print FH Dada::headerFormat("PROC_FILE", $spec{"PROC_FILE"})."\n";
+  print FH Dada::headerFormat("AQ_PROC_FILE", $spec{"AQ_PROC_FILE"})."\n";
+  print FH Dada::headerFormat("BF_PROC_FILE", $spec{"BF_PROC_FILE"})."\n";
+  print FH Dada::headerFormat("BP_PROC_FILE", $spec{"BP_PROC_FILE"})."\n";
   print FH Dada::headerFormat("OBSERVER",  $spec{"OBSERVER"})."\n";
   print FH "\n";
   close FH;
@@ -945,7 +947,8 @@ sub createLocalDirs($)
     return ("fail", "could not copy obs.info to archives dir");
   }
 
-  if ($spec{"MODE"} =~ m/CORR/)
+  # always dump this now!
+  #if ($spec{"MODE"} =~ m/CORR/)
   {
     my $tracking_flag = 1;
     if ($spec{"OBSERVING_TYPE"} ne "TRACKING")
@@ -1489,7 +1492,9 @@ sub genSpecFile($\%)
   push @specs, Dada::headerFormat("DEC", $xml->{'source_parameters'}{'dec'});
 
   # observation parameters
-  push @specs, Dada::headerFormat("PROC_FILE", $xml->{'observation_parameters'}{'processing_file'});
+  push @specs, Dada::headerFormat("AQ_PROC_FILE", $xml->{'observation_parameters'}{'aq_processing_file'});
+  push @specs, Dada::headerFormat("BF_PROC_FILE", $xml->{'observation_parameters'}{'bf_processing_file'});
+  push @specs, Dada::headerFormat("BP_PROC_FILE", $xml->{'observation_parameters'}{'bp_processing_file'});
   push @specs, Dada::headerFormat("MODE", $xml->{'observation_parameters'}{'mode'});
   push @specs, Dada::headerFormat("CONFIG", $xml->{'observation_parameters'}{'config'});
   push @specs, Dada::headerFormat("OBSERVER", $xml->{'observation_parameters'}{'observer'});
@@ -1512,11 +1517,18 @@ sub genSpecFile($\%)
   push @specs, Dada::headerFormat("FILE_SIZE", $site_cfg{"FILE_SIZE"});
 
   # TODO remove the default for this an add it to the parent XML as mandatory
-  my $ut1_offset = -0.272;
+  my $ut1_offset = 0;
   if (eval { exists $xml->{'observation_parameters'}{'ut1_offset'} } ) 
   {
     $ut1_offset = $xml->{'observation_parameters'}{'ut1_offset'};
   }
+  else
+  {
+    my $ut1_cfg_file = $cfg{"CONFIG_DIR"}."/ut1_offset.cfg";
+    my %ut1_cfg =  Dada::readCFGFileIntoHash($ut1_cfg_file, 0);
+    $ut1_offset = $ut1_cfg{"OFFSET"};
+  }
+
   push @specs, Dada::headerFormat("UT1_OFFSET", $ut1_offset);
 
   # now add PWC specific command
@@ -1524,6 +1536,17 @@ sub genSpecFile($\%)
   for ($i=0; $i<$cfg{"NUM_PWC"}; $i++)
   {
     push @specs, Dada::headerFormat("Band".$i."_PFB_ID", $cfg{"PWC_PFB_ID_".$i});
+  }
+
+  # add the best module rankings to the spec
+  my ($result, $best_mods) = getBestModules();
+  if ($result ne "ok")
+  {
+    push @specs, Dada::headerFormat("RANKED_MODULES", "0,1,2,3,4,5,6,7");
+  }
+  else
+  {
+    push @specs, Dada::headerFormat("RANKED_MODULES", $best_mods);
   }
 
   # write the file
@@ -1574,28 +1597,64 @@ sub modsort
   return $mod_a cmp $mod_b;
 }
 
-
 #
-# Dumps the antenna mapping for this observation
+# Get the reference module and preferred modules for this configuration
 #
-sub dumpAntennaMapping($$)
+sub getBestModules()
 {
-  my ($obs, $tracking) = @_;
+  my $rm_file = $cfg{"CONFIG_DIR"}."/mopsr_ranked_modules.txt";
 
-  my $ct_file = $cfg{"CONFIG_DIR"}."/mopsr_cornerturn.cfg";
+  my ($result, $rm, $irm, $imod);
+  my @rms = ();
+  my @mods;
+  my $pm_count = 0;
+  my $pm_max = 8;
+  my $best_modules = "";
+
+  # read all the ranked modules in, 1 line to array element
+  open(FHR,"<".$rm_file) or return ("fail", "could not open ranked modules file for reading");
+  my @rms = <FHR>;
+  close (FHR);
+
+  # get the module ordering of the current modules
+  ($result, @mods) = getOrderedModules();
+
+  # find which ranked modules are current and record them
+  for ($irm=0; $irm<=$#rms; $irm++)
+  {
+    $rm = $rms[$irm];
+    chomp $rm;
+    for ($imod=0; $imod<=$#mods; $imod++)
+    {
+      if (($rm eq $mods[$imod]) && ($pm_count < $pm_max))
+      {
+        if ($best_modules eq "")
+        {
+          $best_modules = $imod;
+        }
+        else
+        {
+          $best_modules .= ",".$imod;
+        }
+        $pm_count++;
+      }
+    }
+  }
+  return ("ok", $best_modules);
+}
+
+
+#
+# return an ordered list of the modules for this configuration
+#
+sub getOrderedModules()
+{
   my $sp_file = $cfg{"CONFIG_DIR"}."/mopsr_signal_paths.txt";
   my $mo_file = $cfg{"CONFIG_DIR"}."/molonglo_modules.txt";
-  my $ba_file = $cfg{"CONFIG_DIR"}."/molonglo_bays.txt";
   my $pm_file = $cfg{"CONFIG_DIR"}."/preferred_modules.txt";
 
-  my $antenna_file = $cfg{"SERVER_RESULTS_DIR"}."/".$obs."/obs.antenna";
-  my $baselines_file = $cfg{"SERVER_RESULTS_DIR"}."/".$obs."/obs.baselines";
-  my $refant_file = $cfg{"SERVER_RESULTS_DIR"}."/".$obs."/obs.refant";
-
-  my %ct = Dada::readCFGFileIntoHash($ct_file, 0);
   my %sp = Dada::readCFGFileIntoHash($sp_file, 1);
   my %mo = Dada::readCFGFileIntoHash($mo_file, 1);
-  my %ba = Dada::readCFGFileIntoHash($ba_file, 1);
   my %aq_cfg = Mopsr::getConfig("aq");
 
   my @sp_keys_sorted = sort modsort keys %sp;
@@ -1607,7 +1666,7 @@ sub dumpAntennaMapping($$)
   my @mods = ();
   for ($i=0; $i<$aq_cfg{"NUM_PWC"}; $i++)
   {
-    logMsg(2, $dl, "dumpAntennaMapping: i=".$i);
+    logMsg(2, $dl, "getOrderedModules: i=".$i);
     # if this PWC is an active or passive
     if ($aq_cfg{"PWC_STATE_".$i} ne "inactive")
     {
@@ -1628,7 +1687,7 @@ sub dumpAntennaMapping($$)
         foreach $rx ( @sp_keys_sorted )
         {
           ($pfb, $pfb_input) = split(/ /, $sp{$rx});
-          logMsg(3, $dl, "dumpAntennaMapping: pfb=".$pfb." pfb_input=".$pfb_input);
+          logMsg(3, $dl, "getOrderedModules: pfb=".$pfb." pfb_input=".$pfb_input);
           if ($pfb eq $pfb_id) 
           {
             my $pfb_mod;
@@ -1643,7 +1702,7 @@ sub dumpAntennaMapping($$)
                 }
                 else
                 {
-            return ("fail", "failed to identify modules correctly");
+                  return ("fail", "failed to identify modules correctly");
                 }
               }
             }
@@ -1652,7 +1711,7 @@ sub dumpAntennaMapping($$)
       }
       else
       {
-        logMsg(3, $dl, "dumpAntennaMapping: pfb_id=".$pfb_id." ants=".$first_ant." -> ".$last_ant);
+        logMsg(3, $dl, "getOrderedModules: pfb_id=".$pfb_id." ants=".$first_ant." -> ".$last_ant);
 
         my @pfb_mods = split(/ +/, $aq_cfg{"PWC_ANTS"});
         $imod = $first_ant;
@@ -1660,7 +1719,7 @@ sub dumpAntennaMapping($$)
         foreach $rx ( @sp_keys_sorted )
         {
           ($pfb, $pfb_input) = split(/ /, $sp{$rx});
-          logMsg(3, $dl, "dumpAntennaMapping: pfb=".$pfb." pfb_input=".$pfb_input);
+          logMsg(3, $dl, "getOrderedModules: pfb=".$pfb." pfb_input=".$pfb_input);
           if ($pfb eq $pfb_id)
           {
             my $pfb_mod;
@@ -1675,7 +1734,8 @@ sub dumpAntennaMapping($$)
                 }
                 else
                 {
-                  return ("fail", "failed to identify modules correctly");
+                  logMsg(3, $dl, "dumpAntennaMapping: pfb=".$pfb." pfb_input=".$pfb_input);
+                  return ("fail", 0);
                 }
               }
             }
@@ -1684,32 +1744,68 @@ sub dumpAntennaMapping($$)
       }
     }
   }
+  return ("ok", @mods);
+}
+
+
+#
+# Dumps the antenna mapping for this observation
+#
+sub dumpAntennaMapping($$)
+{
+  my ($obs, $tracking) = @_;
+
+  my $mo_file = $cfg{"CONFIG_DIR"}."/molonglo_modules.txt";
+  my $ba_file = $cfg{"CONFIG_DIR"}."/molonglo_bays.txt";
+
+  my $antenna_file = $cfg{"SERVER_RESULTS_DIR"}."/".$obs."/obs.antenna";
+  my $baselines_file = $cfg{"SERVER_RESULTS_DIR"}."/".$obs."/obs.baselines";
+  my $refant_file = $cfg{"SERVER_RESULTS_DIR"}."/".$obs."/obs.refant";
+  my $priant_file = $cfg{"SERVER_RESULTS_DIR"}."/".$obs."/obs.priant";
+
+  my %mo = Dada::readCFGFileIntoHash($mo_file, 1);
+  my %ba = Dada::readCFGFileIntoHash($ba_file, 1);
+  my %aq_cfg = Mopsr::getConfig("aq");
+
+  my ($cmd, $result, $best_mods);
+  my @mods;
+
+  # get the ordered list of modules
+  ($result, @mods) = getOrderedModules();
+  if ($result ne "ok")
+  {
+    return ("fail", "could not get ordered list of modules");
+  }
+  my $i;
+
+  # get the list of top ranked modules that exist in the configuration
+  ($result, $best_mods) = getBestModules();
+  if ($result ne "ok")
+  {
+    return ("fail", "could not get list of best modules");
+  }
+  Dada::logMsg(0, $dl, "dumpAntennaMapping: best_mods=".$best_mods);
+
   open(FHA,">".$antenna_file) or return ("fail", "could not open antenna file for writing");
   open(FHB,">".$baselines_file) or return ("fail", "could not open baselines file for writing");
   open(FHC,">".$refant_file) or return ("fail", "could not open reference antenna file for writing");
+  open(FHD,">".$priant_file) or return ("fail", "could not open primary antenna file for writing");
 
   # ants should contain a listing of the antenna orderings
-  my ($mod_id, $dist, $delay, $scale, $jmod);
-  my $ref_mod = -1;
+  my ($mod_id, $bay_id, $dist, $delay, $scale, $imod, $jmod);
 
-  # determine the reference module/antenna
-  for ($imod=0; $imod<=$#mods; $imod++)
-  {
-    if ($ref_mod == -1)
-    {
-      if ($mods[$imod] =~ m/E01/)
-      {
-        print FHC $mods[$imod]."\n";
-        $ref_mod = $imod;
-      }
-    }
-  }
-  if ($ref_mod == -1)
-  {
-    print FHC $mods[0]."\n";
-    $ref_mod = 0;
-  }
+  my @best_list = split(/,/, $best_mods);
+
+  # write the best module name to file
+  print FHC $mods[$best_list[0]]."\n";
   close FHC;
+
+  # write the best module names to file
+  foreach $imod (@best_list)
+  {
+    print FHD $mods[$imod]."\n";
+  }
+  close FHD;
 
   for ($imod=0; $imod<=$#mods; $imod++)
   {

@@ -262,8 +262,9 @@ int main (int argc, char **argv)
     timestamp.tv_sec = utc_start;
     timestamp.tv_usec = (long) (ut1_offset * 1000000);
 
-    calc_app_position (source.raj, source.decj, timestamp,
-                      &(source.ra_curr), &(source.dec_curr));
+    struct tm * utc = gmtime (&utc_start);
+    cal_app_pos_iau (source.raj, source.decj, utc,
+                     &(source.ra_curr), &(source.dec_curr));
   }
 
   uint64_t start_byte, end_byte, mid_byte;
@@ -376,8 +377,8 @@ int main (int argc, char **argv)
       timestamp.tv_sec = utc_start + (long) floor(offset_seconds);
       timestamp.tv_usec = (long) (offset_seconds - floor(offset_seconds));
 
-      double jer_delay = calc_jer_delay2 (source.ra_curr, source.dec_curr, timestamp);
-      x_t[ifile] = (float) asin(calc_jer_delay2 (source.ra_curr, source.dec_curr, timestamp)) * (180 / M_PI);
+      double jer_delay = calc_jer_delay (source.ra_curr, source.dec_curr, timestamp);
+      x_t[ifile] = (float) asin(calc_jer_delay (source.ra_curr, source.dec_curr, timestamp)) * (180 / M_PI);
     }
     else
       x_t[ifile] = (float) mid_utc_offset;

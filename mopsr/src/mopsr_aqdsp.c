@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <time.h>
 #include <errno.h>
 #include <assert.h>
 #include <math.h>
@@ -45,6 +46,7 @@ void usage ()
     "  -a                coherrently add antenna, output order TF\n"
     "  -d <id>           use GPU device with id [default 0]\n"
     "  -g                do not apply geometric delays [default apply them]\n"
+    "  -i                ignore module scaling in config\n"
     "  -l utc            lock the geometric delay to the specific utc, no geometric correction\n"
     "  -n <taps>         number of FIR taps to use [default %d]\n"
     "  -p <id>           override the PFB_ID from the header (e.g. EG03)\n"
@@ -82,8 +84,17 @@ int main(int argc, char** argv)
   key_t out_key;
 
   ctx.d_delays = 0;
+
+#ifdef SKZAP
+  ctx.d_s1s = 0;
+  ctx.d_s2s = 0;
+#endif
   ctx.d_in = 0;
   ctx.d_out = 0;
+ #ifdef SKZAP
+  ctx.s1_count = 1;
+  ctx.s1_memory = MOPSR_MEMORY_BLOCKS;
+#endif
 
   // default values
   ctx.internal_error = 0;
@@ -93,13 +104,14 @@ int main(int argc, char** argv)
   ctx.correct_delays = 1;
   ctx.output_stf = 0;
   ctx.sum_ant = 0;
+  ctx.ignore_scales = 0;
   sprintf (ctx.pfb_id, "XXXX");
 
   ctx.lock_utc_flag = 0;
   ctx.obs_tracking = 0;
   ctx.geometric_delays = 1;
 
-  while ((arg = getopt(argc, argv, "ad:ghl:n:op:rstv")) != -1) 
+  while ((arg = getopt(argc, argv, "ad:gihl:n:op:rstv")) != -1) 
   {
     switch (arg)  
     {
@@ -113,6 +125,10 @@ int main(int argc, char** argv)
 
       case 'g':
         ctx.geometric_delays = 0;
+        break;
+      
+      case 'i':
+        ctx.ignore_scales = 1;
         break;
       
       case 'h':
@@ -400,6 +416,9 @@ int aqdsp_init ( mopsr_aqdsp_t* ctx, dada_hdu_t * in_hdu, dada_hdu_t * out_hdu, 
   }
 
   ctx->h_delays = ctx->d_delays = 0;
+#ifdef SKZAP
+  ctx->d_s1s = ctx->d_s2s = 0;
+#endif
   ctx->h_fringes = 0;
   ctx->h_ant_scales = 0;
   ctx->d_in = ctx->d_out = 0;
@@ -444,13 +463,13 @@ int aqdsp_alloc (mopsr_aqdsp_t * ctx)
 
   // use the PFB from header (or command line) to configure the modules we will be using
   unsigned ipfb;
-  unsigned pfb_id = -1;
+  ctx->pfb_idx = -1;
   for (ipfb=0; ipfb<MOPSR_MAX_PFBS; ipfb++)
   {
     if (strcmp(ctx->pfbs[ipfb].id, ctx->pfb_id) == 0)
-      pfb_id = ipfb; 
+      ctx->pfb_idx = ipfb; 
   }
-  if (pfb_id == -1)
+  if (ctx->pfb_idx == -1)
   {
     multilog (log, LOG_ERR, "alloc: failed to find pfb_id=%s in signal path configuration file\n",  ctx->pfb_id);
     return -1;
@@ -461,9 +480,9 @@ int aqdsp_alloc (mopsr_aqdsp_t * ctx)
 
   if (ctx->verbose > 1)
   {
-    multilog (log, LOG_INFO, "alloc: ctx->pfbs[%d].id=%s\n", pfb_id, ctx->pfbs[pfb_id].id);
+    multilog (log, LOG_INFO, "alloc: ctx->pfbs[%d].id=%s\n", ctx->pfb_idx, ctx->pfbs[ctx->pfb_idx].id);
     for (ipfb_mod=0; ipfb_mod < MOPSR_MAX_MODULES_PER_PFB; ipfb_mod++)
-      multilog (log, LOG_INFO, "alloc: ctx->pfbs[%d].modules[%d]=%s\n", pfb_id, ipfb_mod, ctx->pfbs[pfb_id].modules[ipfb_mod]);
+      multilog (log, LOG_INFO, "alloc: ctx->pfbs[%d].modules[%d]=%s\n", ctx->pfb_idx, ipfb_mod, ctx->pfbs[ctx->pfb_idx].modules[ipfb_mod]);
   }
 
   unsigned ants_found = 0;
@@ -471,7 +490,7 @@ int aqdsp_alloc (mopsr_aqdsp_t * ctx)
   {
     for (imod=0; imod<ctx->nmodules; imod++)
     {
-      if (strcmp(ctx->pfbs[pfb_id].modules[ctx->ant_ids[iant]], ctx->all_modules[imod].name) == 0)
+      if (strcmp(ctx->pfbs[ctx->pfb_idx].modules[ctx->ant_ids[iant]], ctx->all_modules[imod].name) == 0)
       {
         if (ctx->verbose)
           multilog (log, LOG_INFO, "alloc: ctx->modules[%d] == ctx->all_modules[%d] = %s\n", ctx->ant_ids[iant], imod, ctx->all_modules[imod].name);
@@ -479,6 +498,11 @@ int aqdsp_alloc (mopsr_aqdsp_t * ctx)
         ants_found++;
       }
     }
+
+    // if we are ignoring any scaling/down scaling. this would typically be used for correlation
+    // mode, but certainly NOT for beam forming/tiling
+    if (ctx->ignore_scales)
+      ctx->modules[iant].scale = 1.0;
   }
         
 /*
@@ -521,7 +545,7 @@ int aqdsp_alloc (mopsr_aqdsp_t * ctx)
   {
     for (iant=0; iant<ctx->nant; iant++)
     {
-      //multilog (log, LOG_INFO, "alloc: [%d] module.name=%s dist=%lf fixed_delay=%le scale=%lf bay_idx=%u\n", iant, ctx->modules[iant].name, ctx->modules[iant].dist, ctx->modules[iant].fixed_delay, ctx->modules[iant].scale, ctx->modules[iant].bay_idx);
+      multilog (log, LOG_INFO, "alloc: [%d] module.name=%s dist=%lf fixed_delay=%le scale=%lf bay_idx=%u\n", iant, ctx->modules[iant].name, ctx->modules[iant].dist, ctx->modules[iant].fixed_delay, ctx->modules[iant].scale, ctx->modules[iant].bay_idx);
     }
   }
 
@@ -627,8 +651,8 @@ int aqdsp_alloc (mopsr_aqdsp_t * ctx)
   }
 
   // initialise the RNGs
-  //unsigned long long seed = (unsigned long long) time(0);
-  //mopsr_init_rng (ctx->stream, seed, nrngs, ctx->d_rstates);
+  unsigned long long seed = (unsigned long long) time(0) * abs(ctx->pfb_idx) * 1000000;
+  mopsr_init_rng (ctx->stream, seed, nrngs, ctx->d_rstates);
 
   size_t d_sigmas_size = (size_t) (ctx->nchan * ctx->nant * sizeof(float));
   if (ctx->verbose)
@@ -642,6 +666,55 @@ int aqdsp_alloc (mopsr_aqdsp_t * ctx)
     return -1;
   }
   cudaMemsetAsync(ctx->d_sigmas, 0, d_sigmas_size, ctx->stream);
+
+  uint64_t nsamp = ctx->block_size / (ctx->nchan * ctx->nant * ctx->ndim);
+  size_t d_mask_size = (size_t) (ctx->nchan * ctx->nant * sizeof(uint8_t) * (nsamp/1024));
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "alloc: allocating %ld bytes of device memory for d_mask\n", d_mask_size);
+  error = cudaMalloc (&(ctx->d_mask), d_mask_size);
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "alloc: d_mask=%p\n", ctx->d_mask);
+  if (error != cudaSuccess)
+  {
+    multilog (log, LOG_ERR, "alloc: could not allocate %ld bytes of device memory\n", d_mask_size);
+    return -1;
+  }
+  cudaMemsetAsync(ctx->d_mask, 0, d_mask_size, ctx->stream);
+
+  ctx->s2s_size = sizeof(float) * ctx->nchan * ctx->nant * (nsamp / 1024);
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "alloc: allocating %ld bytes on GPU for s2s\n", ctx->s2s_size);
+  error = cudaMalloc( &(ctx->d_s2s), ctx->s2s_size);
+  if (error != cudaSuccess)
+  {
+    multilog (log, LOG_ERR, "alloc: could not allocate %ld bytes of device memory\n", ctx->s2s_size);
+    return -1;
+  }
+
+  ctx->s1_count = 1;
+  ctx->s1_memory = MOPSR_MEMORY_BLOCKS;
+  ctx->s1s_size = ctx->s2s_size * ctx->s1_memory;
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "alloc: allocating %ld bytes on GPU for s1s\n", ctx->s1s_size);
+  error = cudaMalloc( &(ctx->d_s1s), ctx->s1s_size);
+  if (error != cudaSuccess)
+  {
+    multilog (log, LOG_ERR, "alloc: could not allocate %ld bytes of device memory\n", ctx->s1s_size);
+    return -1;
+  }
+  cudaMemsetAsync (ctx->d_s1s, 0, ctx->s1s_size, ctx->stream);
+
+  size_t thresh_size = ctx->nchan * ctx->nant * sizeof(float) * 2;
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "alloc: allocating %ld bytes on GPU for thresh\n", thresh_size);
+  error = cudaMalloc( &(ctx->d_thresh), thresh_size);
+  if (error != cudaSuccess)
+  {
+    multilog (log, LOG_ERR, "alloc: could not allocate %ld bytes of device memory\n", thresh_size);
+    return -1;
+  }
+  cudaMemsetAsync (ctx->d_thresh, 0, thresh_size, ctx->stream);
+
 
 #endif
 
@@ -783,6 +856,22 @@ int aqdsp_dealloc (mopsr_aqdsp_t * ctx)
     cudaFree (ctx->d_delays);
   ctx->d_delays = 0;
 
+#ifdef SKZAP
+  if (ctx->d_s1s)
+    cudaFree (ctx->d_s1s);
+  ctx->d_s1s= 0;
+
+  if (ctx->d_s2s)
+    cudaFree (ctx->d_s2s);
+  ctx->d_s2s = 0;
+
+  if (ctx->d_thresh)
+    cudaFree (ctx->d_thresh);
+  ctx->d_thresh = 0;
+
+#endif
+
+
   if (ctx->h_fringes)
     cudaFreeHost(ctx->h_fringes);
   ctx->h_fringes = 0;
@@ -818,6 +907,10 @@ int aqdsp_dealloc (mopsr_aqdsp_t * ctx)
   if (ctx->d_sigmas)
     cudaFree (ctx->d_sigmas);
   ctx->d_sigmas = 0;
+
+  if (ctx->d_mask)
+    cudaFree (ctx->d_mask);
+  ctx->d_mask = 0;
 #endif
 
   if (ctx->d_out)
@@ -873,6 +966,7 @@ int aqdsp_open (dada_client_t* client)
   ctx->bytes_written = 0;
   ctx->curr_block = 0;
   ctx->first_time = 1;
+  ctx->last_update = 0;
 
   if (ctx->verbose)
     multilog (log, LOG_INFO, "open: extracting params from header\n");
@@ -1015,13 +1109,23 @@ int aqdsp_open (dada_client_t* client)
   // now calculate the apparent RA and DEC for the current timestamp
   struct timeval timestamp;
   timestamp.tv_sec = ctx->utc_start;
-  timestamp.tv_usec = (long) (ctx->ut1_offset * 1000000);
+  if (ctx->ut1_offset < 0)
+  {
+    timestamp.tv_sec -= 1;
+    timestamp.tv_usec = (long) ((1+ctx->ut1_offset) * 1000000);
+  }
+  else
+    timestamp.tv_usec = (long) (ctx->ut1_offset * 1000000);
 
-  calc_app_position (ctx->source.raj, ctx->source.decj, timestamp, 
-                    &(ctx->source.ra_curr), &(ctx->source.dec_curr));
+  struct tm * utc = gmtime (&(ctx->utc_start));
 
-  // multilog (log, LOG_INFO, "open: coords J2000=(%lf, %lf) CURR=(%lf, %lf)\n", 
-  //           ctx->source.raj, ctx->source.decj, ctx->source.ra_curr, ctx->source.dec_curr);
+  cal_app_pos_iau (ctx->source.raj, ctx->source.decj, utc, &(ctx->source.ra_curr), &(ctx->source.dec_curr));
+
+  //calc_app_position (ctx->source.raj, ctx->source.decj, timestamp, 
+  //                  &(ctx->source.ra_curr), &(ctx->source.dec_curr));
+
+  multilog (log, LOG_INFO, "open: coords J2000=(%lf, %lf) CURR=(%lf, %lf)\n", 
+            ctx->source.raj, ctx->source.decj, ctx->source.ra_curr, ctx->source.dec_curr);
 
   float bw;
   if (ascii_header_get (client->header, "BW", "%f", &bw) != 1)
@@ -1125,6 +1229,16 @@ int aqdsp_open (dada_client_t* client)
   }
   ctx->bytes_read += obs_offset;
 
+
+  int64_t old_file_size = -1;
+  int64_t new_file_size = -1;
+  if (ascii_header_get (header, "FILE_SIZE", "%"PRIi64, &old_file_size) == 1)
+  {
+    // we always lose 1 full block due to delays and the requirement of having
+    // complete blocks only
+    new_file_size = old_file_size - ctx->block_size;
+  }
+
   if (ctx->sum_ant)
   {
     int new_nant = 1;
@@ -1145,17 +1259,10 @@ int aqdsp_open (dada_client_t* client)
       return -1;
     }
 
-    uint64_t filesize;
-    if (ascii_header_get (header, "FILE_SIZE", "%"PRIu64, &filesize) == 1)
-    {
-      filesize /= ctx->nant;
-      if (ascii_header_set (header, "FILE_SIZE", "%"PRIu64, filesize) < 0)
-      {
-        multilog (log, LOG_ERR, "open: could not set FILE_SIZE=%"PRIu64" in outgoing header\n", filesize);
-        return -1;
-      }
-    }
+    new_file_size /= ctx->nant;
 
+    // TODO consider the ramificaitons of adding the 50 * 1.28 us delay induced by
+    // this delay engine...
     obs_offset /= ctx->nant;
     if (ascii_header_set (header, "OBS_OFFSET", "%"PRIu64, obs_offset) < 0)
     {
@@ -1163,6 +1270,16 @@ int aqdsp_open (dada_client_t* client)
       return -1;
     }
   }
+
+  if (new_file_size > 0)
+  {
+    if (ascii_header_set (header, "FILE_SIZE", "%"PRIi64, new_file_size) < 0)
+    {
+      multilog (log, LOG_ERR, "open: could not set FILE_SIZE=%"PRIu64" in outgoing header\n", new_file_size);
+      return -1;
+    }
+  }
+  multilog (log, LOG_INFO, "open: changing FILE_SIZE from %"PRIi64" to %"PRIi64"\n", old_file_size, new_file_size);
 
   if (ctx->verbose)
     multilog (log, LOG_INFO, "open: setting PHASE_CORRECTED=TRUE\n");
@@ -1285,8 +1402,9 @@ int64_t aqdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
   error = cudaMemcpyAsync (ctx->d_in, buffer, bytes, cudaMemcpyHostToDevice, ctx->stream);
   if (error != cudaSuccess)
   {
-    multilog (log, LOG_ERR, "cudaMemcpyAsyc H2D failed: %s (%p <- %p)\n", cudaGetErrorString(error),
+    multilog (log, LOG_ERR, "cudaMemcpyAsync H2D failed: %s (%p <- %p)\n", cudaGetErrorString(error),
               ctx->d_in, buffer);
+    ctx->internal_error = 1;
     return -1;
   }
 
@@ -1302,27 +1420,39 @@ int64_t aqdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
   char apply_geometric = ctx->geometric_delays;
 
   {
-    // middle byte of block
-    const double mid_byte = (double) ctx->bytes_read + (bytes / 2);
-
-    // determine the timestamp corresponding to the middle byte of this block
-    double obs_offset_seconds = mid_byte / (double) ctx->bytes_per_second;
-
-    // add UT1 offset to UTC
-    obs_offset_seconds += ctx->ut1_offset;
-
-    // conert to timestamp
     struct timeval timestamp;
-    timestamp.tv_sec = floor(obs_offset_seconds);
-    timestamp.tv_usec = (obs_offset_seconds - (double) timestamp.tv_sec) * 1000000;
-    timestamp.tv_sec += ctx->utc_start;
+    double ut1_time, obs_offset_seconds;
 
     if (ctx->lock_utc_flag)
     {
-      timestamp.tv_sec = ctx->lock_utc_time;
-      timestamp.tv_usec = 0;
+      obs_offset_seconds = (double) ctx->lock_utc_time - ctx->utc_start;
+      ut1_time = (double) ctx->lock_utc_time + (double) ctx->ut1_offset;
+    }
+    else
+    {
+      // middle byte of block
+      const double mid_byte = (double) ctx->bytes_read + (bytes / 2);
+      
+      // determine the timestamp corresponding to the middle byte of this block
+      obs_offset_seconds = mid_byte / (double) ctx->bytes_per_second;
+
+      // the time (seconds) that we wish to compute for
+      ut1_time = (double) ctx->utc_start + obs_offset_seconds + (double) ctx->ut1_offset;
     }
 
+    // we need to update the apparent RA and DEC every 5 minutes
+    if (ctx->last_update + 600 < obs_offset_seconds)
+    {
+      time_t now = ctx->utc_start + obs_offset_seconds;
+      struct tm * utc = gmtime (&now);
+      multilog (log, LOG_INFO, "io_block: updating apparent positions\n");
+      cal_app_pos_iau (ctx->source.raj, ctx->source.decj, utc, &(ctx->source.ra_curr), &(ctx->source.dec_curr));
+      ctx->last_update = obs_offset_seconds;
+    }
+
+    timestamp.tv_sec = (long) floor (ut1_time);
+    timestamp.tv_usec = (long) floor ((ut1_time - (double) timestamp.tv_sec) * 1e6);
+    
     // update the delays
     if (ctx->verbose > 1)
       multilog (log, LOG_INFO, "io_block: utc_start=%d + obs_offset=%lf timestamp=%ld.%ld\n",
@@ -1335,9 +1465,6 @@ int64_t aqdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
       multilog (log, LOG_ERR, "delay_block_gpu: failed to update delays\n");
       return -1;
     }
-
-    //fprintf (stderr, "io_block: obs_offset_seconds=%lf [3][10].samples=%u fractional=%7.6lf\n", obs_offset_seconds, 
-    //         ctx->delays[3][10].samples, ctx->delays[3][10].fractional);
 
     // layout the fractional delays in host memory
     for (ichan=0; ichan < ctx->nchan; ichan++)
@@ -1356,12 +1483,6 @@ int64_t aqdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
         ctx->h_fringes[ichan*ctx->nant + iant] = (float) ctx->delays[iant][ichan].fringe_coeff;
         ctx->h_delays_ds[ichan*ctx->nant + iant] = (float) ctx->delays[iant][ichan].fractional_ds;
         ctx->h_fringe_coeffs_ds[ichan*ctx->nant + iant] = (float) ctx->delays[iant][ichan].fringe_coeff_ds;
-#if 0
-        if ((ichan == 0) && (iant == 3))
-        {
-          fprintf(stderr, "toff=%lf iant=%u fringe=%f, (%f %fi)\n", obs_offset_seconds, iant, ctx->h_fringes[ichan*ctx->nant + iant], cosf(ctx->h_fringes[ichan*ctx->nant + iant]), sinf(ctx->h_fringes[ichan*ctx->nant + iant]));
-        }
-#endif
       }
     }
   }
@@ -1391,11 +1512,13 @@ int64_t aqdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
       if (ctx->verbose > 1)
         multilog (log, LOG_INFO, "io_block: mopsr_delay_fractional_sk_scale(%ld)\n", bytes_tapped);
         mopsr_delay_fractional_sk_scale (ctx->stream, d_sample_delayed, ctx->d_out, ctx->d_fbuf,
-                                ctx->d_rstates, ctx->d_sigmas,
-                                ctx->d_delays, ctx->h_fringes, ctx->h_delays_ds,
+                                ctx->d_rstates, ctx->d_sigmas, ctx->d_mask, 
+                                ctx->d_delays, ctx->d_s1s, ctx->d_s2s, ctx->d_thresh, 
+                                ctx->h_fringes, ctx->h_delays_ds,
                                 ctx->h_fringe_coeffs_ds, ctx->fringes_size,
                                 bytes_tapped, ctx->nchan,
-                                ctx->nant, ctx->ntaps);
+                                ctx->nant, ctx->ntaps, ctx->s1_memory, ctx->s1_count);
+      ctx->s1_count++;
 #else
       if (ctx->verbose > 1)
         multilog (log, LOG_INFO, "io_block: mopsr_delay_fractional(%ld)\n", bytes_tapped);
@@ -1426,7 +1549,8 @@ int64_t aqdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
     error = cudaMemcpyAsync (ctx->d_delays, ctx->h_delays, ctx->delays_size, cudaMemcpyHostToDevice, ctx->stream);
     if (error != cudaSuccess)
     {
-      multilog (log, LOG_ERR, "cudaMemcpyAsyc D2H failed: %s\n", cudaGetErrorString(error));
+      multilog (log, LOG_ERR, "cudaMemcpyAsync H2D [delays] failed: %s\n", cudaGetErrorString(error));
+      ctx->internal_error = 1;
       return -1;
     }
 

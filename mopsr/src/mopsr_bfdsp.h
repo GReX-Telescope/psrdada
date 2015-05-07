@@ -26,7 +26,8 @@ typedef struct {
   uint64_t time_msec;
 
   uint64_t in_block_size;
-  uint64_t ou_block_size;
+  uint64_t fb_block_size;
+  uint64_t tb_block_size;
 
   // GPU pointers
   cudaStream_t stream;
@@ -35,18 +36,25 @@ typedef struct {
   size_t d_buffer_size;
   void *  d_in;            // input data buffer on GPU
   void *  d_fbs;           // fan beam output on GPU
+  void *  d_tb;            // tied array beam output on GPU
 
   unsigned     nant;
   //float *      h_ant_factors;     // antenna distances
 
   int          nbeam;
+  float *      h_beam_offsets;
   //float *      h_sin_thetas;    // angle from boresite to beam
 
   // rephasors required for each FB
   size_t phasors_size;
   float * h_phasors;
   void * d_phasors;  
- 
+
+  // rephasors required for the TB
+  size_t tb_phasors_size;
+  complex float * h_tb_phasors;  
+  void          * d_tb_phasors;  
+
   unsigned tdec;           // time decimation factor
 
   // Tied array beams (TBs)
@@ -57,14 +65,17 @@ typedef struct {
 
   multilog_t * log;
 
-  dada_hdu_t * out_hdu;
+  dada_hdu_t * fb_hdu;
+  dada_hdu_t * tb_hdu;
 
-  char * curr_block;
+  char * fb_block;
+  char * tb_block;
 
   char first_time;
 
   // flag for currently open output HDU
-  char block_open;
+  char tb_block_open;
+  char fb_block_open;
 
   // number of bytes currently written to output HDU
   uint64_t bytes_written;
@@ -74,7 +85,7 @@ typedef struct {
 
   time_t utc_start;
   uint64_t bytes_read;
-  uint64_t bytes_per_second;
+  //uint64_t bytes_per_second;
 
   unsigned chan_offset;               // channel offset from original 128 channels
   float channel_bw;                   // width of critically sampled channel
@@ -102,8 +113,6 @@ typedef struct {
   
   mopsr_delay_t ** delays;
 
-  double tsamp;
-
   char internal_error;
 
   float ut1_offset;
@@ -114,7 +123,13 @@ typedef struct {
   char geometric_delays;
 
   unsigned ant_ids[16];               // PFB antenna identifiers
+  char zero_data;
+  char form_tied_block;
+  uint64_t bytes_per_second;          // for input
 
+  char check_tied_beam;               // flag for whether to check for PSRs
+  char tb_psr_active;                 // flag if we have a current PSR in the beam
+  mopsr_source_t  tb_source;          // current TB source
 
 } mopsr_bfdsp_t;
 
@@ -136,4 +151,5 @@ int64_t bfdsp_io (dada_client_t* client, void * buffer, uint64_t bytes);
 int64_t bfdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, uint64_t block_id);
 
 int64_t bfdsp_transfer (dada_client_t* client, void * buffer, size_t bytes, memory_mode_t mode);
+void bfdsp_update_tb (mopsr_bfdsp_t * ctx);
 

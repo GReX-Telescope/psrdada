@@ -57,6 +57,7 @@ void usage()
      " -a antenna      reference antenna to use for relative delays [default 0]\n"
      " -b baseline     plot specific baseline in great detail\n"
      " -c channel      coarse channel number [default 0]\n"
+     " -d altant       alternate ref antenna\n"
      " -D device       pgplot device name\n"
      " -p              plot SNR and Delay maps\n"
      " -r file         reject channels listed in file\n"
@@ -76,7 +77,8 @@ int main (int argc, char **argv)
   // reference antenna to use for solving delays
   int antenna = 0;
 
-  int alt_antenna = antenna + 5;
+  // alternate reference antenna
+  int alt_antenna = -1;
 
   // coarse channel being processed
   int channel = 0;
@@ -93,13 +95,12 @@ int main (int argc, char **argv)
   char * channel_reject_file = NULL;
   char channel_rejection = 0;
 
-  while ((arg=getopt(argc,argv,"a:b:c:D:hpr:t:v")) != -1)
+  while ((arg=getopt(argc,argv,"a:b:c:d:D:hpr:t:v")) != -1)
   {
     switch (arg)
     {
       case 'a':
         antenna = atoi(optarg);
-        alt_antenna = antenna + 5;
         break;
 
       case 'b':
@@ -108,6 +109,10 @@ int main (int argc, char **argv)
 
       case 'c':
         channel = atoi(optarg);
+        break;
+
+      case 'd':
+        alt_antenna = atoi(optarg);
         break;
 
       case 'D':
@@ -137,6 +142,9 @@ int main (int argc, char **argv)
         return 0;
     } 
   }
+
+  if (alt_antenna == -1)
+    alt_antenna = antenna + 5;
 
   // check and parse the command line arguments
   if (argc-optind != 3)
@@ -360,14 +368,19 @@ int main (int argc, char **argv)
         dead = 0;
     }
     //cc[npt/2] = 0;
+    if (baseline == ipair)
+      dead = 0;
 
     if (channel_rejection)
     {
       for (ipt=0; ipt<num_reject_channels; ipt++)
+      {
         cc[channel_reject[ipt]] = 0;
+      }
+
     }
 
-    if (verbose > 1)
+    if (verbose > 1 || baseline == ipair)
       fprintf (stderr, "antenna=%u pair %d [%u -> %u], dead=%d\n", antenna, ipair, ant_a, ant_b, dead);
 
     ramp_delay = 0;
@@ -669,6 +682,7 @@ int main (int argc, char **argv)
   int jant;
   float * rel_delays = (float *) malloc (sizeof(float) * nant);
   float * rel_phases = (float *) malloc (sizeof(float) * nant);
+  float * rel_snrs   = (float *) malloc (sizeof(float) * nant);
 
   float alt_delay = delays[alt_pair];
   float alt_phase = phase_offsets[alt_pair];
@@ -677,6 +691,7 @@ int main (int argc, char **argv)
   {
     rel_delays[iant] = 0;
     rel_phases[iant] = 0;
+    rel_snrs[iant]   = 0;
   }
 
   if (verbose)
@@ -687,6 +702,8 @@ int main (int argc, char **argv)
   {
     for (jant=iant+1; jant<nant; jant++)
     {
+      if (ipair == baseline)
+        fprintf (stderr, "snrs[%d]=%f iant=%d jant=%d\n", ipair, snrs[ipair], iant, jant);
       // need to have a half decent correlation to calculate a delay
       if (snrs[ipair] > 50)
       {
@@ -707,11 +724,13 @@ int main (int argc, char **argv)
               // now compute the differnce of the two round trip
               rel_delays[jant] = alt_delay - delays[jpair];
               rel_phases[jant] = alt_phase - phase_offsets[jpair];
+              rel_snrs[jant]   = snrs[jpair];
             }
             else
             {
               rel_delays[jant] = delays[ipair];
               rel_phases[jant] = phase_offsets[ipair];
+              rel_snrs[iant]   = snrs[ipair];
               if (verbose > 2 || baseline == ipair)
                 fprintf (stderr, "1: iant=%d jant=%d ipair=%d rel_delays[%d]=%f\n", iant, jant, ipair, jant, rel_delays[jant]);
             }
@@ -724,6 +743,7 @@ int main (int argc, char **argv)
           {
             rel_delays[iant] = delays[ipair] * -1;
             rel_phases[iant] = phase_offsets[ipair] * -1;
+            rel_snrs[iant]   = snrs[ipair];
             if (verbose > 2 || baseline == ipair)
               fprintf (stderr, "2: iant=%d jant=%d ipair=%d rel_delays[%d]=%f\n", iant, jant, ipair, iant, rel_delays[iant]);
           }
@@ -746,7 +766,7 @@ int main (int argc, char **argv)
   fprintf (fptr, "ref %s\n", antennas[antenna]);
   for (iant=0; iant<nant; iant++)
   {
-    fprintf (fptr, "%s %e %f\n", antennas[iant], (rel_delays[iant] * (tsamp / 1000000)), rel_phases[iant]);
+    fprintf (fptr, "%s %e %f %f\n", antennas[iant], (rel_delays[iant] * (tsamp / 1000000)), rel_phases[iant], snrs[iant]);
   }
   fclose (fptr);
 

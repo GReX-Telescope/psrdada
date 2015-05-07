@@ -604,7 +604,57 @@ sub processCorrObservation($$)
     my $band_tsamp = $tsamp / $nchan;
     my $band_nchan = $nchan * $coarse_nchan;
 
-    $cmd = "mopsr_solve_delays ".$band_nchan." cc.sum obs.antenna -t ".$band_tsamp." -p -a 0 -r /home/dada/phonecall";
+    # get the ranked antennas from file
+    open(FH,"<obs.priant") or return ("fail", "could not open obs.priant for reading");
+    my @pas = <FH>;
+    close (FH);
+  
+    my ($ant_a, $ant_a_idx, $ant_b, $ant_b_idx);
+
+    $ant_b = "";
+    $ant_a = $pas[0];
+    chomp $ant_a;
+    my $bay_a = substr($ant_a, 0, 3);
+    my $mod_a = substr($ant_a, 1, 2);
+
+    my $pa;
+    for ($i=1; $i<=$#pas; $i++)
+    { 
+      $pa = $pas[$i];
+      chomp $pa;
+
+      # check if in same bay and check that bay offset is > 2 at least
+      if (($ant_b eq "") && (substr($pa,0,3) ne $bay_a) && (abs(substr($pa,1,2) - $mod_a) > 2))
+      {
+        $ant_b = $pa;
+      }
+    }
+
+    # now find the antenna indexes for these modules
+    $cmd = "grep -n ".$ant_a." obs.antenna | awk -F: '{print \$1}'";
+    Dada::logMsg(2, $dl, "processCorrObservation: ".$cmd);
+    ($result, $ant_a_idx) = Dada::mySystem($cmd);
+    Dada::logMsg(3, $dl, "processCorrObservation: ".$result." ".$ant_a_idx);
+    if ($result ne "ok")
+    {
+      Dada::logMsgWarn($warn, "processCorrObservation: ".$cmd." failed: ".$response);
+      return ("fail", "failed to solve for delays");
+    }
+
+    $cmd = "grep -n ".$ant_b." obs.antenna | awk -F: '{print \$1}'";
+    Dada::logMsg(2, $dl, "processCorrObservation: ".$cmd);
+    ($result, $ant_b_idx) = Dada::mySystem($cmd);
+    Dada::logMsg(3, $dl, "processCorrObservation: ".$result." ".$ant_b_idx);
+    if ($result ne "ok")
+    {
+      Dada::logMsgWarn($warn, "processCorrObservation: ".$cmd." failed: ".$response);
+      return ("fail", "failed to solve for delays");
+    }
+    
+    $ant_a_idx -= 1;
+    $ant_b_idx -= 1;
+
+    $cmd = "mopsr_solve_delays ".$band_nchan." cc.sum obs.antenna -t ".$band_tsamp." -p -a ".$ant_a_idx." -d ".$ant_b_idx." -r /home/dada/phonecall";
     Dada::logMsg(2, $dl, "processCorrObservation: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     Dada::logMsg(3, $dl, "processCorrObservation: ".$result." ".$response);

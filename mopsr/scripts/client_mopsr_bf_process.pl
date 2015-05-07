@@ -36,6 +36,7 @@ our $dl : shared;
 our $quit_daemon : shared;
 our $daemon_name : shared;
 our %cfg : shared;
+our %ct : shared;
 our $localhost : shared;
 our $chan_id : shared;
 our $db_key : shared;
@@ -54,6 +55,7 @@ $dl = 1;
 $quit_daemon = 0;
 $daemon_name = Dada::daemonBaseName($0);
 %cfg = Mopsr::getConfig("bf");
+%ct = Mopsr::getCornerturnConfig("bp");   # read the BP cornerturn
 $chan_id = -1;
 $db_key = "dada";
 $localhost = Dada::getHostMachineName(); 
@@ -167,7 +169,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
       logMsg (0, "INFO", "UTC_START=".$header{"UTC_START"}." NCHAN=".$header{"NCHAN"}." NANT=".$header{"NANT"});
 
       # Add the dada header file to the proc_cmd
-      $proc_cmd_file = $cfg{"CONFIG_DIR"}."/".$header{"PROC_FILE"};
+      $proc_cmd_file = $cfg{"CONFIG_DIR"}."/".$header{"BF_PROC_FILE"};
 
       # tracking is the default
       $tracking = 1;
@@ -176,15 +178,15 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
         $tracking = 0;
       } 
 
-      logMsg(2, "INFO", "Full path to PROC_FILE: ".$proc_cmd_file);
+      logMsg(2, "INFO", "Full path to BF_PROC_FILE: ".$proc_cmd_file);
       if ( ! ( -f $proc_cmd_file ) ) 
       {
-        logMsg(0, "ERROR", "PROC_FILE did not exist: ".$proc_cmd_file);
+        logMsg(0, "ERROR", "BF_PROC_FILE did not exist: ".$proc_cmd_file);
         $proc_cmd = "dada_dbnull -z -s -k ".$db_key;
       }
       elsif ($cfg{"BF_STATE_".$chan_id} eq "active")
       {
-        logMsg(1, "INFO", "PROC_FILE=".$proc_cmd_file);
+        logMsg(1, "INFO", "BF_PROC_FILE=".$proc_cmd_file);
         my %proc_cmd_hash = Dada::readCFGFile($proc_cmd_file);
         $proc_cmd = $proc_cmd_hash{"PROC_CMD"};
         logMsg(1, "INFO", "PROC_CMD=".$proc_cmd);
@@ -195,11 +197,6 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
         $proc_cmd = "dada_dbnull -z -s -k ".$db_key;
         logMsg(1, "INFO", "PROC_CMD=".$proc_cmd);
       }
-
-      #if ($chan_id == 11)
-      #{
-      #  $proc_cmd = "dada_dbdisk -D /data/mopsr/scratch/CH11 -s -k ".$db_key;
-      #}
 
       # create a local directory for the output from this channel
       logMsg(0, "INFO", "createLocalDirs()");
@@ -221,6 +218,8 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
       # replace the SHM key with db_key
       $proc_cmd =~ s/<DADA_KEY>/$db_key/;
 
+      $proc_cmd =~ s/<IN_DADA_KEY>/$db_key/;
+
       # replace <DADA_RAW_DATA> tag with processing dir
       $proc_cmd =~ s/<DADA_DATA_PATH>/$proc_dir/;
 
@@ -232,6 +231,20 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
 
       # replace DADA_CH_ID with chan_dir
       $proc_cmd =~ s/<DADA_CH_ID>/$chan_dir/;
+
+      # replace MOPSR_BF_NBEAMS with cfg{NBEAM}
+      $proc_cmd =~ s/<MOPSR_BF_NBEAMS>/$ct{"NBEAM"}/;
+
+      my @best_mods = split(/,/,$header{"RANKED_MODULES"});
+      my $i = 0;
+      my $primary_ants = "";
+      for ($i=0; $i<=$#best_mods; $i++)
+      {
+        $primary_ants .= " -p ".$best_mods[$i];
+      }
+
+      # replace MOPSR_PRIMARY_ANTS with the top ranked 8 antennas for this configuration
+      $proc_cmd =~ s/<MOPSR_PRIMARY_ANTS>/$primary_ants/;
 
       # replace <DADA_INFO> tags with the matching input .info file
       if ($proc_cmd =~ m/<DADA_INFO>/)
@@ -394,7 +407,7 @@ sub dumpAntennaMapping($$$$)
   my @mods = ();
   for ($i=0; $i<$aq_cfg{"NUM_PWC"}; $i++)
   {
-    logMsg(2, $dl, "dumpAntennaMapping: i=".$i);
+    logMsg(1, $dl, "dumpAntennaMapping: i=".$i);
     # if this PWC is an active or passive
     if ($aq_cfg{"PWC_STATE_".$i} ne "inactive")
     {
@@ -407,7 +420,7 @@ sub dumpAntennaMapping($$$$)
       # now find the physics antennnas for this PFB
       $pfb_id  = $aq_cfg{"PWC_PFB_ID_".$i};
 
-      logMsg(3, $dl, "dumpAntennaMapping: pfb_id=".$pfb_id." ants=".$first_ant." -> ".$last_ant);
+      logMsg(1, $dl, "dumpAntennaMapping: pfb_id=".$pfb_id." ants=".$first_ant."->".$last_ant);
 
       $imod = $first_ant;
       %pfb_mods = ();
@@ -418,21 +431,22 @@ sub dumpAntennaMapping($$$$)
         if ($pfb eq $pfb_id)
         {
           $pfb_mods{$pfb_input} = $rx;
-          logMsg(3, $dl, "dumpAntennaMapping: pfb_mods{".$pfb_input."}=".$rx);
+          logMsg(1, $dl, "dumpAntennaMapping: pfb_mods{".$pfb_input."}=".$rx);
         }
       }
 
       foreach $pfb_input ( sort intsort keys %pfb_mods )
       {
+        logMsg(1, $dl, "dumpAntennaMapping: pfb_input=".$pfb_input." imod=".$imod." first_ant=".$first_ant." last_ant=".$last_ant);
         if (($imod >= $first_ant) && ($imod <= $last_ant))
         {
           $mods[$imod] = $pfb_mods{$pfb_input};
           $imod++;
         }
-        else
-        {
-          return ("fail", "failed to identify modules correctly");
-        }
+        #else
+        #{
+        #  return ("fail", "failed to identify modules correctly on pfb_input=".$pfb_input);
+        #}
       }
     }
   }

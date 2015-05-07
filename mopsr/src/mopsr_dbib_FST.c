@@ -58,7 +58,7 @@ int mopsr_dbib_open (dada_client_t* client)
 
   // the mopsr_dbib specific data
   assert (client != 0);
-  mopsr_ib_t* ctx = (mopsr_ib_t*) client->context;
+  mopsr_bf_ib_t* ctx = (mopsr_bf_ib_t*) client->context;
 
   // the ib communcation managers
   assert(ctx->ib_cms != 0);
@@ -95,7 +95,7 @@ int mopsr_dbib_open (dada_client_t* client)
 int mopsr_dbib_close (dada_client_t* client, uint64_t bytes_written)
 {
   // the mopsr_dbib specific data
-  mopsr_ib_t* ctx = (mopsr_ib_t*) client->context;
+  mopsr_bf_ib_t* ctx = (mopsr_bf_ib_t*) client->context;
 
   // status and error logging facility
   multilog_t* log = client->log;
@@ -154,7 +154,7 @@ int mopsr_dbib_close (dada_client_t* client, uint64_t bytes_written)
 /*! transfer data to ibdb used for sending header only */
 int64_t mopsr_dbib_send (dada_client_t* client, void * buffer, uint64_t bytes)
 {
-  mopsr_ib_t * ctx = (mopsr_ib_t *) client->context;
+  mopsr_bf_ib_t * ctx = (mopsr_bf_ib_t *) client->context;
 
   dada_ib_cm_t ** ib_cms = ctx->ib_cms;
 
@@ -203,6 +203,20 @@ int64_t mopsr_dbib_send (dada_client_t* client, void * buffer, uint64_t bytes)
   }
   if (ctx->verbose)
     multilog (log, LOG_INFO, "send: old NCHAN=%d\n", old_nchan);
+
+  unsigned int nant;
+  if (ascii_header_get (buffer, "NANT", "%d", &nant) != 1)
+  {
+    multilog (log, LOG_WARNING, "send: failed to read NANT from header\n");
+  }
+  unsigned iant;
+  char ant_id[16];
+  for (iant=0; iant<nant; iant++)
+  {
+    sprintf (ant_id, "ANT_ID_%u", iant);
+    if (ascii_header_del (buffer, ant_id) < 0)
+      multilog (log, LOG_WARNING, "send: failed to delete %s from header\n", ant_id);
+  }
 
   float old_freq, new_freq;
   if (ascii_header_get (buffer, "FREQ", "%f", &old_freq) != 1)
@@ -368,7 +382,7 @@ int64_t mopsr_dbib_send_block (dada_client_t* client, void * buffer,
                                uint64_t bytes, uint64_t block_id)
 {
   
-  mopsr_ib_t * ctx = (mopsr_ib_t*) client->context;
+  mopsr_bf_ib_t * ctx = (mopsr_bf_ib_t*) client->context;
 
   dada_ib_cm_t ** ib_cms = ctx->ib_cms;
 
@@ -434,7 +448,7 @@ int64_t mopsr_dbib_send_block (dada_client_t* client, void * buffer,
   {
     remote_buf_va[i] = (uintptr_t) ib_cms[i]->sync_from_val[0];
     remote_buf_rkey[i] = (uint32_t) ib_cms[i]->sync_from_val[1];
-    if (ctx->verbose > 1)
+    if (ctx->verbose)
       multilog (log, LOG_INFO, "send_block: [%d] local_block_id=%"PRIu64", remote_buf_va=%p, "
                 "remote_buf_rkey=%p\n", i, block_id, remote_buf_va[i], remote_buf_rkey[i]);
   }
@@ -527,7 +541,7 @@ int64_t mopsr_dbib_send_block (dada_client_t* client, void * buffer,
 /*
  * required initialization of IB device and associate verb structs
  */
-int mopsr_dbib_ib_init (mopsr_ib_t * ctx, dada_hdu_t * hdu, multilog_t * log)
+int mopsr_dbib_ib_init (mopsr_bf_ib_t * ctx, dada_hdu_t * hdu, multilog_t * log)
 {
   if (ctx->verbose)
     multilog (ctx->log, LOG_INFO, "mopsr_dbib_ib_init()\n");
@@ -587,7 +601,7 @@ int mopsr_dbib_ib_init (mopsr_ib_t * ctx, dada_hdu_t * hdu, multilog_t * log)
   return 0;
 }
 
-int mopsr_dbib_destroy (mopsr_ib_t * ctx) 
+int mopsr_dbib_destroy (mopsr_bf_ib_t * ctx) 
 {
   unsigned i=0;
   int rval = 0;
@@ -604,11 +618,11 @@ int mopsr_dbib_destroy (mopsr_ib_t * ctx)
   return rval;
 }
 
-int mopsr_dbib_open_connections (mopsr_ib_t * ctx, multilog_t * log)
+int mopsr_dbib_open_connections (mopsr_bf_ib_t * ctx, multilog_t * log)
 {
   dada_ib_cm_t ** ib_cms = ctx->ib_cms;
 
-  mopsr_conn_t * conns = ctx->conn_info;
+  mopsr_bf_conn_t * conns = ctx->conn_info;
 
   if (ctx->verbose > 1)
     multilog(ctx->log, LOG_INFO, "mopsr_dbib_open_connections()\n");
@@ -673,7 +687,7 @@ int mopsr_dbib_open_connections (mopsr_ib_t * ctx, multilog_t * log)
  */
 void * mopsr_dbib_init_thread (void * arg)
 {
-  mopsr_conn_t * conn = (mopsr_conn_t *) arg;
+  mopsr_bf_conn_t * conn = (mopsr_bf_conn_t *) arg;
 
   dada_ib_cm_t * ib_cm = conn->ib_cm;
 
@@ -771,7 +785,7 @@ void signal_handler(int signalValue)
 int main (int argc, char **argv)
 {
   /* DADA Data Block to Node configuration */
-  mopsr_ib_t ctx = MOPSR_IB_INIT;
+  mopsr_bf_ib_t ctx = MOPSR_IB_INIT;
 
   /* DADA Header plus Data Unit */
   dada_hdu_t* hdu = 0;

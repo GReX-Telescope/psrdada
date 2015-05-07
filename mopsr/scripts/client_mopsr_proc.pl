@@ -152,7 +152,6 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
   logMsg(2, "INFO", "main: receiving datablock key global=".$db_key);
 
   my $recv_db_key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"NUM_PWC"}, $cfg{"RECEIVING_DATA_BLOCK"});
-  my $send_db_key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"NUM_PWC"}, $cfg{"TRANSMIT_DATA_BLOCK"});
 
   my $curr_raw_header = "";
   my $prev_raw_header = "";
@@ -257,9 +256,9 @@ sub prepareObservation($$)
     logMsg(0, "ERROR", "Error: OBS_OFFSET was malformed or non existent");
     $header_ok = 0;
   }
-  if (length($h{"PROC_FILE"}) < 1)
+  if (length($h{"AQ_PROC_FILE"}) < 1)
   {
-    logMsg(0, "ERROR", "PROC_FILE was malformed or non existent");
+    logMsg(0, "ERROR", "AQ_PROC_FILE was malformed or non existent");
     $header_ok = 0;
   }
 
@@ -272,9 +271,9 @@ sub prepareObservation($$)
   else
   {
     # Add the dada header file to the proc_cmd
-    my $proc_cmd_file = $cfg{"CONFIG_DIR"}."/".$h{"PROC_FILE"};
+    my $proc_cmd_file = $cfg{"CONFIG_DIR"}."/".$h{"AQ_PROC_FILE"};
 
-    logMsg(2, "INFO", "Full path to PROC_FILE: ".$proc_cmd_file);
+    logMsg(2, "INFO", "Full path to AQ_PROC_FILE: ".$proc_cmd_file);
 
     my %proc_cmd_hash = Dada::readCFGFile($proc_cmd_file);
     $proc_cmd = $proc_cmd_hash{"PROC_CMD"};

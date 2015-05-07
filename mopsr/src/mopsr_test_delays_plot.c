@@ -19,10 +19,16 @@
 
 void usage ()
 {
-	fprintf(stdout, "mopsr_test_delays bays_file modules_file\n"
+	fprintf(stdout, "mopsr_test_delays_plot bays_file modules_file header_file\n"
+    " -b file     bays config file [default $DADA_ROOT/share/molonglo_bays.txt\n"
     " -c nchan    number of channels\n" 
+    " -i          disable instrumental delays\n"
+    " -g          disable geometric delays\n"
     " -h          print this help text\n" 
-    " -v          verbose output\n" 
+    " -m file     modules config file [default $DADA_ROOT/share/molonglo_modules.txt\n"
+    " -p imod     print delay and phase for imod for each timestep\n"
+    " -v          verbose output\n\n" 
+    "Plot the delay and phase as a function of time\n"
   );
 }
 
@@ -30,21 +36,61 @@ int main(int argc, char** argv)
 {
   int arg = 0;
 
-  int nchan = 128;
+  unsigned verbose = 0;
 
-  char verbose = 0;
+  char bays_file[512];
+  char modules_file[512];
+  bays_file[0] = '\0';
+  modules_file [0] = '\0';
 
-  while ((arg = getopt(argc, argv, "c:hv")) != -1) 
+  char apply_instrumental = 1;
+  char apply_geometric = 1;
+
+  int print_module = -1;
+
+  while ((arg = getopt(argc, argv, "b:ghim:p:v")) != -1) 
   {
     switch (arg)  
     {
-      case 'c':
-        nchan = atoi(optarg);
+      case 'b':
+        if (optarg)
+        {
+          strcpy (bays_file, optarg);
+          break;
+        }
+        else
+        {
+          fprintf (stderr, "-b requires argument\n");
+          return (EXIT_FAILURE);
+        }
+
+      case 'g':
+        apply_geometric = 0;
         break;
-      
+
       case 'h':
         usage ();
         return 0;
+
+      case 'i':
+        apply_instrumental = 0;
+        break;
+
+      case 'm':
+        if (optarg)
+        {
+          strcpy (modules_file, optarg);
+          break;
+        }
+        else
+        {
+          fprintf (stderr, "-b requires argument\n");
+          return (EXIT_FAILURE);
+        }
+
+      case 'p':
+        print_module = atoi(optarg);
+        break;
 
       case 'v':
         verbose ++;
@@ -54,6 +100,27 @@ int main(int argc, char** argv)
         usage ();
         return 0;
     }
+  }
+
+  char * share_dir = getenv("DADA_ROOT");
+  if (strlen(bays_file) == 0)
+  {
+    if (!share_dir)
+    {
+      fprintf (stderr, "ERROR: DADA_ROOT environment variable must be defined\n");
+      exit (EXIT_FAILURE);
+    }
+    sprintf (bays_file, "%s/share/molonglo_bays.txt", share_dir);
+  }
+
+  if (strlen(modules_file) == 0)
+  {
+    if (!share_dir)
+    {
+      fprintf (stderr, "ERROR: DADA_ROOT environment variable must be defined\n");
+      exit (EXIT_FAILURE);
+    }
+    sprintf (modules_file, "%s/share/molonglo_modules.txt", share_dir);
   }
 
   // check and parse the command line arguments
@@ -66,7 +133,6 @@ int main(int argc, char** argv)
 
   unsigned ichan, imod;
 
-  char * bays_file = strdup (argv[optind+1]);
   int nbay;
   mopsr_bay_t * all_bays = read_bays_file (bays_file, &nbay);
   if (!all_bays)
@@ -75,7 +141,7 @@ int main(int argc, char** argv)
     return EXIT_FAILURE;
   }
 
-  char * modules_file = strdup (argv[optind+1]);
+  // second argument is the molonglo modules file
   int nmod;
   mopsr_module_t * modules = read_modules_file (modules_file, &nmod);
   if (!modules)
@@ -84,52 +150,175 @@ int main(int argc, char** argv)
     return EXIT_FAILURE;
   }
 
-  // preconfigure a source
-  mopsr_source_t source;
-  char position[32];
-  sprintf (source.name, "3C273");
-  fprintf (stderr, "source=%s\n", source.name);
-  sprintf (position, "12:29:06.7");
-  mopsr_delays_hhmmss_to_rad (position, &(source.raj));
-  sprintf (position, "02:03:09.0");
-  mopsr_delays_ddmmss_to_rad (position, &(source.decj));
-  fprintf (stderr, "ra=%lf dec=%lf\n", source.raj, source.decj);
-
-  time_t utc_start = str2utctime ("2014-03-05-15:34:30");
-  if (utc_start == (time_t)-1)
+  // read the header describing the observation
+  char * header_file = strdup (argv[optind]);
+  size_t header_size = 4096;
+  char * header = (char *) malloc (header_size);
+  if (fileread (header_file, header, header_size) < 0)
   {
-    fprintf(stderr, "open: could not parse start time\n");
+    fprintf (stderr, "ERROR: could not read header from %s\n", header_file);
+    return EXIT_FAILURE;
+  }
+
+  // read source information from header
+  mopsr_source_t source;
+
+  if (ascii_header_get (header, "SOURCE", "%s", source.name) != 1)
+  {
+    fprintf (stderr, "ERROR:  could not read SOURCE from header\n");
     return -1;
   }
 
+  char position[32];
+  if (ascii_header_get (header, "RA", "%s", position) != 1)
+  {
+    fprintf (stderr, "ERROR:  could not read RA from header\n");
+    return -1;
+  }
+
+  if (verbose)
+    fprintf (stderr, " RA (HMS) = %s\n", position);
+  if (mopsr_delays_hhmmss_to_rad (position, &(source.raj)) < 0)
+  {
+    fprintf (stderr, "ERROR:  could not parse RA from %s\n", position);
+    return -1;
+  }
+  if (verbose)
+    fprintf (stderr, " RA (rad) = %lf\n", source.raj);
+
+  if (ascii_header_get (header, "DEC", "%s", position) != 1)
+  {
+    fprintf (stderr, "ERROR:  could not read RA from header\n");
+    return -1;
+  }
+  if (verbose)
+    fprintf (stderr, " DEC (DMS) = %s\n", position);
+  if (mopsr_delays_ddmmss_to_rad (position, &(source.decj)) < 0)
+  {
+    fprintf (stderr, "ERROR:  could not parse DEC from %s\n", position);
+    return -1;
+  }
+  if (verbose)
+    fprintf (stderr, " DEC (rad) = %lf\n", source.decj);
+
+  float ut1_offset;
+  if (ascii_header_get (header, "UT1_OFFSET", "%f", &ut1_offset) == 1)
+  {
+    fprintf (stderr, " UT1_OFFSET=%f\n", ut1_offset);
+  }
+
+  char tmp[32];
+  if (ascii_header_get (header, "UTC_START", "%s", tmp) == 1)
+  {
+    if (verbose)
+      fprintf (stderr, " UTC_START=%s\n", tmp);
+  }
+  else
+  {
+    fprintf (stderr, " UTC_START=UNKNOWN\n");
+  }
+  // convert UTC_START to a unix UTC
+  time_t utc_start = str2utctime (tmp);
+  if (utc_start == (time_t)-1)
+  {
+    fprintf (stderr, "ERROR:  could not parse start time from '%s'\n", tmp);
+    return -1;
+  }
+
+  // now calculate the apparent RA and DEC for the current timestamp
+  struct timeval timestamp;
+  timestamp.tv_sec = utc_start;
+  timestamp.tv_usec = (long) (ut1_offset * 1000000);
+
+  struct tm * utc = gmtime (&utc_start);
+  cal_app_pos_iau (source.raj, source.decj, utc,
+                   &(source.ra_curr), &(source.dec_curr));
+
+  // extract required metadata from header
+  int nchan;
+  if (ascii_header_get (header, "NCHAN", "%d", &nchan) != 1)
+  {
+    fprintf (stderr, "ERROR:  could not read NCHAN from header\n");
+    return -1;
+  }
+
+  double bw;
+  if (ascii_header_get (header, "BW", "%lf", &bw) != 1)
+  {
+    fprintf (stderr, "ERROR:  could not read BW from header\n");
+    return -1;
+  }
+
+  double freq;
+  if (ascii_header_get (header, "FREQ", "%lf", &freq) != 1)
+  {
+    fprintf (stderr, "ERROR:  could not read FREQ from header\n");
+    return -1;
+  }
+
+  int chan_offset;
+  if (ascii_header_get (header, "CHAN_OFFSET", "%d", &chan_offset) != 1)
+  {
+    fprintf (stderr, "ERROR:  could not read CHAN_OFFSET from header\n");
+    return -1;
+  }
+
+  double tsamp;
+  if (ascii_header_get (header, "TSAMP", "%lf", &tsamp) != 1)
+  {
+    fprintf (stderr, "ERROR:  could not read TSAMP from header\n");
+    return -1;
+  }
+
+  double chan_bw = bw / nchan;
   mopsr_chan_t * channels = (mopsr_chan_t *) malloc(sizeof(mopsr_chan_t) * nchan);
   for (ichan=0; ichan<nchan; ichan++)
   {
     channels[ichan].number = ichan;
-    channels[ichan].bw     = 0.78125;
-    channels[ichan].cfreq  = (800 + (0.78125/2) + (ichan * 0.78125));
+    channels[ichan].bw     = chan_bw;
+    channels[ichan].cfreq  = (800 + (chan_bw/2) + ((chan_offset + ichan) * chan_bw));
+    if (verbose > 1)
+    {
+      fprintf (stderr, "chan[%d] bw=%lf cfreq=%lf\n", ichan, channels[ichan].bw, channels[ichan].cfreq);
+    }
   }
-
-  struct timeval timestamp;
 
   mopsr_delay_t ** delays = (mopsr_delay_t **) malloc(sizeof(mopsr_delay_t *) * nmod);
   for (imod=0; imod<nmod; imod++)
     delays[imod] = (mopsr_delay_t *) malloc (sizeof(mopsr_delay_t) * nchan);
 
+  char is_tracking = 1;
+  if (ascii_header_get (header, "OBSERVING_TYPE", "%s", tmp) == 1)
+  {
+    if (verbose)
+      fprintf (stderr, "OBSERVING_TYPE=%s\n", tmp);
+  }
+  else
+  {
+    fprintf (stderr, "OBSERVING_TYPE not specified in header, assuming TRACKING\n");
+  }
+  if (strcmp(tmp, "TRANSITING") == 0)
+  {
+    is_tracking = 0;
+  }
+
   cpgopen ("/xs");
   cpgask (0);
 
   // advance time by 1 millisecond each plot
-  const double delta_time = 2;
+  const double delta_time = 10;
   double obs_offset_seconds = 0;
+  unsigned nant = 352;
+  double jer_delay, md_angle;
 
-  char apply_instrumental = 0;
-  char apply_geometric = 1;
-  char is_tracking = 0;
-  double tsamp = 1.28;
-  unsigned nant = 1;
+  fprintf (stderr, "TRACKING=%d APPLY_GEOMETRIC=%d APPLY_INSTRUMENTAL=%d\n", is_tracking,
+           apply_geometric, apply_instrumental);
 
-  while ( 1 )
+  if (verbose && print_module >= 0)
+    fprintf (stderr, "imod=%d module=%s\n", print_module, modules[print_module].name);
+
+  int more = 1;
+  while ( more )
   {
     struct timeval timestamp;
     timestamp.tv_sec = floor(obs_offset_seconds);
@@ -144,11 +333,22 @@ int main(int argc, char** argv)
       return -1;
     }
 
+    jer_delay = calc_jer_delay (source.ra_curr, source.dec_curr, timestamp);
+    md_angle = asin(jer_delay);
+
     timestamp.tv_sec -= utc_start;
     mopsr_delays_plot (nmod, nchan, delays, timestamp);
 
+    if (print_module>= 0)
+      fprintf (stderr, "%lf\t%20.10le\t%lf\n", md_angle, 
+                                          delays[print_module][nchan/2].tot_secs, 
+                                          delays[print_module][nchan/2].fringe_coeff);
+
     obs_offset_seconds += delta_time;
-    usleep (100000);
+
+    if (timestamp.tv_sec >= 1200)
+      more = 0;
+    //usleep (100000);
   }
 
   cpgclos();

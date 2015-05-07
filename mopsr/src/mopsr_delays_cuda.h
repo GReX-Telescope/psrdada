@@ -20,6 +20,8 @@ extern "C" {
 # define HAVE_CUDA_SHUFFLE 0
 #endif
 
+#define MOPSR_MEMORY_BLOCKS 4
+
 typedef struct {
 
   // buffer on GPU where samples reside
@@ -85,16 +87,25 @@ void mopsr_init_rng (cudaStream_t stream, unsigned long long seed, unsigned nrng
 
 void mopsr_delay_fractional_sk_scale (cudaStream_t stream,
                              void * d_in, void * d_out, void * d_fbuf, void * d_rstates, 
-                             void * d_sigmas, float * d_delays, float * h_fringes,
-                             float * h_delays_ds, float * h_fringe_coeffs_ds,
-                             size_t fringes_size,
+                             void * d_sigmas, void * d_mask, float * d_delays, void * d_s1s,
+                             void * d_s2s, void * d_thresh, float * h_fringes, float * h_delays_ds, 
+                             float * h_fringe_coeffs_ds, size_t fringes_size,
                              uint64_t nbytes, unsigned nchan,
-                             unsigned nant, unsigned ntap);
+                             unsigned nant, unsigned ntap,
+                             unsigned s1_memory, uint64_t s1_count);
 
 void mopsr_fringe_rotate (cudaStream_t stream, void * d_in, float * h_fringes, size_t fringes_size,
                           uint64_t nbytes, unsigned nchan, unsigned nant);
 
 size_t mopsr_curandState_size ();
+
+void mopsr_test_skcompute (cudaStream_t stream, void * d_in, void * d_s1s_out, void * d_s2s_out, unsigned nchan, unsigned nant, unsigned nbytes);
+void mopsr_test_compute_power_limits (cudaStream_t stream, void * d_s1s, void * d_thresh,
+                              unsigned nsums, unsigned nant, unsigned nchan, uint64_t ndat,
+                              uint64_t s1_count, unsigned s1_memory);
+
+void mopsr_test_skdetect (cudaStream_t stream, void * d_s1s, void * d_s2s, void * d_thesh, void * d_mask, void * d_sigmas, unsigned nsums, unsigned nant, unsigned nchan, uint64_t ndat);
+void mopsr_test_skmask (cudaStream_t stream, void * d_in, void * d_out, void * d_mask, void * d_rstates, void * d_sigmas, unsigned nsums, unsigned nchan, unsigned nant, uint64_t ndat);
 
 #ifdef __cplusplus
 }

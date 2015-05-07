@@ -4,7 +4,7 @@
 # Simple MOPSR processing script
 #
 #   Runs the antenna splitter on dada datablock
-#   Runs the PROC_FILE on each of the output data blocks
+#   Runs the AQ_PROC_FILE on each of the output data blocks
 # 
 # Author:   Andrew Jameson
 # 
@@ -276,8 +276,8 @@ if (($cfg{"PWC_STATE_".$pwc_id} ne "active") && ($cfg{"PWC_STATE_".$pwc_id} ne "
       }
 
       @proc_db_keys = ();
-      if (($header{"PROC_FILE"} eq "mopsr.dbib") || 
-          ($header{"PROC_FILE"} eq "mopsr.dbdisk"))
+      if (($header{"AQ_PROC_FILE"} eq "mopsr.dbib") || 
+          ($header{"AQ_PROC_FILE"} eq "mopsr.dbdisk"))
       {
         $split_dbs = 0;
         push @proc_db_keys, $recv_db_key;
@@ -286,7 +286,7 @@ if (($cfg{"PWC_STATE_".$pwc_id} ne "active") && ($cfg{"PWC_STATE_".$pwc_id} ne "
       {
         if ($override)
         {
-          $header{"PROC_FILE"} = "mopsr.dbib";
+          $header{"AQ_PROC_FILE"} = "mopsr.dbib";
           $split_dbs = 0;
           push @proc_db_keys, $recv_db_key;
         }
@@ -511,7 +511,7 @@ sub processAntennaThread($$)
 
   if ($override)
   {
-    $h{"PROC_FILE"} = "mopsr.dbib";
+    $h{"AQ_PROC_FILE"} = "mopsr.dbib";
   }
 
   # create the local directory for this observation / antenna
@@ -549,9 +549,9 @@ sub processAntennaThread($$)
     logMsg(0, "ERROR", "Error: OBS_OFFSET was malformed or non existent");
     $header_ok = 0;
   }
-  if (length($h{"PROC_FILE"}) < 1)
+  if (length($h{"AQ_PROC_FILE"}) < 1)
 	{
-    logMsg(0, "ERROR", "PROC_FILE was malformed or non existent");
+    logMsg(0, "ERROR", "AQ_PROC_FILE was malformed or non existent");
     $header_ok = 0;
   }
 
@@ -575,9 +575,9 @@ sub processAntennaThread($$)
     $processing_dir = $obs_dir."/".$h{"ANT_ID"};
 
     # Add the dada header file to the proc_cmd
-    my $proc_cmd_file = $cfg{"CONFIG_DIR"}."/".$h{"PROC_FILE"};
+    my $proc_cmd_file = $cfg{"CONFIG_DIR"}."/".$h{"AQ_PROC_FILE"};
 
-    logMsg(2, "INFO", "Full path to PROC_FILE: ".$proc_cmd_file);
+    logMsg(2, "INFO", "Full path to AQ_PROC_FILE: ".$proc_cmd_file);
 
     my %proc_cmd_hash = Dada::readCFGFile($proc_cmd_file);
     $proc_cmd = $proc_cmd_hash{"PROC_CMD"};

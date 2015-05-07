@@ -30,6 +30,7 @@ int64_t dbsplitdb_write_block_FST_to_FT (dada_client_t *, void *, uint64_t, uint
 int64_t dbsplitdb_write_block_TS_to_T (dada_client_t *, void *, uint64_t, uint64_t);
 int64_t dbsplitdb_write_block_FST_to_TF (dada_client_t *, void *, uint64_t, uint64_t);
 int64_t dbsplitdb_write_block_STF_to_TF (dada_client_t *, void *, uint64_t, uint64_t);
+int64_t dbsplitdb_write_block_SFT_to_TF (dada_client_t *, void *, uint64_t, uint64_t);
 
 void usage()
 {
@@ -163,10 +164,16 @@ int dbsplitdb_open (dada_client_t* client)
     ctx->nbeam = 1;
   }
 
-  if ((ctx->nant != ctx->n_outputs) && (ctx->nbeam != ctx->n_outputs))
+  if (ascii_header_get (client->header, "NCHAN", "%u", &(ctx->nchan)) != 1)
+  {           
+    multilog (log, LOG_ERR, "open: header with no NCHAN\n");
+    return -1;                
+  }
+
+  if ((ctx->nant != ctx->n_outputs) && (ctx->nbeam != ctx->n_outputs) && (ctx->nchan != ctx->n_outputs))
   {
-    multilog (log, LOG_ERR, "open: header specified NANT=%u, NBEAM=%u, but only %d data blocks configured\n",
-              ctx->nant, ctx->nbeam, ctx->n_outputs);
+    multilog (log, LOG_ERR, "open: header specified NANT=%u, NBEAM=%u, NCHAM=%u but only %d data blocks configured\n",
+              ctx->nant, ctx->nbeam, ctx->nchan, ctx->n_outputs);
     return -1;
   }
 
@@ -181,12 +188,6 @@ int dbsplitdb_open (dada_client_t* client)
     multilog (log, LOG_ERR, "open: header with no NDIM\n");
     return -1;                
   }                             
-
-  if (ascii_header_get (client->header, "NCHAN", "%u", &(ctx->nchan)) != 1)
-  {           
-    multilog (log, LOG_ERR, "open: header with no NCHAN\n");
-    return -1;                
-  }
 
   if (ascii_header_get (client->header, "ORDER", "%s", &(ctx->order)) != 1)
   {
@@ -213,12 +214,26 @@ int dbsplitdb_open (dada_client_t* client)
       multilog (log, LOG_INFO, "open: changing order from ST to T\n");
       client->io_block_function = dbsplitdb_write_block_STF_to_TF;
     }
+    if ((strcmp(ctx->order, "SFT") == 0) && client->io_block_function)
+    {
+      sprintf (output_order, "%s", "TF");
+      multilog (log, LOG_INFO, "open: changing order from SFT to TF\n");
+      client->io_block_function = dbsplitdb_write_block_SFT_to_TF;
+    }
     if ((strcmp(ctx->order, "TS") == 0) && client->io_block_function)
     {
       sprintf (output_order, "%s", "T");
       multilog (log, LOG_INFO, "open: changing order from TS to T\n");
       client->io_block_function = dbsplitdb_write_block_TS_to_T;
     }
+    if ((strcmp(ctx->order, "TF") == 0) && client->io_block_function)
+    {
+      sprintf (output_order, "%s", "T");
+      multilog (log, LOG_INFO, "open: changing order from TF to T\n");
+      client->io_block_function = dbsplitdb_write_block_TS_to_T;
+      // yes it is precisely the same operations!
+    }
+
   }
 
   char tmp[32];
@@ -307,6 +322,7 @@ int dbsplitdb_open (dada_client_t* client)
         return -1;
       }
 
+      /*
       sprintf (tmp, "ANT_ID_%d", i);
       if (ascii_header_get (client->header, tmp, "%u", &ant_id) != 1)
       {
@@ -319,6 +335,7 @@ int dbsplitdb_open (dada_client_t* client)
         multilog (log, LOG_ERR, "open: failed to write ANT_ID=%u to header\n", ant_id);
         return -1;
       }
+      */
       if (ascii_header_set (header, "ORDER", "%s", "TF") < 0)
       {
         multilog (log, LOG_ERR, "open: failed to write ORDER=TF to header\n");
@@ -336,9 +353,9 @@ int dbsplitdb_open (dada_client_t* client)
         return -1;
       }
 
-      if (ascii_header_set (header, "ORDER", "%s", "T") < 0)
+      if (ascii_header_set (header, "ORDER", "%s", output_order) < 0)
       {
-        multilog (log, LOG_ERR, "open: failed to write ORDER=T to header\n");
+        multilog (log, LOG_ERR, "open: failed to write ORDER=%s to header\n", output_order);
         return -1;
       }
     }
@@ -907,6 +924,133 @@ int64_t dbsplitdb_write_block_STF_to_TF (dada_client_t* client, void* in_data, u
 
 }
 
+int64_t dbsplitdb_write_block_SFT_to_TF (dada_client_t* client, void* in_data, uint64_t in_data_size, uint64_t block_id)
+{
+  mopsr_dbsplitdb_t* ctx = (mopsr_dbsplitdb_t*) client->context;
+
+  multilog_t * log = client->log;
+
+  mopsr_dbsplitdb_hdu_t * o = 0;
+
+  if (ctx->verbose > 1)
+    multilog (log, LOG_INFO, "write_block_SFT_to_TF: data_size=%"PRIu64", block_id=%"PRIu64"\n",
+              in_data_size, block_id);
+
+  const uint64_t out_data_size = in_data_size / ctx->n_outputs;
+
+  const uint64_t nsamp = out_data_size / (ctx->ndim * (ctx->nbit/8) * ctx->nchan);
+
+  if (ctx->verbose > 1)
+    multilog (log, LOG_INFO, "write_block_SFT_to_TF: in_data_size=%"PRIu64", "
+              "out_data_size=%"PRIu64" nsamp=%"PRIu64"\n", in_data_size, out_data_size, nsamp);
+
+  void * in = in_data;
+  void * out;
+  
+  uint64_t out_block_id;
+  unsigned iant;
+
+  for (iant=0; iant<ctx->n_outputs; iant++)
+  {
+    o = &(ctx->outputs[iant]);
+
+    if (!o->block_open)
+    {
+      if (ctx->verbose > 1)
+        multilog (log, LOG_INFO, "write_block_SFT_to_TF [%x] ipcio_open_block_write()\n", o->key);
+      o->curr_block = ipcio_open_block_write(o->hdu->data_block, &out_block_id);
+      if (!o->curr_block)
+      {
+        multilog (log, LOG_ERR, "write_block_SFT_to_TF [%x] ipcio_open_block_write failed %s\n", o->key, strerror(errno));
+        return -1;
+      }
+      o->block_open = 1;
+      o->bytes_written = 0;
+      out = o->curr_block;
+    }
+    else
+      out = o->curr_block + o->bytes_written;
+
+    if ((ctx->nbit == 32) && (ctx->ndim == 1))
+    {  
+      unsigned ichan;
+      uint64_t isamp;
+      float * out_p = (float *) out;
+      float * in_p = (float *) in;
+      for (ichan=0; ichan<ctx->nchan; ichan++)
+      {
+        for (isamp=0; isamp<nsamp; isamp++)
+        {
+          out_p[(isamp * ctx->nchan) + ichan] = in_p[(ichan * nsamp) + isamp]; 
+        }
+      }
+    }
+    else
+    {
+      multilog (log, LOG_ERR, "write_block_SFT_to_TF no support for NBIT != 32\n");
+      return -1;
+    }
+
+    in += out_data_size;
+
+    o->bytes_written += out_data_size;
+
+    if (o->bytes_written > o->block_size)
+      multilog (log, LOG_ERR, "write_block_SFT_to_TF [%x] output block overrun by "
+                "%"PRIu64" bytes\n", o->key, o->bytes_written - o->block_size);
+
+    if (ctx->verbose > 1)
+      multilog (log, LOG_INFO, "write_block_SFT_to_TF [%x] bytes_written=%"PRIu64", "
+                "block_size=%"PRIu64"\n", o->key, o->bytes_written, o->block_size);
+
+    // check if the output block is now full
+    if (o->bytes_written >= o->block_size)
+    {
+      if (ctx->verbose > 1)
+        multilog (log, LOG_INFO, "write_block_SFT_to_TF [%x] block now full bytes_written=%"PRIu64", block_size=%"PRIu64"\n", o->key, o->bytes_written, o->block_size);
+
+      // check if this is the end of data
+      if (client->transfer_bytes && ((ctx->bytes_in + in_data_size) == client->transfer_bytes))
+      {
+        if (ctx->verbose)
+          multilog (log, LOG_INFO, "write_block_SFT_to_TF [%x] update_block_write written=%"PRIu64"\n", o->key, o->bytes_written);
+        if (ipcio_update_block_write (o->hdu->data_block, o->bytes_written) < 0)
+        {
+          multilog (log, LOG_ERR, "write_block_SFT_to_TF [%x] ipcio_update_block_write failed\n", o->key);
+          return -1;
+        }
+      }
+      else
+      {
+        if (ctx->verbose > 1)
+          multilog (log, LOG_INFO, "write_block_SFT_to_TF [%x] close_block_write written=%"PRIu64"\n", o->key, o->bytes_written);
+        if (ipcio_close_block_write (o->hdu->data_block, o->bytes_written) < 0)
+        {
+          multilog (log, LOG_ERR, "write_block_SFT_to_TF [%x] ipcio_close_block_write failed\n", o->key);
+          return -1;
+        }
+      }
+      o->block_open = 0;
+      o->bytes_written = 0;
+    }
+    else
+    {
+      if (o->bytes_written == 0)
+        o->bytes_written = 1;
+    }
+  }
+
+  ctx->bytes_in += in_data_size;
+  ctx->bytes_out += out_data_size;
+
+  if (ctx->verbose > 1)
+    multilog (log, LOG_INFO, "write_block_SFT_to_TF read %"PRIu64", wrote %"PRIu64" bytes\n", in_data_size, out_data_size);
+
+  return in_data_size;
+}
+
+
+
 int64_t dbsplitdb_write_block_FST_to_FT (dada_client_t* client, void* in_data, uint64_t in_data_size, uint64_t block_id)
 {
   mopsr_dbsplitdb_t* ctx = (mopsr_dbsplitdb_t*) client->context;
@@ -1031,11 +1175,11 @@ int64_t dbsplitdb_write_block_TS_to_T (dada_client_t* client, void* in_data, uin
   int32_t * in;
   int32_t * out;
 
-  unsigned iant, isamp;
+  unsigned iout, isamp;
 
-  for (iant=0; iant<ctx->n_outputs; iant++)
+  for (iout=0; iout<ctx->n_outputs; iout++)
   {
-    o = &(ctx->outputs[iant]);
+    o = &(ctx->outputs[iout]);
 
     if (!o->block_open)
     {
@@ -1053,7 +1197,7 @@ int64_t dbsplitdb_write_block_TS_to_T (dada_client_t* client, void* in_data, uin
     else
       out = (int32_t *) (o->curr_block + o->bytes_written);
 
-    in = ((int32_t *) in_data) + iant;
+    in = ((int32_t *) in_data) + iout;
 
     for (isamp=0; isamp<nsamp; isamp++)
       out[isamp] = in[isamp*ctx->n_outputs];
@@ -1106,8 +1250,6 @@ int64_t dbsplitdb_write_block_TS_to_T (dada_client_t* client, void* in_data, uin
 
   return in_data_size;
 }
-
-
 
 
 int main (int argc, char **argv)
@@ -1251,7 +1393,7 @@ int main (int argc, char **argv)
   uint64_t block_size = ipcbuf_get_bufsz ( (ipcbuf_t *) hdu->data_block);
 
   if (verbose)
-    multilog (log, LOG_INFO, "main: n_outputs=%u\b", dbsplitdb.n_outputs);
+    multilog (log, LOG_INFO, "main: n_outputs=%u\n", dbsplitdb.n_outputs);
 
   // setup output data blocks
   for (i=0; i<dbsplitdb.n_outputs; i++)

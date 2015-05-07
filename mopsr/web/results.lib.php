@@ -6,7 +6,7 @@ include_once("mopsr_webpage.lib.php");
 class results extends mopsr_webpage 
 {
 
-  var $filter_types = array("", "SOURCE", "FREQ", "BW", "PID", "UTC_START", "PROC_FILE");
+  var $filter_types = array("", "SOURCE", "FREQ", "BW", "UTC_START", "PROC_FILE");
   var $cfg = array();
   var $length;
   var $offset;
@@ -424,8 +424,7 @@ class results extends mopsr_webpage
         <th align=left>FREQ</th>
         <th align=left>BW</th>
         <th align=left>LENGTH</th>
-        <th align=left>PID</th>
-        <th align=left>PROC_FILE</th>
+        <th align=left>PROC_FILEs</th>
         <th class="trunc">Annotation</th>
       </tr>
 <?
@@ -476,11 +475,19 @@ class results extends mopsr_webpage
           // INTERGRATION LENGTH
           echo "    <td ".$bg_style."><span id='INT_".$i."'>".$r["INT"]."</span></td>\n";
 
-          // PID
-          echo "    <td ".$bg_style."><span id='PID_".$i."'>".$r["PID"]."</span></td>\n";
-
-          // PROC_FILE
-          echo "    <td ".$bg_style."><span id='PROC_FILE_".$i."'>".$r["PROC_FILE"]."</span></td>\n";
+          // PROC_FILEs
+          if (array_key_exists("AQ_PROC_FILE", $r))
+          {
+            echo "    <td ".$bg_style.">";
+              echo "<span id='AQ_PROC_FILE_".$i."'>".$r["AQ_PROC_FILE"]."</span> ";
+              echo "<span id='BF_PROC_FILE_".$i."'>".$r["BF_PROC_FILE"]."</span> ";
+              echo "<span id='BP_PROC_FILE_".$i."'>".$r["BP_PROC_FILE"]."</span>";
+            echo "</td>\n";
+          }
+          else
+          {
+            echo "    <td ".$bg_style."><span id='PROC_FILE_".$i."'>".$r["PROC_FILE"]."</span></td>\n";
+          }
 
           // ANNOTATION
           echo "    <td ".$bg_style." class=\"trunc\"><div><span id='annotation_".$i."'>".$r["annotation"]."</span></div></td>\n";
@@ -579,8 +586,14 @@ class results extends mopsr_webpage
         $all_results[$o]["FREQ"] = sprintf("%5.2f",$arr["FREQ"]);
         $all_results[$o]["BW"] = $arr["BW"];
         $all_results[$o]["PID"] = $arr["PID"];
-        $all_results[$o]["PROC_FILE"] = $arr["PROC_FILE"];
-
+        if (array_key_exists("PROC_FILE", $arr))
+          $all_results[$o]["PROC_FILE"] = $arr["PROC_FILE"];
+        else
+        {
+          $all_results[$o]["AQ_PROC_FILE"] = $arr["AQ_PROC_FILE"];
+          $all_results[$o]["BF_PROC_FILE"] = $arr["BF_PROC_FILE"];
+          $all_results[$o]["BP_PROC_FILE"] = $arr["BP_PROC_FILE"];
+        }
         // these will only exist after this page has loaded and the values have been calculated once
         $all_results[$o]["INT"] = (array_key_exists("INT", $arr)) ? $arr["INT"] : "NA";
         $all_results[$o]["IMG"] = (array_key_exists("IMG", $arr)) ? $arr["IMG"] : "NA";

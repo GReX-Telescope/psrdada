@@ -234,10 +234,25 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
       $quit_daemon = 1;
     }
 
-    # generate the dspsr polycol necessary for all threads on this host
-    logMsg(2, "INFO", "main: genTempo2Polyco(".$db_keys[0].", ".$responses[0].")");
-    ($result, $response) = genTempo2Polyco($db_keys[0], $responses[0]);
-    logMsg(3, "INFO", "main: genTempo2Polyco() ".$result." ".$response);
+    my $need_polyco = 1;
+    # get the first header
+    my %h = Dada::headerToHash($responses[0]);
+    if (($h{"AQ_PROC_FILE"} eq "mopsr.dspsr.gpu.1fold") || ($h{"AQ_PROC_FILE"} eq "mopsr.dspsr.gpu.10fold"))
+    {
+      $need_polyco = 0;
+    }
+
+    if ($need_polyco)
+    {
+      # generate the dspsr polycol necessary for all threads on this host
+      logMsg(2, "INFO", "main: genTempo2Polyco(".$db_keys[0].", ".$responses[0].")");
+      ($result, $response) = genTempo2Polyco($db_keys[0], $responses[0]);
+      logMsg(3, "INFO", "main: genTempo2Polyco() ".$result." ".$response);
+      if ($result ne "ok")
+      { 
+        logMsg(0, "ERROR", "main: genTempo2Polyco failed: ".$response);
+      }
+    }
 
     # perform all the necessary setup for observations and return the 
     # required command for execution on the datablocks
@@ -250,20 +265,23 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
       }
     }
 
-    my $exists = 0;
-    # wait for the predictor
-    while (!$exists)
+    if ($need_polyco)
     {
-      if ((-f "/tmp/tempo2/mpsr/pulsar.par") && (-f "/tmp/tempo2/mpsr/t2pred.dat"))
+      my $exists = 0;
+      # wait for the predictor
+      while (!$exists)
       {
-        $exists = 1;
-        logMsg(2, "INFO", "/tmp/tempo2/mpsr/pulsar.par && /tmp/tempo2/mpsr/t2pred.dat both exist now");
+        if ((-f "/tmp/tempo2/mpsr/pulsar.par") && (-f "/tmp/tempo2/mpsr/t2pred.dat"))
+        {
+          $exists = 1;
+          logMsg(2, "INFO", "/tmp/tempo2/mpsr/pulsar.par && /tmp/tempo2/mpsr/t2pred.dat both exist now");
+        }
+        else
+        {
+          logMsg(2, "INFO", "waiting for /tmp/tempo2/mpsr/pulsar.par && /tmp/tempo2/mpsr/t2pred.dat");
+        }
+        usleep(10000);
       }
-      else
-      {
-        logMsg(2, "INFO", "waiting for /tmp/tempo2/mpsr/pulsar.par && /tmp/tempo2/mpsr/t2pred.dat");
-      }
-      usleep(10000);
     }
 
     ($results_ref) = multiForkLog ($nkeys, @cmds);
@@ -382,9 +400,9 @@ sub prepareObservation($$)
     logMsg(0, "ERROR", "Error: OBS_OFFSET was malformed or non existent");
     $header_ok = 0;
   }
-  if (length($h{"PROC_FILE"}) < 1)
+  if (length($h{"AQ_PROC_FILE"}) < 1)
   {
-    logMsg(0, "ERROR", "PROC_FILE was malformed or non existent");
+    logMsg(0, "ERROR", "AQ_PROC_FILE was malformed or non existent");
     $header_ok = 0;
   }
 
@@ -403,9 +421,9 @@ sub prepareObservation($$)
   else
   {
     # Add the dada header file to the proc_cmd
-    my $proc_cmd_file = $cfg{"CONFIG_DIR"}."/".$h{"PROC_FILE"};
+    my $proc_cmd_file = $cfg{"CONFIG_DIR"}."/".$h{"AQ_PROC_FILE"};
 
-    logMsg(2, "INFO", "Full path to PROC_FILE: ".$proc_cmd_file);
+    logMsg(2, "INFO", "Full path to AQ_PROC_FILE: ".$proc_cmd_file);
 
     my %proc_cmd_hash = Dada::readCFGFile($proc_cmd_file);
     $proc_cmd = $proc_cmd_hash{"PROC_CMD"};
@@ -451,7 +469,7 @@ sub prepareObservation($$)
     # replace DADA_GPU_ID with actual GPU_ID
     $proc_cmd =~ s/<DADA_GPU_ID>/$gpu_id/;
 
-    if ($proc_cmd =~ m/dspsr/)
+    if (($proc_cmd =~ m/dspsr/) && (!($proc_cmd =~ m/-c/)))
     {
       $proc_cmd .= " -E /tmp/tempo2/mpsr/pulsar.par -P /tmp/tempo2/mpsr/t2pred.dat";
 

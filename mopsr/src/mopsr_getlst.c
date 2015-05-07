@@ -78,17 +78,23 @@ int main(int argc, char** argv)
   if (verbose)
     fprintf (stderr, "mjd=%lf\n", mjd);
 
+#ifdef HAVE_SLA
   // get the LST
-  float lst = (float) lmst_from_mjd (mjd);
-  if (verbose)
-    fprintf (stderr, "lst=%f\n", lst);
+  float lmst = (float) lmst_from_mjd (mjd);
+#endif
+  float last = (float) last_from_mjd (mjd);
 
   int HMSF[4];
   char sign;
-  int NDP = 2;    // number of decimal places
+  int NDP = 4;    // number of decimal places
 
-  slaCr2tf(NDP, lst, &sign, HMSF);
-  fprintf (stderr, "%02d:%02d:%02d.%d [radians=%f]\n", HMSF[0],HMSF[1],HMSF[2],HMSF[3], lst);
+#ifdef HAVE_SLA
+  iauA2tf (NDP, lmst, &sign, HMSF);
+  fprintf (stderr, "LMST: %02d:%02d:%02d.%d [radians=%f]\n", HMSF[0],HMSF[1],HMSF[2],HMSF[3], lmst);
+#endif
+
+  iauA2tf (NDP, last, &sign, HMSF);
+  fprintf (stderr, "LAST: %02d:%02d:%02d.%d [radians=%f]\n", HMSF[0],HMSF[1],HMSF[2],HMSF[3], last);
 
   return 0;
 }

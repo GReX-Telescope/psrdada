@@ -9,9 +9,10 @@
 // library functions for handling delays in MOPSR
 //
 
+#include "sofa.h"
 #include "mopsr_delays.h"
-#include "slalib.h"
 
+#include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -221,13 +222,6 @@ mopsr_module_t * read_modules_file (const char* fname, int *nmod)
   fclose (fptr);
   *nmod = imod;
 
-  // now set the reference module to be E01-B [closest to phase centre in east arm]
-/*
-  for (imod=0; imod < *nmod; imod++)
-  {
-    modules[imod].dist -= ref_dist;
-  }
-*/
   return modules;
 }
 
@@ -379,140 +373,140 @@ mopsr_pfb_t * read_signal_paths_file (const char * fname, int * npfb)
   return pfbs;
 }
 
-double calc_peckham_delay (double RA, double DEC, struct timeval timestamp)
+int cal_app_pos_iau (double RA, double DEC, struct tm * utc, double * RA_app, double * DEC_app)
+{
+  double pr = 0;  // atan2 ( -354.45e-3 * DAS2R, cos(dc) );
+  double pd = 0;  // 595.35e-3 * DAS2R;
+
+  // Parallax (arcsec) and recession speed (km/s).
+  double px = 0;  // 164.99e-3;
+  double rv = 0;  // 0.0;
+
+  double utc1, utc2;
+  double tai1, tai2;
+  double tt1, tt2;
+
+  if (iauDtf2d ( "UTC", utc->tm_year + 1900, utc->tm_mon + 1, utc->tm_mday, utc->tm_hour, utc->tm_min, utc->tm_sec, &utc1, &utc2 ) ) return -1;
+  if ( iauUtctai ( utc1, utc2, &tai1, &tai2 ) ) return -1;
+  if ( iauTaitt ( tai1, tai2, &tt1, &tt2 ) ) return -1;
+
+  double ri, di, eo;
+
+    // catalogue posn to apparent for date output in CIRS
+  iauAtci13 ( RA, DEC, pr, pd, px, rv, tt1, tt2, &ri, &di, &eo );
+
+  *RA_app = ri - eo;
+  *DEC_app = di;
+
+}
+
+int calc_observed_pos (double rc, double dc, struct tm * utc, double dut1, double * RA_obs, double * DEC_obs, double * HA)
+{
+  // proper motion (RA, DEC derivatives)
+  double pr = atan2 ( -354.45e-3 * DAS2R, cos(dc) );
+  double pd = 595.35e-3 * DAS2R;
+
+  // Parallax (arcsec) and recession speed (km/s).
+  double px = 164.99e-3;
+  double rv = 0.0;
+
+  // override these
+  pr = pd = px = rv = 0;
+
+  double utc1, utc2;
+
+  int rval = iauDtf2d ( "UTC", utc->tm_year + 1900, utc->tm_mon + 1, utc->tm_mday, utc->tm_hour, utc->tm_min, utc->tm_sec, &utc1, &utc2 );
+
+  double xp = 50.995e-3 * DAS2R;
+  double yp = 376.723e-3 * DAS2R;
+
+  double elong, phi;
+
+  iauAf2a ( ' ' , 149, 25, 14.5452, &elong );
+  iauAf2a ( '-' , 35,  25, 28.7682, &phi );
+
+  double hm = 751.0;
+
+  /* Ambient pressure (HPa), temperature (C) and rel. humidity (frac). */
+  double phpa = 952.0;
+  double tc = 18.5;
+  double rh = 0.83;
+
+  /* Effective color (35 cm microns). */
+  double  wl = 350000;
+
+  double aob, zob, hob, dob, rob, eo;
+
+  rval = iauAtco13 ( rc, dc, pr, pd, px, rv, utc1, utc2, dut1,
+    elong, phi, hm, xp, yp, phpa, tc, rh, wl,
+    &aob, &zob, &hob, &dob, &rob, &eo );
+
+  fprintf (stderr, "ra=%lf, dec=%lf, hour angle=%lf\n",rob, dob, hob);
+
+  *RA_obs  = rob;
+  *DEC_obs = dob;
+  *HA = hob;
+
+#ifdef _DEBUG
+  int HMSF[4];
+  char sign;
+  int NDP = 2;    // number of decimal places
+  iauA2tf (NDP, hob, &sign, HMSF);
+  fprintf (stderr, "  HOB: %02d:%02d:%02d.%d [%20.15lf]\n",
+                      HMSF[0],HMSF[1],HMSF[2],HMSF[3], hob);
+#endif
+}
+
+double calc_jer_delay (double RA_curr, double DEC_curr, struct timeval timestamp)
 {
   // calculate the MJD
-  double time_ms = timestamp.tv_usec/1000000.000;
-  struct tm * local_t = gmtime (&timestamp.tv_sec);
-  double mjd = mjd_from_utc (local_t);
+ 
+  // convert the integer time to an MJD
+  struct tm * utc_t = gmtime (&timestamp.tv_sec);
+  double mjd = mjd_from_utc (utc_t);
 
-  double seconds = ((double) timestamp.tv_usec / 1000000.0) / (24*60*60);
-  mjd += seconds;
+  //fprintf (stderr, "1: mjd=%lf\n",mjd);
+  //fprintf (stderr, "timestamp.tv_usec=%ld\n", timestamp.tv_usec);
 
-  // get the LST
-  double lst = lmst_from_mjd (mjd);
+  // convert the fractional time from seconds to days
+  double fractional_seconds = ((double) timestamp.tv_usec) / 1000000.0;
+  double fractional_days    = fractional_seconds / 86400.0;
+  //fprintf (stderr, "fractional_seconds=%lf, fractional_days=%le\n", fractional_seconds, fractional_days);
 
-  double EQ = 2000;   // Epoch
-  double PR = 0;      // proper motions
-  double PD = 0;
-  double PX = 0;      // parallax
-  double PV = 0;      // radial velocity
+  mjd += fractional_days;
 
-  double RA_app, DEC_app;
+  //fprintf (stderr, "2: mjd=%30.20lf\n",mjd);
 
-  double mjd2000 = 51544.5;
+  // get the LAST from the MJD
+  double last = last_from_mjd (mjd);
 
-  // Convert RA, DEC to apparent RA, DEC
-  slaMap(RA, DEC, PR, PD, PX, PV, EQ, mjd2000, &RA_app, &DEC_app);
+#ifdef _DEBUG
 
-  char * sys = "FK5";
-  double ep0 = 2000.0;
-  double ep1 = (double) (local_t->tm_year + 1900) + ((double) (local_t->tm_yday) / 364.25);
-  double RA_app_today = RA_app;
-  double DEC_app_today = DEC_app;
-  slaPreces(sys, ep0, ep1, &RA_app_today, &DEC_app_today);
+  int HMSF[4];
+  char sign;
+  int NDP = 2;    // number of decimal places
 
-  // difference in hours between current LST and
-  double hour_angle = lst - RA_app_today;
+  iauA2tf (NDP, last, &sign, HMSF);
+  fprintf (stderr, "LAST: %02d:%02d:%02d.%d [%20.15lf]\n", HMSF[0],HMSF[1],HMSF[2],HMSF[3], last);
+#endif
 
+  // difference in hours between current LAST and
+  double hour_angle = last - RA_curr;
   if (hour_angle < -M_PI)
     hour_angle += (2 * M_PI);
 
-  double tilt = peckham_delay (MOLONGLO_HA_BASELINE, MOLONGLO_DEC_BASELINE,
-                               hour_angle, DEC_app);
-
-  return tilt;
-}
-
-/*
- * Calculate the meridian delay from RAJ, DECJ and timestamp
- */
-double calc_jer_delay_J2000 (double RAJ, double DECJ, struct timeval timestamp)
-{
-  // calculate the MJD
-  double time_ms = timestamp.tv_usec/1000000.000;
-  struct tm * local_t = gmtime (&timestamp.tv_sec);
-  double mjd = mjd_from_utc (local_t);
-
-  double seconds = ((double) timestamp.tv_usec / 1000000.0) / (24*60*60);
-  mjd += seconds;
-
-  // get the LST
-  double lst = lmst_from_mjd (mjd);
-
-  // calculate the apparent RA and DEC 
-  double RA_app, DEC_app;
-  calc_app_position (RAJ, DECJ, timestamp, &RA_app, &DEC_app);
-
-  // difference in hours between current LST and
-  double hour_angle = lst - RA_app;
-
-  if (hour_angle < -M_PI)
-    hour_angle += (2 * M_PI);
-
-  //const double deg2rad = M_PI/180.0;
-  //const double slope = 1.0/289.9;
-  //const double az = (4.9/3600)*DD2R;
-
-  double projected_delay = jer_delay (hour_angle, DEC_app, 
-                                      MOLONGLO_ARRAY_SLOPE, 
-                                      MOLONGLO_AZIMUTH_CORR, 
-                                      MOLONGLO_LATITUDE);
-
-  return projected_delay;
-}
-
-/*
- * calculate the apparent position of the J2000 RA & DEC and UTC timestamp
- */
-void calc_app_position (double RA, double DEC, struct timeval timestamp, double * RA_app, double * DEC_app)
-{
-  double time_ms = timestamp.tv_usec/1000000.000;
-  struct tm * local_t = gmtime (&timestamp.tv_sec);
-
-  double EQ = 2000;   // Epoch
-  double PR = 0;      // proper motions
-  double PD = 0;
-  double PX = 0;      // parallax
-  double PV = 0;      // radial velocity
-
-  double mjd2000 = 51544.5;
-
-  char * sys = "FK5";
-  double ep0 = 2000.0;
-  double ep1 = (double) (local_t->tm_year + 1900) + ((double) (local_t->tm_yday) / 364.25);
-
-  *RA_app = RA;
-  *DEC_app = DEC;
-
-  slaPreces(sys, ep0, ep1, RA_app, DEC_app);
-
-  return;
-}
-
-double calc_jer_delay2 (double RA_curr, double DEC_curr, struct timeval timestamp)
-{
-  // calculate the MJD
-  double time_ms = timestamp.tv_usec/1000000.000;
-  struct tm * local_t = gmtime (&timestamp.tv_sec);
-  double mjd = mjd_from_utc (local_t);
-
-  double seconds = ((double) timestamp.tv_usec / 1000000.0) / (24*60*60);
-  mjd += seconds;
-
-  // get the LST
-  double lst = lmst_from_mjd (mjd);
-
-  // difference in hours between current LST and
-  double hour_angle = lst - RA_curr;
-  if (hour_angle < -M_PI)
-    hour_angle += (2 * M_PI);
-
+#ifdef _DEBUG
+  iauA2tf (NDP, hour_angle, &sign, HMSF);
+  fprintf (stderr, "  HA: %02d:%02d:%02d.%d [%20.15lf]\n",
+            HMSF[0],HMSF[1],HMSF[2],HMSF[3], hour_angle);
+#endif
 
   double projected_delay = jer_delay (hour_angle, DEC_curr,
                                       MOLONGLO_ARRAY_SLOPE,
                                       MOLONGLO_AZIMUTH_CORR,
                                       MOLONGLO_LATITUDE);
+
+  //fprintf (stderr, "projected_delay=%lf\n", projected_delay);
 
   return projected_delay;
 }
@@ -535,22 +529,16 @@ int calculate_delays (unsigned nbay, mopsr_bay_t * bays,
   // compute the timestamp for 1 sample in the future
   struct timeval timestamp_next;
   timestamp_next.tv_sec = timestamp.tv_sec;
-  timestamp_next.tv_usec = timestamp.tv_usec + tsamp;
+  timestamp_next.tv_usec = timestamp.tv_usec + (long) tsamp;
   if (timestamp_next.tv_usec >= 1000000)
   {
     timestamp_next.tv_sec ++;
     timestamp_next.tv_usec -= 1000000;
   }
-  
-  double jer_delay      = calc_jer_delay2 (source.ra_curr, source.dec_curr, timestamp);
-  double jer_delay_next = calc_jer_delay2 (source.ra_curr, source.dec_curr, timestamp_next);
-  double jer_delay_ds   = jer_delay_next - jer_delay;
 
-  //double peckham_delay = calc_peckham_delay (source.ra, source.dec, timestamp);
-  //double md_tilt = calc_md_tilt (source.ra, source.dec, timestamp);
-  //double md_tilt_next = calc_md_tilt (source.ra, source.dec, timestamp_next);
-  //double md_tilt_ds = (md_tilt_next - md_tilt);
-  //fprintf (stderr, "calculate_delays: ra=%lf, dec=%lf timestamp=%ld -> md_tilt=%20.18lf\n", source.ra, source.dec, timestamp.tv_sec, md_tilt);
+  double jer_delay = calc_jer_delay (source.ra_curr, source.dec_curr, timestamp);
+  double jer_delay_next = calc_jer_delay (source.ra_curr, source.dec_curr, timestamp_next);
+  double jer_delay_ds   = jer_delay_next - jer_delay;
 
   unsigned ichan, imod, ibay;
   double C = 2.99792458e8;
@@ -644,7 +632,7 @@ int calculate_delays (unsigned nbay, mopsr_bay_t * bays,
       // now calculate the fractional delay (rate in samples) per sample
       fractional_delay_ds = (geometric_delay_next - geometric_delay) / sampling_period;
 
-      coarse_delay_samples = (unsigned) floor(total_delay / sampling_period);  
+      coarse_delay_samples = (unsigned) floor (total_delay / sampling_period);  
 
       coarse_delay = coarse_delay_samples * sampling_period;
 
@@ -670,7 +658,9 @@ int calculate_delays (unsigned nbay, mopsr_bay_t * bays,
 
       //fprintf (stderr, "[%d][%d] instrumental_delay=%le delay_in_turns=%lf channel_turns=%lf channel_phase_offset=%lf\n", imod, ichan, instrumental_delay, delay_in_turns, channel_turns, channel_phase_offset);
 
-      delays[imod][ichan].fringe_coeff    -= (mods[imod].phase_offset + channel_phase_offset);
+      if (apply_instrumental)
+        delays[imod][ichan].fringe_coeff    -= (mods[imod].phase_offset + channel_phase_offset);
+
     }
 
     //fprintf (stderr, "geometric_delay=%le, geometric_delay_next=%le, fractional_delay_ds=%le [s], fractional_delay_ds=%le [samps]\n",
@@ -679,58 +669,109 @@ int calculate_delays (unsigned nbay, mopsr_bay_t * bays,
   return 0;
 }
 
-double mjd_from_utc (struct tm * utc)
+double mjd_from_utc (struct tm* utc)
 {
-  double mjd;
-  int year, month, day, status;
+  int iy = 1900 + utc->tm_year;
+  int im = 1 + utc->tm_mon;
+  int id = (int) utc->tm_mday;
 
-  year  = 1900 + utc->tm_year;
-  month = 1 + utc->tm_mon;
-  day   = utc->tm_mday; 
+  double d, d1, d2;
 
-  // Calculate the modified Julian Date (JD-2400000.5) at 0hrs   
-  slaCaldj (year, month, day, &mjd, &status);
+  int rval = iauCal2jd ( iy, im, id, &d1, &d2 );
+  if (rval != 0)
+    return -1;
 
-  // now add the hours, minutes and seconds
-  mjd += utc->tm_hour / 24.0;
-  mjd += utc->tm_min / 1440.0;
-  mjd += utc->tm_sec / 86400.0;
+  int ihour = (int) utc->tm_hour;
+  int imin  = (int) utc->tm_min;
+  double sec = (double) utc->tm_sec;
 
-  //fprintf (stderr, "mjd_from_utc MJD=%lf\n", mjd);
+  rval = iauTf2d ('+', ihour, imin, sec, &d );
+  if (rval != 0)
+    return -1;
+
+  double mjd = d2 + d;
 
   return mjd;
 }
 
-
-double lmst_from_mjd (double mjd)
+double gmst_from_mjd (double mjd)
 {
-  double gmst, lmst;
+  // T is julian centuries since 2000 Jan. 1, 12h UT1
+  double T = (mjd - 51544.5) / 36525;
+
+  double day_fraction = mjd - floor (mjd);
+
+  // the GMST in seconds at UT1=0
+  double gmst_seconds = ( 24110.54841 + (8640184.812866 * T) + (0.093104 * pow(T,2)) - (0.0000062 * pow(T,3)));
+
+  // convert to days and add the UT1 fraction for today
+  double gmst_days = gmst_seconds / 86400.0 + day_fraction;
+
+  gmst_days = gmst_days - floor (gmst_days);
+
+  // convert to radians where 2PI = whole day
+  double gmst_radians = gmst_days * 2 * M_PI;
+
+  //fprintf (stderr, "gmst_from_mjd: seconds=%lf days=%lf radians=%lf\n", gmst_seconds, gmst_days, gmst_radians);
+
+  gmst_radians = fmod (gmst_radians, 2 * M_PI);
+
+  return gmst_radians;
+}
+
+// convert MJD in UT1 to a LAST
+double sofa_gast_from_mjd (double mjd)
+{
+  const unsigned num_leap_seconds = 26;
+  const double   tt_offset = 32.184;
+
+  double dt = (double) num_leap_seconds + tt_offset;
+  double jd_base = 2400000.5;
+  double tt1, tt2;
+
+  if (iauUt1tt (jd_base, mjd, dt, &tt1, &tt2) != 0)
+  {
+    fprintf (stderr, "ERROR in UT1 to TT conversion\n");
+    return 0;
+  }
+
+  double gast = iauGst06a (jd_base, mjd, tt1, tt2);
+  return gast;
+}
+
+
+/* gets local mean sidereal time for time_of_day given by mjd  
+double gmrt_lmst(double mjd)
+{
+  double lon = 149 + 25/60.0 + 28.7682/3600;
+  double ut,tu,res,lmstime ;
+  ut = mjd ;
+  tu = (ut - 51544.5) / 36525.;  // centuries since J2000 
+  res = ut + lon/360. ; res = res - floor(res) ;
+  lmstime = res + (((0.093104 - tu * 6.2e-6) * tu + 8640184.812866) * tu + 24110.54841)/86400.0 ;
+  lmstime = (lmstime - floor(lmstime))*2.0 * M_PI ;
+  return lmstime;
+}
+*/
+
+double last_from_mjd (double mjd)
+{
+  double gast, last;
   double mjd_integer = floor (mjd);
   double day_fraction = mjd - mjd_integer;
 
+#ifdef _DEBUG
   int HMSF[4];
   char sign;
-  int NDP = 2;    // number of decimal places
+  int NDP = 4;    // number of decimal places
+#endif
 
-  //fprintf (stderr, "MJD_int=%lf MJD_frac=%lf\n", mjd_integer, day_fraction);
-
-  gmst = slaGmsta(mjd_integer, day_fraction);
-
-  //slaCr2tf(NDP, gmst, &sign, HMSF);
-  //fprintf (stderr, "GMST=%d:%d:%d.%d [%lf]\n",HMSF[0],HMSF[1],HMSF[2],HMSF[3], gmst);
-
-  lmst  = gmst + MOLONGLO_LONGITUDE;
-
-  //slaCr2tf(NDP, lmst, &sign, HMSF);
-  //fprintf (stderr, "LMST=%d:%d:%d.%d [%lf] MOLONGLO_LONGITUDE=%lf\n",HMSF[0],HMSF[1],HMSF[2],HMSF[3], lmst, MOLONGLO_LONGITUDE);
-
-  // remap to range [0 - 2PI]
-  double lmst_2pi = slaDranrm (lmst);
-
-  //slaCr2tf(NDP, lmst_2pi, &sign, HMSF);
-  //fprintf (stderr, "LMST_2PI=%d:%d:%d.%d [%lf]\n",HMSF[0],HMSF[1],HMSF[2],HMSF[3], lmst_2pi);
-
-  return lmst_2pi;
+  gast = sofa_gast_from_mjd (mjd);
+  last  = gast + MOLONGLO_LONGITUDE;
+  
+  const double two_pi = 2.0 * M_PI;
+  double w = fmod (last, two_pi);
+  return ( w >= 0.0 ) ? w : w + two_pi;
 }
 
 int mopsr_delays_hhmmss_to_rad (char * hhmmss, double * rads)
@@ -751,9 +792,18 @@ int mopsr_delays_hhmmss_to_rad (char * hhmmss, double * rads)
   str = strtok_r(NULL, sep, &saveptr);
   if (sscanf(str, "%lf", &sec) != 1)
     return -1;
-  int status;
-  slaDtf2r (ihour, imin, sec, rads, &status);
-  return (status * -1);
+
+  char s = '\0';
+  if (ihour < 0)
+  {
+    ihour *= -1;
+    s = '-';
+  }
+
+  int status = iauTf2a(s, ihour, imin, sec, rads);
+
+  return status;
+
 }
 
 int mopsr_delays_ddmmss_to_rad (char * ddmmss, double * rads)
@@ -774,41 +824,19 @@ int mopsr_delays_ddmmss_to_rad (char * ddmmss, double * rads)
   str = strtok_r(NULL, sep, &saveptr);
   if (sscanf(str, "%lf", &asec) != 1)
     return -1;
-  int status;
-  slaDaf2r (abs(ideg), iamin, asec, rads, &status );
+
+  char s = '\0';
   if (ideg < 0)
-    *rads *= -1;
-  return (status * -1);
+  {
+    ideg *= -1;
+    s = '-';
+  }
+
+  int status = iauAf2a (s, ideg, iamin, asec, rads);
+
+  return status;
 }
 
-
-// MB 6 June 2014
-// Returns delay in natural units - multiply by B/c for delay;
-
-// These are all in radians:
-// ha_baseline is hour angle of baseline
-// dec_baseline is dec of baseline
-// ha_source is hour angle of source
-// dec_source is dec of source
-
-// For Molonglo: ha_baseline is 90 - cos(lat)*gradient*180/pi - az sin(lat)
-//               dec_baseline is slope*sin(lat) - az cos(lat)
-//               ha_baseline = 89.79369761 deg
-//               dec_baseline = -0.0508515 deg
-// az = -4.9"
-// slope = 1/289.9 (radians)
-
-double peckham_delay(double ha_baseline, double dec_baseline,
-         double ha_source, double dec_source) {
-
-  // ha_baseline = 89.79369761 * M_PI/180.0
-  // dec_baseline = -0.0508515 * M_PI/180.0
-
-  return(cos(dec_baseline)*sin(ha_baseline)*cos(dec_source)*sin(ha_source)
-       + cos(dec_baseline)*cos(ha_baseline)*cos(dec_source)*cos(ha_source)
-       + sin(dec_baseline)*sin(dec_source));
-
-}
 
 double jer_delay(double ha_source, double dec_source,
          double tilt, double skew, double latitude)

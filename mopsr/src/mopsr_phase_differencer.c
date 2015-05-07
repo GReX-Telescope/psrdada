@@ -21,9 +21,11 @@
 #include <math.h>
 #include <cpgplot.h>
 #include <complex.h>
+#include <float.h>
 
 void usage();
 void mopsr_phase_delays_plot (float * phases, unsigned npt, double obs_offset1, char * device);
+void mopsr_baseline_phase_delays_plot (float * phases, unsigned nmod, unsigned mod, mopsr_module_t * mods, char * device);
 
 void usage ()
 {
@@ -140,7 +142,6 @@ int main(int argc, char** argv)
     bays2[i].dist += delta_distance;
   }
 
-
   char * modules_file = strdup (argv[optind+1]);
   int nmod;
   mopsr_module_t * modules1 = read_modules_file (modules_file, &nmod);
@@ -157,9 +158,9 @@ int main(int argc, char** argv)
     return EXIT_FAILURE;
   }
 
-  // apply frank module
-  modules2[mod].bay_idx += frank_nmod;
-
+  // apply frank module delay (if set)
+  for (imod=0; imod<nmod; imod++)
+    modules2[imod].bay_idx += frank_nmod;
 
   // read the header
   char * header_file = strdup (argv[optind+2]);
@@ -242,7 +243,8 @@ int main(int argc, char** argv)
   timestamp.tv_sec = utc_start;
   timestamp.tv_usec = (long) (ut1_offset * 1000000);
 
-  calc_app_position (source.raj, source.decj, timestamp,
+  struct tm * utc = gmtime (&utc_start);
+  cal_app_pos_iau (source.raj, source.decj, utc,
                     &(source.ra_curr), &(source.dec_curr));
 
   // extract required metadata from header
@@ -299,10 +301,12 @@ int main(int argc, char** argv)
   char is_tracking = 1;
 
   double tsamp = 1.28;
-  unsigned nant = 1;
+  unsigned nant = nmod;
 
-  double obs_offset1 = (double) ut1_offset;
-  double obs_offset2 = (double) ut1_offset + (double) delta_time;
+  double ut1_time = (double) utc_start + (double) ut1_offset;
+
+  double ut1_time1 = ut1_time;
+  double ut1_time2 = ut1_time + (double) delta_time;
 
   struct timeval timestamp1;
   struct timeval timestamp2;
@@ -310,19 +314,20 @@ int main(int argc, char** argv)
   unsigned npts = 1048576;
   unsigned ipt = 0;
   float * phase_error = (float *) malloc (sizeof(float) * npts);
+  float * baseline_phase_error = (float *) malloc(sizeof(float) * nmod);
 
   fprintf (stderr, "freq1=%lf freq2=%lf delta_freq=%le\n", channels1[0].cfreq, channels2[0].cfreq, channels1[0].cfreq - channels2[0].cfreq);
 
   while ( ipt < npts )
   {
-    timestamp1.tv_sec = utc_start + floor (obs_offset1);
-    timestamp2.tv_sec = utc_start + floor (obs_offset2);
+    timestamp1.tv_sec = floor (ut1_time1);
+    timestamp2.tv_sec = floor (ut1_time2);
 
-    timestamp1.tv_usec = (obs_offset1 - (double) timestamp1.tv_sec) * 1000000;
-    timestamp2.tv_usec = (obs_offset2 - (double) timestamp2.tv_sec) * 1000000;
+    timestamp1.tv_usec = (long) ((ut1_time1 - (double) timestamp1.tv_sec) * 1000000);
+    timestamp2.tv_usec = (long) ((ut1_time2 - (double) timestamp2.tv_sec) * 1000000);
 
     if (verbose)
-      fprintf (stderr, "t1=%lf t2=%lf\n", obs_offset1, obs_offset2);
+      fprintf (stderr, "t1=%lf t2=%lf\n", ut1_time1, ut1_time2);
 
     if (calculate_delays (nbay, bays1, nant, modules1, nchan, channels1,
                           source, timestamp1, delays1, apply_instrumental,
@@ -357,22 +362,34 @@ int main(int argc, char** argv)
 
     double diff_phase = atan2(cimag(diff_phasor), creal(diff_phasor));
 */
-    phase_error[ipt] = (float) diff_phase;
+    // compute the phase error for the module in question
 
+    phase_error[ipt] = (float) diff_phase;
     if (verbose)
       fprintf (stderr, "f1=%le f2=%le diff_phase=%le error=%f\n", fringe1, fringe2, diff_phase, phase_error[ipt]);
 
     ipt++;
-    
-    mopsr_phase_delays_plot (phase_error, ipt, obs_offset1, device);
 
-    obs_offset1 += delta_time_plot;
-    obs_offset2 += delta_time_plot;
+    // compute the phase offset for each baseline against the reference module
+    for (imod=0; imod<nmod; imod++)
+    {
+      fringe1 = delays1[imod]->fringe_coeff;
+      fringe2 = delays2[imod]->fringe_coeff;
+      diff_phase = fringe1 - fringe2;
+      baseline_phase_error[imod] = (float) diff_phase;
+      //fprintf (stderr, "f1=%le f2=%le diff_phase=%le error=%f\n", fringe1, fringe2, diff_phase, baseline_phase_error[imod]);
+    }
+    
+    mopsr_phase_delays_plot (phase_error, ipt, (ut1_time1 - (double) utc_start), "1/xs");
+    mopsr_baseline_phase_delays_plot (baseline_phase_error, nmod, mod, modules1, "2/xs");
+
+    ut1_time1 += delta_time_plot;
+    ut1_time2 += delta_time_plot;
 
     usleep (100000);
   }
 
-  cpgclos();
+  //cpgclos();
 
   free (channels1);
   free (channels2);
@@ -394,11 +411,11 @@ int main(int argc, char** argv)
 
 void mopsr_phase_delays_plot (float * phases, unsigned npts, double obs_offset, char * device)
 {
-
   float xmin = 0;
   float xmax = (float) obs_offset;
   float ymin = -1 * M_PI;
   float ymax =  1 * M_PI;
+  float factor;
 
   float xvals[npts];
 
@@ -406,6 +423,24 @@ void mopsr_phase_delays_plot (float * phases, unsigned npts, double obs_offset, 
   for (i=0; i<npts; i++)
   {
     xvals[i] = ((float) i / (float) (npts - 1)) * obs_offset;
+
+    if (phases[i] > M_PI)
+      while (phases[i] > M_PI)
+        phases[i] -= (2 * M_PI);
+
+    if (phases[i] < -M_PI)
+      while (phases[i] < -M_PI)
+        phases[i] += (2 * M_PI);
+
+    /*
+    factor = phases[i] / M_PI;
+    if (factor > 1)
+      phases[i] -= (floorf(factor/2) * 2 * M_PI);
+
+    if (factor < -1)
+      phases[i] -= (floorf(factor/2) * 2 * M_PI);
+    */
+
     if (phases[i] > ymax)
       ymax = phases[i];
     if (phases[i] < ymin)
@@ -420,7 +455,6 @@ void mopsr_phase_delays_plot (float * phases, unsigned npts, double obs_offset, 
 
   cpgbbuf();
 
-
   cpgswin (xmin, xmax, ymin, ymax);
 
   cpgsvp(0.1, 0.9, 0.1, 0.9);
@@ -430,6 +464,68 @@ void mopsr_phase_delays_plot (float * phases, unsigned npts, double obs_offset, 
   cpgsci(3);
   cpgslw(5);
   cpgpt(npts, xvals, phases, -1);
+  cpgslw(1);
+
+  cpgebuf();
+  cpgend();
+
+}
+
+void mopsr_baseline_phase_delays_plot (float * phases, unsigned nmod, unsigned mod, mopsr_module_t * mods, char * device)
+{
+  float xmin = FLT_MAX;
+  float xmax = -FLT_MAX;
+  float ymin = -1 * M_PI;
+  float ymax =  1 * M_PI;
+
+  float xvals[nmod];
+  float factor;
+
+  unsigned imod;
+  for (imod=0; imod<nmod; imod++)
+  {
+    xvals[imod] = (mods[imod].dist - mods[mod].dist);
+    //xvals[imod] =(float) imod;
+
+    if (xvals[imod] > xmax)
+      xmax = xvals[imod];
+    if (xvals[imod] < xmin)
+      xmin = xvals[imod];
+
+    if (phases[imod] > M_PI)
+      while (phases[imod] > M_PI)
+        phases[imod] -= (2 * M_PI);
+
+    if (phases[imod] < -M_PI)
+      while (phases[imod] < -M_PI)
+        phases[imod] += (2 * M_PI);
+
+    if (phases[imod] > ymax)
+      ymax = phases[imod];
+    if (phases[imod] < ymin)
+      ymin = phases[imod];
+  }
+  //fprintf(stderr, "yrange=(%f, %f)\n", ymin, ymax);
+  //sleep(1);
+
+  if (cpgbeg(0, device, 1, 1) != 1)
+  {
+    fprintf(stderr, "error opening plot device\n");
+    exit(1);
+  }
+
+  cpgbbuf();
+
+
+  cpgswin (xmin, xmax, ymin, ymax);
+
+  cpgsvp(0.1, 0.9, 0.1, 0.9);
+  cpgbox("BCNST", 0.0, 0.0, "BCNST", 0.0, 0.0);
+  cpglab("Baseline Length", "Differential Phase [radians]", "");
+
+  cpgsci(3);
+  cpgslw(5);
+  cpgpt(nmod, xvals, phases, -1);
   cpgslw(1);
 
   cpgebuf();

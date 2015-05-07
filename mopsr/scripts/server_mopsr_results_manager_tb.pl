@@ -440,7 +440,7 @@ sub processObservation($$)
   @channels = split(/\n/, $response);
 
   # get a list of the unprocessing archives in each channel
-  $cmd = "find ".$o." -mindepth 2 -maxdepth 2 -type f -name '????-??-??-??:??:??.ar' -printf '%h/%f\n' | sort -n";
+  $cmd = "find ".$o." -mindepth 2 -maxdepth 2 -type f -name '????-??-??-??:??:??.ar' -printf '%h/%f\n' -o -name 'pulse_*.ar' -printf '%h/%f\n' | sort -n";
   Dada::logMsg(2, $dl, "processObservation: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(3, $dl, "processObservation: ".$result." ".$response);
@@ -490,7 +490,7 @@ sub processObservation($$)
 
       if (($result eq "ok") && ($fres_ar ne "") && ($tres_ar ne ""))
       {
-        $cmd = "find ".$cfg{"SERVER_ARCHIVE_DIR"}."/".$o."/TB/ -name '2*.ar' | sort -n | tail -n 1";
+        $cmd = "find ".$cfg{"SERVER_ARCHIVE_DIR"}."/".$o."/TB/ -name '2???-??-??-??:??:??.ar' -o -name 'pulse_*.ar' | sort -n | tail -n 1";
         Dada::logMsg(2, $dl, "processObservation: ".$cmd);
         ($result, $response) = Dada::mySystem($cmd);
         Dada::logMsg(2, $dl, "processObservation: ".$result." ".$response);
@@ -633,29 +633,32 @@ sub appendArchive($$$)
     }
   }
 
-  $cmd = "psrstat -J ".$psh." -Q -q -l chan=0- -c all:sum ./".$total_t_sum." | awk '{printf(\"%6.3f\\n\",\$1)}'";
-  Dada::logMsg(2, $dl, "appendArchive: ".$cmd);
-  ($result, $response) = Dada::mySystem($cmd);
-  Dada::logMsg(3, $dl, "appendArchive: ".$result." ".$response);
-  if ($result eq "ok")
+  if (!($archive =~ m/^pulse/))
   {
-    @powers = split(/\n/,$response);
-
-    $archive =~ s/\.ar$//;
-    my $archive_time_unix = Dada::getUnixTimeUTC($archive);
-    my $utc_time_unix = Dada::getUnixTimeUTC($utc_start);
-    my $offset = $archive_time_unix - $utc_time_unix;
-
-    $new_pm_text .= $offset;
-    foreach $power ( @powers )
+    $cmd = "psrstat -J ".$psh." -Q -q -l chan=0- -c all:sum ./".$total_t_sum." | awk '{printf(\"%6.3f\\n\",\$1)}'";
+    Dada::logMsg(2, $dl, "appendArchive: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, $dl, "appendArchive: ".$result." ".$response);
+    if ($result eq "ok")
     {
-      $new_pm_text .= ",".$power;
-    }
-    $new_pm_text .= "\n";
+      @powers = split(/\n/,$response);
 
-    open FH, ">>$utc_start/TB/power_monitor.log";
-    print FH $new_pm_text;
-    close FH;
+      $archive =~ s/\.ar$//;
+      my $archive_time_unix = Dada::getUnixTimeUTC($archive);
+      my $utc_time_unix = Dada::getUnixTimeUTC($utc_start);
+      my $offset = $archive_time_unix - $utc_time_unix;
+
+      $new_pm_text .= $offset;
+      foreach $power ( @powers )
+      {
+        $new_pm_text .= ",".$power;
+      }
+      $new_pm_text .= "\n";
+
+      open FH, ">>$utc_start/TB/power_monitor.log";
+      print FH $new_pm_text;
+      close FH;
+    }
   }
 
   # If this is the first result for this observation
@@ -872,10 +875,13 @@ sub makePlotsFromArchives($$$$$)
   Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
 
   # POWER MONITOR
-  $cmd = "mopsr_pmplot -c ".$nchan." ".$pm_args." -D ".$dir."/pm_tmp/png ".$dir."/TB/power_monitor.log";
-  Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
-  ($result, $response) = Dada::mySystem($cmd);
-  Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+  if (-f $dir."/TB/power_monitor.log")
+  {
+    $cmd = "mopsr_pmplot -c ".$nchan." ".$pm_args." -D ".$dir."/pm_tmp/png ".$dir."/TB/power_monitor.log";
+    Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+  }
 
   # wait for each file to "appear"
   my $waitMax = 5;
@@ -884,7 +890,7 @@ sub makePlotsFromArchives($$$$$)
          (-f $dir."/pvt_tmp") &&
          (-f $dir."/pvfr_tmp") &&
          (-f $dir."/bp_tmp") &&
-         (-f $dir."/pm_tmp") )
+         ( (! -f $dir."/TB/power_monitor.log") || (-f $dir."/pm_tmp") ) )
     {
       $waitMax = 0;
     } else {
@@ -898,7 +904,10 @@ sub makePlotsFromArchives($$$$$)
   system("mv -f ".$dir."/pvfr_tmp ".$dir."/".$fr);
   system("mv -f ".$dir."/pvfl_tmp ".$dir."/".$fl);
   system("mv -f ".$dir."/bp_tmp ".$dir."/".$bp);
-  system("mv -f ".$dir."/pm_tmp ".$dir."/".$pm);
+  if (-f $dir."/TB/power_monitor.log")
+  {
+    system("mv -f ".$dir."/pm_tmp ".$dir."/".$pm);
+  }
   Dada::logMsg(2, $dl, "makePlotsFromArchives: plots renamed");
 }
 

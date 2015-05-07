@@ -43,11 +43,12 @@ void usage()
 {
   fprintf (stdout,
            "mopsr_dbcalib [options]\n"
-           " -b core   bind process to CPU core\n"
+           " -c core   bind process to CPU core\n"
            " -d id     run on GPU device\n"
            " -h        display usage\n"
            " -k key    input DADA shm key [default %x]\n"
            " -n nfft   batch size for ffts [default 1024]\n"
+           " -p ant    add specified ant as primary ant [default no primaries]\n"
            " -t dump   number of seconds per correlation dump [default 30]\n"
            " -s        1 transfer, then exit\n"
            " -v        verbose mode\n"
@@ -385,91 +386,92 @@ int dbcalib_open (dada_client_t* client)
     ctx->npairs = ctx->npairs_total;
   else
     ctx->npairs = (int)(ctx->nprimaries * ((ctx->nant+1)-(ctx->nprimaries+1)/2.0));
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "open: npairs_total=%u npairs=%u\n", ctx->npairs_total, ctx->npairs);
       
   // allocate host memory for generating baseline combinations
   ctx->h_pairs = (mopsr_baseline_t*) malloc(sizeof(mopsr_baseline_t) * ctx->npairs);
   if (ctx->h_pairs == NULL)
-    {
-      multilog (log, LOG_ERR, "dbcalib_open: could not create allocated %ld "
-                "bytes of host memory\n", sizeof(mopsr_baseline_t) * ctx->npairs);
-      return -1;
-    }
+  {
+    multilog (log, LOG_ERR, "dbcalib_open: could not create allocated %ld "
+              "bytes of host memory\n", sizeof(mopsr_baseline_t) * ctx->npairs);
+    return -1;
+  }
 
   // allocate memory for baseline mask
   ctx->baseline_mask = (unsigned*) malloc(sizeof(unsigned) * ctx->npairs_total);
   if (ctx->baseline_mask == NULL)
-    {
-      multilog (log, LOG_ERR, "dbcalib_open: could not create allocated %ld "
-                "bytes of host memory\n", sizeof(unsigned) * ctx->npairs_total);
-      return -1;
-    }
+  {
+    multilog (log, LOG_ERR, "dbcalib_open: could not create allocated %ld "
+              "bytes of host memory\n", sizeof(unsigned) * ctx->npairs_total);
+    return -1;
+  }
+  memset (ctx->baseline_mask, 0, sizeof(unsigned) * ctx->npairs_total);
   
   // allocate memory for autocorr mask
   ctx->autocorr_mask = (unsigned*) malloc(sizeof(unsigned) * ctx->npairs_total);
   if (ctx->autocorr_mask == NULL)
-    {
-      multilog (log, LOG_ERR, "dbcalib_open: could not create allocated %ld "
-                "bytes of host memory\n", sizeof(unsigned) * ctx->npairs_total);
-      return -1;
-    }
+  {
+    multilog (log, LOG_ERR, "dbcalib_open: could not create allocated %ld "
+              "bytes of host memory\n", sizeof(unsigned) * ctx->npairs_total);
+    return -1;
+  }
+  memset (ctx->autocorr_mask, 0, sizeof(unsigned) * ctx->npairs_total);
 
   // allocate device memory for baseline combinations                                                  
   error = cudaMalloc ((void**)&ctx->d_pairs, sizeof(mopsr_baseline_t) * ctx->npairs);
   if (error != cudaSuccess)
-    {
-      multilog (log, LOG_ERR, "dbcalib_open: could not create allocated %ld "
-                "bytes of device memory\n", sizeof(mopsr_baseline_t) * ctx->npairs);
-      return -1;
-    }
+  {
+    multilog (log, LOG_ERR, "dbcalib_open: could not create allocated %ld "
+              "bytes of device memory\n", sizeof(mopsr_baseline_t) * ctx->npairs);
+    return -1;
+  }
 
   // generate all baseline combinations on host                                                                          
   int pair_idx,mask_idx,idx,ii,jj;
   pair_idx = mask_idx = idx = 0;
   while (idx < ctx->nant)
+  {
+    for (ii=idx; ii < ctx->nant; ii++)
     {
-      for (ii=idx; ii < ctx->nant; ii++)
-    {
-      unsigned use;
+      unsigned use = 0;
       unsigned a;
       
       if (ctx->nprimaries > 0)
-        {
-          use = 0;
-          for (jj=0;jj<ctx->nprimaries;jj++)
+      {
+        use = 0;
+        for (jj=0;jj<ctx->nprimaries;jj++)
         {
           a = ctx->primary_antennas[jj];
           if ((a==idx) || (a==ii))
-            {
-              use=1;
-              break;
-            }
+          {
+            use=1;
+            break;
+          }
         }
-        }
+      }
       else 
-        {
-          use = 1;
-        }
+      {
+        use = 1;
+      }
+
 
       if (idx==ii)
         ctx->autocorr_mask[mask_idx] = 1;
       else
         ctx->autocorr_mask[mask_idx] = 0;
       
+      ctx->baseline_mask[mask_idx] = use;
       if (use)
-        {
-          ctx->h_pairs[pair_idx].a = idx;
-          ctx->h_pairs[pair_idx].b = ii;
-          ctx->baseline_mask[mask_idx] = 1;
-          pair_idx++;
-        }
-      else
-        {
-          ctx->baseline_mask[mask_idx] = 1;
-        }
+      {
+        ctx->h_pairs[pair_idx].a = idx;
+        ctx->h_pairs[pair_idx].b = ii;
+        pair_idx++;
+      }
       mask_idx++;
     }
-      idx++;
-    }
+    idx++;
+  }
 
   
   // copy baseline combinations to device
@@ -911,11 +913,10 @@ int main (int argc, char **argv)
   }
     
 
-  while ((arg=getopt(argc,argv,"c:d:t:hk:n:svz")) != -1)
+  while ((arg=getopt(argc,argv,"b:c:d:t:hk:n:p:svz")) != -1)
   {
     switch (arg) 
     {
-      
     case 'c':
       core = atoi(optarg);
       break;
@@ -949,17 +950,20 @@ int main (int argc, char **argv)
 
     case 'p':
       // Here populate an array with primary antenna choices
-      if (p_ant_ar_idx+1 >= p_ant_ar_size){
-    p_ant_ar_size+=p_ant_ar_size;
-    dbcalib.primary_antennas = (unsigned*) realloc(dbcalib.primary_antennas, sizeof(unsigned)*p_ant_ar_size);
-    if (dbcalib.primary_antennas == NULL){
-    fprintf (stderr, "mopsr_dbcalib: cannot allocate memory for primary antenna array\n");
-      // Error message of choice
-      return -1;
-    }
+      if (p_ant_ar_idx+1 >= p_ant_ar_size)
+      {
+        p_ant_ar_size+=p_ant_ar_size;
+        dbcalib.primary_antennas = (unsigned*) realloc(dbcalib.primary_antennas, sizeof(unsigned)*p_ant_ar_size);
+        if (dbcalib.primary_antennas == NULL)
+        {
+          fprintf (stderr, "mopsr_dbcalib: cannot allocate memory for primary antenna array\n");
+          // Error message of choice
+          return -1;
+        }
       }
       dbcalib.primary_antennas[p_ant_ar_idx] = atoi(optarg);
       p_ant_ar_idx++;
+      break;
       
     case 'v':
       verbose++;

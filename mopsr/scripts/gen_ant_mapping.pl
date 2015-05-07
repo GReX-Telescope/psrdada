@@ -62,13 +62,11 @@ our $warn;
 our $pwcc_thread;
 our $utc_stop : shared;
 our $tobs_secs : shared;
-our $utc_start : shared;
-our $pkt_utc_start : shared;
 
 #
 # global variable initialization
 #
-$dl = 3;
+$dl = 2;
 $daemon_name = Dada::daemonBaseName($0);
 %cfg = Mopsr::getConfig();
 %site_cfg = Dada::readCFGFileIntoHash($cfg{"CONFIG_DIR"}."/site.cfg", 0);
@@ -85,8 +83,6 @@ $error = $cfg{"STATUS_DIR"}."/".$daemon_name.".error";
 $pwcc_thread = 0;
 $tobs_secs = -1;
 $utc_stop = "";
-$utc_start = "UNKNOWN";
-$pkt_utc_start = "UNKNOWN";
 
 
 #
@@ -135,12 +131,12 @@ $pkt_utc_start = "UNKNOWN";
   $SIG{TERM} = \&sigHandle;
 
   # Sanity check for this script
-  if (index($cfg{"SERVER_ALIASES"}, $ENV{'HOSTNAME'}) < 0 ) 
-  {
-    print STDERR "ERROR: Cannot run this script on ".$ENV{'HOSTNAME'}."\n";
-    print STDERR "       Must be run on the configured server: ".$cfg{"SERVER_HOST"}."\n";
-    exit(1);
-  }
+  #if (index($cfg{"SERVER_ALIASES"}, $ENV{'HOSTNAME'}) < 0 ) 
+  #{
+  #  print STDERR "ERROR: Cannot run this script on ".$ENV{'HOSTNAME'}."\n";
+  #  print STDERR "       Must be run on the configured server: ".$cfg{"SERVER_HOST"}."\n";
+  #  exit(1);
+  #}
 
   if (-f $warn) {
     unlink $warn;
@@ -151,7 +147,7 @@ $pkt_utc_start = "UNKNOWN";
 
   Dada::logMsg(0, $dl, "STARTING SCRIPT");
 
-  my $obs = "2014-10-07-08:15:09";
+  my $obs = $ARGV[0];
   my $tracking = 0;
 
   ($result, $response) = dumpAntennaMapping($obs, $tracking);
@@ -254,30 +250,26 @@ sub dumpAntennaMapping($$)
       {
         my %pm = Dada::readCFGFileIntoHash($pm_file, 1);
         my @pfb_mods = split(/ +/, $pm{$pfb_id});
+        my $pfb_mod;
         $imod = $first_ant;
-        foreach $rx ( @sp_keys_sorted )
+
+        # for each of the specified PFB inputs
+        foreach $pfb_mod (@pfb_mods)
         {
-          ($pfb, $pfb_input) = split(/ /, $sp{$rx});
-          logMsg(3, $dl, "dumpAntennaMapping: pfb=".$pfb." pfb_input=".$pfb_input);
-          if ($pfb eq $pfb_id) 
+          # find the corresponding RX
+          foreach $rx ( @sp_keys_sorted )
           {
-            my $pfb_mod;
-            foreach $pfb_mod (@pfb_mods)
+            ($pfb, $pfb_input) = split(/ /, $sp{$rx});
+            if (($pfb eq $pfb_id) && ($pfb_input eq $pfb_mod))
             {
-              if ($pfb_input eq $pfb_mod)
-              {
-                if (($imod >= $first_ant) && ($imod <= $last_ant))
-                {  
-                  $mods[$imod] = $rx;
-                  $imod++;
-                }
-                else
-                {
-                  return ("fail", "failed to identify modules correctly");
-                }
-              }
+              $mods[$imod] = $rx;
+              $imod++;
             }
           }
+        }
+        if ($imod != $last_ant + 1)
+        {
+          return ("fail", "failed to identify modules correctly");
         }
       }
       else

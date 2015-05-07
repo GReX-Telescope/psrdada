@@ -569,7 +569,6 @@ int main (int argc, char **argv)
       sample_offset2 = delays[1][channel].samples;
     }
 
-
     fringe1 = (float) delays[0][channel].fringe_coeff;
     fringe2 = (float) delays[1][channel].fringe_coeff;
 
@@ -645,6 +644,8 @@ int main (int argc, char **argv)
         im /= 128;
         raw2[ipt] = (re + im * I);
       }
+
+      f2 = fractional_delay;
 
       sinc_filter_float (raw1, tapped1, filter, npt + 2*half_ntap, ntap, f1);
       sinc_filter_float (raw2, tapped2, filter, npt + 2*half_ntap, ntap, f2);

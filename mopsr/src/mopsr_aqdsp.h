@@ -45,12 +45,21 @@ typedef struct {
 
   // GPU buffers for input and output of delayed data
   size_t d_buffer_size;
-  void * d_in;            // input data buffer on GPU
-  void * d_out;           // delayed & rephased data buffer on GPU
+  void * d_in;           // input data buffer on GPU
+  void * d_out;          // delayed & rephased data buffer on GPU
 #ifdef SKZAP
-  void * d_fbuf;          // float input data buffer on GPU
-  void * d_rstates;        // floats for curand states
-  void * d_sigmas;        // floats for curand states
+  void * d_fbuf;         // float input data buffer on GPU
+  void * d_rstates;      // floats for curand states
+  void * d_sigmas;      // floats for curand states
+  void * d_mask;        // floats for curand states
+  void * d_thresh;      // thesholds for median filtering
+
+  size_t s1s_size;      
+  void * d_s1s;
+  size_t s2s_size;
+  void * d_s2s;
+  unsigned s1_memory;
+  uint64_t s1_count;
 #endif
 
   // delays for each channel and antenna
@@ -62,6 +71,7 @@ typedef struct {
   size_t fringes_size;
   float * h_fringes;
   void  * d_fringes;
+
 
   // per sample cororections for delay and fringe coefficient
   float * h_delays_ds;
@@ -136,6 +146,11 @@ typedef struct {
 
   unsigned ant_ids[16];               // PFB antenna identifiers
 
+  int pfb_idx;
+
+  char ignore_scales;
+
+  uint64_t last_update;
 
 } mopsr_aqdsp_t;
 

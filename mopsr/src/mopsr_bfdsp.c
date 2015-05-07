@@ -41,6 +41,7 @@ void usage ()
     "  -b nbeam          create nbeam fan beams [default NANT]\n"
     "  -t key,ra,dec     create a tied array beam on PSRDADA key at RA and DEC\n"
     "  -v                verbose output\n"
+    "  -0                zero output data stream\n"
     "  *                 optional\n");
 }
 
@@ -51,7 +52,8 @@ int main(int argc, char** argv)
 
   // DADA Header plus Data Units
   dada_hdu_t* in_hdu = 0;
-  dada_hdu_t* out_hdu = 0;
+  dada_hdu_t* fb_hdu = 0;
+  dada_hdu_t* tb_hdu = 0;
 
   // DADA Primary Read Client main loop
   dada_client_t* client = 0;
@@ -65,7 +67,7 @@ int main(int argc, char** argv)
 
   key_t in_key;
 
-  key_t out_key;
+  key_t fb_key;
 
   ctx.d_in = 0;
   ctx.d_fbs = 0;
@@ -75,8 +77,10 @@ int main(int argc, char** argv)
   ctx.verbose = 0;
   ctx.device = 0;
   ctx.nbeam = -1;
+  ctx.zero_data = 0;
+  ctx.check_tied_beam = 0;
 
-  while ((arg = getopt(argc, argv, "b:d:hstv")) != -1) 
+  while ((arg = getopt(argc, argv, "b:d:hstv0")) != -1) 
   {
     switch (arg)  
     {
@@ -104,6 +108,10 @@ int main(int argc, char** argv)
         ctx.verbose ++;
         break;
 
+      case '0':
+        ctx.zero_data = 1;
+        break;
+
       default:
         usage ();
         return 0;
@@ -124,7 +132,7 @@ int main(int argc, char** argv)
     exit(EXIT_FAILURE);
   }
 
-  if (sscanf (argv[optind+1], "%x", &out_key) != 1)
+  if (sscanf (argv[optind+1], "%x", &fb_key) != 1)
   {
     fprintf (stderr, "ERROR: could not parse inkey from %s\n", argv[optind+1]);
     exit(EXIT_FAILURE);
@@ -156,9 +164,9 @@ int main(int argc, char** argv)
   }
 
   // now create the output HDU
-  out_hdu = dada_hdu_create (log);
-  dada_hdu_set_key(out_hdu, out_key);
-  if (dada_hdu_connect (out_hdu) < 0)
+  fb_hdu = dada_hdu_create (log);
+  dada_hdu_set_key(fb_hdu, fb_key);
+  if (dada_hdu_connect (fb_hdu) < 0)
   { 
     fprintf (stderr, "ERROR: could not connect to output HDU\n");
     return EXIT_FAILURE;
@@ -166,7 +174,7 @@ int main(int argc, char** argv)
 
   ctx.log = log;
 
-  if (bfdsp_init (&ctx, in_hdu, out_hdu, bays_file, modules_file) < 0)
+  if (bfdsp_init (&ctx, in_hdu, fb_hdu, bays_file, modules_file) < 0)
   {
     fprintf (stderr, "ERROR: failed to initalise data structures\n");
     return EXIT_FAILURE;
@@ -225,7 +233,7 @@ int main(int argc, char** argv)
   if (ctx.verbose)
     multilog(client->log, LOG_INFO, "main: dada_hdu_disconnect()\n");
 
-  if (bfdsp_destroy (&ctx, in_hdu, out_hdu) < 0)
+  if (bfdsp_destroy (&ctx, in_hdu, fb_hdu) < 0)
   {
     multilog (log, LOG_ERR, "failed to release resources\n");
   }
@@ -237,7 +245,7 @@ int main(int argc, char** argv)
 }
 
 /*! Perform initialization */
-int bfdsp_init ( mopsr_bfdsp_t* ctx, dada_hdu_t * in_hdu, dada_hdu_t * out_hdu, char * bays_file, char * modules_file)
+int bfdsp_init ( mopsr_bfdsp_t* ctx, dada_hdu_t * in_hdu, dada_hdu_t * fb_hdu, char * bays_file, char * modules_file)
 {
   multilog_t * log = ctx->log;
 
@@ -255,6 +263,7 @@ int bfdsp_init ( mopsr_bfdsp_t* ctx, dada_hdu_t * in_hdu, dada_hdu_t * out_hdu, 
     return -1;
   }
 
+#ifdef USE_GPU
   // select the gpu device
   int n_devices = dada_cuda_get_device_count();
   if (ctx->verbose)
@@ -292,21 +301,29 @@ int bfdsp_init ( mopsr_bfdsp_t* ctx, dada_hdu_t * in_hdu, dada_hdu_t * out_hdu, 
     multilog (log, LOG_ERR, "bfdsp_init: could not create CUDA stream\n");
     return -1;
   }
+#endif
 
   // input block must be a multiple of the output block in bytes
   ctx->in_block_size = ipcbuf_get_bufsz ((ipcbuf_t *) in_hdu->data_block);
-  ctx->ou_block_size = ipcbuf_get_bufsz ((ipcbuf_t *) out_hdu->data_block);
+  ctx->fb_block_size = ipcbuf_get_bufsz ((ipcbuf_t *) fb_hdu->data_block);
+
+  if (ctx->in_block_size % ctx->fb_block_size != 0)
+  {
+    multilog (log, LOG_ERR, "bfdsp_init: input block size must be a multiple of the output block size\n");
+    return -1;
+  }
 
   // the ratio 
-  //if (ctx->in_block_size *  / ctx->tdec != ctx->ou_block_size)
+  //if (ctx->in_block_size *  / ctx->tdec != ctx->fb_block_size)
   //{
   //  multilog (log, LOG_ERR, "bfdsp_init: input block size / dec != outout block size: input [%"PRIu64"], ouput [%"PRIu64"]\n",
-  //            ctx->in_block_size, ctx->ou_block_size);
+  //            ctx->in_block_size, ctx->fb_block_size);
   //  return -1;
   //}
 
-  ctx->out_hdu = out_hdu;
+  ctx->fb_hdu = fb_hdu;
 
+#ifdef USE_GPU
   // ensure that we register the DADA DB buffers as Cuda Host memory
   if (ctx->verbose)
     multilog (log, LOG_INFO, "init: registering input HDU buffers\n");
@@ -317,9 +334,9 @@ int bfdsp_init ( mopsr_bfdsp_t* ctx, dada_hdu_t * in_hdu, dada_hdu_t * out_hdu, 
   }
   if (ctx->verbose)
     multilog (log, LOG_INFO, "init: registering output HDU buffers\n");
-  if (dada_cuda_dbregister(out_hdu) < 0)
+  if (dada_cuda_dbregister(fb_hdu) < 0)
   {
-    fprintf (stderr, "failed to register out_hdu DADA buffers as pinned memory\n");
+    fprintf (stderr, "failed to register fb_hdu DADA buffers as pinned memory\n");
     return -1;
   }
 
@@ -335,16 +352,16 @@ int bfdsp_init ( mopsr_bfdsp_t* ctx, dada_hdu_t * in_hdu, dada_hdu_t * out_hdu, 
   }
 
   if (ctx->verbose)
-    multilog (log, LOG_INFO, "init: allocating %ld bytes of device memory for d_fbs\n", ctx->ou_block_size);
-  error = cudaMalloc( &(ctx->d_fbs), ctx->ou_block_size);
+    multilog (log, LOG_INFO, "init: allocating %ld bytes of device memory for d_fbs\n", ctx->fb_block_size);
+  error = cudaMalloc( &(ctx->d_fbs), ctx->fb_block_size);
   if (ctx->verbose)
     multilog (log, LOG_INFO, "init: d_fbs=%p\n", ctx->d_fbs);
   if (error != cudaSuccess)
   {
-    multilog (log, LOG_ERR, "init: could not allocate %ld bytes of device memory\n", ctx->ou_block_size);
+    multilog (log, LOG_ERR, "init: could not allocate %ld bytes of device memory\n", ctx->fb_block_size);
     return -1;
   }
-
+#endif
   if (ctx->verbose)
      multilog (log, LOG_INFO, "init: completed\n");
 
@@ -388,6 +405,7 @@ int bfdsp_alloc (mopsr_bfdsp_t * ctx)
   ctx->phasors_size = ctx->nant * ctx->nbeam * sizeof(complex float);
   if (ctx->verbose)
     multilog (log, LOG_INFO, "alloc: allocating %ld bytes of pinned host memory for phasors\n", ctx->phasors_size);
+#ifdef USE_GPU
   cudaError_t error = cudaMallocHost( (void **) &(ctx->h_phasors), ctx->phasors_size);
   if (error != cudaSuccess)
   {
@@ -403,6 +421,9 @@ int bfdsp_alloc (mopsr_bfdsp_t * ctx)
     multilog (log, LOG_ERR, "alloc: could not allocate %ld bytes of device memory\n", ctx->phasors_size);
     return -1;    
   } 
+#else
+  ctx->h_phasors = (float *) malloc(ctx->phasors_size);
+#endif
 
   // compute the phasors for each beam and antenna
   double C = 2.99792458e8;
@@ -410,12 +431,24 @@ int bfdsp_alloc (mopsr_bfdsp_t * ctx)
   const unsigned nbeamant = ctx->nbeam * ctx->nant;
   unsigned idx;
 
-  double range = (4.0 / 352) * ctx->nbeam;
+  //double range = (4.0 / 352) * ctx->nbeam;
+  double range = 4.0;
+
+  ctx->h_beam_offsets = (float *) malloc (ctx->nbeam * sizeof(float));
+
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "alloc: computing beam offsets nbeam=%d\n", ctx->nbeam); 
+
 
   for (ibeam=0; ibeam<ctx->nbeam; ibeam++)
   {
     fraction = (double) ibeam / (double) (ctx->nbeam-1);
+    // centred around delay midpoint
     angle_rads = ((fraction * range) - (range/2)) * DD2R;
+    // leading edge
+    //angle_rads = (fraction * range) * DD2R;
+   
+    ctx->h_beam_offsets[ibeam] = (float) angle_rads;
     sin_md = sin(angle_rads);
 
     // the h_dist will be -2 * PI * FREQ * dist / C
@@ -423,10 +456,12 @@ int bfdsp_alloc (mopsr_bfdsp_t * ctx)
     {
       geometric_delay = (sin_md * ctx->modules[iant]->dist) / C;
       theta = -2 * M_PI * ctx->channel.cfreq * 1000000 * geometric_delay;
+      //theta = -2 * M_PI * 840 * 1000000 * geometric_delay;
 
       idx = ibeam * ctx->nant + iant;
       ctx->h_phasors[idx]          = (float) cos(theta);
       ctx->h_phasors[idx+nbeamant] = (float) sin(theta);
+
       //fprintf (stderr, "[%d][%d] freq=%lf delay=%le angle=%lf degrees, theta=%lf (%e, i%e)\n", ibeam, iant, ctx->channel.cfreq, geometric_delay, angle_rads / DD2R, theta, ctx->h_phasors[idx], ctx->h_phasors[idx+nbeamant]);
     }
   }
@@ -462,7 +497,9 @@ int bfdsp_alloc (mopsr_bfdsp_t * ctx)
   }
 */
 
+#ifdef USE_GPU
   cudaStreamSynchronize(ctx->stream);
+#endif
 
   return 0;
 }
@@ -470,8 +507,10 @@ int bfdsp_alloc (mopsr_bfdsp_t * ctx)
 // de-allocate the observation specific memory
 int bfdsp_dealloc (mopsr_bfdsp_t * ctx)
 {
+#ifdef USE_GPU
   // ensure no operations are pending
   cudaStreamSynchronize(ctx->stream);
+#endif
 /*
   if (ctx->h_ant_factors)
     cudaFreeHost(ctx->h_ant_factors);
@@ -482,6 +521,8 @@ int bfdsp_dealloc (mopsr_bfdsp_t * ctx)
   ctx->h_sin_thetas = 0;
 */
 
+
+#ifdef USE_GPU
   if (ctx->h_phasors)
     cudaFreeHost (ctx->h_phasors);
   ctx->h_phasors = 0;
@@ -497,24 +538,32 @@ int bfdsp_dealloc (mopsr_bfdsp_t * ctx)
   if (ctx->d_phasors)
     cudaFree (ctx->d_phasors);
   ctx->d_phasors = 0;
+#else
+  if (ctx->h_phasors)
+    free (ctx->h_phasors);
+  ctx->h_phasors = 0;
+
+#endif
 
   return 0;
 }
 
 // determine application memory 
-int bfdsp_destroy (mopsr_bfdsp_t * ctx, dada_hdu_t * in_hdu, dada_hdu_t * out_hdu)
+int bfdsp_destroy (mopsr_bfdsp_t * ctx, dada_hdu_t * in_hdu, dada_hdu_t * fb_hdu)
 {
+#ifdef USE_GPU
   if (dada_cuda_dbunregister (in_hdu) < 0)
   {
     multilog (ctx->log, LOG_ERR, "failed to unregister input DADA buffers\n");
     return -1;
   }
 
-  if (dada_cuda_dbunregister (out_hdu) < 0)
+  if (dada_cuda_dbunregister (fb_hdu) < 0)
   {
     multilog (ctx->log, LOG_ERR, "failed to unregister input DADA buffers\n");
     return -1;
   }
+#endif
 }
  
 
@@ -531,22 +580,25 @@ int bfdsp_open (dada_client_t* client)
   // lock the output datablock for writing
   if (ctx->verbose)
     multilog (log, LOG_INFO, "open: locking write on output HDU\n");
-  if (dada_hdu_lock_write (ctx->out_hdu) < 0)
+  if (dada_hdu_lock_write (ctx->fb_hdu) < 0)
   {
     multilog (log, LOG_ERR, "open: could not lock write on output HDU\n");
     return -1;
   }
 
   // initialize
-  ctx->block_open = 0;
+  ctx->tb_block_open = 0;
+  ctx->fb_block_open = 0;
   ctx->bytes_read = 0;
   ctx->bytes_written = 0;
-  ctx->curr_block = 0;
+  ctx->tb_block = 0;
+  ctx->fb_block = 0;
   ctx->first_time = 1;
 
   if (ctx->verbose)
     multilog (log, LOG_INFO, "open: extracting params from header\n");
 
+  // read NANT from incoming header
   if (ascii_header_get (client->header, "NANT", "%d", &(ctx->nant)) != 1)
   {
     multilog (log, LOG_ERR, "open: could not read NANT from header\n");
@@ -555,6 +607,7 @@ int bfdsp_open (dada_client_t* client)
   if (ctx->verbose)
     multilog (log, LOG_INFO, "open: NANT=%d\n", ctx->nant);
 
+  // read NDIM from incoming header (should be 2)
   if (ascii_header_get (client->header, "NDIM", "%d", &(ctx->ndim)) != 1)
   {
     multilog (log, LOG_ERR, "open: could not read NANT from header\n");
@@ -565,21 +618,89 @@ int bfdsp_open (dada_client_t* client)
   if (ctx->verbose)
     multilog (log, LOG_INFO, "open: NBEAM=%d\n", ctx->nbeam);
 
-  if (ascii_header_get (client->header, "TSAMP", "%lf", &(ctx->tsamp)) != 1)
+  // I/O Rate change for this operation is as follows:
+  //   8bits -> 32bits,        * 4
+  //   1 chan -> 4 chan        * 4
+  //   1 beam -> ? beams       * ?
+  //   ? ants -> 1 ant         / ?
+  //   2dim -> 1dim,           / 2
+  //   1.28us -> 327.68 us     / 256
+  //   =============================
+  //   Factor                  / 64 [ 17301504 / 64 = 270336]
+
+  // using the x1024 kernel
+  unsigned nbit_n = 4;
+  unsigned nchan_n = 4;
+  unsigned ndim_d  = 2;
+  unsigned nsamp_d = 256;
+
+  // using the 64_blk kernel
+  //nbit_n = 4;
+  //nchan_n = 1;
+  //ndim_d  = 2;
+  //nsamp_d = 64;
+
+  // using the 2048_blk kernel
+  nbit_n = 4;
+  nchan_n = 1;
+  ndim_d  = 2;
+  nsamp_d = 512;
+
+  unsigned numerator   = (nbit_n * nchan_n * ctx->nbeam);
+  unsigned denominator = (ndim_d * nsamp_d * ctx->nant);
+
+  if (denominator % numerator != 0)
+  {
+    multilog (log, LOG_ERR, "open: requested nbeam did not result in integer denominator change in data rate\n");
+    return -1;
+  }
+
+  unsigned divisor = denominator / numerator;
+
+  // calculate new TSAMP
+  double in_tsamp, fb_tsamp; 
+  if (ascii_header_get (client->header, "TSAMP", "%lf", &in_tsamp) != 1)
   {
     multilog (log, LOG_ERR, "open: could not read TSAMP from header\n");
     return -1;
   }
+  fb_tsamp = in_tsamp * nsamp_d;
   if (ctx->verbose)
-    multilog (log, LOG_INFO, "open: TSAMP=%lf\n", ctx->tsamp);
+    multilog (log, LOG_INFO, "open: TSAMP in=%lf out=%lf\n", in_tsamp, fb_tsamp);
 
+  // calculate new BYTES_PER_SECOND
+  uint64_t fb_bytes_per_second;
   if (ascii_header_get (client->header, "BYTES_PER_SECOND", "%"PRIu64, &(ctx->bytes_per_second)) != 1)
   {
     multilog (log, LOG_ERR, "open: could not read BYTES_PER_SECOND from header\n");
     return -1;
   }
+  fb_bytes_per_second = ctx->bytes_per_second / divisor;
   if (ctx->verbose)
-    multilog (log, LOG_INFO, "open: BYTES_PER_SECOND=%"PRIu64"\n", ctx->bytes_per_second);
+    multilog (log, LOG_INFO, "open: BYTES_PER_SECOND in=%"PRIu64" out=%"PRIu64"\n", 
+              ctx->bytes_per_second, fb_bytes_per_second);
+
+  // calculate new OBS_OFFSET
+  uint64_t in_obs_offset, fb_obs_offset;
+  if (ascii_header_get (client->header, "OBS_OFFSET", "%"PRIu64, &in_obs_offset) != 1)
+  {
+    multilog (log, LOG_ERR, "open: could not read OBS_OFFSET from header\n");
+    return -1;
+  }
+  fb_obs_offset = in_obs_offset / divisor;
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "open: OBS_OFFSET in=%"PRIu64" out=%"PRIu64"\n", 
+              in_obs_offset, fb_obs_offset);
+
+  int64_t in_file_size = -1;
+  int64_t fb_file_size = -1;
+  if (ascii_header_get (client->header, "FILE_SIZE", "%"PRIi64"", &in_file_size) == 1)
+  {
+    fb_file_size = in_file_size / divisor; 
+  }
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "open: FILE_SIZE in=%"PRIi64" out=%"PRIi64"\n", 
+              in_file_size, fb_file_size);
 
   if (ascii_header_get (client->header, "CHAN_OFFSET", "%u", &(ctx->channel.number)) != 1)
   {
@@ -630,7 +751,8 @@ int bfdsp_open (dada_client_t* client)
 
   if (ascii_header_get (client->header, "UT1_OFFSET", "%f", &(ctx->ut1_offset)) == 1)
   {
-    multilog (log, LOG_INFO, "open: UT1_OFFSET=%f\n", ctx->ut1_offset);
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "open: UT1_OFFSET=%f\n", ctx->ut1_offset);
   } 
   else
   {
@@ -661,8 +783,9 @@ int bfdsp_open (dada_client_t* client)
   timestamp.tv_sec = ctx->utc_start;
   timestamp.tv_usec = (long) (ctx->ut1_offset * 1000000);
 
-  calc_app_position (ctx->source.raj, ctx->source.decj, timestamp, 
-                    &(ctx->source.ra_curr), &(ctx->source.dec_curr));
+  struct tm * utc = gmtime (&(ctx->utc_start));
+
+  cal_app_pos_iau (ctx->source.raj, ctx->source.decj, utc, &(ctx->source.ra_curr), &(ctx->source.dec_curr));
 
   // multilog (log, LOG_INFO, "open: coords J2000=(%lf, %lf) CURR=(%lf, %lf)\n", 
   //           ctx->source.raj, ctx->source.decj, ctx->source.ra_curr, ctx->source.dec_curr);
@@ -745,7 +868,7 @@ int bfdsp_open (dada_client_t* client)
   uint64_t header_size = ipcbuf_get_bufsz (client->header_block);
   if (ctx->verbose)
     multilog (log, LOG_INFO, "open: getting next free output header buffer\n");
-  char * header = ipcbuf_get_next_write (ctx->out_hdu->header_block);
+  char * header = ipcbuf_get_next_write (ctx->fb_hdu->header_block);
   if (!header)
   {
     multilog (log, LOG_ERR, "open: could not get next header block\n");
@@ -757,23 +880,37 @@ int bfdsp_open (dada_client_t* client)
     multilog (log, LOG_INFO, "open: copying header from input to output\n");
   memcpy (header, client->header, header_size);
 
-  if (ascii_header_set (header, "RESOLUTION", "%"PRIu64, ctx->ou_block_size) < 0)
+  // double check that the fb_block_size is divisor times smaller than the input block size
+  if (ctx->in_block_size / ctx->fb_block_size != divisor)
   {
-    multilog (log, LOG_ERR, "open: could not set RESOLUTION=%"PRIu64" in outgoing header\n", ctx->ou_block_size);
+    multilog (log, LOG_ERR, "open: in/out block size factor did not match divisor\n");
     return -1;
   }
 
-  uint64_t obs_offset;
-  if (ascii_header_get (header, "OBS_OFFSET", "%"PRIu64, &obs_offset) != 1)
+  // remove the antenna from the outgoing header as it is no longer relevant
+  if (ascii_header_del (header, "ANTENNAE") < 0)
   {
-    multilog (log, LOG_ERR, "open: could not read OBS_OFFSET from header\n");
-   return -1;
+    multilog (log, LOG_ERR, "open: could not delete ANTENNAE in outgoing header\n");
+    return -1;
   }
-  ctx->bytes_read += obs_offset;
 
-  if (ascii_header_set (header, "ORDER", "%s", "TS") < 0)
+  if (ascii_header_set (header, "STATE", "%s", "Intensity") < 0)
   {
-    multilog (log, LOG_ERR, "open: could not set ORDER in outgoing header\n");
+    multilog (log, LOG_ERR, "open: could not set STATE=Intensity in outgoing header\n");
+    return -1;
+  }
+
+  if (ascii_header_set (header, "RESOLUTION", "%"PRIu64, ctx->fb_block_size) < 0)
+  {
+    multilog (log, LOG_ERR, "open: could not set RESOLUTION=%"PRIu64" in outgoing header\n", ctx->fb_block_size);
+    return -1;
+  }
+
+  ctx->bytes_read += in_obs_offset;
+
+  if (ascii_header_set (header, "ORDER", "%s", "ST") < 0)
+  {
+    multilog (log, LOG_ERR, "open: could not set ORDER=ST in outgoing header\n");
     return -1;
   }
 
@@ -799,13 +936,69 @@ int bfdsp_open (dada_client_t* client)
   {
     multilog (log, LOG_ERR, "open: could not set NBEAM=%d in outgoing header\n", ctx->nbeam);
     return -1;    
-  }                 
+  }
+
+  if (ascii_header_set (header, "NCHAN", "%d", nchan_n) < 0)
+  {
+    multilog (log, LOG_ERR, "open: could not set NCHAN=%d in outgoing header\n", nchan_n);
+    return -1;
+  }
+
+  if (ascii_header_set (header, "TSAMP", "%lf", fb_tsamp) < 0)
+  {
+    multilog (log, LOG_ERR, "open: could not set TSAMP=%lf in outgoing header\n", fb_tsamp);
+    return -1;
+  }
+  
+  if (ascii_header_set (header, "OBS_OFFSET", "%"PRIu64, fb_obs_offset) < 0)
+  {
+    multilog (log, LOG_ERR, "open: could not set OBS_OFFSET=%"PRIu64" in outgoing header\n", fb_obs_offset);
+    return -1;
+  }
+
+  if (ascii_header_set (header, "BYTES_PER_SECOND", "%"PRIu64, fb_bytes_per_second) < 0)
+  {
+    multilog (log, LOG_ERR, "open: could not set BYTES_PER_SECOND=%"PRIu64" in outgoing header\n", fb_bytes_per_second);
+    return -1;
+  }
+
+  if ((fb_file_size > 0) && (ascii_header_set (header, "FILE_SIZE", "%"PRIu64, fb_file_size) < 0))
+  {
+    multilog (log, LOG_ERR, "open: could not set FILE_SIZE=%"PRIu64" in outgoing header\n", fb_file_size);
+    return -1;
+  }
+
+  if (ascii_header_set (header, "NBEAM", "%d", ctx->nbeam) < 0)
+  {
+    multilog (log, LOG_ERR, "open: could not set NBEAM=%d in outgoing header\n", ctx->nbeam);
+    return -1;
+  }
+
+  int ibeam;
+
+  // md offets will be [-0.0000,] 7 or 8 chars long
+  char strval[9];
+  char * mdlist = (char *) malloc(sizeof(char) * 7 * ctx->nbeam);
+  mdlist[0] = '\0';
+  for (ibeam=0; ibeam<ctx->nbeam; ibeam++)
+  {
+    sprintf(strval, "%4.3f", ctx->h_beam_offsets[ibeam]);
+    strcat (mdlist, strval);
+    if (ibeam < ctx->nbeam-1)
+      strcat (mdlist,",");
+  }
+
+  if (ascii_header_set (header, "BEAM_MD_OFFSETS", "%s", mdlist) < 0)
+  {
+    multilog (log, LOG_ERR, "open: could not set BEAM_MD_OFFSETS=%s in outgoing header\n", ibeam, mdlist);
+    return -1;
+  }
 
   if (ctx->verbose)
     multilog (log, LOG_INFO, "open: marking output header filled\n");
 
   // mark the outgoing header as filled
-  if (ipcbuf_mark_filled (ctx->out_hdu->header_block, header_size) < 0) 
+  if (ipcbuf_mark_filled (ctx->fb_hdu->header_block, header_size) < 0) 
   {
     multilog (log, LOG_ERR, "open: could not mark header_block filled\n");
     return -1;
@@ -836,16 +1029,16 @@ int bfdsp_close (dada_client_t* client, uint64_t bytes_written)
   if (ctx->verbose)
     multilog (log, LOG_INFO, "bfdsp_close()\n");
 
-  if (ctx->block_open)
+  if (ctx->fb_block_open)
   {
     if (ctx->verbose)
       multilog (log, LOG_INFO, "close: ipcio_close_block_write bytes_written=%"PRIu64"\n", ctx->bytes_written);
-    if (ipcio_close_block_write (ctx->out_hdu->data_block, ctx->bytes_written) < 0)
+    if (ipcio_close_block_write (ctx->fb_hdu->data_block, ctx->bytes_written) < 0)
     {
       multilog (log, LOG_ERR, "close: ipcio_close_block_write failed\n");
       return -1;
     }
-    ctx->block_open = 0;
+    ctx->fb_block_open = 0;
     ctx->bytes_written = 0;
   }
 
@@ -854,7 +1047,7 @@ int bfdsp_close (dada_client_t* client, uint64_t bytes_written)
     multilog (log, LOG_ERR, "close: bfdsp_dealloc failed\n");
   } 
 
-  if (dada_hdu_unlock_write (ctx->out_hdu) < 0)
+  if (dada_hdu_unlock_write (ctx->fb_hdu) < 0)
   {
     multilog (log, LOG_ERR, "close: cannot unlock output HDU\n");
     return -1;
@@ -903,32 +1096,59 @@ int64_t bfdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
     return -1;
   }
 
-  // form the tiled, detected and integrated fan beams
-  // mopsr_tile_beams (ctx->stream, ctx->d_in, ctx->d_fbs, ctx->h_sin_thetas, ctx->h_ant_factors,
-  //                  bytes, ctx->nbeam, ctx->nant, ctx->tdec);
+  // form a tied array beam if requested
+  if (ctx->check_tied_beam)
+  { 
+    // determine if there is a pulsar in the primary beam
+    bfdsp_update_tb (ctx);
+
+    if (ctx->form_tied_block)
+    {
+      mopsr_tie_beam (ctx->stream, ctx->d_in, ctx->d_tb, ctx->d_tb_phasors, ctx->in_block_size, ctx->nant);
+
+      if (!ctx->tb_block_open)
+      {
+        ctx->tb_block = ipcio_open_block_write (ctx->tb_hdu->data_block, &out_block_id);
+        if (ctx->verbose > 1)
+          multilog (log, LOG_INFO, "io_block: opened TB output block %"PRIu64" %p\n", out_block_id, (void *) ctx->tb_block);
+        ctx->tb_block_open = 1;
+      }
+
+      if (ctx->verbose > 1)
+        multilog (log, LOG_INFO, "io_block: cudaMemcpyAsync(%p, %p, %"PRIu64", D2H)\n",
+                  (void *) ctx->tb_block, ctx->d_tb, ctx->tb_block_size);
+      error = cudaMemcpyAsync ( (void *) ctx->tb_block, ctx->d_tb, ctx->tb_block_size,
+                              cudaMemcpyDeviceToHost, ctx->stream);
+      if (error != cudaSuccess)
+      {
+        multilog (log, LOG_ERR, "cudaMemcpyAsync D2H failed: %s\n", cudaGetErrorString(error));
+        ctx->internal_error = 1;
+        return -1;
+      }
+    }
+  }
 
   // form the tiled, detected and integrated tied array beams
   mopsr_tile_beams_precomp (ctx->stream, ctx->d_in, ctx->d_fbs, ctx->d_phasors, ctx->in_block_size, ctx->nbeam, ctx->nant, ctx->tdec);
 #endif
 
   // copy back to output buffer
-  if (!ctx->block_open)
+  if (!ctx->fb_block_open)
   {
-
-    ctx->curr_block = ipcio_open_block_write (ctx->out_hdu->data_block, &out_block_id);
+    ctx->fb_block = ipcio_open_block_write (ctx->fb_hdu->data_block, &out_block_id);
     if (ctx->verbose > 1)
-      multilog (log, LOG_INFO, "io_block: opened output block %"PRIu64" %p\n", out_block_id, (void *) ctx->curr_block);
-    ctx->block_open = 1;
+      multilog (log, LOG_INFO, "io_block: opened output block %"PRIu64" %p\n", out_block_id, (void *) ctx->fb_block);
+    ctx->fb_block_open = 1;
   }
 
 #ifndef USE_GPU
-  mopsr_tile_beams_cpu (buffer, ctx->curr_block, ctx->h_phasors, ctx->in_block_size, ctx->nbeam, ctx->nant, 64);
+  mopsr_tile_beams_cpu (buffer, ctx->fb_block, ctx->h_phasors, ctx->in_block_size, ctx->nbeam, ctx->nant, 512);
 #else
 
   if (ctx->verbose > 1)
     multilog (log, LOG_INFO, "io_block: cudaMemcpyAsync(%p, %p, %"PRIu64", D2H)\n",
-              (void *) ctx->curr_block, ctx->d_fbs, ctx->ou_block_size);
-  error = cudaMemcpyAsync ( (void *) ctx->curr_block, ctx->d_fbs, ctx->ou_block_size, 
+              (void *) ctx->fb_block, ctx->d_fbs, ctx->fb_block_size);
+  error = cudaMemcpyAsync ( (void *) ctx->fb_block, ctx->d_fbs, ctx->fb_block_size, 
                             cudaMemcpyDeviceToHost, ctx->stream);
   if (error != cudaSuccess)
   {
@@ -937,17 +1157,26 @@ int64_t bfdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
     return -1;
   }
 
+
   if (ctx->verbose > 1)
     multilog (log, LOG_INFO, "io_block: cudaStreamSynchronize()\n");
   cudaStreamSynchronize(ctx->stream);
 #endif
 
-  if (ctx->block_open)
+  if (ctx->fb_block_open)
   {
     if (ctx->verbose > 1)
-      multilog (log, LOG_INFO, "io_block: closing output data block for %"PRIu64" bytes\n", ctx->ou_block_size);
-    ipcio_close_block_write (ctx->out_hdu->data_block, ctx->ou_block_size);
-    ctx->block_open = 0;
+      multilog (log, LOG_INFO, "io_block: closing FB data block for %"PRIu64" bytes\n", ctx->fb_block_size);
+    ipcio_close_block_write (ctx->fb_hdu->data_block, ctx->fb_block_size);
+    ctx->fb_block_open = 0;
+  }
+
+  if (ctx->tb_block_open)
+  {
+    if (ctx->verbose > 1)
+      multilog (log, LOG_INFO, "io_block: closing TB data block for %"PRIu64" bytes\n", ctx->tb_block_size);
+    ipcio_close_block_write (ctx->tb_hdu->data_block, ctx->tb_block_size);
+    ctx->tb_block_open = 0;
   }
 
   ctx->bytes_read += bytes;
@@ -979,17 +1208,29 @@ int mopsr_tile_beams_cpu (void * h_in, void * h_out, void * h_phasors, uint64_t 
   const unsigned ndat = tdec;
   unsigned nchunk = nsamp / tdec;
 
+  complex float beam_phasors[nant];
+
   //fprintf (stderr, "nsamp=%u, nchunk=%u\n", nsamp, nchunk);
 
-  unsigned ibeam, ichunk, idat, isamp, iant;
+  unsigned ibeam, ichunk, idat, isamp, iant, idx;
   for (ibeam=0; ibeam<nbeam; ibeam++)
   {
+    fprintf (stderr, "ibeam=%i\n", ibeam);
+
+    // compute phasors for all ant for this beam
+    for (iant=0; iant<nant; iant++)
+    {
+      idx = (ibeam * nant) + iant;
+      beam_phasors[iant] = phasors[idx] + phasors[idx + nbeamant] * I;
+    }
+
     isamp = 0;
     for (ichunk=0; ichunk<nchunk; ichunk++)
     {
       beam_power = 0;
       for (idat=0; idat<ndat; idat++)
       {
+        // compute the "beam_sum" of all antena for each time sample
         beam_sum = 0 + 0 * I;
         for (iant=0; iant<nant; iant++)
         {
@@ -997,18 +1238,84 @@ int mopsr_tile_beams_cpu (void * h_in, void * h_out, void * h_phasors, uint64_t 
           val16 = in16[iant*nsamp + isamp];
           val = ((float) val8[0]) + ((float) val8[1]) * I;
 
+          // fused multiply and add
+          beam_sum = val * beam_phasors[iant] + beam_sum;
+
           // the required phase rotation for this beam and antenna
-          phasor = phasors[ibeam * nant + iant] + phasors[(ibeam * nant) + iant + nbeamant] * I;
-          steered = val * phasor;
+          //phasor = phasors[idx] + phasors[idx + nbeamant] * I;
+          //steered = val * neam_phasors[iant] + steer;
           // add the steered tied array beam to the total
-          beam_sum += steered;
+          //beam_sum += steered;
           //beam_sum += val;
         }
 
         beam_power += (creal(beam_sum) * creal(beam_sum)) + (cimag(beam_sum) * cimag(beam_sum));
         isamp++;
       }
-      ou[ichunk*nbeam + ibeam] = beam_power;
+
+      // output in ST order
+      ou[ibeam * nchunk + ichunk] = beam_power;
     }
   }
+}
+
+// determine if there is a pulsar to time within the primary beam
+void bfdsp_update_tb (mopsr_bfdsp_t * ctx)
+{
+  // if pulsar currently in beam, update phase solution
+  if (ctx->tb_psr_active)
+  {
+    // determine current offset between PSR and MD=0 in radians
+
+    // note that UT1 offset was already accounted for in the AQDSP engine
+    const double mid_byte = (double) ctx->bytes_read + (ctx->in_block_size / 2);
+    const double mid_time = (double) ctx->utc_start + (mid_byte / (double) ctx->bytes_per_second);
+
+    struct timeval timestamp;
+    timestamp.tv_sec = (long) floor (mid_time);
+    timestamp.tv_usec = (long) floor ((mid_time - (double) timestamp.tv_sec) * 1e6);
+
+    double jer_delay = calc_jer_delay (ctx->tb_source.ra_curr, ctx->tb_source.dec_curr, timestamp);
+
+    unsigned iant;
+    const double C = 2.99792458e8;
+    for (iant=0; iant<ctx->nant; iant++)
+    {
+      double geometric_delay = (jer_delay * ctx->modules[iant]->dist) / C;
+      double theta = -2 * M_PI * ctx->channel.cfreq * 1000000 * geometric_delay;
+      ctx->h_tb_phasors[iant] = (float) cos(theta) + (float) sin(theta) * I;
+    }
+
+    // copy these to device memory [TODO]
+    if (ctx->verbose > 1)
+      multilog (ctx->log, LOG_INFO, "update_tb: cudaMemcpyAsync block H2D %ld: (%p <- %p)\n", 
+                ctx->tb_phasors_size, ctx->d_tb_phasors, ctx->h_tb_phasors);
+    cudaError_t error = cudaMemcpyAsync ((void *) ctx->d_tb_phasors, (void *) ctx->h_tb_phasors, 
+                             ctx->tb_phasors_size, cudaMemcpyHostToDevice, ctx->stream);
+    if (error != cudaSuccess)
+    {
+      multilog (ctx->log, LOG_ERR, "cudaMemcpyAsyc H2D failed: %s (%p <- %p)\n", cudaGetErrorString(error),
+                ctx->d_tb_phasors, ctx->h_tb_phasors);
+      return;
+    }
+
+    // if the MD angle is > 2 degrees, then the psr is exiting the primary beam
+    if (asin(jer_delay) > (2.0 * DD2R))
+    {
+      multilog (ctx->log, LOG_INFO, "update_tb: PSR leaving beam\n");
+      ctx->tb_psr_active = 0;
+    }
+  }
+  // we have no PSR in the beam
+  else
+  {
+    // search for PSRS that could be in the BEAM
+
+    // determine which pulsars entering beam
+
+    //
+    // determine RA/DEC of primary
+  }
+
+
 }

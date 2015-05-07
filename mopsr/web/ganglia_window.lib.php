@@ -22,7 +22,7 @@ class ganglia_window extends mopsr_webpage
     $this->srvs_load       = $gang_base."graph.php?g=load_report&z=small&c=Servers&m=&r=hour&s=descending&hc=4";
     $this->nodes_network   = $gang_base."graph.php?g=network_report&z=small&c=Nodes&m=&r=hour&s=descending&hc=4";
     $this->nodes_load      = $gang_base."graph.php?g=load_report&z=small&c=Nodes&m=&r=hour&s=descending&hc=4";
-    $this->nodes_gpu_load  = $gang_base."graph.php?g=gpu_load_report&z=small&c=Nodes&m=&r=hour&s=descending&hc=4";
+    #$this->nodes_gpu_load  = $gang_base."graph.php?g=gpu_load_report&z=small&c=Nodes&m=&r=hour&s=descending&hc=4";
     $this->host           = $inst->config["SERVER_HOST"];
     $this->port           = $inst->config["SERVER_WEB_MONITOR_PORT"];
   }
@@ -49,7 +49,7 @@ class ganglia_window extends mopsr_webpage
         document.getElementById("srvs_load").src = "<?echo $this->srvs_load?>?"+theTime;
         document.getElementById("srvs_network").src = "<?echo $this->srvs_network?>?"+theTime;
         document.getElementById("nodes_load").src = "<?echo $this->nodes_load?>?"+theTime;
-        document.getElementById("nodes_gpu_load").src = "<?echo $this->nodes_gpu_load?>?"+theTime;
+        //document.getElementById("nodes_gpu_load").src = "<?echo $this->nodes_gpu_load?>?"+theTime;
         document.getElementById("nodes_network").src = "<?echo $this->nodes_network?>?"+theTime;
       }
 
@@ -90,10 +90,10 @@ class ganglia_window extends mopsr_webpage
       <td><img id="nodes_load" src="<?echo $this->nodes_load?>"></td>
       <td><img id="nodes_network" src="<?echo $this->nodes_network?>"></td>
     </tr>
-    <tr>
+    <!--<tr>
       <td><img id="nodes_gpu_load" src="<?echo $this->nodes_gpu_load?>"></td>
       <td></td>
-    </tr>
+    </tr>-->
     </table>
 <?
   }

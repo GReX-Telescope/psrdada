@@ -54,7 +54,7 @@ typedef struct {
   // identifying code for antenna number
   unsigned int ant_code;
 
-  // number of antennae
+  // number of antenna
   unsigned int nant;
 
   // number of channels
@@ -83,7 +83,10 @@ typedef struct {
   float ymax;
 
   size_t pkt_size;
+
   size_t data_size;
+
+  int antenna;
 
 } udpplot_t;
 
@@ -103,8 +106,7 @@ void usage()
 {
   fprintf (stdout,
      "mopsr_udpplot [options]\n"
-     " -a nant        set number of antenna\n"
-     " -c nchan       set number of channels\n"
+     " -a nant        antenna to plot\n"
      " -h             print help text\n"
      " -i interface   ip/interface for inc. UDP packets [default all]\n"
      " -l             plot logarithmically\n"
@@ -240,7 +242,6 @@ int udpplot_init (udpplot_t * ctx)
 
 int main (int argc, char **argv)
 {
-
   /* Interface on which to listen for udp packets */
   char * interface = "any";
 
@@ -266,8 +267,14 @@ int main (int argc, char **argv)
 
   char zap_dc = 0;
 
-  while ((arg=getopt(argc,argv,"D:hi:lp:s:vz")) != -1) {
+  int antenna_to_plot = -1;
+
+  while ((arg=getopt(argc,argv,"a:D:hi:lp:s:vz")) != -1) {
     switch (arg) {
+
+    case 'a':
+      antenna_to_plot = atoi(optarg);
+      break;
 
     case 'D':
       device = strdup(optarg);
@@ -318,9 +325,8 @@ int main (int argc, char **argv)
 
   udpplot.interface = strdup(interface);
   udpplot.port = port;
-
   udpplot.ant_code = 0;
-
+  udpplot.antenna = antenna_to_plot;
 
   udpplot.num_integrated = 0;
   udpplot.to_integrate = 1;
@@ -414,8 +420,8 @@ int main (int argc, char **argv)
     {
       StopWatch_Start(&wait_sw);
 
-      //mopsr_decode (ctx->sock->buf, &hdr);
-      mopsr_decode_v2 (ctx->sock->buf, &hdr);
+      mopsr_decode (ctx->sock->buf, &hdr);
+      //mopsr_decode_v2 (ctx->sock->buf, &hdr);
 
       for (i=0; i<16; i++)
         mgt_locks[i] = ((char) mopsr_get_bit_from_16 (hdr.mgt_locks, i)) + '0';
@@ -569,17 +575,16 @@ void plot_packet (udpplot_t * ctx)
   // calculate limits
   for (iant=0; iant < ctx->nant; iant++)
   {
-    //fprintf (stderr, "ANT %d:", iant);
-    for (ichan=0; ichan < ctx->nchan; ichan++)
+    if ((ctx->antenna == -1) || (mopsr_get_new_ant_number (iant) == ctx->antenna))
     {
-      if (ctx->plot_log)
-        ctx->y_points[iant][ichan] = (ctx->y_points[iant][ichan] > 0) ? log10(ctx->y_points[iant][ichan]) : 0;
-      if (ctx->y_points[iant][ichan] > ctx->ymax) ctx->ymax = ctx->y_points[iant][ichan];
-      if (ctx->y_points[iant][ichan] < ctx->ymin) ctx->ymin = ctx->y_points[iant][ichan];
-
-      //fprintf (stderr, " %4.0f", ctx->y_points[iant][ichan]);
+      for (ichan=0; ichan < ctx->nchan; ichan++)
+      {
+        if (ctx->plot_log)
+          ctx->y_points[iant][ichan] = (ctx->y_points[iant][ichan] > 0) ? log10(ctx->y_points[iant][ichan]) : 0;
+        if (ctx->y_points[iant][ichan] > ctx->ymax) ctx->ymax = ctx->y_points[iant][ichan];
+        if (ctx->y_points[iant][ichan] < ctx->ymin) ctx->ymin = ctx->y_points[iant][ichan];
+      }
     }
-    //fprintf (stderr, "\n");
   }
   if (ctx->verbose)
     multilog (ctx->log, LOG_INFO, "plot_packet: ctx->ymin=%f, ctx->ymax=%f\n", ctx->ymin, ctx->ymax);
@@ -598,12 +603,17 @@ void plot_packet (udpplot_t * ctx)
   }
 
   char ant_label[8];
+  float label_offset = -1;
   for (iant=0; iant < ctx->nant; iant++)
   {
-    sprintf(ant_label, "Ant %u", mopsr_get_ant_number (ctx->ant_code, iant));
-    cpgsci(iant+2);
-    cpgmtxt("T", -1 - (1.0 * iant), 0.05, 0.0, ant_label);
-    cpgline(ctx->nchan, ctx->x_points, ctx->y_points[iant]);
+    if ((ctx->antenna == -1) || (mopsr_get_new_ant_number (iant) == ctx->antenna))
+    {
+      sprintf(ant_label, "Ant %u", mopsr_get_new_ant_number (iant));
+      cpgsci(iant+2);
+      cpgmtxt("T", label_offset, 0.05, 0.0, ant_label);
+      cpgline(ctx->nchan, ctx->x_points, ctx->y_points[iant]);
+      label_offset -= 1;
+    }
   }
   cpgebuf();
 }

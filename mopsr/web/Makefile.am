@@ -27,7 +27,7 @@ nobase_dist_web_SCRIPTS = index.php \
 													state_banner.lib.php \
 													tmc_simulator.lib.php \
                           control.lib.php \
-                          control_old.lib.php \
+                          control_new.lib.php \
                           images/mopsr_favicon.ico \
                           images/mopsr_logo.png \
 													rx_plot.php \

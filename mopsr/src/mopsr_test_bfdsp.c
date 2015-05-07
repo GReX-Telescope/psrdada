@@ -38,11 +38,13 @@ int main(int argc, char** argv)
   int arg = 0;
 
   unsigned nant = 352;
-  int nbeam = 512;
-  const unsigned ndim = 2;
-  uint64_t nsamp = 64;
+  int nbeam = 352;
+  const unsigned ndim_in = 2;
+  const unsigned ndim_ou = 1;
+  uint64_t nsamp = 16384 * 6;
   const unsigned tdec = 512;
-  const unsigned nchan_out = 4;
+  const unsigned nchan_in = 1;
+  const unsigned nchan_ou = 1;
 
   char verbose = 0;
 
@@ -154,14 +156,17 @@ int main(int argc, char** argv)
     return -1;
   }
 
+  /*
+  fprintf (stderr, "main: dada_get_device_name(%d)\n", device);
   char * device_name = dada_cuda_get_device_name (device);
   if (!device_name)
   {
     fprintf (stderr, "could not get CUDA device name\n");
     return -1;
   }
-  fprintf (stderr, "Using device %d : %s\n", device, device_name);
-  free(device_name);
+  //fprintf (stderr, "Using device %d : %s\n", device, device_name);
+  //free(device_name);
+  */
 
   // setup the cuda stream for operations
   cudaStream_t stream;
@@ -179,10 +184,11 @@ int main(int argc, char** argv)
   unsigned nbyte_in = sizeof(int8_t);
   unsigned nbyte_ou = sizeof(float);
 
-  uint64_t in_block_size = nsamp * nant * ndim * nbyte_in;
-  uint64_t ou_block_size = (nsamp * nbeam * nbyte_ou * nchan_out) / tdec;
+  uint64_t in_block_size = nsamp        * nant  * ndim_in * nbyte_in * nchan_in;
+  uint64_t ou_block_size = (nsamp/tdec) * nbeam * ndim_ou * nbyte_ou * nchan_ou;
 
-  fprintf (stderr, "nant=%u nbeam=%u nchan_out=%u tdec=%u nsamp=%"PRIu64" in_block_size=%"PRIu64" ou_block_size=%"PRIu64"\n", nant, nbeam, nchan_out, tdec, nsamp, in_block_size, ou_block_size);
+  fprintf (stderr, "IN:  nant=%u  nchan=%u ndim=%u nbit=%u nsamp=%"PRIu64" block_size=%"PRIu64"\n", nant,  nchan_in, ndim_in, nbyte_in*8, nsamp, in_block_size);
+  fprintf (stderr, "OUT: nbeam=%u nchan=%u ndim=%u nbit=%u nsamp=%"PRIu64" block_size=%"PRIu64"\n", nbeam, nchan_ou, ndim_ou, nbyte_ou*8, nsamp/tdec, ou_block_size);
 
   void * d_in;
   void * d_fbs;

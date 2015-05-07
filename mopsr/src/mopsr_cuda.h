@@ -11,6 +11,7 @@ extern "C" {
 
 #define MOPSR_UNIQUE_CORRECTIONS 32
 #define MOPSR_MAX_NANT_PER_AQ    16
+#define MOPSR_MEDIAN_FILTER_MEMORY 8
 
 #ifdef __CUDA_ARCH__
 # if (__CUDA_ARCH__ >= 300)
@@ -38,6 +39,8 @@ void mopsr_input_sum_ant (cudaStream_t stream, void * d_in, void * d_out, uint64
 void mopsr_tile_beams (cudaStream_t stream, void * d_in, void * d_fbs, float * beam_sin_thetas, float * ant_factors, uint64_t bytes, unsigned nbeam, unsigned nant, unsigned tdec);
 
 void mopsr_tile_beams_precomp (cudaStream_t stream, void * d_in, void * d_fbs, float * d_phasors, uint64_t bytes, unsigned nbeam, unsigned nant, unsigned tdec);
+
+void mopsr_tie_beam (cudaStream_t stream, void * d_in, void * d_out, void * d_phasors, uint64_t bytes, unsigned nant);
 
 
 

@@ -10,6 +10,7 @@ class control extends mopsr_webpage
 {
   var $inst = "";
   var $bf_cfg = 0;
+  var $bp_cfg = 0;
 
   var $server_host = "";
   var $server_daemons = array();
@@ -26,13 +27,22 @@ class control extends mopsr_webpage
   var $bf_dbs_str = "";
   var $bf_host_list = array();
 
+  var $bp_daemons = array();
+  var $bp_list = array();
+  var $bp_dbs = array();
+  var $bp_dbs_str = "";
+  var $bp_host_list = array();
+
   function control()
   {
     mopsr_webpage::mopsr_webpage();
     $this->inst = new mopsr();
 
-    # get the Beam Former configuration also
+    # get the Beam Former configuration
     $this->bf_cfg = $this->inst->configFileToHash(BF_FILE);
+
+    # get the Beam Processor configuration
+    $this->bp_cfg = $this->inst->configFileToHash(BP_FILE);
 
     $config = $this->inst->config;
 
@@ -80,35 +90,73 @@ class control extends mopsr_webpage
 
     # beam former configuration
     $config = $this->bf_cfg;
-    $data_block_ids = preg_split("/\s+/", $config["DATA_BLOCK_IDS"]);
-    foreach ($data_block_ids as $dbid)
+    if ($config["NUM_BF"] > 0)
     {
-      array_push($this->bf_dbs, $dbid);
-      if ($this->bfs_dbs_str == "")
-        $this->bfs_dbs_str = "\"buffer_".$dbid."\"";
-      else
-        $this->bfs_dbs_str .= ", \"buffer_".$dbid."\"";
-    }
-
-    for ($i=0; $i<$config["NUM_BF"]; $i++)
-    {
-      $host = $config["BF_".$i];
-
-      $exists = -1;
-      for ($j=0; $j<count($this->bf_host_list); $j++) {
-        if (strpos($this->bf_host_list[$j]["host"], $host) !== FALSE)
-          $exists = $j;
+      $data_block_ids = preg_split("/\s+/", $config["DATA_BLOCK_IDS"]);
+      foreach ($data_block_ids as $dbid)
+      {
+        array_push($this->bf_dbs, $dbid);
+        if ($this->bfs_dbs_str == "")
+          $this->bfs_dbs_str = "\"buffer_".$dbid."\"";
+        else
+          $this->bfs_dbs_str .= ", \"buffer_".$dbid."\"";
       }
-      if ($exists == -1)
-        array_push($this->bf_host_list, array("host" => $host, "span" => 1));
-      else
-        $this->bf_host_list[$exists]["span"]++;
 
-      array_push($this->bf_list, array("host" => $host, "span" => 1, "bf" => $i));
+      for ($i=0; $i<$config["NUM_BF"]; $i++)
+      {
+        $host = $config["BF_".$i];
+
+        $exists = -1;
+        for ($j=0; $j<count($this->bf_host_list); $j++) {
+          if (strpos($this->bf_host_list[$j]["host"], $host) !== FALSE)
+            $exists = $j;
+        }
+        if ($exists == -1)
+          array_push($this->bf_host_list, array("host" => $host, "span" => 1));
+        else
+          $this->bf_host_list[$exists]["span"]++;
+
+        array_push($this->bf_list, array("host" => $host, "span" => 1, "bf" => $i));
+      }
+
+      # get the list of aq client daemons
+      $this->bf_daemons = split(" ", $config["CLIENT_DAEMONS"]);
     }
 
-    # get the list of aq client daemons
-    $this->bf_daemons = split(" ", $config["CLIENT_DAEMONS"]);
+    # beam processor configuration
+    $config = $this->bp_cfg;
+    if ($config["NUM_BP"] > 0)
+    {
+      $data_block_ids = preg_split("/\s+/", $config["DATA_BLOCK_IDS"]);
+      foreach ($data_block_ids as $dbid)
+      {
+        array_push($this->bp_dbs, $dbid);
+        if ($this->bps_dbs_str == "")
+          $this->bps_dbs_str = "\"buffer_".$dbid."\"";
+        else
+          $this->bps_dbs_str .= ", \"buffer_".$dbid."\"";
+      }
+
+      for ($i=0; $i<$config["NUM_BP"]; $i++)
+      {
+        $host = $config["BP_".$i];
+
+        $exists = -1;
+        for ($j=0; $j<count($this->bp_host_list); $j++) {
+          if (strpos($this->bp_host_list[$j]["host"], $host) !== FALSE)
+            $exists = $j;
+        }
+        if ($exists == -1)
+          array_push($this->bp_host_list, array("host" => $host, "span" => 1));
+        else
+          $this->bp_host_list[$exists]["span"]++;
+
+        array_push($this->bp_list, array("host" => $host, "span" => 1, "bp" => $i));
+      }
+
+      # get the list of aq client daemons
+      $this->bp_daemons = split(" ", $config["CLIENT_DAEMONS"]);
+    }
 
     $this->server_host = $this->inst->config["SERVER_HOST"];
     if (strpos($this->server_host, ".") !== FALSE)
@@ -142,15 +190,15 @@ class control extends mopsr_webpage
       var srv_hosts = new Array(srv_host);
 
       var aq_hosts = new Array(<?
-      echo "'".$this->aq_host_list[0]["host"]."'";
-      for ($i=1; $i<count($this->aq_host_list); $i++) {
-        echo ",'".$this->aq_host_list[$i]["host"]."'";
+      for ($i=0; $i<count($this->aq_host_list); $i++) {
+        if ($i > 0) echo ",";
+        echo "'".$this->aq_host_list[$i]["host"]."'";
       }?>);
 
       var aqs = new Array(<?
-      echo "'".$this->inst->config["PWC_0"].":0'";
-      for ($i=1; $i<$this->inst->config["NUM_PWC"]; $i++) {
-        echo ",'".$this->inst->config["PWC_".$i].":".$i."'";
+      for ($i=0; $i<$this->inst->config["NUM_PWC"]; $i++) {
+        if ($i > 0) echo ",";
+        echo "'".$this->inst->config["PWC_".$i].":".$i."'";
       }?>);
 
       var aq_hosts_str = "";
@@ -159,21 +207,21 @@ class control extends mopsr_webpage
       }
 
       var aq_daemons_custom = new Array(<?;
-      echo "'".$this->aq_daemons[0]."'";
-      for ($i=1; $i<count($this->aq_daemons); $i++) {
-        echo ",'".$this->aq_daemons[$i]."'";
+      for ($i=0; $i<count($this->aq_daemons); $i++) {
+        if ($i > 0) echo ",";
+        echo "'".$this->aq_daemons[$i]."'";
       }?>);
 
       var bf_hosts = new Array(<?
-      echo "'".$this->bf_host_list[0]["host"]."'";
-      for ($i=1; $i<count($this->bf_host_list); $i++) {
-        echo ",'".$this->bf_host_list[$i]["host"]."'";
+      for ($i=0; $i<count($this->bf_host_list); $i++) {
+        if ($i > 0) echo ",";
+        echo "'".$this->bf_host_list[$i]["host"]."'";
       }?>);
 
       var bfs = new Array(<?
-      echo "'".$this->bf_cfg["BF_0"].":0'";
-      for ($i=1; $i<$this->bf_cfg["NUM_BF"]; $i++) {
-        echo ",'".$this->bf_cfg["BF_".$i].":".$i."'";
+      for ($i=0; $i<$this->bf_cfg["NUM_BF"]; $i++) {
+        if ($i > 0) echo ",";
+        echo "'".$this->bf_cfg["BF_".$i].":".$i."'";
       }?>);
 
       var bf_hosts_str = "";
@@ -182,9 +230,32 @@ class control extends mopsr_webpage
       }
 
       var bf_daemons_custom = new Array(<?;
-      echo "'".$this->bf_daemons[0]."'";
-      for ($i=1; $i<count($this->bf_daemons); $i++) {
-        echo ",'".$this->bf_daemons[$i]."'";
+      for ($i=0; $i<count($this->bf_daemons); $i++) {
+        if ($i > 0) echo ",";
+        echo "'".$this->bf_daemons[$i]."'";
+      }?>);
+
+      var bp_hosts = new Array(<?
+      for ($i=0; $i<count($this->bp_host_list); $i++) {
+        if ($i > 0) echo ",";
+        echo "'".$this->bp_host_list[$i]["host"]."'";
+      }?>);
+
+      var bps = new Array(<?
+      for ($i=0; $i<$this->bp_cfg["NUM_BP"]; $i++) {
+        if ($i > 0) echo ",";
+        echo "'".$this->bp_cfg["BP_".$i].":".$i."'";
+      }?>);
+
+      var bp_hosts_str = "";
+      for (i=0; i<bp_hosts.length; i++) {
+        bp_hosts_str += "&host_"+i+"="+bp_hosts[i];
+      }
+
+      var bp_daemons_custom = new Array(<?;
+      for ($i=0; $i<count($this->bp_daemons); $i++) {
+        if ($i > 0) echo ",";
+        echo "'".$this->bp_daemons[$i]."'";
       }?>);
 
       var srv_daemons_custom = new Array(<?;
@@ -514,6 +585,8 @@ class control extends mopsr_webpage
           pwcs = aqs;
         else if (a == "bf")
           pwcs = bfs;
+        else if (a == "bp")
+          pwcs = bps;
         else
         {
           alert ("checkMachinesPWCsAndDaemons: unexpected area: "+a);
@@ -543,7 +616,6 @@ class control extends mopsr_webpage
 
       function startMopsr() 
       {
-
         poll_update = 1000;
         poll_2sec_count = 0;
         clearTimeout(poll_timeout);
@@ -558,8 +630,18 @@ class control extends mopsr_webpage
         daemon_action_request(url);
 
         // start the BF's master control script
-        url = "control.lib.php?area=bf&action=start&daemon=mopsr_bf_master_control&nhosts="+bf_hosts.length+bf_hosts_str;
-        daemon_action_request(url);
+        if (bf_hosts.length > 0)
+        {
+          url = "control.lib.php?area=bf&action=start&daemon=mopsr_bf_master_control&nhosts="+bf_hosts.length+bf_hosts_str;
+          daemon_action_request(url);
+        }
+
+        // start the BP's master control script
+        if (bp_hosts.length > 0)
+        {
+          url = "control.lib.php?area=bp&action=start&daemon=mopsr_bp_master_control&nhosts="+bp_hosts.length+bp_hosts_str;
+          daemon_action_request(url);
+        }
 
         stage2_wait = 20;
         startMopsrStage2();
@@ -574,10 +656,23 @@ class control extends mopsr_webpage
         var srv_ready = checkMachinesAndDaemons("srv", srv_hosts, daemons, "green_light.png");
         var aq_ready  = checkMachinesAndDaemons("aq", aq_hosts, daemons, "green_light.png");
 
-        var bf_daemons = new Array("mopsr_bf_master_control");
-        var bf_ready  = checkMachinesAndDaemons("bf", bf_hosts, bf_daemons, "green_light.png");
+        var bf_daemons;
+        var bf_ready = true;      
+        if (bf_hosts.length > 0)
+        {
+          bf_daemons = new Array("mopsr_bf_master_control");
+          bf_ready  = checkMachinesAndDaemons("bf", bf_hosts, bf_daemons, "green_light.png");
+        }
 
-        if (((!srv_ready) || (!aq_ready) || (!bf_ready)) && (stage2_wait > 0))
+        var bp_daemons;
+        var bp_ready = true;
+        if (bp_hosts.length > 0)
+        {
+          var bp_daemons = new Array("mopsr_bp_master_control");
+          var bp_ready  = checkMachinesAndDaemons("bp", bp_hosts, bp_daemons, "green_light.png");
+        }
+
+        if (((!srv_ready) || (!aq_ready) || (!bf_ready) || (!bp_ready)) && (stage2_wait > 0))
         {
           stage2_wait--;
           setTimeout('startMopsrStage2()', 1000);
@@ -585,7 +680,7 @@ class control extends mopsr_webpage
         }
         stage2_wait = 0;
                 
-        // init the AQ and BF datablocks
+        // init the AQ, BF & BP datablocks
 <?
         for ($i=0; $i<count($this->aq_dbs); $i++)
         {
@@ -598,6 +693,13 @@ class control extends mopsr_webpage
         {
           $dbid = $this->bf_dbs[$i];
           echo "         url = \"control.lib.php?area=bf&action=start&daemon=buffer_".$dbid."&nhosts=\"+bf_hosts.length+bf_hosts_str\n";
+          echo "         daemon_action_request(url);\n";
+        }
+
+        for ($i=0; $i<count($this->bp_dbs); $i++)
+        {
+          $dbid = $this->bp_dbs[$i];
+          echo "         url = \"control.lib.php?area=bp&action=start&daemon=buffer_".$dbid."&nhosts=\"+bp_hosts.length+bp_hosts_str\n";
           echo "         daemon_action_request(url);\n";
         }
 ?>
@@ -620,10 +722,23 @@ class control extends mopsr_webpage
         var aq_daemons = new Array(<?echo $this->aq_dbs_str?>); 
         var aq_ready = checkMachinesPWCsAndDaemons("aq", aq_hosts, aq_daemons, new Array("green_light.png", "grey_light.png"));
 
-        var bf_daemons = new Array(<?echo $this->bf_dbs_str?>); 
-        var bf_ready = checkMachinesPWCsAndDaemons("bf", bf_hosts, bf_daemons, new Array("green_light.png", "grey_light.png"));
+        var bf_daemons;
+        var bf_ready = true;
+        if (bf_hosts.length > 0)
+        {
+          bf_daemons = new Array(<?echo $this->bf_dbs_str?>); 
+          bf_ready = checkMachinesPWCsAndDaemons("bf", bf_hosts, bf_daemons, new Array("green_light.png", "grey_light.png"));
+        }
 
-        if (((!aq_ready) || (!bf_ready)) && (stage3_wait > 0))
+        var bp_daemons;
+        var bp_ready = true;
+        if (bp_hosts.length > 0)
+        {
+          bp_daemons = new Array(<?echo $this->bp_dbs_str?>); 
+          bp_ready = checkMachinesPWCsAndDaemons("bp", bp_hosts, bp_daemons, new Array("green_light.png", "grey_light.png"));
+        }
+
+        if (((!aq_ready) || (!bf_ready) || (!bp_ready)) && (stage3_wait > 0))
         {
           stage3_wait--;
           setTimeout('startMopsrStage3()', 1000);
@@ -638,8 +753,18 @@ class control extends mopsr_webpage
         daemon_action_request(url);
 
         // start all the BF's daemons
-        url = "control.lib.php?area=bf&action=start&daemon=all&nhosts="+bf_hosts.length+bf_hosts_str;
-        daemon_action_request(url);
+        if (bf_hosts.length > 0)
+        {
+          url = "control.lib.php?area=bf&action=start&daemon=all&nhosts="+bf_hosts.length+bf_hosts_str;
+          daemon_action_request(url);
+        }
+
+        // start all the BP's daemons
+        if (bp_hosts.length > 0)
+        {
+          url = "control.lib.php?area=bp&action=start&daemon=all&nhosts="+bp_hosts.length+bp_hosts_str;
+          daemon_action_request(url);
+        }
 
         stage4_wait = 20;
         startMopsrStage4();
@@ -652,10 +777,23 @@ class control extends mopsr_webpage
         var aq_daemons = new Array("mopsr_pwc", "mopsr_results_monitor");
         var aq_ready = checkMachinesPWCsAndDaemons("aq", aq_hosts, aq_daemons, "green_light.png");
 
-        var bf_daemons = bf_daemons_custom;
-        var bf_ready = checkMachinesPWCsAndDaemons("bf", bf_hosts, bf_daemons, "green_light.png");
+        var bf_daemons;
+        var bf_ready = true;
+        if (bf_hosts.length > 0)
+        {
+          bf_daemons = bf_daemons_custom;
+          bf_ready = checkMachinesPWCsAndDaemons("bf", bf_hosts, bf_daemons, "green_light.png");
+        }
 
-        if (((!aq_ready) || (!bf_ready)) && (stage4_wait > 0))
+        var bp_daemons;
+        var bp_ready = true;
+        if (bp_hosts.length > 0)
+        {
+          bp_daemons = bp_daemons_custom;
+          bp_ready = checkMachinesPWCsAndDaemons("bp", bp_hosts, bp_daemons, "green_light.png");
+        }
+
+        if (((!aq_ready) || (!bf_ready) || (!bp_ready)) && (stage4_wait > 0))
         {
           stage4_wait--;
           setTimeout('startMopsrStage4()', 1000);
@@ -730,8 +868,18 @@ class control extends mopsr_webpage
         daemon_action_request(url);
 
         // stop the BF daemons
-        url = "control.lib.php?area=bf&action=stop&daemon=all&nhosts="+bf_hosts.length+bf_hosts_str;
-        daemon_action_request(url);
+        if (bf_hosts.length > 0)
+        {
+          url = "control.lib.php?area=bf&action=stop&daemon=all&nhosts="+bf_hosts.length+bf_hosts_str;
+          daemon_action_request(url);
+        }
+
+        // stop the BP daemons
+        if (bp_hosts.length > 0)
+        {
+          url = "control.lib.php?area=bp&action=stop&daemon=all&nhosts="+bp_hosts.length+bp_hosts_str;
+          daemon_action_request(url);
+        }
 
         stage2_wait = 20;
         stopMopsrStage2();
@@ -748,12 +896,25 @@ class control extends mopsr_webpage
         var aq_lights = new Array("red_light.png", "grey_light.png");
         var aq_ready = checkMachinesPWCsAndDaemons("aq", aq_hosts, aq_daemons, aq_lights);
 
-        var bf_daemons = bf_daemons_custom;
-        var bf_ready = checkMachinesPWCsAndDaemons("bf", bf_hosts, bf_daemons, "red_light.png");
+        var bf_daemons;
+        var bf_ready = true;
+        if (bf_hosts.length > 0)
+        {
+          bf_daemons = bf_daemons_custom;
+          bf_ready = checkMachinesPWCsAndDaemons("bf", bf_hosts, bf_daemons, "red_light.png");
+        }
+
+        var bp_daemons;
+        var bp_ready = true;
+        if (bp_hosts.length > 0)
+        {
+          bp_daemons = bp_daemons_custom;
+          bp_ready = checkMachinesPWCsAndDaemons("bp", bp_hosts, bp_daemons, "red_light.png");
+        }
 
         var srv_ready = checkMachinesAndDaemons("srv", srv_hosts, srv_daemons, "red_light.png");
 
-        if ((!(srv_ready && aq_ready && bf_ready)) && (stage2_wait > 0))
+        if ((!(srv_ready && aq_ready && bf_ready && bp_ready)) && (stage2_wait > 0))
         {
           stage2_wait--;
           setTimeout('stopMopsrStage2()', 1000);
@@ -777,6 +938,14 @@ class control extends mopsr_webpage
           echo "         url = \"control.lib.php?area=bf&action=stop&daemon=buffer_".$dbid."&nhosts=\"+bf_hosts.length+bf_hosts_str;\n";
           echo "         daemon_action_request(url);\n";
         }
+
+        // destroy the BP datablocks
+        for ($i=0; $i<count($this->bp_dbs); $i++)
+        {
+          $dbid = $this->bp_dbs[$i];
+          echo "         url = \"control.lib.php?area=bp&action=stop&daemon=buffer_".$dbid."&nhosts=\"+bp_hosts.length+bp_hosts_str;\n";
+          echo "         daemon_action_request(url);\n";
+        }
 ?>
 
         // stop the server daemons 
@@ -798,10 +967,23 @@ class control extends mopsr_webpage
         var aq_lights = new Array("red_light.png", "grey_light.png");
         var aq_ready = checkMachinesPWCsAndDaemons("aq", aq_hosts, aq_daemons, aq_lights);
 
-        var bf_daemons = new Array(<?echo $this->bf_dbs_str?>); 
-        var bf_ready = checkMachinesPWCsAndDaemons("bf", bf_hosts, bf_daemons, "red_light.png");
+        var bf_daemons;
+        var bf_ready = true;
+        if (bf_hosts.length > 0)
+        {
+          bf_daemons = new Array(<?echo $this->bf_dbs_str?>); 
+          bf_ready = checkMachinesPWCsAndDaemons("bf", bf_hosts, bf_daemons, "red_light.png");
+        }
 
-        if ((!(srv_ready && aq_ready && bf_ready)) && (stage3_wait > 0)) {
+        var bp_daemons;
+        var bp_ready = true;
+        if (bp_hosts.length > 0)
+        {
+          bp_daemons = new Array(<?echo $this->bp_dbs_str?>); 
+          bp_ready = checkMachinesPWCsAndDaemons("bp", bp_hosts, bp_daemons, "red_light.png");
+        }
+
+        if ((!(srv_ready && aq_ready && bf_ready && bp_ready)) && (stage3_wait > 0)) {
           stage3_wait--;
           setTimeout('stopMopsrStage3()', 1000);
           return 0;
@@ -813,8 +995,18 @@ class control extends mopsr_webpage
         daemon_action_request(url);
 
         // stop the BF's master control script
-        url = "control.lib.php?area=bf&action=stop&daemon=mopsr_bf_master_control&nhosts="+bf_hosts.length+bf_hosts_str;
-        daemon_action_request(url);
+        if (bf_hosts.length > 0)
+        {
+          url = "control.lib.php?area=bf&action=stop&daemon=mopsr_bf_master_control&nhosts="+bf_hosts.length+bf_hosts_str;
+          daemon_action_request(url);
+        }
+
+        // stop the BP's master control script
+        if (bp_hosts.length > 0)
+        {
+          url = "control.lib.php?area=bp&action=stop&daemon=mopsr_bp_master_control&nhosts="+bp_hosts.length+bp_hosts_str;
+          daemon_action_request(url);
+        }
 
         // stop the server's master control script
         url = "control.lib.php?area=srv&action=stop&daemon=mopsr_master_control&nhosts=1&host_0="+srv_host
@@ -833,10 +1025,23 @@ class control extends mopsr_webpage
         var aq_daemons = new Array("mopsr_master_control");
         var aq_ready = checkMachinesAndDaemons("aq", aq_hosts, aq_daemons, "red_light.png");
 
-        var bf_daemons = new Array("mopsr_bf_master_control");
-        var bf_ready = checkMachinesAndDaemons("bf", bf_hosts, bf_daemons, "red_light.png");
+        var bf_daemons;
+        var bf_ready = true;
+        if (bf_hosts.length > 0)
+        {
+          var bf_daemons = new Array("mopsr_bf_master_control");
+          var bf_ready = checkMachinesAndDaemons("bf", bf_hosts, bf_daemons, "red_light.png");
+        }
 
-        if ((!(srv_ready && aq_ready && bf_ready)) && (stage5_wait > 0)) {
+        var bp_daemons;
+        var bp_ready = true;
+        if (bp_hosts.length > 0)
+        {
+          bp_daemons = new Array("mopsr_bp_master_control");
+          bp_ready = checkMachinesAndDaemons("bp", bp_hosts, bp_daemons, "red_light.png");
+        }
+
+        if ((!(srv_ready && aq_ready && bf_ready && bp_ready)) && (stage5_wait > 0)) {
           stage4_wait--;
           setTimeout('stopMopsrStage4()', 1000);
           return 0;
@@ -994,6 +1199,9 @@ class control extends mopsr_webpage
 
             var bf_results = xmlObj.getElementsByTagName("bf_daemon_info");
             process_daemon_info_area(bf_results, "bf");
+
+            var bp_results = xmlObj.getElementsByTagName("bp_daemon_info");
+            process_daemon_info_area(bp_results, "bp");
           }
         }
       }
@@ -1029,6 +1237,19 @@ class control extends mopsr_webpage
         options = to+","+sc+","+l+","+st+","+mb+","+re
         eval("page" + type + " = window.open(URL, '" + type + "', '"+options+",width=1024,height=768');");
       }
+
+      function pktReset()
+      {
+        // poll every 2 seconds during a stop
+        poll_update = 1000;
+        clearTimeout(poll_timeout);
+        poll_2sec_count = 0;
+        poll_timeout = setTimeout('poll_server()', poll_update);
+
+        // stop server TCS interface
+        url = "control.lib.php?script=mopsr_pkt_reset.pl";
+        popUp(url);
+      }
     
     </script>
 <?
@@ -1052,8 +1273,10 @@ class control extends mopsr_webpage
 ?>
     Updating every <span id="poll_update_secs"></span> seconds<br>
     <input type='button' value='Start' onClick="startMopsr()">
-    <input type='button' value='Stop' onClick="stopMopsr()">
-    <input type='button' value='Hard Stop' onClick="hardstopMopsr()">
+    <input type='button' value='Stop' onClick="stopMopsr()"><br/>
+
+    <input type='button' value='Pkt Reset' onClick="pktReset()"><br/>
+    <!--<input type='button' value='Hard Stop' onClick="hardstopMopsr()">-->
 <?
     $this->closeBlockHeader();
 ?>
@@ -1189,27 +1412,28 @@ class control extends mopsr_webpage
     $server_daemons = explode(" ", $config["SERVER_DAEMONS"]);
     $host = $this->server_host;
 ?>
-    <table width='100%' border=0>
-      <tr>
-        <td>
-          <table class='control' id="srv_controls">
+          <table width='100%' border=0>  
+            <tr>
+              <td>
+                <table class='control' id="srv_controls" border=0>
 <?
     $this->printServerDaemonControl("mopsr_master_control", "Master Control", $host, "srv");
-    for ($i=0; $i < count($server_daemons); $i++) {
+    for ($i=0; $i < count($server_daemons); $i++) 
+    {
       $d = $server_daemons[$i];
       $this->printServerDaemonControl($d, $server_daemons_hash[$d]["name"], $host, "srv");
     }
 ?>
-          </table>
-        </td>
-        <td width='300px' id='srv_output' valign='top'></td>
-      </tr>
+              </table>
+              </td>
+            <td width='300px' id='srv_output' valign='top'></td>
+          </tr>
 
-    </table>
+        </table>
 <?
     $this->closeBlockHeader();
 ?>
-    </td>
+      </td>
     </tr>
     <tr>
     <td style='vertical-align: top'>
@@ -1280,18 +1504,24 @@ class control extends mopsr_webpage
 
     </td>
     </tr>
+
+<?
+    ###########################################################################
+    #
+    # Beam Former Section
+    #
+    if (count($this->bf_host_list) > 0)
+    {
+?>
+
     <tr>
     <td style='vertical-align: top'>
 <?
-
-    ###########################################################################
-    #
-    # PWC Daemons
-    #
     $this->openBlockHeader("Beam Former Daemons");
 
     $beam_former_daemons = explode(" ",$this->bf_cfg["CLIENT_DAEMONS"]);
     $beam_former_daemons_hash =  $this->inst->clientLogInfo();
+
 ?>
 
     <table width='100%' border=0>
@@ -1353,6 +1583,89 @@ class control extends mopsr_webpage
 ?>
       </td>
     </tr>
+<?
+    }
+
+    ###########################################################################
+    #
+    # Beam Processor Section
+    #
+    if (count($this->bp_host_list) > 0)
+    {
+?>
+    <tr>
+    <td style='vertical-align: top'>
+<?
+
+    $this->openBlockHeader("Beam Processor Daemons");
+
+    $beam_processor_daemons = explode(" ",$this->bp_cfg["CLIENT_DAEMONS"]);
+    $beam_processor_daemons_hash =  $this->inst->clientLogInfo();
+?>
+
+    <table width='100%' border=0>
+      <tr>
+        <td>
+          <table class='control' id='bp_controls'>
+            <tr>
+              <td>Host</td>
+<?
+    for ($i=0; $i<count($this->bp_host_list); $i++)
+    {
+      $host = str_replace("mpsr-", "", $this->bp_host_list[$i]["host"]);
+      $span = $this->bp_host_list[$i]["span"];
+      echo "          <td colspan='".$span."' style='text-align: center;'>".$host."</td>\n";
+    }
+?>
+            </tr>
+
+            <tr>
+              <td>Chan</td>
+<?
+    for ($i=0; $i<count($this->bp_list); $i++)
+    {
+      $host = $this->bp_list[$i]["host"];
+      $bp   = $this->bp_list[$i]["bp"];
+      echo "          <td style='text-align: center'><span title='".$host."_".$bp."'>".$bp."</span></td>\n";
+    }
+?>
+              <td></td>
+            </tr>
+
+<?
+    $this->printClientDaemonControl("mopsr_bp_master_control", "Master&nbsp;Control", $this->bp_host_list, "daemon&name=".$d, "bp");
+
+    # Data Blocks
+    for ($i=0; $i<count($this->bp_dbs); $i++)
+    {
+      $id = $this->bp_dbs[$i];
+      $this->printClientDBControl("DB&nbsp;".$id, $this->bp_list, $id, "bp");
+    }
+
+
+    # Print the client daemons
+    for ($i=0; $i<count($beam_processor_daemons); $i++)
+    {
+      $d = $beam_processor_daemons[$i];
+      $n = str_replace(" ", "&nbsp;", $beam_processor_daemons_hash[$d]["name"]);
+      $this->printClientDaemonControl($d, $n, $this->bp_list, "daemon&name=".$d, "bp");
+    }
+?>
+          </table>
+        </td>
+        <td width='300px' id='bp_output' valign='top'></td>
+      </tr>
+
+    </table>
+<?
+    $this->closeBlockHeader();
+?>
+      </td>
+    </tr>
+<?
+    } # END BEAM PROCESSOR LIST
+?>
+
     </table>
 <?
   }
@@ -1439,6 +1752,11 @@ class control extends mopsr_webpage
       array_push ($bf_conns, $this->bf_host_list[$i]["host"].":".$this->bf_cfg["CLIENT_MASTER_PORT"]);
     $bf_statuses = $this->getNodeStatuses($bf_conns);
 
+    $bp_conns = array();
+    for ($i=0; $i<count($this->bp_host_list); $i++)
+      array_push ($bp_conns, $this->bp_host_list[$i]["host"].":".$this->bp_cfg["CLIENT_MASTER_PORT"]);
+    $bp_statuses = $this->getNodeStatuses($bp_conns);
+
     # produce the xml
     $xml = "<?xml version='1.0' encoding='ISO-8859-1'?>\n";
     $xml .= "<daemon_infos>\n";
@@ -1482,6 +1800,20 @@ class control extends mopsr_webpage
         $xml .= $bf_statuses[$i];
 
       $xml .="</bf_daemon_info>\n";
+    }
+
+    for ($i=0; $i<count($bp_statuses); $i++)
+    {
+      $xml .= "<bp_daemon_info>";
+      if ((!array_key_exists($i, $bp_statuses)) || ($bp_statuses[$i] == ""))
+      {
+        list ($host, $port) = split(":", $bp_conns[$i]);
+        $xml .= "<host>".$host."</host><mopsr_bp_master_control>0</mopsr_bp_master_control>";
+      }
+      else
+        $xml .= $bp_statuses[$i];
+
+      $xml .="</bp_daemon_info>\n";
     }
 
     $xml .= "</daemon_infos>\n";
@@ -1606,6 +1938,8 @@ class control extends mopsr_webpage
 
       if ($area == "bf")
         $port = $this->bf_cfg["CLIENT_MASTER_PORT"];
+      else if ($area == "bp")
+        $port = $this->bp_cfg["CLIENT_MASTER_PORT"];
       else
         $port = $this->inst->config["CLIENT_MASTER_PORT"];
 
@@ -1847,6 +2181,8 @@ class control extends mopsr_webpage
         $pwc = ":".$hosts[$i]["pwc"];
       if (array_key_exists("bf", $hosts[$i])) 
         $pwc = ":".$hosts[$i]["bf"];
+      if (array_key_exists("bp", $hosts[$i])) 
+        $pwc = ":".$hosts[$i]["bp"];
       
       echo "    <td colspan='".$span."' style='text-align: center;'>".$this->statusLight($area, $host.$pwc, $daemon, -1, "")."</td>\n";
       if (strpos($host_str, $host) === FALSE)
@@ -1885,6 +2221,8 @@ class control extends mopsr_webpage
         $pwc = ":".$hosts[$i]["pwc"];
       if (array_key_exists("bf", $hosts[$i])) 
         $pwc = ":".$hosts[$i]["bf"];
+      if (array_key_exists("bp", $hosts[$i])) 
+        $pwc = ":".$hosts[$i]["bp"];
       echo "    <td span='".$span."' style='text-align: center;'>".$this->statusLight($area, $host.$pwc, $daemon, -1, "")."</td>\n";
       if (strpos($host_str, $host) === FALSE)
         $host_str .= $host." ";

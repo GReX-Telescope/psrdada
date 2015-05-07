@@ -116,7 +116,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
 # Main
 #
 {
-  my ($cmd, $result, $response);
+  my ($cmd, $result, $response, $proc_cmd_file, $proc_cmd);
 
   $sys_log_file = $cfg{"CLIENT_LOG_DIR"}."/".$daemon_name."_".$pwc_id.".log";
   $src_log_file = $cfg{"CLIENT_LOG_DIR"}."/".$daemon_name."_".$pwc_id.".src.log";
@@ -158,6 +158,9 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
   my $prev_raw_header = "";
   my %header = ();
 
+  logMsg(1, "INFO", "main: recv_key=".$recv_db_key." send_key=".$send_db_key);
+
+
   # Main Loop
   while (!$quit_daemon) 
   {
@@ -168,6 +171,9 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
     logMsg(2, "INFO", "main: ".$cmd);
     $curr_raw_header = `$cmd 2>&1`;
     logMsg(2, "INFO", "main: ".$cmd." returned");
+
+    # by default, discard the observation unless config is valid
+    $proc_cmd = "dada_dbnull -z -s -k <IN_DADA_KEY>";
 
     if ($? != 0)
     {
@@ -183,42 +189,68 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
     }
     else
     {
-      $cmd = "mopsr_aqdsp ".$recv_db_key." ".$send_db_key." ".
-             $cfg{"MOLONGLO_BAYS_FILE"}." ".
-             $cfg{"MOLONGLO_MODULES_FILE"}." ".
-             $cfg{"MOLONGLO_SIGNAL_PATHS_FILE"}." ".
-             "-d ".$cfg{"PWC_GPU_ID_".$pwc_id}." -s -n 25 ";
+      %header = Dada::headerToHash($curr_raw_header);
 
-      my %h = Dada::headerToHash($curr_raw_header);
-      if (exists($h{"OBSERVING_TYPE"}))
+      if (exists($header{"AQ_PROC_FILE"}))
       {
-        if ($h{"OBSERVING_TYPE"} eq "TRACKING")
+        $proc_cmd_file = $cfg{"CONFIG_DIR"}."/".$header{"AQ_PROC_FILE"};
+
+        logMsg(2, "INFO", "Full path to AQ_PROC_FILE: ".$proc_cmd_file);
+        if ( ! ( -f $proc_cmd_file ) )
         {
-          $cmd .= " -t";
+          logMsg(0, "ERROR", "AQ_PROC_FILE did not exist: ".$proc_cmd_file);
         }
-        if ($h{"OBSERVING_TYPE"} eq "STATIONARY")
+        else
         {
-          $cmd .= " -g";
+          logMsg(1, "INFO", "AQ_PROC_FILE=".$proc_cmd_file);
+          my %proc_cmd_hash = Dada::readCFGFile($proc_cmd_file);
+          $proc_cmd = $proc_cmd_hash{"PROC_CMD"};
+          logMsg(1, "INFO", "PROC_CMD=".$proc_cmd);
+        }
+      }
+
+      $proc_cmd =~ s/<IN_DADA_KEY>/$recv_db_key/;
+
+      $proc_cmd =~ s/<OUT_DADA_KEY>/$send_db_key/;
+
+      $proc_cmd =~ s/<BAYS_FILE>/$cfg{"MOLONGLO_BAYS_FILE"}/;
+
+      $proc_cmd =~ s/<MODULES_FILE>/$cfg{"MOLONGLO_MODULES_FILE"}/;
+
+      $proc_cmd =~ s/<SIGNAL_PATHS_FILE>/$cfg{"MOLONGLO_SIGNAL_PATHS_FILE"}/;
+
+      $proc_cmd =~ s/<DADA_GPU_ID>/$cfg{"PWC_GPU_ID_".$pwc_id}/;
+
+      if (exists($header{"OBSERVING_TYPE"}))
+      {
+        if ($header{"OBSERVING_TYPE"} eq "TRACKING")
+        {
+          $proc_cmd .= " -t";
+        }
+        if ($header{"OBSERVING_TYPE"} eq "STATIONARY")
+        {
+          $proc_cmd .= " -g";
         }
       }
 
       if ($curr_raw_header eq $prev_raw_header)
       {
         logMsg(0, "ERROR", "main: header repeated, jettesioning observation");
-        $cmd = "dada_dbnull -k ".$recv_db_key." -s -z";
+        $proc_cmd = "dada_dbnull -k ".$recv_db_key." -s -z";
       }
 
-      open FH, ">/tmp/header.aqdsp.".$pwc_id;
-      print FH $curr_raw_header;
-      close FH;
+      # open FH, ">/tmp/header.aqdsp.".$pwc_id;
+      # print FH $curr_raw_header;
+      # close FH;
 
-      logMsg(1, "INFO", "START ".$cmd);
-      ($result, $response) = Dada::mySystemPiped ($cmd, $src_log_file, $src_log_sock, "src", $pwc_id, $daemon_name, "aqdsp");
+      logMsg(1, "INFO", "START ".$proc_cmd);
+      ($result, $response) = Dada::mySystemPiped ($proc_cmd, $src_log_file, $src_log_sock, "src", $pwc_id, $daemon_name, "aqdsp");
+
       if ($result ne "ok")
       {
         logMsg(1, "WARN", "cmd failed: ".$response);
       }
-      logMsg(1, "INFO", "END   ".$cmd);
+      logMsg(1, "INFO", "END   ".$proc_cmd);
     }
 
     $prev_raw_header = $curr_raw_header;  

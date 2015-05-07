@@ -50,7 +50,7 @@ void usage()
      DADA_DEFAULT_BLOCK_KEY);
 }
 
-mopsr_conn_t * mopsr_parse_cornerturn_cfg (const char * config_file, mopsr_dbib_t * ctx)
+mopsr_bf_conn_t * mopsr_parse_cornerturn_cfg (const char * config_file, mopsr_dbib_t * ctx)
 {
   char config[DADA_DEFAULT_HEADER_SIZE];
 
@@ -79,7 +79,7 @@ mopsr_conn_t * mopsr_parse_cornerturn_cfg (const char * config_file, mopsr_dbib_
     return 0;             
   }                         
 
-  mopsr_conn_t * conns = (mopsr_conn_t *) malloc (sizeof(mopsr_conn_t) * ctx->nchan);
+  mopsr_bf_conn_t * conns = (mopsr_bf_conn_t *) malloc (sizeof(mopsr_bf_conn_t) * ctx->nchan);
 
   unsigned int i;
   char key[16];
@@ -588,7 +588,7 @@ int mopsr_dbib_open_connections (mopsr_dbib_t * ctx, multilog_t * log)
 {
   dada_ib_cm_t ** ib_cms = ctx->ib_cms;
 
-  mopsr_conn_t * conns = ctx->conn_info;
+  mopsr_bf_conn_t * conns = ctx->conn_info;
 
   if (ctx->verbose > 1)
     multilog(ctx->log, LOG_INFO, "mopsr_dbib_open_connections()\n");
@@ -652,7 +652,7 @@ int mopsr_dbib_open_connections (mopsr_dbib_t * ctx, multilog_t * log)
 void * mopsr_dbib_init_thread (void * arg)
 {
 
-  mopsr_conn_t * conn = (mopsr_conn_t *) arg;
+  mopsr_bf_conn_t * conn = (mopsr_bf_conn_t *) arg;
 
   dada_ib_cm_t * ib_cm = conn->ib_cm;
 

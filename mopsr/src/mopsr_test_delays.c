@@ -41,6 +41,8 @@ int main(int argc, char** argv)
   unsigned ndim = 2;
   unsigned ntap = 25;
   unsigned nsamp = 1024;
+  unsigned s1_memory = 8;
+  uint64_t s1_count = 1;
 
   char verbose = 0;
 
@@ -243,13 +245,27 @@ int main(int argc, char** argv)
     fprintf (stderr, "alloc: allocating %ld bytes of device memory for d_sigmas\n", d_sigmas_size);
   error = cudaMalloc (&d_sigmas, d_sigmas_size);
   if (verbose)
-    fprintf (stderr, "alloc: d_rstates=%p\n", d_rstates);
+    fprintf (stderr, "alloc: d_sigmas=%p\n", d_sigmas);
   if (error != cudaSuccess)
   {
     fprintf (stderr, "alloc: could not allocate %ld bytes of device memory\n", d_sigmas_size);
     return -1;
   }
   cudaMemsetAsync(d_sigmas, 0, d_sigmas_size, stream);
+
+  size_t d_mask_size = (size_t) (nchan * nant * sizeof(unsigned) * nsamp) / 1024;
+  void * d_mask = 0;
+  if (verbose)
+    fprintf (stderr, "alloc: allocating %ld bytes of device memory for d_mask\n", d_mask_size);
+  error = cudaMalloc (&d_mask, d_mask_size);
+  if (verbose)
+    fprintf (stderr, "alloc: d_mask=%p\n", d_mask);
+  if (error != cudaSuccess)
+  {
+    fprintf (stderr, "alloc: could not allocate %ld bytes of device memory\n", d_mask_size);
+    return -1;
+  }
+  cudaMemsetAsync(d_mask, 0, d_mask_size, stream);
 
   size_t ant_scales_size = nant * sizeof(float);
   float * h_ant_scales;
@@ -305,7 +321,39 @@ int main(int argc, char** argv)
   {         
     fprintf (stderr, "main: cudaMallocfailed for %ld bytes\n", delays_size);
     return -1;        
-  }                     
+  }       
+
+  size_t s2s_size = sizeof(float) * nchan * nant * (nsamp / 1024);
+  void * d_s2s;
+  fprintf (stderr, "main: cudaMalloc(%"PRIu64") for d_s2s\n", s2s_size);
+  error = cudaMalloc(&d_s2s, s2s_size);
+  if (error != cudaSuccess)
+  {
+    fprintf (stderr, "main: cudaMallocfailed for %ld bytes\n", s2s_size);
+    return -1;
+  }  
+
+  size_t s1s_size = s2s_size * s1_memory;
+  void * d_s1s;
+  fprintf (stderr, "main: cudaMalloc(%"PRIu64") for d_s1s\n", s1s_size);
+  error = cudaMalloc(&d_s1s, s1s_size);
+  if (error != cudaSuccess)
+  {
+    fprintf (stderr, "main: cudaMallocfailed for %ld bytes\n", s1s_size);
+    return -1;
+  }
+
+  size_t thresh_size = nchan * nant * sizeof (float) * 2;
+  void * d_thresh;
+  fprintf (stderr, "main: cudaMalloc(%"PRIu64") for d_thresh\n", thresh_size);
+  error = cudaMalloc(&d_thresh, thresh_size);
+  if (error != cudaSuccess)
+  {
+    fprintf (stderr, "main: cudaMallocfailed for %ld bytes\n", thresh_size);
+    return -1;
+  }
+  cudaMemsetAsync(d_thresh, 0, thresh_size, stream);
+
 
   void * h_out;
   size_t nbytes_out = nbytes + (ndim * nchan * nant * (ntap-1));
@@ -333,11 +381,55 @@ int main(int argc, char** argv)
   mopsr_delay_copy_scales (stream, h_ant_scales, ant_scales_size);
 
   const unsigned fixed_delay = (ntap / 2) + 1;
+  unsigned i;
+
+  int8_t * ptr;
 
   // initialize data in h_in to constants for ant number
-  int8_t * ptr = (int8_t *) h_in;
-  //fprintf (stderr, "[T][F][S]\n");
+  ptr = (int8_t *) h_in;
   
+  char apply_instrumental = 1;
+  char apply_geometric = 1;
+  char is_tracking = 1;
+  double tsamp = 1.28;
+
+  // update the delays
+  fprintf (stderr, "main: calculate_delays()\n");
+  if (calculate_delays (nbay, all_bays, nmod, modules, nchan, channels, source, 
+                        timestamp, delays, apply_instrumental, 
+                        apply_geometric, is_tracking, tsamp) < 0)
+  {
+    fprintf (stderr, "main: calculate_delays() failed\n");
+    return -1;
+  }
+
+  // manually set the delays
+  for (iant=0; iant<nant; iant++)
+  {
+    for (ichan=0; ichan<nchan; ichan++)
+    {
+      // override the sample delays for testing...
+      delays[iant][ichan].samples = fixed_delay + (iant);
+
+      // set the host fractional delays 
+      //h_fractional_delays[ichan*nant + iant] = delays[iant][ichan].fractional;
+      h_fractional_delays[ichan*nant + iant] = 0.0;
+
+      //h_fringe_coeffs[ichan*nant + iant] = delays[iant][ichan].fringe_coeff;
+      h_fringe_coeffs[ichan*nant + iant] = 0;
+
+      //h_delays_ds[ichan*nant + iant] = delays[iant][ichan].fractional_ds;
+      h_delays_ds[ichan*nant + iant] = 0;
+
+      //h_fringe_coeffs_ds[ichan*nant + iant] = delays[iant][ichan].fringe_coeff_ds;
+      h_fringe_coeffs_ds[ichan*nant + iant] = 0;
+    }
+  }
+
+//#define TEST_SAMPLES
+#ifdef TEST_SAMPLES
+
+  fprintf (stderr, "WRITING SAMPLE TESTING TO INPUT\n");
   for (isamp=0; isamp<nsamp; isamp++)
   {
     for (ichan=0; ichan<nchan; ichan++)
@@ -370,45 +462,6 @@ int main(int argc, char** argv)
     }
   }
 
-  char apply_instrumental = 1;
-  char apply_geometric = 1;
-  char is_tracking = 1;
-  double tsamp = 1.28;
-
-  // update the delays
-  fprintf (stderr, "main: calculate_delays()\n");
-  if (calculate_delays (nbay, all_bays, nmod, modules, nchan, channels, source, 
-                        timestamp, delays, apply_instrumental, 
-                        apply_geometric, is_tracking, tsamp) < 0)
-  {
-    fprintf (stderr, "main: calculate_delays() failed\n");
-    return -1;
-  }
-
-  // manually set the delays
-  for (iant=0; iant<nant; iant++)
-  {
-    for (ichan=0; ichan<nchan; ichan++)
-    {
-      // override the sample delays for testing...
-      delays[iant][ichan].samples = fixed_delay + (iant);
-      // set the host fractional delays 
-      //h_fractional_delays[ichan*nant + iant] = delays[iant][ichan].fractional;
-      h_fractional_delays[ichan*nant + iant] = 0.0;
-
-      //h_fringe_coeffs[ichan*nant + iant] = delays[iant][ichan].fringe_coeff;
-      h_fringe_coeffs[ichan*nant + iant] = 0;
-
-      //h_delays_ds[ichan*nant + iant] = delays[iant][ichan].fractional_ds;
-      h_delays_ds[ichan*nant + iant] = 0;
-
-      //h_fringe_coeffs_ds[ichan*nant + iant] = delays[iant][ichan].fringe_coeff_ds;
-      h_fringe_coeffs_ds[ichan*nant + iant] = 0;
-    }
-  }
-
-  unsigned i;
-/*
   // copy input from host to device
   fprintf (stderr, "main: cudaMemcpyAsync to=%p from=%p size=%ld\n", d_in, h_in, nbytes);
   error = cudaMemcpyAsync (d_in, h_in, nbytes, cudaMemcpyHostToDevice, stream);
@@ -430,10 +483,8 @@ int main(int argc, char** argv)
     fprintf (stderr, "cudaMemcpyAsync H2D failed: %s\n", cudaGetErrorString(error));
     return -1;
   }
-
-    
+ 
   // now do 2 iterations
-  unsigned i;
   for (i=0; i<3; i++)
   {
     size_t in_offset = nbytes;
@@ -446,6 +497,8 @@ int main(int argc, char** argv)
       fprintf (stderr, "cudaMemcpyAsync H2D failed: %s\n", cudaGetErrorString(error));
       return -1;
     }
+
+    cudaStreamSynchronize (stream);    
 
     // manually set the delays for secondary jump
     for (iant=0; iant<nant; iant++)
@@ -474,20 +527,22 @@ int main(int argc, char** argv)
     d_sample_delayed = mopsr_transpose_delay (stream, &ctx, d_in, nbytes, delays);
     fprintf (stderr, "main: mopsr_transpose_delay returned %p\n", d_sample_delayed);
 
-    fprintf (stderr, "main: mopsr_delay_fractional(%ld)\n", nbytes_out);
 #ifdef SKZAP
+    fprintf (stderr, "main: mopsr_delay_fractional_sk_scale(%ld)\n", nbytes_out);
     mopsr_delay_fractional_sk_scale (stream, d_sample_delayed, d_fractional_delayed, d_fbuf,
-                                     d_rstates, d_sigmas, 
-                                     d_fractional_delays, h_fringe_coeffs, h_delays_ds,
+                                     d_rstates, d_sigmas, d_mask, 
+                                     d_fractional_delays, d_means, h_fringe_coeffs, h_delays_ds,
                                      h_fringe_coeffs_ds, fringes_size,
                                      nbytes_out, ctx.nchan, ctx.nant, ctx.ntap);
+    fprintf (stderr, "main: mopsr_delay_fractional_sk_scale returned\n");
 #else
+    fprintf (stderr, "main: mopsr_delay_fractional(%ld)\n", nbytes_out);
     mopsr_delay_fractional (stream, d_sample_delayed, d_fractional_delayed,
                             d_fractional_delays, h_fringe_coeffs, h_delays_ds, 
                             h_fringe_coeffs_ds, fringes_size,
                             nbytes_out, ctx.nchan, ctx.nant, ctx.ntap);
-#endif
     fprintf (stderr, "main: mopsr_delay_fractional returned\n");
+#endif
 
     // copy output from device to host
     fprintf (stderr, "main: copy delayed data back %d bytes\n", nbytes);
@@ -519,7 +574,7 @@ int main(int argc, char** argv)
           val = isamp % 128;
           if (ptr[0] != (int8_t) val)
           {
-            if (nerr < 100)
+            if (nerr < 10)
               fprintf (stderr, "[%d][%d][%d][%d] (%d,%d) != %d\n", i, ichan, iant, isamp, ptr[0], ptr[1], val);
             nerr++;
             bad_count++;
@@ -534,10 +589,19 @@ int main(int argc, char** argv)
 
   fprintf (stderr, "bad=%"PRIu64" good=%"PRIu64"\n", bad_count, good_count);
 
+#endif
+
+  for (iant=0; iant<nant; iant++)
+    for (ichan=0; ichan<nchan; ichan++)
+      delays[iant][ichan].samples = fixed_delay;
+
+//#define TEST_ANT
+#ifdef TEST_ANT
   //////////////////////////////////////////////////////////////////////////////
   //
   // Test Antenna integrity
   //
+  fprintf (stderr, "WRITING ANT TESTING TO INPUT\n");
   ptr = (int8_t *) h_in;
   for (isamp=0; isamp<nsamp; isamp++)
   {
@@ -552,7 +616,11 @@ int main(int argc, char** argv)
     }
   }
 
+
+  ctx.first_kernel = 1;
+
   // copy input from host to device
+  fprintf (stderr, "main: cudaMemcpyAsync H2D (%ld)\n", nbytes);
   error = cudaMemcpyAsync (d_in, h_in, nbytes, cudaMemcpyHostToDevice, stream);
   if (error != cudaSuccess)
   {
@@ -588,20 +656,22 @@ int main(int argc, char** argv)
     }
 
 
-    fprintf (stderr, "main: mopsr_delay_fractional(%ld)\n", nbytes_out);
 #ifdef SKZAP
+    fprintf (stderr, "main: mopsr_delay_fractional_sk_scale(%ld)\n", nbytes_out);
     mopsr_delay_fractional_sk_scale (stream, d_sample_delayed, d_fractional_delayed, d_fbuf,
-                                     d_rstates, d_sigmas, 
-                                     d_fractional_delays, h_fringe_coeffs, h_delays_ds,
+                                     d_rstates, d_sigmas, d_mask,
+                                     d_fractional_delays, d_means, h_fringe_coeffs, h_delays_ds,
                                      h_fringe_coeffs_ds, fringes_size,
                                      nbytes_out, ctx.nchan, ctx.nant, ctx.ntap);
+    fprintf (stderr, "main: mopsr_delay_fractional_sk_scale returned\n");
 #else
+    fprintf (stderr, "main: mopsr_delay_fractional(%ld)\n", nbytes_out);
     mopsr_delay_fractional (stream, d_sample_delayed, d_fractional_delayed,
                             d_fractional_delays, h_fringe_coeffs, h_delays_ds,
                             h_fringe_coeffs_ds, fringes_size,
                             nbytes_out, ctx.nchan, ctx.nant, ctx.ntap);
-#endif
     fprintf (stderr, "main: mopsr_delay_fractional returned\n");
+#endif
 
     // copy output from device to host
     fprintf (stderr, "main: copy delayed data back %d bytes\n", nbytes);
@@ -615,11 +685,12 @@ int main(int argc, char** argv)
 
     cudaStreamSynchronize (stream);
 
-#if 1
     fprintf (stderr, "[F][S][T] (re, im) - Testing Antenna Integrity\n");
     ptr = (int8_t *) h_out;
     int val;
     uint64_t nerr = 0;
+    uint64_t bad_count = 0;
+    uint64_t good_count = 0;
     for (ichan=0; ichan<nchan; ichan++)
     {
       for (iant=0; iant<nant; iant++)
@@ -632,18 +703,26 @@ int main(int argc, char** argv)
             if (nerr < 10)
               fprintf (stderr, "[%d][%d][%d] (%d,%d) != %d\n", ichan, iant, isamp, ptr[0], ptr[1], val);
             nerr++;
+            bad_count++;
           }
+          else
+            good_count++;
           ptr += 2;
         }
       }
     }
-#endif
+    fprintf (stderr, "bad=%"PRIu64" good=%"PRIu64"\n", bad_count, good_count);
   }
+#endif
 
+//#define TEST_CHAN
+#ifdef TEST_CHAN
   //////////////////////////////////////////////////////////////////////////////
   //
   // Test Channel integrity
   //
+  //
+  fprintf (stderr, "WRITING CHAN TESTING TO INPUT\n");
   ptr = (int8_t *) h_in;
   for (isamp=0; isamp<nsamp; isamp++)
   {
@@ -658,7 +737,10 @@ int main(int argc, char** argv)
     }
   }
 
+  ctx.first_kernel = 1;
+
   // copy input from host to device
+  fprintf (stderr, "main: copy input GPU %d bytes\n", nbytes);
   error = cudaMemcpyAsync (d_in, h_in, nbytes, cudaMemcpyHostToDevice, stream);
   if (error != cudaSuccess)
   {
@@ -672,7 +754,7 @@ int main(int argc, char** argv)
 
   for (i=0; i<1; i++)
   {
-    fprintf (stderr, "main: copy datablock delays to GPU %d bytes\n", nbytes);
+    fprintf (stderr, "main: copy input GPU %d bytes\n", nbytes);
     error = cudaMemcpyAsync (d_in, h_in, nbytes, cudaMemcpyHostToDevice, stream);
     if (error != cudaSuccess)
     {
@@ -693,20 +775,20 @@ int main(int argc, char** argv)
       return -1;
     }
 
-    fprintf (stderr, "main: mopsr_delay_fractional(%ld)\n", nbytes_out);
 #ifdef SKZAP
+    fprintf (stderr, "main: mopsr_delay_fractional_sk_scale(%ld)\n", nbytes_out);
     mopsr_delay_fractional_sk_scale (stream, d_sample_delayed, d_fractional_delayed, d_fbuf,
-                                     d_rstates, d_sigmas, 
-                                     d_fractional_delays, h_fringe_coeffs, h_delays_ds,
+                                     d_rstates, d_sigmas, d_mask,
+                                     d_fractional_delays, d_means, h_fringe_coeffs, h_delays_ds,
                                      h_fringe_coeffs_ds, fringes_size,
                                      nbytes_out, ctx.nchan, ctx.nant, ctx.ntap);
 #else
+    fprintf (stderr, "main: mopsr_delay_fractional(%ld)\n", nbytes_out);
     mopsr_delay_fractional (stream, d_sample_delayed, d_fractional_delayed,
                             d_fractional_delays, h_fringe_coeffs, h_delays_ds,
                             h_fringe_coeffs_ds, fringes_size,
                             nbytes_out, ctx.nchan, ctx.nant, ctx.ntap);
 #endif
-    fprintf (stderr, "main: mopsr_delay_fractional returned\n");
 
     // copy output from device to host
     fprintf (stderr, "main: copy delayed data back %d bytes\n", nbytes);
@@ -720,35 +802,42 @@ int main(int argc, char** argv)
 
     cudaStreamSynchronize (stream);
 
-#if 1
     fprintf (stderr, "[F][S][T] (re, im) - Testing Channel Integrity\n");
     ptr = (int8_t *) h_out;
     int val;
     uint64_t nerr = 0;
+    uint64_t bad_count = 0;
+    uint64_t good_count = 0;
     for (ichan=0; ichan<nchan; ichan++)
     {
+      val = ichan;
       for (iant=0; iant<nant; iant++)
       {
         for (isamp=0; isamp<nsamp; isamp++)
         {
-          val = ichan;
           if (ptr[0] != (int8_t) val)
           {
             if (nerr < 10)
               fprintf (stderr, "[%d][%d][%d] (%d,%d) != %d\n", ichan, iant, isamp, ptr[0], ptr[1], val);
             nerr++;
+            bad_count++;
           }
+          else
+            good_count++;
           ptr += 2;
         }
       }
     }
-#endif
+    fprintf (stderr, "bad=%"PRIu64" good=%"PRIu64"\n", bad_count, good_count);
   }
-*/
+#endif
 
+#define TEST_RNG
+#ifdef TEST_RNG
   ////////////////////////////////////////////////////////////////
   // Test random number generator
   //
+#if 1
   uint8_t * u8_in = (uint8_t *) h_in;
   srand(4);
 
@@ -769,7 +858,7 @@ int main(int argc, char** argv)
       }
     }
   }
-
+#endif
   fprintf (stderr, "fixed_delay=%u\n", fixed_delay);
 
   // manually set the delays for secondary jump
@@ -819,15 +908,16 @@ int main(int argc, char** argv)
       return -1;
     }
 
-
-    fprintf (stderr, "main: mopsr_delay_fractional(%ld)\n", nbytes_out);
 #ifdef SKZAP
+    fprintf (stderr, "main: mopsr_delay_fractional_sk_scale(%ld)\n", nbytes_out);
     mopsr_delay_fractional_sk_scale (stream, d_sample_delayed, d_fractional_delayed, d_fbuf,
-                                     d_rstates, d_sigmas,
-                                     d_fractional_delays, h_fringe_coeffs, h_delays_ds,
+                                     d_rstates, d_sigmas, d_mask,
+                                     d_fractional_delays, d_s1s, d_s2s, d_thresh, h_fringe_coeffs, h_delays_ds,
                                      h_fringe_coeffs_ds, fringes_size,
-                                     nbytes_out, ctx.nchan, ctx.nant, ctx.ntap);
+                                     nbytes_out, ctx.nchan, ctx.nant, ctx.ntap,
+                                     s1_memory, s1_count);
 #else
+    fprintf (stderr, "main: mopsr_delay_fractional(%ld)\n", nbytes_out);
     mopsr_delay_fractional (stream, d_sample_delayed, d_fractional_delayed,
                             d_fractional_delays, h_fringe_coeffs, h_delays_ds,
                             h_fringe_coeffs_ds, fringes_size,
@@ -849,11 +939,13 @@ int main(int argc, char** argv)
 #if 1
     fprintf (stderr, "[F][S][T] out, in - Testing Random Integrity\n");
     uint8_t * u8_out = (uint8_t *) h_out;
-    u8_in = (uint8_t *) h_in;
+    uint8_t * u8_in = (uint8_t *) h_in;
     int val;
     uint8_t nerr = 0;
     unsigned hout_idx = 0;
     unsigned hin_idx = 0;
+    uint64_t bad_count = 0;
+    uint64_t good_count = 0;
     for (ichan=0; ichan<nchan; ichan++)
     {
       for (iant=0; iant<nant; iant++)
@@ -876,14 +968,19 @@ int main(int argc, char** argv)
                 fprintf (stderr, "[%d][%d][%d] out(%"PRIu8",%"PRIi8") != in(%"PRIu8",%"PRIi8") \n", ichan, iant, isamp, o1, o2, i1, i2);
                 nerr++;
               }
+              bad_count++;
             }
+            else
+              good_count++;
           }
           hout_idx += 2;
         }
       }
     }
+    fprintf (stderr, "bad=%"PRIu64" good=%"PRIu64"\n", bad_count, good_count);
 #endif
   }
+#endif
 
   if (mopsr_transpose_delay_dealloc (&ctx) < 0)
   {
@@ -911,6 +1008,10 @@ int main(int argc, char** argv)
     cudaFree (d_sigmas);
   d_sigmas = 0;
 
+  if (d_mask)
+    cudaFree (d_mask);
+  d_mask = 0;
+
   if (h_ant_scales)
     cudaFreeHost(h_ant_scales);
   h_ant_scales = 0;
@@ -934,6 +1035,18 @@ int main(int argc, char** argv)
   if (d_fractional_delayed)
     cudaFree (d_fractional_delayed);
   d_fractional_delayed = 0;
+
+  if (d_fractional_delays)
+    cudaFree (d_fractional_delays);
+  d_fractional_delays = 0;
+
+  if (d_s1s)
+    cudaFree (d_s1s);
+  d_s1s = 0;
+
+  if (d_s2s)
+    cudaFree (d_s2s);
+  d_s2s = 0;
 
   free (channels);
   free (modules);
