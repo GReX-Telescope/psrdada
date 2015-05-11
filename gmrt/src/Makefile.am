@@ -26,6 +26,7 @@ bin_PROGRAMS += gmrt_correlator
 
 gmrt_correlator_SOURCES = gmrt_correlator.C
 gmrt_correlator_LDADD = $(LDADD) @CUDA_LIBS@ @CUFFT_LIBS@
+gmrt_correlator_CXXFLAGS = @CUFFT_CFLAGS@ @CUDA_CFLAGS@
 AM_CFLAGS = @CUFFT_CFLAGS@ @CUDA_CFLAGS@
 
 endif
