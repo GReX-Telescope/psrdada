@@ -8,7 +8,6 @@ dist_data_DATA = mopsr.cfg \
 								 mopsr.dspsr.gpu \
                  mopsr.dspsr.cpu.sk \
                  mopsr.dspsr.cpu.tied \
-                 mopsr.dspsr.cpu.odd \
 								 mopsr.null
 
 include $(top_srcdir)/config/Makefile.targets
