@@ -27,7 +27,9 @@ void usage ()
 	fprintf(stdout, "mopsr_test_bfdsp bays_file modules_file\n"
     " -a nant     number of antennae\n" 
     " -b nbeam    number of beams\n" 
-    " -t nsamp    number of samples\n" 
+    " -d device   use gpu device [default 0]\n" 
+    " -t nsamp    number of samples [in a block]\n" 
+    " -l nloops   number of blocks to execute\n" 
     " -h          print this help text\n" 
     " -v          verbose output\n" 
   );
@@ -45,12 +47,13 @@ int main(int argc, char** argv)
   const unsigned tdec = 512;
   const unsigned nchan_in = 1;
   const unsigned nchan_ou = 1;
+  unsigned nloop = 1;
 
   char verbose = 0;
 
   int device = 0;
 
-  while ((arg = getopt(argc, argv, "a:b:d:ht:v")) != -1) 
+  while ((arg = getopt(argc, argv, "a:b:d:hl:t:v")) != -1) 
   {
     switch (arg)  
     {
@@ -69,6 +72,10 @@ int main(int argc, char** argv)
       case 'h':
         usage ();
         return 0;
+
+      case 'l':
+        nloop = atoi (optarg);
+        break;
 
       case 't':
         nsamp = (uint64_t) atoi (optarg);
@@ -329,8 +336,8 @@ int main(int argc, char** argv)
     return -1;
   }
 
-  unsigned itrial;
-  for (itrial=0; itrial<1; itrial++)
+  unsigned iloop;
+  for (iloop=0; iloop<nloop; iloop++)
   {
 //#if USE_GPU
     // copy the whole block to the GPU
@@ -382,38 +389,95 @@ int main(int argc, char** argv)
 //#endif
   }
 
-  cudaStreamSynchronize(stream);
+  //cudaDeviceSynchronize();
+  //cudaDeviceReset();
 
   if (d_in)
-    cudaFree(d_in);
+  {
+    error = cudaFree(d_in);
+    if (error != cudaSuccess)
+    {
+      fprintf (stderr, "cudaFree(d_in) failed: %s\n", cudaGetErrorString(error));
+      return -1;
+    }
+  }
   d_in = 0;
 
   if (d_fbs)
-    cudaFree (d_fbs);
+  {
+    error = cudaFree(d_fbs);
+    if (error != cudaSuccess)
+    {
+      fprintf (stderr, "cudaFree(d_fbs) failed: %s\n", cudaGetErrorString(error));
+      return -1;
+    }
+  }
   d_fbs = 0;
 
   if (d_phasors)
-    cudaFree (d_phasors);
+  {
+    error = cudaFree(d_phasors);
+    if (error != cudaSuccess)
+    {
+      fprintf (stderr, "cudaFree(d_phasors) failed: %s\n", cudaGetErrorString(error));
+      return -1;
+    }
+  }
   d_phasors = 0;
 
   if (h_ant_factors)
-    cudaFreeHost(h_ant_factors);
+  {
+    error = cudaFreeHost(h_ant_factors);
+    if (error != cudaSuccess)
+    {
+      fprintf (stderr, "cudaFreeHost(h_ant_factors) failed: %s\n", cudaGetErrorString(error));
+      return -1;
+    }
+  }
   h_ant_factors= 0;
 
   if (h_in)
-    cudaFreeHost(h_in);
+  {
+    error = cudaFreeHost(h_in);
+    if (error != cudaSuccess)
+    {
+      fprintf (stderr, "cudaFreeHost(h_in) failed: %s\n", cudaGetErrorString(error));
+      return -1;
+    }
+  }
   h_in = 0;
 
   if (h_out)
-    cudaFreeHost(h_out);
+  {
+    error = cudaFreeHost(h_out);
+    if (error != cudaSuccess)
+    {
+      fprintf (stderr, "cudaFreeHost(h_out) failed: %s\n", cudaGetErrorString(error));
+      return -1;
+    }
+  }
   h_out = 0;
 
   if (h_phasors)
-    cudaFreeHost(h_phasors);
+  {
+    error = cudaFreeHost(h_phasors);
+    if (error != cudaSuccess)
+    {
+      fprintf (stderr, "cudaFreeHost(h_phasors) failed: %s\n", cudaGetErrorString(error));
+      return -1;
+    }
+  }
   h_phasors = 0;
 
   if (h_sin_thetas)
-    cudaFreeHost(h_sin_thetas);
+  {
+    error = cudaFreeHost(h_sin_thetas);
+    if (error != cudaSuccess)
+    {
+      fprintf (stderr, "cudaFreeHost(h_sin_thetas) failed: %s\n", cudaGetErrorString(error));
+      return -1;
+    }
+  }
   h_sin_thetas = 0;
 
   free (modules);
