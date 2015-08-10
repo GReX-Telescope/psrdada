@@ -49,7 +49,7 @@ uint64_t stop_byte = 0;
 void usage()
 {
   fprintf (stdout,
-     "ska1_udpdb [options]\n"
+     "ska1_udpdb_thread [options]\n"
      " -b core          bind process to run on CPU core\n"
      " -c port          port for 'telnet' control commands\n"
      " -f header_file   ascii header file\n"
@@ -897,7 +897,6 @@ int main (int argc, char **argv)
     multilog (udpdb.log, LOG_INFO, "main: HDU bufsz=%"PRIu64", UDP_DATA=%d, packets_per_buffer=%"PRIu64"\n", 
                                   udpdb.hdu_bufsz, UDP_DATA, udpdb.packets_per_buffer);
 
-
   if (verbose)
     multilog(log, LOG_INFO, "main: ska1_udpdb_prepare()\n");
   if (ska1_udpdb_prepare (&udpdb) < 0)
@@ -956,7 +955,6 @@ int main (int argc, char **argv)
       }
     }
 
-
     //rval = pthread_create (&receiving_thread_id, &recv_attr, (void *) ska1_udpdb_receive_obs , (void *) &udpdb);
     if (verbose)
       multilog(log, LOG_INFO, "starting ska1_udpdb_receive_obs thread\n");
@@ -976,10 +974,8 @@ int main (int argc, char **argv)
     if ( udpdb_stop_function(&udpdb) != 0)
       fprintf(stderr, "Error stopping acquisition");
 
-
     if (!control_port)
       quit_threads = 1;
-
   }
 
   if (control_port)

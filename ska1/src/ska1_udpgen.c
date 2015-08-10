@@ -40,6 +40,8 @@ void reverse_array(char *array, int array_size);
 
 int main(int argc, char *argv[])
 {
+  char * header_file = 0;
+
   // number of microseconds between packets
   double sleep_time = 22;
  
@@ -134,15 +136,32 @@ int main(int argc, char *argv[])
   }
 
   // Check arguments
-  if ((argc - optind) != 1) 
+  if ((argc - optind) != 2) 
   {
-    fprintf(stderr,"ERROR: 1 command line argument expected [destination host]\n");
+    fprintf(stderr,"ERROR: 2 command line arguments expected\n");
     usage();
     return EXIT_FAILURE;
   }
 
+  // header the this data stream
+  header_file = strdup (argv[optind]);
+
   // destination host
-  dest_host = strdup(argv[optind]);
+  dest_host = strdup(argv[optind+1]);
+
+  char * header = (char *) malloc (sizeof(char) * DADA_DEFAULT_HEADER_SIZE);
+  if (header_file == NULL)
+  {
+    fprintf (stderr, "ERROR: could not allocate memory for header buffer\n");
+    return (EXIT_FAILURE);
+  }
+
+  if (fileread (header_file, header, DADA_DEFAULT_HEADER_SIZE) < 0)
+  {
+    free (header);
+    fprintf (stderr, "ERROR: could not read ASCII header from %s\n", header_file);
+    return (EXIT_FAILURE);
+  }
 
   seq_no = 0;
   ant_id = 0;
