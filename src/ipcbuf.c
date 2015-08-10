@@ -1,6 +1,4 @@
-#include "ipcbuf.h"
-#include "ipcutil.h"
-#include <time.h>
+
 
 #include <sys/types.h>
 #include <sys/time.h>
@@ -15,6 +13,10 @@
 #include <sys/ipc.h>
 #include <sys/sem.h>
 #include <sys/shm.h>
+
+#include <time.h>
+#include "ipcbuf.h"
+#include "ipcutil.h"
 
 //#define _DEBUG 1
 
@@ -156,6 +158,9 @@ int ipcbuf_get (ipcbuf_t* id, int flag, int n_readers)
   {
     id->buffer[ibuf] = ipc_alloc (id->shmkey[ibuf], sync->bufsz, 
           flag, id->shmid + ibuf);
+#ifdef _DEBUG
+    fprintf (stderr, "ipcbuf_get: id->buffer[%u]=%p\n", ibuf, (void *) id->buffer[ibuf]);
+#endif
 
     if ( id->buffer[ibuf] == 0 )
     {
