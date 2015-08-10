@@ -28,15 +28,20 @@ typedef struct {
   // check each header for the OBS_XFER
   unsigned check_xfers;
 
+  void * local_buffer;
+
+  size_t local_buffer_size;
+
 } dada_dbnull_t;
 
-#define DADA_DBNULL_INIT { 0, 0, 0 }
+#define DADA_DBNULL_INIT { 0, 0, 0, 0, 0 }
 
 void usage()
 {
   fprintf (stdout,
      "dada_dbnull [options]\n"
      " -k key     connect to key data block\n"
+     " -l         copy contents into a local memory buffer\n"
      " -v         be verbose\n"
      " -q         be quiet\n"
      " -x mbytes  transfer size MB [default 64]\n"
@@ -155,6 +160,9 @@ int64_t sock_send_function (dada_client_t* client,
 int64_t sock_send_block_function (dada_client_t* client,
               void* data, uint64_t data_size, uint64_t block_id)
 {
+  dada_dbnull_t * ctx = (dada_dbnull_t *) client->context;
+  if (ctx->local_buffer)
+    memcpy (ctx->local_buffer, data, data_size);
   return data_size;
 }
 
@@ -209,7 +217,9 @@ int main (int argc, char **argv)
    * block */
   int busy_sleep = 0;
 
-  while ((arg=getopt(argc,argv,"dN:vk:o:O:qsSx:X:z")) != -1)
+  char local_copy = 0;
+
+  while ((arg=getopt(argc,argv,"dlN:vk:o:O:qsSx:X:z")) != -1)
     switch (arg) {
       
     case 'd':
@@ -229,6 +239,10 @@ int main (int argc, char **argv)
         fprintf (stderr, "dada_db: could not parse key from %s\n", optarg);
         return -1;
       }
+      break;
+
+    case 'l':
+      local_copy = 1;
       break;
 
     case 'o':
@@ -290,6 +304,12 @@ int main (int argc, char **argv)
   if (dada_hdu_lock_read (hdu) < 0)
     return EXIT_FAILURE;
 
+  if (local_copy)
+  {
+    dbnull.local_buffer_size = ipcbuf_get_bufsz ((ipcbuf_t *) hdu->data_block);
+    dbnull.local_buffer = malloc (dbnull.local_buffer_size);
+  }
+
   client = dada_client_create ();
 
   dbnull.check_xfers = multiple_xfers;
@@ -341,6 +361,9 @@ int main (int argc, char **argv)
 
   if (dada_hdu_disconnect (hdu) < 0)
     return EXIT_FAILURE;
+
+  if (local_copy)
+    free (dbnull.local_buffer);
 
   return EXIT_SUCCESS;
 }
