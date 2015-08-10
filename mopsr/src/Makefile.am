@@ -108,7 +108,7 @@ bin_PROGRAMS += mopsr_dbrephasedb mopsr_dbcalib mopsr_test_kernel \
 libmopsr_la_SOURCES += mopsr_cuda.cu mopsr_delays_cuda.cu mopsr_delays_cuda.h \
                        mopsr_calib_cuda.cu mopsr_calib_cuda.h
 
-AM_CFLAGS += @CUDA_CFLAGS@ @CUFFT_CFLAGS@
+AM_CFLAGS += @CUDA_CFLAGS@
 LDADD += @CUDA_LIBS@ @CUFFT_LIBS@
 LDFLAGS += $(CUDA_LDFLAGS)
 
