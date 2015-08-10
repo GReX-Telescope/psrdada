@@ -16,13 +16,13 @@ AC_DEFUN([SWIN_LIB_SOFA],
   if test "$have_sofa" != "user disabled"; then
 
     SWIN_PACKAGE_FIND([sofa],[sofa.h])
-    SWIN_PACKAGE_TRY_COMPILE([sofa],[#include <sofa.h>],
+    SWIN_PACKAGE_TRY_COMPILE([sofa],[#include <sofa.h>;#include <math.h>],
                              [iauAnp(0.0);])
 
     SWIN_PACKAGE_FIND([sofa],[lib$SOFA.*])
     SWIN_PACKAGE_TRY_LINK([sofa],[#include <sofa.h>],
                           [ iauAnp(0.0);],
-                          [-lsofa_c])
+                          [-lsofa_c -lm])
 
   fi
 
