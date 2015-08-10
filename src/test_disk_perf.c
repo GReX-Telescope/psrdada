@@ -72,7 +72,6 @@ typedef struct {
 
 #define DADA_DISKPERF_INIT { 0,0,0,0,0,0,0,0,0,0 }
 
-
 /*! Function that opens the data transfer target */
 int file_open_function (dada_diskperf_t* diskperf)
 {
@@ -313,6 +312,11 @@ int main (int argc, char **argv)
   diskperf.chunk_size = (long) chunk_size_bytes;
   diskperf.file_size_gbytes = file_size_gbytes;
 
+  struct timeval start_time;
+  struct timeval end_time;
+
+  gettimeofday (&start_time, 0);
+
   if (file_open_function(&diskperf) < 0) {
     fprintf (stderr, "failed to open file: %s\n", diskperf.file_name);
     return (EXIT_FAILURE);
@@ -326,21 +330,17 @@ int main (int argc, char **argv)
     }
   }
 
-  struct timeval start_time;
-  struct timeval end_time;
-
-  gettimeofday (&start_time, 0);
 
   if (file_io_function(&diskperf) < 0) {
     fprintf(stderr, "IO function failed\n");
   }
 
-  gettimeofday (&end_time, 0);
-
   if (file_close_function(&diskperf) < 0) {
     fprintf(stderr, "Failed to close file\n");
     return EXIT_FAILURE;
   }
+
+  gettimeofday (&end_time, 0);
 
   quit_threads = 1;
 
