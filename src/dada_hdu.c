@@ -350,9 +350,7 @@ int dada_hdu_open (dada_hdu_t* hdu)
 // return the base addresses and sizes of the datablock
 char ** dada_hdu_db_addresses(dada_hdu_t * hdu, uint64_t * nbufs, uint64_t * bufsz)
 {
-
   ipcbuf_t *db = (ipcbuf_t *) hdu->data_block;
-
   *nbufs = ipcbuf_get_nbufs (db);
   *bufsz = ipcbuf_get_bufsz (db);
 
@@ -362,9 +360,7 @@ char ** dada_hdu_db_addresses(dada_hdu_t * hdu, uint64_t * nbufs, uint64_t * buf
 // return the base addresses and sizes of the datablock
 char ** dada_hdu_hb_addresses(dada_hdu_t * hdu, uint64_t * nbufs, uint64_t * bufsz)
 {
-
   ipcbuf_t *hb = hdu->header_block;
-
   *nbufs = ipcbuf_get_nbufs (hb);
   *bufsz = ipcbuf_get_bufsz (hb);
 
