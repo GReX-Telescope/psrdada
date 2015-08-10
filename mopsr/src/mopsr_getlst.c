@@ -14,7 +14,6 @@
 #include <errno.h>
 #include <assert.h>
 #include <math.h>
-#include <slalib.h>
 
 void usage ()
 {
@@ -87,11 +86,6 @@ int main(int argc, char** argv)
   int HMSF[4];
   char sign;
   int NDP = 4;    // number of decimal places
-
-#ifdef HAVE_SLA
-  iauA2tf (NDP, lmst, &sign, HMSF);
-  fprintf (stderr, "LMST: %02d:%02d:%02d.%d [radians=%f]\n", HMSF[0],HMSF[1],HMSF[2],HMSF[3], lmst);
-#endif
 
   iauA2tf (NDP, last, &sign, HMSF);
   fprintf (stderr, "LAST: %02d:%02d:%02d.%d [radians=%f]\n", HMSF[0],HMSF[1],HMSF[2],HMSF[3], last);

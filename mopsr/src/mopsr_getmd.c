@@ -14,7 +14,6 @@
 #include <errno.h>
 #include <assert.h>
 #include <math.h>
-#include <slalib.h>
 
 void usage ()
 {

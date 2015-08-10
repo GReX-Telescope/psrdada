@@ -11,7 +11,6 @@
 //
 
 #include "mopsr_delays.h"
-#include "slalib.h"
 
 #include <stdio.h>
 #include <stdlib.h>
