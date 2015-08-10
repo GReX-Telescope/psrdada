@@ -5,20 +5,28 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#define HAVE_NUMA
+
+#ifdef HAVE_NUMA
+#include <numa.h>
+#endif
 
 void usage ()
 {
   fprintf (stdout,
           "dada_db - create or destroy the DADA shared memory ring buffer\n"
           "\n"
-          "Usage: dada_db [-d] [-k key] [-n nbufs] [-b bufsz] [-r nreaders]\n"
-          " -b  size of each buffer (in bytes) [default: %"PRIu64"]\n"
-          " -d  destroy the shared memory area [default: create]\n"
-          " -k  hexadecimal shared memory key  [default: %x]\n"
-          " -l  lock the shared memory area in physical RAM\n"
-          " -n  number of buffers in ring      [default: %"PRIu64"]\n"
-          " -p  page all blocks into RAM\n"
-          " -r  number of readers              [default: 1]\n",
+          "Usage: dada_db [options]\n"
+          " -b bufsz    size of each buffer (in bytes) [default: %"PRIu64"]\n"
+#ifdef HAVE_NUMA
+          " -c cpu      assign numa memory for cpu     [default: all nodes]\n"
+#endif
+          " -d          destroy the shared memory area [default: create]\n"
+          " -k key      hexadecimal shared memory key  [default: %x]\n"
+          " -l          lock the shared memory in RAM\n"
+          " -n nbufs    number of buffers in ring      [default: %"PRIu64"]\n"
+          " -p          page all blocks into RAM\n"
+          " -r nread     number of readers             [default: 1]\n",
           DADA_DEFAULT_BLOCK_SIZE,
           DADA_DEFAULT_BLOCK_KEY,
           DADA_DEFAULT_BLOCK_NUM);
@@ -42,8 +50,14 @@ int main (int argc, char** argv)
   int lock = 0;
   int arg;
   unsigned num_readers = 1;
+#ifdef HAVE_NUMA
+  char have_numa = (numa_available() != -1);
+  struct bitmask * node_mask = 0;
 
+  while ((arg = getopt(argc, argv, "hc:dk:n:r:b:lp")) != -1) {
+#else
   while ((arg = getopt(argc, argv, "hdk:n:r:b:lp")) != -1) {
+#endif
 
     switch (arg)  {
     case 'h':
@@ -60,6 +74,20 @@ int main (int argc, char** argv)
        return -1;
       }
       break;
+
+#ifdef HAVE_NUMA
+    case 'c':
+      if (have_numa)
+      {
+        node_mask = numa_parse_cpustring_all (optarg);
+        if (!node_mask)
+        {
+          fprintf (stderr, "dada_db: could not parse CPU ID from %s\n", optarg);
+          return -1;
+        }
+      }
+      break;
+#endif
 
     case 'n':
       if (sscanf (optarg, "%"PRIu64"", &nbufs) != 1) {
@@ -111,6 +139,11 @@ int main (int argc, char** argv)
     return 0;
   }
 
+#ifdef HAVE_NUMA
+  if (have_numa && node_mask)
+    numa_set_membind (node_mask);
+#endif
+
   if (ipcbuf_create (&data_block, dada_key, nbufs, bufsz, num_readers) < 0) {
     fprintf (stderr, "Could not create DADA data block\n");
     return -1;
@@ -149,3 +182,4 @@ int main (int argc, char** argv)
 
   return 0;
 }
+

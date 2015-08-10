@@ -52,6 +52,8 @@ TESTS = test_uint64_t test_disk_array test_ipcio test_ascii_header
 LDADD = libpsrdada.la 
 AM_CFLAGS = -g
 
+dada_db_LDADD = $(LDADD) -lnuma
+
 EXTRA_DIST=ipcrme loopssh
 
 ###############################################################################
@@ -87,15 +89,15 @@ if HAVE_CUDA
 
 include $(top_srcdir)/cuda.mk
 
-libpsrdada_la_SOURCES += dada_cuda.cu dada_cuda.h
-include_HEADERS += dada_cuda.h
+libpsrdada_la_SOURCES += dada_cuda.cu dada_cuda.h ipcio_cuda.cu ipcio_cuda.h
+include_HEADERS += dada_cuda.h ipcio_cuda.h
 bin_PROGRAMS += dada_dbgpu
 
-AM_CPPFLAGS = @CUDA_CFLAGS@
+AM_CPPFLAGS = @CUDA_CFLAGS@ 
 
 dada_dbgpu_CFLAGS   = $(CUDA_CFLAGS)
 dada_dbgpu_LDADD    = $(LDADD) $(CUDA_LIBS)
-dada_dbgpu_LDFLAGS  = $(CUDA_LDFLAGS)
+dada_dbgpu_LDFLAGS  = $(CUDA_LDFLAGS) -lstdc++
 
 endif
 

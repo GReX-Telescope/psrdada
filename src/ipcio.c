@@ -2,10 +2,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef HAVE_CUDA
-#include <cuda_runtime.h>
-#endif
-
 #include "ipcio.h"
 
 // #define _DEBUG 1
@@ -590,79 +586,6 @@ ssize_t ipcio_close_block_write (ipcio_t *ipc, uint64_t bytes)
   }
   return 0;
 }
-
-#if HAVE_CUDA
-/* read bytes from ipcbuf, writing to device memory via H2D transfer*/
-ssize_t ipcio_read_cuda (ipcio_t* ipc, char* ptr, size_t bytes, void * cuda_stream)
-{
-  size_t space = 0;
-  size_t toread = bytes;
-
-  if (ipc -> rdwrt != 'r' && ipc -> rdwrt != 'R')
-  {
-    fprintf (stderr, "ipcio_read: invalid ipcio_t (rdwrt=%c)\n", ipc->rdwrt);
-    return -1;
-  }
-
-  cudaStream_t stream = (cudaStream_t) *cuda_stream;
-
-  while (!ipcbuf_eod((ipcbuf_t*)ipc))
-  {
-    if (!ipc->curbuf)
-    {
-      ipc->curbuf = ipcbuf_get_next_read ((ipcbuf_t*)ipc, &(ipc->curbufsz));
-
-#ifdef _DEBUG
-      fprintf (stderr, "ipcio_read buffer:%"PRIu64" %"PRIu64" bytes. buf[0]=%x\n",
-               ipc->buf.sync->r_buf, ipc->curbufsz, ipc->curbuf[0]);
-#endif
-
-      if (!ipc->curbuf)
-      {
-        fprintf (stderr, "ipcio_read: error ipcbuf_next_read\n");
-        return -1;
-      }
-
-      ipc->bytes = 0;
-    }
-
-    if (bytes)
-    {
-      space = ipc->curbufsz - ipc->bytes;
-      if (space > bytes)
-        space = bytes;
-
-      if (ptr)
-      {
-        cudaMemcpyAsync (ptr, ipc->curbuf + ipc->bytes, space, cudaMemcpyHostToDevice, stream);
-        memcpy (ptr, ipc->curbuf + ipc->bytes, space);
-        ptr += space;
-      }
-
-      ipc->bytes += space;
-      bytes -= space;
-    }
-
-    if (ipc->bytes == ipc->curbufsz)
-    {
-      if (ipc -> rdwrt == 'R' && ipcbuf_mark_cleared ((ipcbuf_t*)ipc) < 0)
-      {
-        fprintf (stderr, "ipcio_read: error ipcbuf_mark_filled\n");
-        return -1;
-      }
-
-      ipc->curbuf = 0;
-      ipc->bytes = 0;
-    }
-    else if (!bytes)
-      break;
-  }
-
-  cudaStreamSynchronize(stream);
-
-  return toread - bytes;
-}
-#endif
 
 /* read bytes from ipcbuf */
 ssize_t ipcio_read (ipcio_t* ipc, char* ptr, size_t bytes)

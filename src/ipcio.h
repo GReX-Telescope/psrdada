@@ -71,12 +71,6 @@ extern "C" {
   /*! read bytes from ipcbuf */
   ssize_t ipcio_read (ipcio_t* ipc, char* ptr, size_t bytes);
 
-#if HAVE_CUDA
-  /*! read bytes from ipcbuf directly to cuda device memory */
-  //ssize_t ipcio_read_cuda (ipcio_t* ipc, char* ptr, size_t bytes, cudaStream_t stream);
-  ssize_t ipcio_read_cuda (ipcio_t* ipc, char* ptr, size_t bytes, void * cuda_stream);
-#endif
-
   /*! seek into ipcbuf - valid only for reading for now */
   int64_t ipcio_seek (ipcio_t* ipc, int64_t offset, int whence);
 
