@@ -2520,6 +2520,10 @@ void mopsr_tile_beams_precomp (cudaStream_t stream, void * d_in, void * d_fbs, f
   //cudaFuncSetCacheConfig(tile_beams_kernel_1024, cudaFuncCachePreferL1);
   tile_beams_kernel_512<<<nblocks, nthread, sdata_bytes, stream>>>((int16_t *) d_in, (float *) d_fbs, d_phasors, nbeam, ndat, nant);
 
+#ifdef _GDEBUG
+  check_error_stream("tile_beams_kernel_512", stream);
+#endif
+
 #else
   const unsigned nthread = 1024;
 #endif
@@ -2546,7 +2550,10 @@ void mopsr_tile_beams_precomp (cudaStream_t stream, void * d_in, void * d_fbs, f
 
   //tile_beams_kernel_1024_4pt<<<nblocks, nthread, sdata_bytes, stream>>>((int16_t *) d_in, (float *) d_fbs, d_phasors, nbeam, ndat, nant);
   tile_beams_kernel_1024_test<<<nblocks, nthread, sdata_bytes, stream>>>((int16_t *) d_in, (float *) d_fbs, d_phasors, nbeam, ndat, nant);
-
+  
+#ifdef _GDEBUG
+  check_error_stream("tile_beams_kernel_1024_test", stream);
+#endif
 #endif
 
 #define BLOCK2048
@@ -2564,11 +2571,15 @@ void mopsr_tile_beams_precomp (cudaStream_t stream, void * d_in, void * d_fbs, f
   sdata_bytes = (nbeam_block * (nthread/WARP_SIZE) * sizeof(float) * 2) +
                 (nbeam_block * nant * sizeof (complex float));
 
-  //fprintf (stderr, "bytes=%lu ndat=%lu blocks=%u threads=%u shm=%ld\n", bytes, ndat, nblocks, nthread, sdata_bytes);
+#ifdef _GDEBUG
+  fprintf (stderr, "bytes=%lu ndat=%lu blocks=%u threads=%u shm=%ld\n", bytes, ndat, nblocks, nthread, sdata_bytes);
+#endif
 
   tile_beams_kernel_2048_test<<<nblocks, nthread, sdata_bytes, stream>>>((int32_t *) d_in, (float *) d_fbs, d_phasors, nbeam, ndat, nant);
 
-  //check_error_stream("tile_beams_kernel_2048_test", stream);
+#ifdef _GDEBUG
+  check_error_stream("tile_beams_kernel_2048_test", stream);
+#endif
 
 #endif
 
@@ -2589,6 +2600,10 @@ void mopsr_tile_beams_precomp (cudaStream_t stream, void * d_in, void * d_fbs, f
 d_phasors, nbeam, ndat, nant);
 #endif
 
+#ifdef _GDEBUG
+  check_error_stream("tile_beams_kernel_64_blk", stream);
+#endif
+
 //#define BLOCK32
 #ifdef BLOCK32
   unsigned ndat_per_block = 32;
@@ -2602,6 +2617,10 @@ d_phasors, nbeam, ndat, nant);
 
   // forms fan beams integrating 32 time samples for efficiency
   tile_beams_kernel_32_blk<<<nblocks, nthread, sdata_bytes, stream>>>((int32_t *) d_in, (float *) d_fbs, d_phasors, nbeam, ndat, nant);
+#ifdef _GDEBUG
+  check_error_stream("tile_beams_kernel_32_blk", stream);
+#endif
+
 #endif
 }
 
