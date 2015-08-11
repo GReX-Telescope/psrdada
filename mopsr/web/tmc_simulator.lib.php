@@ -30,18 +30,59 @@ class tmc_simulator extends mopsr_webpage
 
     $this->title = "MOPSR | TMC Simulator";
     $this->inst = new mopsr();
-    $this->valid_psrs = array("J0001+0001", "J0034-0721", "J0255-5304", "J0401-7608", 
-			      "J0437-4715", "J0452-1759", "J0536-7543", "J0534+2200", "J0601-0527", 
+    $this->valid_psrs = array(
+
+			      "J0001+0001", "J0034-0721", "J0255-5304", "J0401-7608", "J1630-4733","J1715-4034","J1717-3424",
+			      "J0437-4715", "J0452-1759", "J0536-7543", "J0534+2200", "J0601-0527", "J1730-3350",
+			      "J1745-3040", "J1225-6408",
 			      "J0610-2100", "J0613-0200", "J0711-6830", "J0737-3039A", 
-			      "J0742-2822", "J0835-4510", "J0820-1350",
-                              "J0900-3144", "J0904-7459", "J0942-5552", "J0953+0755", 
-			      "J1001-5939", "J1001-5507", "J1048-5832", 
+			      "J0742-2822", "J0835-4510", "J0820-1350", "J1534-5334","J1614-5048",
+                              "J0900-3144", "J0904-7459", "J0941-39", "J0942-5552", "J0953+0755", 
+			      "J1001-5939", "J1001-5507", "J1048-5832","J1544-5308", 
+			      "J0837+0610","J1202-5820", "J1305-6455",
+			      "J1721-3532","J1216-5027", "J1558-5419",
+			      "J1707-4053","J1210-5559", "J1559-5545",
+			      "J1709-4429", "J1418-3921", "J1453-0620","J1731-4744",
+			      "J1357-6228", "J1600-3053", "J1600-5751",
+			      "J1651-4246","J1603-7202","J1613-4714",
+			      "J1705-3423",
+			      "J1709-4429", "J1705-1906",
+			      "J1740-3015", "J1738+0333",
+			      "J1825-0935",
+			      "J1723-2837","J1703-3241",
+			      "J1820-0427", "J1648-3256", "J1649-3805",
+			      "J1824-1945", "J1231-6303",
+			      "J1829-1751","J1836-1008",
+			      "J1848-0123", "J1847-0402",
+			      "J1900-2600","J1913-0440","J2026-0421",
+			      "J2144-3933",
+			      "J1359-6038", "J1146-6030", "J1302-6350", "J1306-6617",
+			      "J1605-5257", "J1604-4909", "J1319-6056",
+			      "J1107-5907", "J0206-4028",
+			      "J0907-5157", "J2330-2005",
+			      "J0942-5552", "J0151-0635",
+			      "J1001-5507", "J0152-1637",
+			      "J1056-6258", "J1550-5418",
+			      "J1057-5226", "J1253-5820",
+			      "J1116-4122",
+			      "J1136-5525", "J1824-2452A",
+			      "J1401-6357",
+			      "J1428-5530", "J1557-4258",
+			      "J1430-6623", "J1623-4256", 
+			      "J1453-6413", "J1435-5954",
+			      "J1456-6843",
+			      "J1534-5334",
+			      "J1557-4258",
+			      "J1600-5044", "J1327-6301", "J1328-4357", "J1341-6220", "J1352-6803",
+			      "J1602-5100",
                               "J1018-7154", "J1022+1001", "J1024-0719", "J1034-3224", 
 			      "J1045-4509",
 			      "J1056-6258", "J1057-5226",
                               "J1103-5355", "J1116-4122", "J1125-5825", "J1125-6014", 
 			      "J1141-6545", "J1157-6224",
                               "J1226-6202", "J1243-6423", "J1326-5859",  "J1327-6222",
+			      "J1224-6407", "J1243-6423", "J1312-5516", "J1320-5359", "J1326-6700",
+			      "J1326-6408",
 			      "J1430-6623", 
 			      "J1431-4717", "J1439-5501", "J1525-5544",
                               "J1546-4552", "J1600-3053", "J1600-5044", "J1603-7202", 
@@ -49,19 +90,44 @@ class tmc_simulator extends mopsr_webpage
                               "J1644-4559", "J1709-1640", "J1731-4744",
 			      "J1713+0747", "J1717-4054", "J1718-3718", "J1730-2304",
                               "J1732-5049", "J1744-1134", "J1751-4657", 
-			      "J1807-0847", "J1820-0427", "J1824-2452", 
+			      "J1807-0847", "J1820-0427", "J1825-0935", "J1824-2452", 
 			      "J1844+00", "J1857+0943", 
                               "J1909-3744", "J1900-2600", "J1913-0440", 
 			      "J1933-6211", "J1939+2134", "J2124-3358",
                               "J2129-5721", "J2145-0750", "J2241-5236", "J1456-6843",
-			      "J0630-2834", "J1017-7156",
+			      "J0630-2834", "J1017-7156", "J0908-4913",
                               "J0738-4042", "J0630-2834", "J0738-4042", "J0742-2822",
-                              "J0835-4510", "J0837-4135", "J0953+0755", "J1136+1551",
+                              "J0835-4510", "J0837-4135", "J0953+0755", "J1136+1551", "J1819-1458",
                               "J1453-6413", "J1456-6843", "J1559-4438", "J1644-4559", "J2048-1616",
-                              "J1645-0317", "J1752-2806", "J1932+1059", "J1935+1616", "FRB Transit",
+                              "J1645-0317", "J1752-2806", "J1932+1059", "J1935+1616", 
+			      "J1600-5751", 
+			      "J1603-7202",
+			      "J1603-2531",
+			      "J1613-4714",
+			      "J1623-2631",
+			      "J1623-4256",
+			      "J1625-4048",
+			      "J1808-0813", 
+			      "J1812-1733",
+			      "J1812-2102",
+			      "J1816-2650",
+			      "J1822-2256",
+			      "J1637-4553",
+			      "J1646-6831",
+			      "J1650-1654" ,
+			      "J1651-5222",
+			      "J1700-3312",
+			      "J1703-4851",
+			      "J1705-3423",
+			      "J1708-3426",
+			      "J1720-2933",
+			      "J1730-3350",
+			      "FRB Transit", 
+			      "SUMSS1200M80", "SUMSS1330M76", 
                               "CenA",       "3C273", "HerA", "3C353", "E1", "1hr", "FRB010724",
-			      "3hr", "FRB090625", "CDF-S", "4hr", "Prime", "FRB131104", 
+			      "3hr", "FRB090625", "CDF-S", "4hr", "Prime", "FRB131104", "SN1987A",
 			      "9hr", "Polar", "FRB121002", "HD94660",  
+			      "CJ1744-5144",
 			      "CJ0010-4153",
 			      "CJ0025-2602",
                               "CJ0200-3053", 
@@ -147,6 +213,10 @@ class tmc_simulator extends mopsr_webpage
     $this->psrs["CDF-S"]["RAJ"] = "03:30:24.0";
     $this->psrs["CDF-S"]["DECJ"] = "-28:06:00.0";
 
+    $this->psrs["SN1987A"] = array();     
+    $this->psrs["SN1987A"]["RAJ"] = "05:35:28.0";
+    $this->psrs["SN1987A"]["DECJ"] = "-69:16:11.1";
+
     $this->psrs["4hr"] = array();     
     $this->psrs["4hr"]["RAJ"] = "04:10:00.0";
     $this->psrs["4hr"]["DECJ"] = "-55:00:00.0";
@@ -173,7 +243,15 @@ class tmc_simulator extends mopsr_webpage
 
     $this->psrs["FRB Transit"] = array();     
     $this->psrs["FRB Transit"]["RAJ"] = "00:00:00.0";
-    $this->psrs["FRB Transit"]["DECJ"] = "-44:00:00";
+    $this->psrs["FRB Transit"]["DECJ"] = "-46:00:00";
+
+    $this->psrs["SUMSS1200M80"] = array();     
+    $this->psrs["SUMSS1200M80"]["RAJ"] = "12:00:00.0";
+    $this->psrs["SUMSS1200M80"]["DECJ"] = "-80:00:00";
+
+    $this->psrs["SUMSS1330M76"] = array();     
+    $this->psrs["SUMSS1330M76"]["RAJ"] = "13:30:00.0";
+    $this->psrs["SUMSS1330M76"]["DECJ"] = "-76:00:00";
 
     $this->psrs["CenA"] = array();     
     $this->psrs["CenA"]["RAJ"] = "13:25:27.6";
@@ -278,6 +356,10 @@ class tmc_simulator extends mopsr_webpage
     $this->psrs["CJ1737-5632"] = array();
     $this->psrs["CJ1737-5632"]["RAJ"] = "17:37:42.85";
     $this->psrs["CJ1737-5632"]["DECJ"] = "-56:32:46.0";
+
+    $this->psrs["CJ1744-5144"] = array();
+    $this->psrs["CJ1744-5144"]["RAJ"] = "17:44:25.47";
+    $this->psrs["CJ1744-5144"]["DECJ"] = "-51:44:43.1";
 
     $this->psrs["CJ1819-6345"] = array();
     $this->psrs["CJ1819-6345"]["RAJ"] = "18:19:35.0";
@@ -459,6 +541,7 @@ class tmc_simulator extends mopsr_webpage
             <option value="mopsr.dspsr.gpu">mopsr.dspsr.gpu</option>
             <option value="mopsr.dspsr.gpu.sk" <? if (!$this->passthru) echo "selected"?>>mopsr.dspsr.gpu.sk</option>
             <option value="mopsr.dspsr.gpu.fb" <? if ($this->passthru) echo "selected"?>>mopsr.dspsr.gpu.fb</option>
+            <option value="mopsr.dspsr.gpu.1fold">mopsr.dspsr.gpu.1fold</option>
             <option value="mopsr.dspsr.gpu.10fold">mopsr.dspsr.gpu.10fold</option>
             <option value="mopsr.dbdisk">mopsr.dbdisk</option>
             <option value="mopsr.dbib">mopsr.dbib</option>
@@ -489,8 +572,11 @@ class tmc_simulator extends mopsr_webpage
             <option value="mopsr.calib.gpu">mopsr.calib.gpu [correlator]</option>
             <option value="mopsr.calib.pref8.gpu">mopsr.calib.pref8.gpu [limited baselines 176 input]</option>
             <option value="mopsr.calib.pref16.gpu">mopsr.calib.pref16.gpu [limited baselines 352 input]</option>
-            <option value="mopsr.dspsr.cpu.tied">mopsr.dspsr.cpu.tied [tied-array beam]</option>
-            <option value="mopsr.digifil.tied">mopsr.digifil.tied [tied-array filterbank]</option>
+            <option value="mopsr.dspsr.cpu">mopsr.dspsr.cpu [tied-array beam]</option>
+            <option value="mopsr.dspsr.cpu.cdd">mopsr.dspsr.cpu.cdd [CDD tied-array beam]</option>
+            <option value="mopsr.digifil.cpu">mopsr.digifil.cpu [tied-array beam]</option>
+            <!--<option value="mopsr.dspsr.cpu.tied">mopsr.dspsr.cpu.tied [tied-array beam **]</option>-->
+            <!--<option value="mopsr.digifil.tied">mopsr.digifil.tied [tied-array filterbank **]</option>-->
             <option value="mopsr.bfdsp.gpu">mopsr.bfdsp.gpu [tiled beams]</option>
             <option value="mopsr.dbdisk.channel">mopsr.dbdisk.channel [write baseband]</option>
             <option value="mopsr.null">mopsr.null [discard]</option>
@@ -542,6 +628,7 @@ class tmc_simulator extends mopsr_webpage
             <option value="CORRELATION">CORRELATION</option>
             <option value="TIED_ARRAY_BEAM">TIED ARRAY BEAM</option>
             <option value="FAN_BEAM">FAN BEAM</option>
+            <option value="TIED_ARRAY_FAN_BEAM">TIED ARRAY &amp; FAN BEAM</option>
           </select>
         </td>
 
@@ -585,6 +672,17 @@ class tmc_simulator extends mopsr_webpage
 
         <td class='key'>CHANBW</td>
         <td class='val'><input type="text" name="channel_bandwidth" size="12" value="<?echo $this->channel_bandwidth?>"></td>
+
+      </tr>
+
+      <tr>
+        <td class='key'>MD Angle</td>
+        <td class='val'><input type="text" name="md_angle" size="8" value="0.0"> [degrees]</td>
+
+        <td class='key'>NS Tilt</td>
+        <td class='val'><input type="text" name="ns_tilt" size="8" value="0.0"> [degrees]</td>
+
+        <td colspan=4></td>
 
       </tr>
 
@@ -648,7 +746,8 @@ class tmc_simulator extends mopsr_webpage
       $xml .= "  <name epoch='J2000'>".$get["source"]."</name>\n";
       $xml .=   "<ra units='hh:mm:ss'>".$get["ra"]."</ra>\n";
       $xml .=   "<dec units='hh:mm:ss'>".$get["dec"]."</dec>\n";
-      #$xml .=   "<nstilt units='degrees'>".$get["dec"]."</nstilt>\n";
+      $xml .=   "<ns_tilt units='degrees'>".$get["ns_tilt"]."</ns_tilt>\n";
+      $xml .=   "<md_angle units='degrees'>".$get["md_angle"]."</md_angle>\n";
       $xml .= "</source_parameters>\n";
       $xml .= "<signal_parameters>\n";
       $xml .=   "<nchan>".$get["nchan"]."</nchan>\n";

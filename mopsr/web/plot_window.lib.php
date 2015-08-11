@@ -103,6 +103,8 @@ class plot_window extends mopsr_webpage
 //              alert(ant + " " + ant_name);
 
               var j = 0;
+
+
               for (j=0; j<ant.childNodes.length; j++)
               {
                 img = ant.childNodes[j];
@@ -111,25 +113,41 @@ class plot_window extends mopsr_webpage
                   var type = img.getAttribute("type");
                   var imgurl = http_server + url_prefix + img.childNodes[0].nodeValue;
                   img_id = "pw_" + type + "_" + ant_name;
-                  tr_id = "pw_" + ant_name;
+                  if (ant_name == "FB")
+                  {
+                    tr_id = "pw_tr_" + type + "_"+ ant_name;
+                  }
+                  else
+                  {
+                    tr_id = "pw_tr_" + ant_name;
+                  }
 
+                  //alert ("img_id=" + img_id+ " tr_id="+tr_id)
                   excluded_imgs.push(img_id);
                   excluded_trs.push(tr_id);
 
                   try {
                     document.getElementById (tr_id).style.display = "";
                   } catch (e) {
-                    //alert("tr_id="+tr_id);
+                    alert("could not set display of tr_id="+tr_id+ " to not none");
                   }
 
-                  if (parseInt(img.getAttribute("width")) > 300)
+                  if ((parseInt(img.getAttribute("width")) > 300) || (ant_name == "FB"))
                   {
                     document.getElementById (img_id + "_link").href = "javascript:popImage('"+imgurl+"')";
                   }
-                  else
+
+                  if ((parseInt(img.getAttribute("width")) <= 300) || (ant_name == "FB"))
                   {
                     document.getElementById (img_id).src = imgurl;
-                    document.getElementById (img_id).height = img.getAttribute("height");
+                    if (ant_name != "FB")
+                    {
+                      document.getElementById (img_id).height = img.getAttribute("height");
+                    }
+                    else
+                    {
+                      document.getElementById (img_id).height = "480";
+                    } 
                   }
                 }
               }
@@ -180,7 +198,7 @@ class plot_window extends mopsr_webpage
       </tr>
 <?
       $id = "TB";
-      echo "<tr id='pw_".$id."' style='display: none;'>\n";
+      echo "<tr id='pw_tr_".$id."' style='display: none;'>\n";
         echo "<td>".$id."</td>\n";
         foreach ($this->types as $type)
         {
@@ -202,7 +220,7 @@ class plot_window extends mopsr_webpage
         for ($j=0; $j<$this->ants_per_pfb; $j++)
         {
           $id = sprintf("%s%02d_%d", $this->arm_prefixes[$iarm], ($i+1), $j);
-          echo "<tr id='pw_".$id."' style='display: none;'>\n";
+          echo "<tr id='pw_tr_".$id."' style='display: none;'>\n";
           echo "<td>".$id."</td>\n";
           foreach ($this->types as $type)
           {
@@ -226,7 +244,7 @@ class plot_window extends mopsr_webpage
       for ($ichan=0; $ichan<40; $ichan++)
       {
         $id = sprintf("CH%02d", $ichan);
-        echo "<tr id='pw_".$id."' style='display: none;'>\n";
+        echo "<tr id='pw_tr_".$id."' style='display: none;'>\n";
 
         echo "<td>".$id."</td>\n";
 
@@ -243,6 +261,25 @@ class plot_window extends mopsr_webpage
       }
 ?>
 
+    </table>
+
+    <table border=0 cellspacing=0 cellpadding=2>
+      <tr id='fanbeam_header' style='display: none;'>
+      </tr>
+<?
+      for ($i=47; $i>=0; $i--)
+      {
+        $id = "FB";
+        $type = sprintf("%02d", $i);
+        echo "<tr id='pw_tr_".$type."_".$id."' style='display: none;'>";
+          echo "<td>";
+          echo "<a href='' id='pw_".$type."_".$id."_link'>";
+          echo "<img id='pw_".$type."_".$id."' src='' width='640px' height='480px'>";
+          echo "</a>";
+          echo "</td>";
+        echo "</tr>\n";
+      }
+?>  
     </table>
   </center>
 

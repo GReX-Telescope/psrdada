@@ -6,21 +6,19 @@ error_reporting(E_ALL);
 include_once("mopsr.lib.php");
 include_once("mopsr_webpage.lib.php");
 
-class machine_summary extends mopsr_webpage 
+class area_summary extends mopsr_webpage 
 {
   // Datablock IDs
   var $db_ids = array();
 
-  // mapping of PWC to HOST
-  var $pwcs = array();
-  
+  // mapping of PWC/PROC to HOST
+  var $procs = array();
+
   // mapping of HOST to type 
   var $machines = array();
   var $config = array();
 
-  var $verbose = false;
-
-  function machine_summary()
+  function area_summary()
   {
     mopsr_webpage::mopsr_webpage();
 
@@ -28,61 +26,55 @@ class machine_summary extends mopsr_webpage
     array_push($this->ejs, "/js/prototype.js");
     array_push($this->ejs, "/js/jsProgressBarHandler.js");
 
-    $inst = new mopsr();
-    $this->config = $inst->config;
-    $this->roach = $inst->roach;
+    $this->inst = new mopsr();
+
+    $this->area = $_GET["area"];
+    if ($this->area == "aq")
+    {
+      $this->tag = "PWC";
+      $this->config = $this->inst->configFileToHash(AQ_FILE);
+    }
+    else if ($this->area == "bf")
+    {
+      $this->tag = "BF";
+      $this->config = $this->inst->configFileToHash(BF_FILE);
+    }
+    else if ($this->area == "bp")
+    {
+      $this->tag = "BP";
+      $this->config = $this->inst->configFileToHash(BP_FILE);
+    }
+    else
+    {
+      echo "ERROR: area must be valid get param<BR>\n";
+      exit(0);
+    }
 
     // generate a list of machines
-    for ($i=0; $i<$this->config["NUM_PWC"]; $i++) 
+    for ($i=0; $i<$this->config["NUM_".$this->tag]; $i++) 
     {
-      $host = $this->config["PWC_".$i];
+      $host = $this->config[$this->tag."_".$i];
       $host = str_replace("mpsr-", "", $host);
-      $this->pwcs[$i] = $host;
-      $this->machines[$host] = "pwc";
+      $this->procs[$i] = $host;
+      $this->machines[$host] = "1";
     }
 
-    for ($i=0; $i<$this->config["NUM_BF"]; $i++)
-    {
-      $host = $this->config["BF_".$i];
-      $host = str_replace("mpsr-", "", $host);
-      $this->pwcs[$i] = $host;
-      $this->machines[$host] = "bf";
-    }
-
-    for ($i=0; $i<$this->config["NUM_BP"]; $i++)
-    {
-      $host = $this->config["BP_".$i];
-      $host = str_replace("mpsr-", "", $host);
-      $this->pwcs[$i] = $host;
-      $this->machines[$host] = "bp";
-    }
-
-
-    if (array_key_exists("verbose", $_GET) && ($_GET["verbose"] == "true"))
-      $this->verbose = true;
-    if ($this->verbose)
-      $this->db_ids = explode(" ", $this->config["DATA_BLOCK_IDS"]);
-    else
-      $this->db_ids = array($this->config["RECEIVING_DATA_BLOCK"]);
-
-    list ($server_host, $server_domain) = explode(".", $this->config["SERVER_HOST"], 2);
-    $server_host = str_replace("mpsr-", "", $server_host);
-    $this->machines[$server_host] = "server";
+    $this->db_ids = explode(" ", $this->config["DATA_BLOCK_IDS"]);
   }
 
   function javaScriptCallback()
   {
-    return "machine_summary_request();";
+    return "area_summary_request();";
   }
 
   function printJavaScriptHead()
   {
 ?>
     <style type="text/css">
-      table.machine_summary th {
+      table.area_summary th {
         text-align: left;
       }
-      table.machine_summary td { 
+      table.area_summary td { 
         padding-bottom: 1px;
         padding-top: 1px;
         border-style: none none solid none;
@@ -90,7 +82,7 @@ class machine_summary extends mopsr_webpage
         border-width: 0px 0px 1px 0px;
         font-size: 8pt;
       }
-      table.machine_summary span { 
+      table.area_summary span { 
         font-size: 8pt;
       }
       td.gap {
@@ -134,9 +126,9 @@ class machine_summary extends mopsr_webpage
         echo ",'".$keys[$i]."'";
       echo ")\n";
 
-      $keys = array_keys($this->pwcs);
-      echo "     var pwcs = new Array('server'";
-      for ($i=0; $i<count($keys); $i++)
+      $keys = array_keys($this->procs);
+      echo "     var procs = new Array('".$keys[0]."'";
+      for ($i=1; $i<count($keys); $i++)
         echo ",'".$keys[$i]."'";
       echo ")\n";
 
@@ -160,13 +152,13 @@ class machine_summary extends mopsr_webpage
         {
           // silently ignore
         }
-        for (i=0; i<pwcs.length; i++) 
+        for (i=0; i<procs.length; i++) 
         {
-          var pwc = pwcs[i];
-          if (excluded.indexOf(pwc) == -1) 
+          var proc = procs[i];
+          if (excluded.indexOf(proc) == -1) 
           {
-            document.getElementById(pwc+"_messages").innerHTML = "&nbsp;";
-            document.getElementById(pwc+"_img").src = "/images/green_light.png";
+            document.getElementById(proc+"_messages").innerHTML = "&nbsp;";
+            document.getElementById(proc+"_img").src = "/images/green_light.png";
           }
         }
       }
@@ -182,38 +174,37 @@ class machine_summary extends mopsr_webpage
         pb.setPercentage(0.0);
         pb = eval(host + "_disk"); 
         pb.setPercentage(0.0);
-
       }
 
 
-      function setPWCNotConnected(pwc_id) 
+      function setPROCNotConnected(proc_id) 
       {
         var pb1;
         var buffer;
         var i, j;
 
-        document.getElementById(pwc_id+"_messages").innerHTML = "not connected";
-        document.getElementById(pwc_id+"_img").src  = "/images/grey_light.png";
+        document.getElementById(proc_id+"_messages").innerHTML = "not connected";
+        document.getElementById(proc_id+"_img").src  = "/images/grey_light.png";
 
         for (i=0; i<machines.length; i++)
         {
           for (j=0; j<db_ids.length; j++)
           {
-            //alert(pwc_id+": testing machines["+i+"]="+machines[i]+", db_ids["+j+"]="+db_ids[j]+" length="+db_ids.length);
+            //alert(proc_id+": testing machines["+i+"]="+machines[i]+", db_ids["+j+"]="+db_ids[j]+" length="+db_ids.length);
             try
             {
               // try to evaluate a javascript variable with this name
-              pb1 = eval(machines[i] + "_" + pwc_id + "_" + db_ids[j] + "_buffer");
+              pb1 = eval(machines[i] + "_" + proc_id + "_" + db_ids[j] + "_buffer");
 
               // if we didn't throw an exception, then the object exists, set percent to 0
               pb1.setPercentage(0.0);
 
               // and set the value to 0 also
-              document.getElementById(machines[i] + "_" + pwc_id + "_" + db_ids[j] + "_buffer_value").innerHTML = "&nbsp;--";
+              document.getElementById(machines[i] + "_" + proc_id + "_" + db_ids[j] + "_buffer_value").innerHTML = "&nbsp;--";
             }
             catch(e)
             {
-              //alert(pwc_id+": skipping machines["+i+"]="+machines[i]+", db_ids["+j+"]="+db_ids[j]);
+              //alert(proc_id+": skipping machines["+i+"]="+machines[i]+", db_ids["+j+"]="+db_ids[j]);
             }
           }
         }
@@ -221,20 +212,20 @@ class machine_summary extends mopsr_webpage
 
       function setAllNotConnected() 
       {
-        var pwc;
-        for (i=0; i<pwcs.length; i++) {
-          setPWCNotConnected(pwcs[i]);
+        var proc;
+        for (i=0; i<procs.length; i++) {
+          setPROCNotConnected(procs[i]);
         } 
         for (i=0; i<machines.length; i++) {
           setHostNotConnected(machines[i]);
         } 
       }
 
-      function handle_machine_summary_request(xml_request) 
+      function handle_area_summary_request(xml_request) 
       {
         var children;
         var progress_bar;
-        var active_pwcs = 0;
+        var active_procs = 0;
         var log_length = 6;
 
         if (xml_request.readyState == 4) 
@@ -256,7 +247,7 @@ class machine_summary extends mopsr_webpage
               // process node_status tags first
               var node_statuses = xmlObj.getElementsByTagName("node_status");
 
-              var pwcs_per_host = new Object();
+              var procs_per_host = new Object();
               var disk_free_per_host = new Object();
 
               for (i=0; i<node_statuses.length; i++) 
@@ -264,7 +255,7 @@ class machine_summary extends mopsr_webpage
                 host = node_statuses[i].getAttribute("host");
                 host = host.replace("mpsr-","");
 
-                pwcs_per_host[host] = 0;
+                procs_per_host[host] = 0;
 
                 // process each child key
                 children = node_statuses[i].childNodes;
@@ -303,7 +294,7 @@ class machine_summary extends mopsr_webpage
                     } 
                     else if (key == "datablock") 
                     {
-                      var pwc_id = node.getAttribute("pwc_id");
+                      var proc_id = node.getAttribute("pwc_id");
                       var db_id = node.getAttribute("db_id");
                       var db_size = parseFloat(node.getAttribute("size"));
                       var db_used = parseFloat(node.childNodes[0].nodeValue);
@@ -312,19 +303,19 @@ class machine_summary extends mopsr_webpage
 
                       try 
                       {
-                        progress_bar = eval(host+"_"+pwc_id+"_"+db_id+"_buffer");
+                        progress_bar = eval(host+"_"+proc_id+"_"+db_id+"_buffer");
                         progress_bar.setPercentage(db_percent);
-                        document.getElementById(host+"_"+pwc_id+"_"+db_id+"_buffer_value").innerHTML = "&nbsp;" + db_used + "/"  + db_size;
-                        document.getElementById(host+"_"+pwc_id+"_"+db_id+"_buffer1").bgColor = bg_color;
-                        document.getElementById(host+"_"+pwc_id+"_"+db_id+"_buffer2").bgColor = bg_color;
+                        document.getElementById(host+"_"+proc_id+"_"+db_id+"_buffer_value").innerHTML = "&nbsp;" + db_used + "/"  + db_size;
+                        document.getElementById(host+"_"+proc_id+"_"+db_id+"_buffer1").bgColor = bg_color;
+                        document.getElementById(host+"_"+proc_id+"_"+db_id+"_buffer2").bgColor = bg_color;
                       
-                        // assume that only pwcs have datablocks
-                        active_pwcs ++;
-                        pwcs_per_host[host]++;
+                        // assume that only procs have datablocks
+                        active_procs ++;
+                        procs_per_host[host]++;
                       }
                       catch (e)
                       {
-                        //alert("disabled datablock ["+host+"_"+pwc_id+"_"+db_id+"_buffer]");
+                        //alert("disabled datablock ["+host+"_"+proc_id+"_"+db_id+"_buffer]");
                       }
                     } 
                     else 
@@ -335,8 +326,8 @@ class machine_summary extends mopsr_webpage
                 }
               }
             
-              // update the time remaining for each PWC
-              for (var host in pwcs_per_host)
+              // update the time remaining for each PROC
+              for (var host in procs_per_host)
               {
                 var free_space = parseFloat(disk_free_per_host[host]);
                 var free_space_str = "";
@@ -387,7 +378,7 @@ class machine_summary extends mopsr_webpage
                   img_id = document.getElementById(pwc + "_img");
 
                   // add this light to the list of lights not to be reset
-                  set.push(pwc);
+                  set.push(proc);
 
                   if (img_id.src.indexOf("grey_light.png") == -1)
                   {
@@ -411,8 +402,8 @@ class machine_summary extends mopsr_webpage
                   {
                   }
 
-                  var link = "log_viewer.php?pwc="+pwc+"&level="+log_level+"&length="+log_length+"&daemon="+log_file+"&autoscroll=false";
-                  var msg_element = document.getElementById(pwc+"_messages");
+                  var link = "log_viewer.php?proc="+proc+"&level="+log_level+"&length="+log_length+"&daemon="+log_file+"&autoscroll=false";
+                  var msg_element = document.getElementById(proc+"_messages");
 
                   if (msg_element.innerHTML == "&nbsp;") {
                     msg_element.innerHTML = "<a class='cln' target='log_window' href='"+link+"'>"+msg+"</a>";
@@ -431,9 +422,9 @@ class machine_summary extends mopsr_webpage
         }
       }
 
-      function machine_summary_request() 
+      function area_summary_request() 
       {
-        var url = "machine_summary.lib.php?update=true";
+        var url = "area_summary.lib.php?update=true&area=<?echo $this->area?>";
   
         if (window.XMLHttpRequest)
           ms_http_request = new XMLHttpRequest();
@@ -441,7 +432,7 @@ class machine_summary extends mopsr_webpage
           ms_http_request = new ActiveXObject("Microsoft.XMLHTTP");
 
         ms_http_request.onreadystatechange = function() {
-          handle_machine_summary_request(ms_http_request)
+          handle_area_summary_request(ms_http_request)
         };
         ms_http_request.open("GET", url, true);
         ms_http_request.send(null);
@@ -480,10 +471,10 @@ class machine_summary extends mopsr_webpage
 
         }
 
-        // pwcs have buffer bar
-        foreach ($this->pwcs as $p => $host)
+        // procs have buffer bar
+        foreach ($this->procs as $p => $host)
         {
-          if (($this->config["PWC_STATE_".$p] == "active") || ($this->config["PWC_STATE_".$p] == "passive"))
+          if (($this->config[$this->tag."_STATE_".$p] == "active") || ($this->config[$this->tag."_STATE_".$p] == "passive"))
           {
             foreach ($this->db_ids as $db_id)
             {
@@ -508,9 +499,9 @@ class machine_summary extends mopsr_webpage
   /* HTML for this page */
   function printHTML() 
   {
-    $this->openBlockHeader("Machine Summary");
+    $this->openBlockHeader($this->tag." Area Summary");
 ?>
-    <table class="machine_summary" width='100%' border=0 cellspacing=0 cellpadding=0>
+    <table class="area_summary" width='100%' border=0 cellspacing=0 cellpadding=0>
         
       <tr>
         <th>Host</th>
@@ -518,27 +509,22 @@ class machine_summary extends mopsr_webpage
         <th colspan=2>Disk</th>
         <th>T &deg;C</th>
         <th></th>
-        <th colspan=1>PFB</th>
-<? if ($this->verbose) { ?>
-        <th colspan=2>Prim DB</th>
-        <th colspan=2>Aux  DB</th>
-<? } else { ?>
-        <th colspan=2>Buffer</th>
-<? } ?> 
+<?
+        foreach ($this->db_ids as $db_id)
+          echo "        <th colspan=2>DB ".$db_id."</th>\n";
+?>
         <th>Messages</th>
       </tr>
     <?
-    $status_types = array("pwc", "src", "sys");
+    $status_types = array("proc", "src", "sys");
     foreach ($this->machines as $m => $type)
     {
-      $m_pwcs = array();
-      foreach ($this->pwcs as $p => $host)
+      $m_procs = array();
+      foreach ($this->procs as $p => $host)
       {
         if ($host == $m)
-          array_push($m_pwcs, $p);
+          array_push($m_procs, $p);
       } 
-      if (count($m_pwcs) == 0)
-        array_push($m_pwcs, "server");
 
       echo " <tr id='".$m."_row'>\n";
   
@@ -548,7 +534,7 @@ class machine_summary extends mopsr_webpage
         $s = $status_types[$j];
       }
 
-      $rs = count($m_pwcs);
+      $rs = count($m_procs);
         
       echo "     <td width='30px' class='gap' rowspan='$rs'>".$m."</td>\n";
         
@@ -573,81 +559,38 @@ class machine_summary extends mopsr_webpage
       // temperature value
       echo "     <td width='20px' class='gap' rowspan='$rs'><span id='".$m."_temperature_value'>NA</span></td>\n";
 
-      for ($i=0; $i<count($m_pwcs); $i++)
+      for ($i=0; $i<count($m_procs); $i++)
       {
         // for rowspanning
         if ($i > 0)
           echo "<tr>\n";
 
-        $mp = $m_pwcs[$i];
+        $mp = $m_procs[$i];
 
         if ($this->verbose)
           $class = "gap_line";
         else
           $class = "gap";
 
-        $has_db  = ((strpos($mp, "server") === FALSE) && (($this->config["PWC_STATE_".$mp] == "active") || ($this->config["PWC_STATE_".$mp] == "passive")));
+        $has_db  = (($this->config[$this->tag."_STATE_".$mp] == "active") || ($this->config[$this->tag."_STATE_".$mp] == "passive"));
 
-        // Status Lights for each PWC
+        // Status Lights for each PROC
         $linkid = $mp."_a";
         $imgid = $mp."_img";
         echo "     <td width='15px' class='".$class."' valign='center'>\n";
         echo "      ".$this->overallStatusLight($status, $mp, $linkid, $imgid)."\n";
         echo "     </td>\n";
  
-        // PWC IDs [PFB]       
-        echo "     <td width='30px' class='".$class."'>";
-        if (strpos($mp, "server") === FALSE)
-          echo "      <div>".$this->config["PWC_PFB_ID_".$mp]."</div>\n";
-        else
-          echo "&nbsp;";
-        echo "     </td>";
-
-        // Receiving Data Block
-        $db_id = $this->config["RECEIVING_DATA_BLOCK"];
-
-        // datablock buffers progress bar
-        echo "     <td width='40px' style='vertical-align: middle;'>\n";
-        if ($has_db)
-        {
-          $tag = $m."_".$mp."_".$db_id;
-          echo "      <div id='".$tag."_buffer1'>\n";
-          echo "       <span id='".$tag."_buffer_progress_bar'>[ ... ]</span>\n";
-          echo "      </div>\n";
-        }
-        else
-          echo "&nbsp;";
-        echo "     </td>\n";
-
-        // datablock buffers str value
-        echo "     <td width='40px' style='vertical-align: middle;'>\n";
-        if ($has_db)
-        {
-          $tag = $m."_".$mp."_".$db_id;
-          echo "      <div id='".$tag."_buffer2' style='text-align: right;'>\n";
-          echo "       <span id='".$tag."_buffer_value'></span>\n";
-          echo "      </div>\n";
-        }
-        else
-          echo "&nbsp;";
-        echo "     </td>\n";
-
         // in verbose mode, print other datablocks too
-        if ($this->verbose)
+        foreach ($this->db_ids as $db_id)
         {
           echo "     <td width='40px' style='vertical-align: middle; padding-left: 10px;'>\n";
           if ($has_db)
           {
-            foreach ($this->db_ids as $db_id)
-            {
-              if ($db_id != $this->config["RECEIVING_DATA_BLOCK"])
-              {
-                $tag = $m."_".$mp."_".$db_id;
-                echo "      <div id='".$tag."_buffer1' style='padding-top:4px;'>\n";
-                echo "       <span id='".$tag."_buffer_progress_bar'>[ ... ]</span>\n";
-                echo "      </div>\n";
-              }
-            }
+            $tag = $m."_".$mp."_".$db_id;
+            echo "      <div id='".$tag."_buffer1' style='padding-top:4px;'>\n";
+            echo "       <span id='".$tag."_buffer_progress_bar'>[ ... ]</span>\n";
+            echo "      </div>\n";
           }
           else
             echo "&nbsp;";
@@ -656,16 +599,10 @@ class machine_summary extends mopsr_webpage
           echo "     <td width='40px' style='vertical-align: middle;'>\n";
           if ($has_db)
           {
-            foreach ($this->db_ids as $db_id)
-            {
-              if ($db_id != $this->config["RECEIVING_DATA_BLOCK"])
-              {
-                $tag = $m."_".$mp."_".$db_id;
-                echo "      <div id='".$tag."_buffer2' style='padding-top:4px;'>\n";
-                echo "       <span id='".$tag."_buffer_value'></span>\n";
-                echo "      </div>\n";
-              }
-            }
+            $tag = $m."_".$mp."_".$db_id;
+            echo "      <div id='".$tag."_buffer2' style='padding-top:4px;'>\n";
+            echo "       <span id='".$tag."_buffer_value'></span>\n";
+            echo "      </div>\n";
           }
           else
             echo "&nbsp;";
@@ -683,20 +620,18 @@ class machine_summary extends mopsr_webpage
 ?>
     </table>
 <?
-    if (!$this->verbose)
-      echo "<div align=right><a href='/mopsr/machine_summary.lib.php?single=true&verbose=true' target='_ms_popup'>More Information</a></div>\n";
-
     $this->closeBlockHeader();
   }
 
   function printUpdateHTML($get)
   {
-    $host = $this->config["SERVER_HOST"];
-    $port = $this->config["SERVER_WEB_MONITOR_PORT"];
+    $host = $this->inst->config["SERVER_HOST"];
+    $port = $this->inst->config["SERVER_WEB_MONITOR_PORT"];
+    $area = $get["area"];
 
     $output = "";
     $xml  = "<?xml version='1.0' encoding='ISO-8859-1'?>\n";
-    $xml .= "<machine_summary>\n";
+    $xml .= "<area_summary>\n";
 
     list ($socket, $result) = openSocket($host, $port);
 
@@ -704,13 +639,13 @@ class machine_summary extends mopsr_webpage
     {
       $xml .= "<connection>good</connection>\n";
 
-      $bytes_written = socketWrite($socket, "aq_node_info\r\n");
+      $bytes_written = socketWrite($socket, $area."_node_info\r\n");
       list($result, $response) = socketRead($socket);
       if ($result == "ok")
       {
-        $xml .= "<aq_node_info>\n";
+        $xml .= "<node_info>\n";
         $xml .= $response."\n";
-        $xml .= "</aq_node_info>\n";
+        $xml .= "</node_info>\n";
       }
       socket_close($socket);
       $socket = 0;
@@ -718,22 +653,6 @@ class machine_summary extends mopsr_webpage
     else
     {
       $xml .= "<connection>bad</connection>\n";
-    }
-
-    list ($socket, $result) = openSocket($host, $port);
-
-    if ($result == "ok")
-    {
-      $bytes_written = socketWrite($socket, "srv_node_info\r\n");
-      list($result, $response) = socketRead($socket);
-      if ($result == "ok")
-      {
-        $xml .= "<srv_node_info>\n";
-        $xml .= $response."\n";
-        $xml .= "</srv_node_info>\n";
-      }
-      socket_close($socket);
-      $socket = 0;
     }
 
     list ($socket, $result) = openSocket($host, $port);
@@ -750,7 +669,7 @@ class machine_summary extends mopsr_webpage
       socket_close($socket);
       $socket = 0;
     }
-    $xml .= "</machine_summary>\n";
+    $xml .= "</area_summary>\n";
 
     header('Content-type: text/xml');
     echo $xml;
@@ -783,5 +702,5 @@ class machine_summary extends mopsr_webpage
 
 }
 
-handleDirect("machine_summary");
+handleDirect("area_summary");
 

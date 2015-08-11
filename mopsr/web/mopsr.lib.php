@@ -58,13 +58,13 @@ class mopsr extends instrument
   function clientLogInfo() {
 
     $arr = array();
-    $arr["mopsr_observation_manager"] = array("logfile" => "nexus.sys.log", "name" => "Obs Mngr", "tag" => "obs mngr");
-    $arr["mopsr_results_monitor"]     = array("logfile" => "nexus.sys.log", "name" => "Results Mon", "tag" => "results mon");
-    $arr["mopsr_archive_manager"]     = array("logfile" => "nexus.sys.log", "name" => "Archive Mngr", "tag" => "archive mngr");
+    $arr["mopsr_observation_manager"] = array("logfile" => "nexus.sys.log", "name" => "Obs Mngr", "tag" => "obs_mngr");
+    $arr["mopsr_results_monitor"]     = array("logfile" => "nexus.sys.log", "name" => "Results Mon", "tag" => "results_mon");
+    $arr["mopsr_archive_manager"]     = array("logfile" => "nexus.sys.log", "name" => "Archive Mngr", "tag" => "archive_mngr");
     $arr["mopsr_pwc"]                 = array("logfile" => "nexus.pwc.log", "name" => "PWC", "tag" => "pwc");
-    $arr["mopsr_mux_send"]            = array("logfile" => "nexus.sys.log", "name" => "Mux Send", "tag" => "mux send");
+    $arr["mopsr_mux_send"]            = array("logfile" => "nexus.sys.log", "name" => "Mux Send", "tag" => "muxsend");
     $arr["mopsr_aqdsp"]               = array("logfile" => "nexus.sys.log", "name" => "AQDSP", "tag" => "aqdsp");
-    $arr["mopsr_aq_diskdb"]           = array("logfile" => "nexus.sys.log", "name" => "AQ DiskDB", "tag" => "diskdb");
+    $arr["mopsr_aq_diskdb"]           = array("logfile" => "nexus.sys.log", "name" => "AQ DiskDB", "tag" => "aqdisk");
     $arr["mopsr_superb"]              = array("logfile" => "nexus.sys.log", "name" => "Superb Mon", "tag" => "superb");
     $arr["mopsr_dbsplitdb"]           = array("logfile" => "nexus.sys.log", "name" => "DB split", "tag" => "split");
     $arr["mopsr_dbantsdb"]            = array("logfile" => "nexus.sys.log", "name" => "Select Ants", "tag" => "ants");
@@ -80,13 +80,16 @@ class mopsr extends instrument
     $arr["mopsr_bf_results_mon"]      = array("logfile" => "bfs.src.log", "name" => "Results Mon", "tag" => "results mon");
 
     # Beam Processor Scripts
-    $arr["mopsr_bp_send"]             = array("logfile" => "bps.sys.log", "name" => "BP Send", "tag" => "bp send");
-    $arr["mopsr_bp_recv"]             = array("logfile" => "bps.sys.log", "name" => "BP Recv", "tag" => "bp recv");
-    $arr["mopsr_bp_split"]            = array("logfile" => "bps.sys.log", "name" => "BP Split", "tag" => "bp split");
-    $arr["mopsr_bp_digifil"]          = array("logfile" => "bps.sys.log", "name" => "BP Digifil", "tag" => "bp proc");
-    $arr["mopsr_bp_integrate"]        = array("logfile" => "bps.sys.log", "name" => "BP Int", "tag" => "bpint");
-    $arr["mopsr_bp_process"]          = array("logfile" => "bps.sys.log", "name" => "BP Proc", "tag" => "bp proc");
-    $arr["mopsr_bp_results_mon"]      = array("logfile" => "bps.sys.log", "name" => "BP Results", "tag" => "bp results");
+    $arr["mopsr_bp_send"]             = array("logfile" => "bps.sys.log", "name" => "BP Send", "tag" => "bp_send");
+    $arr["mopsr_bp_recv"]             = array("logfile" => "bps.sys.log", "name" => "BP Recv", "tag" => "bp_recv");
+    $arr["mopsr_bp_split"]            = array("logfile" => "bps.sys.log", "name" => "BP Split", "tag" => "bp_split");
+    $arr["mopsr_bp_digifil"]          = array("logfile" => "bps.sys.log", "name" => "BP Digifil", "tag" => "bp_digifil");
+    $arr["mopsr_bp_fb_manager"]       = array("logfile" => "bps.sys.log", "name" => "BP FB Manager", "tag" => "bp_fb_mngr");
+    $arr["mopsr_bp_integrate"]        = array("logfile" => "bps.sys.log", "name" => "BP Int", "tag" => "bp_int");
+    $arr["mopsr_bp_process"]          = array("logfile" => "bps.sys.log", "name" => "BP Proc", "tag" => "bp_proc");
+    $arr["mopsr_bp_reblock"]          = array("logfile" => "bps.sys.log", "name" => "BP Reblock", "tag" => "bp_reblock");
+    $arr["mopsr_bp_heimdall"]         = array("logfile" => "bps.sys.log", "name" => "BP Heimdall", "tag" => "bp_heimdall");
+    $arr["mopsr_bp_cands_mon"]        = array("logfile" => "bps.sys.log", "name" => "BP Cands Mon", "tag" => "bp_cands_mon");
 
     return $arr;
 

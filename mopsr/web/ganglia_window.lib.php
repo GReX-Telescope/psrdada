@@ -20,8 +20,8 @@ class ganglia_window extends mopsr_webpage
     $gang_base =  "http://".$_SERVER["HTTP_HOST"]."/ganglia/";
     $this->srvs_network    = $gang_base."graph.php?g=network_report&z=small&c=Servers&m=&r=hour&s=descending&hc=4";
     $this->srvs_load       = $gang_base."graph.php?g=load_report&z=small&c=Servers&m=&r=hour&s=descending&hc=4";
-    $this->nodes_network   = $gang_base."graph.php?g=network_report&z=small&c=Nodes&m=&r=hour&s=descending&hc=4";
-    $this->nodes_load      = $gang_base."graph.php?g=load_report&z=small&c=Nodes&m=&r=hour&s=descending&hc=4";
+    $this->nodes_network   = $gang_base."graph.php?g=network_report&z=small&c=AQ%20Nodes&m=&r=hour&s=descending&hc=4";
+    $this->nodes_load      = $gang_base."graph.php?g=load_report&z=small&c=AQ%20Nodes&m=&r=hour&s=descending&hc=4";
     #$this->nodes_gpu_load  = $gang_base."graph.php?g=gpu_load_report&z=small&c=Nodes&m=&r=hour&s=descending&hc=4";
     $this->host           = $inst->config["SERVER_HOST"];
     $this->port           = $inst->config["SERVER_WEB_MONITOR_PORT"];
