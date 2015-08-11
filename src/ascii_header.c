@@ -6,11 +6,15 @@
  ***************************************************************************/
 
 #include "ascii_header.h"
+#include "dada_def.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #define STRLEN 4096
 
@@ -146,5 +150,56 @@ int ascii_header_del (char * header, const char * keyword)
   }
   else
     return -1;
+}
+
+size_t ascii_header_get_size (char * filename)
+{
+  size_t hdr_size = -1;
+  int fd = open (filename, O_RDONLY);
+  if (!fd)
+  {
+    fprintf (stderr, "ascii_header_get_size: failed to open %s for reading\n", filename);
+  }
+  else
+  {
+    hdr_size = ascii_header_get_size_fd (fd);
+    close (fd);
+  }
+  return hdr_size;
+}
+
+size_t ascii_header_get_size_fd (int fd)
+{
+  size_t hdr_size = -1;
+  char * header = (char *) malloc (DADA_DEFAULT_HEADER_SIZE+1);
+  if (!header)
+  {
+    fprintf (stderr, "ascii_header_get_size: failed to allocate %d bytes\n", DADA_DEFAULT_HEADER_SIZE+1);
+  }
+  else
+  {
+    // seek to start of file
+    lseek (fd, 0, SEEK_SET);
+
+    // read the header 
+    ssize_t ret = read (fd, header, DADA_DEFAULT_HEADER_SIZE);
+    if (ret != DADA_DEFAULT_HEADER_SIZE)
+    {
+      fprintf (stderr, "ascii_header_get_size: failed to read %d bytes from file\n", DADA_DEFAULT_HEADER_SIZE);
+    }
+    else
+    {
+      // check the actual HDR_SIZE in the header
+      if (ascii_header_get (header, "HDR_SIZE", "%ld", &hdr_size) != 1)
+      {
+        fprintf (stderr, "ascii_header_get_size: failed to read HDR_SIZE from header\n");
+        hdr_size = -1;
+      }
+    }
+    // seek back to start of file
+    lseek (fd, 0, SEEK_SET);
+    free (header);
+  }
+  return hdr_size;
 }
 

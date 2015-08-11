@@ -1,4 +1,6 @@
 
+#include <stddef.h>
+
 #ifndef __ASCII_HEADER_h
 #define __ASCII_HEADER_h
 
@@ -47,6 +49,10 @@ int ascii_header_get (const char* header, const char* keyword,
 
 /* delete the key from the header */
 int ascii_header_del (char * header, const char * keyword);
+
+/* read the HDR_SIZE from a .dada file */
+size_t ascii_header_get_size (char * filename);
+size_t ascii_header_get_size_fd (int fd);
 
 #ifdef __cplusplus
 }
