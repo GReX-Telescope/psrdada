@@ -50,7 +50,6 @@ check_PROGRAMS = test_multilog test_ipcbuf loop_ipcio	\
 TESTS = test_uint64_t test_disk_array test_ipcio test_ascii_header
 
 LDADD = libpsrdada.la 
-AM_CFLAGS = -g
 
 dada_db_LDADD = $(LDADD) @HWLOC_LIBS@
 
