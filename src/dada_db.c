@@ -1,3 +1,5 @@
+
+#include "config.h"
 #include "dada_def.h"
 #include "ipcbuf.h"
 
@@ -5,10 +7,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#define HAVE_NUMA
-
-#ifdef HAVE_NUMA
-#include <numa.h>
+#ifdef HAVE_HWLOC
+#include <hwloc.h>
 #endif
 
 void usage ()
@@ -18,8 +18,8 @@ void usage ()
           "\n"
           "Usage: dada_db [options]\n"
           " -b bufsz    size of each buffer (in bytes) [default: %"PRIu64"]\n"
-#ifdef HAVE_NUMA
-          " -c cpu      assign numa memory for cpu     [default: all nodes]\n"
+#ifdef HAVE_HWLOC
+          " -c cpu      assign memory adjacent to cpu  [default: all nodes]\n"
 #endif
           " -d          destroy the shared memory area [default: create]\n"
           " -k key      hexadecimal shared memory key  [default: %x]\n"
@@ -50,9 +50,20 @@ int main (int argc, char** argv)
   int lock = 0;
   int arg;
   unsigned num_readers = 1;
-#ifdef HAVE_NUMA
-  char have_numa = (numa_available() != -1);
-  struct bitmask * node_mask = 0;
+
+#ifdef HAVE_HWLOC
+  hwloc_topology_t topology;
+
+  // Allocate and initialize topology object.
+  hwloc_topology_init(&topology);
+
+  // Perform the topology detection.
+  hwloc_topology_load(topology);
+
+  // cpu core to which to bind memory
+  int cpu_core = -1;
+
+  int core_depth;
 
   while ((arg = getopt(argc, argv, "hc:dk:n:r:b:lp")) != -1) {
 #else
@@ -69,22 +80,31 @@ int main (int argc, char** argv)
       break;
 
     case 'k':
-      if (sscanf (optarg, "%x", &dada_key) != 1) {
-       fprintf (stderr, "dada_db: could not parse key from %s\n", optarg);
-       return -1;
+      if (sscanf (optarg, "%x", &dada_key) != 1) 
+      {
+        fprintf (stderr, "dada_db: could not parse key from %s\n", optarg);
+        return -1;
       }
       break;
 
-#ifdef HAVE_NUMA
+#ifdef HAVE_HWLOC
     case 'c':
-      if (have_numa)
+      if (sscanf (optarg, "%u", &cpu_core) != 1)
+      { 
+        fprintf (stderr, "dada_db: could not parse cpu_core from %s\n", optarg);
+        return -1;
+      }
+
+      // get the depth in the topology tree for CPU cores
+      core_depth = hwloc_get_type_or_below_depth (topology, HWLOC_OBJ_CORE);
+
+      // check the number of cpu cores
+      int ncore = hwloc_get_nbobjs_by_depth (topology, core_depth);
+
+      if (cpu_core >= ncore)
       {
-        node_mask = numa_parse_cpustring_all (optarg);
-        if (!node_mask)
-        {
-          fprintf (stderr, "dada_db: could not parse CPU ID from %s\n", optarg);
-          return -1;
-        }
+        fprintf (stderr, "dada_db: only %d cores available on this machine\n", ncore);
+        return -1;
       }
       break;
 #endif
@@ -139,9 +159,42 @@ int main (int argc, char** argv)
     return 0;
   }
 
-#ifdef HAVE_NUMA
-  if (have_numa && node_mask)
-    numa_set_membind (node_mask);
+#ifdef HAVE_HWLOC
+  // fetch the specified core
+  hwloc_obj_t obj = hwloc_get_obj_by_depth (topology, core_depth, cpu_core);
+  if (obj)
+  {
+    // Get a copy of its cpuset that we may modify.
+    hwloc_cpuset_t cpuset = hwloc_bitmap_dup (obj->cpuset);
+
+    // Get only one logical processor (in case the core is SMT/hyperthreaded)
+    hwloc_bitmap_singlify (cpuset);
+
+    /*
+    if (hwloc_set_cpubind(topology, cpuset, 0))
+    {
+      char *str;
+      int error = errno;
+      hwloc_bitmap_asprintf(&str, obj->cpuset);
+      fprintf(stderr, "Couldn't bind to cpuset %s: %s\n", str, strerror(error));
+      free(str);
+    }
+*/
+    hwloc_membind_policy_t policy = HWLOC_MEMBIND_BIND;
+    hwloc_membind_flags_t flags = 0;
+
+    int result = hwloc_set_membind (topology, cpuset, policy, flags);
+    if (result < 0)
+    {
+      fprintf (stderr, "dada_db: failed to set memory binding policy: %s\n",
+               strerror(errno));
+      return -1;
+    }
+
+    // Free our cpuset copy
+    hwloc_bitmap_free(cpuset);
+  }
+
 #endif
 
   if (ipcbuf_create (&data_block, dada_key, nbufs, bufsz, num_readers) < 0) {
@@ -179,6 +232,11 @@ int main (int argc, char** argv)
     fprintf (stderr, "Could not page DADA data block into RAM\n");
     return -1;
   }
+
+#ifdef HAVE_HWLOC
+  // Destroy topology object.
+  hwloc_topology_destroy(topology);
+#endif
 
   return 0;
 }

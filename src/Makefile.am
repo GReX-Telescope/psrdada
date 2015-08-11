@@ -52,7 +52,7 @@ TESTS = test_uint64_t test_disk_array test_ipcio test_ascii_header
 LDADD = libpsrdada.la 
 AM_CFLAGS = -g
 
-dada_db_LDADD = $(LDADD) -lnuma
+dada_db_LDADD = $(LDADD) @HWLOC_LIBS@
 
 EXTRA_DIST=ipcrme loopssh
 
