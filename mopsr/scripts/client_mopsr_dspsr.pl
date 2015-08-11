@@ -244,6 +244,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
 
     if ($need_polyco)
     {
+      logMsg(1, "INFO", "generating polycol once for all antenna");
       # generate the dspsr polycol necessary for all threads on this host
       logMsg(2, "INFO", "main: genTempo2Polyco(".$db_keys[0].", ".$responses[0].")");
       ($result, $response) = genTempo2Polyco($db_keys[0], $responses[0]);
@@ -256,36 +257,41 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
 
     # perform all the necessary setup for observations and return the 
     # required command for execution on the datablocks
+    logMsg(1, "INFO", "preparing observation");
     for ($i=0; $i<$nkeys; $i++)
     {
       ($result, $cmds[$i]) = prepareObservation($db_keys[$i], $responses[$i]);
       if ($result ne "ok")
       {
         logMsg(0, "ERROR", "main: failed to prepareObservation for key ".$i." [".$db_keys[$i]."]");
+        $quit_daemon = 1;
       }
     }
 
-    if ($need_polyco)
+    if (!$quit_daemon)
     {
-      my $exists = 0;
-      # wait for the predictor
-      while (!$exists)
+      if ($need_polyco)
       {
-        if ((-f "/tmp/tempo2/mpsr/pulsar.par") && (-f "/tmp/tempo2/mpsr/t2pred.dat"))
+        my $exists = 0;
+        # wait for the predictor
+        while (!$exists)
         {
-          $exists = 1;
-          logMsg(2, "INFO", "/tmp/tempo2/mpsr/pulsar.par && /tmp/tempo2/mpsr/t2pred.dat both exist now");
+          if ((-f "/tmp/tempo2/mpsr/pulsar.par") && (-f "/tmp/tempo2/mpsr/t2pred.dat"))
+          {
+            $exists = 1;
+            logMsg(2, "INFO", "/tmp/tempo2/mpsr/pulsar.par && /tmp/tempo2/mpsr/t2pred.dat both exist now");
+          }
+          else
+          {
+            logMsg(2, "INFO", "waiting for /tmp/tempo2/mpsr/pulsar.par && /tmp/tempo2/mpsr/t2pred.dat");
+          }
+          usleep(10000);
         }
-        else
-        {
-          logMsg(2, "INFO", "waiting for /tmp/tempo2/mpsr/pulsar.par && /tmp/tempo2/mpsr/t2pred.dat");
-        }
-        usleep(10000);
       }
-    }
 
-    ($results_ref) = multiForkLog ($nkeys, @cmds);
-    @results = @$results_ref;
+      ($results_ref) = multiForkLog ($nkeys, @cmds);
+      @results = @$results_ref;
+    }
   }
 
   logMsg(2, "INFO", "main: joining controlThread");
@@ -380,8 +386,15 @@ sub prepareObservation($$)
   my $proc_dir = $obs_dir."/".$h{"ANT_ID"};
 
   # create the local directories required
-  if ((!exists($h{"ANT_ID"})) || (createLocalDirs(%h) < 0))
+  if (!exists($h{"ANT_ID"}))
   {
+    logMsg(0, "INFO", "prepareObservation: ANT_ID did not exist in header");
+    return ("fail", $obs_dir, $proc_cmd);
+  }
+
+  if (createLocalDirs(%h) < 0)
+  {
+    logMsg(0, "INFO", "prepareObservation: failed to create local dir");
     return ("fail", $obs_dir, $proc_cmd);
   }
 
@@ -469,7 +482,7 @@ sub prepareObservation($$)
     # replace DADA_GPU_ID with actual GPU_ID
     $proc_cmd =~ s/<DADA_GPU_ID>/$gpu_id/;
 
-    if (($proc_cmd =~ m/dspsr/) && (!($proc_cmd =~ m/-c/)))
+    if (($proc_cmd =~ m/dspsr/) && (!($proc_cmd =~ m/ -c /)))
     {
       $proc_cmd .= " -E /tmp/tempo2/mpsr/pulsar.par -P /tmp/tempo2/mpsr/t2pred.dat";
 

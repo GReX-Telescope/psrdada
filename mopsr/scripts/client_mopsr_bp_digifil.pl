@@ -29,7 +29,7 @@ use Symbol 'gensym';
 #
 # Function Prototypes
 #
-sub logMsg($$$);
+sub msg($$$);
 sub multiFork($\@);
 sub multiForkLog($\@);
 sub prepareObservation($$$);
@@ -165,7 +165,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
     print STDERR "Could open src log port: ".$log_host.":".$src_log_port."\n";
   }
 
-  logMsg(1,"INFO", "STARTING SCRIPT");
+  msg(1,"INFO", "STARTING SCRIPT");
 
   sleep(10);
 
@@ -205,14 +205,14 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
     {
       $cmds[$i] = "dada_header -k ".$db_keys[$i];
     }
-    logMsg(0, "INFO", "main: running multiFork on ".$cmds[0]." - ".$cmds[$#cmds]);
+    msg(0, "INFO", "main: running multiFork on ".$cmds[0]." - ".$cmds[$#cmds]);
     ($results_ref, $responses_ref) = multiFork ($nkeys, @cmds);
     @results = @$results_ref;
     @responses = @$responses_ref;
 
     if ($quit_daemon)
     {
-      logMsg(0, "INFO", "main: quit daemon true after dada_header returns, breaking");
+      msg(0, "INFO", "main: quit daemon true after dada_header returns, breaking");
       next;
     }
 
@@ -220,49 +220,60 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
     {
       if ($results[$i] ne "ok") 
       {
-        logMsg(0, "WARN", "dada header failed: ".$responses[$i]);
+        msg(0, "WARN", "dada header failed: ".$responses[$i]);
         $quit_daemon = 1;
       }
     }
 
     if ($quit_daemon)
     {
-      logMsg(0, "INFO", "main: a dada_header instance failed, breaking");
+      msg(0, "INFO", "main: a dada_header instance failed, breaking");
       next;
     }
 
     # ensure that our primary configuration directory (NFS) is mounted
     $cmd = "ls -1d ".$cfg{"CONFIG_DIR"};
-    logMsg(2, "INFO", "main: ".$cmd);
+    msg(2, "INFO", "main: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
-    logMsg(3, "INFO", "main: ".$cmd." config_dir=".$response);
+    msg(3, "INFO", "main: ".$cmd." config_dir=".$response);
     if ($response ne $cfg{"CONFIG_DIR"})
     {
-      logMsg(0, "ERROR", "NFS automount for ".$cfg{"CONFIG_DIR"}." failed: ".$response);
+      msg(0, "ERROR", "NFS automount for ".$cfg{"CONFIG_DIR"}." failed: ".$response);
       $quit_daemon = 1;
     }
 
     # perform all the necessary setup for observations and return the 
     # required command for execution on the datablocks
-    logMsg(0, "INFO", "main: running prepareObservation()");
+    msg(0, "INFO", "main: running prepareObservation()");
     for ($i=0; $i<$nkeys; $i++)
     {
       ($result, $cmds[$i]) = prepareObservation($db_keys[$i], $beams[$i], $responses[$i]);
       if ($result ne "ok")
       {
-        logMsg(0, "ERROR", "main: failed to prepareObservation for key ".$i." [".$db_keys[$i].", ".$beams[$i]."]");
+        msg(0, "ERROR", "main: failed to prepareObservation for key ".$i." [".$db_keys[$i].", ".$beams[$i]."]");
       }
     }
 
-    logMsg(0, "INFO", "main: running multiForkLog on ".$cmds[0]." - ".$cmds[$#cmds]);
+    msg(0, "INFO", "main: running multiForkLog on ".$cmds[0]." - ".$cmds[$#cmds]);
     ($results_ref) = multiForkLog ($nkeys, @cmds);
     @results = @$results_ref;
+    
+    my %header = Dada::headerToHash($responses[0]);
+    $cmd = "mv ".$cfg{"CLIENT_RECORDING_DIR"}."/".$header{"UTC_START"}."/obs.processing ".$cfg{"CLIENT_RECORDING_DIR"}."/".$header{"UTC_START"}."/obs.finished";
+    msg(2, "INFO", "main: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    msg(3, "INFO", "main: ".$cmd." ".$response);
+    if ($result ne "ok")
+    {
+      msg(0, "ERROR", "main: failed to move obs.processing to obs.finished for ".$header{"UTC_START"});
+    }
+
   }
 
-  logMsg(2, "INFO", "main: joining controlThread");
+  msg(2, "INFO", "main: joining controlThread");
   $control_thread->join();
 
-  logMsg(0, "INFO", "STOPPING SCRIPT");
+  msg(0, "INFO", "STOPPING SCRIPT");
   Dada::nexusLogClose($sys_log_sock);
   Dada::nexusLogClose($src_log_sock);
 
@@ -274,7 +285,7 @@ sub controlThread($)
 {
   my ($pid_file) = @_;
 
-  logMsg(2, "INFO", "controlThread : starting");
+  msg(2, "INFO", "controlThread : starting");
 
   my $host_quit_file = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
   my $bp_quit_file  = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$proc_id.".quit";
@@ -298,12 +309,12 @@ sub controlThread($)
 
   foreach $process ( @processes_to_kill)
   {
-    logMsg(1, "INFO", "controlThread: killProcess(".$process.", ".$user.")");
+    msg(2, "INFO", "controlThread: killProcess(".$process.", ".$user.")");
     ($result, $response) = Dada::killProcess($process, $user);
-    logMsg(1, "INFO", "controlThread: killProcess ".$result." ".$response);
+    msg(3, "INFO", "controlThread: killProcess ".$result." ".$response);
     if ($result ne "ok")
     {
-      logMsg(1, "WARN", "controlThread: killProcess for ".$process." failed: ".$response);
+      msg(0, "WARN", "controlThread: killProcess for ".$process." failed: ".$response);
     }
   }
 
@@ -315,25 +326,25 @@ sub controlThread($)
 
   foreach $process ( @processes_to_kill)
   {
-    logMsg(1, "INFO", "controlThread: killProcess(".$process.", ".$user.")");
+    msg(2, "INFO", "controlThread: killProcess(".$process.", ".$user.")");
     ($result, $response) = Dada::killProcess($process, $user);
-    logMsg(1, "INFO", "controlThread: killProcess ".$result." ".$response);
+    msg(3, "INFO", "controlThread: killProcess ".$result." ".$response);
     if ($result ne "ok")
     {
-      logMsg(1, "WARN", "controlThread: killProcess for ".$process." failed: ".$response);
+      msg(1, "WARN", "controlThread: killProcess for ".$process." failed: ".$response);
     }
   }
 
-  logMsg(1, "INFO", "controlThread: checking for PID file");
+  msg(2, "INFO", "controlThread: checking for PID file");
   if ( -f $pid_file) 
   {
-    logMsg(1, "INFO", "controlThread: unlinking PID file");
+    msg(2, "INFO", "controlThread: unlinking PID file");
     unlink($pid_file);
   } else {
-    logMsg(1, "INFO", "controlThread: PID file did not exist on script exit");
+    msg(0, "WARN", "controlThread: PID file did not exist on script exit");
   }
 
-  logMsg(1, "INFO", "controlThread: exiting");
+  msg(2, "INFO", "controlThread: exiting");
 }
 
 sub prepareObservation($$$)
@@ -346,7 +357,7 @@ sub prepareObservation($$$)
   my $proc_cmd = "dada_dbnull -k ".$key." -s -z";
 
   # output data directory
-  my $beam_dir = $cfg{"CLIENT_SCRATCH_DIR"}."/".$h{"UTC_START"}."/".sprintf("BEAM_%03d",$beam);
+  my $beam_dir = $cfg{"CLIENT_RECORDING_DIR"}."/".$h{"UTC_START"}."/".sprintf("BEAM_%03d",$beam);
 
   # create the local directories required
   if (createLocalDir($beam_dir, %h) < 0)
@@ -354,7 +365,7 @@ sub prepareObservation($$$)
     return ("fail", $beam_dir, $proc_cmd);
   }
 
-  logMsg(2, "INFO", "prepareObservation: local dirs created");
+  msg(2, "INFO", "prepareObservation: local dirs created");
 
   my $obs_header = $beam_dir."/obs.header";
 
@@ -373,7 +384,7 @@ sub prepareObservation($$$)
   # processing must ocurring in the specified dir
   $proc_cmd = "cd ".$beam_dir."; ".$proc_cmd;
 
-  logMsg(2, "INFO", "Final PROC_CMD: ".$proc_cmd);
+  msg(2, "INFO", "Final PROC_CMD: ".$proc_cmd);
 
   return ("ok", $proc_cmd);
 }
@@ -385,21 +396,21 @@ sub createLocalDir($\%)
 {
   my ($beam_dir, $h_ref) = @_;
 
-  logMsg(2, "INFO", "createLocalDir()");
+  msg(2, "INFO", "createLocalDir()");
 
   my %h = %$h_ref;
 
   my ($result, $response);
-  logMsg(2, "INFO", "createLocalDir: mkdirRecursive(".$beam_dir.", 0755)");
+  msg(2, "INFO", "createLocalDir: mkdirRecursive(".$beam_dir.", 0755)");
   ($result, $response) = Dada::mkdirRecursive($beam_dir, 0755);
-  logMsg(3, "INFO", "createLocalDir: ".$result." ".$response);
+  msg(3, "INFO", "createLocalDir: ".$result." ".$response);
   if ($result ne "ok")
   {
-    logMsg(0, "ERROR", "createLocalDir: failed to create dir [".$beam_dir."]: ".$response);
+    msg(0, "ERROR", "createLocalDir: failed to create dir [".$beam_dir."]: ".$response);
   }
 
   # create an obs.header file in the processing dir:
-  logMsg(2, "INFO", "createLocalDir: creating obs.header");
+  msg(2, "INFO", "createLocalDir: creating obs.header");
   my $file = $beam_dir."/obs.header";
   open(FH,">".$file.".tmp");
   my $k = "";
@@ -418,7 +429,7 @@ sub createLocalDir($\%)
 #
 # Logs a message to the nexus logger and print to STDOUT with timestamp
 #
-sub logMsg($$$) 
+sub msg($$$) 
 {
   my ($level, $type, $msg) = @_;
   if ($level <= $dl) 
@@ -433,7 +444,7 @@ sub logMsg($$$)
     }
     if ($sys_log_sock)
     {
-      Dada::nexusLogMessage($sys_log_sock, $proc_id, $time, "sys", $type, "bp_digifil", $msg);
+      Dada::nexusLogMessage($sys_log_sock, sprintf("%02d",$proc_id), $time, "sys", $type, "bp_digifil", $msg);
     }
     print "[".$time."] ".$msg."\n";
   }
@@ -503,8 +514,7 @@ sub multiFork($\@)
   
     my ($cmd_in, $cmd_out, $cmd_err);
 
-    logMsg(2, "INFO", "multiFork: open3 for ".$cmd);
-    logMsg(0, "INFO", "START ".$cmd);
+    msg(2, "INFO", "START ".$cmd);
     #eval {
       $pid = open3 ($cmd_in, $cmd_out, $cmd_err, $cmd);
     #};
@@ -544,7 +554,7 @@ sub multiFork($\@)
       }
       if ($index eq -1)
       {
-        logMsg(0, "ERROR", "could not match handle to I/O FD");
+        msg(0, "ERROR", "could not match handle to I/O FD");
         sleep (1);
         $index = 0;
       }
@@ -598,7 +608,7 @@ sub multiFork($\@)
     waitpid ($pids[$i], 0);
     $rval = $? >> 8;
     $results[$i] = ($rval == 0) ? "ok" : "fail";
-    logMsg(0, "INFO", "END   ".$cmds[$i]);
+    msg(2, "INFO", "END   ".$cmds[$i]);
     chomp ($responses[$i]);
   }
 
@@ -633,9 +643,8 @@ sub multiForkLog($\@)
     push (@results, "fail");
   
     my ($cmd_in, $cmd_out, $cmd_err);
-    logMsg(2, "INFO", "multiFork: open3 for ".$cmd);
 
-    logMsg(0, "INFO", "START ".$cmd);
+    msg(2, "INFO", "START ".$cmd);
     #eval {
       $pid = open3 ($cmd_in, $cmd_out, $cmd_err, $cmd);
     #};
@@ -675,7 +684,7 @@ sub multiForkLog($\@)
       }
       if ($index eq -1)
       {
-        logMsg(0, "ERROR", "could not match handle to I/O FD");
+        msg(0, "ERROR", "could not match handle to I/O FD");
         sleep (1);
         $index = 0;
       }
@@ -728,7 +737,7 @@ sub multiForkLog($\@)
   {
     waitpid ($pids[$i], 0);
     $rval = $? >> 8;
-    logMsg(0, "INFO", "END   ".$cmds[$i]);
+    msg(2, "INFO", "END   ".$cmds[$i]);
     $results[$i] = ($rval == 0) ? "ok" : "fail";
   }
 

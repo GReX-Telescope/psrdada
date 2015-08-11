@@ -106,7 +106,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
   {
     print STDERR "Could open log port: ".$log_host.":".$log_port."\n";
   }
-  logMsg (0, "INFO", "STARTING SCRIPT");
+  msg (0, "INFO", "STARTING SCRIPT");
 
   my $control_thread = threads->new(\&controlThread, $pid_file);
 
@@ -124,23 +124,24 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
   my $server_host    = $cfg{"SERVER_HOST"};
   my $server_user    = $cfg{"USER"};
 
-  my ($cmd, $result, $response, $key, $img, $time, $pfb, $input, $type, $res, $ext, $img_list);
+  my ($cmd, $result, $response, $key, $img, $file, $time, $pfb, $input, $type, $res, $ext, $file_list);
   my $sleep_total = 2;
   my $sleep_count;
 
   my @mon_images;
   my @dump_files;
+  my @stats_files;
   my %to_send;
   my $dump_file;
 
   if (! -d $client_mon_dir)
   {
     $cmd = "mkdir -p ".$client_mon_dir;
-    logMsg(2, "INFO", "main: ".$cmd);
+    msg(2, "INFO", "main: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     if ($result ne "ok")
     {
-      logMsg(0, "WARN", "main: ".$cmd." failed: ".$response);
+      msg(0, "WARN", "main: ".$cmd." failed: ".$response);
     }
   }
 
@@ -148,58 +149,60 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
   {
     # look for any dump files
     $cmd = "find ".$client_mon_dir." -mindepth 1 -maxdepth 1 -type f -name '*.dump' | sort";
-    logMsg(2, "INFO", "main: ".$cmd);
+    msg(2, "INFO", "main: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     if ($result ne "ok")
     {
-      logMsg(0, "WARN", "find list of dump files failed: ".$response);
+      msg(0, "WARN", "find list of dump files failed: ".$response);
       @dump_files = ();
     }
     else
     {
       @dump_files = split(/\n/, $response);
-      logMsg(2, "INFO", "main: found ".($#dump_files+1)." monitoring images");
+      msg(2, "INFO", "main: found ".($#dump_files+1)." monitoring images");
       if ($#dump_files >= 0)
       {
         foreach $dump_file (@dump_files)
         {
           $cmd = "mopsr_dumpplot -p -g 160x120 -c 0 -d 39 ".$dump_file;
-          logMsg(2, "INFO", "main: ".$cmd);
+          msg(2, "INFO", "main: ".$cmd);
           ($result, $response) = Dada::mySystem($cmd);
-          logMsg(3, "INFO", "main: ".$result." ".$response);
+          msg(3, "INFO", "main: ".$result." ".$response);
 
           # rename the dump file as .dumped
           $cmd = "mv ".$dump_file." ".$dump_file."ed";
-          logMsg(2, "INFO", "main: ".$cmd);
+          msg(2, "INFO", "main: ".$cmd);
           ($result, $response) = Dada::mySystem($cmd);
-          logMsg(3, "INFO", "main: ".$result." ".$response);
+          msg(3, "INFO", "main: ".$result." ".$response);
         }
       }
     }
 
     # look for any monitoring output files
     $cmd = "find ".$client_mon_dir." -mindepth 1 -maxdepth 1 -type f -name '*.png' -printf '%f\n' | sort";
-    logMsg(2, "INFO", "main: ".$cmd);
+    msg(2, "INFO", "main: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
 
     if ($result ne "ok")
     {
-      logMsg(0, "WARN", "find list of all obs failed: ".$response);
+      msg(0, "WARN", "find list of all obs failed: ".$response);
       @mon_images = ();
     }
     else
     {
       @mon_images = split(/\n/, $response);
-      logMsg(2, "INFO", "main: found ".($#mon_images+1)." monitoring images");
+      $file_list = "";
+
+      msg(2, "INFO", "main: found ".($#mon_images+1)." monitoring images");
       if ($#mon_images >= 0)
       {
         # ensure directory is automounted
         if ($use_nfs)
         {
           $cmd = "ls -1d ".$server_mon_dir;
-          logMsg(2, "INFO", "main: ".$cmd);
+          msg(2, "INFO", "main: ".$cmd);
           ($result, $response) = Dada::mySystem($cmd);
-          logMsg(3, "INFO", "main: ".$result." ".$response);
+          msg(3, "INFO", "main: ".$result." ".$response);
         }
 
         %to_send = ();
@@ -208,43 +211,61 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
         {
           ($time, $pfb, $input, $type, $res, $ext) = split(/\./, $img);
           $to_send{$pfb.".".$input.".".$type.".".$res} = $img;
-          logMsg(2, "INFO", "main: to_send{".$pfb.".".$input.".".$type.".".$res."}=".$img);
+          msg(2, "INFO", "main: to_send{".$pfb.".".$input.".".$type.".".$res."}=".$img);
         }
 
-        $img_list = "";
+        $file_list = "";
         foreach $key (keys %to_send)
         {
-          $img_list .= $client_mon_dir."/".$to_send{$key}." ";
+          $file_list .= $client_mon_dir."/".$to_send{$key}." ";
         }
-        logMsg(2, "INFO", "main: img_list=".$img_list);
+
+        # get any stats files
+        @stats_files = ();
+        $cmd = "find ".$client_mon_dir." -mindepth 1 -maxdepth 1 -type f -name '*.stats' -printf '%f\n' | sort";
+        msg(2, "INFO", "main: ".$cmd);
+        ($result, $response) = Dada::mySystem($cmd);
+        if (($result eq "ok") && ($response ne ""))
+        {
+          @stats_files = split (/\n/, $response);
+          foreach $file (@stats_files)
+          {
+            $file_list .= $client_mon_dir."/".$file;
+          }
+        }
+        msg(2, "INFO", "main: file_list=".$file_list);
 
         if ($use_nfs)
         {
-          $cmd = "cp ".$img_list." ".$server_mon_dir."/";
+          $cmd = "cp ".$file_list." ".$server_mon_dir."/";
         }
         else
         {
-          $cmd = "rsync -a ".$img_list." ".$server_user."\@".$server_host.":".$server_mon_dir."/";
+          $cmd = "rsync -a ".$file_list." ".$server_user."\@".$server_host.":".$server_mon_dir."/";
         }
 
-        logMsg(2, "INFO", "main: ".$cmd);
+        msg(2, "INFO", "main: ".$cmd);
         ($result, $response) = Dada::mySystem($cmd);
-        logMsg(3, "INFO", "main: ".$result." ".$response);
+        msg(3, "INFO", "main: ".$result." ".$response);
           
         foreach $img (@mon_images)
         {
           unlink $client_mon_dir."/".$img;
         }
+        foreach $file (@stats_files)
+        {
+          unlink $client_mon_dir."/".$file;
+        }
       }
 
       # delete any dumped files that are more than 60s old
       $cmd = "find ".$client_mon_dir." -mindepth 1 -maxdepth 1 -type f -mmin +1 -name '*.dumped' -delete";
-      logMsg(2, "INFO", "main: ".$cmd);
+      msg(2, "INFO", "main: ".$cmd);
       ($result, $response) = Dada::mySystem($cmd);
-      logMsg(3, "INFO", "main: ".$result." ".$response);
+      msg(3, "INFO", "main: ".$result." ".$response);
       if ($result ne "ok")
       {
-        logMsg(0, "WARN", "main: ".$cmd." failed: ".$response);
+        msg(0, "WARN", "main: ".$cmd." failed: ".$response);
       }
     }
 
@@ -260,10 +281,10 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
   }
 
   # Rejoin our daemon control thread
-  logMsg(2, "INFO", "joining control thread");
+  msg(2, "INFO", "joining control thread");
   $control_thread->join();
 
-  logMsg(0, "INFO", "STOPPING SCRIPT");
+  msg(0, "INFO", "STOPPING SCRIPT");
 
   # Close the nexus logging connection
   Dada::nexusLogClose($log_sock);
@@ -274,7 +295,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
 #
 # Logs a message to the nexus logger and print to STDOUT with timestamp
 #
-sub logMsg($$$)
+sub msg($$$)
 {
   my ($level, $type, $msg) = @_;
 
@@ -285,7 +306,7 @@ sub logMsg($$$)
       $log_sock = Dada::nexusLogOpen($log_host, $log_port);
     }
     if ($log_sock) {
-      Dada::nexusLogMessage($log_sock, $pwc_id, $time, "sys", $type, "results mon", $msg);
+      Dada::nexusLogMessage($log_sock, sprintf("%02d",$pwc_id), $time, "sys", $type, "results_mon", $msg);
     }
     print "[".$time."] ".$msg."\n";
   }
@@ -295,7 +316,7 @@ sub controlThread($)
 {
   (my $pid_file) = @_;
 
-  logMsg(2, "INFO", "controlThread : starting");
+  msg(2, "INFO", "controlThread : starting");
 
   my $host_quit_file = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
   my $pwc_quit_file  = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$pwc_id.".quit";
@@ -308,13 +329,13 @@ sub controlThread($)
   $quit_daemon = 1;
 
   if ( -f $pid_file) {
-    logMsg(2, "INFO", "controlThread: unlinking PID file");
+    msg(2, "INFO", "controlThread: unlinking PID file");
     unlink($pid_file);
   } else {
-    logMsg(1, "WARN", "controlThread: PID file did not exist on script exit");
+    msg(1, "WARN", "controlThread: PID file did not exist on script exit");
   }
 
-  logMsg(2, "INFO", "controlThread: exiting");
+  msg(2, "INFO", "controlThread: exiting");
 
 }
 

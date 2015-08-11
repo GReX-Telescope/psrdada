@@ -233,7 +233,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
         }
 
         logMsg(1, "INFO", "START ".$proc_cmd);
-        ($result, $response) = Dada::mySystemPiped($proc_cmd, $src_log_file, $src_log_sock, "src", $pwc_id, $daemon_name, "split");
+        ($result, $response) = Dada::mySystemPiped($proc_cmd, $src_log_file, $src_log_sock, "src", sprintf("%02d",$pwc_id), $daemon_name, "split");
         logMsg(1, "INFO", "END   ".$proc_cmd);
 
         if ($result ne "ok")

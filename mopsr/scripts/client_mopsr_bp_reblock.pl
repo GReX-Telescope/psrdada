@@ -2,14 +2,15 @@
 
 ##############################################################################
 #  
-#     Copyright (C) 2013 by Andrew Jameson
+#     Copyright (C) 2015 by Andrew Jameson
 #     Licensed under the Academic Free License version 2.1
 # 
 ###############################################################################
 #
-# client_mopsr_bf_mux_recv.pl 
+# client_mopsr_bp_reblock.pl 
 #
-# recvs data stream for 1 channel from many mux_sends
+# Reblock the 32-bit detected fan beam stream to a 8-bit stream with reverse
+# channel ordering and greater samples/block
 # 
 ###############################################################################
 
@@ -23,9 +24,10 @@ use strict;
 use threads;
 use threads::shared;
 
+
 sub usage() 
 {
-  print "Usage: ".basename($0)." CHAN_ID\n";
+  print "Usage: ".basename($0)." PROC_ID\n";
 }
 
 #
@@ -36,8 +38,9 @@ our $quit_daemon : shared;
 our $daemon_name : shared;
 our %cfg : shared;
 our $localhost : shared;
-our $chan_id : shared;
-our $db_key : shared;
+our $proc_id : shared;
+our $in_db_key : shared;
+our $out_db_key : shared;
 our $log_host;
 our $sys_log_port;
 our $src_log_port;
@@ -46,20 +49,20 @@ our $src_log_sock;
 our $sys_log_file;
 our $src_log_file;
 
-
 #
 # Initialize globals
 #
 $dl = 1;
 $quit_daemon = 0;
 $daemon_name = Dada::daemonBaseName($0);
-%cfg = Mopsr::getConfig("bf");
-$chan_id = -1;
-$db_key = "dada";
+%cfg = Mopsr::getConfig("bp");
+$proc_id = -1;
+$in_db_key = "";
+$out_db_key = "";
 $localhost = Dada::getHostMachineName(); 
 $log_host = $cfg{"SERVER_HOST"};
-$sys_log_port = $cfg{"SERVER_BF_SYS_LOG_PORT"};
-$src_log_port = $cfg{"SERVER_BF_SRC_LOG_PORT"};
+$sys_log_port = $cfg{"SERVER_BP_SYS_LOG_PORT"};
+$src_log_port = $cfg{"SERVER_BP_SRC_LOG_PORT"};
 $sys_log_sock = 0;
 $src_log_sock = 0;
 $sys_log_file = "";
@@ -72,31 +75,30 @@ if ($#ARGV != 0)
   exit(1);
 }
 
-$chan_id  = $ARGV[0];
+$proc_id  = $ARGV[0];
 
-# ensure that our chan_id is valid 
-if (($chan_id >= 0) &&  ($chan_id < $cfg{"NCHAN"}))
+# ensure that our proc_id is valid 
+if (($proc_id >= 0) &&  ($proc_id < $cfg{"NUM_BP"}))
 {
   # and matches configured hostname
-  if ($cfg{"RECV_".$chan_id} ne Dada::getHostMachineName())
+  if ($cfg{"BP_".$proc_id} ne Dada::getHostMachineName())
   {
-    print STDERR "RECV_".$chan_id." did not match configured hostname [".Dada::getHostMachineName()."]\n";
+    print STDERR "BP_".$proc_id."[".$cfg{"BP_".$proc_id}."] did not match configured hostname [".Dada::getHostMachineName()."]\n";
     usage();
     exit(1);
   }
 }
 else
 {
-  print STDERR "chan_id was not a valid integer between 0 and ".($cfg{"NCHAN"}-1)."\n";
+  print STDERR "proc_id was not a valid integer between 0 and ".($cfg{"NUM_BP"}-1)."\n";
   usage();
   exit(1);
 }
 
-
 #
 # Sanity check to prevent multiple copies of this daemon running
 #
-Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
+Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
 
 ###############################################################################
 #
@@ -108,12 +110,13 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
   $SIG{TERM} = \&sigHandle;
   $SIG{PIPE} = \&sigPipeHandle;
 
-  $sys_log_file = $cfg{"CLIENT_LOG_DIR"}."/".$daemon_name."_".$chan_id.".log";
-  $src_log_file = $cfg{"CLIENT_LOG_DIR"}."/".$daemon_name."_".$chan_id.".src.log";
-  my $pid_file =  $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$chan_id.".pid";
+  $sys_log_file = $cfg{"CLIENT_LOG_DIR"}."/".$daemon_name."_".$proc_id.".log";
+  $src_log_file = $cfg{"CLIENT_LOG_DIR"}."/".$daemon_name."_".$proc_id.".src.log";
+  my $pid_file =  $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$proc_id.".pid";
 
   # this is data stream we will be reading from
-  $db_key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $chan_id, $cfg{"NUM_BF"}, $cfg{"BF_DATA_BLOCK"});
+  $in_db_key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $proc_id, $cfg{"NUM_BP"}, $cfg{"RECEIVING_DATA_BLOCK"});
+  $out_db_key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $proc_id, $cfg{"NUM_BP"}, $cfg{"HEIMDALL_DATA_BLOCK"});
 
   # Autoflush STDOUT
   $| = 1;
@@ -136,24 +139,57 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
 
   my $control_thread = threads->new(\&controlThread, $pid_file);
 
-  my ($cmd, $result, $response, $raw_header, $full_cmd);
+  my ($cmd, $result, $response, $raw_header, $proc_cmd);
 
-  # continuously run mopsr_ibdb for this PWC
+  # continuously run mopsr_dbib for this PWC
   while (!$quit_daemon)
   {
-    $cmd = "mopsr_ibdb_FST -k ".$db_key." ".$chan_id." ".$cfg{"CONFIG_DIR"}."/mopsr_cornerturn.cfg -s ";
+    $cmd = "dada_header -k ".$in_db_key;
+    msg(2, "INFO", "main: ".$cmd);
+    $raw_header = `$cmd 2>&1`;
+    msg(2, "INFO", "main: ".$cmd." returned");
 
-    msg(1, "INFO", "START ".$cmd);
-    ($result, $response) = Dada::mySystemPiped($cmd, $src_log_file, $src_log_sock, "src", sprintf("%02d",$chan_id), $daemon_name, "muxrecv");
-    msg(1, "INFO", "END   ".$cmd);
+    # by default discard all incoming data
+    $proc_cmd = "dada_dbnull -z -s -k ".$in_db_key;
 
-    if ($result ne "ok")
+    if ($? != 0)
     {
-      if (!$quit_daemon)
+      if ($quit_daemon)
       {
-        msg(0, "ERROR", $cmd." failed: ".$response);
+        msg(2, "INFO", "dada_header failed, but quit_daemon true");
       }
-      $quit_daemon = 1;
+      else
+      {
+        msg(0, "ERROR", "dada_header failed: ".$raw_header);
+        $quit_daemon = 1;
+      }
+    }
+    else
+    {
+      my %header = Dada::headerToHash($raw_header);
+      msg (0, "INFO", "UTC_START=".$header{"UTC_START"}." NCHAN=".$header{"NCHAN"}." NANT=".$header{"NANT"});
+      
+      my $reblock_factor = $cfg{"HEIMDALL_REBLOCK_FACTOR"};
+
+      $proc_cmd = "mopsr_dbreblockdb ".$in_db_key." ".$out_db_key." -z -s -r ".$reblock_factor;
+
+      my ($binary, $junk) = split(/ /,$proc_cmd, 2);
+      $cmd = "ls -l ".$cfg{"SCRIPTS_DIR"}."/".$binary;
+      ($result, $response) = Dada::mySystem($cmd);
+      msg(2, "INFO", "main: ".$cmd.": ".$result." ".$response);
+
+      $cmd = $proc_cmd;
+      msg(1, "INFO", "START ".$cmd);
+      ($result, $response) = Dada::mySystemPiped($cmd, $src_log_file, $src_log_sock, "src", sprintf("%02d",$proc_id), $daemon_name, "bp_reblock");
+      msg(1, "INFO", "END   ".$cmd);
+      if ($result ne "ok")
+      {
+        $quit_daemon = 1;
+        if ($result ne "ok")
+        {
+          msg(0, "ERROR", $cmd." failed: ".$response);
+        }
+      }
     }
   }
 
@@ -165,7 +201,6 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
 
   # Close the nexus logging connection
   Dada::nexusLogClose($sys_log_sock);
-  Dada::nexusLogClose($src_log_sock);
 
   exit (0);
 }
@@ -184,7 +219,7 @@ sub msg($$$)
       $sys_log_sock = Dada::nexusLogOpen($log_host, $sys_log_port);
     }
     if ($sys_log_sock) {
-      Dada::nexusLogMessage($sys_log_sock, sprintf("%02d",$chan_id), $time, "sys", $type, "muxrecv", $msg);
+      Dada::nexusLogMessage($sys_log_sock, sprintf("%02d",$proc_id), $time, "sys", $type, "bp_reblock", $msg);
     }
     print "[".$time."] ".$msg."\n";
   }
@@ -197,7 +232,7 @@ sub controlThread($)
   msg(2, "INFO", "controlThread : starting");
 
   my $host_quit_file = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
-  my $pwc_quit_file  = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$chan_id.".quit";
+  my $pwc_quit_file  = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$proc_id.".quit";
 
   while ((!$quit_daemon) && (!(-f $host_quit_file)) && (!(-f $pwc_quit_file)))
   {
@@ -208,10 +243,20 @@ sub controlThread($)
 
   my ($cmd, $result, $response);
 
-  $cmd = "^mopsr_ibdb_FST -k ".$db_key;
-  msg(2, "INFO", "controlThread: killProcess(".$cmd.", mpsr)");
+  $cmd = "^dada_header -k ".$in_db_key;
+  msg(2, "INFO" ,"controlThread: killProcess(".$cmd.", mpsr)");
   ($result, $response) = Dada::killProcess($cmd, "mpsr");
-  msg(3, "INFO", "controlThread: killProcess() ".$result." ".$response);
+  msg(3, "INFO" ,"controlThread: killProcess() ".$result." ".$response);
+
+  $cmd = "^dada_dbnull -k ".$in_db_key;
+  msg(2, "INFO" ,"controlThread: killProcess(".$cmd.", mpsr)");
+  ($result, $response) = Dada::killProcess($cmd, "mpsr");
+  msg(3, "INFO" ,"controlThread: killProcess() ".$result." ".$response);
+
+  $cmd = "^dada_dbreblockdb ".$in_db_key;
+  msg(2, "INFO" ,"controlThread: killProcess(".$cmd.", mpsr)");
+  ($result, $response) = Dada::killProcess($cmd, "mpsr");
+  msg(3, "INFO" ,"controlThread: killProcess() ".$result." ".$response);
 
   if ( -f $pid_file) {
     msg(2, "INFO", "controlThread: unlinking PID file");
@@ -252,6 +297,5 @@ sub sigPipeHandle($)
   if ($log_host && $sys_log_port) {
     $sys_log_sock = Dada::nexusLogOpen($log_host, $sys_log_port);
   }
-
 }
 

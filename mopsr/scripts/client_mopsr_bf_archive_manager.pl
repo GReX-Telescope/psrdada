@@ -340,7 +340,7 @@ sub msg($$$)
       $log_sock = Dada::nexusLogOpen($log_host, $log_port);
     }
     if ($log_sock) {
-      Dada::nexusLogMessage($log_sock, $chan_id, $time, "sys", $type, "bp_arch_mngr", $msg);
+      Dada::nexusLogMessage($log_sock, sprintf("%02d",$chan_id), $time, "sys", $type, "bp_arch_mngr", $msg);
     }
     print "[".$time."] ".$msg."\n";
   }

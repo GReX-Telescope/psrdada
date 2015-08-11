@@ -134,12 +134,12 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
     print STDERR "Could open log port: ".$log_host.":".$log_port."\n";
   }
 
-  logMsg(1,"INFO", "STARTING SCRIPT");
+  msg(1,"INFO", "STARTING SCRIPT");
 
   # This thread will monitor for our daemon quit file
   $control_thread = threads->new(\&controlThread, $pid_file);
 
-  logMsg(2, "INFO", "main: receiving datablock key global=".$db_key);
+  msg(2, "INFO", "main: receiving datablock key global=".$db_key);
 
   my $recv_db_key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"NUM_PWC"}, $cfg{"RECEIVING_DATA_BLOCK"});
   my $aqdsp_db_key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"NUM_PWC"}, $cfg{"AQDSP_DATA_BLOCK"});
@@ -156,25 +156,25 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
 
     # next header to read from the receiving data_block
     $cmd =  "dada_header -k ".$recv_db_key;
-    logMsg(2, "INFO", "main: ".$cmd);
+    msg(2, "INFO", "main: ".$cmd);
     $curr_raw_header = `$cmd 2>&1`;
-    logMsg(2, "INFO", "main: ".$cmd." returned");
+    msg(2, "INFO", "main: ".$cmd." returned");
 
     if ($? != 0)
     {
       if ($quit_daemon)
       {
-        logMsg(0, "INFO", "dada_header failed, but quit_daemon true");
+        msg(0, "INFO", "dada_header failed, but quit_daemon true");
       }
       else
       {
-        logMsg(0, "ERROR", "dada_header failed: ".$curr_raw_header);
+        msg(0, "ERROR", "dada_header failed: ".$curr_raw_header);
         $quit_daemon = 1;
       }
     }
     elsif ($curr_raw_header eq $prev_raw_header)
     {
-      logMsg(0, "ERROR", "main: header repeated, jettesioning observation");
+      msg(0, "ERROR", "main: header repeated, jettesioning observation");
 
       # start null thread to draing the datablock
       my $null_thread = threads->new(\&nullThread, $recv_db_key, "proc");
@@ -196,10 +196,10 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
     }
   }
 
-  logMsg(2, "INFO", "main: joining controlThread");
+  msg(2, "INFO", "main: joining controlThread");
   $control_thread->join();
 
-  logMsg(0, "INFO", "STOPPING SCRIPT");
+  msg(0, "INFO", "STOPPING SCRIPT");
   Dada::nexusLogClose($log_sock);
 
   exit(0);
@@ -217,15 +217,15 @@ sub aqdspThread($$)
 
   my $full_cmd = $cmd." 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/".$client_logger." ".$pwc_id." aqdsp";
 
-  logMsg(1, "INFO", "START ".$cmd);
-  logMsg(2, "INFO", "aqdspThread: ".$cmd);
+  msg(1, "INFO", "START ".$cmd);
+  msg(2, "INFO", "aqdspThread: ".$cmd);
   ($result, $response) = Dada::mySystem($full_cmd);
   if ($result ne "ok")
   {
-    logMsg(1, "WARN", "aqdsp thread failed :".$response);
+    msg(1, "WARN", "aqdsp thread failed :".$response);
   }
-  logMsg(2, "INFO", "aqdspThread: ".$result." ".$response);
-  logMsg(1, "INFO", "END   ".$cmd);
+  msg(2, "INFO", "aqdspThread: ".$result." ".$response);
+  msg(1, "INFO", "END   ".$cmd);
 
   return "ok";
 }
@@ -244,13 +244,13 @@ sub nullThread($$)
 
   my $full_cmd = $cmd." 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/".$client_logger." ".$pwc_id." null";
 
-  logMsg(1, "INFO", "START ".$cmd);
+  msg(1, "INFO", "START ".$cmd);
 
-  logMsg(2, "INFO", "nullThread: ".$full_cmd);
+  msg(2, "INFO", "nullThread: ".$full_cmd);
   ($result, $response) = Dada::mySystem($full_cmd);
-  logMsg(2, "INFO", "nullThread: ".$result." ".$response);
+  msg(2, "INFO", "nullThread: ".$result." ".$response);
 
-  logMsg(1, "INFO", "END   ".$cmd);
+  msg(1, "INFO", "END   ".$cmd);
 
   return "ok";
 }
@@ -259,7 +259,7 @@ sub controlThread($)
 {
   my ($pid_file) = @_;
 
-  logMsg(2, "INFO", "controlThread : starting");
+  msg(2, "INFO", "controlThread : starting");
 
   my $host_quit_file = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
   my $pwc_quit_file  =  $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$pwc_id.".quit";
@@ -277,27 +277,27 @@ sub controlThread($)
   # Kill the dada_header command
   $cmd = "ps aux | grep -v grep | grep ".$cfg{"USER"}." | grep 'dada_header -k ".$db_key."' | awk '{print \$2}'";
 
-  logMsg(2, "INFO", "controlThread: ".$cmd);
+  msg(2, "INFO", "controlThread: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   $response =~ s/\n/ /g;
-  logMsg(2, "INFO", "controlThread: ".$result." ".$response);
+  msg(2, "INFO", "controlThread: ".$result." ".$response);
 
   if (($result eq "ok") && ($response ne "")) 
   {
     $cmd = "kill -KILL ".$response;
-    logMsg(1, "INFO", "controlThread: Killing dada_header -k ".$db_key.": ".$cmd);
+    msg(2, "INFO", "controlThread: Killing dada_header -k ".$db_key.": ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
-    logMsg(2, "INFO", "controlThread: ".$result." ".$response);
+    msg(3, "INFO", "controlThread: ".$result." ".$response);
   }
 
   if ( -f $pid_file) {
-    logMsg(2, "INFO", "controlThread: unlinking PID file");
+    msg(2, "INFO", "controlThread: unlinking PID file");
     unlink($pid_file);
   } else {
-    logMsg(1, "INFO", "controlThread: PID file did not exist on script exit");
+    msg(1, "INFO", "controlThread: PID file did not exist on script exit");
   }
 
-  logMsg(2, "INFO", "controlThread: exiting");
+  msg(2, "INFO", "controlThread: exiting");
 
 }
 
@@ -305,7 +305,7 @@ sub controlThread($)
 #
 # Logs a message to the nexus logger and print to STDOUT with timestamp
 #
-sub logMsg($$$) {
+sub msg($$$) {
 
   my ($level, $type, $msg) = @_;
 
@@ -319,7 +319,7 @@ sub logMsg($$$) {
       $log_sock = Dada::nexusLogOpen($log_host, $log_port);
     }
     if ($log_sock) {
-      Dada::nexusLogMessage($log_sock, $pwc_id, $time, "sys", $type, "obs mngr", $msg);
+      Dada::nexusLogMessage($log_sock, sprintf("%02d", $pwc_id), $time, "sys", $type, "obs_mngr", $msg);
     }
     print "[".$time."] ".$msg."\n";
   }

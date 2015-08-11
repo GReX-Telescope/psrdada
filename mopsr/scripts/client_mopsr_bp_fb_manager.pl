@@ -7,10 +7,10 @@
 # 
 ###############################################################################
 #
-# client_mopsr_bp_integrate.pl 
+# client_mopsr_bp_filterbank_manager.pl 
 #
-# Integrate a SFT datastream in time
-# 
+# transfer filterbank files from clients to the server
+#
 ###############################################################################
 
 use lib $ENV{"DADA_ROOT"}."/bin";
@@ -36,10 +36,10 @@ our $dl : shared;
 our $quit_daemon : shared;
 our $daemon_name : shared;
 our %cfg : shared;
+our %ct : shared;
 our $localhost : shared;
 our $proc_id : shared;
-our $in_db_key : shared;
-our $out_db_key : shared;
+our $db_key : shared;
 our $log_host;
 our $sys_log_port;
 our $src_log_port;
@@ -55,9 +55,9 @@ $dl = 1;
 $quit_daemon = 0;
 $daemon_name = Dada::daemonBaseName($0);
 %cfg = Mopsr::getConfig("bp");
+%ct = Mopsr::getCornerturnConfig("bp");
 $proc_id = -1;
-$in_db_key = "dada";
-$out_db_key = "eada";
+$db_key = "dada";
 $localhost = Dada::getHostMachineName(); 
 $log_host = $cfg{"SERVER_HOST"};
 $sys_log_port = $cfg{"SERVER_BP_SYS_LOG_PORT"};
@@ -111,11 +111,10 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
 
   $sys_log_file = $cfg{"CLIENT_LOG_DIR"}."/".$daemon_name."_".$proc_id.".log";
   $src_log_file = $cfg{"CLIENT_LOG_DIR"}."/".$daemon_name."_".$proc_id.".src.log";
-  my $pid_file =  $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$proc_id.".pid";
+  my $pid_file  = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$proc_id.".pid";
 
   # this is data stream we will be reading from
-  $in_db_key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $proc_id, $cfg{"NUM_BP"}, $cfg{"RECEIVING_DATA_BLOCK"});
-  $out_db_key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $proc_id, $cfg{"NUM_BP"}, $cfg{"PROCESSING_DATA_BLOCK"});
+  $db_key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $proc_id, $cfg{"NUM_BP"}, $cfg{"PROCESSING_DATA_BLOCK"});
 
   # Autoflush STDOUT
   $| = 1;
@@ -138,55 +137,115 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
 
   my $control_thread = threads->new(\&controlThread, $pid_file);
 
-  my ($cmd, $result, $response, $raw_header, $proc_cmd);
+  my ($cmd, $result, $response, $utc_start);
+  my @parts = ();
 
-  # continuously run mopsr_dbib for this PWC
+  chdir $cfg{"CLIENT_RECORDING_DIR"};
+
+  # look for filterbank files to transfer to the server via rsync
   while (!$quit_daemon)
   {
-    $cmd = "dada_header -k ".$in_db_key;
+    $cmd = "find . -maxdepth 2 -type f -name 'obs.finished' | sort -nr | tail -n 1";
     msg(2, "INFO", "main: ".$cmd);
-    $raw_header = `$cmd 2>&1`;
-    msg(2, "INFO", "main: ".$cmd." returned");
+    ($result, $response) = Dada::mySystem($cmd);
+    msg(3, "INFO", "main: ".$result." ".$response);
 
-    # by default discard all incoming data
-    $proc_cmd = "dada_dbnull -z -s -k ".$in_db_key;
-
-    if ($? != 0)
+    if (($result eq "ok") && ($response ne ""))
     {
-      if ($quit_daemon)
+      # get the observation UTC_START
+      @parts = split (/\//, $response);
+
+      if ($#parts == 2)
       {
-        msg(2, "INFO", "dada_header failed, but quit_daemon true");
-      }
-      else
-      {
-        msg(0, "ERROR", "dada_header failed: ".$raw_header);
-        $quit_daemon = 1;
+        $utc_start = $parts[1];
+        msg(2, "INFO", "main: found finished observation: ".$utc_start);
+
+        # get the list of beams in this observation
+        $cmd = "find ".$utc_start." -maxdepth 1 -type d -name 'BEAM_???' -printf '%f\n' | sort -n";
+        msg(2, "INFO", "main: ".$cmd);
+        ($result, $response) = Dada::mySystem($cmd);
+        msg(3, "INFO", "main: ".$result." ".$response);
+    
+        if (($result ne "ok") || ($response eq ""))
+        {
+          msg(0, "WARN", "no beams found in ".$utc_start);
+
+          $cmd = "mv ".$utc_start."/obs.finished ".$utc_start."/obs.failed";
+          msg(2, "INFO", "main: ".$cmd);
+          ($result, $response) = Dada::mySystem($cmd);
+          msg(3, "INFO", "main: ".$result." ".$response);
+        }
+        else
+        {
+          $cmd = "rsync -a --stats --bwlimit=8192 --no-g --chmod=go-ws --password-file=/home/mpsr/.ssh/rsync_passwd ".
+                 "./".$utc_start."/BEAM_??? upload\@192.168.5.10::archives/".$utc_start."/";
+
+          msg(2, "INFO", "main: ".$cmd);
+          ($result, $response) = Dada::mySystem($cmd);
+          msg(3, "INFO", "main: ".$result." ".$response);
+          if ($result ne "ok")
+          {
+            if ($quit_daemon)
+            {
+              msg(0, "INFO", "transfer of ".$utc_start." interrupted");
+            }
+            else
+            {
+              msg(0, "ERROR", "transfer of ".$utc_start." failed: ".$response);
+
+              $cmd = "mv ".$utc_start."/obs.finished ".$utc_start."/obs.failed";
+              msg(2, "INFO", "main: ".$cmd);
+              ($result, $response) = Dada::mySystem($cmd);
+              msg(3, "INFO", "main: ".$result." ".$response);
+            }
+          }
+          else
+          {
+            # determine the data rate
+            my @output_lines = split(/\n/, $response);
+            my $mbytes_per_sec = 0;
+            my $j = 0;
+            for ($j=0; $j<=$#output_lines; $j++)
+            {
+              if ($output_lines[$j] =~ m/bytes\/sec/)
+              {
+                my @bits = split(/[\s]+/, $output_lines[$j]);
+                $mbytes_per_sec = $bits[6] / 1048576;
+              }
+            }
+            my $data_rate = sprintf("%5.2f", $mbytes_per_sec)." MB/s";
+
+            msg(1, "INFO", $utc_start." finished -> transferred [".$data_rate."]");
+
+            $cmd = "mv ".$utc_start."/obs.finished ".$utc_start."/obs.transferred";
+            msg(2, "INFO", "main: ".$cmd);
+            ($result, $response) = Dada::mySystem($cmd);
+            msg(3, "INFO", "main: ".$result." ".$response);
+            if ($result ne "ok")
+            {
+              msg(0, "ERROR", $cmd." failed: ".$response);
+              $quit_daemon = 1;
+            }
+
+            $cmd = "rm -rf ".$utc_start."/BEAM_???";
+            msg(2, "INFO", "main: ".$cmd);
+            ($result, $response) = Dada::mySystem($cmd);
+            msg(3, "INFO", "main: ".$result." ".$response);
+            if ($result ne "ok")
+            {
+              msg(0, "ERROR", $cmd." failed: ".$response);
+              $quit_daemon = 1;
+            }
+          }
+        } 
       }
     }
-    else
+      
+    my $counter = 10;
+    while (!$quit_daemon && $counter > 0)
     {
-      my %header = Dada::headerToHash($raw_header);
-      msg (0, "INFO", "UTC_START=".$header{"UTC_START"}." NCHAN=".$header{"NCHAN"}." NANT=".$header{"NANT"});
-
-      $proc_cmd = "mopsr_dbintegratedb -s -t 8 ".$in_db_key." ".$out_db_key;
-
-      my ($binary, $junk) = split(/ /,$proc_cmd, 2);
-      $cmd = "ls -l ".$cfg{"SCRIPTS_DIR"}."/".$binary;
-      ($result, $response) = Dada::mySystem($cmd);
-      msg(2, "INFO", "main: ".$cmd.": ".$result." ".$response);
-
-      $cmd = $proc_cmd;
-      msg(1, "INFO", "START ".$cmd);
-      ($result, $response) = Dada::mySystemPiped($cmd, $src_log_file, $src_log_sock, "src", sprintf("%02d",$proc_id), $daemon_name, "bp_int");
-      msg(1, "INFO", "END   ".$cmd);
-      if ($result ne "ok")
-      {
-        $quit_daemon = 1;
-        if ($result ne "ok")
-        {
-          msg(0, "ERROR", $cmd." failed: ".$response);
-        }
-      }
+      sleep(1);
+      $counter --;
     }
   }
 
@@ -216,7 +275,7 @@ sub msg($$$)
       $sys_log_sock = Dada::nexusLogOpen($log_host, $sys_log_port);
     }
     if ($sys_log_sock) {
-      Dada::nexusLogMessage($sys_log_sock, sprintf("%02d",$proc_id), $time, "sys", $type, "bp_int", $msg);
+      Dada::nexusLogMessage($sys_log_sock, sprintf("%02d",$proc_id), $time, "sys", $type, "bp_fb_mngr", $msg);
     }
     print "[".$time."] ".$msg."\n";
   }
@@ -240,26 +299,16 @@ sub controlThread($)
 
   my ($cmd, $result, $response);
 
-  $cmd = "^dada_header -k ".$in_db_key;
-  msg(2, "INFO" ,"controlThread: killProcess(".$cmd.", mpsr)");
+  $cmd = "^rsync -a --stats";
+  msg(2, "INFO", "controlThread: killProcess(".$cmd.", mpsr)");
   ($result, $response) = Dada::killProcess($cmd, "mpsr");
-  msg(3, "INFO" ,"controlThread: killProcess() ".$result." ".$response);
-
-  $cmd = "^dada_dbnull -k ".$in_db_key;
-  msg(2, "INFO" ,"controlThread: killProcess(".$cmd.", mpsr)");
-  ($result, $response) = Dada::killProcess($cmd, "mpsr");
-  msg(3, "INFO" ,"controlThread: killProcess() ".$result." ".$response);
-
-  $cmd = "^dada_dbintegratedb ".$in_db_key;
-  msg(2, "INFO" ,"controlThread: killProcess(".$cmd.", mpsr)");
-  ($result, $response) = Dada::killProcess($cmd, "mpsr");
-  msg(3, "INFO" ,"controlThread: killProcess() ".$result." ".$response);
+  msg(3, "INFO", "controlThread: killProcess() ".$result." ".$response);
 
   if ( -f $pid_file) {
     msg(2, "INFO", "controlThread: unlinking PID file");
     unlink($pid_file);
   } else {
-    msg(0, "WARN", "controlThread: PID file did not exist on script exit");
+    msg(1, "WARN", "controlThread: PID file did not exist on script exit");
   }
 
   msg(2, "INFO", "controlThread: exiting");

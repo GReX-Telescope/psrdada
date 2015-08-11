@@ -134,7 +134,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
     print STDERR "Could open src log port: ".$log_host.":".$src_log_port."\n";
   }
 
-  logMsg (0, "INFO", "STARTING SCRIPT");
+  msg (0, "INFO", "STARTING SCRIPT");
 
   my $control_thread = threads->new(\&controlThread, $pid_file);
 
@@ -147,26 +147,26 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
   while (!$quit_daemon)
   {
     $cmd = "dada_header -k ".$db_key;
-    logMsg(2, "INFO", "main: ".$cmd);
+    msg(2, "INFO", "main: ".$cmd);
     $raw_header = `$cmd 2>&1`;
-    logMsg(2, "INFO", "main: ".$cmd." returned");
+    msg(2, "INFO", "main: ".$cmd." returned");
 
     if ($? != 0)
     {
       if ($quit_daemon)
       {
-        logMsg(2, "INFO", "dada_header failed, but quit_daemon true");
+        msg(2, "INFO", "dada_header failed, but quit_daemon true");
       }
       else
       {
-        logMsg(0, "ERROR", "dada_header failed: ".$raw_header);
+        msg(0, "ERROR", "dada_header failed: ".$raw_header);
         $quit_daemon = 1;
       }
     }
     else
     {
       my %header = Dada::headerToHash($raw_header);
-      logMsg (0, "INFO", "UTC_START=".$header{"UTC_START"}." NCHAN=".$header{"NCHAN"}." NANT=".$header{"NANT"});
+      msg (0, "INFO", "UTC_START=".$header{"UTC_START"}." NCHAN=".$header{"NCHAN"}." NANT=".$header{"NANT"});
 
       # Add the dada header file to the proc_cmd
       $proc_cmd_file = $cfg{"CONFIG_DIR"}."/".$header{"BF_PROC_FILE"};
@@ -178,32 +178,32 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
         $tracking = 0;
       } 
 
-      logMsg(2, "INFO", "Full path to BF_PROC_FILE: ".$proc_cmd_file);
+      msg(2, "INFO", "Full path to BF_PROC_FILE: ".$proc_cmd_file);
       if ( ! ( -f $proc_cmd_file ) ) 
       {
-        logMsg(0, "ERROR", "BF_PROC_FILE did not exist: ".$proc_cmd_file);
+        msg(0, "ERROR", "BF_PROC_FILE did not exist: ".$proc_cmd_file);
         $proc_cmd = "dada_dbnull -z -s -k ".$db_key;
       }
       elsif ($cfg{"BF_STATE_".$chan_id} eq "active")
       {
-        logMsg(1, "INFO", "BF_PROC_FILE=".$proc_cmd_file);
+        msg(1, "INFO", "BF_PROC_FILE=".$proc_cmd_file);
         my %proc_cmd_hash = Dada::readCFGFile($proc_cmd_file);
         $proc_cmd = $proc_cmd_hash{"PROC_CMD"};
-        logMsg(1, "INFO", "PROC_CMD=".$proc_cmd);
+        msg(1, "INFO", "PROC_CMD=".$proc_cmd);
       }   
       else
       {
-        logMsg(0, "INFO", "BF_STATE_".$chan_id." == ".$cfg{"BF_STATE_".$chan_id});
+        msg(0, "INFO", "BF_STATE_".$chan_id." == ".$cfg{"BF_STATE_".$chan_id});
         $proc_cmd = "dada_dbnull -z -s -k ".$db_key;
-        logMsg(1, "INFO", "PROC_CMD=".$proc_cmd);
+        msg(1, "INFO", "PROC_CMD=".$proc_cmd);
       }
 
       # create a local directory for the output from this channel
-      logMsg(0, "INFO", "createLocalDirs()");
+      msg(0, "INFO", "createLocalDirs()");
       ($result, $response) = createLocalDirs(\%header);
       if ($result ne "ok")
       {
-        logMsg(0, "ERROR", "could not create local dir for chan_id=".$chan_id.": ".$response);
+        msg(0, "ERROR", "could not create local dir for chan_id=".$chan_id.": ".$response);
         $proc_cmd = "dada_dbnull -z -s -k ".$db_key;
         $proc_dir = "/";
       }
@@ -264,7 +264,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
       my ($binary, $junk) = split(/ /,$proc_cmd, 2);
       $cmd = "ls -l ".$cfg{"SCRIPTS_DIR"}."/".$binary;
       ($result, $response) = Dada::mySystem($cmd);
-      logMsg(2, "INFO", "main: ".$cmd.": ".$result." ".$response);
+      msg(2, "INFO", "main: ".$cmd.": ".$result." ".$response);
 
       # if the processing is a calibration, then additionally dump the antenna configuration
       # mapping used in memory to the file also
@@ -273,30 +273,35 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
       #  ($result, $response) = dumpAntennaMapping ($tracking, $proc_dir."/obs.antenna", $proc_dir."/obs.baselines", $proc_dir."/obs.refant");
       #  if ($result ne "ok")
       #  {
-      #    logMsg(1, "WARN", "failed to dump Antenna Mapping to ".$proc_dir.": ".$response);
+      #    msg(1, "WARN", "failed to dump Antenna Mapping to ".$proc_dir.": ".$response);
       #  }
       #}
 
+      if ($binary eq "dspsr")
+      {
+        $proc_cmd = "export T2USER=".$cfg{"USER"}.$chan_id."; ".$proc_cmd;
+      }
+
       $cmd = "cd ".$proc_dir."; ".$proc_cmd;
-      logMsg(1, "INFO", "START ".$cmd);
-      ($result, $response) = Dada::mySystemPiped($cmd, $src_log_file, $src_log_sock, "src", $chan_id, $daemon_name, "proc");
-      logMsg(1, "INFO", "END   ".$cmd);
+      msg(1, "INFO", "START ".$cmd);
+      ($result, $response) = Dada::mySystemPiped($cmd, $src_log_file, $src_log_sock, "src", sprintf("%02d",$chan_id), $daemon_name, "proc");
+      msg(1, "INFO", "END   ".$cmd);
       if ($result ne "ok")
       {
         $quit_daemon = 1;
         if ($result ne "ok")
         {
-          logMsg(0, "ERROR", $cmd." failed: ".$response);
+          msg(0, "ERROR", $cmd." failed: ".$response);
         }
       }
     }
   }
 
   # Rejoin our daemon control thread
-  logMsg(2, "INFO", "joining control thread");
+  msg(2, "INFO", "joining control thread");
   $control_thread->join();
 
-  logMsg(0, "INFO", "STOPPING SCRIPT");
+  msg(0, "INFO", "STOPPING SCRIPT");
 
   # Close the nexus logging connection
   Dada::nexusLogClose($sys_log_sock);
@@ -311,7 +316,7 @@ sub createLocalDirs(\%)
 {
   my ($h_ref) = @_;
 
-  logMsg(2, "INFO", "createLocalDirs()");
+  msg(2, "INFO", "createLocalDirs()");
 
   my %h = %$h_ref;
   my $utc_start = $h{"UTC_START"};
@@ -320,16 +325,16 @@ sub createLocalDirs(\%)
 
   my ($cmd, $result, $response);
 
-  logMsg(2, "INFO", "createLocalDirs: mkdirRecursive(".$dir.", 0755)");
+  msg(2, "INFO", "createLocalDirs: mkdirRecursive(".$dir.", 0755)");
   ($result, $response) = Dada::mkdirRecursive($dir, 0755);
-  logMsg(3, "INFO", "createLocalDirs: ".$result." ".$response);
+  msg(3, "INFO", "createLocalDirs: ".$result." ".$response);
   if ($result ne "ok")
   {
     return ("fail", "Could not create local dir: ".$response);
   }
 
   # create an obs.header file in the processing dir:
-  logMsg(2, "INFO", "createLocalDirs: creating obs.header");
+  msg(2, "INFO", "createLocalDirs: creating obs.header");
   my $file = $dir."/obs.header";
   open(FH,">".$file.".tmp");
   my $k = "";
@@ -407,7 +412,7 @@ sub dumpAntennaMapping($$$$)
   my @mods = ();
   for ($i=0; $i<$aq_cfg{"NUM_PWC"}; $i++)
   {
-    logMsg(1, $dl, "dumpAntennaMapping: i=".$i);
+    msg(1, $dl, "dumpAntennaMapping: i=".$i);
     # if this PWC is an active or passive
     if ($aq_cfg{"PWC_STATE_".$i} ne "inactive")
     {
@@ -420,24 +425,24 @@ sub dumpAntennaMapping($$$$)
       # now find the physics antennnas for this PFB
       $pfb_id  = $aq_cfg{"PWC_PFB_ID_".$i};
 
-      logMsg(1, $dl, "dumpAntennaMapping: pfb_id=".$pfb_id." ants=".$first_ant."->".$last_ant);
+      msg(1, $dl, "dumpAntennaMapping: pfb_id=".$pfb_id." ants=".$first_ant."->".$last_ant);
 
       $imod = $first_ant;
       %pfb_mods = ();
       foreach $rx ( @sp_keys_sorted )
       {
         ($pfb, $pfb_input) = split(/ /, $sp{$rx});
-        logMsg(3, $dl, "dumpAntennaMapping: pfb=".$pfb." pfb_input=".$pfb_input);
+        msg(3, $dl, "dumpAntennaMapping: pfb=".$pfb." pfb_input=".$pfb_input);
         if ($pfb eq $pfb_id)
         {
           $pfb_mods{$pfb_input} = $rx;
-          logMsg(1, $dl, "dumpAntennaMapping: pfb_mods{".$pfb_input."}=".$rx);
+          msg(1, $dl, "dumpAntennaMapping: pfb_mods{".$pfb_input."}=".$rx);
         }
       }
 
       foreach $pfb_input ( sort intsort keys %pfb_mods )
       {
-        logMsg(1, $dl, "dumpAntennaMapping: pfb_input=".$pfb_input." imod=".$imod." first_ant=".$first_ant." last_ant=".$last_ant);
+        msg(1, $dl, "dumpAntennaMapping: pfb_input=".$pfb_input." imod=".$imod." first_ant=".$first_ant." last_ant=".$last_ant);
         if (($imod >= $first_ant) && ($imod <= $last_ant))
         {
           $mods[$imod] = $pfb_mods{$pfb_input};
@@ -506,12 +511,12 @@ sub dumpAntennaMapping($$$$)
     
     # $dist -= $ref_dist;
 
-    Dada::logMsg(2, $dl, "imod=".$imod." ".$mod_id.": dist=".$dist." delay=".$delay." scale=".$scale);
+    msg(2, "INFO", "imod=".$imod." ".$mod_id.": dist=".$dist." delay=".$delay." scale=".$scale);
     print FHA $mod_id." ".$dist." ".$delay."\n";
   
     for ($jmod=$imod+1; $jmod<=$#mods; $jmod++)
     {
-      Dada::logMsg(2, $dl, $mods[$imod]." ".$mods[$jmod]);
+      msg(2, "INFO", $mods[$imod]." ".$mods[$jmod]);
       print FHB $mods[$imod]." ".$mods[$jmod]."\n";
     }
   }
@@ -529,7 +534,7 @@ sub createRemoteDirs($$$)
 {
   my ($utc_start, $ch_id, $obs_header) = @_;
 
-  logMsg(2, "INFO", "createRemoteDirs(".$utc_start.", ".$ch_id.", ".$obs_header.")");
+  msg(2, "INFO", "createRemoteDirs(".$utc_start.", ".$ch_id.", ".$obs_header.")");
 
   my $user = $cfg{"USER"};
   my $host = $cfg{"SERVER_HOST"};
@@ -547,20 +552,20 @@ sub createRemoteDirs($$$)
   {
     if ($use_nfs)
     {
-      logMsg(2, "INFO", "createRemoteDirs: ".$cmd);
+      msg(2, "INFO", "createRemoteDirs: ".$cmd);
       ($result, $response) = Dada::mySystem($cmd);
-      logMsg(2, "INFO", "createRemoteDirs: ".$result." ".$response);
+      msg(2, "INFO", "createRemoteDirs: ".$result." ".$response);
     }
     else
     {
-      logMsg(2, "INFO", "createRemoteDirs: ".$user."@".$host.":".$cmd);
+      msg(2, "INFO", "createRemoteDirs: ".$user."@".$host.":".$cmd);
       ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
-      logMsg(2, "INFO", "createRemoteDirs: ".$result." ".$rval." ".$response);
+      msg(2, "INFO", "createRemoteDirs: ".$result." ".$rval." ".$response);
     }
 
     if (($result eq "ok") && ($rval == 0))
     {
-      logMsg(2, "INFO", "createRemoteDirs: remote directory created");
+      msg(2, "INFO", "createRemoteDirs: remote directory created");
 
       # now copy obs.header file to remote directory
       if ($use_nfs)
@@ -571,13 +576,13 @@ sub createRemoteDirs($$$)
       {
         $cmd = "scp ".$obs_header." ".$user."@".$host.":".$remote_dir."/";
       }
-      logMsg(2, "INFO", "createRemoteDirs: ".$cmd);
+      msg(2, "INFO", "createRemoteDirs: ".$cmd);
       ($result, $response) = Dada::mySystem($cmd);
-      logMsg(2, "INFO", "createRemoteDirs: ".$result." ".$response);
+      msg(2, "INFO", "createRemoteDirs: ".$result." ".$response);
       if ($result ne "ok")
       {
-        logMsg(0, "INFO", "createRemoteDirs: ".$cmd." failed: ".$response);
-        logMsg(0, "WARN", "could not copy obs.header file to server");
+        msg(0, "INFO", "createRemoteDirs: ".$cmd." failed: ".$response);
+        msg(0, "WARN", "could not copy obs.header file to server");
         return ("fail", "could not copy obs.header file");
       }
       else
@@ -590,13 +595,13 @@ sub createRemoteDirs($$$)
     {
       if ($result ne "ok")
       {
-        logMsg(0, "INFO", "createRemoteDir: ssh failed ".$user."@".$host.": ".$response);
-        logMsg(0, "WARN", "could not ssh to server");
+        msg(0, "INFO", "createRemoteDir: ssh failed ".$user."@".$host.": ".$response);
+        msg(0, "WARN", "could not ssh to server");
       }
       else
       {
-        logMsg(0, "INFO", "createRemoteDir: ".$cmd." failed: ".$response);
-        logMsg(0, "WARN", "could not create dir on server");
+        msg(0, "INFO", "createRemoteDir: ".$cmd." failed: ".$response);
+        msg(0, "WARN", "could not create dir on server");
       }
       $attempts_left--;
       sleep(1);
@@ -610,7 +615,7 @@ sub createRemoteDirs($$$)
 #
 # Logs a message to the nexus logger and print to STDOUT with timestamp
 #
-sub logMsg($$$)
+sub msg($$$)
 {
   my ($level, $type, $msg) = @_;
 
@@ -621,7 +626,7 @@ sub logMsg($$$)
       $sys_log_sock = Dada::nexusLogOpen($log_host, $sys_log_port);
     }
     if ($sys_log_sock) {
-      Dada::nexusLogMessage($sys_log_sock, $chan_id, $time, "sys", $type, "bfproc", $msg);
+      Dada::nexusLogMessage($sys_log_sock, sprintf("%02d",$chan_id), $time, "sys", $type, "bfproc", $msg);
     }
     print "[".$time."] ".$msg."\n";
   }
@@ -631,7 +636,7 @@ sub controlThread($)
 {
   (my $pid_file) = @_;
 
-  logMsg(2, "INFO", "controlThread : starting");
+  msg(2, "INFO", "controlThread : starting");
 
   my $host_quit_file = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
   my $pwc_quit_file  = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$chan_id.".quit";
@@ -646,23 +651,23 @@ sub controlThread($)
   my ($cmd, $result, $response);
 
   $cmd = "^dada_header -k ".$db_key;
-  Dada::logMsg(1, $dl ,"controlThread: killProcess(".$cmd.", mpsr)");
+  msg(2, "INFO" ,"controlThread: killProcess(".$cmd.", mpsr)");
   ($result, $response) = Dada::killProcess($cmd, "mpsr");
-  Dada::logMsg(1, $dl ,"controlThread: killProcess() ".$result." ".$response);
+  msg(3, "INFO" ,"controlThread: killProcess() ".$result." ".$response);
 
   $cmd = "^dada_dbnull -k ".$db_key;
-  Dada::logMsg(1, $dl ,"controlThread: killProcess(".$cmd.", mpsr)");
+  msg(2, "INFO" ,"controlThread: killProcess(".$cmd.", mpsr)");
   ($result, $response) = Dada::killProcess($cmd, "mpsr");
-  Dada::logMsg(1, $dl ,"controlThread: killProcess() ".$result." ".$response);
+  msg(3, "INFO" ,"controlThread: killProcess() ".$result." ".$response);
 
   if ( -f $pid_file) {
-    logMsg(2, "INFO", "controlThread: unlinking PID file");
+    msg(2, "INFO", "controlThread: unlinking PID file");
     unlink($pid_file);
   } else {
-    logMsg(1, "WARN", "controlThread: PID file did not exist on script exit");
+    msg(1, "WARN", "controlThread: PID file did not exist on script exit");
   }
 
-  logMsg(2, "INFO", "controlThread: exiting");
+  msg(2, "INFO", "controlThread: exiting");
 
 }
 

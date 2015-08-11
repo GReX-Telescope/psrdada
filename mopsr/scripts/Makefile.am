@@ -40,10 +40,14 @@ dist_bin_SCRIPTS = Mopsr.pm \
                    client_mopsr_archive_manager.pl \
 									 client_mopsr_bp_master_control.pl \
 									 client_mopsr_bp_digifil.pl \
+									 client_mopsr_bp_fb_manager.pl \
+                   client_mopsr_bp_cands_mon.pl \
 									 client_mopsr_bp_send.pl \
 									 client_mopsr_bp_split.pl \
 									 client_mopsr_bp_recv.pl \
+									 client_mopsr_bp_heimdall.pl \
 									 client_mopsr_bp_integrate.pl \
+									 client_mopsr_bp_reblock.pl \
 									 client_mopsr_bp_process.pl \
                    client_mopsr_mux_send.pl \
                    client_mopsr_mux_recv.pl \

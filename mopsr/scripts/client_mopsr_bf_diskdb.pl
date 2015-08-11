@@ -136,7 +136,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$bf_id);
     print STDERR "Could open src log port: ".$log_host.":".$src_log_port."\n";
   }
 
-  logMsg (0, "INFO", "STARTING SCRIPT");
+  msg (0, "INFO", "STARTING SCRIPT");
 
   my $control_thread = threads->new(\&controlThread, $pid_file);
 
@@ -152,24 +152,24 @@ Dada::preventDuplicateDaemon(basename($0)." ".$bf_id);
   {
     $cmd = "dada_diskdb -k ".$db_key." -s -f ".$file;
 
-    logMsg(1, "INFO", "START ".$cmd);
-    ($result, $response) = Dada::mySystemPiped ($cmd, $src_log_file, $src_log_sock, "src", $bf_id, $daemon_name, "bfdsp");
+    msg(1, "INFO", "START ".$cmd);
+    ($result, $response) = Dada::mySystemPiped ($cmd, $src_log_file, $src_log_sock, "src", sprintf("%02d",$bf_id), $daemon_name, "bfdsp");
     if ($result ne "ok")
     {
-      logMsg(1, "WARN", "cmd failed: ".$response);
+      msg(1, "WARN", "cmd failed: ".$response);
     }
-    logMsg(1, "INFO", "END   ".$cmd);
+    msg(1, "INFO", "END   ".$cmd);
   }
   else
   {
-    logMsg(1, "WARN", "file did not exist: ".$file);
+    msg(1, "WARN", "file did not exist: ".$file);
   }
 
   # Rejoin our daemon control thread
-  logMsg(2, "INFO", "joining control thread");
+  msg(2, "INFO", "joining control thread");
   $control_thread->join();
 
-  logMsg(0, "INFO", "STOPPING SCRIPT");
+  msg(0, "INFO", "STOPPING SCRIPT");
 
   # Close the nexus logging connection
   Dada::nexusLogClose($sys_log_sock);
@@ -182,7 +182,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$bf_id);
 #
 # Logs a message to the nexus logger and print to STDOUT with timestamp
 #
-sub logMsg($$$)
+sub msg($$$)
 {
   my ($level, $type, $msg) = @_;
 
@@ -193,7 +193,7 @@ sub logMsg($$$)
       $sys_log_sock = Dada::nexusLogOpen($log_host, $sys_log_port);
     }
     if ($sys_log_sock) {
-      Dada::nexusLogMessage($sys_log_sock, $bf_id, $time, "sys", $type, "bfdisk", $msg);
+      Dada::nexusLogMessage($sys_log_sock, sprintf("%02d",$bf_id), $time, "sys", $type, "bfdisk", $msg);
     }
     print "[".$time."] ".$msg."\n";
   }
@@ -203,7 +203,7 @@ sub controlThread($)
 {
   (my $pid_file) = @_;
 
-  logMsg(2, "INFO", "controlThread : starting");
+  msg(2, "INFO", "controlThread : starting");
 
   my $host_quit_file = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
   my $bf_quit_file  = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$bf_id.".quit";
@@ -218,18 +218,18 @@ sub controlThread($)
   my ($cmd, $result, $response);
 
   $cmd = "^dada_diskdb -k ".$db_key;
-  Dada::logMsg(1, $dl ,"controlThread: killProcess(".$cmd.", mpsr)");
+  msg (1, "INFO", "controlThread: killProcess(".$cmd.", mpsr)");
   ($result, $response) = Dada::killProcess($cmd, "mpsr");
-  Dada::logMsg(1, $dl ,"controlThread: killProcess() ".$result." ".$response);
+  msg (1, "INFO", "controlThread: killProcess() ".$result." ".$response);
 
   if ( -f $pid_file) {
-    logMsg(2, "INFO", "controlThread: unlinking PID file");
+    msg(2, "INFO", "controlThread: unlinking PID file");
     unlink($pid_file);
   } else {
-    logMsg(1, "WARN", "controlThread: PID file did not exist on script exit");
+    msg(1, "WARN", "controlThread: PID file did not exist on script exit");
   }
 
-  logMsg(2, "INFO", "controlThread: exiting");
+  msg(2, "INFO", "controlThread: exiting");
 
 }
 

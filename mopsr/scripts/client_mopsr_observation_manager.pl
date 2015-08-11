@@ -450,7 +450,7 @@ sub splitterThread($\@)
 
   logMsg(1, "INFO", "START ".$cmd);
   logMsg(2, "INFO", "splitterThread: ".$cmd);
-  ($result, $response ) = Dada::mySystemPiped($cmd, $src_log_file, $src_log_sock, "src", $pwc_id, $daemon_name, "split");
+  ($result, $response ) = Dada::mySystemPiped($cmd, $src_log_file, $src_log_sock, "src", sprintf("%02d",$pwc_id), $daemon_name, "split");
   if ($result ne "ok")
   {
     logMsg(1, "WARN", "splitter thread failed :".$response);
@@ -476,7 +476,7 @@ sub transposeThread($$)
 
   logMsg(1, "INFO", "START ".$cmd);
   logMsg(2, "INFO", "transposeThread: ".$cmd);
-  ($result, $response ) = Dada::mySystemPiped($cmd, $src_log_file, $src_log_sock, "src", $pwc_id, $daemon_name, "trans");
+  ($result, $response ) = Dada::mySystemPiped($cmd, $src_log_file, $src_log_sock, "src", sprintf("%02d",$pwc_id), $daemon_name, "trans");
   if ($result ne "ok")
   {
     logMsg(1, "WARN", "transpose thread failed :".$response);
@@ -653,7 +653,7 @@ sub processAntennaThread($$)
 
   chdir $processing_dir;
 
-  ($result, $response) = Dada::mySystemPiped ($proc_cmd, $src_log_file, $src_log_sock, "src", $pwc_id, $daemon_name, "proc");
+  ($result, $response) = Dada::mySystemPiped ($proc_cmd, $src_log_file, $src_log_sock, "src", sprintf("%02d",$pwc_id), $daemon_name, "proc");
  
   if ($result ne "ok") {
     logMsg(0, "ERROR", $proc_cmd." failed: ".$response);
@@ -692,7 +692,7 @@ sub nullThread($$)
   #my $full_cmd = $cmd." 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/".$client_logger." ".$pwc_id." null";
 
   logMsg(1, "INFO", "START ".$cmd);
-  ($result, $response ) = Dada::mySystemPiped($cmd, $src_log_file, $src_log_sock, "src", $pwc_id, $daemon_name, "null");
+  ($result, $response ) = Dada::mySystemPiped($cmd, $src_log_file, $src_log_sock, "src", sprintf("%02d",$pwc_id), $daemon_name, "null");
   logMsg(1, "INFO", "END   ".$cmd);
 
   return "ok";
@@ -736,7 +736,7 @@ sub eventsThread($$)
       my %h = Dada::headerToHash($obs_header);
       logMsg(2, "INFO", "      [evnt] ".$h{"UTC_START"});
       logMsg(1, "INFO", "START [evnt] ".$cmd);
-      ($result, $response ) = Dada::mySystemPiped($cmd, $src_log_file, $src_log_sock, "src", $pwc_id, $daemon_name, "event");
+      ($result, $response ) = Dada::mySystemPiped($cmd, $src_log_file, $src_log_sock, "src", sprintf("%02d",$pwc_id), $daemon_name, "event");
       logMsg(1, "INFO", "END   [evnt] ".$cmd);
       if ($result ne "ok")
       {

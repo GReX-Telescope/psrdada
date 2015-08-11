@@ -40,7 +40,10 @@ our $error                       = $cfg{"STATUS_DIR"}."/mopsr_web_monitor.error"
 our $warn                        = $cfg{"STATUS_DIR"}."/mopsr_web_monitor.warn";
 our $quit_daemon : shared        = 0;
 our $daemon_name : shared        = Dada::daemonBaseName($0);
-our $node_info : shared          = "";
+our $srv_node_info : shared      = "";
+our $aq_node_info : shared       = "";
+our $bf_node_info : shared       = "";
+our $bp_node_info : shared       = "";
 our $curr_obs : shared           = "";
 our $status_info : shared        = "";
 our $image_string : shared       = "";
@@ -178,7 +181,10 @@ our $mgt_lock_string : shared    = "";
           Dada::logMsg(2, DL, "<- ".$string);
           my $r = "";
 
-          if    ($string eq "node_info")        { $r = $node_info; }
+          if    ($string eq "srv_node_info")    { $r = $srv_node_info; }
+          elsif ($string eq "aq_node_info")     { $r = $aq_node_info; }
+          elsif ($string eq "bf_node_info")     { $r = $bf_node_info; }
+          elsif ($string eq "bp_node_info")     { $r = $bp_node_info; }
           elsif ($string eq "img_info")         { $r = $image_string; }
           elsif ($string eq "curr_obs")         { $r = $curr_obs; }
           elsif ($string eq "status_info")      { $r = $status_info; }
@@ -440,6 +446,7 @@ sub udpMonitorThread ($)
     {
       Dada::logMsg(2, DL, "udpMonitorThread: removeOldFiles");
       removeOldFiles($monitor_dir, 0, "png");
+      removeOldFiles($monitor_dir, 0, "stats");
       $img_clean_counter = $img_clean_time;
     }
   }
@@ -649,8 +656,10 @@ sub imageInfoThread($)
         #if (($result eq "ok") && ($response eq "PSR"))
         {
           # get the listing of image files
+          # $cmd = "find ".$results_dir."/".$utc_start." -ignore_readdir_race -mindepth 1 ".
+          #        "-maxdepth 1 -name '*.*.??.*x*.png' | sort -n | awk -F/ '{print \$(NF)-1\"\/\"\$(NF)}'";
           $cmd = "find ".$results_dir."/".$utc_start." -ignore_readdir_race -mindepth 1 ".
-                 "-maxdepth 1 -name '*.*.??.*x*.png' | sort -n | awk -F/ '{print \$(NF)-1\"\/\"\$(NF)}'";
+                 "-maxdepth 1 -name '*.*.??.*x*.png' | sort -n | awk -F/ '{print \$(NF)}'";
           $img_string = `$cmd`;
           @images = split(/\n/, $img_string);
 
@@ -659,14 +668,14 @@ sub imageInfoThread($)
 
           for ($i=0; $i<=$#images; $i++)
           {
-            ($ant, $img_file) = split(/\//, $images[$i]);
-            ($time, $ant, $type, $res, $ext) = split(/\./, $img_file);
+            #($ant, $img_file) = split(/\//, $images[$i]);
+            ($time, $ant, $type, $res, $ext) = split(/\./, $images[$i]);
             if (!exists($to_use{$ant}))
             {
               $to_use{$ant} = ();
               push @ants, $ant;
             }
-            $to_use{$ant}{$type.".".$res} = $img_file;
+            $to_use{$ant}{$type.".".$res} = $images[$i];
           }
 
           foreach $ant ( @ants )
@@ -808,69 +817,188 @@ sub nodeInfoThread()
 
   my $sleep_time = 4;
   my $sleep_counter = 0;
-  my $port = $cfg{"CLIENT_MASTER_PORT"};
 
+  my %aqs = ();
+  my %bfs = ();
+  my %bps = ();
+
+  my $port = $cfg{"CLIENT_MASTER_PORT"};
+  my %bf_cfg = Mopsr::getConfig("bf");
+  my $bf_port = $bf_cfg{"CLIENT_MASTER_PORT"};
+  my %bp_cfg = Mopsr::getConfig("bp");
+  my $bp_port = $bp_cfg{"CLIENT_MASTER_PORT"};
+
+  my $machine;
   my @machines = ();
   my @results = ();
   my @responses = ();
+  my @sockets = ();
 
   my $tmp_str = "";
   my $i = 0;
   my $result = "";
   my $response = "";
 
+  my @aq_socks = ();
+  my @bf_socks = ();
+  my @bp_socks = ();
+  my @hosts = ();
+
   # setup the list of machines that we will poll
-  my %hosts = ();
   for ($i=0; $i<$cfg{"NUM_PWC"}; $i++) {
-    $hosts{$cfg{"PWC_".$i}} = 1;
+    $aqs{$cfg{"PWC_".$i}} = 1;
   }
-  for ($i=0; $i<$cfg{"NUM_HELP"}; $i++) {
-    $hosts{$cfg{"HELP_".$i}} = 1;
+  for ($i=0; $i<$bf_cfg{"NUM_BF"}; $i++) {
+    $bfs{$bf_cfg{"BF_".$i}} = 1;
   }
-  $hosts{$cfg{"SERVER_HOST"}}  = 1;
+  for ($i=0; $i<$bp_cfg{"NUM_BP"}; $i++) {
+    $bps{$bp_cfg{"BP_".$i}} = 1;
+  }
 
-  @machines = keys %hosts;
+  @hosts = keys %aqs;
+  for ($i=0; $i<=$#hosts; $i++) {
+    $aq_socks[$i] = Dada::connectToMachine ($hosts[$i], $cfg{"CLIENT_MASTER_PORT"});
+  }
+  @hosts = keys %bfs;
+  for ($i=0; $i<=$#hosts; $i++) {
+    $bf_socks[$i] = Dada::connectToMachine ($hosts[$i], $bf_cfg{"CLIENT_MASTER_PORT"});
+  }
 
-  my $handle = 0;
+  @hosts = keys %bps;
+  for ($i=0; $i<=$#hosts; $i++) {
+    $bp_socks[$i] = Dada::connectToMachine ($hosts[$i], $bp_cfg{"CLIENT_MASTER_PORT"});
+  }
+  
+  my $srv_sock = Dada::connectToMachine($cfg{"SERVER_HOST"}, $cfg{"CLIENT_MASTER_PORT"});
 
-  while (!$quit_daemon) {
-
-    if ($sleep_counter > 0) {
+  while (!$quit_daemon) 
+  {
+    if ($sleep_counter > 0) 
+    {
       sleep(1);
       $sleep_counter--;
-                                                                                                          
+    } 
     # The time has come to check the status warnings
-    } else {
+    else
+    {
       $sleep_counter = $sleep_time;
+
+      if ($srv_sock)
+      {
+        ($result, $response) = Dada::sendTelnetCommand ($srv_sock, "get_status"); 
+      }
+      else
+      {
+        $result = "fail";
+        $response = "<status><host>".$cfg{"SERVER_HOST"}."</host></status>";
+      }
+
+      $srv_node_info = "<srv_node_statuses>".$response."</srv_node_statuses>";
 
       @results = ();
       @responses = ();
 
-      for ($i=0; ((!$quit_daemon) && $i<=$#machines); $i++) {
-
-        $handle = Dada::connectToMachine($machines[$i], $port, 0);
-        # ensure our file handle is valid
-        if (!$handle) {
-          $result = "fail";
-          $response = "<status><host>".$machines[$i]."</host></status>";
-        } else {
-          ($result, $response) = Dada::sendTelnetCommand($handle, "get_status");
-          $handle->close();
+      for ($i=0; ((!$quit_daemon) && $i<=$#aq_socks); $i++) 
+      {
+        if ($aq_socks[$i])
+        {
+          ($results[$i], $responses[$i]) = Dada::sendTelnetCommand ($aq_socks[$i], "get_status");
         }
-
-        $results[$i] = $result;
-        $responses[$i] = $response;
+        else
+        {
+          $results[$i] = "fail";
+          $responses[$i] = "<status><host>".$machine."</host></status>";
+        } 
       }
 
       # now set the global string
-      $tmp_str = "<node_statuses>";
-      for ($i=0; $i<=$#machines; $i++) {
+      $tmp_str = "<aq_node_statuses>";
+      for ($i=0; $i<=$#responses; $i++) {
         $tmp_str .= $responses[$i];
       }
-      $tmp_str .= "</node_statuses>";
-      $node_info = $tmp_str;
+      $tmp_str .= "</aq_node_statuses>";
+      $aq_node_info = $tmp_str;
+      Dada::logMsg(2, DL, "nodeInfoThread: ".$aq_node_info);
 
-      Dada::logMsg(2, DL, "nodeInfoThread: ".$node_info);
+      @results = ();
+      @responses = ();
+
+      for ($i=0; ((!$quit_daemon) && $i<=$#bf_socks); $i++)
+      {
+        if ($bf_socks[$i])
+        {
+          ($results[$i], $responses[$i]) = Dada::sendTelnetCommand ($bf_socks[$i], "get_status");
+        }
+        else
+        {
+          $results[$i] = "fail";
+          $responses[$i] = "<status><host>".$machine."</host></status>";
+        }
+      }
+
+      # now set the global string
+      $tmp_str = "<bf_node_statuses>";
+      for ($i=0; $i<=$#responses; $i++) {
+        $tmp_str .= $responses[$i];
+      }
+      $tmp_str .= "</bf_node_statuses>";
+      $bf_node_info = $tmp_str;
+      Dada::logMsg(2, DL, "nodeInfoThread: ".$bf_node_info);
+
+      @results = ();
+      @responses = ();
+
+      for ($i=0; ((!$quit_daemon) && $i<=$#bp_socks); $i++)
+      {
+        if ($bp_socks[$i])
+        {
+          ($results[$i], $responses[$i]) = Dada::sendTelnetCommand ($bp_socks[$i], "get_status");
+        }
+        else
+        {
+          $results[$i] = "fail";
+          $responses[$i] = "<status><host>".$machine."</host></status>";
+        }
+      }
+
+      # now set the global string
+      $tmp_str = "<bp_node_statuses>";
+      for ($i=0; $i<=$#responses; $i++) {
+        $tmp_str .= $responses[$i];
+      }
+      $tmp_str .= "</bp_node_statuses>";
+      $bp_node_info = $tmp_str;
+
+      Dada::logMsg(2, DL, "nodeInfoThread: ".$bp_node_info);
+
+      @hosts = keys %aqs;
+      for ($i=0; $i<=$#hosts; $i++) {
+        if (!$aq_socks[$i]) {
+          $aq_socks[$i] = Dada::connectToMachine ($hosts[$i], $cfg{"CLIENT_MASTER_PORT"});
+        } 
+      }
+
+      @hosts = keys %bfs;
+      for ($i=0; $i<=$#hosts; $i++) {
+        if (!$bf_socks[$i]) {
+          $bf_socks[$i] = Dada::connectToMachine ($hosts[$i], $bf_cfg{"CLIENT_MASTER_PORT"});
+        }
+      }
+
+      @hosts = keys %bps;
+      for ($i=0; $i<=$#hosts; $i++) {
+        if (!$bp_socks[$i]) {
+          $bp_socks[$i] = Dada::connectToMachine ($hosts[$i], $bp_cfg{"CLIENT_MASTER_PORT"});
+        }
+      }
+    }
+  }  
+
+  for ($i=0; $i<=$#machines; $i++)
+  {
+    if ($sockets[$i])
+    {
+      $sockets[$i]->close();
     }
   }  
   Dada::logMsg(1, DL, "nodeInfoThread: exiting");

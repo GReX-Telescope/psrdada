@@ -110,7 +110,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
   {
     print STDERR "Could open log port: ".$log_host.":".$log_port."\n";
   }
-  logMsg (0, "INFO", "STARTING SCRIPT");
+  msg (0, "INFO", "STARTING SCRIPT");
 
   my $control_thread = threads->new(\&controlThread, $pid_file);
 
@@ -136,11 +136,11 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
   if (! -d $client_dir)
   {
     $cmd = "mkdir -p ".$client_dir;
-    logMsg(2, "INFO", "main: ".$cmd);
+    msg(2, "INFO", "main: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     if ($result ne "ok")
     {
-      logMsg(0, "WARN", "main: ".$cmd." failed: ".$response);
+      msg(0, "WARN", "main: ".$cmd." failed: ".$response);
     }
   }
 
@@ -149,13 +149,13 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
     ($result, $response) = sumCorrFiles($client_dir, "ac");
     if ($result ne "ok")
     {
-      logMsg(0, "WARN", "failed to sum ac files: ".$response);
+      msg(0, "WARN", "failed to sum ac files: ".$response);
     }
 
     ($result, $response) = sumCorrFiles($client_dir, "cc");
     if ($result ne "ok")
     {
-      logMsg(0, "WARN", "failed to sum cc files: ".$response);
+      msg(0, "WARN", "failed to sum cc files: ".$response);
     }
 
     $sleep_count = 0;
@@ -167,10 +167,10 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
   }
 
   # Rejoin our daemon control thread
-  logMsg(2, "INFO", "joining control thread");
+  msg(2, "INFO", "joining control thread");
   $control_thread->join();
 
-  logMsg(0, "INFO", "STOPPING SCRIPT");
+  msg(0, "INFO", "STOPPING SCRIPT");
 
   # Close the nexus logging connection
   Dada::nexusLogClose($log_sock);
@@ -197,21 +197,21 @@ sub sumCorrFiles($$)
   # look for any corr files
   $cmd = "find ".$dir." -mindepth 2 -maxdepth 2 -type f -name '*.".$ext."' -printf '%f\n'| sort -n";
 
-  logMsg(2, "INFO", "sumCorrFiles: ".$cmd);
+  msg(2, "INFO", "sumCorrFiles: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   if ($result ne "ok")
   {
-    logMsg(0, "WARN", "find list of dump files failed: ".$response);
+    msg(0, "WARN", "find list of dump files failed: ".$response);
     return ("fail", "");
   }
   elsif ($response eq "")
   {
-    logMsg(2, "INFO", "sumCorrFiles: no .".$ext." files found");
+    msg(2, "INFO", "sumCorrFiles: no .".$ext." files found");
   }
   else
   {
     @files = split(/\n/, $response);
-    logMsg(2, "INFO", "main: found ".($#files+1)." .".$ext." files");
+    msg(2, "INFO", "main: found ".($#files+1)." .".$ext." files");
     if ($#files >= 0)
     {
       foreach $file (@files)
@@ -221,9 +221,9 @@ sub sumCorrFiles($$)
 
         # determine NANT
         $cmd = "grep ^NANT ".$dir."/".$obs."/obs.header | awk '{print \$2}'";
-        logMsg(2, "INFO", "sumCorrFiles: ".$cmd);
+        msg(2, "INFO", "sumCorrFiles: ".$cmd);
         ($result, $response) = Dada::mySystem($cmd);
-        logMsg(3, "INFO", "sumCorrFiles: ".$result." ".$response);
+        msg(3, "INFO", "sumCorrFiles: ".$result." ".$response);
         if ($result ne "ok")
         {
           return ("fail", "could not determine NANT from obs.header");
@@ -240,21 +240,21 @@ sub sumCorrFiles($$)
         {
           $cmd = "mopsr_corr_fscr -F ".$nchan_out." ".$nant." ".$dir."/".$obs."/".$file." ".$dir."/".$obs."/".$file_fscr;
         }
-        logMsg(2, "INFO", "sumCorrFiles: ".$cmd);
+        msg(2, "INFO", "sumCorrFiles: ".$cmd);
         ($result, $response) = Dada::mySystem($cmd);
-        logMsg(3, "INFO", "sumCorrFiles: ".$result." ".$response);
+        msg(3, "INFO", "sumCorrFiles: ".$result." ".$response);
 
         if (!(-f $dir."/".$obs."/".$sum))
         {
           $first_time = 1;
           $cmd = "rsync -a ".$dir."/".$obs."/obs\.* ".
           $server_user."\@".$server_host.":".$cfg{"SERVER_RESULTS_DIR"}."/".$obs."/".$chan_tag."/";
-          logMsg(2, "INFO", "sumCorrFiles: ".$cmd);
+          msg(2, "INFO", "sumCorrFiles: ".$cmd);
           ($result, $response) = Dada::mySystem($cmd);
-          logMsg(3, "INFO", "main: ".$result." ".$response);
+          msg(3, "INFO", "main: ".$result." ".$response);
           if ($result ne "ok")
           {
-            logMsg(0, "WARN", $cmd." failed: ".$response);
+            msg(0, "WARN", $cmd." failed: ".$response);
             next;
           }
         }
@@ -262,22 +262,22 @@ sub sumCorrFiles($$)
         # copy the new new Fscrunch archive to the server
         $cmd = "rsync -a ".$dir."/".$obs."/".$file_fscr." ".
                $server_user."\@".$server_host.":".$cfg{"SERVER_RESULTS_DIR"}."/".$obs."/".$chan_tag."/".$file;
-        logMsg(2, "INFO", "sumCorrFiles: ".$cmd);
+        msg(2, "INFO", "sumCorrFiles: ".$cmd);
         ($result, $response) = Dada::mySystem($cmd);
-        logMsg(3, "INFO", "main: ".$result." ".$response);
+        msg(3, "INFO", "main: ".$result." ".$response);
         if ($result ne "ok")
         {
-          logMsg(0, "WARN", $cmd." failed: ".$response);
+          msg(0, "WARN", $cmd." failed: ".$response);
           next;
         }
 
         $cmd = "rm -f  ".$dir."/".$obs."/".$file." ".$dir."/".$obs."/".$file_fscr;
-        logMsg(2, "INFO", "main: ".$cmd);
+        msg(2, "INFO", "main: ".$cmd);
         ($result, $response) = Dada::mySystem($cmd);
-        logMsg(3, "INFO", "main: ".$result." ".$response);
+        msg(3, "INFO", "main: ".$result." ".$response);
         if ($result ne "ok")
         {
-          logMsg(0, "WARN", "summCorrFiles: ".$cmd." failed: ".$response);
+          msg(0, "WARN", "summCorrFiles: ".$cmd." failed: ".$response);
         }
       }
     }
@@ -289,7 +289,7 @@ sub sumCorrFiles($$)
 #
 # Logs a message to the nexus logger and print to STDOUT with timestamp
 #
-sub logMsg($$$)
+sub msg($$$)
 {
   my ($level, $type, $msg) = @_;
 
@@ -300,7 +300,7 @@ sub logMsg($$$)
       $log_sock = Dada::nexusLogOpen($log_host, $log_port);
     }
     if ($log_sock) {
-      Dada::nexusLogMessage($log_sock, $chan_id, $time, "sys", $type, "results mon", $msg);
+      Dada::nexusLogMessage($log_sock, sprintf("%02d",$chan_id), $time, "sys", $type, "results mon", $msg);
     }
     print "[".$time."] ".$msg."\n";
   }
@@ -310,7 +310,7 @@ sub controlThread($)
 {
   (my $pid_file) = @_;
 
-  logMsg(2, "INFO", "controlThread : starting");
+  msg(2, "INFO", "controlThread : starting");
 
   my $host_quit_file = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
   my $pwc_quit_file  = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$chan_id.".quit";
@@ -323,13 +323,13 @@ sub controlThread($)
   $quit_daemon = 1;
 
   if ( -f $pid_file) {
-    logMsg(2, "INFO", "controlThread: unlinking PID file");
+    msg(2, "INFO", "controlThread: unlinking PID file");
     unlink($pid_file);
   } else {
-    logMsg(1, "WARN", "controlThread: PID file did not exist on script exit");
+    msg(1, "WARN", "controlThread: PID file did not exist on script exit");
   }
 
-  logMsg(2, "INFO", "controlThread: exiting");
+  msg(2, "INFO", "controlThread: exiting");
 
 }
 

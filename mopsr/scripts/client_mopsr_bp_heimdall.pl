@@ -7,9 +7,9 @@
 # 
 ###############################################################################
 #
-# client_mopsr_bp_integrate.pl 
+# client_mopsr_bp_heimdall.pl 
 #
-# Integrate a SFT datastream in time
+# run multibeam heimdall on the reblocked, 8-bit unsigned ints
 # 
 ###############################################################################
 
@@ -38,8 +38,7 @@ our $daemon_name : shared;
 our %cfg : shared;
 our $localhost : shared;
 our $proc_id : shared;
-our $in_db_key : shared;
-our $out_db_key : shared;
+our $db_key : shared;
 our $log_host;
 our $sys_log_port;
 our $src_log_port;
@@ -56,8 +55,7 @@ $quit_daemon = 0;
 $daemon_name = Dada::daemonBaseName($0);
 %cfg = Mopsr::getConfig("bp");
 $proc_id = -1;
-$in_db_key = "dada";
-$out_db_key = "eada";
+$db_key = "";
 $localhost = Dada::getHostMachineName(); 
 $log_host = $cfg{"SERVER_HOST"};
 $sys_log_port = $cfg{"SERVER_BP_SYS_LOG_PORT"};
@@ -114,8 +112,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
   my $pid_file =  $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$proc_id.".pid";
 
   # this is data stream we will be reading from
-  $in_db_key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $proc_id, $cfg{"NUM_BP"}, $cfg{"RECEIVING_DATA_BLOCK"});
-  $out_db_key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $proc_id, $cfg{"NUM_BP"}, $cfg{"PROCESSING_DATA_BLOCK"});
+  $db_key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $proc_id, $cfg{"NUM_BP"}, $cfg{"HEIMDALL_DATA_BLOCK"});
 
   # Autoflush STDOUT
   $| = 1;
@@ -134,22 +131,26 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
     print STDERR "Could open src log port: ".$log_host.":".$src_log_port."\n";
   }
 
+  # need the cornerturn config to know which beams are where
+  my %ct = Mopsr::getCornerturnConfig("bp");
+
   msg (0, "INFO", "STARTING SCRIPT");
 
   my $control_thread = threads->new(\&controlThread, $pid_file);
 
-  my ($cmd, $result, $response, $raw_header, $proc_cmd);
+  my ($cmd, $result, $response, $raw_header, $proc_cmd, $proc_dir);
+
 
   # continuously run mopsr_dbib for this PWC
   while (!$quit_daemon)
   {
-    $cmd = "dada_header -k ".$in_db_key;
+    $cmd = "dada_header -k ".$db_key;
     msg(2, "INFO", "main: ".$cmd);
     $raw_header = `$cmd 2>&1`;
     msg(2, "INFO", "main: ".$cmd." returned");
 
     # by default discard all incoming data
-    $proc_cmd = "dada_dbnull -z -s -k ".$in_db_key;
+    $proc_cmd = "dada_dbnull -z -s -k ".$db_key;
 
     if ($? != 0)
     {
@@ -166,9 +167,30 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
     else
     {
       my %header = Dada::headerToHash($raw_header);
-      msg (0, "INFO", "UTC_START=".$header{"UTC_START"}." NCHAN=".$header{"NCHAN"}." NANT=".$header{"NANT"});
+      msg (0, "INFO", "UTC_START=".$header{"UTC_START"}." NCHAN=".$header{"NCHAN"}." NANT=".$header{"NANT"}." NBIT=".$header{"NBIT"});
 
-      $proc_cmd = "mopsr_dbintegratedb -s -t 8 ".$in_db_key." ".$out_db_key;
+      # heimdall produces output in the current working directory
+      $proc_dir = $cfg{"CLIENT_RECORDING_DIR"}."/".$header{"UTC_START"};
+      if (!-d $proc_dir)
+      {
+        mkdir $proc_dir;
+      }
+     
+      msg(1, "INFO", "createLocalDirs: creating obs.header.heimdall");
+      my $file = $proc_dir."/obs.header";
+      open (FH,">".$file.".tmp");
+      my $k = "";
+      foreach $k ( keys %header)
+      {
+        print FH Dada::headerFormat($k, $header{$k})."\n";
+      }
+      close FH;
+      rename($file.".tmp", $file);
+
+      # starting beam for this heimdall instance
+      my $start_beam = 1 + $ct{"BEAM_FIRST_RECV_".$proc_id};
+
+      $proc_cmd = "heimdall -k ".$db_key." -gpu_id ".$cfg{"BP_GPU_ID_".$proc_id}." -dm 0 2000 -beam ".$start_beam." -output_dir ".$proc_dir;
 
       my ($binary, $junk) = split(/ /,$proc_cmd, 2);
       $cmd = "ls -l ".$cfg{"SCRIPTS_DIR"}."/".$binary;
@@ -177,7 +199,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
 
       $cmd = $proc_cmd;
       msg(1, "INFO", "START ".$cmd);
-      ($result, $response) = Dada::mySystemPiped($cmd, $src_log_file, $src_log_sock, "src", sprintf("%02d",$proc_id), $daemon_name, "bp_int");
+      ($result, $response) = Dada::mySystemPiped($cmd, $src_log_file, $src_log_sock, "src", sprintf("%02d",$proc_id), $daemon_name, "bp_heimdall");
       msg(1, "INFO", "END   ".$cmd);
       if ($result ne "ok")
       {
@@ -216,7 +238,7 @@ sub msg($$$)
       $sys_log_sock = Dada::nexusLogOpen($log_host, $sys_log_port);
     }
     if ($sys_log_sock) {
-      Dada::nexusLogMessage($sys_log_sock, sprintf("%02d",$proc_id), $time, "sys", $type, "bp_int", $msg);
+      Dada::nexusLogMessage($sys_log_sock, sprintf("%02d",$proc_id), $time, "sys", $type, "bp_heimdall", $msg);
     }
     print "[".$time."] ".$msg."\n";
   }
@@ -240,17 +262,17 @@ sub controlThread($)
 
   my ($cmd, $result, $response);
 
-  $cmd = "^dada_header -k ".$in_db_key;
+  $cmd = "^dada_header -k ".$db_key;
   msg(2, "INFO" ,"controlThread: killProcess(".$cmd.", mpsr)");
   ($result, $response) = Dada::killProcess($cmd, "mpsr");
   msg(3, "INFO" ,"controlThread: killProcess() ".$result." ".$response);
 
-  $cmd = "^dada_dbnull -k ".$in_db_key;
+  $cmd = "^dada_dbnull -k ".$db_key;
   msg(2, "INFO" ,"controlThread: killProcess(".$cmd.", mpsr)");
   ($result, $response) = Dada::killProcess($cmd, "mpsr");
   msg(3, "INFO" ,"controlThread: killProcess() ".$result." ".$response);
 
-  $cmd = "^dada_dbintegratedb ".$in_db_key;
+  $cmd = "^heimdall -k ".$db_key;
   msg(2, "INFO" ,"controlThread: killProcess(".$cmd.", mpsr)");
   ($result, $response) = Dada::killProcess($cmd, "mpsr");
   msg(3, "INFO" ,"controlThread: killProcess() ".$result." ".$response);

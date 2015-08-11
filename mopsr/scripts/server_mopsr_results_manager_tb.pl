@@ -18,6 +18,8 @@ use Mopsr;
 our $dl;
 our $daemon_name;
 our %cfg;
+our %bp_cfg;
+our %bp_ct;
 our $quit_daemon : shared;
 our $warn;
 our $error;
@@ -27,6 +29,8 @@ our $coarse_nchan;
 # Initialize global variables
 #
 %cfg = Mopsr::getConfig();
+%bp_cfg = Mopsr::getConfig("bp");
+%bp_ct = Mopsr::getCornerturnConfig("bp");
 $dl = 1;
 $daemon_name = Dada::daemonBaseName($0);
 $warn = ""; 
@@ -49,6 +53,7 @@ sub getObsAge($$);
 sub markObsState($$$);
 sub checkClientsFinished($$);
 sub processObservation($$);
+sub processCandidates($);
 sub processArchive($$$);
 sub makePlotsFromArchives($$$$$);
 sub removeOldPngs($);
@@ -140,7 +145,7 @@ sub main()
 
         ($obs_mode, $obs_config) = getObsInfo($o);
 
-        if (($obs_mode eq "PSR") && ($obs_config eq "TIED_ARRAY_BEAM"))
+        if ($obs_mode eq "PSR")
         {
           # Get the number of band subdirectories
           Dada::logMsg(3, $dl, "main: countHeaders(".$o.")");
@@ -160,7 +165,14 @@ sub main()
           # if newest archive was more than 32 seconds old, finish the obs.
           if ($t > 32)
           {
-            processObservation($o, $n_obs_headers);
+            if (($obs_config eq "TIED_ARRAY_BEAM") || ($obs_config eq "TIED_ARRAY_FAN_BEAM"))
+            {
+              processObservation($o, $n_obs_headers);
+            }
+            if (($obs_config eq "FAN_BEAM") || ($obs_config eq "TIED_ARRAY_FAN_BEAM"))
+            {
+              processCandidates($o);
+            }
             markObsState($o, "processing", "finished");
             cleanResultsDir($o);
           } 
@@ -168,7 +180,14 @@ sub main()
           # we are still receiving results from this observation
           elsif ($t >= 0) 
           {
-            processObservation($o, $n_obs_headers);
+            if (($obs_config eq "TIED_ARRAY_BEAM") || ($obs_config eq "TIED_ARRAY_FAN_BEAM"))
+            {
+              processObservation($o, $n_obs_headers);
+            }
+            if (($obs_config eq "FAN_BEAM") || ($obs_config eq "TIED_ARRAY_FAN_BEAM"))
+            {
+              processCandidates($o);
+            }
           }
 
           # no archives yet received, wait
@@ -274,6 +293,8 @@ sub getObsAge($$)
   {
     $cmd = "find ".$o." -type f -name '*.ar' -printf '\%T@\\n' ".
            "-o -name '*.tot' -printf '\%T@\\n' ".
+           "-o -name '*.cand' -printf '\%T@\\n' ".
+           "-o -name 'all_candidates.dat' -printf '\%T@\\n' ".
            "| sort -n | tail -n 1";
 
     Dada::logMsg(3, $dl, "getObsAge: ".$cmd);
@@ -511,9 +532,6 @@ sub processObservation($$)
     removeOldPngs($o);
   }
 }
-
-
-
 
 ###############################################################################
 #
@@ -832,8 +850,8 @@ sub makePlotsFromArchives($$$$$)
   if ($res ne "1024x768") 
   {
     $args .= " -s ".$web_style_txt." -c below:l=unset";
-    $bscrunch = "";
-    $bscrunch_t = "";
+    $bscrunch = " -j 'B 128'";
+    $bscrunch_t = " -j 'B 128'";
     $pm_args .= " -p";
   } else {
     $bscrunch = "";
@@ -952,6 +970,141 @@ sub checkClientsFinished($$) {
 
 }
 
+sub processCandidates($)
+{
+  my ($utc_start) = @_;
+
+  my ($cmd, $result, $response);
+  my ($file, @files, $timestamp, $suffix);
+
+  $cmd = "find ".$utc_start." -ignore_readdir_race -mindepth 1 -maxdepth 1 -type f -name '2???-??-??-??:??:??_*.cand' -printf '%f\n' | sort -n";
+
+  Dada::logMsg(2, $dl, "processCandidates: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(2, $dl, "processCandidates: ".$result." ".$response);
+
+  @files = split(/\n/, $response);
+
+  my %timestamps = ();
+
+  foreach $file (@files)
+  {
+    ($timestamp, $suffix) = split(/_/, $file, 2);
+    Dada::logMsg(3, $dl, "processCandidates: ".$file." -> [".$timestamp."] + [".$suffix."]");
+    if (!defined($timestamps{$timestamp}))
+    {
+      $timestamps{$timestamp} = 0;
+    }
+    $timestamps{$timestamp} += 1;
+  }
+
+  my $n_processed = 0;
+
+  foreach $timestamp ( sort keys %timestamps )
+  {
+    Dada::logMsg(2, $dl, "processCandidates: [".$timestamp."]=".$timestamps{$timestamp});
+  }
+
+  # now wait for all BP's results to arrive
+  foreach $timestamp ( sort keys %timestamps )
+  {
+    Dada::logMsg(2, $dl, "processCandidates: timestamp=".$timestamp." count=".$timestamps{$timestamp});
+
+    # this is where a coincidencer command would go
+    if ($timestamps{$timestamp} == $bp_cfg{"NUM_BP"})
+    {
+      $cmd = "cat ".$utc_start."/".$timestamp."_*.cand > ".$utc_start."/".$timestamp.".candsum";
+      Dada::logMsg(2, $dl, "processCandidates: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      Dada::logMsg(2, $dl, "processCandidates: ".$result." ".$response);
+      if ($result ne "ok")
+      {
+        Dada::logMsgWarn($warn, "processCandidates: ".$cmd." failed");
+        return ("fail", "cat command failed");
+      } 
+      else
+      {
+        # this is where a transient search detection program would go
+        my $have_candidate = 0;
+        if ($have_candidate)
+        {
+          # this is where a transient buffer dump would go
+        }
+
+        # add this timestamp to the accumulated total
+        $cmd = "cat ".$utc_start."/".$timestamp.".candsum >> ".$utc_start."/all_candidates.dat";
+        Dada::logMsg(2, $dl, "processCandidates: ".$cmd);
+        ($result, $response) = Dada::mySystem($cmd);
+        Dada::logMsg(2, $dl, "processCandidates: ".$result." ".$response);
+        if ($result ne "ok")
+        {
+          Dada::logMsgWarn($warn, "processCandidates: ".$cmd." failed");
+          return ("fail", "cat command failed");
+        }
+
+        $n_processed++;
+
+        $cmd = "rm -f ".$utc_start."/".$timestamp."*.cand*";
+        Dada::logMsg(2, $dl, "processCandidates: ".$cmd);
+        ($result, $response) = Dada::mySystem($cmd);
+        Dada::logMsg(2, $dl, "processCandidates: ".$result." ".$response);
+        if ($result ne "ok")
+        {
+          Dada::logMsgWarn($warn, "processCandidates: ".$cmd." failed");
+          return ("fail", "cat command failed");
+        }
+      }
+    }
+    else
+    {
+      Dada::logMsg(2, $dl, "processCandidates: only ".$timestamps{$timestamp}."/".$bp_cfg{"NUM_BP"}." cand files existed");
+    }
+  }
+
+  if (( -f $utc_start."/all_candidates.dat") && ($n_processed > 0))
+  {
+    # determine end of observation
+    $cmd = "tail -n 1000 ".$utc_start."/all_candidates.dat | sort -k 3 | tail -n 1 | awk '{print \$3}'";
+    Dada::logMsg(2, $dl, "processCandidates: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, $dl, "processCandidates: ".$result." ".$response);
+    if ($result ne "ok")
+    {
+      Dada::logMsgWarn($warn, "processCandidates: ".$cmd." failed");
+      return ("fail", "could not determine observation end");
+    }
+
+    my $obs_start = 0;
+    my $obs_end = $response;
+
+    my $img_idx = 0;
+
+    if (($obs_end - $obs_start) > 1800)
+    {
+      $img_idx = int($obs_end / 1800);
+      $obs_start = $img_idx * 1800;
+    }
+
+    $obs_end = $obs_start + 1800;
+
+    # create the plot
+    $cmd = "/home/vravi/CODE/plot_cands -f ".$utc_start."/all_candidates.dat ".
+           "-time1 ".$obs_start." -time2 ".$obs_end." -nbeams ".$bp_ct{"NBEAM"}.
+           " -snr_cut 10 -scale 8 ".
+           "-dev ".$utc_start."/".$timestamp.".FB.".sprintf("%02d", $img_idx).
+           ".850x680.png/png -catted_raw_output";
+    Dada::logMsg(2, $dl, "processCandidates: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, $dl, "processCandidates: ".$result." ".$response);
+    if (($result ne "ok") && (0))
+    {
+      Dada::logMsgWarn($warn, "processCandidates: ".$cmd." failed");
+      return ("fail", "plot command failed");
+    }
+  }
+}
+
+###############################################################################
 #
 # remove old pngs
 #

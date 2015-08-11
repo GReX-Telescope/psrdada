@@ -655,6 +655,7 @@ sub processCorrObservation($$)
     $ant_b_idx -= 1;
 
     $cmd = "mopsr_solve_delays ".$band_nchan." cc.sum obs.antenna -t ".$band_tsamp." -p -a ".$ant_a_idx." -d ".$ant_b_idx." -r /home/dada/phonecall";
+    $cmd = "mopsr_solve_delays ".$band_nchan." cc.sum obs.antenna -t ".$band_tsamp." -p -a ".$ant_a_idx." -d ".$ant_b_idx." -r /home/dada/copradar";
     Dada::logMsg(2, $dl, "processCorrObservation: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     Dada::logMsg(3, $dl, "processCorrObservation: ".$result." ".$response);

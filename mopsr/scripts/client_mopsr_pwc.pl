@@ -166,27 +166,27 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
   {
     print STDERR "Could open log port: ".$log_host.":".$log_port."\n";
   }
-  logMsg (0, "INFO", "STARTING SCRIPT");
+  msg (0, "INFO", "STARTING SCRIPT");
 
   my $control_thread = threads->new(\&controlThread, $pid_file);
 
-  logMsg (2, "INFO", "mon_dir=".$mon_dir);
+  msg (2, "INFO", "mon_dir=".$mon_dir);
 
   # ensure the monitoring dir exists
   if (! -d $mon_dir ) 
   {
     $cmd = "mkdir -p ".$mon_dir;
-    logMsg (2, "INFO", "main: ".$cmd);
+    msg (2, "INFO", "main: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
-    logMsg (3, "INFO", "main: ".$result." ".$response);
+    msg (3, "INFO", "main: ".$result." ".$response);
     if ($result ne "ok")
     {
-      logMsg (0, "ERROR", "failed to create ".$mon_dir.": ".$response);
+      msg (0, "ERROR", "failed to create ".$mon_dir.": ".$response);
       $quit_daemon = 1;
     }
   }
 
-  logMsg (2, "INFO", "pwc_state=".$pwc_state);
+  msg (2, "INFO", "pwc_state=".$pwc_state);
 
   # simple run 1 instance of the PWC, this should be persistent!
   if (($pwc_state eq "active") || ($pwc_state eq "passive"))
@@ -225,27 +225,27 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
   }
   else
   {
-    logMsg (0, "ERROR", "unrecognized pwc_state [".$pwc_state."]");
+    msg (0, "ERROR", "unrecognized pwc_state [".$pwc_state."]");
     $quit_daemon = 1;
   }
 
   if (!$quit_daemon)
   {
-    logMsg(1, "INFO", "START ".$cmd);
-    ($result, $response) = Dada::mySystemPiped($cmd, $src_log_file, 0, "pwc", $pwc_id, $daemon_name, "pwc");
-    logMsg(2, "INFO", "main: ".$result." ".$response);
-    logMsg(1, "INFO", "END   ".$cmd);
+    msg(1, "INFO", "START ".$cmd);
+    ($result, $response) = Dada::mySystemPiped($cmd, $src_log_file, 0, "pwc", sprintf("%02d",$pwc_id), $daemon_name, "pwc");
+    msg(2, "INFO", "main: ".$result." ".$response);
+    msg(1, "INFO", "END   ".$cmd);
     if (($result ne "ok") && (!$quit_daemon))
     {
-      logMsg(0, "ERROR", $cmd." failed: ".$response);
+      msg(0, "ERROR", $cmd." failed: ".$response);
     }
   }
 
   # Rejoin our daemon control thread
-  logMsg(2, "INFO", "joining control thread");
+  msg(2, "INFO", "joining control thread");
   $control_thread->join();
 
-  logMsg(0, "INFO", "STOPPING SCRIPT");
+  msg(0, "INFO", "STOPPING SCRIPT");
 
   # Close the nexus logging connection
   Dada::nexusLogClose($log_sock);
@@ -256,7 +256,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
 #
 # Logs a message to the nexus logger and print to STDOUT with timestamp
 #
-sub logMsg($$$)
+sub msg($$$)
 {
   my ($level, $type, $msg) = @_;
 
@@ -267,7 +267,7 @@ sub logMsg($$$)
       $log_sock = Dada::nexusLogOpen($log_host, $log_port);
     }
     if ($log_sock) {
-      Dada::nexusLogMessage($log_sock, $pwc_id, $time, "sys", $type, "pwc", $msg);
+      Dada::nexusLogMessage($log_sock, sprintf("%02d",$pwc_id), $time, "sys", $type, "pwc", $msg);
     }
     print "[".$time."] ".$msg."\n";
   }
@@ -277,7 +277,7 @@ sub controlThread($)
 {
   (my $pid_file) = @_;
 
-  logMsg(2, "INFO", "controlThread : starting");
+  msg(2, "INFO", "controlThread : starting");
 
   my $host_quit_file = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
   my $pwc_quit_file  = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$pwc_id.".quit";
@@ -291,19 +291,19 @@ sub controlThread($)
 
   if ($regex ne "")
   { 
-    Dada::logMsg(2, $dl ,"controlThread: killProcess(".$regex.", mpsr)");
+    msg(2, "INFO", "controlThread: killProcess(".$regex.", mpsr)");
     my ($result, $response) = Dada::killProcess($regex, "mpsr");
-    Dada::logMsg(2, $dl ,"controlThread: killProcess() ".$result." ".$response);
+    msg(2, "INFO", "controlThread: killProcess() ".$result." ".$response);
   }
 
   if ( -f $pid_file) {
-    logMsg(2, "INFO", "controlThread: unlinking PID file");
+    msg(2, "INFO", "controlThread: unlinking PID file");
     unlink($pid_file);
   } else {
-    logMsg(1, "WARN", "controlThread: PID file did not exist on script exit");
+    msg(0, "WARN", "controlThread: PID file did not exist on script exit");
   }
 
-  logMsg(2, "INFO", "controlThread: exiting");
+  msg(2, "INFO", "controlThread: exiting");
 
 }
 

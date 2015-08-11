@@ -390,7 +390,7 @@ sub parseXMLCommand($)
         my %required = ( 'signal_parameters' => ['bandwidth', 'centre_frequency', 'nant', 'nchan', 'ndim', 'npol', 'nbit'],
                          'pfb_parameters' => ['oversampling_ratio', 'sampling_time', 'channel_bandwidth', 'dual_sideband', 'resolution'],
                          'observation_parameters' => ['observer', 'aq_processing_file', 'bf_processing_file', 'bp_processing_file', 'mode', 'type', 'config'],
-                         'source_parameters' => ['name', 'ra', 'dec' ] );
+                         'source_parameters' => ['name', 'ra', 'dec', 'ns_tilt', 'md_angle' ] );
         my ($set, $param);
         foreach $set (keys %required) 
         {
@@ -917,6 +917,8 @@ sub createLocalDirs($)
   print FH Dada::headerFormat("SOURCE",    $spec{"SOURCE"})."\n";
   print FH Dada::headerFormat("RA",        $spec{"RA"})."\n";
   print FH Dada::headerFormat("DEC",       $spec{"DEC"})."\n";
+  print FH Dada::headerFormat("MD_ANGLE",  $spec{"MD_ANGLE"})."\n";
+  print FH Dada::headerFormat("NS_TILT",   $spec{"NS_TILT"})."\n";
   print FH Dada::headerFormat("FREQ",      $spec{"FREQ"})."\n";
   print FH Dada::headerFormat("PID",       $spec{"PID"})."\n";
   print FH Dada::headerFormat("BW",        $spec{"BW"})."\n";
@@ -947,6 +949,20 @@ sub createLocalDirs($)
     return ("fail", "could not copy obs.info to archives dir");
   }
 
+  # copy the molonglo_modules.txt file into the observation directory
+  my $mo_file = $cfg{"CONFIG_DIR"}."/molonglo_modules.txt";
+  if (-f $mo_file)
+  {
+    $cmd = "cp ".$mo_file." ".$rdir."/";
+    Dada::logMsg(2, $dl, "createLocalDirs: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, $dl, "createLocalDirs: ".$result." ".$response);
+    if ($result ne "ok")
+    {
+      return ("fail", "could not copy molonglo_modules.txt to results dir: ".$response);
+    }
+  }
+
   # always dump this now!
   #if ($spec{"MODE"} =~ m/CORR/)
   {
@@ -959,7 +975,7 @@ sub createLocalDirs($)
     ($result, $response) = dumpAntennaMapping($utc_start, $tracking_flag);
     if ($result ne "ok")
     {
-      return ("fail", "could not dump antenna mapping: ".$response);
+      Dada::logMsg(0, $dl, "createLocalDirs: could not dump antenna mapping: ".$response);
     }
   }
 
@@ -1488,6 +1504,8 @@ sub genSpecFile($\%)
 
   # source parameters
   push @specs, Dada::headerFormat("SOURCE", $xml->{'source_parameters'}{'name'});
+  push @specs, Dada::headerFormat("MD_ANGLE", $xml->{'source_parameters'}{'md_angle'});
+  push @specs, Dada::headerFormat("NS_TILT", $xml->{'source_parameters'}{'ns_tilt'});
   push @specs, Dada::headerFormat("RA", $xml->{'source_parameters'}{'ra'});
   push @specs, Dada::headerFormat("DEC", $xml->{'source_parameters'}{'dec'});
 
@@ -1714,29 +1732,23 @@ sub getOrderedModules()
         logMsg(3, $dl, "getOrderedModules: pfb_id=".$pfb_id." ants=".$first_ant." -> ".$last_ant);
 
         my @pfb_mods = split(/ +/, $aq_cfg{"PWC_ANTS"});
-        $imod = $first_ant;
         %pfb_mods = ();
+        my $j = 0;
         foreach $rx ( @sp_keys_sorted )
         {
           ($pfb, $pfb_input) = split(/ /, $sp{$rx});
-          logMsg(3, $dl, "getOrderedModules: pfb=".$pfb." pfb_input=".$pfb_input);
+          logMsg(3, $dl, "getOrderedModules: rx=".$rx." pfb=".$pfb." pfb_input=".$pfb_input);
+
+          # If this RX board matches the PFB board we are currently processing
           if ($pfb eq $pfb_id)
           {
-            my $pfb_mod;
-            foreach $pfb_mod (@pfb_mods)
+            # determine which index this RX board will have in the antenna ordering
+            for ($j=0; $j<=$#pfb_mods; $j++)
             {
-              if ($pfb_input eq $pfb_mod)
+              if ($pfb_input eq $pfb_mods[$j])
               {
-                if (($imod >= $first_ant) && ($imod <= $last_ant))
-                {
-                  $mods[$imod] = $rx;
-                  $imod++;
-                }
-                else
-                {
-                  logMsg(3, $dl, "dumpAntennaMapping: pfb=".$pfb." pfb_input=".$pfb_input);
-                  return ("fail", 0);
-                }
+                $mods[($first_ant + $j)] = $rx;
+                logMsg(3, $dl, "getOrderedModules: mods[".($first_ant + $j)."]=".$rx);
               }
             }
           }
