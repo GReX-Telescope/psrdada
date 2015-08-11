@@ -222,6 +222,14 @@ void inline mopsr_decode_seq (unsigned char * b, mopsr_hdr_t * hdr)
   }
 }
 
+void inline mopsr_decode_seq_fast (unsigned char * b, mopsr_hdr_t * hdr)
+{
+  hdr->seq_no = UINT64_C (0);
+  uint64_t * ptr = (uint64_t *) b;
+  hdr->seq_no = ptr[1];
+}
+
+
 // 4    [   schan    |   schan    ]
 // 5    [     nbit   |    nant    ]
 // 6    [   nchan    |   nchan    ]

@@ -14,12 +14,13 @@
 #include <errno.h>
 #include <assert.h>
 #include <math.h>
+#include <sys/stat.h>
 #include <cpgplot.h>
 
 
 void usage ()
 {
-	fprintf(stdout, "mopsr_test_delays_plot bays_file modules_file header_file\n"
+	fprintf(stdout, "mopsr_test_delays_plot header_file\n"
     " -b file     bays config file [default $DADA_ROOT/share/molonglo_bays.txt\n"
     " -c nchan    number of channels\n" 
     " -i          disable instrumental delays\n"
@@ -152,7 +153,13 @@ int main(int argc, char** argv)
 
   // read the header describing the observation
   char * header_file = strdup (argv[optind]);
-  size_t header_size = 4096;
+  struct stat buf;
+  if (stat (header_file, &buf) < 0)
+  {
+    fprintf (stderr, "ERROR: failed to stat header_file [%s]: %s\n", header_file, strerror(errno));
+    return (EXIT_FAILURE);
+  }
+  size_t header_size = buf.st_size + 1;
   char * header = (char *) malloc (header_size);
   if (fileread (header_file, header, header_size) < 0)
   {
@@ -318,6 +325,8 @@ int main(int argc, char** argv)
     fprintf (stderr, "imod=%d module=%s\n", print_module, modules[print_module].name);
 
   int more = 1;
+  float start_md_angle = 0;
+
   while ( more )
   {
     struct timeval timestamp;
@@ -326,8 +335,8 @@ int main(int argc, char** argv)
     timestamp.tv_sec += utc_start;
 
     if (calculate_delays (nbay, all_bays, nant, modules, nchan, channels,
-                          source, timestamp, delays, apply_instrumental,
-                          apply_geometric, is_tracking, tsamp) < 0)
+                          source, timestamp, delays, start_md_angle, 
+                          apply_instrumental, apply_geometric, is_tracking, tsamp) < 0)
     {
       fprintf (stderr, "failed to update delays\n");
       return -1;

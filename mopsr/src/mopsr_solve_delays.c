@@ -1365,18 +1365,27 @@ void plot_delays (float * delays, unsigned npts, char * device, char * title, mo
   float ymin = FLT_MAX;
   float ymax = -FLT_MAX;
 
-  float xvals[npts];
+  float x1[npts];
+  float x2[npts];
+  float yvals[npts];
   char label[64];
 
   unsigned i;
+  unsigned ipt = 0;
   for (i=0; i<npts; i++)
   {
-    if (delays[i] > ymax)
+    if (delays[i] > ymax && delays[i] < 3)
       ymax = delays[i];
-    if (delays[i] < ymin)
+    if (delays[i] < ymin && delays[i] > 3)
       ymin = delays[i];
 
-    xvals[i] = (float) i + 0.5;
+    x1[i] = (float) i + 0.5;
+    if (fabsf (delays[i]) > 0.001)
+    {
+      x2[ipt] = (float) i + 0.5;
+      yvals[ipt] = delays[i];
+      ipt++;
+    }
   }
 
   cpgbbuf();
@@ -1405,12 +1414,16 @@ void plot_delays (float * delays, unsigned npts, char * device, char * title, mo
   if (!opt->plot_plain)
     cpgbox("BCGNST", 16, 0, "BCNST", 0, 0);
 
+  cpgsci(15);
+  cpgslw(3);
+  cpgpt(npts, x1, delays, -2);
+
   cpgsci(3);
   if (!opt->plot_plain)
     cpgslw(10);
   else
     cpgslw(4);
-  cpgpt(npts, xvals, delays, -2);
+  cpgpt(ipt, x2, yvals, -2);
   cpgslw(1);
   cpgsci(1);
 
@@ -1424,15 +1437,24 @@ void plot_phase_offsets (float * phase_offsets, unsigned npts, char * device, ch
   float ymin = FLT_MAX;
   float ymax = -FLT_MAX;
 
-  float xvals[npts];
+  float x1[npts];
+  float x2[npts];
+  float yvals[npts];
   char label[64];
 
   ymin = -1 * M_PI;
   ymax =  1 * M_PI;
   unsigned i;
+  unsigned ipt = 0;
   for (i=0; i<npts; i++)
   {
-    xvals[i] = (float) i + 0.5;
+    x1[i] = (float) i + 0.5;
+    if (fabsf(phase_offsets[i]) > 0)
+    {
+      x2[ipt] = (float) i + 0.5;
+      yvals[ipt] = phase_offsets[i];
+      ipt++;
+    }
   }
 
   cpgbbuf();
@@ -1450,8 +1472,10 @@ void plot_phase_offsets (float * phase_offsets, unsigned npts, char * device, ch
   if (!opt->plot_plain)
     cpgbox("BCGNST", 16, 0, "BCNST", 0, 0);
 
+  cpgsci(15);
+  cpgpt(npts, x1, phase_offsets, -2);
   cpgsci(3);
-  cpgpt(npts, xvals, phase_offsets, -5);
+  cpgpt(ipt, x2, yvals, -4);
   cpgsci(1);
 
   cpgebuf();

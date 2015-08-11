@@ -64,6 +64,7 @@ int main(int argc, char** argv)
   ctx.verbose = 0;
   ctx.device = 0;
   ctx.ntaps = MOPSR_DBDELAYDB_DEFAULT_NTAPS;
+  ctx.start_md_angle = 0;
   
   while ((arg = getopt(argc, argv, "d:hn:sv")) != -1) 
   {
@@ -473,6 +474,12 @@ int dbdelaydb_open (dada_client_t* client)
     return -1;
   }
 
+  if (ascii_header_get (client->header, "START_MD_ANGLE", "%lf", &(ctx->start_md_angle)) != 1)
+  {
+    multilog (log, LOG_ERR, "open: could not read START_MD_ANGLE from header\n");
+    return -1;
+  }
+
   if (ascii_header_get (client->header, "BYTES_PER_SECOND", "%"PRIu64, &(ctx->bytes_per_second)) != 1)
   {
     multilog (log, LOG_ERR, "open: could not read BYTES_PER_SECOND from header\n");
@@ -719,7 +726,7 @@ int64_t dbdelaydb_delay_block_gpu (dada_client_t* client, void * buffer, uint64_
 
   // update the delays
   if (calculate_delays (ctx->nbay, ctx->all_bays, ctx->nant, ctx->mods, ctx->nchan, ctx->chans, 
-                        ctx->source, timestamp, ctx->delays,
+                        ctx->source, timestamp, ctx->delays, ctx->start_md_angle,
                         apply_instrumental, apply_geometric,
                         is_tracking, ctx->tsamp) < 0)
   {

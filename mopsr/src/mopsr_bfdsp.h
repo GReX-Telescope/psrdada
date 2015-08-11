@@ -41,6 +41,7 @@ typedef struct {
   unsigned     nant;
   //float *      h_ant_factors;     // antenna distances
 
+  char         fan_beams;           // flag for fan beam mode [optional]
   int          nbeam;
   float *      h_beam_offsets;
   //float *      h_sin_thetas;    // angle from boresite to beam
@@ -59,9 +60,9 @@ typedef struct {
 
   // Tied array beams (TBs)
   unsigned n_tbs;               // number of TBs
-  mopsr_source_t * tb_sources;  // TB source positions
-  void ** d_tbs;                // TBs GPU pointers
+  //mopsr_source_t * tb_sources;  // TB source positions
   void ** h_tbs;                // TBs CPU pointers
+  void ** d_ts;                 // TB GPU pointers
 
   multilog_t * log;
 
@@ -127,18 +128,18 @@ typedef struct {
   char form_tied_block;
   uint64_t bytes_per_second;          // for input
 
-  char check_tied_beam;               // flag for whether to check for PSRs
-  char tb_psr_active;                 // flag if we have a current PSR in the beam
-  mopsr_source_t  tb_source;          // current TB source
+  char tied_beam;                     // flag for producing a tied array bea,
+  char steer_tb;                      // flag for steering towards the tied array beam
+  //mopsr_source_t  tb_source;          // current TB source
 
 } mopsr_bfdsp_t;
 
 void usage(void);
 
 // application specific memory management
-int bfdsp_init (mopsr_bfdsp_t* ctx, dada_hdu_t *in, dada_hdu_t *out, 
-                char * bays_file, char * modules_file);
-int bfdsp_destroy (mopsr_bfdsp_t * ctx, dada_hdu_t * in, dada_hdu_t * out);
+int bfdsp_init (mopsr_bfdsp_t* ctx, dada_hdu_t *in, dada_hdu_t *fb,  
+                dada_hdu_t *tb, char * bays_file, char * modules_file);
+int bfdsp_destroy (mopsr_bfdsp_t * ctx, dada_hdu_t * in);
 
 // observation specific memory management
 int bfdsp_alloc (mopsr_bfdsp_t * ctx);

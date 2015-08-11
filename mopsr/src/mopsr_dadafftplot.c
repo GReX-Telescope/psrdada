@@ -235,18 +235,23 @@ int main (int argc, char **argv)
   if (fd < 0)
   {
     fprintf(stderr, "failed to open dada file[%s]: %s\n", filename, strerror(errno));
-    exit(EXIT_FAILURE);
+    exit (EXIT_FAILURE);
   }
 
-  size_t data_size = filesize - 4096;
-
-  char * header = (char *) malloc (4096);
+  // get the size of the ascii header in this file
+  size_t hdr_size = ascii_header_get_size_fd (fd);
+  char * header = (char *) malloc (hdr_size + 1);
 
   if (verbose)
-    fprintf (stderr, "reading header, 4096 bytes\n");
-  size_t bytes_read = read (fd, header, 4096);
-  if (verbose)
-    fprintf (stderr, "read %lu bytes\n", bytes_read);
+    fprintf (stderr, "reading header, %ld bytes\n", hdr_size);
+  size_t bytes_read = read (fd, header, hdr_size);
+  if (bytes_read != hdr_size)
+  {
+    fprintf (stderr, "failed to read %ld bytes of header\n", hdr_size);
+    exit (EXIT_FAILURE);
+  }
+
+  size_t data_size = filesize - hdr_size;
 
   //size_t pkt_size = 2560;
   //void * pkt = (void *) malloc (pkt_size);

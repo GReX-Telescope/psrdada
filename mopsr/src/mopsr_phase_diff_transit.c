@@ -346,6 +346,8 @@ int main(int argc, char** argv)
   //double obs_offset1 = (double) ut1_offset + (double) delta_time_plot;
   //double obs_offset2 = (double) ut1_offset + (double) delta_time_plot + (double) delta_time;
 
+  float start_md_angle = 0;
+
   struct timeval timestamp1;
   struct timeval timestamp2;
 
@@ -364,8 +366,8 @@ int main(int argc, char** argv)
       fprintf (stderr, "t1=%lf t2=%lf\n", ut1_time1, ut1_time2);
 
     if (calculate_delays (nbay, bays1, nant, modules1, nchan, channels1,
-                          source, timestamp1, delays1, apply_instrumental,
-                          apply_geometric, is_tracking, tsamp) < 0)
+                          source, timestamp1, delays1, start_md_angle, 
+                          apply_instrumental, apply_geometric, is_tracking, tsamp) < 0)
     {
       fprintf (stderr, "failed to update delays\n");
       return -1;
@@ -376,8 +378,8 @@ int main(int argc, char** argv)
     //source.dec_curr = dap;
 
     if (calculate_delays (nbay, bays2, nant, modules2, nchan, channels2,
-                          source, timestamp2, delays2, apply_instrumental,
-                          apply_geometric, is_tracking, tsamp) < 0)
+                          source, timestamp2, delays2, start_md_angle, 
+                          apply_instrumental, apply_geometric, is_tracking, tsamp) < 0)
     {
       fprintf (stderr, "failed to update delays\n");
       return -1;

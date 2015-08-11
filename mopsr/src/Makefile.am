@@ -28,7 +28,7 @@ bin_PROGRAMS = mopsr_udpheader mopsr_udpdb_thread mopsr_dbsplitdb \
 							 mopsr_udpcorr mopsr_test_cpubf mopsr_dbTBdb \
 							 mopsr_dbintegratedb \
 							 mopsr_test_sk_kernel mopsr_dadatestct mopsr_dadasftsplit mopsr_pulsedada \
-							 mopsr_dadatfssplit mopsr_dbreblockdb
+							 mopsr_dadatfssplit mopsr_dbreblockdb mopsr_dumpplot
 
 #############################################################################
 #
@@ -115,7 +115,7 @@ LDFLAGS += $(CUDA_LDFLAGS)
 if HAVE_SOFA
 
 bin_PROGRAMS += mopsr_aqdsp mopsr_bfdsp mopsr_test_delays mopsr_test_bfdsp \
-                mopsr_dbdelaydb
+                mopsr_dbdelaydb mopsr_test_bfdsp_tb
 
 endif
 

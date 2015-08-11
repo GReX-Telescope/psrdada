@@ -798,7 +798,7 @@ void plot_phase_time (float * xvals, float * amps, float * phases, unsigned npts
   cpgend();
 }
 
-#define MAX_LENGTH 1024
+#define MAX_LENGTH 1280
 void unwrap(double * p, int N)
 {
   double dp[MAX_LENGTH];

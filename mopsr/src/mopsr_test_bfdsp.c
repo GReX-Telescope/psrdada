@@ -1,9 +1,8 @@
-
 /***************************************************************************
- *  
+ *
  *    Copyright (C) 2013 by Andrew Jameson
  *    Licensed under the Academic Free License version 2.1
- * 
+ *
  ****************************************************************************/
 
 #include "dada_cuda.h"
@@ -24,7 +23,7 @@
 
 void usage ()
 {
-	fprintf(stdout, "mopsr_test_bfdsp bays_file modules_file\n"
+  fprintf(stdout, "mopsr_test_bfdsp bays_file modules_file\n"
     " -a nant     number of antennae\n" 
     " -b nbeam    number of beams\n" 
     " -d device   use gpu device [default 0]\n" 
@@ -35,7 +34,7 @@ void usage ()
   );
 }
 
-int main(int argc, char** argv) 
+int main(int argc, char** argv)
 {
   int arg = 0;
 
@@ -55,7 +54,7 @@ int main(int argc, char** argv)
 
   while ((arg = getopt(argc, argv, "a:b:d:hl:t:v")) != -1) 
   {
-    switch (arg)  
+    switch (arg)
     {
       case 'a':
         nant = atoi(optarg);
@@ -68,7 +67,7 @@ int main(int argc, char** argv)
       case 'd':
         device = atoi (optarg);
         break;
-      
+
       case 'h':
         usage ();
         return 0;
@@ -207,7 +206,7 @@ int main(int argc, char** argv)
   float * h_sin_thetas;
   float * h_phasors;
 
-  error = cudaMallocHost( &h_in, in_block_size); 
+  error = cudaMallocHost( &h_in, in_block_size);
   if (error != cudaSuccess)
   {
     fprintf(stderr, "alloc: could not allocate %ld bytes of pinned host memory\n", in_block_size);
@@ -261,9 +260,9 @@ int main(int argc, char** argv)
     return -1;
   }
 
-  // assume that the beams tile from -2 degrees to + 2 degrees in even steps 
+  // assume that the beams tile from -2 degrees to + 2 degrees in even steps
   for (ibeam=0; ibeam<nbeam; ibeam++)
-  {  
+  {
     float fraction = (float) ibeam / (float) (nbeam-1);
     h_sin_thetas[ibeam] = sinf((fraction * 4) - 2);
   }

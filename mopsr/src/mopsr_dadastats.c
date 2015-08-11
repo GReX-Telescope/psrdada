@@ -20,6 +20,7 @@
 #include "mopsr_def.h"
 #include "mopsr_util.h"
 #include "mopsr_udp.h"
+#include "dada_generator.h"
 
 #include "string_array.h"
 #include "ascii_header.h"
@@ -184,7 +185,7 @@ int main (int argc, char **argv)
   float * s1_lowers = (float *) malloc(sizeof(float) * nsets);
 
   size_t block_size = 768;
-  size_t block_history = 8;
+  size_t block_history = 64;
   float * vals = (float *) malloc(sizeof(float) * block_size * block_history);
   float * diff_block = (float *) malloc(sizeof(float) * block_size * block_history);
   float * history_block = (float *) malloc(sizeof(float) * block_size * block_history);
@@ -283,6 +284,8 @@ int main (int argc, char **argv)
   float * this_block;
   char plot;
 
+  fprintf (stderr, "nsets=%d\n", nsets);
+
   for (i=0; i<nsets; i++)
   {
     bytes_read = read (fd, raw, bytes_to_read);
@@ -357,11 +360,11 @@ int main (int argc, char **argv)
 
       if (avg_mean > 0)
       {
-        float upper = avg_mean + (5 * avg_stddev);
+        float upper = avg_mean + (3 * avg_stddev);
         for (j=0; j<block_size; j++)
         {
           if (s1s[start_id + j] > upper)
-            s1s[start_id + j] = avg_mean;
+            s1s[start_id + j] =  (float) rand_normal (avg_mean, (double) avg_stddev);
         }
       }
 
@@ -429,13 +432,13 @@ int main (int argc, char **argv)
       fprintf (stderr,"median of history differences=%f [aka sigma!]\n", sigma);
 
       avg_mean = median;
-      avg_stddev = sigma;
+      avg_stddev = sigma * 1.4826;
 
       for (j=0; j<block_size; j++)
       {
         s1_means[(i-block_size)+j] = median;
-        s1_uppers[(i-block_size)+j] = median + (3 * sigma);
-        s1_lowers[(i-block_size)+j] = median - (3 * sigma);
+        s1_uppers[(i-block_size)+j] = median + (3 * avg_stddev);
+        s1_lowers[(i-block_size)+j] = median - (3 * avg_stddev);
       }
 
       start_id += block_size;
@@ -549,8 +552,8 @@ int main (int argc, char **argv)
     if (s1s[i] < ymins1)
       ymins1 = s1s[i];
     xmax = (float) i+1;
-    if (ymaxs1 > 450000)
-      ymaxs1 = 450000;
+    if (ymaxs1 > 200000)
+      ymaxs1 = 200000;
 
     cpgbbuf();
 

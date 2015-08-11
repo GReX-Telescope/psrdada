@@ -37,12 +37,18 @@ int main(int argc, char** argv)
 
   float fractional = 0;
 
-  while ((arg = getopt(argc, argv, "fhv")) != -1) 
+  char negative_dec = 0;
+
+  while ((arg = getopt(argc, argv, "fhnv")) != -1) 
   {
     switch (arg)  
     {
       case 'f':
         fractional = atof(optarg);
+        break;
+
+      case 'n':
+        negative_dec = 1;
         break;
 
       case 'h':
@@ -87,11 +93,21 @@ int main(int argc, char** argv)
     return -1;
   }
 
-  if (mopsr_delays_ddmmss_to_rad (argv[optind+2], &(source.decj)) < 0)
+  char dec[32];
+  if (negative_dec)
+  {
+    dec[0] = '-';
+    strcpy(dec+1, argv[optind+2]);
+  }
+  else
+    strcpy(dec, argv[optind+2]); 
+
+  if (mopsr_delays_ddmmss_to_rad (dec, &(source.decj)) < 0)
   {
     fprintf (stderr, "ERROR:  could not parse DEC from %s\n", argv[optind+2]);
     return -1;
   }
+
 
   struct timeval timestamp;
   timestamp.tv_sec = utc_start;

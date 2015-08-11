@@ -9,11 +9,12 @@
 #include "mopsr_cuda.h"
 #include "mopsr_delays_cuda.h"
 
-// maximum number of channels * antenna from 1 PFB 128 * 16
+// maximum number of channels * antenna from 1 PFB 40 * 16
 #define MOPSR_PFB_CHANANT_MAX 640 
 #define MOPSR_MAX_ANT         352
 #define WARP_SIZE             32
 #define SPECTRAL_DELAYS       1
+#define MEDIAN_FILTER         1
 //#define _GDEBUG               1
 
 //#define USE_DS_DELAYS 1
@@ -72,29 +73,6 @@ int mopsr_transpose_delay_buf_alloc (transpose_delay_buf_t * buf, size_t buffer_
 
   buf->counter_size = counter_size;
 
-/*
-  error = cudaMalloc (&(buf->d_out_from), buf->counter_size);
-  if (error != cudaSuccess)
-  {
-    fprintf (stderr, "mopsr_transpose_delay_buf_alloc: cudaMalloc failed for %ld bytes\n", buf->counter_size);
-    return -1;
-  }
-
-  error = cudaMalloc (&(buf->d_in_from), buf->counter_size);
-  if (error != cudaSuccess)
-  {
-    fprintf (stderr, "mopsr_transpose_delay_buf_alloc: cudaMalloc failed for %ld bytes\n", buf->counter_size);
-    return -1;
-  }
-
-  error = cudaMalloc (&(buf->d_in_to), buf->counter_size);
-  if (error != cudaSuccess)
-  {
-    fprintf (stderr, "mopsr_transpose_delay_buf_alloc: cudaMalloc failed for %ld bytes\n", buf->counter_size);
-    return -1;
-  }
-*/
-
   error = cudaMallocHost (&(buf->h_out_from), buf->counter_size);
   if (error != cudaSuccess)
   {
@@ -132,6 +110,8 @@ int mopsr_transpose_delay_dealloc (transpose_delay_t * ctx)
 {
   mopsr_transpose_delay_buf_dealloc (ctx->curr);
   mopsr_transpose_delay_buf_dealloc (ctx->next);
+  free (ctx->curr);
+  free (ctx->next);
 
   return 0;
 }
@@ -180,6 +160,102 @@ __constant__ unsigned next_out_from[MOPSR_MAX_NANT_PER_AQ];
 __constant__ unsigned next_in_from[MOPSR_MAX_NANT_PER_AQ];
 __constant__ unsigned next_in_to[MOPSR_MAX_NANT_PER_AQ];
 #endif
+
+__global__ void mopsr_transpose_delay_16_kernel (
+     int16_t * in,
+     int16_t * curr,
+     int16_t * next,
+     const unsigned nchan, const unsigned nant, const unsigned nval, 
+     const unsigned nval_per_thread, const unsigned in_block_stride, 
+     const unsigned nsamp_per_block, const unsigned out_chanant_stride)
+{
+  // for loaded data samples
+  extern __shared__ int16_t sdata[];
+
+  const unsigned nchanant = nchan * nant;
+
+  const unsigned half_warp_num = threadIdx.x / 16;
+  const unsigned half_warp_idx = threadIdx.x & 0xF; // more efficient than % 16
+  const unsigned offset = (half_warp_num * (16 * nval_per_thread)) + half_warp_idx;
+
+  unsigned in_idx  = (blockIdx.x * blockDim.x * nval_per_thread) + offset;
+  unsigned sin_idx = offset;
+
+  unsigned ival;
+  for (ival=0; ival<nval_per_thread; ival++)
+  {
+    if (in_idx < nval * nval_per_thread)
+      sdata[sin_idx] = in[in_idx];
+    else
+      sdata[sin_idx] = 0;
+
+    in_idx += 16;
+    sin_idx += 16;
+  }
+
+  __syncthreads();
+
+  // our thread number within the half warp [0-16], also the time sample this will write each time
+  const unsigned isamp = half_warp_idx;
+
+  // starting ichan/ant
+  unsigned ichanant = half_warp_num * nval_per_thread;
+
+  // determine which shared memory index for this output ichan and isamp
+  unsigned sout_idx = (isamp * nchanant) + ichanant;
+
+  // which sample number in the kernel this thread is writing
+  const unsigned isamp_kernel = (blockIdx.x * nsamp_per_block) + (isamp);
+
+  // vanilla output index for this thread
+  uint64_t out_idx = (ichanant * out_chanant_stride) + isamp_kernel;
+
+  int64_t curr_idx, next_idx;
+
+#ifdef SPECTRAL_DELAYS
+  for (ival=0; ival<nval_per_thread; ival++)
+  {
+    if ((curr_in_from[ichanant] <= isamp_kernel) && (isamp_kernel < curr_in_to[ichanant]))
+    {
+      curr_idx = (int64_t) out_idx + curr_out_from[ichanant] - curr_in_from[ichanant];
+      curr[curr_idx] = sdata[sout_idx];
+    }
+
+    if ((next_in_from[ichanant] <= isamp_kernel) && (isamp_kernel < next_in_to[ichanant]))
+    {
+      next_idx = (int64_t) out_idx + next_out_from[ichanant] - next_in_from[ichanant];
+      next[next_idx] = sdata[sout_idx];
+    }
+
+    sout_idx ++;
+    out_idx += out_chanant_stride;
+    ichanant++;
+  }
+#else
+  unsigned iant;
+
+  for (ival=0; ival<nval_per_thread; ival++)
+  {
+    iant = ichanant % nant;
+
+    if ((curr_in_from[iant] <= isamp_kernel) && (isamp_kernel < curr_in_to[iant]))
+    {
+      curr_idx = (int64_t) out_idx + curr_out_from[iant] - curr_in_from[iant];
+      curr[curr_idx] = sdata[sout_idx];
+    }
+
+    if ((next_in_from[iant] <= isamp_kernel) && (isamp_kernel < next_in_to[iant]))
+    {
+      next_idx = (int64_t) out_idx + next_out_from[iant] - next_in_from[iant];
+      next[next_idx] = sdata[sout_idx];
+    }
+
+    sout_idx ++;
+    out_idx += out_chanant_stride;
+    ichanant++;
+  }
+#endif
+}
 
 __global__ void mopsr_transpose_delay_kernel (
      int16_t * in,
@@ -232,7 +308,6 @@ __global__ void mopsr_transpose_delay_kernel (
 
   int64_t curr_idx, next_idx;
 
-
 #ifdef SPECTRAL_DELAYS
   for (ival=0; ival<nval_per_thread; ival++)
   {
@@ -283,8 +358,13 @@ void * mopsr_transpose_delay (cudaStream_t stream, transpose_delay_t * ctx, void
   const unsigned ndim = 2;
   unsigned nthread = 1024;
 
+#ifdef TRANSPOSE_32SAMPS
   // since we want a warp of 32 threads to write out just 1 chunk
   const unsigned nsamp_per_block = 32;
+#else
+  const unsigned nsamp_per_block = 16;
+#endif
+
   const unsigned nval_per_block  = nsamp_per_block * ctx->nchan * ctx->nant;
   const uint64_t nsamp = nbytes / (ctx->nchan * ctx->nant * ndim);
 
@@ -300,7 +380,7 @@ void * mopsr_transpose_delay (cudaStream_t stream, transpose_delay_t * ctx, void
     {
       if (delays[iant][ichan].samples < ctx->half_ntap)
       {
-        fprintf (stderr, "ERROR: delay in samples is less than ntap/2\n");
+        fprintf (stderr, "ERROR: [%d][%d] delay in samples[%u] is less than ntap/2[%u]\n", iant, ichan, delays[iant][ichan].samples, ctx->half_ntap);
         return 0;
       }
 
@@ -440,11 +520,17 @@ void * mopsr_transpose_delay (cudaStream_t stream, transpose_delay_t * ctx, void
   fprintf (stderr, "transpose_delay: nthread=%d, nblocks=%d sdata_bytes=%d\n", nthread, nblocks, sdata_bytes);
   fprintf (stderr, "transpose_delay: out_chanant_stride=%u\n", out_chanant_stride);
 #endif
-
+#ifdef TRANSPOSE_32SAMPS
   mopsr_transpose_delay_kernel<<<nblocks,nthread,sdata_bytes,stream>>>((int16_t *) d_in, 
         (int16_t *) ctx->curr->d_buffer, //ctx->curr->d_out_from, ctx->curr->d_in_from, ctx->curr->d_in_to,
         (int16_t *) ctx->next->d_buffer, //ctx->next->d_out_from, ctx->next->d_in_from, ctx->next->d_in_to,
         ctx->nchan, ctx->nant, nval, nval_per_thread, in_block_stride, nsamp_per_block, out_chanant_stride);
+#else
+  mopsr_transpose_delay_16_kernel<<<nblocks,nthread,sdata_bytes,stream>>>((int16_t *) d_in,
+        (int16_t *) ctx->curr->d_buffer, //ctx->curr->d_out_from, ctx->curr->d_in_from, ctx->curr->d_in_to,
+        (int16_t *) ctx->next->d_buffer, //ctx->next->d_out_from, ctx->next->d_in_from, ctx->next->d_in_to,
+        ctx->nchan, ctx->nant, nval, nval_per_thread, in_block_stride, nsamp_per_block, out_chanant_stride);
+#endif
 
 #if _GDEBUG
   check_error_stream("mopsr_transpose_delay_kernel", stream);
@@ -539,17 +625,6 @@ void mopsr_fringe_rotate (cudaStream_t stream, void * d_in,
 #endif
 }
 
-
-/*
-__global__ void mopsr_print_ant_scales (unsigned nant)
-{
-  unsigned iant;
-  for (iant=0; iant<nant; iant++)
-  {
-    printf("d_ant_scales[%d]=%f\n", iant, d_ant_scales_delay[iant]); 
-  }
-}
-*/
 
 void mopsr_delay_copy_scales (cudaStream_t stream, float * h_ant_scales, size_t nbytes)
 {
@@ -657,19 +732,66 @@ __global__ void mopsr_delay_fractional_kernel (int16_t * input, int16_t * output
   }
 }
 
-// apply a fractional delay correction to a channel / antenna, warps will always 
-__global__ void mopsr_delay_fractional_float_kernel (int16_t * input, 
-                    cuFloatComplex * output, float * delays, 
-                    unsigned nthread_run, uint64_t nsamp_in, 
-                    const unsigned chan_stride, const unsigned ant_stride, 
+// calculate the filter coefficients for each channel and antenna
+__global__ void mopsr_calculate_fir_coeffs (float * delays, float * fir_coeffs, unsigned ntap)
+{
+  const unsigned half_ntap = ntap / 2;
+
+  const unsigned ichanant = blockIdx.x;
+  const float itap = (float) threadIdx.x;
+
+  float x = itap - delays[ichanant];
+  float window = 0.54 - 0.46 * cos (2.0 * M_PI * (x+0.5) / (float) ntap);
+  float sinc   = 1;
+  if (x != half_ntap)
+  {
+    x -= half_ntap;
+    x *= M_PI;
+    sinc = sinf(x) / x;
+  }
+
+  fir_coeffs[(ichanant * ntap) + threadIdx.x] = sinc * window;
+/*
+
+  // FIR filter coefficients are stored in FST format 
+  const unsigned stap = threadIdx.x % 32;   // warp_idx, starting itap
+  unsigned ichanant   = threadIdx.x / 32;   // warp_num
+  unsigned odx = (ichanant * ntap);
+
+  while (ichanant < nchanant)
+  {
+    unsigned itap = stap;
+    const float delay = delays[ichanant];
+    while (itap < ntap)
+    {
+      float x = ((float) itap) - delay;
+      float window = 0.54 - 0.46 * cos (2.0 * M_PI * (x+0.5) / (float) ntap);
+      float sinc   = 1;
+      if (x != half_ntap)
+      {
+        x -= half_ntap;
+        x *= M_PI;
+        sinc = sinf(x) / x;
+      }
+      fir_coeffs[odx + itap] = sinc * window;
+      itap += 32;
+    }
+    ichanant += 32;
+  }
+*/
+}
+
+// apply a fractional delay correction to a channel / antenna, warps will always
+__global__ void mopsr_delay_fractional_float_kernel (int16_t * input,
+                    cuFloatComplex * output, float * fir_coeffs,
+                    unsigned nthread_run, uint64_t nsamp_in,
+                    const unsigned chan_stride, const unsigned ant_stride,
                     const unsigned ntap)
 {
   // the input data for block are stored in blockDim.x values
   extern __shared__ cuFloatComplex fk_shared2[];
 
   float * filter = (float *) (fk_shared2 + blockDim.x);
-
-  //const unsigned ndim = 2;
 
   const unsigned half_ntap = ntap / 2;
   const unsigned in_offset = 2 * half_ntap;
@@ -682,35 +804,14 @@ __global__ void mopsr_delay_fractional_float_kernel (int16_t * input,
 
   const unsigned nsamp_out = nsamp_in - in_offset;
 
-#ifdef USE_DS_DELAYS
-  const float isamp_offset = (float) isamp - ((float) nsamp_out) / 2;
-
-  // using constant memory should result in broadcast for this 
-  // block/half warp.  handle change in delay across the block
-  float delay        = delays[ichanant] + (delays_ds[ichanant] * isamp_offset);
-  float fringe_coeff = fringe_coeffs[ichanant] + (fringe_coeffs_ds[ichanant] * isamp_offset);
-#else
-  float delay        = delays[ichanant];
+  // compute the complex term required for fringe stopping
   float fringe_coeff = fringe_coeffs[ichanant];
-#endif
-
   cuFloatComplex fringe_phasor;
   sincosf (fringe_coeff, &(fringe_phasor.y), &(fringe_phasor.x));
 
-  // calculate the filter coefficients for the delay
+  // read in the FIR cofficients
   if (threadIdx.x < ntap)
-  {
-    float x      = ((float) threadIdx.x) - delay;
-    float window = 0.54 - 0.46 * cos(2.0 * M_PI * (x+0.5) / ntap);
-    float sinc   = 1;
-    if (x != half_ntap)
-    {
-      x -= half_ntap;
-      x *= M_PI;
-      sinc = sinf(x) / x;
-    }
-    filter[threadIdx.x] = sinc * window;
-  }
+    filter[threadIdx.x] = fir_coeffs[(ichanant * ntap) + threadIdx.x];
 
   // final block check for data input (not data output!)
   if (isamp >= nsamp_in)
@@ -725,7 +826,6 @@ __global__ void mopsr_delay_fractional_float_kernel (int16_t * input,
   int8_t * val8ptr = (int8_t *) &val16;
 
   cuFloatComplex val = make_cuComplex ((float) (val8ptr[0]) + 0.5, (float) (val8ptr[1]) + 0.5);
-  //cuFloatComplex val = make_cuComplex ((float) (val8ptr[0]), (float) (val8ptr[1]));
   fk_shared2[threadIdx.x] = cuCmulf (val, fringe_phasor);
 
   __syncthreads();
@@ -744,74 +844,8 @@ __global__ void mopsr_delay_fractional_float_kernel (int16_t * input,
       sum = cuCaddf(sum, val);
     }
 
-    //val.x += cuCrealf(fk_shared2[threadIdx.x + i]) * filter[i];
-    //val.y += cuCimagf(fk_shared2[threadIdx.x + i]) * filter[i];
-
     unsigned ou_data_idx = (ichanant * nsamp_out) + osamp;
     output[ou_data_idx] = sum;
-
-/*
-    if ((iant == 0) && (ichan == 13) && (blockIdx.x % 2 == 0))
-    {
-      output[ou_data_idx].x = 0;
-      output[ou_data_idx].y = 0;
-    }
-*/
-    //output[2*ou_data_idx + 0] = val.x;
-    //output[2*ou_data_idx + 1] = val.y;
-
-/*
-    unsigned osamp = (blockIdx.x * nthread_run * ndim) + threadIdx.x;
-    const unsigned nfloat_out = nsamp_out * ndim;
-
-    // increment the base pointed to the right block
-    output += (ichanant * nfloat_out);
-
-    //if (osamp < nfloat_out)
-    {
-      float * dataf = (float *) fk_shared2;
-
-      // pointer to first value in shared memory
-      dataf += threadIdx.x;
-
-      // compute sinc delayed float
-      float val_re = 0;
-      for (unsigned i=0; i<ntap; i++)
-        val_re += dataf[2*i] * filter[i];
-
-      //if ((blockIdx.x == 0) && (blockIdx.y == 0) && (blockIdx.z == 0))
-      //  printf ("[%d] val_re=%f\n", threadIdx.x, val_re);
-
-      //if (ichanant == 0 && blockIdx.x == 60)
-      //  printf ("[%d][%d] output[%u]=%f\n", blockIdx.x, threadIdx.x, osamp, val);
-      
-      // write output to gmem
-      output[osamp] = val_re;
-
-      // increment shared memory pointer by number of active threads
-      dataf += blockDim.x;
-
-      // increment output pointer by number of active threads
-      osamp += nthread_run;
-
-      float val_im;
-      //if (osamp < nfloat_out)
-      {
-        // compute sinc delayed float
-        val_im = 0;
-        for (unsigned i=0; i<ntap; i++)
-          val_im += dataf[2*i] * filter[i];
-
-        //if (ichanant == 0 && blockIdx.x == 60)
-        //  printf ("[%d][%d] output[%u]=%f\n", blockIdx.x, threadIdx.x, osamp, val);
-
-        // write output to gmem
-        output[osamp] = val_im;
-      }
-      //if ((blockIdx.x == 0) && (blockIdx.y == 0) && (blockIdx.z == 0))
-      //  printf ("[%d] val_im=%f\n", threadIdx.x, val_im);
-    }
-    */
   }
 }
 
@@ -1285,10 +1319,121 @@ __global__ void mopsr_skmask_kernel (float * in, int8_t * out, cuFloatComplex * 
 }
 
 /*
+ */
+__global__ void mopsr_compute_power_limits_kernel2 (float * s1s_memory, cuFloatComplex * thresholds, curandState * rstates, unsigned nsums, unsigned valid_memory, unsigned nsigma, unsigned iblock)
+{
+  const unsigned iant = blockIdx.y;
+  const unsigned nant = gridDim.y;
+  const unsigned ichan = blockIdx.z;
+  const unsigned nchan = gridDim.z;
+  const unsigned ichanant = (ichan * nant) + iant;
+  const unsigned nchanant = nchan * nant;
+
+  // a maximum of 96 * 64 keys [6144] will be handled by 768 threads, that is 8/thread
+  float keys[8];
+
+  const unsigned id = ichanant * blockDim.x + threadIdx.x;
+  curandState localState = rstates[id];
+
+  __shared__ float median;
+  __shared__ float sigma;
+
+  median = thresholds[ichanant].x;
+  sigma  = thresholds[ichanant].y;
+
+  // get the previous thresholds
+  float upper = median + (3 * sigma);
+
+  // S1 values stored as FST in blocks that are 96 samples long
+  // first offset into the first block by the chanant
+  float * in = s1s_memory + (ichanant * 96);
+
+  // use warps in a different way (groups of 96 threads)
+  unsigned warp_idx = threadIdx.x % 96;
+  unsigned warp_num = threadIdx.x / 96;
+  in += warp_num * nchanant * 96;
+
+  for (unsigned i=0; i<8; i++)
+  {
+    if (i < valid_memory)
+    {
+      keys[i] = in[warp_idx];
+
+      if ((i == iblock) && (median != 0) && (keys[i] != 0) && (keys[i] > upper))
+      {
+        // so completely nuke the S1 value (dangerous for downstream SKZ)
+        keys[i] = median + (curand_normal (&localState) * sigma);
+        in[threadIdx.x] = keys[i];
+      }
+    }
+    else
+    {
+      keys[i] = 0;
+    }
+
+    // increment includes * 8 for which is number of "warps"
+    in += (nchanant * 96 * 8);
+  }
+
+  // here compute the memory based median
+  typedef cub::BlockRadixSort<float, 768, 8> BlockRadixSort;
+
+  __shared__ typename BlockRadixSort::TempStorage temp_storage;
+
+  BlockRadixSort(temp_storage).Sort(keys);
+
+  __syncthreads();
+
+  // centre val = 96*64 - (valid*96)/2
+  unsigned centre_val = (6144 - ((valid_memory * 96) / 2));
+  unsigned centre_thread = centre_val / 8;
+
+  // the median will be located in thread (nthreads_sort/2)[0]
+  if (threadIdx.x == centre_thread)
+  {
+    median = keys[centre_val % 8];
+  }
+
+  // ensure all threads in block can read the median
+  __syncthreads();
+
+  // now subtract median from s1 value in thread_keys and take abs value
+  for (unsigned i=0; i<8; i++)
+  {
+    if (keys[i] > 0)
+    {
+      keys[i] = fabsf(keys[i] - median);
+    }
+  }
+
+  __syncthreads();
+
+  BlockRadixSort(temp_storage).Sort(keys);
+
+  __syncthreads();
+
+  // convert median absolute deviation to standard deviation
+  if (threadIdx.x == centre_thread)
+    sigma = keys[centre_val % 8] * 1.4826;
+
+  __syncthreads();
+
+  // now we have the median and sigma for the memory blocks of S1, compute the
+  // total power thresholds
+  if (threadIdx.x == 0)
+  {
+    thresholds[ichanant].x = median;
+    thresholds[ichanant].y = sigma;
+  }
+
+  rstates[id] = localState;
+}
+
+/*
  * TODO kernel currently requires that NSUMS < 1024
  * compute the median and absolute median difference median
  */
-__global__ void mopsr_compute_power_limits_kernel (float * s1s_memory, cuFloatComplex * thresholds, unsigned nsums, unsigned valid_memory, unsigned nsigma, unsigned iblock)
+__global__ void mopsr_compute_power_limits_kernel (float * s1s_memory, cuFloatComplex * thresholds, curandState * rstates, unsigned nsums, unsigned valid_memory, unsigned nsigma, unsigned iblock)
 {
   const unsigned iant = blockIdx.y;
   const unsigned nant = gridDim.y;
@@ -1299,6 +1444,9 @@ __global__ void mopsr_compute_power_limits_kernel (float * s1s_memory, cuFloatCo
 
   // nmemory should be something like 4
   float keys[MOPSR_MEMORY_BLOCKS];
+
+  const unsigned id = ichanant * blockDim.x + threadIdx.x;
+  curandState localState = rstates[id];
 
   __shared__ float median;
   __shared__ float sigma;
@@ -1315,12 +1463,33 @@ __global__ void mopsr_compute_power_limits_kernel (float * s1s_memory, cuFloatCo
 
   for (unsigned i=0; i<MOPSR_MEMORY_BLOCKS; i++)
   {
-    keys[i] = in[threadIdx.x];
-    if ((i == iblock) && (median != 0) && (keys[i] != 0) && (keys[i] > upper))
-      keys[i] = median;
+    if (i < valid_memory)
+    {
+      keys[i] = in[threadIdx.x];
 
-    //if ((iant == 0) && (ichan == 10))
-    //  printf ("[%d][%d] s1s == %f\n", threadIdx.x, i, keys[i]);
+      if ((i == iblock) && (median != 0) && (keys[i] != 0) && (keys[i] > upper))
+      {
+        //if ((iant == 1) && (ichan == 10))
+        //  printf ("%f\t%f\t%f\n", median, sigma, keys[i]);
+        // so completely nuke the S1 value (dangerous for downstream SKZ)
+        //keys[i] = median + (curand_normal (&localState) * sigma);
+        //in[threadIdx.x] = keys[i];
+      }
+
+/*
+      if ((iant == 1) && (ichan == 10) && (i == iblock))
+      {
+        //if ((median == 0) && (upper == 0))
+        //  printf("%f\t%f\t%f\t%d\n", keys[i], keys[i], keys[i], blockIdx.x);
+        //else
+        //  printf("%f\t%f\t%f\t%d\n", keys[i], median, upper, blockIdx.x);
+      }
+*/
+    }
+    else
+    {
+      keys[i] = 0;
+    }
 
     in += (nchanant * nsums);
   }
@@ -1334,12 +1503,15 @@ __global__ void mopsr_compute_power_limits_kernel (float * s1s_memory, cuFloatCo
 
   __syncthreads();
 
-  unsigned centre_thread = ((96*MOPSR_MEMORY_BLOCKS)- ((valid_memory * 96) / 2)) / MOPSR_MEMORY_BLOCKS;
+  unsigned centre_val = ((96*MOPSR_MEMORY_BLOCKS)- ((valid_memory * 96) / 2));
+  unsigned centre_thread = centre_val / MOPSR_MEMORY_BLOCKS;
 
   // the median will be located in thread (nthreads_sort/2)[0]
   if (threadIdx.x == centre_thread)
   {
-    median = keys[0];
+    //if ((ichan == 10) && (iant == 1))
+    //  printf ("centre_val=%u centre_thread=%u centre_idx=%u\n", centre_val, centre_thread, centre_val % MOPSR_MEMORY_BLOCKS);
+    median = keys[centre_val % MOPSR_MEMORY_BLOCKS];
   }
 
   //if ((iant == 0) && (ichan == 10) && threadIdx.x == 0)
@@ -1347,7 +1519,6 @@ __global__ void mopsr_compute_power_limits_kernel (float * s1s_memory, cuFloatCo
 
   // ensure all threads in block can read the median
   __syncthreads();
-
 
   // now subtract median from s1 value in thread_keys and take abs value
   for (unsigned i=0; i<MOPSR_MEMORY_BLOCKS; i++)
@@ -1373,8 +1544,9 @@ __global__ void mopsr_compute_power_limits_kernel (float * s1s_memory, cuFloatCo
     printf ("[%d] = %f\n", threadIdx.x * 2+1, keys[1]);
   }
 */
+  // convert median absolute deviation to standard deviation
   if (threadIdx.x == centre_thread)
-    sigma = keys[0];
+    sigma = keys[centre_val % MOPSR_MEMORY_BLOCKS] * 1.4826;
 
   __syncthreads();
 
@@ -1383,18 +1555,30 @@ __global__ void mopsr_compute_power_limits_kernel (float * s1s_memory, cuFloatCo
 
   // now we have the median and sigma for the memory blocks of S1, compute the
   // total power thresholds
-  thresholds[ichanant].x = median;
-  thresholds[ichanant].y = sigma;
-  //if ((iant == 0) && (ichan == 10) && threadIdx.x == 0)
-  //  printf ("[%d][%d] median=%f, stddev=%f\n", ichan, iant, median, sigma);
+  if (threadIdx.x == 0)
+  {
+    thresholds[ichanant].x = median;
+    thresholds[ichanant].y = sigma;
+  }
+  if ((iant == 1) && (ichan == 10) && threadIdx.x == 0)
+  {
+    //printf ("[%d][%d] median=%f, stddev=%f\n", ichan, iant, median, sigma);
+    //printf ("%f\t%f\n", median, sigma);
+  }
+  rstates[id] = localState;
 }
 
 void mopsr_test_compute_power_limits (cudaStream_t stream, void * d_s1s, void * d_thresh,
                           unsigned nsums, unsigned nant, unsigned nchan, uint64_t ndat,
-                          uint64_t s1_count, unsigned s1_memory)
+                          uint64_t s1_count, unsigned s1_memory, void * d_rstates)
 {
   dim3 blocks_skm (1, nant, nchan);
+
+  //unsigned ndat = nsums * 96;
+  //unsigned nthreads = (ndat / 1024) * 1024;
+  //unsigned ndat_per_thread = ndat / nthreads;
   unsigned nthreads = 96;
+  //unsigned nthreads = 768;
   const unsigned nsigma = 4;
 
   unsigned valid_memory = s1_memory;
@@ -1407,10 +1591,45 @@ void mopsr_test_compute_power_limits (cudaStream_t stream, void * d_s1s, void * 
 
   // re-use d_in for the total power thresholds [FS]
   mopsr_compute_power_limits_kernel<<<blocks_skm,nthreads,0,stream>>>((float *) d_s1s, 
-                  (cuFloatComplex *) d_thresh, nsums, valid_memory, nsigma, 0);
+                  (cuFloatComplex *) d_thresh, (curandState *) d_rstates, nsums, valid_memory, nsigma, 0);
 
   check_error_stream("mopsr_compute_power_limits_kernel", stream);
+
+//  nthreads = 768;
+//  mopsr_compute_power_limits_kernel2<<<blocks_skm,nthreads,0,stream>>>((float *) d_s1s,
+//                  (cuFloatComplex *) d_thresh, (curandState *) d_rstates, nsums, valid_memory, nsigma, 0);
+
+//  check_error_stream("mopsr_compute_power_limits_kernel2", stream);
 }
+
+void mopsr_test_compute_power_limits2 (cudaStream_t stream, void * d_s1s, void * d_thresh,
+                          unsigned nsums, unsigned nant, unsigned nchan, uint64_t ndat,
+                          uint64_t s1_count, unsigned s1_memory, void * d_rstates)
+{
+  dim3 blocks_skm (1, nant, nchan);
+
+  //unsigned ndat = nsums * 96;
+  //unsigned nthreads = (ndat / 1024) * 1024;
+  //unsigned ndat_per_thread = ndat / nthreads;
+
+  unsigned nthreads = 768;
+  const unsigned nsigma = 4;
+
+  unsigned valid_memory = s1_memory;
+  if (s1_count < s1_memory)
+    valid_memory = (unsigned) s1_count;
+
+  fprintf (stderr, "test_compute_power_limits2: d_s1s=%p d_thresh=%p\n", d_s1s, d_thresh);
+  fprintf (stderr, "test_compute_power_limits2: nant=%u nchan=%u ndat=%lu\n", nant, nchan, ndat);
+  fprintf (stderr, "test_compute_power_limits2: nsums=%u nmemory=%u nsigma=%u\n", nsums, valid_memory, nsigma);
+
+  nthreads = 768;
+  mopsr_compute_power_limits_kernel2<<<blocks_skm,nthreads,0,stream>>>((float *) d_s1s,
+                  (cuFloatComplex *) d_thresh, (curandState *) d_rstates, nsums, valid_memory, nsigma, 0);
+
+  check_error_stream("mopsr_compute_power_limits_kernel2", stream);
+}
+
 
 
 
@@ -1492,8 +1711,10 @@ __global__ void mopsr_skdetect_kernel (float * s1s, float * s2s, cuFloatComplex 
 
   float sk_estimate;
 
+#ifdef MEDIAN_FILTER
   const float upper_power_thresh = power_thresholds[ichanant].x + (3 * power_thresholds[ichanant].y);
   const float lower_power_thresh = power_thresholds[ichanant].x - (3 * power_thresholds[ichanant].y);
+#endif
 
   unsigned idx = threadIdx.x;
 
@@ -1543,9 +1764,13 @@ __global__ void mopsr_skdetect_kernel (float * s1s, float * s2s, cuFloatComplex 
                 {
                   if (sk_idx == log2_M)
                   {
+#ifdef MEDIAN_FILTER
                     if ((s1 > upper_power_thresh) || (s1 < lower_power_thresh))
+                    {
                       smask_det[idx] = 3;
+                    }
                     else
+#endif
                     {
                       s1_thread += s1;
                       s1_count++;
@@ -1557,7 +1782,10 @@ __global__ void mopsr_skdetect_kernel (float * s1s, float * s2s, cuFloatComplex 
             cdx += nant * nsums;
           }
 
-          if (ichan + nchan_sum < nchan)
+          if (ichan + nchan_sum < nchan && 
+            ( (nchan == 20 && ((ichan == 4)  || (ichan == 10))) ||
+              (nchan == 40 && ((ichan == 21) || (ichan == 27)))))
+            
           {
             float mu2 = (4 * m * m) / ((m-1) * (m + 2) * (m + 3));
             float one_sigma_idat = sqrtf(mu2 / nchan_sum);
@@ -1738,8 +1966,7 @@ __global__ void mopsr_skmask_kernel_new (float * in, int8_t * out, int8_t * mask
         if (idx < nval_per_sum)
         {
           const float inval = curand_normal (&localState);
-          outdat[idx] = (int8_t) rintf(inval * rand_factor);
-          //outdat[idx] = 0;
+          outdat[idx] = (int8_t) rintf((inval * rand_factor) - 0.5);
         }
         idx += blockDim.x;
       }
@@ -1750,8 +1977,7 @@ __global__ void mopsr_skmask_kernel_new (float * in, int8_t * out, int8_t * mask
       {
         if (idx < nval_per_sum)
         {
-          outdat[idx] = (int8_t) rintf (indat[idx] * data_factor - 0.5);
-          //outdat[idx] = (int8_t) rintf (indat[idx] - 0.5);
+          outdat[idx] = (int8_t) rintf ((indat[idx] * data_factor) - 0.5);
         }
         idx += blockDim.x;
       }
@@ -1806,9 +2032,9 @@ __global__ void mopsr_srand_setup_kernel (unsigned long long seed, curandState *
   unsigned id = blockIdx.x * blockDim.x + threadIdx.x;
 
   // more efficient, but less random...
-  //curand_init( (seed << 20) + id, 0, 0, &states[id]);
+  curand_init( (seed << 20) + id, 0, 0, &states[id]);
 
-  curand_init (seed, id, 0, &states[id]);
+  //curand_init (seed, id, 0, &states[id]);
 }
 
 void mopsr_init_rng (cudaStream_t stream, unsigned long long seed, unsigned nrngs, void * states)
@@ -1816,9 +2042,9 @@ void mopsr_init_rng (cudaStream_t stream, unsigned long long seed, unsigned nrng
   unsigned nthreads = 1024;
   unsigned nblocks = nrngs / nthreads;
 
-//#if _GDEBUG
+#if _GDEBUG
   fprintf (stderr, "rand_setup: nblocks=%u nthreads=%u\n", nblocks, nthreads);
-//#endif
+#endif
 
   mopsr_srand_setup_kernel<<<nblocks, nthreads, 0, stream>>>(seed, (curandState *) states);
 
@@ -1832,15 +2058,27 @@ void mopsr_init_rng (cudaStream_t stream, unsigned long long seed, unsigned nrng
 //
 void mopsr_delay_fractional_sk_scale (cudaStream_t stream, 
      void * d_in, void * d_out, void * d_fbuf, void * d_rstates,
-     void * d_sigmas, void * d_mask, float * d_delays, void * d_s1s, 
-     void * d_s2s, void * d_thresh, float * h_fringes, float * h_delays_ds, 
-     float * h_fringe_coeffs_ds, size_t fringes_size, uint64_t nbytes, 
-     unsigned nchan, unsigned nant, unsigned ntap, 
+     void * d_sigmas, void * d_mask, float * d_delays, void * d_fir_coeffs,
+     void * d_s1s, void * d_s2s, void * d_thresh, float * h_fringes, 
+     float * h_delays_ds, float * h_fringe_coeffs_ds, size_t fringes_size, 
+     uint64_t nbytes, unsigned nchan, unsigned nant, unsigned ntap, 
      unsigned s1_memory, uint64_t s1_count)
 {
   const unsigned ndim = 2;
   const uint64_t ndat = nbytes / (nchan * nant * ndim);
   const unsigned half_ntap = ntap / 2;
+
+  // copy the fringe coeffs and delays to GPU memory
+  cudaMemcpyToSymbolAsync (fringe_coeffs, (void *) h_fringes, fringes_size, 0, cudaMemcpyHostToDevice, stream);
+#ifdef USE_DS_DELAYS
+  cudaMemcpyToSymbolAsync (delays_ds, (void *) h_delays_ds, fringes_size, 0, cudaMemcpyHostToDevice, stream);
+  cudaMemcpyToSymbolAsync (fringe_coeffs_ds, (void *) h_fringe_coeffs_ds, fringes_size, 0, cudaMemcpyHostToDevice, stream);
+#endif
+  cudaStreamSynchronize(stream); 
+
+  unsigned nthread = ntap;
+  unsigned nblock = nchan * nant;
+  mopsr_calculate_fir_coeffs<<<nblock,nthread,0,stream>>>((float *) d_delays, (float *) d_fir_coeffs, ntap);
 
   // number of threads that actually load data
   unsigned nthread_load = 1024;
@@ -1855,14 +2093,6 @@ void mopsr_delay_fractional_sk_scale (cudaStream_t stream,
   if (ndat % nthread_load)
     blocks.x++;
 
-  //fprintf (stderr, "delay_fractional_sk_scale: fringes_size=%ld\n", fringes_size);
-
-  cudaMemcpyToSymbolAsync (fringe_coeffs, (void *) h_fringes, fringes_size, 0, cudaMemcpyHostToDevice, stream);
-#ifdef USE_DS_DELAYS
-  cudaMemcpyToSymbolAsync (delays_ds, (void *) h_delays_ds, fringes_size, 0, cudaMemcpyHostToDevice, stream);
-  cudaMemcpyToSymbolAsync (fringe_coeffs_ds, (void *) h_fringe_coeffs_ds, fringes_size, 0, cudaMemcpyHostToDevice, stream);
-#endif
-  cudaStreamSynchronize(stream);
 
 #if _GDEBUG
   fprintf (stderr, "delay_fractional_sk_scale: bytes=%lu ndat=%lu sdata_bytes=%ld\n", nbytes, ndat, sdata_bytes);
@@ -1873,9 +2103,9 @@ void mopsr_delay_fractional_sk_scale (cudaStream_t stream,
   const unsigned chan_stride = nant * ndat;
   const unsigned ant_stride  = ndat;
 
-  mopsr_delay_fractional_float_kernel<<<blocks, nthread_load, sdata_bytes, stream>>>((int16_t *) d_in, 
-                (cuFloatComplex *) d_fbuf, (float *) d_delays, nthread_run, 
-                ndat, chan_stride, ant_stride, ntap);
+  mopsr_delay_fractional_float_kernel<<<blocks, nthread_load, sdata_bytes, stream>>>((int16_t *) d_in,
+              (cuFloatComplex *) d_fbuf, (float *) d_fir_coeffs, nthread_run,
+              ndat, chan_stride, ant_stride, ntap);
 
 #if _GDEBUG
   check_error_stream("mopsr_delay_fractional_float_kernel", stream);
@@ -1914,7 +2144,7 @@ void mopsr_delay_fractional_sk_scale (cudaStream_t stream,
 #endif
 
   unsigned s1_idx = (unsigned) ((s1_count-1) % s1_memory);
-  float * d_s1s_curr = ((float * ) d_s1s) + (s1_idx * blocks.x * nchan * nant);
+  float * d_s1s_curr = ((float *) d_s1s) + (s1_idx * blocks.x * nchan * nant);
 
   // reuse d_in as a temporary work buffer for the S1 and S2 sums
   //mopsr_skcompute_kernel<<<blocks, nthreads, shm_bytes, stream>>>( (cuFloatComplex *) d_fbuf, (cuFloatComplex *) d_in, nval_per_thread, ndat_sk);
@@ -1928,16 +2158,16 @@ void mopsr_delay_fractional_sk_scale (cudaStream_t stream,
   unsigned nsums = blocks.x;
   dim3 blocks_skm (1, nant, nchan);
 
+#ifdef MEDIAN_FILTER
   /////////////////////////////////////////////////////////
   // compute the power limits based on the S1 and S2 values
   // this is required until we have an adaptive sorting method... (sigh cub)
 #ifdef _GDEBUG
   fprintf (stderr, "ndat=%lu ndat_sk=%lu nsums=%u\n", ndat, ndat_sk, nsums);
   //fprintf (stderr, "d_s1s_curr=%p d_s1s=%p offset=%d\n", (void *) d_s1s_curr, (void *) d_s1s, int(d_s1s_curr - d_s1s));
-  fprintf (stderr, "s1_idx=%u s1_count=%u\n", s1_idx, s1_count);  
+  fprintf (stderr, "s1_idx=%u s1_count=%u\n", s1_idx, s1_count);
 #endif
 
-  nthreads = nsums;
   const unsigned nsigma = 3;
   unsigned valid_memory = s1_memory;
   if (s1_count < s1_memory)
@@ -1945,11 +2175,19 @@ void mopsr_delay_fractional_sk_scale (cudaStream_t stream,
 
   if (nsums == 96)
   {
-    mopsr_compute_power_limits_kernel<<<blocks_skm,nthreads,0,stream>>>((float *) d_s1s, (cuFloatComplex *) d_thresh, nsums, valid_memory, nsigma, s1_count % s1_memory);
+    //nthreads = nsums;
+    //mopsr_compute_power_limits_kernel<<<blocks_skm,nthreads,0,stream>>>((float *) d_s1s, (cuFloatComplex *) d_thresh, (curandState *) d_rstates, nsums, valid_memory, nsigma, s1_idx);
+
+    nthreads = 768;
+    mopsr_compute_power_limits_kernel2<<<blocks_skm,nthreads,0,stream>>>((float *) d_s1s, (cuFloatComplex *) d_thresh, (curandState *) d_rstates, nsums, valid_memory, nsigma, s1_idx);
   }
 
 #if _GDEBUG
   check_error_stream("mopsr_compute_power_limits_kernel", stream);
+#endif
+
+
+
 #endif
 
   //////////////////////////////////////////////////////////

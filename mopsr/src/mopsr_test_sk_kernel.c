@@ -67,7 +67,8 @@ int main (int argc, char **argv)
   void * h_s1;
   void * h_s2;
   void * h_mask;
-  void * h_thresh;
+  void * h_thresh1;
+  void * h_thresh2;
 
   /* Flag set in verbose mode */
   char verbose = 0;
@@ -75,7 +76,7 @@ int main (int argc, char **argv)
   int arg = 0;
   unsigned nchan = 20;
   unsigned nant  = 2;
-  uint64_t nsamp = 256*1024;
+  uint64_t nsamp = 16*1024*6;
   unsigned ndim = 2;
 
   while ((arg=getopt(argc,argv,"a:c:d:t:v")) != -1)
@@ -166,14 +167,14 @@ int main (int argc, char **argv)
   size_t nbytes = nchan * nant * nsamp * ndim * sizeof(float);
   size_t block_size = nbytes * nblocks;
 
-  multilog (log, LOG_INFO, "allocating %ld bytes for input\n", block_size);
+  multilog (log, LOG_INFO, "allocating %ld bytes for d_in\n", block_size);
   error = cudaMalloc (&d_in, block_size);
   if (error != cudaSuccess)
   {
     multilog (log, LOG_ERR, "could not create allocated %ld bytes of device memory\n", block_size);
     return -1;
   }
-  multilog (log, LOG_INFO, "allocating %ld bytes for output\n", block_size);
+  multilog (log, LOG_INFO, "allocating %ld bytes for d_out\n", block_size);
   error = cudaMalloc (&d_out, block_size);
   if (error != cudaSuccess)
   {
@@ -182,7 +183,7 @@ int main (int argc, char **argv)
   }
 
   size_t nbytes_s2 = nchan * nant * (nsamp / 1024) * sizeof(float);
-  multilog (log, LOG_INFO, "allocating %ld bytes for input\n", nbytes_s2);
+  multilog (log, LOG_INFO, "allocating %ld bytes for d_s2\n", nbytes_s2);
   error = cudaMalloc (&d_s2, nbytes_s2);
   if (error != cudaSuccess)
   {
@@ -190,9 +191,9 @@ int main (int argc, char **argv)
     return -1;
   }
 
-  size_t n_memory = 8;
+  size_t n_memory = MOPSR_MEMORY_BLOCKS;
   size_t nbytes_s1 = nbytes_s2 * n_memory;
-  multilog (log, LOG_INFO, "allocating %ld bytes for input\n", nbytes_s1);
+  multilog (log, LOG_INFO, "allocating %ld bytes for d_s1\n", nbytes_s1);
   error = cudaMalloc (&d_s1, nbytes_s1);
   if (error != cudaSuccess)
   {
@@ -229,7 +230,6 @@ int main (int argc, char **argv)
     multilog (log, LOG_ERR, "could not create allocated %ld bytes of device memory\n", thresh_size);
     return -1;
   }
-
 
   const size_t maxthreads = 1024;
   const unsigned nrngs = nchan * nant * maxthreads;
@@ -275,13 +275,18 @@ int main (int argc, char **argv)
     return -1;
   }
 
-  error = cudaMallocHost((void **) &h_thresh, thresh_size);
+  error = cudaMallocHost((void **) &h_thresh1, thresh_size);
   if (error != cudaSuccess)
   {
     multilog (log, LOG_ERR, "could not create allocated %ld bytes of host memory\n", thresh_size);
     return -1;
   }
-
+  error = cudaMallocHost((void **) &h_thresh2, thresh_size);
+  if (error != cudaSuccess)
+  {
+    multilog (log, LOG_ERR, "could not create allocated %ld bytes of host memory\n", thresh_size);
+    return -1;
+  }
 
   // initialise the RNGs
   unsigned long long seed = (unsigned long long) time(0) * 1000000;
@@ -331,16 +336,22 @@ int main (int argc, char **argv)
     return -1;
   }
 
-  mopsr_test_skcompute (stream, d_in, d_s1, d_s2, nchan, nant, nbytes);
+  size_t memory_stride = nant * nchan * (nsamp / 1024) * sizeof(float);
+  size_t memory_offset = 0;
+  for (i=0; i<MOPSR_MEMORY_BLOCKS;i++)
+  {
+    mopsr_test_skcompute (stream, d_in, d_s1 + memory_offset, d_s2, nchan, nant, nbytes);
+    memory_offset += memory_stride;
+  }
 
-  multilog (log, LOG_INFO, "cudaMemcpyDeviceToHost (%d)\n", nbytes_s1);
+  multilog (log, LOG_INFO, "cudaMemcpyDeviceToHost (%d) - S1\n", nbytes_s1);
   error = cudaMemcpyAsync (h_s1, d_s1, nbytes_s1, cudaMemcpyDeviceToHost, stream);
   if (error != cudaSuccess)
   {
    multilog (log, LOG_ERR, "cudaMemcpyAsync D2H failed: %s\n", cudaGetErrorString(error));
    return -1;
   }
-  multilog (log, LOG_INFO, "cudaMemcpyDeviceToHost (%d)\n", nbytes_s2);
+  multilog (log, LOG_INFO, "cudaMemcpyDeviceToHost (%d) - S2\n", nbytes_s2);
   error = cudaMemcpyAsync (h_s2, d_s2, nbytes_s2, cudaMemcpyDeviceToHost, stream);
   if (error != cudaSuccess)
   {
@@ -391,15 +402,14 @@ int main (int argc, char **argv)
     }
   }
 
-  unsigned s1_count = 1;
+  unsigned s1_count = n_memory;
   unsigned s1_memory = n_memory;
   unsigned ndat_cpl = nsamp / 1024;
 
-  mopsr_test_compute_power_limits (stream, d_s1, d_thresh, nsums, nant, nchan, ndat_cpl, s1_count, s1_memory);
-  
+  mopsr_test_compute_power_limits (stream, d_s1, d_thresh, nsums, nant, nchan, ndat_cpl, s1_count, s1_memory, d_rstates);
 
   multilog (log, LOG_INFO, "cudaMemcpyDeviceToHost (%d)\n", thresh_size);
-  error = cudaMemcpyAsync (h_thresh, d_thresh, thresh_size, cudaMemcpyDeviceToHost, stream);
+  error = cudaMemcpyAsync (h_thresh1, d_thresh, thresh_size, cudaMemcpyDeviceToHost, stream);
   if (error != cudaSuccess)
   {
    multilog (log, LOG_ERR, "cudaMemcpyAsync D2H failed: %s\n", cudaGetErrorString(error));
@@ -408,36 +418,60 @@ int main (int argc, char **argv)
 
   cudaStreamSynchronize(stream);
 
-  outs1 = (float * ) h_s1;
-  float * h_thr = (float *) h_thresh;
-  float tmp[256];
 
-  float upper, lower, gpu_upper, gpu_lower;
+  mopsr_test_compute_power_limits2 (stream, d_s1, d_thresh, nsums, nant, nchan, ndat_cpl, s1_count, s1_memory, d_rstates);
+
+  multilog (log, LOG_INFO, "cudaMemcpyDeviceToHost (%d)\n", thresh_size);
+  error = cudaMemcpyAsync (h_thresh2, d_thresh, thresh_size, cudaMemcpyDeviceToHost, stream);
+  if (error != cudaSuccess)
+  {
+   multilog (log, LOG_ERR, "cudaMemcpyAsync D2H failed: %s\n", cudaGetErrorString(error));
+   return -1;
+  }
+  cudaStreamSynchronize(stream);
+
+  fprintf (stderr, "nsums=%d\n", nsums);
+
+  outs1 = (float * ) h_s1;
+  float * h_thr1 = (float *) h_thresh1;
+  float * h_thr2 = (float *) h_thresh2;
+  float * tmp = (float *) malloc(sizeof(float) * nsums);
+
+  float upper, lower, gpu_median1, gpu_sigma1, gpu_median2, gpu_sigma2, gpu_upper, gpu_lower;
 
   for (ichan=0; ichan<nchan; ichan++)
   {
     for (iant=0; iant<nant; iant++)
     {
-      for (i=0; i<256; i++)
+      for (i=0; i<nsums; i++)
       {
         tmp[i] = outs1[i];
       }
-      outs1 += 256;
+      outs1 += nsums;
     
       // now quicksort the array
-      qsort ((void *) tmp, 256, sizeof(float), compare);
-      float median = tmp[128];
-      for (i=0; i<256; i++)
+      qsort ((void *) tmp, nsums, sizeof(float), compare);
+      float median = tmp[nsums/2];
+      for (i=0; i<nsums; i++)
         tmp[i] = fabsf(tmp[i] - median);
 
-      qsort ((void *) tmp, 256, sizeof(float), compare);
-      float stddev = tmp[128];
+      qsort ((void *) tmp, nsums, sizeof(float), compare);
+      float stddev = tmp[nsums/2] * 1.4826;
 
       upper = median + 4 * stddev;
       lower = median - 4 * stddev;
 
-      gpu_upper = h_thr[0];
-      gpu_lower = h_thr[1];
+      gpu_median1 = h_thr1[0];
+      gpu_sigma1  = h_thr1[1];
+
+      gpu_median2 = h_thr2[0];
+      gpu_sigma2  = h_thr2[1];
+
+      if (gpu_median1 != gpu_median2 || gpu_sigma1 != gpu_sigma2)
+        fprintf (stderr, "1[%f, %f] 2[%f, %f]\n", gpu_median1, gpu_sigma1, gpu_median2, gpu_sigma2);
+
+      gpu_upper = gpu_median1 + 4 * gpu_sigma1;
+      gpu_lower = gpu_median1 - 4 * gpu_sigma1;
 
       if (((upper > gpu_upper) && (upper / gpu_upper > tol)) || ((gpu_upper > upper) && (gpu_upper / upper > tol)))
         fprintf (stderr, "[%d][%d] [%f - %f] median=%f sigma=%f || [%f - %f] median=%f\n",
@@ -450,7 +484,8 @@ int main (int argc, char **argv)
                 median, stddev,
                 gpu_upper, gpu_lower, gpu_lower + ((gpu_upper - gpu_lower)/2));
 
-      h_thr += 2;
+      h_thr1 += 2;
+      h_thr2 += 2;
     }
   }
 
@@ -474,7 +509,7 @@ int main (int argc, char **argv)
   in = (float * ) h_in;
   outs1 = (float * ) h_s1;
   outs2 = (float * ) h_s2;
-  h_thr = (float *) h_thresh;
+  h_thr1 = (float *) h_thresh1;
 
   float sk_l = 0.834186;
   float sk_h = 1.21695;
@@ -483,8 +518,8 @@ int main (int argc, char **argv)
   {
     for (iant=0; iant<nant; iant++)
     { 
-      gpu_upper = h_thr[0];
-      gpu_lower = h_thr[1];
+      gpu_upper = h_thr1[0];
+      gpu_lower = h_thr1[1];
 
       for (isum=0; isum<nsums; isum++)
       {
@@ -495,21 +530,24 @@ int main (int argc, char **argv)
         if (sk < sk_l || sk > sk_h || s1 < gpu_lower || s1 > gpu_upper)
         {
           if (*h_ptr == 0)
-            fprintf (stderr, "[%d][%d][%d] s1=%f s2=%f sk=%f [%f - %f] thresh[%f - %f] mask=%d\n", ichan, iant, isum, s1, s2, sk, sk_l, sk_h, gpu_upper, gpu_lower, *h_ptr);
+            if (verbose)
+              fprintf (stderr, "[%d][%d][%d] s1=%f s2=%f sk=%f [%f - %f] thresh[%f - %f] mask=%d\n", ichan, iant, isum, s1, s2, sk, sk_l, sk_h, gpu_upper, gpu_lower, *h_ptr);
         }
         else
         {
           if (*h_ptr != 0)
-            fprintf (stderr, "[%d][%d][%d] s1=%f s2=%f sk=%f [%f - %f] thresh[%f - %f] mask=%d\n", ichan, iant, isum, s1, s2, sk, sk_l, sk_h, gpu_upper, gpu_lower, *h_ptr);
+            if (verbose)
+              fprintf (stderr, "[%d][%d][%d] s1=%f s2=%f sk=%f [%f - %f] thresh[%f - %f] mask=%d\n", ichan, iant, isum, s1, s2, sk, sk_l, sk_h, gpu_upper, gpu_lower, *h_ptr);
         }
         h_ptr ++;
         outs1 ++;
         outs2 ++;
       }
-      h_thr += 2;
+      h_thr1 += 2;
     }
   }
 
+#ifdef _DEBUG
   h_ptr = (int8_t *) h_mask;
   for (ichan=0; ichan<nchan; ichan++)
   {
@@ -527,7 +565,7 @@ int main (int argc, char **argv)
       fprintf (stderr, "\n");
     }
   }
-
+#endif
 
   // now mask the input data
   mopsr_delay_copy_scales (stream, h_ant_scales, ant_scales_size);
@@ -543,6 +581,7 @@ int main (int argc, char **argv)
 
   cudaStreamSynchronize(stream);
 
+#ifdef _DEBUG
   // now check what has been zapped!
   in = (float * ) h_in;
   int8_t * out8 = (int8_t  *) h_out;
@@ -576,6 +615,7 @@ int main (int argc, char **argv)
       }
     }
   }
+#endif
 
   cudaFree (d_in);
   cudaFree (d_out);
@@ -590,7 +630,8 @@ int main (int argc, char **argv)
   cudaFreeHost (h_s1);
   cudaFreeHost (h_s2);
   cudaFreeHost (h_mask);
-  cudaFreeHost (h_thresh);
+  cudaFreeHost (h_thresh1);
+  cudaFreeHost (h_thresh2);
 
   return EXIT_SUCCESS;
 }

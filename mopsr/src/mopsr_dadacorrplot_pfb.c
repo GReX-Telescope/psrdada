@@ -303,6 +303,13 @@ int main (int argc, char **argv)
     return -1;    
   }                 
 
+  float start_md_angle;
+  if (ascii_header_get (header1, "START_MD_ANGLE", "%f", &start_md_angle) != 1)
+  {
+    fprintf(stderr, "could not read START_MD_ANGLE from header1\n");
+    start_md_angle = 0;
+  }
+
   // convert UTC_START to a unix UTC
   time_t utc_start = str2utctime (tmp);
 
@@ -544,7 +551,7 @@ int main (int argc, char **argv)
                       obs_offset_seconds, timestamp.tv_sec, timestamp.tv_usec);
 
     if (calculate_delays (nbays, all_bays, nant, modules, nchan, channels,
-                          source, timestamp, delays, apply_instrumental,
+                          source, timestamp, delays, start_md_angle, apply_instrumental,
                           apply_geometric, is_tracking, tsamp) < 0)
     {
       fprintf (stderr, "failed to calculate delays!\n");

@@ -84,6 +84,7 @@ int main(int argc, char** argv)
   key_t out_key;
 
   ctx.d_delays = 0;
+  ctx.d_fir_coeffs = 0;
 
 #ifdef SKZAP
   ctx.d_s1s = 0;
@@ -110,6 +111,7 @@ int main(int argc, char** argv)
   ctx.lock_utc_flag = 0;
   ctx.obs_tracking = 0;
   ctx.geometric_delays = 1;
+  ctx.starting_md_angle = 0;
 
   while ((arg = getopt(argc, argv, "ad:gihl:n:op:rstv")) != -1) 
   {
@@ -305,6 +307,13 @@ int main(int argc, char** argv)
   if (dada_hdu_disconnect (in_hdu) < 0)
     return EXIT_FAILURE;
 
+  dada_hdu_destroy (in_hdu);
+  dada_hdu_destroy (out_hdu);
+
+  multilog_close (log);
+ 
+  dada_client_destroy (client);
+
   return EXIT_SUCCESS;
 }
 
@@ -380,11 +389,21 @@ int aqdsp_init ( mopsr_aqdsp_t* ctx, dada_hdu_t * in_hdu, dada_hdu_t * out_hdu, 
 
   free(device_name);
 
+  ctx->stream = 0;
+  cudaError_t error = 0;
   // setup the cuda stream for operations
-  cudaError_t error = cudaStreamCreate(&(ctx->stream));
+  error = cudaStreamCreate(&(ctx->stream));
   if (error != cudaSuccess)
   {
     multilog (log, LOG_ERR, "aqdsp_init: could not create CUDA stream\n");
+    return -1;
+  }
+
+  // check the header block sizes for input and output
+  ctx->header_size = ipcbuf_get_bufsz (in_hdu->header_block);
+  if (ctx->header_size != ipcbuf_get_bufsz (out_hdu->header_block))
+  {
+    multilog (log, LOG_ERR, "aqdsp_init: input and output header blocks sizes must be the same\n");
     return -1;
   }
 
@@ -415,7 +434,7 @@ int aqdsp_init ( mopsr_aqdsp_t* ctx, dada_hdu_t * in_hdu, dada_hdu_t * out_hdu, 
     return -1;
   }
 
-  ctx->h_delays = ctx->d_delays = 0;
+  ctx->h_delays = ctx->d_delays = ctx->d_fir_coeffs = 0;
 #ifdef SKZAP
   ctx->d_s1s = ctx->d_s2s = 0;
 #endif
@@ -590,6 +609,16 @@ int aqdsp_alloc (mopsr_aqdsp_t * ctx)
     return -1;
   }
 
+  ctx->fir_coeffs_size = sizeof(float) * nchanant * ctx->ntaps;
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "alloc: allocating %ld bytes on GPU for fir_coeffs\n", ctx->fir_coeffs_size);
+  error = cudaMalloc( &(ctx->d_fir_coeffs), ctx->fir_coeffs_size);
+  if (error != cudaSuccess)
+  {
+    multilog (log, LOG_ERR, "alloc: could not allocate %ld bytes of device memory\n", ctx->fir_coeffs_size);
+    return -1;
+  }
+
   // buffers for the fringe coefficients (host only)
   ctx->fringes_size = sizeof(float) * nchanant;
   if (ctx->verbose)
@@ -640,7 +669,7 @@ int aqdsp_alloc (mopsr_aqdsp_t * ctx)
   const unsigned nrngs = ctx->nchan * ctx->nant * maxthreads; 
   size_t d_curand_size = (size_t) (nrngs * mopsr_curandState_size());
   if (ctx->verbose)
-   multilog (log, LOG_INFO, "alloc: allocating %ld bytes of device memory for d_rstates\n", d_curand_size);
+    multilog (log, LOG_INFO, "alloc: allocating %ld bytes of device memory for d_rstates\n", d_curand_size);
   error = cudaMalloc (&(ctx->d_rstates), d_curand_size);
   if (ctx->verbose)
     multilog (log, LOG_INFO, "alloc: d_rstates=%p\n", ctx->d_rstates);
@@ -848,6 +877,18 @@ int aqdsp_dealloc (mopsr_aqdsp_t * ctx)
   // ensure no operations are pending
   cudaStreamSynchronize(ctx->stream);
 
+  if (ctx->all_bays)
+    free (ctx->all_bays);
+  ctx->all_bays = 0;
+
+  if (ctx->all_modules)
+    free (ctx->all_modules);
+  ctx->all_modules = 0;
+
+  if (ctx->pfbs)
+    free (ctx->pfbs);
+  ctx->pfbs = 0;
+
   if (ctx->h_delays)
     cudaFreeHost(ctx->h_delays);
   ctx->h_delays = 0;
@@ -855,6 +896,31 @@ int aqdsp_dealloc (mopsr_aqdsp_t * ctx)
   if (ctx->d_delays)
     cudaFree (ctx->d_delays);
   ctx->d_delays = 0;
+
+  if (ctx->d_fir_coeffs)
+    cudaFree (ctx->d_fir_coeffs);
+  ctx->d_fir_coeffs = 0;
+
+  if (ctx->delays)
+  {
+    unsigned iant;
+    for (iant=0; iant<ctx->nant; iant++)
+    {
+      if (ctx->delays[iant])
+        free(ctx->delays[iant]);
+      ctx->delays[iant] = 0;
+    }
+    free (ctx->delays);
+  }
+  ctx->delays = 0;
+
+  if (ctx->channels)
+    free (ctx->channels);
+  ctx->channels = 0;
+
+  if (ctx->modules)
+    free (ctx->modules);
+  ctx->modules = 0;
 
 #ifdef SKZAP
   if (ctx->d_s1s)
@@ -916,6 +982,12 @@ int aqdsp_dealloc (mopsr_aqdsp_t * ctx)
   if (ctx->d_out)
     cudaFree (ctx->d_out);
    ctx->d_out = 0;
+
+   if (ctx->gtx)
+     free (ctx->gtx);
+   ctx->gtx = 0;
+
+   cudaStreamDestroy (ctx->stream);
 
   return 0;
 }
@@ -1078,6 +1150,14 @@ int aqdsp_open (dada_client_t* client)
   if (ctx->verbose)
     multilog (log, LOG_INFO, "open: DEC (rad) = %lf\n", ctx->source.decj);
 
+  if (ascii_header_get (client->header, "MD_ANGLE", "%f", &(ctx->starting_md_angle)) != 1)
+  {
+    multilog (log, LOG_ERR, "open: could not read MD_ANGLE from header\n");
+    return -1;
+  }
+  // convert from degrees to radians
+  ctx->starting_md_angle *= (M_PI / 180);
+
   if (ascii_header_get (client->header, "UT1_OFFSET", "%f", &(ctx->ut1_offset)) == 1)
   {
     multilog (log, LOG_INFO, "open: UT1_OFFSET=%f\n", ctx->ut1_offset);
@@ -1121,11 +1201,9 @@ int aqdsp_open (dada_client_t* client)
 
   cal_app_pos_iau (ctx->source.raj, ctx->source.decj, utc, &(ctx->source.ra_curr), &(ctx->source.dec_curr));
 
-  //calc_app_position (ctx->source.raj, ctx->source.decj, timestamp, 
-  //                  &(ctx->source.ra_curr), &(ctx->source.dec_curr));
-
-  multilog (log, LOG_INFO, "open: coords J2000=(%lf, %lf) CURR=(%lf, %lf)\n", 
-            ctx->source.raj, ctx->source.decj, ctx->source.ra_curr, ctx->source.dec_curr);
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "open: coords J2000=(%lf, %lf) CURR=(%lf, %lf)\n", 
+              ctx->source.raj, ctx->source.decj, ctx->source.ra_curr, ctx->source.dec_curr);
 
   float bw;
   if (ascii_header_get (client->header, "BW", "%f", &bw) != 1)
@@ -1168,7 +1246,6 @@ int aqdsp_open (dada_client_t* client)
     return -1;
   }
 
-  uint64_t header_size = ipcbuf_get_bufsz (client->header_block);
   if (ctx->verbose)
     multilog (log, LOG_INFO, "open: getting next free output header buffer\n");
   char * header = ipcbuf_get_next_write (ctx->out_hdu->header_block);
@@ -1181,7 +1258,7 @@ int aqdsp_open (dada_client_t* client)
   // copy the header from the in to the out
   if (ctx->verbose)
     multilog (log, LOG_INFO, "open: copying header from input to output\n");
-  memcpy (header, client->header, header_size);
+  memcpy (header, client->header, ctx->header_size);
 
   if (ctx->output_stf)
   {
@@ -1279,7 +1356,9 @@ int aqdsp_open (dada_client_t* client)
       return -1;
     }
   }
-  multilog (log, LOG_INFO, "open: changing FILE_SIZE from %"PRIi64" to %"PRIi64"\n", old_file_size, new_file_size);
+
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "open: changing FILE_SIZE from %"PRIi64" to %"PRIi64"\n", old_file_size, new_file_size);
 
   if (ctx->verbose)
     multilog (log, LOG_INFO, "open: setting PHASE_CORRECTED=TRUE\n");
@@ -1310,7 +1389,7 @@ int aqdsp_open (dada_client_t* client)
     multilog (log, LOG_INFO, "open: marking output header filled\n");
 
   // mark the outgoing header as filled
-  if (ipcbuf_mark_filled (ctx->out_hdu->header_block, header_size) < 0) 
+  if (ipcbuf_mark_filled (ctx->out_hdu->header_block, ctx->header_size) < 0) 
   {
     multilog (log, LOG_ERR, "open: could not mark header_block filled\n");
     return -1;
@@ -1445,7 +1524,8 @@ int64_t aqdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
     {
       time_t now = ctx->utc_start + obs_offset_seconds;
       struct tm * utc = gmtime (&now);
-      multilog (log, LOG_INFO, "io_block: updating apparent positions\n");
+      if (ctx->verbose)
+        multilog (log, LOG_INFO, "io_block: updating apparent positions\n");
       cal_app_pos_iau (ctx->source.raj, ctx->source.decj, utc, &(ctx->source.ra_curr), &(ctx->source.dec_curr));
       ctx->last_update = obs_offset_seconds;
     }
@@ -1459,7 +1539,7 @@ int64_t aqdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
                 ctx->utc_start, obs_offset_seconds, timestamp.tv_sec, timestamp.tv_usec); 
     if (calculate_delays (ctx->nbays, ctx->all_bays, ctx->nant, ctx->modules, 
                           ctx->nchan, ctx->channels, ctx->source, timestamp, 
-                          ctx->delays, apply_instrumental,
+                          ctx->delays, ctx->starting_md_angle, apply_instrumental,
                           apply_geometric, ctx->obs_tracking, ctx->tsamp) < 0)
     {
       multilog (log, LOG_ERR, "delay_block_gpu: failed to update delays\n");
@@ -1513,7 +1593,7 @@ int64_t aqdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
         multilog (log, LOG_INFO, "io_block: mopsr_delay_fractional_sk_scale(%ld)\n", bytes_tapped);
         mopsr_delay_fractional_sk_scale (ctx->stream, d_sample_delayed, ctx->d_out, ctx->d_fbuf,
                                 ctx->d_rstates, ctx->d_sigmas, ctx->d_mask, 
-                                ctx->d_delays, ctx->d_s1s, ctx->d_s2s, ctx->d_thresh, 
+                                ctx->d_delays, ctx->d_fir_coeffs, ctx->d_s1s, ctx->d_s2s, ctx->d_thresh, 
                                 ctx->h_fringes, ctx->h_delays_ds,
                                 ctx->h_fringe_coeffs_ds, ctx->fringes_size,
                                 bytes_tapped, ctx->nchan,

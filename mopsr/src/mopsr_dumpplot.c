@@ -279,6 +279,19 @@ int main (int argc, char **argv)
     start_ant = ant;
     end_ant = ant+1;
   }
+  int lower_bin, upper_bin;
+  unsigned max_ibin, max_counts;
+  unsigned * dim_ptr;
+
+  FILE * fptr = 0;
+  if (!device)
+  {
+    strcpy(png_file, filename);
+    char * str_ptr = strstr (png_file, ".dump");
+    sprintf (str_ptr, ".stats");
+    fptr = fopen (png_file, "w");
+    fprintf (fptr, "#ANT FWHM\n");
+  }
 
   // do the timeseries and histogram first
   for (iant=start_ant; iant<end_ant; iant++)
@@ -341,6 +354,49 @@ int main (int argc, char **argv)
                (void *) histogram, (void *) packet, nbytes);
     mopsr_form_histogram (histogram, packet, nbytes, &opts);
 
+    // compute the FWHM for this histogram
+    dim_ptr = histogram;
+    unsigned fwhm_sum = 0;
+    unsigned idim, ibin, ubin;
+
+    for (idim=0; idim<opts.ndim; idim++)
+    {
+      upper_bin = -1;
+      lower_bin = -1;
+      max_ibin = 0;
+      max_counts = 0;
+
+      for (ibin=0; ibin<opts.nbin; ibin++)
+      {
+        if (dim_ptr[ibin] > max_counts)
+        {
+          max_counts = dim_ptr[ibin];
+          max_ibin = ibin;
+        }
+      }
+      
+      if (verbose)
+        fprintf (stderr, "max_counts=%u max_ibin=%u\n", max_counts, max_ibin);
+
+      for (ibin=0; ibin<opts.nbin; ibin++)
+      {
+        if (lower_bin<0 && dim_ptr[ibin] > max_counts/2)
+          lower_bin = ibin;
+
+        ubin = (opts.nbin-1)-ibin;
+        if (upper_bin<0 && dim_ptr[ubin] > max_counts/2)
+          upper_bin = ubin;
+      }
+
+      fwhm_sum += (upper_bin - lower_bin);
+
+      dim_ptr += opts.nbin;
+    }
+
+    fwhm_sum /= opts.ndim;
+    if (verbose)
+      fprintf (stderr, "fwhm=%u\n", fwhm_sum);
+
     if (plot_type == MOPSR_DUMPPLOT_TYPE_ALL || plot_type == MOPSR_DUMPPLOT_TYPE_HG)
     {
       if (!device)
@@ -361,6 +417,11 @@ int main (int argc, char **argv)
         set_resolution (xres, yres);
         mopsr_plot_histogram (histogram, &opts);
         cpgend();
+      }
+
+      if (!device)
+      {
+        fprintf (fptr, "%u %u\n",opts.ant_id, fwhm_sum);
       }
     }
   }
@@ -464,6 +525,9 @@ int main (int argc, char **argv)
       }
     }
   }
+
+  if (!device && fptr)
+    fclose(fptr);
 
   free (raw);
   free (bandpass);

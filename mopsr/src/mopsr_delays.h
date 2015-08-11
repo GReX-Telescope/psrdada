@@ -123,8 +123,9 @@ int calculate_delays (unsigned nbay, mopsr_bay_t * bays,
                       unsigned nmod, mopsr_module_t * mods, 
                       unsigned nchan, mopsr_chan_t * chans,
                       mopsr_source_t source, struct timeval timestamp,
-                      mopsr_delay_t ** delays, char apply_instrumental,
-                      char apply_geometric, char is_tracking, double tsamp);
+                      mopsr_delay_t ** delays, float starting_md_angle, 
+                      char apply_instrumental, char apply_geometric, 
+                      char is_tracking, double tsamp);
 
 int cal_app_pos_iau (double RA, double DEC, struct tm * utc, double * RA_app, double * DEC_app);
 

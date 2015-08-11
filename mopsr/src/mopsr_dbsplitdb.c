@@ -263,6 +263,72 @@ int dbsplitdb_open (dada_client_t* client)
   // get the header from the input data block
   uint64_t header_size = ipcbuf_get_bufsz (client->header_block);
   unsigned ant_id;
+  unsigned * ant_ids = (unsigned *) malloc (ctx->nant * sizeof(unsigned));
+  if (ctx->nant > 1)
+  {
+    for (i=0; i<ctx->nant; i++)
+    {
+      sprintf (tmp, "ANT_ID_%d", i);
+      if (ascii_header_get (client->header, tmp, "%u", &(ant_ids[i])) != 1)
+      {
+        multilog (log, LOG_WARNING, "open: header with no %s\n", tmp);
+        ant_ids[i] = 0;
+      }
+      else
+      {
+        if (ascii_header_del (client->header, tmp) < 0)
+        {
+          multilog (log, LOG_ERR, "open: could not delete %s from header\n", tmp);
+          return -1;
+        }
+      }
+    } 
+
+    unsigned nant = 1;
+    if (ascii_header_set (client->header, "NANT", "%u", nant) < 0)
+    {
+      multilog (log, LOG_WARNING, "open: failed to set NANT=1\n");
+      return -1;
+    }
+  }
+
+  // update OBS_OFFSET for split headers
+  if (ascii_header_set (client->header, "OBS_OFFSET", "%"PRIu64, new_obs_offset) < 0)
+  {
+    multilog (log, LOG_ERR, "open: failed to write new OBS_OFFSET to header\n");
+    return -1;
+  }
+
+
+  //multilog (log, LOG_INFO, "open: BYTES_PER_SECOND=%"PRIu64" [%"PRIu64" / %d]\n", new_bytes_per_second, bytes_per_second, ctx->n_outputs);
+  if (ascii_header_set (client->header, "BYTES_PER_SECOND", "%"PRIu64, new_bytes_per_second) < 0)
+  {
+    multilog (log, LOG_ERR, "open: failed to write new BYTES_PER_SECOND to header\n");
+    return -1;
+  }
+
+  //multilog (log, LOG_INFO, "open: RESOLUTION=%"PRIu64" [%"PRIu64" / %d]\n", new_resolution, resolution, ctx->n_outputs);
+  if (ascii_header_set (client->header, "RESOLUTION", "%"PRIu64, new_resolution) < 0)
+  {
+    multilog (log, LOG_ERR, "open: failed to write new RESOLUTION to header\n");
+    return -1;
+  }
+
+  if (file_size)
+  {
+    //multilog (log, LOG_INFO, "open: FILE_SIZE=%"PRIu64" [%"PRIu64" / %d]\n", new_file_size, file_size, ctx->n_outputs);
+    if (ascii_header_set (client->header, "FILE_SIZE", "%"PRIu64, new_file_size) < 0)
+    {
+      multilog (log, LOG_ERR, "open: failed to write new FILE_SIZE to header\n");
+      return -1;
+    }
+  }
+
+  if (ascii_header_set (client->header, "ORDER", "%s", output_order) < 0)
+  {
+    multilog (log, LOG_ERR, "open: failed to write ORDER=%s to header\n", output_order);
+    return -1;
+  }
 
   // setup headers for all active HDUs
   for (i=0; i<ctx->n_outputs; i++)
@@ -284,64 +350,15 @@ int dbsplitdb_open (dada_client_t* client)
     // copy the header from the in to the out
     memcpy ( header, client->header, header_size );
 
-    if (ascii_header_set (header, "OBS_OFFSET", "%"PRIu64, new_obs_offset) < 0)
-    {
-      multilog (log, LOG_ERR, "open: failed to write new OBS_OFFSET to header\n");
-      return -1;
-    }
-
-    if (ascii_header_set (header, "BYTES_PER_SECOND", "%"PRIu64, new_bytes_per_second) < 0)
-    {
-      multilog (log, LOG_ERR, "open: failed to write new BYTES_PER_SECOND to header\n");
-      return -1;
-    }
-
-    if (ascii_header_set (header, "RESOLUTION", "%"PRIu64, new_resolution) < 0)
-    {
-      multilog (log, LOG_ERR, "open: failed to write new RESOLUTION to header\n");
-      return -1;
-    }
-
-    if (file_size)
-    {
-      if (ascii_header_set (header, "FILE_SIZE", "%"PRIu64, new_file_size) < 0)
-      {
-        multilog (log, LOG_ERR, "open: failed to write new FILE_SIZE to header\n");
-        return -1;
-      }
-    }
-
     if (ctx->nant > 1)
     {
-      // now set each output data block to 1 antenna
-      int nant = 1;
-      if (ascii_header_set (header, "NANT", "%d", nant) < 0)
+      if (ascii_header_set (header, "ANT_ID", "%u", ant_ids[i]) < 0)
       {
-        multilog (log, LOG_ERR, "open: failed to write NANT=%d to header\n",
-                                 nant);
-        return -1;
-      }
-
-      /*
-      sprintf (tmp, "ANT_ID_%d", i);
-      if (ascii_header_get (client->header, tmp, "%u", &ant_id) != 1)
-      {
-        multilog (log, LOG_ERR, "open: header with no %s\n", tmp);
-        return -1;
-      }
-
-      if (ascii_header_set (header, "ANT_ID", "%u", ant_id) < 0)
-      {
-        multilog (log, LOG_ERR, "open: failed to write ANT_ID=%u to header\n", ant_id);
-        return -1;
-      }
-      */
-      if (ascii_header_set (header, "ORDER", "%s", "TF") < 0)
-      {
-        multilog (log, LOG_ERR, "open: failed to write ORDER=TF to header\n");
+        multilog (log, LOG_WARNING, "open: failed to write ANT_ID=%u to header\n", ant_ids[i]);
         return -1;
       }
     }
+
     if (ctx->nbeam > 1)
     {
       // now set each output data block to 1 antenna

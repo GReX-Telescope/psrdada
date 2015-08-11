@@ -91,6 +91,8 @@ typedef struct {
   mopsr_chan_t   * chans;
   mopsr_delay_t ** delays;
 
+  float start_md_angle;
+
   double tsamp;
 
 } mopsr_dbdelaydb_t;

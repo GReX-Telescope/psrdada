@@ -28,7 +28,8 @@ typedef struct {
 
   uint64_t time_msec;
 
-  uint64_t block_size;
+  uint64_t header_size;           // size of the DADA header blocks
+  uint64_t block_size;            // size of the DADA data blocks
 
   // number of taps in filter - must be odd
   unsigned ntaps;
@@ -66,6 +67,9 @@ typedef struct {
   size_t delays_size;
   float * h_delays;
   void  * d_delays;
+
+  size_t fir_coeffs_size;
+  void  * d_fir_coeffs;
 
   // fringes for each channel and antenna
   size_t fringes_size;
@@ -132,6 +136,8 @@ typedef struct {
   mopsr_chan_t   * channels;
   
   mopsr_delay_t ** delays;
+
+  float starting_md_angle;
 
   double tsamp;
 

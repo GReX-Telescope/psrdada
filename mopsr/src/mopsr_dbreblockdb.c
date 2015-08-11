@@ -13,10 +13,16 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <assert.h>
+#include <float.h>
 #include <math.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
+
+//#define OUT_FLOAT
+//#define OUT_32BIT
+//#define OUT_16BIT
+#define OUT_8BIT
 
 int quit_threads = 0;
 
@@ -26,7 +32,7 @@ void usage()
 {
   fprintf (stdout,
            "mopsr_dbreblockdb [options] in_key out_key\n"
-           "              data type change from 32-bit float to 16-bit uint\n"
+           "              data type change from 32-bit float to 8-bit unsigned int\n"
            " -r factor    reblock by factor from input to output\n"
            " -s           1 transfer, then exit\n"
            " -z           use zero copy transfers\n"
@@ -76,10 +82,14 @@ typedef struct {
 
   char order[4];
 
+  uint64_t n_errors;
+
+  uint64_t n_exceeds;
+
 
 } mopsr_dbreblockdb_t;
 
-#define DADA_DBREBLOCKDB_INIT { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define DADA_DBREBLOCKDB_INIT { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 
 /*! Function that opens the data transfer target */
 int dbreblockdb_open (dada_client_t* client)
@@ -143,7 +153,18 @@ int dbreblockdb_open (dada_client_t* client)
     multilog (log, LOG_ERR, "open: header with no NBIT\n");
     return -1;
   }
+#ifdef OUT_FLOAT
+  ctx->nbit_out = 32;
+#endif
+#ifdef OUT_32BIT
+  ctx->nbit_out = 32;
+#endif
+#ifdef OUT_16BIT
+  ctx->nbit_out = 16;
+#endif
+#ifdef OUT_8BIT
   ctx->nbit_out = 8;
+#endif
 
   if (ascii_header_get (client->header, "NDIM", "%u", &(ctx->ndim)) != 1)
   {           
@@ -242,6 +263,7 @@ int dbreblockdb_open (dada_client_t* client)
     return -1;
   }
 
+#ifndef OUT_FLOAT
   // since we are inverting the channel order, flip the bandwidth
   bw *= -1;
   if (ascii_header_set (header, "BW", "%f", bw) < 0)
@@ -249,6 +271,7 @@ int dbreblockdb_open (dada_client_t* client)
     multilog (log, LOG_ERR, "open: failed to write BW=%f to header\n", bw);
     return -1;
   }
+#endif
 
   new_bytes_per_second = bytes_per_second / ctx->bitrate_factor;
   if (ascii_header_set (header, "BYTES_PER_SECOND", "%"PRIu64, new_bytes_per_second) < 0)
@@ -386,8 +409,19 @@ int64_t dbreblockdb_write_block_SFT_to_STF (dada_client_t * client, void *in_dat
 
   //  assume 32-bit, detected (ndim == 1) data
   float * in = (float *) in_data;
-  // since we are converting from 32-bit float to 16-bit unsigned int
+
+#ifdef OUT_FLOAT
+  float * out;
+#endif
+#ifdef OUT_32BIT
+  uint32_t * out;
+#endif
+#ifdef OUT_16_BIT
+  uint16_t * out; 
+#endif
+#ifdef OUT_8BIT
   uint8_t * out; 
+#endif
  
   //const uint64_t nsamp = data_size / (ctx->nsig * ctx->ndim * ctx->nchan); 
   //const size_t sig_stride = nsamp * ctx->ndim * ctx->nchan;
@@ -415,10 +449,23 @@ int64_t dbreblockdb_write_block_SFT_to_STF (dada_client_t * client, void *in_dat
 
     uint64_t avg_power = total_power / (ctx->nsig * ctx->nchan * nsamp_in);
 
+#ifdef OUT_FLOAT
+    ctx->scale = 1.0f;
+#endif
+#ifdef OUT_32BIT
+    // power level around 24-bits
+    ctx->scale = 16777216.0f / avg_power;
+#endif
+
+#ifdef OUT_16BIT
     // we want the average power to be around 12-bits of unsigned integer (4096)
-    //ctx->scale = 4096.0f / avg_power;
-    // we want the average power to be around the 6-bit
+    ctx->scale = 4096.0f / avg_power;
+#endif
+
+#ifdef OUT_8BIT
+    // we want the average power to be around the 6-bit level
     ctx->scale = 64.0f / avg_power;
+#endif
 
     multilog (log, LOG_INFO, "write_block_SFT_to_STF: total_power=%"PRIu64" avg_power=%"PRIu64" scale=%e\n", total_power, avg_power, ctx->scale);
   }
@@ -436,28 +483,83 @@ int64_t dbreblockdb_write_block_SFT_to_STF (dada_client_t * client, void *in_dat
     ctx->output.block_open = 1;
     ctx->output.bytes_written = 0;
     ctx->reblock_curr = 0;
-    out = (uint8_t *) ctx->output.curr_block;
   }
-  else
-    out = (uint8_t *) ctx->output.curr_block;
+
+    
+#ifdef OUT_FLOAT
+  out = (float *) ctx->output.curr_block;
+  float out_val;
+  float out_limit = FLT_MAX;
+#endif
+#ifdef OUT_32BIT
+  out = (uint32_t *) ctx->output.curr_block;
+  uint32_t out_val;
+  uint32_t out_limit = 4294967295;
+#endif
+#ifdef OUT_16BIT
+  out = (uint16_t *) ctx->output.curr_block;
+  uint16_t out_val;
+  uint16_t out_limit = 65535;
+#endif
+#ifdef OUT_8BIT
+  out = (uint8_t *) ctx->output.curr_block;
+  uint8_t out_val;
+  uint8_t out_limit = 255;
+#endif
+
+  float in_val;
 
   // advance forward on the datablock pointer for the current input block offset
-  //multilog (log, LOG_INFO, "write_block_SFT_to_STF: incrementing output pointer by %"PRIu64" samples\n", nsamp_in * ctx->reblock_curr);
   out += (nsamp_in * ctx->nchan * ctx->reblock_curr);
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "write_block_SFT_to_STF: out incremented by %d bytes\n", nsamp_in * ctx->nchan * ctx->reblock_curr);
 
   //multilog (log, LOG_INFO, "write_block_SFT_to_STF: in_stride=%"PRIu64" out_stride=%"PRIu64"\n", sig_stride_in, sig_stride_out);
 
   for (isig=0; isig<ctx->nsig; isig++)
   {
-    //multilog (log, LOG_INFO, "write_block_SFT_to_STF: transposing signal %u\n", isig);
+    if (ctx->verbose > 2)
+      multilog (log, LOG_INFO, "write_block_SFT_to_STF: transposing signal %u\n", isig);
     for (ichan=0; ichan<ctx->nchan; ichan++)
     {
+#ifdef OUT_FLOAT
+      ochan = ichan;
+#else
       ochan = (ctx->nchan - 1) - ichan;
-      //multilog (log, LOG_INFO, "write_block_SFT_to_STF: ichan=%u ochan=%u [%ld]\n", ichan, ochan, out - ((uint16_t *) ctx->output.curr_block));
+#endif
+      if (ctx->verbose > 2)
+        multilog (log, LOG_INFO, "write_block_SFT_to_STF: ichan=%u ochan=%u\n", ichan, ochan);
+
       for (isamp=0; isamp<nsamp_in; isamp++)
       {
-        //multilog (log, LOG_INFO, "write_block_SFT_to_STF: ioff=%u off=%u\n", ichan * nsamp_in + isamp, isamp * ctx->nchan + ochan);
-        out[isamp * ctx->nchan + ochan] = (uint8_t) (in[ichan * nsamp_in + isamp] * ctx->scale);
+        if (ctx->verbose > 2)
+          multilog (log, LOG_INFO, "write_block_SFT_to_STF: ioff=%u off=%u\n", ichan * nsamp_in + isamp, isamp * ctx->nchan + ochan);
+        in_val = in[ichan * nsamp_in + isamp] * ctx->scale;
+
+        if (in_val > out_limit)
+        {
+          if (ctx->n_exceeds < 100)
+            multilog (log, LOG_INFO, "reblocking power level [%f] exceeding output limits\n", in_val);
+          ctx->n_exceeds++;
+          out_val = out_limit;
+        }
+        else
+        {
+#ifdef OUT_FLOAT
+          out_val = in_val; 
+#endif
+#ifdef OUT_32BIT
+          out_val = (uint32_t) in_val; 
+#endif
+#ifdef OUT_16BIT
+          out_val = (uint16_t) in_val; 
+#endif
+#ifdef OUT_8BIT
+          out_val = (uint8_t) in_val; 
+#endif
+        }
+
+        out[isamp * ctx->nchan + ochan] = out_val;
         //if (isig == 0 && ichan == 0 && isamp < 10)
         //  multilog (log, LOG_INFO, "write_block_SFT_to_STF: [%u] out=%"PRIu16" in=%e scale=%e\n", isamp, out[isamp * ctx->nchan + ochan], in[ichan * nsamp_in + isamp], ctx->scale);
       }
@@ -466,8 +568,12 @@ int64_t dbreblockdb_write_block_SFT_to_STF (dada_client_t * client, void *in_dat
     in += sig_stride_in;
   }
 
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "write_block_SFT_to_STF old: %u, %"PRIu64"\n", ctx->reblock_curr, ctx->output.bytes_written);
   ctx->reblock_curr++;
   ctx->output.bytes_written += data_size / ctx->bitrate_factor;
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "write_block_SFT_to_STF new: %u, %"PRIu64"\n", ctx->reblock_curr, ctx->output.bytes_written);
 
   if (ctx->output.bytes_written > ctx->output.block_size)
     multilog (log, LOG_ERR, "write_block_SFT_to_STF output block overrun by "
@@ -480,7 +586,7 @@ int64_t dbreblockdb_write_block_SFT_to_STF (dada_client_t * client, void *in_dat
   // check if the output block is now full
   if (ctx->output.bytes_written >= ctx->output.block_size)
   {
-    if (ctx->verbose > 1)
+    if (ctx->verbose)
       multilog (log, LOG_INFO, "write_block_SFT_to_STF block now full bytes_written=%"PRIu64", block_size=%"PRIu64"\n", ctx->output.bytes_written, ctx->output.block_size);
 
     // check if this is the end of data
@@ -546,7 +652,19 @@ int main (int argc, char **argv)
 
   ctx->verbose = 0;
   ctx->reblock_factor = 1;
+#ifdef OUT_FLOAT 
+  ctx->bitrate_factor = 1;
+#endif
+#ifdef OUT_32BIT
+  ctx->bitrate_factor = 1;
+#endif
+#ifdef OUT_16BIT
+  ctx->bitrate_factor = 2;
+#endif
+#ifdef OUT_8BIT
   ctx->bitrate_factor = 4;
+#endif
+
 
   while ((arg=getopt(argc,argv,"dp:r:svz")) != -1)
   {

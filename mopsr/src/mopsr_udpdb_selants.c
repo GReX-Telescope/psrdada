@@ -275,7 +275,7 @@ time_t mopsr_udpdb_selants_start (dada_pwc_main_t * pwcm, time_t start_utc)
     return -1;
   }
 
-  // centre freq will chan if we select channels
+  // centre freq will change if we select channels
   float old_freq, new_freq;
   if (ascii_header_get (pwcm->header, "FREQ", "%f", &old_freq) != 1)
   {

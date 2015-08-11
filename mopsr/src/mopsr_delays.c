@@ -191,15 +191,8 @@ mopsr_module_t * read_modules_file (const char* fname, int *nmod)
     else
       imod++;
 
-#ifdef MOPSR_USE_SIGN   
-    if ((mod->name[0] == 'E') || (mod->name[0] == 'e'))
-      mod->sign = -1;
-    else
-      mod->sign = 1;
-#else
     if ((mod->name[0] == 'E') || (mod->name[0] == 'e'))
       mod->dist *= -1;
-#endif
 
     if (mod->name[4] == 'B')
       mod->bay_idx = 0;
@@ -270,17 +263,10 @@ mopsr_bay_t * read_bays_file (const char* fname, int *nbay)
       ref_dist *= -1;
     }
 
-#ifdef MOPSR_USE_SIGN
-    if ((bay->name[0] == 'E') || (bay->name[0] == 'e'))
-      bay->sign = -1;
-    else
-      bay->sign = 1;
-#else
     if ((bay->name[0] == 'E') || (bay->name[0] == 'e'))
     {
       bay->dist *= -1;
     }
-#endif
   }
 
   fclose (fptr);
@@ -515,9 +501,9 @@ int calculate_delays (unsigned nbay, mopsr_bay_t * bays,
                       unsigned nmod, mopsr_module_t * mods, 
                       unsigned nchan, mopsr_chan_t * chans,
                       mopsr_source_t source, struct timeval timestamp,
-                      mopsr_delay_t ** delays, char apply_instrumental,
-                      char apply_geometric, char  is_tracking,
-                      double tsamp)
+                      mopsr_delay_t ** delays, float start_md_angle,
+                      char apply_instrumental, char apply_geometric, 
+                      char  is_tracking, double tsamp)
 {
   // delays should be an array allocat to nmod * nchan
   if (!delays)
@@ -542,7 +528,7 @@ int calculate_delays (unsigned nbay, mopsr_bay_t * bays,
 
   unsigned ichan, imod, ibay;
   double C = 2.99792458e8;
-  double dist, ant_dist;
+  double dist, ant_dist, bay_dist;
 
   const double fixed_delay  = 5.12e-5;
   double instrumental_delay;
@@ -558,37 +544,28 @@ int calculate_delays (unsigned nbay, mopsr_bay_t * bays,
   const double sampling_period = tsamp / 1000000;
   char bay[4];
 
+  double sin_start_md_angle = sin (start_md_angle);
+
+  //fprintf (stderr, "jer_delay=%lf, sin_start_md_angle=%lf\n", jer_delay, sin_start_md_angle);
+
   for (imod=0; imod < nmod; imod++)
   {
     // extract the bay name for this module
     strncpy (bay, mods[imod].name, 3);
     bay[3] = '\0';
     ant_dist = 0;
+    bay_dist = 0;
 
     // if we are tracking then the ring antenna phase each of the 4
     // modules to the bay centre
-    if (is_tracking)
+    for (ibay=0; ibay<nbay; ibay++)
     {
-      for (ibay=0; ibay<nbay; ibay++)
+      if (strcmp(bays[ibay].name, bay) == 0)
       {
-        if (strcmp(bays[ibay].name, bay) == 0)
-        {
-#ifdef MOPSR_USE_SIGN
-          ant_dist = bays[ibay].dist * mods[imod].sign;
-#else
-          ant_dist = bays[ibay].dist;
-#endif
-        }
+        bay_dist = bays[ibay].dist;
       }
     }
-    else
-    {
-#ifdef MOPSR_USE_SIGN
-      ant_dist = mods[imod].dist * mods[imod].sign;
-#else
-      ant_dist = mods[imod].dist;
-#endif
-    }
+    ant_dist = mods[imod].dist;
 
     // antenna_distances will be +ve for the west arm, negative for the east
 
@@ -604,17 +581,22 @@ int calculate_delays (unsigned nbay, mopsr_bay_t * bays,
       if (apply_instrumental)
         total_delay -= instrumental_delay;
 
+      // calculate the geometric delay from md_tilt angle
+
       if (is_tracking)
       {
         freq_ratio = (1.0 - (843.0 / chans[ichan].cfreq));
         frank_dist = module_offset * freq_ratio;
-        dist = ant_dist + frank_dist;
+        dist = bay_dist + frank_dist;
+
+        geometric_delay = (jer_delay * dist) / C;
       }
       else
-        dist = ant_dist;
+      {
+        geometric_delay = ((sin_start_md_angle * bay_dist / C) - ((sin_start_md_angle - jer_delay) * (ant_dist / C)));
 
-      // calculate the geometric delay from md_tilt angle
-      geometric_delay = (jer_delay * dist) / C;
+        dist = ant_dist;
+      }
 
       // calculate the geometric delay for 1 sample offset into the future
       geometric_delay_next = (jer_delay_next * dist) / C;
@@ -645,8 +627,8 @@ int calculate_delays (unsigned nbay, mopsr_bay_t * bays,
       delays[imod][ichan].fractional    = fractional_delay / sampling_period;
       delays[imod][ichan].fractional_ds = fractional_delay_ds;
 
-      //if (imod == 0)
-      //  fprintf (stderr, "jer_delay=%lf instrumental_delay=%lf geometric_delay=%lf fractional_delay=%lf [samples]\n", jer_delay, instrumental_delay * 1e9, geometric_delay *1e9,  delays[imod][ichan].fractional);
+      //if (ichan == 0)
+       // fprintf (stderr, "jer_delay=%lf instrumental_delay=%lf geometric_delay=%lf sample_delay=%u fractional_delay=%lf [samples]\n", jer_delay, instrumental_delay * 1e9, geometric_delay *1e9,  delays[imod][ichan].samples, delays[imod][ichan].fractional);
 
       delays[imod][ichan].fringe_coeff    = -2 * M_PI * chans[ichan].cfreq * 1000000 * geometric_delay;
       fringe_coeff_next                   = -2 * M_PI * chans[ichan].cfreq * 1000000 * geometric_delay_next;
