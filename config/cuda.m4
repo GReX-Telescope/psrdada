@@ -71,6 +71,23 @@ AC_DEFUN([SWIN_LIB_CUDA],
       [$2]
     fi
 
+    # check for the CUB header library
+
+    AC_MSG_CHECKING([for CUB installation])
+   
+    SWIN_PACKAGE_FIND([cub],[cub.h])
+    SWIN_PACKAGE_TRY_COMPILE([cub],[#include <cub.h>])
+
+    AC_MSG_RESULT([$have_cub])   
+
+    if test "$have_cub" = "yes"; then
+      AC_DEFINE([HAVE_CUB],[1],[Define if the CUB headers are present])
+      [$1]
+    else
+      AC_MSG_WARN([psrdada will not use CUB headers])
+      [$2]
+    fi
+
   else
 
     if test "$have_cuda" = "not found"; then
@@ -88,16 +105,18 @@ AC_DEFUN([SWIN_LIB_CUDA],
 
   CUDA_LIBS="$cuda_LIBS"
   CUDA_CFLAGS="$cuda_CFLAGS"
-
   AC_SUBST(CUDA_LIBS)
   AC_SUBST(CUDA_CFLAGS)
   AM_CONDITIONAL(HAVE_CUDA,[test "$have_cuda" = "yes"])
 
   CUFFT_LIBS="$cufft_LIBS"
   CUFFT_CFLAGS="$cufft_CFLAGS"
-
   AC_SUBST(CUFFT_LIBS)
   AC_SUBST(CUFFT_CFLAGS)
   AM_CONDITIONAL(HAVE_CUFFT,[test "$have_cufft" = "yes"])
+
+  CUB_CFLAGS="$cub_CFLAGS"
+  AC_SUBST(CUB_CFLAGS)
+  AM_CONDITIONAL(HAVE_CUB,[test "$have_cub" = "yes"])
 
 ])
