@@ -886,7 +886,6 @@ sub stopDaemon($$;$$)
     $quit_file = $control_dir."/".$daemon."_".$pwc_to_stop.".quit";
   }
 
-  Dada::logMsg(2, $dl, "stopDaemon: touch ".$quit_file);
   system("touch ".$quit_file);
     
   my $counter = $timeout;
@@ -900,7 +899,7 @@ sub stopDaemon($$;$$)
     Dada::logMsg(3, $dl, "stopDaemon: ".$result." ".$response);
     if ($result eq "ok")
     {
-      Dada::logMsg(0, $dl, "daemon ".$daemon." still running");
+      Dada::logMsg(0, $dl, "daemon ".$daemon." still running: ".$response);
       sleep(1);
     } 
     else 
@@ -950,10 +949,9 @@ sub stopDaemon($$;$$)
   return ($result, $response);
 }
 
-sub stopDaemons($\@) {
+sub stopDaemons($) {
 
-  (my $pwc_to_stop, my $ref) = @_;
-  my @ds = @$ref;
+  (my $pwc_to_stop) = @_;
 
   my $threshold = 20;
   my $all_stopped = 0;
