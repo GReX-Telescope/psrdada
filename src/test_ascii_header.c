@@ -3,7 +3,7 @@
 
 int main ()
 {
-  char header[4096] = 
+  char header[DADA_DEFAULT_HEADER_SIZE] = 
   "VERSION 4.5         # the header version\n"
   "CALFREQ 1.234       # the modulation frequency of the diode\n"
   "DATA_0  0\n"
