@@ -17,16 +17,19 @@ void usage ()
           "dada_db - create or destroy the DADA shared memory ring buffer\n"
           "\n"
           "Usage: dada_db [options]\n"
+          " -a hdrsz    size of each header buffer (in bytes) [default: %"PRIu64"]\n"
           " -b bufsz    size of each buffer (in bytes) [default: %"PRIu64"]\n"
 #ifdef HAVE_HWLOC
           " -c cpu      assign memory adjacent to cpu  [default: all nodes]\n"
 #endif
           " -d          destroy the shared memory area [default: create]\n"
+          " -h          show help\n"
           " -k key      hexadecimal shared memory key  [default: %x]\n"
           " -l          lock the shared memory in RAM\n"
           " -n nbufs    number of buffers in ring      [default: %"PRIu64"]\n"
           " -p          page all blocks into RAM\n"
           " -r nread     number of readers             [default: 1]\n",
+          DADA_DEFAULT_HEADER_SIZE,
           DADA_DEFAULT_BLOCK_SIZE,
           DADA_DEFAULT_BLOCK_KEY,
           DADA_DEFAULT_BLOCK_NUM);
@@ -65,9 +68,9 @@ int main (int argc, char** argv)
 
   int core_depth;
 
-  while ((arg = getopt(argc, argv, "hc:dk:n:r:b:lp")) != -1) {
+  while ((arg = getopt(argc, argv, "a:b:c:dhk:ln:pr:")) != -1) {
 #else
-  while ((arg = getopt(argc, argv, "hdk:n:r:b:lp")) != -1) {
+  while ((arg = getopt(argc, argv, "a:b:dhk:ln:pr:")) != -1) {
 #endif
 
     switch (arg)  {
@@ -75,14 +78,16 @@ int main (int argc, char** argv)
       usage ();
       return 0;
 
-    case 'd':
-      destroy = 1;
+    case 'a':
+      if (sscanf (optarg, "%"PRIu64"", &hdrsz) != 1) {
+        fprintf (stderr, "dada_db: could not parse hdrsz from %s\n", optarg);
+        return -1;
+      }
       break;
-
-    case 'k':
-      if (sscanf (optarg, "%x", &dada_key) != 1) 
-      {
-        fprintf (stderr, "dada_db: could not parse key from %s\n", optarg);
+        
+    case 'b':
+      if (sscanf (optarg, "%"PRIu64"", &bufsz) != 1) {
+        fprintf (stderr, "dada_db: could not parse bufsz from %s\n", optarg);
         return -1;
       }
       break;
@@ -90,7 +95,7 @@ int main (int argc, char** argv)
 #ifdef HAVE_HWLOC
     case 'c':
       if (sscanf (optarg, "%u", &cpu_core) != 1)
-      { 
+      {
         fprintf (stderr, "dada_db: could not parse cpu_core from %s\n", optarg);
         return -1;
       }
@@ -109,20 +114,25 @@ int main (int argc, char** argv)
       break;
 #endif
 
-    case 'n':
-      if (sscanf (optarg, "%"PRIu64"", &nbufs) != 1) {
-       fprintf (stderr, "dada_db: could not parse nbufs from %s\n", optarg);
-       return -1;
+    case 'd':
+      destroy = 1;
+      break;
+
+    case 'k':
+      if (sscanf (optarg, "%x", &dada_key) != 1) 
+      {
+        fprintf (stderr, "dada_db: could not parse key from %s\n", optarg);
+        return -1;
       }
       break;
 
-    case 'b':
-      if (sscanf (optarg, "%"PRIu64"", &bufsz) != 1) {
-       fprintf (stderr, "dada_db: could not parse bufsz from %s\n", optarg);
-       return -1;
+    case 'n':
+      if (sscanf (optarg, "%"PRIu64"", &nbufs) != 1) {
+        fprintf (stderr, "dada_db: could not parse nbufs from %s\n", optarg);
+        return -1;
       }
       break;
-        
+
     case 'r':
       if (sscanf (optarg, "%d", &num_readers) != 1) {
         fprintf (stderr, "dada_db: could not parse number of readers from %s\n", optarg);
@@ -138,6 +148,12 @@ int main (int argc, char** argv)
       page = 1;
       break;
     }
+  }
+
+  if (hdrsz < DADA_DEFAULT_HEADER_SIZE)
+  {
+    fprintf (stderr, "ERROR: header size must be greater than the default header size [%"PRIu64"]\n", DADA_DEFAULT_HEADER_SIZE);
+    return -1;
   }
 
   if ((num_readers < 1) || (num_readers > 5))
