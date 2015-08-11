@@ -331,11 +331,12 @@ int check_contiguity (multilog_t * log, dada_diskdb_t * diskdb)
   uint64_t prev_obs_offset, prev_file_size;
   uint64_t curr_obs_offset, curr_file_size;
 
-  const size_t header_size = 4096;
+  // get the header size for the first file
+  size_t hdr_size = ascii_header_get_size (diskdb->filenames[0]);
+  char * header = (char *) malloc (hdr_size + 1);
+
   char * curr_utc_start = (char *) malloc (sizeof(char) * 20);
   char * prev_utc_start = (char *) malloc (sizeof(char) * 20);
-  char * header = (char *) malloc(sizeof(char) * (header_size+1));
-
   int rval = -1;
 
   // read the require meta-data from the first file
@@ -344,9 +345,7 @@ int check_contiguity (multilog_t * log, dada_diskdb_t * diskdb)
     fd = open (diskdb->filenames[0], O_RDONLY);
     if (fd)
     {
-      ret = read (fd, header, header_size);
-      lseek (fd, 0, SEEK_SET);
-      close (fd);
+      ret = read (fd, header, hdr_size);
 
       if (ascii_header_get (header, "UTC_START", "%s", prev_utc_start) != 1)
       {
@@ -369,7 +368,7 @@ int check_contiguity (multilog_t * log, dada_diskdb_t * diskdb)
           multilog (log, LOG_ERR, "check_contiguity: error during fstat on %s: %s\n", diskdb->filenames[0], strerror(errno));
           return -1;
         }
-        prev_file_size = buf.st_size - header_size;
+        prev_file_size = buf.st_size - hdr_size;
       }
     }
     diskdb->file_sizes[0] = prev_file_size;
@@ -382,7 +381,7 @@ int check_contiguity (multilog_t * log, dada_diskdb_t * diskdb)
     fd = open (diskdb->filenames[ifile], O_RDONLY);
     if (fd)
     {
-      ret = read (fd, header, header_size);
+      ret = read (fd, header, hdr_size);
       close (fd);
 
       if (ascii_header_get (header, "UTC_START", "%s", curr_utc_start) != 1)
@@ -406,7 +405,7 @@ int check_contiguity (multilog_t * log, dada_diskdb_t * diskdb)
           multilog (log, LOG_ERR, "check_contiguity: error during fstat on %s: %s\n", diskdb->filenames[0], strerror(errno));
           break;
         }
-        curr_file_size = buf.st_size - header_size;
+        curr_file_size = buf.st_size - hdr_size;
       }
 
       // save this file size
