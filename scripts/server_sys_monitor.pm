@@ -297,6 +297,7 @@ sub loggingThread($)
   my $type = "";
   my $class = "";
   my $program = "";
+  my $message = "";
 
   while (!$quit_daemon) 
   {
