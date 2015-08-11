@@ -45,6 +45,9 @@ dada_client_t* dada_client_create ()
 /*! Destroy a DADA client main loop */
 void dada_client_destroy (dada_client_t* client)
 {
+  if (client->header)
+    free (client->header);
+  client->header = 0;
   free (client);
 }
 
