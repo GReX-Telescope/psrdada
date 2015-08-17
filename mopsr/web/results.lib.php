@@ -13,6 +13,10 @@ class results extends mopsr_webpage
   var $inline_images;
   var $filter_type;
   var $filter_value;
+  var $class = "new";
+  var $results_dir;
+  var $results_link;
+  var $archive_dir;
 
   function results()
   {
@@ -25,7 +29,18 @@ class results extends mopsr_webpage
     $this->inline_images = (isset($_GET["inline_images"])) ? $_GET["inline_images"] : "false";
     $this->filter_type = (isset($_GET["filter_type"])) ? $_GET["filter_type"] : "";
     $this->filter_value = (isset($_GET["filter_value"])) ? $_GET["filter_value"] : "";
-  
+    $this->results_dir = $this->cfg["SERVER_RESULTS_DIR"];
+    $this->archive_dir = $this->cfg["SERVER_ARCHIVE_DIR"];
+    $this->results_link = "/mopsr/results";
+    $this->results_title = "Recent Results";
+    $this->class = (isset($_GET["class"])) ? $_GET["class"] : "new";
+    if ($this->class == "old")
+    {
+      $this->results_dir = $this->cfg["SERVER_OLD_RESULTS_DIR"];
+      $this->archive_dir = $this->cfg["SERVER_OLD_ARCHIVE_DIR"];
+      $this->results_link = "/mopsr/old_results";
+      $this->results_title = "Archived Results";
+    }
   }
 
   function printJavaScriptHead()
@@ -131,7 +146,7 @@ class results extends mopsr_webpage
         var offset = getOffset();
         var length = getLength();
 
-        var url = "results.lib.php?update=true&offset="+offset+"&length="+length;
+        var url = "results.lib.php?update=true&offset="+offset+"&length="+length+"&class=<?echo $this->class?>";
 
         // check if inline images has been specified
         if (document.getElementById("inline_images").checked)
@@ -139,7 +154,7 @@ class results extends mopsr_webpage
         else
           show_inline = "false";
         url = url + "&inline_images="+show_inline;
-        
+
         // check if a filter has been specified
         var u, filter_type, filter_vaule;
         i = document.getElementById("filter_type").selectedIndex;
@@ -208,16 +223,16 @@ class results extends mopsr_webpage
 
               } else if (key == "IMG") {
 
-                var url = "result.lib.php?single=true&utc_start="+utc_start;
+                var url = "result.lib.php?single=true&utc_start="+utc_start+"&class=<?echo $this->class?>";
                 var link = document.getElementById("link_"+i);
                 var img = value.replace("112x84","400x300");
                 link.href = url;
-                link.onmouseover = new Function("Tip(\"<img src='results/"+utc_start+"/"+img+"' width=401 height=301>\")");
+                link.onmouseover = new Function("Tip(\"<img src='<?echo $this->results_link?>/"+utc_start+"/"+img+"' width=401 height=301>\")");
                 link.onmouseout = new Function("UnTip()");
                 link.innerHTML = this_result["SOURCE"];
 
                 try {
-                  document.getElementById("img_"+i).src = "results/"+utc_start+"/"+value;
+                  document.getElementById("img_"+i).src = "<?echo $this->results_link?>/"+utc_start+"/"+value;
                 } catch (e) {
                   // do nothing
                 }
@@ -267,7 +282,7 @@ class results extends mopsr_webpage
 
       <tr>
         <td width='210px' height='60px'><img src='/mopsr/images/mopsr_logo.png' width='200px' height='60px'></td>
-        <td align=left><font size='+2'>Recent Results</font></td>
+        <td align=left><font size='+2'><?echo $this->results_title?></font></td>
       </tr>
 
       <tr>
@@ -314,7 +329,10 @@ class results extends mopsr_webpage
         </td>
       </tr>
       <tr>
-        <td colspan=2><a href="/mopsr/old_results.lib.php?single=true">Archived MOPSR Results</a></td>
+        <td colspan=2><a href="/mopsr/results.lib.php?single=true">Recent MOPSR Results</a></td>
+      </tr>
+      <tr>
+        <td colspan=2><a href="/mopsr/results.lib.php?single=true&class=old">Archived MOPSR Results</a></td>
       </tr>
 
     </table>
@@ -325,21 +343,20 @@ class results extends mopsr_webpage
 
     $this->openBlockHeader("Matching Observations");
 
-    $basedir = $this->cfg["SERVER_RESULTS_DIR"];
     $cmd = "";
 
     if (($this->filter_type == "") && ($this->filter_value == "")) {
-      $cmd = "find ".$basedir." -maxdepth 2 -name 'obs.info' | wc -l";
+      $cmd = "find ".$this->results_dir." -maxdepth 2 -name 'obs.info' | wc -l";
     } else {
       if ($this->filter_type == "UTC_START") {
-        $cmd = "find ".$basedir."/*".$this->filter_value."* -maxdepth 1 -name 'obs.info' | wc -l";
+        $cmd = "find ".$this->results_dir."/*".$this->filter_value."* -maxdepth 1 -name 'obs.info' | wc -l";
       } else {
-        $cmd = "find ".$basedir." -maxdepth 2 -type f -name obs.info | xargs grep ".$this->filter_type." | grep ".$this->filter_value." | wc -l";
+        $cmd = "find ".$this->results_dir." -maxdepth 2 -type f -name obs.info | xargs grep ".$this->filter_type." | grep ".$this->filter_value." | wc -l";
       }
     }
     $total_num_results = exec($cmd);
 
-    $results = $this->getResultsArray($this->cfg["SERVER_RESULTS_DIR"], 
+    $results = $this->getResultsArray($this->results_dir,
                                       $this->offset, $this->length, 
                                       $this->filter_type, $this->filter_value);
 
@@ -432,19 +449,18 @@ class results extends mopsr_webpage
         $keys = array_keys($results);
         rsort($keys);
         $result_url = "result.lib.php";
-        $results_dir = "results";
 
         for ($i=0; $i < count($keys); $i++) {
 
           $k = $keys[$i];
           $r = $results[$k];
           
-          $url = $result_url."?single=true&utc_start=".$k;
+          $url = $result_url."?single=true&utc_start=".$k."&class=".$this->class;
 
           // guess the larger image size
           $image = $r["IMG"];
 
-          $mousein = "onmouseover=\"Tip('<img src=\'".$results_dir."/".$k."/".$image."\' width=201 height=151>')\"";
+          $mousein = "onmouseover=\"Tip('<img src=\'".$this->results_link."/".$k."/".$image."\' width=201 height=151>')\"";
           $mouseout = "onmouseout=\"UnTip()\"";
   
           // If archives have been finalised and its not a brand new obs
@@ -458,7 +474,7 @@ class results extends mopsr_webpage
 
           $bg_style = "class='processing'";
 
-          echo "    <td ".$bg_style."><img style='".$style."' id='img_".$i."' src=".$results_dir."/".$k."/".$r["IMG"]." width=64 height=48>\n";
+          echo "    <td ".$bg_style."><img style='".$style."' id='img_".$i."' src=".$this->results_link."/".$k."/".$r["IMG"]." width=64 height=48>\n";
           
           // SOURCE 
           echo "    <td ".$bg_style."><a id='link_".$i."' href='".$url."' ".$mousein." ".$mouseout.">".$r["SOURCE"]."</a></td>\n";
@@ -510,8 +526,7 @@ class results extends mopsr_webpage
    ***************************************************************************************************/
   function printUpdateHTML($get)
   {
-
-    $results = $this->getResultsArray($this->cfg["SERVER_RESULTS_DIR"],
+    $results = $this->getResultsArray($this->results_dir,
                                       $this->offset, $this->length, 
                                       $this->filter_type, $this->filter_value);
 
@@ -543,7 +558,6 @@ class results extends mopsr_webpage
 
   function handleRequest()
   {
-
     if ($_GET["update"] == "true") {
       $this->printUpdateHTML($_GET);
     } else {
@@ -554,15 +568,17 @@ class results extends mopsr_webpage
 
   function getResultsArray($results_dir, $offset=0, $length=0, $filter_type, $filter_value) 
   {
-
     $all_results = array();
 
     $observations = array();
     $dir = $results_dir;
 
-    if (($filter_type == "") || ($filter_value == "")) {
+    if (($filter_type == "") || ($filter_value == "")) 
+    {
       $observations = getSubDirs($results_dir, $offset, $length, 1);
-    } else {
+    } 
+    else 
+    {
 
       # get a complete list
       if ($filter_type == "UTC_START") {
@@ -574,12 +590,12 @@ class results extends mopsr_webpage
       $observations = array_slice($all_obs, $offset, $length);
     }
 
+
     for ($i=0; $i<count($observations); $i++) {
 
       $o = $observations[$i];
       $dir = $results_dir."/".$o;
-
-      /* read the obs.info file into an array */
+      // read the obs.info file into an array 
       if (file_exists($dir."/obs.info")) {
         $arr = getConfigFile($dir."/obs.info");
         $all_results[$o]["SOURCE"] = $arr["SOURCE"];
@@ -609,7 +625,7 @@ class results extends mopsr_webpage
       # get the image bp or pvf 
       if (($all_results[$o]["IMG"] == "NA") || ($all_results[$o]["IMG"] == "")) 
       {
-        $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -type f -name '*.fr.120x90.png' -printf '%f\n' | sort -n | head -n 1";
+        $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -type f -name '*.fr.120x90.png' -printf '%f\n' -o -name '*.FB.00.*png' -printf '%f\n' -o -name '*CH00.ad.160x120.png' -printf '%f\n' | sort -n | head -n 1";
         $img = exec($cmd, $output, $rval);
         if (($rval == 0) && ($img != "")) {
           $all_results[$o]["IMG"] = $img;
@@ -621,7 +637,6 @@ class results extends mopsr_webpage
           system("echo 'IMG                 ".$img."' >> ".$results_dir."/".$o."/obs.info");
         }
       }
-
       # get the integration length 
       if (($all_results[$o]["INT"] == "NA") || ($all_results[$o]["INT"] <= 0))
       {
@@ -638,7 +653,6 @@ class results extends mopsr_webpage
           system("echo 'INT                 ".$int."' >> ".$results_dir."/".$o."/obs.info");
         }
       }
-
       if (file_exists($dir."/obs.txt")) {
         $all_results[$o]["annotation"] = file_get_contents($dir."/obs.txt");
       } else {
@@ -657,24 +671,37 @@ class results extends mopsr_webpage
 
   function calcIntLength($utc_start) 
   {
-    $dir = $this->cfg["SERVER_RESULTS_DIR"]."/".$utc_start." ".$this->cfg["SERVER_ARCHIVE_DIR"]."/".$utc_start;
-    $cmd = "find ".$dir." -mindepth 2 -maxdepth 2 -type f -name '2*.ar' -printf '%f\n' | sort -n | tail -n 1";
+    $dir = $this->results_dir."/".$utc_start." ".$this->archive_dir."/".$utc_start;
 
-    $ar = exec($cmd, $output, $rval);
+    if (file_exists($this->results_dir."/".$utc_start."/all_candidates.dat"))
+    {
+      $cmd = "tail -n 1 ".$this->results_dir."/".$utc_start."/all_candidates.dat | awk '{print $3}'";
+      $length = exec($cmd, $output, $rval);
+    }
+    else if (file_exists ($this->results_dir."/".$utc_start."/cc.sum"))
+    {
+      return "NA";
+    }
+    else
+    {
+      $cmd = "find ".$dir." -mindepth 2 -maxdepth 2 -type f -name '2*.ar' -printf '%f\n' | sort -n | tail -n 1";
 
-    $array = split("\.",$ar);
-    $ar_time_str = $array[0];
+      $ar = exec($cmd, $output, $rval);
 
+      if ($ar != "")
+      {
+        $array = split("\.",$ar);
+        $ar_time_str = $array[0];
 
-    # if image is pvf, then it is a local time, convert to unix time
-    $ar_time_unix = unixTimeFromGMTime($ar_time_str);
-     
-    # add ten as the 10 second image file has a UTC referring to the first byte of the file 
-    $length = $ar_time_unix - unixTimeFromGMTime($utc_start);
+        # if image is pvf, then it is a local time, convert to unix time
+        $ar_time_unix = unixTimeFromGMTime($ar_time_str);
+       
+        # add ten as the 10 second image file has a UTC referring to the first byte of the file 
+        $length = $ar_time_unix - unixTimeFromGMTime($utc_start);
+      }
 
-    return $length;
+      return $length;
+    }
   }
-
 }
-
 handledirect("results");

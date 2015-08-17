@@ -8,16 +8,29 @@ class process_obs extends mopsr_webpage
   var $action = "none";
   var $utc_start = "none";
   var $annotation = "";
+  var $class = "";
   var $inst = 0;
 
   function process_obs()
   {
     mopsr_webpage::mopsr_webpage();
 
+    $this->inst = new mopsr();
     $this->action = $_GET["action"];
     $this->utc_start = $_GET["utc_start"];
     $this->annotation = $_GET["annotation"];
-    $this->inst = new mopsr();
+    $this->class = $_GET["class"];
+    if ($this->class == "old")
+    {
+      $this->obs_results_dir = $this->inst->config["SERVER_OLD_RESULTS_DIR"]."/".$this->utc_start;
+      $this->obs_archive_dir = $this->inst->config["SERVER_OLD_ARCHIVE_DIR"]."/".$this->utc_start;
+    }
+    else
+    {
+      $this->obs_results_dir = $this->inst->config["SERVER_RESULTS_DIR"]."/".$this->utc_start;
+      $this->obs_archive_dir = $this->inst->config["SERVER_ARCHIVE_DIR"]."/".$this->utc_start;
+    }
+
 
     if ($this->action == "") 
     {
@@ -36,8 +49,8 @@ class process_obs extends mopsr_webpage
       exit(0);
     }
 
-    if (! (file_exists($this->inst->config["SERVER_RESULTS_DIR"]."/".$this->utc_start) &&
-           file_exists($this->inst->config["SERVER_ARCHIVE_DIR"]."/".$this->utc_start))) {
+    if (! (file_exists($this->obs_results_dir) &&
+           file_exists($this->obs_archive_dir))) {
       echo "<p>ERROR: UTC_START dirs did not exist in results and/or archive dir(s)</p>\n";
       exit(0);
     }
@@ -75,7 +88,7 @@ class process_obs extends mopsr_webpage
     {
       $this->openBlockHeader("Annotate Observation: ".$this->utc_start);
 
-      $file = $this->inst->config["SERVER_ARCHIVE_DIR"]."/".$this->utc_start."/obs.txt";
+      $file = $this->obs_archive_dir."/obs.txt";
 
       $text = array();
 
@@ -104,6 +117,7 @@ class process_obs extends mopsr_webpage
       <input type="hidden" name="single" value="true">
       <input type="hidden" name="action" value="write_annotation">
       <input type="hidden" name="utc_start" value="<?echo $this->utc_start?>">
+      <input type="hidden" name="class" value="<?echo $this->class?>">
       <input type="submit" value="Save"></input>
       <input type="button" value="Close" onclick="finish()"></input>
       </form>
@@ -120,7 +134,7 @@ class process_obs extends mopsr_webpage
         return;
       }
 
-      $file = $this->inst->config["SERVER_ARCHIVE_DIR"]."/".$this->utc_start."/obs.txt";
+      $file = $this->obs_archive_dir."/obs.txt";
       $fptr = fopen($file, "w");
       if (!$fptr)
       {
@@ -130,11 +144,11 @@ class process_obs extends mopsr_webpage
       fwrite($fptr, $this->annotation);
       fclose($fptr);
 
-      $cmd = "cp -f ".$file." ".$this->inst->config["SERVER_RESULTS_DIR"]."/".$this->utc_start."/obs.txt";
+      $cmd = "cp -f ".$file." ".$this->obs_results_dir."/obs.txt";
       $line = exec($cmd, $output, $rval);
       if ($rval != 0) 
       {
-        echo "<p>Failed to copy file to results dir</p>\n";
+        echo "<p>Failed to copy file to results dir [".$cmd."]</p>\n";
         echo "<pre>\n";
         print_r($output);
         echo "</pre>\n";

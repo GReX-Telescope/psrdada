@@ -12,33 +12,72 @@ class result extends mopsr_webpage
   var $annotation_file = "";
   var $inst = "";
   var $imgs;
-  var $img_types;
   var $mode;
   var $obs_config = "UNKNOWN";
+  var $class = "";
+
+  var $corr_types = array();
+  var $fb_types = array();
+  var $tb_types = array();
+  var $im_types = array();
 
   function result()
   {
     mopsr_webpage::mopsr_webpage();
     $this->inst = new mopsr();
     $this->utc_start = $_GET["utc_start"];
-    $this->obs_results_dir = $this->inst->config["SERVER_RESULTS_DIR"]."/".$this->utc_start;
-    $this->obs_archive_dir = $this->inst->config["SERVER_ARCHIVE_DIR"]."/".$this->utc_start;
-    $this->annotation_file = $this->inst->config["SERVER_ARCHIVE_DIR"]."/".$this->utc_start."/obs.txt";
-    $this->imgs = $this->inst->getObsImages($this->obs_results_dir);
+    $this->class = (isset($_GET["class"])) ? $_GET["class"] : "new";
+    if ($this->class == "old")
+    {
+      $this->obs_results_dir = $this->inst->config["SERVER_OLD_RESULTS_DIR"]."/".$this->utc_start;
+      $this->obs_archive_dir = $this->inst->config["SERVER_OLD_ARCHIVE_DIR"]."/".$this->utc_start;
+      $this->results_link = "old_results";
+    }
+    else
+    {
+      $this->obs_results_dir = $this->inst->config["SERVER_RESULTS_DIR"]."/".$this->utc_start;
+      $this->obs_archive_dir = $this->inst->config["SERVER_ARCHIVE_DIR"]."/".$this->utc_start;
+      $this->results_link = "results";
+    }
+    $this->annotation_file = $this->obs_archive_dir."/obs.txt";
     $this->source_info = $this->getObsModules($this->obs_results_dir);
     $cmd = "grep ^MODE ". $this->obs_results_dir."/obs.info | awk '{print $2}'";
     $this->mode = exec($cmd);
-    if ($this->mode == "PSR")
-      $this->img_types = array("fl", "fr", "ti", "bp", "pm");
-    else if (($this->mode == "CORR") || ($this->mode == "CORR_CAL"))
-      $this->img_types = array("sn", "bd", "ad", "po");
-    else
-      $this->img_types = array();
-
+  
     $cmd = "grep ^CONFIG ".$this->obs_results_dir."/obs.info | awk '{print $2}'";
     $result = exec($cmd);
     if ($result != "")
       $this->obs_config = $result;
+    else
+      if (($this->mode == "CORR") || ($this->mode == "CORR_CAL"))
+        $this->obs_config = "CORRELATION";
+      else
+        $this->obs_config = "INDIVIDUAL_MODULES";
+
+    $ant = array();
+    if ($this->obs_config == "FAN_BEAM" || $this->obs_config == "TIED_ARRAY_FAN_BEAM")
+    {
+      $ant = array_merge ($ant, array("FB"));
+      $cmd = "find ".$this->obs_results_dir." -name '????-??-??-??:??:??.FB.*.850x680.png' | awk -F. '{print $3}'";
+      $lastline = exec($cmd, $this->fb_types, $rval);
+    }
+    else if ($this->obs_config == "TIED_ARRAY_BEAM" || $this->obs_config == "TIED_ARRAY_FAN_BEAM")
+    {
+      $this->tb_types = array("fl", "fr", "ti", "bp", "pm");
+      $ant = array_merge ($ant, array("TB"));
+    }
+    else if ($this->obs_config == "CORRELATION")
+    {
+      $this->corr_types = array("sn", "bd", "ad", "po");
+      $ant = array_merge ($ant, array("CH00"));
+    }
+    else if ($this->obs_config == "INDIVIDUAL_MODULES")
+    {
+      $this->im_types = array("fl", "fr", "ti", "bp", "pm");
+    }
+
+    $this->imgs = $this->inst->getObsImages($this->obs_results_dir, $ant);
+
   }
 
   function javaScriptCallback()
@@ -90,7 +129,7 @@ class result extends mopsr_webpage
 
     /* Summary of the observation */
     $most_recent = $this->getMostRecentResult();
-    $results_link = "<a href='/mopsr/results/".$this->utc_start."/'>link</a>";
+    $results_link = "<a href='/mopsr/".$this->results_link."/".$this->utc_start."/'>link</a>";
     $cmd = "find ".$this->obs_archive_dir." -mindepth 2 -maxdepth 2 -type f -name '*.ar' -printf '%f\n' | sort -n | uniq | wc -l";
     $num_archives = exec($cmd);
 
@@ -103,7 +142,7 @@ class result extends mopsr_webpage
       <tr><td>State</td><td><? echo ucfirst($obs_state)?></td></tr>
       <tr><td>Age</td><td><? echo makeTimeString($most_recent)?></td></tr>
       <tr><td>Archives</td><td><? echo $num_archives?></td></tr>
-      <tr><td>Results</td><td><a href='/mopsr/results/<? echo $this->utc_start?>/'>Link</a></td></tr>
+      <tr><td>Results</td><td><a href='/mopsr/<? echo $this->results_link."/".$this->utc_start?>/'>Link</a></td></tr>
     </table>
 <?
 
@@ -163,7 +202,7 @@ class result extends mopsr_webpage
     /* Actions */
     $this->openBlockHeader("Actions");
 
-    $process_url = "/mopsr/process_obs.lib.php?single=true&utc_start=".$this->utc_start;
+    $process_url = "/mopsr/process_obs.lib.php?single=true&utc_start=".$this->utc_start."&class=".$this->class;
     $process_url = str_replace("+", "%2B", $process_url);
 
     $custom_url = "/mopsr/custom_plot.lib.php?basedir=".$this->obs_results_dir."&utc_start=".$this->utc_start;
@@ -188,24 +227,58 @@ class result extends mopsr_webpage
   {
     $this->openBlockHeader("Plots");
 
-    #$source_info = $this->inst->getObsSources($this->obs_results_dir);
-    echo "    <table>\n";
-    $ants = array_keys($this->imgs);
-    sort($ants);
-    foreach ($ants as $a)
+    // plot correlation images if they exist
+    if ($this->obs_config == "CORRELATION")
     {
+      echo "    <table id='correlation_images'>\n";
       echo "      <tr>\n";
-      echo "        <td>".$a."</td>\n";
-      foreach ($this->img_types as $t)
-      {
-        if (($this->mode == "CORR") || ($this->mode == "CORR_CAL"))
-          $this->printPlotCell($this->imgs[$a][$t."_160x120"], $this->imgs[$a][$t."_1024x768"]);
-        else
-          $this->printPlotCell($this->imgs[$a][$t."_120x90"], $this->imgs[$a][$t."_1024x768"]);
-      }
+      foreach ($this->corr_types as $t)
+        $this->printPlotCell($this->imgs["CH00"][$t."_160x120"], $this->imgs["CH00"][$t."_1024x768"]);
       echo "      </tr>\n";
+      echo "    </table>\n";
     }
-    echo "    </table>\n";
+
+    // print tied array beam images if they exist
+    if ($this->obs_config == "TIED_ARRAY_BEAM" || $this->obs_config == "TIED_ARRAY_FAN_BEAM")
+    {
+      echo "    <table id='tied_array_beam_images'>\n";
+      echo "      <tr>\n";
+      foreach ($this->tb_types as $t)
+        $this->printPlotCell($this->imgs["TB"][$t."_120x90"], $this->imgs["TB"][$t."_1024x768"]);
+      echo "      </tr>\n";
+      echo "    </table>\n";
+    }
+
+    // print fan beam images if they exist
+    if ($this->obs_config == "FAN_BEAM" || $this->obs_config == "TIED_ARRAY_FAN_BEAM")
+    {
+      echo "    <table id='fan_beam_images'>\n";
+      rsort($this->fb_types);
+      foreach ($this->fb_types as $t)
+      {
+        echo "      <tr>\n";
+        $this->printPlotCell($this->imgs["FB"][$t."_850x680"], $this->imgs["FB"][$t."_850x680"]);
+        echo "      </tr>\n";
+      }
+      echo "    </table>\n";
+    }
+
+    if ($this->obs_config == "INDIVIDUAL_MODULES")
+    {
+      $ants = array_keys($this->imgs);
+      sort($ants);
+      echo "    <table id='individual_modules'>\n";
+      foreach ($ants as $a)
+      {
+        echo "      <tr>\n";
+        echo "        <td>".$a."</td>\n";
+        foreach ($this->im_types as $t)
+          $this->printPlotCell($this->imgs[$a][$t."_120x90"], $this->imgs[$a][$t."_1024x768"]);
+        echo "        </td>\n";
+        echo "      </tr>\n";
+      }
+      echo "    </table>\n";
+    }
 
     $this->closeBlockHeader();
 
@@ -332,10 +405,10 @@ class result extends mopsr_webpage
     echo "    <td align='center'>\n"; 
 
     if ($have_hires) {
-      echo "      <a href=\"/mopsr/results/".$this->utc_start."/".$image_hires."\">";
+      echo "      <a href=\"/mopsr/".$this->results_link."/".$this->utc_start."/".$image_hires."\">";
     }
       
-    echo "      <img src=\"/mopsr/results/".$this->utc_start."/".$image."\">";
+    echo "      <img src=\"/mopsr/".$this->results_link."/".$this->utc_start."/".$image."\">";
 
     if ($have_hires) {
       echo "    </a><br>\n";

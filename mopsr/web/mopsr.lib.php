@@ -134,13 +134,15 @@ class mopsr extends instrument
   #
   # Over-ride baseclass method
   #
-  function getObsImages($dir)
+  function getObsImages($dir, $ants = array())
   {
     # determine how many antenna / beam 
     $rval = 0;
-    $ants = array();
-    $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -n";
-    $line = exec($cmd, $ants, $rval);
+    if (count($ants) == 0)
+    {
+      $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -n";
+      $line = exec($cmd, $ants, $rval);
+    }
 
     $results = array();
     foreach ($ants as $ant)
