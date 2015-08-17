@@ -52,6 +52,9 @@ AC_DEFUN([SWIN_LIB_CUDA],
 
     AC_DEFINE([HAVE_CUDA],[1],[Define if the CUDA library is present])
 
+    with_cufft_include_dir=${with_cuda_include_dir}
+    with_cufft_lib_dir=${with_cuda_lib_dir}
+
     AC_MSG_CHECKING([for CUDA FFT installation])
 
     SWIN_PACKAGE_FIND([cufft],[cufft.h])
@@ -75,8 +78,8 @@ AC_DEFUN([SWIN_LIB_CUDA],
 
     AC_MSG_CHECKING([for CUB installation])
    
-    SWIN_PACKAGE_FIND([cub],[cub.h])
-    SWIN_PACKAGE_TRY_COMPILE([cub],[#include <cub.h>])
+    SWIN_PACKAGE_FIND([cub],[cub.cuh])
+    # SWIN_PACKAGE_TRY_COMPILE([cub],[#include <cub/block/block_radix_sort.cuh>])
 
     AC_MSG_RESULT([$have_cub])   
 
