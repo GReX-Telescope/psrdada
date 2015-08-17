@@ -901,7 +901,7 @@ void mopsr_delay_fractional (cudaStream_t stream, void * d_in, void * d_out,
 }
 
 
-//#if HAVE_CUDA_SHUFFLE
+#ifdef HAVE_CUDA_SHUFFLE
 __inline__ __device__
 float warpReduceSumF(float val) {
   for (int offset = warpSize/2; offset > 0; offset /= 2) 
@@ -957,7 +957,7 @@ int blockReduceSumI(int val) {
 
   return val;
 }
-//#endif
+#endif
 
 
 // Compute the mean of the re and imginary compoents for 
@@ -990,10 +990,12 @@ __global__ void mopsr_measure_means_kernel (cuFloatComplex * in, cuFloatComplex 
     idx += blockDim.x;
   }
 
+#ifdef HAVE_CUDA_SHUFFLE
   // compute via block reduce sum
   sum_re = blockReduceSumF(sum_re);
   sum_im = blockReduceSumF(sum_im);
   count = blockReduceSumI(count);
+#endif
 
   if (threadIdx.x == 0)
   {
@@ -1039,9 +1041,11 @@ __global__ void mopsr_skcompute_kernel (cuFloatComplex * in, float * s1s, float 
     idx += blockDim.x;
   }
 
+#ifdef HAVE_CUDA_SHUFFLE
   // compute via block reduce sum  
   s1_sum = blockReduceSumF(s1_sum);
   s2_sum = blockReduceSumF(s2_sum);
+#endif
 
   if (threadIdx.x == 0)
   {
@@ -1222,9 +1226,11 @@ __global__ void mopsr_skmask_kernel (float * in, int8_t * out, cuFloatComplex * 
     // since s1 will have twice the variance of the Re/Im components, / 2
     s1_thread /= (2 * M);
 
+#ifdef HAVE_CUDA_SHUFFLE
     // compute the sum of the sums[].x for all the block
     s1_thread = blockReduceSumF (s1_thread);
     s1_count = blockReduceSumI (s1_count);
+#endif
 
     // sync here to be sure the smask is now updated
     __syncthreads();
@@ -1817,9 +1823,11 @@ __global__ void mopsr_skdetect_kernel (float * s1s, float * s2s, cuFloatComplex 
   // since s1 will have twice the variance of the Re/Im components, / 2
   s1_thread /= (2 * M);
 
+#ifdef HAVE_CUDA_SHUFFLE
   // compute the sum of the sums[].x for all the block
   s1_thread = blockReduceSumF (s1_thread);
   s1_count = blockReduceSumI (s1_count);
+#endif
 
   // sync here to be sure the smask is now updated
   __syncthreads();

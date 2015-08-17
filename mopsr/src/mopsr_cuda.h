@@ -14,13 +14,9 @@ extern "C" {
 #define MOPSR_MEDIAN_FILTER_MEMORY 8
 
 #ifdef __CUDA_ARCH__
-# if (__CUDA_ARCH__ >= 300)
-# define HAVE_CUDA_SHUFFLE 1
-# else
-# define HAVE_CUDA_SHUFFLE 0
-# endif
-#else
-# define HAVE_CUDA_SHUFFLE 0
+#if __CUDA_ARCH__ >= 300
+#define HAVE_CUDA_SHUFFLE
+#endif
 #endif
 
 void mopsr_input_transpose_TFS_to_FST (cudaStream_t stream, void * d_in, void * d_out, uint64_t nbytes, unsigned nchan, unsigned nant);

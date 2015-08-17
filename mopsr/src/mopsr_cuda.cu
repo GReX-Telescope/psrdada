@@ -7,9 +7,14 @@
 #include "dada_cuda.h"
 #include "mopsr_cuda.h"
 
+
+
 #define BEAMS_PER_LOOP 8
 #define WARP_SIZE      32
 //#define _GDEBUG      1
+
+// large parts of these kernels require SHFL instructions that are 
+// only available in sm_30 (kepler) or greater
 
 // each thread loads 16 x 2bytes into shm
 __global__ void input_transpose_TFS_to_FST (
@@ -971,6 +976,7 @@ __global__ void tile_beams_kernel_64_blk (
       float beam_sum = 0;
       unsigned count = 32;
      
+#ifdef HAVE_CUDA_SHUFFLE
       {
         unsigned i = 0;
         while (i < nant)
@@ -1033,6 +1039,7 @@ __global__ void tile_beams_kernel_64_blk (
         if (warp_idx == 0)
           output[(ibeam * gridDim.x) + blockIdx.x] = beam_sum;
       }
+#endif
     }
   }
 }
@@ -1123,9 +1130,11 @@ __global__ void tile_beams_kernel_32_blk (
         count = 0;
       }
 
+#ifdef HAVE_CUDA_SHUFFLE
       phasor.x = __shfl (phasor_load.x, count);
       phasor.y = __shfl (phasor_load.y, count);
       count++;
+#endif
       
       {
         cuFloatComplex val = make_cuComplex ((float) ptr8[0], (float) ptr8[1]);
@@ -1138,13 +1147,13 @@ __global__ void tile_beams_kernel_32_blk (
     // get the magnitude of the power
     float beam_sum = sum.x * sum.x + sum.y * sum.y;
 
-//#if HAVE_CUDA_SHUFFLE
+#ifdef HAVE_CUDA_SHUFFLE
     beam_sum += __shfl_down (beam_sum, 16);
     beam_sum += __shfl_down (beam_sum, 8);
     beam_sum += __shfl_down (beam_sum, 4);
     beam_sum += __shfl_down (beam_sum, 2);
     beam_sum += __shfl_down (beam_sum, 1);
-//#endif
+#endif
 
     // each warp contains a time sample from a different beam
     if (warp_idx == 0)
@@ -1159,6 +1168,7 @@ __global__ void tile_beams_kernel_32_blk (
   }
 }
 
+#ifdef HAVE_CUDA_SHUFFLE
 __device__ __forceinline__ cuFloatComplex shflComplex( cuFloatComplex r, int lane )
 {
   return make_cuComplex ( __shfl( r.x, lane ), __shfl( r.y, lane ) );
@@ -1168,6 +1178,7 @@ __device__ __forceinline__ cuFloatComplex shfl_xor_Complex ( cuFloatComplex r, i
 {
   return make_cuComplex ( __shfl_xor( r.x, lane ), __shfl_xor( r.y, lane ) );
 }
+#endif
 
 __global__ void tile_beams_kernel_512 (
         const __restrict__ int16_t * input, float * output,
@@ -1224,6 +1235,8 @@ __global__ void tile_beams_kernel_512 (
 
     __syncthreads();
 
+#ifdef HAVE_CUDA_SHUFFLE
+
     // detect each sample and integrate across the warp (factor of 32 in time)
     // this takes us from 1.28us to 40.96
     float power;
@@ -1263,6 +1276,7 @@ __global__ void tile_beams_kernel_512 (
         output[out_idx] = power;
       }
     }
+#endif
   }
 }
 
@@ -1350,6 +1364,7 @@ __global__ void tile_beams_kernel_2048_test (
       idx += ndat/2;
     }
 
+#ifdef HAVE_CUDA_SHUFFLE
     // detect each sample and integrate across the warp (factor of 32 in time)
     // this takes us from 1.28us to 40.96
     unsigned sdx = 2 * warp_num;
@@ -1409,6 +1424,7 @@ __global__ void tile_beams_kernel_2048_test (
         output[out_idx] = power;
       }
     }
+#endif
   }
 }
 
@@ -1474,6 +1490,7 @@ __global__ void tile_beams_kernel_1024_test (
       idx += ndat;
     }
 
+#ifdef HAVE_CUDA_SHUFFLE
     // detect each sample and integrate across the warp (factor of 32 in time)
     // this takes us from 1.28us to 40.96
     unsigned sdx = warp_num;
@@ -1516,6 +1533,7 @@ __global__ void tile_beams_kernel_1024_test (
         //output[out_idx] = power;
       }
     }
+#endif
   }
 }
 
@@ -1586,6 +1604,8 @@ __global__ void tile_beams_kernel_1024_4pt (
       }
       idx += nant;
     }
+
+#ifdef HAVE_CUDA_SHUFFLE
 
     ///////////////////////////////////////////////////////////////////////////
     // 4-pt inter-thread FFT
@@ -1720,6 +1740,7 @@ __global__ void tile_beams_kernel_1024_4pt (
         }
       }
     }
+#endif
   }
 }
 
@@ -1788,6 +1809,7 @@ __global__ void tile_beams_kernel_1024_8pt (
       }
     }
 
+#ifdef HAVE_CUDA_SHUFFLE
     ///////////////////////////////////////////////////////////////////////////
     // 8-pt inter-thread FFT
     //
@@ -1902,6 +1924,7 @@ __global__ void tile_beams_kernel_1024_8pt (
       //          this is 512 / 4       isamp       
       output[(ibeam * (ndat / 128)) + (blockIdx.x * 4) + ichan] = sdata_tb_c[ibeam * 4 + ichan];
     }
+#endif
   }
 }
 
@@ -2062,7 +2085,6 @@ d_phasors, nbeam, ndat, nant);
 #endif
 }
 
-
 __global__ void tie_beam_kernel (int16_t * in, cuFloatComplex * out, cuFloatComplex * d_phasors, uint64_t ndat, unsigned nant)
 {
   extern __shared__ cuFloatComplex s_phasors[];
@@ -2125,3 +2147,4 @@ void mopsr_tie_beam (cudaStream_t stream, void * d_in, void * d_out, void * d_ph
   tie_beam_kernel<<<nblocks, nthreads, shm_bytes, stream>>>((int16_t *) d_in, (cuFloatComplex *) d_out, (cuFloatComplex *) d_phasors, ndat, nant);
 
 }
+

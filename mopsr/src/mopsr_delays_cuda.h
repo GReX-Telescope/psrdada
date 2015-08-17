@@ -10,16 +10,6 @@ extern "C" {
 #include "mopsr_delays.h"
 #include <cuda_runtime.h>
 
-#ifdef __CUDA_ARCH__
-# if (__CUDA_ARCH__ >= 300)
-# define HAVE_CUDA_SHUFFLE 1
-# else
-# define HAVE_CUDA_SHUFFLE 0
-# endif
-#else
-# define HAVE_CUDA_SHUFFLE 0
-#endif
-
 #define MOPSR_MEMORY_BLOCKS 64
 #define MOPSR_MBLOCKS_PER_THREAD 8
 // this should be MOPSR_MEMORY_BLOCKS/8
