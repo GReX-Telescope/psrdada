@@ -275,9 +275,9 @@ void static_delay_kernel(cuFloatComplex * in, float * out, float * out_errors,
     //printf("thread %d: %.4f\n",threadIdx.x,-B / (2*A));
 
     //float xv = -B / (2*A);
-    float xv = fmod((-B / (2*A) + batch_size/2), batch_size) - batch_size/2;
+    float xv = fmodf((-B / (2*A) + batch_size/2), (float) batch_size) - batch_size/2;
     //yv = C - B*B / (4*A);
-    //out[pair_idx] = fmod((-batch_size/2 + xv) - batch_size/2,batch_size);
+    //out[pair_idx] = fmodf((-batch_size/2 + xv) - batch_size/2,batch_size);
     out[pair_idx] = xv;
     out_errors[pair_idx] = sn;
     //out[pair_idx] = sq_sum/n;
