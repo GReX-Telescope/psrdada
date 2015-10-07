@@ -39,6 +39,7 @@ struct dada_block_t
   char            error;
   char *          header;
   char *          curr_buf;
+  float           max_percent_full;
   dada_block_t *  other_pol;
   pthread_mutex_t * mutex;
 };
@@ -54,6 +55,7 @@ typedef struct {
   uint64_t bytes_out;
   int verbose;
   unsigned quit;
+  char wait_for_both;
   pthread_t pola_thread_id;
   pthread_t polb_thread_id;
   pthread_mutex_t   mutex;
@@ -71,6 +73,7 @@ void usage()
   fprintf (stdout,
            "dada_dbmergedb [options] pola_key polb_key out_key\n"
            " -s        1 transfer, then exit\n"
+           " -w        wait for both pols before aligning\n"
            " -v        verbose mode\n"
            " pola_key  DADA key for polarisation A\n"
            " polb_key  DADA key for polarisation B\n"
@@ -138,6 +141,10 @@ int dbmergedb_init_hdu (dada_dbmergedb_t * ctx, dada_block_t * db, char reader)
   db->curr_buf = 0;
   db->header = 0;
   db->mutex = &(ctx->mutex);
+  if (ctx->wait_for_both)
+    db->max_percent_full = 1.1;
+  else
+    db->max_percent_full = 0.5;
 
   return 0;
 }
@@ -466,7 +473,7 @@ void * input_thread (void * arg)
     // that we which know which thread needs to delay itself
     if (db->other_pol->utc_start.tv_sec == 0)
     {
-      if (ipcio_percent_full (db->hdu->data_block) > 0.5)
+      if (ipcio_percent_full (db->hdu->data_block) > db->max_percent_full)
       {
         db->curr_buf = ipcio_open_block_read (db->hdu->data_block, &(db->bytes), &(db->block_id));
         ipcio_close_block_read (db->hdu->data_block, db->bufsz);
@@ -555,6 +562,9 @@ int main (int argc, char **argv)
   // Flag set in verbose mode
   char verbose = 0;
 
+  // Flag for waiting for both pols
+  char wait_for_both = 0;
+
   // number of transfers
   unsigned single_transfer = 0;
 
@@ -573,6 +583,10 @@ int main (int argc, char **argv)
         single_transfer = 1;
         break;
 
+      case 'w':
+        wait_for_both = 1;
+        break;
+
       case 'v':
         verbose++;
         break;
@@ -585,6 +599,7 @@ int main (int argc, char **argv)
   }
 
   dbmergedb.verbose = verbose;
+  dbmergedb.wait_for_both = wait_for_both;
 
   int num_args = argc-optind;
   int i = 0;
