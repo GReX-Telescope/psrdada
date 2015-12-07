@@ -8,7 +8,7 @@ set ra_deg = `cat $inf | grep '<start_coordinate>' -A 3 | grep ra | sed -e 's:.*
 set dec_deg = `cat $inf | grep '<start_coordinate>' -A 3 | grep dec | sed -e 's:.*>\(-*[0-9.]*\)<.*:\1:'`
 set ibeam = `cat $inf  | grep '<receiver_beam>'| sed -e 's:.*>\(-*[0-9.]*\)<.*:\1:'`
 
-set ra_tot = `echo ${ra_deg} | awk '{print $1/15}'`  #total ra hours
+set ra_tot = `echo ${ra_deg} | awk '{printf ("%f", $1/15)}'`  #total ra hours
 set ra_h = `echo ${ra_tot} | awk '{print int($1)}' | awk '{printf "%02d",$1}'` #hours
 set ra_min = `echo ${ra_tot} | awk '{print int(($1-int($1))*60)}' | awk '{printf "%02d",$1}'` #min
 set ra_sec = `echo $ra_tot $ra_min | awk '{print int((($1-int($1))*60 - $2)*60)}' | awk '{printf "%02d",$1}'` #sec
