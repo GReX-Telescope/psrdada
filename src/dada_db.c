@@ -20,7 +20,7 @@ void usage ()
           " -a hdrsz    size of each header buffer (in bytes) [default: %"PRIu64"]\n"
           " -b bufsz    size of each buffer (in bytes) [default: %"PRIu64"]\n"
 #ifdef HAVE_HWLOC
-          " -c cpu      assign memory adjacent to cpu  [default: all nodes]\n"
+          " -c node      assign memory from NUMA node  [default: all nodes]\n"
 #endif
           " -d          destroy the shared memory area [default: create]\n"
           " -h          show help\n"
@@ -63,10 +63,8 @@ int main (int argc, char** argv)
   // Perform the topology detection.
   hwloc_topology_load(topology);
 
-  // cpu core to which to bind memory
-  int cpu_core = -1;
-
-  int core_depth;
+  // numa node to bind to
+  int numa_node = -1;
 
   while ((arg = getopt(argc, argv, "a:b:c:dhk:ln:pr:")) != -1) {
 #else
@@ -94,22 +92,19 @@ int main (int argc, char** argv)
 
 #ifdef HAVE_HWLOC
     case 'c':
-      if (sscanf (optarg, "%u", &cpu_core) != 1)
+      if (sscanf (optarg, "%d", &numa_node) != 1)
       {
-        fprintf (stderr, "dada_db: could not parse cpu_core from %s\n", optarg);
+        fprintf (stderr, "dada_db: could not parse numa_node from %s\n", optarg);
         return -1;
       }
 
-      // get the depth in the topology tree for CPU cores
-      core_depth = hwloc_get_type_or_below_depth (topology, HWLOC_OBJ_CORE);
-
-      // check the number of cpu cores
-      int ncore = hwloc_get_nbobjs_by_depth (topology, core_depth);
-
-      if (cpu_core >= ncore)
+      int numa_nodes = hwloc_get_nbobjs_by_type (topology, HWLOC_OBJ_NODE);
+      if ((numa_node < 0) || (numa_node >= numa_nodes))
       {
-        fprintf (stderr, "dada_db: only %d cores available on this machine\n", ncore);
+        fprintf (stderr, "dada_db: only %d NUMA nodes available on this machine\n",
+                 numa_nodes);
         return -1;
+
       }
       break;
 #endif
@@ -176,39 +171,21 @@ int main (int argc, char** argv)
   }
 
 #ifdef HAVE_HWLOC
+
   // fetch the specified core
-  hwloc_obj_t obj = hwloc_get_obj_by_depth (topology, core_depth, cpu_core);
+  hwloc_obj_t obj = hwloc_get_obj_by_type (topology, HWLOC_OBJ_NODE, numa_node);
   if (obj)
   {
-    // Get a copy of its cpuset that we may modify.
-    hwloc_cpuset_t cpuset = hwloc_bitmap_dup (obj->cpuset);
-
-    // Get only one logical processor (in case the core is SMT/hyperthreaded)
-    hwloc_bitmap_singlify (cpuset);
-
-    /*
-    if (hwloc_set_cpubind(topology, cpuset, 0))
-    {
-      char *str;
-      int error = errno;
-      hwloc_bitmap_asprintf(&str, obj->cpuset);
-      fprintf(stderr, "Couldn't bind to cpuset %s: %s\n", str, strerror(error));
-      free(str);
-    }
-*/
     hwloc_membind_policy_t policy = HWLOC_MEMBIND_BIND;
     hwloc_membind_flags_t flags = 0;
 
-    int result = hwloc_set_membind (topology, cpuset, policy, flags);
+    int result = hwloc_set_membind_nodeset (topology, obj->nodeset, policy, flags);
     if (result < 0)
     {
       fprintf (stderr, "dada_db: failed to set memory binding policy: %s\n",
                strerror(errno));
       return -1;
     }
-
-    // Free our cpuset copy
-    hwloc_bitmap_free(cpuset);
   }
 
 #endif
