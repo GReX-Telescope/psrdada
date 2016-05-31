@@ -8,6 +8,7 @@ define("AQ_FILE",  "/home/dada/linux_64/share/mopsr_aq.cfg");
 define("BF_FILE",  "/home/dada/linux_64/share/mopsr_bf.cfg");
 define("BP_FILE",  "/home/dada/linux_64/share/mopsr_bp.cfg");
 define("CNR_FILE", "/home/dada/linux_64/share/mopsr_cornerturn.cfg");
+define("BP_CNR_FILE", "/home/dada/linux_64/share/mopsr_bp_cornerturn.cfg");
 define("SP_FILE",  "/home/dada/linux_64/share/mopsr_signal_paths.txt");
 define("CSS_FILE", "/mopsr/mopsr.css");
 
@@ -41,6 +42,7 @@ class mopsr extends instrument
     $arr["mopsr_results_manager_tb"]     = array("logfile" => "mopsr_results_manager_tb.log", "name" => "Results Mngr TB", "tag" => "server", "shortname" => "Results");
     $arr["mopsr_web_monitor"]            = array("logfile" => "mopsr_web_monitor.log", "name" => "Web Monitor", "tag" => "server", "shortname" => "Monitor");
     $arr["mopsr_event_monitor"]          = array("logfile" => "mopsr_event_monitor.log", "name" => "Event Monitor", "tag" => "server", "shortname" => "EMon");
+    $arr["mopsr_swin_transferrer"]       = array("logfile" => "mopsr_swin_transferrer.log", "name" => "Swin Transfer", "tag" => "server", "shortname" => "SwinXfer");
 
     $arr["mopsr_pwc_monitor"]            = array("logfile" => "nexus.pwc.log", "name" => "PWC", "tag" => "pwc", "shortname" => "PWC");
     $arr["mopsr_sys_monitor"]            = array("logfile" => "nexus.sys.log", "name" => "SYS", "tag" => "sys", "shortname" => "SYS");
@@ -65,6 +67,7 @@ class mopsr extends instrument
     $arr["mopsr_mux_send"]            = array("logfile" => "nexus.sys.log", "name" => "Mux Send", "tag" => "muxsend");
     $arr["mopsr_aqdsp"]               = array("logfile" => "nexus.sys.log", "name" => "AQDSP", "tag" => "aqdsp");
     $arr["mopsr_aq_diskdb"]           = array("logfile" => "nexus.sys.log", "name" => "AQ DiskDB", "tag" => "aqdisk");
+    $arr["mopsr_aq_cleaner"]          = array("logfile" => "nexus.sys.log", "name" => "AQ Cleaner", "tag" => "aqcleaner");
     $arr["mopsr_superb"]              = array("logfile" => "nexus.sys.log", "name" => "Superb Mon", "tag" => "superb");
     $arr["mopsr_dbsplitdb"]           = array("logfile" => "nexus.sys.log", "name" => "DB split", "tag" => "split");
     $arr["mopsr_dbantsdb"]            = array("logfile" => "nexus.sys.log", "name" => "Select Ants", "tag" => "ants");
@@ -74,6 +77,8 @@ class mopsr extends instrument
 
     $arr["mopsr_mux_recv"]            = array("logfile" => "bfs.sys.log", "name" => "Mux Recv", "tag" => "mux recv");
     $arr["mopsr_bf_transpose"]        = array("logfile" => "bfs.sys.log", "name" => "Transpose", "tag" => "bf xpose");
+    $arr["mopsr_bf_cleaner"]          = array("logfile" => "bfs.sys.log", "name" => "BF Cleaner", "tag" => "bfcleaner");
+    $arr["mopsr_bf_rescale"]          = array("logfile" => "bfs.sys.log", "name" => "Rescale", "tag" => "bf scale");
     $arr["mopsr_bf_process"]          = array("logfile" => "bfs.sys.log", "name" => "Proc", "tag" => "bf proc");
     $arr["mopsr_bf_archive_manager"]  = array("logfile" => "bfs.sys.log", "name" => "Archive Mngr", "tag" => "archive mngr");
     $arr["mopsr_bfdsp"]               = array("logfile" => "bfs.sys.log", "name" => "BFDSP", "tag" => "bfdsp");
@@ -83,6 +88,7 @@ class mopsr extends instrument
     $arr["mopsr_bp_send"]             = array("logfile" => "bps.sys.log", "name" => "BP Send", "tag" => "bp_send");
     $arr["mopsr_bp_recv"]             = array("logfile" => "bps.sys.log", "name" => "BP Recv", "tag" => "bp_recv");
     $arr["mopsr_bp_split"]            = array("logfile" => "bps.sys.log", "name" => "BP Split", "tag" => "bp_split");
+    $arr["mopsr_bp_sigproc"]          = array("logfile" => "bps.sys.log", "name" => "BP Sigproc", "tag" => "bp_sigproc");
     $arr["mopsr_bp_digifil"]          = array("logfile" => "bps.sys.log", "name" => "BP Digifil", "tag" => "bp_digifil");
     $arr["mopsr_bp_fb_manager"]       = array("logfile" => "bps.sys.log", "name" => "BP FB Manager", "tag" => "bp_fb_mngr");
     $arr["mopsr_bp_integrate"]        = array("logfile" => "bps.sys.log", "name" => "BP Int", "tag" => "bp_int");
@@ -90,6 +96,7 @@ class mopsr extends instrument
     $arr["mopsr_bp_reblock"]          = array("logfile" => "bps.sys.log", "name" => "BP Reblock", "tag" => "bp_reblock");
     $arr["mopsr_bp_heimdall"]         = array("logfile" => "bps.sys.log", "name" => "BP Heimdall", "tag" => "bp_heimdall");
     $arr["mopsr_bp_cands_mon"]        = array("logfile" => "bps.sys.log", "name" => "BP Cands Mon", "tag" => "bp_cands_mon");
+    $arr["mopsr_bp_cleaner"]          = array("logfile" => "bps.sys.log", "name" => "BP Cleaner", "tag" => "bpclenaer");
 
     return $arr;
 
@@ -163,7 +170,6 @@ class mopsr extends instrument
     }
     
     return $results;
-
   }
 
   function getObsSources($dir) 

@@ -119,6 +119,13 @@ class area_summary extends mopsr_webpage
         } 
         return pd + n.toString(); 
       }
+
+      function pad(num, size) {
+          var s = num+"";
+          while (s.length < size) s = "0" + s;
+          return s;
+      }
+
 <?
       $keys = array_keys($this->machines);
       echo "      var machines = new Array('".$keys[0]."'";
@@ -157,8 +164,12 @@ class area_summary extends mopsr_webpage
           var proc = procs[i];
           if (excluded.indexOf(proc) == -1) 
           {
-            document.getElementById(proc+"_messages").innerHTML = "&nbsp;";
-            document.getElementById(proc+"_img").src = "/images/green_light.png";
+            var msg = document.getElementById(proc+"_messages");
+            if (msg.innerHTML != "&nbsp;")
+            {
+              msg.innerHTML = "&nbsp;";
+              document.getElementById(proc+"_img").src = "/images/green_light.png";
+            }
           }
         }
       }
@@ -351,6 +362,7 @@ class area_summary extends mopsr_webpage
               // process daemon_status tags next
               var daemon_statuses = xmlObj.getElementsByTagName("daemon_status");
 
+              var this_area = "<?echo $this->area?>"
               var set = new Array();
               resetOthers(set);
   
@@ -363,52 +375,60 @@ class area_summary extends mopsr_webpage
                   var type = node.getAttribute("type");
                   var pwc = node.getAttribute("pwc");
                   var tag = node.getAttribute("tag");
+                  var area = node.getAttribute("area");
                   var msg = node.childNodes[0].nodeValue;
 
-                  var log_file = "";
-                  if (pwc != "server")
+                  if (this_area == area)
                   {
-                    log_file = "mopsr_" + tag + "_monitor";
-                  }
-                  else
-                  {
-                    log_file = tag;
-                  }
+                    var log_file = "";
+                    if (pwc != "server")
+                    {
+                      log_file = "mopsr_" + tag + "_monitor";
+                    }
+                    else
+                    {
+                      log_file = tag;
+                    }
 
-                  img_id = document.getElementById(pwc + "_img");
 
-                  // add this light to the list of lights not to be reset
-                  set.push(proc);
+                    img_id = document.getElementById(pwc + "_img");
 
-                  if (img_id.src.indexOf("grey_light.png") == -1)
-                  {
-                    if (type == "ok") 
-                      img_id.src = "/images/green_light.png";
-                    if (type == "warning")
-                      img_id.src = "/images/yellow_light.png";
-                    if (type == "error")
-                      img_id.src = "/images/red_light.png";
-                  }
+                    // add this light to the list of lights not to be reset
+                    set.push(pwc);
 
-                  log_level = "all";
-        
-                  log_length = 6;
-                  try  
-                  {
-                    var j = document.getElementById("loglength").selectedIndex;
-                    log_length = document.getElementById("loglength").options[j].value
-                  }
-                  catch(e) 
-                  {
-                  }
+                    if (img_id.src.indexOf("grey_light.png") == -1)
+                    {
+                      if (type == "ok") 
+                      {
+                        alert(img_id.src);
+                        img_id.src = "/images/green_light.png";
+                      }
+                      if (type == "warning")
+                        img_id.src = "/images/yellow_light.png";
+                      if (type == "error")
+                        img_id.src = "/images/red_light.png";
+                    }
 
-                  var link = "log_viewer.php?proc="+proc+"&level="+log_level+"&length="+log_length+"&daemon="+log_file+"&autoscroll=false";
-                  var msg_element = document.getElementById(proc+"_messages");
+                    log_level = "all";
+          
+                    log_length = 6;
+                    try  
+                    {
+                      var j = document.getElementById("loglength").selectedIndex;
+                      log_length = document.getElementById("loglength").options[j].value
+                    }
+                    catch(e) 
+                    {
+                    }
 
-                  if (msg_element.innerHTML == "&nbsp;") {
-                    msg_element.innerHTML = "<a class='cln' target='log_window' href='"+link+"'>"+msg+"</a>";
-                  } else {
-                    msg_element.innerHTML = msg_element.innerHTML + " | <a class='cln' target='log_window' href='"+link+"'>"+msg+"</a>";
+                    var link = "log_viewer.php?proc="+pwc+"&level="+log_level+"&length="+log_length+"&daemon="+log_file+"&autoscroll=false";
+                    var msg_element = document.getElementById(pwc+"_messages");
+
+                    if (msg_element.innerHTML == "&nbsp;") {
+                      msg_element.innerHTML = "<a class='cln' target='log_window' href='"+link+"'>"+msg+"</a>";
+                    } else {
+                      msg_element.innerHTML = msg_element.innerHTML + " | <a class='cln' target='log_window' href='"+link+"'>"+msg+"</a>";
+                    }
                   }
                 }
               }

@@ -40,18 +40,15 @@ class mgt_monitor extends mopsr_webpage
 ?>
     <script type='text/javascript'>  
 
-      var active_img = "hg";
-
-      function reset_other_imgs(excluded) 
+      function reset_other_cells(excluded) 
       {
-        var imgs = document.getElementsByTagName('img');
+        var cells = document.getElementsByTagName('td');
         var i=0;
-        for (i=0; i< imgs.length; i++) 
+        for (i=0; i< cells.length; i++) 
         {
-          if (excluded.indexOf(imgs[i].id) == -1)
+          if ((cells[i].id.length > 4) && (excluded.indexOf(cells[i].id) == -1))
           {
-            imgs[i].src = "/images/grey_light.png";
-            imgs[i].height = 0;
+            cells[i].style.backgroundColor = "grey";
           }
         }
       }
@@ -69,9 +66,8 @@ class mgt_monitor extends mopsr_webpage
           var xmlDoc = xml_request.responseXML
           if (xmlDoc != null)
           {
-            var i, j, k, img_id, img_url;
-            var excluded_imgs = Array();
-            var excluded_trs  = Array();
+            var i, j, k
+            var excluded_cells = Array();
 
             var xmlObj=xmlDoc.documentElement;
 
@@ -90,24 +86,23 @@ class mgt_monitor extends mopsr_webpage
             for (i=0; i<pfbs.length; i++)
             {
               pfb_id = pfbs[i].getAttribute("id");
-              excluded_trs.push(pfb_id);
               inputs = pfbs[i].childNodes;
               for (j=0; j<inputs.length; j++)
               {
                 input_id = inputs[j].getAttribute("id");
                 locked = inputs[j].getAttribute("locked");
                 cell_id = pfb_id + "_" + input_id
-                excluded_imgs.push(cell_id);
+                excluded_cells.push(cell_id);
 
                 if (locked == "true")
-                  document.getElementById (cell_id).src = "/images/green_light.png";
+                  document.getElementById (cell_id).style.backgroundColor = "#00ee00";
                 else if (locked == "false")
-                  document.getElementById (cell_id).src = "/images/red_light.png";
+                  document.getElementById (cell_id).style.backgroundColor = "red";
                 else
-                  document.getElementById (cell_id).src = "/images/grey_light.png";
+                  document.getElementById (cell_id).style.backgroundColor = "yellow";
               }
             }
-            reset_other_imgs (excluded_imgs);
+            reset_other_cells (excluded_cells);
           }
         }
       }
@@ -140,23 +135,18 @@ class mgt_monitor extends mopsr_webpage
     <style type="text/css">
     
       table.mgt_monitor {
-        border-collapse: separate;
-        border-spacing: 0px 5px;
+        border-collapse: none;
+        border-spacing: 1px;
       }
 
       table.mgt_monitor td {
-        padding-top: 2px;
-        padding-bottom: 2px;
+        padding: 2px;
       }
 
       table.mgt_monitor th {
         padding-left: 5px;
         padding-right: 5px;
-      }
-
-      table.mgt_monitor img {
-        margin-left:  2px;
-        margin-right: 2px;
+        width: 14px;
       }
 
       .name {
@@ -223,9 +213,7 @@ class mgt_monitor extends mopsr_webpage
           $module_id = $pfb_id."_".($imod);
           $title = $this->signal_paths[$module_id];
 
-          echo "<td>";
-          echo "<img id='".$module_id."' src='/images/grey_light.png' width='15px' height='15px' title='".$title."'/>";
-          echo "</td>\n";
+          echo "<td id='".$module_id."' style='background-color: grey;'>&nbsp;</td>";
           if ($imod && (($imod+1) % 4 == 0))
             echo "<td>&nbsp;</td>\n";
         }

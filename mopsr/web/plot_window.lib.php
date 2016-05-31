@@ -15,7 +15,7 @@ class plot_window extends mopsr_webpage
 
   var $ants_per_pfb = 16;
 
-  var $types = array ("fl", "fr", "ti", "bp", "pm");
+  var $types = array ("fl", "fr", "ti", "bp", "pm", "ta");
 
   var $corr_types = array ("ad", "po", "sn", "bd");
 
@@ -132,23 +132,27 @@ class plot_window extends mopsr_webpage
                     alert("could not set display of tr_id="+tr_id+ " to not none");
                   }
 
-                  if ((parseInt(img.getAttribute("width")) > 300) || (ant_name == "FB"))
-                  {
-                    document.getElementById (img_id + "_link").href = "javascript:popImage('"+imgurl+"')";
-                  }
+                  try {
 
-                  if ((parseInt(img.getAttribute("width")) <= 300) || (ant_name == "FB"))
-                  {
-                    document.getElementById (img_id).src = imgurl;
-                    if (ant_name != "FB")
+                    if ((parseInt(img.getAttribute("width")) > 300) || (ant_name == "FB"))
                     {
-                      document.getElementById (img_id).height = img.getAttribute("height");
+                      document.getElementById (img_id + "_link").href = "javascript:popImage('"+imgurl+"')";
                     }
-                    else
+
+                    if ((parseInt(img.getAttribute("width")) <= 300) || (ant_name == "FB"))
                     {
-                      document.getElementById (img_id).height = "480";
-                    } 
-                  }
+                      document.getElementById (img_id).src = imgurl;
+                      if (ant_name != "FB")
+                      {
+                        document.getElementById (img_id).height = img.getAttribute("height");
+                      }
+                      else
+                      {
+                        document.getElementById (img_id).height = "480";
+                      } 
+                    }
+                  } catch (e) {
+                  } 
                 }
               }
             }
@@ -267,7 +271,7 @@ class plot_window extends mopsr_webpage
       <tr id='fanbeam_header' style='display: none;'>
       </tr>
 <?
-      for ($i=47; $i>=0; $i--)
+      for ($i=127; $i>=0; $i--)
       {
         $id = "FB";
         $type = sprintf("%02d", $i);

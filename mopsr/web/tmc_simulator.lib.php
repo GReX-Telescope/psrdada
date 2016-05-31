@@ -30,12 +30,10 @@ class tmc_simulator extends mopsr_webpage
 
     $this->title = "MOPSR | TMC Simulator";
     $this->inst = new mopsr();
-    $this->valid_psrs = array(
-
-			      "J0001+0001", "J0034-0721", "J0255-5304", "J0401-7608", "J1630-4733","J1715-4034","J1717-3424",
+    $this->valid_psrs = array("J0001+0001", "J0034-0721", "J0255-5304", "J0401-7608", "J1630-4733","J1715-4034","J1717-3424",
 			      "J0437-4715", "J0452-1759", "J0536-7543", "J0534+2200", "J0601-0527", "J1730-3350",
 			      "J1745-3040", "J1225-6408",
-			      "J0610-2100", "J0613-0200", "J0711-6830", "J0737-3039A", 
+			      "J0610-2100", "J0613-0200", "J0711-6830", "J0737-3039A", "J0737-3039B", 
 			      "J0742-2822", "J0835-4510", "J0820-1350", "J1534-5334","J1614-5048",
                               "J0900-3144", "J0904-7459", "J0941-39", "J0942-5552", "J0953+0755", 
 			      "J1001-5939", "J1001-5507", "J1048-5832","J1544-5308", 
@@ -48,7 +46,7 @@ class tmc_simulator extends mopsr_webpage
 			      "J1705-3423",
 			      "J1709-4429", "J1705-1906",
 			      "J1740-3015", "J1738+0333",
-			      "J1825-0935",
+			      "J1825-0935", "J0924-5814", "J0924-5302",
 			      "J1723-2837","J1703-3241",
 			      "J1820-0427", "J1648-3256", "J1649-3805",
 			      "J1824-1945", "J1231-6303",
@@ -66,7 +64,7 @@ class tmc_simulator extends mopsr_webpage
 			      "J1057-5226", "J1253-5820",
 			      "J1116-4122",
 			      "J1136-5525", "J1824-2452A",
-			      "J1401-6357",
+			      "J1401-6357", "J2053-7200",
 			      "J1428-5530", "J1557-4258",
 			      "J1430-6623", "J1623-4256", 
 			      "J1453-6413", "J1435-5954",
@@ -122,12 +120,74 @@ class tmc_simulator extends mopsr_webpage
 			      "J1708-3426",
 			      "J1720-2933",
 			      "J1730-3350",
-			      "FRB Transit", 
+"J1848-1952",
+"J1849-0636",
+"J1854-1421",
+"J1859+00",
+"J1901-0906",
+"J1903-0632",
+"J1603-2712",
+"J1643-1224",
+"J1705-1906",
+"J1705-3423",
+"J1709-4429",
+"J1723-2837",
+"J1740-3015",
+"J1744-1134",
+"J1835-1106",
+"J1835-1020",
+"J1836-1008",
+"J1840-0809",
+"J1842-0359",
+"J1825-0935",
+"J1852-0635",
+"J1854-1421",
+"J1901-0906",
+"J1909-3744",
+"J1941-2602",
+"J2046-0421",
+"J2144-3933",
+"J2241-5236",
+"J1705-3423",
+"J1709-4429",
+"J1723-2837",
+"J1743-3150",
+"J1740-3014",
+"J1759-2205",
+"J1825-0935",
+"J1832-0827",
+"J1834-0426",
+"J1842-0359",
+"J1903-0632",
+"J1909-3744",
+"J1943-1237",
+"J2051-0827",
+"J2145-0750",
+"J2222-0137",
+"J2346-0609",
+"J2046-0421",
+"J2324-6054",
+"J2330-2005",
+"J2346-0609",		      "FRB Transit",
+			      "PEASOUP search", "FRB151206", "FRB090625", "FRB131104", "FRB121002", "FRB150418", "FRB160102", "FRB151230", "New Slowie",
 			      "SUMSS1200M80", "SUMSS1330M76", 
-                              "CenA",       "3C273", "HerA", "3C353", "E1", "1hr", "FRB010724",
-			      "3hr", "FRB090625", "CDF-S", "4hr", "Prime", "FRB131104", "SN1987A",
-			      "9hr", "Polar", "FRB121002", "HD94660",  
-			      "CJ1744-5144",
+                              "CenA", "3C273", "HerA", "3C353", "E1", "1hr", 
+			      "FRB010724", 
+			      "XMM/LSS", "NGC 1084", "NGC 1614",
+			      "3hr", "4hr", "5hr", 
+			      "CDF-S", 
+			      "Prime", 
+			      "SGR 0755-2933", "Vela offset",
+			      "J1644 offset 1",
+			      "J1644 offset 2",
+			      "J1644 offset 3",
+			      "J1644 offset 4",
+			      "J1644 offset 5",
+			      "J1644 offset 6",
+			      "SN1987A", "SN1987Amon", 
+			      "9hr", "Polar", 
+			      "HD94660",  "UV Ceti", "GCN18231",
+			      "CJ1744-5144", "SUMSS2030M75",
 			      "CJ0010-4153",
 			      "CJ0025-2602",
                               "CJ0200-3053", 
@@ -153,12 +213,17 @@ class tmc_simulator extends mopsr_webpage
 			      "CJ1737-5632",
                               "CJ1819-6345", 
 			      "CJ1830-3602", 
-			      "CJ1924-2833",
+			      "CJ1924-2833", 
 			      "CJ1935-4620",
+			      "CJ1939-6342",
 			      "CJ1957-4222", 
 			      "CJ2154-5150",
 			      "CJ2253-4057",
-			      "CJ2334-4125"
+			      "CJ2334-4125", "GLEAM0251-3325", 
+			      "GLEAM0720-3909", "GLEAM0837+0610",
+			      "GLEAM1256-2602", "GLEAM1601-3607",
+			      "GLEAM1945-3147", "GLEAM1951-0859",
+			      "GLEAM1959-0527"
 			      );
 
     if ($this->sixteen_inputs)
@@ -197,17 +262,77 @@ class tmc_simulator extends mopsr_webpage
     $this->psrs["1hr"]["RAJ"] = "01:15:00.0";
     $this->psrs["1hr"]["DECJ"] = "-50:25:00";
 
-    $this->psrs["FRB010724"] = array();     
-    $this->psrs["FRB010724"]["RAJ"] = "01:18:06.0";
-    $this->psrs["FRB010724"]["DECJ"] = "-75:12:19.0";
-
     $this->psrs["3hr"] = array();     
     $this->psrs["3hr"]["RAJ"] = "03:00:00.0";
     $this->psrs["3hr"]["DECJ"] = "-55:25:00.0";
 
+    $this->psrs["4hr"] = array();     
+    $this->psrs["4hr"]["RAJ"] = "04:10:00.0";
+    $this->psrs["4hr"]["DECJ"] = "-55:00:00.0";
+
+    $this->psrs["5hr"] = array();     
+    $this->psrs["5hr"]["RAJ"] = "05:10:00.0";
+    $this->psrs["5hr"]["DECJ"] = "-55:00:00.0";
+
+    $this->psrs["9hr"] = array();     
+    $this->psrs["9hr"]["RAJ"] = "09:00:00.0";
+    $this->psrs["9hr"]["DECJ"] = "-70:00:00.0";
+
+    $this->psrs["PEASOUP search"] = array();
+    $this->psrs["PEASOUP search"]["RAJ"] = "00:00:00.0";
+    $this->psrs["PEASOUP search"]["DECJ"] = "00:00:00.0";
+
+    $this->psrs["FRB010724"] = array();     
+    $this->psrs["FRB010724"]["RAJ"] = "01:18:06.0";
+    $this->psrs["FRB010724"]["DECJ"] = "-75:12:19.0";
+
     $this->psrs["FRB090625"] = array();     
     $this->psrs["FRB090625"]["RAJ"] = "03:07:47.2";
     $this->psrs["FRB090625"]["DECJ"] = "-29:55:35.9";
+
+    $this->psrs["FRB131104"] = array();     
+    $this->psrs["FRB131104"]["RAJ"] = "06:44:08.7";
+    $this->psrs["FRB131104"]["DECJ"] = "-51:16:55.1";
+
+    $this->psrs["FRB151206"] = array();     
+    $this->psrs["FRB151206"]["RAJ"] = "19:21:25.4";
+    $this->psrs["FRB151206"]["DECJ"] = "-04:07:54.5";
+
+    $this->psrs["FRB150418"] = array();     
+    $this->psrs["FRB150418"]["RAJ"] = "07:16:34.557";
+    $this->psrs["FRB150418"]["DECJ"] = "-19:00:39.954";
+
+    $this->psrs["FRB121002"] = array();     
+    $this->psrs["FRB121002"]["RAJ"] = "18:14:47.4";
+    $this->psrs["FRB121002"]["DECJ"] = "-85:11:53.0";
+
+    $this->psrs["FRB151230"] = array();
+    $this->psrs["FRB151230"]["RAJ"] = "09:40:49.9";
+    $this->psrs["FRB151230"]["DECJ"] = "-03:27:05.1";
+
+    $this->psrs["FRB160102"] = array();
+    $this->psrs["FRB160102"]["RAJ"] = "22:38:49.3";
+    $this->psrs["FRB160102"]["DECJ"] = "-30:10:49.9";
+
+    $this->psrs["New Slowie"] = array();
+    $this->psrs["New Slowie"]["RAJ"] = "22:51:56.1";
+    $this->psrs["New Slowie"]["DECJ"] = "-37:16:16.3";
+
+    $this->psrs["FRB Transit"] = array();     
+    $this->psrs["FRB Transit"]["RAJ"] = "00:00:00.0";
+    $this->psrs["FRB Transit"]["DECJ"] = "-46:00:00";
+
+    $this->psrs["XMM/LSS"] = array();     
+    $this->psrs["XMM/LSS"]["RAJ"] = "02:25:00.0";
+    $this->psrs["XMM/LSS"]["DECJ"] = "-04:39:00.0";
+
+    $this->psrs["NGC 1084"] = array();     
+    $this->psrs["NGC 1084"]["RAJ"] = "02:46:00.0";
+    $this->psrs["NGC 1084"]["DECJ"] = "-07:34:41.0";
+
+    $this->psrs["NGC 1614"] = array();     
+    $this->psrs["NGC 1614"]["RAJ"] = "04:34:00.0";
+    $this->psrs["NGC 1614"]["DECJ"] = "-08:34:46.0";
 
     $this->psrs["CDF-S"] = array();     
     $this->psrs["CDF-S"]["RAJ"] = "03:30:24.0";
@@ -217,33 +342,53 @@ class tmc_simulator extends mopsr_webpage
     $this->psrs["SN1987A"]["RAJ"] = "05:35:28.0";
     $this->psrs["SN1987A"]["DECJ"] = "-69:16:11.1";
 
-    $this->psrs["4hr"] = array();     
-    $this->psrs["4hr"]["RAJ"] = "04:10:00.0";
-    $this->psrs["4hr"]["DECJ"] = "-55:00:00.0";
+    $this->psrs["SN1987Amon"] = array();     
+    $this->psrs["SN1987Amon"]["RAJ"] = "05:35:58.45";
+    $this->psrs["SN1987Amon"]["DECJ"] = "-69:13:15.9";
 
     $this->psrs["Prime"] = array();     
     $this->psrs["Prime"]["RAJ"] = "05:55:07.0";
     $this->psrs["Prime"]["DECJ"] = "-61:21:00.0";
 
-    $this->psrs["FRB131104"] = array();     
-    $this->psrs["FRB131104"]["RAJ"] = "06:44:08.7";
-    $this->psrs["FRB131104"]["DECJ"] = "-51:16:55.1";
+    $this->psrs["SGR 0755-2933"] = array();     
+    $this->psrs["SGR 0755-2933"]["RAJ"] = "07:55:42.48";
+    $this->psrs["SGR 0755-2933"]["DECJ"] = "-29:33:49.2";
 
-    $this->psrs["9hr"] = array();     
-    $this->psrs["9hr"]["RAJ"] = "09:00:00.0";
-    $this->psrs["9hr"]["DECJ"] = "-70:00:00.0";
+    $this->psrs["Vela offset"] = array();     
+    $this->psrs["Vela offset"]["RAJ"] = "08:37:25.61149";
+    $this->psrs["Vela offset"]["DECJ"] = "-42:57:51.8751";
+
+    $this->psrs["J1644 offset 1"] = array();     
+    $this->psrs["J1644 offset 1"]["RAJ"] = "16:55:49";
+    $this->psrs["J1644 offset 1"]["DECJ"] = "-45:59:00";
+
+    $this->psrs["J1644 offset 2"] = array();     
+    $this->psrs["J1644 offset 2"]["RAJ"] = "16:52:49";
+    $this->psrs["J1644 offset 2"]["DECJ"] = "-45:59:00";
+
+    $this->psrs["J1644 offset 3"] = array();     
+    $this->psrs["J1644 offset 3"]["RAJ"] = "16:49:49";
+    $this->psrs["J1644 offset 3"]["DECJ"] = "-45:59:00";
+
+    $this->psrs["J1644 offset 4"] = array();     
+    $this->psrs["J1644 offset 4"]["RAJ"] = "16:41:49";
+    $this->psrs["J1644 offset 4"]["DECJ"] = "-45:59:00";
+
+    $this->psrs["J1644 offset 5"] = array();     
+    $this->psrs["J1644 offset 5"]["RAJ"] = "16:38:49";
+    $this->psrs["J1644 offset 5"]["DECJ"] = "-45:59:00";
+
+    $this->psrs["J1644 offset 6"] = array();     
+    $this->psrs["J1644 offset 6"]["RAJ"] = "16:35:49";
+    $this->psrs["J1644 offset 6"]["DECJ"] = "-45:59:00";
 
     $this->psrs["Polar"] = array();     
     $this->psrs["Polar"]["RAJ"] = "16:00:00.0";
     $this->psrs["Polar"]["DECJ"] = "-74:00:00.0";
 
-    $this->psrs["FRB121002"] = array();     
-    $this->psrs["FRB121002"]["RAJ"] = "18:14:47.4";
-    $this->psrs["FRB121002"]["DECJ"] = "-85:11:53.0";
-
-    $this->psrs["FRB Transit"] = array();     
-    $this->psrs["FRB Transit"]["RAJ"] = "00:00:00.0";
-    $this->psrs["FRB Transit"]["DECJ"] = "-46:00:00";
+    $this->psrs["SUMSS2030M75"] = array();     
+    $this->psrs["SUMSS2030M75"]["RAJ"] = "20:30:00.0";
+    $this->psrs["SUMSS2030M75"]["DECJ"] = "-75:00:00";
 
     $this->psrs["SUMSS1200M80"] = array();     
     $this->psrs["SUMSS1200M80"]["RAJ"] = "12:00:00.0";
@@ -261,6 +406,10 @@ class tmc_simulator extends mopsr_webpage
     $this->psrs["HerA"]["RAJ"] = "16:51:08.0";
     $this->psrs["HerA"]["DECJ"] = "04:59:33";
 
+    $this->psrs["GCN18231"] = array();     
+    $this->psrs["GCN18231"]["RAJ"] = "16:25:42.0";
+    $this->psrs["GCN18231"]["DECJ"] = "-27:23:24";
+
     $this->psrs["3C273"] = array();
     $this->psrs["3C273"]["RAJ"] = "12:29:06.7";
     $this->psrs["3C273"]["DECJ"] = "02:03:09.0";
@@ -272,6 +421,14 @@ class tmc_simulator extends mopsr_webpage
     $this->psrs["HD94660"] = array();
     $this->psrs["HD94660"]["RAJ"] = "10:55:01.005";
     $this->psrs["HD94660"]["DECJ"] = "-42:15:03.93";
+
+    $this->psrs["UV Ceti"] = array();
+    $this->psrs["UV Ceti"]["RAJ"] = "01:39:01.54";
+    $this->psrs["UV Ceti"]["DECJ"] = "-17:57:00.4";
+
+    $this->psrs["CJ0010-4153"] = array();
+    $this->psrs["CJ0010-4153"]["RAJ"] = "00:10:52.44";
+    $this->psrs["CJ0010-4153"]["DECJ"] = "-41:53:10.8";
 
     $this->psrs["CJ0025-2602"] = array();
     $this->psrs["CJ0025-2602"]["RAJ"] = "00:25:49.2";
@@ -349,6 +506,10 @@ class tmc_simulator extends mopsr_webpage
     $this->psrs["CJ1424-4913"]["RAJ"] = "14:24:32.18";
     $this->psrs["CJ1424-4913"]["DECJ"] = "-49:13:17.16";
 
+    $this->psrs["CJ1530-4231"] = array();
+    $this->psrs["CJ1530-4231"]["RAJ"] = "15:30:14.28";
+    $this->psrs["CJ1530-4231"]["DECJ"] = "-42:31:53.6";
+
     $this->psrs["CJ1556-7914"] = array();
     $this->psrs["CJ1556-7914"]["RAJ"] = "15:56:57.8";
     $this->psrs["CJ1556-7914"]["DECJ"] = "-79:14:03.8";
@@ -369,29 +530,21 @@ class tmc_simulator extends mopsr_webpage
     $this->psrs["CJ1830-3602"]["RAJ"] = "18:30:58.8";
     $this->psrs["CJ1830-3602"]["DECJ"] = "-36:02:30.3";
 
-    $this->psrs["CJ1935-4620"] = array();
-    $this->psrs["CJ1935-4620"]["RAJ"] = "19:35:57.2";
-    $this->psrs["CJ1935-4620"]["DECJ"] = "-46:20:43.1";
-
     $this->psrs["CJ1924-2833"] = array();
     $this->psrs["CJ1924-2833"]["RAJ"] = "19:24:50.2";
     $this->psrs["CJ1924-2833"]["DECJ"] = "-28:33:39.4";
 
-    $this->psrs["CJ2334-4125"] = array();
-    $this->psrs["CJ2334-4125"]["RAJ"] = "23:34:26.1";
-    $this->psrs["CJ2334-4125"]["DECJ"] = "-41:25:25.8";
+    $this->psrs["CJ1935-4620"] = array();
+    $this->psrs["CJ1935-4620"]["RAJ"] = "19:35:57.2";
+    $this->psrs["CJ1935-4620"]["DECJ"] = "-46:20:43.1";
 
-    $this->psrs["CJ1530-4231"] = array();
-    $this->psrs["CJ1530-4231"]["RAJ"] = "15:30:14.28";
-    $this->psrs["CJ1530-4231"]["DECJ"] = "-42:31:53.6";
+    $this->psrs["CJ1939-6342"] = array();
+    $this->psrs["CJ1939-6342"]["RAJ"] = "19:39:25.42";
+    $this->psrs["CJ1939-6342"]["DECJ"] = "-63:42:43.7";
 
     $this->psrs["CJ1957-4222"] = array();
     $this->psrs["CJ1957-4222"]["RAJ"] = "19:57:15.19";
     $this->psrs["CJ1957-4222"]["DECJ"] = "-42:22:19.8";
-
-    $this->psrs["CJ0010-4153"] = array();
-    $this->psrs["CJ0010-4153"]["RAJ"] = "00:10:52.44";
-    $this->psrs["CJ0010-4153"]["DECJ"] = "-41:53:10.8";
 
     $this->psrs["CJ2154-5150"] = array();
     $this->psrs["CJ2154-5150"]["RAJ"] = "21:54:07.28";
@@ -401,16 +554,44 @@ class tmc_simulator extends mopsr_webpage
     $this->psrs["CJ2253-4057"]["RAJ"] = "22:53:03.37";
     $this->psrs["CJ2253-4057"]["DECJ"] = "-40:57:47.5";
 
-    $this->psrs["CJ0440-4333"] = array();
-    $this->psrs["CJ0440-4333"]["RAJ"] = "04:40:17.06";
-    $this->psrs["CJ0440-4333"]["DECJ"] = "-43:33:09.0";
+    $this->psrs["CJ2334-4125"] = array();
+    $this->psrs["CJ2334-4125"]["RAJ"] = "23:34:26.1";
+    $this->psrs["CJ2334-4125"]["DECJ"] = "-41:25:25.8";
 
+    $this->psrs["GLEAM0251-3325"] = array();
+    $this->psrs["GLEAM0251-3325"]["RAJ"] = "02:51:08";
+    $this->psrs["GLEAM0251-3325"]["DECJ"] = "-33:25:47";
 
+    $this->psrs["GLEAM0720-3909"] = array();
+    $this->psrs["GLEAM0720-3909"]["RAJ"] = "07:20:47";
+    $this->psrs["GLEAM0720-3909"]["DECJ"] = "-39:09:22";
 
+    $this->psrs["GLEAM0837+0610"] = array();
+    $this->psrs["GLEAM0837+0610"]["RAJ"] = "08:37:06";
+    $this->psrs["GLEAM0837+0610"]["DECJ"] = "+06:10:12";
 
+    $this->psrs["GLEAM1256-2602"] = array();
+    $this->psrs["GLEAM1256-2602"]["RAJ"] = "12:56:22";
+    $this->psrs["GLEAM1256-2602"]["DECJ"] = "-26:02:39";
 
+    $this->psrs["GLEAM1601-3607"] = array();
+    $this->psrs["GLEAM1601-3607"]["RAJ"] = "16:01:11";
+    $this->psrs["GLEAM1601-3607"]["DECJ"] = "-36:07:17";
+
+    $this->psrs["GLEAM1945-3147"] = array();
+    $this->psrs["GLEAM1945-3147"]["RAJ"] = "19:45:14";
+    $this->psrs["GLEAM1945-3147"]["DECJ"] = "-31:47:36";
+
+    $this->psrs["GLEAM1951-0859"] = array();
+    $this->psrs["GLEAM1951-0859"]["RAJ"] = "19:51:46";
+    $this->psrs["GLEAM1951-0859"]["DECJ"] = "-08:59:57";
+
+    $this->psrs["GLEAM1959-0527"] = array();
+    $this->psrs["GLEAM1959-0527"]["RAJ"] = "19:59:15";
+    $this->psrs["GLEAM1959-0527"]["DECJ"] = "-05:27:49";
 
     $this->psr_keys = array_keys($this->psrs);
+
 ?>
     <style type='text/css'>
 
@@ -570,6 +751,7 @@ class tmc_simulator extends mopsr_webpage
         <td class='val'>
           <select name="bf_processing_file">
             <option value="mopsr.calib.gpu">mopsr.calib.gpu [correlator]</option>
+            <option value="mopsr.calib.xgpu">mopsr.calib.xgpu [dev correlator]</option>
             <option value="mopsr.calib.pref8.gpu">mopsr.calib.pref8.gpu [limited baselines 176 input]</option>
             <option value="mopsr.calib.pref16.gpu">mopsr.calib.pref16.gpu [limited baselines 352 input]</option>
             <option value="mopsr.dspsr.cpu">mopsr.dspsr.cpu [tied-array beam]</option>
@@ -629,6 +811,8 @@ class tmc_simulator extends mopsr_webpage
             <option value="TIED_ARRAY_BEAM">TIED ARRAY BEAM</option>
             <option value="FAN_BEAM">FAN BEAM</option>
             <option value="TIED_ARRAY_FAN_BEAM">TIED ARRAY &amp; FAN BEAM</option>
+            <option value="MOD_BEAM">MOD BEAM</option>
+            <option value="TIED_ARRAY_MOD_BEAM">TIED ARRAY &amp; MOD BEAM</option>
           </select>
         </td>
 

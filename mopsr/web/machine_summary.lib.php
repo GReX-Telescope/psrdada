@@ -8,14 +8,15 @@ include_once("mopsr_webpage.lib.php");
 
 class machine_summary extends mopsr_webpage 
 {
-  // Datablock IDs
-  var $db_ids = array();
-
-  // mapping of PWC to HOST
-  var $pwcs = array();
+  // mapping of AQs, BF, BPs to HOST
+  var $aqs = array();
+  var $bfs = array();
+  var $bps = array();
   
   // mapping of HOST to type 
   var $machines = array();
+  var $mappings = array();
+
   var $config = array();
 
   var $verbose = false;
@@ -29,45 +30,55 @@ class machine_summary extends mopsr_webpage
     array_push($this->ejs, "/js/jsProgressBarHandler.js");
 
     $inst = new mopsr();
+
     $this->config = $inst->config;
-    $this->roach = $inst->roach;
+    $aq_cfg = $inst->configFileToHash(AQ_FILE);
+    $bf_cfg = $inst->configFileToHash(BF_FILE);
+    $bp_cfg = $inst->configFileToHash(BP_FILE);
+    $bf_x_cfg = $inst->configFileToHash(CNR_FILE);
+    $bp_x_cfg = $inst->configFileToHash(BP_CNR_FILE);
 
     // generate a list of machines
-    for ($i=0; $i<$this->config["NUM_PWC"]; $i++) 
+    for ($i=0; $i<$aq_cfg["NUM_PWC"]; $i++) 
     {
-      $host = $this->config["PWC_".$i];
+      $host = $aq_cfg["PWC_".$i];
       $host = str_replace("mpsr-", "", $host);
-      $this->pwcs[$i] = $host;
-      $this->machines[$host] = "pwc";
+      $this->aqs[$i] = $host;
+      if (!array_key_exists($host, $this->machines))
+        $this->machines[$host] = array();
+      if (!in_array("aq", $this->machines[$host]))
+        array_push ($this->machines[$host], "aq");
+      $this->mappings["aq".sprintf("%02d",$i)] = $host;
     }
 
-    for ($i=0; $i<$this->config["NUM_BF"]; $i++)
+    for ($i=0; $i<$bf_cfg["NUM_BF"]; $i++)
     {
-      $host = $this->config["BF_".$i];
+      $host = $bf_cfg["BF_".$i];
       $host = str_replace("mpsr-", "", $host);
-      $this->pwcs[$i] = $host;
-      $this->machines[$host] = "bf";
+      $this->bfs[$i] = $host;
+      if (!array_key_exists($host, $this->machines))
+        $this->machines[$host] = array();
+      if (!in_array("bf", $this->machines[$host]))
+        array_push ($this->machines[$host], "bf");
+      $this->mappings["bf".sprintf("%02d",$i)] = $host;
     }
 
-    for ($i=0; $i<$this->config["NUM_BP"]; $i++)
+    for ($i=0; $i<$bp_cfg["NUM_BP"]; $i++)
     {
-      $host = $this->config["BP_".$i];
+      $host = $bp_cfg["BP_".$i];
       $host = str_replace("mpsr-", "", $host);
-      $this->pwcs[$i] = $host;
-      $this->machines[$host] = "bp";
+      $this->bps[$i] = $host;
+      if (!array_key_exists($host, $this->machines))
+        $this->machines[$host] = array();
+      if (!in_array("bp", $this->machines[$host]))
+        array_push ($this->machines[$host], "bp");
+      $this->mappings["bp".sprintf("%02d",$i)] = $host;
     }
 
-
-    if (array_key_exists("verbose", $_GET) && ($_GET["verbose"] == "true"))
-      $this->verbose = true;
-    if ($this->verbose)
-      $this->db_ids = explode(" ", $this->config["DATA_BLOCK_IDS"]);
-    else
-      $this->db_ids = array($this->config["RECEIVING_DATA_BLOCK"]);
-
-    list ($server_host, $server_domain) = explode(".", $this->config["SERVER_HOST"], 2);
+    list ($server_host, $server_domain) = explode(".", $inst->config["SERVER_HOST"], 2);
     $server_host = str_replace("mpsr-", "", $server_host);
-    $this->machines[$server_host] = "server";
+    $this->machines[$server_host] = array("server");
+    $this->mappings["srv"] = $host;
   }
 
   function javaScriptCallback()
@@ -77,6 +88,7 @@ class machine_summary extends mopsr_webpage
 
   function printJavaScriptHead()
   {
+
 ?>
     <style type="text/css">
       table.machine_summary th {
@@ -99,12 +111,34 @@ class machine_summary extends mopsr_webpage
       td.gap_line {
         padding-right: 20px;
       }
-    </style>
 
+      a.warning {
+        color: #995c00;
+        underline: none;
+      }
+      a.error {
+        color: #0000ff;
+        underline: none;
+      }
+      a.ok {
+        color: #00ff00;
+        underline: none;
+      }
+
+    </style>
 
     <script type='text/javascript'>  
 
       var current_machines = <?echo count($this->machines)?>;
+
+      var host_mappings = {<?
+      foreach ($this->mappings as $map => $host)
+      {
+        echo $map.":'".$host."',";
+      }
+      echo "junk:'Junk'";
+?>}
+
 
       function rtrim(str, chars) {
         chars = chars || "\\s";
@@ -113,8 +147,6 @@ class machine_summary extends mopsr_webpage
 
       function PadDigits(n, totalDigits) 
       { 
-
-        //alert("PadDigits("+n+","+totalDigits+")");
         var n = n.toString(); 
         var pd = ''; 
         var k = 0;
@@ -133,17 +165,6 @@ class machine_summary extends mopsr_webpage
       for ($i=1; $i<count($keys); $i++)
         echo ",'".$keys[$i]."'";
       echo ")\n";
-
-      $keys = array_keys($this->pwcs);
-      echo "     var pwcs = new Array('server'";
-      for ($i=0; $i<count($keys); $i++)
-        echo ",'".$keys[$i]."'";
-      echo ")\n";
-
-      echo "     var db_ids = new Array('".$this->db_ids[0]."'";
-      for ($i=1; $i<count($this->db_ids); $i++)
-        echo ",'".$this->db_ids[$i]."'";
-      echo ")\n";
 ?>
 
       // Set all the imgs, links and messages not in the excluded array to green
@@ -160,15 +181,22 @@ class machine_summary extends mopsr_webpage
         {
           // silently ignore
         }
-        for (i=0; i<pwcs.length; i++) 
+
+        for (i=0; i<machines.length; i++) 
         {
-          var pwc = pwcs[i];
-          if (excluded.indexOf(pwc) == -1) 
+          var machine = machines[i];
+          if (excluded.indexOf(machine) == -1) 
           {
-            document.getElementById(pwc+"_messages").innerHTML = "&nbsp;";
-            document.getElementById(pwc+"_img").src = "/images/green_light.png";
+            document.getElementById(machine+"_messages").innerHTML = "&nbsp;";
+            document.getElementById(machine+"_img").src = "/images/green_light.png";
           }
         }
+      }
+
+      function pad(num, size) {
+          var s = num+"";
+          while (s.length < size) s = "0" + s;
+          return s;
       }
 
       function setHostNotConnected(host)
@@ -185,46 +213,8 @@ class machine_summary extends mopsr_webpage
 
       }
 
-
-      function setPWCNotConnected(pwc_id) 
-      {
-        var pb1;
-        var buffer;
-        var i, j;
-
-        document.getElementById(pwc_id+"_messages").innerHTML = "not connected";
-        document.getElementById(pwc_id+"_img").src  = "/images/grey_light.png";
-
-        for (i=0; i<machines.length; i++)
-        {
-          for (j=0; j<db_ids.length; j++)
-          {
-            //alert(pwc_id+": testing machines["+i+"]="+machines[i]+", db_ids["+j+"]="+db_ids[j]+" length="+db_ids.length);
-            try
-            {
-              // try to evaluate a javascript variable with this name
-              pb1 = eval(machines[i] + "_" + pwc_id + "_" + db_ids[j] + "_buffer");
-
-              // if we didn't throw an exception, then the object exists, set percent to 0
-              pb1.setPercentage(0.0);
-
-              // and set the value to 0 also
-              document.getElementById(machines[i] + "_" + pwc_id + "_" + db_ids[j] + "_buffer_value").innerHTML = "&nbsp;--";
-            }
-            catch(e)
-            {
-              //alert(pwc_id+": skipping machines["+i+"]="+machines[i]+", db_ids["+j+"]="+db_ids[j]);
-            }
-          }
-        }
-      }
-
       function setAllNotConnected() 
       {
-        var pwc;
-        for (i=0; i<pwcs.length; i++) {
-          setPWCNotConnected(pwcs[i]);
-        } 
         for (i=0; i<machines.length; i++) {
           setHostNotConnected(machines[i]);
         } 
@@ -234,7 +224,6 @@ class machine_summary extends mopsr_webpage
       {
         var children;
         var progress_bar;
-        var active_pwcs = 0;
         var log_length = 6;
 
         if (xml_request.readyState == 4) 
@@ -301,32 +290,10 @@ class machine_summary extends mopsr_webpage
                       progress_bar.setPercentage(disk_percent);
                       disk_free_per_host[host] = disk_free;
                     } 
-                    else if (key == "datablock") 
+                    else if (key == "datablock")
                     {
-                      var pwc_id = node.getAttribute("pwc_id");
-                      var db_id = node.getAttribute("db_id");
-                      var db_size = parseFloat(node.getAttribute("size"));
-                      var db_used = parseFloat(node.childNodes[0].nodeValue);
-                      var db_percent = Math.floor((db_used / db_size) * 100);
-                      var bg_color = (db_used == 0 ? "#FF2e2e" : "");
-
-                      try 
-                      {
-                        progress_bar = eval(host+"_"+pwc_id+"_"+db_id+"_buffer");
-                        progress_bar.setPercentage(db_percent);
-                        document.getElementById(host+"_"+pwc_id+"_"+db_id+"_buffer_value").innerHTML = "&nbsp;" + db_used + "/"  + db_size;
-                        document.getElementById(host+"_"+pwc_id+"_"+db_id+"_buffer1").bgColor = bg_color;
-                        document.getElementById(host+"_"+pwc_id+"_"+db_id+"_buffer2").bgColor = bg_color;
-                      
-                        // assume that only pwcs have datablocks
-                        active_pwcs ++;
-                        pwcs_per_host[host]++;
-                      }
-                      catch (e)
-                      {
-                        //alert("disabled datablock ["+host+"_"+pwc_id+"_"+db_id+"_buffer]");
-                      }
-                    } 
+                      ;
+                    }
                     else 
                     {
                       alert("unrecognized key: "+key);
@@ -335,6 +302,7 @@ class machine_summary extends mopsr_webpage
                 }
               }
             
+
               // update the time remaining for each PWC
               for (var host in pwcs_per_host)
               {
@@ -362,7 +330,7 @@ class machine_summary extends mopsr_webpage
 
               var set = new Array();
               resetOthers(set);
-  
+
               for (i=0; i<daemon_statuses.length; i++) 
               {
                 var node = daemon_statuses[i];
@@ -370,9 +338,13 @@ class machine_summary extends mopsr_webpage
                 if (node.nodeType == 1)
                 {
                   var type = node.getAttribute("type");
-                  var pwc = node.getAttribute("pwc");
+                  var area = node.getAttribute("area");
+                  var pwc = pad(node.getAttribute("pwc"),2);
                   var tag = node.getAttribute("tag");
                   var msg = node.childNodes[0].nodeValue;
+
+                  var host_id = area + pwc;
+                  var host = host_mappings[host_id]
 
                   var log_file = "";
                   if (pwc != "server")
@@ -384,10 +356,10 @@ class machine_summary extends mopsr_webpage
                     log_file = tag;
                   }
 
-                  img_id = document.getElementById(pwc + "_img");
+                  img_id = document.getElementById(host + "_img");
 
                   // add this light to the list of lights not to be reset
-                  set.push(pwc);
+                  set.push(host);
 
                   if (img_id.src.indexOf("grey_light.png") == -1)
                   {
@@ -411,13 +383,13 @@ class machine_summary extends mopsr_webpage
                   {
                   }
 
-                  var link = "log_viewer.php?pwc="+pwc+"&level="+log_level+"&length="+log_length+"&daemon="+log_file+"&autoscroll=false";
-                  var msg_element = document.getElementById(pwc+"_messages");
+                  var link = "log_viewer.php?host="+host+"&pwc="+pwc+"&level="+log_level+"&length="+log_length+"&daemon="+log_file+"&autoscroll=false";
+                  var msg_element = document.getElementById(host+"_messages");
 
                   if (msg_element.innerHTML == "&nbsp;") {
-                    msg_element.innerHTML = "<a class='cln' target='log_window' href='"+link+"'>"+msg+"</a>";
+                    msg_element.innerHTML = "<a class='"+type+"' target='log_window' href='"+link+"'>"+msg+"</a>";
                   } else {
-                    msg_element.innerHTML = msg_element.innerHTML + " | <a class='cln' target='log_window' href='"+link+"'>"+msg+"</a>";
+                    msg_element.innerHTML = msg_element.innerHTML + " | <a class='"+type+"' target='log_window' href='"+link+"'>"+msg+"</a>";
                   }
                 }
               }
@@ -479,26 +451,6 @@ class machine_summary extends mopsr_webpage
                "'/images/jsprogress/percentImage_back4_40.png') } );\n";
 
         }
-
-        // pwcs have buffer bar
-        foreach ($this->pwcs as $p => $host)
-        {
-          if (($this->config["PWC_STATE_".$p] == "active") || ($this->config["PWC_STATE_".$p] == "passive"))
-          {
-            foreach ($this->db_ids as $db_id)
-            {
-              $tag = $host."_".$p."_".$db_id;
-              echo "        ".$tag."_buffer = new JS_BRAMUS.jsProgressBar($('".$tag."_buffer_progress_bar'), 0, ";
-              echo " { width : 40, showText : false, animate : false, ".
-                   "boxImage: '/images/jsprogress/percentImage_40.png', ".
-                   "barImage : Array( '/images/jsprogress/percentImage_back1_40.png', ".
-                   "'/images/jsprogress/percentImage_back2_40.png', ".
-                   "'/images/jsprogress/percentImage_back3_40.png', ".
-                 "'/images/jsprogress/percentImage_back4_40.png') } );\n";
-            }
-          }
-        }
-
 ?>
       }, false);
     </script>
@@ -508,7 +460,13 @@ class machine_summary extends mopsr_webpage
   /* HTML for this page */
   function printHTML() 
   {
-    $this->openBlockHeader("Machine Summary");
+    $title = "Machine Summary";
+    $title .= " <a target='_ms_popup' href='area_summary.lib.php?single=true&area=aq'>AQ</a>";
+    $title .= " <a target='_ms_popup' href='area_summary.lib.php?single=true&area=bf'>BF</a>";
+    $title .= " <a target='_ms_popup' href='area_summary.lib.php?single=true&area=bp'>BP</a>";
+
+    $this->openBlockHeader($title);
+
 ?>
     <table class="machine_summary" width='100%' border=0 cellspacing=0 cellpadding=0>
         
@@ -518,28 +476,13 @@ class machine_summary extends mopsr_webpage
         <th colspan=2>Disk</th>
         <th>T &deg;C</th>
         <th></th>
-        <th colspan=1>PFB</th>
-<? if ($this->verbose) { ?>
-        <th colspan=2>Prim DB</th>
-        <th colspan=2>Aux  DB</th>
-<? } else { ?>
-        <th colspan=2>Buffer</th>
-<? } ?> 
         <th>Messages</th>
       </tr>
     <?
-    $status_types = array("pwc", "src", "sys");
-    foreach ($this->machines as $m => $type)
-    {
-      $m_pwcs = array();
-      foreach ($this->pwcs as $p => $host)
-      {
-        if ($host == $m)
-          array_push($m_pwcs, $p);
-      } 
-      if (count($m_pwcs) == 0)
-        array_push($m_pwcs, "server");
 
+    $status_types = array("pwc", "src", "sys");
+    foreach ($this->machines as $m => $types)
+    {
       echo " <tr id='".$m."_row'>\n";
   
       $status = STATUS_OK;
@@ -548,137 +491,39 @@ class machine_summary extends mopsr_webpage
         $s = $status_types[$j];
       }
 
-      $rs = count($m_pwcs);
-        
-      echo "     <td width='30px' class='gap' rowspan='$rs'>".$m."</td>\n";
+      echo "     <td width='30px' class='gap'>".$m."</td>\n";
         
       // load progress bar and value
-      echo "     <td width='40px' style='vertical-align: middle;' rowspan='$rs'>\n"; 
+      echo "     <td width='40px' style='vertical-align: middle;'>\n"; 
       echo "      <span id='".$m."_load_progress_bar'>[ ... ]</span>\n";
       echo "     </td>\n";
         
-      echo "     <td width='40px' class='gap' rowspan='$rs'>\n";
+      echo "     <td width='40px' class='gap'>\n";
       echo "      <span id='".$m."_load_value'></span>\n";
       echo "     </td>\n";
 
       // disk progress bar and value
-      echo "     <td width='40px' style='vertical-align: middle;' rowspan='$rs'>\n";
+      echo "     <td width='40px' style='vertical-align: middle;'>\n";
       echo "      <span id='".$m."_disk_progress_bar'>[ ... ]</span>\n";
       echo "     </td>\n";
 
-      echo "     <td width='50px' class='gap' align='left' rowspan='$rs'>\n";
+      echo "     <td width='50px' class='gap' align='left'>\n";
       echo "      <span id='".$m."_disk_value'></span>\n";
       echo "     </td>\n";
 
       // temperature value
-      echo "     <td width='20px' class='gap' rowspan='$rs'><span id='".$m."_temperature_value'>NA</span></td>\n";
+      echo "     <td width='20px' class='gap'><span id='".$m."_temperature_value'>NA</span></td>\n";
 
-      for ($i=0; $i<count($m_pwcs); $i++)
-      {
-        // for rowspanning
-        if ($i > 0)
-          echo "<tr>\n";
+      echo "     <td width='15px' class='".$class."' valign='center'>\n";
+      echo "      ".$this->overallStatusLight($status, $m, $m."_a", $m."_img")."\n";
+      echo "     </td>\n";
 
-        $mp = $m_pwcs[$i];
-
-        if ($this->verbose)
-          $class = "gap_line";
-        else
-          $class = "gap";
-
-        $has_db  = ((strpos($mp, "server") === FALSE) && (($this->config["PWC_STATE_".$mp] == "active") || ($this->config["PWC_STATE_".$mp] == "passive")));
-
-        // Status Lights for each PWC
-        $linkid = $mp."_a";
-        $imgid = $mp."_img";
-        echo "     <td width='15px' class='".$class."' valign='center'>\n";
-        echo "      ".$this->overallStatusLight($status, $mp, $linkid, $imgid)."\n";
-        echo "     </td>\n";
- 
-        // PWC IDs [PFB]       
-        echo "     <td width='30px' class='".$class."'>";
-        if (strpos($mp, "server") === FALSE)
-          echo "      <div>".$this->config["PWC_PFB_ID_".$mp]."</div>\n";
-        else
-          echo "&nbsp;";
-        echo "     </td>";
-
-        // Receiving Data Block
-        $db_id = $this->config["RECEIVING_DATA_BLOCK"];
-
-        // datablock buffers progress bar
-        echo "     <td width='40px' style='vertical-align: middle;'>\n";
-        if ($has_db)
-        {
-          $tag = $m."_".$mp."_".$db_id;
-          echo "      <div id='".$tag."_buffer1'>\n";
-          echo "       <span id='".$tag."_buffer_progress_bar'>[ ... ]</span>\n";
-          echo "      </div>\n";
-        }
-        else
-          echo "&nbsp;";
-        echo "     </td>\n";
-
-        // datablock buffers str value
-        echo "     <td width='40px' style='vertical-align: middle;'>\n";
-        if ($has_db)
-        {
-          $tag = $m."_".$mp."_".$db_id;
-          echo "      <div id='".$tag."_buffer2' style='text-align: right;'>\n";
-          echo "       <span id='".$tag."_buffer_value'></span>\n";
-          echo "      </div>\n";
-        }
-        else
-          echo "&nbsp;";
-        echo "     </td>\n";
-
-        // in verbose mode, print other datablocks too
-        if ($this->verbose)
-        {
-          echo "     <td width='40px' style='vertical-align: middle; padding-left: 10px;'>\n";
-          if ($has_db)
-          {
-            foreach ($this->db_ids as $db_id)
-            {
-              if ($db_id != $this->config["RECEIVING_DATA_BLOCK"])
-              {
-                $tag = $m."_".$mp."_".$db_id;
-                echo "      <div id='".$tag."_buffer1' style='padding-top:4px;'>\n";
-                echo "       <span id='".$tag."_buffer_progress_bar'>[ ... ]</span>\n";
-                echo "      </div>\n";
-              }
-            }
-          }
-          else
-            echo "&nbsp;";
-          echo "     </td>\n";
-
-          echo "     <td width='40px' style='vertical-align: middle;'>\n";
-          if ($has_db)
-          {
-            foreach ($this->db_ids as $db_id)
-            {
-              if ($db_id != $this->config["RECEIVING_DATA_BLOCK"])
-              {
-                $tag = $m."_".$mp."_".$db_id;
-                echo "      <div id='".$tag."_buffer2' style='padding-top:4px;'>\n";
-                echo "       <span id='".$tag."_buffer_value'></span>\n";
-                echo "      </div>\n";
-              }
-            }
-          }
-          else
-            echo "&nbsp;";
-          echo "     </td>\n";
-        }
-
-        //  messages
-        echo "     <td class='status_text' align='left'>\n";
-        echo "      <div id='".$mp."_messages' style='padding-top:4px;'></div>\n";
-        echo "     </td>\n";
-        
-        echo " </tr>\n";
-      }
+      //  messages
+      echo "     <td class='status_text' align='left'>\n";
+      echo "      <div id='".$m."_messages' style='padding-top:4px;'></div>\n";
+      echo "     </td>\n";
+       
+      echo " </tr>\n";
     }
 ?>
     </table>
@@ -714,6 +559,36 @@ class machine_summary extends mopsr_webpage
       }
       socket_close($socket);
       $socket = 0;
+    }
+
+    list ($socket, $result) = openSocket($host, $port);
+    if ($result == "ok")
+    {
+      $bytes_written = socketWrite($socket, "bf_node_info\r\n");
+      list($result, $response) = socketRead($socket);
+      if ($result == "ok")
+      {
+        $xml .= "<bf_node_info length='".strlen($response)."'>\n";
+        $xml .= $response."\n";
+        $xml .= "</bf_node_info>\n";
+      }
+      socket_close($socket);
+      $socket = 0;
+    }
+  
+    list ($socket, $result) = openSocket($host, $port);
+    if ($result == "ok")
+    {
+      $bytes_written = socketWrite($socket, "bp_node_info\r\n");
+      list($result, $response) = socketRead($socket);
+      if ($result == "ok")
+      {
+        $xml .= "<bp_node_info length='".strlen($response)."'>\n";
+        $xml .= $response."\n";
+        $xml .= "</bp_node_info>\n";
+      }
+      socket_close($socket);
+      $socket = 0;
     } 
     else
     {
@@ -721,16 +596,15 @@ class machine_summary extends mopsr_webpage
     }
 
     list ($socket, $result) = openSocket($host, $port);
-
     if ($result == "ok")
     {
       $bytes_written = socketWrite($socket, "srv_node_info\r\n");
       list($result, $response) = socketRead($socket);
       if ($result == "ok")
       {
-        $xml .= "<srv_node_info>\n";
+        $xml .= "<daemon_statuses>\n";
         $xml .= $response."\n";
-        $xml .= "</srv_node_info>\n";
+        $xml .= "</daemon_statuses>\n";
       }
       socket_close($socket);
       $socket = 0;
@@ -750,6 +624,7 @@ class machine_summary extends mopsr_webpage
       socket_close($socket);
       $socket = 0;
     }
+
     $xml .= "</machine_summary>\n";
 
     header('Content-type: text/xml');

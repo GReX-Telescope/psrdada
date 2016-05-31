@@ -438,8 +438,9 @@ class results extends mopsr_webpage
 ?>
         <th align=left>SOURCE</th>
         <th align=left>UTC START</th>
-        <th align=left>FREQ</th>
-        <th align=left>BW</th>
+        <th align=left>CONFIG</th>
+<!--        <th align=left>FREQ</th>
+        <th align=left>BW</th>-->
         <th align=left>LENGTH</th>
         <th align=left>PROC_FILEs</th>
         <th class="trunc">Annotation</th>
@@ -482,11 +483,14 @@ class results extends mopsr_webpage
           // UTC_START 
           echo "    <td ".$bg_style."><span id='UTC_START_".$i."'>".$k."</span></td>\n";
 
+          // CONFIG
+          echo "    <td ".$bg_style."><span id='CONFIG_".$i."'>".$r["CONFIG"]."</span></td>\n";
+
           // FREQ
-          echo "    <td ".$bg_style."><span id='FREQ_".$i."'>".$r["FREQ"]."</span></td>\n";
+          //echo "    <td ".$bg_style."><span id='FREQ_".$i."'>".$r["FREQ"]."</span></td>\n";
 
           // BW
-          echo "    <td ".$bg_style."><span id='BW_".$i."'>".$r["BW"]."</span></td>\n";
+          //echo "    <td ".$bg_style."><span id='BW_".$i."'>".$r["BW"]."</span></td>\n";
 
           // INTERGRATION LENGTH
           echo "    <td ".$bg_style."><span id='INT_".$i."'>".$r["INT"]."</span></td>\n";
@@ -544,7 +548,7 @@ class results extends mopsr_webpage
       for ($j=0; $j<count($rkeys); $j++) {
         $rk = $rkeys[$j]; 
         if (($rk != "FRES_AR") && ($rk != "TRES_AR")) {
-          $xml .= "<".$rk.">".$r[$rk]."</".$rk.">\n";
+          $xml .= "<".$rk.">".htmlspecialchars($r[$rk])."</".$rk.">\n";
         }
       }
       $xml .= "</result>\n";
@@ -599,8 +603,9 @@ class results extends mopsr_webpage
       if (file_exists($dir."/obs.info")) {
         $arr = getConfigFile($dir."/obs.info");
         $all_results[$o]["SOURCE"] = $arr["SOURCE"];
-        $all_results[$o]["FREQ"] = sprintf("%5.2f",$arr["FREQ"]);
-        $all_results[$o]["BW"] = $arr["BW"];
+        $all_results[$o]["CONFIG"] = $arr["CONFIG"];
+        //$all_results[$o]["FREQ"] = sprintf("%5.2f",$arr["FREQ"]);
+        //$all_results[$o]["BW"] = $arr["BW"];
         $all_results[$o]["PID"] = $arr["PID"];
         if (array_key_exists("PROC_FILE", $arr))
           $all_results[$o]["PROC_FILE"] = $arr["PROC_FILE"];
@@ -625,12 +630,23 @@ class results extends mopsr_webpage
       # get the image bp or pvf 
       if (($all_results[$o]["IMG"] == "NA") || ($all_results[$o]["IMG"] == "")) 
       {
-        $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -type f -name '*.fr.120x90.png' -printf '%f\n' -o -name '*.FB.00.*png' -printf '%f\n' -o -name '*CH00.ad.160x120.png' -printf '%f\n' | sort -n | head -n 1";
+        $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -type f ".
+               "-name '*.fl.120x90.png' -printf '%f\n' ".
+               "-o -name '*CH00.ad.160x120.png' -printf '%f\n' ".
+               "| sort -n | head -n 1";
         $img = exec($cmd, $output, $rval);
         if (($rval == 0) && ($img != "")) {
           $all_results[$o]["IMG"] = $img;
         } else {
-          $all_results[$o]["IMG"] = "../../../images/blankimage.gif";
+          $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -type f ".
+                 "-name '*.FB.00.*png' -printf '%f\n' ".
+                "| sort -n | head -n 1";
+          $img = exec($cmd, $output, $rval);
+          if (($rval == 0) && ($img != "")) {
+            $all_results[$o]["IMG"] = $img;
+          } else {
+            $all_results[$o]["IMG"] = "../../../images/blankimage.gif";
+          }
         }
         if ($finished) {
           system("perl -ni -e 'print unless /^IMG/' ".$results_dir."/".$o."/obs.info");
@@ -650,7 +666,7 @@ class results extends mopsr_webpage
         } 
         if ($finished) {
           system("perl -ni -e 'print unless /^INT/' ".$results_dir."/".$o."/obs.info");
-          system("echo 'INT                 ".$int."' >> ".$results_dir."/".$o."/obs.info");
+          system("echo 'INT              ".$int."' >> ".$results_dir."/".$o."/obs.info");
         }
       }
       if (file_exists($dir."/obs.txt")) {
@@ -677,17 +693,42 @@ class results extends mopsr_webpage
     {
       $cmd = "tail -n 1 ".$this->results_dir."/".$utc_start."/all_candidates.dat | awk '{print $3}'";
       $length = exec($cmd, $output, $rval);
+      return sprintf("%5.0f", $length);
     }
     else if (file_exists ($this->results_dir."/".$utc_start."/cc.sum"))
     {
-      return "NA";
+      $cmd = "find ".$this->archive_dir."/".$utc_start." -name '*.ac' | sort -n | tail -n 1";
+      $output = array();
+      $ac = exec($cmd, $output, $rval);
+
+      $parts = explode("_", $ac);
+      $bytes_to = $parts[count($parts)-1];
+
+      $cmd = "grep BYTES_PER_SECOND ".$this->archive_dir."/".$utc_start."/obs.header | awk '{print $2}'";
+      $output = array();
+      $Bps = exec($cmd, $output, $rval);
+
+      $length = $bytes_to / $Bps;
+      return sprintf ("%5.0f", $length);
     }
     else
     {
+      # try to find a TB/*_f.tot file
+      $cmd = "find ".$this->results_dir."/".$utc_start."/TB -mindepth 1 -maxdepth 1 -type f -name '*_f.tot' | sort -n | tail -n 1";
+      $tot = exec($cmd, $output, $rval);
+      if ($tot != "")
+      {
+        $cmd = $this->cfg["SCRIPTS_DIR"]."/psredit -Q -c length ".$tot;
+        $output = array();
+        $result = exec($cmd, $output, $rval);
+        list ($file, $length) = split(" ", $result);
+        if ($length != "" && $rval == 0)
+          return sprintf ("%5.0f",$length);
+      }
+    
+      # try to find a 2*.ar file
       $cmd = "find ".$dir." -mindepth 2 -maxdepth 2 -type f -name '2*.ar' -printf '%f\n' | sort -n | tail -n 1";
-
       $ar = exec($cmd, $output, $rval);
-
       if ($ar != "")
       {
         $array = split("\.",$ar);

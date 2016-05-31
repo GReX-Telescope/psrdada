@@ -55,29 +55,30 @@ class result extends mopsr_webpage
         $this->obs_config = "INDIVIDUAL_MODULES";
 
     $ant = array();
-    if ($this->obs_config == "FAN_BEAM" || $this->obs_config == "TIED_ARRAY_FAN_BEAM")
+    if ($this->obs_config == "FAN_BEAM" || $this->obs_config == "TIED_ARRAY_FAN_BEAM" || 
+        $this->obs_config == "MOD_BEAM" || $this->obs_config == "TIED_ARRAY_MOD_BEAM")
     {
       $ant = array_merge ($ant, array("FB"));
       $cmd = "find ".$this->obs_results_dir." -name '????-??-??-??:??:??.FB.*.850x680.png' | awk -F. '{print $3}'";
       $lastline = exec($cmd, $this->fb_types, $rval);
     }
-    else if ($this->obs_config == "TIED_ARRAY_BEAM" || $this->obs_config == "TIED_ARRAY_FAN_BEAM")
+    if ($this->obs_config == "TIED_ARRAY_BEAM" || $this->obs_config == "TIED_ARRAY_FAN_BEAM" ||
+        $this->obs_config == "TIED_ARRAY_BEAM" || $this->obs_config == "TIED_ARRAY_MOD_BEAM")
     {
-      $this->tb_types = array("fl", "fr", "ti", "bp", "pm");
+      $this->tb_types = array("fl", "fr", "ti", "bp", "pm", "l9", "re", "st", "ta");
       $ant = array_merge ($ant, array("TB"));
     }
-    else if ($this->obs_config == "CORRELATION")
+    if ($this->obs_config == "CORRELATION")
     {
       $this->corr_types = array("sn", "bd", "ad", "po");
       $ant = array_merge ($ant, array("CH00"));
     }
-    else if ($this->obs_config == "INDIVIDUAL_MODULES")
+    if ($this->obs_config == "INDIVIDUAL_MODULES")
     {
       $this->im_types = array("fl", "fr", "ti", "bp", "pm");
     }
 
     $this->imgs = $this->inst->getObsImages($this->obs_results_dir, $ant);
-
   }
 
   function javaScriptCallback()
@@ -233,31 +234,34 @@ class result extends mopsr_webpage
       echo "    <table id='correlation_images'>\n";
       echo "      <tr>\n";
       foreach ($this->corr_types as $t)
-        $this->printPlotCell($this->imgs["CH00"][$t."_160x120"], $this->imgs["CH00"][$t."_1024x768"]);
+        $this->printPlotCell($this->imgs["CH00"][$t."_160x120"], $this->imgs["CH00"][$t."_1024x768"], "160", "120");
       echo "      </tr>\n";
       echo "    </table>\n";
     }
 
     // print tied array beam images if they exist
-    if ($this->obs_config == "TIED_ARRAY_BEAM" || $this->obs_config == "TIED_ARRAY_FAN_BEAM")
+    if (($this->obs_config == "TIED_ARRAY_BEAM") || 
+        ($this->obs_config == "TIED_ARRAY_FAN_BEAM") ||
+        ($this->obs_config == "TIED_ARRAY_MOD_BEAM"))
     {
       echo "    <table id='tied_array_beam_images'>\n";
       echo "      <tr>\n";
       foreach ($this->tb_types as $t)
-        $this->printPlotCell($this->imgs["TB"][$t."_120x90"], $this->imgs["TB"][$t."_1024x768"]);
+        $this->printPlotCell($this->imgs["TB"][$t."_120x90"], $this->imgs["TB"][$t."_1024x768"], "120", "90");
       echo "      </tr>\n";
       echo "    </table>\n";
     }
 
     // print fan beam images if they exist
-    if ($this->obs_config == "FAN_BEAM" || $this->obs_config == "TIED_ARRAY_FAN_BEAM")
+    if ($this->obs_config == "FAN_BEAM" || $this->obs_config == "TIED_ARRAY_FAN_BEAM" ||
+       $this->obs_config == "MOD_BEAM" || $this->obs_config == "TIED_ARRAY_MOD_BEAM")
     {
       echo "    <table id='fan_beam_images'>\n";
       rsort($this->fb_types);
       foreach ($this->fb_types as $t)
       {
         echo "      <tr>\n";
-        $this->printPlotCell($this->imgs["FB"][$t."_850x680"], $this->imgs["FB"][$t."_850x680"]);
+        $this->printPlotCell($this->imgs["FB"][$t."_850x680"], $this->imgs["FB"][$t."_850x680"], "850", "680");
         echo "      </tr>\n";
       }
       echo "    </table>\n";
@@ -273,7 +277,7 @@ class result extends mopsr_webpage
         echo "      <tr>\n";
         echo "        <td>".$a."</td>\n";
         foreach ($this->im_types as $t)
-          $this->printPlotCell($this->imgs[$a][$t."_120x90"], $this->imgs[$a][$t."_1024x768"]);
+          $this->printPlotCell($this->imgs[$a][$t."_120x90"], $this->imgs[$a][$t."_1024x768"], "120", "90");
         echo "        </td>\n";
         echo "      </tr>\n";
       }
@@ -392,10 +396,8 @@ class result extends mopsr_webpage
     }
   }
 
-  function printPlotCell($image, $image_hires) 
+  function printPlotCell($image, $image_hires, $width, $height) 
   {
-
-
     $have_hires = 0;
     $hires_path = $this->obs_results_dir."/".$image_hires;
     if ((strlen($image_hires) > 1) && (file_exists($hires_path))) {
@@ -405,14 +407,15 @@ class result extends mopsr_webpage
     echo "    <td align='center'>\n"; 
 
     if ($have_hires) {
-      echo "      <a href=\"/mopsr/".$this->results_link."/".$this->utc_start."/".$image_hires."\">";
+      echo "<a href=\"/mopsr/".$this->results_link."/".$this->utc_start."/".$image_hires."\">";
     }
       
-    echo "      <img src=\"/mopsr/".$this->results_link."/".$this->utc_start."/".$image."\">";
+    echo "<img src=\"/mopsr/".$this->results_link."/".$this->utc_start."/".$image."\" width='".$width."px' height=".$height."px'>";
 
     if ($have_hires) {
-      echo "    </a><br>\n";
+      echo "</a>";
     }
+    
 
     echo "    </td>\n";
 

@@ -43,7 +43,7 @@ class log_list extends mopsr_webpage
 
       function clearLogWindow()
       {
-        log_window.document.location = "antenna_monitor.lib.php?single=true";
+        log_window.document.location = "ganglia_window.lib.php?single=true";
       }
 
       function changeLogWindow()
