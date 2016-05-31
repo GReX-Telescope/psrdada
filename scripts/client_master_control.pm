@@ -1493,6 +1493,10 @@ sub dbThread()
             ($result, $nblocks, $nfull) = Dada::getDBStatus($key);
             $response .= $key.":".$result." ";
             $xml .= "<datablock pwc_id='".$pwc."' db_id='".$db_id."' key='".$key."' size='".$nblocks."'>".$nfull."</datablock>";
+            if (($nblocks > 0) && (($nfull / $nblocks) > 0.9))
+            {
+              Dada::logMsg(1, $dl, "dbThread: pwc_id=".$pwc." db_id=".$db_id." key=".$key." full_blocks=".$nfull." of ".$nblocks);
+            }
           }
         }
 
