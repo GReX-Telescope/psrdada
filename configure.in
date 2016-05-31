@@ -154,6 +154,7 @@ AC_CONFIG_FILES([Makefile
     mopsr/config/Makefile
     mopsr/config/mopsr.cfg
     mopsr/src/Makefile
+    mopsr/src/sigproc/Makefile
     mopsr/sla/Makefile
     mopsr/web/Makefile
     hispec/Makefile
