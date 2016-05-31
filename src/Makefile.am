@@ -51,33 +51,20 @@ TESTS = test_uint64_t test_disk_array test_ipcio test_ascii_header
 
 LDADD = libpsrdada.la 
 
-dada_db_LDADD = $(LDADD) @HWLOC_LIBS@
-
 EXTRA_DIST=ipcrme loopssh
 
 ###############################################################################
 #
-# Depends on librdmacm
+# Depends on HWLOC
 #
 ###############################################################################
 
-if HAVE_RDMACM
+if HAVE_HWLOC
 
-libpsrdada_la_SOURCES += dada_ib.c dada_ib_datagram.c
-include_HEADERS += dada_ib.h dada_ib_datagram.h
-bin_PROGRAMS += dada_ibdb dada_dbib dada_udheader dada_dbud
-
-LDADD += $(RDMACM_LIBS)
-
-if COMPILE_THIRD
-
-bin_PROGRAMS += dada_udgen
-dada_udgen_CFLAGS = -I$(top_srcdir)/3rdparty -D$(ARCH)
-dada_udgen_LDFLAGS = $(LDADD) $(top_builddir)/3rdparty/libtimers.la
+  dada_db_LDADD = $(LDADD) @HWLOC_LIBS@
 
 endif
 
-endif
 
 ###############################################################################
 #
@@ -93,10 +80,31 @@ include_HEADERS += dada_cuda.h ipcio_cuda.h
 bin_PROGRAMS += dada_dbgpu
 
 AM_CPPFLAGS = @CUDA_CFLAGS@ 
-
-dada_dbgpu_CFLAGS   = $(CUDA_CFLAGS)
-dada_dbgpu_LDADD    = $(LDADD) $(CUDA_LIBS)
-dada_dbgpu_LDFLAGS  = $(CUDA_LDFLAGS) -lstdc++
+#libpsrdada_la_LIBADD = @CUDA_LIBS@
+LDADD += @CUDA_LIBS@ 
 
 endif
+###############################################################################
+#
+# Depends on librdmacm
+#
+###############################################################################
+
+if HAVE_RDMACM
+
+libpsrdada_la_SOURCES += dada_ib.c dada_ib_datagram.c
+include_HEADERS += dada_ib.h dada_ib_datagram.h
+bin_PROGRAMS += dada_ibdb dada_dbib dada_udheader dada_dbud
+LDADD += $(RDMACM_LIBS)
+
+if COMPILE_THIRD
+
+bin_PROGRAMS += dada_udgen
+dada_udgen_CFLAGS = -I$(top_srcdir)/3rdparty -D$(ARCH)
+dada_udgen_LDFLAGS = $(LDADD) $(top_builddir)/3rdparty/libtimers.la
+
+endif
+
+endif
+
 
