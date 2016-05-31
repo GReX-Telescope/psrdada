@@ -136,7 +136,10 @@ sub main() {
   $SIG{PIPE} = \&sigPipeHandle;
   
   # become a daemon
-  Dada::daemonize($log_file, $pid_file);
+  if ($dl < 3 )
+  {  
+    Dada::daemonize($log_file, $pid_file);
+  }
 
   Dada::logMsg(0, $dl, "STARTING SCRIPT");
 
@@ -193,7 +196,6 @@ sub main() {
 
         $read_set->add($handle);
         $handle = 0;
-
       }
       else
       {
@@ -366,7 +368,7 @@ sub loggingThread($)
           } else {
             open(FH,">".$status_file);
           }
-          print FH $program.": ".$line."\n";
+          print FH $program.": ".$message."\n";
           close FH;
         }   
       }
@@ -480,7 +482,7 @@ sub good($) {
     return ("fail", "master_log_prefix was not set");
   } 
 
-  my $n_listen = $cfg{"NUM_PWC"} * 10;
+  my $n_listen = $cfg{"NUM_PWC"} * 20;
 
   $log_sock = new IO::Socket::INET (
     LocalHost => $log_host,
