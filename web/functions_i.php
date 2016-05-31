@@ -258,7 +258,7 @@ function socketWrite($socket, $string) {
     return -1;
   }
   if ($bytes_written != $bytes_to_write) {
-    echo "Error, tried to write".$bytes_to_write.", but only ".$bytes_written." bytes were written<BR>\n";
+    echo "Error, tried to write ".$bytes_to_write.", but only ".$bytes_written." bytes were written<BR>\n";
     return -1;
   } 
   return $bytes_written;
