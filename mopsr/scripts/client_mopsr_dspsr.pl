@@ -267,6 +267,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
         $quit_daemon = 1;
       }
     }
+    logMsg(1, "INFO", "observation prepared");
 
     if (!$quit_daemon)
     {

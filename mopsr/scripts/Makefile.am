@@ -20,10 +20,12 @@ dist_bin_SCRIPTS = Mopsr.pm \
                    server_mopsr_pwc_monitor.pl \
                    server_mopsr_src_monitor.pl \
                    server_mopsr_sys_monitor.pl \
+                   server_mopsr_swin_transferrer.pl \
                    server_mopsr_web_monitor.pl \
                    sn_mods.py \
                    client_mopsr_aqdsp.pl \
                    client_mopsr_aq_diskdb.pl \
+                   client_mopsr_aq_cleaner.pl \
                    client_mopsr_bfdsp.pl \
 									 client_mopsr_dbsplitdb.pl \
                    client_mopsr_dbantsdb.pl \
@@ -31,14 +33,18 @@ dist_bin_SCRIPTS = Mopsr.pm \
 									 client_mopsr_dspsr.pl \
                    client_mopsr_master_control.pl \
 								   client_mopsr_bf_archive_manager.pl \
+                   client_mopsr_bf_cleaner.pl \
 									 client_mopsr_bf_diskdb.pl \
                    client_mopsr_bf_master_control.pl \
                    client_mopsr_bf_process.pl \
                    client_mopsr_bf_src_logger.pl \
                    client_mopsr_bf_results_mon.pl \
+                   client_mopsr_bf_rescale.pl \
                    client_mopsr_bf_transpose.pl \
                    client_mopsr_archive_manager.pl \
 									 client_mopsr_bp_master_control.pl \
+                   client_mopsr_bp_cleaner.pl \
+									 client_mopsr_bp_digifil_custom.pl \
 									 client_mopsr_bp_digifil.pl \
 									 client_mopsr_bp_fb_manager.pl \
                    client_mopsr_bp_cands_mon.pl \
@@ -49,6 +55,8 @@ dist_bin_SCRIPTS = Mopsr.pm \
 									 client_mopsr_bp_integrate.pl \
 									 client_mopsr_bp_reblock.pl \
 									 client_mopsr_bp_process.pl \
+									 client_mopsr_bp_sigproc.pl \
+									 client_mopsr_bp_transpose.pl \
                    client_mopsr_mux_send.pl \
                    client_mopsr_mux_recv.pl \
                    client_mopsr_proc.pl \
@@ -58,6 +66,8 @@ dist_bin_SCRIPTS = Mopsr.pm \
                    client_mopsr_pwc.pl \
                    client_mopsr_aqdsp_observation_manager.pl \
                    client_mopsr_src_logger.pl \
+									 mopsr_backend_start.pl \
+									 mopsr_backend_stop.pl \
 									 mopsr_pkt_reset.pl
 
 include $(top_srcdir)/config/Makefile.targets

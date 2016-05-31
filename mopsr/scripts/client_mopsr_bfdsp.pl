@@ -204,15 +204,25 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
           $proc_cmd = "mopsr_bfdsp ".$in_db_key." ". $cfg{"MOLONGLO_BAYS_FILE"}." ".
                       $cfg{"MOLONGLO_MODULES_FILE"}." -d " .$cfg{"BF_GPU_ID_".$chan_id}." -s";
 
-          if (($header{"CONFIG"} eq "TIED_ARRAY_BEAM") || ($header{"CONFIG"} eq "TIED_ARRAY_FAN_BEAM"))
+          if (($header{"CONFIG"} eq "TIED_ARRAY_BEAM") || 
+              ($header{"CONFIG"} eq "TIED_ARRAY_FAN_BEAM") || 
+              ($header{"CONFIG"} eq "TIED_ARRAY_MOD_BEAM"))
           {
             $proc_cmd .= " -t ".$tb_db_key;
           }
 
-          if (($header{"CONFIG"} eq "FAN_BEAM") || ($header{"CONFIG"} eq "TIED_ARRAY_FAN_BEAM"))
+          if (($header{"CONFIG"} eq "FAN_BEAM") || 
+              ($header{"CONFIG"} eq "TIED_ARRAY_FAN_BEAM"))
           {
             $proc_cmd .= " -f ".$fb_db_key." -b ".$ct{"NBEAM"};
           }
+
+          if (($header{"CONFIG"} eq "MOD_BEAM") ||
+              ($header{"CONFIG"} eq "TIED_ARRAY_MOD_BEAM"))
+          {
+            $proc_cmd .= " -m ".$fb_db_key." -b ".$ct{"NBEAM"};
+          }
+
         }   
         else
         {

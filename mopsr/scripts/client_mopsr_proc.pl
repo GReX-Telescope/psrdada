@@ -241,6 +241,13 @@ sub prepareObservation($$)
     return ("fail", $obs_dir, $proc_cmd);
   }
 
+  my $scratch_dir = "/data/mopsr/scratch/".$cfg{"PWC_PFB_ID_".$pwc_id};
+  my ($result, $response);
+  logMsg(2, "INFO", "prepareObservation: mkdirRecursive(".$scratch_dir.", 0755)");
+  ($result, $response) = Dada::mkdirRecursive($scratch_dir, 0755);
+  logMsg(3, "INFO", "prepareObservation: ".$result." ".$response);
+  
+
   logMsg(1, "INFO", "prepareObservation: local dirs created");
 
   my $obs_header = $obs_dir."/obs.header";

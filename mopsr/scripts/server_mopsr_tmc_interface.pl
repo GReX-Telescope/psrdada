@@ -50,6 +50,7 @@ our $daemon_name;
 our %cfg : shared;
 our %site_cfg : shared;
 our $current_state : shared;
+our $current_config;
 our $pwcc_running : shared;
 our $quit_threads : shared;
 our $n_ant : shared;
@@ -73,6 +74,7 @@ $daemon_name = Dada::daemonBaseName($0);
 %cfg = Mopsr::getConfig();
 %site_cfg = Dada::readCFGFileIntoHash($cfg{"CONFIG_DIR"}."/site.cfg", 0);
 $current_state = "Idle";
+$current_config = $cfg{"CONFIG_NAME"};
 $pwcc_running = 0;
 $quit_threads = 0;
 $n_ant  = "N/A";
@@ -433,7 +435,7 @@ sub parseXMLCommand($)
         }
         else
         {
-          $current_state = "Starting...";
+          $current_state = "Starting";
           if (!$jun_testing)
           {
             Dada::logMsg(2, $dl, "parseXMLCommand: start(".$cfg{"CONFIG_DIR"}."/mopsr_tmc.spec)");
@@ -455,6 +457,13 @@ sub parseXMLCommand($)
         {
           $result = "fail";
           $response = "Received stop command whilst ".$current_state;
+        }
+        elsif ($current_state eq "Prepared")
+        {
+          $result = "ok";
+          $response = "Returning from Prepared to Idle";
+          $current_state = "Idle";
+          $spec_generated = 0;
         }
         else
         {
@@ -493,6 +502,7 @@ sub parseXMLCommand($)
         $xml_out .= "<reply>".$result."</reply>";
         $xml_out .= "<response>";
         $xml_out .=   "<mpsr_status>".$current_state."</mpsr_status>";
+        $xml_out .=   "<mpsr_configuration>".$current_config."</mpsr_configuration>";
         $xml_out .=   "<snr_status>";
         $xml_out .=     "<source>";
         $xml_out .=       "<name epoch='J2000'>J0437-4715</name>";
@@ -931,7 +941,6 @@ sub createLocalDirs($)
   print FH Dada::headerFormat("NBIT",      $spec{"NBIT"})."\n";
   print FH Dada::headerFormat("NPOL",      $spec{"NPOL"})."\n";
   print FH Dada::headerFormat("NDIM",      $spec{"NDIM"})."\n";
-  print FH Dada::headerFormat("NCHAN",     $spec{"NCHAN"})."\n";
   print FH Dada::headerFormat("NANT",      $spec{"NANT"})."\n";
   print FH Dada::headerFormat("AQ_PROC_FILE", $spec{"AQ_PROC_FILE"})."\n";
   print FH Dada::headerFormat("BF_PROC_FILE", $spec{"BF_PROC_FILE"})."\n";
@@ -1890,4 +1899,9 @@ sub setPktUtcStart ($)
   close FH;
 
   return ("ok", "");
+}
+
+sub checkEphemeris($)
+{
+
 }

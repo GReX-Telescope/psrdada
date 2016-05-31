@@ -44,13 +44,24 @@ our $srv_node_info : shared      = "";
 our $aq_node_info : shared       = "";
 our $bf_node_info : shared       = "";
 our $bp_node_info : shared       = "";
+our $srv_node_info_lock : shared = "";
+our $aq_node_info_lock : shared  = "";
+our $bf_node_info_lock : shared  = "";
+our $bp_node_info_lock : shared  = "";
 our $curr_obs : shared           = "";
+our $curr_obs_lock : shared      = "";
 our $status_info : shared        = "";
-our $image_string : shared       = "";
+our $status_info_lock : shared   = "";
+our $image_string : shared = "";
+our $image_string_lock : shared = "";
 our $rx_monitor_string : shared  = "";
+our $rx_monitor_string_lock : shared  = "";
 our $pfb_monitor_string : shared = "";
+our $pfb_monitor_string_lock : shared = "";
 our $udp_monitor_string : shared = "";
-our $mgt_lock_string : shared    = "";
+our $udp_monitor_string_lock : shared = "";
+our $mgt_lock_string : shared = "";
+our $mgt_lock_string_lock : shared = "";
 
 #
 # Main
@@ -181,20 +192,73 @@ our $mgt_lock_string : shared    = "";
           Dada::logMsg(2, DL, "<- ".$string);
           my $r = "";
 
-          if    ($string eq "srv_node_info")    { $r = $srv_node_info; }
-          elsif ($string eq "aq_node_info")     { $r = $aq_node_info; }
-          elsif ($string eq "bf_node_info")     { $r = $bf_node_info; }
-          elsif ($string eq "bp_node_info")     { $r = $bp_node_info; }
-          elsif ($string eq "img_info")         { $r = $image_string; }
-          elsif ($string eq "curr_obs")         { $r = $curr_obs; }
-          elsif ($string eq "status_info")      { $r = $status_info; }
-          elsif ($string eq "rx_monitor_info")  { $r = $rx_monitor_string; }
-          elsif ($string eq "udp_monitor_info") { $r = $udp_monitor_string; }
-          elsif ($string eq "mgt_lock_info")    { $r = $mgt_lock_string; }
-          else  { Dada::logMsgWarn($warn, "unexpected command: ".$string); } 
-
-          print $rh $r."\n";
-          Dada::logMsg(2, DL, "-> ".$r);
+          if    ($string eq "srv_node_info")
+          { 
+            lock $srv_node_info_lock;
+            print $rh $srv_node_info."\n";
+            Dada::logMsg(2, DL, "-> ".$srv_node_info);
+          }
+          elsif ($string eq "aq_node_info")
+          {
+            lock $aq_node_info_lock;
+            print $rh $aq_node_info."\n";
+            Dada::logMsg(2, DL, "-> ".$aq_node_info);
+          }
+          elsif ($string eq "bf_node_info")
+          {
+            lock $bf_node_info_lock;
+            #Dada::logMsg(1, DL, "<- bf_node_info");
+            print $rh $bf_node_info."\n";
+            #Dada::logMsg(1, DL, "-> wrote ".(length($bf_node_info)+1)." bytes");
+            Dada::logMsg(2, DL, "-> ".$bf_node_info);
+          }
+          elsif ($string eq "bp_node_info")
+          {
+            lock $bp_node_info_lock;
+            print $rh $bp_node_info."\n";
+            Dada::logMsg(2, DL, "-> ".$bp_node_info);
+          }
+          elsif ($string eq "img_info")
+          { 
+            lock $image_string_lock;
+            print $rh $image_string."\n";
+            Dada::logMsg(2, DL, "-> ".$image_string);
+          }
+          elsif ($string eq "curr_obs")
+          {
+            lock $curr_obs_lock;
+            print $rh $curr_obs."\n";
+            Dada::logMsg(2, DL, "-> ".$curr_obs);
+          }
+          elsif ($string eq "status_info")
+          {
+            lock $status_info_lock;
+            print $rh $status_info."\n";
+            Dada::logMsg(2, DL, "-> ".$status_info);
+          }
+          elsif ($string eq "rx_monitor_info")
+          {
+            lock $rx_monitor_string_lock;
+            print $rh $rx_monitor_string."\n";
+            Dada::logMsg(2, DL, "-> ".$rx_monitor_string);
+          }
+          elsif ($string eq "udp_monitor_info")
+          {
+            lock $udp_monitor_string_lock;
+            print $rh $udp_monitor_string."\n";
+            Dada::logMsg(2, DL, "-> ".$udp_monitor_string);
+          }
+          elsif ($string eq "mgt_lock_info")
+          {
+            lock $mgt_lock_string_lock;
+            print $rh $mgt_lock_string."\n";
+            Dada::logMsg(2, DL, "-> ".$mgt_lock_string);
+          }
+          else 
+          { 
+            print $rh "\n";
+            Dada::logMsgWarn($warn, "unexpected command: ".$string);
+          } 
 
           # experimental!
           $read_set->remove($rh);
@@ -294,7 +358,6 @@ sub currentInfoThread($)
 
   my $cmd = "find ".$results_dir." -ignore_readdir_race -maxdepth 1 -type d -name '2*' -printf '\%f\n' | sort | tail -n 1";
   my $obs = "";
-  my $tmp_str = "";
   my %cfg_file = ();
 
   while (!$quit_daemon) 
@@ -315,27 +378,21 @@ sub currentInfoThread($)
 
       if (-f $results_dir."/".$obs."/obs.info")
       {
-        $tmp_str = "";
+        lock $curr_obs_lock;
         %cfg_file = Dada::readCFGFile($results_dir."/".$obs."/obs.info"); 
 
-        $tmp_str .= "SOURCE:::".$cfg_file{"SOURCE"}.";;;";
-        $tmp_str .= "RA:::".$cfg_file{"RA"}.";;;";
-        $tmp_str .= "DEC:::".$cfg_file{"DEC"}.";;;";
-        $tmp_str .= "FREQ:::".$cfg_file{"FREQ"}.";;;";
-        $tmp_str .= "BW:::".$cfg_file{"BW"}.";;;";
-        $tmp_str .= "NUM_PWC:::".$cfg_file{"NUM_PWC"}.";;;";
-        $tmp_str .= "PID:::".$cfg_file{"PID"}.";;;";
-        $tmp_str .= "UTC_START:::".$cfg_file{"UTC_START"}.";;;";
-        $tmp_str .= "PROC_FILE:::".$cfg_file{"PROC_FILE"}.";;;";
-        $tmp_str .= "NANT:::".$cfg_file{"NANT"}.";;;";
-        $tmp_str .= "OBSERVER:::".$cfg_file{"OBSERVER"}.";;;";
-        $tmp_str .= "INTERGRATED:::0;;;";
- 
-        Dada::logMsg(3, DL, $tmp_str); 
-
-        # update the global variable 
-        $curr_obs = $tmp_str;
-
+        $curr_obs = "SOURCE:::".$cfg_file{"SOURCE"}.";;;";
+        $curr_obs .= "RA:::".$cfg_file{"RA"}.";;;";
+        $curr_obs .= "DEC:::".$cfg_file{"DEC"}.";;;";
+        $curr_obs .= "FREQ:::".$cfg_file{"FREQ"}.";;;";
+        $curr_obs .= "BW:::".$cfg_file{"BW"}.";;;";
+        $curr_obs .= "NUM_PWC:::".$cfg_file{"NUM_PWC"}.";;;";
+        $curr_obs .= "PID:::".$cfg_file{"PID"}.";;;";
+        $curr_obs .= "UTC_START:::".$cfg_file{"UTC_START"}.";;;";
+        $curr_obs .= "PROC_FILE:::".$cfg_file{"PROC_FILE"}.";;;";
+        $curr_obs .= "NANT:::".$cfg_file{"NANT"}.";;;";
+        $curr_obs .= "OBSERVER:::".$cfg_file{"OBSERVER"}.";;;";
+        $curr_obs .= "INTERGRATED:::0;;;";
         Dada::logMsg(2, DL, "currInfoThread: ".$curr_obs);
       }
     }
@@ -371,7 +428,7 @@ sub udpMonitorThread ($)
   my %to_use;
   my %locked = ();
   my @keys = ();
-  my ($k, $no_image, $xml, $img_file, $img_string, $mgt_lock_xml);
+  my ($k, $no_image, $img_file, $img_string, $mgt_lock_xml);
   
   # chdir $monitor_dir;
   while (!$quit_daemon)
@@ -386,7 +443,6 @@ sub udpMonitorThread ($)
     else
     {
       $img_check_counter = $img_check_time;
-      $xml = "";
       $mgt_lock_xml = "";
 
       # get the listing of image files [UTC_START.PFB_ID.INPUT_ID.PLOT_TPE.XxY.png]
@@ -417,28 +473,40 @@ sub udpMonitorThread ($)
         $locked{$pfb}{$input} = ($locked eq "L") ? "true" : "false";
       }
 
-      foreach $pfb (keys %to_use)
       {
-        $xml .= "<pfb id='".$pfb."'>";
-        $mgt_lock_xml .= "<pfb id='".$pfb."'>";
-        foreach $input ( keys  %{$to_use{$pfb}})
+        lock $udp_monitor_string_lock;
+        $udp_monitor_string = "";
+        foreach $pfb (keys %to_use)
         {
-          $xml .= "<input id='".$input."' locked='".$locked{$pfb}{$input}."'>";
-          $mgt_lock_xml .= "<input id='".$input."' locked='".$locked{$pfb}{$input}."'/>";
-          foreach $key ( keys  %{$to_use{$pfb}{$input}})
+          $udp_monitor_string .= "<pfb id='".$pfb."'>";
+          foreach $input ( keys  %{$to_use{$pfb}})
           {
-            ($type, $res) = split(/\./, $key);
-            ($xres, $yres) = split(/x/, $res);
-            $xml .= "<img type='".$type."' width='".$xres."' height='".$yres."'>".$to_use{$pfb}{$input}{$key}."</img>";
+            $udp_monitor_string .= "<input id='".$input."' locked='".$locked{$pfb}{$input}."'>";
+            foreach $key ( keys  %{$to_use{$pfb}{$input}})
+            {
+              ($type, $res) = split(/\./, $key);
+              ($xres, $yres) = split(/x/, $res);
+              $udp_monitor_string .= "<img type='".$type."' width='".$xres."' height='".$yres."'>".$to_use{$pfb}{$input}{$key}."</img>";
+            }
+            $udp_monitor_string .= "</input>";
           }
-          $xml .= "</input>";
+          $udp_monitor_string .= "</pfb>\n";
         }
-        $xml .= "</pfb>\n";
-        $mgt_lock_xml .= "</pfb>\n";
       }
 
-      $udp_monitor_string = $xml;
-      $mgt_lock_string    = $mgt_lock_xml;
+      {
+        lock $mgt_lock_string_lock;
+        $mgt_lock_string = "";
+        foreach $pfb (keys %to_use)
+        {
+          $mgt_lock_string .= "<pfb id='".$pfb."'>";
+          foreach $input ( keys  %{$to_use{$pfb}})
+          {
+            $mgt_lock_string .= "<input id='".$input."' locked='".$locked{$pfb}{$input}."'/>";
+          }
+          $mgt_lock_string .= "</pfb>\n";
+        }
+      }
       Dada::logMsg(2, DL, "udpMonitorThread: collected images");
     }
 
@@ -482,7 +550,6 @@ sub rxMonitorThread ($)
   my @keys = ();
   my $k = "";
   my $no_image = "";
-  my $xml = "";
   my $img_file = "";
   my $img_string = "";
 
@@ -500,7 +567,6 @@ sub rxMonitorThread ($)
     else
     {
       $img_check_counter = $img_check_time;
-      $xml = "";
 
       # find any .bin files in the rx_monitor dir
       $cmd = "find ".$monitor_dir." -ignore_readdir_race -name '2*.???.bin' | sort -n  | awk -F/ '{print \$(NF)}'";
@@ -554,26 +620,29 @@ sub rxMonitorThread ($)
         $to_use{$rx}{$module}{$type.".".$res} = $img_file;
       }
 
-      foreach $rx ( keys %to_use)
       {
-        $xml .= "<rx id='".$rx."'>";
+        lock $rx_monitor_string_lock;
+        $rx_monitor_string = "";
 
-        foreach $module ( keys %{$to_use{$rx}})
+        foreach $rx ( keys %to_use)
         {
-          $xml .= "<module id='".$module."'>";
+          $rx_monitor_string .= "<rx id='".$rx."'>";
 
-          foreach $key ( keys  %{$to_use{$rx}{$module}})
+          foreach $module ( keys %{$to_use{$rx}})
           {
-            ($type, $res) = split(/\./, $key);
-            ($xres, $yres) = split(/x/, $res);
-            $xml .= "<img type='".$type."' width='".$xres."' height='".$yres."'>rx_monitor/".$to_use{$rx}{$module}{$key}."</img>";
-          }
-          $xml .= "</module>";
-        }
-        $xml .= "</rx>\n";
-      }
+            $rx_monitor_string .= "<module id='".$module."'>";
 
-      $rx_monitor_string = $xml;
+            foreach $key ( keys  %{$to_use{$rx}{$module}})
+            {
+              ($type, $res) = split(/\./, $key);
+              ($xres, $yres) = split(/x/, $res);
+              $rx_monitor_string .= "<img type='".$type."' width='".$xres."' height='".$yres."'>rx_monitor/".$to_use{$rx}{$module}{$key}."</img>";
+            }
+            $rx_monitor_string .= "</module>";
+          }
+          $rx_monitor_string .= "</rx>\n";
+        }
+      }
 
       Dada::logMsg(2, DL, "rxMonitorThread: collected images");
     }
@@ -612,7 +681,7 @@ sub imageInfoThread($)
 
   my $i = 0;
 
-  my ($cmd, $result, $response, $xml);
+  my ($cmd, $result, $response);
   my ($time, $type, $res, $ext);
   my ($key, $xres, $yres, $img_file);
   my ($utc_start, $ant);
@@ -645,51 +714,43 @@ sub imageInfoThread($)
 
       if ($result eq "ok")
       {
-        $xml = "";
         $utc_start = $response;
 
-        # check if mode is PSR
-        #$cmd = "grep ^MODE ".$results_dir."/".$utc_start."/obs.info | awk '{print \$2}'";
-        #Dada::logMsg(2, DL, "imageInfoThread: ".$cmd);
-        #($result, $response) = Dada::mySystem($cmd);
-        #Dada::logMsg(3, DL, "imageInfoThread: ".$result." ".$response);
-        #if (($result eq "ok") && ($response eq "PSR"))
+        # get the listing of image files
+        $cmd = "find ".$results_dir."/".$utc_start." -ignore_readdir_race -mindepth 1 ".
+               "-maxdepth 1 -name '*.*.??.*x*.png' | sort -n | awk -F/ '{print \$(NF)}'";
+        $img_string = `$cmd`;
+        @images = split(/\n/, $img_string);
+
+        %to_use = ();
+        @ants = ();
+
+        for ($i=0; $i<=$#images; $i++)
         {
-          # get the listing of image files
-          # $cmd = "find ".$results_dir."/".$utc_start." -ignore_readdir_race -mindepth 1 ".
-          #        "-maxdepth 1 -name '*.*.??.*x*.png' | sort -n | awk -F/ '{print \$(NF)-1\"\/\"\$(NF)}'";
-          $cmd = "find ".$results_dir."/".$utc_start." -ignore_readdir_race -mindepth 1 ".
-                 "-maxdepth 1 -name '*.*.??.*x*.png' | sort -n | awk -F/ '{print \$(NF)}'";
-          $img_string = `$cmd`;
-          @images = split(/\n/, $img_string);
-
-          %to_use = ();
-          @ants = ();
-
-          for ($i=0; $i<=$#images; $i++)
+          ($time, $ant, $type, $res, $ext) = split(/\./, $images[$i]);
+          if (!exists($to_use{$ant}))
           {
-            #($ant, $img_file) = split(/\//, $images[$i]);
-            ($time, $ant, $type, $res, $ext) = split(/\./, $images[$i]);
-            if (!exists($to_use{$ant}))
-            {
-              $to_use{$ant} = ();
-              push @ants, $ant;
-            }
-            $to_use{$ant}{$type.".".$res} = $images[$i];
+            $to_use{$ant} = ();
+            push @ants, $ant;
           }
+          $to_use{$ant}{$type.".".$res} = $images[$i];
+        }
+      
+        {
+          lock $image_string_lock;
+          $image_string = "";
 
           foreach $ant ( @ants )
           {
-            $xml .= "<ant name='".$ant."'>";
+            $image_string .= "<ant name='".$ant."'>";
             foreach $key ( keys %{$to_use{$ant}} )
             {
               ($type, $res) = split(/\./, $key);
               ($xres, $yres) = split(/x/, $res);
-              $xml .= "<img type='".$type."' width='".$xres."' height='".$yres."'>results/".$utc_start."/".$to_use{$ant}{$key}."</img>";
+              $image_string .= "<img type='".$type."' width='".$xres."' height='".$yres."'>results/".$utc_start."/".$to_use{$ant}{$key}."</img>";
             }
-            $xml .= "</ant>\n";
+            $image_string .= "</ant>\n";
           }
-          $image_string = $xml;
 
           if ($img_clean_counter <= 0)
           {
@@ -697,7 +758,7 @@ sub imageInfoThread($)
             removeOldFiles($results_dir."/".$utc_start, 1, "png");
             $img_clean_counter = $img_clean_time;
           }
-          Dada::logMsg(2, DL, "imageInfoThread: collected images ".$xml);
+          Dada::logMsg(2, DL, "imageInfoThread: collected images");
         }
       }
     }
@@ -725,9 +786,7 @@ sub statusInfoThread()
   my $statuses = "";
   my $file = "";
   my $msg = "";
-  my $pwc = ""; 
-  my $tag = ""; 
-  my $type = "";
+  my ($area, $pwc, $tag, $type);
   my $tmp_str = "";
   my $cmd = "";
 
@@ -759,7 +818,8 @@ sub statusInfoThread()
       @files = split(/\n/, $statuses);
 
       # get the current warnings and errors
-      for ($i=0; $i<=$#files; $i++) {
+      for ($i=0; $i<=$#files; $i++) 
+      {
         $file = $files[$i];
         $msg = `tail -n 1 $status_dir/$file`;
         chomp $msg;
@@ -767,41 +827,53 @@ sub statusInfoThread()
         @arr = ();
         @arr = split(/\./,$file);
 
+        $area = "aq";
         $pwc = "";
         $tag = "";
         $type = "";
 
         # for pwc, sys and src client errors
-        if ($#arr == 2) 
+        if ($#arr == 3)
         {
+          $area = $arr[0];
+          $pwc = $arr[1];
+          $tag = $arr[2];
+          $type= $arr[3];
+        }
+        elsif ($#arr == 2) 
+        {
+          $area = "aq";
           $pwc = $pwc_ids{$arr[0]};
           $tag = $arr[1];
           $type = $arr[2];
         } 
         elsif ($#arr == 1)
         {
+          $area = "srv";
           $pwc = "server";
           $tag = $arr[0];
           $type = $arr[1];
         }
         else
         {
-          Dada::logMsg(0, DL, "statusInfoThread: un-parseable status file: ".$file);
+          Dada::logMsg(0, DL, "statusInfoThread: un-parseable status file: ".$file." [".($#arr+1)."]");
         }
 
         if ($type eq "warn")
         {
-          $tmp_str .= "<daemon_status type='warning' pwc='".$pwc."' tag='".$tag."'>".$msg."</daemon_status>";
+          $tmp_str .= "<daemon_status type='warning' area='".$area."' pwc='".$pwc."' tag='".$tag."'>".$msg."</daemon_status>";
         }
         if ($type eq "error")
         {
-          $tmp_str .= "<daemon_status type='error' pwc='".$pwc."' tag='".$tag."'>".$msg."</daemon_status>";
+          $tmp_str .= "<daemon_status type='error' area='".$area."' pwc='".$pwc."' tag='".$tag."'>".$msg."</daemon_status>";
         }
       }
 
-      $status_info = $tmp_str;
+      {
+        lock $status_info_lock;
+        $status_info = $tmp_str;
+      }
       Dada::logMsg(2, DL, "statusInfoThread: ".$status_info);
-
     }
   }
 
@@ -893,7 +965,10 @@ sub nodeInfoThread()
         $response = "<status><host>".$cfg{"SERVER_HOST"}."</host></status>";
       }
 
-      $srv_node_info = "<srv_node_statuses>".$response."</srv_node_statuses>";
+      {
+        lock $srv_node_info_lock;
+        $srv_node_info = "<srv_node_statuses>".$response."</srv_node_statuses>";
+      }
 
       @results = ();
       @responses = ();
@@ -912,12 +987,14 @@ sub nodeInfoThread()
       }
 
       # now set the global string
-      $tmp_str = "<aq_node_statuses>";
-      for ($i=0; $i<=$#responses; $i++) {
-        $tmp_str .= $responses[$i];
+      {
+        lock $aq_node_info_lock;
+        $aq_node_info = "<aq_node_statuses>";
+        for ($i=0; $i<=$#responses; $i++) {
+          $aq_node_info .= $responses[$i];
+        }
+        $aq_node_info .= "</aq_node_statuses>";
       }
-      $tmp_str .= "</aq_node_statuses>";
-      $aq_node_info = $tmp_str;
       Dada::logMsg(2, DL, "nodeInfoThread: ".$aq_node_info);
 
       @results = ();
@@ -936,13 +1013,14 @@ sub nodeInfoThread()
         }
       }
 
-      # now set the global string
-      $tmp_str = "<bf_node_statuses>";
-      for ($i=0; $i<=$#responses; $i++) {
-        $tmp_str .= $responses[$i];
+      {
+        lock $bf_node_info_lock;
+        $bf_node_info = "<bf_node_statuses>";
+        for ($i=0; $i<=$#responses; $i++) {
+          $bf_node_info .= $responses[$i];
+        }
+        $bf_node_info .= "</bf_node_statuses>";
       }
-      $tmp_str .= "</bf_node_statuses>";
-      $bf_node_info = $tmp_str;
       Dada::logMsg(2, DL, "nodeInfoThread: ".$bf_node_info);
 
       @results = ();
@@ -961,14 +1039,14 @@ sub nodeInfoThread()
         }
       }
 
-      # now set the global string
-      $tmp_str = "<bp_node_statuses>";
-      for ($i=0; $i<=$#responses; $i++) {
-        $tmp_str .= $responses[$i];
+      {
+        lock $bp_node_info_lock;
+        $bp_node_info = "<bp_node_statuses>";
+        for ($i=0; $i<=$#responses; $i++) {
+          $bp_node_info .= $responses[$i];
+        }
+        $bp_node_info .= "</bp_node_statuses>";
       }
-      $tmp_str .= "</bp_node_statuses>";
-      $bp_node_info = $tmp_str;
-
       Dada::logMsg(2, DL, "nodeInfoThread: ".$bp_node_info);
 
       @hosts = keys %aqs;

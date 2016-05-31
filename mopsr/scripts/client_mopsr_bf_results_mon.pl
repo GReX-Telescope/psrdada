@@ -146,6 +146,12 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
 
   while (!$quit_daemon)
   {
+    ($result, $response) = procXGPUFiles($client_dir);
+    if ($result ne "ok")
+    {
+      msg(0, "WARN", "failed to sum ac files: ".$response);
+    }
+
     ($result, $response) = sumCorrFiles($client_dir, "ac");
     if ($result ne "ok")
     {
@@ -275,6 +281,117 @@ sub sumCorrFiles($$)
         msg(2, "INFO", "main: ".$cmd);
         ($result, $response) = Dada::mySystem($cmd);
         msg(3, "INFO", "main: ".$result." ".$response);
+        if ($result ne "ok")
+        {
+          msg(0, "WARN", "summCorrFiles: ".$cmd." failed: ".$response);
+        }
+      }
+    }
+  }
+  return ("ok", "");
+}
+
+sub procXGPUFiles($)
+{
+  my ($dir) = @_;
+
+  my $first_time = 0;
+  my $last_sum = "";
+  my ($cmd, $result, $rval, $response, $obs, $range, $file, $ac_file, $cc_file, $nant);
+  my @files;
+
+  my $results_dir = $cfg{"SERVER_RESULTS_DIR"};
+  my $archive_dir = $cfg{"SERVER_ARCHIVE_DIR"};
+  my $server_host = $cfg{"SERVER_HOST"};
+  my $server_user = $cfg{"USER"};
+
+  # look for any xc files
+  $cmd = "find ".$dir." -mindepth 2 -maxdepth 2 -type f -name '*.xc' -printf '%f\n'| sort -n";
+
+  msg(2, "INFO", "procXGPUFiles: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  if ($result ne "ok")
+  {
+    msg(0, "WARN", "find list of xc files failed: ".$response);
+    return ("fail", "");
+  }
+  elsif ($response eq "")
+  {
+    msg(2, "INFO", "procXGPUFiles: no xc files found");
+  }
+  else
+  {
+    @files = split(/\n/, $response);
+    msg(2, "INFO", "procXGPUFiles: found ".($#files+1)." .xc files");
+    if ($#files >= 0)
+    {
+      foreach $file (@files)
+      {
+        # determine UTC for this file
+        ($obs, $range) = split(/_/, $file, 2);
+
+        #  convert the XC file into ac and cc files
+        $cmd = "mopsr_xgpu_convert ".$dir."/".$obs."/".$file;
+        msg(1, "INFO", "procXGPUFiles: ".$cmd);
+        ($result, $response) = Dada::mySystem($cmd);
+        msg(3, "INFO", "procXGPUFiles: ".$result." ".$response);
+        if  ($result ne "ok")
+        {
+          return  ("fail", "could not convert xGPU dump file");
+        }
+
+        $ac_file = $file;
+        $cc_file = $file;
+
+        $ac_file =~ s/\.xc$/.ac/;
+        $cc_file =~ s/\.xc$/.cc/;
+
+        # determine NANT
+        $cmd = "grep ^NANT ".$dir."/".$obs."/obs.header | awk '{print \$2}'";
+        msg(2, "INFO", "procXGPUFiles: ".$cmd);
+        ($result, $response) = Dada::mySystem($cmd);
+        msg(3, "INFO", "procXGPUFiles: ".$result." ".$response);
+        if ($result ne "ok")
+        {
+          return ("fail", "could not determine NANT from obs.header");
+        }
+        $nant = $response;
+
+        if (! -f $dir."/".$obs."/header.copied")
+        {
+          $first_time = 1;
+          $cmd = "rsync -a ".$dir."/".$obs."/obs\.* ".
+          $server_user."\@".$server_host.":".$cfg{"SERVER_RESULTS_DIR"}."/".$obs."/".$chan_tag."/";
+          msg(2, "INFO", "procXGPUFiles: ".$cmd);
+          ($result, $response) = Dada::mySystem($cmd);
+          msg(3, "INFO", "procXGPUFiles: ".$result." ".$response);
+          if ($result ne "ok")
+          {
+            msg(0, "WARN", $cmd." failed: ".$response);
+            next;
+          }
+          $cmd = "touch ".$dir."/".$obs."/header.copied";
+          msg(2, "INFO", "procXGPUFiles: ".$cmd);
+          ($result, $response) = Dada::mySystem($cmd);
+          msg(3, "INFO", "procXGPUFiles: ".$result." ".$response);
+        }
+
+        # copy the new new Fscrunch archive to the server
+        $cmd = "rsync -a ".$dir."/".$obs."/".$ac_file." ".$dir."/".$obs."/".$cc_file." ".
+               $server_user."\@".$server_host.":".$cfg{"SERVER_RESULTS_DIR"}."/".$obs."/".$chan_tag."/";
+        msg(2, "INFO", "procXGPUFiles: ".$cmd);
+        ($result, $response) = Dada::mySystem($cmd);
+        msg(3, "INFO", "procXGPUFiles: ".$result." ".$response);
+        if ($result ne "ok")
+        {
+          msg(0, "WARN", $cmd." failed: ".$response);
+          next;
+        }
+
+        $cmd = "rm -f  ".$dir."/".$obs."/".$ac_file." ".$dir."/".$obs."/".$cc_file." ".$dir."/".$obs."/".$file;
+        msg(2, "INFO", "procXGPUFiles: ".$cmd);
+        ($result, $response) = Dada::mySystem($cmd);
+        msg(3, "INFO", "procXGPUFiles: ".$result." ".$response);
         if ($result ne "ok")
         {
           msg(0, "WARN", "summCorrFiles: ".$cmd." failed: ".$response);

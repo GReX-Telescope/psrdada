@@ -190,7 +190,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
       # starting beam for this heimdall instance
       my $start_beam = 1 + $ct{"BEAM_FIRST_RECV_".$proc_id};
 
-      $proc_cmd = "heimdall -k ".$db_key." -gpu_id ".$cfg{"BP_GPU_ID_".$proc_id}." -dm 0 2000 -beam ".$start_beam." -output_dir ".$proc_dir;
+      $proc_cmd = "heimdall -k ".$db_key." -gpu_id ".$cfg{"BP_GPU_ID_".$proc_id}." -dm 0 2000 -dm_tol 1.05 -boxcar_max 4096 -beam ".$start_beam." -output_dir ".$proc_dir;
 
       my ($binary, $junk) = split(/ /,$proc_cmd, 2);
       $cmd = "ls -l ".$cfg{"SCRIPTS_DIR"}."/".$binary;

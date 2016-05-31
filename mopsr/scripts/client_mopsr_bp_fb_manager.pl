@@ -178,7 +178,9 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
         else
         {
           $cmd = "rsync -a --stats --bwlimit=8192 --no-g --chmod=go-ws --password-file=/home/mpsr/.ssh/rsync_passwd ".
-                 "./".$utc_start."/BEAM_??? upload\@192.168.5.10::archives/".$utc_start."/";
+                 "./".$utc_start."/BEAM_??? upload\@172.17.228.204::archives/".$utc_start."/";
+          #$cmd = "rsync -a --stats --no-g --chmod=go-ws --password-file=/home/mpsr/.ssh/rsync_passwd ".
+          #       "./".$utc_start."/BEAM_??? upload\@192.168.5.10::archives/".$utc_start."/";
 
           msg(2, "INFO", "main: ".$cmd);
           ($result, $response) = Dada::mySystem($cmd);
@@ -226,6 +228,15 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
               msg(0, "ERROR", $cmd." failed: ".$response);
               $quit_daemon = 1;
             }
+
+            my $user = "dada";
+            my $host = "172.17.228.204";
+            my $rval;
+    
+            $cmd = "touch ".$cfg{"SERVER_ARCHIVE_DIR"}."/".$utc_start."/obs.finished.".$proc_id.".".$cfg{"NUM_BP"};
+            msg(2, "INFO", "main: ".$user."@".$host.":".$cmd);
+            ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
+            msg(2, "INFO", "main: ".$result." ".$rval." ".$response);
 
             $cmd = "rm -rf ".$utc_start."/BEAM_???";
             msg(2, "INFO", "main: ".$cmd);

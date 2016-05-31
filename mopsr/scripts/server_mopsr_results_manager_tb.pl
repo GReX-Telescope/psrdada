@@ -55,7 +55,7 @@ sub checkClientsFinished($$);
 sub processObservation($$);
 sub processCandidates($);
 sub processArchive($$$);
-sub makePlotsFromArchives($$$$$);
+sub makePlotsFromArchives($$$$$$);
 sub removeOldPngs($);
 sub getObsInfo($);
 
@@ -165,11 +165,12 @@ sub main()
           # if newest archive was more than 32 seconds old, finish the obs.
           if ($t > 32)
           {
-            if (($obs_config eq "TIED_ARRAY_BEAM") || ($obs_config eq "TIED_ARRAY_FAN_BEAM"))
+            if (($obs_config eq "TIED_ARRAY_BEAM") || ($obs_config eq "TIED_ARRAY_FAN_BEAM") || ($obs_config eq "TIED_ARRAY_MOD_BEAM"))
             {
               processObservation($o, $n_obs_headers);
             }
-            if (($obs_config eq "FAN_BEAM") || ($obs_config eq "TIED_ARRAY_FAN_BEAM"))
+            if (($obs_config eq "FAN_BEAM") || ($obs_config eq "TIED_ARRAY_FAN_BEAM") ||
+                ($obs_config eq "MOD_BEAM") || ($obs_config eq "TIED_ARRAY_MOD_BEAM"))
             {
               processCandidates($o);
             }
@@ -180,20 +181,22 @@ sub main()
           # we are still receiving results from this observation
           elsif ($t >= 0) 
           {
-            if (($obs_config eq "TIED_ARRAY_BEAM") || ($obs_config eq "TIED_ARRAY_FAN_BEAM"))
+            if (($obs_config eq "TIED_ARRAY_BEAM") || ($obs_config eq "TIED_ARRAY_FAN_BEAM") || ($obs_config eq "TIED_ARRAY_MOD_BEAM"))
             {
               processObservation($o, $n_obs_headers);
             }
-            if (($obs_config eq "FAN_BEAM") || ($obs_config eq "TIED_ARRAY_FAN_BEAM"))
+            if (($obs_config eq "FAN_BEAM") || ($obs_config eq "TIED_ARRAY_FAN_BEAM") ||
+                ($obs_config eq "MOD_BEAM") || ($obs_config eq "TIED_ARRAY_MOD_BEAM"))
+
             {
               processCandidates($o);
             }
           }
 
           # no archives yet received, wait
-          elsif ($t > -60)
+          elsif ($t > -600)
           {
-            # no archives have been received 60+ seconds after the
+            # no archives have been received 10 minutes after the
             # directories were created, something is wrong with this
             # observation, mark it as failed
 
@@ -278,7 +281,7 @@ sub getObsAge($$)
   my $now = time;
 
   # If no obs.header files yet exist, we return the age of the obs dir
-  if ($num_obs_headers== 0)
+  if ($num_obs_headers == 0)
   {
     $cmd = "find ".$o." -maxdepth 0 -type d -printf '\%T@\\n'";
     Dada::logMsg(3, $dl, "getObsAge: ".$cmd); 
@@ -429,7 +432,7 @@ sub processObservation($$)
   my $i = 0;
   my $k = "";
   my ($fres_ar, $tres_ar, $latest_archive);
-  my ($source, $archive, $file, $chan, $count);
+  my ($source, $archive, $file, $chan, $count, $nchan);
   my ($cmd, $result, $response);
   my @files = ();
   my @channels = ();
@@ -446,6 +449,18 @@ sub processObservation($$)
     return;
   }
   $source = $response;
+
+  # get the number of channels for this observation
+  $cmd = "grep ^NCHAN ".$o."/obs.info | awk '{print \$2}'";
+  Dada::logMsg(3, $dl, "processObservation: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, $dl, "processObservation: ".$result." ".$response);
+  if ($result ne "ok")
+  {
+    Dada::logMsgWarn($warn, "processObservation:  ".$cmd." failed: ".$response);
+    return;
+  }
+  $nchan = $response;
 
   # get a list of all the channels
   $cmd = "find ".$o." -mindepth 1 -maxdepth 1 -type d -name 'CH??' -printf '%f\n' | sort -n";
@@ -503,7 +518,8 @@ sub processObservation($$)
     $count = $archives{$archive};
     Dada::logMsg(2, $dl, "processObservation: found ".($#files + 1)." channel archives");
 
-    if ($count == $#channels + 1)
+    # if ($count == $#channels + 1)
+    if ($count == $nchan)
     {
       Dada::logMsg(2, $dl, "processObservation: appendArchive(".$o.", ".$source.", ".$archive.")");
       ($result, $fres_ar, $tres_ar) = appendArchive($o, $source, $archive);
@@ -527,10 +543,35 @@ sub processObservation($$)
   if ($fres_ar ne "")
   {
     Dada::logMsg(2, $dl, "processObservation: plotting [".$i."] (".$o.", TB, ".$source.", ".$fres_ar.", ".$tres_ar.")");
-    makePlotsFromArchives($o, $fres_ar, $tres_ar, "120x90", $latest_archive);
-    makePlotsFromArchives($o, $fres_ar, $tres_ar, "1024x768", $latest_archive);
+    makePlotsFromArchives($o, $fres_ar, $tres_ar, "120x90", $latest_archive, $source);
+    makePlotsFromArchives($o, $fres_ar, $tres_ar, "1024x768", $latest_archive, $source);
     removeOldPngs($o);
   }
+
+  if ((!(-f $o."/2016-01-01-00:00:00.TB.st.1024x768.png")) && (-f "/data/mopsr/database/pulsar_gallery/".$source."-standard.png"))
+  {
+    $cmd = "cp /data/mopsr/database/pulsar_gallery/".$source."-standard.png ".$o."/2016-01-01-00:00:00.TB.st.1024x768.png";
+    ($result, $response) = Dada::mySystem($cmd);
+    $cmd = "cp /data/mopsr/database/pulsar_gallery/".$source."-standard.png ".$o."/2016-01-01-00:00:00.TB.st.120x90.png";
+    ($result, $response) = Dada::mySystem($cmd);
+  }
+
+  if ((!(-f $o."/2016-01-01-00:00:00.TB.l9.1024x768.png")) && (-f "/data/mopsr/database/pulsar_gallery/".$source."-last9.png"))
+  {
+    $cmd = "cp /data/mopsr/database/pulsar_gallery/".$source."-last9.png ".$o."/2016-01-01-00:00:00.TB.l9.1024x768.png";
+    ($result, $response) = Dada::mySystem($cmd);
+    $cmd = "cp /data/mopsr/database/pulsar_gallery/".$source."-last9.png ".$o."/2016-01-01-00:00:00.TB.l9.120x90.png";
+    ($result, $response) = Dada::mySystem($cmd);
+  }
+
+  if ((!(-f $o."/2016-01-01-00:00:00.TB.re.1024x768.png")) && -f ("/data/mopsr/database/pulsar_gallery/".$source."-residual.png"))
+  {
+    $cmd = "cp /data/mopsr/database/pulsar_gallery/".$source."-residual.png ".$o."/2016-01-01-00:00:00.TB.re.1024x768.png";
+    ($result, $response) = Dada::mySystem($cmd);
+    $cmd = "cp /data/mopsr/database/pulsar_gallery/".$source."-residual.png ".$o."/2016-01-01-00:00:00.TB.re.120x90.png";
+    ($result, $response) = Dada::mySystem($cmd);
+  }
+
 }
 
 ###############################################################################
@@ -614,6 +655,51 @@ sub appendArchive($$$)
     Dada::logMsg(0, $dl, "appendArchive: archive [".$total_t_sum."] did not exist");
     return ("fail", "", "");
   }
+
+  # if we do not have an obs.header for the TB
+  if ( (! -f $utc_start."/TB/obs.header") && 
+       (-f $utc_start."/CH00/obs.header") && 
+       (-f $source_f_res) )
+  {
+    my %header = Dada::readCFGFileIntoHash ($utc_start."/CH00/obs.header", 0);
+
+    # determine new FREQ and BW
+    $cmd = "psredit -q -c freq ".$source_f_res." | awk -F= '{print \$2}'";
+    Dada::logMsg(2, $dl, "appendArchive: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, $dl, "appendArchive: ".$result." ".$response);
+    if ($result eq "ok")
+    {
+      $header{"FREQ"} = $response;
+    }
+
+    $cmd = "psredit -q -c bw ".$source_f_res." | awk -F= '{print \$2}'";
+    Dada::logMsg(2, $dl, "appendArchive: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, $dl, "appendArchive: ".$result." ".$response);
+    if ($result eq "ok")
+    {
+      $header{"BW"} = $response;
+    }
+
+    $cmd = "psredit -q -c nchan ".$source_f_res." | awk -F= '{print \$2}'";
+    Dada::logMsg(2, $dl, "appendArchive: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, $dl, "appendArchive: ".$result." ".$response);
+    if ($result eq "ok")
+    {
+      $header{"NCHAN"} = $response;
+    }
+
+    open(FH,">".$utc_start."/TB/obs.header");
+    my $k = "";
+    foreach $k ( keys %header)
+    {
+      print FH Dada::headerFormat($k, $header{$k})."\n";
+    }
+    close FH;
+  }
+
 
   # now delete in the individual channel archives
   $cmd = "rm -f ".$utc_start."/CH??/".$archive;
@@ -826,9 +912,9 @@ sub countHeaders($) {
 #
 # Create plots for use in the web interface
 #
-sub makePlotsFromArchives($$$$$) 
+sub makePlotsFromArchives($$$$$$) 
 {
-  my ($dir, $total_f_res, $total_t_res, $res, $ten_sec_archive) = @_;
+  my ($dir, $total_f_res, $total_t_res, $res, $ten_sec_archive, $source) = @_;
 
   my $web_style_txt = $cfg{"SCRIPTS_DIR"}."/web_style.txt";
   my $args = "-g ".$res." ";
@@ -866,6 +952,7 @@ sub makePlotsFromArchives($$$$$)
   my $fl = $timestamp.".TB.fl.".$res.".png";
   my $bp = $timestamp.".TB.bp.".$res.".png";
   my $pm = $timestamp.".TB.pm.".$res.".png";
+  my $ta = $timestamp.".TB.ta.".$res.".png";
 
   # Combine the archives from the machine into the archive to be processed
   # PHASE vs TIME
@@ -891,6 +978,19 @@ sub makePlotsFromArchives($$$$$)
   Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+
+  # TOAS
+  $cmd = "pat -j FT -s /home/observer/Timing/ephemerides/".$source."/*.std -A FDM -f tempo2 /home/observer/Timing/profiles/".$source."/*FT  ".$total_t_res." > ".$dir."/temp.tim";
+  Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+  if ($result eq "ok")
+  {
+    $cmd = "tempo2 -gr plk -f /home/observer/Timing/ephemerides/".$source."/good.par ".$dir."/temp.tim -publish -image -grdev ".$dir."/".$ta."/png";
+    Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+  }
 
   # POWER MONITOR
   if (-f $dir."/TB/power_monitor.log")
@@ -1010,10 +1110,10 @@ sub processCandidates($)
   {
     Dada::logMsg(2, $dl, "processCandidates: timestamp=".$timestamp." count=".$timestamps{$timestamp});
 
-    # this is where a coincidencer command would go
     if ($timestamps{$timestamp} == $bp_cfg{"NUM_BP"})
     {
-      $cmd = "cat ".$utc_start."/".$timestamp."_*.cand > ".$utc_start."/".$timestamp.".candsum";
+      # combine the candidates from timestamp_\d\d\d.cand -> timestamp_all.cand
+      $cmd = "coincidencer -n ".$bp_ct{"NBEAM"}." -t 5 ".$utc_start."/".$timestamp."_*.cand";
       Dada::logMsg(2, $dl, "processCandidates: ".$cmd);
       ($result, $response) = Dada::mySystem($cmd);
       Dada::logMsg(2, $dl, "processCandidates: ".$result." ".$response);
@@ -1021,7 +1121,7 @@ sub processCandidates($)
       {
         Dada::logMsgWarn($warn, "processCandidates: ".$cmd." failed");
         return ("fail", "cat command failed");
-      } 
+      }
       else
       {
         # this is where a transient search detection program would go
@@ -1032,7 +1132,7 @@ sub processCandidates($)
         }
 
         # add this timestamp to the accumulated total
-        $cmd = "cat ".$utc_start."/".$timestamp.".candsum >> ".$utc_start."/all_candidates.dat";
+        $cmd = "cat ".$utc_start."/".$timestamp."_all.cand >> ".$utc_start."/all_candidates.dat";
         Dada::logMsg(2, $dl, "processCandidates: ".$cmd);
         ($result, $response) = Dada::mySystem($cmd);
         Dada::logMsg(2, $dl, "processCandidates: ".$result." ".$response);
@@ -1088,11 +1188,11 @@ sub processCandidates($)
     $obs_end = $obs_start + 1800;
 
     # create the plot
-    $cmd = "/home/vravi/CODE/plot_cands -f ".$utc_start."/all_candidates.dat ".
+    $cmd = "mopsr_plot_cands -f ".$utc_start."/all_candidates.dat ".
            "-time1 ".$obs_start." -time2 ".$obs_end." -nbeams ".$bp_ct{"NBEAM"}.
-           " -snr_cut 10 -scale 8 ".
+           " -snr_cut 10 -scale 8 -nbeams_cut 10 ".
            "-dev ".$utc_start."/".$timestamp.".FB.".sprintf("%02d", $img_idx).
-           ".850x680.png/png -catted_raw_output";
+           ".850x680.png/png";
     Dada::logMsg(2, $dl, "processCandidates: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     Dada::logMsg(3, $dl, "processCandidates: ".$result." ".$response);

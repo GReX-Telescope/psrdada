@@ -144,7 +144,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
   # continuously run mopsr_dbib for this PWC
   while (!$quit_daemon)
   {
-    $cmd = "dada_header -k ".$in_db_key;
+    $cmd = "dada_header -t bpreblock -k ".$in_db_key;
     msg(2, "INFO", "main: ".$cmd);
     $raw_header = `$cmd 2>&1`;
     msg(2, "INFO", "main: ".$cmd." returned");
@@ -243,7 +243,7 @@ sub controlThread($)
 
   my ($cmd, $result, $response);
 
-  $cmd = "^dada_header -k ".$in_db_key;
+  $cmd = "^dada_header -t bpreblock -k ".$in_db_key;
   msg(2, "INFO" ,"controlThread: killProcess(".$cmd.", mpsr)");
   ($result, $response) = Dada::killProcess($cmd, "mpsr");
   msg(3, "INFO" ,"controlThread: killProcess() ".$result." ".$response);

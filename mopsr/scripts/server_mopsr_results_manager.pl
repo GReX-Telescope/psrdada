@@ -21,7 +21,6 @@ our %cfg;
 our $quit_daemon : shared;
 our $warn;
 our $error;
-our $coarse_nchan;
 
 #
 # Initialize global variables
@@ -32,7 +31,6 @@ $daemon_name = Dada::daemonBaseName($0);
 $warn = ""; 
 $error = ""; 
 $quit_daemon = 0;
-$coarse_nchan = 32;
 
 
 # Autoflush STDOUT
@@ -199,6 +197,7 @@ sub main()
           {
             Dada::logMsg(2, $dl, "CORR processing dumps");
             processCorrObservation($o, $n_obs_headers);
+            chdir $cfg{"SERVER_RESULTS_DIR"};
           }
           elsif ($t > -80)
           {
@@ -429,7 +428,7 @@ sub processCorrObservation($$)
   my ($archive_dir, $nchan, $summed_file, $first_time);
   my ($cmd, $result, $response, $ichan, $file_list);
   my ($file, $junk, $chan_dir, $tsum, $plus, $ifile);
-  my ($key);
+  my ($key, $nant);
   my @chans = ();
   my @archives = ();
   my @dumps = ();
@@ -454,7 +453,7 @@ sub processCorrObservation($$)
   # move into the observation directory
   chdir $o;
 
-  # get a list of all thechannels
+  # get a list of all the channels
   $cmd = "find . -mindepth 1 -maxdepth 1 -type d -name 'CH*' -printf '%f\n' | sort -n";
   Dada::logMsg(3, $dl, "processCorrObservation: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
@@ -462,11 +461,50 @@ sub processCorrObservation($$)
   if ($result ne "ok")
   {
     Dada::logMsgWarn($warn, "processCorrObservation: ".$cmd." failed: ".$response);
-    return;
+    return ("fail", "no CH directories existing yet");
   }
 
   @chans = split(/\n/, $response);
-  $nchan = $#chans + 1;
+
+  # now determine the number of antenna
+  $cmd = "find . -name 'obs.header' | head -n 1";
+  Dada::logMsg(2, $dl, "processCorrObservation: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, $dl, "processCorrObservation: ".$result." ".$response);
+  if (($result ne "ok") || ($response eq ""))
+  {
+    Dada::logMsgWarn($warn, "processCorrObservation: ".$cmd." failed: ".$response);
+    return ("fail", "could not find obs.header");
+  }
+
+  my $obs_header_file = $response;
+  $cmd = "grep ^NANT ".$obs_header_file." | awk '{print \$2}'";
+  Dada::logMsg(2, $dl, "processCorrObservation: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, $dl, "processCorrObservation: ".$result." ".$response);
+  if (($result ne "ok") || ($response eq ""))
+  {
+    Dada::logMsg(0, $dl, "processCorrObservation: ".$cmd." failed: ".$response);
+    return ("fail", "could not extract nant");
+  }
+  $nant = $response;
+
+  $cmd = "grep ^NCHAN obs.info | tail -n 1 | awk '{print \$2}'";
+  Dada::logMsg(2, $dl, "processCorrObservation: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, $dl, "processCorrObservation: ".$result." ".$response);
+  if (($result ne "ok") || ($response eq ""))
+  {
+    Dada::logMsg(0, $dl, "processCorrObservation: ".$cmd." failed: ".$response);
+    return ("fail", "could not extract nchan");
+  }
+  $nchan = $response;
+
+  if ($nchan != ($#chans + 1))
+  {
+    Dada::logMsg(0, $dl, "processCorrObservation: only ".($#chans +1)." of ".$nchan." CH dirs");
+    return ("fail", "not all chan dirs existed");
+  }
 
   # get a list of the unprocessed correlator dumps
   $cmd = "find . -mindepth 2 -maxdepth 2 -type f -name '*.?c' -printf '%f\n' | sort -n";
@@ -491,15 +529,41 @@ sub processCorrObservation($$)
 
   @files = sort keys %unprocessed;
   my $n_appended = 0;
+
+  my $band_nchan = -1;
+  my $coarse_nchan = -1;
   for ($ifile=0; $ifile<=$#files; $ifile++)
   {
     $file = $files[$ifile];
     $summed_file = 0;
 
+    if ($coarse_nchan == -1)
+    {
+      $cmd = "find . -name '".$file."' | head -n 1";
+      Dada::logMsg(3, $dl, "processCorrObservation: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      Dada::logMsg(3, $dl, "processCorrObservation: ".$result." ".$response);
+      if ($result eq "ok")
+      { 
+        my @stat = stat $response;
+        my $filesize = $stat[7];
+        my $nbaselines = ($nant * ($nant - 1)) / 2;
+        if ($file =~ m/.cc$/)
+        {
+          $coarse_nchan = $filesize / ($nbaselines * 8);
+        }
+        else
+        {
+          $coarse_nchan = $filesize / ($nant * 4);
+        }
+        $band_nchan = $coarse_nchan * $nchan;
+      }
+    }
+
     if ($unprocessed{$file} == $nchan) 
     {
-      Dada::logMsg(2, $dl, "processCorrObservation: appendCorrFile(".$file.")");
-      ($result, $response) = appendCorrFile($file);
+      Dada::logMsg(2, $dl, "processCorrObservation: appendCorrFile(".$file.", ".$coarse_nchan.")");
+      ($result, $response) = appendCorrFile($file, $coarse_nchan);
       if ($result ne "ok")
       {
         Dada::logMsgWarn($warn, "processCorrObservation: failed to Fappend file [".$file."]: ".$response);
@@ -602,7 +666,6 @@ sub processCorrObservation($$)
   {
     my $tsamp = 1.28;
     my $band_tsamp = $tsamp / $nchan;
-    my $band_nchan = $nchan * $coarse_nchan;
 
     # get the ranked antennas from file
     open(FH,"<obs.priant") or return ("fail", "could not open obs.priant for reading");
@@ -665,15 +728,12 @@ sub processCorrObservation($$)
       return ("fail", "failed to solve for delays");
     }
   }
-
-  chdir $cfg{"SERVER_RESULTS_DIR"};
-
 }
 
 
-sub appendCorrFile($)
+sub appendCorrFile($$)
 {
-  my ($file) = @_;
+  my ($file, $coarse_nchan) = @_;
 
   my ($cmd, $result, $response, $chan_file, $plus);
   my @chan_files;
@@ -717,7 +777,6 @@ sub appendCorrFile($)
   {
     unlink $chan_file;
   }
-
 
   return ("ok", $file);
 }

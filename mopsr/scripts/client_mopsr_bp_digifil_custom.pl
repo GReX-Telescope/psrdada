@@ -49,8 +49,8 @@ our $dl : shared;
 our $quit_daemon : shared;
 our $daemon_name : shared;
 our $proc_id : shared;
-our @db_keys : shared;
-our @beams : shared;
+our $db_key : shared;
+our $beam : shared;
 our %cfg : shared;
 our %ct : shared;
 our $log_host;
@@ -68,8 +68,8 @@ $dl = 1;
 $quit_daemon = 0;
 $daemon_name = Dada::daemonBaseName($0);
 $proc_id = 0;
-@db_keys = ();
-@beams = ();
+$db_key = ();
+$beam = ();
 %cfg = Mopsr::getConfig("bp");
 %ct = Mopsr::getCornerturnConfig("bp");
 $log_host = $cfg{"SERVER_HOST"};
@@ -137,7 +137,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
 #
 {
   my ($cmd, $result, $response, $proc_cmd, $curr_raw_header, $prev_raw_header);
-  my ($i, $index, $line, $rval, $db_key);
+  my ($i, $index, $line, $rval);
 
   $sys_log_file = $cfg{"CLIENT_LOG_DIR"}."/".$daemon_name."_".$proc_id.".log";
   $src_log_file = $cfg{"CLIENT_LOG_DIR"}."/".$daemon_name."_".$proc_id.".src.log";
@@ -167,7 +167,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
 
   msg(1,"INFO", "STARTING SCRIPT");
 
-  sleep(10);
+  sleep(5);
 
   # this thread will monitor for our daemon quit file
   $control_thread = threads->new(\&controlThread, $pid_file);
@@ -176,24 +176,12 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
 	$prev_raw_header = "";
 	my %header;
 
-  my (@cmds, @results, @responses, $results_ref, $responses_ref);
+  my ($cmd, $raw_header);
   my ($obs_dir, $ibeam, $key);
   my $err = gensym;
 
-  # the beams that this proc_id processes
-  my $start_beam = $ct{"BEAM_FIRST_RECV_".$proc_id};
-  my $end_beam   = $ct{"BEAM_LAST_RECV_".$proc_id};
-
-  my $nbeam = ($end_beam - $start_beam) + 1;
-  for ($i=0; $i<$nbeam; $i++)
-  {
-    $ibeam = $i + $start_beam;
-    $key = sprintf ("f%03d", $ibeam * 2);
-    $db_keys[$i] = $key;
-    $beams[$i] = $ibeam + 1;
-  }
-
-  my $nkeys = $#db_keys + 1;
+  $db_key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $proc_id, $cfg{"NUM_BP"}, $cfg{"BP_DATA_BLOCK"});
+  $beam = 1;
 
   # Main Loop
   while (!$quit_daemon) 
@@ -201,73 +189,49 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
 		%header = ();
 
     # run dada_header on all the input data blocks
-    for ($i=0; $i<=$#db_keys; $i++)
-    {
-      $cmds[$i] = "dada_header -k ".$db_keys[$i];
-    }
-    msg(0, "INFO", "main: running multiFork on ".$cmds[0]." - ".$cmds[$#cmds]);
-    ($results_ref, $responses_ref) = multiFork ($nkeys, @cmds);
-    @results = @$results_ref;
-    @responses = @$responses_ref;
+    $cmd = "dada_header -k ".$db_key;
 
-    if ($quit_daemon)
+    msg(2, "INFO", "main: ".$cmd);
+    $raw_header = `$cmd 2>&1`;
+    msg(2, "INFO", "main: ".$cmd." returned");
+    if ($? != 0)
     {
-      msg(0, "INFO", "main: quit daemon true after dada_header returns, breaking");
-      next;
-    }
-
-    for ($i=0; $i<$nkeys; $i++)
-    {
-      if ($results[$i] ne "ok") 
+      if ($quit_daemon)
       {
-        msg(0, "WARN", "dada header failed: ".$responses[$i]);
+        msg(2, "INFO", "dada_header failed, but quit_daemon true");
+      }
+      else
+      {
+        msg(0, "ERROR", "dada_header failed: ".$raw_header);
         $quit_daemon = 1;
       }
     }
-
-    if ($quit_daemon)
+    else
     {
-      msg(0, "INFO", "main: a dada_header instance failed, breaking");
-      next;
-    }
+      my %header = Dada::headerToHash($raw_header);
+      msg (0, "INFO", "UTC_START=".$header{"UTC_START"}." NCHAN=".$header{"NCHAN"}." NANT=".$header{"NANT"});
 
-    # ensure that our primary configuration directory (NFS) is mounted
-    $cmd = "ls -1d ".$cfg{"CONFIG_DIR"};
-    msg(2, "INFO", "main: ".$cmd);
-    ($result, $response) = Dada::mySystem($cmd);
-    msg(3, "INFO", "main: ".$cmd." config_dir=".$response);
-    if ($response ne $cfg{"CONFIG_DIR"})
-    {
-      msg(0, "ERROR", "NFS automount for ".$cfg{"CONFIG_DIR"}." failed: ".$response);
-      $quit_daemon = 1;
-    }
+      # ensure that our primary configuration directory (NFS) is mounted
+      $cmd = "ls -1d ".$cfg{"CONFIG_DIR"};
+      msg(2, "INFO", "main: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      msg(3, "INFO", "main: ".$cmd." config_dir=".$response);
+      if ($response ne $cfg{"CONFIG_DIR"})
+      {
+        msg(0, "ERROR", "NFS automount for ".$cfg{"CONFIG_DIR"}." failed: ".$response);
+        $quit_daemon = 1;
+      }
 
-    # perform all the necessary setup for observations and return the 
-    # required command for execution on the datablocks
-    msg(0, "INFO", "main: running prepareObservation()");
-    for ($i=0; $i<$nkeys; $i++)
-    {
-      ($result, $cmds[$i]) = prepareObservation($db_keys[$i], $beams[$i], $responses[$i]);
+      my %header = Dada::headerToHash($responses[0]);
+      $cmd = "mv ".$cfg{"CLIENT_RECORDING_DIR"}."/".$header{"UTC_START"}."/obs.processing ".$cfg{"CLIENT_RECORDING_DIR"}."/".$header{"UTC_START"}."/obs.finished";
+      msg(2, "INFO", "main: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      msg(3, "INFO", "main: ".$cmd." ".$response);
       if ($result ne "ok")
       {
-        msg(0, "ERROR", "main: failed to prepareObservation for key ".$i." [".$db_keys[$i].", ".$beams[$i]."]");
+        msg(0, "ERROR", "main: failed to move obs.processing to obs.finished for ".$header{"UTC_START"});
       }
     }
-
-    msg(0, "INFO", "main: running multiForkLog on ".$cmds[0]." - ".$cmds[$#cmds]);
-    ($results_ref) = multiForkLog ($nkeys, @cmds);
-    @results = @$results_ref;
-    
-    my %header = Dada::headerToHash($responses[0]);
-    $cmd = "mv ".$cfg{"CLIENT_RECORDING_DIR"}."/".$header{"UTC_START"}."/obs.processing ".$cfg{"CLIENT_RECORDING_DIR"}."/".$header{"UTC_START"}."/obs.finished";
-    msg(2, "INFO", "main: ".$cmd);
-    ($result, $response) = Dada::mySystem($cmd);
-    msg(3, "INFO", "main: ".$cmd." ".$response);
-    if ($result ne "ok")
-    {
-      msg(0, "ERROR", "main: failed to move obs.processing to obs.finished for ".$header{"UTC_START"});
-    }
-
   }
 
   msg(2, "INFO", "main: joining controlThread");
@@ -379,7 +343,7 @@ sub prepareObservation($$$)
     close FH;
   }
 
-  $proc_cmd = "digifil ".$tmp_info_file." -c -b 8 -B 0.1 -o ".$h{"UTC_START"}.".fil";
+  $proc_cmd = "digifil ".$tmp_info_file." -D 478.8 -c -b 8 -B 0.1 -o ".$h{"UTC_START"}.".fil";
 
   # processing must ocurring in the specified dir
   $proc_cmd = "cd ".$beam_dir."; ".$proc_cmd;
@@ -722,7 +686,7 @@ sub multiForkLog($\@)
             $out_bufs[$index] = "";
           }
 
-          Dada::nexusPipeLog ($line, $src_log_sock, $src_log_file, "src",  sprintf("%02d",$proc_id), $daemon_name, "bp_proc");
+          Dada::nexusPipeLog ($line, $src_log_sock, $src_log_file, "src", $proc_id, $daemon_name, "bp_proc");
         }
 
         if (!($buf =~ m/\n$/))

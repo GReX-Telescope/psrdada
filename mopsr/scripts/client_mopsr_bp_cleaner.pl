@@ -7,10 +7,10 @@
 # 
 ###############################################################################
 #
-# client_mopsr_bp_cands_mon.pl 
+# client_mopsr_bp_cleaner.pl 
 #
-# transfer candidate files from clients to the server
-#
+# Delete 1month old directories from the local disk system
+# 
 ###############################################################################
 
 use lib $ENV{"DADA_ROOT"}."/bin";
@@ -18,6 +18,7 @@ use lib $ENV{"DADA_ROOT"}."/bin";
 use IO::Socket;
 use Getopt::Std;
 use File::Basename;
+use Time::Local;
 use Mopsr;
 use strict;
 use threads;
@@ -36,17 +37,12 @@ our $dl : shared;
 our $quit_daemon : shared;
 our $daemon_name : shared;
 our %cfg : shared;
-our %ct : shared;
 our $localhost : shared;
 our $proc_id : shared;
-our $db_key : shared;
 our $log_host;
 our $sys_log_port;
-our $src_log_port;
 our $sys_log_sock;
-our $src_log_sock;
 our $sys_log_file;
-our $src_log_file;
 
 #
 # Initialize globals
@@ -55,17 +51,12 @@ $dl = 1;
 $quit_daemon = 0;
 $daemon_name = Dada::daemonBaseName($0);
 %cfg = Mopsr::getConfig("bp");
-%ct = Mopsr::getCornerturnConfig("bp");
 $proc_id = -1;
-$db_key = "dada";
 $localhost = Dada::getHostMachineName(); 
 $log_host = $cfg{"SERVER_HOST"};
 $sys_log_port = $cfg{"SERVER_BP_SYS_LOG_PORT"};
-$src_log_port = $cfg{"SERVER_BP_SRC_LOG_PORT"};
 $sys_log_sock = 0;
-$src_log_sock = 0;
 $sys_log_file = "";
-$src_log_file = "";
 
 # Check command line argument
 if ($#ARGV != 0)
@@ -110,11 +101,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
   $SIG{PIPE} = \&sigPipeHandle;
 
   $sys_log_file = $cfg{"CLIENT_LOG_DIR"}."/".$daemon_name."_".$proc_id.".log";
-  $src_log_file = $cfg{"CLIENT_LOG_DIR"}."/".$daemon_name."_".$proc_id.".src.log";
-  my $pid_file  = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$proc_id.".pid";
-
-  # this is data stream we will be reading from
-  $db_key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $proc_id, $cfg{"NUM_BP"}, $cfg{"PROCESSING_DATA_BLOCK"});
+  my $pid_file =  $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$proc_id.".pid";
 
   # Autoflush STDOUT
   $| = 1;
@@ -128,124 +115,55 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
     print STDERR "Could open sys log port: ".$log_host.":".$sys_log_port."\n";
   }
 
-  $src_log_sock = Dada::nexusLogOpen($log_host, $src_log_port);
-  if (!$src_log_sock) {
-    print STDERR "Could open src log port: ".$log_host.":".$src_log_port."\n";
-  }
-
   msg (0, "INFO", "STARTING SCRIPT");
 
   my $control_thread = threads->new(\&controlThread, $pid_file);
 
-  my ($cmd, $result, $response, $utc_start);
-  my @observations = ();
-  my @parts = ();
-  my @files = ();
-  my ($file, $file_list, $observation, $last_utc_start);
+  my ($cmd, $result, $response, $i);
 
-  chdir $cfg{"CLIENT_RECORDING_DIR"};
-  $last_utc_start = "";
+  my $proc_dir  = $cfg{"CLIENT_RECORDING_DIR"};
+  my $one_month = 31*24*60*60;
 
-  # look for filterbank files to transfer to the server via rsync
+  # continuously run mopsr_dbib for this PWC
   while (!$quit_daemon)
   {
-    $cmd = "find . -maxdepth 2 -type f -name 'obs.processing' -o -name 'obs.finished' | sort -n";
+    my $curr_time = time;
+
+    $cmd = "find ".$proc_dir." -maxdepth 1 -type d ".
+           "-name '????-??-??-??:??:??' -printf '%f\n' | sort -n";
     msg(2, "INFO", "main: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     msg(3, "INFO", "main: ".$result." ".$response);
 
-    if (($result eq "ok") && ($response ne ""))
+    if ($result eq "ok")
     {
-      @observations = split(/\n/, $response);
-      foreach $observation (@observations)
+      my @list = split(/\n/, $response);
+
+      for ($i=0; (!$quit_daemon && $i<=$#list); $i++)
       {
-        # get the observation UTC_START
-        @parts = split (/\//, $observation);
+        my $o = $list[$i];
 
-        if ($#parts == 2)
+        # check the UTC_START time to ensure this obs is > 1 month old
+        my @t = split(/-|:/,$o);
+        my $unixtime = timelocal($t[5], $t[4], $t[3], $t[2], ($t[1]-1), $t[0]);
+
+        msg(2, "INFO", "main: testing ".$unixtime."+".$one_month." < ".$curr_time);
+        if (($unixtime + $one_month) < $curr_time)
         {
-          $utc_start = $parts[1];
-          msg(2, "INFO", "main: found processing/finished observation: ".$utc_start);
-
-          # check if the obs.header exists, if so read it
-          if ( -f $utc_start."/obs.header" )
-          {
-            $cmd = "grep ^CONFIG ".$utc_start."/obs.header | awk '{print \$2}'";
-            msg(2, "INFO", "main: ".$cmd);
-            ($result, $response) = Dada::mySystem($cmd);
-            msg(3, "INFO", "main: ".$result." ".$response);
-            if (($result eq "ok") && ($response ne ""))
-            {
-              if (($response eq "FAN_BEAM") || ($response eq "MOD_BEAM"))
-              {
-                my $start_beam = sprintf("%03d", $ct{"BEAM_FIRST_RECV_".$proc_id});
-                my $end_beam   = sprintf("%03d", $ct{"BEAM_LAST_RECV_".$proc_id});
-                my $beams_dir  = "BEAMS_".$start_beam."_to_".$end_beam;
-
-                $cmd = "rsync -a --no-g --chmod=go-ws --password-file=/home/mpsr/.ssh/rsync_passwd ".
-                       "./".$utc_start."/obs.header upload\@192.168.5.10::results/".$utc_start."/".$beams_dir."/";
-
-                msg(2, "INFO", "main: ".$cmd);
-                ($result, $response) = Dada::mySystem($cmd);
-                msg(3, "INFO", "main: ".$result." ".$response);
-      
-                $cmd = "mv ".$utc_start."/obs.header ".$utc_start."/obs.header.heimdall";
-                msg(2, "INFO", "main: ".$cmd);
-                ($result, $response) = Dada::mySystem($cmd);
-                msg(3, "INFO", "main: ".$result." ".$response);
-              }
-            }
-          }
-
-          # get a list of candidate files from this observation
-          $cmd = "find ".$utc_start." -maxdepth 1 -type f -name '*.cand' -printf '%f\n' | sort -n";
+          $cmd = "rm -rf ".$proc_dir."/".$o;
+          msg(1, "INFO", "Deleting ".$proc_dir."/".$o);
           msg(2, "INFO", "main: ".$cmd);
           ($result, $response) = Dada::mySystem($cmd);
           msg(3, "INFO", "main: ".$result." ".$response);
-      
-          if (($result eq "ok") && ($response ne ""))
-          {
-            if ($last_utc_start ne $utc_start)
-            {
-              msg(0, "INFO", "processing cand files for ".$utc_start);
-              $last_utc_start = $utc_start;
-            }
-
-            $file_list = "";
-            @files = split(/\n/, $response);
-            foreach $file ( @files)
-            {
-              $file_list .= "./".$utc_start."/".$file." ";
-            }
-        
-            $cmd = "rsync -a --no-g --chmod=go-ws --password-file=/home/mpsr/.ssh/rsync_passwd ".
-                   $file_list." upload\@192.168.5.10::results/".$utc_start."/";
-
-            msg(2, "INFO", "main: ".$cmd);
-            ($result, $response) = Dada::mySystem($cmd);
-            msg(3, "INFO", "main: ".$result." ".$response);
-            if ($result ne "ok")
-            {
-              msg(0, "ERROR", "transfer of ".$utc_start." failed: ".$response);
-            }
-            else
-            {
-              msg(2, "INFO", "main: deleting transferred cand files");
-              foreach $file ( @files)
-              {
-                unlink ($utc_start."/".$file);
-              }
-            }
-          } 
         }
       }
     }
-      
-    my $counter = 5;
-    while (!$quit_daemon && $counter > 0)
+
+    my $to_sleep = 30;
+    while (!$quit_daemon && $to_sleep > 0)
     {
+      $to_sleep--;
       sleep(1);
-      $counter--;
     }
   }
 
@@ -275,7 +193,7 @@ sub msg($$$)
       $sys_log_sock = Dada::nexusLogOpen($log_host, $sys_log_port);
     }
     if ($sys_log_sock) {
-      Dada::nexusLogMessage($sys_log_sock, sprintf("%02d",$proc_id), $time, "sys", $type, "bp_cands_mon", $msg);
+      Dada::nexusLogMessage($sys_log_sock, sprintf("%02d",$proc_id), $time, "sys", $type, "bp_cleaner", $msg);
     }
     print "[".$time."] ".$msg."\n";
   }

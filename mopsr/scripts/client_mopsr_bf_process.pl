@@ -166,7 +166,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
     else
     {
       my %header = Dada::headerToHash($raw_header);
-      msg (0, "INFO", "UTC_START=".$header{"UTC_START"}." NCHAN=".$header{"NCHAN"}." NANT=".$header{"NANT"});
+      msg (2, "INFO", "UTC_START=".$header{"UTC_START"}." NCHAN=".$header{"NCHAN"}." NANT=".$header{"NANT"});
 
       # Add the dada header file to the proc_cmd
       $proc_cmd_file = $cfg{"CONFIG_DIR"}."/".$header{"BF_PROC_FILE"};
@@ -186,10 +186,8 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
       }
       elsif ($cfg{"BF_STATE_".$chan_id} eq "active")
       {
-        msg(1, "INFO", "BF_PROC_FILE=".$proc_cmd_file);
         my %proc_cmd_hash = Dada::readCFGFile($proc_cmd_file);
         $proc_cmd = $proc_cmd_hash{"PROC_CMD"};
-        msg(1, "INFO", "PROC_CMD=".$proc_cmd);
       }   
       else
       {
@@ -199,7 +197,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
       }
 
       # create a local directory for the output from this channel
-      msg(0, "INFO", "createLocalDirs()");
+      #my $remote_dirs_thread = 0;
       ($result, $response) = createLocalDirs(\%header);
       if ($result ne "ok")
       {
@@ -212,7 +210,8 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
         $proc_dir = $response;
         my $obs_header = $proc_dir."/obs.header";
 
-        ($result, $response) = createRemoteDirs ($header{"UTC_START"}, $chan_dir, $obs_header);
+        #$remote_dirs_thread = threads->new(\&createRemoteDirs,$header{"UTC_START"}, $chan_dir, $obs_header);
+        #($result, $response) = createRemoteDirs ($header{"UTC_START"}, $chan_dir, $obs_header);
       }
 
       # replace the SHM key with db_key
@@ -228,6 +227,9 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
 
       # replace DADA_GPU_ID with actual GPU_ID 
       $proc_cmd =~ s/<DADA_GPU_ID>/$cfg{"BF_GPU_ID_".$chan_id}/;
+
+      # replace DADA_GPU_ID with actual GPU_ID 
+      $proc_cmd =~ s/<DADA_CORE>/$cfg{"BF_CORE_".$chan_id}/;
 
       # replace DADA_CH_ID with chan_dir
       $proc_cmd =~ s/<DADA_CH_ID>/$chan_dir/;
@@ -280,12 +282,18 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
       if ($binary eq "dspsr")
       {
         $proc_cmd = "export T2USER=".$cfg{"USER"}.$chan_id."; ".$proc_cmd;
+
+        # need to ensure that the sub-integration length is at least twice the 
+        # folding period
+        $cmd = "psrcat -x -all -c P0 ".$header{"SOURCE"}." | awk '{print \$1}'";
+        ($result, $response) = Dada::mySystem($cmd);
+        msg(2, "INFO", "main: ".$cmd.": ".$result." ".$response);
       }
 
       $cmd = "cd ".$proc_dir."; ".$proc_cmd;
-      msg(1, "INFO", "START ".$cmd);
+      msg(1, "INFO", "START ".$proc_cmd);
       ($result, $response) = Dada::mySystemPiped($cmd, $src_log_file, $src_log_sock, "src", sprintf("%02d",$chan_id), $daemon_name, "proc");
-      msg(1, "INFO", "END   ".$cmd);
+      msg(1, "INFO", "END   ".$proc_cmd);
       if ($result ne "ok")
       {
         $quit_daemon = 1;
@@ -294,6 +302,9 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
           msg(0, "ERROR", $cmd." failed: ".$response);
         }
       }
+
+      #msg(2, "INFO", "joining remote_dirs thread");
+      #$remote_dirs_thread->join();
     }
   }
 
@@ -568,28 +579,35 @@ sub createRemoteDirs($$$)
       msg(2, "INFO", "createRemoteDirs: remote directory created");
 
       # now copy obs.header file to remote directory
-      if ($use_nfs)
-      {
-        $cmd = "cp ".$obs_header." ".$remote_dir."/";
+      if (-f $obs_header)
+      { 
+        if ($use_nfs)
+        {
+          $cmd = "cp ".$obs_header." ".$remote_dir."/";
+        }
+        else
+        {
+          $cmd = "scp ".$obs_header." ".$user."@".$host.":".$remote_dir."/";
+        }
+        msg(2, "INFO", "createRemoteDirs: ".$cmd);
+        ($result, $response) = Dada::mySystem($cmd);
+        msg(2, "INFO", "createRemoteDirs: ".$result." ".$response);
+        if ($result ne "ok")
+        {
+          msg(0, "INFO", "createRemoteDirs: ".$cmd." failed: ".$response);
+          msg(0, "WARN", "could not copy obs.header file to server");
+          return ("fail", "could not copy obs.header file");
+        }
+        else
+        {
+          return ("ok", "");
+        }
       }
       else
       {
-        $cmd = "scp ".$obs_header." ".$user."@".$host.":".$remote_dir."/";
+        $attempts_left--;
+        sleep(1);
       }
-      msg(2, "INFO", "createRemoteDirs: ".$cmd);
-      ($result, $response) = Dada::mySystem($cmd);
-      msg(2, "INFO", "createRemoteDirs: ".$result." ".$response);
-      if ($result ne "ok")
-      {
-        msg(0, "INFO", "createRemoteDirs: ".$cmd." failed: ".$response);
-        msg(0, "WARN", "could not copy obs.header file to server");
-        return ("fail", "could not copy obs.header file");
-      }
-      else
-      {
-        return ("ok", "");
-      }
-
     }
     else
     {

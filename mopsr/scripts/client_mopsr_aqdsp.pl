@@ -22,8 +22,6 @@ use IO::Socket;      # Standard perl socket library
 use IO::Select;      # Allows select polling on a socket
 use Net::hostent;
 
-sub aqdspSrcLogger($);
-
 sub usage() 
 {
   print "Usage: ".basename($0)." PWC_ID\n";
@@ -249,6 +247,8 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
       open FH, ">".$local_dir."/obs.header";
       print FH $curr_raw_header;
       close FH;
+
+      chdir $local_dir;
 
       msg(1, "INFO", "START ".$proc_cmd);
       ($result, $response) = Dada::mySystemPiped ($proc_cmd, $src_log_file, 

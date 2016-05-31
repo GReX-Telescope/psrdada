@@ -7,7 +7,7 @@
 # 
 ###############################################################################
 # 
-# Graceful shutdown of the MOPSR backend based on the configuration
+# Correct Startup of the MOPSR backend based on the configuration
 #
 
 use lib $ENV{"DADA_ROOT"}."/bin";
@@ -24,6 +24,7 @@ use Mopsr;
 sub usage();
 sub debugMessage($$);
 sub tc($$);
+#sub threadedTelnetCommand($\@);
 
 #
 # Constants
@@ -73,7 +74,6 @@ my $srv;
 my ($i, $port, $host);
 
 # determine number of AQ nodes
-$port = $aq_cfg{"CLIENT_MASTER_PORT"};
 for ($i=0; $i<$aq_cfg{"NUM_PWC"}; $i++)
 {
   $host = $aq_cfg{"PWC_".$i};
@@ -86,18 +86,6 @@ for ($i=0; $i<$aq_cfg{"NUM_PWC"}; $i++)
 }
 @aq_hosts = sort keys %aq_hosts_counts;
 $num_aq = $#aq_hosts + 1;
-debugMessage(1, "Connecting to ".$num_aq." AQ master control daemons");
-for ($i=0; $i<$num_aq; $i++)
-{
-  $host = $aq_hosts[$i];
-  debugMessage(2, "connecting to AQ[".$i."] ".$host.":".$port);
-  $aqs[$i] = Dada::connectToMachine($host, $port);
-  if (!$aqs[$i])
-  {
-    debugMessage(0, "ERROR: could not connect to AQ[".$i."] ".$host.":".$port);
-    exit (1);
-  }
-}
 
 $port = $bf_cfg{"CLIENT_MASTER_PORT"};
 for ($i=0; $i<$bf_cfg{"NUM_BF"}; $i++)
@@ -111,18 +99,7 @@ for ($i=0; $i<$bf_cfg{"NUM_BF"}; $i++)
 }
 @bf_hosts = sort keys %bf_hosts_counts;
 $num_bf = $#bf_hosts + 1;
-debugMessage(1, "Connecting to ".$num_bf." BF master control daemons");
-for ($i=0; $i<$num_bf; $i++)
-{
-  $host = $bf_hosts[$i];
-  debugMessage(2, "connecting to BF[".$i."] ".$host.":".$port);
-  $bfs[$i] = Dada::connectToMachine($host, $port);
-  if (!$bfs[$i])
-  {
-    debugMessage(0, "ERROR: could not connect to BF[".$i."] ".$host.":".$port);
-    exit (1);
-  }
-}
+
 
 $port = $bp_cfg{"CLIENT_MASTER_PORT"};
 for ($i=0; $i<$bp_cfg{"NUM_BP"}; $i++)
@@ -133,14 +110,67 @@ for ($i=0; $i<$bp_cfg{"NUM_BP"}; $i++)
     $bp_hosts_counts{$host} = 0;
   }
   $bp_hosts_counts{$host} += 1;
-} 
+}
 @bp_hosts = sort keys %bp_hosts_counts;
 $num_bp = $#bp_hosts + 1;
-debugMessage(1, "Connecting to ".$num_bp." BP master control daemons");
+
+$cmd = "ssh dada\@mpsr-srv0 client_mopsr_master_control.pl";
+($result, $response) = Dada::mySystem($cmd);
+
+
+for ($i=0; $i<$num_aq; $i++)
+{
+  $host = $aq_hosts[$i];
+  debugMessage(1, "starting AQ master control on ".$host);
+  $cmd = "ssh mpsr@".$host." client_mopsr_master_control.pl";
+  ($result, $response) = Dada::mySystem($cmd);
+}
+for ($i=0; $i<$num_bf; $i++)
+{
+  $host = $bf_hosts[$i];
+  debugMessage(1, "starting BF master control on ".$host);
+  $cmd = "ssh mpsr@".$host." client_mopsr_bf_master_control.pl";
+  ($result, $response) = Dada::mySystem($cmd);
+}
 for ($i=0; $i<$num_bp; $i++)
 {
   $host = $bp_hosts[$i];
-  debugMessage(2, "connecting to BP[".$i."] ".$host.":".$port);
+  debugMessage(1, "starting BP master control on ".$host);
+  $cmd = "ssh mpsr@".$host." client_mopsr_bp_master_control.pl";
+  ($result, $response) = Dada::mySystem($cmd);
+}
+
+$port = $aq_cfg{"CLIENT_MASTER_PORT"};
+for ($i=0; $i<$num_aq; $i++)
+{
+  $host = $aq_hosts[$i];
+  debugMessage(1, "connecting to AQ[".$i."] ".$host.":".$port);
+  $aqs[$i] = Dada::connectToMachine($host, $port);
+  if (!$aqs[$i])
+  {
+    debugMessage(0, "ERROR: could not connect to AQ[".$i."] ".$host.":".$port);
+    exit (1);
+  }
+}
+
+$port = $bf_cfg{"CLIENT_MASTER_PORT"};
+for ($i=0; $i<$num_bf; $i++)
+{
+  $host = $bf_hosts[$i];
+  debugMessage(1, "connecting to BF[".$i."] ".$host.":".$port);
+  $bfs[$i] = Dada::connectToMachine($host, $port);
+  if (!$bfs[$i])
+  {
+    debugMessage(0, "ERROR: could not connect to BF[".$i."] ".$host.":".$port);
+    exit (1);
+  }
+}
+
+$port = $bp_cfg{"CLIENT_MASTER_PORT"};
+for ($i=0; $i<$num_bp; $i++)
+{
+  $host = $bp_hosts[$i];
+  debugMessage(1, "connecting to BP[".$i."] ".$host.":".$port);
   $bps[$i] = Dada::connectToMachine($host, $port);
   if (!$bps[$i])
   {
@@ -149,10 +179,10 @@ for ($i=0; $i<$num_bp; $i++)
   }
 }
 
+
 $host = $cfg{"SERVER_HOST"};
 $port = $cfg{"CLIENT_MASTER_PORT"};
-debugMessage(1, "Connecting to SRV master control daemon");
-debugMessage(2, "connecting to ".$host.":".$port);
+debugMessage(0, "connecting to ".$host.":".$port);
 $srv = Dada::connectToMachine($host, $port);
 if (!$srv)
 {
@@ -160,50 +190,50 @@ if (!$srv)
   exit (1);
 }
 
-debugMessage(1, "Stopping TMC interface on server");
-($result, $response) = Dada::sendTelnetCommand($srv, "cmd=stop_daemon&args=mopsr_tmc_interface");
+debugMessage(0, "Performing startup");
 
-sleep(2);
+# init datablocks
+debugMessage(1, "Creating AQ datablocks");
+threadedTelnetCommand("cmd=init_dbs", \@aqs);
 
-# stop AQ daemons
-debugMessage(1, "Stopping AQ daemons");
-threadedTelnetCommand("cmd=stop_daemons", \@aqs);
+debugMessage(1, "Creating BF datablocks");
+threadedTelnetCommand("cmd=init_dbs", \@bfs);
 
-debugMessage(1, "Stopping BF daemons");
-threadedTelnetCommand("cmd=stop_daemons", \@bfs);
+debugMessage(1, "Creating BP datablocks");
+threadedTelnetCommand("cmd=init_dbs", \@bps);
 
-debugMessage(1, "Stopping BP daemons");
-threadedTelnetCommand("cmd=stop_daemons", \@bps);
+# next we start all server daemons (EXCEPT TMC Interface)
+my @srv_daemons = split(/ /, $aq_cfg{"SERVER_DAEMONS"});
+my @srv_daemons_custom = ();
+my $d;
+foreach $d ( @srv_daemons )
+{
+  if ($d ne "mopsr_tmc_interface")
+  {
+    push (@srv_daemons_custom, $d);
+  }
+}
 
-sleep(2);
+foreach $d ( @srv_daemons_custom )
+{
+  debugMessage(1, "Starting ".$d." on server");
+  ($result, $response) = Dada::sendTelnetCommand($srv, "cmd=start_daemon&args=".$d);
+}
 
-debugMessage(1, "Stopping SRV daemons");
-($result, $response) = Dada::sendTelnetCommand($srv, "cmd=stop_daemons");
+sleep (1);
 
-# destroy datablocks
-debugMessage(1, "Destroying AQ datablocks");
-threadedTelnetCommand("cmd=destroy_dbs", \@aqs);
+debugMessage(1, "Starting AQ daemons");
+threadedTelnetCommand("cmd=start_daemons", \@aqs);
 
-debugMessage(1, "Destroying BF datablocks");
-threadedTelnetCommand("cmd=destroy_dbs", \@bfs);
+debugMessage(1, "Starting BF daemons");
+threadedTelnetCommand("cmd=start_daemons", \@bfs);
 
-debugMessage(1, "Destroying BP datablocks");
-threadedTelnetCommand("cmd=destroy_dbs", \@bps);
+debugMessage(1, "Starting BP daemons");
+threadedTelnetCommand("cmd=start_daemons", \@bps);
 
-sleep(2);
-
-debugMessage(1, "Stopping SRV master control");
-($result, $response) = Dada::sendTelnetCommand($srv, "cmd=stop_daemon&args=mopsr_master_control");
-
-debugMessage(1, "Stopping AQ master control");
-threadedTelnetCommand("cmd=stop_daemon&args=mopsr_master_control", \@aqs);
-
-debugMessage(1, "Stopping BF master control");
-threadedTelnetCommand("cmd=stop_daemon&args=mopsr_master_control", \@bfs);
-
-debugMessage(1, "Stopping BP master control");
-threadedTelnetCommand("cmd=stop_daemon&args=mopsr_master_control", \@bps);
-
+$d = "mopsr_tmc_interface";
+debugMessage(1, "Starting ".$d." on server");
+($result, $response) = Dada::sendTelnetCommand($srv, "cmd=start_daemon&args=".$d);
 
 debugMessage(1, "Closing Sockets");
 
