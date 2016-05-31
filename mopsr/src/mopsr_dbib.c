@@ -167,6 +167,8 @@ mopsr_bf_conn_t * mopsr_parse_cornerturn_cfg (const char * config_file, mopsr_db
       conns[ichan].ant_first = ant_first;
       conns[ichan].ant_last = ant_last;
 
+      ctx->ib_cms[ichan].port = conns[ichan].port;
+
       prev_chan = ichan;
     }
   }
@@ -564,6 +566,8 @@ int mopsr_dbib_ib_init (mopsr_dbib_t * ctx, dada_hdu_t * hdu, multilog_t * log)
     ctx->ib_cms[idst]->bufs_size = db_bufsz;
     ctx->ib_cms[idst]->header_size = hb_bufsz;
     ctx->ib_cms[idst]->db_buffers = db_buffers;
+    ctx->ib_cms[idst]->port = 
+
   }
 
   return 0;

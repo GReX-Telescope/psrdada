@@ -441,7 +441,7 @@ int64_t mopsr_udpdb_recv_block (dada_pwc_main_t * pwcm, void * block,
 
       // wait for packet reset
       if ((!ctx->capture_started) && 
-          (ctx->hdr.seq_no < ctx->pkt_start + 1000) && 
+          (ctx->hdr.seq_no < (ctx->pkt_start + 1e6)) && 
           (ctx->hdr.seq_no >= ctx->pkt_start))
       {
         ctx->prev_seq  = ctx->pkt_start - 1;
@@ -514,7 +514,7 @@ int64_t mopsr_udpdb_recv_block (dada_pwc_main_t * pwcm, void * block,
     uint64_t dropped = ctx->packets_per_buffer - pkts_caught;
     if (dropped)
     {
-      multilog (pwcm->log, LOG_WARNING, "dropped %"PRIu64" packets %5.2f percent\n", dropped, (float) dropped / (float) ctx->packets_per_buffer);
+      multilog (pwcm->log, LOG_WARNING, "dropped %"PRIu64" packets %5.2f percent\n", dropped, 100.0 * (float) dropped / (float) ctx->packets_per_buffer);
       ctx->packets->dropped += dropped;
       ctx->bytes->dropped += (dropped * ctx->pkt_size);
     }

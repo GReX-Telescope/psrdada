@@ -17,8 +17,8 @@
 
 void usage ()
 {
-	fprintf(stdout, "mopsr_getmd [options] utc RA DEC\n"
-    " return the Meridian Distance angle in degrees for the specified epoch and position\n"
+	fprintf(stdout, "mopsr_getha [options] utc RA DEC\n"
+    " return the apparent Hour Angle and Declination in degrees for the specified epoch and position\n"
     " utc             UTC in YYYY-MM-DD-HH:MM:SS\n"
     " RA              J2000 RA in HH:MM:SS\n"
     " DEC             J2000 DEC in DD:MM:SS\n"
@@ -115,14 +115,12 @@ int main(int argc, char** argv)
     return -1;
   }
 
-
   struct timeval timestamp;
   timestamp.tv_sec = utc_start;
   timestamp.tv_usec = (uint64_t) (fractional * 1e6);
   
-  struct tm * utc = gmtime (&utc_start);
-  cal_app_pos_iau (source.raj, source.decj, utc,
-                   &(source.ra_curr), &(source.dec_curr));
+  double HA_app, DEC_app;
+  int calc_app_ha_dec (source.raj, source.decj, timestamp, &HA_app, &DEC_app);
 
   if (verbose)
   {

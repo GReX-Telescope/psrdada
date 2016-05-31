@@ -68,7 +68,8 @@ typedef struct {
   char            * mdir;                 // directory for monitoring files
   int16_t         * buf;                  // cache for reordering
 
-  unsigned int      decifactor;           // factor reduction due to chan and ant selection
+  unsigned int      deci_numer;           // factor reduction due to chan and ant selection
+  unsigned int      deci_denom;           // factor reduction due to chan and ant selection
 
   unsigned int      old_nchan;            // start chan
   unsigned int      new_nchan;            // end chan

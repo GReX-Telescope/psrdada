@@ -51,9 +51,11 @@ typedef struct {
 #ifdef SKZAP
   void * d_fbuf;         // float input data buffer on GPU
   void * d_rstates;      // floats for curand states
-  void * d_sigmas;      // floats for curand states
+  void * d_sigmas;       // floats for curand states
+  void * d_thresh;       // thesholds for median filtering
+
+  size_t mask_size;      // size of mask [bytes]
   void * d_mask;        // floats for curand states
-  void * d_thresh;      // thesholds for median filtering
 
   size_t s1s_size;      
   void * d_s1s;
@@ -76,7 +78,6 @@ typedef struct {
   float * h_fringes;
   void  * d_fringes;
 
-
   // per sample cororections for delay and fringe coefficient
   float * h_delays_ds;
   float * h_fringe_coeffs_ds;
@@ -84,6 +85,10 @@ typedef struct {
   // scale factors for each antenna
   float * h_ant_scales;
   size_t  ant_scales_size;
+
+  int8_t * h_mask;
+  int8_t * h_mask_scr;
+  FILE ** mask_fptrs;
 
   // corrections for rephasing coarse channels
   // void * d_corr;  
@@ -158,6 +163,8 @@ typedef struct {
 
   uint64_t last_update;
 
+  char replace_noise;
+
 } mopsr_aqdsp_t;
 
 void usage(void);
@@ -179,3 +186,4 @@ int64_t aqdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
 
 int64_t aqdsp_transfer (dada_client_t* client, void * buffer, size_t bytes, memory_mode_t mode);
 
+int aqdsp_append_mask (mopsr_aqdsp_t * ctx);

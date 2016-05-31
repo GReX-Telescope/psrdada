@@ -24,6 +24,7 @@
 #include <complex.h>
 #include <float.h>
 
+//#define BAY_DIST
 #define USE_GPU
 
 void usage ()
@@ -37,8 +38,10 @@ void usage ()
     "  inkey             PSRDADA hexideciaml key for input ST data\n"
     "\n"
     "  -b nbeam          generate nbeam fan beams [default nant]\n"
+    "  -c core           bind processing to CPU core\n"
     "  -d <id>           use GPU device with id [default 0]\n"
     "  -f fb_key         output integrated, tiled beams on fb_key [ST ordering]\n"
+    "  -m mb_key         output integrated, module beams on mb_key [ST ordering]\n"
     "  -t tb_key         output baseband tied array beam on tb_key [T ordering]\n"
     "  -v                verbose output\n"
     "  -0                zero output data stream\n"
@@ -54,6 +57,7 @@ int main(int argc, char** argv)
   dada_hdu_t* in_hdu = 0;
   dada_hdu_t* fb_hdu = 0;
   dada_hdu_t* tb_hdu = 0;
+  dada_hdu_t* mb_hdu = 0;
 
   // DADA Primary Read Client main loop
   dada_client_t* client = 0;
@@ -68,9 +72,12 @@ int main(int argc, char** argv)
   key_t in_key;
   key_t fb_key = 0;
   key_t tb_key = 0;
+  key_t mb_key = 0;
 
   ctx.d_in = 0;
   ctx.d_fbs = 0;
+  ctx.d_tb = 0;
+  ctx.d_mbs = 0;
 
   // default values
   ctx.internal_error = 0;
@@ -81,13 +88,20 @@ int main(int argc, char** argv)
 
   ctx.fan_beams = 0;
   ctx.tied_beam = 0;
+  ctx.mod_beams = 0;
+  
+  int core = -1;
 
-  while ((arg = getopt(argc, argv, "b:d:f:hst:v0")) != -1) 
+  while ((arg = getopt(argc, argv, "b:c:d:f:hm:st:v0")) != -1) 
   {
     switch (arg)  
     {
       case 'b':
         ctx.nbeam = atoi(optarg);
+        break;
+
+      case 'c':
+        core = atoi (optarg);
         break;
 
       case 'd':
@@ -106,6 +120,15 @@ int main(int argc, char** argv)
       case 'h':
         usage ();
         return 0;
+
+      case 'm':
+        ctx.mod_beams = 1;
+        if (sscanf (optarg, "%x", &mb_key) != 1)
+        {
+          fprintf (stderr, "ERROR: could not parse mb_key from %s\n", optarg);
+          exit(EXIT_FAILURE);
+        }
+        break;
 
       case 's':
         quit = 1;
@@ -186,6 +209,20 @@ int main(int argc, char** argv)
     }
   }
 
+  // now create the output HDUs
+  if (ctx.mod_beams)
+  {
+    multilog (log, LOG_INFO, "preparing Module Beam HDU\n");
+    mb_hdu = dada_hdu_create (log);
+    dada_hdu_set_key(mb_hdu, mb_key);
+    if (dada_hdu_connect (mb_hdu) < 0)
+    {
+      fprintf (stderr, "ERROR: could not connect to output HDU\n");
+      return EXIT_FAILURE;
+    }
+  }
+
+
   if (ctx.tied_beam)
   {
     multilog (log, LOG_INFO, "preparing Tied Beam HDU\n");
@@ -200,7 +237,7 @@ int main(int argc, char** argv)
 
   ctx.log = log;
 
-  if (bfdsp_init (&ctx, in_hdu, fb_hdu, tb_hdu, bays_file, modules_file) < 0)
+  if (bfdsp_init (&ctx, in_hdu, fb_hdu, tb_hdu, mb_hdu, bays_file, modules_file) < 0)
   {
     fprintf (stderr, "ERROR: failed to initalise data structures\n");
     return EXIT_FAILURE;
@@ -273,7 +310,9 @@ int main(int argc, char** argv)
 }
 
 /*! Perform initialization */
-int bfdsp_init ( mopsr_bfdsp_t* ctx, dada_hdu_t * in_hdu, dada_hdu_t * fb_hdu, dada_hdu_t * tb_hdu, char * bays_file, char * modules_file)
+int bfdsp_init ( mopsr_bfdsp_t* ctx, dada_hdu_t * in_hdu, dada_hdu_t * fb_hdu, 
+                 dada_hdu_t * tb_hdu, dada_hdu_t * mb_hdu, 
+                 char * bays_file, char * modules_file)
 {
   multilog_t * log = ctx->log;
 
@@ -339,11 +378,11 @@ int bfdsp_init ( mopsr_bfdsp_t* ctx, dada_hdu_t * in_hdu, dada_hdu_t * fb_hdu, d
   if (fb_hdu)
   {
     ctx->fb_block_size = ipcbuf_get_bufsz ((ipcbuf_t *) fb_hdu->data_block);
-    if (ctx->in_block_size % ctx->fb_block_size != 0)
-    {
-      multilog (log, LOG_ERR, "bfdsp_init: input block size must be a multiple of the output block size\n");
-      return -1;
-    }
+    //if (ctx->in_block_size % ctx->fb_block_size != 0)
+    //{
+    //  multilog (log, LOG_ERR, "bfdsp_init: input block size must be a multiple of the output block size\n");
+    //  return -1;
+    //}
     ctx->fb_hdu = fb_hdu;
   }
 
@@ -352,13 +391,28 @@ int bfdsp_init ( mopsr_bfdsp_t* ctx, dada_hdu_t * in_hdu, dada_hdu_t * fb_hdu, d
   if (tb_hdu)
   {
     ctx->tb_block_size = ipcbuf_get_bufsz ((ipcbuf_t *) tb_hdu->data_block);
-    ctx->tb_block_size = ipcbuf_get_bufsz ((ipcbuf_t *) tb_hdu->data_block);
     if (ctx->in_block_size % ctx->tb_block_size != 0)
     {
       multilog (log, LOG_ERR, "bfdsp_init: input block size must be a multiple of the output block size\n");
       return -1;
     }
     ctx->tb_hdu = tb_hdu;
+  }
+
+  ctx->mb_block_size = 0;
+  ctx->mb_hdu = 0;
+
+  // input block must be a multiple of the output block in bytes
+  ctx->in_block_size = ipcbuf_get_bufsz ((ipcbuf_t *) in_hdu->data_block);
+  if (mb_hdu)
+  {
+    ctx->mb_block_size = ipcbuf_get_bufsz ((ipcbuf_t *) mb_hdu->data_block);
+    if (ctx->in_block_size % ctx->mb_block_size != 0)
+    {
+      multilog (log, LOG_ERR, "bfdsp_init: input block size must be a multiple of the output block size\n");
+      return -1;
+    }
+    ctx->mb_hdu = mb_hdu;
   }
 
 #ifdef USE_GPU
@@ -385,6 +439,15 @@ int bfdsp_init ( mopsr_bfdsp_t* ctx, dada_hdu_t * in_hdu, dada_hdu_t * fb_hdu, d
     if (dada_cuda_dbregister(tb_hdu) < 0)
     {
       fprintf (stderr, "failed to register tb_hdu DADA buffers as pinned memory\n");
+      return -1;
+    }
+  }
+
+  if (mb_hdu)
+  {
+    if (dada_cuda_dbregister(mb_hdu) < 0)
+    {
+      fprintf (stderr, "failed to register mb_hdu DADA buffers as pinned memory\n");
       return -1;
     }
   }
@@ -428,6 +491,21 @@ int bfdsp_init ( mopsr_bfdsp_t* ctx, dada_hdu_t * in_hdu, dada_hdu_t * fb_hdu, d
     }
   }
 
+  if (mb_hdu)
+  {
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "init: allocating %ld bytes of device memory for d_mbs\n", ctx->mb_block_size);
+    error = cudaMalloc( &(ctx->d_mbs), ctx->mb_block_size);
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "init: d_mbs=%p\n", ctx->d_mbs);
+    if (error != cudaSuccess)
+    { 
+      multilog (log, LOG_ERR, "init: could not allocate %ld bytes of device memory\n", ctx->mb_block_size);
+      return -1;
+    }
+  }
+
+
 #endif
   if (ctx->verbose)
      multilog (log, LOG_INFO, "init: completed\n");
@@ -444,7 +522,11 @@ int bfdsp_alloc (mopsr_bfdsp_t * ctx)
 
   if (ctx->fan_beams)
   {
+#ifdef EIGHT_BIT_PHASORS
+    ctx->phasors_size = ctx->nant * ctx->nbeam * sizeof(int8_t) * 2;
+#else
     ctx->phasors_size = ctx->nant * ctx->nbeam * sizeof(complex float);
+#endif
     if (ctx->verbose)
       multilog (log, LOG_INFO, "alloc: allocating %ld bytes of pinned host memory for phasors\n", ctx->phasors_size);
 
@@ -489,7 +571,11 @@ int bfdsp_alloc (mopsr_bfdsp_t * ctx)
   }
 
 #else
+#ifdef EIGHT_BIT_PHASORS
   ctx->h_phasors = (float *) malloc(ctx->phasors_size);
+#else
+  ctx->h_phasors = (int8_t *) malloc(ctx->phasors_size);
+#endif
 #endif
 
   if (ctx->fan_beams)
@@ -503,6 +589,10 @@ int bfdsp_alloc (mopsr_bfdsp_t * ctx)
     //double range = (4.0 / 352) * ctx->nbeam;
     double range = 4.0;
 
+#ifdef BAY_DIST
+    char bay[4];
+#endif
+
     ctx->h_beam_offsets = (float *) malloc (ctx->nbeam * sizeof(float));
 
     if (ctx->verbose)
@@ -510,7 +600,8 @@ int bfdsp_alloc (mopsr_bfdsp_t * ctx)
 
     for (ibeam=0; ibeam<ctx->nbeam; ibeam++)
     {
-      fraction = (double) ibeam / (double) (ctx->nbeam-1);
+      //fraction = (double) ibeam / (double) (ctx->nbeam-1);
+      fraction = (double) ibeam / (double) (ctx->nbeam);
       // centred around delay midpoint
       angle_rads = ((fraction * range) - (range/2)) * DD2R;
       // leading edge
@@ -521,15 +612,39 @@ int bfdsp_alloc (mopsr_bfdsp_t * ctx)
 
       //fprintf (stderr, "[%d] beam angle=%f\n", ibeam, ctx->h_beam_offsets[ibeam]);
 
-      // the h_dist will be -2 * PI * FREQ * dist / C
       for (iant=0; iant<ctx->nant; iant++)
       {
-        geometric_delay = (sin_md * ctx->modules[iant]->dist) / C;
+        dist = ctx->modules[iant]->dist;
+
+#ifdef BAY_DIST
+        // extract the bay name for this module
+        strncpy (bay, ctx->modules[iant]->name, 3);
+        bay[3] = '\0';
+        unsigned ibay;
+
+        // if we are tracking then the ring antenna phase each of the 4
+        // modules to the bay centre
+        for (ibay=0; ibay<ctx->nbays; ibay++)
+        {
+          if (strcmp(ctx->all_bays[ibay].name, bay) == 0)
+          {
+            dist = ctx->all_bays[ibay].dist;
+          }
+        }
+#endif
+
+        geometric_delay = (sin_md * dist) / C;
         theta = -2 * M_PI * ctx->channel.cfreq * 1000000 * geometric_delay;
 
         idx = ibeam * ctx->nant + iant;
+#ifdef EIGHT_BIT_PHASORS
+        // TODO check distribution
+        ctx->h_phasors[idx]          = (int8_t) (cos(theta) * 128);
+        ctx->h_phasors[idx+nbeamant] = (int8_t) (sin(theta) * 128);
+#else
         ctx->h_phasors[idx]          = (float) cos(theta);
         ctx->h_phasors[idx+nbeamant] = (float) sin(theta);
+#endif
 
         //fprintf (stderr, "[%d][%d] freq=%lf delay=%le angle=%lf degrees, theta=%lf (%e, i%e)\n", ibeam, iant, ctx->channel.cfreq, geometric_delay, angle_rads / DD2R, theta, ctx->h_phasors[idx], ctx->h_phasors[idx+nbeamant]);
       }
@@ -618,9 +733,9 @@ int bfdsp_dealloc (mopsr_bfdsp_t * ctx)
     cudaFree (ctx->d_fbs);
    ctx->d_fbs = 0;
 
-  if (ctx->fan_beams && ctx->d_tb)
+  if (ctx->tied_beam && ctx->d_tb)
     cudaFree (ctx->d_tb);
-   ctx->d_tb = 0;
+  ctx->d_tb = 0;
 
   if (ctx->fan_beams && ctx->d_phasors)
     cudaFree (ctx->d_phasors);
@@ -629,6 +744,11 @@ int bfdsp_dealloc (mopsr_bfdsp_t * ctx)
   if (ctx->tied_beam && ctx->d_tb_phasors)
     cudaFree (ctx->d_tb_phasors);
   ctx->d_tb_phasors = 0;
+
+  if (ctx->mod_beams && ctx->d_mbs)
+    cudaFree (ctx->d_mbs);
+  ctx->d_mbs = 0;
+
 
 #else
   if (ctx->h_phasors)
@@ -673,6 +793,18 @@ int bfdsp_destroy (mopsr_bfdsp_t * ctx, dada_hdu_t * in_hdu)
       return -1;
     }
   } 
+
+  if (ctx->mod_beams)
+  {
+    if (ctx->verbose)
+      multilog (ctx->log, LOG_INFO, "dada_cuda_dbunregister (mb_hdu)\n");
+    if (dada_cuda_dbunregister (ctx->mb_hdu) < 0)
+    {
+      multilog (ctx->log, LOG_ERR, "failed to unregister Fan Beam DADA buffers\n");
+      return -1;
+    }
+  }
+
 #endif
 }
  
@@ -706,15 +838,24 @@ int bfdsp_open (dada_client_t* client)
       return -1;
     }
   }
-
+  if (ctx->mod_beams)
+  {
+    if (dada_hdu_lock_write (ctx->mb_hdu) < 0)
+    {
+      multilog (log, LOG_ERR, "open: could not lock write on MB HDU\n");
+      return -1;
+    }
+  }
 
   // initialize
   ctx->tb_block_open = 0;
   ctx->fb_block_open = 0;
+  ctx->mb_block_open = 0;
   ctx->bytes_read = 0;
   ctx->bytes_written = 0;
   ctx->tb_block = 0;
   ctx->fb_block = 0;
+  ctx->mb_block = 0;
   ctx->first_time = 1;
 
   if (ctx->verbose)
@@ -736,6 +877,14 @@ int bfdsp_open (dada_client_t* client)
     return -1;
   }
 
+  // calculate new TSAMP
+  double in_tsamp, fb_tsamp, mb_tsamp; 
+  if (ascii_header_get (client->header, "TSAMP", "%lf", &in_tsamp) != 1)
+  {
+    multilog (log, LOG_ERR, "open: could not read TSAMP from header\n");
+    return -1;
+  }
+
   if (ctx->nbeam == -1)
     ctx->nbeam = ctx->nant;
   if (ctx->verbose)
@@ -743,6 +892,7 @@ int bfdsp_open (dada_client_t* client)
 
   unsigned fb_divisor = 1;
   unsigned tb_divisor = 1;
+  unsigned mb_divisor = 1;
 
   // I/O Rate change for this operation is as follows:
   //   8bits -> 32bits,        * 4
@@ -783,24 +933,31 @@ int bfdsp_open (dada_client_t* client)
       return -1;
     } 
     fb_divisor = denominator / numerator;
+    fb_tsamp = in_tsamp * nsamp_d;
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "open: TSAMP in=%lf FB=%lf\n", in_tsamp, fb_tsamp);
   }
 
   if (ctx->tied_beam)
     tb_divisor = ctx->nant / nbit_n;
 
-  // calculate new TSAMP
-  double in_tsamp, fb_tsamp; 
-  if (ascii_header_get (client->header, "TSAMP", "%lf", &in_tsamp) != 1)
+  if (ctx->mod_beams)
   {
-    multilog (log, LOG_ERR, "open: could not read TSAMP from header\n");
-    return -1;
+    nbit_n  = 4;    // 8 - 32 bit
+    nsamp_d = 512;  // integrate 512 samples
+    ndim_d  = 2;    // detect
+
+    unsigned numerator = nbit_n;
+    unsigned denominator = nsamp_d * ndim_d;
+    mb_divisor = denominator / numerator;
+    mb_tsamp = in_tsamp * nsamp_d;
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "open: TSAMP in=%lf MB=%lf\n", in_tsamp, mb_tsamp);
   }
-  fb_tsamp = in_tsamp * nsamp_d;
-  if (ctx->verbose)
-    multilog (log, LOG_INFO, "open: TSAMP in=%lf out=%lf\n", in_tsamp, fb_tsamp);
+
 
   // calculate new BYTES_PER_SECOND
-  uint64_t fb_bytes_per_second, tb_bytes_per_second;
+  uint64_t fb_bytes_per_second, tb_bytes_per_second, mb_bytes_per_second;
   if (ascii_header_get (client->header, "BYTES_PER_SECOND", "%"PRIu64, &(ctx->bytes_per_second)) != 1)
   {
     multilog (log, LOG_ERR, "open: could not read BYTES_PER_SECOND from header\n");
@@ -808,34 +965,38 @@ int bfdsp_open (dada_client_t* client)
   }
   fb_bytes_per_second = ctx->bytes_per_second / fb_divisor;
   tb_bytes_per_second = ctx->bytes_per_second / tb_divisor;
+  mb_bytes_per_second = ctx->bytes_per_second / mb_divisor;
   if (ctx->verbose)
-    multilog (log, LOG_INFO, "open: BYTES_PER_SECOND in=%"PRIu64" fb=%"PRIu64" tb=%"PRIu64"\n", 
-              ctx->bytes_per_second, fb_bytes_per_second, tb_bytes_per_second);
+    multilog (log, LOG_INFO, "open: BYTES_PER_SECOND in=%"PRIu64" fb=%"PRIu64" tb=%"PRIu64" mb=%"PRIu64"\n", 
+              ctx->bytes_per_second, fb_bytes_per_second, tb_bytes_per_second, mb_bytes_per_second);
 
   // calculate new OBS_OFFSET
-  uint64_t in_obs_offset, fb_obs_offset, tb_obs_offset;
+  uint64_t in_obs_offset, fb_obs_offset, tb_obs_offset, mb_obs_offset;
   if (ascii_header_get (client->header, "OBS_OFFSET", "%"PRIu64, &in_obs_offset) != 1)
   {
     multilog (log, LOG_ERR, "open: could not read OBS_OFFSET from header\n");
     return -1;
   }
   fb_obs_offset = in_obs_offset / fb_divisor;
-  fb_obs_offset = in_obs_offset / tb_divisor;
+  tb_obs_offset = in_obs_offset / tb_divisor;
+  mb_obs_offset = in_obs_offset / mb_divisor;
   if (ctx->verbose)
-    multilog (log, LOG_INFO, "open: OBS_OFFSET in=%"PRIu64" fb=%"PRIu64" tb=%"PRIu64"\n", 
-              in_obs_offset, fb_obs_offset, tb_obs_offset);
+    multilog (log, LOG_INFO, "open: OBS_OFFSET in=%"PRIu64" fb=%"PRIu64" tb=%"PRIu64" mb=%"PRIu64"\n", 
+              in_obs_offset, fb_obs_offset, tb_obs_offset, mb_obs_offset);
 
   int64_t in_file_size = -1;
   int64_t fb_file_size = -1;
   int64_t tb_file_size = -1;
+  int64_t mb_file_size = -1;
   if (ascii_header_get (client->header, "FILE_SIZE", "%"PRIi64"", &in_file_size) == 1)
   {
     fb_file_size = in_file_size / fb_divisor; 
     tb_file_size = in_file_size / tb_divisor; 
+    mb_file_size = in_file_size / mb_divisor; 
   }
   if (ctx->verbose)
-    multilog (log, LOG_INFO, "open: FILE_SIZE in=%"PRIi64" fb=%"PRIi64" tb=%"PRIi64"\n", 
-              in_file_size, fb_file_size, tb_file_size);
+    multilog (log, LOG_INFO, "open: FILE_SIZE in=%"PRIi64" fb=%"PRIi64" tb=%"PRIi64" mb=%"PRIu64"\n", 
+              in_file_size, fb_file_size, tb_file_size, mb_file_size);
 
   if (ascii_header_get (client->header, "CHAN_OFFSET", "%u", &(ctx->channel.number)) != 1)
   {
@@ -1016,6 +1177,108 @@ int bfdsp_open (dada_client_t* client)
     return -1;
   }
 
+  if (ascii_header_set (client->header, "NBIT", "%d", 32) < 0)
+  {     
+    multilog (log, LOG_ERR, "open: could not set NBIT=32 in outgoing header\n");
+    return -1;    
+  }                 
+
+  uint64_t header_size = ipcbuf_get_bufsz (client->header_block);
+
+  if (ctx->mb_hdu)
+  {
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "open: getting next free MB header buffer\n");
+    char * header = ipcbuf_get_next_write (ctx->mb_hdu->header_block);
+    if (!header)
+    {
+      multilog (log, LOG_ERR, "open: could not get next header block\n");
+      return -1;
+    }
+
+    // copy the header from the in to the out
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "open: copying header from input to output\n");
+    memcpy (header, client->header, header_size);
+
+    // double check that the mb_block_size is mb_divisor times smaller than the input block size
+    if (ctx->in_block_size / ctx->mb_block_size != mb_divisor)
+    {
+      multilog (log, LOG_ERR, "open: in/out block size factor did not match mb_divisor\n");
+      return -1;
+    }
+
+    if (ascii_header_set (header, "STATE", "%s", "Intensity") < 0)
+    {
+      multilog (log, LOG_ERR, "open: could not set STATE=Intensity in outgoing header\n");
+      return -1;
+    }
+
+    if (ascii_header_set (header, "RESOLUTION", "%"PRIu64, ctx->mb_block_size) < 0)
+    {
+      multilog (log, LOG_ERR, "open: could not set RESOLUTION=%"PRIu64" in outgoing header\n", ctx->mb_block_size);
+      return -1;
+    }
+
+    if (ascii_header_set (header, "ORDER", "%s", "ST") < 0)
+    {
+      multilog (log, LOG_ERR, "open: could not set ORDER=ST in outgoing header\n");
+      return -1;
+    }
+
+    if (ascii_header_set (header, "NDIM", "%d", 1) < 0)
+    {
+      multilog (log, LOG_ERR, "open: could not set NDIM=1 in outgoing header\n");
+      return -1;
+    }
+
+    if (ascii_header_set (header, "TSAMP", "%lf", mb_tsamp) < 0)
+    {
+      multilog (log, LOG_ERR, "open: could not set TSAMP=%lf in outgoing header\n", mb_tsamp);
+      return -1;
+    }
+
+    if (ascii_header_set (header, "OBS_OFFSET", "%"PRIu64, mb_obs_offset) < 0)
+    {
+      multilog (log, LOG_ERR, "open: could not set OBS_OFFSET=%"PRIu64" in outgoing header\n", mb_obs_offset);
+      return -1;
+    }
+
+    if (ascii_header_set (header, "BYTES_PER_SECOND", "%"PRIu64, mb_bytes_per_second) < 0)
+    {
+      multilog (log, LOG_ERR, "open: could not set BYTES_PER_SECOND=%"PRIu64" in outgoing header\n", mb_bytes_per_second);
+      return -1;
+    }
+
+    // hack for now TODO fix!!
+    if (ascii_header_set (header, "NBEAM", "%d", ctx->nant) < 0)
+    {
+      multilog (log, LOG_ERR, "open: could not set NBEAM=%d in outgoing header\n", ctx->nant);
+      return -1;
+    }
+    if (ascii_header_set (header, "NANT", "%d", 1) < 0)
+    {
+      multilog (log, LOG_ERR, "open: could not set NANT=%d in outgoing header\n", 1);
+      return -1;
+    }
+
+    if ((mb_file_size > 0) && (ascii_header_set (header, "FILE_SIZE", "%"PRIu64, mb_file_size) < 0))
+    {
+      multilog (log, LOG_ERR, "open: could not set FILE_SIZE=%"PRIu64" in outgoing header\n", mb_file_size);
+      return -1;
+    }
+
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "open: marking MB header filled, len=%d header_size=%d\n", strlen(header), header_size);
+
+    // mark the outgoing header as filled
+    if (ipcbuf_mark_filled (ctx->mb_hdu->header_block, header_size) < 0)
+    {
+      multilog (log, LOG_ERR, "open: could not mark header_block filled\n");
+      return -1;
+    }
+  }
+
   // remove the antenna from the outgoing header as it is no longer relevant
   if (ascii_header_del (client->header, "ANTENNAE") < 0)
   {
@@ -1029,13 +1292,6 @@ int bfdsp_open (dada_client_t* client)
     return -1;
   }
 
-  if (ascii_header_set (client->header, "NBIT", "%d", 32) < 0)
-  {     
-    multilog (log, LOG_ERR, "open: could not set NBIT=32 in outgoing header\n");
-    return -1;    
-  }                 
-
-  uint64_t header_size = ipcbuf_get_bufsz (client->header_block);
   ctx->bytes_read += in_obs_offset;
 
   if (ctx->fb_hdu)
@@ -1122,12 +1378,6 @@ int bfdsp_open (dada_client_t* client)
       return -1;
     }
 
-    if (ascii_header_set (header, "NBEAM", "%d", ctx->nbeam) < 0)
-    {
-      multilog (log, LOG_ERR, "open: could not set NBEAM=%d in outgoing header\n", ctx->nbeam);
-      return -1;
-    }
-
     int ibeam;
 
     // md offets will be [-0.0000,] 7 or 8 chars long
@@ -1152,7 +1402,6 @@ int bfdsp_open (dada_client_t* client)
     }
     if (ctx->verbose)
       multilog (log, LOG_INFO, "open: marking FB header filled, len=%d header_size=%d\n", strlen(header), header_size);
-
 
     // mark the outgoing header as filled
     if (ipcbuf_mark_filled (ctx->fb_hdu->header_block, header_size) < 0) 
@@ -1277,6 +1526,20 @@ int bfdsp_close (dada_client_t* client, uint64_t bytes_written)
     ctx->bytes_written = 0;
   }
 
+  if (ctx->mb_block_open)
+  { 
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "close: ipcio_close_block_write bytes_written=%"PRIu64"\n", ctx->bytes_written);
+    if (ipcio_close_block_write (ctx->mb_hdu->data_block, ctx->bytes_written) < 0)
+    {
+      multilog (log, LOG_ERR, "close: ipcio_close_block_write failed\n");
+      return -1;
+    }
+    ctx->mb_block_open = 0;
+    ctx->bytes_written = 0;
+  } 
+
+
   if (bfdsp_dealloc (ctx) < 0)
   {
     multilog (log, LOG_ERR, "close: bfdsp_dealloc failed\n");
@@ -1290,6 +1553,16 @@ int bfdsp_close (dada_client_t* client, uint64_t bytes_written)
       return -1;
     }
   }
+  if (ctx->mod_beams)
+  {
+    if (dada_hdu_unlock_write (ctx->mb_hdu) < 0)
+    {
+      multilog (log, LOG_ERR, "close: cannot unlock MB HDU\n");
+      return -1;
+    }
+  }
+
+
   if (ctx->tied_beam)
   {
     if (dada_hdu_unlock_write (ctx->tb_hdu) < 0)
@@ -1375,6 +1648,7 @@ int64_t bfdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
   {
     // form the tiled, detected and integrated tied array beams
     mopsr_tile_beams_precomp (ctx->stream, ctx->d_in, ctx->d_fbs, ctx->d_phasors, ctx->in_block_size, ctx->nbeam, ctx->nant, ctx->tdec);
+    
 #endif
 
     // copy back to output buffer
@@ -1394,6 +1668,32 @@ int64_t bfdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
       multilog (log, LOG_INFO, "io_block: cudaMemcpyAsync(%p, %p, %"PRIu64", D2H)\n",
                 (void *) ctx->fb_block, ctx->d_fbs, ctx->fb_block_size);
     error = cudaMemcpyAsync ( (void *) ctx->fb_block, ctx->d_fbs, ctx->fb_block_size, 
+                              cudaMemcpyDeviceToHost, ctx->stream);
+    if (error != cudaSuccess)
+    {
+      multilog (log, LOG_ERR, "cudaMemcpyAsync D2H failed: %s\n", cudaGetErrorString(error));
+      ctx->internal_error = 1;
+      return -1;
+    }
+  }
+ 
+  if (ctx->mod_beams)
+  {
+    mopsr_mod_beams (ctx->stream, ctx->d_in, ctx->d_mbs, ctx->in_block_size, ctx->nant, 512);
+
+    // copy back to output buffer
+    if (!ctx->mb_block_open)
+    {
+      ctx->mb_block = ipcio_open_block_write (ctx->mb_hdu->data_block, &out_block_id);
+      if (ctx->verbose > 1)
+        multilog (log, LOG_INFO, "io_block: opened output block %"PRIu64" %p\n", out_block_id, (void *) ctx->mb_block);
+      ctx->mb_block_open = 1;
+    }
+
+    if (ctx->verbose > 1)
+      multilog (log, LOG_INFO, "io_block: cudaMemcpyAsync(%p, %p, %"PRIu64", D2H)\n",
+                (void *) ctx->mb_block, ctx->d_mbs, ctx->mb_block_size);
+    error = cudaMemcpyAsync ( (void *) ctx->mb_block, ctx->d_mbs, ctx->mb_block_size,
                               cudaMemcpyDeviceToHost, ctx->stream);
     if (error != cudaSuccess)
     {
@@ -1423,6 +1723,15 @@ int64_t bfdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
     ipcio_close_block_write (ctx->tb_hdu->data_block, ctx->tb_block_size);
     ctx->tb_block_open = 0;
   }
+
+  if (ctx->mb_block_open)
+  {
+    if (ctx->verbose > 1)
+      multilog (log, LOG_INFO, "io_block: closing MB data block for %"PRIu64" bytes\n", ctx->mb_block_size);
+    ipcio_close_block_write (ctx->mb_hdu->data_block, ctx->mb_block_size);
+    ctx->mb_block_open = 0;
+  }
+
 
   ctx->bytes_read += bytes;
   return (int64_t) bytes;
@@ -1543,4 +1852,10 @@ void bfdsp_update_tb (mopsr_bfdsp_t * ctx)
       return;
     }
   }
+}
+
+void bfdsp_calculate_statistics (mopsr_bfdsp_t * ctx)
+{
+  float * data = (float *) ctx->fb_block;
+
 }

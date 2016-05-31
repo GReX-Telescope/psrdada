@@ -30,6 +30,15 @@ mopsr_bf_conn_t * mopsr_setup_cornerturn_send (const char * config_file, mopsr_b
     return 0;
   }
 
+  unsigned int nsend;
+  if (ascii_header_get (config , "NSEND", "%d", &nsend) != 1)
+  {
+    multilog (ctx->log, LOG_ERR, "setup_cornerturn_send: config with no NSEND\n");
+    return 0;
+  }
+  if (ctx->verbose)
+    multilog (ctx->log, LOG_INFO, "setup_cornerturn_send: NSEND=%d\n", nsend);
+
   unsigned int nrecv;
   if (ascii_header_get (config , "NRECV", "%d", &nrecv) != 1)
   {
@@ -63,23 +72,31 @@ mopsr_bf_conn_t * mopsr_setup_cornerturn_send (const char * config_file, mopsr_b
     return 0;
   }
 
-  // senders will maintain nchan connections
-  ctx->nconn = ctx->nchan;
+  // senders will maintain nrecv connections
+  ctx->nconn = nrecv;
   mopsr_bf_conn_t * conns = (mopsr_bf_conn_t *) malloc (sizeof(mopsr_bf_conn_t) * ctx->nconn);
 
   char host[64];
-  unsigned int ichan;
-  for (ichan=0; ichan<ctx->nchan; ichan++)
+  unsigned int irecv, ichan;
+  for (irecv=0; irecv<nrecv; irecv++)
   {
-    sprintf (key, "RECV_%d", ichan);
+    sprintf (key, "RECV_%d", irecv);
     if (ascii_header_get (config , key, "%s", host) != 1)
     {
       multilog (ctx->log, LOG_ERR, "setup_cornerturn_send: config with no %s\n", key);
       return 0;
     }
 
+    // get the channel to be sent to this receiver
+    sprintf (key, "RECV_CHAN_%d", irecv);
+    if (ascii_header_get (config , key, "%u", &ichan) != 1)
+    {
+      multilog (ctx->log, LOG_ERR, "setup_cornerturn_send: config with no %s\n", key);
+      return 0;
+    }
+
     // set destination host for opening IB connection
-    strcpy (conns[ichan].host, host);
+    strcpy (conns[irecv].host, host);
 
     // now get the IB address for this hostname
     sprintf (key, "%s_IB", host);
@@ -88,14 +105,16 @@ mopsr_bf_conn_t * mopsr_setup_cornerturn_send (const char * config_file, mopsr_b
       multilog (ctx->log, LOG_ERR, "setup_cornerturn_send: config with no %s\n", key);
       return 0;
     }
-    strcpy (conns[ichan].ib_host, host);
+    strcpy (conns[irecv].ib_host, host);
 
     // set destination port for opening IB connection
-    conns[ichan].port      = chan_baseport + (send_id * ctx->nchan) + ichan;
-    conns[ichan].chan      = ichan;
-    conns[ichan].ant_first = ant_first;
-    conns[ichan].ant_last  = ant_last;
-    conns[ichan].ib_cm     = 0;
+    conns[irecv].pfb       = send_id;
+    conns[irecv].port      = chan_baseport + (send_id * nrecv) + irecv;
+    conns[irecv].chan      = ichan;
+    conns[irecv].npfb      = nsend;
+    conns[irecv].ant_first = ant_first;
+    conns[irecv].ant_last  = ant_last;
+    conns[irecv].ib_cm     = 0;
   }
 
 #if 0
@@ -167,9 +186,18 @@ mopsr_bf_conn_t * mopsr_setup_cornerturn_recv (const char * config_file, mopsr_b
     return 0;
   }
 
+  // number of input channels to cornerturn 
   if (ascii_header_get (config , "NCHAN", "%d", &(ctx->nchan)) != 1)
   {
     multilog (ctx->log, LOG_ERR, "setup_cornerturn_recv: config with no NCHAN\n");
+    return 0;
+  }
+
+  // numner of output channels from cornerturn
+  unsigned int nrecv;
+  if (ascii_header_get (config , "NRECV", "%d", &nrecv) != 1)
+  {
+    multilog (ctx->log, LOG_ERR, "setup_read_config: config with no NRECV\n");
     return 0;
   }
 
@@ -237,15 +265,16 @@ mopsr_bf_conn_t * mopsr_setup_cornerturn_recv (const char * config_file, mopsr_b
       return 0;
     } 
 
-    conns[isend].port      = chan_baseport + (isend * ctx->nchan) + channel;
+    conns[isend].pfb       = isend;
+    conns[isend].port      = chan_baseport + (isend * nrecv) + channel;
     conns[isend].chan      = channel;
+    conns[isend].npfb      = nsend;
     conns[isend].ant_first = ant_first;
     conns[isend].ant_last  = ant_last;
 
     if (ctx->verbose)
       multilog (ctx->log, LOG_INFO, "setup_cornerturn_recv: conns[%d].port=%d "
-                "ctx->nchan=%d channel=%d\n", isend, conns[isend].port, ctx->nchan, channel);
-
+                "ctx->nchan=%d nrecv=%u channel=%d\n", isend, conns[isend].port, ctx->nchan, nrecv, channel);
   }
   return conns;
 }
@@ -408,6 +437,9 @@ mopsr_bp_conn_t * mopsr_setup_bp_cornerturn_send (const char * config_file, mops
     conns[iconn].beam_first = beam_first;
     conns[iconn].beam_last  = beam_last;
     conns[iconn].ib_cm      = 0;
+    conns[iconn].isend      = send_id;
+    conns[iconn].nsend      = ctx->nsend;
+    conns[iconn].irecv      = iconn;
   }
 
   return conns;
@@ -496,6 +528,9 @@ mopsr_bp_conn_t * mopsr_setup_bp_cornerturn_recv (const char * config_file, mops
     conns[iconn].chan_last  = chan_last;
     conns[iconn].beam_first = beam_first;
     conns[iconn].beam_last  = beam_last;
+    conns[iconn].isend      = iconn;
+    conns[iconn].nsend      = ctx->nsend;
+    conns[iconn].irecv      = recv_id;
 
     if (ctx->verbose)
       multilog (ctx->log, LOG_INFO, "setup_bp_cornerturn_recv: conns[%d].port=%d "

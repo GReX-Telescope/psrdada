@@ -44,6 +44,7 @@ void usage ()
     "  signal_path_file  file containing all signal path connections\n"
     "\n"
     "  -a                coherrently add antenna, output order TF\n"
+    "  -c                calibration mode, do not replace zapped samples with noise\n"
     "  -d <id>           use GPU device with id [default 0]\n"
     "  -g                do not apply geometric delays [default apply them]\n"
     "  -i                ignore module scaling in config\n"
@@ -112,13 +113,18 @@ int main(int argc, char** argv)
   ctx.obs_tracking = 0;
   ctx.geometric_delays = 1;
   ctx.starting_md_angle = 0;
+  ctx.replace_noise = 1;
 
-  while ((arg = getopt(argc, argv, "ad:gihl:n:op:rstv")) != -1) 
+  while ((arg = getopt(argc, argv, "acd:gihl:n:op:rstv")) != -1) 
   {
     switch (arg)  
     {
       case 'a':
         ctx.sum_ant = 1;
+        break;
+
+      case 'c':
+        ctx.replace_noise = 0;
         break;
 
       case 'd':
@@ -322,6 +328,9 @@ int aqdsp_init ( mopsr_aqdsp_t* ctx, dada_hdu_t * in_hdu, dada_hdu_t * out_hdu, 
 {
   multilog_t * log = ctx->log;
 
+  if (ctx->verbose > 1)
+    multilog (log, LOG_INFO, "init: reading files\n");
+
   ctx->all_bays = read_bays_file (bays_file, &(ctx->nbays));
   if (!ctx->all_bays)
   {
@@ -359,6 +368,9 @@ int aqdsp_init ( mopsr_aqdsp_t* ctx, dada_hdu_t * in_hdu, dada_hdu_t * out_hdu, 
     return -1;
   }
 
+  if (ctx->verbose > 1)
+    multilog (log, LOG_INFO, "init: getting cuda_devices\n");
+
   // select the gpu device
   int n_devices = dada_cuda_get_device_count();
   if (ctx->verbose)
@@ -389,6 +401,7 @@ int aqdsp_init ( mopsr_aqdsp_t* ctx, dada_hdu_t * in_hdu, dada_hdu_t * out_hdu, 
 
   free(device_name);
 
+  multilog (log, LOG_INFO, "init: creating cuda stream\n");
   ctx->stream = 0;
   cudaError_t error = 0;
   // setup the cuda stream for operations
@@ -398,6 +411,8 @@ int aqdsp_init ( mopsr_aqdsp_t* ctx, dada_hdu_t * in_hdu, dada_hdu_t * out_hdu, 
     multilog (log, LOG_ERR, "aqdsp_init: could not create CUDA stream\n");
     return -1;
   }
+
+  multilog (log, LOG_INFO, "init: cuda stream created\n");
 
   // check the header block sizes for input and output
   ctx->header_size = ipcbuf_get_bufsz (in_hdu->header_block);
@@ -442,7 +457,7 @@ int aqdsp_init ( mopsr_aqdsp_t* ctx, dada_hdu_t * in_hdu, dada_hdu_t * out_hdu, 
   ctx->h_ant_scales = 0;
   ctx->d_in = ctx->d_out = 0;
 
-  if (ctx->verbose)
+  //if (ctx->verbose)
      multilog (log, LOG_INFO, "init: completed\n");
 
   return 0;
@@ -524,36 +539,6 @@ int aqdsp_alloc (mopsr_aqdsp_t * ctx)
       ctx->modules[iant].scale = 1.0;
   }
         
-/*
-  for (ipfb_mod=0; ipfb_mod < MOPSR_MAX_MODULES_PER_PFB; ipfb_mod++)
-  {
-    if (strcmp(ctx->pfbs[pfb_id].modules[ipfb_mod], "-") == 0)
-    {
-      if (ctx->verbose > 1)
-        multilog (log, LOG_INFO, "alloc: skipping ctx->pfbs[%d].modules[%d] == %s\n", ipfb, ipfb_mod, ctx->pfbs[pfb_id].modules[ipfb_mod]);
-      // skip as it is not connected
-    }
-    else
-    {
-      if (ctx->verbose > 1)
-        multilog (log, LOG_INFO, "alloc: searching for ctx->pfbs[%d].modules[%d]=%s\n", pfb_id, ipfb_mod, ctx->pfbs[pfb_id].modules[ipfb_mod]);
-      for (imod=0; imod<ctx->nmodules; imod++)
-      {
-        if (strcmp(ctx->pfbs[pfb_id].modules[ipfb_mod],ctx->all_modules[imod].name) == 0)
-        {
-          if (iant < ctx->nant)
-          {
-            if (ctx->verbose)
-              multilog (log, LOG_INFO, "alloc: ctx->modules[%d] = ctx->all_modules[%d] = %s\n", iant, imod, ctx->all_modules[imod].name);
-            ctx->modules[iant] = ctx->all_modules[imod];
-            iant++;
-          }
-        }
-      }
-    }
-  }
-  */
-
   if (ants_found != ctx->nant)
   {
     multilog (log, LOG_ERR, "alloc: failed to identify the specific modules for this PFB [only %d of %d]\n", ants_found, ctx->nant);
@@ -697,18 +682,36 @@ int aqdsp_alloc (mopsr_aqdsp_t * ctx)
   cudaMemsetAsync(ctx->d_sigmas, 0, d_sigmas_size, ctx->stream);
 
   uint64_t nsamp = ctx->block_size / (ctx->nchan * ctx->nant * ctx->ndim);
-  size_t d_mask_size = (size_t) (ctx->nchan * ctx->nant * sizeof(uint8_t) * (nsamp/1024));
+  ctx->mask_size = (size_t) (ctx->nchan * ctx->nant * sizeof(uint8_t) * (nsamp/1024));
   if (ctx->verbose)
-    multilog (log, LOG_INFO, "alloc: allocating %ld bytes of device memory for d_mask\n", d_mask_size);
-  error = cudaMalloc (&(ctx->d_mask), d_mask_size);
+    multilog (log, LOG_INFO, "alloc: allocating %ld bytes of device memory for d_mask\n", ctx->mask_size);
+  error = cudaMalloc (&(ctx->d_mask), ctx->mask_size);
   if (ctx->verbose)
     multilog (log, LOG_INFO, "alloc: d_mask=%p\n", ctx->d_mask);
   if (error != cudaSuccess)
   {
-    multilog (log, LOG_ERR, "alloc: could not allocate %ld bytes of device memory\n", d_mask_size);
+    multilog (log, LOG_ERR, "alloc: could not allocate %ld bytes of device memory\n", ctx->mask_size);
     return -1;
   }
-  cudaMemsetAsync(ctx->d_mask, 0, d_mask_size, ctx->stream);
+  cudaMemsetAsync(ctx->d_mask, 0, ctx->mask_size, ctx->stream);
+
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "alloc: allocating %ld bytes on CPU for mask\n", ctx->mask_size);
+  error = cudaMallocHost ((void **) &(ctx->h_mask), ctx->mask_size);
+  if (error != cudaSuccess)
+  {
+    multilog (log, LOG_ERR, "alloc: could not allocate %ld bytes of host memory\n", ctx->mask_size);
+    return -1;
+  }
+  size_t mask_scr_size = ctx->mask_size / 16;
+  mask_scr_size = ctx->mask_size;
+
+  ctx->h_mask_scr = (int8_t *) malloc (mask_scr_size);
+  if (!ctx->h_mask_scr)
+  {
+    multilog (log, LOG_ERR, "alloc: could not allocate %ld bytes of memory\n", mask_scr_size);
+    return -1;
+  }
 
   ctx->s2s_size = sizeof(float) * ctx->nchan * ctx->nant * (nsamp / 1024);
   if (ctx->verbose)
@@ -779,46 +782,6 @@ int aqdsp_alloc (mopsr_aqdsp_t * ctx)
     return -1;
   }
 
-/*
-  // cpu memory for rephasing corrections
-  size_t corr_size = sizeof (float complex) * MOPSR_UNIQUE_CORRECTIONS * ctx->nchan;
-  float complex * h_corr = (float complex *) malloc(corr_size);
-  if (!h_corr)
-  {
-    multilog (log, LOG_ERR, "alloc: could not allocate %ld bytes of CPU memory\n", corr_size);
-    return -1;
-  }
-
-  // device memory for rephasing corrections
-  error = cudaMalloc((void **) &(ctx->d_corr), corr_size);
-  if (error != cudaSuccess)
-  {
-    multilog (log, LOG_ERR, "alloc: could not allocate %ld bytes of device memory\n", corr_size);
-    return -1;
-  }
-
-  // now compute the corrections based on the channel offset from header
-  unsigned ipt, icorr;
-  float theta;
-  float ratio = 2 * M_PI * (5.0 / 32.0);
-  for (ichan=0; ichan<ctx->nchan; ichan++)
-  {
-    for (ipt=0; ipt < MOPSR_UNIQUE_CORRECTIONS; ipt++)
-    {
-      icorr = (ichan * MOPSR_UNIQUE_CORRECTIONS) + ipt;
-      theta = (ctx->chan_offset + ichan) * ratio * ipt;
-      h_corr[icorr] = sin (theta) - cos(theta) * I;
-    }
-  }
-
-  error = cudaMemcpyAsync (ctx->d_corr, h_corr, corr_size, cudaMemcpyHostToDevice, ctx->stream);
-  if (error != cudaSuccess)
-  {
-    multilog (log, LOG_ERR, "cudaMemcpyAsync H2D failed: %s\n", cudaGetErrorString(error));
-    return -1;
-  }
-*/
-
   // scaling factors for antenna
   ctx->ant_scales_size = ctx->nant * sizeof(float);
   if (ctx->verbose)
@@ -846,12 +809,6 @@ int aqdsp_alloc (mopsr_aqdsp_t * ctx)
     mopsr_delay_copy_scales (ctx->stream, ctx->h_ant_scales, ctx->ant_scales_size);
   }
 
-  // now copy to the symbol
-  /*if (ctx->verbose)
-    multilog (log, LOG_INFO, "alloc: copying rephase ant_scales to GPU [%ld]\n", ctx->ant_scales_size);
-  mopsr_input_rephase_scales (ctx->stream, ctx->h_ant_scales, ctx->ant_scales_size);
-  */
-
   if (ctx->verbose)
     multilog (log, LOG_INFO, "alloc: allocating %ld bytes of device memory for d_in\n", ctx->d_buffer_size);
   error = cudaMalloc( &(ctx->d_in), ctx->block_size);
@@ -865,9 +822,6 @@ int aqdsp_alloc (mopsr_aqdsp_t * ctx)
 
   cudaStreamSynchronize(ctx->stream);
 
-/*
-  free (h_corr);
-*/
   return 0;
 }
 
@@ -977,6 +931,18 @@ int aqdsp_dealloc (mopsr_aqdsp_t * ctx)
   if (ctx->d_mask)
     cudaFree (ctx->d_mask);
   ctx->d_mask = 0;
+
+  if (ctx->h_mask)
+    cudaFreeHost (ctx->h_mask);
+  ctx->h_mask = 0;
+
+  if (ctx->h_mask_scr)
+    free (ctx->h_mask_scr);
+  ctx->h_mask_scr = 0;
+
+  if (ctx->mask_fptrs)
+    free (ctx->mask_fptrs);
+  ctx->mask_fptrs = 0;
 #endif
 
   if (ctx->d_out)
@@ -1385,6 +1351,30 @@ int aqdsp_open (dada_client_t* client)
     return -1;
   }
 
+#ifdef SKZAP
+  char mask_header[4096];
+  strcpy (mask_header, header);
+  ascii_header_set (mask_header, "NBIT", "%d", 1);
+  //float mask_tsamp = ctx->tsamp * (1024 * 16);
+  float mask_tsamp = ctx->tsamp * (1024);
+  ascii_header_set (mask_header, "TSAMP", "%f", mask_tsamp);
+  ascii_header_del (mask_header, "ANTENNAE");
+  
+  ctx->mask_fptrs = (FILE **) malloc (sizeof (FILE *) * ctx->nant);
+  for (iant=0; iant<ctx->nant; iant++)
+  {
+    sprintf (ant_list, "%s.mask", ctx->modules[iant].name);
+    ascii_header_set (mask_header, "ANTENNA", "%s", ctx->modules[iant].name);
+    ctx->mask_fptrs[iant] = fopen (ant_list, "w");
+    if (!ctx->mask_fptrs[iant])
+    {
+      multilog (log, LOG_ERR, "open: could not open file: %s\n", ant_list);
+      return -1;
+    }
+    fwrite (mask_header, sizeof(char), 4096, ctx->mask_fptrs[iant]);
+  }
+#endif
+
   if (ctx->verbose)
     multilog (log, LOG_INFO, "open: marking output header filled\n");
 
@@ -1410,14 +1400,13 @@ int aqdsp_open (dada_client_t* client)
 
 int aqdsp_close (dada_client_t* client, uint64_t bytes_written)
 {
-
   assert (client != 0);
   mopsr_aqdsp_t* ctx = (mopsr_aqdsp_t*) client->context;
 
   multilog_t * log = (multilog_t *) client->log;
 
   if (ctx->verbose)
-    multilog (log, LOG_INFO, "aqdsp_close()\n");
+    multilog (log, LOG_INFO, "close: total bytes processed: %"PRIu64"\n", ctx->bytes_read);
 
   if (ctx->block_open)
   {
@@ -1431,6 +1420,12 @@ int aqdsp_close (dada_client_t* client, uint64_t bytes_written)
     ctx->block_open = 0;
     ctx->bytes_written = 0;
   }
+
+#ifdef SKZAP
+  unsigned iant;
+  for (iant=0; iant<ctx->nant; iant++)
+    fclose (ctx->mask_fptrs[iant]);
+#endif
 
   if (aqdsp_dealloc (ctx) < 0)
   {
@@ -1452,7 +1447,7 @@ int64_t aqdsp_io (dada_client_t* client, void * buffer, uint64_t bytes)
   assert (client != 0);
   mopsr_aqdsp_t* ctx = (mopsr_aqdsp_t*) client->context;
 
-  multilog_t * log = (multilog_t *) client->log;
+  multilog_t * log = (multilog_t *) ctx->log;
   multilog (log, LOG_ERR, "io: should not be called\n");
 
   return (int64_t) bytes;
@@ -1470,6 +1465,13 @@ int64_t aqdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
   if (ctx->verbose > 1)
     multilog (log, LOG_INFO, "io_block: buffer=%p, bytes=%"PRIu64" block_id=%"PRIu64"\n", buffer, bytes, block_id);
 
+  // a less than full buffer typically means the end of an observation, ignore
+  if (bytes < ctx->block_size)
+  {
+    multilog (log, LOG_INFO, "io_block: non-full block [%"PRIu64" / %"PRIu64"], ignoring\n", bytes, ctx->block_size);
+    return bytes;
+  }
+
   cudaError_t error;
   uint64_t out_block_id;
   unsigned ichan, iant;
@@ -1486,13 +1488,6 @@ int64_t aqdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
     ctx->internal_error = 1;
     return -1;
   }
-
-  // rephase each coarse channel 
-/*
-  if (ctx->verbose > 1)
-    multilog (log, LOG_INFO, "io_block: mopsr_input_rephase_TFS(%ld)\n", bytes);
-   mopsr_input_rephase_TFS (ctx->stream, ctx->d_in, bytes, ctx->nchan, ctx->nant, ctx->chan_offset);
-*/
 
   char write_output = 1;
   char apply_instrumental = 1;
@@ -1597,7 +1592,12 @@ int64_t aqdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
                                 ctx->h_fringes, ctx->h_delays_ds,
                                 ctx->h_fringe_coeffs_ds, ctx->fringes_size,
                                 bytes_tapped, ctx->nchan,
-                                ctx->nant, ctx->ntaps, ctx->s1_memory, ctx->s1_count);
+                                ctx->nant, ctx->ntaps, ctx->s1_memory, ctx->s1_count,
+                                ctx->replace_noise);
+
+      // write out the host mask from the previous iteration whilst this kernel is executing
+      if (ctx->s1_count > 1)
+        aqdsp_append_mask (ctx);
       ctx->s1_count++;
 #else
       if (ctx->verbose > 1)
@@ -1633,8 +1633,6 @@ int64_t aqdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
       ctx->internal_error = 1;
       return -1;
     }
-
-
   }
   else
   {
@@ -1730,6 +1728,20 @@ int64_t aqdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
       return -1;
     }
 
+#ifdef SKZAP
+    if (ctx->verbose > 1)
+      multilog (log, LOG_INFO, "io_block: cudaMemcpyAsync(%p, %p, %"PRIu64", D2H)\n",
+                (void *) ctx->h_mask, ctx->d_mask, ctx->mask_size);
+    error = cudaMemcpyAsync ( (void *) ctx->h_mask, ctx->d_mask, ctx->mask_size,
+                              cudaMemcpyDeviceToHost, ctx->stream);
+    if (error != cudaSuccess)
+    {
+      multilog (log, LOG_ERR, "cudaMemcpyAsync D2H failed: %s\n", cudaGetErrorString(error));
+      ctx->internal_error = 1;
+      return -1;
+    }
+#endif
+
     if (ctx->verbose > 1)
       multilog (log, LOG_INFO, "io_block: cudaStreamSynchronize()\n");
     cudaStreamSynchronize(ctx->stream);
@@ -1740,4 +1752,68 @@ int64_t aqdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
 
   ctx->bytes_read += bytes;
   return (int64_t) bytes;
+}
+
+/*
+ *  Write zap mask to file for each antenna 
+ */
+int aqdsp_append_mask (mopsr_aqdsp_t* ctx)
+{
+  // mask is stored in FST order
+  unsigned ichan, iant, isamp, i;
+  uint64_t nsamp = ctx->block_size / (ctx->nchan * ctx->nant * ctx->ndim * 1024);
+  uint64_t nsamp_scr = nsamp / 16;
+  nsamp_scr = nsamp;
+
+  // output to be written in S x TF order
+  int8_t * in = ctx->h_mask;
+  int8_t o;
+
+  const uint64_t ant_stride = ctx->nchan * nsamp_scr;
+  const uint64_t samp_stride = ctx->nchan;
+
+  // further integrate up to 16 samples (20.97152 milli seconds), reorder to STF
+  for (ichan=0; ichan<ctx->nchan; ichan++)
+  {
+    for (iant=0; iant<ctx->nant; iant++)
+    {
+      for (isamp=0; isamp<nsamp_scr; isamp++)
+      {
+        /*
+        o = 0;
+        for (i=0; i<16; i++)
+        {
+          if (in[i] > 0)
+            o = 1;
+        }
+        */
+        ctx->h_mask_scr[iant*ant_stride + isamp*samp_stride + ichan] = in[isamp];
+        //in += 16;
+      }
+      in += nsamp_scr;
+    }
+  }
+
+  int8_t * out;
+  unsigned ival;
+  char val;
+
+  // pack each ant into 1-bit
+  for (iant=0; iant<ctx->nant; iant++)
+  {
+    out = ctx->h_mask_scr + iant*ant_stride;
+    for (ival=0; ival < ctx->nchan*nsamp_scr; ival+=8)
+    {
+      val = 0;
+      if (out[ival + 0]) val |= 1 << 0;
+      if (out[ival + 1]) val |= 1 << 1;
+      if (out[ival + 2]) val |= 1 << 2;
+      if (out[ival + 3]) val |= 1 << 3;
+      if (out[ival + 4]) val |= 1 << 4;
+      if (out[ival + 5]) val |= 1 << 5;
+      if (out[ival + 6]) val |= 1 << 6;
+      if (out[ival + 7]) val |= 1 << 7;
+      fwrite (&val, sizeof(char), 1, ctx->mask_fptrs[iant]);
+    }
+  }
 }

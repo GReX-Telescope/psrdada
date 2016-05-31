@@ -20,11 +20,10 @@
 
 int quit_threads = 0;
 
-void control_thread (void *);
-
 int64_t dbtransposedb_write_block (dada_client_t *, void *, uint64_t, uint64_t);
 int64_t dbtransposedb_write_block_ST_to_TS (dada_client_t *, void *, uint64_t, uint64_t);
 int64_t dbtransposedb_write_block_SFT_to_STF (dada_client_t *, void *, uint64_t, uint64_t);
+int64_t dbtransposedb_write_block_FT_to_TF (dada_client_t *, void *, uint64_t, uint64_t);
 
 void usage()
 {
@@ -67,8 +66,6 @@ typedef struct {
   unsigned int nbit;
 
   unsigned quit;
-
-  unsigned control_port;
 
   char order[4];
 
@@ -119,11 +116,11 @@ int dbtransposedb_open (dada_client_t* client)
     nbeam = 1;
   }
 
-  if ((nant == 1) && (nbeam == 1))
-  {
-    multilog (log, LOG_ERR, "open: cannot transpose from ST to T with NANT=%d && NBEAM=%d\n", nant, nbeam);
-    return -1;
-  }
+  //if ((nant == 1) && (nbeam == 1))
+  //{
+  //  multilog (log, LOG_ERR, "open: cannot transpose from ST to T with NANT=%d && NBEAM=%d\n", nant, nbeam);
+  //  return -1;
+  //}
   ctx->nsig = nant > nbeam ? nant : nbeam;
 
   if (ascii_header_get (client->header, "NBIT", "%u", &(ctx->nbit)) != 1)
@@ -143,7 +140,7 @@ int dbtransposedb_open (dada_client_t* client)
     multilog (log, LOG_ERR, "open: header with no NCHAN\n");
     return -1;                
   }
-  if (ctx->nchan != 1 && nbeam == 1)
+  if (ctx->nchan != 1 && ctx->nsig > 1)
   {
     multilog (log, LOG_ERR, "open: cannot transpose from ST to T with NCHAN=%d\n", ctx->nchan);
     return -1;
@@ -169,6 +166,12 @@ int dbtransposedb_open (dada_client_t* client)
       multilog (log, LOG_INFO, "open: changing order from SFT to STF\n");
       client->io_block_function = dbtransposedb_write_block_SFT_to_STF;
       strcpy (output_order, "STF");
+    }
+    else if ((strcmp(ctx->order, "FT") == 0) && client->io_block_function)
+    {
+      multilog (log, LOG_INFO, "open: changing order from FT to TF\n");
+      client->io_block_function = dbtransposedb_write_block_FT_to_TF;
+      strcpy (output_order, "TF");
     }
     else
     {
@@ -504,6 +507,104 @@ int64_t dbtransposedb_write_block_SFT_to_STF (dada_client_t * client, void *in_d
   return data_size;
 }
 
+int64_t dbtransposedb_write_block_FT_to_TF (dada_client_t * client, void *in_data , uint64_t data_size, uint64_t block_id)
+{
+  mopsr_dbtransposedb_t* ctx = (mopsr_dbtransposedb_t*) client->context;
+
+  multilog_t * log = client->log;
+
+  if (ctx->verbose > 1)
+    multilog (log, LOG_INFO, "write_block_FT_to_TF: data_size=%"PRIu64", block_id=%"PRIu64"\n",
+              data_size, block_id);
+
+  //  assume 32-bit, dual-pol data
+  uint64_t * in = (int64_t *) in_data;
+  uint64_t * out; 
+ 
+  const uint64_t nsamp = data_size / (ctx->ndim * ctx->nchan * (ctx->nbit/8));
+  uint64_t out_block_id;
+  unsigned isamp, ichan;
+
+  if (!ctx->output.block_open)
+  {
+    if (ctx->verbose > 1)
+      multilog (log, LOG_INFO, "write_block_FT_to_TF [%x] ipcio_open_block_write()\n", ctx->output.key);
+    ctx->output.curr_block = ipcio_open_block_write(ctx->output.hdu->data_block, &out_block_id);
+    if (!ctx->output.curr_block)
+    {
+      multilog (log, LOG_ERR, "write_block_FT_to_TF [%x] ipcio_open_block_write failed %s\n", ctx->output.key, strerror(errno));
+      return -1;
+    }
+    ctx->output.block_open = 1;
+    ctx->output.bytes_written = 0;
+    out = (uint64_t *) ctx->output.curr_block;
+  }
+  else
+    out = (uint64_t *) (ctx->output.curr_block + ctx->output.bytes_written);
+
+  for (ichan=0; ichan<ctx->nchan; ichan++)
+  {
+    for (isamp=0; isamp<nsamp; isamp++)
+    {
+      out[isamp * ctx->nchan + ichan] = in[ichan * nsamp + isamp];
+    }
+  }
+
+  ctx->output.bytes_written += data_size;
+
+  if (ctx->output.bytes_written > ctx->output.block_size)
+    multilog (log, LOG_ERR, "write_block_FT_to_TF [%x] output block overrun by "
+              "%"PRIu64" bytes\n", ctx->output.key, ctx->output.bytes_written - ctx->output.block_size);
+
+  if (ctx->verbose > 1)
+    multilog (log, LOG_INFO, "write_block_FT_to_TF [%x] bytes_written=%"PRIu64", "
+              "block_size=%"PRIu64"\n", ctx->output.key, ctx->output.bytes_written, ctx->output.block_size);
+
+  // check if the output block is now full
+  if (ctx->output.bytes_written >= ctx->output.block_size)
+  {
+    if (ctx->verbose > 1)
+      multilog (log, LOG_INFO, "write_block_FT_to_TF [%x] block now full bytes_written=%"PRIu64", block_size=%"PRIu64"\n", ctx->output.key, ctx->output.bytes_written, ctx->output.block_size);
+
+    // check if this is the end of data
+    if (client->transfer_bytes && ((ctx->bytes_in + data_size) == client->transfer_bytes))
+    {
+      if (ctx->verbose)
+        multilog (log, LOG_INFO, "write_block_FT_to_TF [%x] update_block_write written=%"PRIu64"\n", ctx->output.key, ctx->output.bytes_written);
+      if (ipcio_update_block_write (ctx->output.hdu->data_block, ctx->output.bytes_written) < 0)
+      {
+        multilog (log, LOG_ERR, "write_block_FT_to_TF [%x] ipcio_update_block_write failed\n", ctx->output.key);
+         return -1;
+      }
+    }
+    else
+    {
+      if (ctx->verbose > 1)
+        multilog (log, LOG_INFO, "write_block_FT_to_TF [%x] close_block_write written=%"PRIu64"\n", ctx->output.key, ctx->output.bytes_written);
+      if (ipcio_close_block_write (ctx->output.hdu->data_block, ctx->output.bytes_written) < 0)
+      {
+        multilog (log, LOG_ERR, "write_block_FT_to_TF [%x] ipcio_close_block_write failed\n", ctx->output.key);
+        return -1;
+      }
+    }
+    ctx->output.block_open = 0;
+    ctx->output.bytes_written = 0;
+  }
+  else
+  {
+    if (ctx->output.bytes_written == 0)
+      ctx->output.bytes_written = 1;
+  }
+
+  ctx->bytes_in += data_size;
+  ctx->bytes_out += data_size;
+
+  if (ctx->verbose > 1)
+    multilog (log, LOG_INFO, "write_block_FT_to_TF read %"PRIu64", wrote %"PRIu64" bytes\n", data_size, data_size);
+
+  return data_size;
+}
+
 int main (int argc, char **argv)
 {
   mopsr_dbtransposedb_t dbtransposedb = DADA_DBSUMDB_INIT;
@@ -530,11 +631,9 @@ int main (int argc, char **argv)
   // input data block HDU key
   key_t in_key = 0;
 
-  pthread_t control_thread_id;
-
   int arg = 0;
 
-  while ((arg=getopt(argc,argv,"dp:svz")) != -1)
+  while ((arg=getopt(argc,argv,"dsvz")) != -1)
   {
     switch (arg) 
     {
@@ -542,19 +641,6 @@ int main (int argc, char **argv)
       case 'd':
         daemon = 1;
         break;
-
-      case 'p':
-        if (optarg)
-        {
-          dbtransposedb.control_port = atoi(optarg);
-          break;
-        }
-        else
-        {
-          fprintf(stderr, "mopsr_dbtransposedb: -p requires argument\n");
-          usage();
-          return EXIT_FAILURE;
-        }
 
       case 's':
         single_transfer = 1;

@@ -194,13 +194,13 @@ mopsr_module_t * read_modules_file (const char* fname, int *nmod)
     if ((mod->name[0] == 'E') || (mod->name[0] == 'e'))
       mod->dist *= -1;
 
-    if (mod->name[4] == 'B')
+    if (mod->name[4] == 'R')
       mod->bay_idx = 0;
-    else if (mod->name[4] == 'G')
-      mod->bay_idx = 1;
     else if (mod->name[4] == 'Y')
+      mod->bay_idx = 1;
+    else if (mod->name[4] == 'G')
       mod->bay_idx = 2;
-    else if (mod->name[4] == 'R')
+    else if (mod->name[4] == 'B')
       mod->bay_idx = 3;
     else
     {
@@ -443,31 +443,22 @@ int calc_observed_pos (double rc, double dc, struct tm * utc, double dut1, doubl
 #endif
 }
 
-double calc_jer_delay (double RA_curr, double DEC_curr, struct timeval timestamp)
+double calc_ha_source ( double RA_curr, double DEC_curr, struct timeval timestamp)
 {
-  // calculate the MJD
- 
   // convert the integer time to an MJD
   struct tm * utc_t = gmtime (&timestamp.tv_sec);
   double mjd = mjd_from_utc (utc_t);
 
-  //fprintf (stderr, "1: mjd=%lf\n",mjd);
-  //fprintf (stderr, "timestamp.tv_usec=%ld\n", timestamp.tv_usec);
-
   // convert the fractional time from seconds to days
   double fractional_seconds = ((double) timestamp.tv_usec) / 1000000.0;
   double fractional_days    = fractional_seconds / 86400.0;
-  //fprintf (stderr, "fractional_seconds=%lf, fractional_days=%le\n", fractional_seconds, fractional_days);
 
   mjd += fractional_days;
-
-  //fprintf (stderr, "2: mjd=%30.20lf\n",mjd);
 
   // get the LAST from the MJD
   double last = last_from_mjd (mjd);
 
 #ifdef _DEBUG
-
   int HMSF[4];
   char sign;
   int NDP = 2;    // number of decimal places
@@ -487,15 +478,40 @@ double calc_jer_delay (double RA_curr, double DEC_curr, struct timeval timestamp
             HMSF[0],HMSF[1],HMSF[2],HMSF[3], hour_angle);
 #endif
 
+  return hour_angle;
+}
+
+
+double calc_jer_delay (double RA_curr, double DEC_curr, struct timeval timestamp)
+{
+
+  double hour_angle = calc_ha_source (RA_curr, DEC_curr, timestamp);
+
   double projected_delay = jer_delay (hour_angle, DEC_curr,
                                       MOLONGLO_ARRAY_SLOPE,
                                       MOLONGLO_AZIMUTH_CORR,
                                       MOLONGLO_LATITUDE);
 
-  //fprintf (stderr, "projected_delay=%lf\n", projected_delay);
-
   return projected_delay;
 }
+
+int calc_app_ha_dec (double RA_J2000, double DEC_J2000, struct timeval timestamp, double * HA_app, double * DEC_app)
+{
+  double ra, dec;
+
+  // convert the integer time to an MJD
+  struct tm * utc = gmtime (&timestamp.tv_sec);
+
+  // calculate the apparent position (integer second accuracy);
+  cal_app_pos_iau (RA_J2000, DEC_J2000, utc, &ra, &dec);
+
+  // determine the HA of the source
+  double ha = calc_ha_source (ra, dec, timestamp);
+
+  *HA_app = ha;
+  *DEC_app = dec;
+}
+
 
 int calculate_delays (unsigned nbay, mopsr_bay_t * bays, 
                       unsigned nmod, mopsr_module_t * mods, 
@@ -544,7 +560,18 @@ int calculate_delays (unsigned nbay, mopsr_bay_t * bays,
   const double sampling_period = tsamp / 1000000;
   char bay[4];
 
-  double sin_start_md_angle = sin (start_md_angle);
+  const double md_angle = asin(jer_delay);
+  const double sin_start_md_angle = sin (start_md_angle);
+  const double start_minus_md = (start_md_angle - md_angle);
+  const double sin_start_minus_md = sin(start_minus_md);
+
+  //const double sin_start_md_angle = sin (start_md_angle);
+  //const double cos_start_md_angle = cos (start_md_angle);
+
+  //const double sin_jer_delay = jer_delay;
+  //const double cos_jer_delay = cos (asin(jer_delay));
+
+  //const double sin_start_md_minus_jer = (sin_start_md_angle * cos_jer_delay) - (cos_start_md_angle * sin_jer_delay);
 
   //fprintf (stderr, "jer_delay=%lf, sin_start_md_angle=%lf\n", jer_delay, sin_start_md_angle);
 
@@ -593,7 +620,9 @@ int calculate_delays (unsigned nbay, mopsr_bay_t * bays,
       }
       else
       {
-        geometric_delay = ((sin_start_md_angle * bay_dist / C) - ((sin_start_md_angle - jer_delay) * (ant_dist / C)));
+        geometric_delay = ((sin_start_md_angle * bay_dist / C) - ((sin_start_minus_md * ant_dist) / C));
+
+        //geometric_delay = (sin_start_md_angle * bay_dist / C);
 
         dist = ant_dist;
       }
@@ -758,22 +787,32 @@ double last_from_mjd (double mjd)
 
 int mopsr_delays_hhmmss_to_rad (char * hhmmss, double * rads)
 {
-  int ihour, imin;
-  double sec;
+  int ihour = 0;
+  int imin = 0;
+  double sec = 0;
   const char *sep = ":";
   char * saveptr;
 
   char * str = strtok_r(hhmmss, sep, &saveptr);
-  if (sscanf(str, "%d", &ihour) != 1)
-    return -1;
+  if (str != NULL)
+  {
+    if (sscanf(str, "%d", &ihour) != 1)
+      return -1;
 
-  str = strtok_r(NULL, sep, &saveptr);
-  if (sscanf(str, "%d", &imin) != 1)
-    return -1;
+    str = strtok_r(NULL, sep, &saveptr);
+    if (str != NULL)
+    {
+      if (sscanf(str, "%d", &imin) != 1)
+        return -1;
 
-  str = strtok_r(NULL, sep, &saveptr);
-  if (sscanf(str, "%lf", &sec) != 1)
-    return -1;
+      str = strtok_r(NULL, sep, &saveptr);
+      if (str != NULL)
+      {
+        if (sscanf(str, "%lf", &sec) != 1)
+          return -1;
+      }
+    }
+  }
 
   char s = '\0';
   if (ihour < 0)
@@ -785,27 +824,76 @@ int mopsr_delays_hhmmss_to_rad (char * hhmmss, double * rads)
   int status = iauTf2a(s, ihour, imin, sec, rads);
 
   return status;
+}
 
+int mopsr_delays_hhmmss_to_sigproc (char * hhmmss, double * sigproc)
+{ 
+  int ihour = 0;
+  int imin = 0;
+  double sec = 0; 
+  const char *sep = ":";
+  char * saveptr;
+  
+  char * str = strtok_r(hhmmss, sep, &saveptr);
+  if (str != NULL)
+  { 
+    if (sscanf(str, "%d", &ihour) != 1)
+      return -1;
+
+    str = strtok_r(NULL, sep, &saveptr);
+    if (str != NULL)
+    {
+      if (sscanf(str, "%d", &imin) != 1)
+        return -1;
+
+      str = strtok_r(NULL, sep, &saveptr);
+      if (str != NULL)
+      {
+        if (sscanf(str, "%lf", &sec) != 1)
+          return -1;
+      }
+    }
+  }
+
+  char s = '\0';
+  if (ihour < 0)
+  {
+    ihour *= -1;
+    s = '-';
+  }
+
+  *sigproc = ((double)ihour*1e4  + (double)imin*1e2 + sec);
+  return 0;
 }
 
 int mopsr_delays_ddmmss_to_rad (char * ddmmss, double * rads)
 {
-  int ideg, iamin;
-  double asec;
+  int ideg = 0;
+  int iamin = 0;
+  double asec = 0;
   const char *sep = ":";
   char * saveptr;
 
   char * str = strtok_r(ddmmss, sep, &saveptr);
-  if (sscanf(str, "%d", &ideg) != 1)
-    return -1;
+  if (str != NULL)
+  {
+    if (sscanf(str, "%d", &ideg) != 1)
+      return -1;
 
-  str = strtok_r(NULL, sep, &saveptr);
-  if (sscanf(str, "%d", &iamin) != 1)
-    return -1;
+    str = strtok_r(NULL, sep, &saveptr);
+    if (str != NULL)
+    {
+      if (sscanf(str, "%d", &iamin) != 1)
+        return -1;
 
-  str = strtok_r(NULL, sep, &saveptr);
-  if (sscanf(str, "%lf", &asec) != 1)
-    return -1;
+      str = strtok_r(NULL, sep, &saveptr);
+      if (str != NULL)
+      {
+        if (sscanf(str, "%lf", &asec) != 1)
+          return -1;
+      }
+    }
+  }
 
   char s = '\0';
   if (ideg < 0)
@@ -817,6 +905,59 @@ int mopsr_delays_ddmmss_to_rad (char * ddmmss, double * rads)
   int status = iauAf2a (s, ideg, iamin, asec, rads);
 
   return status;
+}
+
+
+int mopsr_delays_ddmmss_to_sigproc (char * ddmmss, double * sigproc)
+{
+  int ideg = 0;
+  int iamin = 0;
+  double asec = 0;
+  const char *sep = ":";
+  char * saveptr;
+
+  char * str = strtok_r(ddmmss, sep, &saveptr);
+  if (str != NULL)
+  {
+    if (sscanf(str, "%d", &ideg) != 1)
+      return -1;
+
+    str = strtok_r(NULL, sep, &saveptr);
+    if (str != NULL)
+    {
+      if (sscanf(str, "%d", &iamin) != 1)
+        return -1;
+
+      str = strtok_r(NULL, sep, &saveptr);
+      if (str != NULL)
+      {
+        if (sscanf(str, "%lf", &asec) != 1)
+          return -1;
+      }
+    }
+  }
+
+  if (ideg < 0)
+    *sigproc = ((double) ideg*1e4 - (double) iamin*1e2) - asec;
+  else
+    *sigproc = ((double) ideg*1e4  + (double) iamin*1e2) + asec;
+
+  return 0;
+}
+
+
+double ns_tilt (double ha_source, double dec_source, double md_angle)
+{
+  //fprintf (stderr, "ns_tilt: ha_source=%lf\n", ha_source);
+  //fprintf (stderr, "ns_tilt: dec_source=%lf\n", dec_source);
+  //fprintf (stderr, "ns_tilt: md_angle=%lf\n", md_angle);
+
+  double NS_Tilt_1 = -0.0000237558704*cos(dec_source)*sin(ha_source);
+  double NS_Tilt_2 =  0.578881847*cos(dec_source)*cos(ha_source);
+  double NS_Tilt_3 =  0.8154114339*sin(dec_source);
+  double NS_Tilt   = asin(( NS_Tilt_1 + NS_Tilt_2 + NS_Tilt_3)/(cos(md_angle)));
+  
+  return NS_Tilt;
 }
 
 

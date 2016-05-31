@@ -176,9 +176,8 @@ int main (int argc, char **argv)
   }
 
   size_t nsets = nsamp_total / nsamp;
-  float * sks = (float *) malloc(sizeof(float) * nsets);
-  float * s1s = (float *) malloc(sizeof(float) * nsets);
-  float * sks2 = (float *) malloc(sizeof(float) * nsets);
+  float ** sks = (float **) malloc(sizeof(float *) * 16);
+  float ** s1s = (float **) malloc(sizeof(float) * 16);
   float * xvals = (float *) malloc(sizeof(float) * nsets);
   float * s1_uppers = (float *) malloc(sizeof(float) * nsets);
   float * s1_means = (float *) malloc(sizeof(float) * nsets);
@@ -190,12 +189,21 @@ int main (int argc, char **argv)
   float * diff_block = (float *) malloc(sizeof(float) * block_size * block_history);
   float * history_block = (float *) malloc(sizeof(float) * block_size * block_history);
 
-  unsigned i;
+  unsigned i, j, k;
+  for (i=0; i<16; i++)
+  {
+    unsigned nval =  nsets / (i+1);
+    sks[i] = (float *) malloc (sizeof(float) * nval);
+    s1s[i] = (float *) malloc (sizeof(float) * nval);
+    for (j=0; j<nval; j++)
+    {
+      sks[i][j] = 0;
+      s1s[i][j] = 0;
+    }
+  }
+
   for (i=0; i<nsets; i++)
   {
-    sks[i] = 0;
-    s1s[i] = 0;
-    sks2[i] = 0;
     xvals[i] = i;
     s1_uppers[i] = 0;
     s1_lowers[i] = 0;
@@ -266,7 +274,6 @@ int main (int argc, char **argv)
   double s1_sq_sum = 0;
   double s1_count = 0;
   double sigma;
-  unsigned j;
   unsigned start_id = 0;
   unsigned batches = 0;
   unsigned valid_blocks;
@@ -324,8 +331,8 @@ int main (int argc, char **argv)
         {
           if ((iant == opts.ant) && (ichan == opts.chans[0]))
           {
-            re = ((double) ptr[0]) + 0.5;
-            im = ((double) ptr[1]) + 0.5;
+            re = ((double) ptr[0]) + 0.38;
+            im = ((double) ptr[1]) + 0.38;
 
             //re_sum += re;
             //im_sum += im;
@@ -338,7 +345,7 @@ int main (int argc, char **argv)
             //s2s += (repower * repower);
 
             s1 += power;
-            //s2 += (power * power);
+            s2 += (power * power);
           }
           ptr += 2;
         }
@@ -346,7 +353,24 @@ int main (int argc, char **argv)
     }
 
     //sks[i]  = (float) (m_fac * ((m * (s2 / (s1 * s1))) - 1));
-    s1s[i]  = s1;
+    s1s[0][i] = s1;
+    for (j=1; j<16; j++)
+    {
+      if (i % j == 0)
+      {
+        float sum = 0;  
+        for (k=i-j; k<i; i++)
+        {
+          sum += s1s[0][k];
+        }
+        s1s[j][i/j] = sum;
+      }
+    }
+
+    //fprintf (stderr, "s1=%f s2=%f\n", s1, s2);
+    //char bad = 0;
+    //if (sks[i] > sk_h)
+    //  bad = 1;
 
     s1_sum_total += s1;
     s1_total_count++;
@@ -363,13 +387,13 @@ int main (int argc, char **argv)
         float upper = avg_mean + (3 * avg_stddev);
         for (j=0; j<block_size; j++)
         {
-          if (s1s[start_id + j] > upper)
-            s1s[start_id + j] =  (float) rand_normal (avg_mean, (double) avg_stddev);
+          if (s1s[0][start_id + j] > upper)
+            s1s[0][start_id + j] =  (float) rand_normal (avg_mean, (double) avg_stddev);
         }
       }
 
       // copy from s1s to the vals/history block
-      memcpy ((void *) this_block , (void *) (s1s + start_id), (i - start_id) * sizeof(float));
+      memcpy ((void *) this_block , (void *) (s1s[0] + start_id), (i - start_id) * sizeof(float));
 
 /*
       if (avg_mean > 0)
@@ -460,13 +484,13 @@ int main (int argc, char **argv)
     s1_sum = 0;
     for (j=start_id; j<i+1; j++)
     {
-      s1_sum += s1s[j];
+      s1_sum += s1s[0][j];
     }
     s1_mean = s1_sum / ((i-start_id)+1);
 
     s1_sq_sum = 0;
     for (j=start_id; j<i+1; j++)
-      s1_sq_sum += (s1s[j]-s1_mean) * (s1s[j]-s1_mean);
+      s1_sq_sum += (s1s[0][j]-s1_mean) * (s1s[0][j]-s1_mean);
 
     s1_variance = s1_sq_sum / ((i-start_id)+1);
 
@@ -482,16 +506,17 @@ int main (int argc, char **argv)
     //fprintf (stderr, "means: re=%lf im=%lf sks[%d]=%f sks2[%d]=%f\n", re_mean, im_mean, i, sks[i], i, sks2[i]);
     //fprintf (stderr, "means: s1_mean=%lf s1=%lf sks[%d]=%f sigma=%lf\n", s1_mean, s1, i, sks[i], sigma);
 
-/*
-    if (cpgbeg(0, "1/xs", 1, 1) != 1)
+    if (plot == 2)
     {
-      fprintf(stderr, "error opening plot device\n");
-      exit(1);
+      if (cpgbeg(0, "1/xs", 1, 1) != 1)
+      {
+        fprintf(stderr, "error opening plot device\n");
+        exit(1);
+      }
+
+      mopsr_plot_histogram (hist, &opts);
+      cpgend();
     }
-
-    mopsr_plot_histogram (hist, &opts);
-
-    cpgend();
 
     if (cpgbeg(0, "2/xs", 0, 0) != 1)
     {
@@ -499,116 +524,120 @@ int main (int argc, char **argv)
       exit(1);
     }
 
-    if (sks[i] > ymax)
-      ymax = sks[i];
-    if (sks[i] < ymin)
-      ymin = sks[i];
-    
-    //if (sks2[i] > ymax)
-    //  ymax = sks2[i];
-    //if (sks2[i] < ymin)
-    //  ymin = sks2[i];
+    //if (plot == 2)
+    {
+      if (sks[0][i] > ymax)
+        ymax = sks[0][i];
+      if (sks[0][i] < ymin)
+        ymin = sks[0][i];
 
-    xmax = (float) i+1;
+      xmax = (float) i+1;
 
-    cpgbbuf();
+      cpgbbuf();
 
-    float yrange = (ymax - ymin);
+      float yrange = (ymax - ymin);
 
-    cpgswin(xmin, xmax, ymin - (yrange/10), ymax + (yrange/10));
+      cpgswin(xmin, xmax, ymin - (yrange/10), ymax + (yrange/10));
      
-    cpgsvp(0.1, 0.9, 0.1, 0.9);
-    cpgbox("BCSNT", 0.0, 0.0, "BCNST", 0.0, 0.0);
-    cpglab("Block", "SK", "");
+      cpgsvp(0.1, 0.9, 0.1, 0.9);
+      cpgbox("BCSNT", 0.0, 0.0, "BCNST", 0.0, 0.0);
+      cpglab("Block", "SK", "");
 
-    x_sk[0] = 0;
-    x_sk[1] = (float) (i+1);
+      x_sk[0] = 0;
+      x_sk[1] = (float) (i+1);
 
-    cpgline (2, x_sk, y_skl);
-    cpgline (2, x_sk, y_skh);
-    cpgsci(2);
-    cpgslw(10);
-    cpgpt (i+1, xvals, sks, symbol);
-    cpgslw(1);
-    //cpgsci(3);
-    //cpgpt (i+1, xvals, sks2, symbol);
-    cpgsci(1);
+      cpgline (2, x_sk, y_skl);
+      cpgline (2, x_sk, y_skh);
+      cpgsci(2);
+      cpgslw(10);
+      cpgpt (i+1, xvals, sks[0], symbol);
+      cpgslw(1);
+      cpgsci(1);
 
-    cpgebuf();
-    cpgend();
-    */
+      cpgebuf();
+      cpgend();
+    }
 
     if (plot)
     {
+      if (cpgbeg(0, "3/xs", 0, 0) != 1)
+      {
+        fprintf(stderr, "error opening plot device\n");
+        exit(1);
+      }
 
-    if (cpgbeg(0, "3/xs", 0, 0) != 1)
-    {
-      fprintf(stderr, "error opening plot device\n");
-      exit(1);
-    }
+      for (j=0; j<i; j++)
+      {
+        if (s1s[0][j] > ymaxs1)
+          ymaxs1 = s1s[0][j];
+        if (s1s[0][j] < ymins1)
+          ymins1 = s1s[0][j];
+      }
+      xmax = (float) i+1;
 
-    if (s1s[i] > ymaxs1)
-      ymaxs1 = s1s[i];
-    if (s1s[i] < ymins1)
-      ymins1 = s1s[i];
-    xmax = (float) i+1;
-    if (ymaxs1 > 200000)
-      ymaxs1 = 200000;
+      //if (ymaxs1 > 200000)
+      //  ymaxs1 = 200000;
 
-    cpgbbuf();
+      cpgbbuf();
 
-    float yrange = (ymaxs1 - ymins1);
+      float yrange = (ymaxs1 - ymins1);
 
-    cpgswin(xmin, xmax, ymins1 - (yrange/10), ymaxs1 + (yrange/10));
+      cpgswin(xmin, xmax, ymins1 - (yrange/2), ymaxs1 + (yrange/2));
 
-    cpgsvp(0.1, 0.9, 0.1, 0.9);
-    cpgbox("BCSNT", 0.0, 0.0, "BCNST", 0.0, 0.0);
-    cpglab("Block", "S1", "");
+      cpgsvp(0.1, 0.9, 0.1, 0.9);
+      cpgbox("BCSNT", 0.0, 0.0, "BCNST", 0.0, 0.0);
+      cpglab("Block", "S1", "");
 
-    x_sk[0] = 0;
-    x_sk[1] = (float) (i+1);
+      x_sk[0] = 0;
+      x_sk[1] = (float) (i+1);
 
-    cpgline (2, x_sk, y_skl);
-    cpgline (2, x_sk, y_skh);
-    cpgsci(3);
-    cpgslw(5);
-    cpgpt (i+1, xvals, s1s, symbol);
-    cpgslw(1);
-    cpgsci(1);
+      cpgline (2, x_sk, y_skl);
+      cpgline (2, x_sk, y_skh);
+      cpgsci(3);
+      cpgslw(5);
+      cpgpt (i+1, xvals, s1s[0], symbol);
+      cpgslw(1);
+      cpgsci(1);
 
-    cpgline (i+1, xvals, s1_means);
-    cpgsci(2);
-    cpgline (i+1, xvals, s1_uppers);
-    cpgsci(3);
-    cpgline (i+1, xvals, s1_lowers);
-    cpgsci(1);
+      cpgline (i+1, xvals, s1_means);
+      cpgsci(2);
+      cpgline (i+1, xvals, s1_uppers);
+      cpgsci(3);
+      cpgline (i+1, xvals, s1_lowers);
+      cpgsci(1);
 
-    // now do the averages in blue
-/*
-    cpgsci(4);
-    cpgslw(10);
-    y_s1[0] = avg_mean;
-    y_s1[1] = avg_mean;
-    cpgline (2, x_sk, y_s1);
-    cpgslw(1);
-    y_s1[0] = avg_mean + 3 * avg_stddev;
-    y_s1[1] = avg_mean + 3 * avg_stddev;
-    cpgline (2, x_sk, y_s1);
-    y_s1[0] = avg_mean - 3 * avg_stddev;
-    y_s1[1] = avg_mean - 3 * avg_stddev;
-    cpgline (2, x_sk, y_s1);
-    cpgslw(1);
-    cpgsci(1);
-*/
-    cpgebuf();
-    cpgend();
+      // now do the averages in blue
+  /*
+      cpgsci(4);
+      cpgslw(10);
+      y_s1[0] = avg_mean;
+      y_s1[1] = avg_mean;
+      cpgline (2, x_sk, y_s1);
+      cpgslw(1);
+      y_s1[0] = avg_mean + 3 * avg_stddev;
+      y_s1[1] = avg_mean + 3 * avg_stddev;
+      cpgline (2, x_sk, y_s1);
+      y_s1[0] = avg_mean - 3 * avg_stddev;
+      y_s1[1] = avg_mean - 3 * avg_stddev;
+      cpgline (2, x_sk, y_s1);
+      cpgslw(1);
+      cpgsci(1);
+  */
+      cpgebuf();
+      cpgend();
     }
   }
 
   close (fd);
 
   free(xvals);
+  for (i=0; i<16; i++)
+  {
+    free(sks[i]);
+    free(s1s[i]);
+  }
   free(sks);
+  free(s1s);
   free(raw);
   free(hist);
 

@@ -26,7 +26,6 @@ void usage ()
   fprintf(stdout, "mopsr_test_bfdsp bays_file modules_file\n"
     " -a nant     number of antennae\n" 
     " -b nbeam    number of beams\n" 
-    " -d device   use gpu device [default 0]\n" 
     " -t nsamp    number of samples [in a block]\n" 
     " -l nloops   number of blocks to execute\n" 
     " -h          print this help text\n" 
@@ -161,18 +160,6 @@ int main(int argc, char** argv)
     fprintf (stderr, "could not select requested device [%d]\n", device);
     return -1;
   }
-
-  /*
-  fprintf (stderr, "main: dada_get_device_name(%d)\n", device);
-  char * device_name = dada_cuda_get_device_name (device);
-  if (!device_name)
-  {
-    fprintf (stderr, "could not get CUDA device name\n");
-    return -1;
-  }
-  //fprintf (stderr, "Using device %d : %s\n", device, device_name);
-  //free(device_name);
-  */
 
   // setup the cuda stream for operations
   cudaStream_t stream;
@@ -338,7 +325,6 @@ int main(int argc, char** argv)
   unsigned iloop;
   for (iloop=0; iloop<nloop; iloop++)
   {
-//#if USE_GPU
     // copy the whole block to the GPU
     if (verbose > 1)
       fprintf(stderr, "io_block: cudaMemcpyAsync block H2D %ld: (%p <- %p)\n", in_block_size, d_in, h_in);
@@ -351,7 +337,6 @@ int main(int argc, char** argv)
     }
 
     // form the tiled, detected and integrated fan beamsa
-    //mopsr_tile_beams (stream, d_in, d_fbs, h_sin_thetas, h_ant_factors, in_block_size, nbeam, nant, tdec);
     mopsr_tile_beams_precomp (stream, d_in, d_fbs, d_phasors, in_block_size, nbeam, nant, tdec);
 
     if (verbose > 1)
@@ -364,32 +349,8 @@ int main(int argc, char** argv)
       fprintf(stderr, "cudaMemcpyAsync D2H failed: %s\n", cudaGetErrorString(error));
       return -1;
     }
-//#else
-
-    cudaStreamSynchronize(stream);
-
-    /*
-    mopsr_tile_beams_cpu (h_in, h_out_cpu, h_phasors, in_block_size, nbeam, nant, tdec);
-
-    unsigned nchunk = nsamp / 64;
-    float * gpu = (float *) h_out;
-    float * cpu = (float *) h_out_cpu;
-
-    unsigned ichunk;
-    for (ibeam=0; ibeam<nbeam; ibeam++)
-    {
-      for (ichunk=0; ichunk<nchunk; ichunk++)
-      {
-        fprintf (stderr, "[%d][%d] cpu=%f gpu=%f\n",ibeam, ichunk, cpu[ibeam*nchunk+ichunk], gpu[ichunk*nbeam+ibeam]);
-      }
-    }
-    */
-
-//#endif
   }
-
-  //cudaDeviceSynchronize();
-  //cudaDeviceReset();
+  cudaStreamSynchronize(stream);
 
   if (d_in)
   {
@@ -482,59 +443,4 @@ int main(int argc, char** argv)
   free (modules);
 
   return 0;
-}
-
-// simpler CPU version
-int mopsr_tile_beams_cpu (void * h_in, void * h_out, void * h_phasors, uint64_t nbytes, unsigned nbeam, unsigned nant, unsigned tdec)
-{
-  unsigned ndim = 2;
-
-  // data is ordered in ST order
-  uint64_t nsamp = nbytes / (nant * ndim);
-
-  float * phasors = (float *) h_phasors;
-
-  int16_t * in16 = (int16_t *) h_in;
-  float * ou     = (float *) h_out;
-
-  int16_t val16;
-  int8_t * val8 = (int8_t *) &val16;
-
-  const unsigned nbeamant = nbeam * nant;
-  const unsigned ant_stride = nsamp;
-  complex float val, beam_sum, phasor, steered;
-  float beam_power;
-
-  // intergrate 32 samples together
-  const unsigned ndat = tdec;
-  unsigned nchunk = nsamp / tdec;
-
-  unsigned ibeam, ichunk, idat, isamp, iant;
-  for (ibeam=0; ibeam<nbeam; ibeam++)
-  {
-    isamp = 0;
-    for (ichunk=0; ichunk<nchunk; ichunk++)
-    {
-      beam_power = 0;
-      for (idat=0; idat<ndat; idat++)
-      {
-        beam_sum = 0 + 0 * I;
-        for (iant=0; iant<nant; iant++)
-        {
-          // unpack this sample and antenna
-          val16 = in16[iant*nsamp + isamp];
-          val = ((float) val8[0]) + ((float) val8[1]) * I;
-
-          // the required phase rotation for this beam and antenna
-          phasor = phasors[ibeam * nant + iant] + phasors[(ibeam * nant) + iant + nbeamant] * I;
-          steered = val * phasor;
-          // add the steered tied array beam to the total
-          beam_sum += steered;
-        }
-        beam_power += (creal(beam_sum) * creal(beam_sum)) + (cimag(beam_sum) * cimag(beam_sum));
-        isamp++;
-      }
-      ou[ibeam*nchunk+ichunk] = beam_power;
-    }
-  }
 }

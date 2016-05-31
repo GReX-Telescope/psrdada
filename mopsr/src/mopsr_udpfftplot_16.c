@@ -796,6 +796,8 @@ void detect_data (udpplot_t * ctx)
             newchan = (ibit+halfbit);
             ctx->y_points[iant][basechan + newchan] += ((a*a) + (b*b));
           }
+          if (ctx->zap_dc)
+            ctx->y_points[iant][basechan + halfbit] = ctx->y_points[iant][basechan + halfbit + 1];
         }
         else
         {
@@ -805,10 +807,9 @@ void detect_data (udpplot_t * ctx)
             b = ctx->fft_out[iant][offset + (ibit*2) + 1];
             ctx->y_points[iant][basechan + ibit] += ((a*a) + (b*b));
           }
+          if (ctx->zap_dc)
+            ctx->y_points[iant][basechan] = ctx->y_points[iant][basechan+1];
         }
-
-        if (ctx->zap_dc && ichan == 0)
-          ctx->y_points[iant][ichan] = 0;
       }
     }
   }

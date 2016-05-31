@@ -31,6 +31,7 @@ void usage ()
 {
 	fprintf(stdout, "mopsr_test_delays bays_file modules_file obs.header\n"
     " -D dev      use pgplot devices [default /xs]\n" 
+    " -a angle    apply md angle offset [default 0]\n" 
     " -d nsecs    plot time unit [default 10s]\n" 
     " -l metres   apply metres delta baseline difference\n" 
     " -h          print this help text\n" 
@@ -56,19 +57,26 @@ int main(int argc, char** argv)
 
   double delta_distance = 0;
 
+  double delta_md_angle = 0;
+
   char * device = "/xs";
 
   int frank_nmod = 0;
 
   int mod = 0;
 
-  while ((arg = getopt(argc, argv, "D:d:f:F:hl:m:t:v")) != -1) 
+  while ((arg = getopt(argc, argv, "a:D:d:f:F:hl:m:t:v")) != -1) 
   {
     switch (arg)  
     {
       case 'D':
         device = strdup (optarg);
         break; 
+
+      case 'a':
+        delta_md_angle = atof (optarg);
+        delta_md_angle *= (M_PI / 180.0);
+        break;
 
       case 'd':
         delta_time_plot = atof (optarg);
@@ -215,10 +223,14 @@ int main(int argc, char** argv)
     fprintf (stderr, " DEC (rad) = %lf\n", source.decj);
 
   float ut1_offset;
-  if (ascii_header_get (header, "UT1_OFFSET", "%f", ut1_offset) == 1)
+  if (ascii_header_get (header, "UT1_OFFSET", "%f", &ut1_offset) == 1)
   {
     fprintf (stderr, " UT1_OFFSET=%f\n", ut1_offset);
   }
+  else 
+    ut1_offset = 0;
+  if (verbose)
+    fprintf (stderr, "UT1_OFFSET=%f\n", ut1_offset);
 
   char tmp[32];
   if (ascii_header_get (header, "UTC_START", "%s", tmp) == 1)
@@ -274,6 +286,14 @@ int main(int argc, char** argv)
     return -1;
   }
 
+  float start_md_angle;
+  if (ascii_header_get (header, "MD_ANGLE", "%f", &start_md_angle) != 1)
+  {
+    fprintf (stderr, "ERROR:  could not read MD_ANGLE from header\n");
+    return -1;
+  }
+  start_md_angle *= (M_PI / 180.0);
+
   // configure the channels
   mopsr_chan_t * channels1 = (mopsr_chan_t *) malloc(sizeof(mopsr_chan_t));
   channels1[0].number = 0;
@@ -296,9 +316,10 @@ int main(int argc, char** argv)
   cpgopen (device);
   cpgask (0);
 
-  char apply_instrumental = 1;
+  char apply_instrumental = 0;
   char apply_geometric = 1;
-  char is_tracking = 1;
+  char is_tracking1 = 0;
+  char is_tracking2 = 1;
 
   double tsamp = 1.28;
   unsigned nant = nmod;
@@ -318,8 +339,6 @@ int main(int argc, char** argv)
 
   fprintf (stderr, "freq1=%lf freq2=%lf delta_freq=%le\n", channels1[0].cfreq, channels2[0].cfreq, channels1[0].cfreq - channels2[0].cfreq);
 
-  float start_md_angle = 0;
-
   while ( ipt < npts )
   {
     timestamp1.tv_sec = floor (ut1_time1);
@@ -329,12 +348,12 @@ int main(int argc, char** argv)
     timestamp2.tv_usec = (long) ((ut1_time2 - (double) timestamp2.tv_sec) * 1000000);
 
     if (verbose)
-      fprintf (stderr, "t1=%lf t2=%lf\n", ut1_time1, ut1_time2);
+      fprintf (stderr, "t1=%lf t2=%lf start_md=%f\n", ut1_time1, ut1_time2, start_md_angle);
 
     if (calculate_delays (nbay, bays1, nant, modules1, nchan, channels1,
                           source, timestamp1, delays1, start_md_angle, 
                           apply_instrumental, apply_geometric, 
-                          is_tracking, tsamp) < 0)
+                          is_tracking1, tsamp) < 0)
     {
       fprintf (stderr, "failed to update delays\n");
       return -1;
@@ -343,7 +362,7 @@ int main(int argc, char** argv)
     if (calculate_delays (nbay, bays2, nant, modules2, nchan, channels2,
                           source, timestamp2, delays2, start_md_angle, 
                           apply_instrumental, apply_geometric, 
-                          is_tracking, tsamp) < 0)
+                          is_tracking2, tsamp) < 0)
     {
       fprintf (stderr, "failed to update delays\n");
       return -1;

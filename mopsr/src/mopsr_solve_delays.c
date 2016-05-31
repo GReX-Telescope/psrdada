@@ -388,9 +388,6 @@ int main (int argc, char **argv)
     avg_phase = 0;
     snr = 0;
 
-    //if (ant_a != antenna)
-    //  dead = 1;
-
     if (!dead)
     {
       // inverse FFT to find the integer delay
@@ -571,6 +568,11 @@ int main (int argc, char **argv)
           avg_phase = (float) centre_phase - (2 * M_PI);
         else
           avg_phase = (float) centre_phase;
+
+        if (avg_phase < -1 * M_PI)
+          avg_phase += 2 * M_PI;
+        if (avg_phase > M_PI)
+          avg_phase -= 2 * M_PI;
 
         if ((verbose>1) || (baseline == ipair))
           fprintf (stderr, "centre_phase=%lf, avg_phase=%f\n", centre_phase, avg_phase);

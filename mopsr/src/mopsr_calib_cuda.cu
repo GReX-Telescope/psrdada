@@ -360,7 +360,7 @@ __global__ void byte_to_float_kernel(const char* input, float* output, unsigned 
   unsigned ii;
   for (ii=idx; ii<size; ii+=gridDim.x*blockDim.x)
   {
-    output[ii] = (((float) input[ii])+0.5) / 127.5;
+    output[ii] = ((float) input[ii]) / 127.0;
   }
 }
 

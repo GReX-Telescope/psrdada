@@ -162,6 +162,12 @@ int main (int argc, char **argv)
   }
   tsamp /= 1000000;
 
+  float digitization_offset;
+  if (ascii_header_get(header, "DIGITZATION_OFFSET", "%f", &digitization_offset) != 1)
+  {
+    digitization_offset = 0.0;
+  }
+
   const unsigned ndim = 2;
   size_t nsamp_total = data_size / (ndim * opts.nchan * opts.nant);
   size_t nsamp_plot  = nsamp_total / tscrunch;
@@ -211,18 +217,18 @@ int main (int argc, char **argv)
       {
         for (iant=0; iant<opts.nant; iant++)
         {
-          if (iant == opts.ant)
+          if (iant == opts.ant && ichan == 10)
           {
-            re = (float) ptr[0] + 0.5;
-            im = (float) ptr[1] + 0.5;
+            re = (float) ptr[0] - digitization_offset;
+            im = (float) ptr[1] - digitization_offset;
             power[isamp_plot] += (re * re) + (im * im);
           }
           ptr += 2;
         }
       }
+      isamp_plot++;
     }
 
-    isamp_plot++;
   }
 
   float xmin = 0;

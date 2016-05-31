@@ -323,7 +323,7 @@ int64_t mopsr_dbib_send (dada_client_t* client, void * buffer, uint64_t bytes)
   for (i=0; i<ctx->nconn; i++)
   {
     // each conn / channel will have a unique FREQ
-    new_freq = freq_low + (chan_bw / 2) + (chan_bw * i);
+    new_freq = freq_low + (chan_bw / 2) + (chan_bw * ctx->conn_info[i].chan);
     if (ctx->verbose)
       multilog (log, LOG_INFO, "send: setting FREQ=%f in header\n", new_freq);
     if (ascii_header_set (buffer, "FREQ", "%f", new_freq) < 0)
@@ -423,7 +423,7 @@ int64_t mopsr_dbib_send_block (dada_client_t* client, void * buffer,
   }
 
   // tell ibdb how many bytes we are sending
-  uint64_t bytes_to_xfer = bytes / ctx->nconn;
+  uint64_t bytes_to_xfer = bytes / ctx->nchan;
   if (ctx->verbose)
     multilog(log, LOG_INFO, "send_block: send_messages [BYTES TO XFER]=%"PRIu64"\n", bytes_to_xfer);
   if (dada_ib_send_messages (ib_cms, ctx->nconn, DADA_IB_BYTES_TO_XFER_KEY, bytes_to_xfer) < 0)
@@ -459,10 +459,7 @@ int64_t mopsr_dbib_send_block (dada_client_t* client, void * buffer,
   const unsigned int src_nant = (ctx->conn_info[0].ant_last - ctx->conn_info[0].ant_first) + 1;
 
   // number of time samples in the block
-  const uint64_t nsamp = bytes / (ctx->nchan * src_nant * ndim);
-
-  // number of bytes to be copied for each channel
-  const uint64_t chan_bytes = bytes / ctx->nchan;
+  const uint64_t nsamp = bytes_to_xfer / (src_nant * ndim);
 
   // destination remote address offset for these antenna
   const uint64_t dst_ant_offset = nsamp * ndim * ctx->conn_info[0].ant_first;
@@ -470,44 +467,42 @@ int64_t mopsr_dbib_send_block (dada_client_t* client, void * buffer,
   if (ctx->verbose)
     multilog (log, LOG_INFO, "send_block: ctx->conn_info[0].ant_first=%u, nsamp=%"PRIu64", dst_ant_offset=%"PRIu64"\n", ctx->conn_info[0].ant_first, nsamp, dst_ant_offset);
 
-  unsigned int ichan;
-
   // RDMA WRITES now!
-
   struct ibv_sge       sge;
   struct ibv_send_wr   send_wr = { };
   struct ibv_send_wr * bad_send_wr;
 
-  sge.addr   = (uintptr_t) buffer;
-  sge.length = chan_bytes;
+  //sge.addr = (uintptr_t) buffer;
+  sge.length = bytes_to_xfer;
 
   send_wr.sg_list  = &sge;
   send_wr.num_sge  = 1;
   send_wr.next     = NULL;
 
   if (ctx->verbose)
-    multilog (log, LOG_INFO, "send_block: bytes=%"PRIu64" nsamp=%"PRIu64" chan_bytes=%"PRIu64"\n", bytes, nsamp, chan_bytes );
+    multilog (log, LOG_INFO, "send_block: bytes=%"PRIu64" nsamp=%"PRIu64" bytes_to_xfer=%"PRIu64"\n", bytes, nsamp, bytes_to_xfer);
+
+  char * buf_ptr = (char *) buffer;
 
   // we have 1 channel per connection !
-  for (ichan=0; ichan<ctx->nconn; ichan++)
+  for (i=0; i<ctx->nconn; i++)
   {
-    sge.lkey = ib_cms[ichan]->local_blocks[block_id].buf_lkey,
+    sge.lkey = ib_cms[i]->local_blocks[block_id].buf_lkey,
+    sge.addr = (uintptr_t) (buf_ptr + (bytes_to_xfer * ctx->conn_info[i].chan));
 
     // increase remote channel memory address by relevant amount 
-    send_wr.wr.rdma.remote_addr = remote_buf_va[ichan] + dst_ant_offset;
-    send_wr.wr.rdma.rkey        = remote_buf_rkey[ichan];
+    send_wr.wr.rdma.remote_addr = remote_buf_va[i] + dst_ant_offset;
+    send_wr.wr.rdma.rkey        = remote_buf_rkey[i];
     send_wr.opcode              = IBV_WR_RDMA_WRITE;
     send_wr.send_flags          = 0;
-    send_wr.wr_id               = ichan;
+    send_wr.wr_id               = i;
 
-    if (ibv_post_send (ib_cms[ichan]->cm_id->qp, &send_wr, &bad_send_wr))
+    if (ibv_post_send (ib_cms[i]->cm_id->qp, &send_wr, &bad_send_wr))
     {
-      multilog(log, LOG_ERR, "send_block: ibv_post_send [ichan=%d] failed\n", ichan);
+      multilog(log, LOG_ERR, "send_block: ibv_post_send [%d] failed\n", i);
       return -1;
     }
-
-    // incremement local address pointers by 1 channel's stride
-    sge.addr += chan_bytes;
+    //sge.addr += bytes_to_xfer;
   }
 
   // post a recv for the next call to send_block
@@ -523,7 +518,7 @@ int64_t mopsr_dbib_send_block (dada_client_t* client, void * buffer,
   }
 
   // tell each ibdb how many bytes we actually sent
-  uint64_t bytes_xferred = bytes / ctx->nconn;
+  uint64_t bytes_xferred = bytes / ctx->nchan;
   if (ctx->verbose)
     multilog(log, LOG_INFO, "send_block: send_messages [BYTES XFERRED]=%"PRIu64"\n", bytes_xferred);
   if (dada_ib_send_messages (ib_cms, ctx->nconn, DADA_IB_BYTES_XFERRED_KEY, bytes_xferred) < 0)
@@ -591,7 +586,7 @@ int mopsr_dbib_ib_init (mopsr_bf_ib_t * ctx, dada_hdu_t * hdu, multilog_t * log)
     }
     ctx->conn_info[i].ib_cm = ctx->ib_cms[i];
     ctx->ib_cms[i]->verbose = ctx->verbose;
-    ctx->ib_cms[i]->send_depth = ctx->nchan + 1; // only ever have this many outstanding post sends
+    ctx->ib_cms[i]->send_depth = ctx->nconn + 1; // only ever have this many outstanding post sends
     ctx->ib_cms[i]->recv_depth = 1;
     ctx->ib_cms[i]->bufs_size = db_bufsz;
     ctx->ib_cms[i]->header_size = hb_bufsz;
@@ -631,52 +626,83 @@ int mopsr_dbib_open_connections (mopsr_bf_ib_t * ctx, multilog_t * log)
   int rval = 0;
   pthread_t * connections = (pthread_t *) malloc(sizeof(pthread_t) * ctx->nconn);
 
-  // start all the connection threads
-  for (i=0; i<ctx->nconn; i++)
-  {
-    if (!ib_cms[i]->cm_connected)
-    {
-      if (ctx->verbose > 1)
-        multilog (ctx->log, LOG_INFO, "open_connections: mopsr_dbib_init_thread ib_cms[%d]=%p\n",
-                  i, ctx->ib_cms[i]);
+  char all_connected = 0;
+  int attempts = 0;
 
-      rval = pthread_create(&(connections[i]), 0, (void *) mopsr_dbib_init_thread,
-                          (void *) &(conns[i]));
-      if (rval != 0)
+  // open a connection to all the receivers
+  while (!all_connected && attempts < 1)
+  {
+    // start all the connection threads
+    for (i=0; i<ctx->nconn; i++)
+    {
+      if (ib_cms[i]->cm_connected == 0)
       {
-        multilog (ctx->log, LOG_INFO, "open_connections: error creating init_thread\n");
-        return -1;
+        if (ctx->verbose > 1)
+          multilog (ctx->log, LOG_INFO, "open_connections: mopsr_dbib_init_thread ib_cms[%d]=%p\n",
+                    i, ctx->ib_cms[i]);
+
+        rval = pthread_create(&(connections[i]), 0, (void *) mopsr_dbib_init_thread,
+                              (void *) &(conns[i]));
+        if (rval != 0)
+        {
+          multilog (ctx->log, LOG_INFO, "open_connections: error creating init_thread\n");
+          return -1;
+        }
       }
+      else
+      {
+        multilog (ctx->log, LOG_INFO, "open_connections: ib_cms[%d] already connected\n", i);
+      }
+    }
+
+    // join all the connection threads
+    void * result;
+    int init_cm_ok = 1;
+    for (i=0; i<ctx->nconn; i++)
+    {
+      if (ib_cms[i]->cm_connected <= 1)
+      {
+        pthread_join (connections[i], &result);
+         
+        // if this connection was NOT established, release the CM resources and 
+        // we will try again 
+        if (!ib_cms[i]->cm_connected)
+        {
+          multilog (ctx->log, LOG_WARNING, "ib_cms[%d] releasing resources\n", i);
+          if (dada_ib_disconnect (ib_cms[i]))
+          {
+            multilog(ctx->log, LOG_ERR, "dada_ib_disconnect for %d failed\n", i);
+            return -1;
+          }
+          init_cm_ok = 0;
+        }
+        else
+        {
+          // set to 2 to indicate connection is established
+          ib_cms[i]->cm_connected = 2;
+        }
+      } 
+    }
+
+    if (init_cm_ok)
+    {
+      all_connected = 1;
     }
     else
     {
-      multilog (ctx->log, LOG_INFO, "open_connections: ib_cms[%d] already connected\n", i);
+      multilog (ctx->log, LOG_INFO, "open_connections: sleep(1)\n");
+      sleep(1);
     }
+    attempts++;
   }
 
-  // join all the connection threads
-  void * result;
-  int init_cm_ok = 1;
-  for (i=0; i<ctx->nconn; i++)
-  {
-    if (ib_cms[i]->cm_connected <= 1)
-    {
-      pthread_join (connections[i], &result);
-      if (!ib_cms[i]->cm_connected)
-        init_cm_ok = 0;
-    }
-
-    // set to 2 to indicate connection is established
-    ib_cms[i]->cm_connected = 2;
-  }
   free(connections);
-  if (!init_cm_ok)
+
+  if (!all_connected)
   {
     multilog(ctx->log, LOG_ERR, "open_connections: failed to init CM connections\n");
     return -1;
   }
-
-  multilog (ctx->log, LOG_INFO, "open_connections: connections opened\n");
 
   return 0;
 }
@@ -698,6 +724,7 @@ void * mopsr_dbib_init_thread (void * arg)
 
   ib_cm->cm_connected = 0;
   ib_cm->ib_connected = 0;
+  ib_cm->port = conn->port;
 
   // resolve the route to the server
   if (ib_cm->verbose)
@@ -921,7 +948,13 @@ int main (int argc, char **argv)
   }
 
   // deal breaker!
-  assert (ctx.nchan == ctx.nconn);
+  if (ctx.nchan < ctx.nconn)
+  {
+    multilog (log, LOG_ERR, "Bad cornerturn configuration\n");
+    dada_hdu_unlock_read(hdu);
+    dada_hdu_disconnect (hdu);
+    return EXIT_FAILURE;
+  }
 
   if (ctx.verbose)
     multilog (log, LOG_INFO, "Initializing IB\n");

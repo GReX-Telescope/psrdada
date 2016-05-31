@@ -864,7 +864,7 @@ void mopsr_plot_waterfall (float * spectra, unsigned int nsamps, mopsr_util_t * 
     if (opts->plot_log)
       sprintf (label, "Waterfall: Log, Module %d", opts->ant_id);
     else
-      sprintf (label, "Waterfall:, Module %d", opts->ant_id);
+      sprintf (label, "Waterfall: Module %d", opts->ant_id);
 
     cpgenv(0, (float) nsamps, 0, (float) opts->nchan, 0, 0);
     cpglab("Time (samples)", "Channel", label);
@@ -1038,8 +1038,10 @@ void mopsr_plot_histogram (unsigned int * histogram, mopsr_util_t * opts)
   ymax_re *= 1.1;
   ymax_im *= 1.1;
 
+  float ymax = ymax_re > ymax_im ? ymax_re : ymax_im;
+
   // real
-  cpgswin(-128, 128, ymin, ymax_re);
+  cpgswin(-128, 128, ymin, ymax);
   if (opts->plot_plain)
   {
     cpgsvp(0, 1, 0.5, 1.0);
@@ -1059,7 +1061,7 @@ void mopsr_plot_histogram (unsigned int * histogram, mopsr_util_t * opts)
   cpgsls(2);
   cpgslw(2);
   cpgmove (0, 0);
-  cpgdraw (0, ymax_re);
+  cpgdraw (0, ymax);
   cpgsls(1);
 
   // Real line
@@ -1071,7 +1073,7 @@ void mopsr_plot_histogram (unsigned int * histogram, mopsr_util_t * opts)
   cpgslw(1);
   cpgsci(1);
 
-  float yrange = ymax_re;
+  float yrange = ymax;
   if (opts->lock_flag == 0)
   {
     cpgsch(6);
@@ -1104,13 +1106,13 @@ void mopsr_plot_histogram (unsigned int * histogram, mopsr_util_t * opts)
     cpgbox("BCNST", 0.0, 0.0, "BCNST", 0.0, 0.0);
     cpglab("State", "Count", "");
   }
-  cpgswin(-128, 128, ymin, ymax_im);
+  cpgswin(-128, 128, ymin, ymax);
 
   // draw dotted line for the centre of the distribution
   cpgsls(2);
   cpgslw(2);
   cpgmove (0, 0);
-  cpgdraw (0, ymax_im);
+  cpgdraw (0, ymax);
   cpgsls(1);
 
   // Im line
@@ -1122,7 +1124,7 @@ void mopsr_plot_histogram (unsigned int * histogram, mopsr_util_t * opts)
   cpgsci(1);
   cpgslw(1);
 
-  yrange = ymax_im;
+  yrange = ymax;
   if (all_zero)
   {
     cpgsch(6);

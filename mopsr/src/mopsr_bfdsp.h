@@ -28,6 +28,7 @@ typedef struct {
   uint64_t in_block_size;
   uint64_t fb_block_size;
   uint64_t tb_block_size;
+  uint64_t mb_block_size;
 
   // GPU pointers
   cudaStream_t stream;
@@ -37,18 +38,24 @@ typedef struct {
   void *  d_in;            // input data buffer on GPU
   void *  d_fbs;           // fan beam output on GPU
   void *  d_tb;            // tied array beam output on GPU
+  void *  d_mbs;           // module beam output on GPU
 
   unsigned     nant;
   //float *      h_ant_factors;     // antenna distances
 
   char         fan_beams;           // flag for fan beam mode [optional]
+  char         mod_beams;           // flag for module beam mode [optional]
   int          nbeam;
   float *      h_beam_offsets;
   //float *      h_sin_thetas;    // angle from boresite to beam
 
   // rephasors required for each FB
   size_t phasors_size;
+#ifdef EIGHT_BIT_PHASORS
+  int8_t * h_phasors;
+#else
   float * h_phasors;
+#endif
   void * d_phasors;  
 
   // rephasors required for the TB
@@ -68,15 +75,18 @@ typedef struct {
 
   dada_hdu_t * fb_hdu;
   dada_hdu_t * tb_hdu;
+  dada_hdu_t * mb_hdu;
 
   char * fb_block;
   char * tb_block;
+  char * mb_block;
 
   char first_time;
 
   // flag for currently open output HDU
   char tb_block_open;
   char fb_block_open;
+  char mb_block_open;
 
   // number of bytes currently written to output HDU
   uint64_t bytes_written;
@@ -128,7 +138,7 @@ typedef struct {
   char form_tied_block;
   uint64_t bytes_per_second;          // for input
 
-  char tied_beam;                     // flag for producing a tied array bea,
+  char tied_beam;                     // flag for producing a tied array beam,
   char steer_tb;                      // flag for steering towards the tied array beam
   //mopsr_source_t  tb_source;          // current TB source
 
@@ -138,7 +148,7 @@ void usage(void);
 
 // application specific memory management
 int bfdsp_init (mopsr_bfdsp_t* ctx, dada_hdu_t *in, dada_hdu_t *fb,  
-                dada_hdu_t *tb, char * bays_file, char * modules_file);
+                dada_hdu_t *tb, dada_hdu_t *mb, char * bays_file, char * modules_file);
 int bfdsp_destroy (mopsr_bfdsp_t * ctx, dada_hdu_t * in);
 
 // observation specific memory management

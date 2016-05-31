@@ -24,7 +24,11 @@ typedef struct {
 
   int port;
 
+  int pfb;
+
   int chan;
+
+  int npfb;
 
   int ant_first;
 
@@ -82,10 +86,13 @@ typedef struct {
   // sender limits
   unsigned chan_first;
   unsigned chan_last;
+  unsigned isend;
+  unsigned nsend;
 
   // receiver limits
   unsigned beam_first;
   unsigned beam_last;
+  unsigned irecv;
 
 } mopsr_bp_conn_t;
 

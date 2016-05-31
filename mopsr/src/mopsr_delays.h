@@ -138,9 +138,14 @@ double last_from_mjd (double mjd);
 int mopsr_delays_plot (unsigned nmod, unsigned nchan, mopsr_delay_t ** delays, struct timeval timestamp);
 
 int mopsr_delays_hhmmss_to_rad (char * hhmmss, double * rads);
+int mopsr_delays_hhmmss_to_sigproc (char * hhmmss, double * sigprocs);
 
 int mopsr_delays_ddmmss_to_rad (char * ddmmss, double * rads);
+int mopsr_delays_ddmmss_to_sigproc (char * ddmmss, double * sigprocs);
 
+int calc_app_ha_dec (double RA_J2000, double DEC_J2000, struct timeval timestamp, double * HA_app, double * DEC_app);
+double calc_ha_source ( double RA_curr, double DEC_curr, struct timeval timestamp);
+double ns_tilt (double ha_source, double dec_source, double md_tilt);
 double jer_delay(double ha_source, double dec_source,
              double tilt, double skew, double latitude);
 double calc_jer_delay (double RA, double DEC, struct timeval timestamp);

@@ -68,7 +68,7 @@ int mopsr_udpdb_selants_init (mopsr_udpdb_selants_t * ctx)
   // allocate required memory strucutres
   ctx->packets  = init_stats_t();
   ctx->bytes    = init_stats_t();
-  ctx->pkt_size = UDP_DATA / ctx->decifactor;
+  ctx->pkt_size = (UDP_DATA * ctx->deci_denom) / ctx->deci_numer;
 
   ctx->buf = (int16_t *) malloc (ctx->pkt_size);
 
@@ -324,8 +324,8 @@ time_t mopsr_udpdb_selants_start (dada_pwc_main_t * pwcm, time_t start_utc)
     multilog (pwcm->log, LOG_WARNING, "start: failed to set NCHAN=%d in header\n", ctx->new_nchan);
   }
 
-  new_bytes_per_second = old_bytes_per_second / ctx->decifactor;
-  new_resolution = old_resolution / ctx->decifactor;
+  new_bytes_per_second = old_bytes_per_second * ctx->deci_denom / ctx->deci_numer;
+  new_resolution = old_resolution * ctx->deci_denom / ctx->deci_numer;
 
   // calculate new centre frequencies
   float freq_low = old_freq - (old_bw / 2);
@@ -1003,12 +1003,12 @@ int main (int argc, char **argv)
   ctx.echan = echan;
   ctx.new_nchan = (echan - schan) + 1;
 
-  ctx.decifactor = (ctx.old_nchan / ctx.new_nchan) * (ctx.old_nant / ctx.new_nant);
+  ctx.deci_numer = ctx.old_nchan * ctx.old_nant;
+  ctx.deci_denom = ctx.new_nchan * ctx.new_nant;
 
   if (ctx.verbose)
   {
-    fprintf (stderr, "main: decifactor=%u = (%d/%d) * (%d/%d)\n", ctx.decifactor, ctx.old_nchan, ctx.new_nchan, ctx.old_nant, ctx.new_nant);
-    fprintf (stderr, "main: decifactor=%u = (%d) * (%d)\n", ctx.decifactor, (ctx.old_nchan / ctx.new_nchan), (ctx.old_nant / ctx.new_nant));
+    fprintf (stderr, "main: decifactor=%f = (%d/%d) * (%d/%d)\n", ((float) ctx.deci_numer / (float) ctx.deci_denom), ctx.old_nchan, ctx.new_nchan, ctx.old_nant, ctx.new_nant);
   }
 
   // do not use the syslog facility
@@ -1058,11 +1058,12 @@ int main (int argc, char **argv)
   uint64_t block_size = ipcbuf_get_bufsz ( (ipcbuf_t *) hdu->data_block);
 
   // ensure the block size is a multiple of the packet size
-  if (block_size % (UDP_DATA / ctx.decifactor) != 0)
+  if (block_size % ((UDP_DATA * ctx.deci_denom) / ctx.deci_numer) != 0)
   {
+    float decifactor = (float) ctx.deci_numer / (float) ctx.deci_denom;
     fprintf (stderr, "mopsr_udpdb_selants: block size [%"PRIu64"] was not a "
-                     "multiple of the decimated UDP payload size [%d] decifactor=%d\n", block_size,
-                     UDP_DATA / ctx.decifactor, ctx.decifactor);
+                     "multiple of the decimated UDP payload size [%f] decifactor=%f\n", block_size,
+                     (float) UDP_DATA / decifactor, decifactor);
     dada_hdu_unlock_write (hdu);
     dada_hdu_disconnect (hdu);
     return EXIT_FAILURE;

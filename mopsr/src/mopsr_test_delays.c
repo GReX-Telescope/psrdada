@@ -44,6 +44,7 @@ int main(int argc, char** argv)
   uint64_t s1_count = 1;
 
   char verbose = 0;
+  char replace_noise = 1;
 
   int device = 0;
 
@@ -542,7 +543,7 @@ int main(int argc, char** argv)
                                      d_rstates, d_sigmas, d_mask, d_fractional_delays, 
                                      d_fir_coeffs, d_means, h_fringe_coeffs, h_delays_ds,
                                      h_fringe_coeffs_ds, fringes_size,
-                                     nbytes_out, ctx.nchan, ctx.nant, ctx.ntap);
+                                     nbytes_out, ctx.nchan, ctx.nant, ctx.ntap, replace_noise);
     fprintf (stderr, "main: mopsr_delay_fractional_sk_scale returned\n");
 #else
     fprintf (stderr, "main: mopsr_delay_fractional(%ld)\n", nbytes_out);
@@ -671,7 +672,7 @@ int main(int argc, char** argv)
                                      d_rstates, d_sigmas, d_mask,
                                      d_fractional_delays, d_means, h_fringe_coeffs, h_delays_ds,
                                      h_fringe_coeffs_ds, fringes_size,
-                                     nbytes_out, ctx.nchan, ctx.nant, ctx.ntap);
+                                     nbytes_out, ctx.nchan, ctx.nant, ctx.ntap, replace_noise);
     fprintf (stderr, "main: mopsr_delay_fractional_sk_scale returned\n");
 #else
     fprintf (stderr, "main: mopsr_delay_fractional(%ld)\n", nbytes_out);
@@ -790,7 +791,7 @@ int main(int argc, char** argv)
                                      d_rstates, d_sigmas, d_mask,
                                      d_fractional_delays, d_means, h_fringe_coeffs, h_delays_ds,
                                      h_fringe_coeffs_ds, fringes_size,
-                                     nbytes_out, ctx.nchan, ctx.nant, ctx.ntap);
+                                     nbytes_out, ctx.nchan, ctx.nant, ctx.ntap, replace_noise);
 #else
     fprintf (stderr, "main: mopsr_delay_fractional(%ld)\n", nbytes_out);
     mopsr_delay_fractional (stream, d_sample_delayed, d_fractional_delayed,
@@ -924,7 +925,7 @@ int main(int argc, char** argv)
                                      d_fractional_delays, d_fir_coeffs, d_s1s, d_s2s, d_thresh, h_fringe_coeffs, h_delays_ds,
                                      h_fringe_coeffs_ds, fringes_size,
                                      nbytes_out, ctx.nchan, ctx.nant, ctx.ntap,
-                                     s1_memory, s1_count);
+                                     s1_memory, s1_count, replace_noise);
 #else
     fprintf (stderr, "main: mopsr_delay_fractional(%ld)\n", nbytes_out);
     mopsr_delay_fractional (stream, d_sample_delayed, d_fractional_delayed,

@@ -17,12 +17,12 @@
 
 void usage ()
 {
-	fprintf(stdout, "mopsr_getmd [options] utc RA DEC\n"
-    " return the Meridian Distance angle in degrees for the specified epoch and position\n"
+	fprintf(stdout, "mopsr_getns [options] utc RA DEC\n"
+    " return the North-South tilt angle in degrees for the specified epoch and position\n"
     " utc             UTC in YYYY-MM-DD-HH:MM:SS\n"
     " RA              J2000 RA in HH:MM:SS\n"
     " DEC             J2000 DEC in DD:MM:SS\n"
-    " -f fractional   add fractional seconds to the UTC\n"
+    " -f fractional   add fractional seconds to the UTC [0.0 - 1.0]\n"
     " -h              print this help text\n" 
     " -v              verbose output\n" 
   );
@@ -115,10 +115,9 @@ int main(int argc, char** argv)
     return -1;
   }
 
-
   struct timeval timestamp;
   timestamp.tv_sec = utc_start;
-  timestamp.tv_usec = (uint64_t) (fractional * 1e6);
+  timestamp.tv_usec = (uint64_t) (fractional * 100000);
   
   struct tm * utc = gmtime (&utc_start);
   cal_app_pos_iau (source.raj, source.decj, utc,
@@ -139,8 +138,14 @@ int main(int argc, char** argv)
   }
 
   double jer_delay = calc_jer_delay (source.ra_curr, source.dec_curr, timestamp);
-  double md_angle = asin(jer_delay) * (180.0 / M_PI);
+  double md_angle = asin(jer_delay);
+  double ha_source = calc_ha_source (source.ra_curr, source.dec_curr, timestamp);
+  //fprintf (stderr, "MD angle=%lf\n", md_angle);
+  double ns_angle = ns_tilt(ha_source, source.dec_curr, md_angle);
+  //fprintf (stderr, "NS angle=%lf [radians]\n", ns_angle);
 
-  fprintf (stdout, "%17.15lf\n", md_angle);
+  ns_angle *= (180.0 / M_PI);
+
+  fprintf (stdout, "%17.15lf\n", ns_angle);
   return 0;
 }

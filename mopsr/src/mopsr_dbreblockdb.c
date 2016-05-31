@@ -22,7 +22,8 @@
 //#define OUT_FLOAT
 //#define OUT_32BIT
 //#define OUT_16BIT
-#define OUT_8BIT
+//#define OUT_8BIT
+#define OUT_SAME
 
 int quit_threads = 0;
 
@@ -76,7 +77,7 @@ typedef struct {
   unsigned int nbit_in;
   unsigned int nbit_out;
   
-  float scale;
+  float * scales;
 
   unsigned quit;
 
@@ -84,7 +85,7 @@ typedef struct {
 
   uint64_t n_errors;
 
-  uint64_t n_exceeds;
+  uint64_t * exceeds;
 
 
 } mopsr_dbreblockdb_t;
@@ -148,11 +149,22 @@ int dbreblockdb_open (dada_client_t* client)
   }
   ctx->nsig = nant > nbeam ? nant : nbeam;
 
+  if (ctx->scales)
+    free (ctx->scales);
+  ctx->scales = (float *) malloc (sizeof(float) * ctx->nsig);
+
+  if (ctx->exceeds)
+    free (ctx->exceeds);
+  ctx->exceeds = (uint64_t *) malloc (sizeof(uint64_t) * ctx->nsig);
+
   if (ascii_header_get (client->header, "NBIT", "%u", &(ctx->nbit_in)) != 1)
   {
     multilog (log, LOG_ERR, "open: header with no NBIT\n");
     return -1;
   }
+#ifdef OUT_SAME
+  ctx->nbit_out = ctx->nbit_in;
+#endif
 #ifdef OUT_FLOAT
   ctx->nbit_out = 32;
 #endif
@@ -299,7 +311,13 @@ int dbreblockdb_open (dada_client_t* client)
     multilog (log, LOG_ERR, "open: failed to write NBIT=%"PRIu16" to header\n", ctx->nbit_out);
     return -1;
   }
-  ctx->scale = -1;
+
+  unsigned isig;
+  for (isig=0; isig<ctx->nsig; isig++)
+  {
+    ctx->scales[isig] = -1;
+    ctx->exceeds[isig] = 0;
+  }
 
   // mark the outgoing header as filled
   if (ipcbuf_mark_filled (ctx->output.hdu->header_block, header_size) < 0)  {
@@ -328,6 +346,11 @@ int dbreblockdb_close (dada_client_t* client, uint64_t bytes_written)
   mopsr_dbreblockdb_hdu_t * o = 0;
 
   unsigned i = 0;
+  for (i=0; i<ctx->nsig; i++)
+  {
+    if (ctx->exceeds[i] > 0)
+      multilog (log, LOG_INFO, "close: samples from %u that exceed power limits=%"PRIu64"\n", i, ctx->exceeds[i]);
+  }
 
   if (ctx->verbose)
     multilog (log, LOG_INFO, "close: bytes_in=%"PRIu64", bytes_out=%"PRIu64"\n",
@@ -356,6 +379,14 @@ int dbreblockdb_close (dada_client_t* client, uint64_t bytes_written)
     multilog (log, LOG_ERR, "dbreblockdb_close: cannot unlock DADA HDU (key=%x)\n", ctx->output.key);
     return -1;
   }
+
+  if (ctx->scales)
+    free (ctx->scales);
+  ctx->scales = 0;
+
+  if (ctx->exceeds)
+    free (ctx->exceeds);
+  ctx->exceeds = 0;
 
   return 0;
 }
@@ -407,8 +438,14 @@ int64_t dbreblockdb_write_block_SFT_to_STF (dada_client_t * client, void *in_dat
   if (ctx->verbose > 1)
     multilog (log, LOG_INFO, "write_block_SFT_to_STF: sig_stride_in=%"PRIu64", sig_stride_out=%"PRIu64"\n", sig_stride_in, sig_stride_out);
 
+
+#ifdef OUT_SAME
+  uint8_t * in = (uint8_t *) in_data;
+  uint8_t * out;
+#else
   //  assume 32-bit, detected (ndim == 1) data
   float * in = (float *) in_data;
+#endif
 
 #ifdef OUT_FLOAT
   float * out;
@@ -427,13 +464,15 @@ int64_t dbreblockdb_write_block_SFT_to_STF (dada_client_t * client, void *in_dat
   //const size_t sig_stride = nsamp * ctx->ndim * ctx->nchan;
   uint64_t out_block_id;
   unsigned isig, isamp, ichan, ochan;
+  uint64_t nchansamp = ctx->nchan * nsamp_in;
 
-  if (ctx->scale < 0)
+#ifndef OUT_SAME
+  if (ctx->scales[0] < 0)
   {
     // compute the mean power level across all beams and channels
-    uint64_t total_power = 0;
     for (isig=0; isig<ctx->nsig; isig++)
     {
+      uint64_t total_power = 0;
       for (ichan=0; ichan<ctx->nchan; ichan++)
       {
         for (isamp=0; isamp<nsamp_in; isamp++)
@@ -442,33 +481,33 @@ int64_t dbreblockdb_write_block_SFT_to_STF (dada_client_t * client, void *in_dat
         }
       }
       in += sig_stride_in;
+
+      uint64_t avg_power = total_power / nchansamp;
+
+#ifdef OUT_FLOAT
+      ctx->scales[isig] = 1.0f;
+#endif
+#ifdef OUT_32BIT
+      // power level around 24-bits
+      ctx->scales[isig] = 16777216.0f / avg_power;
+#endif
+#ifdef OUT_16BIT
+      // we want the average power to be around 12-bits of unsigned integer (4096)
+      ctx->scales[isig] = 4096.0f / avg_power;
+#endif
+#ifdef OUT_8BIT
+      // we want the average power to be around the 6-bit level (4-bit)
+      ctx->scales[isig] = 64.0f / avg_power;
+#endif
+      ctx->exceeds[isig] = 0;
+
+      multilog (log, LOG_INFO, "write_block_SFT_to_STF: beam=%u total_power=%"PRIu64" avg_power=%"PRIu64" scale=%e\n", isig, total_power, avg_power, ctx->scales[isig]);
     }
 
     // reset the pointer
     in = (float *) in_data;
-
-    uint64_t avg_power = total_power / (ctx->nsig * ctx->nchan * nsamp_in);
-
-#ifdef OUT_FLOAT
-    ctx->scale = 1.0f;
-#endif
-#ifdef OUT_32BIT
-    // power level around 24-bits
-    ctx->scale = 16777216.0f / avg_power;
-#endif
-
-#ifdef OUT_16BIT
-    // we want the average power to be around 12-bits of unsigned integer (4096)
-    ctx->scale = 4096.0f / avg_power;
-#endif
-
-#ifdef OUT_8BIT
-    // we want the average power to be around the 6-bit level
-    ctx->scale = 64.0f / avg_power;
-#endif
-
-    multilog (log, LOG_INFO, "write_block_SFT_to_STF: total_power=%"PRIu64" avg_power=%"PRIu64" scale=%e\n", total_power, avg_power, ctx->scale);
   }
+#endif
 
   if (!ctx->output.block_open)
   {
@@ -485,7 +524,11 @@ int64_t dbreblockdb_write_block_SFT_to_STF (dada_client_t * client, void *in_dat
     ctx->reblock_curr = 0;
   }
 
-    
+#ifdef OUT_SAME
+  out = (uint8_t *) ctx->output.curr_block;
+  uint8_t out_val;
+  uint8_t out_limit = 255;
+#endif
 #ifdef OUT_FLOAT
   out = (float *) ctx->output.curr_block;
   float out_val;
@@ -506,6 +549,7 @@ int64_t dbreblockdb_write_block_SFT_to_STF (dada_client_t * client, void *in_dat
   uint8_t out_val;
   uint8_t out_limit = 255;
 #endif
+  float out_limit_float = (float) out_limit;
 
   float in_val;
 
@@ -530,17 +574,23 @@ int64_t dbreblockdb_write_block_SFT_to_STF (dada_client_t * client, void *in_dat
       if (ctx->verbose > 2)
         multilog (log, LOG_INFO, "write_block_SFT_to_STF: ichan=%u ochan=%u\n", ichan, ochan);
 
+#ifdef OUT_SAME
+      for (isamp=0; isamp<nsamp_in; isamp++)
+      {
+        out[isamp * ctx->nchan + ochan] = in[ichan * nsamp_in + isamp];
+      }
+#else
       for (isamp=0; isamp<nsamp_in; isamp++)
       {
         if (ctx->verbose > 2)
           multilog (log, LOG_INFO, "write_block_SFT_to_STF: ioff=%u off=%u\n", ichan * nsamp_in + isamp, isamp * ctx->nchan + ochan);
-        in_val = in[ichan * nsamp_in + isamp] * ctx->scale;
+        in_val = in[ichan * nsamp_in + isamp] * ctx->scales[isig];
 
-        if (in_val > out_limit)
+        if (in_val > out_limit_float)
         {
-          if (ctx->n_exceeds < 100)
-            multilog (log, LOG_INFO, "reblocking power level [%f] exceeding output limits\n", in_val);
-          ctx->n_exceeds++;
+          if (ctx->exceeds[isig] < 2)
+            multilog (log, LOG_INFO, "reblocking power level for beam %u [%f] exceeded output limit [%f]\n", isig, in_val, out_limit_float);
+          ctx->exceeds[isig]++;
           out_val = out_limit;
         }
         else
@@ -563,6 +613,7 @@ int64_t dbreblockdb_write_block_SFT_to_STF (dada_client_t * client, void *in_dat
         //if (isig == 0 && ichan == 0 && isamp < 10)
         //  multilog (log, LOG_INFO, "write_block_SFT_to_STF: [%u] out=%"PRIu16" in=%e scale=%e\n", isamp, out[isamp * ctx->nchan + ochan], in[ichan * nsamp_in + isamp], ctx->scale);
       }
+#endif
     }
     out += sig_stride_out;
     in += sig_stride_in;
@@ -652,6 +703,9 @@ int main (int argc, char **argv)
 
   ctx->verbose = 0;
   ctx->reblock_factor = 1;
+#ifdef OUT_SAME
+  ctx->bitrate_factor = 1;
+#endif
 #ifdef OUT_FLOAT 
   ctx->bitrate_factor = 1;
 #endif

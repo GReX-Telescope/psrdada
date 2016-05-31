@@ -38,6 +38,9 @@
 #include "RealTime.h"
 #include "StopWatch.h"
 
+#define PACKET_SIZE 7696
+#define PAYLOAD_SIZE 7680
+
 typedef struct {
 
   multilog_t * log;
@@ -183,7 +186,7 @@ int udpplot_init (udpplot_t * ctx)
   ctx->sock = mopsr_init_sock();
 
   // now set it up to allow for all valid jumbo packets
-  ctx->sock->bufsz = sizeof(char) * 8208;
+  ctx->sock->bufsz = sizeof(char) * PACKET_SIZE;
   free (ctx->sock->buf);
   ctx->sock->buf = (char *) malloc (ctx->sock->bufsz);
   assert(ctx->sock->buf != NULL);
@@ -204,7 +207,9 @@ int udpplot_init (udpplot_t * ctx)
   dada_udp_sock_set_buffer_size (ctx->log, ctx->sock->fd, ctx->verbose, sock_buf_size);
 
   // get a packet to determine the packet size and type of data
-  ctx->pkt_size = recvfrom (ctx->sock->fd, ctx->sock->buf, 8208, 0, NULL, NULL);
+  if (ctx->verbose)
+    multilog (ctx->log, LOG_INFO, "init: recv_from (%d, %p, %d, 0, NULL,NULL)\n", ctx->sock->fd, (void *) ctx->sock->buf, PACKET_SIZE);
+  ctx->pkt_size = recvfrom (ctx->sock->fd, ctx->sock->buf, PACKET_SIZE, 0, NULL, NULL);
   size_t data_size = ctx->pkt_size - UDP_HEADER;
   multilog (ctx->log, LOG_INFO, "init: pkt_size=%ld data_size=%ld\n", ctx->pkt_size, data_size);
   ctx->data_size = ctx->pkt_size - UDP_HEADER;
@@ -212,10 +217,10 @@ int udpplot_init (udpplot_t * ctx)
   // decode the header
   multilog (ctx->log, LOG_INFO, "init: decoding packet\n");
   mopsr_hdr_t hdr;
-  if (ctx->data_size == 8192)
-    mopsr_decode_v2 (ctx->sock->buf, &hdr);
-  else
-    mopsr_decode (ctx->sock->buf, &hdr);
+  //if (ctx->data_size == PAYLOAD_SIZE)
+  //  mopsr_decode_v2 (ctx->sock->buf, &hdr);
+  //else
+  mopsr_decode (ctx->sock->buf, &hdr);
 
   multilog (ctx->log, LOG_INFO, "init: nchan=%u nant=%u nframe=%u\n", hdr.nchan, hdr.nant, hdr.nframe);
 
@@ -329,10 +334,13 @@ int main (int argc, char **argv)
   udpplot.antenna = antenna_to_plot;
 
   udpplot.num_integrated = 0;
-  udpplot.to_integrate = 1;
+  udpplot.to_integrate = 128;
 
   udpplot.plot_log = plot_log;
-  udpplot.ymin = 100000;
+  if (plot_log)
+    udpplot.ymin = 1;
+  else
+    udpplot.ymin = 0;
   udpplot.ymax = -100000;
 
   // initialise data rate timing library 
@@ -341,15 +349,17 @@ int main (int argc, char **argv)
   StopWatch_Initialise(1);
 
   if (verbose)
-    multilog(log, LOG_INFO, "mopsr_dbplot: using device %s\n", device);
+    multilog(log, LOG_INFO, "mopsr_udpplot: using device %s\n", device);
 
   if (cpgopen(device) != 1) {
-    multilog(log, LOG_INFO, "mopsr_dbplot: error opening plot device\n");
+    multilog(log, LOG_INFO, "mopsr_udpplot: error opening plot device\n");
     exit(1);
   }
   cpgask(0);
 
   // allocate require resources, open socket
+  if (verbose)
+    multilog(log, LOG_INFO, "mopsr_udpplot: init()\n");
   if (udpplot_init (&udpplot) < 0)
   {
     fprintf (stderr, "ERROR: Could not create UDP socket\n");
@@ -357,6 +367,8 @@ int main (int argc, char **argv)
   }
 
   // clear packets ready for capture
+  if (verbose)
+    multilog(log, LOG_INFO, "mopsr_udpplot: prepare()\n");
   udpplot_prepare (&udpplot);
 
   uint64_t seq_no = 0;
@@ -372,6 +384,10 @@ int main (int argc, char **argv)
   char mgt_locks[17];
   char mgt_locks_long[17];
 
+  StopWatch_Start(&wait_sw);
+
+  if (verbose)
+    multilog(log, LOG_INFO, "mopsr_udpplot: while(!quit)\n");
   while (!quit_threads) 
   {
     ctx->sock->have_packet = 0;
@@ -418,7 +434,6 @@ int main (int argc, char **argv)
 
     if (ctx->sock->have_packet)
     {
-      StopWatch_Start(&wait_sw);
 
       mopsr_decode (ctx->sock->buf, &hdr);
       //mopsr_decode_v2 (ctx->sock->buf, &hdr);
@@ -431,10 +446,11 @@ int main (int argc, char **argv)
         mgt_locks_long[i] = ((char) mopsr_get_bit_from_16 (hdr.mgt_locks_long, i)) + '0';
       mgt_locks_long[16] = '\0';
 
-      multilog (ctx->log, LOG_INFO, "main: seq=%"PRIu64" nbit=%u nant=%u nchan=%u start_chan=%u nframe=%u locks=[%s] locks_long=[%s]\n", hdr.seq_no, hdr.nbit, hdr.nant, hdr.nchan, hdr.start_chan, hdr.nframe, mgt_locks, mgt_locks_long);
+     if (ctx->verbose)
+        multilog (ctx->log, LOG_INFO, "main: seq=%"PRIu64" nbit=%u nant=%u nchan=%u start_chan=%u nframe=%u locks=[%s] locks_long=[%s]\n", hdr.seq_no, hdr.nbit, hdr.nant, hdr.nchan, hdr.start_chan, hdr.nframe, mgt_locks, mgt_locks_long);
 
-      mopsr_encode (ctx->sock->buf, &hdr);
-      mopsr_decode (ctx->sock->buf, &hdr);
+      //mopsr_encode (ctx->sock->buf, &hdr);
+      //mopsr_decode (ctx->sock->buf, &hdr);
 
       for (i=0; i<16; i++)
         mgt_locks[i] = ((char) mopsr_get_bit_from_16 (hdr.mgt_locks, i)) + '0';
@@ -443,7 +459,7 @@ int main (int argc, char **argv)
         mgt_locks_long[i] = ((char) mopsr_get_bit_from_16 (hdr.mgt_locks_long, i)) + '0';
       mgt_locks_long[16] = '\0';
 
-      multilog (ctx->log, LOG_INFO, "main: seq=%"PRIu64" nbit=%u nant=%u nchan=%u start_chan=%u nframe=%u locks=[%s] locks_long=[%s]\n", hdr.seq_no, hdr.nbit, hdr.nant, hdr.nchan, hdr.start_chan, hdr.nframe, mgt_locks, mgt_locks_long);
+      //multilog (ctx->log, LOG_INFO, "main: seq=%"PRIu64" nbit=%u nant=%u nchan=%u start_chan=%u nframe=%u locks=[%s] locks_long=[%s]\n", hdr.seq_no, hdr.nbit, hdr.nant, hdr.nchan, hdr.start_chan, hdr.nframe, mgt_locks, mgt_locks_long);
       if (ctx->verbose > 1) 
         multilog (ctx->log, LOG_INFO, "main: seq_no= %"PRIu64" difference=%"PRIu64" packets\n", hdr.seq_no, (hdr.seq_no - prev_seq_no));
       prev_seq_no = hdr.seq_no;
@@ -463,9 +479,9 @@ int main (int argc, char **argv)
       {
         plot_packet (ctx);
         udpplot_reset (ctx);
+        StopWatch_Delay(&wait_sw, sleep_time);
+        StopWatch_Start(&wait_sw);
       }
-
-      StopWatch_Delay(&wait_sw, sleep_time);
 
       if (ctx->verbose)
         multilog(ctx->log, LOG_INFO, "main: clearing packets at socket\n");
@@ -545,16 +561,16 @@ void integrate_packet (udpplot_t * ctx, char * buffer, unsigned int size)
     multilog (ctx->log, LOG_INFO, "integrate_packet: assigning floats, checking min/max: nframe=%d\n", nframe);
 
   int8_t * in = (int8_t *) buffer;
-  int re, im;
+  float re, im;
   for (iframe=0; iframe < nframe; iframe++)
   {
     for (ichan=0; ichan < ctx->nchan; ichan++)
     {
       for (iant=0; iant < ctx->nant; iant++)
       {
-        re = (int) in[0];
-        im = (int) in[1];
-        ctx->y_points[iant][ichan] += (float) ((re*re) + (im*im));
+        re = ((float) in[0]) + 0.5;
+        im = ((float) in[1]) + 0.5;
+        ctx->y_points[iant][ichan] += ((re*re) + (im*im));
         in += 2;
       }
     }
@@ -586,33 +602,59 @@ void plot_packet (udpplot_t * ctx)
       }
     }
   }
-  if (ctx->verbose)
+  //if (ctx->verbose)
     multilog (ctx->log, LOG_INFO, "plot_packet: ctx->ymin=%f, ctx->ymax=%f\n", ctx->ymin, ctx->ymax);
 
   cpgbbuf();
-  cpgsci(1);
-  if (ctx->plot_log)
-  {
-    cpgenv(xmin, xmax, ctx->ymin, 1.1 * ctx->ymax, 0, 20);
-    cpglab("Channel", "log\\d10\\u(Power)", "Bandpass"); 
-  }
-  else
-  {
-    cpgenv(xmin, xmax, ctx->ymin, 1.1*ctx->ymax, 0, 0);
-    cpglab("Channel", "Power", "Bandpass"); 
-  }
+  cpgeras();
 
-  char ant_label[8];
-  float label_offset = -1;
-  for (iant=0; iant < ctx->nant; iant++)
+  unsigned nx = 4;
+  unsigned ny = 4;
+  unsigned ix, iy;
+  for (ix=0; ix<nx; ix++)
   {
-    if ((ctx->antenna == -1) || (mopsr_get_new_ant_number (iant) == ctx->antenna))
+    for (iy=0; iy<ny; iy++)
     {
+      iant = iy * nx + ix;
+
+      float xl = 0.1 + 0.2f * ix;
+      float xr = xl + 0.2;
+
+      float yb = 0.1 + 0.2 * iy;
+      float yt = yb + 0.2;
+
+      cpgsci(1);
+      cpgswin(xmin, xmax, ctx->ymin, 1.1 * ctx->ymax);
+      cpgsvp(xl, xr, yb, yt);
+      if (iy == 0)
+        if (ix == 0)
+          if (ctx->plot_log)
+            cpgbox("BCNT", 0.0, 0.0, "BCLNSTV", 0.0, 0.0);
+          else
+            cpgbox("BCNT", 0.0, 0.0, "BCNSTV", 0.0, 0.0);
+        else
+          if (ctx->plot_log)
+            cpgbox("BCNT", 0.0, 0.0, "BCLST", 0.0, 0.0);
+          else
+            cpgbox("BCNT", 0.0, 0.0, "BCST", 0.0, 0.0);
+      else
+        if (ix == 0)
+          if (ctx->plot_log)
+            cpgbox("BCT", 0.0, 0.0, "BCLNSTV", 0.0, 0.0);
+          else
+            cpgbox("BCT", 0.0, 0.0, "BCNSTV", 0.0, 0.0);
+        else
+          if (ctx->plot_log)
+            cpgbox("BCT", 0.0, 0.0, "BCLST", 0.0, 0.0);
+          else
+            cpgbox("BCT", 0.0, 0.0, "BCST", 0.0, 0.0);
+
+      char ant_label[8];
       sprintf(ant_label, "Ant %u", mopsr_get_new_ant_number (iant));
-      cpgsci(iant+2);
-      cpgmtxt("T", label_offset, 0.05, 0.0, ant_label);
+      cpgmtxt("T", -1.0, 0.05, 0.0, ant_label);
+      cpgsci(2);
       cpgline(ctx->nchan, ctx->x_points, ctx->y_points[iant]);
-      label_offset -= 1;
+      cpgsci(1);
     }
   }
   cpgebuf();

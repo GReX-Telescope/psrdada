@@ -43,9 +43,11 @@ void usage()
      " -D device       pgplot device name\n"
      " -h              plot this help\n"
      " -p              plot each timestep\n"
+     " -r rejectfile   reject channels listed in this file\n"
      " -t file         write phase vs time output to text file instread\n"
      " -s secs         number of seconds per subint [default 20]\n"
      " -v              be verbose\n"
+     " -x              print xcorr vs time amplitudes\n"
      " -z              zap channel npt/2\n");
 }
 
@@ -73,7 +75,13 @@ int main (int argc, char **argv)
 
   char zap_dc = 0;
 
-  while ((arg=getopt(argc,argv,"f:D:hmps:t:vz")) != -1)
+  char just_xcorr_time_amps = 0;
+
+  char * channel_reject_file = NULL;
+  char channel_rejection = 0;
+
+
+  while ((arg=getopt(argc,argv,"f:D:hmpr:s:t:vxz")) != -1)
   {
     switch (arg)
     {
@@ -101,8 +109,17 @@ int main (int argc, char **argv)
         plot_all++;
         break;
 
+      case 'r':
+        channel_reject_file = strdup(optarg);
+        channel_rejection = 1;
+        break;
+
       case 'v':
         verbose++;
+        break;
+
+      case 'x':
+        just_xcorr_time_amps = 1;
         break;
 
       case 'z':
@@ -173,6 +190,30 @@ int main (int argc, char **argv)
     fclose (fptr);
   }
   fptr = 0;
+
+  int num_reject_channels = 0;
+  int * channel_reject = NULL;
+  if (channel_rejection)
+  {
+    FILE * fptr = fopen (channel_reject_file, "r");
+    if (!fptr)
+    {
+      fprintf (stderr, "ERROR: failed to open file: %s for reading: %s\n", channel_reject_file, strerror(errno));
+      return (EXIT_FAILURE);
+    }
+
+    char line1[1024];
+    int i;
+    fgets (line1, 1024, fptr);
+    num_reject_channels = atoi(line1);
+
+    channel_reject = (int*) malloc (num_reject_channels * sizeof(int));
+    for(i=0;i<num_reject_channels;i++)
+    {
+      fgets(line1, 1024, fptr);
+      channel_reject[i] = atoi(line1);
+    }
+  }
 
   uint64_t bytes_per_second;
   float ut1_offset;
@@ -449,6 +490,14 @@ int main (int argc, char **argv)
         fsum = 0;
         fsum_bp = 0;
 
+        if (channel_rejection)
+        {
+          for (ipt=0; ipt<num_reject_channels; ipt++)
+          {
+            cc[channel_reject[ipt]] = 0;
+          }
+        }
+
         for (ipt=0; ipt<npt; ipt++)
         {
           
@@ -497,7 +546,7 @@ int main (int argc, char **argv)
         else
         {
           phase_t = 0;
-          amp_t = 0;
+          amp_t = 1;
         }
 
         phases_t[ifile] = phase_t;
@@ -565,8 +614,11 @@ int main (int argc, char **argv)
         
         float fractional_delay = (float) c1 * (npt / (2 * M_PI));
 
-        sprintf (title, "%s [%d -> %d] Corr vs Freq uncorrected delay %f samples", baseline_name, anta, antb, fractional_delay);
-        plot_phase_freq (amps, phases, npt, (float) c1, (float) c0, "1/xs", title);
+        if (!just_xcorr_time_amps)
+        {
+          sprintf (title, "%s [%d -> %d] Corr vs Freq uncorrected delay %f samples", baseline_name, anta, antb, fractional_delay);
+          plot_phase_freq (amps, phases, npt, (float) c1, (float) c0, "10/xs", title);
+        }
 
         c0 = 0;
         c1 = 0;
@@ -585,12 +637,21 @@ int main (int argc, char **argv)
 
         float turns_per_hour = (float) c1 * (3600 / (2 * M_PI));
 
+        if (just_xcorr_time_amps)
+        {
+          fprintf (stdout, "%f", amps_t[0]);
+          for (i=1; i<ifile+1; i++)
+            fprintf (stdout, ",%f", amps_t[i]);
+          fprintf (stdout, "\n");
+        }
+        else
+        {
         sprintf (title, "%s [%d -> %d] (%d) - xCorr vs Time [%4.2f tphr, chiq=%5.2lf] ", baseline_name, anta, antb, baseline, turns_per_hour, chisq);
         if (plot_meridian_dist)
-          plot_phase_time (x_t, amps_t, phases_t, ifile+1, (float) c1, (float) c0, "2/xs", title, 0);
+          plot_phase_time (x_t, amps_t, phases_t, ifile+1, (float) c1, (float) c0, device, title, 0);
         else
-          plot_phase_time (x_t, amps_t, phases_t, ifile+1, (float) c1, (float) c0, "2/xs", title, nsecs_per_subint);
-
+          plot_phase_time (x_t, amps_t, phases_t, ifile+1, (float) c1, (float) c0, device, title, nsecs_per_subint);
+        }
         //if ((fabs(turns_per_hour) > 1) && (chisq < 200) && (abs(anta - antb) > 3))
         //  sleep (1);
       }
@@ -636,8 +697,10 @@ void plot_phase_freq (float * amps, float * phases, unsigned npts, float gradien
   unsigned i;
   for (i=0; i<npts; i++)
   {
-    if (amps[i] > 0)
-      amps[i] = log10(amps[i]);
+    //if (amps[i] > 0)
+    //  amps[i] = log10(amps[i]);
+    //else
+    //  amps[i] = -6;
 
     if (amps[i] > ymax)
       ymax = amps[i];

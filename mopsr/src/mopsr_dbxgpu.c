@@ -4,33 +4,6 @@
  *    Licensed under the Academic Free License version 2.1
  * 
  ****************************************************************************/
-
-/*
-  This code currently writes out two data files.
-  The first file (delays.bin) has the following format:
-  
-  Antenna ID (unsigned) : Antenna ID (unsigned) : Delay (float) : Delay error (float)
-  Antenna ID (unsigned) : Antenna ID (unsigned) : Delay (float) : Delay error (float)
-  Antenna ID (unsigned) : Antenna ID (unsigned) : Delay (float) : Delay error (float)
-  Antenna ID (unsigned) : Antenna ID (unsigned) : Delay (float) : Delay error (float)
-  ...
-  ...
-  ...
-   
-  The second file (cp_spectra.bin) is formatted:
-  
-  Batch size (unsigned)
-  Antenna ID (unsigned) : Antenna ID (unsigned) : Delay (float) : Delay error (float) 
-  Cross power spectrum (Batch size * cufftComplex)
-  Antenna ID (unsigned) : Antenna ID (unsigned) : Delay (float) : Delay error (float)
-  Cross power spectrum (Batch size * cufftComplex)
-  Antenna ID (unsigned) : Antenna ID (unsigned) : Delay (float) : Delay error (float)
-  Cross power spectrum (Batch size * cufftComplex)
-  Antenna ID (unsigned) : Antenna ID (unsigned) : Delay (float) : Delay error (float)
-  ...
-  ...
-  ...
-*/
    
 #define DSB 1
 
@@ -42,7 +15,10 @@
 #include "dada_generator.h"
 #include "dada_affinity.h"
 #include "ascii_header.h"
-#include "mopsr_calib_cuda.h"
+
+#include "cube/cube.h"
+#include "xgpu.h"
+#include "xgpu_info.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -55,7 +31,6 @@
 #include <byteswap.h>
 #include <complex.h>
 #include <float.h>
-#include <cuda_runtime.h>
 #include <time.h>
 
 #include <sys/types.h>
@@ -64,26 +39,16 @@
 
 #include <cufft.h>
 
-#define NSTATION 352
-#define NFREQ 256
-#define NPOL 1
-#define NTIME_PIPE 128
-#define NTIME 6144
-#include "cuda_xengine.cu"
-#include "omp_xengine.cc"
-#include "cpu_util.cc"
-
 #define CHECK_ALIGN(x) assert ( ( ((uintptr_t)x) & 15 ) == 0 )
 
 void usage()
 {
   fprintf (stdout,
-           "mopsr_dbxgpu [options] in_key out_key\n"
-           " -b core   bind process to CPU core\n"
+           "mopsr_dbxgpu [options]\n"
+           " -c core   bind process to CPU core\n"
            " -d id     run on GPU device\n"
            " -h        display usage\n"
            " -k key    input DADA shm key [default %x]\n"
-           " -n nfft   batch size for ffts [default 1024]\n"
            " -t dump   number of seconds per correlation dump [default 30]\n"
            " -s        1 transfer, then exit\n"
            " -v        verbose mode\n",
@@ -100,11 +65,6 @@ typedef struct {
   // verbose output
   int verbose;
 
-  // number of points in fft
-  unsigned batch_size;
-
-  cufftHandle fft_plan_forward;
-
   unsigned nchan;
 
   unsigned npol;
@@ -113,29 +73,15 @@ typedef struct {
 
   unsigned nant;
 
+  uint64_t obs_offset;
+
   uint64_t block_size;
 
   int device;             // cuda device to use
 
   XGPUContext xgpu_context;
 
-  cudaStream_t stream;    // cuda stream for engine
-
-  void * d_in;            // device memory for input
-
-  void * d_unpacked;      // device memory for unpacked data
-  size_t d_unpacked_bytes;
-
-  void * d_fftd;           // device memory for output
-
-  void * d_cross_power;    // device memory for cross power spectra
-  size_t d_cross_power_bytes;  
-
-  void * h_cross_power; // host memory for cross power spectra
-  
-  unsigned npairs;            // number of baseline pairs to correlate 
-  mopsr_baseline_t* d_pairs;  // device memory for baseline pairs 
-  mopsr_baseline_t* h_pairs;  // host memory for baseline pairs
+  XGPUInfo xgpu_info;
 
   uint64_t bytes_per_second; 
  
@@ -144,7 +90,21 @@ typedef struct {
   unsigned dump_counter;  // counter for dumps or something!
   uint64_t byte_counter; //counter for total number of bytes read
 
-  char utc_start[19]; //time stamp for output files
+  char utc_start[20]; //time stamp for output files
+
+  Complex * tmp;
+  size_t tmp_size;
+
+  size_t nbaselines;
+
+  float *   ac_data;
+  size_t    ac_data_size;
+
+  Complex * cc_data;
+  size_t    cc_data_size;
+
+  ComplexInput * inbuf;
+  size_t inbuf_size;
 
 } mopsr_dbxgpu_t;
 
@@ -152,10 +112,51 @@ typedef struct {
 int dbxgpu_init (mopsr_dbxgpu_t * ctx, dada_hdu_t * in_hdu);
 int dbxgpu_destroy (mopsr_dbxgpu_t * ctx, dada_hdu_t * in_hdu);
 
-#define MOPSR_DBCALIB_INIT { 0, "", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ""}
+#define MOPSR_DBXGPU_INIT { 0, "", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
+
+
+//function to write output in raw format
+int dbxgpu_dump_spectra (dada_client_t* client, uint64_t start_byte, uint64_t end_byte)
+{
+  mopsr_dbxgpu_t * ctx = (mopsr_dbxgpu_t *) client->context;
+
+  // status and error logging facilty
+  multilog_t* log = client->log;
+  cudaError_t error;
+
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "dump_spectra()\n");
+
+  int flags = O_WRONLY | O_CREAT | O_TRUNC;
+  int perms = S_IRUSR | S_IRGRP;
+  char filename_tmp[512];
+  char filename[512];
+  sprintf (filename_tmp,"%s_%020lu_%020lu.xc.tmp", ctx->utc_start, start_byte, end_byte);
+  sprintf (filename,"%s_%020lu_%020lu.xc", ctx->utc_start, start_byte, end_byte);
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "dump_spectra: opening %s\n", filename_tmp);
+  int fd = open (filename_tmp, flags, perms);
+  if (!fd)
+  {
+    multilog (log, LOG_ERR, "Could not open file: %s\n", filename_tmp);
+    return -1;
+  }
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "dump_spectra: opened file %s\n", filename_tmp);
+
+  write (fd, ctx->xgpu_context.matrix_h, ctx->tmp_size * sizeof(Complex));
+
+  close (fd);
+
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "dump_spectra: closed file %s\n", filename_tmp);
+
+  rename (filename_tmp, filename);
+  return 0;
+}
 
 //function to write ac and cc files
-int dbxgpu_dump_spectra (dada_client_t* client, uint64_t start_byte, uint64_t end_byte)
+int dbxgpu_dump_spectra_old (dada_client_t* client, uint64_t start_byte, uint64_t end_byte)
 {
   mopsr_dbxgpu_t * ctx = (mopsr_dbxgpu_t *) client->context;
 
@@ -166,87 +167,131 @@ int dbxgpu_dump_spectra (dada_client_t* client, uint64_t start_byte, uint64_t en
   if (ctx->verbose)
     multilog (log, LOG_INFO, "dump_spectra()\n");
 
-  size_t bytes_to_copy = sizeof(cuComplex) * ctx->npairs * ctx->batch_size;
-  if (ctx->verbose)
-    multilog (log, LOG_INFO, "dump_spectra: cudaMemcpyAsync copying back %ld bytes\n", bytes_to_copy);
-  error = cudaMemcpyAsync (ctx->h_cross_power, ctx->d_cross_power, bytes_to_copy, cudaMemcpyDeviceToHost, ctx->stream);
-  if (error != cudaSuccess)
-    {
-      multilog (log, LOG_ERR, "cudaMemcpyAsync D2H failed: %s\n", cudaGetErrorString(error));
-      return -1;
-    }
-
-  if (ctx->verbose)
-    multilog (log, LOG_INFO, "dump_spectra: cudaStreamSynchronize()\n");
-  cudaStreamSynchronize(ctx->stream);
-
-  FILE *acfile, *ccfile;
+  int acfile, ccfile;
+  int flags = O_WRONLY | O_CREAT | O_TRUNC;
+  int perms = S_IRUSR | S_IRGRP;
   char acfilename [512];
   char ccfilename [512];
   sprintf(acfilename,"%s_%020lu_%020lu.ac.tmp", ctx->utc_start, start_byte, end_byte);
   if (ctx->verbose)
     multilog (log, LOG_INFO, "dump_spectra: opening %s\n", acfilename);
-  acfile = fopen(acfilename, "w");
+  acfile = open (acfilename, flags, perms);
   if (!acfile)
-    {
-      multilog (log, LOG_ERR, "Could not open file: %s\n", acfilename);
-      return -1;
-    }
+  {
+    multilog (log, LOG_ERR, "Could not open file: %s\n", acfilename);
+    return -1;
+  }
   if (ctx->verbose)
     multilog (log, LOG_INFO, "Opened file %s\n",acfilename);
-
 
   sprintf (ccfilename, "%s_%020lu_%020lu.cc.tmp", ctx->utc_start, start_byte, end_byte);
   if (ctx->verbose)
     multilog (log, LOG_INFO, "dump_spectra: opening %s\n", ccfilename);
-  ccfile = fopen(ccfilename, "w");
+  ccfile = open(ccfilename, flags, perms);
   if (!ccfile)
-    {
-      multilog (log, LOG_ERR, "Could not open file: %s\n", ccfilename);
-      return -1;
-    }
+  {
+    multilog (log, LOG_ERR, "Could not open file: %s\n", ccfilename);
+    return -1;
+  }
   if (ctx->verbose)
     multilog (log, LOG_INFO, "Opened file %s\n",ccfilename);
 
-  int ii,jj;
-  cuComplex * cp_spectra = (cuComplex *) ctx->h_cross_power;
+  // here is where the trickery begins to understand the xGPU internal format!
+ 
+  // xGPU will use it's internal REGISTER_TILE_TRIANGULAR_ORDERordering, so this
+  // should be converted to the AC and CC formats we are used to
 
   if (ctx->verbose)
-    multilog (log, LOG_INFO, "dump_spectra: writing output data..\n");
-#ifdef DSB
-  for (ii=0;ii<ctx->npairs;ii++)
+    multilog (log, LOG_INFO, "dump_spectra: reordering REGISTER_TILE -> TRIANGLE\n");
+  int f, i, rx, j, ry, pol1, pol2;
+  size_t matLength = NFREQUENCY * ((NSTATION+1)*(NSTATION/2)*NPOL*NPOL) * (NPULSAR + 1);
+  for (i=0; i<NSTATION/2; i++) 
   {
-    if (ctx->h_pairs[ii].a == ctx->h_pairs[ii].b)
+    for (rx=0; rx<2; rx++) 
     {
-      for (jj=ctx->batch_size/2; jj<ctx->batch_size; jj++)
-        fwrite( &(cp_spectra[ctx->batch_size*ii+jj].x), sizeof(float), 1, acfile);
-      for (jj=0; jj<ctx->batch_size; jj++)
-        fwrite( &(cp_spectra[ctx->batch_size*ii+jj].x), sizeof(float), 1, acfile);
-    }
-    else
-    {
-      fwrite(&(cp_spectra[ctx->batch_size*ii + ctx->batch_size/2]), sizeof(cuComplex), ctx->batch_size/2, ccfile);
-      fwrite(&(cp_spectra[ctx->batch_size*ii]), sizeof(cuComplex), ctx->batch_size/2, ccfile);
+      for (j=0; j<=i; j++) 
+      {
+        for (ry=0; ry<2; ry++) 
+        {
+          int k = f*(NSTATION+1)*(NSTATION/2) + (2*i+rx)*(2*i+rx+1)/2 + 2*j+ry;
+          int l = f*4*(NSTATION/2+1)*(NSTATION/4) + (2*ry+rx)*(NSTATION/2+1)*(NSTATION/4) + i*(i+1)/2 + j;
+          for (pol1=0; pol1<NPOL; pol1++)
+          {
+            for (pol2=0; pol2<NPOL; pol2++)
+            {
+              size_t tri_index = (k*NPOL+pol1)*NPOL+pol2;
+              size_t reg_index = (l*NPOL+pol1)*NPOL+pol2;
+              ctx->tmp[tri_index].real = ((float*) (ctx->xgpu_context.matrix_h))[reg_index];
+              ctx->tmp[tri_index].imag = ((float*) (ctx->xgpu_context.matrix_h))[reg_index+matLength];
+            }
+          }
+        }
+      }
     }
   }
 
-#else
-  for (ii=0;ii<ctx->npairs;ii++)
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "dump_spectra: reordering TRIANGLE -> CUSTOM\n");
+  // now we have auto and cross correlations in ctx->tmp in xGPU TRIANGULAR ORDER
+  for (i=0; i<NSTATION; i++)
+  {
+    for (j=0; j<=i; j++)
     {
-      if (ctx->h_pairs[ii].a == ctx->h_pairs[ii].b){
-          for (jj=0; jj<ctx->batch_size; jj++)
-            fwrite( &(cp_spectra[ctx->batch_size*ii+jj].x), sizeof(float), 1, acfile);
-      }
-      else
-        fwrite(&(cp_spectra[ctx->batch_size*ii]), sizeof(cuComplex), ctx->batch_size, ccfile);
-    }
-#endif
+      for (pol1=0; pol1<NPOL; pol1++)
+      {
+        for (pol2=0; pol2<NPOL; pol2++)
+        {
+          for(f=0; f<NFREQUENCY; f++)
+          {
+            int k = f*(NSTATION+1)*(NSTATION/2) + i*(i+1)/2 + j;
+            int index = (k*NPOL+pol1)*NPOL+pol2;
 
-  fclose(acfile);
+            // convert i + pol1 and j + pol2 to our single pol antenna number
+            int ant1 = (i * 2) + pol1;
+            int ant2 = (j * 2) + pol2;
+
+            // if auto-correlation
+            if (ant1 == ant2)
+            {
+              ctx->ac_data[ant1] = ctx->tmp[index].real;
+            }
+            else
+            {
+              int baseline = 0;
+              int ib, jb;
+              for (ib=0; ib<ctx->nant; ib++)
+              {
+                for (jb=0; jb<ctx->nant; jb++)
+                {
+                  if (ib != jb)
+                  {
+                    if (ib == ant1 && jb == ant2)
+                    {
+                      ctx->cc_data[baseline] = ctx->tmp[index];
+                    }
+                    baseline++;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "dump_spectra: writing AC\n");
+  write (acfile, ctx->ac_data, ctx->ac_data_size);
+
+  close(acfile);
   if (ctx->verbose)
     multilog (log, LOG_INFO, "Closed file %s\n",acfilename);
   
-  fclose(ccfile);
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "dump_spectra: writing CC\n");
+  write (ccfile, ctx->cc_data, ctx->cc_data_size);
+  close(ccfile);
   if (ctx->verbose)
     multilog (log, LOG_INFO, "Closed file %s\n",ccfilename);
 
@@ -260,10 +305,6 @@ int dbxgpu_dump_spectra (dada_client_t* client, uint64_t start_byte, uint64_t en
   
   return 0;
 }
-
-
-
-
 
 /*! Function that opens the data transfer target */
 int dbxgpu_open (dada_client_t* client)
@@ -314,6 +355,12 @@ int dbxgpu_open (dada_client_t* client)
     return -1;
   }
 
+  if (ascii_header_get (client->header, "OBS_OFFSET", "%"PRIu64, &(ctx->obs_offset)) != 1)
+  {
+    multilog (log, LOG_ERR, "header had no OBS_OFFSET\n");
+    return -1;
+  }
+
   if (ascii_header_get (client->header, "BYTES_PER_SECOND", "%"PRIu64, &(ctx->bytes_per_second)) != 1)
   {
     multilog (log, LOG_ERR, "header had no BYTES_PER_SECOND\n");
@@ -332,147 +379,43 @@ int dbxgpu_open (dada_client_t* client)
     return -1;
   }
 
+  if (ctx->nant != (ctx->xgpu_info.nstation * ctx->xgpu_info.npol))
+  {
+    multilog (log, LOG_ERR, "NANT [%u] does not match xGPUs compiled size [%u]\n",
+              ctx->nant, (ctx->xgpu_info.nstation * ctx->xgpu_info.npol));
+    return -1;
+  }
+ 
+  unsigned nbytes_per_samp = ctx->nchan * ctx->nant * ctx->ndim * ctx->npol;
+  if ((ctx->block_size / nbytes_per_samp) % ctx->xgpu_info.ntime != 0)
+  {
+    multilog (log, LOG_ERR, "open: not an even number of xGPU gulps per block\n");
+    return -1;
+  }
+
+  
+  ctx->ac_data_size = ctx->nant * sizeof(float);
+  ctx->ac_data = (float *) malloc (ctx->ac_data_size);
+
+  ctx->nbaselines = (ctx->nant * (ctx->nant-1)) / 2;
+  ctx->cc_data_size = ctx->nbaselines * sizeof(Complex);
+  ctx->cc_data = (Complex *) malloc (ctx->cc_data_size);
+
+  ctx->tmp_size = NFREQUENCY * ((NSTATION/2+1)*(NSTATION/4)*NPOL*NPOL*4) * (NPULSAR + 1);
+  ctx->tmp = (Complex *) malloc (ctx->tmp_size * sizeof(Complex));
+
+  ctx->inbuf_size = ctx->xgpu_info.ntime * ctx->nant * ctx->ndim * ctx->npol;
+  ctx->inbuf = (ComplexInput *) malloc (ctx->inbuf_size);
+
+  float block_length_s = ((float) ctx->block_size) / (float) ctx->bytes_per_second;
+  ctx->blocks_per_dump = (unsigned ) (ctx->dump_time / block_length_s + 0.5);
+
   if (ctx->verbose)
     multilog (log, LOG_INFO, "open: NCHAN=%d NANT=%d, NDIM=%d NPOL=%d\n", ctx->nchan, ctx->nant, ctx->ndim, ctx->npol);
-
-
-  XGPUInfo xgpu_info;
-  xgpuInfo(&xgpu_info);
-
-  unsigned int npol, nstation, nfrequency;
-  npol = xgpu_info.npol;
-  nstation = xgpu_info.nstation;
-  nfrequency = xgpu_info.nfrequency;
-
-  if (npol != ctx->npol)
-  {
-    multilog (log, LOG_ERR, "NPOL=%d did not match xGPU compile time define of %d\n", ctx->npol, npol);
-    return -1;
-  }
-
-  if (nstation != ctx->nant)
-  {
-    multilog (log, LOG_ERR, "NANT=%d did not match xGPU compile time define of %d\n", ctx->nant, nstation);
-    return -1;
-  }
-
-  if (nfrequency != ctx->batch_size)
-  {
-    multilog (log, LOG_ERR, "NFFT=%d did not match xGPU compile time define of %d\n", ctx->batch_size, nfrequnecy);
-    return -1;
-  }
 
   client->transfer_bytes = 0;
   client->optimal_bytes = 64*1024*1024;
   client->header_transfer = 0;
-
-  // Generate baseline combinations
-  cudaError_t error;  
-  ctx->npairs = (ctx->nant * ctx->nant + ctx->nant)/2;
-  
-  // allocate host memory for generating baseline combinations
-  ctx->h_pairs = (mopsr_baseline_t*) malloc(sizeof(mopsr_baseline_t) * ctx->npairs);
-  if (ctx->h_pairs == NULL)
-    {
-      multilog (log, LOG_ERR, "dbxgpu_open: could not create allocated %ld "
-                "bytes of host memory\n", sizeof(mopsr_baseline_t) * ctx->npairs);
-      return -1;
-    }
-
-  // allocate device memory for baseline combinations                                                  
-  error = cudaMalloc ((void**)&ctx->d_pairs, sizeof(mopsr_baseline_t) * ctx->npairs);
-  if (error != cudaSuccess)
-    {
-      multilog (log, LOG_ERR, "dbxgpu_open: could not create allocated %ld "
-                "bytes of device memory\n", sizeof(mopsr_baseline_t) * ctx->npairs);
-      return -1;
-    }
-
-  // generate all baseline combinations on host                                                                          
-  int pair_idx,idx,ii;
-  pair_idx = idx = 0;
-  while (idx < ctx->nant)
-    {
-      for (ii=idx; ii < ctx->nant; ii++)
-        {
-          ctx->h_pairs[pair_idx].a = idx;
-          ctx->h_pairs[pair_idx].b = ii;
-          pair_idx++;
-        }
-      idx++;
-    }
-
-  // copy baseline combinations to device
-  error = cudaMemcpyAsync (ctx->d_pairs, ctx->h_pairs, sizeof(mopsr_baseline_t) * ctx->npairs, cudaMemcpyHostToDevice, ctx->stream);
-  if (error != cudaSuccess)
-  {
-    multilog (log, LOG_ERR, "cudaMemcpyAsync H2D failed: %s\n", cudaGetErrorString(error));
-    return -1;
-  }
-
-  ctx->d_cross_power_bytes = ctx->batch_size * ctx->npairs * sizeof(cuComplex);
-  if (!ctx->d_cross_power)
-  {
-    if (ctx->verbose)
-      multilog (log, LOG_INFO, "open: cudaMalloc(%"PRIu64") for d_cross_power\n", ctx->d_cross_power_bytes);
-    error = cudaMalloc (&(ctx->d_cross_power), ctx->d_cross_power_bytes);
-    if (error != cudaSuccess)
-    {
-      multilog (log, LOG_ERR, "open: could not create allocated %ld bytes of device memory\n", ctx->d_cross_power_bytes);
-      return -1;
-    }
-    error = cudaMemsetAsync (ctx->d_cross_power, 0, ctx->d_cross_power_bytes, ctx->stream);
-    if (error != cudaSuccess)
-    {
-      multilog (log, LOG_ERR, "open: could not memset array\n");
-      return -1;
-    }
-  }
-  
-  if (!ctx->h_cross_power)
-    {
-      if (ctx->verbose)
-        multilog (log, LOG_INFO, "open: cudaMallocHost(%"PRIu64") for h_cross_power\n", ctx->d_cross_power_bytes);
-      error = cudaMallocHost (&(ctx->h_cross_power), ctx->d_cross_power_bytes);
-      if (error != cudaSuccess)
-        {
-          multilog (log, LOG_ERR, "open: could not create allocated %ld bytes of host memory\n", ctx->d_cross_power_bytes);
-          return -1;
-        }
-    }
-  
-
-  // instantiate fft_plan_forward for data accululation
-  cufftResult cufft_error;
-  if (ctx->verbose)
-    multilog (log, LOG_INFO, "open: creating cufftPlan1d NX=%d BATCH=%d\n", ctx->batch_size, (ctx->block_size / ctx->ndim / ctx->batch_size));
-  
-  cufft_error = cufftPlan1d(&(ctx->fft_plan_forward), ctx->batch_size, CUFFT_C2C, ctx->block_size / ctx->ndim / ctx->batch_size);
-  if (cufft_error != CUFFT_SUCCESS)
-  {
-    multilog (log, LOG_ERR, "dbxgpu_open: cufftPlan1d returned error state %d\n",
-              cufft_error);
-    return -1;
-  }
-
-  cufft_error = cufftSetCompatibilityMode(ctx->fft_plan_forward, CUFFT_COMPATIBILITY_NATIVE);
-  if (cufft_error != CUFFT_SUCCESS)
-  {
-    multilog (log, LOG_ERR, "dbxgpu_open: cufftSetCompatibilityMode return error state %d\n",
-              cufft_error);
-    return -1;
-  }
-
-  cufft_error = cufftSetStream(ctx->fft_plan_forward, ctx->stream);
-  if (cufft_error != CUFFT_SUCCESS)
-  {
-    multilog (log, LOG_ERR, "dbxgpu_open: cufftSetStream returned error state %d \n",
-              cufft_error);
-    return -1;
-  }
-
-  float block_length_s = ((float) ctx->block_size) / (float) ctx->bytes_per_second;
-  ctx->blocks_per_dump = (unsigned ) (ctx->dump_time / block_length_s + 0.5);
 
   return 0;
 }
@@ -503,8 +446,8 @@ int dbxgpu_close (dada_client_t* client, uint64_t bytes_read)
   if (ctx->dump_counter%ctx->blocks_per_dump != 0)
     {
       //dump remainder of data to file
-      uint64_t start_byte = ctx->byte_counter;
-      uint64_t end_byte = ctx->byte_counter + ctx->block_size * (ctx->dump_counter % ctx->blocks_per_dump); 
+      uint64_t start_byte = ctx->obs_offset + ctx->byte_counter;
+      uint64_t end_byte = start_byte + ctx->block_size * (ctx->dump_counter % ctx->blocks_per_dump); 
       if (dbxgpu_dump_spectra(client,start_byte,end_byte) != 0){
         return -1;
       }
@@ -553,63 +496,78 @@ int64_t dbxgpu_block_gpu (dada_client_t* client, void * buffer, uint64_t bytes, 
     return (int64_t) bytes;
   } 
 
-  cudaError_t error;
-  cufftResult cufft_error;
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "block_gpu: nant=%u ndim=%u\n", ctx->nant, ctx->ndim);
+  const uint64_t nsamp = bytes / (ctx->nant * ctx->ndim);
+  const unsigned nant = ctx->nant;
 
-  // copy from the [pinned] shared memory block to d_in
-  error = cudaMemcpyAsync (ctx->d_in, buffer, bytes, cudaMemcpyHostToDevice, ctx->stream);
-  if (error != cudaSuccess)
+  ComplexInput * buf = ctx->xgpu_context.array_h;
+  ComplexInput * in =  (ComplexInput *) buffer;
+
+  ctx->dump_counter++;
+  if (ctx->verbose > 1)
+    multilog (log, LOG_INFO, "block_gpu: dump_counter=%lu blocks_per_dump=%lu\n", ctx->dump_counter, ctx->blocks_per_dump);
+  const char dump_at_end = (ctx->dump_counter % ctx->blocks_per_dump == 0);
+
+  uint64_t isamp, osamp, iblock;
+  unsigned iant;
+  int xgpu_error;
+
+  const unsigned block_nantsamp = nant * ctx->xgpu_info.ntime;
+
+  // prepare the specified number of time samples for xGPU to consume
+  const uint64_t nblock = bytes / (block_nantsamp * ctx->ndim);
+  for (iblock=0; iblock<nblock; iblock++)
   {
-    multilog (log, LOG_ERR, "cudaMemcpyAsync H2D failed: %s\n", cudaGetErrorString(error));
-    return -1;
+    // copy the input from main memory to a smallish buffer
+    for (iant=0; iant<nant; iant++)
+    {
+      memcpy (ctx->inbuf, in + (iant * nsamp), ctx->xgpu_info.ntime * ctx->ndim);
+
+      // transpose
+      for (isamp=0; isamp<ctx->xgpu_info.ntime; isamp++)
+      {
+        buf[isamp*nant + iant] = ctx->inbuf[isamp];
+      }
+    }
+
+    in += ctx->xgpu_info.ntime;
+
+#ifdef _DEBUG
+    multilog (log, LOG_INFO, "block_gpu: reordered %d samps, caling CudaXengine\n", osamp);
+#endif
+    if (dump_at_end && iblock == (nblock - 1))
+    {
+      xgpu_error = xgpuCudaXengine (&(ctx->xgpu_context), SYNCOP_DUMP);
+    }
+    else
+    {
+      xgpu_error = xgpuCudaXengine (&(ctx->xgpu_context), SYNCOP_SYNC_COMPUTE);
+    }
+#ifdef _DEBUG
+    multilog (log, LOG_INFO, "block_gpu: CudaXengine done, xgpu_error=%d\n", xgpu_error);
+#endif
   }
 
-  // we must ensure that the data is copied across before continuing...
-  cudaStreamSynchronize(ctx->stream);
-  
   if (ctx->verbose)
-    multilog (log, LOG_INFO, "mopsr_byte_to_float (block_size=%"PRIu64")\n", ctx->block_size);
-  mopsr_byte_to_float ((char *)ctx->d_in, (float *) ctx->d_unpacked, ctx->block_size, ctx->stream);
-
-  // FFT
-  cufft_error = cufftExecC2C(ctx->fft_plan_forward, ctx->d_unpacked, ctx->d_unpacked, CUFFT_FORWARD);
-  if (cufft_error != CUFFT_SUCCESS)
-  {
-    multilog (log, LOG_ERR, "dbxgpu_block_gpu: cufftExecC2C returned error state %d: %s \n",
-              cufft_error, cudaGetErrorString(cudaGetLastError()));
-    return -1;
-  }
-
-  unsigned nsamps = ctx->block_size/ctx->nant/ctx->ndim;
-  unsigned nbatch = nsamps/ctx->batch_size;
-  if (ctx->verbose)
-    multilog (log, LOG_INFO, "mopsr_accumulate_cp_spectra(%p %p %p %d %d %d %d %p)\n",
-              ctx->d_unpacked, ctx->d_cross_power, ctx->d_pairs, ctx->batch_size,
-              nbatch, ctx->npairs, nsamps, ctx->stream);
-  mopsr_accumulate_cp_spectra (ctx->d_unpacked, ctx->d_cross_power, ctx->d_pairs, ctx->batch_size,
-                               nbatch, ctx->npairs, nsamps, ctx->stream);
+    multilog (log, LOG_INFO, "block_gpu: finished processing block %lu, dump=%d\n", block_id, dump_at_end);
 
   //test if we want to dump
-  ctx->dump_counter++;
-  if (ctx->dump_counter%ctx->blocks_per_dump == 0)
+  if (dump_at_end)
+  {
+    uint64_t start_byte = ctx->obs_offset + ctx->byte_counter;
+    uint64_t end_byte = start_byte + ctx->block_size * ctx->blocks_per_dump;
+
+    if (dbxgpu_dump_spectra(client, start_byte, end_byte) !=0)
     {
-      uint64_t start_byte = ctx->byte_counter;
-      uint64_t end_byte = ctx->byte_counter + ctx->block_size * ctx->blocks_per_dump;
-      
-      if (dbxgpu_dump_spectra(client, start_byte, end_byte)!=0){
-        multilog (log, LOG_ERR, "dbxgpu_block_gpu: could not dump spectra\n");
-        return -1;
-      }
-      
-      // zero the cross power accumulation array
-      error = cudaMemsetAsync (ctx->d_cross_power, 0, ctx->d_cross_power_bytes, ctx->stream);
-      if (error != cudaSuccess)
-        {
-          multilog (log, LOG_ERR, "dbxgpu_block_gpu: could not memset accumulation array\n");
-          return -1;
-        }
-      ctx->byte_counter += ctx->block_size * ctx->blocks_per_dump;
+      multilog (log, LOG_ERR, "dbxgpu_block_gpu: could not dump spectra\n");
+      return -1;
     }
+
+    // zero the integration buffer in xGPU library
+    xgpuClearDeviceIntegrationBuffer (&(ctx->xgpu_context));
+    ctx->byte_counter += ctx->block_size * ctx->blocks_per_dump;
+  }
 
 
   return (int64_t) bytes;
@@ -634,97 +592,28 @@ int dbxgpu_init (mopsr_dbxgpu_t * ctx, dada_hdu_t * in_hdu)
 
   if (ctx->device >= 0)
   {
-    // select the gpu device
-    int n_devices = dada_cuda_get_device_count();
-    if (ctx->verbose)
-      multilog (log, LOG_INFO, "init: detected %d CUDA devices\n", n_devices);
+    int xgpu_error = 0;
 
-    if ((ctx->device < 0) && (ctx->device >= n_devices))
+    // Get sizing info from library
+    xgpuInfo(&(ctx->xgpu_info));
+
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "init: xGPU configured for %u antenna "
+                "and integration length of %u\n", 
+                ctx->xgpu_info.nstation * ctx->xgpu_info.npol,
+                ctx->xgpu_info.ntime);
+
+    // note this is pinned memory allocated by xGPU library
+    ctx->xgpu_context.array_h = NULL;
+    ctx->xgpu_context.matrix_h = NULL;
+
+    xgpu_error = xgpuInit(&(ctx->xgpu_context), ctx->device);
+    if (xgpu_error)
     {
-      multilog (log, LOG_ERR, "dbxgpu_init: no CUDA devices available [%d]\n",
-                n_devices);
+      multilog (log, LOG_ERR, "xgpuInit returned error code %d\n", xgpu_error);
       return -1;
     }
 
-    if (ctx->verbose)
-      multilog (log, LOG_INFO, "init: selecting cuda device %d\n", ctx->device);
-    if (dada_cuda_select_device (ctx->device) < 0)
-    {
-      multilog (log, LOG_ERR, "dbxgpu_init: could not select requested device [%d]\n",
-                ctx->device);
-      return -1;
-    }
-
-    char * device_name = dada_cuda_get_device_name (ctx->device);
-    if (!device_name)
-    {
-      multilog (log, LOG_ERR, "dbxgpu_init: could not get CUDA device name\n");
-      return -1;
-    }
-    if (ctx->verbose)
-      multilog (log, LOG_INFO, "init: using device %d : %s\n", ctx->device, device_name);
-    free(device_name);
-
-    ComplexInput * array_h = 0;// hdu->data_block->curbuf;
-    Complex * cuda_matrix_h = 0;
-      
-    xGPUInit(&array_h, &cuda_matrix_h, NSTATION, device);
-
-
-    // setup the cuda stream for operations
-    if (ctx->verbose)
-      multilog (log, LOG_INFO, "init: creating cudaStream\n");
-    cudaError_t error = cudaStreamCreate (&(ctx->stream));
-    if (ctx->verbose)
-      multilog (log, LOG_INFO, "init: stream created\n");
-    if (error != cudaSuccess)
-    {
-      multilog (log, LOG_ERR, "init: could not create CUDA stream\n");
-      return -1;
-    }
-
-    if (ctx->verbose)
-      multilog (log, LOG_INFO, "init: stream=%p\n", (void *) ctx->stream);
-
-    // d_in should be same size as PSRDADA block
-    if (!ctx->d_in)
-    {
-      if (ctx->verbose)
-        multilog (log, LOG_INFO, "init: cudaMalloc(%"PRIu64") for d_in\n", ctx->block_size);
-      error = cudaMalloc (&(ctx->d_in), ctx->block_size);
-      if (error != cudaSuccess)
-      {
-        multilog (log, LOG_ERR, "dbxgpu_init: could not create allocated %ld bytes of device memory\n", ctx->block_size);
-        return -1;
-      }
-    }
-
-    // d_unpacked, should be 4 times larger than the PSRDADA block (8->32bit) this also includes the transpose
-    ctx->d_unpacked_bytes = ctx->block_size * 4;
-    if (!ctx->d_unpacked)
-    {
-      if (ctx->verbose)
-        multilog (log, LOG_INFO, "init: cudaMalloc(%"PRIu64") for d_unpacked\n", ctx->d_unpacked_bytes);
-      error = cudaMalloc (&(ctx->d_unpacked), ctx->d_unpacked_bytes);
-      if (error != cudaSuccess)
-      {
-        multilog (log, LOG_ERR, "init: could not create allocated %ld bytes of device memory\n", ctx->d_unpacked_bytes);
-        return -1;
-      }
-    }
-
-    // d_fft'd same as d_unpacked
-    if (!ctx->d_fftd)
-    {
-      if (ctx->verbose)
-        multilog (log, LOG_INFO, "init: cudaMalloc(%"PRIu64") for d_fftd\n", ctx->d_unpacked_bytes);
-      error = cudaMalloc (&(ctx->d_fftd), ctx->d_unpacked_bytes);
-      if (error != cudaSuccess)
-      {
-        multilog (log, LOG_ERR, "init: could not create allocated %ld bytes of device memory\n", ctx->d_unpacked_bytes);
-        return -1;
-      }
-    }
 
     // ensure that we register the DADA DB buffers as Cuda Host memory
     if (ctx->verbose)
@@ -743,29 +632,8 @@ int dbxgpu_destroy (mopsr_dbxgpu_t * ctx, dada_hdu_t * in_hdu)
 {
   if (ctx->device >= 0)
   {
-    if (ctx->d_in)
-      cudaFree (ctx->d_in);
-    ctx->d_in = 0;
-
-    if (ctx->d_unpacked)
-      cudaFree (ctx->d_unpacked);
-    ctx->d_unpacked = 0;
-
-    if (ctx->d_fftd)
-      cudaFree (ctx->d_fftd);
-    ctx->d_fftd = 0;
-
-    if (ctx->d_cross_power)
-      cudaFree (ctx->d_cross_power);
-    ctx->d_cross_power = 0;
-
-    if (ctx->d_pairs)
-      cudaFree (ctx->d_pairs);
-    ctx->d_pairs = 0;
-
-    if (ctx->d_pairs)
-      free (ctx->h_pairs);
-    ctx->h_pairs = 0;
+    // free gpu memory
+    xgpuFree(&(ctx->xgpu_context));
 
     if (dada_cuda_dbunregister (in_hdu) < 0)
     {
@@ -779,7 +647,7 @@ int dbxgpu_destroy (mopsr_dbxgpu_t * ctx, dada_hdu_t * in_hdu)
 int main (int argc, char **argv)
 {
   /* DADA Data Block to Disk configuration */
-  mopsr_dbxgpu_t dbxgpu = MOPSR_DBCALIB_INIT;
+  mopsr_dbxgpu_t dbxgpu = MOPSR_DBXGPU_INIT;
 
   // input data block HDU key
   key_t dada_key = DADA_DEFAULT_BLOCK_KEY;
@@ -814,11 +682,11 @@ int main (int argc, char **argv)
 
   int arg = 0;
 
-  while ((arg=getopt(argc,argv,"c:d:t:h:k:n:sv")) != -1)
+
+  while ((arg=getopt(argc,argv,"c:d:t:hk:sv")) != -1)
   {
     switch (arg) 
     {
-      
     case 'c':
       core = atoi(optarg);
       break;
@@ -837,37 +705,29 @@ int main (int argc, char **argv)
       
     case 'k':
       if (sscanf (optarg, "%x", &dada_key) != 1) {
-        fprintf (stderr, "dada_db: could not parse key from %s\n", optarg);
+        fprintf (stderr, "dada_dbxgpu: could not parse key from %s\n", optarg);
         return -1;
       }
-      break;
-      
-    case 'n':
-      nfft = atoi(optarg);
       break;
       
     case 's':
       single_transfer = 1;
       break;
-      
+
     case 'v':
       verbose++;
       break;
-      
+
     default:
       usage ();
       return 0;
       
     }
   }
-
-  // AJ: this was moved to the open function (thats where we find out the BPS)
-  //float block_length_s = ((float)dbxgpu.block_size)/dbxgpu.bytes_per_second;
-  //dbxgpu.blocks_per_dump = (int)(dump_time/block_length_s + 0.5);
+  
   dbxgpu.dump_time = dump_time;
   dbxgpu.verbose = verbose;
   dbxgpu.device = device;
-  dbxgpu.batch_size = nfft;
 
   int num_args = argc-optind;
   unsigned i = 0;
@@ -900,9 +760,6 @@ int main (int argc, char **argv)
 
   if (dada_hdu_lock_read (hdu) < 0)
     return EXIT_FAILURE;
-
-  if (verbose)
-    multilog (log, LOG_INFO, "main: batch_size=%d\n", dbxgpu.batch_size);
 
   if (verbose > 1)
     multilog (log, LOG_INFO, "main: dbxgpu_init()\n");

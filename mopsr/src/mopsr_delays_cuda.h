@@ -84,7 +84,7 @@ void mopsr_delay_fractional_sk_scale (cudaStream_t stream,
                              float * h_delays_ds, float * h_fringe_coeffs_ds, size_t fringes_size,
                              uint64_t nbytes, unsigned nchan,
                              unsigned nant, unsigned ntap,
-                             unsigned s1_memory, uint64_t s1_count);
+                             unsigned s1_memory, uint64_t s1_count, char replace_noise);
 
 void mopsr_fringe_rotate (cudaStream_t stream, void * d_in, float * h_fringes, size_t fringes_size,
                           uint64_t nbytes, unsigned nchan, unsigned nant);
@@ -95,12 +95,9 @@ void mopsr_test_skcompute (cudaStream_t stream, void * d_in, void * d_s1s_out, v
 void mopsr_test_compute_power_limits (cudaStream_t stream, void * d_s1s, void * d_thresh,
                               unsigned nsums, unsigned nant, unsigned nchan, uint64_t ndat,
                               uint64_t s1_count, unsigned s1_memory, void * d_rstates);
-void mopsr_test_compute_power_limits2 (cudaStream_t stream, void * d_s1s, void * d_thresh,
-                              unsigned nsums, unsigned nant, unsigned nchan, uint64_t ndat,
-                              uint64_t s1_count, unsigned s1_memory, void * d_rstates);
 
 void mopsr_test_skdetect (cudaStream_t stream, void * d_s1s, void * d_s2s, void * d_thesh, void * d_mask, void * d_sigmas, unsigned nsums, unsigned nant, unsigned nchan, uint64_t ndat);
-void mopsr_test_skmask (cudaStream_t stream, void * d_in, void * d_out, void * d_mask, void * d_rstates, void * d_sigmas, unsigned nsums, unsigned nchan, unsigned nant, uint64_t ndat);
+void mopsr_test_skmask (cudaStream_t stream, void * d_in, void * d_out, void * d_mask, void * d_rstates, void * d_sigmas, unsigned nsums, unsigned nchan, unsigned nant, uint64_t ndat, char replace_noise);
 
 #ifdef __cplusplus
 }

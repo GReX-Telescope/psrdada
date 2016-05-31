@@ -797,6 +797,8 @@ void detect_data (udpplot_t * ctx)
   unsigned shift;
   float a, b;
 
+  fprintf (stderr, "detect: zap_dc=%d\n", ctx->zap_dc);
+
   for (iant=0; iant < ctx->nant; iant++)
   {
     if ((ctx->antenna < 0) || (ctx->antenna == iant))
@@ -824,6 +826,8 @@ void detect_data (udpplot_t * ctx)
             b = ctx->fft_out[iant][offset + (ibit*2) + 1];
             newchan = (ibit+halfbit);
             ctx->y_points[iant][basechan + newchan] += ((a*a) + (b*b));
+            if (ctx->zap_dc && ibit == 0)
+              ctx->y_points[iant][basechan + newchan] = 0;
           }
         }
         else
@@ -833,11 +837,15 @@ void detect_data (udpplot_t * ctx)
             a = ctx->fft_out[iant][offset + (ibit*2) + 0];
             b = ctx->fft_out[iant][offset + (ibit*2) + 1];
             ctx->y_points[iant][basechan + ibit] += ((a*a) + (b*b));
+
+            if (ctx->zap_dc && ibit == 0)
+            {
+              fprintf (stderr, "zapping chan=%d\n", basechan + ibit);
+              ctx->y_points[iant][basechan + ibit] = 0;
+            }
           }
         }
 
-        if (ctx->zap_dc && ichan == 0)
-          ctx->y_points[iant][ichan] = 0;
       }
     }
   }

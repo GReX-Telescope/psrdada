@@ -67,8 +67,7 @@ int main (int argc, char **argv)
   void * h_s1;
   void * h_s2;
   void * h_mask;
-  void * h_thresh1;
-  void * h_thresh2;
+  void * h_thresh;
 
   /* Flag set in verbose mode */
   char verbose = 0;
@@ -78,6 +77,7 @@ int main (int argc, char **argv)
   unsigned nant  = 2;
   uint64_t nsamp = 16*1024*6;
   unsigned ndim = 2;
+  char replace_noise = 1;
 
   while ((arg=getopt(argc,argv,"a:c:d:t:v")) != -1)
   {
@@ -275,13 +275,7 @@ int main (int argc, char **argv)
     return -1;
   }
 
-  error = cudaMallocHost((void **) &h_thresh1, thresh_size);
-  if (error != cudaSuccess)
-  {
-    multilog (log, LOG_ERR, "could not create allocated %ld bytes of host memory\n", thresh_size);
-    return -1;
-  }
-  error = cudaMallocHost((void **) &h_thresh2, thresh_size);
+  error = cudaMallocHost((void **) &h_thresh, thresh_size);
   if (error != cudaSuccess)
   {
     multilog (log, LOG_ERR, "could not create allocated %ld bytes of host memory\n", thresh_size);
@@ -409,20 +403,7 @@ int main (int argc, char **argv)
   mopsr_test_compute_power_limits (stream, d_s1, d_thresh, nsums, nant, nchan, ndat_cpl, s1_count, s1_memory, d_rstates);
 
   multilog (log, LOG_INFO, "cudaMemcpyDeviceToHost (%d)\n", thresh_size);
-  error = cudaMemcpyAsync (h_thresh1, d_thresh, thresh_size, cudaMemcpyDeviceToHost, stream);
-  if (error != cudaSuccess)
-  {
-   multilog (log, LOG_ERR, "cudaMemcpyAsync D2H failed: %s\n", cudaGetErrorString(error));
-   return -1;
-  }
-
-  cudaStreamSynchronize(stream);
-
-
-  mopsr_test_compute_power_limits2 (stream, d_s1, d_thresh, nsums, nant, nchan, ndat_cpl, s1_count, s1_memory, d_rstates);
-
-  multilog (log, LOG_INFO, "cudaMemcpyDeviceToHost (%d)\n", thresh_size);
-  error = cudaMemcpyAsync (h_thresh2, d_thresh, thresh_size, cudaMemcpyDeviceToHost, stream);
+  error = cudaMemcpyAsync (h_thresh, d_thresh, thresh_size, cudaMemcpyDeviceToHost, stream);
   if (error != cudaSuccess)
   {
    multilog (log, LOG_ERR, "cudaMemcpyAsync D2H failed: %s\n", cudaGetErrorString(error));
@@ -433,11 +414,10 @@ int main (int argc, char **argv)
   fprintf (stderr, "nsums=%d\n", nsums);
 
   outs1 = (float * ) h_s1;
-  float * h_thr1 = (float *) h_thresh1;
-  float * h_thr2 = (float *) h_thresh2;
+  float * h_thr = (float *) h_thresh;
   float * tmp = (float *) malloc(sizeof(float) * nsums);
 
-  float upper, lower, gpu_median1, gpu_sigma1, gpu_median2, gpu_sigma2, gpu_upper, gpu_lower;
+  float upper, lower, gpu_median, gpu_sigma, gpu_upper, gpu_lower;
 
   for (ichan=0; ichan<nchan; ichan++)
   {
@@ -461,17 +441,11 @@ int main (int argc, char **argv)
       upper = median + 4 * stddev;
       lower = median - 4 * stddev;
 
-      gpu_median1 = h_thr1[0];
-      gpu_sigma1  = h_thr1[1];
+      gpu_median = h_thr[0];
+      gpu_sigma  = h_thr[1];
 
-      gpu_median2 = h_thr2[0];
-      gpu_sigma2  = h_thr2[1];
-
-      if (gpu_median1 != gpu_median2 || gpu_sigma1 != gpu_sigma2)
-        fprintf (stderr, "1[%f, %f] 2[%f, %f]\n", gpu_median1, gpu_sigma1, gpu_median2, gpu_sigma2);
-
-      gpu_upper = gpu_median1 + 4 * gpu_sigma1;
-      gpu_lower = gpu_median1 - 4 * gpu_sigma1;
+      gpu_upper = gpu_median + 4 * gpu_sigma;
+      gpu_lower = gpu_median - 4 * gpu_sigma;
 
       if (((upper > gpu_upper) && (upper / gpu_upper > tol)) || ((gpu_upper > upper) && (gpu_upper / upper > tol)))
         fprintf (stderr, "[%d][%d] [%f - %f] median=%f sigma=%f || [%f - %f] median=%f\n",
@@ -484,8 +458,7 @@ int main (int argc, char **argv)
                 median, stddev,
                 gpu_upper, gpu_lower, gpu_lower + ((gpu_upper - gpu_lower)/2));
 
-      h_thr1 += 2;
-      h_thr2 += 2;
+      h_thr += 2;
     }
   }
 
@@ -509,7 +482,6 @@ int main (int argc, char **argv)
   in = (float * ) h_in;
   outs1 = (float * ) h_s1;
   outs2 = (float * ) h_s2;
-  h_thr1 = (float *) h_thresh1;
 
   float sk_l = 0.834186;
   float sk_h = 1.21695;
@@ -518,8 +490,8 @@ int main (int argc, char **argv)
   {
     for (iant=0; iant<nant; iant++)
     { 
-      gpu_upper = h_thr1[0];
-      gpu_lower = h_thr1[1];
+      gpu_upper = h_thr[0];
+      gpu_lower = h_thr[1];
 
       for (isum=0; isum<nsums; isum++)
       {
@@ -543,7 +515,7 @@ int main (int argc, char **argv)
         outs1 ++;
         outs2 ++;
       }
-      h_thr1 += 2;
+      h_thr += 2;
     }
   }
 
@@ -569,7 +541,7 @@ int main (int argc, char **argv)
 
   // now mask the input data
   mopsr_delay_copy_scales (stream, h_ant_scales, ant_scales_size);
-  mopsr_test_skmask (stream, d_in, d_out, d_mask, d_rstates, d_sigmas, nsums, nchan, nant, nsamp);
+  mopsr_test_skmask (stream, d_in, d_out, d_mask, d_rstates, d_sigmas, nsums, nchan, nant, nsamp, replace_noise);
 
   multilog (log, LOG_INFO, "cudaMemcpyDeviceToHost (%d)\n", block_size);
   error = cudaMemcpyAsync (h_out, d_out, nbytes, cudaMemcpyDeviceToHost, stream);
@@ -630,8 +602,7 @@ int main (int argc, char **argv)
   cudaFreeHost (h_s1);
   cudaFreeHost (h_s2);
   cudaFreeHost (h_mask);
-  cudaFreeHost (h_thresh1);
-  cudaFreeHost (h_thresh2);
+  cudaFreeHost (h_thresh);
 
   return EXIT_SUCCESS;
 }

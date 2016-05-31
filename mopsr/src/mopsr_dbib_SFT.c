@@ -328,84 +328,106 @@ int64_t mopsr_dbib_send (dada_client_t* client, void * buffer, uint64_t bytes)
     multilog (log, LOG_WARNING, "send: failed to set NBEAM=%d in header\n", new_nbeam);
   }
 
-  if (ctx->verbose)
-    multilog (log, LOG_INFO, "open: setting ORDER=SFT\n");
-  if (ascii_header_set (buffer, "ORDER", "%s", "SFT") < 0)
+  if (old_nbeam > 1 && new_nbeam > 1)
   {
-    multilog (log, LOG_ERR, "open: could not set ORDER=SFT in outgoing header\n");
-    return -1;
-  }
-
-  // read the md_offets into memory
-  float * md_offsets = (float *) malloc (sizeof(float) * old_nbeam);
-  memset (md_offsets, 0, sizeof(float) * old_nbeam);
-  char * md_list = (char *) malloc (sizeof(char) * 8 * old_nbeam);
-  
-  // extract the module identifiers
-  if (ascii_header_get (client->header, "BEAM_MD_OFFSETS", "%s", md_list) != 1)
-  {
-    multilog (log, LOG_ERR, "open: could not read BEAM_MD_OFFSETS from header\n");
-    return -1;
-  }
-
-
-  const char *sep = ",";
-  char * saveptr;
-  char * str = strtok_r(md_list, sep, &saveptr);
-  unsigned ibeam=0;
-  while (str && ibeam<old_nbeam)
-  {
-    sscanf(str,"%f", &(md_offsets[ibeam]));
-    str = strtok_r(NULL, sep, &saveptr);
-    ibeam++;
-  }
-
-
-  // copy the header to the header memory buffer
-  char keyword[64];
-  mopsr_bp_conn_t * conns = ctx->conn_info;
-
-  // delete it
-  if (ctx->verbose)
-    multilog (log, LOG_INFO, "open: ascii_header_del BEAM_MD_OFFSETS");
-  if (ascii_header_del (buffer, "BEAM_MD_OFFSETS") < 0)
-  {
-    multilog (log, LOG_ERR, "open: failed to delete %s from the header\n", keyword);
-    return -1;
-  }
-
-  md_list[0] = '\0';
-  for (i=0; i<ctx->nconn; i++)
-  {
-    memcpy (ib_cms[i]->header_mb->buffer, buffer, bytes);
-
-    // each beam will have a unique MD_OFFSET angle
-    for (ibeam=0; ibeam<old_nbeam; ibeam++)
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "open: setting ORDER=SFT\n");
+    if (ascii_header_set (buffer, "ORDER", "%s", "SFT") < 0)
     {
-      if (ctx->verbose)
-        multilog (log, LOG_INFO, "open: checking if (%u >= %u) && (%u <= %u)\n",
-                  ibeam, conns[i].beam_first, ibeam, conns[i].beam_last);
+      multilog (log, LOG_ERR, "open: could not set ORDER=SFT in outgoing header\n");
+      return -1;
+    }
 
-      // if this connection will recieve this beam, then write it to the beam
-      if (ibeam >= conns[i].beam_first && ibeam <= conns[i].beam_last)
+    // read the md_offets into memory
+    float * md_offsets = (float *) malloc (sizeof(float) * old_nbeam);
+    memset (md_offsets, 0, sizeof(float) * old_nbeam);
+    char * md_list = (char *) malloc (sizeof(char) * 8 * old_nbeam);
+
+    // extract the module identifiers
+    if (ascii_header_get (client->header, "BEAM_MD_OFFSETS", "%s", md_list) == 1)
+    {
+      const char *sep = ",";
+      char * saveptr;
+      char * str = strtok_r(md_list, sep, &saveptr);
+      unsigned ibeam=0;
+      while (str && ibeam<old_nbeam)
       {
-        sprintf (keyword, "%4.3f", md_offsets[ibeam]);
-        strcat (md_list, keyword);
-        if (ibeam < conns[i].beam_last)
-          strcat (md_list, ",");  
-        else
+        sscanf(str,"%f", &(md_offsets[ibeam]));
+        str = strtok_r(NULL, sep, &saveptr);
+        ibeam++;
+      }
+
+      // copy the header to the header memory buffer
+      char keyword[64];
+      mopsr_bp_conn_t * conns = ctx->conn_info;
+
+      // delete it
+      if (ctx->verbose)
+        multilog (log, LOG_INFO, "open: ascii_header_del BEAM_MD_OFFSETS");
+      if (ascii_header_del (buffer, "BEAM_MD_OFFSETS") < 0)
+      {
+        multilog (log, LOG_ERR, "open: failed to delete %s from the header\n", keyword);
+        return -1;
+      }
+
+      md_list[0] = '\0';
+      for (i=0; i<ctx->nconn; i++)
+      {
+        memcpy (ib_cms[i]->header_mb->buffer, buffer, bytes);
+
+        // each beam will have a unique MD_OFFSET angle
+        for (ibeam=0; ibeam<old_nbeam; ibeam++)
         {
-          if (ascii_header_set (ib_cms[i]->header_mb->buffer, "BEAM_MD_OFFSETS", "%s", md_list) < 0)
-            multilog (log, LOG_WARNING, "open: failed to write BEAM_MD_OFFSETS=%s "
-                     "to the outgoing header\n", md_list);
-           md_list[0] = '\0';
+          if (ctx->verbose)
+            multilog (log, LOG_INFO, "open: checking if (%u >= %u) && (%u <= %u)\n",
+                      ibeam, conns[i].beam_first, ibeam, conns[i].beam_last);
+
+          // if this connection will recieve this beam, then write it to the beam
+          if (ibeam >= conns[i].beam_first && ibeam <= conns[i].beam_last)
+          {
+            sprintf (keyword, "%4.3f", md_offsets[ibeam]);
+            strcat (md_list, keyword);
+            if (ibeam < conns[i].beam_last)
+              strcat (md_list, ",");  
+            else
+            {
+              if (ascii_header_set (ib_cms[i]->header_mb->buffer, "BEAM_MD_OFFSETS", "%s", md_list) < 0)
+              multilog (log, LOG_WARNING, "open: failed to write BEAM_MD_OFFSETS=%s "
+                       "to the outgoing header\n", md_list);
+              md_list[0] = '\0';
+            }
+          }
         }
       }
     }
+    else
+    {
+      // TODO put ANTENNAE split instead!!
+      multilog (log, LOG_INFO, "open: could not read BEAM_MD_OFFSETS from header\n");
+      mopsr_bp_conn_t * conns = ctx->conn_info;
+      unsigned ibeam=0;
+      for (i=0; i<ctx->nconn; i++)
+      {
+        memcpy (ib_cms[i]->header_mb->buffer, buffer, bytes);
+      }
+    }
+    free (md_offsets);
+    free (md_list);
   }
-
-  free (md_offsets);
-  free (md_list);
+  else
+  {
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "open: setting ORDER=FT\n");
+    if (ascii_header_set (buffer, "ORDER", "%s", "FT") < 0)
+    {
+      multilog (log, LOG_ERR, "open: could not set ORDER=FT in outgoing header\n");
+      return -1;
+    }
+    for (i=0; i<ctx->nconn; i++)
+    {
+      memcpy (ib_cms[i]->header_mb->buffer, buffer, bytes);
+    }
+  }
 
   uint64_t transfer_size = 0;
   for (i=0; i<ctx->nconn; i++)
@@ -719,52 +741,82 @@ int mopsr_dbib_open_connections (mopsr_bp_ib_t * ctx, multilog_t * log)
   int rval = 0;
   pthread_t * connections = (pthread_t *) malloc(sizeof(pthread_t) * ctx->nconn);
 
-  // start all the connection threads
-  for (i=0; i<ctx->nconn; i++)
-  {
-    if (!ib_cms[i]->cm_connected)
-    {
-      if (ctx->verbose > 1)
-        multilog (ctx->log, LOG_INFO, "open_connections: mopsr_dbib_init_thread ib_cms[%d]=%p\n",
-                  i, ctx->ib_cms[i]);
+  char all_connected = 0;
+  int attempts = 0;
 
-      rval = pthread_create(&(connections[i]), 0, (void *) mopsr_dbib_init_thread,
-                          (void *) &(conns[i]));
-      if (rval != 0)
+  while (!all_connected && attempts < 1)
+  {
+    // start all the connection threads
+    for (i=0; i<ctx->nconn; i++)
+    {
+      if (ib_cms[i]->cm_connected == 0)
       {
-        multilog (ctx->log, LOG_INFO, "open_connections: error creating init_thread\n");
-        return -1;
+        if (ctx->verbose > 1)
+          multilog (ctx->log, LOG_INFO, "open_connections: mopsr_dbib_init_thread ib_cms[%d]=%p\n",
+                    i, ctx->ib_cms[i]);
+
+        rval = pthread_create(&(connections[i]), 0, (void *) mopsr_dbib_init_thread,
+                            (void *) &(conns[i]));
+        if (rval != 0)
+        {
+          multilog (ctx->log, LOG_INFO, "open_connections: error creating init_thread\n");
+          return -1;
+        }
       }
+      else
+      {
+        multilog (ctx->log, LOG_INFO, "open_connections: ib_cms[%d] already connected\n", i);
+      }
+    }
+
+
+    // join all the connection threads
+    void * result;
+    int init_cm_ok = 1;
+    for (i=0; i<ctx->nconn; i++)
+    {
+      if (ib_cms[i]->cm_connected <= 1)
+      {
+        pthread_join (connections[i], &result);
+        if (ib_cms[i]->cm_connected == 0)
+        {
+          multilog (ctx->log, LOG_WARNING, "ib_cms[%d] releasing resources\n", i);
+          if (dada_ib_disconnect (ib_cms[i]))
+          {
+            multilog(ctx->log, LOG_ERR, "dada_ib_disconnect for %d failed\n", i);
+            return -1;
+          }
+          init_cm_ok = 0;
+        }
+      }
+      else
+      {
+        // set to 2 to indicate connection is established
+        ib_cms[i]->cm_connected = 2;
+      }
+    }
+
+    if (init_cm_ok)
+    {
+      all_connected = 1;
     }
     else
     {
-      multilog (ctx->log, LOG_INFO, "open_connections: ib_cms[%d] already connected\n", i);
+      multilog (ctx->log, LOG_INFO, "open_connections: sleep(1)\n");
+      sleep(1);
     }
+    attempts++;
   }
 
-  // join all the connection threads
-  void * result;
-  int init_cm_ok = 1;
-  for (i=0; i<ctx->nconn; i++)
-  {
-    if (ib_cms[i]->cm_connected <= 1)
-    {
-      pthread_join (connections[i], &result);
-      if (!ib_cms[i]->cm_connected)
-        init_cm_ok = 0;
-    }
-
-    // set to 2 to indicate connection is established
-    ib_cms[i]->cm_connected = 2;
-  }
   free(connections);
-  if (!init_cm_ok)
+  if (!all_connected)
   {
     multilog(ctx->log, LOG_ERR, "open_connections: failed to init CM connections\n");
     return -1;
   }
 
-  multilog (ctx->log, LOG_INFO, "open_connections: connections opened\n");
+  if (ctx->verbose)
+    multilog (ctx->log, LOG_INFO, "open_connections: connections opened\n");
 
   return 0;
 }
@@ -786,6 +838,7 @@ void * mopsr_dbib_init_thread (void * arg)
 
   ib_cm->cm_connected = 0;
   ib_cm->ib_connected = 0;
+  ib_cm->port = conn->port;
 
   // resolve the route to the server
   if (ib_cm->verbose)
@@ -843,6 +896,15 @@ void * mopsr_dbib_init_thread (void * arg)
     multilog(log, LOG_ERR, "ib_init_thread: post_recv [READY HDR] failed\n");
     pthread_exit((void *) &(ib_cm->cm_connected));
   }
+
+  // dont overwhelm the receiver
+  unsigned irecv = conn->irecv;
+  if (irecv < conn->isend)
+    irecv += conn->nsend;
+
+  //unsigned wait_us = 2e6 + (10000 * (irecv - conn->isend));
+  //multilog (log, LOG_INFO, "ib_init_thread: usleep(%d)\n", wait_us);
+  //usleep(wait_us);
 
   if (ib_cm->verbose)
     multilog (log, LOG_INFO, "ib_init_thread: dada_ib_connect\n");

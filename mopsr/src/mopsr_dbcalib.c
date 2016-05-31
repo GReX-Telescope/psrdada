@@ -1024,6 +1024,10 @@ int main (int argc, char **argv)
   if (verbose)
     multilog (log, LOG_INFO, "main: batch_size=%d\n", dbcalib.batch_size);
 
+  if (core >= 0)
+    if (dada_bind_thread_to_core(core) < 0)
+       multilog(log, LOG_WARNING, "mopsr_dbcalib: failed to bind to core %d\n", core);
+
   if (verbose > 1)
     multilog (log, LOG_INFO, "main: dbcalib_init()\n");
   if (dbcalib_init (&dbcalib, hdu) < 0)

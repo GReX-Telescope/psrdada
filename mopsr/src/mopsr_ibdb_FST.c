@@ -530,7 +530,7 @@ int mopsr_ibdb_open_connections (mopsr_bf_ib_t * ctx, multilog_t * log)
   mopsr_bf_conn_t * conns = ctx->conn_info;
 
   if (ctx->verbose > 1)
-    multilog(ctx->log, LOG_INFO, "mopsr_ibdb_open_connections()\n");
+    multilog(ctx->log, LOG_INFO, "mopsr_ibdb_open_connections: nconn=%u()\n", ctx->nconn);
 
   unsigned i = 0;
   int rval = 0;
@@ -565,29 +565,32 @@ int mopsr_ibdb_open_connections (mopsr_bf_ib_t * ctx, multilog_t * log)
   // join all the connection threads
   void * result;
   int init_cm_ok = 1;
+  int init_ib_ok = 1;
   for (i=0; i<ctx->nconn; i++)
   {
-    if (ib_cms[i]->cm_connected <= 1)
-    {
-      if (ctx->verbose)
-        multilog (ctx->log, LOG_INFO, "open_connections: joining connection thread %d\n", i);
-      pthread_join (connections[i], &result);
-      if (ctx->verbose)
-        multilog (ctx->log, LOG_INFO, "open_connections: connection thread %d joined\n", i);
-      if (!ib_cms[i]->cm_connected)
-        init_cm_ok = 0;
-    }
-
-    // set to 2 to indicate connection is established
-    ib_cms[i]->cm_connected = 2;
+    pthread_join (connections[i], &result);
+    if (ctx->verbose)
+      multilog (ctx->log, LOG_INFO, "open_connections: connection thread %d joined\n", i);
+    if (ib_cms[i]->cm_connected != 2)
+      init_cm_ok = 0;
+    if (ib_cms[i]->ib_connected != 1)
+      init_ib_ok = 0;
   }
+
   free(connections);
-  if (!init_cm_ok)
+
+  if (init_cm_ok && init_ib_ok)
+  {
+    multilog(ctx->log, LOG_INFO, "open_connections: connections initialized\n");
+    return 0;
+  }
+  else
   {
     multilog(ctx->log, LOG_ERR, "open_connections: failed to init CM connections\n");
     return -1;
   }
 
+  /*
   // pre-post receive for the header transfer 
   if (ctx->verbose)
     multilog(ctx->log, LOG_INFO, "open_connections: post_recv on header_mb [HEADER]\n");
@@ -613,7 +616,7 @@ int mopsr_ibdb_open_connections (mopsr_bf_ib_t * ctx, multilog_t * log)
   {
     if (!ib_cms[i]->ib_connected)
     {
-      if (ctx->verbose)
+      //if (ctx->verbose)
         multilog(ctx->log, LOG_INFO, "open_connections: ib_cms[%d] accept\n", i);
       if (dada_ib_accept (ib_cms[i]) < 0)
       {
@@ -623,11 +626,11 @@ int mopsr_ibdb_open_connections (mopsr_bf_ib_t * ctx, multilog_t * log)
       ib_cms[i]->ib_connected = 1;
     }
   }
-
+*/
   //if (ctx->verbose)
-    multilog(ctx->log, LOG_INFO, "open_connections: connections initialized\n");
+  //  multilog(ctx->log, LOG_INFO, "open_connections: connections initialized\n");
 
-  return accept_result;
+  //return accept_result;
 }
 
 
@@ -652,6 +655,8 @@ void * mopsr_ibdb_init_thread (void * arg)
   if (ib_cm->verbose)
     multilog(log, LOG_INFO, "init_thread: listening for CM event on port %d\n", ib_cm->port);
 
+//#define ORIGINAL_WAY
+#ifdef ORIGINAL_WAY
   // listen for a connection request on the specified port
   if (ib_cm->verbose > 1)
     multilog(log, LOG_INFO, "init_thread: dada_ib_listen_cm (port=%d)\n", ib_cm->port);
@@ -661,6 +666,16 @@ void * mopsr_ibdb_init_thread (void * arg)
     multilog(log, LOG_ERR, "init_thread: dada_ib_listen_cm failed\n");
     pthread_exit((void *) &(ib_cm->cm_connected));
   }
+#else
+  if (ib_cm->verbose > 1)
+    multilog(log, LOG_INFO, "init_thread: dada_ib_bind_cm (port=%d)\n", ib_cm->port);
+
+  if (dada_ib_bind_cm(ib_cm, ib_cm->port) < 0)
+  {
+    multilog(log, LOG_ERR, "init_thread: dada_ib_bind_cm failed\n");
+    pthread_exit((void *) &(ib_cm->cm_connected));
+  }
+#endif
 
   // create the IB verb structures necessary
   if (ib_cm->verbose > 1)
@@ -697,6 +712,14 @@ void * mopsr_ibdb_init_thread (void * arg)
     pthread_exit((void *) &(ib_cm->cm_connected));
   }
 
+#ifndef ORIGINAL_WAY
+  if (dada_ib_listen_cm_only (ib_cm) < 0)
+  {
+    multilog(log, LOG_ERR, "ib_init: dada_ib_listen_cm_only failed\n");
+    pthread_exit((void *) &(ib_cm->cm_connected));
+  }
+#endif
+
   ib_cm->header_mb->wr_id = 10000;
 
   if (ib_cm->verbose > 1)
@@ -709,8 +732,22 @@ void * mopsr_ibdb_init_thread (void * arg)
 
   if (ib_cm->verbose > 1)
     multilog(log, LOG_INFO, "init_thread: thread completed\n");
-  ib_cm->cm_connected = 1;
-  pthread_exit((void *) &(ib_cm->cm_connected));
+  ib_cm->cm_connected = 2;
+
+  if (dada_ib_post_recv(ib_cm, ib_cm->header_mb) < 0)
+  {
+    multilog(log, LOG_ERR, "init_thread: post_recv on header_mb [HEADER] failed\n");
+    pthread_exit((void *) &(ib_cm->ib_connected));
+  }
+
+  if (dada_ib_accept (ib_cm) < 0)
+  {
+    multilog(log, LOG_ERR, "init_thread: dada_ib_accept failed\n");
+    pthread_exit((void *) &(ib_cm->ib_connected));
+  }
+
+  ib_cm->ib_connected = 1;
+  pthread_exit((void *) &(ib_cm->ib_connected));
 }
 
 
