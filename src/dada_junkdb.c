@@ -34,6 +34,7 @@ void usage()
 {
   fprintf (stdout,
 	   "dada_junkdb [options] header_file\n"
+     " -b bytes total number of bytes to generate\n"
      " -c char  fill data with char\n"
      " -g       write gaussian distributed data\n"
      " -k       hexadecimal shared memory key  [default: %x]\n"
@@ -209,6 +210,8 @@ int dada_junkdb_open (dada_client_t* client)
   client->transfer_bytes = junkdb->transfer_size;
   junkdb->bytes_to_copy = 0;
 
+  if (junkdb->verbose)
+    multilog (client->log, LOG_INFO, "FILE_SIZE=%"PRIu64"\n", junkdb->transfer_size);
   if (ascii_header_set(client->header, "FILE_SIZE", "%"PRIu64, junkdb->transfer_size) < 0)
   {
     multilog (client->log, LOG_WARNING, "Failed to set FILE_SIZE header attribute to %"PRIu64"\n",
@@ -216,7 +219,7 @@ int dada_junkdb_open (dada_client_t* client)
   }
 
   if (junkdb->verbose)
-    multilog (client->log, LOG_INFO, "open: setting filesize %"PRIu64"\n", junkdb->transfer_size);
+    multilog (client->log, LOG_INFO, "open: setting transfer_bytes=%"PRIu64"\n", junkdb->transfer_size);
 
   // seed the RNG
   srand ( time(NULL) );
@@ -282,10 +285,21 @@ int main (int argc, char **argv)
 
   uint64_t rate_base = 1024*1024;
 
+  int64_t total_bytes = -1;
+
   int arg = 0;
 
-  while ((arg=getopt(argc,argv,"c:ghk:r:R:t:vz")) != -1)
+  while ((arg=getopt(argc,argv,"b:c:ghk:r:R:t:vz")) != -1)
     switch (arg) {
+
+    case 'b':
+      if (sscanf(optarg, "%"PRIi64, &total_bytes) != 1)
+      {
+        fprintf (stderr, "ERROR: could not parse total_bytes from %s\n", optarg);
+        usage();
+        return EXIT_FAILURE;
+      }
+      break;
 
     case 'c':
       if (sscanf(optarg, "%c", &fill_char) != 1)
@@ -389,6 +403,8 @@ int main (int argc, char **argv)
   junkdb.write_gaussian = write_gaussian;
   junkdb.data_size = (uint64_t) rate * rate_base;
   junkdb.transfer_size = write_time * junkdb.data_size;
+  if (total_bytes > 0)
+    junkdb.transfer_size = (uint64_t) total_bytes;
   junkdb.header_file = strdup(header_file);
   junkdb.verbose = verbose;
   junkdb.fill_char = fill_char;
