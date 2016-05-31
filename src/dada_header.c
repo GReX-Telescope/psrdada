@@ -26,6 +26,7 @@ void usage()
      "dada_header [options]\n"
      " -k         hexadecimal shared memory key  [default: %x]\n"
      " -p         read header block as a passive viewer \n"
+     " -t tag     unused command line option\n"
      " -v         be verbose\n",DADA_DEFAULT_BLOCK_KEY);
 }
 
@@ -52,7 +53,7 @@ int main (int argc, char **argv)
   /* TODO the amount to conduct a busy sleep inbetween clearing each sub
    * block */
 
-  while ((arg=getopt(argc,argv,"pvk:")) != -1)
+  while ((arg=getopt(argc,argv,"pvk:t:")) != -1)
     switch (arg)
     {
     case 'p':
@@ -61,6 +62,9 @@ int main (int argc, char **argv)
 
     case 'v':
       verbose=1;
+      break;
+
+    case 't':
       break;
 
     case 'k':
