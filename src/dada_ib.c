@@ -21,6 +21,8 @@ dada_ib_cm_t * dada_ib_create_cm (unsigned nbufs, multilog_t * log)
 
   ctx->cm_channel = 0;
   ctx->cm_id = 0;
+  ctx->listen_id = 0;
+  ctx->verbs = 0;
   ctx->event = 0;
   ctx->send_comp_chan = 0;
   ctx->recv_comp_chan = 0;
@@ -98,6 +100,19 @@ int dada_ib_listen_cm (dada_ib_cm_t * ctx, int port)
     return -1;
   }
 
+  // ensure the REUSEADDR option is set on this listening ID
+  int optval = 1;
+  err = rdma_set_option (listen_id, RDMA_OPTION_ID, 
+                         RDMA_OPTION_ID_REUSEADDR, 
+                         (void *)&optval, sizeof(optval));
+  if (err)
+  {
+    multilog (log, LOG_ERR, "dada_ib_listen_cm: rdma_set_option failed [%d] -> %s\n",
+             err, strerror(errno));
+    return -1;
+  }
+
+
   sin.sin_family      = AF_INET;
   sin.sin_port        = htons(port);
   sin.sin_addr.s_addr = INADDR_ANY;
@@ -148,9 +163,7 @@ int dada_ib_listen_cm (dada_ib_cm_t * ctx, int port)
 
 }
 
-/* 
- *  creates event channel and binds a port to the CM_ID ready for a rdma_listen call
- */
+// creates event channel and binds a port to the CM_ID ready for a rdma_listen call
 int dada_ib_bind_cm (dada_ib_cm_t * ctx, int port)
 {
   assert(ctx);
@@ -169,7 +182,6 @@ int dada_ib_bind_cm (dada_ib_cm_t * ctx, int port)
   }
 
   int err = 0;
-  struct rdma_cm_id    * listen_id;
   struct rdma_cm_event * event;
   struct sockaddr_in     sin;
 
@@ -178,10 +190,22 @@ int dada_ib_bind_cm (dada_ib_cm_t * ctx, int port)
 
   if (ctx->verbose > 1)
     multilog(log, LOG_INFO, "dada_ib_bind_cm: rdma_create_id\n");
-  err = rdma_create_id(ctx->cm_channel, &listen_id, NULL, RDMA_PS_TCP);
+  err = rdma_create_id(ctx->cm_channel, &(ctx->listen_id), NULL, RDMA_PS_TCP);
   if (err)
   {
     multilog(log, LOG_ERR, "dada_ib_bind_cm: rdma_create_id failed [%d]\n", err);
+    return -1;
+  }
+
+  // ensure the REUSEADDR option is set on this listening ID
+  int optval = 1;
+  err = rdma_set_option (ctx->listen_id, RDMA_OPTION_ID, 
+                         RDMA_OPTION_ID_REUSEADDR, 
+                         (void *)&optval, sizeof(optval));
+  if (err)
+  {
+    multilog (log, LOG_ERR, "dada_ib_bind_cm: rdma_set_option failed [%d] -> %s\n", 
+             err, strerror(errno));
     return -1;
   }
 
@@ -192,14 +216,14 @@ int dada_ib_bind_cm (dada_ib_cm_t * ctx, int port)
   // Bind to local port and listen for connection request 
   if (ctx->verbose > 1)
     multilog(log, LOG_INFO, "dada_ib_bind_cm: rdma_bind_addr on port %d\n", port);
-  err = rdma_bind_addr(listen_id, (struct sockaddr *) &sin);
+  err = rdma_bind_addr(ctx->listen_id, (struct sockaddr *) &sin);
   if (err)
   {
     multilog(log, LOG_ERR, "dada_ib_bind_cm: rdma_bind_addr failed [%d]\n", err);
     return -1;
   }
 
-  ctx->cm_id = listen_id;
+  //multilog(log, LOG_INFO, "dada_ib_bind_cm: listen_id=%p\n", ctx->listen_id);
   return 0;
 }
 
@@ -311,7 +335,47 @@ int dada_ib_connect_cm (dada_ib_cm_t * ctx, const char *host, unsigned port)
   rdma_ack_cm_event(event);
 
   return 0;
+}
 
+int dada_ib_listen_cm_only (dada_ib_cm_t * ctx)
+{
+  assert(ctx);
+  multilog_t * log = ctx->log;
+
+  int err;
+  struct rdma_cm_event * event;
+
+  // accept the connection
+  if (ctx->verbose)
+    multilog(log, LOG_INFO, "dada_ib_listen_cm_only: waiting for RDMA connection\n");
+  err = rdma_listen (ctx->listen_id, 1);
+  if (err)
+  {
+    multilog(log, LOG_ERR, "dada_ib_listen_cm_only:  rdma_listen failed [%d]\n", err);
+    return -1;
+  }
+  err = rdma_get_cm_event(ctx->cm_channel, &event);
+  if (err)
+  {
+    multilog(log, LOG_ERR, "dada_ib_listen_cm_only: rdma_get_cm_event failed "
+             "[%d]\n", err);
+    return -1;
+  }
+
+  if (event->event != RDMA_CM_EVENT_CONNECT_REQUEST)
+  {
+    multilog(log, LOG_ERR, "dada_ib_listen_cm_only: rdma_get_cm_event returned "
+             "%s event, expected RDMA_CM_EVENT_CONNECT_REQUEST\n",
+             rdma_event_str(event->event));
+    return -1;
+  }
+
+  if (ctx->verbose > 1)
+    multilog(log, LOG_INFO, "dada_ib_listen_cm_only: event->id = %d\n", event->id);
+  ctx->cm_id = event->id;
+  //multilog(log, LOG_INFO, "dada_ib_listen_cm_only: cm_id=%p cm_id->verbs=%p\n", ctx->cm_id, ctx->verbs);
+
+  rdma_ack_cm_event(event);
 }
 
 int dada_ib_create_verbs(dada_ib_cm_t * ctx)
@@ -322,11 +386,26 @@ int dada_ib_create_verbs(dada_ib_cm_t * ctx)
   if (ctx->verbose > 1)
     multilog(log, LOG_INFO, "dada_ib_create_verbs()\n");
 
+  //multilog(log, LOG_INFO, "dada_ib_create_verbs: ctx->cm_id=%d\n", ctx->cm_id);
+  //multilog(log, LOG_INFO, "dada_ib_create_verbs: ctx->listen_id=%d\n", ctx->listen_id);
+  if (ctx->cm_id && ctx->cm_id->verbs)
+    ctx->verbs = ctx->cm_id->verbs;
+  else if (ctx->listen_id && ctx->listen_id->verbs)
+    ctx->verbs = ctx->listen_id->verbs;
+  else
+  {
+    int num_devices;
+    struct ibv_context ** devices = rdma_get_devices(&num_devices);
+    ctx->verbs = devices[0];
+  }
+
+  //multilog(log, LOG_INFO, "dada_ib_create_verbs: ctx->verbs=%p\n", ctx->verbs);
+
   // create a PD (protection domain). The PD limits which memory regions can be 
   // accessed by which QP (queue pairs) or CQ (completion queues). 
   if (ctx->verbose > 1)
     multilog(log, LOG_INFO, "create_verbs: ibv_alloc_pd \n");
-  ctx->pd = ibv_alloc_pd(ctx->cm_id->verbs);
+  ctx->pd = ibv_alloc_pd(ctx->verbs);
   if (!ctx->pd)
   {
     multilog(log, LOG_ERR, "dada_ib_create_verbs: ibv_alloc_pd failed\n");
@@ -337,14 +416,14 @@ int dada_ib_create_verbs(dada_ib_cm_t * ctx)
   // receiving notifications when CQEs are placed on the CQ
   if (ctx->verbose > 1)
     multilog(log, LOG_INFO, "create_verbs: ibv_create_comp_channel for send and recv\n");
-  ctx->send_comp_chan = ibv_create_comp_channel(ctx->cm_id->verbs);
+  ctx->send_comp_chan = ibv_create_comp_channel(ctx->verbs);
   if (!ctx->send_comp_chan)
   {
     multilog(log, LOG_ERR, "dada_ib_create_verbs: ibv_create_comp_channel [send] failed\n");
     return -1;
   }
 
-  ctx->recv_comp_chan = ibv_create_comp_channel(ctx->cm_id->verbs);
+  ctx->recv_comp_chan = ibv_create_comp_channel(ctx->verbs);
   if (!ctx->recv_comp_chan)
   {
     multilog(log, LOG_ERR, "dada_ib_create_verbs: ibv_create_comp_channel [recv] failed\n");
@@ -355,7 +434,7 @@ int dada_ib_create_verbs(dada_ib_cm_t * ctx)
   // create a CQ. The CQ will hold the CQEs
   if (ctx->verbose > 1)
     multilog(log, LOG_INFO, "create_verbs: ibv_create_cq send_cq\n");
-  ctx->send_cq = ibv_create_cq(ctx->cm_id->verbs, ctx->send_depth, NULL, ctx->send_comp_chan, 0);
+  ctx->send_cq = ibv_create_cq(ctx->verbs, ctx->send_depth, NULL, ctx->send_comp_chan, 0);
   if (!ctx->send_cq)
   {
     multilog(log, LOG_ERR, "dada_ib_create_verbs: ibv_create_cq send_cq failed\n");
@@ -364,7 +443,7 @@ int dada_ib_create_verbs(dada_ib_cm_t * ctx)
 
   if (ctx->verbose > 1)
     multilog(log, LOG_INFO, "create_verbs: ibv_create_cq recv_cq\n");
-  ctx->recv_cq = ibv_create_cq(ctx->cm_id->verbs, ctx->recv_depth, NULL, ctx->recv_comp_chan, 0);
+  ctx->recv_cq = ibv_create_cq(ctx->verbs, ctx->recv_depth, NULL, ctx->recv_comp_chan, 0);
   if (!ctx->recv_cq)
   {
     multilog(log, LOG_ERR, "dada_ib_create_verbs: ibv_create_cq recv_cq failed\n");
@@ -584,19 +663,21 @@ int dada_ib_accept (dada_ib_cm_t * ctx)
   multilog_t * log = ctx->log;
 
   if (ctx->verbose > 1)
-    multilog(log, LOG_INFO, "dada_ib_accept()\n");
+    multilog(log, LOG_INFO, "dada_ib_accept() [%d]\n", ctx->port);
 
   struct rdma_cm_event * event;
   struct rdma_conn_param conn_param = { };
   unsigned err = 0;
 
+  memset(&conn_param, 0, sizeof(conn_param));
+
   conn_param.responder_resources = 1;
-  conn_param.private_data        = 0;
-  conn_param.private_data_len    = 0;
+  conn_param.initiator_depth = 1;
+  conn_param.rnr_retry_count = 7;
 
   // Accept connection
   if (ctx->verbose > 1)
-    multilog(log, LOG_INFO, "accept: rdma_accept\n");
+    multilog(log, LOG_INFO, "accept: rdma_accept [port=%d]\n", ctx->port);
   err = rdma_accept(ctx->cm_id, &conn_param);
   if (err)
   {
@@ -605,29 +686,45 @@ int dada_ib_accept (dada_ib_cm_t * ctx)
   }
 
   if (ctx->verbose > 1)
-    multilog(log, LOG_INFO, "accept: rdma_get_cm_event\n");
+    multilog(log, LOG_INFO, "accept: rdma_get_cm_event [port=%d]\n", ctx->port);
   err = rdma_get_cm_event(ctx->cm_channel, &event);
   if (err)
   {
     multilog(log, LOG_ERR, "accept: rdma_get_cm_event failed [%d]\n", err);
     return -1;
   }
-      
+        
   if (event->event != RDMA_CM_EVENT_ESTABLISHED)
   {
     multilog(log, LOG_ERR, "accept: rdma_get_cm_event returned %s event, expected "
-                           "RDMA_CM_EVENT_ESTABLISHED\n", rdma_event_str(event->event));
-    return -1;
+                           "RDMA_CM_EVENT_ESTABLISHED [port=%d]\n", rdma_event_str(event->event), ctx->port);
+    multilog(log, LOG_ERR, "accept: event->status=%d [port=%d]\n", event->status, ctx->port);
+    if (event->status == 28)
+    {
+      const struct cm_priv_reject *rej = event->param.conn.private_data;
+      //multilog(log, LOG_ERR, "accept: rej->reason=%d\n", rej->reason);
+    }
+  }
+  else
+  {
+    ctx->ib_connected = 1;
   }
 
-  if (ctx->verbose)
-    multilog(log, LOG_INFO, "accept: connection established\n");
-  ctx->ib_connected = 1;
-
+  if (ctx->verbose > 1)
+    multilog(log, LOG_INFO, "accept: rdma_ack_cm_event [port=%d]\n", ctx->port);
   rdma_ack_cm_event(event);
-
-  return 0;
-
+  
+  if (ctx->ib_connected)
+  {
+    if (ctx->verbose)
+      multilog(log, LOG_INFO, "accept: connection established [port=%d]\n", ctx->port);
+    return 0;
+  }
+  else
+  {
+    multilog(log, LOG_INFO, "accept: failed to establish connection\n");
+    return -1;
+  }
 }
 
 /*
@@ -642,17 +739,18 @@ int dada_ib_connect (dada_ib_cm_t * ctx)
   if (ctx->verbose > 1)
     multilog(log, LOG_INFO, "dada_ib_connect()\n");
 
-  int connected = 0;
-  struct rdma_conn_param conn_param = { };
+  struct rdma_conn_param conn_param;
   struct rdma_cm_event * event;
   int err = 0;
+
+  memset(&conn_param, 0, sizeof(conn_param)); 
 
   conn_param.responder_resources = 1;
   conn_param.initiator_depth = 1;
   conn_param.retry_count     = 7;
 
   if (ctx->verbose > 1)
-    multilog(log, LOG_INFO, "connect: rdma_connect\n");
+    multilog(log, LOG_INFO, "connect: rdma_connect [port=%d]\n", ctx->port);
   err = rdma_connect(ctx->cm_id, &conn_param);
   if (err)
   {
@@ -661,7 +759,7 @@ int dada_ib_connect (dada_ib_cm_t * ctx)
   }
 
   if (ctx->verbose > 1)
-    multilog(log, LOG_INFO, "connect: rdma_get_cm_event\n");
+    multilog(log, LOG_INFO, "connect: rdma_get_cm_event [port=%d]\n", ctx->port);
   err = rdma_get_cm_event(ctx->cm_channel, &event);
   if (err)
   {
@@ -669,28 +767,30 @@ int dada_ib_connect (dada_ib_cm_t * ctx)
     return -1;
   }
 
-  if (ctx->verbose > 1)
-    multilog(log, LOG_INFO, "connect: cm_event=%s attempts\n", rdma_event_str(event->event));
-
   if (event->event != RDMA_CM_EVENT_ESTABLISHED)
-    multilog(log, LOG_WARNING, "connect: rdma_get_cm_event returned %s event, expected "
-                             "RDMA_CM_EVENT_ESTABLISHED\n", rdma_event_str(event->event));
-  else
-    connected = 1;
-
-  rdma_ack_cm_event(event);
-
-  if (!connected)
   {
-    multilog(log, LOG_ERR, "connect: connection could not be established\n");
-    return -1;
+    multilog(log, LOG_WARNING, "connect: rdma_get_cm_event returned %s event, expected "
+                               "RDMA_CM_EVENT_ESTABLISHED [port=%d]\n", rdma_event_str(event->event), ctx->port);
+    multilog(log, LOG_WARNING, "connect: event->status=%d\n", event->status);
+    ctx->ib_connected = 0;
   }
   else
   {
     ctx->ib_connected = 1;
+  }
+
+  rdma_ack_cm_event(event);
+
+  if (ctx->ib_connected == 1)
+  {
     if (ctx->verbose)
       multilog(log, LOG_INFO, "connect: connection established\n");
     return 0;
+  }
+  else
+  {
+    multilog(log, LOG_ERR, "connect: connection could not be established\n");
+    return -1;
   }
 }
 

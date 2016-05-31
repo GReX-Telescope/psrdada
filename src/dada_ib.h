@@ -64,6 +64,8 @@ typedef struct dada_ib_rdma_cm
 {
   struct rdma_event_channel     * cm_channel;
   struct rdma_cm_id             * cm_id;
+  struct rdma_cm_id             * listen_id;
+  struct ibv_context            * verbs;
   struct rdma_cm_event          * event;
   struct rdma_conn_param          conn_param;
   struct ibv_comp_channel       * send_comp_chan;
@@ -101,6 +103,7 @@ struct rdma_cm_id * dada_rdma_resolve_addr (const char * host, const char * port
 dada_ib_cm_t * dada_ib_create_cm (unsigned nbufs, multilog_t * log);
 
 int dada_ib_listen_cm (dada_ib_cm_t * ctx, int port);
+int dada_ib_listen_cm_only (dada_ib_cm_t * ctx);
 
 int dada_ib_connect_cm (dada_ib_cm_t * ctx, const char *host, unsigned port);
 
