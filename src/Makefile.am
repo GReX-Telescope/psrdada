@@ -61,7 +61,7 @@ EXTRA_DIST=ipcrme loopssh
 
 if HAVE_HWLOC
 
-  dada_db_LDADD = $(LDADD) @HWLOC_LIBS@
+dada_db_LDFLAGS = $(LDADD) @HWLOC_LIBS@
 
 endif
 
