@@ -34,10 +34,7 @@
 #include "futils.h"
 #include "sock.h"
 
-#include "arch.h"
-#include "Statistics.h"
-#include "RealTime.h"
-#include "StopWatch.h"
+#include "stopwatch.h"
 
 typedef struct {
 
@@ -230,7 +227,7 @@ int main (int argc, char **argv)
 
   int nchan = -1;
 
-  double sleep_time = 1000000;
+  double sleep_time = 1;
 
   unsigned int zap = 0;
 
@@ -268,7 +265,6 @@ int main (int argc, char **argv)
 
     case 's':
       sleep_time = (double) atof (optarg);
-      sleep_time *= 1000000;
       break;
 
     case 't':
@@ -328,9 +324,7 @@ int main (int argc, char **argv)
   opts.ymax = 0;
   opts.plot_plain = 0;
 
-  StopWatch wait_sw;
-  RealTime_Initialise(1);
-  StopWatch_Initialise(1);
+  stopwatch_t wait_sw;
 
   if (verbose)
     multilog(log, LOG_INFO, "mopsr_dbplot: using device %s\n", device);
@@ -403,7 +397,7 @@ int main (int argc, char **argv)
 
     if (ctx->sock->have_packet)
     {
-      StopWatch_Start(&wait_sw);
+      StartTimer(&wait_sw);
 
       mopsr_decode (ctx->sock->buf, &hdr);
 
@@ -428,7 +422,7 @@ int main (int argc, char **argv)
         multilog(ctx->log, LOG_INFO, "plotting %d of %d\n", ctx->num_integrated, ctx->nsamps);
         mopsr_plot_time_series (ctx->timeseries, ctx->channel, ctx->num_integrated, &opts);
         udptimeseries_reset (ctx);
-        StopWatch_Delay(&wait_sw, sleep_time);
+        DelayTimer(&wait_sw, sleep_time);
 
         if (ctx->verbose)
           multilog(ctx->log, LOG_INFO, "main: clearing packets at socket\n");

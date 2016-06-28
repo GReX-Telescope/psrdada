@@ -35,11 +35,7 @@
 #include "multilog.h"
 #include "futils.h"
 #include "sock.h"
-
-#include "arch.h"
-#include "Statistics.h"
-#include "RealTime.h"
-#include "StopWatch.h"
+#include "stopwatch.h"
 
 #define UDP_DATA_16     7680
 #define UDP_PAYLOAD_16  7696
@@ -394,7 +390,7 @@ int main (int argc, char **argv)
 
   unsigned int plot_log = 0;
 
-  double sleep_time = 1000000;
+  double sleep_time = 1;
 
   float base_freq = 819.53125;
 
@@ -482,7 +478,6 @@ int main (int argc, char **argv)
 
     case 's':
       sleep_time = (double) atof (optarg);
-      sleep_time *= 1000000;
       break;
 
     case 't':
@@ -554,9 +549,7 @@ int main (int argc, char **argv)
   multilog(log, LOG_INFO, "mopsr_udpfftplot: %f %f\n", udpplot.xmin, udpplot.xmax);
 
   // initialise data rate timing library 
-  StopWatch wait_sw;
-  RealTime_Initialise(1);
-  StopWatch_Initialise(1);
+  stopwatch_t wait_sw;
 
   if (verbose)
     multilog(log, LOG_INFO, "mopsr_udpfftplot: using device %s\n", device);
@@ -585,7 +578,7 @@ int main (int argc, char **argv)
 
   udpplot_t * ctx = &udpplot;
 
-  StopWatch_Start(&wait_sw);
+  StartTimer(&wait_sw);
 
   while (!quit_threads) 
   {
@@ -667,14 +660,14 @@ int main (int argc, char **argv)
         else
           plot_data (ctx);
         udpplot_reset (ctx);
-        StopWatch_Delay(&wait_sw, sleep_time);
+        DelayTimer(&wait_sw, sleep_time);
 
         if (ctx->verbose)
           multilog(ctx->log, LOG_INFO, "main: clearing packets at socket\n");
           size_t cleared = dada_sock_clear_buffered_packets(ctx->sock->fd, UDP_PAYLOAD_16);
         if (ctx->verbose)
           multilog(ctx->log, LOG_INFO, "main: cleared %d packets\n", cleared);
-        StopWatch_Start(&wait_sw);
+        StartTimer(&wait_sw);
       }
     }
   }

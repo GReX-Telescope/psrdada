@@ -17,10 +17,7 @@
 #include "mopsr_def.h"
 #include "mopsr_udp.h"
 
-#include "arch.h"
-#include "Statistics.h"
-#include "RealTime.h"
-#include "StopWatch.h"
+#include "stopwatch.h"
 
 #define MIN(x,y) (x < y ? x : y)
 #define MAX(x,y) (x > y ? x : y)
@@ -35,7 +32,7 @@ int main(int argc, char *argv[])
 {
 
   /* number of microseconds between packets */
-  double sleep_time = 22;
+  double sleep_time = 22.0f / 1e6;
  
   /* be verbose */ 
   int verbose = 0;
@@ -168,16 +165,14 @@ int main(int argc, char *argv[])
   uint64_t data_counter = 0;
 
   // initialise data rate timing library 
-  StopWatch wait_sw;
-  RealTime_Initialise(1);
-  StopWatch_Initialise(1);
+  stopwatch_t wait_sw;
 
   /* If we have a desired data rate, then we need to adjust our sleep time
    * accordingly */
   if (data_rate > 0)
   {
     packets_ps = floor(((double) data_rate) / ((double) UDP_PAYLOAD));
-    sleep_time = (1.0/packets_ps) * 1000000.0;
+    sleep_time = (1.0/packets_ps);
 
     if (verbose)
     {
@@ -213,7 +208,7 @@ int main(int argc, char *argv[])
   while (total_bytes_sent < total_bytes_to_send) 
   {
     if (data_rate)
-      StopWatch_Start(&wait_sw);
+      StartTimer(&wait_sw);
 
     // choose a start index in gaussian array
     float rand_ratio = ((float) rand()) / ((float) RAND_MAX);
@@ -266,7 +261,7 @@ int main(int argc, char *argv[])
     seq_no++;
 
     if (data_rate)
-      StopWatch_Delay(&wait_sw, sleep_time);
+      DelayTimer(&wait_sw, sleep_time);
   }
 
   uint64_t packets_sent = seq_no;

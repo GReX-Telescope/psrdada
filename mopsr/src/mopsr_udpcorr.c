@@ -36,10 +36,7 @@
 #include "futils.h"
 #include "sock.h"
 
-#include "arch.h"
-#include "Statistics.h"
-#include "RealTime.h"
-#include "StopWatch.h"
+#include "stopwatch.h"
 
 #define CHECK_ALIGN(x) assert ( ( ((uintptr_t)x) & 15 ) == 0 )
 
@@ -375,7 +372,7 @@ int main (int argc, char **argv)
   /* Pointer to array of "read" data */
   char *src;
 
-  double sleep_time = 1000000;
+  double sleep_time = 1;
 
   udpcorr.ndim = 2;
   udpcorr.npt = 8;
@@ -430,7 +427,6 @@ int main (int argc, char **argv)
 
       case 's':
         sleep_time = (double) atof (optarg);
-        sleep_time *= 1000000;
         break;
 
       case 't':
@@ -492,14 +488,12 @@ int main (int argc, char **argv)
   }
 
   // initialise data rate timing library 
-  StopWatch wait_sw;
-  RealTime_Initialise(1);
-  StopWatch_Initialise(1);
+  stopwatch_t wait_sw;
 
   // clear packets ready for capture
   udpcorr_prepare (&udpcorr);
 
-  StopWatch_Start(&wait_sw);
+  StartTimer(&wait_sw);
 
   while (!quit_threads && ctx->idump < ctx->ndump) 
   {
@@ -513,14 +507,14 @@ int main (int argc, char **argv)
       multilog(ctx->log, LOG_INFO, "main: correlate()\n");
     udpcorr_correlate (ctx);
 
-    StopWatch_Delay(&wait_sw, sleep_time);
+    DelayTimer(&wait_sw, sleep_time);
 
     if (ctx->verbose)
       multilog(ctx->log, LOG_INFO, "main: clearing packets at socket [%ld]\n", ctx->pkt_size);
     size_t cleared = dada_sock_clear_buffered_packets(ctx->sock->fd, ctx->pkt_size);
     if (ctx->verbose)
       multilog(ctx->log, LOG_INFO, "main: cleared %d packets\n", cleared);
-    StopWatch_Start(&wait_sw);
+    StartTimer(&wait_sw);
 
     udpcorr_reset (ctx);
 

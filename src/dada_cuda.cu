@@ -7,25 +7,6 @@
 
 #include "dada_cuda.h"
 
-inline void start_profiling(const cudaEvent_t& start_event,
-                            const cudaStream_t& stream=0)
-{
-  cudaEventRecord(start_event, stream);
-
-}
-
-inline float stop_profiling(const cudaEvent_t& start_event,
-                            const cudaEvent_t& stop_event,
-                            const cudaStream_t& stream=0)
-{
-  float elapsed = 0.f;
-  cudaEventRecord(stop_event, stream);
-  cudaEventSynchronize(stop_event);
-  cudaEventElapsedTime(&elapsed, start_event, stop_event);
-  return elapsed;
-}
-
-
 /*! select the specified GPU as the active device */
 int dada_cuda_select_device (int index)
 {
@@ -156,17 +137,20 @@ int dada_cuda_device_free (void * memory)
 /*! transfer the supplied buffer to the GPU */
 float dada_cuda_device_transfer ( void * from, void * to, size_t size, memory_mode_t mode, dada_cuda_profile_t * timer)
 {
-
   cudaError_t error_id;
+  float elapsed;
 
-  start_profiling (timer->start_event, 0);
+  cudaEventRecord(timer->start_event, 0);
 
   if (mode == PINNED)
     error_id = cudaMemcpyAsync (to , from, size, cudaMemcpyHostToDevice, 0);
   else
     error_id = cudaMemcpy (to, from, size, cudaMemcpyHostToDevice);
 
-  float elapsed = stop_profiling(timer->start_event, timer->stop_event, 0);
+  cudaStream_t stream = 0;
+  cudaEventRecord(timer->stop_event, stream);
+  cudaEventSynchronize(timer->stop_event);
+  cudaEventElapsedTime(&elapsed, timer->start_event, timer->stop_event);
 
   if (error_id != cudaSuccess)
   {
@@ -177,7 +161,6 @@ float dada_cuda_device_transfer ( void * from, void * to, size_t size, memory_mo
 
   return elapsed;
 }
-
 
 int dada_cuda_profiler_init (dada_cuda_profile_t * timer)
 {

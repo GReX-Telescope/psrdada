@@ -11,7 +11,6 @@
 #include "mopsr_def.h"
 
 #include "xgpu.h"
-#include "xgpu_info.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -30,9 +29,8 @@
 #include <sys/stat.h>
 #include <inttypes.h>
 
-#include <cufft.h>
-
 void usage();
+unsigned parse_info (char * line);
 int xgpu_convert_dump (const char * filename, char verbose);
 
 void usage()
@@ -50,13 +48,14 @@ int xgpu_convert_dump (const char * filename, char verbose)
 {
   if (verbose)
     fprintf (stderr, "dump_spectra()\n");
-
   int acfile, ccfile;
   int flags = O_WRONLY | O_CREAT | O_TRUNC;
   int perms = S_IRUSR | S_IRGRP;
 
   char acfilename[512];
   char ccfilename[512];
+  char tmp[512];
+
   strcpy (acfilename, filename);
   strcpy (ccfilename, filename);
 
@@ -66,7 +65,6 @@ int xgpu_convert_dump (const char * filename, char verbose)
   str_ptr = strstr (ccfilename, ".xc");
   sprintf (str_ptr, ".cc");
   
-  char tmp[512];
   sprintf (tmp, "%s.tmp", acfilename);
   if (verbose)
     fprintf (stderr, "dump_spectra: opening %s\n", tmp);
@@ -91,6 +89,36 @@ int xgpu_convert_dump (const char * filename, char verbose)
   if (verbose)
     fprintf (stderr, "Opened file %s\n",tmp);
 
+  // parse xgpuinfo from compiled program
+  FILE *fp = popen ("xgpuinfo", "r");
+  if (fp == NULL)
+  {
+    fprintf (stderr, "Failed to run xgpuinfo\n");
+    return -1;
+  }
+
+  char line[160];
+  unsigned xgpu_npol = 0;
+  unsigned xgpu_nstation = 0;
+  unsigned xgpu_nfrequency = 0;
+  unsigned xgpu_ntime = 0;
+  unsigned xgpu_npulsar = 0;
+
+  // parse key information from xGPU library configuration
+  while (fgets(line, sizeof(line)-1, fp) != NULL)
+  {
+    if (strstr (line, "Number of polarizations:") != NULL)
+      xgpu_npol = parse_info (line);
+    if (strstr (line, "Number of stations:") != NULL)
+      xgpu_nstation = parse_info (line);
+    if (strstr (line, "Number of frequencies:") != NULL)
+      xgpu_nfrequency = parse_info (line);
+    if (strstr (line, "Number of time samples per GPU integration:") != NULL)
+      xgpu_ntime = parse_info (line);
+  }
+  pclose (fp);
+  xgpu_npulsar = 1;
+
   // here is where the trickery begins to understand the xGPU internal format!
   // xGPU will use it's internal REGISTER_TILE_TRIANGULAR_ORDERordering, so this
   // should be converted to the AC and CC formats we are used to
@@ -98,8 +126,8 @@ int xgpu_convert_dump (const char * filename, char verbose)
   if (verbose)
     fprintf (stderr, "dump_spectra: reordering REGISTER_TILE -> TRIANGLE\n");
   int f, i, rx, j, ry, pol1, pol2;
-  size_t matLength = NFREQUENCY * ((NSTATION/2+1)*(NSTATION/4)*NPOL*NPOL*4) * (NPULSAR + 1);
-  size_t triLength = NFREQUENCY * ((NSTATION+1)*(NSTATION/2)*NPOL*NPOL) * (NPULSAR + 1);
+  size_t matLength = xgpu_nfrequency * ((xgpu_nstation/2+1)*(xgpu_nstation/4)*xgpu_npol*xgpu_npol*4) * (xgpu_npulsar + 1);
+  size_t triLength = xgpu_nfrequency * ((xgpu_nstation+1)*(xgpu_nstation/2)*xgpu_npol*xgpu_npol) * (xgpu_npulsar + 1);
 
   size_t matBytes = matLength * sizeof(Complex);
   size_t triBytes = triLength * sizeof(Complex);
@@ -108,7 +136,7 @@ int xgpu_convert_dump (const char * filename, char verbose)
   float * input = (float *) malloc (matBytes);
   Complex * buf = (Complex *) malloc (triBytes);
 
-  size_t nant = NSTATION * NPOL;
+  size_t nant = xgpu_nstation * xgpu_npol;
   size_t ac_data_size = nant* sizeof(float);
   float * ac_data = (float *) malloc (ac_data_size);
 
@@ -126,7 +154,7 @@ int xgpu_convert_dump (const char * filename, char verbose)
   }
   close (fd);
 
-  for (i=0; i<NSTATION/2; i++) 
+  for (i=0; i<xgpu_nstation/2; i++) 
   {
     for (rx=0; rx<2; rx++) 
     {
@@ -134,14 +162,14 @@ int xgpu_convert_dump (const char * filename, char verbose)
       {
         for (ry=0; ry<2; ry++) 
         {
-          int k = f*(NSTATION+1)*(NSTATION/2) + (2*i+rx)*(2*i+rx+1)/2 + 2*j+ry;
-          int l = f*4*(NSTATION/2+1)*(NSTATION/4) + (2*ry+rx)*(NSTATION/2+1)*(NSTATION/4) + i*(i+1)/2 + j;
-          for (pol1=0; pol1<NPOL; pol1++)
+          int k = f*(xgpu_nstation+1)*(xgpu_nstation/2) + (2*i+rx)*(2*i+rx+1)/2 + 2*j+ry;
+          int l = f*4*(xgpu_nstation/2+1)*(xgpu_nstation/4) + (2*ry+rx)*(xgpu_nstation/2+1)*(xgpu_nstation/4) + i*(i+1)/2 + j;
+          for (pol1=0; pol1<xgpu_npol; pol1++)
           {
-            for (pol2=0; pol2<NPOL; pol2++)
+            for (pol2=0; pol2<xgpu_npol; pol2++)
             {
-              size_t tri_index = (k*NPOL+pol1)*NPOL+pol2;
-              size_t reg_index = (l*NPOL+pol1)*NPOL+pol2;
+              size_t tri_index = (k*xgpu_npol+pol1)*xgpu_npol+pol2;
+              size_t reg_index = (l*xgpu_npol+pol1)*xgpu_npol+pol2;
               //if (reg_index + matLength > matBytes/sizeof(float))
               //  fprintf (stderr, "bad reg_index=%ld\n", reg_index);
               buf[tri_index].real = input[reg_index];
@@ -156,18 +184,18 @@ int xgpu_convert_dump (const char * filename, char verbose)
   if (verbose)
     fprintf (stderr, "dump_spectra: reordering TRIANGLE -> CUSTOM\n");
   // now we have auto and cross correlations in ctx->tmp in xGPU TRIANGULAR ORDER
-  for (i=0; i<NSTATION; i++)
+  for (i=0; i<xgpu_nstation; i++)
   {
     for (j=0; j<=i; j++)
     {
-      for (pol1=0; pol1<NPOL; pol1++)
+      for (pol1=0; pol1<xgpu_npol; pol1++)
       {
-        for (pol2=0; pol2<NPOL; pol2++)
+        for (pol2=0; pol2<xgpu_npol; pol2++)
         {
-          for(f=0; f<NFREQUENCY; f++)
+          for(f=0; f<xgpu_nfrequency; f++)
           {
-            int k = f*(NSTATION+1)*(NSTATION/2) + i*(i+1)/2 + j;
-            int index = (k*NPOL+pol1)*NPOL+pol2;
+            int k = f*(xgpu_nstation+1)*(xgpu_nstation/2) + i*(i+1)/2 + j;
+            int index = (k*xgpu_npol+pol1)*xgpu_npol+pol2;
 
             // convert i + pol1 and j + pol2 to our single pol antenna number
             int ant1 = (i * 2) + pol1;
@@ -248,6 +276,25 @@ int xgpu_convert_dump (const char * filename, char verbose)
   free (cc_data);
 
   return 0;
+}
+
+unsigned parse_info (char * line)
+{
+  unsigned value;
+  const char * sep = ":";
+  char * saveptr;
+  char * str;
+
+  str = strtok_r (line, sep, &saveptr);
+  if (str == NULL)
+    return 0;
+  str = strtok_r (NULL, sep, &saveptr);
+  if (str == NULL)
+    return 0;
+  if (sscanf(str, " %u", &value) != 1)
+    return 0;
+  else
+    return value;
 }
 
 int main (int argc, char **argv)

@@ -22,10 +22,7 @@
 #include "bpsr_udpdb.h"
 #include "bpsr_udp.h"
 
-#include "arch.h"
-#include "Statistics.h"
-#include "RealTime.h"
-#include "StopWatch.h"
+#include "stopwatch.h"
 
 #define MIN(x,y) (x < y ? x : y)
 #define MAX(x,y) (x > y ? x : y)
@@ -107,7 +104,7 @@ int main(int argc, char *argv[])
 {
 
   /* number of microseconds between packets */
-  double sleep_time = 22;
+  double sleep_time_secs = 22;
  
   /* Size of UDP payload. Optimally 1472 (1500 MTU) or 8948 (9000 MTU) bytes */
   uint64_t size_of_frame = BPSR_UDP_PAYLOAD_BYTES;
@@ -278,10 +275,7 @@ int main(int argc, char *argv[])
 
   uint64_t data_counter = 0;
 
-  // initialise data rate timing library
-  StopWatch wait_sw;
-  RealTime_Initialise(1);
-  StopWatch_Initialise(1);
+  stopwatch_t wait_sw;
 
   if (verbose)
     multilog(log,LOG_INFO,"Tsamp = %10.8f, data_rate = %f\n",tsamp, data_rate);
@@ -290,7 +284,7 @@ int main(int argc, char *argv[])
   if (data_rate > 0) 
   {
     double packets_per_second = ((double) data_rate) / ((double) BPSR_UDP_PAYLOAD_BYTES);
-    sleep_time = (1.0/packets_per_second)*1000000.0;
+    sleep_time_secs = (1.0/packets_per_second)*1000000.0;
   }
 
   /* Generate signals */
@@ -406,7 +400,7 @@ int main(int argc, char *argv[])
       daemon=0;
     }
 
-    StopWatch_Start(&wait_sw);
+    StartTimer(&wait_sw);
 
     // If more than one option, choose the array to use
     if (num_arrays > 1)
@@ -478,12 +472,12 @@ int main(int argc, char *argv[])
       double useful_rate = rate * useful_ratio;
              
       multilog(log,LOG_INFO,"%"PRIu64": %5.2f MB/s  %5.2f MB/s  %"PRIu64"  %5.2f, %"PRIu64"\n",
-                            (sequence_no/sequence_incr), wire_rate, useful_rate,data_counter,sleep_time,bytes_sent);
+                            (sequence_no/sequence_incr), wire_rate, useful_rate,data_counter,sleep_time_secs,bytes_sent);
     }
 
     sequence_no += sequence_incr;
 
-    StopWatch_Delay(&wait_sw, sleep_time);
+    DelayTimer(&wait_sw, sleep_time_secs);
 
   }
 

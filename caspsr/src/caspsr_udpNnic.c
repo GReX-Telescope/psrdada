@@ -1221,7 +1221,7 @@ void * sending_thread(void * arg)
   packets_ps = byte_rate / UDP_DATA;
   //packets_ps = 1600000000 / (ctx->n_distrib * UDP_DATA);
 
-  sleep_time = (1 / (double)packets_ps) * 1000000;
+  sleep_time = (1.0f / (double)packets_ps);
   sleep_time *= ctx->n_receivers;
   sleep_time *= 0.90;
 
@@ -1229,12 +1229,10 @@ void * sending_thread(void * arg)
 
   if (ctx->verbose)
     multilog (ctx->log, LOG_INFO, "sending_thread: clamped_output_rate=%d, byte_rate=%"PRIu64", "
-                                  "packets_ps=%"PRIu64", sleep_time=%fus\n", ctx->clamped_output_rate,
+                                  "packets_ps=%"PRIu64", sleep_time=%f s\n", ctx->clamped_output_rate,
                                   byte_rate, packets_ps, sleep_time);
 
-  StopWatch wait_sw;
-  RealTime_Initialise(1);
-  StopWatch_Initialise(1);
+  stopwatch_t wait_sw;
 
   uint64_t tmpseq;
   uint64_t tmpchid;
@@ -1244,7 +1242,7 @@ void * sending_thread(void * arg)
   while (keep_sending) 
   {
 
-    StopWatch_Start(&wait_sw);
+    StartTimer(&wait_sw);
 
     /* cycle through the receivers */
     for (i=0; i<ctx->n_receivers; i++)
@@ -1295,7 +1293,7 @@ void * sending_thread(void * arg)
       }
     }
 
-    StopWatch_Delay(&wait_sw, sleep_time);
+    DelayTimer(&wait_sw, sleep_time);
     
     /* check that everything that has been written has been sent */
     if (quit_threads || stop_pending) 

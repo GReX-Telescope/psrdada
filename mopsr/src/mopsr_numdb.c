@@ -4,10 +4,7 @@
 #include "dada_generator.h"
 #include "ascii_header.h"
 
-#include "arch.h"
-#include "Statistics.h"
-#include "RealTime.h"
-#include "StopWatch.h"
+#include "stopwatch.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -75,7 +72,7 @@ typedef struct {
 
   unsigned seconds;
 
-  StopWatch wait_sw;
+  stopwatch_t wait_sw;
 
 } mopsr_numdb_t;
 
@@ -179,16 +176,15 @@ int64_t mopsr_numdb_io_block (dada_client_t* client, void* data, uint64_t data_s
 #endif
 
   double data_secs = ((double) data_size) / ((double) ctx->bytes_per_second);
-  double data_usecs = data_secs * 1000000;
 
   if (ctx->verbose)
     multilog (client->log, LOG_INFO, "io_block: data_secs=%lf\n", data_secs);
 
   // delay the requisiste time
-  StopWatch_Delay(&(ctx->wait_sw), data_usecs);
+  DelayTimer(&(ctx->wait_sw), data_secs);
 
   // start it again 
-  StopWatch_Start(&(ctx->wait_sw));
+  StartTimer(&(ctx->wait_sw));
 
   if (ctx->verbose)
     multilog (client->log, LOG_INFO, "io_block: processed %"PRIu64" bytes\n", data_size);
@@ -204,7 +200,7 @@ int mopsr_numdb_close (dada_client_t* client, uint64_t bytes_written)
   if (ctx->verbose)
     multilog (client->log, LOG_INFO, "close: bytes_written=%"PRIu64"\n", bytes_written);
 
-  StopWatch_Stop(&(ctx->wait_sw));
+  StopTimer(&(ctx->wait_sw));
   if (ctx->verbose)
     multilog (client->log, LOG_INFO, "close: stopwatch stopped\n");
 
@@ -260,7 +256,7 @@ int mopsr_numdb_open (dada_client_t* client)
 
   if (ctx->verbose)
     multilog (client->log, LOG_INFO, "open: starting stopwatch\n");
-  StopWatch_Start(&(ctx->wait_sw));
+  StartTimer(&(ctx->wait_sw));
 
   if (ctx->verbose)
     multilog (client->log, LOG_INFO, "open: setting transfer_bytes to %"PRIu64"\n", client->transfer_bytes);
@@ -300,10 +296,6 @@ int main (int argc, char **argv)
   ctx.encode_ant  = 1;
   ctx.encode_chan = 0;
   ctx.encode_seq  = 0;
-
-  // initialise data rate timing library 
-  RealTime_Initialise(1);
-  StopWatch_Initialise(1);
 
   while ((arg=getopt(argc,argv,"a:c:e:hi:k:s:v")) != -1)
     switch (arg) {

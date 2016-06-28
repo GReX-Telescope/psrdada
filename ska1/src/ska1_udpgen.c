@@ -24,10 +24,7 @@
 #include "ska1_def.h"
 #include "ska1_udp.h"
 
-#include "arch.h"
-#include "Statistics.h"
-#include "RealTime.h"
-#include "StopWatch.h"
+#include "stopwatch.h"
 
 // Debug / display functions
 void print_bram_line(FILE * fp, unsigned int i, unsigned int value, char * binary);
@@ -43,7 +40,7 @@ int main(int argc, char *argv[])
   char * header_file = 0;
 
   // number of microseconds between packets
-  double sleep_time = 22;
+  double sleep_time = 22.0 / 1e6;
  
   // be verbose 
   char verbose = 0;
@@ -196,21 +193,19 @@ int main(int argc, char *argv[])
   uint64_t data_counter = 0;
 
   // initialise data rate timing library 
-  StopWatch wait_sw;
-  RealTime_Initialise(1);
-  StopWatch_Initialise(1);
+  stopwatch_t wait_sw;
 
   // If we have a desired data rate, then we need to adjust our sleep time
   // accordingly
   if (data_rate_bytes_ps > 0)
   {
     packets_ps = floor(((double) data_rate_bytes_ps) / ((double) UDP_DATA));
-    sleep_time = (1.0 / packets_ps) * 1000000.0;
+    sleep_time = (1.0 / packets_ps);
 
     if (verbose)
     {
       multilog(log, LOG_INFO, "packets/sec %"PRIu64"\n",packets_ps);
-      multilog(log, LOG_INFO, "sleep_time %f us\n",sleep_time);
+      multilog(log, LOG_INFO, "sleep_time %f s\n",sleep_time);
     }
   }
 
@@ -250,7 +245,7 @@ int main(int argc, char *argv[])
   while (total_bytes_sent < total_bytes_to_send) 
   {
     if (data_rate_bytes_ps)
-      StopWatch_Start(&wait_sw);
+      StartTimer(&wait_sw);
 
     // write the custom header into the packet
     ska1_encode_header (packet, seq_no, ant_id);
@@ -295,7 +290,7 @@ int main(int argc, char *argv[])
     seq_no++;
 
     if (data_rate_bytes_ps)
-      StopWatch_Delay(&wait_sw, sleep_time);
+      DelayTimer(&wait_sw, sleep_time);
   }
 
   uint64_t packets_sent = seq_no;

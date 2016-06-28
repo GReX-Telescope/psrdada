@@ -76,14 +76,18 @@ if HAVE_CUDA
 include $(top_srcdir)/cuda.mk
 
 libpsrdada_la_SOURCES += dada_cuda.cu dada_cuda.h ipcio_cuda.cu ipcio_cuda.h
+
 include_HEADERS += dada_cuda.h ipcio_cuda.h
+
 bin_PROGRAMS += dada_dbgpu
 
+dada_dbgpu_LDADD = $(LDADD) -lstdc++
+
 AM_CPPFLAGS = @CUDA_CFLAGS@ 
-#libpsrdada_la_LIBADD = @CUDA_LIBS@
-LDADD += @CUDA_LIBS@ 
+libpsrdada_la_LIBADD = @CUDA_LIBS@
 
 endif
+
 ###############################################################################
 #
 # Depends on librdmacm
@@ -94,16 +98,10 @@ if HAVE_RDMACM
 
 libpsrdada_la_SOURCES += dada_ib.c dada_ib_datagram.c
 include_HEADERS += dada_ib.h dada_ib_datagram.h
-bin_PROGRAMS += dada_ibdb dada_dbib dada_udheader dada_dbud
-LDADD += $(RDMACM_LIBS)
+bin_PROGRAMS += dada_ibdb dada_dbib dada_udheader dada_dbud dada_udgen
 
-if COMPILE_THIRD
-
-bin_PROGRAMS += dada_udgen
-dada_udgen_CFLAGS = -I$(top_srcdir)/3rdparty -D$(ARCH)
-dada_udgen_LDFLAGS = $(LDADD) $(top_builddir)/3rdparty/libtimers.la
-
-endif
+AM_CFLAGS = -I$(top_srcdir)/3rdparty
+LDADD += @RDMACM_LIBS@ $(top_builddir)/3rdparty/libtimers.la
 
 endif
 

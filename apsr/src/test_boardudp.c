@@ -13,12 +13,8 @@
 #include <sys/socket.h> 
 #include <sys/wait.h> 
 #include <sys/timeb.h> 
-//#include <arpa/inet.h>
 
-#include "arch.h"
-#include "Statistics.h"
-#include "RealTime.h"
-#include "StopWatch.h"
+#include "stopwatch.h"
 
 int sendPacket(int sockfd, struct sockaddr_in addr, char *data, int size);
 void encode_data(char * udp_data, int size_of_frame, int value);
@@ -156,13 +152,10 @@ int main(int argc, char *argv[])
   int bytes_sent = 0;
   int prev_bytes_sent = 0;
 
-  double sleep_time= (double) time_per_frame;
-  StopWatch wait_sw;
+  double sleep_time= ((double) time_per_frame) / 1e6;
+  stopwatch_t wait_sw;
 
   int ret;
-  int quiet = 1;
-  ret = RealTime_Initialise(quiet);
-  ret = StopWatch_Initialise(quiet);
 
   /* Setup udp header information */
   header.length = (int) UDPHEADERSIZE;
@@ -204,7 +197,7 @@ int main(int argc, char *argv[])
   if (verbose) fprintf(stderr,"Rate\t\tPacket\n");
   while (current_time <= end_time) {
 
-    StopWatch_Start(&wait_sw);
+    StartTimer(&wait_sw);
 
     header.sequence++;
     encode_header(udp_data, &header);
@@ -226,7 +219,7 @@ int main(int argc, char *argv[])
        }
     }
 
-    StopWatch_Delay(&wait_sw, sleep_time);
+    DelayTimer(&wait_sw, sleep_time);
 
   }
 

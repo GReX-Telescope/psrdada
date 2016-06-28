@@ -32,11 +32,7 @@
 #include "multilog.h"
 #include "futils.h"
 #include "sock.h"
-
-#include "arch.h"
-#include "Statistics.h"
-#include "RealTime.h"
-#include "StopWatch.h"
+#include "stopwatch.h"
 
 typedef struct {
 
@@ -218,7 +214,7 @@ int main (int argc, char **argv)
 
   unsigned int plot_log = 0;
 
-  double sleep_time = 1000000;
+  double sleep_time = 1;
 
   unsigned int zap = 0;
 
@@ -252,7 +248,6 @@ int main (int argc, char **argv)
 
     case 's':
       sleep_time = (double) atof (optarg);
-      sleep_time *= 1000000;
       break;
 
     case 't':
@@ -298,9 +293,7 @@ int main (int argc, char **argv)
   udpwaterfall.plot_log = plot_log;
   udpwaterfall.zap = zap;
 
-  StopWatch wait_sw;
-  RealTime_Initialise(1);
-  StopWatch_Initialise(1);
+  stopwatch_t wait_sw;
 
   if (verbose)
     multilog(log, LOG_INFO, "mopsr_dbplot: using device %s\n", device);
@@ -381,7 +374,7 @@ int main (int argc, char **argv)
 
     if (ctx->sock->have_packet)
     {
-      StopWatch_Start(&wait_sw);
+      StartTimer(&wait_sw);
 
       mopsr_decode_header(ctx->sock->buf, &seq_no, &(ctx->ant_code));
 
@@ -400,7 +393,7 @@ int main (int argc, char **argv)
         //multilog (ctx->log, LOG_INFO, "main: plot_packet\n");
         plot_packet (ctx);
         udpwaterfall_reset (ctx);
-        StopWatch_Delay(&wait_sw, sleep_time);
+        DelayTimer(&wait_sw, sleep_time);
 
         if (ctx->verbose)
           multilog(ctx->log, LOG_INFO, "main: clearing packets at socket\n");

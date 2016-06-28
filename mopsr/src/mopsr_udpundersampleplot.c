@@ -34,10 +34,7 @@
 #include "futils.h"
 #include "sock.h"
 
-#include "arch.h"
-#include "Statistics.h"
-#include "RealTime.h"
-#include "StopWatch.h"
+#include "stopwatch.h"
 
 #define CHECK_ALIGN(x) assert ( ( ((uintptr_t)x) & 15 ) == 0 )
 
@@ -344,7 +341,7 @@ int main (int argc, char **argv)
 
   unsigned int plot_log = 0;
 
-  double sleep_time = 1000000;
+  double sleep_time = 1;
 
   float base_freq = 800.0;
 
@@ -384,7 +381,6 @@ int main (int argc, char **argv)
 
     case 's':
       sleep_time = (double) atof (optarg);
-      sleep_time *= 1000000;
       break;
 
     case 't':
@@ -442,9 +438,7 @@ int main (int argc, char **argv)
   udpplot.base_freq = base_freq;
 
   // initialise data rate timing library 
-  StopWatch wait_sw;
-  RealTime_Initialise(1);
-  StopWatch_Initialise(1);
+  stopwatch_t wait_sw;
 
   if (verbose)
     multilog(log, LOG_INFO, "mopsr_dbplot: using device %s\n", device);
@@ -474,7 +468,7 @@ int main (int argc, char **argv)
 
   udpplot_t * ctx = &udpplot;
 
-  StopWatch_Start(&wait_sw);
+  StartTimer(&wait_sw);
 
   while (!quit_threads) 
   {
@@ -547,14 +541,14 @@ int main (int argc, char **argv)
         multilog (ctx->log, LOG_INFO, "plotting %d FFTs in %d channels\n", ctx->num_integrated, ctx->nchan_out);
         plot_data (ctx);
         udpplot_reset (ctx);
-        StopWatch_Delay(&wait_sw, sleep_time);
+        DelayTimer(&wait_sw, sleep_time);
 
         if (ctx->verbose)
           multilog(ctx->log, LOG_INFO, "main: clearing packets at socket\n");
           size_t cleared = dada_sock_clear_buffered_packets(ctx->sock->fd, UDP_PAYLOAD);
         if (ctx->verbose)
           multilog(ctx->log, LOG_INFO, "main: cleared %d packets\n", cleared);
-        StopWatch_Start(&wait_sw);
+        StartTimer(&wait_sw);
       }
     }
   }

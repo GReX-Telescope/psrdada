@@ -19,10 +19,7 @@
 #include "caspsr_def.h"
 #include "caspsr_udp.h"
 
-#include "arch.h"
-#include "Statistics.h"
-#include "RealTime.h"
-#include "StopWatch.h"
+#include "stopwatch.h"
 
 #define MIN(x,y) (x < y ? x : y)
 #define MAX(x,y) (x > y ? x : y)
@@ -74,7 +71,7 @@ int main(int argc, char *argv[])
 {
 
   /* number of microseconds between packets */
-  double sleep_time = 22;
+  double sleep_time = 22.0f / 1e6;
  
   /* be verbose */ 
   int verbose = 0;
@@ -237,9 +234,7 @@ int main(int argc, char *argv[])
   uint64_t data_counter = 0;
 
   /* initialise data rate timing library */
-  StopWatch wait_sw;
-  RealTime_Initialise(1);
-  StopWatch_Initialise(1);
+  stopwatch_t wait_sw;
 
   /*
   if (data_rate > 117000000) {
@@ -253,7 +248,7 @@ int main(int argc, char *argv[])
    * accordingly */
   if (data_rate > 0) {
     packets_ps = floor(((double) data_rate) / ((double) UDP_PAYLOAD));
-    sleep_time = (1.0/packets_ps)*1000000.0;
+    sleep_time = (1.0/packets_ps);
   }
   multilog(log,LOG_INFO,"Packets/sec = %"PRIu64"\n",packets_ps);
   multilog(log,LOG_INFO,"sleep_time = %f\n",sleep_time);
@@ -301,7 +296,7 @@ int main(int argc, char *argv[])
       daemon=0;
     }
 
-    StopWatch_Start(&wait_sw);
+    StartTimer(&wait_sw);
 
     /* If more than one option, choose the array to use */
     if (num_arrays > 1) {
@@ -376,8 +371,7 @@ int main(int argc, char *argv[])
 
     seq_no++;
 
-    StopWatch_Delay(&wait_sw, sleep_time);
-
+    DelayTimer(&wait_sw, sleep_time);
   }
 
   uint64_t packets_sent = seq_no;

@@ -12,14 +12,14 @@
 void usage()
 {
   fprintf (stdout,
-	   "dada_edit - query or change DADA header parameters in file[s]\n"
-	   "\n"
-	   "USAGE: dada_edit [options] filename[s]\n"
-	   "\n"
-	   "WHERE options are:\n"
-	   " -c KEY=VAL     set KEY to VAL \n"
+           "dada_edit - query or change DADA header parameters in file[s]\n"
+           "\n"
+           "USAGE: dada_edit [options] filename[s]\n"
+           "\n"
+           "WHERE options are:\n"
+           " -c KEY=VAL     set KEY to VAL \n"
            " -s size        set HDR_SIZE size in old headers \n"
-	   " -i header.txt  over-write header with text in specified file\n");
+           " -i header.txt  over-write header with text in specified file\n");
 }
 
 
@@ -95,7 +95,7 @@ int main (int argc, char **argv)
     if (!current_file)
     {
       fprintf (stderr, "dada_edit: could not open '%s': %s\n",
-	       argv[arg], strerror(errno));
+               argv[arg], strerror(errno));
       continue;
     }
 
@@ -106,12 +106,12 @@ int main (int argc, char **argv)
       current_header = realloc (current_header, hdr_size);
       current_header_size = hdr_size;
 
-      if (fread (current_header, 1, current_header_size, current_file)
-	  != current_header_size)
+      size_t bytes_read = fread (current_header, 1, current_header_size, current_file);
+      if (bytes_read != current_header_size)
       {
-	fprintf (stderr, "dada_edit: could not read %u bytes: %s\n",
-		 current_header_size, strerror(errno));
-	return -1;
+        fprintf (stderr, "dada_edit: could not read %u bytes, read %ld: %s\n",
+                 current_header_size, bytes_read, strerror(errno));
+        return -1;
       }
 
       if (set_hdr_size)
@@ -127,8 +127,8 @@ int main (int argc, char **argv)
       /* Get the header size */
       else if (ascii_header_get (current_header, "HDR_SIZE", "%u", &hdr_size) != 1)
       {
-	fprintf (stderr, "dada_edit: could not parse HDR_SIZE\n");
-	return -1;
+        fprintf (stderr, "dada_edit: could not parse HDR_SIZE\n");
+        return -1;
       }
 
       /* Ensure that the incoming header fits in the client header buffer */
@@ -185,11 +185,11 @@ int main (int argc, char **argv)
       rewind (current_file);
 
       if (fwrite (current_header, 1, current_header_size, current_file)
-	  != current_header_size)
+          != current_header_size)
       {
-	fprintf (stderr, "dada_edit: could not write %u bytes: %s\n",
-		 current_header_size, strerror(errno));
-	return -1;
+        fprintf (stderr, "dada_edit: could not write %u bytes: %s\n",
+                 current_header_size, strerror(errno));
+        return -1;
       }
     }
 

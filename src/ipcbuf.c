@@ -1084,10 +1084,21 @@ char* ipcbuf_get_next_read_work (ipcbuf_t* id, uint64_t* bytes, int flag)
       }
     }
 
+#ifdef _DEBUG
+    fprintf (stderr, "ipcbuf_get_next_read: sync->w_buf=%"PRIu64" id->viewbuf=%"PRIu64"\n",
+             sync->w_buf, id->viewbuf);
+#endif
+
     /* Viewers wait until w_buf is incremented without semaphore operations */
     while (sync->w_buf <= id->viewbuf)
     {
-      if (sync->eod[id->xfer] && sync->r_bufs[iread] == sync->e_buf[id->xfer])
+#ifdef _DEBUG
+      fprintf (stderr, "ipcbuf_get_next_read: sync->eod[%d]=%d sync->r_bufs[%d]=%"PRIu64" sync->e_buf[%d]=%"PRIu64"\n",
+                        id->xfer, sync->eod[id->xfer], iread, sync->r_bufs[iread], id->xfer, sync->e_buf[id->xfer]); 
+#endif
+
+      // AJ added: sync->r_bufs[iread] to ensure that a buffer has been read by a reader
+      if (sync->eod[id->xfer] && sync->r_bufs[iread] && sync->r_bufs[iread] == sync->e_buf[id->xfer])
       {
         id->state = IPCBUF_VSTOP;
         break;

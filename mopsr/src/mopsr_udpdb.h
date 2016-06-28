@@ -29,10 +29,7 @@
 #include "mopsr_def.h"
 #include "mopsr_udp.h"
 
-#include "arch.h"
-#include "Statistics.h"
-#include "RealTime.h"
-#include "StopWatch.h"
+#include "stopwatch.h"
 
 typedef struct {
 
@@ -74,7 +71,7 @@ typedef struct {
 
   uint64_t          bytes_per_second;
   char              zeros;
-  StopWatch         wait_sw;
+  stopwatch_t       wait_sw;
 
   pthread_mutex_t   mutex;
 

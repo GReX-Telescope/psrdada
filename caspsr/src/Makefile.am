@@ -8,14 +8,18 @@ lib_LTLIBRARIES = libcaspsr.la
 
 casper_hdr = bibob.h caspsr_def.h mulbibob.h caspsr_rdma.h 
 
-libcaspsr_la_SOURCES = $(casper_hdr) bibob.c mulbibob.c start_observation.c
+libcaspsr_la_SOURCES = $(casper_hdr) bibob.c mulbibob.c start_observation.c \
+	caspsr_udp.c caspsr_udp.h
 
-bin_PROGRAMS = bibob_terminal caspsr_udpthreaded caspsr_udpNdb caspsr_udpgen bibob_start_observation caspsr_udpNdebug caspsr_dbnum caspsr_dbnum_demux caspsr_disknumcheck caspsr_udptester caspsr_dbdecidb
+bin_PROGRAMS = bibob_terminal caspsr_udpthreaded caspsr_udpNdb caspsr_udpgen \
+	bibob_start_observation caspsr_udpNdebug caspsr_dbnum caspsr_dbnum_demux \
+	caspsr_disknumcheck caspsr_udptester caspsr_dbdecidb caspsr_udpdb \
+	caspsr_udpheader caspsr_udpNnic
 
+INCLUDES = -I$(top_srcdir)/src -I$(top_srcdir)/3rdparty
 
-LDADD = libcaspsr.la $(top_builddir)/src/libpsrdada.la 
-INCLUDES = -I$(top_srcdir)/src 
-AM_CFLAGS = -D$(ARCH)
+LDADD = libcaspsr.la $(top_builddir)/src/libpsrdada.la \
+	$(top_builddir)/3rdparty/libtimers.la
 
 #############################################################################
 #
@@ -32,24 +36,6 @@ caspsr_ibdb_LDADD = $(LDADD) $(RDMACM_LIBS)
 caspsr_pwc_ibdb_LDADD = $(LDADD) $(RDMACM_LIBS)
 
 endif
-
-#############################################################################
-#
-# Depends on 3rd Party Timers
-#
-#############################################################################
-
-if COMPILE_THIRD
-
-bin_PROGRAMS += caspsr_udpdb caspsr_udpheader caspsr_udpNnic
-libcaspsr_la_SOURCES += caspsr_udp.c caspsr_udp.h 
-
-AM_CFLAGS += -D$(ARCH)
-INCLUDES += -I$(top_srcdir)/3rdparty
-LDADD += $(top_builddir)/3rdparty/libtimers.la
-
-endif
-
 
 #############################################################################
 #

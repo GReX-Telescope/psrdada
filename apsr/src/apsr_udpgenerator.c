@@ -16,14 +16,10 @@
 #include <sys/socket.h> 
 #include <sys/wait.h> 
 #include <sys/timeb.h> 
-//#include <arpa/inet.h>
 #include <math.h>
 #include <pthread.h>
 
-#include "arch.h"
-#include "Statistics.h"
-#include "RealTime.h"
-#include "StopWatch.h"
+#include "stopwatch.h"
 
 #define MIN(x,y) (x < y ? x : y)
 #define MAX(x,y) (x > y ? x : y)
@@ -66,7 +62,7 @@ int main(int argc, char *argv[])
   header_struct header;
 
   /* number of microseconds between packets */
-  double sleep_time = 22;
+  double sleep_time_secs = 22.0f / 1e6;
  
   /* Size of UDP payload. Optimally 1472 (1500 MTU) or 8948 (9000 MTU) bytes */
   uint64_t size_of_frame = UDPHEADERSIZE + DEFAULT_UDPDATASIZE;
@@ -257,10 +253,7 @@ int main(int argc, char *argv[])
   char udp_data[(UDPHEADERSIZE+udp_data_size)];
   uint64_t data_counter = 0;
 
-  /* initialise data rate timing library */
-  StopWatch wait_sw;
-  RealTime_Initialise(1);
-  StopWatch_Initialise(1);
+  stopwatch_t wait_sw;
 
   /* setup udp header information */
   header.length = (int) UDPHEADERSIZE;
@@ -281,7 +274,7 @@ int main(int argc, char *argv[])
    * accordingly */
   if (data_rate > 0) {
     double packets_per_second = ((double) data_rate) / ((double)udp_data_size);
-    sleep_time = (1.0/packets_per_second)*1000000.0;
+    sleep_time_secs = (1.0/packets_per_second);
   }
 
   /* Determine size of the signal array
@@ -388,7 +381,7 @@ int main(int argc, char *argv[])
       daemon=0;
     }
 
-    StopWatch_Start(&wait_sw);
+    StartTimer(&wait_sw);
 
     encode_header(udp_data, &header);
     header.sequence++;
@@ -455,10 +448,10 @@ int main(int argc, char *argv[])
       double useful_rate = rate * useful_ratio;
              
       multilog(log,LOG_INFO,"%5.2f MB/s\t%5.2f MB/s\t%"PRIu64"\t%5.2f, %"PRIu64"\n",
-                            wire_rate, useful_rate,data_counter,sleep_time,bytes_sent);
+                            wire_rate, useful_rate,data_counter,sleep_time_secs,bytes_sent);
     }
 
-    StopWatch_Delay(&wait_sw, sleep_time);
+    DelayTimer(&wait_sw, sleep_time_secs);
 
   }
 

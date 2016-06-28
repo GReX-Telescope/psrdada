@@ -9,7 +9,7 @@
 
 #define BEAMS_PER_LOOP 8
 #define WARP_SIZE      32
-//#define _GDEBUG      1
+#define _GDEBUG      1
 
 // different GPUs have different cache performance profiles. Best kernel
 // I could write for the TitanX was the BLOCK2048 kernel

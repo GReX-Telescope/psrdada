@@ -19,8 +19,7 @@
 
 #include "dada_udp.h"
 #include "caspsr_def.h"
-#include "arch.h"
-#include "StopWatch.h"
+#include "stopwatch.h"
 
 //#define _DEBUG 1
 
@@ -67,7 +66,7 @@ typedef struct {
   caspsr_data_t * temp;
 
   /* packet timing */
-  StopWatch   * timer;
+  stopwatch_t  * timer;
   double        timer_sleep;
   uint64_t      timer_count;
   struct        timeval timeout;

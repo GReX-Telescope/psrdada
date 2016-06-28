@@ -33,10 +33,7 @@
 #include "futils.h"
 #include "sock.h"
 
-#include "arch.h"
-#include "Statistics.h"
-#include "RealTime.h"
-#include "StopWatch.h"
+#include "stopwatch.h"
 
 #define PACKET_SIZE 7696
 #define PAYLOAD_SIZE 7680
@@ -268,7 +265,7 @@ int main (int argc, char **argv)
 
   unsigned int plot_log = 0;
 
-  double sleep_time = 1000000;
+  double sleep_time = 1;
 
   char zap_dc = 0;
 
@@ -304,7 +301,6 @@ int main (int argc, char **argv)
 
     case 's':
       sleep_time = (double) atof (optarg);
-      sleep_time *= 1000000;
       break;
 
     case 'v':
@@ -344,9 +340,7 @@ int main (int argc, char **argv)
   udpplot.ymax = -100000;
 
   // initialise data rate timing library 
-  StopWatch wait_sw;
-  RealTime_Initialise(1);
-  StopWatch_Initialise(1);
+  stopwatch_t wait_sw;
 
   if (verbose)
     multilog(log, LOG_INFO, "mopsr_udpplot: using device %s\n", device);
@@ -384,7 +378,7 @@ int main (int argc, char **argv)
   char mgt_locks[17];
   char mgt_locks_long[17];
 
-  StopWatch_Start(&wait_sw);
+  StartTimer(&wait_sw);
 
   if (verbose)
     multilog(log, LOG_INFO, "mopsr_udpplot: while(!quit)\n");
@@ -434,6 +428,7 @@ int main (int argc, char **argv)
 
     if (ctx->sock->have_packet)
     {
+      StartTimer(&wait_sw);
 
       mopsr_decode (ctx->sock->buf, &hdr);
       //mopsr_decode_v2 (ctx->sock->buf, &hdr);
@@ -479,9 +474,11 @@ int main (int argc, char **argv)
       {
         plot_packet (ctx);
         udpplot_reset (ctx);
-        StopWatch_Delay(&wait_sw, sleep_time);
-        StopWatch_Start(&wait_sw);
+        DelayTimer(&wait_sw, sleep_time);
+        StartTimer(&wait_sw);
       }
+
+      DelayTimer(&wait_sw, sleep_time);
 
       if (ctx->verbose)
         multilog(ctx->log, LOG_INFO, "main: clearing packets at socket\n");

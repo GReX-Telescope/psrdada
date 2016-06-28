@@ -16,9 +16,7 @@
 #include "dada_affinity.h"
 #include "ascii_header.h"
 
-#include "cube/cube.h"
 #include "xgpu.h"
-#include "xgpu_info.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -81,8 +79,6 @@ typedef struct {
 
   XGPUContext xgpu_context;
 
-  XGPUInfo xgpu_info;
-
   uint64_t bytes_per_second; 
  
   unsigned dump_time;       // how often (s) to dump CC and AC spectra 
@@ -106,14 +102,20 @@ typedef struct {
   ComplexInput * inbuf;
   size_t inbuf_size;
 
+  unsigned xgpu_npol;
+  unsigned xgpu_nstation;
+  unsigned xgpu_nfrequencies;
+  unsigned xgpu_ntime;
+  unsigned xgpu_npulsar;
+
 } mopsr_dbxgpu_t;
 
 
 int dbxgpu_init (mopsr_dbxgpu_t * ctx, dada_hdu_t * in_hdu);
+unsigned dbxgpu_parse_info (char * line);
 int dbxgpu_destroy (mopsr_dbxgpu_t * ctx, dada_hdu_t * in_hdu);
 
 #define MOPSR_DBXGPU_INIT { 0, "", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
-
 
 //function to write output in raw format
 int dbxgpu_dump_spectra (dada_client_t* client, uint64_t start_byte, uint64_t end_byte)
@@ -204,8 +206,8 @@ int dbxgpu_dump_spectra_old (dada_client_t* client, uint64_t start_byte, uint64_
   if (ctx->verbose)
     multilog (log, LOG_INFO, "dump_spectra: reordering REGISTER_TILE -> TRIANGLE\n");
   int f, i, rx, j, ry, pol1, pol2;
-  size_t matLength = NFREQUENCY * ((NSTATION+1)*(NSTATION/2)*NPOL*NPOL) * (NPULSAR + 1);
-  for (i=0; i<NSTATION/2; i++) 
+  size_t matLength = ctx->xgpu_nfrequencies * ((ctx->xgpu_nstation+1)*(ctx->xgpu_nstation/2)*ctx->xgpu_npol*ctx->xgpu_npol) * (ctx->xgpu_npulsar + 1);
+  for (i=0; i<ctx->xgpu_nstation/2; i++) 
   {
     for (rx=0; rx<2; rx++) 
     {
@@ -213,14 +215,14 @@ int dbxgpu_dump_spectra_old (dada_client_t* client, uint64_t start_byte, uint64_
       {
         for (ry=0; ry<2; ry++) 
         {
-          int k = f*(NSTATION+1)*(NSTATION/2) + (2*i+rx)*(2*i+rx+1)/2 + 2*j+ry;
-          int l = f*4*(NSTATION/2+1)*(NSTATION/4) + (2*ry+rx)*(NSTATION/2+1)*(NSTATION/4) + i*(i+1)/2 + j;
-          for (pol1=0; pol1<NPOL; pol1++)
+          int k = f*(ctx->xgpu_nstation+1)*(ctx->xgpu_nstation/2) + (2*i+rx)*(2*i+rx+1)/2 + 2*j+ry;
+          int l = f*4*(ctx->xgpu_nstation/2+1)*(ctx->xgpu_nstation/4) + (2*ry+rx)*(ctx->xgpu_nstation/2+1)*(ctx->xgpu_nstation/4) + i*(i+1)/2 + j;
+          for (pol1=0; pol1<ctx->xgpu_npol; pol1++)
           {
-            for (pol2=0; pol2<NPOL; pol2++)
+            for (pol2=0; pol2<ctx->xgpu_npol; pol2++)
             {
-              size_t tri_index = (k*NPOL+pol1)*NPOL+pol2;
-              size_t reg_index = (l*NPOL+pol1)*NPOL+pol2;
+              size_t tri_index = (k*ctx->xgpu_npol+pol1)*ctx->xgpu_npol+pol2;
+              size_t reg_index = (l*ctx->xgpu_npol+pol1)*ctx->xgpu_npol+pol2;
               ctx->tmp[tri_index].real = ((float*) (ctx->xgpu_context.matrix_h))[reg_index];
               ctx->tmp[tri_index].imag = ((float*) (ctx->xgpu_context.matrix_h))[reg_index+matLength];
             }
@@ -233,18 +235,18 @@ int dbxgpu_dump_spectra_old (dada_client_t* client, uint64_t start_byte, uint64_
   if (ctx->verbose)
     multilog (log, LOG_INFO, "dump_spectra: reordering TRIANGLE -> CUSTOM\n");
   // now we have auto and cross correlations in ctx->tmp in xGPU TRIANGULAR ORDER
-  for (i=0; i<NSTATION; i++)
+  for (i=0; i<ctx->xgpu_nstation; i++)
   {
     for (j=0; j<=i; j++)
     {
-      for (pol1=0; pol1<NPOL; pol1++)
+      for (pol1=0; pol1<ctx->xgpu_npol; pol1++)
       {
-        for (pol2=0; pol2<NPOL; pol2++)
+        for (pol2=0; pol2<ctx->xgpu_npol; pol2++)
         {
-          for(f=0; f<NFREQUENCY; f++)
+          for(f=0; f<ctx->xgpu_nfrequencies; f++)
           {
-            int k = f*(NSTATION+1)*(NSTATION/2) + i*(i+1)/2 + j;
-            int index = (k*NPOL+pol1)*NPOL+pol2;
+            int k = f*(ctx->xgpu_nstation+1)*(ctx->xgpu_nstation/2) + i*(i+1)/2 + j;
+            int index = (k*ctx->xgpu_npol+pol1)*ctx->xgpu_npol+pol2;
 
             // convert i + pol1 and j + pol2 to our single pol antenna number
             int ant1 = (i * 2) + pol1;
@@ -331,9 +333,9 @@ int dbxgpu_open (dada_client_t* client)
     return -1;
   } 
 
-  if (ascii_header_get (client->header, "NPOL", "%d", &(ctx->npol)) != 1)
+  if (ascii_header_get (client->header, "ctx->xgpu_npol", "%d", &(ctx->npol)) != 1)
   {
-    multilog (log, LOG_ERR, "header had no NPOL\n");
+    multilog (log, LOG_ERR, "header had no ctx->xgpu_npol\n");
     return -1;
   }
 
@@ -379,15 +381,15 @@ int dbxgpu_open (dada_client_t* client)
     return -1;
   }
 
-  if (ctx->nant != (ctx->xgpu_info.nstation * ctx->xgpu_info.npol))
+  if (ctx->nant != (ctx->xgpu_nstation * ctx->xgpu_npol))
   {
     multilog (log, LOG_ERR, "NANT [%u] does not match xGPUs compiled size [%u]\n",
-              ctx->nant, (ctx->xgpu_info.nstation * ctx->xgpu_info.npol));
+              ctx->nant, (ctx->xgpu_nstation * ctx->xgpu_npol));
     return -1;
   }
  
   unsigned nbytes_per_samp = ctx->nchan * ctx->nant * ctx->ndim * ctx->npol;
-  if ((ctx->block_size / nbytes_per_samp) % ctx->xgpu_info.ntime != 0)
+  if ((ctx->block_size / nbytes_per_samp) % ctx->xgpu_ntime != 0)
   {
     multilog (log, LOG_ERR, "open: not an even number of xGPU gulps per block\n");
     return -1;
@@ -401,23 +403,42 @@ int dbxgpu_open (dada_client_t* client)
   ctx->cc_data_size = ctx->nbaselines * sizeof(Complex);
   ctx->cc_data = (Complex *) malloc (ctx->cc_data_size);
 
-  ctx->tmp_size = NFREQUENCY * ((NSTATION/2+1)*(NSTATION/4)*NPOL*NPOL*4) * (NPULSAR + 1);
+  ctx->tmp_size = ctx->xgpu_nfrequencies * ((ctx->xgpu_nstation/2+1)*(ctx->xgpu_nstation/4)*ctx->xgpu_npol*ctx->xgpu_npol*4) * (ctx->xgpu_npulsar + 1);
   ctx->tmp = (Complex *) malloc (ctx->tmp_size * sizeof(Complex));
 
-  ctx->inbuf_size = ctx->xgpu_info.ntime * ctx->nant * ctx->ndim * ctx->npol;
+  ctx->inbuf_size = ctx->xgpu_ntime * ctx->nant * ctx->ndim * ctx->npol;
   ctx->inbuf = (ComplexInput *) malloc (ctx->inbuf_size);
 
   float block_length_s = ((float) ctx->block_size) / (float) ctx->bytes_per_second;
   ctx->blocks_per_dump = (unsigned ) (ctx->dump_time / block_length_s + 0.5);
 
   if (ctx->verbose)
-    multilog (log, LOG_INFO, "open: NCHAN=%d NANT=%d, NDIM=%d NPOL=%d\n", ctx->nchan, ctx->nant, ctx->ndim, ctx->npol);
+    multilog (log, LOG_INFO, "open: NCHAN=%d NANT=%d, NDIM=%d ctx->xgpu_npol=%d\n", ctx->nchan, ctx->nant, ctx->ndim, ctx->npol);
 
   client->transfer_bytes = 0;
   client->optimal_bytes = 64*1024*1024;
   client->header_transfer = 0;
 
   return 0;
+}
+
+unsigned dbxgpu_parse_info (char * line)
+{
+  unsigned value;
+  const char * sep = ":";
+  char * saveptr;
+  char * str;
+
+  str = strtok_r (line, sep, &saveptr);
+  if (str == NULL)
+    return 0;
+  str = strtok_r (NULL, sep, &saveptr);
+  if (str == NULL)
+    return 0;
+  if (sscanf(str, " %u", &value) != 1)
+    return 0;
+  else
+    return value;
 }
 
 /*! Function that closes the data transfer */
@@ -513,7 +534,7 @@ int64_t dbxgpu_block_gpu (dada_client_t* client, void * buffer, uint64_t bytes, 
   unsigned iant;
   int xgpu_error;
 
-  const unsigned block_nantsamp = nant * ctx->xgpu_info.ntime;
+  const unsigned block_nantsamp = nant * ctx->xgpu_ntime;
 
   // prepare the specified number of time samples for xGPU to consume
   const uint64_t nblock = bytes / (block_nantsamp * ctx->ndim);
@@ -522,16 +543,16 @@ int64_t dbxgpu_block_gpu (dada_client_t* client, void * buffer, uint64_t bytes, 
     // copy the input from main memory to a smallish buffer
     for (iant=0; iant<nant; iant++)
     {
-      memcpy (ctx->inbuf, in + (iant * nsamp), ctx->xgpu_info.ntime * ctx->ndim);
+      memcpy (ctx->inbuf, in + (iant * nsamp), ctx->xgpu_ntime * ctx->ndim);
 
       // transpose
-      for (isamp=0; isamp<ctx->xgpu_info.ntime; isamp++)
+      for (isamp=0; isamp<ctx->xgpu_ntime; isamp++)
       {
         buf[isamp*nant + iant] = ctx->inbuf[isamp];
       }
     }
 
-    in += ctx->xgpu_info.ntime;
+    in += ctx->xgpu_ntime;
 
 #ifdef _DEBUG
     multilog (log, LOG_INFO, "block_gpu: reordered %d samps, caling CudaXengine\n", osamp);
@@ -594,14 +615,36 @@ int dbxgpu_init (mopsr_dbxgpu_t * ctx, dada_hdu_t * in_hdu)
   {
     int xgpu_error = 0;
 
-    // Get sizing info from library
-    xgpuInfo(&(ctx->xgpu_info));
+    // parse xgpuinfo from compiled program
+    FILE *fp = popen ("xgpuinfo", "r");
+    if (fp == NULL)
+    {
+      multilog (log, LOG_ERR, "Failed to run xgpuinfo\n");
+      return -1;
+    }
+
+    char line[160];
+
+    // parse key information from xGPU library configuration
+    while (fgets(line, sizeof(line)-1, fp) != NULL)
+    {
+      if (strcmp (line, "Number of polarizations:") == 0)
+        ctx->xgpu_npol = dbxgpu_parse_info (line);
+      if (strcmp (line, "Number of stations:") == 0)
+        ctx->xgpu_nstation = dbxgpu_parse_info (line);
+      if (strcmp (line, "Number of frequencies:") == 0)
+        ctx->xgpu_nfrequencies = dbxgpu_parse_info (line);
+      if (strcmp (line, "Number of time samples per GPU integration:") == 0)
+        ctx->xgpu_ntime = dbxgpu_parse_info (line);
+    }
+    pclose (fp);
+    ctx->xgpu_npulsar = 1;
 
     if (ctx->verbose)
       multilog (log, LOG_INFO, "init: xGPU configured for %u antenna "
                 "and integration length of %u\n", 
-                ctx->xgpu_info.nstation * ctx->xgpu_info.npol,
-                ctx->xgpu_info.ntime);
+                ctx->xgpu_nstation * ctx->xgpu_npol,
+                ctx->xgpu_ntime);
 
     // note this is pinned memory allocated by xGPU library
     ctx->xgpu_context.array_h = NULL;

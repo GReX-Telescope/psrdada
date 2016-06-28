@@ -5,6 +5,7 @@
 #include "ipcio_cuda.h"
 
 /* read bytes from ipcbuf, writing to device memory via H2D transfer*/
+extern "C"
 ssize_t ipcio_read_cuda (ipcio_t* ipc, char* ptr, size_t bytes, cudaStream_t stream)
 {
   size_t space = 0;

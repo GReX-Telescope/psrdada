@@ -196,8 +196,6 @@ time_t mopsr_udpdb_start (dada_pwc_main_t * pwcm, time_t start_utc)
   // if we are receiving real data, not inserting fake zeros
   if (ctx->zeros)
   {
-    RealTime_Initialise(1);
-    StopWatch_Initialise(1);
     // use 2 to indicate that we are beginning observation
     ctx->idle_state = 2;
   } 
@@ -461,20 +459,19 @@ int64_t mopsr_udpdb_fake_block (dada_pwc_main_t * pwcm, void * block,
 
   // on first block just start 
   if (ctx->idle_state == 2)
-    StopWatch_Start(&(ctx->wait_sw));
+    StartTimer(&(ctx->wait_sw));
   ctx->idle_state = 1;
 
   // get the delay in micro seconds
   double to_delay = ((double) block_size) / (double) ctx->bytes_per_second;
-  to_delay *= 1000000;
 
   // now delay for the requisite time
   if (ctx->verbose > 1)
-    multilog (pwcm->log, LOG_INFO, "fake_block: %"PRIu64" bytes -> %lf seconds\n", block_size, to_delay/1000000);
-  StopWatch_Delay(&(ctx->wait_sw), to_delay);
+    multilog (pwcm->log, LOG_INFO, "fake_block: %"PRIu64" bytes -> %lf seconds\n", block_size, to_delay);
+  DelayTimer(&(ctx->wait_sw), to_delay);
 
   // now start the stopwatch ready for the next fake_block call
-  StopWatch_Start(&(ctx->wait_sw));
+  StartTimer(&(ctx->wait_sw));
 
   return (int64_t) block_size;
 }
@@ -489,7 +486,7 @@ int mopsr_udpdb_stop (dada_pwc_main_t* pwcm)
     multilog (pwcm->log, LOG_INFO, "mopsr_udpdb_stop()\n");
 
   if (ctx->zeros)
-    StopWatch_Stop (&(ctx->wait_sw));
+    StopTimer (&(ctx->wait_sw));
 
   ctx->capture_started = 0;
   ctx->idle_state = 1;

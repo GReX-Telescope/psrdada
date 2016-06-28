@@ -3,10 +3,6 @@ ACLOCAL_AMFLAGS = -I config
 
 SUBDIRS = Management
 
-if COMPILE_THIRD
-SUBDIRS += 3rdparty
-endif
-
-SUBDIRS	+= src web scripts config apsr bpsr caspsr gmrt leda mopsr ska1
+SUBDIRS	+= 3rdparty src web scripts config apsr bpsr caspsr gmrt leda mopsr ska1
 
 EXTRA_DIST = cudalt.py

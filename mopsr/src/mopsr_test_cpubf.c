@@ -26,10 +26,7 @@
 #include <pthread.h>
 #include <inttypes.h>
 
-#include "arch.h"
-#include "Statistics.h"
-#include "RealTime.h"
-#include "StopWatch.h"
+#include "stopwatch.h"
 
 void usage()
 {
@@ -119,13 +116,11 @@ int main (int argc, char **argv)
   unsigned ichunk, iant, ival;
 
   // initialise data rate timing library
-  StopWatch wait_sw;
-  RealTime_Initialise(1);
-  StopWatch_Initialise(1);
+  stopwatch_t wait_sw;
 
   if (verbose)
     multilog (log, LOG_INFO, "Starting\n");
-  StopWatch_Start(&wait_sw);
+  StartTimer(&wait_sw);
   {
     for (ichunk=0; ichunk<nchunk; ichunk++)
     {
@@ -147,17 +142,14 @@ int main (int argc, char **argv)
       memcpy ((void *) (h_out + (ichunk * chunk_nsamps)), (void *) ou_buf, chunk_nsamps * ndim * sizeof(float));
     }
   }
-  StopWatch_Stop(&wait_sw);
+  StopTimer(&wait_sw);
 
   if (verbose)
     multilog (log, LOG_INFO, "Ended\n");
 
-  double time_cpu = StopWatch_TimeDiff(&wait_sw);
-  double time_usec = StopWatch_uSec(time_cpu);
-
+  unsigned long elapsed_ms = ReadTimer(&wait_sw);
   double bytes_per_second = 550000000;
-
-  double time_sec = time_usec / 1000000;
+  double time_sec = (double) elapsed_ms / 1e3;
   double data_length = nbytes_in / bytes_per_second;
   double performance = time_sec / data_length;
 

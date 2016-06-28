@@ -28,10 +28,7 @@
 #include "multilog.h"
 #include "dada_ib_datagram.h"
 
-#include "arch.h"
-#include "Statistics.h"
-#include "RealTime.h"
-#include "StopWatch.h"
+#include "stopwatch.h"
 
 #define DADA_UDGEN_XMIT_TIME 5
 #define DADA_UDGEN_DATA_RATE 64
@@ -217,15 +214,13 @@ int main(int argc, char *argv[])
   uint64_t data_counter = 0;
 
   // initialise data rate timing library
-  StopWatch wait_sw;
-  RealTime_Initialise(1);
-  StopWatch_Initialise(1);
+  stopwatch_t wait_sw;
 
   // If we have a desired data rate, then we need to set sleep time 
   if (data_rate > 0) 
   {
     packets_ps = floor(((double) data_rate) / ((double) IB_PAYLOAD));
-    sleep_time = (1.0/packets_ps)*1000000.0;
+    sleep_time = (1.0/packets_ps);
   }
 
   multilog (log, LOG_INFO, "Packets/sec = %"PRIu64"\n",packets_ps);
@@ -332,7 +327,7 @@ int main(int argc, char *argv[])
     for (i = 0; i < ne; i++)
     {
       if (data_rate)
-        StopWatch_Start(&wait_sw);
+        StartTimer(&wait_sw);
       if (wcs[i].status != IBV_WC_SUCCESS)
       {
         multilog(log, LOG_WARNING, "main: wcs[%d].status != IBV_WC_SUCCESS "
@@ -367,7 +362,7 @@ int main(int argc, char *argv[])
       seq_no++;
     
       if (data_rate)
-        StopWatch_Delay(&wait_sw, sleep_time);
+        DelayTimer(&wait_sw, sleep_time);
     }
 
     if (num_cq_received)

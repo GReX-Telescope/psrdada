@@ -270,13 +270,8 @@ int caspsr_receiver_init(caspsr_receiver_t * ctx, unsigned i_dest, unsigned n_de
   ctx->curr    = caspsr_init_data();
   ctx->next    = caspsr_init_data();
 
-  /* Intialize the stopwatch timer */
-  RealTime_Initialise(1);
-  StopWatch_Initialise(1);
-
-  /* 10 usecs between packets */
-  ctx->timer_sleep = 10;
-  ctx->timer = (StopWatch *) malloc(sizeof(StopWatch));
+  ctx->timer_sleep = 10.0f / 1e6;
+  ctx->timer = (stopwatch_t *) malloc(sizeof(stopwatch_t));
 
   /* xfer spacing */
   ctx->xfer_bytes   = (n_packets + n_append) * UDP_DATA;
@@ -413,7 +408,7 @@ void * caspsr_xfer(caspsr_receiver_t * ctx, int64_t * size)
       while (!ctx->sock->have_packet && !ctx->got_enough) {
 
         /* to control how often we check for packets, and accurate timeout */
-        StopWatch_Start(ctx->timer);
+        StartTimer(ctx->timer);
 
         /* get a packet from the (non-blocking) socket */
         ctx->sock->got = recvfrom (ctx->sock->fd, ctx->sock->buffer, UDP_PAYLOAD, 0, NULL, NULL);
@@ -422,7 +417,7 @@ void * caspsr_xfer(caspsr_receiver_t * ctx, int64_t * size)
         if (ctx->sock->got == UDP_PAYLOAD) {
 
           ctx->sock->have_packet = 1;
-          StopWatch_Stop(ctx->timer);
+          StopTimer(ctx->timer);
 
         /* if no packet at the socket */
         } else if (ctx->sock->got == -1) {
@@ -432,20 +427,20 @@ void * caspsr_xfer(caspsr_receiver_t * ctx, int64_t * size)
           /* if no packet at the socket, busy sleep for 10us */
           if (errsv == EAGAIN) {
             ctx->timer_count += (uint64_t) ctx->timer_sleep;
-            StopWatch_Delay(ctx->timer, ctx->timer_sleep);
+            DelayTimer(ctx->timer, ctx->timer_sleep);
   
           /* otherwise recvfrom failed, this is an error */
           } else {
             multilog(ctx->log, LOG_ERR, "caspsr_xfer: recvfrom failed: %s\n", strerror(errsv));
             ctx->got_enough = 1;
-            StopWatch_Stop(ctx->timer);
+            StopTimer(ctx->timer);
           }
 
        /* we got a packet of the wrong size */
         } else {
 
           multilog(ctx->log, LOG_ERR, "caspsr_xfer: got %d, expected %d\n", ctx->sock->got, UDP_PAYLOAD);
-          StopWatch_Stop(ctx->timer);
+          StopTimer(ctx->timer);
 
         }
 

@@ -1,13 +1,11 @@
 bin_PROGRAMS = vsib_proxy vsib_recv vsib_send 
 
-AM_CFLAGS = -D$(ARCH)
-
 lib_LTLIBRARIES = libtimers.la
 
-libtimers_la_SOURCES = StopWatch.c RealTime.c Statistics.c
+libtimers_la_SOURCES = stopwatch.c
 
-include_HEADERS = arch.h StopWatch.h RealTime.h Statistics.h
+include_HEADERS = stopwatch.h
 
-ARCH = @ARCH@
-libtimers_la_CFLAGS  = -Wall -O3 -D$(ARCH)
+libtimers_la_LIBADD = -lrt
+
 

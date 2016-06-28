@@ -35,12 +35,6 @@
 #include "dada_affinity.h"
 #include "sock.h"
 
-// Realtime timing library
-#include "arch.h"
-#include "Statistics.h"
-#include "RealTime.h"
-#include "StopWatch.h"
-
 /* debug mode */
 #define _DEBUG 1
 

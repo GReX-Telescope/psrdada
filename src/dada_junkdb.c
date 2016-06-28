@@ -105,40 +105,56 @@ int64_t transfer_data (dada_client_t* client, void* data, uint64_t data_size)
     return data_size;
   }
 
+  // copy data_size bytes at the specified rate into data  
+  uint64_t bytes_remaining = data_size;
   uint64_t bytes_copied = 0;
   uint64_t bytes = 0;
 
-  while (bytes_copied < data_size) {
-
+  while (bytes_remaining > 0)
+  {
     if (junkdb->bytes_to_copy == 0) {
       fsleep(0.1);
     } 
 
+    // busy loop wait until the next second ticks over, then 
+    // increment by bytes_per_second
     junkdb->prev_time = junkdb->curr_time;
     junkdb->curr_time = time(0);
-    if (junkdb->curr_time > junkdb->prev_time) {
+
+    if (junkdb->curr_time > junkdb->prev_time)
+    {
+      //fprintf (stderr, "incrementing %lu by %lu\n", junkdb->bytes_to_copy, junkdb->rate);
       junkdb->bytes_to_copy += junkdb->rate;
     }
 
-    if (junkdb->bytes_to_copy) {
-
-      if (data_size-bytes_copied < junkdb->bytes_to_copy)
-        bytes = data_size-bytes_copied;
+    // if we have some data to copy now (due to rate)
+    if (junkdb->bytes_to_copy > 0) 
+    {
+      // how much data to memcpy into the ring buffer
+      if (bytes_remaining < junkdb->bytes_to_copy)
+        bytes = bytes_remaining;
       else 
-        bytes = junkdb->bytes_to_copy-bytes_copied;
+        bytes = junkdb->bytes_to_copy;
 
+      // if the number of bytes to be copied is more than our
+      // internal buffer, just truncate it
       if (bytes > junkdb->data_size)
         bytes = junkdb->data_size;
 
-#ifdef _DEBUG
-      multilog (client->log, LOG_INFO, "[%"PRIu64" / %"PRIu64"] bytes=%"PRIu64", btc=%"PRIu64"\n", bytes_copied, data_size,bytes, junkdb->bytes_to_copy);
-#endif
-      memcpy (data+bytes_copied, junkdb->data, bytes);
-      bytes_copied += bytes;
-      junkdb->bytes_to_copy -= bytes;
-    }
+      // copy
+      memcpy (data + bytes_copied, junkdb->data, bytes);
 
+      // increment 
+      bytes_copied += bytes;            // destination offset
+      junkdb->bytes_to_copy -= bytes;   // data_rate offset
+      bytes_remaining -= bytes;         // bytes left to copy to destination
+
+#ifdef _DEBUG
+      fprintf(stderr, "bytes=%lu bytes_copied=%lu bytes_remaining=%lu data_size=%lu\n", bytes, bytes_copied, bytes_remaining, data_size);
+#endif
+    }
   }
+  
 #ifdef _DEBUG 
   multilog (client->log, LOG_INFO, "transfer_data: copied %"PRIu64" bytes\n", bytes_copied);
 #endif
@@ -178,8 +194,6 @@ int dada_junkdb_open (dada_client_t* client)
   assert (junkdb != 0);
 
   uint64_t hdr_size = 0;
-  time_t current_time = 0;
-  time_t prev_time = 0;
   
   // read the header
   if (fileread (junkdb->header_file, client->header, client->header_size) < 0) {
@@ -239,6 +253,13 @@ int dada_junkdb_open (dada_client_t* client)
   }
 
   multilog (client->log, LOG_INFO, "open: data generated\n");
+
+  // wait for a 1s tick
+  junkdb->curr_time = time(0);
+  junkdb->prev_time = junkdb->curr_time;
+  while (junkdb->prev_time == junkdb->curr_time)
+    junkdb->curr_time = time(0);
+  junkdb->bytes_to_copy += junkdb->rate;
 
   return 0;
 }
@@ -401,10 +422,12 @@ int main (int argc, char **argv)
   junkdb.rate = (uint64_t) rate * rate_base;
   junkdb.write_time = write_time;
   junkdb.write_gaussian = write_gaussian;
+
+  // never "generate" more than 4 MB
   junkdb.data_size = (uint64_t) rate * rate_base;
-  junkdb.transfer_size = write_time * junkdb.data_size;
-  if (total_bytes > 0)
-    junkdb.transfer_size = (uint64_t) total_bytes;
+  if (junkdb.data_size > 4 * 1024 * 1024)
+    junkdb.data_size = 4 * 1024 * 1024;
+
   junkdb.header_file = strdup(header_file);
   junkdb.verbose = verbose;
   junkdb.fill_char = fill_char;

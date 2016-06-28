@@ -17,6 +17,8 @@
 #include "dada_def.h"
 #include "apsr_udp.h"
 #include "sock.h"
+#include "stopwatch.h"
+
 
 #include "node_array.h"
 #include "string_array.h"
@@ -35,12 +37,6 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
-/* 3rd party includes for StopWatch library */
-#include "arch.h"
-#include "Statistics.h"
-#include "RealTime.h"
-#include "StopWatch.h"
-
 /* structures dbudp datatype  */
 typedef struct{
   int verbose;                      /* verbosity flag */
@@ -51,7 +47,7 @@ typedef struct{
   char *udpbuffer;                  /* for sending udp data */
   struct sockaddr_in udpsocket;     /* socket for sending udp data */
   header_struct header;             /* custom udp header */
-  StopWatch *wait_sw;               /* StopWatch for packet throttling */
+  stopwatch_t *wait_sw;             /* StopWatch for packet throttling */
   int sequence_number;
   time_t current_time;
   time_t prev_time;
@@ -267,7 +263,7 @@ int64_t dbudp_io_function (dada_client_t* client,
 
       //fprintf(stderr,"while (%"PRIu64" <= %"PRIu64")\n",(data_pos+send_size),data_size);
 
-      StopWatch_Start(dbudp->wait_sw);
+      StartTimer(dbudp->wait_sw);
             
       bytes_to_send = (size_t) (send_size+UDPHEADERSIZE);
 
@@ -316,7 +312,7 @@ int64_t dbudp_io_function (dada_client_t* client,
       }
   
       /* 22 usecs ~= 64 MB/s for packets of ~1500 bytes */
-      StopWatch_Delay(dbudp->wait_sw, 30.0); 
+      DelayTimer(dbudp->wait_sw, 30.0/1e6); 
 
       dbudp->sequence_number++;
     }
@@ -358,7 +354,7 @@ int main (int argc, char **argv)
   int onefile = 0;
 
   /* StopWatch */
-  StopWatch stopwatch;
+  stopwatch_t stopwatch;
 
   /* actual struct with info */
   dbudp_t dbudp;
@@ -433,10 +429,6 @@ int main (int argc, char **argv)
   dbudp.prev_bytes_sent = 0;
 
   /* Timer/Stopwatch initialise */
-  int ret;
-  int quiet = 1;
-  ret = RealTime_Initialise(quiet);
-  ret = StopWatch_Initialise(quiet);
   dbudp.wait_sw = &stopwatch;
 
   int bufsize = 4096;

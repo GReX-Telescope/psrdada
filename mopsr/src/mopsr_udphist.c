@@ -33,11 +33,7 @@
 #include "multilog.h"
 #include "futils.h"
 #include "sock.h"
-
-#include "arch.h"
-#include "Statistics.h"
-#include "RealTime.h"
-#include "StopWatch.h"
+#include "stopwatch.h"
 
 typedef struct {
 
@@ -269,7 +265,7 @@ int main (int argc, char **argv)
 
   unsigned int chan_loop = 0;
 
-  double sleep_time = 1000000;
+  double sleep_time = 1;
 
   unsigned int zap = 0;
 
@@ -317,7 +313,6 @@ int main (int argc, char **argv)
 
     case 's':
       sleep_time = (double) atof (optarg);
-      sleep_time *= 1000000;
       break;
 
     case 't':
@@ -369,9 +364,7 @@ int main (int argc, char **argv)
   udphist.ymax = 0;
   udphist.zap = zap;
 
-  StopWatch wait_sw;
-  RealTime_Initialise(1);
-  StopWatch_Initialise(1);
+  stopwatch_t wait_sw;
 
   if (verbose)
     multilog(log, LOG_INFO, "mopsr_udphist: using device %s\n", device);
@@ -482,7 +475,7 @@ int main (int argc, char **argv)
 
     if (ctx->sock->have_packet)
     {
-      StopWatch_Start(&wait_sw);
+      StartTimer(&wait_sw);
 
       mopsr_decode (ctx->sock->buf, &hdr);
 
@@ -509,7 +502,7 @@ int main (int argc, char **argv)
         mopsr_plot_histogram (histogram, &opts);
 
         udphist_reset (ctx);
-        StopWatch_Delay(&wait_sw, sleep_time);
+        DelayTimer(&wait_sw, sleep_time);
         if (ctx->channel_loop)
           ctx->channel = (ctx->channel + 1) % ctx->nchan;
 

@@ -16,17 +16,6 @@ AC_PREFIX_DEFAULT([${PSRHOME:-"/usr/local"}${PSRHOME:+"/$LOGIN_ARCH"}])
 AM_INIT_AUTOMAKE([foreign subdir-objects])
 AC_DISABLE_SHARED
 
-AC_CANONICAL_HOST
-case $host in
-  i?86-*-linux-*) ARCH=IA32;;
-  ia64-*-linux-*) ARCH=IA64;;
-  x86_64-*-linux-*) ARCH=AMD64;;
-  *) ARCH=unsupported;
-     AC_MSG_WARN([architecture is not supported by third party software]);;
-esac
-AC_SUBST(ARCH)
-AM_CONDITIONAL(COMPILE_THIRD, [test x"$ARCH" != xunsupported])
-
 # Checks for programs.
 AC_PROG_CC
 AC_PROG_CPP
