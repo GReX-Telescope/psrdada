@@ -14,7 +14,7 @@
 #include <sys/socket.h>
 #include <math.h>
 #include <pthread.h>
-#include <sys/sysinfo.h>
+//#include <sys/sysinfo.h>
 #include <sys/types.h>
 #include <sys/syscall.h>
 #include <sys/mman.h>
@@ -881,22 +881,6 @@ int main (int argc, char **argv)
     multilog_add (log, stderr);
 
   //multilog_serve (log, l_port);
-
-  /* check we will have enough memory */
-  struct sysinfo myinfo;
-  sysinfo(&myinfo); 
-
-  uint64_t required_memory = 0;
-  uint64_t total_memory = 0;
-  total_memory = myinfo.mem_unit * myinfo.totalram; 
-  required_memory = num_dests;
-  required_memory *= UDP_PAYLOAD;
-  required_memory *= (packets_per_xfer + packets_to_append);
-  if (required_memory > 0.75 * total_memory) {
-    double percent = ((double) required_memory) / ((double) total_memory);
-    fprintf(stderr, "ERROR: parameters would try to use %3.0f%% of RAM [max 75%%]\n", percent*100);
-    exit(EXIT_FAILURE);
-  }
 
   /* allocate receiver data strutures */
   udpNnic.receivers = (udpNnic_receiver_t **) malloc(sizeof(udpNnic_receiver_t*) * num_dests);

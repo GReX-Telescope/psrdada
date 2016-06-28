@@ -16,9 +16,11 @@ bin_PROGRAMS = bibob_terminal caspsr_udpthreaded caspsr_udpNdb caspsr_udpgen \
 	caspsr_disknumcheck caspsr_udptester caspsr_dbdecidb caspsr_udpdb \
 	caspsr_udpheader caspsr_udpNnic
 
-INCLUDES = -I$(top_srcdir)/src -I$(top_srcdir)/3rdparty
+AM_CPPFLAGS = -I$(top_srcdir)/src \
+  -I$(top_srcdir)/3rdparty
 
-LDADD = libcaspsr.la $(top_builddir)/src/libpsrdada.la \
+LDADD = libcaspsr.la \
+  $(top_builddir)/src/libpsrdada.la \
 	$(top_builddir)/3rdparty/libtimers.la
 
 #############################################################################
@@ -30,10 +32,11 @@ LDADD = libcaspsr.la $(top_builddir)/src/libpsrdada.la \
 if HAVE_RDMACM
 
 bin_PROGRAMS += caspsr_dbib caspsr_ibdb caspsr_pwc_ibdb
+LDADD += @RDMACM_LIBS@
 
-caspsr_dbib_LDADD = $(LDADD) $(RDMACM_LIBS)
-caspsr_ibdb_LDADD = $(LDADD) $(RDMACM_LIBS)
-caspsr_pwc_ibdb_LDADD = $(LDADD) $(RDMACM_LIBS)
+#caspsr_dbib_LDADD = $(LDADD) $(RDMACM_LIBS)
+#caspsr_ibdb_LDADD = $(LDADD) $(RDMACM_LIBS)
+#caspsr_pwc_ibdb_LDADD = $(LDADD) $(RDMACM_LIBS)
 
 endif
 
@@ -46,8 +49,9 @@ endif
 if HAVE_PGPLOT
 
 bin_PROGRAMS += mulbibob_server caspsr_disknumplot
-AM_CPPFLAGS = @PGPLOT_CFLAGS@
-mulbibob_server_LDADD = $(LDADD) @PGPLOT_LIBS@
-caspsr_disknumplot_LDADD = $(LDADD) @PGPLOT_LIBS@
+AM_CPPFLAGS += @PGPLOT_CFLAGS@
+LDADD += @PGPLOT_LIBS@
+#mulbibob_server_LDADD = $(LDADD) @PGPLOT_LIBS@
+#caspsr_disknumplot_LDADD = $(LDADD) @PGPLOT_LIBS@
 endif
 

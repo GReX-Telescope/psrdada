@@ -24,6 +24,18 @@ AM_PROG_CC_C_O
 AC_PROG_INSTALL
 AC_PROG_LIBTOOL
 
+
+case $target_os in
+*linux*)
+  AM_CONDITIONAL(HAVE_LINUX, true)
+  AC_DEFINE(HAVE_LINUX,[1],[Have a linux operating system])
+  ;;
+*)
+  AM_CONDITIONAL(HAVE_LINUX, false)
+  #AC_DEFINE(HAVE_LINUX,[0],[Have a linux operating system])
+  ;;
+esac
+
 ACX_PTHREAD
 LIBS="$PTHREAD_LIBS $LIBS"
 CFLAGS="$CFLAGS $PTHREAD_CFLAGS"

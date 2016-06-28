@@ -96,7 +96,9 @@ int main (int argc, char * const argv[]) {
   struct sockaddr_in client;    /* Client address */
   socklen_t client_len;
   disktime *times;
+#ifdef O_DIRECT
   unsigned o_direct = 0;
+#endif
   int open_flags = OPENOPTIONS;
 
   unsigned long long currentfilesize, completed;
@@ -132,7 +134,11 @@ int main (int argc, char * const argv[]) {
   write_failure = 0;
 
   /* Read command line options */
+#ifdef O_DIRECT
   while ((opt=getopt(argc,argv,"b:w:op:t:H:Dsmqh1")) != -1) {
+#else
+  while ((opt=getopt(argc,argv,"b:w:p:t:H:Dsmqh1")) != -1) {
+#endif
 
     switch (opt) {
       
@@ -152,9 +158,11 @@ int main (int argc, char * const argv[]) {
         window_size = ftmp * 1024;
      break;
 
+#ifdef O_DIRECT
     case 'o':
       o_direct = 1;
       break;
+#endif
  
     case 'p':
       status = sscanf(optarg, "%d", &tmp);
@@ -213,9 +221,11 @@ int main (int argc, char * const argv[]) {
     }
   }
 
+#ifdef O_DIRECT
   if (o_direct) {
     open_flags |= O_DIRECT;
   }
+#endif
 
   nupdate = timeupdate/(bufsize/1e6);
   if (nupdate==0) nupdate = 1;
@@ -409,6 +419,7 @@ int main (int argc, char * const argv[]) {
             }
           }
         } else if (dodisk && nbufsize[ibuf]>0) {
+#ifdef O_DIRECT
           if (o_direct) {
             if (nbufsize[ibuf] % 512 == 0) {
               nwrote = write(ofile, buf[ibuf], nbufsize[ibuf]);
@@ -430,7 +441,10 @@ int main (int argc, char * const argv[]) {
               wrote += write (ofile, buf[ibuf] + wrote, nbufsize[ibuf] - wrote);
               nwrote = wrote;
             }
-          } else { 
+          } 
+          else 
+#endif
+          { 
             nwrote = write(ofile, buf[ibuf], nbufsize[ibuf]);
           }
           if (nwrote==-1) {
@@ -928,7 +942,9 @@ void usage(void) {
   fprintf(stderr, "  -w <SIZE>     Network window size (kB)\n");
   fprintf(stderr, "  -t <TIME>     Number of blocks (-b) to average timing statistics\n");
   fprintf(stderr, "  -H <HOST>     Act as client and connect to remove server\n");
+#ifdef O_DIRECT
   fprintf(stderr, "  -o            enable O_DIRECT\n");
+#endif
   fprintf(stderr, "  -s            Save a summary of network statistics\n");
   fprintf(stderr, "  -m            Don't write data to disk\n");
   fprintf(stderr, "  -q            Quiet mode, less output\n");

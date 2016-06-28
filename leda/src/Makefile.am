@@ -10,7 +10,7 @@ LDADD = libleda.la \
 	$(top_builddir)/src/libpsrdada.la \
 	$(top_builddir)/3rdparty/libtimers.la
 
-INCLUDES = -I$(top_srcdir)/src \
+AM_CPPFLAGS = -I$(top_srcdir)/src \
 	-I$(top_srcdir)/3rdparty
 
 if HAVE_IPP

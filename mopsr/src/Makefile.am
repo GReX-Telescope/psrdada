@@ -7,8 +7,8 @@ mopsr_hdr = mopsr_udp.h mopsr_def.h mopsr_util.h
 
 libmopsr_la_SOURCES = $(mopsr_hdr) mopsr_udp.c mopsr_util.c
 
-INCLUDES = -I$(top_srcdir)/src \
-					 -I$(top_srcdir)/3rdparty
+AM_CPPFLAGS = -I$(top_srcdir)/src \
+					    -I$(top_srcdir)/3rdparty
 
 AM_CFLAGS = @PGPLOT_CFLAGS@ @FFTW_CFLAGS@
 
@@ -132,7 +132,7 @@ endif
 
 if HAVE_CUB
 
-AM_CPPFLAGS = @CUB_CFLAGS@
+AM_CPPFLAGS += @CUB_CFLAGS@
 
 endif
 

@@ -31,4 +31,4 @@ AM_CFLAGS = @CUFFT_CFLAGS@ @CUDA_CFLAGS@
 
 endif
 
-INCLUDES = -I$(top_srcdir)/src
+AM_CPPFLAGS = -I$(top_srcdir)/src

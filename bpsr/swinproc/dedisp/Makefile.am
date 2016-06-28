@@ -11,7 +11,7 @@ LDADD = $(top_builddir)/bpsr/swinproc/libswinproc.la libspdedisp.la
 
 dedisperse_all_LDADD = $(LDADD)
 
-INCLUDES = -I$(top_srcdir)/bpsr/swinproc
+AM_CPPFLAGS = -I$(top_srcdir)/bpsr/swinproc
 
 AM_CXXFLAGS = @OPENMP_CFLAGS@
 

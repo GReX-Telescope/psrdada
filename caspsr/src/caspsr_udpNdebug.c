@@ -14,7 +14,7 @@
 #include <sys/socket.h>
 #include <math.h>
 #include <pthread.h>
-#include <sys/sysinfo.h>
+//#include <sys/sysinfo.h>
 #include <sys/types.h>
 #include <sys/syscall.h>
 #include <sys/mman.h>

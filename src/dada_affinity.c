@@ -6,7 +6,7 @@
 
 int dada_bind_thread_to_core(int core)
 {
-
+#ifdef HAVE_AFFINTY
   cpu_set_t set;
   pid_t tpid;
 
@@ -24,6 +24,6 @@ int dada_bind_thread_to_core(int core)
     fprintf(stderr, "failed to get cpu affinity: %s", strerror(errno));
     return -1;
   }
-
+#endif
   return 0;
 }
