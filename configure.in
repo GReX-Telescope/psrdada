@@ -5,6 +5,7 @@ AC_PREREQ(2.57)
 AC_INIT([DADA],[1.0],[straten@astron.nl])
 
 AC_CONFIG_SRCDIR([src/dada_def.h])
+AC_CANONICAL_TARGET
 
 AC_ARG_VAR([PSRHOME],    [Standard pulsar home directory])
 AC_ARG_VAR([LOGIN_ARCH], [Architecture-dependent sub-directory of PSRHOME])
@@ -23,18 +24,6 @@ AC_PROG_CXX
 AM_PROG_CC_C_O
 AC_PROG_INSTALL
 AC_PROG_LIBTOOL
-
-
-case $target_os in
-*linux*)
-  AM_CONDITIONAL(HAVE_LINUX, true)
-  AC_DEFINE(HAVE_LINUX,[1],[Have a linux operating system])
-  ;;
-*)
-  AM_CONDITIONAL(HAVE_LINUX, false)
-  #AC_DEFINE(HAVE_LINUX,[0],[Have a linux operating system])
-  ;;
-esac
 
 ACX_PTHREAD
 LIBS="$PTHREAD_LIBS $LIBS"
@@ -168,6 +157,11 @@ AC_CONFIG_FILES([Makefile
     ska1/Makefile
     ska1/src/Makefile
 		3rdparty/Makefile])
+
+case $target_os in
+*linux*) AM_CONDITIONAL([HAVE_LINUX],[true]);;
+*) AM_CONDITIONAL([HAVE_LINUX],[false]);;
+esac
 
 #		puma2/Makefile # Removed since tim.h is missing
 AC_OUTPUT
