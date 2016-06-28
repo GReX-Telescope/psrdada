@@ -1,3 +1,5 @@
+#ifdef __MACH__
+
 #include "mach_gettime.h"
 #include <mach/mach_time.h>
 
@@ -41,3 +43,4 @@ int clock_gettime(clockid_t clk_id, struct timespec *tp)
 
     return retval;
 }
+#endif //__MACH__
