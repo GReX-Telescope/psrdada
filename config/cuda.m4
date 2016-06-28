@@ -79,7 +79,28 @@ AC_DEFUN([SWIN_LIB_CUDA],
     AC_MSG_CHECKING([for CUB installation])
    
     SWIN_PACKAGE_FIND([cub],[cub.cuh])
-    # SWIN_PACKAGE_TRY_COMPILE([cub],[#include <cub/block/block_radix_sort.cuh>])
+
+    cat >conftest.cu<<_ACEOF
+/* confdefs.h.*/
+_ACEOF
+cat confdefs.h >>conftest.cu
+cat >conftest.cu<<_ACEOF
+/* end confdefs.h.  */
+#include <cub.cuh>
+int
+main ()
+{
+  return 0;
+}
+_ACEOF
+    for cf_dir in $swin_cub_found; do
+      if $cuda_nvcc -I$cf_dir conftest.cu
+      then
+        have_cub=yes
+        cub_CFLAGS=-I`dirname $cf_dir`
+      fi
+    done
+    rm -f conftest.cu conftest.o 
 
     AC_MSG_RESULT([$have_cub])   
 
