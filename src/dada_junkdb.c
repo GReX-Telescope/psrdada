@@ -15,8 +15,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-/* #define _DEBUG 1 */
-
 #define DEFAULT_DATA_RATE 64.000
 #define DEFAULT_WRITE_TIME 10 
 
@@ -106,7 +104,7 @@ int64_t transfer_data (dada_client_t* client, void* data, uint64_t data_size)
   }
 
   // copy data_size bytes at the specified rate into data  
-  uint64_t bytes_remaining = data_size;
+  int64_t bytes_remaining = (int64_t) data_size;
   uint64_t bytes_copied = 0;
   uint64_t bytes = 0;
 
@@ -423,10 +421,15 @@ int main (int argc, char **argv)
   junkdb.write_time = write_time;
   junkdb.write_gaussian = write_gaussian;
 
-  // never "generate" more than 4 MB
   junkdb.data_size = (uint64_t) rate * rate_base;
+  junkdb.transfer_size = write_time * junkdb.data_size;
+
+  // never "generate" more than 4 MB
   if (junkdb.data_size > 4 * 1024 * 1024)
     junkdb.data_size = 4 * 1024 * 1024;
+
+  if (total_bytes > 0)
+    junkdb.transfer_size = (uint64_t) total_bytes;
 
   junkdb.header_file = strdup(header_file);
   junkdb.verbose = verbose;
