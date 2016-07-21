@@ -1,9 +1,13 @@
+#include "config.h"
+
 #include <cuda_runtime.h>
 #include <cuComplex.h>
 #include <curand_kernel.h>
 #include <inttypes.h>
 #include <stdio.h>
+#ifdef HAVE_CUDA
 #include <cub/block/block_radix_sort.cuh>
+#endif
 #include <assert.h>
 
 #include "mopsr_cuda.h"
@@ -979,12 +983,14 @@ __global__ void mopsr_compute_power_limits_kernel (float * s1s_memory, cuFloatCo
     in += (nchanant * 96 * 8);
   }
 
+#ifdef HAVE_CUB
   // here compute the memory based median
   typedef cub::BlockRadixSort<float, 768, 8> BlockRadixSort;
 
   __shared__ typename BlockRadixSort::TempStorage temp_storage;
 
   BlockRadixSort(temp_storage).Sort(keys);
+#endif
 
   __syncthreads();
 
@@ -1012,7 +1018,9 @@ __global__ void mopsr_compute_power_limits_kernel (float * s1s_memory, cuFloatCo
 
   __syncthreads();
 
+#ifdef HAVE_CUB
   BlockRadixSort(temp_storage).Sort(keys);
+#endif
 
   __syncthreads();
 
