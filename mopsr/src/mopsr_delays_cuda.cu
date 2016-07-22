@@ -5,7 +5,7 @@
 #include <curand_kernel.h>
 #include <inttypes.h>
 #include <stdio.h>
-#ifdef HAVE_CUDA
+#ifdef HAVE_CUB
 #include <cub/block/block_radix_sort.cuh>
 #endif
 #include <assert.h>
