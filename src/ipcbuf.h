@@ -125,6 +125,8 @@ extern "C" {
     to ipcbuf_lock_write. */
   char* ipcbuf_get_next_write (ipcbuf_t*);
 
+  int ipcbuf_zero_next_write (ipcbuf_t *id);
+
   /*! Return the write buffer byte offset from the start of the transfer */
   int64_t ipcbuf_tell_write (ipcbuf_t* id);
 

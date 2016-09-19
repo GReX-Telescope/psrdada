@@ -511,8 +511,19 @@ char * ipcio_open_block_write (ipcio_t *ipc, uint64_t *block_id)
   ipc->bytes = 0;
 
   return ipc->curbuf;
-
 }
+
+int ipcio_zero_next_block (ipcio_t *ipc)
+{
+  if (ipc -> rdwrt != 'W')
+  {
+    fprintf(stderr, "ipcio_open_block_write: ipc -> rdwrt != W\n");
+    return -1;
+  }
+
+  return ipcbuf_zero_next_write ((ipcbuf_t*)ipc);
+}
+
 
 /*
  * Update the number of bytes written to a Data Block unit that was opened

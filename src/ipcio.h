@@ -95,6 +95,8 @@ extern "C" {
 
   ssize_t ipcio_close_block_write (ipcio_t *ipc, uint64_t bytes);
 
+  int ipcio_zero_next_block (ipcio_t *ipc);
+
 #ifdef __cplusplus
 	   }
 #endif

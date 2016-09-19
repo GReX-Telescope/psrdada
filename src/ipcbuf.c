@@ -15,6 +15,8 @@
 #include <sys/shm.h>
 
 #include <time.h>
+
+#include <emmintrin.h>
 #include "ipcbuf.h"
 #include "ipcutil.h"
 
@@ -716,6 +718,41 @@ char* ipcbuf_get_next_write (ipcbuf_t* id)
   }
 
   return id->buffer[bufnum];
+}
+
+/* memset the contents of the next write buffer to zero, after it has been marked cleared */
+int ipcbuf_zero_next_write (ipcbuf_t *id)
+{
+  ipcsync_t* sync = id->sync;
+
+  /* must be the designated writer */
+  if (!ipcbuf_is_writer(id))
+  {
+    fprintf (stderr, "ipcbuf_get_next_write: process is not writer\n");
+    return -1;
+  }
+
+  // get the next buffer to be written
+  uint64_t next_buf = (sync->w_buf + 1) % sync->nbufs;
+
+  char have_cleared = 0;
+  unsigned iread;
+  while (!have_cleared)
+  {
+    have_cleared = 1;
+    // check that each reader has 1 clear buffer at least
+    for (iread = 0; iread < sync->n_readers; iread++ )
+    {
+      if (semctl (id->semid_data[iread], IPCBUF_CLEAR, GETVAL) == 0)
+        have_cleared = 0;
+    }
+    if (!have_cleared)
+      fsleep(0.01);
+  }
+
+  // zap bufnum
+  bzero (id->buffer[next_buf], id->sync->bufsz);
+  return 0;
 }
 
 int ipcbuf_mark_filled (ipcbuf_t* id, uint64_t nbytes)
@@ -1451,18 +1488,10 @@ int ipcbuf_page (ipcbuf_t* id)
   if (id->syncid < 0 || id->shmid == 0)
     return -1;
 
-  void * empty = malloc(id->sync->bufsz);
-  if (!empty)
-  {
-    fprintf (stderr, "ipcbuf_page: failed to malloc %"PRIu64" bytes\n", id->sync->bufsz);
-    return -1;
-  }
-  memset (empty, 0, id->sync->bufsz);
   for (ibuf = 0; ibuf < id->sync->nbufs; ibuf++)
   {
-    memcpy (id->buffer[ibuf], empty, id->sync->bufsz); 
+    bzero (id->buffer[ibuf], id->sync->bufsz); 
   }
-  free (empty);
 
   return 0;
 }
