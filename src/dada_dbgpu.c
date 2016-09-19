@@ -34,7 +34,7 @@ typedef struct {
 
   size_t device_memory_bytes;
 
-  dada_cuda_profile_t timer;
+  cudaStream_t stream;
 
 } dada_dbgpu_t;
 
@@ -235,17 +235,18 @@ int dbgpu_init ( dada_dbgpu_t* ctx, multilog_t* log )
     multilog (log, LOG_ERR, "dbgpu_init: could not get CUDA device name\n");
     return -1;
   }
-
   multilog (log, LOG_INFO, "Using device %d : %s\n", ctx->device, device_name);
 
-  if (dada_cuda_profiler_init (&(ctx->timer)) < 0)
+  // create a stream for these operations
+  cudaError_t error = cudaStreamCreate(&(ctx->stream));
+  if (error != cudaSuccess)
   {
-    multilog (log, LOG_ERR, "dbgpu_init: could not initialize timer\n");
+    multilog (log, LOG_ERR, "aqdsp_init: could not create CUDA stream\n");
     return -1;
-  } 
+  }
+  multilog (log, LOG_INFO, "Using stream %d\n", ctx->stream);
 
   free(device_name);
-
 }
  
 
@@ -325,6 +326,7 @@ int64_t dbgpu_transfer (dada_client_t* client, void * buffer, size_t bytes, memo
       }
 
     dbgpu->device_memory = dada_cuda_device_malloc ((size_t) bytes);
+    dbgpu->device_memory_bytes = bytes;
     if (!dbgpu->device_memory)
     {
       multilog (client->log, LOG_ERR, "dbgpu_send: dada_cuda_device_malloc failed\n");
@@ -332,7 +334,7 @@ int64_t dbgpu_transfer (dada_client_t* client, void * buffer, size_t bytes, memo
     }
   }
 
-  float msec_elapsed = dada_cuda_device_transfer (buffer, dbgpu->device_memory, bytes, mode, &(dbgpu->timer));
+  float msec_elapsed = dada_cuda_device_transfer (buffer, dbgpu->device_memory, bytes, mode, dbgpu->stream);
 
   if (mode == PINNED)
   {

@@ -135,39 +135,51 @@ int dada_cuda_device_free (void * memory)
 }
 
 /*! transfer the supplied buffer to the GPU */
-float dada_cuda_device_transfer ( void * from, void * to, size_t size, memory_mode_t mode, dada_cuda_profile_t * timer)
+float dada_cuda_device_transfer (void * from, void * to, size_t size, memory_mode_t mode, cudaStream_t stream)
 {
   cudaError_t error_id;
   float elapsed;
 
-  cudaEventRecord(timer->start_event, 0);
+  struct timeval start;
+  struct timeval end;
+  gettimeofday (&start, 0);
 
-  if (mode == PINNED)
-    error_id = cudaMemcpyAsync (to , from, size, cudaMemcpyHostToDevice, 0);
+  if (mode == PINNED && stream != 0)
+  {
+    error_id = cudaMemcpyAsync (to , from, size, cudaMemcpyHostToDevice, stream);
+    if (error_id != cudaSuccess)
+    {
+      fprintf (stderr, "dada_cuda_device_transfer: cudaMemcpyAsync (H2D) failed: %s\n",
+               cudaGetErrorString(error_id));
+      return -1;
+    }
+    
+    error_id = cudaStreamSynchronize (stream);
+    if (error_id != cudaSuccess)    
+    {    
+      fprintf (stderr, "dada_cuda_device_transfer: cudaStreamSyncrhonize (%d) failed: %s\n",
+               stream, cudaGetErrorString(error_id));
+      return -1;
+    }
+  }
   else
+  {
     error_id = cudaMemcpy (to, from, size, cudaMemcpyHostToDevice);
 
-  cudaStream_t stream = 0;
-  cudaEventRecord(timer->stop_event, stream);
-  cudaEventSynchronize(timer->stop_event);
-  cudaEventElapsedTime(&elapsed, timer->start_event, timer->stop_event);
-
-  if (error_id != cudaSuccess)
-  {
-    fprintf (stderr, "dada_cuda_device_transfer: memcpy failed: %s\n",
-                      cudaGetErrorString(error_id));
-    return -1;
+    if (error_id != cudaSuccess)
+    {
+      fprintf (stderr, "dada_cuda_device_transfer: memcpy failed: %s\n",
+                        cudaGetErrorString(error_id));
+      return -1;
+    }
+    cudaThreadSynchronize();
   }
+  gettimeofday (&end, 0);
+
+  float elapsed = (float) ((end.tv_sec - start.tv_sec) * 1000) + 
+                  (float) ((end.tv_usec - start.tv_usec) / 1000);
 
   return elapsed;
-}
-
-int dada_cuda_profiler_init (dada_cuda_profile_t * timer)
-{
-  cudaEventCreate (&(timer->start_event));
-  cudaEventCreate (&(timer->stop_event));
-  timer->elapsed = 0;
-  return 0;
 }
 
 void check_error_stream (const char* method, cudaStream_t stream)
