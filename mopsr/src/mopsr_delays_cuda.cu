@@ -916,7 +916,7 @@ void mopsr_test_skcompute (cudaStream_t stream, void * d_in, void * d_s1s_out, v
   if (ndat % nthreads)
     blocks.x++;
 
-  fprintf (stderr, "mopsr_skcompute_kernel: bytes=%lu ndat=%lu shm_bytes=%ld\n", nbytes, ndat, shm_bytes);
+  fprintf (stderr, "mopsr_skcompute_kernel: bytes=%u ndat=%lu shm_bytes=%ld\n", nbytes, ndat, shm_bytes);
   fprintf (stderr, "mopsr_skcompute_kernel: blocks.x=%d, blocks.y=%d, blocks.z=%d, nthreads=%u\n", blocks.x, blocks.y, blocks.z, nthreads);
   fprintf (stderr, "mopsr_skcompute_kernel: d_in=%p d_s1s_out=%p, d_s2s_out=%p nval_per_thread=%u, ndat_sk=%lu\n", d_in, d_s1s_out, d_s2s_out, nval_per_thread, ndat);
 
