@@ -177,7 +177,7 @@ int main (int argc, char** argv)
   if (obj)
   {
     hwloc_membind_policy_t policy = HWLOC_MEMBIND_BIND;
-    hwloc_membind_flags_t flags = 0;
+    hwloc_membind_flags_t flags = HWLOC_MEMBIND_STRICT;
 
     int result = hwloc_set_membind_nodeset (topology, obj->nodeset, policy, flags);
     if (result < 0)
@@ -221,7 +221,7 @@ int main (int argc, char** argv)
     return -1;
   }
 
-  if (page && ipcbuf_page (&data_block) < 0) {
+  if (page && ipcbuf_page ((ipcbuf_t*) &data_block) < 0) {
     fprintf (stderr, "Could not page DADA data block into RAM\n");
     return -1;
   }
