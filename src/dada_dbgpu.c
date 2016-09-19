@@ -241,7 +241,7 @@ int dbgpu_init ( dada_dbgpu_t* ctx, multilog_t* log )
   cudaError_t error = cudaStreamCreate(&(ctx->stream));
   if (error != cudaSuccess)
   {
-    multilog (log, LOG_ERR, "aqdsp_init: could not create CUDA stream\n");
+    multilog (log, LOG_ERR, "dbgpu_init: could not create CUDA stream\n");
     return -1;
   }
   multilog (log, LOG_INFO, "Using stream %d\n", ctx->stream);
