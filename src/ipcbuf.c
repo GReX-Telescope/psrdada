@@ -24,16 +24,7 @@
 
 /* semaphores */
 
-#define IPCBUF_WRITE      0   /* semaphore locks writer status */
-#define IPCBUF_READ       1   /* semaphore locks reader (+clear) status */
-#define IPCBUF_CONN_NSEM  2   /* total number of connection semaphores */
-
-#define IPCBUF_SODACK       0   /* acknowledgement of start of data */
-#define IPCBUF_EODACK       1   /* acknowledgement of end of data */
-#define IPCBUF_FULL         2   /* semaphore counts full buffers */
-#define IPCBUF_CLEAR        3   /* semaphore counts emptied buffers */
-#define IPCBUF_READER_CONN  4   /* semaphore counts emptied buffers */
-#define IPCBUF_DATA_NSEM    5   /* total number of data semaphores */
+// now defined in ipcbuf.h
 
 /* process states */
 
@@ -51,10 +42,9 @@
 #define IPCBUF_VIEWING 8  /* currently viewing */
 #define IPCBUF_VSTOP   9  /* end-of-data while viewer */
 
-static void fsleep (double seconds)
+void fsleep (float seconds)
 {
   struct timeval t ;
-  
   t.tv_sec = seconds;
   seconds -= t.tv_sec;
   t.tv_usec = seconds * 1e6;

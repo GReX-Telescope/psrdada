@@ -15,6 +15,17 @@
 extern "C" {
 #endif
 
+#define IPCBUF_WRITE      0   /* semaphore locks writer status */
+#define IPCBUF_READ       1   /* semaphore locks reader (+clear) status */
+#define IPCBUF_CONN_NSEM  2   /* total number of connection semaphores */
+
+#define IPCBUF_SODACK       0   /* acknowledgement of start of data */
+#define IPCBUF_EODACK       1   /* acknowledgement of end of data */
+#define IPCBUF_FULL         2   /* semaphore counts full buffers */
+#define IPCBUF_CLEAR        3   /* semaphore counts emptied buffers */
+#define IPCBUF_READER_CONN  4   /* semaphore counts emptied buffers */
+#define IPCBUF_DATA_NSEM    5   /* total number of data semaphores */
+
 #define IPCBUF_XFERS 8 /* total transfers in buffer */
 #define IPCBUF_READERS 8 /* maximum number of readers */
 
@@ -245,6 +256,8 @@ extern "C" {
 
   /*! set the start of clocking data buffer  */
   uint64_t ipcbuf_set_soclock_buf(ipcbuf_t*);
+
+  void fsleep (float seconds);
 
 #ifdef __cplusplus
 	   }

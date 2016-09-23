@@ -6,6 +6,7 @@
  ****************************************************************************/
 
 #include "dada_cuda.h"
+#include "sys/time.h"
 
 /*! select the specified GPU as the active device */
 int dada_cuda_select_device (int index)
@@ -138,7 +139,6 @@ int dada_cuda_device_free (void * memory)
 float dada_cuda_device_transfer (void * from, void * to, size_t size, memory_mode_t mode, cudaStream_t stream)
 {
   cudaError_t error_id;
-  float elapsed;
 
   struct timeval start;
   struct timeval end;
