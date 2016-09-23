@@ -18,16 +18,6 @@
 #define DEFAULT_DATA_RATE 64.000
 #define DEFAULT_WRITE_TIME 10 
 
-static void fsleep (double seconds)
-{
-  struct timeval t ;
-
-  t.tv_sec = seconds;
-  seconds -= t.tv_sec;
-  t.tv_usec = seconds * 1e6;
-  select (0, 0, 0, 0, &t) ;
-}
-
 void usage()
 {
   fprintf (stdout,

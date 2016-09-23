@@ -19,7 +19,7 @@
 #include <sys/sem.h>
 #include <sys/shm.h>
 
-#define IPCBUF_EODACK 3   /* acknowledgement of end of data */
+//#define IPCBUF_EODACK 3   /* acknowledgement of end of data */
 
 #define DBOVERFLOW_SIGINT 1
 #define DBOVERFLOW_SIGTERM 2

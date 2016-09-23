@@ -33,7 +33,7 @@
 #include <sys/shm.h>
 #include <math.h>
 
-#define IPCBUF_EODACK 3   /* acknowledgement of end of data */
+//#define IPCBUF_EODACK 3   /* acknowledgement of end of data */
 #define DADA_DBEVENT_DEFAULT_PORT 30000
 #define DADA_DBEVENT_DEFAULT_INPUT_BUFFER 80
 #define DADA_DBEVENT_DEFAULT_INPUT_DELAY 60
