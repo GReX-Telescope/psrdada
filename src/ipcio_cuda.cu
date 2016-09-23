@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "ipcio_cuda.h"
+#include "ipcbuf_cuda.h"
 
 /* read bytes from ipcbuf, writing to device memory via H2D transfer*/
 extern "C"
@@ -76,3 +77,16 @@ ssize_t ipcio_read_cuda (ipcio_t* ipc, char* ptr, size_t bytes, cudaStream_t str
 
   return toread - bytes;
 }
+
+extern "C"
+ssize_t ipcio_zero_next_block_cuda (ipcio_t* ipc, char * dev_ptr, size_t dev_bytes, cudaStream_t stream)
+{
+  if (ipc -> rdwrt != 'W')
+  {
+    fprintf(stderr, "ipcio_zero_next_block_cuda: ipc -> rdwrt != W\n");
+    return -1;
+  }
+
+  return ipcbuf_zero_next_block_cuda ((ipcbuf_t*)ipc, dev_ptr, dev_bytes, stream);
+}
+
