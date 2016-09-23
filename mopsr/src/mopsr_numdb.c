@@ -17,16 +17,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-static void fsleep (double seconds)
-{
-  struct timeval t ;
-
-  t.tv_sec = seconds;
-  seconds -= t.tv_sec;
-  t.tv_usec = seconds * 1e6;
-  select (0, 0, 0, 0, &t) ;
-}
-
 void usage()
 {
   fprintf (stdout,
