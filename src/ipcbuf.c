@@ -42,15 +42,6 @@
 #define IPCBUF_VIEWING 8  /* currently viewing */
 #define IPCBUF_VSTOP   9  /* end-of-data while viewer */
 
-void fsleep (float seconds)
-{
-  struct timeval t ;
-  t.tv_sec = seconds;
-  seconds -= t.tv_sec;
-  t.tv_usec = seconds * 1e6;
-  select (0, 0, 0, 0, &t) ;
-}
-
 /* *************************************************************** */
 /*!
   creates the shared memory block that may be used as an ipcsync_t struct
@@ -737,7 +728,7 @@ int ipcbuf_zero_next_write (ipcbuf_t *id)
         have_cleared = 0;
     }
     if (!have_cleared)
-      fsleep(0.01);
+      float_sleep(0.01);
   }
 
   // zap bufnum
@@ -1131,7 +1122,7 @@ char* ipcbuf_get_next_read_work (ipcbuf_t* id, uint64_t* bytes, int flag)
         break;
       }
 
-      fsleep (0.1);
+      float_sleep (0.1);
     }
 
     if (id->viewbuf + sync->nbufs < sync->w_buf)

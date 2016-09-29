@@ -6,7 +6,7 @@
 #include <sys/ipc.h>
 #include <sys/sem.h>
 
-
+#include "tmutil.h"
 #include "ipcbuf_cuda.h"
 
 /* zero bytes in an ipcbuf, by reading from previously zerod device memory*/
@@ -37,7 +37,7 @@ ssize_t ipcbuf_zero_next_block_cuda (ipcbuf_t* id, char * dev_ptr, size_t dev_by
         have_cleared = 0;
     }
     if (!have_cleared)
-      fsleep((double)0.01);
+      float_sleep((double)0.01);
   }
 
   uint64_t bytes_zeroed = 0;

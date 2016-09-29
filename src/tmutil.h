@@ -30,6 +30,8 @@ extern "C" {
   /*! convert a UTC MJD time into the struct tm */
   time_t mjd2utctm (double mjd);
 
+  void float_sleep (float seconds);
+
 #ifdef __cplusplus
 }
 #endif

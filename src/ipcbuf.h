@@ -257,8 +257,6 @@ extern "C" {
   /*! set the start of clocking data buffer  */
   uint64_t ipcbuf_set_soclock_buf(ipcbuf_t*);
 
-  void fsleep (float seconds);
-
 #ifdef __cplusplus
 	   }
 #endif

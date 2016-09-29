@@ -101,7 +101,7 @@ int64_t transfer_data (dada_client_t* client, void* data, uint64_t data_size)
   while (bytes_remaining > 0)
   {
     if (junkdb->bytes_to_copy == 0) {
-      fsleep(0.1);
+      float_sleep(0.1);
     } 
 
     // busy loop wait until the next second ticks over, then 
