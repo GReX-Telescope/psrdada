@@ -21,7 +21,7 @@ AC_DEFUN([SWIN_LIB_RDMACM],
     SWIN_PACKAGE_FIND([rdmacm],[lib$RDMACM.*])
     SWIN_PACKAGE_TRY_LINK([rdmacm],[#include <rdma/rdma_cma.h>],
                           [ rdma_create_event_channel();],
-                          [-l$RDMACM])
+                          [-l$RDMACM -libverbs])
 
   fi
 

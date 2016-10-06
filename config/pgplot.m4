@@ -78,7 +78,7 @@ AC_DEFUN([SWIN_LIB_PGPLOT],
 
   if test $have_pgplot = no; then
 # Blade libs
-    PGPLOT_LIBS="$PGPLOT_LIBS -L/usr/X11R6/lib -lX11 -lcpgplot -lpgplot -lpng"
+    PGPLOT_LIBS="$PGPLOT_LIBS -L/usr/X11R6/lib -lcpgplot -lpgplot -lpng -lX11"
     LIBS="$ac_save_LIBS $PGPLOT_LIBS"
     AC_TRY_LINK([#include <cpgplot.h>],[cpgopen(""); cpgend();],
                 have_pgplot=yes, have_pgplot=no)
