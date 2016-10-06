@@ -3,6 +3,8 @@
 import sys
 import os
 
+basedir = os.path.dirname(os.path.realpath(__file__))
+
 lo_filepath = sys.argv[1]
 o_filepath = lo_filepath.replace(".lo", ".o")
 
@@ -57,7 +59,7 @@ if rv != 0:
     sys.exit(1)
 
 # get libtool version
-fd = os.popen("libtool --version")
+fd = os.popen(basedir + "/libtool --version")
 libtool_version = fd.readline()
 # this loop supresses the broken pipe errors
 # you get by not reading all the data
