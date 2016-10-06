@@ -8,37 +8,35 @@ mopsr_hdr = mopsr_udp.h mopsr_def.h mopsr_util.h
 libmopsr_la_SOURCES = $(mopsr_hdr) mopsr_udp.c mopsr_util.c
 
 AM_CPPFLAGS = -I$(top_srcdir)/src \
-					    -I$(top_srcdir)/3rdparty
+              -I$(top_srcdir)/3rdparty
 
 AM_CFLAGS = @PGPLOT_CFLAGS@ @FFTW_CFLAGS@
 
 LDADD = libmopsr.la \
-				$(top_builddir)/src/libpsrdada.la \
-				$(top_builddir)/3rdparty/libtimers.la \
-				@PGPLOT_LIBS@ @FFTW_LIBS@
+        $(top_builddir)/src/libpsrdada.la \
+        $(top_builddir)/3rdparty/libtimers.la \
+        @PGPLOT_LIBS@ @FFTW_LIBS@
 
 bin_PROGRAMS = mopsr_udpheader mopsr_udpdb_thread mopsr_dbsplitdb \
                mopsr_udpdb mopsr_udpdb_16 mopsr_udpdb_dual mopsr_dbresampdb mopsr_dbsumdb \
                mopsr_udpdump mopsr_dbjoindb mopsr_dbchandb \
-							 mopsr_dbnum mopsr_dadatxt \
+               mopsr_dbnum mopsr_dadatxt \
                mopsr_udplongprbs mopsr_dadawaterfallplot \
-	    			   mopsr_fringeplot mopsr_solve_delays mopsr_dadastats \
+               mopsr_fringeplot mopsr_solve_delays mopsr_dadastats \
                mopsr_corr_sum mopsr_corr_fsum mopsr_plot_baseline \
                mopsr_dbtransposedb mopsr_dbselectantsdb mopsr_udpdb_selants \
-							 mopsr_udphist_16bit \
+               mopsr_udphist_16bit \
                mopsr_dadapowermonitor mopsr_udphist_8bit \
                mopsr_dadapearsoncoeff \
-							 mopsr_corr_fscr mopsr_solve_delays_spectral \
-							 mopsr_udpcorr mopsr_test_cpubf mopsr_dbTBdb \
-							 mopsr_dbintegratedb mopsr_dbrescaledb \
-							 mopsr_test_sk_kernel mopsr_dadatestct mopsr_dadasftsplit mopsr_pulsedada \
-							 mopsr_dadatfssplit mopsr_dbreblockdb mopsr_dumpplot mopsr_plot_cands \
-               mopsr_dbsigproc mopsr_maskplot mopsr_dadahistplot \
-							 mopsr_udpgen mopsr_udpplot mopsr_udpfftplot \
-							 mopsr_udpfftplot_16 mopsr_udpwaterfall mopsr_udphist mopsr_udptimeseries \
-							 mopsr_udpundersampleplot mopsr_dadafftplot mopsr_numdb
-
-mopsr_dbsigproc_LDADD = $(LDADD) sigproc/libsigproc.la
+               mopsr_corr_fscr mopsr_solve_delays_spectral \
+               mopsr_udpcorr mopsr_test_cpubf mopsr_dbTBdb \
+               mopsr_dbintegratedb mopsr_dbrescaledb \
+               mopsr_test_sk_kernel mopsr_dadatestct mopsr_dadasftsplit mopsr_pulsedada \
+               mopsr_dadatfssplit mopsr_dbreblockdb mopsr_dumpplot mopsr_plot_cands \
+               mopsr_maskplot mopsr_dadahistplot \
+               mopsr_udpgen mopsr_udpplot mopsr_udpfftplot \
+               mopsr_udpfftplot_16 mopsr_udpwaterfall mopsr_udphist mopsr_udptimeseries \
+               mopsr_udpundersampleplot mopsr_dadafftplot mopsr_numdb
 
 #############################################################################
 #
@@ -52,12 +50,14 @@ mopsr_hdr += mopsr_delays.h
 libmopsr_la_SOURCES += mopsr_delays.c
 
 bin_PROGRAMS += mopsr_phase_differencer mopsr_getmd mopsr_getns \
-								mopsr_dadacorrplot_pfb mopsr_getlst mopsr_test_signal_paths \
-								mopsr_test_delays_plot mopsr_phase_diff_transit \
-							  mopsr_plot_acs
+                mopsr_dadacorrplot_pfb mopsr_getlst mopsr_test_signal_paths \
+                mopsr_test_delays_plot mopsr_phase_diff_transit \
+                mopsr_plot_acs mopsr_dbsigproc
 
 AM_CFLAGS += @SOFA_CFLAGS@
 LDADD += @SOFA_LIBS@
+
+mopsr_dbsigproc_LDADD = $(LDADD) sigproc/libsigproc.la
 
 endif
 

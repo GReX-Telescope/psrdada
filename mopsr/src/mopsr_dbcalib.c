@@ -527,14 +527,6 @@ int dbcalib_open (dada_client_t* client)
     return -1;
   }
 
-  cufft_error = cufftSetCompatibilityMode(ctx->fft_plan_forward, CUFFT_COMPATIBILITY_NATIVE);
-  if (cufft_error != CUFFT_SUCCESS)
-  {
-    multilog (log, LOG_ERR, "dbcalib_open: cufftSetCompatibilityMode return error state %d\n",
-              cufft_error);
-    return -1;
-  }
-
   cufft_error = cufftSetStream(ctx->fft_plan_forward, ctx->stream);
   if (cufft_error != CUFFT_SUCCESS)
   {
