@@ -15,11 +15,12 @@ extern "C" {
 //#define EIGHT_BIT_PHASORS
 
 #ifdef __CUDA_ARCH__
-#if __CUDA_ARCH__ >= 300
-#define HAVE_CUDA_SHUFFLE
+      #if (__CUDA_ARCH__ >= 300)
+          #define HAVE_SHFL
+      #else
+          #define NO_SHFL
+      #endif
 #endif
-#endif
-
 
 void mopsr_input_transpose_TFS_to_FST (cudaStream_t stream, void * d_in, void * d_out, uint64_t nbytes, unsigned nchan, unsigned nant);
 void mopsr_input_transpose_FST_to_STF (cudaStream_t stream, void * d_in, void * d_out, uint64_t nbytes, unsigned nchan, unsigned nant);

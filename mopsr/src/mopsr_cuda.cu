@@ -18,6 +18,7 @@
 //#define BLOCK1024
 #define BLOCK2048
 
+// TODO write non shfl variant
 
 // large parts of these kernels require SHFL instructions that are 
 // only available in sm_30 (kepler) or greater
@@ -794,7 +795,7 @@ __global__ void tile_beams_kernel (int16_t * input, float * output,
   }
 }
 
-#ifdef HAVE_CUDA_SHUFFLE
+#ifdef HAVE_SHFL
 __device__ __forceinline__ cuFloatComplex shflComplex( cuFloatComplex r, int lane )
 {
   return make_cuComplex ( __shfl( r.x, lane ), __shfl( r.y, lane ) );
@@ -862,7 +863,7 @@ __global__ void tile_beams_kernel_512 (
 
     __syncthreads();
 
-#ifdef HAVE_CUDA_SHUFFLE
+#ifdef HAVE_SHFL
 
     // detect each sample and integrate across the warp (factor of 32 in time)
     // this takes us from 1.28us to 40.96
@@ -999,7 +1000,7 @@ __global__ void tile_beams_kernel_2048(
       idx += ndat/2;
     }
 
-#ifdef HAVE_CUDA_SHUFFLE
+#ifdef HAVE_SHFL
     // detect each sample and integrate across the warp (factor of 32 in time)
     // this takes us from 1.28us to 40.96
     unsigned sdx = 2 * warp_num;
@@ -1133,7 +1134,7 @@ __global__ void tile_beams_kernel_1024(
       idx += ndat;
     }
 
-#ifdef HAVE_CUDA_SHUFFLE
+#ifdef HAVE_SHFL
     // detect each sample and integrate across the warp (factor of 32 in time)
     // this takes us from 1.28us to 40.96
     unsigned sdx = warp_num;
@@ -1249,7 +1250,7 @@ __global__ void tile_beams_kernel_1024_4pt (
       idx += nant;
     }
 
-#ifdef HAVE_CUDA_SHUFFLE
+#ifdef HAVE_SHFL
 
     ///////////////////////////////////////////////////////////////////////////
     // 4-pt inter-thread FFT
@@ -1453,7 +1454,7 @@ __global__ void tile_beams_kernel_1024_8pt (
       }
     }
 
-#ifdef HAVE_CUDA_SHUFFLE
+#ifdef HAVE_SHFL
     ///////////////////////////////////////////////////////////////////////////
     // 8-pt inter-thread FFT
     //
@@ -1749,11 +1750,13 @@ __global__ void mod_beam_kernel_64 (int16_t * in, float * out, uint64_t ndat, un
   float power = val.x * val.x + val.y * val.y;
 
   // add all of the time samples from this warp together
+#ifdef HAVE_SHFL
   power += __shfl_down (power, 16);
   power += __shfl_down (power, 8);
   power += __shfl_down (power, 4);
   power += __shfl_down (power, 2);
   power += __shfl_down (power, 1);
+#endif
 
   if (warp_idx == 0)
     block_power_sums[warp_num] = power;
@@ -1763,7 +1766,9 @@ __global__ void mod_beam_kernel_64 (int16_t * in, float * out, uint64_t ndat, un
   if (warp_num == 0)
   {
     power = block_power_sums[warp_idx];
+#ifdef HAVE_SHFL
     power += __shfl_down (power, 16);
+#endif
 
     if (warp_idx < 16)
     {
@@ -1801,11 +1806,13 @@ __global__ void mod_beam_kernel_512 (int16_t * in, float * out, uint64_t ndat, u
   float power = val.x * val.x + val.y * val.y;
   
   // add all of the time samples from this warp together
+#ifdef HAVE_SHFL
   power += __shfl_down (power, 16);
   power += __shfl_down (power, 8);
   power += __shfl_down (power, 4);
   power += __shfl_down (power, 2);
   power += __shfl_down (power, 1);
+#endif
 
   if (warp_idx == 0)
     block_power_sums[warp_num] = power;
@@ -1815,10 +1822,12 @@ __global__ void mod_beam_kernel_512 (int16_t * in, float * out, uint64_t ndat, u
   if (warp_num == 0)
   { 
     power = block_power_sums[warp_idx];
+#ifdef HAVE_SHFL
     power += __shfl_down (power, 8);
     power += __shfl_down (power, 4);
     power += __shfl_down (power, 2);
     power += __shfl_down (power, 1);
+#endif
   
     if (warp_idx == 0 || warp_idx == 16)
     {
