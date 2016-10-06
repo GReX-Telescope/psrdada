@@ -2,6 +2,15 @@
  * read a file from disk and create the associated images
  */
 
+#include "config.h"
+#include "dada_def.h"
+#include "mopsr_def.h"
+#include "mopsr_util.h"
+#include "mopsr_delays.h"
+
+#include "string_array.h"
+#include "ascii_header.h"
+#include "daemon.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -18,16 +27,6 @@
 #include <complex.h>
 #include <math.h>
 #include <cpgplot.h>
-#include <gsl/gsl_fit.h>
-
-#include "dada_def.h"
-#include "mopsr_def.h"
-#include "mopsr_util.h"
-#include "mopsr_delays.h"
-
-#include "string_array.h"
-#include "ascii_header.h"
-#include "daemon.h"
 
 void usage ();
 void plot_phase_time (float * xvals, float * amps, unsigned npts, char * device, char * title);

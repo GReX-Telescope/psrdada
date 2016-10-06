@@ -19,8 +19,11 @@
 #include <math.h>
 #include <cpgplot.h>
 #include <fftw3.h>
+
+#ifdef HAVE_GSL
 #include <gsl/gsl_sort.h>
 #include <gsl/gsl_statistics.h>
+#endif
 
 #include "dada_def.h"
 #include "mopsr_def.h"
@@ -607,9 +610,10 @@ int main (int argc, char **argv)
             coarse_phases[ihp] = (double) hist_phases[ihp];
         }
 
+#ifdef HAVE_GSL
         gsl_sort (coarse_phases, 1, nhist_phases);
         centre_phase = gsl_stats_median_from_sorted_data (coarse_phases, 1, nhist_phases);
-
+#endif
         if (centre_phase > M_PI)
           avg_phase = (float) centre_phase - (2 * M_PI);
         else
@@ -1202,6 +1206,7 @@ float calculate_snr (float * data, unsigned npt)
   for (ipt=0; ipt<npt; ipt++)
     ddata[ipt] = (double) data[ipt];
 
+#ifdef HAVE_GSL
   // sort the data (doubles)
   gsl_sort (ddata, 1, npt);
 
@@ -1213,7 +1218,7 @@ float calculate_snr (float * data, unsigned npt)
 
   // resort the data
   gsl_sort (ddata, 1, npt);
-
+#endif
   double sum = 0;
   unsigned rms_npts = floor ((float) npt * 0.9);
   for (ipt=0; ipt<rms_npts; ipt++)
