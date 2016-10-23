@@ -5,6 +5,7 @@ use lib $ENV{"DADA_ROOT"}."/bin";
 use IO::Handle;
 use IO::Socket;     # Standard perl socket library
 use IO::Select;     # Allows select polling on a socket
+use IPC::Open3;
 use strict;
 use vars qw($DADA_ROOT $VERSION @ISA @EXPORT @EXPORT_OK);
 use Sys::Hostname;
@@ -27,7 +28,7 @@ BEGIN {
   $VERSION = '1.00';
 
   @ISA         = qw(Exporter AutoLoader);
-  @EXPORT      = qw(&sendTelnetCommand &connectToMachine &getDADABinaryDir &getCurrentBinaryVersion &getDefaultBinaryVersion &setBinaryDir &getAvailableBinaryVersions &addToTime &addToTimeFractional &getUnixTimeUTC &getUnixTimeLocal &getCurrentDadaTime &printDadaTime &printTime &getPWCCState &printPWCCState &waitForState &getLine &getLines &parseCFGLines &readCFGFile &readCFGFileIntoHash &getDADA_ROOT &getDiskInfo &getRawDisk &getDBInfo &getAllDBInfo &getDBStatus &getLoad &getUnprocessedFiles &getServerResultsNFS &getServerArchiveNFS &constructRsyncURL &headerFormat &myShell &mySystem &mySystemPiped &killProcess &getAPSRConfigVariable &nexusLogOpen &nexusLogClose &nexusLogMessage &getHostMachineName &daemonize &commThread &logMsg &logMsgWarn &remoteSshCommand &headerToHash &daemonBaseName &getProjectGroups &processHeader &getDM &getPeriod &checkScriptIsUnique &getObsDestinations &removeFiles &createDir &getDBKey &getPWCKeys &convertRadiansToRA &convertRadiansToDEC &checkPWCID &mkdirRecursive &sendEmail &convertHHMMSSToDegrees &convertDDMMSSToDegrees &inCatalogue nexusSrcLog &fileSrcLog);
+  @EXPORT      = qw(&sendTelnetCommand &connectToMachine &getDADABinaryDir &getCurrentBinaryVersion &getDefaultBinaryVersion &setBinaryDir &getAvailableBinaryVersions &addToTime &addToTimeFractional &getUnixTimeUTC &getUnixTimeLocal &getCurrentDadaTime &printDadaTime &printTime &getPWCCState &printPWCCState &waitForState &getLine &getLines &parseCFGLines &readCFGFile &readCFGFileIntoHash &getDADA_ROOT &getDiskInfo &getRawDisk &getDBInfo &getAllDBInfo &getDBStatus &getLoad &getUnprocessedFiles &getServerResultsNFS &getServerArchiveNFS &constructRsyncURL &headerFormat &myShell &mySystem &mySystemPiped &killProcess &getAPSRConfigVariable &nexusLogOpen &nexusLogClose &nexusLogMessage &getHostMachineName &daemonize &commThread &logMsg &logMsgWarn &remoteSshCommand &headerToHash &daemonBaseName &getProjectGroups &processHeader &getDM &getPeriod &checkScriptIsUnique &getObsDestinations &removeFiles &createDir &getDBKey &getPWCKeys &convertRadiansToRA &convertRadiansToDEC &checkPWCID &mkdirRecursive &sendEmail &convertHHMMSSToDegrees &convertDDMMSSToDegrees &inCatalogue &fileSrcLog);
   %EXPORT_TAGS = ( );
   @EXPORT_OK   = ( );
 
@@ -1437,6 +1438,12 @@ sub myShell($)
   $/ = "\n";
   chomp $response;
 
+  my $child_return_val = ($rVal >> 8);
+  my $child_signal     = ($rVal & 127);
+  my $child_core_dump  = ($rVal & 128);
+
+  #print "rv=".$child_return_val." signal=".$child_signal." core_dump=".$child_core_dump."\n";
+
   # If the command failed
   if ($rVal != 0) {
     $result = "fail";
@@ -1650,9 +1657,11 @@ sub mySystemPipedOld($$)
   return ($result, $response);
 }
 
-sub killProcess($;$) {
 
-  (my $regex, my $user="") = @_;
+
+sub killProcess($;$$) {
+
+  (my $regex, my $user="", my $ppid="") = @_;
 
   my $pgrep_cmd = "";
   my $args = "";
@@ -1666,6 +1675,10 @@ sub killProcess($;$) {
   if ($user ne "")
   {
     $args = "-u ".$user." ".$args;
+  }
+  if ($ppid ne "")
+  {
+    $args .= " -P ".$ppid;
   }
 
   $pgrep_cmd = "pgrep ".$args;
@@ -2479,6 +2492,84 @@ sub convertRadiansToDEC($)
 
   return ($result, $hhmmss);
 }  
+
+sub convertHHMMSSToDegrees($)
+{
+  (my $string) = @_;
+
+  if ($string eq "") {
+    return ("fail", "no input supplied");
+  }
+
+  my @vars = split (/:/, $string, 3);
+
+  my $hh = 0;
+  my $mm = 0;
+  my $ss = 0;
+
+  if ($#vars >= 0) {
+    $hh = $vars[0];
+  } 
+  if ($#vars >= 1) {
+    $mm = $vars[1];
+  }
+  if ($#vars >= 2) {
+    $ss = $vars[2];
+  }
+
+  if ($#vars > 3) {
+    return ("fail", "badly formed input");;
+  }
+
+  # print "hh=".$hh." mm=".$mm." ss=".$ss."\n";
+
+  my $degs = ($hh * 15) + ($mm / 4) + ($ss / 240);
+  return ("ok", $degs);
+}
+
+sub convertDDMMSSToDegrees($)
+{
+  (my $string) = @_;
+
+  if ($string eq "") {
+    return ("fail", "no input supplied");
+  }
+
+  my $ve = substr($string, 0, 1);
+  $string =~ s/-//g;
+  
+  my @vars = split (/:/, $string, 3);
+
+  my $dd = 0;
+  my $mm = 0;
+  my $ss = 0;
+
+  if ($#vars >= 0) {
+    $dd = $vars[0];
+  }
+  if ($#vars >= 1) {
+    $mm = $vars[1]; 
+  }
+  if ($#vars >= 2) {
+    $ss = $vars[2];
+  }
+
+  if ($#vars > 3) {
+    return ("fail", "badly formed input");
+  }
+
+  my $degs = $dd + ($mm / 60) + ($ss / 3600);
+  
+  if ($ve eq "-") 
+  {
+    $degs *= -1;
+  }
+
+  return ("ok", $degs);
+}
+
+
+
 
 sub checkPWCID($\%)
 {
