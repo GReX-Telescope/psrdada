@@ -27,7 +27,7 @@ BEGIN {
   $VERSION = '1.00';
 
   @ISA         = qw(Exporter AutoLoader);
-  @EXPORT      = qw(&sendTelnetCommand &connectToMachine &getDADABinaryDir &getCurrentBinaryVersion &getDefaultBinaryVersion &setBinaryDir &getAvailableBinaryVersions &addToTime &addToTimeFractional &getUnixTimeUTC &getUnixTimeLocal &getCurrentDadaTime &printDadaTime &printTime &getPWCCState &printPWCCState &waitForState &getLine &getLines &parseCFGLines &readCFGFile &readCFGFileIntoHash &getDADA_ROOT &getDiskInfo &getRawDisk &getDBInfo &getAllDBInfo &getDBStatus &getLoad &getUnprocessedFiles &getServerResultsNFS &getServerArchiveNFS &constructRsyncURL &headerFormat &myShell &mySystem &mySystemPiped &killProcess &getAPSRConfigVariable &nexusLogOpen &nexusLogClose &nexusLogMessage &getHostMachineName &daemonize &commThread &logMsg &logMsgWarn &remoteSshCommand &headerToHash &daemonBaseName &getProjectGroups &processHeader &getDM &getPeriod &checkScriptIsUnique &getObsDestinations &removeFiles &createDir &getDBKey &getPWCKeys &convertRadiansToRA &convertRadiansToDEC &checkPWCID &mkdirRecursive &sendEmail &inCatalogue nexusSrcLog &fileSrcLog);
+  @EXPORT      = qw(&sendTelnetCommand &connectToMachine &getDADABinaryDir &getCurrentBinaryVersion &getDefaultBinaryVersion &setBinaryDir &getAvailableBinaryVersions &addToTime &addToTimeFractional &getUnixTimeUTC &getUnixTimeLocal &getCurrentDadaTime &printDadaTime &printTime &getPWCCState &printPWCCState &waitForState &getLine &getLines &parseCFGLines &readCFGFile &readCFGFileIntoHash &getDADA_ROOT &getDiskInfo &getRawDisk &getDBInfo &getAllDBInfo &getDBStatus &getLoad &getUnprocessedFiles &getServerResultsNFS &getServerArchiveNFS &constructRsyncURL &headerFormat &myShell &mySystem &mySystemPiped &killProcess &getAPSRConfigVariable &nexusLogOpen &nexusLogClose &nexusLogMessage &getHostMachineName &daemonize &commThread &logMsg &logMsgWarn &remoteSshCommand &headerToHash &daemonBaseName &getProjectGroups &processHeader &getDM &getPeriod &checkScriptIsUnique &getObsDestinations &removeFiles &createDir &getDBKey &getPWCKeys &convertRadiansToRA &convertRadiansToDEC &checkPWCID &mkdirRecursive &sendEmail &convertHHMMSSToDegrees &convertDDMMSSToDegrees &inCatalogue nexusSrcLog &fileSrcLog);
   %EXPORT_TAGS = ( );
   @EXPORT_OK   = ( );
 
@@ -1401,6 +1401,27 @@ sub headerFormat($$) {
   return $header_string;
 }
 
+sub myShellStdout($)
+{
+  (my $cmd) = @_;
+
+  my $rVal = 0;
+  my $result = "ok";
+  my $response = "";
+  my $realcmd = $cmd;
+
+  $response = `$realcmd`;
+  $rVal = $?;
+  $/ = "\n";
+  chomp $response;
+
+  # If the command failed
+  if ($rVal != 0) {
+    $result = "fail";
+  }
+
+  return ($result,$response);
+}
 
 sub myShell($)
 {
@@ -2578,6 +2599,81 @@ sub sendEmail($$$$$$)
   print SENDMAIL $msg;
   close(SENDMAIL);
 }
+
+sub convertHHMMSSToDegrees($)
+{
+  (my $string) = @_;
+
+  if ($string eq "") {
+    return ("fail", "no input supplied");
+  }
+
+  my @vars = split (/:/, $string, 3);
+
+  my $hh = 0;
+  my $mm = 0;
+  my $ss = 0;
+
+  if ($#vars >= 0) {
+    $hh = $vars[0];
+  }
+  if ($#vars >= 1) {
+    $mm = $vars[1];
+  }
+  if ($#vars >= 2) {
+    $ss = $vars[2];
+  }
+
+  if ($#vars > 3) {
+    return ("fail", "badly formed input");;
+  }
+
+  my $degs = ($hh * 15) + ($mm / 4) + ($ss / 240);
+  return ("ok", $degs);
+}
+
+
+sub convertDDMMSSToDegrees($)
+{
+  (my $string) = @_;
+
+  if ($string eq "") {
+    return ("fail", "no input supplied");
+  }
+
+  my $ve = substr($string, 0, 1);
+  $string =~ s/-//g;
+
+  my @vars = split (/:/, $string, 3);
+
+  my $dd = 0;
+  my $mm = 0;
+  my $ss = 0;
+
+  if ($#vars >= 0) {
+    $dd = $vars[0];
+  }
+  if ($#vars >= 1) {
+    $mm = $vars[1];
+  }
+  if ($#vars >= 2) {
+    $ss = $vars[2];
+  }
+
+  if ($#vars > 3) {
+    return ("fail", "badly formed input");
+  }
+
+  my $degs = $dd + ($mm / 60) + ($ss / 3600);
+
+  if ($ve eq "-")
+  {
+    $degs *= -1;
+  }
+
+  return ("ok", $degs);
+}
+
 
 END { }
 
