@@ -442,12 +442,7 @@ sub handleCommand($)
   my $result = "ok";
   my $response = "";
 
-  if (($key eq "stop_pwcs") || ($key eq "stop_pwc")) 
-  {
-    ($result, $response) = stopPWCs($pwc);
-  }
-
-  elsif ($key eq "stop_dfbs") 
+  if ($key eq "stop_dfbs") 
   {
     $cmd = "killall -KILL ".$cfg{"DFB_SIM_BINARY"};
     ($result,$response) = Dada::mySystem($cmd);
@@ -461,11 +456,6 @@ sub handleCommand($)
   elsif ($key eq  "start_bin") 
   {
     ($result,$response) = Dada::mySystem($args);  
-  }
-
-  elsif ($key eq "start_pwcs") 
-  {
-    ($result,$response) = startPWCs($pwc);
   }
 
   elsif ($key eq "destroy_db") 
