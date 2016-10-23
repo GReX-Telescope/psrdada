@@ -316,7 +316,6 @@ sub deleteCompletedBeam($$)
   }
 
   my $cmd = "find ".$path." -name '*.fil' -o -name '*.ar' -o -name '*.png' -o -name '*.bp*' -o -name '*.ts?' -o -name '*.cand' -o -name 'rfi.*' -o -name '*.dada' > ".$rm_file;
-  # $cmd = "find ".$path." -name '*.fil' -o -name '*.ar' -o -name '*.png' -o -name 'rfi.*' -o -name '*.dada' > ".$rm_file;
 
   logMsg(2, "INFO", $cmd);
   ($result, $response) = Dada::mySystem($cmd);
@@ -327,16 +326,35 @@ sub deleteCompletedBeam($$)
     return ("fail", "find command failed");
   }
 
-  chomp $response;
-  my $files = $response;
-
-  $files =~ s/\n/ /g;
-  $cmd = "slow_rm -r 256 -M ".$rm_file;
-
+  # get the list of files
+  $cmd = "cat ".$rm_file;
   logMsg(2, "INFO", $cmd);
   ($result, $response) = Dada::mySystem($cmd);
-  if ($result ne "ok") {
-    logMsg(1, "WARN", $result." ".$response);
+  logMsg(2, "INFO", $result." ".$response);
+  if (($result eq "ok") && ($response ne ""))
+  {
+    chomp $response;
+    my $files = $response;
+    $files =~ s/\n/ /g;
+    
+    if ($files ne "")
+    {
+      $cmd = "chmod u+w ".$files;
+      logMsg(2, "INFO", $cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      logMsg(2, "INFO", $result." ".$response);
+      if ($result ne "ok")
+      {
+        logMsg(1, "WARN", "failed to chmod u+w files [".$files."]: ".$response);
+      }
+    }
+
+    $cmd = "slow_rm -r 256 -M ".$rm_file;
+    logMsg(2, "INFO", $cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    if ($result ne "ok") {
+      logMsg(1, "WARN", $result." ".$response);
+    }
   }
 
   if (-d $path."/aux")
