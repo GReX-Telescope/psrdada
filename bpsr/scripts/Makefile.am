@@ -6,6 +6,8 @@ dist_bin_SCRIPTS = Bpsr.pm \
                    bpsr_hard_reset.pl \
                    eq2gal.py \
                    median_smooth.py \
+                   dualpol.py \
+                   fullpol.py \
                    merge_tcs_logs.csh \
                    server_bpsr_bookkeeping_archiver.pl \
                    server_bpsr_tcs_interface.pl \
@@ -25,12 +27,17 @@ dist_bin_SCRIPTS = Bpsr.pm \
                    server_bpsr_swin_tape_controller.pl \
                    server_bpsr_server_logger.pl \
                    server_bpsr_web_monitor.pl \
+                   client_bpsr_auxiliary.pl \
                    client_bpsr_disk_cleaner.pl \
+                   client_bpsr_dumper.pl \
+                   client_bpsr_events.pl \
+                   client_bpsr_heimdall.pl \
                    client_bpsr_master_control.pl \
                    client_bpsr_command.pl \
                    client_bpsr_observation_manager.pl \
                    client_bpsr_results_monitor.pl \
                    client_ibob_level_setter.pl \
+                   client_bpsr_proc.pl \
                    client_bpsr_src_logger.pl \
                    client_bpsr_transfer_raid.pl \
                    raid_bpsr_archiver.pl \
