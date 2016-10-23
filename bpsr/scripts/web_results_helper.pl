@@ -17,6 +17,7 @@ my %cfg = Bpsr::getConfig();      # dada.cfg in a hash
 my $cmd = "";
 my $result = "";
 my $response = "";
+my @processing = ();
 my @finished = ();
 my @transferred = ();
 my @deleted = ();
@@ -24,8 +25,10 @@ my @lines = ();
 my $line = "";
 my $found = 0;
 my $i = 0;
+my $processing_pid = "";
 my $finished_pid = "";
 my $transferred_pid = "";
+my $processing_du = "";
 my $finished_du = "";
 my $transferred_du = "";
 
@@ -37,6 +40,7 @@ my $pid = "";
 
 if (! -d $cfg{"CLIENT_ARCHIVE_DIR"})
 {
+  print "PROCESSING\n";
   print "FINISHED\n";
   print "TRANSFERRED\n";
   exit;
@@ -44,7 +48,7 @@ if (! -d $cfg{"CLIENT_ARCHIVE_DIR"})
 
 chdir $cfg{"CLIENT_ARCHIVE_DIR"};
 {
-  my $ndirs = `ls -1d * | wc -l`;
+  my $ndirs = `find -mindepth 2 -maxdepth 2 -type d | wc -l`;
   if ($ndirs > 0)
   {
     # get a PID listing for each project on local disk
@@ -137,13 +141,95 @@ chdir $cfg{"CLIENT_ARCHIVE_DIR"};
     }
   }
 
-  Dada::logMsg(2, $dl, "nfinished=".($#finished+1)." transferred=".($#transferred+1)." deleted=".($#deleted));
+  # get a list of all beams not marked anything (assume the are processing?)
+  $cmd = "find . -mindepth 3 -maxdepth 3 -type f -name 'obs.start' | awk -F/ '{print \$2\"/\"\$3}' | sort -n";
+  Dada::logMsg(2, $dl, $cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, $dl, $result." ".$response);
+  if ($result ne "ok")
+  {
+    exit 1;
+  }
+  @lines = split(/\n/, $response);
+  foreach $line ( @lines )
+  {
+    $found = 0;
+    for ($i=0; $i<=$#deleted; $i++)
+    {
+      if ($line eq $deleted[$i])
+      {
+        Dada::logMsg(3, $dl, $line." is marked as deleted");
+        $found = 1;
+      }
+    }
+    for ($i=0; $i<=$#transferred; $i++)
+    {
+      if ($line eq $transferred[$i])
+      {
+        Dada::logMsg(3, $dl, $line." is marked as transferred");
+        $found = 1;
+      }
+    }
+    for ($i=0; $i<=$#finished; $i++)
+    {
+      if ($line eq $finished[$i])
+      {
+        Dada::logMsg(3, $dl, $line." is marked as finished");
+        $found = 1;
+      }
+    }
 
+    if (!$found)
+    {
+      Dada::logMsg(2, $dl, $line." is marked as processing");
+      push (@processing, $line);
+      $processing_pid .= $line."/obs.start ";
+      $processing_du .= $line." ";
+    }
+  }
+
+  Dada::logMsg(2, $dl, "nprocessing=".($#processing+1)." nfinished=".($#finished+1)." transferred=".($#transferred+1)." deleted=".($#deleted));
+
+  my $processing_line = "PROCESSING";
   my $finished_line = "FINISHED";
   my $transferred_line = "TRANSFERRED";
   #my $deleted_line = "DELETED";
   my @keys = ();
 
+  #
+  # Processing observations
+  #
+  %pid_counts = ();
+  %pid_sizes = ();
+
+  for ($i=0; $i<=$#processing; $i++)
+  {
+    $obs = $processing[$i];
+    if (exists($pids{$obs}))
+    {
+      $pid = $pids{$obs};
+      Dada::logMsg(2, $dl, "obs=".$obs." pid=".$pid);
+      if (!exists($pid_counts{$pid}))
+      {
+        $pid_counts{$pid} = 0;
+        $pid_sizes{$pid} = 0;
+      }
+      $pid_counts{$pid}++;
+      $pid_sizes{$pid} += `du -b -c $obs | tail -n 1 | awk '{print \$1}'`;
+    }
+  }
+  @keys = keys %pid_counts;
+  for ($i=0; $i<=$#keys; $i++)
+  {
+    $pid_sizes{$keys[$i]} = sprintf("%0.2f", $pid_sizes{$keys[$i]} / 1073741824);
+    $processing_line .= " ".$keys[$i].":".$pid_counts{$keys[$i]}.":".$pid_sizes{$keys[$i]};
+    Dada::logMsg(2, $dl, "PID=".$keys[$i]." COUNT=".$pid_counts{$keys[$i]}." SIZES=".$pid_sizes{$keys[$i]});
+  }
+
+
+  # 
+  # Finished observations
+  #
   %pid_counts = ();
   %pid_sizes = ();
 
@@ -214,6 +300,7 @@ chdir $cfg{"CLIENT_ARCHIVE_DIR"};
   #  Dada::logMsg(2, $dl, "PID=".$keys[$i]." COUNT=".$pid_counts{$keys[$i]}." SIZES=".$pid_sizes{$keys[$i]});
   #}
 
+  print $processing_line."\n";
   print $finished_line."\n";
   print $transferred_line."\n";
   #print $deleted_line."\n";
