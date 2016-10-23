@@ -178,8 +178,8 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
   {
     @finished = ();
 
-    # look for observations marked beam.finished and more than 3 minutes old
-    $cmd = "find ".$a_dir."/".$beam." -mindepth 2 -maxdepth 2 -type f -mmin +3 -name 'beam.finished' -printf '\%h\n' | awk -F/ '{print \$(NF)}' | sort";
+    # look for observations marked beam.finished and more than 2 minutes old
+    $cmd = "find ".$a_dir."/".$beam." -mindepth 2 -maxdepth 2 -type f -mmin +2 -name 'beam.finished' -printf '\%h\n' | awk -F/ '{print \$(NF)}' | sort";
     msg(2, "INFO", "main: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     msg(3, "INFO", "main: ".$result." ".$response);
