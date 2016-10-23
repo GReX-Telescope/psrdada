@@ -33,7 +33,6 @@ our $quit_daemon : shared;
 our $daemon_name : shared;
 our $pwc_id : shared;
 our $beam : shared;
-our $db_key : shared;
 our %cfg : shared;
 our %roach : shared;
 our $log_host;
@@ -49,7 +48,6 @@ $quit_daemon = 0;
 $daemon_name = Dada::daemonBaseName($0);
 $pwc_id = 0;
 $beam = "";
-$db_key = "";
 %cfg = Bpsr::getConfig();
 %roach = Bpsr::getROACHConfig();
 $log_host = $cfg{"SERVER_HOST"};
@@ -83,7 +81,6 @@ if (($pwc_id >= 0) &&  ($pwc_id < $cfg{"NUM_PWC"}))
   {
     # determine the relevant PWC based configuration for this script 
     $beam = $roach{"BEAM_".$pwc_id};
-    $db_key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"RECEIVING_DATA_BLOCK"});
   }
   else
   {
@@ -139,8 +136,20 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
   # This thread will monitor for our daemon quit file
   $control_thread = threads->new(\&controlThread, $pid_file);
 
+  # for receipt of UDP data
 	my $recv_db_key    = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"RECEIVING_DATA_BLOCK"});
-	my $trans_db_key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"TRANSIENT_DATA_BLOCK"});
+
+  # for Pscrunched data to be search ed by heimdall
+	my $trans_db_key   = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"TRANSIENT_DATA_BLOCK"});
+
+  # a short buffer for writing events to disk
+	my $dump_db_key    = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"DUMP_DATA_BLOCK"});
+
+  # start a thread to processed delayed events
+	my $events_thread  = threads->new(\&eventsThread, $recv_db_key, $dump_db_key);
+
+  # start up a thread to dump any valid events to the local disk
+  my $dump_thread    = threads->new(\&dumperThread, $dump_db_key);
 
 	my $curr_raw_header = "";
 	my $prev_raw_header = "";
@@ -149,7 +158,6 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
 	my $processing_thread = 0;
 	my $auxiliary_thread = 0;
 	my $transient_thread = 0;
-
   my $out_db_key_used = "";
 
   # Main Loop
@@ -158,14 +166,22 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
 		%header = ();
 
 		# next header to read from the receiving data_block
-    $cmd =  "dada_header -k ".$recv_db_key;
+    $cmd = "dada_header -k ".$recv_db_key;
     logMsg(2, "INFO", "main: ".$cmd);
-    $curr_raw_header = `$cmd 2>&1`;
-    logMsg(2, "INFO", "main: ".$cmd." returned");
+    ($result, $curr_raw_header) = Dada::mySystem ($cmd);
+    logMsg(3, "INFO", "main: ".$curr_raw_header);
 
-		if ($? != 0)
+    if ($result ne "ok")
 		{
-			logMsg(0, "INFO", "dada_header failed, but quit_daemon true");
+      if ($quit_daemon)
+      {
+			  logMsg(2, "INFO", "main: dada_header failed, but quit_daemon true");
+      }
+      else
+      {
+			  logMsg(1, "WARN", "dada_header failed, and quit_daemon != true");
+        $quit_daemon = 1;
+      }
 		}
 		elsif ($curr_raw_header eq $prev_raw_header)
 		{
@@ -173,9 +189,11 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
 
       # start 2 null threads as the datablock is configured for 2 readers
       my $null_thread1 = threads->new(\&nullThread, $recv_db_key, "proc");
-      my $null_thread2 = threads->new(\&nullThread, $recv_db_key, "deci");
+      my $null_thread2 = threads->new(\&nullThread, $recv_db_key, "auxi");
+      my $null_thread3 = threads->new(\&nullThread, $recv_db_key, "evnt");
 
       $null_thread1->join();
+      $null_thread2->join();
       $null_thread2->join();
 		}
 		else
@@ -190,15 +208,15 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
       }
 
       # check the BEAM_LEVEL (average scaling coefficient) that server_bpsr_tcs_interface set, 
-      # if > 40000, then its likely that the LNA is off, an so we wont run heimdall
+      # if > 120000, then its likely that the LNA is off, an so we wont run heimdall
       # check whether beam is active or not
-      if (exists($header{"BEAM_LEVEL"}) && (int($header{"BEAM_LEVEL"}) > 40000) && ($header{"BEAM_ACTIVE"} eq "off"))
+      if (exists($header{"BEAM_LEVEL"}) && (int($header{"BEAM_LEVEL"}) > 120000) && ($header{"BEAM_ACTIVE"} eq "off"))
       {
         logMsg(0, "WARN", "LNA for Beam ".$beam." appears to be off");
         # disable transient pipeline as this beam's LNA may not even be on
         $trans_db_key = "";
       }
-
+      
       # determine processing command
       my $proc_cmd_file = $cfg{"CONFIG_DIR"}."/".$header{"PROC_FILE"};
       logMsg(2, "INFO", "Full path to PROC_FILE: ".$proc_cmd_file);
@@ -208,38 +226,32 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
 
       my $obs_start_file = createLocalDirs($header{"UTC_START"}, $curr_raw_header);
 
-      # if the proc_cmd matches the decimator, then we can perform monitoring and
-      # transient analysis without running dbcopydb and digiplot
-      if (($proc_cmd =~ m/the_decimator/) && ($header{"BEAM_ACTIVE"} ne "off"))
+      # run the primary processing thread whatever that may be
+      $processing_thread = threads->new(\&processingThread, $recv_db_key, $trans_db_key, $obs_start_file, $curr_raw_header);
+
+      # if we dont need to run an auxilary decimating thread, run an auxiliary null thread
+      if ((($proc_cmd =~ m/the_decimator/) && ($header{"BEAM_ACTIVE"} ne "off")) || ($trans_db_key eq ""))
       {
-        $processing_thread = threads->new(\&processingThread, $recv_db_key, $trans_db_key, $obs_start_file, $curr_raw_header);
-    
-        $auxiliary_thread = threads->new(\&nullThread, $recv_db_key, "deci");
+        $auxiliary_thread = threads->new(\&nullThread, $recv_db_key, "auxi"); 
       }
+      # we are not running the decimater on the primary and we have a transient thread to feed
       else
       {
-        # start a thread to duplicate the datablock stream
-        # logMsg(2, "INFO", "main: starting dbcopydbThread");
-        # $dbcopydb_thread = threads->new(\&dbcopydbThread, $in_db_key, $proc_db_key, $aux_db_key);
-
-        # start the processing thread primary DB
-        logMsg(2, "INFO", "main: starting processingThread");
-        $processing_thread = threads->new(\&processingThread, $recv_db_key, "", $obs_start_file, $curr_raw_header);
-
-        # start the plot/mon thread on aux DB
         logMsg(2, "INFO", "main: starting auxiliaryThread");
         $auxiliary_thread = threads->new(\&auxiliaryThread, $recv_db_key, $trans_db_key, \%header);
       }
 
+      # if our beam seems to be on, run the transient pipeline
       if ($trans_db_key ne "")
       {
         $transient_thread = threads->new(\&transientThread, $trans_db_key, \%header);
       }
 
-			# we now wait for threads to finish, just join the threads
+      logMsg(2, "INFO", "main: all threads launched, waiting for processing Thread to finish");
 
+			# we now wait for threads to finish, just join the threads
       logMsg(2, "INFO", "main: joining processingThread");
-			($result, $response) = $processing_thread->join();
+			$result = $processing_thread->join();
 			if ($result ne "ok")
 			{
 				logMsg(0, "ERROR", "main: processingThread failed: ".$response);
@@ -273,59 +285,27 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
 
 		$prev_raw_header = $curr_raw_header;	
 
-    if ($quit) {
+    if ($quit)
+    {
       $quit_daemon = 1;
     }
   }
 
+
   logMsg(2, "INFO", "main: joining controlThread");
   $control_thread->join();
+
+  logMsg(1, "INFO", "main: joining eventsThread");
+  $events_thread->join();
+
+  logMsg(2, "INFO", "main: joining dumperThread");
+  $dump_thread->join();
 
   logMsg(0, "INFO", "STOPPING SCRIPT");
   Dada::nexusLogClose($log_sock);
 
   exit(0);
 }
-
-#
-# runs a thread to duplicate the datablock stream from in_key to out_key1 and out_key2
-#
-sub dbcopydbThread($$$) 
-{
-  (my $in_key, my $out_key1, my $out_key2) = @_;
-
-  my $cmd = "";
-  my $result = "";
-  my $response = "";
-  my $full_cmd = "";
-
-  $cmd = "dada_dbcopydb -z -s ".$in_key." ".$out_key1." ".$out_key2;
-  logMsg(2, "INFO", "dbcopydbThread: ".$cmd);
-
-  logMsg(1, "INFO", "START ".$cmd);
-  $full_cmd = $cmd." 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/client_bpsr_src_logger.pl ".$pwc_id." copy";
-  ($result, $response) = Dada::mySystem($cmd);
-  logMsg(1, "INFO", "END   ".$cmd);
-  logMsg(2, "INFO", "dbcopydbThread: ".$result." ".$response);
-	if ($result ne "ok")
-	{
-		logMsg(0, "INFO", "dbcopydbThread: ".$cmd." failed: ".$response);
-		if ($quit_daemon)
-		{
-			logMsg(0, "INFO", "dbcopydbThread: quit_daemon true, probably ok");
-		}
-		else
-		{
-			logMsg(0, "ERROR", "dada_dbcopydb failed, restart may be required");	
-		}
-		return "fail";
-	}
-	else
-	{
-		return "ok";
-	}
-}
-
 
 #
 # Processes a single observation
@@ -388,12 +368,12 @@ sub processingThread($$$$)
 	if (! $header_ok) 
 	{
 		logMsg(0, "ERROR", "DADA header malformed, jettesioning xfer");
-		$proc_cmd = "dada_dbnull -s -k ".$in_key;
+		$proc_cmd = "dada_dbnull -q -s -z -k ".$in_key;
 	} 
 	elsif ($beam ne $h{"BEAM"})
 	{
 		logMsg(0, "ERROR", "Beam mismatch between header[".$h{"BEAM"}."] and config[".$beam."]");
-		$proc_cmd = "dada_dbnull -s -k ".$in_key;
+		$proc_cmd = "dada_dbnull -q -s -z -k ".$in_key;
 	}
   else
   { 
@@ -406,7 +386,7 @@ sub processingThread($$$$)
     if ($h{"BEAM_ACTIVE"} eq "off")
     {
       logMsg(0, "INFO", "Ignoring observation as header[BEAM_ACTIVE] == off");
-      $proc_cmd = "dada_dbnull -s -k ".$in_key;
+      $proc_cmd = "dada_dbnull -q -s -z -k ".$in_key;
     }
     else
     {
@@ -463,7 +443,8 @@ sub processingThread($$$$)
     logMsg(2, "INFO", "Final PROC_CMD: ".$proc_cmd);
   }
 
-  logMsg(1, "INFO", "START ".$proc_cmd);
+  logMsg(1, "INFO", "      [proc] ".$h{"UTC_START"});
+  logMsg(1, "INFO", "START [proc] ".$proc_cmd);
   logMsg(2, "INFO", "Changing dir to $processing_dir");
 
   $cmd = "cd ".$processing_dir."; ".$proc_cmd." 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/client_bpsr_src_logger.pl ".$pwc_id." proc";
@@ -476,7 +457,7 @@ sub processingThread($$$$)
     logMsg(0, "ERROR", $proc_cmd." failed: ".$?." ".$return_value);
   }
 
-  logMsg(1, "INFO", "END   ".$proc_cmd);
+  logMsg(1, "INFO", "END   [proc] ".$proc_cmd);
 
   if (($processing_dir ne "") && (-d $processing_dir))
   {
@@ -531,15 +512,16 @@ sub auxiliaryThread($$$)
   }
   $cmd .= " ".$dada_info_file;
 
-	logMsg(1, "INFO", "START ".$cmd);
+  logMsg(1, "INFO", "      [auxi] ".$h{"UTC_START"});
+	logMsg(1, "INFO", "START [auxi] ".$cmd);
 
-  my $full_cmd = "cd ".$processing_dir."; ".$cmd." 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/client_bpsr_src_logger.pl ".$pwc_id." deci";
+  my $full_cmd = "cd ".$processing_dir."; ".$cmd." 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/client_bpsr_src_logger.pl ".$pwc_id." auxi";
 
 	logMsg(2, "INFO", "auxiliaryThread: ".$full_cmd);
 	($result, $response) = Dada::mySystem($full_cmd);
 	logMsg(2, "INFO", "auxiliaryThread: ".$result." ".$response);
 
-	logMsg(1, "INFO", "END   ".$cmd);
+	logMsg(1, "INFO", "END   [auxi] ".$cmd);
 
 	return "ok";
 }
@@ -551,19 +533,19 @@ sub nullThread($$)
 {
   (my $in_key, my $tag) = @_;
 
-  my $cmd = "dada_dbnull -s -k ".$in_key;
+  my $cmd = "dada_dbnull -q -s -z -k ".$in_key;
   my $result = "";
   my $response = "";
 
-  my $full_cmd = $cmd." 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/client_bpsr_src_logger.pl ".$pwc_id." ",$tag;
+  my $full_cmd = $cmd." 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/client_bpsr_src_logger.pl ".$pwc_id." ".$tag;
 
-  logMsg(1, "INFO", "START ".$cmd);
+  logMsg(1, "INFO", "START [".$tag."] ".$cmd);
 
   logMsg(2, "INFO", "nullThread: ".$full_cmd);
   ($result, $response) = Dada::mySystem($full_cmd);
   logMsg(2, "INFO", "nullThread: ".$result." ".$response);
 
-  logMsg(1, "INFO", "END   ".$cmd);
+  logMsg(1, "INFO", "END   [".$tag."] ".$cmd);
 
   return "ok";
 }
@@ -584,10 +566,11 @@ sub transientThread($$)
   my $processing_dir = $cfg{"CLIENT_ARCHIVE_DIR"}."/".$beam."/".$h{"UTC_START"};
 
   # added 4096 to give an extra 2^12th bin for junk events
-  #$cmd = "heimdall -k ".$key." -gpu_id ".$gpu_id." -beam ".$beam." -output_dir ".$processing_dir;
-  $cmd = "heimdall -dm 0 1500 -boxcar_max 4096 -min_tscrunch_width 8 -k ".$key." -gpu_id ".$gpu_id.
-         " -zap_chans 0 150 -zap_chans 335 338 -zap_chans 181 183 -max_giant_rate 20000 -beam ".$beam." -output_dir ".$processing_dir;
-  logMsg(1, "INFO", "START ".$cmd);
+  $cmd = "heimdall -dm 0 4000 -boxcar_max 4096 -min_tscrunch_width 8 -k ".$key." -gpu_id ".$gpu_id.
+         " -zap_chans 0 150 -zap_chans 335 338 -zap_chans 181 183 -dm_tol 1.20 -max_giant_rate 100000 -beam ".$beam." -output_dir ".$processing_dir;
+
+  logMsg(1, "INFO", "      [tran] ".$h{"UTC_START"});
+  logMsg(1, "INFO", "START [tran] ".$cmd);
 
   my $full_cmd = "cd ".$processing_dir."; ".$cmd."  2>&1 | ".$cfg{"SCRIPTS_DIR"}."/client_bpsr_src_logger.pl ".$pwc_id." tran";
 
@@ -595,13 +578,128 @@ sub transientThread($$)
   ($result, $response) = Dada::mySystem($full_cmd);
   logMsg(2, "INFO", "transientThread: ".$result." ".$response);
 
-  logMsg(1, "INFO", "END   ".$cmd);
+  logMsg(1, "INFO", "END   [tran] ".$cmd);
 
   return "ok";
 }
 
+#
+# Persistent thread that continuously runs the dada_dbevent asynchoronously a datablock
+#
+sub eventsThread($$)
+{
+  my ($in_key, $out_key) = @_;
 
+  my ($cmd, $full_cmd, $result, $response, $obs_header);
 
+  # port on which to listen for event dumping requests
+  my $event_port = (int($cfg{"CLIENT_EVENT_BASEPORT"}) + int($pwc_id));
+
+  while (!$quit_daemon)
+  {
+    $cmd = "dada_header -k ".$in_key;
+    logMsg(1, "INFO", "eventsThread: ".$cmd);
+    ($result, $obs_header) = Dada::mySystem($cmd);
+    logMsg(3, "INFO", "eventsThread: ".$cmd." returned");
+    if ($result ne "ok")
+    {
+      if ($quit_daemon)
+      {
+        logMsg(2, "INFO", "eventsThread: dada_header -k ".$in_key." failed, and quit_daemon true");
+        return ("ok");
+      }
+      logMsg(1, "WARN", "eventsThread: dada_header -k ".$in_key." failed, but quit_daemon not true");
+      sleep (1);
+    }
+    else
+    {
+      logMsg(3, "INFO", "eventsThread: HEADER=[".$obs_header."]");
+      $cmd = "dada_dbevent ".$in_key." ".$out_key." -p ".$event_port." -t 96 ";
+      $full_cmd = $cmd." 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/client_bpsr_src_logger.pl ".$pwc_id." evnt";
+
+      my %h = Dada::headerToHash($obs_header);
+      logMsg(1, "INFO", "      [evnt] ".$h{"UTC_START"});
+      logMsg(1, "INFO", "START [evnt] ".$cmd);
+      ($result, $response) = Dada::mySystem($full_cmd);
+      logMsg(1, "INFO", "END   [evnt] ".$cmd);
+      if ($result ne "ok")
+      {
+        logMsg(1, "WARN", "eventsThread: ".$cmd." failed ".$response);
+      }
+    }
+  }
+}
+
+sub dumperThread($)
+{
+  my ($key) = @_;
+
+  my ($cmd, $full_cmd, $result, $response, $dump_header);
+
+  my $can_dump = 1;
+  my $dump_dir = $cfg{"CLIENT_RECORDING_DIR"}."/".$beam;
+
+  if (! -d $dump_dir) 
+  {
+    $cmd = "mkdir -m 0755 ".$dump_dir;
+    logMsg(2, "INFO", "dumperThread: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    logMsg(3, "INFO", "dumperThread: ".$result." ".$response);
+    if ($result ne "ok")
+    {
+      $can_dump = 0;
+    }
+  }
+
+  $cmd = "touch ".$dump_dir."/test.touch";
+  logMsg(2, "INFO", "dumperThread: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  logMsg(3, "INFO", "dumperThread: ".$result." ".$response);
+  if ($result ne "ok")
+  {
+    $can_dump = 0;
+  }
+  else
+  {
+    logMsg(2, "INFO", "dumperThread: unlink ".$dump_dir."/test.touch");
+    unlink $dump_dir."/test.touch";
+  }
+
+  while (!$quit_daemon)
+  {
+    $cmd = "dada_header -k ".$key;
+    logMsg(2, "INFO", "dumperThread: ".$cmd);
+    ($result, $dump_header) = Dada::mySystem($cmd);
+    logMsg(3, "INFO", "dumperThread: ".$cmd." returned");
+    if (($result ne "ok") || ($dump_header eq ""))
+    {
+      if ($quit_daemon)
+      {
+        logMsg(2, "INFO", "dumperThread: dada_header -k ".$key." failed, and quit_daemon true");
+        return ("ok");
+      }
+      logMsg(1, "WARN", "dumperThread: dada_header -k ".$key." failed, but quit_daemon not true");
+      sleep (1);
+    }
+    else
+    {
+      logMsg(3, "INFO", "dumperThread: HEADER=[".$dump_header."]");
+      if ($can_dump)
+      {
+        $cmd = "dada_dbdisk -k ".$key." -D ".$dump_dir." -s";
+      }
+      else
+      { 
+        $cmd = "dada_dbnull -q -z -k ".$key." -s";
+      }
+      $full_cmd = $cmd." 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/client_bpsr_src_logger.pl ".$pwc_id." dump";
+      logMsg(1, "INFO", "START [dump] ".$cmd);
+      ($result, $response) = Dada::mySystem($full_cmd);
+      logMsg(1, "INFO", "END   [dump] ".$result." ".$response);
+    }
+  }
+  return ("ok");
+}
 
 #
 # Thread to create remote NFS links on the server
@@ -881,9 +979,9 @@ sub controlThread($)
   my $host_quit_file = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
   my $pwc_quit_file  =  $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$pwc_id.".quit";
 
-  my $cmd = "";
-  my $result = "";
-  my $response = "";
+  my ($cmd, $result, $response);
+  my ($recv_db_key, $event_db_key, $dump_db_key, $process, $user);
+  my @processes_to_kill = ();
 
   while ((!$quit_daemon) && (!(-f $host_quit_file)) && (!(-f $pwc_quit_file))) {
     sleep(1);
@@ -891,21 +989,63 @@ sub controlThread($)
 
   $quit_daemon = 1;
 
-  # Kill the dada_header command
-  $cmd = "ps aux | grep -v grep | grep bpsr | grep 'dada_header -k ".$db_key."' | awk '{print \$2}'";
+  # we have dada_headers listening on the receiving, event and dump data blocks - kill them, 
+  # then allow a short time for those threads to exit
 
-  logMsg(2, "INFO", "controlThread: ".$cmd);
-  ($result, $response) = Dada::mySystem($cmd);
-  $response =~ s/\n/ /;
-  logMsg(2, "INFO", "controlThread: ".$result." ".$response);
+  #$recv_db_key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, "*");
+  #push @processes_to_kill, "^dada_header -k ".$recv_db_key;
 
-  if (($result eq "ok") && ($response ne "")) {
-    $cmd = "kill -KILL ".$response;
-    logMsg(1, "INFO", "controlThread: Killing dada_header -k ".$db_key.": ".$cmd);
-    ($result, $response) = Dada::mySystem($cmd);
-    logMsg(2, "INFO", "controlThread: ".$result." ".$response);
+  #$event_db_key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"EVENT_DATA_BLOCK"});
+  #push @processes_to_kill, "^dada_header -k ".$event_db_key;
+
+  $dump_db_key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"DUMP_DATA_BLOCK"});
+  push @processes_to_kill, "^dada_header -k ".$dump_db_key;
+
+  my $pwc_key = Dada::getPWCKeys($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id);
+  $process = "^dada_header -k ".$pwc_key;
+  $user = "bpsr";
+
+  logMsg(1, "INFO", "controlThread: killProcess(".$process.", ".$user.")");
+  ($result, $response) = Dada::killProcess($process, $user);
+  logMsg(1, "INFO", "controlThread: killProcess ".$result." ".$response);
+  if ($result ne "ok")
+  {
+    logMsg(1, "WARN", "controlThread: killProcess for ".$process." failed: ".$response);
+  }
+  sleep (1);
+
+  foreach $process ( @processes_to_kill)
+  {
+    logMsg(1, "INFO", "controlThread: killProcess(".$process.", ".$user.")");
+    ($result, $response) = Dada::killProcess($process, $user);
+    logMsg(1, "INFO", "controlThread: killProcess ".$result." ".$response);
+    if ($result ne "ok")
+    {
+      logMsg(1, "WARN", "controlThread: killProcess for ".$process." failed: ".$response);
+    }
   }
 
+  # sleep a short time to ensure that the threads from the above may will have exited
+  sleep (1);
+
+  @processes_to_kill = ();
+
+  push @processes_to_kill, "^dada_dbcopydb -z -s ".$recv_db_key;
+  push @processes_to_kill, "^dada_dbevent ".$recv_db_key." ".$dump_db_key;
+  push @processes_to_kill, "^dada_dbnull";
+
+  foreach $process ( @processes_to_kill)
+  {
+    logMsg(2, "INFO", "controlThread: killProcess(".$process.", ".$user.")");
+    ($result, $response) = Dada::killProcess($process, $user);
+    logMsg(2, "INFO", "controlThread: killProcess ".$result." ".$response);
+    if ($result ne "ok")
+    {
+      logMsg(1, "WARN", "controlThread: killProcess for ".$process." failed: ".$response);
+    }
+  }
+
+  logMsg(2, "INFO", "controlThread: checking if PID file [".$pid_file."] exists");
   if ( -f $pid_file) {
     logMsg(2, "INFO", "controlThread: unlinking PID file");
     unlink($pid_file);
@@ -939,7 +1079,7 @@ sub logMsg($$$) {
     if ($log_sock) {
       Dada::nexusLogMessage($log_sock, $pwc_id, $time, "sys", $type, "obs mngr", $msg);
     }
-    print "[".$time."] ".$msg."\n";
+    print STDERR "[".$time."] ".$msg."\n";
   }
 }
 
@@ -965,15 +1105,26 @@ sub sigHandle($) {
   }
 }
 
-sub sigPipeHandle($) {
-
+sub sigPipeHandle($) 
+{
   my $sigName = shift;
   print STDERR $daemon_name." : Received SIG".$sigName."\n";
   $log_sock = 0;
   if ($log_host && $log_port) {
     $log_sock = Dada::nexusLogOpen($log_host, $log_port);
   }
+}
 
+sub sigChildHandle ()
+{
+  my $stiff;
+  while (($stiff = waitpid(-1, &WNOHANG)) > 0) 
+  {
+    # do something with $stiff if you want
+  }
+
+  # install *after* calling waitpid
+  $SIG{CHLD} = \&igPipeHandle;
 }
 
 #
