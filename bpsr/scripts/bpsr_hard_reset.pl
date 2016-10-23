@@ -299,7 +299,6 @@ sub destroyClientSpecial($)
   my ($hostsRef) = @_;
 
   my @hosts = @$hostsRef;
-  my @dbs  = split(/ /, lc($cfg{"DATA_BLOCKS"}));
     
   my $u = "bpsr";
   my $h = "";
@@ -314,28 +313,57 @@ sub destroyClientSpecial($)
   {
     $h = $hosts[$i];
 
-    $cmd = "sudo killall -KILL ".$cfg{"PWC_BINARY"};
+    $cmd = "killall -KILL ".$cfg{"PWC_BINARY"};
     debugMessage(2, "killClientDaemons: remoteSshCommand(".$u.", ".$h.", ".$cmd.")");
     ($result, $response) = Dada::remoteSshCommand($u, $h, $cmd);
     debugMessage(2, "killClientDaemons: ".$result." ".$rval." ".$response);
 
-    $cmd = "sudo killall -KILL dspsr";
+    $cmd = "killall -KILL dspsr";
     debugMessage(2, "killClientDaemons: remoteSshCommand(".$u.", ".$h.", ".$cmd.")");
     ($result, $response) = Dada::remoteSshCommand($u, $h, $cmd);
     debugMessage(2, "killClientDaemons: ".$result." ".$rval." ".$response);
 
-    $cmd = "sudo killall -KILL dada_dbnull";
+    $cmd = "killall -KILL dada_dbnull";
     debugMessage(2, "killClientDaemons: remoteSshCommand(".$u.", ".$h.", ".$cmd.")");
     ($result, $response) = Dada::remoteSshCommand($u, $h, $cmd);
     debugMessage(2, "killClientDaemons: ".$result." ".$rval." ".$response);
 
-    for ($j=0; $j<=$#dbs; $j++) 
+    $cmd = "killall -KILL dada_dbevent";
+    debugMessage(2, "killClientDaemons: remoteSshCommand(".$u.", ".$h.", ".$cmd.")");
+    ($result, $response) = Dada::remoteSshCommand($u, $h, $cmd);
+    debugMessage(2, "killClientDaemons: ".$result." ".$rval." ".$response);
+
+    $cmd = "echo destroy_dbs";
+
+    for ($j=0; ($j<$cfg{"NUM_PWC"}); $j++)
     {
-      $cmd = "dada_db -d -k ".$dbs[$j];
-      debugMessage(2, "killClientDaemons: remoteSshCommand(".$u.", ".$h.", ".$cmd.")");
-      ($result, $response) = Dada::remoteSshCommand($u, $h, $cmd);
-      debugMessage(2, "killClientDaemons: ".$result." ".$rval." ".$response);
+      if ($h =~ m/$cfg{"PWC_".$j}/)
+      {
+        # determine data blocks for this PWC
+        my @ids = split(/ /,$cfg{"DATA_BLOCK_IDS"});
+        my $key = "";
+        my $id = 0;
+        foreach $id (@ids)
+        {
+          $key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $j, $id);
+          # check nbufs and bufsz
+          
+          $cmd .= "; dada_db -d -k ".$key;
+        }
+      }
     }
+
+    debugMessage(2, "killClientDaemons: remoteSshCommand(".$u.", ".$h.", ".$cmd.")");
+    ($result, $response) = Dada::remoteSshCommand($u, $h, $cmd);
+    debugMessage(2, "killClientDaemons: ".$result." ".$rval." ".$response);
+
+    # and just to be safe :)
+    $cmd = "ipcrme";
+    debugMessage(2, "killClientDaemons: remoteSshCommand(".$u.", ".$h.", ".$cmd.")");
+    ($result, $response) = Dada::remoteSshCommand($u, $h, $cmd);
+    debugMessage(2, "killClientDaemons: ".$result." ".$rval." ".$response);
+
+
   }
 
   return ("ok", "all nuked");
