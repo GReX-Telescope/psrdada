@@ -160,6 +160,8 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
     }
     else
     {
+      $total_processed = 0;
+
       @all_obs = split(/\n/, $response);
       logMsg(2, "INFO", "main: found ".($#all_obs+1)." obs to consider");
 
@@ -176,7 +178,6 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
       {
         @finished_obs = split(/\n/, $response);
         logMsg(2, "INFO", "main: found ".($#finished_obs+1)." obs marked finished");
-        $total_processed = 0;
 
         for ($i=0; ((!$quit_daemon) && ($i<=$#all_obs)); $i++) 
         {
@@ -260,6 +261,12 @@ sub processMonFiles($)
   my $key = "";
   my $plot_file = "";
   my @plot_files = ();
+
+  # delete any files from pols [2|3] for now [WvS]
+  $cmd = "find ".$list." -mindepth 1 -maxdepth 1 -type f -regex '.*[ts|bp|bps][2|3]' -delete";
+  logMsg(2, "INFO", "processMonFiles: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  logMsg(3, "INFO", "processMonFiles: ".$result." ".$response);
 
   # get ALL unprocessed mon files (not checking aux dirs)
   $cmd = "find ".$list." -mindepth 1 -maxdepth 1 -type f -regex '.*[ts|bp|bps][0|1]' | sort";
@@ -404,7 +411,6 @@ sub processDspsrFiles($)
     logMsg(2, "INFO", "Processing dspsr file \"".$line."\"");
 
     my ($utc, $file) = split( /\//, $line);
-                                                                                                                    
     my $file_dir = $utc;
 
     my $sumd_archive = $file_dir."/integrated.ar";
@@ -424,7 +430,6 @@ sub processDspsrFiles($)
     } 
     else
     {
-
       logMsg(2, "INFO", "processDspsrFiles: archive added");
 
       my $time_str = Dada::getCurrentDadaTime();
@@ -461,6 +466,25 @@ sub processDspsrFiles($)
       foreach $plot_file (@plot_files)
       {
         unlink $plot_file;
+      }
+
+      my $tar_file = $file_dir."/archives.tar";
+
+      # add this file to a tar file
+      if ( -f $tar_file ) 
+      {
+        $cmd = "tar --force-local -C ".$file_dir." -rf ".$tar_file." ".$file;
+      }
+      else
+      {
+        $cmd = "tar --force-local -C ".$file_dir."  -cf ".$tar_file." ".$file;
+      }
+  
+      logMsg(2, "INFO", $cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      if ($result ne "ok")
+      {
+        logMsg(0, "ERROR", "processDspsrFiles: ".$cmd." failed: ".$response);
       }
     }
 
