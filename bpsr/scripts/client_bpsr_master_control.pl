@@ -26,7 +26,6 @@ sub setupClientType();
 #
 $Dada::client_master_control::dl = 1;
 $Dada::client_master_control::daemon_name = Dada::daemonBaseName($0);
-$Dada::client_master_control::pwc_add = " -d ";
 
 my $client_setup = setupClientType();
 if (! $client_setup) 
@@ -136,6 +135,8 @@ sub setupClientType()
           $Dada::client_master_control::dbs{$i}{$id} = $key;
         }
 
+        $Dada::client_master_control::pwc_adds{$i} = " -p ".$cfg{"PWC_UDP_PORT_".$i}." -d -x";
+
         if (!$found) 
         {
           @Dada::client_master_control::daemons = split(/ /,$cfg{"CLIENT_DAEMONS"});
@@ -147,15 +148,12 @@ sub setupClientType()
     }
     
     # If we matched a PWC
-    if ($found) 
-    {
-      $Dada::client_master_control::pwc_add = " -d ";
-    }
-    else
+    if (!$found) 
     {
       @Dada::client_master_control::daemons = ();
       @Dada::client_master_control::dbs = ();
       @Dada::client_master_control::binaries = ();
+      @Dada::client_master_control::pwc_adds = ();
     }
     $Dada::client_master_control::host = Dada::getHostMachineName();
   }
