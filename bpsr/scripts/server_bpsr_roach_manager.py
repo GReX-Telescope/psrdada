@@ -9,6 +9,8 @@
 
 import Dada, Bpsr, threading, sys, time, socket, select, signal, traceback
 import corr, time, numpy, math, os, fnmatch
+import fullpol as spec
+#import dualpol as spec
 
 PIDFILE  = "bpsr_roach_manager.pid"
 LOGFILE  = "bpsr_roach_manager.log"
@@ -26,8 +28,10 @@ TASK_ARM = 8
 TASK_START_TX= 9
 TASK_STOP_TX = 10
 TASK_LEVELS = 11
-TASK_BRAMPLOT = 12
-TASK_BRAMDISK = 13
+TASK_SETGAINS = 12
+TASK_BRAMPLOT = 13
+TASK_BRAMDISK = 14
+TASK_ACCLEN = 15
 
 ###########################################################################
 
@@ -39,13 +43,14 @@ def signal_handler(signal, frame):
 # Thread to operate on Roach
 class roachThread(threading.Thread):
 
-  def __init__(self, roach_num, quit_event, cond, lock, states, results, responses, cfg):
+  def __init__(self, roach_num, quit_event, cond, lock, states, args, results, responses, cfg):
     threading.Thread.__init__(self)
     self.roach_num = roach_num
     self.quit_event = quit_event
     self.cond = cond
     self.lock = lock
     self.states = states
+    self.args = args
     self.results = results
     self.responses = responses
     self.cfg = cfg
@@ -57,6 +62,7 @@ class roachThread(threading.Thread):
     lock = self.lock
     cond = self.cond
     states = self.states
+    args = self.args
     results = self.results
     responses = self.responses
     fpga = []
@@ -71,6 +77,11 @@ class roachThread(threading.Thread):
 
       Dada.logMsg(1, DL, "["+rid+"] roachThread: starting")
 
+      Dada.logMsg(2, DL, "["+rid+"] roachThread: connectRoach("+rid+")")
+      result, fpga = Bpsr.connectRoach(DL, rid)
+      if (result != "ok"):
+        raise NameError('Could not connect to Roach')
+
       # acquire lock to wait for commands setup
       locked = lock.acquire()
       Dada.logMsg(3, DL, "["+rid+"] roachThread: lock acquired")
@@ -83,14 +94,15 @@ class roachThread(threading.Thread):
           locked = True
         if (states[ithread] == QUIT):
           Dada.logMsg(1, DL, "["+rid+"] roachThread: quit requested")
-          Bpsr.stopTX(DL, fpga)
+          spec.stopTX(DL, fpga)
           lock.release()
           locked = False
           return
 
         # we have been given a command to perform (i.e. not QUIT or IDLE)
         task = states[ithread]
-        Dada.logMsg(3, DL, "["+rid+"] roachThread: TASK="+str(task))
+        arg  = args[ithread]
+        Dada.logMsg(3, DL, "["+rid+"] roachThread: TASK="+str(task)+" ARG="+str(arg))
 
         Dada.logMsg(3, DL, "["+rid+"] roachThread: lock.release()")
         lock.release()
@@ -106,34 +118,59 @@ class roachThread(threading.Thread):
 
         elif (task == TASK_CONFIG):
           Dada.logMsg(3, DL, "["+rid+"] roachThread: perform config")
-          result, fpga = Bpsr.configureRoach (DL, acc_len, rid, cfg)
-          if (result != "ok"):
-            Dada.logMsg(-2, DL, "["+rid+"] roachThread: roach not ready")
-            fpga = []
+          
+          result, response = spec.programRoach(DL, fpga, rid)
+          if (result == "ok"):
+            result, response = spec.configureRoach(DL, fpga, rid, cfg)
+            if (result == "ok"):
+              result, response = spec.accLenRoach(DL, fpga, acc_len, rid)
+              if (result == "ok"):
+                Dada.logMsg(2, DL, "["+rid+"] roachThread: config finished")
+              else:
+                Dada.logMsg(-2, DL, "["+rid+"] roachThread: accLenRoach failed " + response)
+            else:
+              Dada.logMsg(-2, DL, "["+rid+"] roachThread: configureRoach failed " + response)
+          else:
+            Dada.logMsg(-2, DL, "["+rid+"] roachThread: programRoach failed " + response)
+
+        elif (task == TASK_ACCLEN):
+          acc_len = int(arg)
+          Dada.logMsg(3, DL, "["+rid+"] roachThread: perform accLen")
+          result, response = spec.accLenRoach(DL, fpga, acc_len, rid)
 
         elif (task == TASK_ARM):
           Dada.logMsg(3, DL, "["+rid+"] roachThread: perform arm")
-          result = Bpsr.rearm(DL, fpga)
+          result = spec.rearm(DL, fpga)
 
         elif (task == TASK_START_TX):
           Dada.logMsg(3, DL, "["+rid+"] roachThread: perform start tx")
-          result = Bpsr.startTX(DL, fpga)
+          result = spec.startTX(DL, fpga)
 
         elif (task == TASK_STOP_TX):
           Dada.logMsg(3, DL, "["+rid+"] roachThread: perform stop tx")
-          result = Bpsr.stopTX(DL, fpga)
+          result = spec.stopTX(DL, fpga)
 
         elif (task == TASK_LEVELS):
           Dada.logMsg(3, DL, "["+rid+"] roachThread: perform set levels")
           if (fpga != []):
-            result, response = Bpsr.setLevels(DL, fpga, rid)
+            # test if all our beam/pols are active first
+            pol1, pol2 = Bpsr.getActivePolConfig(beam_name)
+
+            Dada.logMsg(2, DL, "["+rid+"] roachThread: setLevels("+str(pol1)+", " + str(pol2)+")")
+            result, response = spec.setLevels(DL, fpga, pol1, pol2, rid)
             Dada.logMsg(2, DL, "["+rid+"] roachThread: result=" + result + " response=" + response)
+
+        elif (task == TASK_SETGAINS):
+          new_cross_gain = int(arg)
+          new_bit_window = 3
+          Dada.logMsg(3, DL, "["+rid+"] roachThread: perform setGains")
+          result, response = spec.setComplexGains(DL, fpga, rid, new_cross_gain, new_bit_window)
 
         elif (task == TASK_BRAMPLOT):
           if (fpga != []):
             Dada.logMsg(3, DL, "["+rid+"] roachThread: perform bramplot")
             time_str = Dada.getCurrentDadaTime()
-            result = Bpsr.bramplotRoach(DL, fpga, time_str, beam_name)
+            result = spec.bramplotRoach(DL, fpga, time_str, beam_name)
           else:
             Dada.logMsg(-1, DL, "["+rid+"] roachThread: not connected to FPGA")
 
@@ -141,7 +178,7 @@ class roachThread(threading.Thread):
           if (fpga != []):
             Dada.logMsg(3, DL, "["+rid+"] roachThread: perform bramdisk")
             time_str = Dada.getCurrentDadaTime()
-            result = Bpsr.bramdiskRoach(DL, fpga, time_str, beam_name)
+            result = spec.bramdiskRoach(DL, fpga, time_str, beam_name)
           else:
             Dada.logMsg(-1, DL, "["+rid+"] roachThread: not connected to FPGA")
 
@@ -173,7 +210,7 @@ class roachThread(threading.Thread):
       states[ithread] = ERROR
       results[ithread] = "fail"
       responses[ithread] = "exception ocurred in roachThread " + roach_name + ":" + beam_name
-      Bpsr.stopTx(DL, fpga)
+      spec.stopTX(DL, fpga)
       Dada.logMsg(2, DL, "["+rid+"] roachThread: except: cond.notifyAll()")
       cond.notifyAll()
       Dada.logMsg(2, DL, "["+rid+"] roachThread: except: lock.release()")
@@ -183,17 +220,18 @@ class roachThread(threading.Thread):
 
      # we have been asked to exit the rthread
     Dada.logMsg(1, DL, "["+rid+"] roachThread: end of thread")
-    Bpsr.stopTx(DL, fpga)
+    spec.stopTX(DL, fpga)
 
 # Thread to handle commands
 class commandThread(threading.Thread):
 
-  def __init__(self, quit_event, cond, lock, states, results, responses, cfg):
+  def __init__(self, quit_event, cond, lock, states, args, results, responses, cfg):
     threading.Thread.__init__(self)
     self.quit_event = quit_event
     self.cond = cond
     self.lock = lock
     self.states = states
+    self.args = args 
     self.results = results
     self.responses = responses
     self.cfg = cfg
@@ -203,6 +241,7 @@ class commandThread(threading.Thread):
     cond = self.cond
     lock = self.lock
     states = self.states
+    args = self.args
     results = self.results
     responses = self.responses
     cfg = self.cfg
@@ -236,8 +275,10 @@ class commandThread(threading.Thread):
                               "START_TX":TASK_START_TX, \
                               "STOP_TX":TASK_STOP_TX, \
                               "LEVELS":TASK_LEVELS, \
+                              "SETGAINS":TASK_SETGAINS, \
                               "BRAMPLOT":TASK_BRAMPLOT, \
-                              "BRAMDISK":TASK_BRAMDISK})
+                              "BRAMDISK":TASK_BRAMDISK, \
+                              "ACCLEN":TASK_ACCLEN})
 
       # keep listening
       # while ((not quit_event.isSet()) or (len(can_read) > 1)):
@@ -278,10 +319,15 @@ class commandThread(threading.Thread):
                   qdl = 1
 
                 Dada.logMsg(qdl, DL, "<- " + message)
+                message_parts = message.split(" ", 2)
 
-                if (message in valid_commands.keys()):
+                if (message_parts[0] in valid_commands.keys()):
                 
-                  command = valid_commands[message]
+                  command = valid_commands[message_parts[0]]
+                  arg = ""
+                  if (len(message_parts) == 2):
+                   arg = message_parts[1] 
+
                   Dada.logMsg(3, DL, "commandThread: " + message + " was valid, index=" + str(command))
 
                   if (command == QUIT):
@@ -308,14 +354,16 @@ class commandThread(threading.Thread):
 
                   elif (command == TASK_HELP):
                     handle.send("Available commands:\r\n")
-                    handle.send("  help    print these commands\r\n")
-                    handle.send("  exit    close current connection\r\n")
-                    handle.send("  quit    stop the server script\r\n")
-                    handle.send("  config  program all roaches\r\n")
-                    handle.send("  state   report state of all roaches\r\n")
-                    handle.send("  levels  perform level setting\r\n")
-                    handle.send("  arm     start 10GbE packets, reset seq no, returning UTC_START\r\n")
-                    handle.send("  stop    stop 10GbE packets\r\n")
+                    handle.send("  help           print these commands\r\n")
+                    handle.send("  exit           close current connection\r\n")
+                    handle.send("  quit           stop the server script\r\n")
+                    handle.send("  config         program all roaches\r\n")
+                    handle.send("  state          report state of all roaches\r\n")
+                    handle.send("  acclen <num>   set the accumlation length\r\n")
+                    handle.send("  levels         perform level setting\r\n")
+                    handle.send("  setgains <num> set cross pol gains to <num>\r\n")
+                    handle.send("  arm            start 10GbE packets, reset seq no, returning UTC_START\r\n")
+                    handle.send("  stop           stop 10GbE packets\r\n")
               
                   else:
                     # now process this message
@@ -324,8 +372,9 @@ class commandThread(threading.Thread):
                     Dada.logMsg(3, DL, "commandThread: lock acquired")
 
                     for i in range(n_roach):
-                      roach_states[i] = command 
-                    roach_state = command 
+                      states[i] = command 
+                      args[i] = arg
+                    state = command 
                     Dada.logMsg(3, DL, "commandThread: states set to " + message)
 
                     # all commands should happen as soon as is practical, expect
@@ -358,7 +407,7 @@ class commandThread(threading.Thread):
                     command_result = ""
                     command_response = ""
 
-                    while (roach_state == command):
+                    while (state == command):
                       Dada.logMsg(3, DL, "commandThread: checking all roaches for IDLE")
 
                       n_idle = 0
@@ -371,15 +420,15 @@ class commandThread(threading.Thread):
                         Dada.logMsg(3, DL, "commandThread: testing roach["+str(i)+"]")
 
                         # check the states of each roach thread
-                        if (roach_states[i] == IDLE):
+                        if (states[i] == IDLE):
                           n_idle += 1
                         # check the return values of this roach
-                          Dada.logMsg(3, DL, "commandThread: roach_results["+str(i)+"] = " + roach_results[i])
-                          if (roach_results[i] == "ok"):
+                          Dada.logMsg(3, DL, "commandThread: results["+str(i)+"] = " + results[i])
+                          if (results[i] == "ok"):
                             n_ok += 1
                           else:
                             n_fail += 1
-                        elif (roach_states[i] == ERROR):
+                        elif (states[i] == ERROR):
                           Dada.logMsg(-1, DL, "commandThread: roach["+str(i)+"] thread failed")
                           n_error += 1
                         else:
@@ -389,23 +438,23 @@ class commandThread(threading.Thread):
                       # if all roach threads are idle, we are done - extract the results
                       if (n_idle == n_roach):
 
-                        roach_state = IDLE
+                        state = IDLE
                         if (n_ok == n_roach):
                           command_result = "ok"
                         else:
                           command_result= "fail"
                         for i in range(n_roach):
                           command_response = command_response + roach_cfg["BEAM_"+str(i)] + ":"
-                          if (roach_responses[i] != ""):
-                            command_response += roach_responses[i] + " "
+                          if (responses[i] != ""):
+                            command_response += responses[i] + " "
                           else:
-                            command_response += roach_results[i] + " "
+                            command_response += results[i] + " "
 
                       elif (n_error > 0):
                         Dada.logMsg(2, DL, "commandThread: roach thread error")
                         command_result = "fail"
                         command_response = str(n_error) + " roach threads failed"
-                        roach_state = ERROR
+                        state = ERROR
 
                       else:
                         Dada.logMsg(3, DL, "commandThread: NOT all IDLE, cond.wait()")
@@ -504,6 +553,59 @@ class plotThread(threading.Thread):
                 Dada.logMsg(3, DL, "plotThread: cleaning file: "+filename)
                 os.remove(filename)
 
+      extension = ".bram_cross"
+      bram_files = [file for file in os.listdir(directory) if file.lower().endswith(extension)]
+
+      for bram_file in bram_files:
+
+        Dada.logMsg(2, DL, "plotThread: found " + bram_file)
+        cmd = "bpsr_bramplot_cross " + bram_file
+
+        Dada.logMsg(2, DL, "plotThread: " + cmd)
+        os.system(cmd)
+        os.remove(bram_file)
+
+      for beam in beams:
+        for res in resolutions:
+          filematch = "*_" + beam + "_" + res + "_cross.png"
+          Dada.logMsg(3, DL, "plotThread: checking " + os.getcwd() + " for matching " + filematch)
+          filelist = os.listdir(os.getcwd())
+          filelist.sort(reverse=True)
+          count = 0
+          for filename in filelist:
+            if (fnmatch.fnmatch(filename, filematch)):
+              count += 1
+              if (count > 3):
+                Dada.logMsg(3, DL, "plotThread: cleaning file: "+filename)
+                os.remove(filename)
+
+
+      extension = ".bram_hist"
+      bram_files = [file for file in os.listdir(directory) if file.lower().endswith(extension)]
+
+      for bram_file in bram_files:
+
+        Dada.logMsg(2, DL, "plotThread: found " + bram_file)
+        cmd = "bpsr_bramplot_hist " + bram_file
+
+        Dada.logMsg(2, DL, "plotThread: " + cmd)
+        os.system(cmd)
+        os.remove(bram_file)
+
+      for beam in beams:
+        for res in resolutions:
+          filematch = "*_" + beam + "_" + res + "_hist.png"
+          Dada.logMsg(3, DL, "plotThread: checking " + os.getcwd() + " for matching " + filematch)
+          filelist = os.listdir(os.getcwd())
+          filelist.sort(reverse=True)
+          count = 0
+          for filename in filelist:
+            if (fnmatch.fnmatch(filename, filematch)):
+              count += 1
+              if (count > 3):
+                Dada.logMsg(3, DL, "plotThread: cleaning file: "+filename)
+                os.remove(filename)
+
       # now sleep for a bit
       time.sleep (4.0)
 
@@ -528,6 +630,7 @@ control_thread = []
 n_roach = 0
 roach_threads = []
 roach_states = []
+roach_args = []
 roach_results = []
 roach_responses = []
 
@@ -557,16 +660,17 @@ try:
   # start a thread for each ROACH board
   for i in range(int(roach_cfg["NUM_ROACH"])):
     roach_states.append(IDLE)
+    roach_args.append("")
     roach_results.append("")
     roach_responses.append("")
-    thr = roachThread(i, quit_event, cond, lock, roach_states, roach_results, roach_responses, cfg)
+    thr = roachThread(i, quit_event, cond, lock, roach_states, roach_args, roach_results, roach_responses, cfg)
     thr.start()
     roach_threads.append(thr)
     n_roach += 1
 
   # start a thread to handle socket commands that will interact with the ROACH threads
   Dada.logMsg(2, DL, "main: starting command thread")
-  command_thread = commandThread(quit_event, cond, lock, roach_states, roach_results, roach_responses, cfg)
+  command_thread = commandThread(quit_event, cond, lock, roach_states, roach_args, roach_results, roach_responses, cfg)
   command_thread.start()
 
   # start a thread to handle plotting of bram dumps
@@ -578,7 +682,7 @@ try:
   time.sleep(2)
 
   # open a socket to the command thread
-  hostname = Dada.getHostMachineName()
+  hostname = cfg["SERVER_HOST"]
   port =  int(cfg["IBOB_MANAGER_PORT"])
 
   # wait for all roaches to be active, then start bramdumping till exit
@@ -660,7 +764,7 @@ Dada.logMsg(3, DL, "main: lock acquired")
 
 for i in range(n_roach):
   roach_states[i] = QUIT
-roach_state = QUIT
+#roach_state = QUIT
 
 Dada.logMsg(3, DL, "main: cond.notifyAll()")
 cond.notifyAll()
