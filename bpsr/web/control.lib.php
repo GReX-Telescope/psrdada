@@ -35,6 +35,7 @@ class control extends bpsr_webpage
         $this->pwcs_dbs_str .= ", \"buffer_".$dbid."\"";
     }
 
+    $prev_host = "";
     for ($i=0; $i<$config["NUM_PWC"]; $i++) 
     {
       $host = $config["PWC_".$i];
@@ -44,12 +45,14 @@ class control extends bpsr_webpage
         if (strpos($this->host_list[$j]["host"], $host) !== FALSE)
           $exists = $j;
       }
-      if ($exists == -1)
+
+      if ($exists == -1) 
         array_push($this->host_list, array("host" => $host, "span" => 1));
       else
         $this->host_list[$exists]["span"]++;
 
       array_push($this->pwc_list, array("host" => $host, "span" => 1, "pwc" => $i));
+      $prev_host = $host;
     }
 
     $this->server_host = $this->inst->config["SERVER_HOST"];
@@ -485,7 +488,7 @@ class control extends bpsr_webpage
         stage3_wait = 0;
 
         // start the pwc's pwc
-        url = "control.lib.php?action=start&daemon=pwcs&nhosts="+pwc_hosts.length+pwc_hosts_str;
+        url = "control.lib.php?action=start&daemon=bpsr_pwc&nhosts="+pwc_hosts.length+pwc_hosts_str;
         daemon_action_request(url);
 
         // start the server daemons 
@@ -499,7 +502,7 @@ class control extends bpsr_webpage
       function startBpsrStage4()
       {
         poll_2sec_count = 0;
-        var pwc_daemons = new Array("<?echo $this->inst->config["PWC_BINARY"]?>");
+        var pwc_daemons = new Array("bpsr_pwc");
         var pwc_ready = checkMachinesPWCsAndDaemons(pwc_hosts, pwc_daemons, "green_light.png");
 
         var srv_daemons = new Array("bpsr_pwc_monitor", "bpsr_src_monitor", "bpsr_sys_monitor", "bpsr_tcs_interface", "bpsr_results_manager", "bpsr_roach_manager", "bpsr_web_monitor");
@@ -524,7 +527,8 @@ class control extends bpsr_webpage
       function startBpsrStage5()
       {
         poll_2sec_count = 0;
-        var pwc_daemons = new Array("bpsr_observation_manager","bpsr_results_monitor","bpsr_disk_cleaner","bpsr_transfer_raid");
+        //var pwc_daemons = new Array("bpsr_observation_manager","bpsr_results_monitor","bpsr_disk_cleaner","bpsr_transfer_raid");
+        var pwc_daemons = new Array("bpsr_proc", "bpsr_events", "bpsr_auxiliary", "bpsr_heimdall", "bpsr_dumper", "bpsr_results_monitor","bpsr_disk_cleaner","bpsr_transfer_raid");
         var pwc_ready = checkMachinesPWCsAndDaemons(pwc_hosts, pwc_daemons, "green_light.png");
 
         if ((!pwc_ready) && (stage5_wait > 0)) {
@@ -577,7 +581,8 @@ class control extends bpsr_webpage
         poll_2sec_count = 0;
 
         var srv_daemons = new Array("bpsr_tcs_interface");
-        var pwc_daemons = new Array("bpsr_observation_manager","bpsr_results_monitor","bpsr_disk_cleaner","bpsr_transfer_raid");
+        //var pwc_daemons = new Array("bpsr_observation_manager","bpsr_results_monitor","bpsr_disk_cleaner","bpsr_transfer_raid");
+        var pwc_daemons = new Array("bpsr_proc", "bpsr_events", "bpsr_auxiliary", "bpsr_heimdall", "bpsr_dumper", "bpsr_results_monitor","bpsr_disk_cleaner","bpsr_transfer_raid");
 
         var srv_ready = checkMachinesAndDaemons(srv_hosts, srv_daemons, "red_light.png");
         var pwc_ready = checkMachinesPWCsAndDaemons(pwc_hosts, pwc_daemons, "red_light.png");
@@ -590,7 +595,7 @@ class control extends bpsr_webpage
         stage2_wait = 0;
 
         // stop the pwc's pwc
-        url = "control.lib.php?action=stop&daemon=pwcs&nhosts="+pwc_hosts.length+pwc_hosts_str;
+        url = "control.lib.php?action=stop&daemon=bpsr_pwc&nhosts="+pwc_hosts.length+pwc_hosts_str;
         daemon_action_request(url);
 
         stage3_wait = 20;
@@ -601,7 +606,7 @@ class control extends bpsr_webpage
       {
         poll_2sec_count = 0;
 
-        var pwc_daemons = new Array("<?echo $this->inst->config["PWC_BINARY"]?>");
+        var pwc_daemons = new Array("bpsr_pwc");
         var pwc_ready = checkMachinesPWCsAndDaemons(pwc_hosts, pwc_daemons, "red_light.png");
 
         if ((!pwc_ready) && (stage3_wait > 0)) {
@@ -771,6 +776,7 @@ class control extends bpsr_webpage
 
               for (key in this_result) 
               {
+                //alert("key="+key)
                 if (key == "host") 
                 {
 
@@ -836,6 +842,7 @@ class control extends bpsr_webpage
           url += "&host_"+j+"="+pwc_hosts[i];
           j++;
         } 
+
 
         if (window.XMLHttpRequest)
           di_http_request = new XMLHttpRequest()
@@ -906,7 +913,7 @@ class control extends bpsr_webpage
       $server_daemons_persist = explode(" ",$this->inst->config["SERVER_DAEMONS_PERSIST"]);
       $server_daemons_hash  = $this->inst->serverLogInfo();
       $host = $this->server_host;
-      $pids = array("P630", "P786", "P682");
+      $pids = array("P858");
 ?>
       <table width='100%'>
         <tr>
@@ -1094,7 +1101,7 @@ class control extends bpsr_webpage
     }
 
     # Primary Write Client
-    $this->printClientDaemonControl($this->inst->config{"PWC_BINARY"}, "PWC", $this->pwc_list, "pwcs");
+    #$this->printClientDaemonControl("bpsr_pwc", "PWC", $this->pwc_list, "pwcs");
 
     # Print the client daemons
     for ($i=0; $i<count($client_daemons); $i++) {
@@ -1456,7 +1463,8 @@ class control extends bpsr_webpage
       }
 
       # read the responses
-      for ($i=0; $i<count($results); $i++) {
+      for ($i=0; $i<count($results); $i++) 
+      {
         $host = $hosts[$i];
         if ($results[$i] == "ok") {
 
@@ -1527,7 +1535,8 @@ class control extends bpsr_webpage
     echo "<br>\n";
     echo "<br>\n";
     flush();
-    $script = "source /home/dada/.bashrc; ".$script_name." 2>&1";
+    putenv("DADA_ROOT=".DADA_ROOT);
+    $script = $this->inst->config["SCRIPTS_DIR"]."/".$script_name." 2>&1";
     echo "<pre>\n";
     system($script);
     echo "</pre>\n";

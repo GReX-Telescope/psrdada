@@ -25,7 +25,7 @@ class machine_summary extends bpsr_webpage
   {
     bpsr_webpage::bpsr_webpage();
 
-    $this->callback_freq = 10000;
+    $this->callback_freq = 5000;
     array_push($this->ejs, "/js/prototype.js");
     array_push($this->ejs, "/js/jsProgressBarHandler.js");
 
@@ -275,7 +275,7 @@ class machine_summary extends bpsr_webpage
                     }
                     else if (key == "disk") 
                     {
-                      var disk_used = parseFloat(node.childNodes[0].nodeValue);
+                      var disk_used = parseFloat(node.getAttribute("used"));
                       var disk_size = parseFloat(node.getAttribute("size"));
                       var disk_free = (disk_size - disk_used);
                       var disk_percent = Math.floor((disk_used / disk_size) * 100);

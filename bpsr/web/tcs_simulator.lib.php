@@ -18,8 +18,15 @@ class tcs_simulator extends bpsr_webpage
     $this->title = "BPSR | TCS Simulator";
     $this->inst = new bpsr();
     $this->groups = $this->inst->getPIDS();
-    array_push($this->groups, "P999");
     array_push($this->groups, "P456");
+    array_push($this->groups, "P737");
+    array_push($this->groups, "P789");
+    array_push($this->groups, "P842");
+    array_push($this->groups, "P858");
+    array_push($this->groups, "P864");
+    array_push($this->groups, "P878");
+    array_push($this->groups, "PX025");
+    array_push($this->groups, "P999");
 
     $this->valid_psrs = array("J0437-4715", "J0534+2200", "J0610-2100", "J0613-0200",
                               "J0711-6830", "J0737-3039A", "J0742-2822", "J0835-4510",
@@ -29,9 +36,11 @@ class tcs_simulator extends bpsr_webpage
                               "J1226-6202", "J1431-4717", "J1439-5501", "J1525-5544",
                               "J1546-4552", "J1600-3053", "J1603-7202", "J1643-1224",
                               "J1713+0747", "J1718-3718", "J1730-2304", "J1732-5049",
-                              "J1744-1134", "J1824-2452", "J1857+0943", "J1909-3744",
-                              "J1933-6211", "J1939+2134", "J2124-3358", "J2129-5721",
-                              "J2145-0750", "J2241-5236");
+                              "J1744-1134", "J1811-2404", "J1824-2452", "J1857+0943",
+                              "J1909-3744", "J1933-6211", "J1939+2134", "J2124-3358",
+                              "J2129-5721", "J2145-0750", "J2241-5236", "J0941-39", 
+                              "J0540-6919", "J2234+0944", "J1755-3715", "J2236-5526",
+                              "J1748-2446A", "J1824-2452", "J1824-2452_R", "J1832-0836");
 
   }
 
@@ -39,6 +48,7 @@ class tcs_simulator extends bpsr_webpage
   {
     $this->psrs = $this->inst->getPsrcatPsrs();
     $this->psr_keys = array_keys($this->psrs);
+    array_push($this->psr_keys, "J1824-2452_R");
 
 ?>
     <style type='text/css'>
@@ -56,7 +66,7 @@ class tcs_simulator extends bpsr_webpage
 
 
     <script type='text/javascript'>
-      var ras = { 'default':'00:00:00.00'<?
+      var ras = { 'default':'00:00:00.00', 'G302.9-37.3':'04:37:00.0', 'J1824-2452_R':'18:24:32.0' <?
       for ($i=0; $i<count($this->psr_keys); $i++)
       {
         $p = $this->psr_keys[$i];
@@ -67,7 +77,7 @@ class tcs_simulator extends bpsr_webpage
       }
       ?>};
 
-      var decs = { 'default':'00:00:00.00'<?
+      var decs = { 'default':'00:00:00.00', 'G302.9-37.3':'-47:15:00.0', 'J1824-2452_R':'-24:52:10.8' <?
       for ($i=0; $i<count($this->psr_keys); $i++)
       {
         $p = $this->psr_keys[$i];
@@ -105,10 +115,9 @@ class tcs_simulator extends bpsr_webpage
       function updateRADEC() {
         var i = document.getElementById("src_list").selectedIndex;
         var psr = document.getElementById("src_list").options[i].value;
-        var psr_ra = ras[psr];
         var psr_dec= decs[psr];
-        document.getElementById("ra").value = psr_ra;
-        document.getElementById("dec").value = psr_dec;
+        //document.getElementById("ra").value = psr_ra;
+        //document.getElementById("dec").value = psr_dec;
       }
     </script>
 
@@ -134,6 +143,7 @@ class tcs_simulator extends bpsr_webpage
             <option value="BPSR.NULL">BPSR.NULL</option>
             <option value="SURVEY.MULTIBEAM">SURVEY.MULTIBEAM</option>
             <option value="THEDSPSR">THEDSPSR</option>
+            <option value="FILTERBANK">FILTERBANK</option>
             <option value="BPSR_256CH_64US_1B">BPSR_256CH_64US_1B</option>
             <option value="BPSR_256CH_128US_1B">BPSR_256CH_128US_1B</option>
             <option value="BPSR_128CH_64US_1B">BPSR_128CH_64US_1B</option>
@@ -142,6 +152,8 @@ class tcs_simulator extends bpsr_webpage
             <option value="BPSR_128CH_128US_1B">BPSR_128CH_128US_1B</option>
             <option value="BPSR_128CH_1024US_1B">BPSR_128CH_1024US_1B</option>
             <option value="BPSR.SCRATCH">BPSR.SCRATCH</option>
+            <option value="P878_MULTIFOLD">P878_MULTIFOLD</option>
+            <option value="M28_MULTIFOLD">M28_MULTIFOLD</option>
           </select>
         </td>
 
@@ -149,7 +161,7 @@ class tcs_simulator extends bpsr_webpage
         <td class='val'><input type="text" name="band" value="-400.00" size="12" readonly></td>
 
         <td class='key'>ACC LEN</td>
-        <td class='val'><input type="text" name="acclen" size="2" value="25" readonly></td>
+        <td class='val'><input type="text" name="acclen" size="2" value="25"></td>
 
         <td class='key'>TSCRUNCH</td>
         <td class='val'><input type="text" name="tscrunch" size="1" value="1"></td>
@@ -239,9 +251,13 @@ class tcs_simulator extends bpsr_webpage
         <td class='key'>OBSERVER</td>
         <td class='val'><input type="text" name="observer" size="6" value="TEST"></td>
 
-        <td class='key'></td>
-        <td class='val'></td>
+        <td></td>
+        <td></td>
 
+<!--
+        <td class='key'>NPOL</td>
+        <td class='val'><input type="text" name="NPOL" size="1" value="2"></td>
+-->
       </tr>
   
       <tr>

@@ -81,6 +81,7 @@ class old_results extends bpsr_webpage
 
         var URL = "old_results.lib.php?single=true&offset="+offset+"&length="+length+"&inline_images="+show_inline;
 
+        /*
         i = document.getElementById("filter_type").selectedIndex;
         var filter_type = document.getElementById("filter_type").options[i].value;
 
@@ -89,6 +90,8 @@ class old_results extends bpsr_webpage
         if ((filter_value != "") && (filter_type != "")) {
           URL = URL + "&filter_type="+filter_type+"&filter_value="+filter_value;
         }
+        */
+
         document.location = URL;
       }
 
@@ -139,6 +142,7 @@ class old_results extends bpsr_webpage
         url = url + "&inline_images="+show_inline;
         
         // check if a filter has been specified
+        /*
         var u, filter_type, filter_vaule;
         i = document.getElementById("filter_type").selectedIndex;
         filter_type = document.getElementById("filter_type").options[i].value;
@@ -146,6 +150,7 @@ class old_results extends bpsr_webpage
         if ((filter_value != "") && (filter_type != "")) {
           url = URL + "&filter_type="+filter_type+"&filter_value="+filter_value;
         }
+        */
 
         if (window.XMLHttpRequest)
           ru_http_request = new XMLHttpRequest()

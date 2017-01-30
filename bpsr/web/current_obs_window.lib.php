@@ -119,8 +119,8 @@ class current_obs extends bpsr_webpage
         <td><span id ="PROC_FILE"></span></td>
         <th>Project ID</th>
         <td><span id ="PID"></span></td>
-        <th></th>
-        <td></td>
+        <th>NPOL</th>
+        <td><span id ="NPOL"></span></td>
       </tr>
     </table>
 <?

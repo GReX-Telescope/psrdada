@@ -217,26 +217,45 @@ class transient_viewer extends bpsr_webpage
                 var snr = cand.getAttribute("snr");
                 var samp_idx = cand.getAttribute("samp_idx");
                 var filter = cand.getAttribute("filter");
-                var time = cand.getAttribute("time");
-                var dm = cand.getAttribute("dm");
+                var width = Math.pow(2,filter) * 0.064;
+                var time = parseFloat(cand.getAttribute("time"));
+                var dm = parseFloat(cand.getAttribute("dm"));
                 var beam = cand.getAttribute("prim_beam");
                 if (beam < 10)
                   beam = "0"+ beam;
 
                 document.getElementById("cand_"+j+"_snr").innerHTML = snr;
-                document.getElementById("cand_"+j+"_time").innerHTML = time;
-                document.getElementById("cand_"+j+"_dm").innerHTML = dm;
+                document.getElementById("cand_"+j+"_time").innerHTML = time.toFixed(2);
+                document.getElementById("cand_"+j+"_dm").innerHTML = dm.toFixed(2);
+                document.getElementById("cand_"+j+"_width").innerHTML = width;
                 document.getElementById("cand_"+j+"_beam").innerHTML = beam;
 
-                var url = "/bpsr/candidate_viewer.lib.php?single=true&utc_start="+utc_start+
-                          "&beam="+beam+"&sample="+samp_idx+"&filter="+filter+"&dm="+dm
-                document.getElementById("cand_"+j+"_link").innerHTML = "<a href='"+url+"' target='cand_popup'>plot</a>";
+                if (utc_start != "") 
+                { 
+                  var link1 = "<a href='/bpsr/candidate_viewer.lib.php?single=true&utc_start="+utc_start+
+                              "&beam="+beam+"&sample="+samp_idx+"&filter="+filter+"&dm="+dm+"&snr="+snr+
+                              "' target='cand_popup'>cand</a>";
+
+                  var link2 = "<a href='/bpsr/candidate_viewer.lib.php?single=true&utc_start="+utc_start+
+                              "&beam="+beam+"&sample="+samp_idx+"&filter="+filter+"&dm="+dm+"&snr="+snr+"&proc_type=dspsr"+
+                              "' target='cand_popup'>dspsr</a>";
+
+                  document.getElementById("cand_"+j+"_link").innerHTML = link1 + "&nbsp;&nbsp;" + link2
+                }
+                else
+                {
+                  var link = "<a href='/bpsr/live_candidate_viewer.lib.php?single=true&utc_start="+utc_start+
+                              "&beam="+beam+"&sample="+samp_idx+"&filter="+filter+"&dm="+dm+"&snr="+snr+"&proc_type=dspsr"+
+                              "' target='cand_popup'>dspsr</a>";
+                  document.getElementById("cand_"+j+"_link").innerHTML = link
+                }
               }
               for (j=cand_list[i].childNodes.length; j<<?echo $this->max_candidates?>; j++)
               {
                 document.getElementById("cand_"+j+"_snr").innerHTML = "";
                 document.getElementById("cand_"+j+"_time").innerHTML = "";
                 document.getElementById("cand_"+j+"_dm").innerHTML = "";
+                document.getElementById("cand_"+j+"_width").innerHTML = "";
                 document.getElementById("cand_"+j+"_beam").innerHTML = "";
                 document.getElementById("cand_"+j+"_link").innerHTML = "";
               }
@@ -278,10 +297,8 @@ class transient_viewer extends bpsr_webpage
         var dm_cut     = document.getElementById('dm_cut').value;
         var beam_mask  = calculate_beam_mask();
 
-        var host = "<?echo $this->inst->config["SERVER_HOST"];?>";
-        var port = "<?echo $this->inst->config["SERVER_WEB_MONITOR_PORT"];?>";
         var url  = "transient_viewer.lib.php?update=true";
-        var url_args = "&host="+host+"&port="+port+"&beam_infos=true&cand_list=true";
+        var url_args = "&beam_infos=true&cand_list=true";
 
         url_args += "&snr_cut="+snr_cut
         url_args += "&beam_mask="+beam_mask
@@ -343,6 +360,19 @@ class transient_viewer extends bpsr_webpage
         tw_xml_request.send(null);
       }
 
+      function popUp(URL, type) 
+      {
+        var to = "toolbar=1";
+        var sc = "scrollbars=1";
+        var l  = "location=1";
+        var st = "statusbar=1";
+        var mb = "menubar=1";
+        var re = "resizeable=1";
+
+        options = to+","+sc+","+l+","+st+","+mb+","+re
+        eval("page" + type + " = window.open(URL, '" + type + "', '"+options+",width=1024,height=768');");
+      }
+
     </script>
 <?
   }
@@ -359,8 +389,11 @@ class transient_viewer extends bpsr_webpage
       <tr>
         <td colspan=2>
           <div class="btns">
+<!--
             <a href="javascript:start_pipeline()" class="btn" ><span>Start</span></a>
             <a href="javascript:stop_pipeline()" class="btn"><span>Stop</span></a>
+-->
+            <a href="javascript:popUp('transient_results.lib.php?single=true','history')" class="btn" ><span>History</span></a>
           </div>
         </td>
       </tr>
@@ -418,7 +451,7 @@ class transient_viewer extends bpsr_webpage
 ?>
     <table border=0 cellspacing=0 cellpadding='2px' width='300px'>
       <tr>
-        <td><b>SNR</b></td><td><b>Time</b></td><td><b>DM</b></td><td><b>Beam</b></td><td><b>Link</b></td>
+        <td><b>SNR</b></td><td><b>Time</b></td><td><b>DM</b></td><td><b>Width</b></td><td><b>Beam</b></td><td><b>Link</b></td>
       </tr>
 <?
     for ($i=0; $i<$this->max_candidates; $i++)
@@ -427,6 +460,7 @@ class transient_viewer extends bpsr_webpage
       echo  "<td id='cand_".$i."_snr'></td>";
       echo  "<td id='cand_".$i."_time'></td>";
       echo  "<td id='cand_".$i."_dm'></td>";
+      echo  "<td id='cand_".$i."_width'></td>";
       echo  "<td id='cand_".$i."_beam'></td>";
       echo  "<td id='cand_".$i."_link'></td>";
       echo "</tr>\n";
@@ -461,10 +495,10 @@ class transient_viewer extends bpsr_webpage
 
   function printUpdateHTML($get)
   {
-    $host = $get["host"];
-    $port = $get["port"];
-    $utc_start = (isset($get["utc_start"]) && ($get["utc_start"] != "")) ? $get["utc_start"] : "";
+    $host = $this->inst->config["SERVER_HOST"];
+    $port = $this->inst->config["SERVER_WEB_MONITOR_PORT"];
 
+    $utc_start = (isset($get["utc_start"]) && ($get["utc_start"] != "")) ? $get["utc_start"] : "";
     $default = (isset($get["default_cands"]) && $get["default_cands"] == "true");
  
     # get the the UTC_START of the current observation   

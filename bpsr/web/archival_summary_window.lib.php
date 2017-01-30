@@ -43,63 +43,36 @@ class archival_summary extends bpsr_webpage
 
     </style>
 
-    <script type="text/javascript" src="/js/soundmanager2.js"></script>
-
     <script type='text/javascript'>  
 
-      soundManager.url = '/sounds/sm2-swf-movies/'; // directory where SM2 .SWFs live
-      soundManager.debugMode = false;
-      soundManager.waitForWindowLoad = true;
-
-      soundManager.onload = function() {
-        soundManager.createSound('changetape','/sounds/please_change_the_tape.mp3');
-      }
-
       // handle the response from an archival_summary request
-      function handle_archival_summary_request( as_http_request) 
+      function handle_archival_summary_request( as_xml_request) 
       {
-        if ( as_http_request.readyState == 4) {
-          var response = String(as_http_request.responseText)
-
-          if (response.indexOf("Could not connect to") == -1) 
+        if ( as_xml_request.readyState == 4)
+        {
+          var xmlDoc = as_xml_request.responseXML;
+          if (xmlDoc != null)
           {
+            var xmlObj = xmlDoc.documentElement;
+  
+            var tags = xmlObj.getElementsByTagName("tape_info");
 
-            var lines = response.split(";;;")
-            var span
-            var td
-            var values
-            
-            for (i=0; i<lines.length; i++) {
-
-              if (lines[i].length > 0) {
-                values = lines[i].split(":::");
-        
-                if ((values[0]) && (document.getElementById(values[0]))) {  
-                  span = document.getElementById(values[0])
-                  td = document.getElementById(values[0]+"_td")
-
-                  span.innerHTML = values[1]
-
-                  if (values[1] == "Insert Tape") {
-                    var html = "<span>Load "+values[2]+"</span>\n";
-                    span.innerHTML = html
-                    td.style.backgroundColor = "orange"
-                    soundManager.play('changetape');
-                  } else {
-
-                    if (values[1].substring(0,5) == "Error") {
-                      td.style.backgroundColor = "red"
-                    } else {
-                      td.style.backgroundColor = ""
-                    }
-                  }
-                }
+            var i, key, val;
+            for (i=0; i<tags[0].childNodes.length; i++)
+            {
+              tag = tags[0].childNodes[i];
+              if (tag.nodeType == 1)
+              {
+                key = tag.nodeName;
+                val = tag.childNodes[0].nodeValue;
+                newval = val.replace(/GB/g, "GB<BR/>");
+                document.getElementById(key).innerHTML = newval;
               }
             }
           }
         }
       }
-
+                
       // generate an obsevartaion info request
       function archival_summary_request() 
       {
@@ -108,15 +81,15 @@ class archival_summary extends bpsr_webpage
         var url = "archival_summary_window.lib.php?update=true&host="+host+"&port="+port;
 
         if (window.XMLHttpRequest)
-          as_http_request = new XMLHttpRequest();
+          as_xml_request = new XMLHttpRequest();
         else
-          as_http_request = new ActiveXObject("Microsoft.XMLHTTP");
+          as_xml_request = new ActiveXObject("Microsoft.XMLHTTP");
 
-        as_http_request.onreadystatechange = function() {
-          handle_archival_summary_request( as_http_request)
+        as_xml_request.onreadystatechange = function() {
+          handle_archival_summary_request( as_xml_request)
         };
-        as_http_request.open("GET", url, true);
-        as_http_request.send(null);
+        as_xml_request.open("GET", url, true);
+        as_xml_request.send(null);
       }
 
     </script>
@@ -130,21 +103,18 @@ class archival_summary extends bpsr_webpage
   <table cellpadding=0 cellspacing=0 border=0 width=100%>
     <tr>
       <td align="center" valign="top">
-        <table class='archival_summary'>
-          <tr> 
-            <td colspan=4 id="XFER_PID_td">
-              <b>Transfer Manager</b>&nbsp;&nbsp;&nbsp;
-              <span id="XFER_PID"></span>
-            </td>
-          </tr>
-          <tr> 
-            <td colspan=4 id="XFER_td" align="center"><span id ="XFER"></span></td> 
+        <table class='archival_summary' border=0>
+          <tr>
+            <td><b>On HIPSR</b></td>
+            <td><b>Uploaded</b></td>
+            <td><b>To Swin</b></td>
+            <td><b>To ATNF</b></td>
           </tr>
           <tr>
-            <td id="XFER_FINISHED_td" align="center"><span id ="XFER_FINISHED"></span></td>
-            <td>&rarr;</td>
-            <td id="XFER_ON_RAID_td" align="center"><span id ="XFER_ON_RAID"></span></td>
-            <td></td>
+            <td align="center"><span id ="xfer_finished"></span></td>
+            <td align="center"><span id ="xfer_uploaded"></span></td>
+            <td align="center"><span id ="xfer_to_swin"></span></td>
+            <td align="center"><span id ="xfer_to_atnf"></span></td>
           </tr>
         </table>
       </td>
@@ -153,36 +123,17 @@ class archival_summary extends bpsr_webpage
           <tr>
             <td colspan=2 id="SWIN_TAPE_td" align="center">
               <b>Swin Tape</b>&nbsp;&nbsp;&nbsp;
-              <span id ="SWIN_TAPE"></span>
+              <span id ="swin_tape"></span>
             </td>
-            <td id="SWIN_PID_td"><span id="SWIN_PID"></span></td> 
+            <td id="SWIN_PID_td"><span id="swin_pid"></span></td> 
           </tr>
           <tr> 
-            <td colspan=3 id="SWIN_STATE_td" align="center" width=100%><span id ="SWIN_STATE"></span></td>
+            <td colspan=3 id="SWIN_STATE_td" align="center" width=100%><span id ="swin_state"></span></td>
           </tr>
           <tr>
-            <td id="SWIN_NUM_td" align="center">Queued: <span id ="SWIN_NUM"></span></td>
-            <td id="SWIN_PERCENT_td" align="center"><span id ="SWIN_PERCENT"></span>&#37; full</td>
-            <td id="SWIN_TIME_LEFT_td" align="center"><span id ="SWIN_TIME_LEFT"></span> m</td>
-          </tr>
-        </table>
-      </td>
-      <td align="center" valign="top">
-        <table class='archival_summary'>
-          <tr>
-            <td colspan=2 id="PARKES_TAPE_td" align="center">
-              <b>Parkes Tape</b>&nbsp;&nbsp;&nbsp;
-              <span id ="PARKES_TAPE"></span>
-            </td>
-            <td id="PARKES_PID_td"><span id="PARKES_PID"></span></td>
-          </tr>
-          <tr> 
-            <td colspan=3 id="PARKES_STATE_td" align="center" width=100%><span id ="PARKES_STATE"></span></td>
-          </tr>
-          <tr>
-            <td id="PARKES_NUM_td" align="center">Queued: <span id ="PARKES_NUM"></span></td>
-            <td id="PARKES_PERCENT_td" align="center"><span id ="PARKES_PERCENT"></span>&#37; full</td>
-            <td id="PARKES_TIME_LEFT_td" align="center"><span id ="PARKES_TIME_LEFT"></span> m</td>
+            <td id="SWIN_NUM_td" align="center">Queued: <span id ="swin_num"></span></td>
+            <td id="SWIN_PERCENT_td" align="center"><span id ="swin_percent"></span>&#37; full</td>
+            <td id="SWIN_TIME_LEFT_td" align="center"><span id ="swin_time_left"></span> m</td>
           </tr>
         </table>
       </td>
@@ -197,19 +148,36 @@ class archival_summary extends bpsr_webpage
     $host = $get["host"];
     $port = $get["port"];
     $response = "";
+    $data = "";
 
     list ($socket, $result) = openSocket($host, $port);
-    if ($result == "ok") {
-
+    if ($result == "ok")
+    {
       $bytes_written = socketWrite($socket, "tape_info\r\n");
-      list ($result, $response) = socketRead($socket);
-      socket_close($socket);
+      $max = 100;
+      $response = "initial";
+      while ($socket && ($result == "ok") && ($response != "") && ($max > 0))
+      {
+        list ($result, $response) = socketRead($socket);
+        if ($result == "ok")
+        {
+          $data .= $response;
+        }
+        $max--;
+      }
+      if (($result == "ok") && ($socket))
+        socket_close($socket);
+      $socket = 0;
 
     } else {
       $response = "Could not connect to $host:$port<BR>\n";
     }
 
-    echo $response;
+    header('Content-type: text/xml');
+    echo "<?xml version='1.0' encoding='ISO-8859-1'?>";
+    echo "<archival_summary_update_request>";
+    echo $data;
+    echo "</archival_summary_update_request>";
   }
 
 }

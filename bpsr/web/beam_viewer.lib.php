@@ -191,9 +191,20 @@ class beam_viewer extends bpsr_webpage
         </td>
 
         <td align=center>
-          Digitizer Statistics<br>
-          <a id="dts_1024x768" href="/images/blackimage.gif">
-            <img id="dts_400x300" src="/images/blackimage.gif" width=300 height=225>
+          Cross Pol (live)<br>
+          <a id="pdcp_1024x768" href="/images/blackimage.gif">
+            <img id="pdcp_400x300" src="/images/blackimage.gif" width=300 height=225>
+          </a>
+        </td>
+
+      </tr>
+
+      <tr>
+
+        <td align=center>
+          ADC Histogram (live)<br>
+          <a id="pdhg_1024x768" href="/images/blackimage.gif">
+            <img id="pdhg_400x300" src="/images/blackimage.gif" width=300 height=225>
           </a>
         </td>
 
@@ -266,7 +277,7 @@ class beam_viewer extends bpsr_webpage
 
     $results = array_merge($actual_obs_results, $actual_stats_results);
 
-    $types = array("bp","ts","fft","dts","pdbp","pvf");
+    $types = array("bp","ts","fft","pdbp","pdcp", "pdhg", "pvf");
     $sizes = array("400x300", "1024x768");
 
     $xml = "<beam_viewer>";

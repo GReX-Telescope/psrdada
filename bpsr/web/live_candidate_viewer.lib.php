@@ -3,7 +3,7 @@
 include_once("bpsr.lib.php");
 include_once("bpsr_webpage.lib.php");
 
-class candidate_viewer extends bpsr_webpage 
+class live_candidate_viewer extends bpsr_webpage 
 {
   var $utc_start;
 
@@ -21,15 +21,16 @@ class candidate_viewer extends bpsr_webpage
 
   var $nchan;
 
-  var $length;
-
   var $proc_type;
 
   var $inst;
 
-  function candidate_viewer()
+  var $cand_url;
+
+  function live_candidate_viewer()
   {
     bpsr_webpage::bpsr_webpage();
+
     $this->title = "BPSR Candidate Viewer";
     $this->callback_freq = 16000;
     $this->inst = new bpsr();
@@ -40,29 +41,39 @@ class candidate_viewer extends bpsr_webpage
     $this->filter = isset($_GET["filter"]) ? $_GET["filter"] : "";
     $this->dm = isset($_GET["dm"]) ? $_GET["dm"] : "";
     $this->snr = isset($_GET["snr"]) ? $_GET["snr"] : "";
-    $this->nchan = isset($_GET["nchan"]) ? $_GET["nchan"] : "0";
-    $this->nbin = isset($_GET["nbin"]) ? $_GET["nbin"] : "0";
-    $this->length = isset($_GET["length"]) ? $_GET["length"] : "0";
+    $this->nchan = isset($_GET["nchan"]) ? $_GET["nchan"] : "";
+    $this->nbin = isset($_GET["nbin"]) ? $_GET["nbin"] : "";
+    $this->length= isset($_GET["length"]) ? $_GET["length"] : "0";
     $this->proc_type = isset($_GET["proc_type"]) ? $_GET["proc_type"] : "cand";
 
-    $this->cand_url = "candidate_viewer.lib.php?update=true";
+    $this->cand_url = "live_candidate_viewer.lib.php?update=true";
     if ($this->utc_start != "") $this->cand_url .= "&utc_start=".$this->utc_start;
     if ($this->beam != "") $this->cand_url .= "&beam=".$this->beam;
     if ($this->sample != "") $this->cand_url .= "&sample=".$this->sample;
     if ($this->filter != "") $this->cand_url .= "&filter=".$this->filter;
     if ($this->dm != "") $this->cand_url .= "&dm=".$this->dm;
     if ($this->snr != "") $this->cand_url .= "&snr=".$this->snr;
+    if ($this->length != "") $this->cand_url .= "&length=".$this->length;
     if ($this->proc_type != "") $this->cand_url .= "&proc_type=".$this->proc_type;
+
     $this->cand_url .= "&length=".$this->length;
     $this->cand_url .= "&nchan=".$this->nchan;
     $this->cand_url .= "&nbin=".$this->nbin;
+
+    if ($this->utc_start == "")
+    {
+      $cmd = "find ".$this->inst->config["SERVER_RESULTS_DIR"]." -mindepth 2 -maxdepth 2 ".
+             "-type f -name 'all_candidates.dat' -printf '%h\n' | sort | tail -n 1 | awk -F/ '{print \$NF}'";
+      $output = array();
+      $this->utc_start = exec($cmd, $output, $rval);
+    }
   }
 
   function printJavaScriptHead()
   {
 ?>
     <script type='text/javascript'>  
-      function update_candidate_image() 
+      function update_live_candidate_image() 
       {
         url = "<?echo $this->cand_url;?>";
 
@@ -114,14 +125,14 @@ class candidate_viewer extends bpsr_webpage
         <td><?echo $this->dm?></td>
       </tr>
       <tr>
-        <td>SNR </td>
+        <td>SNR</td>
         <td><?echo $this->snr?></td>
       </tr>
       <tr>
         <td>NBIN</td>
         <td>
-          <select name="nbin" id="nbin" onchange="update_candidate_image()">
-            <option value="0" selected>default</option>
+          <select name="nbin" id="nbin" onchange="update_live_candidate_image()">
+            <option value="0">default</option>
             <option value="4">4</option>
             <option value="8">8</option>
             <option value="16">16</option>
@@ -137,8 +148,8 @@ class candidate_viewer extends bpsr_webpage
       <tr>
         <td>NCHAN</td>
         <td>
-        <select name="nchan" id="nchan" onchange="update_candidate_image()">
-          <option value="0" selected>default</option>
+        <select name="nchan" id="nchan" onchange="update_live_candidate_image()">
+          <option value="0">default</option>
           <option value="4">4</option>
           <option value="8">8</option>
             <option value="16">16</option>
@@ -154,12 +165,10 @@ class candidate_viewer extends bpsr_webpage
       <tr>
         <td>Length</td>
         <td>
-          <select name="length" id="length" onchange="update_candidate_image()">
-            <option value="0" selected>default</option>
-            <option value="0.25">0.25</option>
-            <option value="0.5">0.5</option>
-            <option value="1">1</option>
-            <option value="2">2</option>
+         <select name="length" id="length" onchange="update_live_candidate_image()">
+          <option value="0">default</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
             <option value="3">3</option>
             <option value="4">4</option>
             <option value="5">5</option>
@@ -170,6 +179,8 @@ class candidate_viewer extends bpsr_webpage
             <option value="10">10</option>
           </select>
         </td>
+
+
       </tr>
       <tr>
         <td>Proc Type</td>
@@ -186,7 +197,7 @@ class candidate_viewer extends bpsr_webpage
   {
     $this->openBlockHeader("Candidate Event");
 ?>
-    <img id="candidate_image" src="<?echo $this->cand_url?>"/>
+    <img id='candidate_image' src="<?echo $this->cand_url?>">
 <?
     $this->closeBlockHeader();
   }
@@ -194,47 +205,34 @@ class candidate_viewer extends bpsr_webpage
   # get the candidate plot from the gpu cand server
   function printUpdateHTML($get)
   {
-    $host = "hipsr7";
-    $port = "55555";
+    $cfg = $this->inst->config;
 
-    $params  = "";
-    $params .= "utc_start=".$get["utc_start"]." ";
-    $params .= "beam=".$get["beam"]." ";
-    $params .= "sample=".$get["sample"]." ";
-    $params .= "filter=".$get["filter"]." ";
-    $params .= "dm=".$get["dm"]." ";
-    $params .= "snr=".$get["snr"]." ";
-    $params .= "proc_type=".$get["proc_type"]." ";
-    $params .= "nchan=".$get["nchan"]." ";
-    $params .= "nbin=".$get["nbin"]." ";
-    $params .= "length=".$get["length"];
-
-    list ($socket, $result) = openSocket($host, $port);
-    $img_data = "";
-    if ($result == "ok")
+    # determine which host has this beam
+    $host = "";
+    for ($i=0; (($host == "") && ($i<$cfg["NUM_PWC"])); $i++)
     {
-      $bytes_written = socketWrite($socket, $params."\r\n");
-      $data = socket_read($socket, 8192, PHP_BINARY_READ);
-      $img_data = $data;
-      while ($data)
+      if ($this->inst->roach["BEAM_".$i] == $this->beam)
       {
-        $data = socket_read($socket, 8192, PHP_BINARY_READ);
-        $img_data .= $data;
+        $host = $cfg["PWC_".$i];
       }
-      if ($socket)
-        socket_close($socket);
-      $socket = 0;
-      header('Content-Type: image/png');
-      header('Content-Disposition: inline; filename="image.png"');
-      echo $img_data;
     }
-    else
-    {
-      header('Content-Type: image/gif');
-      header('Content-Disposition: inline; filename="image.gif"');
-      passthru("cat /home/dada/linux_64/web/images/blankimage.gif");
-    }
+
+    $fil_file = $cfg["CLIENT_ARCHIVE_DIR"]."/".$this->beam."/".$this->utc_start."/".$this->utc_start.".fil";
+    $plot_cmd = "trans_freqplus_plot.py ".$fil_file." ".$this->sample." ".$this->dm." ".$this->filter." ".$this->snr;
+    if ($this->nchan != "")
+      $plot_cmd .= " -nchan ".$this->nchan;
+    if ($this->nbin != "")
+      $plot_cmd .= " -nbin ".$this->nbin;
+    if ($this->length != "")
+      $plot_cmd .= " -length ".$this->length;
+    $cmd = "ssh -o BatchMode=yes -x ".$cfg["USER"]."@".$host." '".$plot_cmd."'";
+
+    $img_data = `$cmd`;
+
+    header('Content-Type: image/png');
+    header('Content-Disposition: inline; filename="image.png"');
+    echo $img_data;
   }
 }
 
-handleDirect("candidate_viewer");
+handleDirect("live_candidate_viewer");

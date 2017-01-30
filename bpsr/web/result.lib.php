@@ -352,7 +352,7 @@ class result extends bpsr_webpage
     $beam_str = sprintf("%02d", $beam_no);
 
     echo "<td rowspan=2 align=right>";
-    echo "<a border=0px href=\"javascript:popWindow('beam_viewer.lib.php?single=true&beamid=".$beam_no."')\">";
+    echo "<a border=0px href=\"javascript:popWindow('beam_viewer.lib.php?single=true&utc_start=".$this->utc_start."&beam=".$beam_no."')\">";
     echo "<img src=\"/images/blankimage.gif\" border=0 width=113 height=85 id=\"beam".$beam_str."\" TITLE=\"Beam ".$beam_str."\" alt=\"Beam ".$beam_no."\">\n";
     echo "</a></td>\n";
   }

@@ -99,7 +99,7 @@ class state_banner extends bpsr_webpage
     } 
 ?>
         </td>
-        <td width="520px" align=right>
+        <td width="600px" align=right>
 <?
     if ($this->show_buttons == "true") {
 ?>
@@ -110,6 +110,7 @@ class state_banner extends bpsr_webpage
             <a href="javascript:popUp('control.lib.php?single=true', 'ctr')" class="btn"><span>Controls</span></a>
             <a href="javascript:popUp('tcs_simulator.lib.php?single=true', 'test')" class="btn"><span>Test</span></a>
             <a href="javascript:popUp('transient_viewer.lib.php?single=true','tran')" class="btn" ><span>Transients</span></a>
+            <a href="javascript:popUp('beam_control.lib.php?single=true','beam')" class="btn" ><span>Beams</span></a>
             <a href="javascript:popUp('support.html', 'help')" class="btn"><span>Help</span></a>
           </div>
 <?  

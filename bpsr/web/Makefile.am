@@ -7,6 +7,7 @@ nobase_dist_web_SCRIPTS = definitions_i.php \
                           archival.lib.php \
                           backend_state_window.lib.php \
                           beam_config.lib.php \
+                          beam_control.lib.php \
                           beam_config.php \
                           beam_reconfig.php \
                           beamovision.lib.php \
@@ -24,6 +25,7 @@ nobase_dist_web_SCRIPTS = definitions_i.php \
                           results.lib.php \
                           index.php \
                           ganglia_window.lib.php \
+                          live_candidate_viewer.lib.php \
                           log_list.lib.php \
                           log_viewer.php \
                           old_results.lib.php \

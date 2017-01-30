@@ -51,14 +51,21 @@ class bpsr extends instrument
     $arr["bpsr_swin_tape_controller"]   = array("logfile" => "bpsr_swin_tape_controller.log", "name" => "Swin Tape", "tag" => "server", "shortname" => "SwinTape");
     $arr["bpsr_parkes_tape_controller"] = array("logfile" => "bpsr_parkes_tape_controller.log", "name" => "Parkes Tape", "tag" => "server", "shortname" => "ParkesTape");
     $arr["bpsr_raid_pipeline"]          = array("logfile" => "bpsr_raid_pipeline.log", "name" => "RAID Pipeline", "tag" => "server", "shortname" => "Pipeline");
-    return $arr;
+    $arr["bpsr_frb_manager"]            = array("logfile" => "bpsr_frb_manager.log", "name" => "FRB Mgr", "tag" => "server", "shortname" => "FRB");
 
+    return $arr;
   }
 
   function clientLogInfo() {
 
     $arr = array();
     $arr["bpsr_observation_manager"] = array("logfile" => "nexus.sys.log", "name" => "Obs Mngr", "tag" => "obs mngr");
+    $arr["bpsr_pwc"]                 = array("logfile" => "nexus.pwc.log", "name" => "PWC", "tag" => "pwc");
+    $arr["bpsr_proc"]                = array("logfile" => "nexus.sys.log", "name" => "Proc", "tag" => "proc");
+    $arr["bpsr_events"]              = array("logfile" => "nexus.sys.log", "name" => "Event", "tag" => "evnt");
+    $arr["bpsr_dumper"]              = array("logfile" => "nexus.sys.log", "name" => "Dumper", "tag" => "dump");
+    $arr["bpsr_heimdall"]            = array("logfile" => "nexus.sys.log", "name" => "Heimdall", "tag" => "tran");
+    $arr["bpsr_auxiliary"]           = array("logfile" => "nexus.sys.log", "name" => "Auxiliary", "tag" => "auxi");
     $arr["bpsr_results_monitor"]     = array("logfile" => "nexus.sys.log", "name" => "Results Mon", "tag" => "results mon");
     $arr["processor"]                = array("logfile" => "nexus.src.log", "name" => "Processor", "tag" => "proc");
     $arr["bpsr_disk_cleaner"]        = array("logfile" => "nexus.sys.log", "name" => "Disk Cleaner", "tag" => "cleaner");
@@ -286,29 +293,35 @@ class bpsr extends instrument
       }
 
       closedir($handle);
-      rsort($files);
+      sort($files);
 
       # Now ensure we have only the most recent files in the array
-      foreach ($results as $key => $value) {
+      foreach ($results as $key => $value) 
+      {
         $beam = $key;
-        $have_low = 0;
-        $have_mid = 0;
-        $have_hi = 0;
 
-        for ($j=0; $j<count($files); $j++) {
-          if ((strpos($files[$j], $beam."_112x84") !== FALSE) && (!$have_low) ){
-            $have_low = 1;
-            $value["pdbp_112x84"] = "/bpsr/results/stats/".$files[$j];
+        for ($j=0; $j<count($files); $j++) 
+        {
+          if (strpos($files[$j], "cross") !== FALSE)
+            $type = "pdcp";
+          else if (strpos($files[$j], "hist") !== FALSE)
+            $type = "pdhg";
+          else
+            $type = "pdbp";
+
+          if (strpos($files[$j], $beam."_112x84") !== FALSE)
+          {
+            $value[$type."_112x84"] = "/bpsr/results/stats/".$files[$j];
           }
-          if ((strpos($files[$j], $beam."_400x300") !== FALSE) && (!$have_mid) ){
-            $have_mid = 1;
-            $value["pdbp_400x300"] = "/bpsr/results/stats/".$files[$j];
+          if (strpos($files[$j], $beam."_400x300") !== FALSE)
+          {
+            $value[$type."_400x300"] = "/bpsr/results/stats/".$files[$j];
           }
-          if ((strpos($files[$j], $beam."_1024x768") != FALSE) && (!$have_hi) ){
-            $have_hi = 1;
-            $value["pdbp_1024x768"] = "/bpsr/results/stats/".$files[$j];
+          if (strpos($files[$j], $beam."_1024x768") != FALSE)
+          {
+            $value[$type."_1024x768"] = "/bpsr/results/stats/".$files[$j];
           }
-        }        
+        }
         $results[$key] = $value;
       }
 

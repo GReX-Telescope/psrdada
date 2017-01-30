@@ -10,15 +10,17 @@ class transient_results extends bpsr_webpage
 
   var $images;
 
+  var $inst;
+  
   function transient_results()
   {
     bpsr_webpage::bpsr_webpage();
     $this->title = "BPSR Transient Pipeline";
 
-    $inst = new bpsr();
+    $this->inst = new bpsr();
 
     # retrieve the list of all transient images from results dir
-    $cmd = "find ".$inst->config["SERVER_RESULTS_DIR"]." -mindepth 2 -maxdepth 2 -type f -name '*cands_*x*.png' | sort";
+    $cmd = "find ".$this->inst->config["SERVER_RESULTS_DIR"]." -mindepth 2 -maxdepth 2 -type f -name '*cands_*x*.png' | sort";
     $results = array();
     $last_line = exec($cmd, $results, $rval);
 
@@ -44,6 +46,19 @@ class transient_results extends bpsr_webpage
   function printJavaScriptHead()
   {
 ?>
+    <style type='text/css'>
+
+      span {
+        padding-left: 5px;
+      }
+
+      td {
+        text-align: center;
+      }
+
+    </style>
+
+
     <script type='text/javascript'>  
 
       var http_server = "http://<?echo $_SERVER["SERVER_NAME"].":".$_SERVER["SERVER_PORT"]?>"
@@ -77,7 +92,6 @@ class transient_results extends bpsr_webpage
 
       function set_curr_image(new_index)
       {
-
         curr_index = new_index;
         prev_index = Math.max(0, curr_index - 1);
         next_index = Math.min(n_imags, curr_index + 1);
@@ -87,7 +101,9 @@ class transient_results extends bpsr_webpage
 
         // load the specified new_index image immediately
         document.getElementById("current").src = http_server + url_prefix + utcs[curr_index] + "/" + imags[curr_index];
-        document.getElementById("curr_utc").innerHTML = utcs[curr_index] + ": <a href='"+result_url+"'>Results Link</a> <a href='"+transient_url+"'>Transient Link</a>";
+        document.getElementById("curr_utc").innerHTML = utcs[curr_index]
+        document.getElementById("links").innerHTML = "<a href='"+result_url+"'>Results Page</a> <a href='"+transient_url+"'>Transient Viewer</a>";
+        transient_results_request(utcs[curr_index]);
 
         prev_img.src = http_server + url_prefix + utcs[prev_index] + "/" + imags[prev_index];
         document.getElementById("prev_utc").innerHTML = utcs[prev_index];
@@ -116,7 +132,11 @@ class transient_results extends bpsr_webpage
 
         var result_url    = http_server + "/bpsr/result.lib.php?single=true&utc_start=" + utcs[curr_index];
         var transient_url = http_server + "/bpsr/transient_viewer.lib.php?single=true&utc_start=" + utcs[curr_index];
-        document.getElementById("curr_utc").innerHTML = utcs[curr_index]+ ": <a href='"+result_url+"'>Results Link</a> <a href='"+transient_url+"'>Transient Link</a>";
+        document.getElementById("curr_utc").innerHTML = utcs[curr_index]
+        document.getElementById("links").innerHTML = "<a href='"+result_url+"'>Results Page</a> <a href='"+transient_url+"'>Transient Viewer</a>";
+        transient_results_request (utcs[curr_index]);
+
+
       }
 
       function prev_obs() 
@@ -138,8 +158,65 @@ class transient_results extends bpsr_webpage
         
         var result_url    = http_server + "/bpsr/result.lib.php?single=true&utc_start=" + utcs[curr_index];
         var transient_url = http_server + "/bpsr/transient_viewer.lib.php?single=true&utc_start=" + utcs[curr_index];
-        document.getElementById("curr_utc").innerHTML = utcs[curr_index]+ ": <a href='"+result_url+"'>Results Link</a> <a href='"+transient_url+"'>Transient Link</a>";
+        document.getElementById("curr_utc").innerHTML = utcs[curr_index]
+        document.getElementById("links").innerHTML = "<a href='"+result_url+"'>Results Page</a> <a href='"+transient_url+"'>Transient Viewer</a>";
+        transient_results_request (utcs[curr_index]);
+        
       }
+
+      function handle_transient_results_request(tr_xml_request) 
+      {
+        if (tr_xml_request.readyState == 4)
+        {
+          var xmlDoc = tr_xml_request.responseXML
+          if (xmlDoc != null)
+          {
+            var xmlObj = xmlDoc.documentElement;
+
+            var obs = xmlObj.getElementsByTagName("obs");
+            for (iob=0; iob<obs.length; iob++)
+            {
+              var ob = obs[iob];
+              var utc_start = ob.getAttribute("utc_start");
+
+              children = ob.childNodes;
+              for (i=0; i<children.length; i++)
+              {
+                child = children[i];
+                if (child.nodeType == 1)
+                {
+                  if (child.nodeName == "pid")
+                  {
+                    document.getElementById("pid").innerHTML = child.childNodes[0].nodeValue;
+                  }
+                  if (child.nodeName == "source")
+                  {
+                    document.getElementById("source").innerHTML = child.childNodes[0].nodeValue;
+                  }
+                }
+              }
+            } 
+          }
+        }
+      }
+      
+      function transient_results_request (utc_start) 
+      {
+        url = "transient_results.lib.php?update=true&utc_start="+utc_start;
+
+        if (window.XMLHttpRequest)
+          tr_xml_request = new XMLHttpRequest();
+        else
+          tr_xml_request = new ActiveXObject("Microsoft.XMLHTTP");
+
+        tr_xml_request.onreadystatechange = function() {
+          handle_transient_results_request(tr_xml_request)
+        };
+        tr_xml_request.open("GET", url, true);
+        tr_xml_request.send(null);
+      }
+
+
 
     </script>
 <?
@@ -151,14 +228,22 @@ class transient_results extends bpsr_webpage
 ?>
   <table cellpadding="10px" border="1">
     <tr>
-      <th><input type="button" value="Previous" onClick="prev_obs()"></th>
-      <th>Current Obs</th>
-      <th><input type="button" value="Next" onClick="next_obs()"></th>
-    </tr>
-    <tr>
-      <td valign=top style='text-align:center;'><span id='prev_utc'></span>
-      <td valign=top style='text-align:center;'><span id='curr_utc'></span>
-      <td valign=top style='text-align:center;'><span id='next_utc'></span>
+      <td align=center>
+        <span id='prev_utc'></span><br/>
+        <input type="button" name='prev_button' value="Prev" onClick="prev_obs()"/>
+      </td>
+      <td align=center>
+        <b><span id='curr_utc'></span></b>
+        <span id='pid'></span>
+        <span id='source'></span>
+        <br/>
+        <div class="clear"/>
+        <span id='links'></span>
+      </td>
+      <td align=center>
+        <span id='next_utc'></span><br>
+        <input type="button" name='next_button' value="Next" onClick="next_obs()"/>
+      </td>
     </tr>
     <tr>
       <td colspan=3>
@@ -168,11 +253,48 @@ class transient_results extends bpsr_webpage
   </table>
   <script type='text/javascript'>
     set_curr_image(utcs.length - 1);
-    //set_curr_image(0);
   </script>
-      
 <?
   }
+
+  function printUpdateHTML($get)
+  {
+    $utc = $get["utc_start"];
+    $pid = "PXXX";
+    $source = "Unknown";
+
+    $results = array();
+    $rval = 0;
+
+    # get the PID and SOURCE from the obs.info
+    $cmd = "grep ^PID ".$this->inst->config["SERVER_RESULTS_DIR"]."/".$utc."/obs.info | awk '{print \$2}'";
+    $last_line = exec($cmd, $results, $rval);
+    if ($rval == 0)
+    {
+      $pid = $last_line;
+    }
+
+    $results = array();
+    $rval = 0;
+    $cmd = "grep ^SOURCE ".$this->inst->config["SERVER_RESULTS_DIR"]."/".$utc."/obs.info | awk '{print \$2}'";
+    $last_line = exec($cmd, $results, $rval);
+    if ($rval == 0)
+    { 
+      $source = $last_line;
+    }
+
+    $xml = "<?xml version='1.0' encoding='ISO-8859-1'?>\n";
+    $xml .= "<transient_results>";
+    $xml .= "<obs utc_start='".$utc."'>";
+    $xml .= "<source>".$source."</source>";
+    $xml .= "<pid>".$pid."</pid>";
+    $xml .= "</obs>";
+    $xml .= "</transient_results>";
+
+    header('Content-type: text/xml');
+    echo $xml;
+  }
+  
 }
 
 handleDirect("transient_results");

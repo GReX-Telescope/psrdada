@@ -91,6 +91,12 @@ class plot_window extends bpsr_webpage
               type = "pdbp";
 
             if (document.imageform.imagetype[4].checked == true) 
+              type = "pdcp";
+
+            if (document.imageform.imagetype[5].checked == true) 
+              type = "pdhg";
+
+            if (document.imageform.imagetype[6].checked == true) 
               type = "pvf";
 
   
@@ -143,6 +149,12 @@ class plot_window extends bpsr_webpage
           type = "pdbp";
 
         if (document.imageform.imagetype[4].checked == true) 
+          type = "pdcp";
+
+        if (document.imageform.imagetype[5].checked == true) 
+          type = "pdhg";
+
+        if (document.imageform.imagetype[6].checked == true) 
           type = "pvf";
 
         url += "&type="+type+"&size=112x84&beam=all";
@@ -177,6 +189,8 @@ class plot_window extends bpsr_webpage
             <input type="radio" name="imagetype" id="imagetype" value="ts" onClick="plot_window_request()">Time Series<br>
             <input type="radio" name="imagetype" id="imagetype" value="fft" onClick="plot_window_request()">Fluct. PS<br>
             <input type="radio" name="imagetype" id="imagetype" value="pdbp" checked onClick="plot_window_request()">PD Bandpass<br>
+            <input type="radio" name="imagetype" id="imagetype" value="pdcp" onClick="plot_window_request()">PD Crosspol<br>
+            <input type="radio" name="imagetype" id="imagetype" value="pdhg" onClick="plot_window_request()">ADC Histogram<br>
             <input type="radio" name="imagetype" id="imagetype" value="pvf" onClick="plot_window_request()">Phase v Freq<br>
           </form>
         </td>
