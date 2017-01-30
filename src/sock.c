@@ -106,7 +106,7 @@ int sock_create (port)
      bind() address already in use */
   setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)); 
        
-  if (bind(fd, (struct sockaddr*) &server, sizeof(server)))  {
+  if (bind(fd, (struct sockaddr*) &server, sizeof(server))) {
     perror ("sock_create: (err) bind");
     return -1;
   }
