@@ -14,6 +14,7 @@ use strict;               # strict mode (like -Wall)
 use File::Basename;
 use threads;
 use threads::shared;
+use MIME::Lite;
 use Bpsr;
 
 #
@@ -31,10 +32,13 @@ use constant DL           => 1;
 # Global Variable Declarations
 #
 our %cfg = Bpsr::getConfig();
+our %roach = Bpsr::getROACHConfig();
 our $quit_daemon : shared = 0;
 our $daemon_name : shared = Dada::daemonBaseName($0);
 our $error = $cfg{"STATUS_DIR"}."/".$daemon_name.".error";
 our $warn  = $cfg{"STATUS_DIR"}."/".$daemon_name.".warn";
+our $last_frb = "";
+our %frb_actions = ();
 
 #
 # Signal Handlers
@@ -51,19 +55,50 @@ if (index($cfg{"SERVER_ALIASES"}, $ENV{'HOSTNAME'}) < 0 )
 }
 
 #
+# only beam 2 - 8189
+#
+
+# default FRB detection options
+$frb_actions{"default"} = { "snr_cut" => 10.0, "filter_cut" => 8.0, "egal_dm" => "true", 
+                            "excise_psr" => "true", "cps_cut" => "5", "cc_email" => "" };
+
+# custom (per project) FRB detection options
+$frb_actions{"P999"}    = { "snr_cut" => 8.0, "filter_cut" => 10.0, "excise_psr" => "false", "egal_dm" => "false" };
+                           # "cc_email" => "manishacaleb\@gmail.com, cflynn\@swin.edu.au, ebpetroff\@gmail.com, evan.keane\@gmail.com" };
+
+$frb_actions{"P864"}    = { "egal_dm" => "false", "excise_psr" => "false", 
+                            "cps_cut" => "50", "filter_cut" => "9",
+                            "cc_email" => "manishacaleb\@gmail.com, cflynn\@swin.edu.au" };
+
+$frb_actions{"P858"}    = { "cc_email" => "superb\@lists.pulsarastronomy.net" };
+$frb_actions{"P892"}    = { "cc_email" => "superb\@lists.pulsarastronomy.net" };
+$frb_actions{"PX025"}   = { "cc_email" => "superb\@lists.pulsarastronomy.net" };
+
+$frb_actions{"P871"}    = { "cc_email" => "ebpetroff\@gmail.com, cherrywyng\@gmail.com, cmlflynn\@gmail.com, davidjohnchampion\@gmail.com, evan.keane\@gmail.com, ewan.d.barr\@gmail.com, manishacaleb\@gmail.com, matthew.bailes\@gmail.com, michael\@mpifr-bonn.mpg.de, apossenti\@gmail.com, sarahbspolaor\@gmail.com, Simon.Johnston\@atnf.csiro.au, vanstraten.willem\@gmail.com, Ben.Stappers\@manchester.ac.uk" };
+
+$frb_actions{"P789"}    = { "cc_email" => "ewan.d.barr\@gmail.com, Simon.Johnston\@atnf.csiro.au, evan.keane\@gmail.com" };
+
+$frb_actions{"P879"}    = { "cc_email" => "cmlflynn\@gmail.com, Ramesh.Bhat\@curtin.edu.au, michael\@mpifr-bonn.mpg.de, davidjohnchampion\@gmail.com, sarahbspolaor\@gmail.com" };
+
+#$frb_actions{"P888"}    = { "egal_dm" => "false", "excise_psr" => "false", "snr_cut" => 8.0,
+#                            "cps_cut" => "50", "filter_cut" => "9", "beam_mask" => "1", 
+#                            "cc_email" => "epetroff\@swin.edu.au" };
+
+
+#
 # Main Loop
 #
 {
-
   my $log_file = $cfg{"SERVER_LOG_DIR"}."/".$daemon_name.".log";
   my $pid_file = $cfg{"SERVER_CONTROL_DIR"}."/".$daemon_name.".pid";
   my $obs_results_dir = $cfg{"SERVER_RESULTS_DIR"};
   my $control_thread = 0;
-  my $coincidencer_thread = 0;
 
   my $cmd;
   my $dir;
   my @subdirs;
+  my $curr_time;
+  my $now;
 
   my $i;
   my $j;
@@ -93,13 +128,12 @@ if (index($cfg{"SERVER_ALIASES"}, $ENV{'HOSTNAME'}) < 0 )
   # Start the daemon control thread
   $control_thread = threads->new(\&controlThread, $pid_file);
 
-  # start the coincidencer thread 
-  # $coincidencer_thread = threads->new(\&coincidencerThread);
-
   my $curr_processing = "";
-  
+
   while (!$quit_daemon)
   {
+    $curr_time = time;
+
     $dir = "";
     @subdirs = ();
 
@@ -141,8 +175,10 @@ if (index($cfg{"SERVER_ALIASES"}, $ENV{'HOSTNAME'}) < 0 )
         Dada::logMsg(2, DL, "main: testing ".$subdirs[$h]);
 
         # If this observation has not been finished, archived or transferred
-        if (!( (-f $dir."/obs.archived") || (-f $dir."/obs.finished") || (-f $dir."/obs.deleted") ||
-               (-f $dir."/obs.transferred") ) ) {
+        #if (!( (-f $dir."/obs.archived") || (-f $dir."/obs.finished") || (-f $dir."/obs.deleted") ||
+        #       (-f $dir."/obs.transferred") ) ) {
+        # if (!(-f $dir."/obs.deleted"))
+        {
 
           # determine the age of the observation and number of files that can be processed in it
           Dada::logMsg(2, DL, "main: getObsAge(".$dir.")");
@@ -163,47 +199,9 @@ if (index($cfg{"SERVER_ALIASES"}, $ENV{'HOSTNAME'}) < 0 )
             # remove any old files in the archive dir
             cleanUpObs($obs_results_dir."/".$dir);
 
-            # we need to patch the TCS logs into the file!
-            # ($result, $response) = patchInTcsLogs($obs_archive_dir, $dir);
-            # if ($result ne "ok") {
-            #   Dada::logMsgWarn($warn, "patchInTcsLogs failed for ".$dir.": ".$response);
-            #   markObsState($dir, "processing", "failed");
-            #   next;
-            # }
-
-            # If the TCS log file didn't exist, we cannot do the rest of these steps
-            # if ($response eq "failed to get TCS log file") {
-            #   markObsState($dir, "processing", "finished");
-            #   next;
-            # }
-        
-            # copy psrxml files to special dir for mike to deal with
-            # ($result, $response) = copyPsrxmlToDb($obs_archive_dir, $dir);
-            # if ($result ne "ok") {
-            #   Dada::logMsgWarn($warn, "copyPsrxmlToDb failed for ".$dir.": ".$response);
-            #   markObsState($dir, "processing", "failed");
-            #   $quit_daemon = 1;
-            #   next;
-            # }
-
-            # only observations run with the_decimator produce .fil and .psrxml files, so 
-            # check the reponse from copyPsrxmlToDb to find out if we have psrxml files
-            # if ($response > 0) {
-
-              # fix the .fil headers from the psrxml file
-            #   ($result, $response) = fixFilHeaders($obs_archive_dir, $dir);
-            #   if ($result ne "ok") {
-            #     Dada::logMsgWarn($warn, "fixFilHeaders failed for ".$dir.": ".$response);
-            #     markObsState($dir, "processing", "failed");
-            #     $quit_daemon = 1;
-            #     next;
-            #   }
-            # }
-
             # Otherwise all the post processing parts are ok and we can mark this obs
             # as finished, and thereby ready for xfer
             markObsState($dir, "processing", "finished");
-
           } 
           # Else this is an active observation, try to process the .pol
           # files that may exist in each beam
@@ -224,14 +222,17 @@ if (index($cfg{"SERVER_ALIASES"}, $ENV{'HOSTNAME'}) < 0 )
 
             if ($n_cand_files > 0)
             {
-              if ($dir eq $curr_processing) {
-                Dada::logMsg(2, DL, "Received ".$n_cand_files." cand files for ".$dir);
-              } else {
-                $curr_processing = $dir;
-                Dada::logMsg(1, DL, "Receiving cand files for ".$dir);
-              }
+              #if ($dir eq $curr_processing) {
+              #  Dada::logMsg(2, DL, "Received ".$n_cand_files." cand files for ".$dir);
+              #} else {
+              #  $curr_processing = $dir;
+              #  Dada::logMsg(1, DL, "Receiving cand files for ".$dir);
+              #}
 
-              ($result, $response) = processCandidates($dir);
+              #($result, $response) = processCandidates($dir);
+
+              chdir $cfg{"SERVER_RESULTS_DIR"};
+
               removeOldPngs($dir, "cands", "1024x768");
               removeOldPngs($dir, "dm_vs_time", "700x240");
             }
@@ -240,19 +241,19 @@ if (index($cfg{"SERVER_ALIASES"}, $ENV{'HOSTNAME'}) < 0 )
       } 
     }
 
+    $now = time;
+
     # If we have been asked to exit, dont sleep
-    $counter = 5;
-    while ((!$quit_daemon) && ($counter > 0)) {
-    sleep(1);
-    $counter--;
+    while ((!$quit_daemon) && ($now < $curr_time + 5))
+    {
+      sleep(1);
+      $now = time;
     }
   }
 
   # Rejoin our daemon control thread
   $control_thread->join();
 
-  # $coincidencer_thread->join();
-                                                                                
   Dada::logMsg(0, DL, "STOPPING SCRIPT");
 
   exit(0);
@@ -263,249 +264,6 @@ if (index($cfg{"SERVER_ALIASES"}, $ENV{'HOSTNAME'}) < 0 )
 # Functions
 #
 
-sub processCandidatesNew($)
-{
-  (my $obs) = @_;
-
-  my $cmd = "";
-  my $result = "";
-  my $response = "";
-
-  my $cands_record = $cfg{"SERVER_RESULTS_DIR"}."/".$obs."/all_candidates.dat";
-  my @files = ();
-  my $file = "";
-  my $n_processed = 0;
-
-  # for the given obs, a list of the candiate files to be parsed beams 
-  $cmd = "find ".$cfg{"SERVER_RESULTS_DIR"}."/".$obs." -mindepth 1 -maxdepth 1 -type f -name '2*_all.cand' | sort";
-  Dada::logMsg(2, DL, "processCandidates: ".$cmd);
-  ($result, $response) = Dada::mySystem($cmd);
-  Dada::logMsg(3, DL, "processCandidates: ".$result." ".$response);
-
-  if ($result ne "ok")
-  {
-    Dada::logMsg(0, DL, "processCandidates: ".$cmd." failed: ".$response);
-    Dada::logMsgWarn($warn, "could not find candidate files");
-    return ("fail", "could not get candiate list");
-  }
-
-  # count the number of candidate files to each epoch
-  @files = split(/\n/, $response);
-  foreach $file ( @files )
-  {
-    # now append the .cands files to the accumulated total for this observation
-    if (-f $cands_record)
-    {
-      $cmd = "cat ".$file." >> ".$cands_record;
-    }
-    else
-    {
-      $cmd = "cp ".$file." ".$cands_record;
-    }
-    Dada::logMsg(2, DL, "processCandidates: ".$cmd);
-    ($result, $response) = Dada::mySystem($cmd);
-    Dada::logMsg(3, DL, "processCandidates: ".$result." ".$response);
-    if ($result ne "ok")
-    {
-      Dada::logMsg(0, DL, "processCandidates: ".$cmd." failed: ".$response);
-      Dada::logMsgWarn($warn, "could not append output to record");
-      return ("fail", "could not append output to record");
-    }
-
-    # delete the intermin candidates file
-    unlink $file;
-
-    $n_processed++;
-  }
-
-  if ($n_processed > 0)
-  {
-    # generate 1024x768 large plot and candidate XML list
-    $cmd = $cfg{"SCRIPTS_DIR"}."/trans_gen_overview.py -cands_file ".$obs."/all_candidates.dat -snr_cut 6.5 -filter_cut 11 -cand_list_xml > ".$obs."/cand_list.xml";
-    Dada::logMsg(2, DL, "processCandidates: ".$cmd);
-    ($result, $response) = Dada::mySystem($cmd);
-    Dada::logMsg(3, DL, "processCandidates: ".$result." ".$response);
-    if ($result ne "ok")
-    {
-      Dada::logMsg(0, DL, "processCandidates: ".$cmd." failed: ".$response);
-    }
-
-    my $curr_time = Dada::getCurrentDadaTime();
-    $cmd = "mv overview_1024x768.tmp.png ".$obs."/".$curr_time.".cands_1024x768.png";
-    Dada::logMsg(2, DL, "processCandidates: ".$cmd);
-    ($result, $response) = Dada::mySystem($cmd);
-    Dada::logMsg(3, DL, "processCandidates: ".$result." ".$response);
-    if ($result ne "ok")
-    {
-      Dada::logMsg(0, DL, "processCandidates: ".$cmd." failed: ".$response);
-    }
-
-    # generate 700x 240 small plot
-    $cmd = $cfg{"SCRIPTS_DIR"}."/trans_gen_overview.py -cands_file ".$obs."/all_candidates.dat -snr_cut 7.0 -filter_cut 11 -just_time_dm -resolution 700x240";
-    Dada::logMsg(2, DL, "processCandidates: ".$cmd);
-    ($result, $response) = Dada::mySystem($cmd);
-    Dada::logMsg(3, DL, "processCandidates: ".$result." ".$response);
-    if ($result ne "ok")
-    {
-      Dada::logMsg(0, DL, "processCandidates: ".$cmd." failed: ".$response);
-    }
-
-    $curr_time = Dada::getCurrentDadaTime();
-    $cmd = "mv overview_700x240.tmp.png ".$obs."/".$curr_time.".dm_vs_time_700x240.png";
-    Dada::logMsg(2, DL, "processCandidates: ".$cmd);
-    ($result, $response) = Dada::mySystem($cmd);
-    Dada::logMsg(3, DL, "processCandidates: ".$result." ".$response);
-    if ($result ne "ok")
-    {
-      Dada::logMsg(0, DL, "processCandidates: ".$cmd." failed: ".$response);
-    }
-  }
-}
-
-sub processCandidates($)
-{
-  (my $obs) = @_;
-
-  my $cmd = "";
-  my $result = "";
-  my $response = "";
-
-  my $beam = "";
-  my $file = "";
-  my @files = ();
-  my %cands = ();
-  my @bits = ();
-
-  my $file_prefix = "";
-  my $junk = "";
-  my $cands_record = $cfg{"SERVER_RESULTS_DIR"}."/".$obs."/all_candidates.dat";
-  my $output_file = "";
-  my $n_processed = 0;
-
-  # for the given obs, build a list of the candiate beams 
-  $cmd = "find ".$cfg{"SERVER_RESULTS_DIR"}."/".$obs." -mindepth 2 -maxdepth 2 -type f -name '2*_??.cand'";
-  Dada::logMsg(2, DL, "processCandidates: ".$cmd);
-  ($result, $response) = Dada::mySystem($cmd);
-  Dada::logMsg(3, DL, "processCandidates: ".$result." ".$response);
-  
-  if ($result ne "ok")
-  {
-    Dada::logMsg(0, DL, "processCandidates: ".$cmd." failed: ".$response);
-    Dada::logMsgWarn($warn, "could not find candidate files");
-    return ("fail", "could not get candiate list");
-  }
- 
-  # count the number of candidate files to each epoch
-  @files = split(/\n/, $response);
-  foreach $file ( @files )
-  {
-    @bits = split(/\//, $file);
-    
-    $beam = $bits[$#bits - 1];
-    $file = $bits[$#bits - 0];
-    ($file_prefix, $junk) = split(/_/, $file, 2); 
-
-    if (! exists($cands{$file_prefix}))
-    {
-      $cands{$file_prefix} = 0;
-    }
-    $cands{$file_prefix} += 1;
-  }
-
-  # now do some plotting
-  chdir $cfg{"SERVER_RESULTS_DIR"}."/".$obs;
-
-  @files = sort keys %cands;
-  foreach $file ( @files )
-  {
-    # TODO better logic 
-    if (($cands{$file} == $cfg{"NUM_PWC"}) || ($#files > 0))
-    {
-      $cmd = "coincidencer ./??/".$file."_??.cand";
-      Dada::logMsg(2, DL, "processCandidates: ".$cmd);
-      ($result, $response) = Dada::mySystem($cmd);
-      Dada::logMsg(3, DL, "processCandidates: ".$result." ".$response);
-      if ($result ne "ok")
-      {
-        Dada::logMsg(0, DL, "processCandidates: ".$cmd." failed: ".$response);
-        Dada::logMsgWarn($warn, "coincidencer failed to process candidates");
-        return ("fail", "could not process candidates");
-      }
-
-      # remove beam candidate files
-      $cmd = "rm -f ./??/".$file."_??.cand";
-      Dada::logMsg(2, DL, "processCandidates: ".$cmd);
-      ($result, $response) = Dada::mySystem($cmd);
-      Dada::logMsg(3, DL, "processCandidates: ".$result." ".$response);
-      if ($result ne "ok")
-      {
-        Dada::logMsg(0, DL, "processCandidates: ".$cmd." failed: ".$response);
-        Dada::logMsgWarn($warn, "could not removed processed candidates");
-        return ("fail", "could not remove processed candidates");
-      }
-      
-      $output_file = $file."_all.cand";
-
-      # now append the .cands files to the accumulated total for this observation
-      if (-f $cands_record)
-      {
-        $cmd = "cat ".$output_file." >> ".$cands_record;
-      }
-      else
-      {
-        $cmd = "cp ".$output_file." ".$cands_record;
-      }
-      Dada::logMsg(2, DL, "processCandidates: ".$cmd);
-      ($result, $response) = Dada::mySystem($cmd);
-      Dada::logMsg(3, DL, "processCandidates: ".$result." ".$response);
-      if ($result ne "ok")
-      {
-        Dada::logMsg(0, DL, "processCandidates: ".$cmd." failed: ".$response);
-        Dada::logMsgWarn($warn, "could not append output to record");
-        return ("fail", "could not append output to record");
-      }
-
-      # delete the intermin candidates file
-      unlink $output_file;
-
-      $n_processed++;
-    }
-    else
-    {
-      Dada::logMsg(2, DL, "processCandidates: skipping ".$obs."/??/".$file." as only ".$cands{$file}." candidates present");
-    }
-  }
- 
-  if ($n_processed > 0)
-  {
-    # generate 1024x768 large plot and candidate XML list
-    $cmd = $cfg{"SCRIPTS_DIR"}."/trans_gen_overview.py -snr_cut 6.5 -filter_cut 11 -cand_list_xml > cand_list.xml";
-    Dada::logMsg(2, DL, "processCandidates: ".$cmd);
-    ($result, $response) = Dada::mySystem($cmd);
-    Dada::logMsg(3, DL, "processCandidates: ".$result." ".$response);
-
-    my $curr_time = Dada::getCurrentDadaTime();
-    $cmd = "mv overview_1024x768.tmp.png ".$curr_time.".cands_1024x768.png";
-    Dada::logMsg(2, DL, "processCandidates: ".$cmd);
-    ($result, $response) = Dada::mySystem($cmd);
-    Dada::logMsg(3, DL, "processCandidates: ".$result." ".$response);
-
-    # generate 700x 240 small plot
-    $cmd = $cfg{"SCRIPTS_DIR"}."/trans_gen_overview.py -snr_cut 7.0 -filter_cut 11 -just_time_dm -resolution 700x240";
-    Dada::logMsg(2, DL, "processCandidates: ".$cmd);
-    ($result, $response) = Dada::mySystem($cmd);
-    Dada::logMsg(3, DL, "processCandidates: ".$result." ".$response);
-
-    $curr_time = Dada::getCurrentDadaTime();
-    $cmd = "mv overview_700x240.tmp.png ".$curr_time.".dm_vs_time_700x240.png";
-    Dada::logMsg(2, DL, "processCandidates: ".$cmd);
-    ($result, $response) = Dada::mySystem($cmd);
-    Dada::logMsg(3, DL, "processCandidates: ".$result." ".$response);
-
-  }
-
-  chdir $cfg{"SERVER_RESULTS_DIR"};
-}
 
 # Handle INT AND TERM signals
 sub sigHandle($) {
@@ -536,12 +294,6 @@ sub controlThread($)
 
   my $result = "";
   my $response = "";
-
-  Dada::logMsg(0, DL, "controlThread: killProcess(^coincidencer)");
-  ($result, $response) = Dada::killProcess("^coincidencer");
-  Dada::logMsg(0, DL, "controlThread: ".$result." ".$response);
-
-  
 
   if (-f $pid_file)
   {
@@ -920,53 +672,6 @@ sub markObsState($$$)
   } else {
     Dada::logMsgWarn($warn, "markObsState: expected file missing: ".$file);
   }
-
-  # touch a beam.finished in all the client beam directories
-  # $cmd = "find ".$archives_dir."/".$o." -mindepth 1 -maxdepth 1 -type l -name '??' -printf '\%f\n'";
-  # Dada::logMsg(2, DL, "markObsState: ".$cmd);
-  # ($result, $response) = Dada::mySystem($cmd);
-  # Dada::logMsg(2, DL, "markObsState: ".$result." ".$response);
-  # if (($result ne "ok") || ($response eq ""))
-  # {
-  #   Dada::logMsgWarn($warn, "markObsState: could get beam list");
-  # } 
-  # else
-  # {
-  #   my @beams = split(/\n/, $response);
-  #   my $i = 0;
-  #   my $b = "";
-  #   for ($i=0; $i<=$#beams; $i++)
-  #   {
-  #     $b = $beams[$i]; 
-  #     $cmd = "touch ".$archives_dir."/".$o."/".$b."/beam.finished";
-  #     Dada::logMsg(2, DL, "markObsState: ".$cmd);
-  #    ($result, $response) = Dada::mySystem($cmd);
-  #     Dada::logMsg(2, DL, "markObsState: ".$result." ".$response);
-  #     if ($result ne "ok") 
-  #     {
-  #       Dada::logMsgWarn($warn, "markObsState: could touch ".$o."/".$b."/beam.finished");
-  #     }
-  #   }
-  # }
-
-}
-
-sub coincidencerThread()
-{
-
-  Dada::logMsg(1, DL, "coincidencerThread: starting");
-
-  my $cmd = "";
-  my $result = "";
-  my $response = "";
-
-  $cmd = "coincidencer -a ".$cfg{"SERVER_HOST"}." -p ".$cfg{"SERVER_COINCIDENCER_PORT"}.
-         " -n ".$cfg{"NUM_PWC"}." -v | server_bpsr_server_logger.pl -n coin";
-  Dada::logMsg(1, DL, "coincidencerThread: ".$cmd);
-  ($result, $response) = Dada::mySystem($cmd);
-  Dada::logMsg(1, DL, "coincidencerThread: ".$result." ".$response);
-
-  Dada::logMsg(1, DL, "coincidencerThread: exiting");
 }
 
 #
@@ -1028,24 +733,19 @@ sub fixFilHeaders($$) {
 #
 sub checkDeletedObs() 
 {
-  my $cmd = "";
-  my $result = "";
-  my $rval = "";
-  my $response = "";
   my @hosts = ("hipsr0", "hipsr1", "hipsr2", "hipsr3", "hipsr4", "hipsr5", "hipsr6", "hipsr7");
-  my $o = "";
-  my $host = "";
+  my ($cmd, $result, $response, $rval);
+  my ($o, $host, $i, $j, $pid, $nbeams, $swin_to_swin, $on_tape_swin);
+  my ($obs_utc_time, $curr_utc_time);
+  my $month_in_secs = 30 * 24 * 60 * 60;
   my $user = "bpsr";
-  my $j = 0;
-  my $i = 0;
   my @observations = ();
   my $n_moved = 0;
   my $max_moved = 5;
-
   Dada::logMsg(2, DL, "checkDeletedObs()");
 
-  # Find all observations marked as obs.deleted and > 14*24 hours since being modified 
-  $cmd = "find ".$cfg{"SERVER_RESULTS_DIR"}." -mindepth 2 -maxdepth 2 -name 'obs.deleted' -mtime +14 -printf '\%h\\n' | awk -F/ '{print \$NF}' | sort";
+  # Find all observations marked as obs.deleted and > 1 hour since being modified
+  $cmd = "find ".$cfg{"SERVER_RESULTS_DIR"}." -mindepth 2 -maxdepth 2 -name 'obs.deleted' -mmin +60 -printf '\%h\\n' | awk -F/ '{print \$NF}' | sort";
   Dada::logMsg(2, DL, "checkDeletedObs: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(3, DL, "checkDeletedObs: ".$result." ".$response);
@@ -1062,8 +762,16 @@ sub checkDeletedObs()
 
   for ($i=0; (($i<=$#observations) && (!$quit_daemon)); $i++) 
   {
-
     $o = $observations[$i];
+
+    $obs_utc_time  = Dada::getUnixTimeUTC($o);
+    $curr_utc_time = Dada::getUnixTimeUTC(Dada::printTime(time, "utc"));
+
+    if (($obs_utc_time + $month_in_secs) > $curr_utc_time)
+    {
+      Dada::logMsg(2, DL, "checkDeletedObs: obs is less than 1 month old: ".$o);
+      next;
+    }
 
     # check that the source directory exists
     if (! -d $cfg{"SERVER_RESULTS_DIR"}."/".$o)
@@ -1071,6 +779,30 @@ sub checkDeletedObs()
       Dada::logMsgWarn($warn, "checkDeletedObs: ".$o." did not exist in results dir");
       next;
     }
+
+    # If P630 data, check tape flags exist
+    $cmd = "grep ^PID ".$cfg{"SERVER_RESULTS_DIR"}."/".$o."/obs.info | awk '{print \$2}'";
+    Dada::logMsg(2, DL, "checkDeletedObs: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(2, DL, "checkDeletedObs: ".$result." ".$response);
+    if (($result ne "ok") || ($response eq ""))
+    {
+      Dada::logMsg(2, DL, "checkDeletedObs: could not determine PID for ".$o);
+      next;
+    }
+    $pid = $response;
+
+    # count the number of beams
+    $cmd = "find ".$cfg{"SERVER_RESULTS_DIR"}."/".$o." -mindepth 1 -maxdepth 1 -type d -name '??' | wc -l";
+    Dada::logMsg(2, DL, "checkDeletedObs: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(2, DL, "checkDeletedObs: ".$result." ".$response);
+    if (($result ne "ok") || ($response eq ""))
+    {
+      Dada::logMsg(2, DL, "checkDeletedObs: could not counter number of beams for ".$o);
+      next;
+    }
+    $nbeams = $response;
 
     for ($j=0; $j<=$#hosts; $j++)
     {
