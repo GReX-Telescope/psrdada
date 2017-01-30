@@ -16,6 +16,7 @@ use IO::Socket;     # Standard perl socket library
 use IO::Select;     # Allows select polling on a socket
 use Net::hostent;
 use File::Basename;
+use Math::Trig;
 use Bpsr;           # Bpsr Module for configuration options
 use strict;         # strict mode (like -Wall)
 use threads;
@@ -302,6 +303,7 @@ sub currentInfoThread($)
         $tmp_str .= "PROC_FILE:::".$cfg_file{"PROC_FILE"}.";;;";
         $tmp_str .= "REF_BEAM:::".$cfg_file{"REF_BEAM"}.";;;";
         $tmp_str .= "NBEAM:::".$cfg_file{"NBEAM"}.";;;";
+        $tmp_str .= "NPOL:::".$cfg_file{"NPOL"}.";;;";
         $tmp_str .= "INTERGRATED:::0;;;";
  
         Dada::logMsg(3, DL, $tmp_str); 
@@ -343,6 +345,8 @@ sub imageInfoThread($)
   my %dts_images = ();
   my %pvf_images = ();
   my %pdbp_images = ();
+  my %pdcp_images = ();
+  my %pdhg_images = ();
   my @keys = ();
   my $k = "";
   my $dirs_string = ();
@@ -363,6 +367,7 @@ sub imageInfoThread($)
   my %beams = ();
   my $cand_img = "";
   my $dm_vs_time_img = "";
+  my $junk;
 
   for ($i=0; $i<$cfg{"NUM_PWC"}; $i++)
   {
@@ -405,6 +410,8 @@ sub imageInfoThread($)
       %dts_images = ();
       %pvf_images = ();
       %pdbp_images = ();
+      %pdcp_images = ();
+      %pdhg_images = ();
 
       for ($i=0; $i<$cfg{"NUM_PWC"}; $i++)
       {
@@ -420,6 +427,8 @@ sub imageInfoThread($)
         $dts_images{$b} = $no_image;
         $pvf_images{$b} = $no_image;
         $pdbp_images{$b} = $no_image;
+        $pdcp_images{$b} = $no_image;
+        $pdhg_images{$b} = $no_image;
       }
 
 
@@ -450,6 +459,30 @@ sub imageInfoThread($)
         $pdbp_images{$img_beam} = $images[$i];
       }
 
+      # lookup the Pre Decimation Cross Pol images
+      $cmd = "find ".$results_dir."/stats -ignore_readdir_race -name '*_112x84_cross.png' -printf '\%f\n' | sort";
+      $img_string = `$cmd`;
+      @images = split(/\n/, $img_string);
+
+      for ($i=0; $i<=$#images; $i++)
+      {
+        chomp $images[$i];
+        ($img_time, $img_beam, $img_res, $junk) = split(/_/, $images[$i], 4);
+        $pdcp_images{$img_beam} = $images[$i];
+      }
+
+      # lookup the Histogram images
+      $cmd = "find ".$results_dir."/stats -ignore_readdir_race -name '*_112x84_hist.png' -printf '\%f\n' | sort";
+      $img_string = `$cmd`;
+      @images = split(/\n/, $img_string);
+
+      for ($i=0; $i<=$#images; $i++)
+      {
+        chomp $images[$i];
+        ($img_time, $img_beam, $img_res, $junk) = split(/_/, $images[$i], 4);
+        $pdhg_images{$img_beam} = $images[$i];
+      }
+
       for  ($i=0; $i<$cfg{"NUM_PWC"}; $i++)
       {
         $b = $beams{$i};
@@ -470,6 +503,8 @@ sub imageInfoThread($)
       {
         $xml .= "<beam name='".$b."'>";
         $xml .= "<img type='pdbp' width='112' height='84'>stats/".$pdbp_images{$b}."</img>";
+        $xml .= "<img type='pdcp' width='112' height='84'>stats/".$pdcp_images{$b}."</img>";
+        $xml .= "<img type='pdhg' width='112' height='84'>stats/".$pdhg_images{$b}."</img>";
         $xml .= "</beam>\n";
       }
 
@@ -521,44 +556,22 @@ sub tapeInfoThread() {
   my $sleep_counter = 0;
   my $secondary_freq = 6;
   my $secondary_counter = 0;
-  my $tmp_str = "";
-  my $cmd = "";
-  my $result = "";
-  my $response = "";
 
   my $control_dir = $cfg{"SERVER_CONTROL_DIR"};
-  my $parkes_file = $control_dir."/bpsr.parkes.state";
   my $swin_file   = $control_dir."/bpsr.swin.state";
   my $xfer_file   = $control_dir."/bpsr.xfer.state";
 
+  my ($xml, $cmd, $result, $response, $tmp_str, $key, $val);
+  my ($swin_tape, $swin_percent, $swin_time_left, $swin_pid, $num_swin, $swin_state);
+
   # Tape archiving
-  my @parkes_db = split(/:/, $cfg{"PARKES_DB_DIR"});
   my @swin_db = split(/:/, $cfg{"SWIN_DB_DIR"});
-  my @parkes_files_db = ();
   my @swin_files_db = ();
-  my $parkes_tape = "";
-  my $parkes_percent = 0;
-  my $parkes_time_left = 0;
-  my $swin_tape = "";
-  my $swin_percent = 0;
-  my $swin_time_left = 0;
 
   my $i = 0;
   my $j = 0;
   my @arr = ();
   my @arr2 = ();
-
-  # Buffering areas
-  my @p_users = ();
-  my @p_hosts = ();
-  my @p_paths = ();
-  my %parkes = ();
-  for ($i=0; $i<$cfg{"NUM_PARKES_DIRS"}; $i++) {
-    @arr = split(/:/, $cfg{"PARKES_DIR_".$i});
-    $p_users[$i] = $arr[0]; 
-    $p_hosts[$i] = $arr[1]; 
-    $p_paths[$i] = $arr[2]; 
-  }
 
   my @s_users = ();
   my @s_hosts = ();
@@ -571,31 +584,28 @@ sub tapeInfoThread() {
     $s_paths[$i] = $arr[2];
   }
   
-  my $parkes_state = "";
-  my $swin_state = "";
   my $xfer_state = "";
-  my $parkes_pid = "";
-  my $swin_pid = "";
   my $xfer_pid = "";
-  my $num_parkes = 0;
-  my $num_swin = 0;
-  my $want_swin = 0;
-  my $want_parkes = 0;
 
   my $ready_to_send = 0;
   my @obs_fin = ();
+  my %processing_count = ();
+  my %processing_size = ();
   my %finished_count = ();
   my %finished_size = ();
   my %transferred_count = ();
   my %transferred_size = ();
-  my %beam_finished = ();
-  my $beams_finished = "";      # number of beams finished but not transferred
-  my %on_raid = ();
-  my $beams_on_raid = 0;       # number transferred to raid but not sent to swin yet
-  my $beams_archived = "";       # number transferred to raid but not sent to swin yet
+  
+  my $beams_finished = "";
+  #my $beams_archived = "";
+  my $beams_uploaded = "";
+  my $beams_to_swin = "";
+  my $beams_to_atnf = "";
   my $result = "";
   my @bits = ();
   my @keys = ();
+  my @keys_finished = ();
+  my ($key, $sum);
   my $obs = "";
   my $pid = "";
   my $cnt = 0;
@@ -616,15 +626,9 @@ sub tapeInfoThread() {
 
       $sleep_counter = $sleep_time;
 
-      # determine the PID's of the current transfer manager, parkes tape and swin tapes
+      # determine the PID's of the current transfer manager and swin tapes
       $xfer_pid   = getDaemonPID($cfg{"SERVER_HOST"}, $cfg{"SERVER_XFER_PID_PORT"});
-      $parkes_pid = getDaemonPID($cfg{"SERVER_HOST"}, $cfg{"SERVER_PARKESTAPE_PID_PORT"});
       $swin_pid   = getDaemonPID($cfg{"SERVER_HOST"}, $cfg{"SERVER_SWINTAPE_PID_PORT"});
-
-      open FH, "<".$parkes_file;
-      read FH, $parkes_state, 4096;
-      close FH;
-      chomp $parkes_state;
 
       open FH, "<".$swin_file;
       read FH, $swin_state, 4096;
@@ -642,32 +646,6 @@ sub tapeInfoThread() {
       } else {
         $secondary_counter = $secondary_freq;
 
-        # Get information from tapes.db
-        $cmd = "ssh -x -l ".$parkes_db[0]." ".$parkes_db[1]." 'cat ".$parkes_db[2]."/tapes.".$parkes_pid.".db' | awk '{print \$1,\$2,\$3,\$6}'";
-        Dada::logMsg(2, DL, "tapeInfoThread: ".$cmd);
-        
-        $tmp_str = `$cmd`;
-        chomp $tmp_str;
-        @parkes_files_db = split(/\n/,$tmp_str);
-
-        $cmd = "ssh -x -l ".$swin_db[0]." ".$swin_db[1]." 'cat ".$swin_db[2]."/tapes.".$swin_pid.".db' | awk '{print \$1,\$2,\$3,\$6}'";
-        Dada::logMsg(2, DL, "tapeInfoThread: ".$cmd);
-        $tmp_str = `$cmd`;
-        chomp $tmp_str;
-        @swin_files_db = split(/\n/,$tmp_str);
-
-        $parkes_tape = "none";
-        $parkes_percent = 0;
-        $parkes_time_left = 0;
-        for ($i=0; (($parkes_tape eq "none") && ($i<=$#parkes_files_db)); $i++) {
-          @arr = split(/ /,$parkes_files_db[$i]);
-          if ($arr[3] eq "0") {
-            $parkes_tape = $arr[0];
-            $parkes_percent = sprintf("%5.2f",(int($arr[2]) / int($arr[1]))*100);
-            $parkes_time_left = sprintf("%5.1f",(((int($arr[1]) - int($arr[2])) * 1024.0) / (40.0 * 60.0)));
-          }
-        }
-
         $swin_tape = "none";
         $swin_percent = 0;
         $swin_time_left = 0;
@@ -680,19 +658,22 @@ sub tapeInfoThread() {
           }
         }
 
-        Dada::logMsg(2, DL, "tapeInfoThread: percents parkes=".$parkes_percent."% swin=".$swin_percent."%");
-        Dada::logMsg(2, DL, "tapeInfoThread: names parkes=".$parkes_tape." swin=".$swin_tape);
+        Dada::logMsg(2, DL, "tapeInfoThread: percent swin=".$swin_percent."%");
+        Dada::logMsg(2, DL, "tapeInfoThread: names swin=".$swin_tape);
 
+        %processing_count = ();
+        %processing_size = ();
         %finished_count = ();
         %finished_size = ();
         %transferred_count = ();
         %transferred_size = ();
 
-        for ($i=0; (($i<=8) && (!$quit_daemon)); $i++)
+        for ($i=0; (($i<8) && (!$quit_daemon)); $i++)
         {
           $cmd = "ssh -l bpsr hipsr".$i." \"web_results_helper.pl\"";
           Dada::logMsg(2, DL, "tapeInfoThread: ".$cmd);
           ($result, $tmp_str) = Dada::mySystem($cmd);
+          Dada::logMsg(3, DL, "tapeInfoThread: ".$result." ".$tmp_str);
           if ($result eq "ok")
           {
             @arr = split(/\n/, $tmp_str);
@@ -702,6 +683,19 @@ sub tapeInfoThread() {
               for ($k=1; $k<=$#bits; $k++)
               {
                 ($pid, $cnt, $sz) = split(/:/, $bits[$k]);
+                if ($bits[0] eq "PROCESSING")
+                {
+                  if (!exists($processing_count{$pid}))
+                  {
+                    $processing_count{$pid} = 0;
+                    $processing_size{$pid} = 0;
+                  }
+                  $processing_count{$pid} += $cnt;
+                  $processing_size{$pid} += $sz;
+                  Dada::logMsg(2, DL, "tapeInfoThread: \$processing_size{".$pid."} += ".$sz);;
+
+                }
+
                 if ($bits[0] eq "FINISHED")
                 { 
                   if (!exists($finished_count{$pid}))
@@ -711,6 +705,7 @@ sub tapeInfoThread() {
                   }
                   $finished_count{$pid} += $cnt;
                   $finished_size{$pid} += $sz;
+                  Dada::logMsg(2, DL, "tapeInfoThread: \$finished_size{".$pid."} += ".$sz);;
                 }
                 if ($bits[0] eq "TRANSFERRED")
                 { 
@@ -727,25 +722,52 @@ sub tapeInfoThread() {
           }
         }
 
-        $beams_finished = "<table>";
-        @keys = keys %finished_count;
-        for ($i=0; $i<=$#keys; $i++)
+        @keys = keys %processing_count;
+        @keys_finished = keys %finished_count;
+        foreach $key (@keys_finished)
         {
-          $beams_finished .= "<tr><td>".$keys[$i]."</td><td>".$finished_size{$keys[$i]}." GB</td></tr>";
+          Dada::logMsg(2, DL, "tapeInfoThread: testing if finished key [".$key."] is in processing keys");
+
+          if (!(grep( /^$key$/, @keys)))
+          {
+            Dada::logMsg(2, DL, "tapeInfoThread: it wasn't, adding: ".$key);
+            push @keys, $key;
+          }
+          else
+          {
+            Dada::logMsg(2, DL, "tapeInfoThread: it was, skipping: ".$key);
+          }
+        }
+
+        $beams_finished = "";
+        for $key ( @keys )
+        {
+          Dada::logMsg(2, DL, "tapeInfoThread: key=".$key);
+          $sum = 0;
+          if (exists($processing_size{$key}))
+          {
+            $sum += $processing_size{$key};
+          }
+          if (exists($finished_size{$key}))
+          {
+            $sum += $finished_size{$key};
+          }
+          $beams_finished .= $key."\t".sprintf("%0.1f", $sum)." GB\n";
         }
         if ($#keys == -1)
         {
-          $beams_finished = "<tr><td>none</td></tr>";
+          $beams_finished = "none";
         }
-        $beams_finished .= "</table>";
 
         Dada::logMsg(2, DL, "tapeInfoThread: beams_finished=".$beams_finished);
 
-        %on_raid = ();
-        $beams_on_raid = "<table>";
-
         # the number of beams waiting on raid to be sent to swin [for all projID's]
         $handle = Dada::connectToMachine($cfg{"RAID_HOST"}, $cfg{"RAID_WEB_MONITOR_PORT"}, 2);
+
+        $beams_to_swin = "pipeline off";
+        $beams_to_atnf = "pipeline off";
+        #$beams_archived = "none";
+        $beams_uploaded = "pipeline off";
 
         # ensure our file handle is valid
         if ($handle) 
@@ -753,81 +775,60 @@ sub tapeInfoThread() {
           ($result, $response) = Dada::sendTelnetCommand ($handle, "swin_send_info");
           if ($result eq "ok")
           {
-            @arr = split(/\n/, $response);
-            for ($j=0; $j<=$#arr; $j++)
-            { 
-              @bits = split(/ /, $arr[$j]);
-              if (!exists($on_raid{$bits[0]}))
-              {
-                $on_raid{$bits[0]} = 0;
-              }
-              $on_raid{$bits[0]} += $bits[1];
-            }
+            $beams_to_swin = formatRAIDReport($response);
           }
+        
+          ($result, $response) = Dada::sendTelnetCommand ($handle, "atnf_send_info");
+          if ($result eq "ok")
+          {
+            $beams_to_atnf = formatRAIDReport($response);
+          }
+
+          ($result, $response) = Dada::sendTelnetCommand ($handle, "upload_info");
+          if ($result eq "ok")
+          {
+            $beams_uploaded = formatRAIDReport($response);
+          }
+
+          #($result, $response) = Dada::sendTelnetCommand ($handle, "archived_info");
+          #if ($result eq "ok")
+          #{
+          #  $beams_archived = formatRAIDReport($response);
+          #}
+
           $handle->close();
-        
-          @keys = keys %on_raid;
-          for ($i=0; $i<=$#keys; $i++)
-          {
-            if ($on_raid{$keys[$i]} > 1000000)
-            {
-              $beams_on_raid .= "<tr><td>".$keys[$i]."</td><td>".sprintf("%0.1f", ($on_raid{$keys[$i]} / 1073741824))." GB</td></tr>";
-            }
-          }
-          if ($beams_on_raid eq "<table>")
-          {
-            $beams_on_raid = "<tr><td>none</td></tr>";
-          }
-        }
-        else
-        {
-          $beams_on_raid = "<tr><td>Pipeline Off</td></tr>";
         }
         
-        $beams_on_raid .= "</table>";
-        Dada::logMsg(2, DL, "tapeInfoThread: obs_fin=".($#obs_fin+1).", beams_on_raid=".$beams_on_raid);
-
-        $num_parkes = 0;
-        $num_swin = 0;
-        # number of beams in staging area for PARKES_DIRS
-        for ($i=0; $i<=$#p_users; $i++) {
-          $cmd = "ssh -x -l ".$p_users[$i]." ".$p_hosts[$i]." 'cd ".$p_paths[$i]."/archive/".$parkes_pid."; find . -mindepth 2 -maxdepth 2 -type l -printf \"\%f\\n\"' | wc -l";
-          $tmp_str = `$cmd`;
-          chomp $tmp_str;
-          $num_parkes += int($tmp_str);
-        } 
-
-        Dada::logMsg(2, DL, "tapeInfoThread: num_parkes = ".$num_parkes);
-
         # number of beams in staging area for SWIN_DIRS
         for ($i=0; $i<=$#s_users; $i++) {
           $cmd = "ssh -x -l ".$s_users[$i]." ".$s_hosts[$i]." 'cd ".$s_paths[$i]."/archive/".$swin_pid."; find . -mindepth 2 -maxdepth 2 -type d -printf \"\%f\\n\"' | wc -l";
+          Dada::logMsg(2, DL, "tapeInfoThread: getting number of beams in staging_area for SWIN");
           $tmp_str = `$cmd`;
           chomp $tmp_str;
           $num_swin += int($tmp_str);
-        } 
+        }
         Dada::logMsg(2, DL, "tapeInfoThread: num_swin= ".$num_swin);
       }
 
-      $tmp_str = "";
-      $tmp_str .= "PARKES_STATE:::".$parkes_state.";;;";
-      $tmp_str .= "PARKES_TAPE:::".$parkes_tape.";;;";
-      $tmp_str .= "PARKES_PERCENT:::".$parkes_percent.";;;";
-      $tmp_str .= "PARKES_TIME_LEFT:::".$parkes_time_left.";;;";
-      $tmp_str .= "PARKES_NUM:::".$num_parkes.";;;";
-      $tmp_str .= "PARKES_PID:::".$parkes_pid.";;;";
-      $tmp_str .= "SWIN_STATE:::".$swin_state.";;;";
-      $tmp_str .= "SWIN_TAPE:::".$swin_tape.";;;";
-      $tmp_str .= "SWIN_PERCENT:::".$swin_percent.";;;";
-      $tmp_str .= "SWIN_TIME_LEFT:::".$swin_time_left.";;;";
-      $tmp_str .= "SWIN_NUM:::".$num_swin.";;;";
-      $tmp_str .= "SWIN_PID:::".$swin_pid.";;;";
-      $tmp_str .= "XFER:::".$xfer_state.";;;";
-      $tmp_str .= "XFER_FINISHED:::".$beams_finished.";;;";
-      $tmp_str .= "XFER_ON_RAID:::".$beams_on_raid.";;;";
-      $tmp_str .= "XFER_PID:::".$xfer_pid.";;;";
+      # $xml = "<?xml version='1.0' encoding='ISO-8859-1'?>";
+      $xml = "<tape_info>";
 
-      $tape_info_string = $tmp_str;
+      $xml .= "<xfer_finished>".$beams_finished."</xfer_finished>";
+      $xml .= "<xfer_uploaded>".$beams_uploaded."</xfer_uploaded>";
+      $xml .= "<xfer_to_swin>".$beams_to_swin."</xfer_to_swin>";
+      $xml .= "<xfer_to_atnf>".$beams_to_atnf."</xfer_to_atnf>";
+      #$xml .= "<xfer_archived>".$beams_archived."</xfer_archived>";
+
+      $xml .= "<swin_state>".$swin_state."</swin_state>";
+      $xml .= "<swin_tape>".$swin_tape."</swin_tape>";
+      $xml .= "<swin_percent>".$swin_percent."</swin_percent>";
+      $xml .= "<swin_time_left>".$swin_time_left."</swin_time_left>";
+      $xml .= "<swin_num>".$num_swin."</swin_num>";
+      $xml .= "<swin_pid>".$swin_pid."</swin_pid>";
+
+      $xml .= "</tape_info>";
+
+      $tape_info_string = $xml;
 
       Dada::logMsg(2, DL, "tapeInfoThread: ".$tape_info_string);
     }
@@ -1040,6 +1041,7 @@ sub beamInfoThread()
 
   my %rajs = ();
   my %decjs = ();
+  my ($raj_deg, $decj_deg, $gl, $gb, $dm);
   my @lines = ();
   my $line = "";
   my @parts = ();
@@ -1110,6 +1112,10 @@ sub beamInfoThread()
         # convert RA, DEC from radians to degree string
         foreach $beam (sort keys %rajs)
         {
+          # determine the GL and GB also
+          $raj_deg = ($rajs{$beam} * 180) / pi;
+          $decj_deg = ($decjs{$beam} * 180) / pi;
+
           # convert the RA
           Dada::logMsg(3, DL, "beamInfoThread: IN  rajs{".$beam."} = ".$rajs{$beam});
           ($result, $response) = Dada::convertRadiansToRA($rajs{$beam});
@@ -1131,12 +1137,27 @@ sub beamInfoThread()
             next;
           }
           $decjs{$beam} = $response;
-          $xml .= "<beam_info beam='".$beam."' raj='".$rajs{$beam}."' decj='".$decjs{$beam}."'>\n";
+
+          $cmd = "eq2gal.py ".$raj_deg." ".$decj_deg;
+          Dada::logMsg(3, DL, "beamInfoThread: ".$cmd);
+          ($result, $response) = Dada::mySystem($cmd);
+          Dada::logMsg(3, DL, "beamInfoThread: ".$result." ".$response);
+
+          my ($gl, $gb) = split(/ /, $response, 2);
+
+          # determine the DM for this GL and GB
+          $cmd = "cd \$HOME/opt/NE2001/runtime; ./NE2001 ".$gl." ".$gb." 100 -1 | grep ModelDM | awk '{print \$1}'";
+          Dada::logMsg(2, DL, "beamInfoThread: ".$cmd);
+          ($result, $dm) = Dada::mySystem($cmd);
+          Dada::logMsg(3, DL, "beamInfoThread: ".$result." ".$dm);
+
+          $xml .= "<beam_info beam='".$beam."' raj='".$rajs{$beam}."' decj='".$decjs{$beam}."' gl='".$gl."' gb='".$gb."' dm='".$dm."'>\n";
 
           # get a PSRCAT listing. FWHM = 14 arcmin = 0.233333 degrees, prefer 1/e rather than 1/2 which means 16.8 arcmin -> 0.28
           # $cmd = 'psrcat -c "JNAME DM RAJ DECJ S1400" -o short -nohead -nonumber -boundary "1 '.$rajs{$beam}.' '.$decjs{$beam}.' 0.28"';
-          # so we get absolutely all sources, use radius of 1
-          $cmd = 'psrcat -c "JNAME DM RAJ DECJ S1400" -o short -nohead -nonumber -boundary "1 '.$rajs{$beam}.' '.$decjs{$beam}.' 1"';
+
+          # so we get absolutely all sources, double radius (just diameter of beam)
+          $cmd = 'psrcat -all -c "JNAME DM RAJ DECJ S1400" -o short -nohead -nonumber -boundary "1 '.$rajs{$beam}.' '.$decjs{$beam}.' 0.28"';
           Dada::logMsg(2, DL, "beamInfoThread: ".$cmd);
           ($result, $response) = Dada::mySystem($cmd);
           Dada::logMsg(3, DL, "beamInfoThread: ".$result." ".$response);
@@ -1196,7 +1217,7 @@ sub getDaemonPID($$) {
 
   my ($machine, $port) = @_;
 
-  my $d_pid = "P630";
+  my $d_pid = "P858";
 
   my $response = "";
 
@@ -1222,3 +1243,29 @@ sub getDaemonPID($$) {
   return $d_pid;
 
 }
+
+sub formatRAIDReport($)
+{
+  my ($str) = @_;
+
+  my @lines = split(/\n/, $str);
+  my $html = "<table>";
+  $html = "";
+  my ($key, $val, $line);
+
+  foreach $line (@lines)
+  {
+    ($key, $val) = split(/ /,$line);
+    $html .= $key."\t".sprintf("%0.1f", $val/1073741824)." GB\n";
+  }
+
+  if ($html eq "")
+  {
+    $html .= "none";
+  }
+
+  #$html .= "</table>";
+
+  return $html;
+}
+
