@@ -25,8 +25,8 @@ $Dada::server_tape_controller::daemon_name = Dada::daemonBaseName($0);
 $Dada::server_tape_controller::pid_report_port = $cfg{"SERVER_SWINTAPE_PID_PORT"};
 $Dada::server_tape_controller::db_dir = $cfg{"SWIN_DB_DIR"};
 $Dada::server_tape_controller::dest_script = "server_bpsr_swin_tape_archiver.pl";
-$Dada::server_tape_controller::dest_host = "shrek201";
-$Dada::server_tape_controller::dest_user = "pulsar";
+$Dada::server_tape_controller::dest_host = "";
+$Dada::server_tape_controller::dest_user = "";
 
 # Autoflush STDOUT
 $| = 1;
