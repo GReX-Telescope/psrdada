@@ -13,9 +13,9 @@ use Time::Local;
 use Time::HiRes qw(usleep);
 use File::Basename;
 use POSIX qw(setsid);
-use POSIX ":sys_wait_h";
+#use POSIX ":sys_wait_h";
 use Math::Trig ':pi';
-use IPC::Cmd qw[can_run run run_forked];
+use IPC::Cmd qw[can_run run];
 use IPC::Open3;
 
 BEGIN {
@@ -1629,35 +1629,6 @@ sub nexusPipeLog($$$$$$$)
     close FH;
   }
 }
-
-sub mySystemPipedOld($$)
-{
-  my ($cmd, $coderef) = @_;
-
-  my ($binary, $rest) = split(/ /, $cmd, 2);
-  my $full_path = can_run($binary) or warn $binary." is not installed!";
-
-  my $hashref =  run_forked ($cmd, { timeout => 0,
-                                     stderr_handler => $coderef,
-                                     stdout_handler => $coderef,
-                                     discard_output => 1,
-                                     terminate_on_parent_sudden_death => 1 } );
-
-  my ($result, $response);
-  if ($$hashref{'exit_code'} == 0)
-  {
-    $result = "ok";
-    $response = "";
-  }
-  else
-  {
-    $result = "fail";
-    $response = $$hashref{'err_msg'};
-  }
-  return ($result, $response);
-}
-
-
 
 sub killProcess($;$$) {
 
