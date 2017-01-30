@@ -227,7 +227,7 @@ void createPlot (char* device, float * xvals, float * pol1, float * pol2,
   {
     cpgsvp(0.1,0.9,0.1,0.9);
     cpgswin((IBOB_BRAM_CHANNELS*2), 0, 0, (1.1*ymax));
-    cpglab("IBoB Channel", "Activated Bits", "Pre Bit-selected Bandpass");
+    cpglab("Channel", "Activated Bits", "Pre Bit-selected Bandpass");
   }
 
   // grey out the background
