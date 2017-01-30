@@ -497,7 +497,7 @@ def bramdumpRoachCross(dl, fpga, n_dumps=1):
 #
 def bramdiskRoach(dl, fpga, timestamp, roach_name):
 
-  Dada.logMsg(2, dl, "[" + roach_name + "] bramdiskRoach: dumping BRAM");
+  Dada.logMsg(2, dl, "[" + roach_name + "] bramdiskRoach: dumping BRAM")
 
   file_prefix = timestamp + "_" + roach_name
   fpga.write_int ('snapshot1_ctrl', 1)
@@ -577,13 +577,26 @@ def dumpRoach(dl, fpga, reg, unpack_type, n_dumps=1):
 
 def dumpADCRoach (dl, fpga, reg, n_dumps=1):
 
-  data = numpy.array(struct.unpack('>4096b', fpga.read(reg,1024*4,0)))
+  data = []
+
+  try:
+    data = numpy.array(struct.unpack('>4096b', fpga.read(reg,1024*4,0)))
+  except RuntimeError:
+    Dada.logMsg(-1, dl, "dumpADCRoach: failed to read register " + str(reg))
+    data = numpy.zeros (1024)
+    time.sleep (1)
 
   if (n_dumps <= 1):
     return data
 
   for i in range(n_dumps-1):
-    new = numpy.array(struct.unpack('>4096b', fpga.read(reg,1024*4,0)))
+    new = []
+    try:
+      new = numpy.array(struct.unpack('>4096b', fpga.read(reg,1024*4,0)))
+    except RuntimeError:
+      Dada.logMsg(-1, dl, "[" + roach_name + "] dumpADCRoach: failed to read register " + str(reg))
+      new = numpy.zeros (1024)
+      time.sleep (1)
     data = numpy.concatenate ((data, new), axis=0)
 
   return data
