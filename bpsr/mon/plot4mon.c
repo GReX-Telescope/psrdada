@@ -78,6 +78,11 @@ int main (int argc, char *argv[])
   /* reading the data and filling the y array with them */
   read_stream(ndata,inpfile0,&y_read[0],&totvaluesread);
   read_stream(ndata,inpfile1,&y_read1[0],&totvaluesread);
+  for (i=0; i<totvaluesread; i++)
+  {
+    if (isinf(y_read[i])) y_read[i] = 0;
+    if (isinf(y_read1[i])) y_read1[i] = 0;
+  }
 
   /*
   utc_file = basename(inpfile0); 
@@ -89,7 +94,7 @@ int main (int argc, char *argv[])
 */
 
   /* enter the loop on the plots to be produced with the data in inpfile1 */
-  while (plotnum <= work_flag) { 
+  while (plotnum <= work_flag) {
 
     // if time series scale x axis by tsamp
     if (strstr(inpfile1, "ts") && (plotnum==0)) 

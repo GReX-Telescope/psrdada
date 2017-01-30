@@ -14,6 +14,8 @@
 /***************************************************************************/
 
 #include "plot4mon.h"
+#include "math.h"
+#include "float.h"
 
 void plotdat (float* x, float* y, long nvalues, int dommm)
 {
@@ -55,6 +57,23 @@ int plot_stream_1D(float x[], float y[], float y1[],
   compute_extremes(x,endvalue,inivalue,&max_x,&min_x);
   compute_extremes(y,endvalue,inivalue,&max_y,&min_y);
   compute_extremes(y1,endvalue,inivalue,&max_y1,&min_y1);
+
+  char plot_y = 1;
+  char plot_y1 = 1;
+
+  if (isnan(min_y) || isnan(max_y) || (min_y == max_y))
+  {
+    min_y = FLT_MAX;
+    max_y = -FLT_MAX;
+    plot_y = 0;
+  }
+
+  if (isnan(min_y1) || isnan(max_y1) || (min_y1 == max_y1))
+  {
+    min_y1 = FLT_MAX;
+    max_y1 = -FLT_MAX;
+    plot_y1 = 0;
+  }
 
   // fix y range good for both y and y1
   if (max_y1 > max_y) max_y = max_y1;
@@ -110,11 +129,13 @@ int plot_stream_1D(float x[], float y[], float y1[],
 
   // plot pol0 
   cpgsci(2);
-  plotdat (x, y, endvalue, dommm);
-
+  if (plot_y)
+    plotdat (x, y, endvalue, dommm);
+    
   // plot pol1
   cpgsci(10);
-  plotdat (x, y1, endvalue, dommm);
+  if (plot_y1)
+    plotdat (x, y1, endvalue, dommm);
 
   /* Display a "red box" warning if data samples are zero */
 
@@ -139,8 +160,8 @@ int plot_stream_1D(float x[], float y[], float y1[],
 
   cpgsci(1);
   cpgend();
-  //printf(" Plotting completed \n");
 
   return 0;
 }
+
 
