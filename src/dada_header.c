@@ -80,7 +80,10 @@ int main (int argc, char **argv)
       return 0;
     }
 
-  log = multilog_open ("dada_header", 0);
+  char logname[64];
+  sprintf(logname, "dada_header-%x", dada_key);
+  log = multilog_open (logname, 0);
+
   multilog_add (log, stderr);
   hdu = dada_hdu_create (log);
 
@@ -96,16 +99,25 @@ int main (int argc, char **argv)
     return EXIT_FAILURE;
   }
 
-  if (!passive && dada_hdu_lock_read(hdu) < 0)
+  if (!passive)
   {
-    fprintf(stderr, "Could not lock Header Block for reading\n");
-    return EXIT_FAILURE;
+    if (verbose)
+      fprintf(stderr, "dada_hdu_lock_read()\n");
+    if (dada_hdu_lock_read(hdu) < 0)
+    {
+      fprintf(stderr, "Could not lock Header Block for reading\n");
+      return EXIT_FAILURE;
+    }
   }
-
-  if (passive && dada_hdu_open_view(hdu) < 0)
+  else
   {
-    fprintf(stderr, "Could not lock Header Block for viewing\n");
-    return EXIT_FAILURE;
+    if (verbose)
+      fprintf (stderr, "dada_hdu_open_view\n");
+    if (dada_hdu_open_view(hdu) < 0)
+    {
+      fprintf(stderr, "Could not lock Header Block for viewing\n");
+      return EXIT_FAILURE;
+    }
   }
 
 
@@ -119,12 +131,13 @@ int main (int argc, char **argv)
   header = ipcbuf_get_next_readable (hdu->header_block, &header_size);
   if (!header)
   {
-    fprintf(stderr,"Could not get next header\n");
-    return DADA_ERROR_FATAL;
+    fprintf(stderr, "Could not get next header\n");
+    dada_hdu_unlock_read (hdu);
+    dada_hdu_disconnect (hdu);
+    return EXIT_FAILURE;
   }
 
   header_size = ipcbuf_get_bufsz (hdu->header_block);
-
   if (verbose)
   {
     fprintf(stderr,"HEADER BEGIN\n");
@@ -139,12 +152,27 @@ int main (int argc, char **argv)
     fprintf(stderr,"HEADER END\n");
   }
 
-  if (!passive && dada_hdu_unlock_read (hdu) < 0)
-    return EXIT_FAILURE;
+  return 0;
+
+  if (!passive)
+  {
+    if (verbose)
+      fprintf (stderr, "dada_hdu_unlock_read()\n");
+    if (dada_hdu_unlock_read (hdu) < 0)
+    {
+      fprintf (stdout, "EXIT    UNLOCK_READ_FAILED\n");
+      return EXIT_FAILURE;
+    }
+  }
   
   if (dada_hdu_disconnect (hdu) < 0)
+  {
+    fprintf (stdout, "EXIT    HDU_DISCONNECT_FAILED\n");
     return EXIT_FAILURE;
+  }
 
-  return EXIT_SUCCESS;
+  if (verbose)
+    fprintf (stdout, "EXIT      CLEAN\n");
+  return (0);
 }
 
