@@ -67,7 +67,9 @@ void do_powerspec(float timeseries[], float powsp[],
   compute_extremes(powsp,endvalue,inivalue,&max_y,&min_y);
   
   if ( min_y == max_y ) { 
+#ifndef PLOT4MON_QUIET
     printf(" data range is 0.0, bypassing whitening \n");
+#endif
     } 
     else 
     {

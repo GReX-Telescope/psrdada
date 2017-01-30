@@ -17,6 +17,7 @@
 void do_mmm (float timeseries[], float mmm[], 
     long nvalues, long *totvalues4plot, float tsamp)
 {
+
   long reduction_factor = MMM_REDUCTION;
   long result_nvalues = nvalues / reduction_factor;
 
