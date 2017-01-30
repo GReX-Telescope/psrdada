@@ -15,6 +15,7 @@ use IO::Socket;     # Standard perl socket library
 use IO::Select;     
 use Net::hostent;
 use File::Basename;
+use Time::Local;
 use threads;        # Perl threads module
 use threads::shared; 
 use Dada;           # DADA Module for configuration options
@@ -43,6 +44,7 @@ use constant TERMINATOR         => "\r";
 # Global variable declarations
 #
 our $dl;
+our $cross_poln : shared;
 our $daemon_name;
 our %cfg : shared;
 our %roach : shared;
@@ -56,11 +58,13 @@ our $client_master_port;
 our $error;
 our $warn;
 our $pwcc_thread;
+our $recording_start : shared;
 
 #
 # global variable initialization
 #
 $dl = 1;
+$cross_poln = 1;
 $daemon_name = Dada::daemonBaseName($0);
 %cfg = Bpsr::getConfig();
 %roach = Bpsr::getROACHConfig();
@@ -74,6 +78,7 @@ $client_master_port = $cfg{"CLIENT_MASTER_PORT"};
 $warn = $cfg{"STATUS_DIR"}."/".$daemon_name.".warn";
 $error = $cfg{"STATUS_DIR"}."/".$daemon_name.".error";
 $pwcc_thread = 0;
+$recording_start = -1;
 
 
 #
@@ -169,10 +174,8 @@ $pwcc_thread = 0;
     Dada::logMsg(2, $dl, "site_cfg: ".$key." => ".$site_cfg{$key});
   }
 
-  my $localhost = Dada::getHostMachineName();
   my $pwcc_file = $config_dir."/bpsr_tcs.cfg";
   my $utc_start = "";
-
 
   # Create the initial bpsr_tcs.cfg file to launch dada_pwc_command
   ($result, $response) = generateConfigFile($cfg{"CONFIG_DIR"}."/bpsr_tcs.cfg", \%site_cfg);
@@ -270,88 +273,129 @@ $pwcc_thread = 0;
           # START command 
           if ($lckey eq "start") 
           {
-            Dada::logMsg(2, $dl, "Processing START command"); 
+            print $handle "ok".TERMINATOR;
+            Dada::logMsg(0, $dl, "TCS <- ok");
 
             # adjust the command names
             %tcs_cmds = fixTCSCommands(\%tcs_cmds);
   
-            # set levels of roaches and return hash of level values
-            ($result, %levels) = setRoachLevels();
-
-            # Set the number of active beams
-            %tcs_cmds = setActiveBeamsTCS(\%tcs_cmds, \%levels);
-
-            # Check that %tcs_cmds has all the required parameters in it
-            ($result, $response) = parseTCSCommands(\%tcs_cmds);
-
-            # Send response to TCS
-            if ($result ne "ok")
+            my $length;
+            if (exists($tcs_cmds{"OBS_VAL"}))
             {
-              Dada::logMsg(0, $dl, "TCS <- ".$result);
+              $length = int($tcs_cmds{"OBS_VAL"});
             }
             else
             {
-              Dada::logMsg(2, $dl, "TCS <- ".$result);
-            } 
-            print $handle $result.TERMINATOR;
+              $length = -1;
+            }
 
-            if ($result ne "ok") {
-
-              Dada::logMsg(0, $dl, "parseTCSCommands returned \"".$result.":".$response."\"");
-
-            } else {
-
-              Dada::logMsg(1, $dl, "TCS commands parsed ok");
-
-              # quit/kill the current daemon
-              quitPWCCommand();
-  
-              # Clear the status files
-              my $cmd = "rm -f ".$cfg{"STATUS_DIR"}."/*";
-              ($result, $response) = Dada::mySystem($cmd);
-              if ($result ne "ok") {
-                Dada::logMsgWarn($warn, "Could not delete status files: $response");
-              }
-
-              # Add the extra commands/config for each PWC
-              %tcs_cmds = addHostCommands(\%tcs_cmds, \%site_cfg);
-
-              # Create the tcs.cfg file to launch dada_pwc_command
-              Dada::logMsg(2, $dl, "main: generateConfigFile(".$cfg{"CONFIG_DIR"}."/bpsr_tcs.cfg)");
-              ($result, $response) = generateConfigFile($cfg{"CONFIG_DIR"}."/bpsr_tcs.cfg", \%tcs_cmds);
-              Dada::logMsg(2, $dl, "main: generateConfigFile() ".$result." ".$response);
-
-              # rejoin the pwcc command thread
-              $pwcc_thread->join();
-
-              # Now that we have a successful header. Launch dada_pwc_command in
-              $pwcc_thread = threads->new(\&pwcc_thread, $cfg{"CONFIG_DIR"}."/bpsr_tcs.cfg");
-
-              # Create the bpsr_tcs.spec file to launch dada_pwc_command
-              Dada::logMsg(2, $dl, "main: generateSpecificationFile(".$cfg{"CONFIG_DIR"}."/bpsr_tcs.spec)");
-              ($result, $response) = generateSpecificationFile($cfg{"CONFIG_DIR"}."/bpsr_tcs.spec", \%tcs_cmds);
-              Dada::logMsg(2, $dl, "main: generateSpecificationFile() ".$result." ".$response);
-  
-              # Issue the start command itself
-              Dada::logMsg(2, $dl, "main: start(".$cfg{"CONFIG_DIR"}."/bpsr_tcs.spec)");
-              ($result, $response) = start($cfg{"CONFIG_DIR"}."/bpsr_tcs.spec", \%tcs_cmds);
-              if ($result ne "ok") {
-                Dada::logMsgWarn($warn, "start() failed \"".$response."\"");
-              } else {
-                Dada::logMsg(2, $dl, "start() successful \"".$response."\"");
-
-                $utc_start = $response;
-
-                $current_state = "Recording";
-
-                $cmd = "start_utc ".$utc_start;
-                Dada::logMsg(1, $dl, "TCS <- ".$cmd);
-                print $handle $cmd.TERMINATOR;
-
-                %tcs_cmds = ();
+            # check if the PROC_FILE is the dspsr, mode is PSR and source is in catalogue
+            my $can_process = 1;
+            if (($tcs_cmds{"MODE"} eq "PSR") && ($tcs_cmds{"PROC_FILE"} eq "THEDSPSR"))
+            {
+              ($result, $response) = Dada::inCatalogue($tcs_cmds{"SOURCE"});
+              if ($result eq "fail")
+              {
+                Dada::logMsgWarn ($warn, "DSPSR cannot find source ".$tcs_cmds{"SOURCE"}." in catalogue, ignoring");
+                $can_process = 0;
+                $result = "ok";
+                $response = "source ".$tcs_cmds{"SOURCE"}." not in catalogue";
               }
             }
 
+            # ignore any short observation (< 20s) that is not a beam-o-vision
+            if (($length >= 0) && ($length < 20))
+            {
+              Dada::logMsgWarn ($warn, "Observation length less than 20s, ignoring");
+              $can_process = 0;
+            }
+
+            if ($can_process)
+            {
+              Dada::logMsg(2, $dl, "Processing START command"); 
+
+              # set levels of roaches and return hash of level values
+              ($result, %levels) = setRoachLevels($tcs_cmds{"ACC_LEN"});
+
+              # Set the number of active beams
+              %tcs_cmds = setActiveBeamsTCS(\%tcs_cmds, \%levels);
+
+              # Check that %tcs_cmds has all the required parameters in it
+              ($result, $response) = parseTCSCommands(\%tcs_cmds);
+
+              if ($result ne "ok") {
+
+                Dada::logMsg(0, $dl, "parseTCSCommands returned \"".$result.":".$response."\"");
+
+              } else {
+
+                Dada::logMsg(1, $dl, "TCS commands parsed ok");
+
+                # quit/kill the current daemon
+                quitPWCCommand();
+  
+                # Clear the status files
+                my $cmd = "rm -f ".$cfg{"STATUS_DIR"}."/*";
+                ($result, $response) = Dada::mySystem($cmd);
+                if ($result ne "ok") {
+                  Dada::logMsgWarn($warn, "Could not delete status files: $response");
+                }
+
+                # Add the extra commands/config for each PWC
+                %tcs_cmds = addHostCommands(\%tcs_cmds, \%site_cfg);
+
+                # Create the tcs.cfg file to launch dada_pwc_command
+                Dada::logMsg(2, $dl, "main: generateConfigFile(".$cfg{"CONFIG_DIR"}."/bpsr_tcs.cfg)");
+                ($result, $response) = generateConfigFile($cfg{"CONFIG_DIR"}."/bpsr_tcs.cfg", \%tcs_cmds);
+                Dada::logMsg(2, $dl, "main: generateConfigFile() ".$result." ".$response);
+
+                # rejoin the pwcc command thread
+                $pwcc_thread->join();
+
+                # Now that we have a successful header. Launch dada_pwc_command in
+                $pwcc_thread = threads->new(\&pwcc_thread, $cfg{"CONFIG_DIR"}."/bpsr_tcs.cfg");
+
+                # Create the bpsr_tcs.spec file to launch dada_pwc_command
+                Dada::logMsg(2, $dl, "main: generateSpecificationFile(".$cfg{"CONFIG_DIR"}."/bpsr_tcs.spec)");
+                ($result, $response) = generateSpecificationFile($cfg{"CONFIG_DIR"}."/bpsr_tcs.spec", \%tcs_cmds);
+                Dada::logMsg(2, $dl, "main: generateSpecificationFile() ".$result." ".$response);
+  
+                # Issue the start command itself
+                Dada::logMsg(2, $dl, "main: start(".$cfg{"CONFIG_DIR"}."/bpsr_tcs.spec)");
+                ($result, $response) = start($cfg{"CONFIG_DIR"}."/bpsr_tcs.spec", \%tcs_cmds);
+                if ($result ne "ok") {
+                  Dada::logMsgWarn($warn, "start() failed \"".$response."\"");
+
+                  $utc_start = "";
+                } else {
+                  Dada::logMsg(2, $dl, "start() successful \"".$response."\"");
+  
+                  $utc_start = $response;
+
+                  # determine the unix time of the utc_start
+                  my @t = split(/-|:/,$utc_start);
+                  $recording_start = timegm($t[5], $t[4], $t[3], $t[2], ($t[1]-1), $t[0]);
+
+                  $cmd = "start_utc ".$utc_start;
+                  Dada::logMsg(1, $dl, "TCS <- ".$cmd);
+                  print $handle $cmd.TERMINATOR;
+
+                  $current_state = "Recording";
+                }
+              }
+            }
+            else
+            {
+              $current_state = "Idle";
+              my $now = time + 5;
+              $utc_start = Dada::printTime($now, "utc");
+              $cmd = "start_utc ".$utc_start;
+              Dada::logMsg(1, $dl, "TCS <- ".$cmd);
+              print $handle $cmd.TERMINATOR;
+            }
+
+            %tcs_cmds = ();
+        
           #######################################################################
           # STOP command
           }
@@ -363,6 +407,7 @@ $pwcc_thread = 0;
             {
               # ignore this
               Dada::logMsg(1, $dl, "main: ignoring STOP command since state is ".$current_state);
+              $result = "ok";
             }
             else
             {
@@ -447,6 +492,11 @@ $pwcc_thread = 0;
           }
         }
       }
+    }
+
+    if (($current_state =~ m/^Recording/) && (time > $recording_start))
+    {
+      $current_state = "Recording [".(time - $recording_start)." secs]";
     }
   }
 
@@ -649,10 +699,11 @@ sub start($\%)
   my $cmd;
   my $result;
   my $response;
-  my $localhost = Dada::getHostMachineName();
+  my $host = $cfg{"SERVER_HOST"};
+  my $port = $cfg{"IBOB_MANAGER_PORT"};
 
   Dada::logMsg(2, $dl, "connecting to roach manager");
-  my $roach_mngr = Dada::connectToMachine($localhost, $cfg{"IBOB_MANAGER_PORT"});
+  my $roach_mngr = Dada::connectToMachine($host, $port);
   if (!$roach_mngr)
   {
     Dada::logMsg(0, $dl, "Could not connect to roach manager");
@@ -1017,7 +1068,7 @@ sub stopRoachTX()
   my $result = "";
   my $response = "";
 
-  my $host = Dada::getHostMachineName();
+  my $host = $cfg{"SERVER_HOST"};
   my $port = $cfg{"IBOB_MANAGER_PORT"};
 
   my $roach_mngr = Dada::connectToMachine($host, $port);
@@ -1301,22 +1352,33 @@ sub fixTCSCommands(\%)
   $fix{"observer"} = "OBSERVER";
   $fix{"nbeam"}    = "NBEAM";
   $fix{"refbeam"}  = "REF_BEAM";
+  $fix{"length"}   = "OBS_VAL";
   $fix{"obsval"}   = "OBS_VAL";
   $fix{"obsunit"}  = "OBS_UNIT";
   $fix{"tscrunch"} = "TSCRUNCH";
   $fix{"fscrunch"} = "FSCRUNCH";
 
   my %add = ();
-  $add{"STATE"}      = "PPQQ";
   $add{"MODE"}       = "PSR";
   $add{"FA"}         = "23";
   $add{"NCHAN"}      = "1024";
   $add{"NBIT"}       = "8";
-  $add{"NPOL"}       = "2";
   $add{"NDIM"}       = "1";
   $add{"CFREQ"}      = "1382";
   $add{"RECEIVER"}   = "MULTI";
-  $add{"RESOLUTION"} = "2048";
+
+  if ($cross_poln)
+  {
+    $add{"NPOL"}       = "4";
+    $add{"STATE"}      = "Coherence";
+    $add{"RESOLUTION"} = "4096";
+  }
+  else
+  {
+    $add{"NPOL"}       = "2";
+    $add{"STATE"}      = "PPQQ";
+    $add{"RESOLUTION"} = "2048";
+  }
   $add{"BANDWIDTH"}  = "-400";
 
   my %new_cmds = ();
@@ -1355,8 +1417,16 @@ sub fixTCSCommands(\%)
 
   $new_cmds{"PROC_FILE"} = uc($new_cmds{"PROC_FILE"});
 
+  my $src = $new_cmds{"SOURCE"};
+
+  if (($src =~ m/HYDRA/) || ($src =~ m/_R$/) || ($src =~ m/CAL/) || ($src =~ m/Cal/))
+  {
+    $new_cmds{"MODE"}    = "CAL";
+    $new_cmds{"CALFREQ"} = "11.123";
+  }
+
   my $proj_id = $new_cmds{"PID"};
-  if (!($proj_id =~ m/P\d\d\d/))
+  if (!($proj_id =~ m/^P/))
   {
     Dada::logMsgWarn($warn, "PID ".$proj_id." invalid, using P000 instead");
     $new_cmds{"PID"} = "P000";
@@ -1401,6 +1471,31 @@ sub setActiveBeamsTCS(\%\%)
     if (exists($levels{$roach{"BEAM_".$i}}))
     {
       $tcs_cmds{"Band".$i."_BEAM_LEVEL"} = $levels{$roach{"BEAM_".$i}};
+    }
+    # add the individual polX levels if they exist
+    if (exists($levels{$roach{"BEAM_".$i}."_pol1"}))
+    {
+      $tcs_cmds{"Band".$i."_GAIN_POL1"} = $levels{$roach{"BEAM_".$i}."_pol1"};
+    }
+    if (exists($levels{$roach{"BEAM_".$i}."_pol2"}))
+    {
+      $tcs_cmds{"Band".$i."_GAIN_POL2"} = $levels{$roach{"BEAM_".$i}."_pol2"};
+    }
+    if (exists($levels{$roach{"BEAM_".$i}."_bw"}))
+    {
+      $tcs_cmds{"Band".$i."_PPQQ_BW"} = $levels{$roach{"BEAM_".$i}."_bw"};
+    }
+    if (exists($levels{$roach{"BEAM_".$i}."_polx"}))
+    {
+      $tcs_cmds{"Band".$i."_GAIN_POLX"} = $levels{$roach{"BEAM_".$i}."_polx"};
+    }
+    if (exists($levels{$roach{"BEAM_".$i}."_bwx"}))
+    {
+      $tcs_cmds{"Band".$i."_POLX_BW"} = $levels{$roach{"BEAM_".$i}."_bwx"};
+    }
+    if (exists($levels{$roach{"BEAM_".$i}."_factorpolx"}))
+    {
+      $tcs_cmds{"Band".$i."_FACTOR_POLX"} = $levels{$roach{"BEAM_".$i}."_factorpolx"};
     }
   }
 
@@ -1511,16 +1606,19 @@ sub addHostCommands(\%\%)
 
 }
 
-sub setRoachLevels()
+sub setRoachLevels($)
 {
+  my ($acc_len) = @_;
+
   my $cmd = "";
   my $result = "";
   my $response = "";
-  my $localhost = Dada::getHostMachineName();
+  my $host = $cfg{"SERVER_HOST"};
+  my $port = $cfg{"IBOB_MANAGER_PORT"};
   my %levels = ();
 
   Dada::logMsg(1, $dl, "connecting to roach manager");
-  my $roach_mngr = Dada::connectToMachine($localhost, $cfg{"IBOB_MANAGER_PORT"});
+  my $roach_mngr = Dada::connectToMachine($host, $port);
   if (!$roach_mngr)
   {
     Dada::logMsg(0, $dl, "Could not connect to roach manager");
@@ -1541,6 +1639,19 @@ sub setRoachLevels()
     return ("fail", %levels);
   }
 
+  # set the accumulation length on the ROACH baords
+  $cmd = "acclen ".$acc_len;
+  Dada::logMsg(1, $dl, "roach_mngr <- ".$cmd);
+  ($result, $response) = Dada::sendTelnetCommand($roach_mngr, $cmd);
+  Dada::logMsg(1, $dl, "roach_mngr -> ".$result);
+  if ($result ne "ok")
+  {
+    Dada::logMsgWarn($warn, "roach_mngr -> ".$response);
+  }
+
+  # allow some time for the BRAM buffers to be re-accumulated
+  sleep (1);
+
   # set the levels on the ROACH boards
   $cmd = "levels";
   Dada::logMsg(1, $dl, "roach_mngr <- ".$cmd);
@@ -1556,14 +1667,63 @@ sub setRoachLevels()
     # use this information to determine if the LNAs for each roach are on (for heimdall)
 
     my @roaches = split(/ /, $response);
-    my $beam = "";
-    my $level = "";
-    my $roach = "";
+    my ($beam, $levels, $roach, $part, $key, $val);
+    my $pol1_level = 0;
+    my $pol2_level = 0;
+    my $bw = 0;
+    my $polx_level = 0;
+    my $bwx = 0;
+    my $factorpolx = 0;
+    my @parts = ();
+
     foreach $roach (@roaches)
     {
-      ($beam, $level) = split(/:/, $roach);
-      $levels{$beam} = $level;
-      Dada::logMsg(2, $dl, "setRoachLevels: setting levels{".$beam."}=".$level);
+      ($beam, $levels) = split(/:/, $roach);
+      @parts = split(/,/,$levels);
+      foreach $part (@parts)
+      {
+        ($key,$val) = split(/=/, $part);
+        if ($key eq "pol1")
+        {
+          $pol1_level = $val;
+        }
+        elsif ($key eq "pol2")
+        {
+          $pol2_level = $val;
+        }
+        elsif ($key eq "bw")
+        {
+          $bw = $val;
+        }
+        elsif ($key eq "polx")
+        {
+          $polx_level = $val;
+        }
+        elsif ($key eq "bwx")
+        {
+          $bwx = $val;
+        }
+      }
+      # the factor by which AB* has been additionally multiplied is calculated as
+      $factorpolx = ((2048.0) / (256.0 ** ($bwx - $bw))) * $polx_level;
+
+      $levels{$beam} = ($pol1_level + $pol2_level) / 2.0;
+      $levels{$beam."_pol1"} = $pol1_level;
+      $levels{$beam."_pol2"} = $pol2_level;
+      $levels{$beam."_bw"}   = $bw;
+      $levels{$beam."_polx"} = $polx_level;
+      $levels{$beam."_bwx"}  = $bwx;
+
+      # the factor by which AB* has been additionally multiplied is calculated as
+      $levels{$beam."_factorpolx"} = $factorpolx;
+
+      Dada::logMsg(2, $dl, "setRoachLevels: setting levels{".$beam."}=".$levels{$beam});
+      Dada::logMsg(2, $dl, "setRoachLevels: setting levels{".$beam."_pol1}=".$pol1_level);
+      Dada::logMsg(2, $dl, "setRoachLevels: setting levels{".$beam."_pol2}=".$pol2_level);
+      Dada::logMsg(2, $dl, "setRoachLevels: setting levels{".$beam."_bw}=".$bw);
+      Dada::logMsg(2, $dl, "setRoachLevels: setting levels{".$beam."_polx}=".$polx_level);
+      Dada::logMsg(2, $dl, "setRoachLevels: setting levels{".$beam."_bwx}=".$bwx);
+      Dada::logMsg(2, $dl, "setRoachLevels: setting levels{".$beam."_factorpolx}=".$factorpolx);
     }
   }
 
@@ -1693,8 +1853,7 @@ sub calcTsampFromAccLen($) {
 
 sub waitForMultibobBoot() 
 {
-
-  my $host = Dada::getHostMachineName();
+  my $host = $cfg{"SERVER_HOST"};
   my $port = $cfg{"IBOB_MANAGER_PORT"};
 
   my $result;
