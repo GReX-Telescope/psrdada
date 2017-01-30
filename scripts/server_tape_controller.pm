@@ -209,7 +209,14 @@ sub main() {
     # Now stop the tape script
     Dada::logMsg(1, $dl, "main: stopping ".$dest_script);
 
-    $cmd = "touch \$DADA_ROOT/control/".Dada::daemonBaseName($dest_script).".quit";
+    if ($dest_host ne "")
+    {
+      $cmd = "touch \\\$DADA_ROOT/control/".Dada::daemonBaseName($dest_script).".quit; sleep 10";
+    }
+    else
+    {
+      $cmd = "touch \$DADA_ROOT/control/".Dada::daemonBaseName($dest_script).".quit; sleep 10";
+    }
     Dada::logMsg(1, $dl, "main: sshViaProxy(".$user.", ".$host.",". $cmd.")");
     ($result, $response) = sshViaProxy($user, $host, $cmd);
     Dada::logMsg(2, $dl, "main: sshViaProxy() ".$result." ".$response);
@@ -248,7 +255,14 @@ sub main() {
 
     # Now stop the tape script
     Dada::logMsg(1, $dl, "main: unlinking quit file on remote machine");
-    $cmd = "unlink \$DADA_ROOT/control/".Dada::daemonBaseName($dest_script).".quit";
+    if ($dest_host ne "")
+    {
+      $cmd = "unlink \\\$DADA_ROOT/control/".Dada::daemonBaseName($dest_script).".quit";
+    }
+    else
+    {
+      $cmd = "unlink \$DADA_ROOT/control/".Dada::daemonBaseName($dest_script).".quit";
+    }
     Dada::logMsg(2, $dl, "main: sshViaProxy(".$user.", ".$host.",". $cmd.")");
     ($result, $response) = sshViaProxy($user, $host, $cmd);
     Dada::logMsg(2, $dl, "main: sshViaProxy() ".$result." ".$response);
@@ -307,7 +321,7 @@ sub sshViaProxy($$$) {
   my $response = "";
 
   if ($dest_host ne "") {
-    $cmd = "ssh -x -l ".$user." ".$host." 'ssh -x -l ".$dest_user." ".$dest_host." \"".$remote_cmd."\"'";
+    $cmd = "ssh -x -l ".$dest_user." ".$dest_host." \"ssh -x -l ".$user." ".$host." '".$remote_cmd."'\"";
   } else {
     $cmd = "ssh -x -l ".$user." ".$host." '".$remote_cmd."'";
   }
