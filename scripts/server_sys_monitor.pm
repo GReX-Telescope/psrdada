@@ -320,7 +320,7 @@ sub loggingThread($)
 #       program   script or binary that generated message (e.g. obs mngr)
 #       message   message itself
 
-        $src     = $bits[0];
+        $src     = sprintf("%02d",$bits[0]);
         $time    = $bits[1];
         $type    = $bits[2];
         $class   = $bits[3];
