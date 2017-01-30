@@ -4,7 +4,7 @@
 
 #include "ipcio.h"
 
-// #define _DEBUG 1
+//#define _DEBUG 1
 
 void ipcio_init (ipcio_t* ipc)
 {
@@ -238,6 +238,9 @@ int ipcio_stop_close (ipcio_t* ipc, char unlock)
 
   if (ipc -> rdwrt == 'R') {
 
+#ifdef _DEBUG
+    fprintf (stderr, "ipcio_close:R ipcbuf_unlock_read()\n");
+#endif
     if (ipcbuf_unlock_read ((ipcbuf_t*)ipc) < 0) {
       fprintf (stderr, "ipcio_close:R error ipcbuf_unlock_read\n");
       return -1;
@@ -618,7 +621,7 @@ ssize_t ipcio_read (ipcio_t* ipc, char* ptr, size_t bytes)
 
 #ifdef _DEBUG
       fprintf (stderr, "ipcio_read buffer:%"PRIu64" %"PRIu64" bytes. buf[0]=%x\n",
-               ipc->buf.sync->r_buf, ipc->curbufsz, ipc->curbuf[0]);
+               ipc->buf.sync->r_bufs[0], ipc->curbufsz, ipc->curbuf[0]);
 #endif
 
       if (!ipc->curbuf)

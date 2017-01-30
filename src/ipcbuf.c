@@ -275,7 +275,7 @@ int ipcbuf_create (ipcbuf_t* id, key_t key, uint64_t nbufs, uint64_t bufsz, unsi
     }
     if (ipc_semop (id->semid_data[iread], IPCBUF_READER_CONN, 1, 0) < 0)
     {
-      fprintf (stderr, "ipcbuf_create: error incrementing IPCBUF_EODACK for reader %d\n", iread);
+      fprintf (stderr, "ipcbuf_create: error incrementing IPCBUF_READER_CONN for reader %d\n", iread);
       return -1;
     }
 
@@ -1054,7 +1054,6 @@ char* ipcbuf_get_next_read_work (ipcbuf_t* id, uint64_t* bytes, int flag)
     }
 
     bufnum = sync->r_bufs[iread];
-
   }
   else
   {
