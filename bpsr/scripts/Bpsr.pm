@@ -2,6 +2,7 @@ package Bpsr;
 
 use lib $ENV{"DADA_ROOT"}."/bin";
 
+use Dada;
 use IO::Socket;     # Standard perl socket library
 use IO::Select;     # Allows select polling on a socket
 use Time::HiRes qw(usleep ualarm gettimeofday tv_interval);
@@ -12,7 +13,6 @@ use vars qw($VERSION @ISA @EXPORT @EXPORT_OK);
 use Sys::Hostname;
 use Time::Local;
 use POSIX qw(setsid);
-use Dada;
 
 require Exporter;
 require AutoLoader;
