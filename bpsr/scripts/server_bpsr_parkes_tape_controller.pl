@@ -25,8 +25,8 @@ $Dada::server_tape_controller::daemon_name = Dada::daemonBaseName($0);
 $Dada::server_tape_controller::pid_report_port = $cfg{"SERVER_PARKESTAPE_PID_PORT"};
 $Dada::server_tape_controller::db_dir = $cfg{"PARKES_DB_DIR"};
 $Dada::server_tape_controller::dest_script = "server_bpsr_parkes_tape_archiver.pl";
-$Dada::server_tape_controller::dest_host = "";
-$Dada::server_tape_controller::dest_user = "";
+$Dada::server_tape_controller::dest_host = "tapeserv01";
+$Dada::server_tape_controller::dest_user = "pulsar";
 
 # Autoflush STDOUT
 $| = 1;
