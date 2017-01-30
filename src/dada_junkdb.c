@@ -200,6 +200,19 @@ int dada_junkdb_open (dada_client_t* client)
     hdr_size = DADA_DEFAULT_HEADER_SIZE;
   }
 
+  size_t buffer_size = 64;
+  char buffer[buffer_size];
+  if (ascii_header_get (client->header, "UTC_START", "%s", buffer) != 1)
+  {
+    time_t utc = time(0);
+    strftime (buffer, buffer_size, DADA_TIMESTR, gmtime(&utc));
+    multilog (client->log, LOG_INFO, "Setting UTC_START=%s\n", buffer);
+    if (ascii_header_set (client->header, "UTC_START", "%s", buffer) < 0)
+    {
+      multilog (client->log, LOG_WARNING, "failed to set UTC_START in header\n");
+    }
+  }
+
   // ensure that the incoming header fits in the client header buffer
   if (hdr_size > client->header_size) {
     multilog (client->log, LOG_ERR, "HDR_SIZE=%u > Block size=%"PRIu64"\n",
