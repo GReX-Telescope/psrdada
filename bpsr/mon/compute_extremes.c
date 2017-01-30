@@ -16,8 +16,8 @@ void compute_extremes(float array[], long nvalues, long inivalue,
   *max_array=-1e12;
   *min_array=+1e12;
   for (i=inivalue;i<=(nvalues-1);i++)
-    {
+  {
       if (array[i]>(*max_array)) *max_array=array[i];
       if (array[i]<(*min_array)) *min_array=array[i];
-    }
+  }
 }
