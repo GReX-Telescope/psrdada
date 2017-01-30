@@ -138,7 +138,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
   $control_thread = threads->new(\&controlThread, $pid_file);
 
   # for receipt of UDP data
-	my $trans_db_key    = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"TRANSIENT_DATA_BLOCK"});
+	my $trans_db_key    = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"NUM_PWC"}, $cfg{"TRANSIENT_DATA_BLOCK"});
 
   my $gpu_id = $cfg{"PWC_GPU_ID_".$pwc_id};
 
@@ -191,18 +191,20 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
         else
         {
           $proc_dir = $cfg{"CLIENT_ARCHIVE_DIR"}."/".$beam."/".$h{"UTC_START"};
-          $proc_cmd = "heimdall -k ".$trans_db_key." ".
-                      "-dm 0 3000 ".
-                      "-dm_tol 1.20 ".
-                      "-boxcar_max 4096 ".
-                      "-min_tscrunch_width 8 ".
-                      "-gpu_id ".$gpu_id." ".
-                      "-zap_chans 0 150 ".
-                      "-zap_chans 335 338 ".
-                      "-zap_chans 181 183 ".
-                      "-max_giant_rate 100000 ".
-                      "-beam ".$beam." ".
-                      "-output_dir ".$proc_dir;
+          $proc_cmd = "heimdall -k ".$trans_db_key.
+                      " -dm 0 3000".
+                      " -dm_tol 1.20".
+                      " -boxcar_max 4096".
+                      " -min_tscrunch_width 8".
+                      " -gpu_id ".$gpu_id.
+                      " -zap_chans 0 150".
+                      " -zap_chans 181 183".
+                      " -zap_chans 335 338".
+                      " -zap_chans 573 607".
+                      " -max_giant_rate 100000".
+                      " -beam ".$beam.
+                      " -output_dir ".$proc_dir;
+                      #"-coincidencer ".$cfg{"SERVER_HOST"}.":".$cfg{"SERVER_COINCIDENCER_PORT"};
         }
       }
 
@@ -243,7 +245,7 @@ sub controlThread($)
 
   my $host_quit_file = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
   my $pwc_quit_file  =  $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$pwc_id.".quit";
-	my $trans_db_key    = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"TRANSIENT_DATA_BLOCK"});
+	my $trans_db_key    = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"NUM_PWC"}, $cfg{"TRANSIENT_DATA_BLOCK"});
 
   my ($cmd, $result, $response, $process, $user);
   my @processes_to_kill = ();

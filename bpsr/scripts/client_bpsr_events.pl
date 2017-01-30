@@ -138,10 +138,10 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
   $control_thread = threads->new(\&controlThread, $pid_file);
 
   # for receipt of UDP data
-	my $recv_db_key    = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"RECEIVING_DATA_BLOCK"});
+	my $recv_db_key    = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"NUM_PWC"}, $cfg{"RECEIVING_DATA_BLOCK"});
 
   # a short buffer for writing events to disk
-	my $dump_db_key    = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"DUMP_DATA_BLOCK"});
+	my $dump_db_key    = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"NUM_PWC"}, $cfg{"DUMP_DATA_BLOCK"});
 
   # port on which to listen for event dumping requests
   my $event_port = (int($cfg{"CLIENT_EVENT_BASEPORT"}) + int($pwc_id));
@@ -239,7 +239,7 @@ sub controlThread($)
 
   my $host_quit_file = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
   my $pwc_quit_file  =  $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$pwc_id.".quit";
-	my $recv_db_key    = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"RECEIVING_DATA_BLOCK"});
+	my $recv_db_key    = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"NUM_PWC"}, $cfg{"RECEIVING_DATA_BLOCK"});
 
   my ($cmd, $result, $response, $process, $user);
   my @processes_to_kill = ();

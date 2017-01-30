@@ -15,7 +15,6 @@ use Dada::client_master_control qw(%cfg);
 #
 sub setupClientType();
 
-
 #
 # Global Variables
 # 

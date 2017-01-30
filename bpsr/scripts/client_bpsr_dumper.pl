@@ -139,7 +139,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
   $control_thread = threads->new(\&controlThread, $pid_file);
 
   # a short buffer for writing events to disk
-	my $dump_db_key    = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"DUMP_DATA_BLOCK"});
+	my $dump_db_key    = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"NUM_PWC"}, $cfg{"DUMP_DATA_BLOCK"});
 
   my $can_dump = 1;
   my $can_backup_dump = 1;
@@ -295,7 +295,7 @@ sub controlThread($)
 
   my $host_quit_file = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
   my $pwc_quit_file  =  $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$pwc_id.".quit";
-	my $dump_db_key    = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"DUMP_DATA_BLOCK"});
+	my $dump_db_key    = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"NUM_PWC"}, $cfg{"DUMP_DATA_BLOCK"});
 
   my ($cmd, $result, $response, $process, $user);
   my @processes_to_kill = ();

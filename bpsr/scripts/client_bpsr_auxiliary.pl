@@ -137,10 +137,10 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
   $control_thread = threads->new(\&controlThread, $pid_file);
 
   # for receipt of UDP data
-	my $recv_db_key    = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"RECEIVING_DATA_BLOCK"});
+	my $recv_db_key    = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"NUM_PWC"}, $cfg{"RECEIVING_DATA_BLOCK"});
 
   # for output onto the transient data block
-	my $trans_db_key    = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"TRANSIENT_DATA_BLOCK"});
+	my $trans_db_key    = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"NUM_PWC"}, $cfg{"TRANSIENT_DATA_BLOCK"});
 
   # for running the_decimator
   my $dada_info_file = "/tmp/bpsr_".$recv_db_key.".info";
@@ -265,7 +265,7 @@ sub controlThread($)
 
   my $host_quit_file = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
   my $pwc_quit_file  =  $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$pwc_id.".quit";
-	my $recv_db_key    = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"RECEIVING_DATA_BLOCK"});
+	my $recv_db_key    = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"NUM_PWC"}, $cfg{"RECEIVING_DATA_BLOCK"});
 
   my ($cmd, $result, $response, $process, $user);
   my @processes_to_kill = ();

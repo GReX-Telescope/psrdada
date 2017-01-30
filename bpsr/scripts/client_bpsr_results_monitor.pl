@@ -168,7 +168,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
       # now get a list of all observations marked beam.finished and more than 10 minutes old
       # to exclude them
       $cmd = "find ".$archive_dir." -mindepth 2 -maxdepth 2 -type f -mmin +10 ".
-             "-name 'beam.*' | awk -F/ '{print \$(NF-1)}' | sort";
+             "-name 'beam.*' | awk -F/ '{print \$(NF-1)}' | sort -n | uniq";
       ($result, $response) = Dada::mySystem($cmd);
       if ($result ne "ok") 
       {

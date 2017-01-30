@@ -345,7 +345,7 @@ sub destroyClientSpecial($)
         my $id = 0;
         foreach $id (@ids)
         {
-          $key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $j, $id);
+          $key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $j, $cfg{"NUM_PWC"}, $id);
           # check nbufs and bufsz
           
           $cmd .= "; dada_db -d -k ".$key;

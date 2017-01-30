@@ -137,10 +137,10 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
   $control_thread = threads->new(\&controlThread, $pid_file);
 
   # for receipt of UDP data
-	my $recv_db_key    = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"RECEIVING_DATA_BLOCK"});
+	my $recv_db_key    = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"NUM_PWC"}, $cfg{"RECEIVING_DATA_BLOCK"});
 
-  # for Pscrunched data to be search ed by heimdall
-	my $trans_db_key   = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"TRANSIENT_DATA_BLOCK"});
+  # for Pscrunched data to be searched by heimdall
+	my $trans_db_key   = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"NUM_PWC"}, $cfg{"TRANSIENT_DATA_BLOCK"});
 
 	my $curr_raw_header = "";
 	my $prev_raw_header = "";
@@ -350,10 +350,10 @@ sub processObservation($$$$$)
     # replace BPSR_NDECI_BIT with number of bits to be decimated too
     $proc_cmd =~ s/<BPSR_NDECI_BIT>/$h{"NDECI_BIT"}/;
 
-    # replace BPSR_NDADA_UTC_START with actual UTC_START
+    # replace BPSR_TSCRUNCH with header TSCRUNCH 
     $proc_cmd =~ s/<BPSR_TSCRUNCH>/$h{"TSCRUNCH"}/;
 
-    # replace BPSR_NDADA_UTC_START with actual UTC_START
+    # replace BPSR_FSCRUNCH with header FSCRUNCH 
     $proc_cmd =~ s/<BPSR_FSCRUNCH>/$h{"FSCRUNCH"}/;
 
     # special cases for the decimator
@@ -508,7 +508,7 @@ sub controlThread($)
 
   my $host_quit_file = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
   my $pwc_quit_file  =  $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$pwc_id.".quit";
-	my $recv_db_key    = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"RECEIVING_DATA_BLOCK"});
+	my $recv_db_key    = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc_id, $cfg{"NUM_PWC"}, $cfg{"RECEIVING_DATA_BLOCK"});
 
   my ($cmd, $result, $response, $process, $user);
 
