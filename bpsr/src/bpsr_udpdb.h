@@ -33,11 +33,18 @@
 #include "futils.h"
 
 typedef struct{
+
+  multilog_t *      log;    // multilog pointer
+  bpsr_sock_t *     sock;   // socket for UDP data
+
+  uint64_t          packet_header_size;   // number of bytes in the custom header of packet
+  uint64_t          packet_data_size;     // number of bytes in the packet of signal data
+  uint64_t          packet_payload_size;  // total payload size
+  uint64_t          block_size;           // size of a datablock buffer
+  uint64_t          packets_per_block;    // number of packets in a block
+
   int verbose;           /* verbosity flag */
-  int fd;                /* udp socket file descriptor */
   int port;              /* port to receive UDP data */
-  char *socket_buffer;   /* data buffer for stioring of multiple udp packets */
-  int datasize;          /* size of *data array */
   char *next_buffer;     /* buffer for a single udp packet */
   char *curr_buffer;     /* buffer for a single udp packet */
   int packet_in_buffer;  /* flag if buffer overrun occured */
