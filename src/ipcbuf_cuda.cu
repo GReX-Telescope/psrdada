@@ -9,7 +9,7 @@
 #include "tmutil.h"
 #include "ipcbuf_cuda.h"
 
-/* zero bytes in an ipcbuf, by reading from previously zerod device memory*/
+/* zero bytes in an ipcbuf, by reading from previously zerod device memory */
 extern "C"
 ssize_t ipcbuf_zero_next_block_cuda (ipcbuf_t* id, char * dev_ptr, size_t dev_bytes, cudaStream_t stream)
 {

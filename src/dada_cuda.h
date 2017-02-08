@@ -49,6 +49,10 @@ void * dada_cuda_device_malloc (size_t bytes);
 
 int dada_cuda_device_free (void * memory);
 
+void * dada_cuda_host_malloc (size_t bytes);
+
+int dada_cuda_host_free (void * memory);
+
 float dada_cuda_device_transfer ( void * from, void * to, size_t bufsz, memory_mode_t mode, cudaStream_t stream);
 
 //int dada_cuda_profiler_init (dada_cuda_profile_t * timer, cudaStream_t * stream);

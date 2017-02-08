@@ -132,8 +132,37 @@ int dada_cuda_device_free (void * memory)
     return -1;
   }
   return 0;
-
 }
+
+/*! return a pointer to GPU host memory of bytes size */
+void * dada_cuda_host_malloc ( size_t bytes)
+{
+  cudaError_t error_id;
+  void * host_memory; 
+  error_id = cudaMallocHost (&host_memory, bytes);
+  if (error_id != cudaSuccess)
+  {
+    fprintf (stderr, "dada_cuda_host_malloc: could not allocate %d bytes: %s\n",
+                      bytes, cudaGetErrorString(error_id));
+    return 0;
+  }
+  return host_memory;
+}
+
+/*! free the specified GPU host memory */
+int dada_cuda_host_free (void * memory)
+{
+  cudaError_t error_id;
+  error_id = cudaFreeHost (memory);
+  if (error_id != cudaSuccess)
+  {
+    fprintf (stderr, "dada_cuda_host_free: could not free memory: %s\n",
+                      cudaGetErrorString(error_id));
+    return -1;
+  }
+  return 0;
+}
+
 
 /*! transfer the supplied buffer to the GPU */
 float dada_cuda_device_transfer (void * from, void * to, size_t size, memory_mode_t mode, cudaStream_t stream)
