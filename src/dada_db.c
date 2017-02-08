@@ -3,6 +3,7 @@
 #include "dada_def.h"
 #include "ipcbuf.h"
 
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -28,12 +29,16 @@ void usage ()
           " -l          lock the shared memory in RAM\n"
           " -n nbufs    number of buffers in ring      [default: %"PRIu64"]\n"
           " -p          page all blocks into RAM\n"
-          " -r nread     number of readers             [default: 1]\n",
+          " -r nread     number of readers             [default: 1]\n"
+          " -w          persistance mode, wait for signal before destroying db\n",
           DADA_DEFAULT_HEADER_SIZE,
           DADA_DEFAULT_BLOCK_SIZE,
           DADA_DEFAULT_BLOCK_KEY,
           DADA_DEFAULT_BLOCK_NUM);
 }
+
+void signal_handler(int signalValue);
+char quit = 0;
 
 int main (int argc, char** argv)
 {
@@ -51,6 +56,7 @@ int main (int argc, char** argv)
   int page = 0;
   int destroy = 0;
   int lock = 0;
+  int persist = 0;
   int arg;
   unsigned num_readers = 1;
 
@@ -66,7 +72,7 @@ int main (int argc, char** argv)
   // numa node to bind to
   int numa_node = -1;
 
-  while ((arg = getopt(argc, argv, "a:b:c:dhk:ln:pr:")) != -1) {
+  while ((arg = getopt(argc, argv, "a:b:c:dhk:ln:pr:w")) != -1) {
 #else
   while ((arg = getopt(argc, argv, "a:b:dhk:ln:pr:")) != -1) {
 #endif
@@ -142,6 +148,10 @@ int main (int argc, char** argv)
     case 'p':
       page = 1;
       break;
+
+    case 'w':
+      persist = 1;
+      break;
     }
   }
 
@@ -157,8 +167,93 @@ int main (int argc, char** argv)
     return -1;
   }
 
-  if (destroy) {
+  signal(SIGINT, signal_handler);
 
+  // data block creation
+  if (!destroy)
+  {
+    // binding to a numa node
+#ifdef HAVE_HWLOC
+    hwloc_obj_t obj = hwloc_get_obj_by_type (topology, HWLOC_OBJ_NODE, numa_node);
+    if (obj)
+    {
+      hwloc_membind_policy_t policy = HWLOC_MEMBIND_BIND;
+      hwloc_membind_flags_t flags = HWLOC_MEMBIND_STRICT;
+
+      int result = hwloc_set_membind_nodeset (topology, obj->nodeset, policy, flags);
+      if (result < 0)
+      {
+        fprintf (stderr, "dada_db: failed to set memory binding policy: %s\n",
+                 strerror(errno));
+        return -1;
+      }
+    }
+#endif
+
+    // create data ring buffer
+    if (ipcbuf_create (&data_block, dada_key, nbufs, bufsz, num_readers) < 0) {
+      fprintf (stderr, "Could not create DADA data block\n");
+      return -1;
+    }
+    fprintf (stderr, "Created DADA data block with"
+            " nbufs=%"PRIu64" bufsz=%"PRIu64" nread=%d\n", nbufs, bufsz, num_readers);
+
+    // create header ring buffer
+    if (ipcbuf_create (&header, dada_key + 1, nhdrs, hdrsz, num_readers) < 0) {
+      fprintf (stderr, "Could not create DADA header block\n");
+      return -1;
+    }
+    fprintf (stderr, "Created DADA header block with nhdrs = %"PRIu64", hdrsz "
+                     "= %"PRIu64" bytes, nread=%d\n", nhdrs, hdrsz, num_readers);
+
+    // locking of memory buffers
+    if (lock)
+    {
+      if (ipcbuf_lock (&data_block) < 0)
+      {
+        fprintf (stderr, "Could not lock DADA data block into RAM\n");
+        return -1;
+      }
+      if (ipcbuf_lock (&header) < 0) 
+      {
+        fprintf (stderr, "Could not lock DADA header block into RAM\n");
+        return -1;
+      }
+    }
+
+    // paging of memory buffers
+    if (page)
+    {
+      if (ipcbuf_page (&header) < 0) 
+      {
+        fprintf (stderr, "Could not page DADA header block into RAM\n");
+        return -1;
+      }
+
+      if (ipcbuf_page ((ipcbuf_t*) &data_block) < 0) {
+        fprintf (stderr, "Could not page DADA data block into RAM\n");
+        return -1;
+      }
+    }
+
+    // persistence of application
+    if (persist)
+    {
+      while (!quit)
+      {
+        usleep(100000);
+      }
+    }
+
+#ifdef HAVE_HWLOC
+    // Destroy topology object.
+    hwloc_topology_destroy(topology);
+#endif
+  }
+
+  // if the data block is to be destroyed at the end of this program
+  if (destroy || persist) 
+  {
     ipcbuf_connect (&data_block, dada_key);
     ipcbuf_destroy (&data_block);
 
@@ -170,67 +265,12 @@ int main (int argc, char** argv)
     return 0;
   }
 
-#ifdef HAVE_HWLOC
-
-  // fetch the specified core
-  hwloc_obj_t obj = hwloc_get_obj_by_type (topology, HWLOC_OBJ_NODE, numa_node);
-  if (obj)
-  {
-    hwloc_membind_policy_t policy = HWLOC_MEMBIND_BIND;
-    hwloc_membind_flags_t flags = HWLOC_MEMBIND_STRICT;
-
-    int result = hwloc_set_membind_nodeset (topology, obj->nodeset, policy, flags);
-    if (result < 0)
-    {
-      fprintf (stderr, "dada_db: failed to set memory binding policy: %s\n",
-               strerror(errno));
-      return -1;
-    }
-  }
-
-#endif
-
-  if (ipcbuf_create (&data_block, dada_key, nbufs, bufsz, num_readers) < 0) {
-    fprintf (stderr, "Could not create DADA data block\n");
-    return -1;
-  }
-
-  fprintf (stderr, "Created DADA data block with"
-          " nbufs=%"PRIu64" bufsz=%"PRIu64" nread=%d\n", nbufs, bufsz, num_readers);
-
-  if (ipcbuf_create (&header, dada_key + 1, nhdrs, hdrsz, num_readers) < 0) {
-    fprintf (stderr, "Could not create DADA header block\n");
-    return -1;
-  }
-
-  fprintf (stderr, "Created DADA header block with nhdrs = %"PRIu64", hdrsz "
-                   "= %"PRIu64" bytes, nread=%d\n", nhdrs, hdrsz, num_readers);
-
-  if (lock && ipcbuf_lock (&data_block) < 0) {
-    fprintf (stderr, "Could not lock DADA data block into RAM\n");
-    return -1;
-  }
-
-  if (lock && ipcbuf_lock (&header) < 0) {
-    fprintf (stderr, "Could not lock DADA header block into RAM\n");
-    return -1;
-  }
-
-  if (page && ipcbuf_page (&header) < 0) {
-    fprintf (stderr, "Could not page DADA header block into RAM\n");
-    return -1;
-  }
-
-  if (page && ipcbuf_page ((ipcbuf_t*) &data_block) < 0) {
-    fprintf (stderr, "Could not page DADA data block into RAM\n");
-    return -1;
-  }
-
-#ifdef HAVE_HWLOC
-  // Destroy topology object.
-  hwloc_topology_destroy(topology);
-#endif
-
   return 0;
+}
+
+void signal_handler(int signalValue) 
+{
+  quit = 1;
+  return;
 }
 
