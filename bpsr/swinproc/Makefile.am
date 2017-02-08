@@ -1,5 +1,5 @@
 
-lib_LTLIBRARIES = libswinproc.la
+noinst_LTLIBRARIES = libswinproc.la
 
 libswinproc_la_SOURCES = nsamples.c read_header.c send_stuff.c strings_equal.c swap_bytes.c
 

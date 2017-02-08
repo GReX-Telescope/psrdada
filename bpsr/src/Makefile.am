@@ -1,20 +1,24 @@
 
-lib_LTLIBRARIES = libbpsr.la
+noinst_LTLIBRARIES = libbpsr.la
 
-bpsr_hdr=bpsr_def.h bpsr_udp.h ibob.h multibob.h
+nobase_include_HEADERS = bpsr_def.h bpsr_udp.h ibob.h multibob.h
 
-libbpsr_la_SOURCES = $(bpsr_hdr) ibob.c multibob.c start_observation.c
+libbpsr_la_SOURCES = $(nobase_include_HEADERS) ibob.c multibob.c start_observation.c
 
 bin_PROGRAMS = bpsr_udpheader bpsr_udpdb bpsr_dbdisk bpsr_udpdisk \
 	bpsr_dbmon ibob_telnet multibob_server bpsr_dbavg bpsr_udpgenerator \
   bpsr_dbscrunchdb
 
+LDADD = libbpsr.la \
+  $(top_builddir)/src/libpsrdada.la \
+  $(top_builddir)/3rdparty/libtimers.la
+
 AM_CPPFLAGS = -I$(top_srcdir)/src \
   -I$(top_srcdir)/3rdparty
 
-LDADD = libbpsr.la  \
-  $(top_builddir)/src/libpsrdada.la \
-  $(top_builddir)/3rdparty/libtimers.la
+if HAVE_CUDA
+LDADD += @CUDA_LIBS@
+endif
 
 #############################################################################
 #
@@ -25,18 +29,12 @@ LDADD = libbpsr.la  \
 if HAVE_PGPLOT
 
 bin_PROGRAMS += bpsr_dbplot bpsr_diskplot bpsr_bramplot bpsr_dadadiskareaplot \
-  bpsr_dadadiskplot bpsr_udpplot bpsr_fpdiskplot bpsr_bramplot_cross bpsr_bramplot_hist
+  bpsr_dadadiskplot bpsr_udpplot bpsr_fpdiskplot bpsr_bramplot_cross \
+  bpsr_bramplot_hist
+
 AM_CPPFLAGS = @PGPLOT_CFLAGS@
-bpsr_dbplot_LDADD = $(LDADD) @PGPLOT_LIBS@
-bpsr_diskplot_LDADD = $(LDADD) @PGPLOT_LIBS@
-bpsr_dadadiskplot_LDADD = $(LDADD) @PGPLOT_LIBS@
-bpsr_dadadiskareaplot_LDADD = $(LDADD) @PGPLOT_LIBS@
-bpsr_bramplot_LDADD = $(LDADD) @PGPLOT_LIBS@
-bpsr_bramplot_cross_LDADD = $(LDADD) @PGPLOT_LIBS@
-bpsr_bramplot_hist_LDADD = $(LDADD) @PGPLOT_LIBS@
-bpsr_fpdiskplot_LDADD = $(LDADD) @PGPLOT_LIBS@
+LDADD += @PGPLOT_LIBS@
 
 endif
 
-bpsr_udpplot_LDADD = $(LDADD) @PGPLOT_LIBS@ $(top_builddir)/3rdparty/libtimers.la
 

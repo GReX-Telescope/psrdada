@@ -1,5 +1,5 @@
 
-lib_LTLIBRARIES = libspdedisp.la
+noinst_LTLIBRARIES = libspdedisp.la
 
 libspdedisp_la_SOURCES = getDMtable.C gtools.C
 

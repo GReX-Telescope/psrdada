@@ -61,6 +61,7 @@ dada_db_LDFLAGS = $(LDADD) @HWLOC_LIBS@
 
 endif
 
+libpsrdada_la_LIBADD = @CUDA_LIBS@
 
 ###############################################################################
 #
@@ -77,10 +78,10 @@ include_HEADERS += dada_cuda.h ipcio_cuda.h ipcbuf_cuda.h
 
 bin_PROGRAMS += dada_dbgpu
 
-dada_dbgpu_LDADD = $(LDADD) -lstdc++
+#dada_dbgpu_LDADD = $(LDADD) -lstdc++
 
 AM_CPPFLAGS = @CUDA_CFLAGS@ 
-libpsrdada_la_LIBADD = @CUDA_LIBS@
+LDADD += @CUDA_LIBS@
 
 endif
 
@@ -97,7 +98,8 @@ include_HEADERS += dada_ib.h dada_ib_datagram.h
 bin_PROGRAMS += dada_ibdb dada_dbib dada_udheader dada_dbud dada_udgen
 
 AM_CFLAGS = -I$(top_srcdir)/3rdparty
-LDADD += @RDMACM_LIBS@ $(top_builddir)/3rdparty/libtimers.la
+libpsrdada_la_LIBADD += @RDMACM_LIBS@
+LDADD += @RDMACM_LIBS@  $(top_builddir)/3rdparty/libtimers.la
 
 endif
 

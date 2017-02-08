@@ -1,5 +1,5 @@
 
-lib_LTLIBRARIES = libsigproc.la
+noinst_LTLIBRARIES = libsigproc.la
 
 sigproc_hdr = epn.h filterbank.h header.h polyco.h sigproc.h version.h
 

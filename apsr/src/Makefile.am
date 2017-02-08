@@ -1,7 +1,9 @@
 
-lib_LTLIBRARIES = libapsr.la
+noinst_LTLIBRARIES = libapsr.la
 
-libapsr_la_SOURCES = apsr_udp.c apsr_def.h apsr_udp.h apsr_udpdb.h apsr_udpdisk.h apsr_udpheader.h
+nobase_include_HEADERS  = apsr_def.h apsr_udp.h apsr_udpdb.h apsr_udpdisk.h apsr_udpheader.h
+
+libapsr_la_SOURCES = apsr_udp.c $noinst_include_HEADERS
 
 dist_bin_SCRIPTS = apsr_rm.csh apsr_edit.csh apsr_reprocess.csh
 

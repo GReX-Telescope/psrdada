@@ -1,5 +1,5 @@
 
-lib_LTLIBRARIES = libska1.la
+noinst_LTLIBRARIES = libska1.la
 
 ska1_hdr = ska1_udp.h ska1_def.h
 

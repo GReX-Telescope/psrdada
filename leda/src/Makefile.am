@@ -1,4 +1,4 @@
-lib_LTLIBRARIES = libleda.la
+noinst_LTLIBRARIES = libleda.la
 
 leda_hdr = leda_udp.h leda_def.h
 

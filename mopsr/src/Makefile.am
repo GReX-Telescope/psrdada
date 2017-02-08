@@ -1,7 +1,7 @@
 
 SUBDIRS = sigproc
 
-lib_LTLIBRARIES = libmopsr.la
+noinst_LTLIBRARIES = libmopsr.la
 
 mopsr_hdr = mopsr_udp.h mopsr_def.h mopsr_util.h
 

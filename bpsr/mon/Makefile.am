@@ -1,7 +1,7 @@
 
 if HAVE_PGPLOT
 
-lib_LTLIBRARIES = libplot4mon.la
+noinst_LTLIBRARIES = libplot4mon.la
 
 libplot4mon_la_SOURCES = plot4mon.h get_commandline.c check_file_exists.c display_help.c \
         compute_extremes.c compute_margin.c strings_compare.c \

@@ -4,7 +4,7 @@
 #
 #############################################################################
 
-lib_LTLIBRARIES = libcaspsr.la
+noinst_LTLIBRARIES = libcaspsr.la
 
 casper_hdr = bibob.h caspsr_def.h mulbibob.h caspsr_rdma.h 
 
