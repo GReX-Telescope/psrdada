@@ -116,7 +116,7 @@ bpsr_sock_t * bpsr_init_sock ()
   assert(b != NULL);
 
   b->bufsz = sizeof(char) * BPSR_UDP_4POL_PAYLOAD_BYTES;
-    b->buf = (char *) malloc (b->bufsz);
+  b->buf = (char *) malloc (b->bufsz);
   assert(b->buf != NULL);
 
   b->have_packet = 0;
