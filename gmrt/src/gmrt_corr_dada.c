@@ -3,6 +3,7 @@
 #include "ascii_header.h"
 #include "gmrt_corr_dada.h"
 
+#include <stdlib.h>
 #include <string.h>
 #include <assert.h>
 #include <errno.h>
