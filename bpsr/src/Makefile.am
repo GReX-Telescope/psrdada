@@ -32,7 +32,7 @@ bin_PROGRAMS += bpsr_dbplot bpsr_diskplot bpsr_bramplot bpsr_dadadiskareaplot \
   bpsr_dadadiskplot bpsr_udpplot bpsr_fpdiskplot bpsr_bramplot_cross \
   bpsr_bramplot_hist
 
-AM_CPPFLAGS = @PGPLOT_CFLAGS@
+AM_CPPFLAGS += @PGPLOT_CFLAGS@
 LDADD += @PGPLOT_LIBS@
 
 endif

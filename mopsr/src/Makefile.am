@@ -71,7 +71,7 @@ if HAVE_GSL
 
 bin_PROGRAMS += mopsr_solve_delays mopsr_solve_delays_spectral
 
-CFLAGS += @GSL_CFLAGS@
+AM_CPPFLAGS += @GSL_CFLAGS@
 LDADD += @GSL_LIBS@
 
 if HAVE_SOFA
