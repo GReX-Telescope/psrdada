@@ -5,7 +5,7 @@ nobase_include_HEADERS = bpsr_def.h bpsr_udp.h ibob.h multibob.h
 
 libbpsr_la_SOURCES = $(nobase_include_HEADERS) ibob.c multibob.c start_observation.c
 
-bin_PROGRAMS = bpsr_udpheader bpsr_udpdb bpsr_dbdisk bpsr_udpdisk \
+bin_PROGRAMS = bpsr_udpdb bpsr_dbdisk bpsr_udpdisk \
 	bpsr_dbmon ibob_telnet multibob_server bpsr_dbavg bpsr_udpgenerator \
   bpsr_dbscrunchdb
 
@@ -17,7 +17,11 @@ AM_CPPFLAGS = -I$(top_srcdir)/src \
   -I$(top_srcdir)/3rdparty
 
 if HAVE_CUDA
+
+bin_PROGRAMS += bpsr_udpheader
+AM_CPPFLAGS += @CUDA_CFLAGS@
 LDADD += @CUDA_LIBS@
+
 endif
 
 #############################################################################
