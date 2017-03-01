@@ -75,8 +75,8 @@ void mopsr_decode_header (unsigned char * b, uint64_t *seq_no, unsigned int * an
 void mopsr_decode (unsigned char * b, mopsr_hdr_t * hdr);
 void mopsr_decode_v2 (unsigned char * b, mopsr_hdr_t * hdr);
 void mopsr_decode_v1 (unsigned char * b, mopsr_hdr_t * hdr);
-void inline mopsr_decode_seq (unsigned char * b, mopsr_hdr_t * hdr);
-void inline mopsr_decode_seq_fast (unsigned char * b, mopsr_hdr_t * hdr);
+void mopsr_decode_seq (unsigned char * b, mopsr_hdr_t * hdr);
+void mopsr_decode_seq_fast (unsigned char * b, mopsr_hdr_t * hdr);
 
 void mopsr_encode_header (unsigned char * b, uint64_t seq_no);
 void mopsr_encode (unsigned char * b, mopsr_hdr_t * hdr);
