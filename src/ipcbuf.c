@@ -17,8 +17,14 @@
 #include <time.h>
 
 #include <emmintrin.h>
+
+#include "config.h"
 #include "ipcbuf.h"
 #include "ipcutil.h"
+
+#ifdef HAVE_CUDA
+#include "ipcutil_cuda.h"
+#endif
 
 //#define _DEBUG 1
 
@@ -139,8 +145,19 @@ int ipcbuf_get (ipcbuf_t* id, int flag, int n_readers)
 
   for (ibuf=0; ibuf < sync->nbufs; ibuf++)
   {
-    id->buffer[ibuf] = ipc_alloc (id->shmkey[ibuf], sync->bufsz, 
-          flag, id->shmid + ibuf);
+#ifdef HAVE_CUDA
+    if (sync->on_device_id >= 0)
+    {
+      id->buffer[ibuf] = ipc_alloc_cuda (id->shmkey[ibuf], sync->bufsz,
+                                         flag, id->shmid + ibuf, sync->on_device_id);
+    }
+    else
+#endif
+    {
+      id->buffer[ibuf] = ipc_alloc (id->shmkey[ibuf], sync->bufsz, 
+            flag, id->shmid + ibuf);
+    }
+
 #ifdef _DEBUG
     fprintf (stderr, "ipcbuf_get: id->buffer[%u]=%p\n", ibuf, (void *) id->buffer[ibuf]);
 #endif
@@ -171,7 +188,11 @@ int ipcbuf_get (ipcbuf_t* id, int flag, int n_readers)
 /* start with some random key for all of the pieces */
 static int key_increment  = 0x00010000;
 
+#ifdef HAVE_CUDA
+int ipcbuf_create (ipcbuf_t* id, key_t key, uint64_t nbufs, uint64_t bufsz, unsigned n_readers, int device_id)
+#else
 int ipcbuf_create (ipcbuf_t* id, key_t key, uint64_t nbufs, uint64_t bufsz, unsigned n_readers)
+#endif
 {
   uint64_t ibuf = 0;
   uint64_t iread = 0;
@@ -191,6 +212,9 @@ int ipcbuf_create (ipcbuf_t* id, key_t key, uint64_t nbufs, uint64_t bufsz, unsi
   id->sync->nbufs     = nbufs;
   id->sync->bufsz     = bufsz;
   id->sync->n_readers = n_readers;
+#ifdef HAVE_CUDA
+  id->sync->on_device_id = device_id;
+#endif
 
   for (ibuf = 0; ibuf < IPCBUF_XFERS; ibuf++)
   {
@@ -334,8 +358,14 @@ int ipcbuf_disconnect (ipcbuf_t* id)
   }
 
   for (ibuf = 0; ibuf < id->sync->nbufs; ibuf++)
+  {
+#ifdef HAVE_CUDA
+    if (id->sync->on_device_id >= 0)
+      ipc_disconnect_cuda (id->buffer[ibuf]);
+#endif
     if (id->buffer[ibuf] && shmdt (id->buffer[ibuf]) < 0)
       perror ("ipcbuf_disconnect: shmdt(buffer)");
+  }
 
   if (id->buffer) free (id->buffer); id->buffer = 0;
   if (id->shmid) free (id->shmid); id->shmid = 0;
@@ -383,6 +413,11 @@ int ipcbuf_destroy (ipcbuf_t* id)
 #ifdef _DEBUG
     fprintf (stderr, "ipcbuf_destroy: id[%"PRIu64"]=%x\n",
              ibuf, id->shmid[ibuf]);
+#endif
+
+#ifdef HAVE_CUDA
+    if (id->sync->on_device_id >= 0)
+      ipc_dealloc_cuda (id->buffer[ibuf], id->sync->on_device_id);
 #endif
 
     if (id->buffer)
@@ -732,7 +767,12 @@ int ipcbuf_zero_next_write (ipcbuf_t *id)
   }
 
   // zap bufnum
-  bzero (id->buffer[next_buf], id->sync->bufsz);
+#ifdef HAVE_CUDA
+  if (id->sync->on_device_id >= 0)
+    ipc_zero_buffer_cuda (id->buffer[next_buf], id->sync->bufsz);
+  else
+#endif
+    bzero (id->buffer[next_buf], id->sync->bufsz);
   return 0;
 }
 
@@ -1470,7 +1510,12 @@ int ipcbuf_page (ipcbuf_t* id)
 
   for (ibuf = 0; ibuf < id->sync->nbufs; ibuf++)
   {
-    bzero (id->buffer[ibuf], id->sync->bufsz); 
+#ifdef HAVE_CUDA
+    if (id->sync->on_device_id >= 0)
+      ipc_zero_buffer_cuda( id->buffer[ibuf], id->sync->bufsz );
+    else
+#endif
+      bzero (id->buffer[ibuf], id->sync->bufsz); 
   }
 
   return 0;

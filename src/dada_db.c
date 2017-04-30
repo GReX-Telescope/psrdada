@@ -21,9 +21,12 @@ void usage ()
           " -a hdrsz    size of each header buffer (in bytes) [default: %"PRIu64"]\n"
           " -b bufsz    size of each buffer (in bytes) [default: %"PRIu64"]\n"
 #ifdef HAVE_HWLOC
-          " -c node      assign memory from NUMA node  [default: all nodes]\n"
+          " -c node     assign memory from NUMA node  [default: all nodes]\n"
 #endif
           " -d          destroy the shared memory area [default: create]\n"
+#ifdef HAVE_CUDA
+          " -g id       allocate data buffers on GPU with device id\n"
+#endif
           " -h          show help\n"
           " -k key      hexadecimal shared memory key  [default: %x]\n"
           " -l          lock the shared memory in RAM\n"
@@ -60,6 +63,10 @@ int main (int argc, char** argv)
   int arg;
   unsigned num_readers = 1;
 
+#ifdef HAVE_CUDA
+  int device_id = -1;
+#endif
+
 #ifdef HAVE_HWLOC
   hwloc_topology_t topology;
 
@@ -71,10 +78,17 @@ int main (int argc, char** argv)
 
   // numa node to bind to
   int numa_node = -1;
-
+#ifdef HAVE_CUDA
+  while ((arg = getopt(argc, argv, "a:b:c:dg:hk:ln:pr:w")) != -1) {
+#else
   while ((arg = getopt(argc, argv, "a:b:c:dhk:ln:pr:w")) != -1) {
+#endif
+#else
+#ifdef HAVE_CUDA
+  while ((arg = getopt(argc, argv, "a:b:dg:hk:ln:pr:")) != -1) {
 #else
   while ((arg = getopt(argc, argv, "a:b:dhk:ln:pr:")) != -1) {
+#endif
 #endif
 
     switch (arg)  {
@@ -119,6 +133,16 @@ int main (int argc, char** argv)
       destroy = 1;
       break;
 
+#ifdef HAVE_CUDA
+    case 'g':
+      if (sscanf (optarg, "%d", &device_id) != 1)
+      {
+        fprintf (stderr, "dada_db: could not parse device ID from %s\n", optarg);
+        return -1;
+      }
+      break;
+#endif
+
     case 'k':
       if (sscanf (optarg, "%x", &dada_key) != 1) 
       {
@@ -153,6 +177,12 @@ int main (int argc, char** argv)
       persist = 1;
       break;
     }
+  }
+
+  if (device_id >= 0 && !persist)
+  {
+    fprintf (stderr, "ERROR: use of GPU memory mandates persistence mode\n");
+    return -1;
   }
 
   if (hdrsz < DADA_DEFAULT_HEADER_SIZE)
@@ -191,7 +221,11 @@ int main (int argc, char** argv)
 #endif
 
     // create data ring buffer
+#ifdef HAVE_CUDA
+    if (ipcbuf_create (&data_block, dada_key, nbufs, bufsz, num_readers, device_id) < 0) {
+#else
     if (ipcbuf_create (&data_block, dada_key, nbufs, bufsz, num_readers) < 0) {
+#endif
       fprintf (stderr, "Could not create DADA data block\n");
       return -1;
     }
@@ -199,7 +233,11 @@ int main (int argc, char** argv)
             " nbufs=%"PRIu64" bufsz=%"PRIu64" nread=%d\n", nbufs, bufsz, num_readers);
 
     // create header ring buffer
+#ifdef HAVE_CUDA
+    if (ipcbuf_create (&header, dada_key + 1, nhdrs, hdrsz, num_readers, -1) < 0) {
+#else
     if (ipcbuf_create (&header, dada_key + 1, nhdrs, hdrsz, num_readers) < 0) {
+#endif
       fprintf (stderr, "Could not create DADA header block\n");
       return -1;
     }
@@ -254,10 +292,12 @@ int main (int argc, char** argv)
   // if the data block is to be destroyed at the end of this program
   if (destroy || persist) 
   {
-    ipcbuf_connect (&data_block, dada_key);
+    if (!persist)
+      ipcbuf_connect (&data_block, dada_key);
     ipcbuf_destroy (&data_block);
 
-    ipcbuf_connect (&header, dada_key + 1);
+    if (!persist)
+      ipcbuf_connect (&header, dada_key + 1);
     ipcbuf_destroy (&header);
 
     fprintf (stderr, "Destroyed DADA data and header blocks\n");

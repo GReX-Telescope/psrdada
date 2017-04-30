@@ -52,6 +52,10 @@ void* ipc_alloc (key_t key, size_t size, int flag, int* shmid)
   return buf;
 }
 
+int ipc_dealloc ()
+{
+}
+
 int ipc_semop (int semid, short num, short op, short flag)
 {
   struct sembuf semopbuf;
