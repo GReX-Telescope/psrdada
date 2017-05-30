@@ -41,6 +41,7 @@ dist_bin_SCRIPTS = Bpsr.pm \
                    client_bpsr_proc.pl \
                    client_bpsr_pwc.pl \
                    client_bpsr_src_logger.pl \
+                   client_bpsr_svd_master_control.pl \
                    client_bpsr_transfer_raid.pl \
                    raid_bpsr_archiver.pl \
                    raid_bpsr_beams_finished.pl \

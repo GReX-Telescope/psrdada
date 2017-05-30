@@ -326,15 +326,32 @@ sub getObsDestinations($$) {
 
 }
 
-sub getConfig() 
+sub getConfig(;$) 
 {
+  (my $sub_type) = @_;
+  if ($sub_type eq "")
+  {
+    $sub_type = "pwc";
+  }
+
   my $config_file = $DADA_ROOT."/share/bpsr.cfg";
   my %config = Dada::readCFGFileIntoHash($config_file, 0);
 
+  my $ct_file = $DADA_ROOT."/bpsr_cornerturn.cfg";
+  my %ct_config = Dada::readCFGFileIntoHash($ct_file, 0);
+  my %combined = (%config, %ct_config);
+
   my $pwc_config_file = $DADA_ROOT."/share/bpsr_pwcs.cfg";
   my %pwc_config = Dada::readCFGFileIntoHash($pwc_config_file, 0);
+  %combined = (%config, %pwc_config);
 
-  my %combined = (%config, %pwc_config);
+  if ($sub_type ne "pwc")
+  {
+    my $sub_config_file = $DADA_ROOT."/share/bpsr_".$sub_type.".cfg";
+    my %sub_config = Dada::readCFGFileIntoHash($sub_config_file, 0);
+    %combined = (%combined, %sub_config);
+  }
+
   return %combined;
 }
 
