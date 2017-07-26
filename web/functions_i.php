@@ -11,7 +11,7 @@ function getConfigFile($fname, $quiet=FALSE) {
     if (!$quiet)
     echo "Could not open file: $fname for reading<BR>\n";
   } else {
-    while ($line = fgets($fptr, 1024)) {
+    while ($line = fgets($fptr, 16384)) {
       // Search for comments and  remove them from the line to be parsed
       $comment_pos = strpos($line,"#");
       if ($comment_pos!==FALSE) {
@@ -246,6 +246,43 @@ function socketRead($socket)
 
   return array($result, rtrim($response));
 }
+
+function socketReadTilClose($socket)
+{
+  $result = "ok";
+  $response = "";
+
+  while ($socket)
+  {
+    $bit = @socket_read ($socket, 262144, PHP_NORMAL_READ);
+    if ($bit === FALSE)
+    {
+      $err_code = socket_last_error();
+      $err_str = socket_strerror($err_code);
+      if ($response == "")
+      {
+        $result = "fail";
+        $response = $err_str;
+      }
+      if ($err_str == "Connection reset by peer")
+      {
+        socket_close($socket);
+        $socket = 0;
+      }
+    }
+    else
+    {
+      $response .= rtrim($bit, "\n\r");
+    }
+  }
+  if ($response == "")
+  {
+    $response = "socket invalid";
+  }
+
+  return array($result, rtrim($response));
+}
+
 
 
 function socketWrite($socket, $string) {
