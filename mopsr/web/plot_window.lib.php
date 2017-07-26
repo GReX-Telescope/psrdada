@@ -19,12 +19,16 @@ class plot_window extends mopsr_webpage
 
   var $corr_types = array ("ad", "po", "sn", "bd");
 
+  var $bf_cfg;
+
   function plot_window()
   {
     mopsr_webpage::mopsr_webpage();
     $this->title = "MOPSR Plot Window";
     $this->callback_freq = 2000;
     $this->verbose = isset($_GET["verbose"]);
+    $this->inst = new mopsr();
+    $this->bf_cfg  = $this->inst->configFileToHash(BF_FILE);
   }
 
   function javaScriptCallback()
@@ -100,10 +104,11 @@ class plot_window extends mopsr_webpage
             {
               var ant = ants[i];
               var ant_name = ant.getAttribute("name");
-//              alert(ant + " " + ant_name);
-
+              var ant_type = ant.getAttribute("type");
               var j = 0;
 
+              var td_name_id = "pw_name_" + ant_type
+              document.getElementById(td_name_id).innerHTML = ant_name;
 
               for (j=0; j<ant.childNodes.length; j++)
               {
@@ -112,17 +117,16 @@ class plot_window extends mopsr_webpage
                 {
                   var type = img.getAttribute("type");
                   var imgurl = http_server + url_prefix + img.childNodes[0].nodeValue;
-                  img_id = "pw_" + type + "_" + ant_name;
+                  img_id = "pw_" + type + "_" + ant_type;
                   if (ant_name == "FB")
                   {
-                    tr_id = "pw_tr_" + type + "_"+ ant_name;
+                    tr_id = "pw_tr_" + type + "_"+ ant_type;
                   }
                   else
                   {
-                    tr_id = "pw_tr_" + ant_name;
+                    tr_id = "pw_tr_" + ant_type;
                   }
 
-                  //alert ("img_id=" + img_id+ " tr_id="+tr_id)
                   excluded_imgs.push(img_id);
                   excluded_trs.push(tr_id);
 
@@ -134,15 +138,15 @@ class plot_window extends mopsr_webpage
 
                   try {
 
-                    if ((parseInt(img.getAttribute("width")) > 300) || (ant_name == "FB"))
+                    if ((parseInt(img.getAttribute("width")) > 300) || (ant_type == "FB"))
                     {
                       document.getElementById (img_id + "_link").href = "javascript:popImage('"+imgurl+"')";
                     }
 
-                    if ((parseInt(img.getAttribute("width")) <= 300) || (ant_name == "FB"))
+                    if ((parseInt(img.getAttribute("width")) <= 300) || (ant_type == "FB"))
                     {
                       document.getElementById (img_id).src = imgurl;
-                      if (ant_name != "FB")
+                      if (ant_type != "FB")
                       {
                         document.getElementById (img_id).height = img.getAttribute("height");
                       }
@@ -201,18 +205,21 @@ class plot_window extends mopsr_webpage
         <th>Power Monitor</th>
       </tr>
 <?
-      $id = "TB";
-      echo "<tr id='pw_tr_".$id."' style='display: none;'>\n";
-        echo "<td>".$id."</td>\n";
-        foreach ($this->types as $type)
-        {
-          echo "<td>";
-          echo "<a href='' id='pw_".$type."_".$id."_link'>";
-          echo "<img id='pw_".$type."_".$id."' src='' width='121px' height='91px'>";
-          echo "</a>";
-          echo "</td>\n";
-        }
+      for ($i=0; $i<$this->bf_cfg{"NUM_TIED_BEAMS"}; $i++)
+      {
+        $id = "TB".$i;
+        echo "<tr id='pw_tr_".$id."' style='display: none;'>\n";
+          echo "<td id='pw_name_".$id."'></td>\n";
+          foreach ($this->types as $type)
+          {
+            echo "<td>";
+            echo "<a href='' id='pw_".$type."_".$id."_link'>";
+            echo "<img id='pw_".$type."_".$id."' src='' width='121px' height='91px'>";
+            echo "</a>";
+            echo "</td>\n";
+          }
         echo "</tr>\n";
+      }
           
 ?>
       </tr>
@@ -225,7 +232,7 @@ class plot_window extends mopsr_webpage
         {
           $id = sprintf("%s%02d_%d", $this->arm_prefixes[$iarm], ($i+1), $j);
           echo "<tr id='pw_tr_".$id."' style='display: none;'>\n";
-          echo "<td>".$id."</td>\n";
+          echo "<td id='pw_name_".$id."'></td>\n";
           foreach ($this->types as $type)
           {
             echo "<td>";
@@ -247,11 +254,9 @@ class plot_window extends mopsr_webpage
 <?
       for ($ichan=0; $ichan<40; $ichan++)
       {
-        $id = sprintf("CH%02d", $ichan);
+        $id = "CORR";
         echo "<tr id='pw_tr_".$id."' style='display: none;'>\n";
-
-        echo "<td>".$id."</td>\n";
-
+        echo "<td id='pw_name_".$id."'>".$id."</td>\n";
         foreach ($this->corr_types as $type)
         {
           echo "<td>";
@@ -269,6 +274,7 @@ class plot_window extends mopsr_webpage
 
     <table border=0 cellspacing=0 cellpadding=2>
       <tr id='fanbeam_header' style='display: none;'>
+        <td id='pw_name_FB'></td>
       </tr>
 <?
       for ($i=127; $i>=0; $i--)
@@ -276,6 +282,7 @@ class plot_window extends mopsr_webpage
         $id = "FB";
         $type = sprintf("%02d", $i);
         echo "<tr id='pw_tr_".$type."_".$id."' style='display: none;'>";
+          
           echo "<td>";
           echo "<a href='' id='pw_".$type."_".$id."_link'>";
           echo "<img id='pw_".$type."_".$id."' src='' width='640px' height='480px'>";

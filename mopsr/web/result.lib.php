@@ -40,45 +40,17 @@ class result extends mopsr_webpage
       $this->results_link = "results";
     }
     $this->annotation_file = $this->obs_archive_dir."/obs.txt";
+    
+    # length and snr for the sources in this observation
     $this->source_info = $this->getObsModules($this->obs_results_dir);
-    $cmd = "grep ^MODE ". $this->obs_results_dir."/obs.info | awk '{print $2}'";
-    $this->mode = exec($cmd);
-  
-    $cmd = "grep ^CONFIG ".$this->obs_results_dir."/obs.info | awk '{print $2}'";
-    $result = exec($cmd);
-    if ($result != "")
-      $this->obs_config = $result;
-    else
-      if (($this->mode == "CORR") || ($this->mode == "CORR_CAL"))
-        $this->obs_config = "CORRELATION";
-      else
-        $this->obs_config = "INDIVIDUAL_MODULES";
 
-    $ant = array();
-    if ($this->obs_config == "FAN_BEAM" || $this->obs_config == "TIED_ARRAY_FAN_BEAM" || 
-        $this->obs_config == "MOD_BEAM" || $this->obs_config == "TIED_ARRAY_MOD_BEAM")
-    {
-      $ant = array_merge ($ant, array("FB"));
-      $cmd = "find ".$this->obs_results_dir." -name '????-??-??-??:??:??.FB.*.850x680.png' | awk -F. '{print $3}'";
-      $lastline = exec($cmd, $this->fb_types, $rval);
-    }
-    if ($this->obs_config == "TIED_ARRAY_BEAM" || $this->obs_config == "TIED_ARRAY_FAN_BEAM" ||
-        $this->obs_config == "TIED_ARRAY_BEAM" || $this->obs_config == "TIED_ARRAY_MOD_BEAM")
-    {
-      $this->tb_types = array("fl", "fr", "ti", "bp", "pm", "l9", "re", "st", "ta");
-      $ant = array_merge ($ant, array("TB"));
-    }
-    if ($this->obs_config == "CORRELATION")
-    {
-      $this->corr_types = array("sn", "bd", "ad", "po");
-      $ant = array_merge ($ant, array("CH00"));
-    }
-    if ($this->obs_config == "INDIVIDUAL_MODULES")
-    {
-      $this->im_types = array("fl", "fr", "ti", "bp", "pm");
-    }
+    $this->img_types = array ();
+    $this->img_types["TB"] = array("fl", "fr", "ti", "bp", "pm", "st", "l9", "ta", "tc");
+    $this->img_types["CORR"] = array("sn", "bd", "ad", "po");
+    $this->img_types["FB"] = array("*");
 
     $this->imgs = $this->inst->getObsImages($this->obs_results_dir, $ant);
+
   }
 
   function javaScriptCallback()
@@ -152,39 +124,34 @@ class result extends mopsr_webpage
 
     $this->openBlockHeader("Source Summary");
 
-
     $vals = array("int", "snr");
     $names = array("Length", "SNR");
 
-    $ants = array_keys($this->source_info);
+    $sources = array_keys($this->source_info);
 
     echo "    <table>\n";
-    echo "      <tr><th class='module'>Ant</th>";
+    echo "      <tr><th class='module'>Source</th>";
     foreach ($names as $name)
     {
       echo "<th class='module'>".$name."</th>";
     }
     echo "</tr>\n";
 
-    sort ($ants);
-    foreach ($ants as $ant)
+    sort ($sources);
+    foreach ($sources as $source)
     {
-      $sources = array_keys($this->source_info[$ant]);
-      foreach ($sources as $source)
-      {
-        $row = $this->source_info[$ant][$source];
+      $row = $this->source_info[$source];
         
-        echo "        <tr>\n";
-        echo "          <td class='module'>".$ant."</td>\n";
+      echo "        <tr>\n";
+      echo "          <td class='module'>".$source."</td>\n";
 
-        for ($j=0; $j<count($vals); $j++) 
-        {
-          $n = $names[$j];
-          $v = $row[$vals[$j]];
-          echo "          <td class='module'>".$v."</td>\n";
-        }
-        echo "      </tr>\n";
+      for ($j=0; $j<count($vals); $j++) 
+      {
+        $n = $names[$j];
+        $v = $row[$vals[$j]];
+        echo "          <td class='module'>".$v."</td>\n";
       }
+      echo "      </tr>\n";
     }
     echo "</table>\n";
 
@@ -228,60 +195,27 @@ class result extends mopsr_webpage
   {
     $this->openBlockHeader("Plots");
 
-    // plot correlation images if they exist
-    if ($this->obs_config == "CORRELATION")
-    {
-      echo "    <table id='correlation_images'>\n";
-      echo "      <tr>\n";
-      foreach ($this->corr_types as $t)
-        $this->printPlotCell($this->imgs["CH00"][$t."_160x120"], $this->imgs["CH00"][$t."_1024x768"], "160", "120");
-      echo "      </tr>\n";
-      echo "    </table>\n";
-    }
+    $sources = array_keys($this->source_info);
 
-    // print tied array beam images if they exist
-    if (($this->obs_config == "TIED_ARRAY_BEAM") || 
-        ($this->obs_config == "TIED_ARRAY_FAN_BEAM") ||
-        ($this->obs_config == "TIED_ARRAY_MOD_BEAM"))
-    {
-      echo "    <table id='tied_array_beam_images'>\n";
-      echo "      <tr>\n";
-      foreach ($this->tb_types as $t)
-        $this->printPlotCell($this->imgs["TB"][$t."_120x90"], $this->imgs["TB"][$t."_1024x768"], "120", "90");
-      echo "      </tr>\n";
-      echo "    </table>\n";
-    }
+    rsort($sources);
 
-    // print fan beam images if they exist
-    if ($this->obs_config == "FAN_BEAM" || $this->obs_config == "TIED_ARRAY_FAN_BEAM" ||
-       $this->obs_config == "MOD_BEAM" || $this->obs_config == "TIED_ARRAY_MOD_BEAM")
+    for ($i=0; $i<count($sources); $i++)
     {
-      echo "    <table id='fan_beam_images'>\n";
-      rsort($this->fb_types);
-      foreach ($this->fb_types as $t)
+      $source = $sources[$i];
+      $type = $this->source_info[$source]["type"];
+
+      if ($type == "TB")
       {
-        echo "      <tr>\n";
-        $this->printPlotCell($this->imgs["FB"][$t."_850x680"], $this->imgs["FB"][$t."_850x680"], "850", "680");
-        echo "      </tr>\n";
+        $this->printTBImgs($source);
       }
-      echo "    </table>\n";
-    }
-
-    if ($this->obs_config == "INDIVIDUAL_MODULES")
-    {
-      $ants = array_keys($this->imgs);
-      sort($ants);
-      echo "    <table id='individual_modules'>\n";
-      foreach ($ants as $a)
+      else if ($type == "CORR")
       {
-        echo "      <tr>\n";
-        echo "        <td>".$a."</td>\n";
-        foreach ($this->im_types as $t)
-          $this->printPlotCell($this->imgs[$a][$t."_120x90"], $this->imgs[$a][$t."_1024x768"], "120", "90");
-        echo "        </td>\n";
-        echo "      </tr>\n";
+        $this->printCorrImgs($source);
       }
-      echo "    </table>\n";
+      else if ($type == "FB")
+      {
+        $this->printFBImgs("FB");
+      }
     }
 
     $this->closeBlockHeader();
@@ -315,7 +249,6 @@ class result extends mopsr_webpage
     else
       $keys = array();
 
-
 ?>
     <table width='100%'>
 <?
@@ -329,16 +262,16 @@ class result extends mopsr_webpage
 
         echo "      <tr>";
         $j = ($sub * 0) + $i;
-        echo "        <td width='16.6%' align='right'>".$keys[$j]."</td>";
-        echo "        <td width='16.6%'>".substr($header[$keys[$j]],0, 32)."</td>";
+        echo "        <td width='16.6%'>".$keys[$j]."</td>";
+        echo "        <td width='16.6%' style='padding-right:10px;'>".substr($header[$keys[$j]],0, 32)."</td>";
 
         $j = ($sub * 1) + $i;
-        echo "        <td width='16.6%' align='right'>".$keys[$j]."</td>";
-        echo "        <td width='16.6%'>".substr($header[$keys[$j]],0, 32)."</td>";
+        echo "        <td width='16.6%'>".$keys[$j]."</td>";
+        echo "        <td width='16.6%' style='padding-right:10px;'>".substr($header[$keys[$j]],0, 32)."</td>";
 
         $j = ($sub * 2) + $i;
         echo "        <td width='16.6%' align='right'>".$keys[$j]."</td>";
-        echo "        <td width='16.6%'>".substr($header[$keys[$j]],0,32)."</td>";
+        echo "        <td width='16.6%' style='padding-right:10px;'>".substr($header[$keys[$j]],0,32)."</td>";
         echo "      </tr>\n";
       }
     }
@@ -421,6 +354,49 @@ class result extends mopsr_webpage
 
   }
 
+  function printTBImgs($source)
+  {
+    echo "<table id='tied_array_beam_images'>\n";
+    echo   "<tr>\n";
+    $counter = 0;
+    foreach ($this->img_types["TB"] as $t)
+    {
+      $this->printPlotCell($this->imgs[$source][$t."_120x90"], $this->imgs[$source][$t."_1024x768"], "120", "90");
+      $counter++;
+      if ($counter % 5 == 0)
+        echo "</tr>\n<tr>";
+    }
+    echo   "</tr>\n";
+    echo "</table>\n";
+  }
+
+  function printCorrImgs($source)
+  {
+    echo "<table id='correlation_images'>\n";
+    echo   "<tr>\n";
+    foreach ($this->img_types["CORR"] as $t)
+      $this->printPlotCell($this->imgs[$source][$t."_160x120"], $this->imgs[$source][$t."_1024x768"], "160", "120");
+    echo   "</tr>\n";
+    echo "</table>\n";
+  }
+
+  function printFBImgs($source)
+  {
+    $types = array();
+    $cmd = "find ".$this->obs_results_dir." -name '????-??-??-??:??:??.FB.*.850x680.png' | awk -F. '{print $3}' | sort -rn | uniq";
+    $lastline = exec($cmd, $types, $rval);
+
+    echo "<table id='fan_beam_images'>\n";
+    foreach ($types as $t)
+    {
+      echo   "<tr>\n";
+      $this->printPlotCell($this->imgs[$source][$t."_850x680"], $this->imgs[$source][$t."_850x680"], "850", "680");
+      echo   "</tr>\n";
+    }
+    echo "<table>\n";
+  }
+
+
   function printSourceCell($psr, $data)
   {
 
@@ -450,44 +426,92 @@ class result extends mopsr_webpage
     echo  "    </td>\n";
   } 
 
-  function getObsModules($dir)
+  function getObsModules()
   {
-    $rval = 0;
-    $dirs = array();
-    $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -type d -printf '%f\n'";
-    $line = exec ($cmd, $dirs, $rval);
+    $dir = $this->obs_results_dir;
 
+    $info = getConfigFile ($dir."/obs.info");
     $results = array();
-    foreach ($dirs as $subdir)
+
+    if ($info["CORR_ENABLED"] == "true")
     {
-      $tots = array();
-      $cmd = "find ".$dir."/".$subdir." -mindepth 1 -maxdepth 1 -type f -name '*_t.tot' -printf '%f\n'";
-      $line = exec($cmd, $tots, $rval);
-
-      $results[$subdir] = array();
-      foreach ($tots as $tot)
+      $source = $info["SOURCE"];
+      if (file_exists($dir."/".$source))
       {
-        $arr = split("_", $tot, 3);
-        if (count($arr) == 3)
-          $s = $arr[0]."_".$arr[1];
-        else
-          $s = $arr[0];
-
-        if (!array_key_exists($s, $results[$subdir]))
-          $results[$subdir][$s] = array();
-
-        if (strpos($tot, "_t") !== FALSE)
-        {
-          $results[$subdir][$s]["int"]     = $this->inst->getIntergrationLength($dir."/".$subdir."/".$tot);
-          $results[$subdir][$s]["nsubint"] = $this->inst->getNumSubints($dir."/".$subdir."/".$tot);
-          $results[$subdir][$s]["snr"]     = instrument::getSNR($dir."/".$subdir."/".$tot);
-        }
+        $results[$source] = array();
+        $results[$source]["type"] = "CORR";
+        $results[$source]["int"] = $this->calcIntLengthCorr ($source);
       }
     }
 
+    if ($info["FB_ENABLED"] == "true")
+    {
+      $source = "FB";
+      if (file_exists($dir."/".$source))
+      {
+        $results[$source] = array();
+        $results[$source]["type"] = "FB";
+        $results[$source]["int"] = $this->calcIntLengthFB ($source);
+        $results[$source]["snr"] = "NA";
+      }
+    }
+
+    for ($i=0; $i<4; $i++)
+    {
+      if ($info["TB".$i."_ENABLED"] == "true")
+      {
+        $source = $info["TB".$i."_SOURCE"];
+        if (file_exists($dir."/".$source))
+        {
+          $results[$source] = array();
+          $results[$source]["type"] = "TB";
+
+          $tot_file = $dir."/".$source."/".$source."_t.tot";
+          if (file_exists($tot_file))
+          {
+            $results[$source]["int"]     = $this->inst->getIntergrationLength($tot_file);
+            $results[$source]["nsubint"] = $this->inst->getNumSubints($tot_file);
+            $results[$source]["snr"]     = instrument::getSNR($tot_file);
+          }
+        }
+      }
+    }
     return $results;
   }
 
+  function calcIntLengthFB ($source)
+  {
+    $ac_file = $this->obs_results_dir."/".$source."/all_candidates.dat";
+    if (file_exists($ac_file))
+    {
+      $cmd = "tail -n 1000 ".$ac_file." | awk '{print $3}' | sort -n | tail -n 1";
+      $length = exec($cmd, $output, $rval);
+      return sprintf("%5.0f", $length);
+    }
+    return 0;
+  }
+
+  function calcIntLengthCorr($source)
+  {
+    $cc_file = $this->obs_results_dir."/".$source."/cc.sum";
+    if (file_exists ($cc_file))
+    {
+      $cmd = "find ".$this->obs_archive_dir."/".$source." -name '*.ac' | sort -n | tail -n 1";
+      $output = array();
+      $ac = exec($cmd, $output, $rval);
+
+      $parts = explode("_", $ac);
+      $bytes_to = $parts[count($parts)-1];
+
+      $cmd = "grep BYTES_PER_SECOND ".$this->obs_results_dir."/".$source."/obs.header | awk '{print $2}'";
+      $output = array();
+      $Bps = exec($cmd, $output, $rval);
+
+      $length = $bytes_to / $Bps;
+      return sprintf ("%5.0f", $length);
+    }
+    return 0;
+  }
 }
 
 handleDirect("result");

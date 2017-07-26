@@ -12,6 +12,7 @@ class machine_summary extends mopsr_webpage
   var $aqs = array();
   var $bfs = array();
   var $bps = array();
+  var $bss = array();
   
   // mapping of HOST to type 
   var $machines = array();
@@ -35,6 +36,7 @@ class machine_summary extends mopsr_webpage
     $aq_cfg = $inst->configFileToHash(AQ_FILE);
     $bf_cfg = $inst->configFileToHash(BF_FILE);
     $bp_cfg = $inst->configFileToHash(BP_FILE);
+    $bs_cfg = $inst->configFileToHash(BS_FILE);
     $bf_x_cfg = $inst->configFileToHash(CNR_FILE);
     $bp_x_cfg = $inst->configFileToHash(BP_CNR_FILE);
 
@@ -74,6 +76,19 @@ class machine_summary extends mopsr_webpage
         array_push ($this->machines[$host], "bp");
       $this->mappings["bp".sprintf("%02d",$i)] = $host;
     }
+
+    for ($i=0; $i<$bs_cfg["NUM_BS"]; $i++)
+    {
+      $host = $bs_cfg["BS_".$i];
+      $host = str_replace("mpsr-", "", $host);
+      $this->bss[$i] = $host;
+      if (!array_key_exists($host, $this->machines))
+        $this->machines[$host] = array();
+      if (!in_array("bs", $this->machines[$host]))
+        array_push ($this->machines[$host], "bs");
+      $this->mappings["bs".sprintf("%02d",$i)] = $host;
+    }
+
 
     list ($server_host, $server_domain) = explode(".", $inst->config["SERVER_HOST"], 2);
     $server_host = str_replace("mpsr-", "", $server_host);
@@ -281,11 +296,10 @@ class machine_summary extends mopsr_webpage
                     }
                     else if (key == "disk") 
                     {
-                      var disk_used = parseFloat(node.getAttribute("used"));
                       var disk_free = parseFloat(node.childNodes[0].nodeValue);
                       var disk_size = parseFloat(node.getAttribute("size"));
-                      var disk_free = (disk_size - disk_used);
-                      var disk_percent = Math.floor((disk_used / disk_size) * 100);
+                      var disk_percent = (1.0 - (disk_free / disk_size)) * 100;
+                      //alert (disk_percent);
                       progress_bar = eval(host+"_disk")
                       progress_bar.setPercentage(disk_percent);
                       disk_free_per_host[host] = disk_free;
@@ -464,6 +478,7 @@ class machine_summary extends mopsr_webpage
     $title .= " <a target='_ms_popup' href='area_summary.lib.php?single=true&area=aq'>AQ</a>";
     $title .= " <a target='_ms_popup' href='area_summary.lib.php?single=true&area=bf'>BF</a>";
     $title .= " <a target='_ms_popup' href='area_summary.lib.php?single=true&area=bp'>BP</a>";
+    $title .= " <a target='_ms_popup' href='area_summary.lib.php?single=true&area=bs'>BS</a>";
 
     $this->openBlockHeader($title);
 
@@ -540,22 +555,22 @@ class machine_summary extends mopsr_webpage
     $port = $this->config["SERVER_WEB_MONITOR_PORT"];
 
     $output = "";
-    $xml  = "<?xml version='1.0' encoding='ISO-8859-1'?>\n";
-    $xml .= "<machine_summary>\n";
+    $xml  = "<?xml version='1.0' encoding='ISO-8859-1'?>";
+    $xml .= "<machine_summary>";
 
     list ($socket, $result) = openSocket($host, $port);
 
     if ($result == "ok")
     {
-      $xml .= "<connection>good</connection>\n";
+      $xml .= "<connection>good</connection>";
 
       $bytes_written = socketWrite($socket, "aq_node_info\r\n");
       list($result, $response) = socketRead($socket);
       if ($result == "ok")
       {
-        $xml .= "<aq_node_info>\n";
-        $xml .= $response."\n";
-        $xml .= "</aq_node_info>\n";
+        $xml .= "<aq_node_info>";
+        $xml .= $response;
+        $xml .= "</aq_node_info>";
       }
       socket_close($socket);
       $socket = 0;
@@ -565,14 +580,13 @@ class machine_summary extends mopsr_webpage
     if ($result == "ok")
     {
       $bytes_written = socketWrite($socket, "bf_node_info\r\n");
-      list($result, $response) = socketRead($socket);
+      list($result, $response) = socketReadTilClose($socket);
       if ($result == "ok")
       {
-        $xml .= "<bf_node_info length='".strlen($response)."'>\n";
-        $xml .= $response."\n";
-        $xml .= "</bf_node_info>\n";
+        $xml .= "<bf_node_info length='".strlen($response)."'>";
+        $xml .= $response;
+        $xml .= "</bf_node_info>";
       }
-      socket_close($socket);
       $socket = 0;
     }
   
@@ -583,9 +597,9 @@ class machine_summary extends mopsr_webpage
       list($result, $response) = socketRead($socket);
       if ($result == "ok")
       {
-        $xml .= "<bp_node_info length='".strlen($response)."'>\n";
-        $xml .= $response."\n";
-        $xml .= "</bp_node_info>\n";
+        $xml .= "<bp_node_info length='".strlen($response)."'>";
+        $xml .= $response;
+        $xml .= "</bp_node_info>";
       }
       socket_close($socket);
       $socket = 0;
@@ -598,13 +612,33 @@ class machine_summary extends mopsr_webpage
     list ($socket, $result) = openSocket($host, $port);
     if ($result == "ok")
     {
+      $bytes_written = socketWrite($socket, "bs_node_info\r\n");
+      list($result, $response) = socketRead($socket);
+      if ($result == "ok")
+      {
+        $xml .= "<bs_node_info length='".strlen($response)."'>";
+        $xml .= $response;
+        $xml .= "</bs_node_info>";
+      }
+      socket_close($socket);
+      $socket = 0;
+    }
+    else
+    {
+      $xml .= "<connection>bad</connection>\n";
+    }
+
+
+    list ($socket, $result) = openSocket($host, $port);
+    if ($result == "ok")
+    {
       $bytes_written = socketWrite($socket, "srv_node_info\r\n");
       list($result, $response) = socketRead($socket);
       if ($result == "ok")
       {
-        $xml .= "<daemon_statuses>\n";
-        $xml .= $response."\n";
-        $xml .= "</daemon_statuses>\n";
+        $xml .= "<daemon_statuses>";
+        $xml .= $response;
+        $xml .= "</daemon_statuses>";
       }
       socket_close($socket);
       $socket = 0;
@@ -617,18 +651,18 @@ class machine_summary extends mopsr_webpage
       list($result, $response) = socketRead($socket);
       if ($result == "ok")
       {
-        $xml .= "<daemon_statuses>\n";
-        $xml .= $response."\n";
-        $xml .= "</daemon_statuses>\n";
+        $xml .= "<daemon_statuses>";
+        $xml .= $response;
+        $xml .= "</daemon_statuses>";
       }
       socket_close($socket);
       $socket = 0;
     }
 
-    $xml .= "</machine_summary>\n";
+    $xml .= "</machine_summary>";
 
     header('Content-type: text/xml');
-    echo $xml;
+    echo $xml."\n";
   }
 
   function overallStatusLight($status, $machine, $linkid, $imgid) 

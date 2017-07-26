@@ -44,6 +44,11 @@ class area_summary extends mopsr_webpage
       $this->tag = "BP";
       $this->config = $this->inst->configFileToHash(BP_FILE);
     }
+    else if ($this->area == "bs")
+    {
+      $this->tag = "BS";
+      $this->config = $this->inst->configFileToHash(BS_FILE);
+    }
     else
     {
       echo "ERROR: area must be valid get param<BR>\n";
@@ -660,14 +665,13 @@ class area_summary extends mopsr_webpage
       $xml .= "<connection>good</connection>\n";
 
       $bytes_written = socketWrite($socket, $area."_node_info\r\n");
-      list($result, $response) = socketRead($socket);
+      list($result, $response) = socketReadTilClose($socket);
       if ($result == "ok")
       {
         $xml .= "<node_info>\n";
         $xml .= $response."\n";
         $xml .= "</node_info>\n";
       }
-      socket_close($socket);
       $socket = 0;
     } 
     else
@@ -679,14 +683,13 @@ class area_summary extends mopsr_webpage
     if ($result == "ok") 
     {
       $bytes_written = socketWrite($socket, "status_info\r\n");
-      list($result, $response) = socketRead($socket);
+      list($result, $response) = socketReadTilClose($socket);
       if ($result == "ok")
       {
         $xml .= "<daemon_statuses>\n";
         $xml .= $response."\n";
         $xml .= "</daemon_statuses>\n";
       }
-      socket_close($socket);
       $socket = 0;
     }
     $xml .= "</area_summary>\n";

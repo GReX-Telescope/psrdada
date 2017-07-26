@@ -136,6 +136,7 @@ class state_banner extends mopsr_webpage
           <div class="btns" align="right" style="float:right">
             <a href="javascript:popUp('/ganglia/', 'gang')" class="btn"><span>Ganglia</span></a>
             <a href="javascript:popUp('results.lib.php?single=true', 'res')" class="btn"><span>Results</span></a>
+            <a href="javascript:popUp('Asteria.php', 'Asteria')" class="btn"><span>Asteria</span></a>
             <!--<a href="javascript:popUp('pfb_monitor.lib.php?single=true', 'pfb')" class="btn"><span>PFB Monitor</span></a>-->
             <a href="javascript:popUp('tmc_simulator.lib.php?single=true', 'tmc')" class="btn"><span>Manual Ctrl</span></a>
             <a href="javascript:popUp('control.lib.php?single=true', 'ctrl')" class="btn"><span>Controls</span></a>
@@ -143,7 +144,7 @@ class state_banner extends mopsr_webpage
             <a href="javascript:popUp('environment_monitor.lib.php?single=true', 'em')" class="btn"><span>Env</span></a>
             <a href="javascript:popUp('rxlink_monitor.lib.php?single=true', 'rxlink')" class="btn"><span>RX Eth</span></a>
             <a href="javascript:popUp('rx_monitor.lib.php?single=true', 'rx')" class="btn"><span>RX</span></a>
-            <a href="javascript:popUp('udp_monitor.lib.php?single=true', 'udp')" class="btn"><span>UDP</span></a>
+            <a href="javascript:popUp('udp_monitor_hires.lib.php?single=true', 'udp')" class="btn"><span>UDP</span></a>
             <a href="javascript:popUp('mgt_monitor.lib.php?single=true', 'mgt')" class="btn"><span>MGT</span></a>
           </div>
 <?  

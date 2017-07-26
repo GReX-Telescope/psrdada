@@ -28,6 +28,7 @@ nobase_dist_web_SCRIPTS = index.php \
                           signal_path.lib.php \
 													state_banner.lib.php \
 													tmc_simulator.lib.php \
+													tmc_simulator_new.lib.php \
                           control.lib.php \
                           images/mopsr_favicon.ico \
                           images/mopsr_logo.png \
@@ -37,7 +38,10 @@ nobase_dist_web_SCRIPTS = index.php \
 													rxlink_monitor.lib.php \
 													udp_plot.php \
 													udp_input.lib.php \
-													udp_monitor.lib.php
+													udp_input_hires.lib.php \
+													udp_monitor.lib.php \
+													udp_monitor_hires.lib.php \
+													pulsars.list sources.list
 
 include $(top_srcdir)/config/Makefile.targets
 

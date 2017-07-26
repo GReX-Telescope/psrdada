@@ -9,9 +9,10 @@ $type = $_GET["type"];
 $res = $_GET["res"];
 $schan = isset($_GET["schan"]) ? $_GET["schan"] : 0;
 $echan = isset($_GET["echan"]) ? $_GET["echan"] : "39";
+$echan = isset($_GET["echan"]) ? $_GET["echan"] : "319";
 
-$schan = isset($_GET["schan"]) ? $_GET["schan"] : "19";
-$echan = isset($_GET["echan"]) ? $_GET["echan"] : "19";
+//$schan = isset($_GET["schan"]) ? $_GET["schan"] : "19";
+//$echan = isset($_GET["echan"]) ? $_GET["echan"] : "19";
 
 define ("UDP_MONITOR_PATH", "/data/mopsr/monitor/udp/".$pfb_id); 
 

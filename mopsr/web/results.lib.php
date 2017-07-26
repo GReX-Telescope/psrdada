@@ -193,33 +193,46 @@ class results extends mopsr_webpage
           // for each result returned in the XML DOC
           for (i=0; i<results.length; i++) {
 
+            // row ID
+            rid = "row_" + i
+  
             result = results[i];
             this_result = new Array();
+            
+            this_result["ANNOTATION"] = "";
+            this_result["SOURCE"] = "";
 
             for (j=0; j<result.childNodes.length; j++) 
             {
-
               // if the child node is an element
               if (result.childNodes[j].nodeType == 1) {
                 key = result.childNodes[j].nodeName;
-                // if there is a text value in the element
                 if (result.childNodes[j].childNodes.length == 1) {
-                  value = result.childNodes[j].childNodes[0].nodeValue;
-                } else {
-                  value = "";
+                  val = result.childNodes[j].childNodes[0].nodeValue;
+                  if (key == "UTC_START") {
+                    this_result[key] = val
+                  }
+                  else if (key == "SOURCE") {
+                    name = result.childNodes[j].getAttribute("name")
+                    if (this_result[key] == '')
+                      this_result[key] = name
+                    else
+                      this_result[key] = this_result[key] + " " + name
+                  }
+                  else 
+                  {
+                    this_result[key] = val;
+                  }
                 }
-                this_result[key] = value;
               }
             }
 
-            utc_start = this_result["UTC_START"];
-
             for ( key in this_result) {
+              utc_start = this_result["UTC_START"]
               value = this_result[key];
+              rid = "row_" + i
 
-              if (key == "SOURCE") {
-
-                // ignore
+              if (key == "UTC_START") {
 
               } else if (key == "IMG") {
 
@@ -229,7 +242,7 @@ class results extends mopsr_webpage
                 link.href = url;
                 link.onmouseover = new Function("Tip(\"<img src='<?echo $this->results_link?>/"+utc_start+"/"+img+"' width=401 height=301>\")");
                 link.onmouseout = new Function("UnTip()");
-                link.innerHTML = this_result["SOURCE"];
+                link.innerHTML = this_result["UTC_START"];
 
                 try {
                   document.getElementById("img_"+i).src = "<?echo $this->results_link?>/"+utc_start+"/"+value;
@@ -248,6 +261,7 @@ class results extends mopsr_webpage
                   span = document.getElementById(key+"_"+i);
                   span.innerHTML = value;
                 } catch (e) {
+                  alert ("failed key="+key+" value="+value);
                   // do nothing 
                 }
               }
@@ -360,6 +374,7 @@ class results extends mopsr_webpage
                                       $this->offset, $this->length, 
                                       $this->filter_type, $this->filter_value);
 
+
     ?>
     <div style="text-align: right; padding-bottom:10px;">
       <span style="padding-right: 10px">
@@ -436,14 +451,12 @@ class results extends mopsr_webpage
       else 
         echo "        <th id='IMAGE_TR' align=left></th>\n";
 ?>
-        <th align=left>SOURCE</th>
         <th align=left>UTC START</th>
-        <th align=left>CONFIG</th>
-<!--        <th align=left>FREQ</th>
-        <th align=left>BW</th>-->
+        <th align=left>SOURCEs</th>
+        <th align=left>STATE</th>
+        <th align=left>PID</th>
         <th align=left>LENGTH</th>
-        <th align=left>PROC_FILEs</th>
-        <th class="trunc">Annotation</th>
+        <th class="trunc">ANNOTATION</th>
       </tr>
 <?
 
@@ -451,18 +464,18 @@ class results extends mopsr_webpage
         rsort($keys);
         $result_url = "result.lib.php";
 
-        for ($i=0; $i < count($keys); $i++) {
-
+        for ($i=0; $i < count($keys); $i++) 
+        {
           $k = $keys[$i];
           $r = $results[$k];
-          
+
           $url = $result_url."?single=true&utc_start=".$k."&class=".$this->class;
 
           // guess the larger image size
           $image = $r["IMG"];
 
-          $mousein = "onmouseover=\"Tip('<img src=\'".$this->results_link."/".$k."/".$image."\' width=201 height=151>')\"";
-          $mouseout = "onmouseout=\"UnTip()\"";
+          #$mousein = "onmouseover=\"Tip('<img src=\'".$this->results_link."/".$k."/".$image."\' width=201 height=151>')\"";
+          #$mouseout = "onmouseout=\"UnTip()\"";
   
           // If archives have been finalised and its not a brand new obs
           echo "  <tr id='row_".$i."' class='".(($results[$keys[$i]]["processing"] === 1) ? "processing" : "finished")."'>\n";
@@ -477,14 +490,38 @@ class results extends mopsr_webpage
 
           echo "    <td ".$bg_style."><img style='".$style."' id='img_".$i."' src=".$this->results_link."/".$k."/".$r["IMG"]." width=64 height=48>\n";
           
-          // SOURCE 
-          echo "    <td ".$bg_style."><a id='link_".$i."' href='".$url."' ".$mousein." ".$mouseout.">".$r["SOURCE"]."</a></td>\n";
-
           // UTC_START 
-          echo "    <td ".$bg_style."><span id='UTC_START_".$i."'>".$k."</span></td>\n";
+          echo "    <td ".$bg_style."><span id='UTC_START_".$i."'><a id='link_".$i."' href='".$url."'>".$k."</a></span></td>\n";
+
+          $sources = "";
+
+          foreach ($r["SOURCES"] as $s => $v)
+          {
+            $sources .= $s." ";
+/*
+            if ($v["TYPE"] == "CORR")
+              $sources .= $this->tippedImage ($i, $url, $v["IMAGE"], "purple", $s);
+            if ($v["TYPE"] == "TB")
+              $sources .= $this->tippedImage ($i, $url, $v["IMAGE"], "blue", $s);
+            if ($v["TYPE"] == "FB")
+              $sources .= $this->tippedImage ($i, $url, $v["IMAGE"], "green", $s);
+*/
+          }
+  
+
+          // SOURCE 
+          echo "    <td ".$bg_style."><span id='SOURCE_".$i."'>".$sources."</span></td>\n";
+
+          // Observation State
+          echo "    <td ".$bg_style."><span id='STATE_".$i."'>".$r["STATE"]."</span></td>\n";
+
+          // PID 
+          echo "    <td ".$bg_style."><span id='PID_".$i."'>".$r["PID"]."</span></td>\n";
+
+          //echo "    <td ".$bg_style."><a id='link_".$i."' href='".$url."' ".$mousein." ".$mouseout.">".$r["SOURCE"]."</a></td>\n";
 
           // CONFIG
-          echo "    <td ".$bg_style."><span id='CONFIG_".$i."'>".$r["CONFIG"]."</span></td>\n";
+          //echo "    <td ".$bg_style."><span id='CONFIG_".$i."'>".$r["CONFIG"]."</span></td>\n";
 
           // FREQ
           //echo "    <td ".$bg_style."><span id='FREQ_".$i."'>".$r["FREQ"]."</span></td>\n";
@@ -496,21 +533,21 @@ class results extends mopsr_webpage
           echo "    <td ".$bg_style."><span id='INT_".$i."'>".$r["INT"]."</span></td>\n";
 
           // PROC_FILEs
-          if (array_key_exists("AQ_PROC_FILE", $r))
-          {
-            echo "    <td ".$bg_style.">";
-              echo "<span id='AQ_PROC_FILE_".$i."'>".$r["AQ_PROC_FILE"]."</span> ";
-              echo "<span id='BF_PROC_FILE_".$i."'>".$r["BF_PROC_FILE"]."</span> ";
-              echo "<span id='BP_PROC_FILE_".$i."'>".$r["BP_PROC_FILE"]."</span>";
-            echo "</td>\n";
-          }
-          else
-          {
-            echo "    <td ".$bg_style."><span id='PROC_FILE_".$i."'>".$r["PROC_FILE"]."</span></td>\n";
-          }
+          //if (array_key_exists("AQ_PROC_FILE", $r))
+          //{
+          //  echo "    <td ".$bg_style.">";
+          //    echo "<span id='AQ_PROC_FILE_".$i."'>".$r["AQ_PROC_FILE"]."</span> ";
+          //    echo "<span id='BF_PROC_FILE_".$i."'>".$r["BF_PROC_FILE"]."</span> ";
+          //    echo "<span id='BP_PROC_FILE_".$i."'>".$r["BP_PROC_FILE"]."</span>";
+          //  echo "</td>\n";
+         // }
+          //else
+         // {
+          //  echo "    <td ".$bg_style."><span id='PROC_FILE_".$i."'>".$r["PROC_FILE"]."</span></td>\n";
+          //}
 
           // ANNOTATION
-          echo "    <td ".$bg_style." class=\"trunc\"><div><span id='annotation_".$i."'>".$r["annotation"]."</span></div></td>\n";
+          echo "    <td ".$bg_style." class=\"trunc\"><div><span id='ANNOTATION_".$i."'>".$r["ANNOTATION"]."</span></div></td>\n";
 
           echo "  </tr>\n";
 
@@ -523,6 +560,14 @@ class results extends mopsr_webpage
     echo "</td></tr></table>\n";
   }
 
+  function tippedimage($i, $url, $image, $color, $text)
+  {
+    $mousein = "onmouseover=\"Tip('<img src=\'".$this->results_link."/".$image."\' width=201 height=151>')\"";
+    $mouseout = "onmouseout=\"UnTip()\"";
+    $link = "<a id='link_".$i."' href='".$url."' ".$mousein." ".$mouseout."><font color='".$color."'>".$text."</font></a>&nbsp;&nbsp;";
+    return $link;
+  }
+
   /*************************************************************************************************** 
    *
    * Prints raw text to be parsed by the javascript XMLHttpRequest
@@ -533,22 +578,42 @@ class results extends mopsr_webpage
     $results = $this->getResultsArray($this->results_dir,
                                       $this->offset, $this->length, 
                                       $this->filter_type, $this->filter_value);
-
     $keys = array_keys($results);
     rsort($keys);
 
     $xml = "<?xml version='1.0' encoding='ISO-8859-1'?>\n";
     $xml .= "<results>\n";
-    for ($i=0; $i<count($keys); $i++) {
-      $k = $keys[$i];
-      $r = $results[$k];
-      $rkeys = array_keys($r);
+    foreach ($results as $utc => $array)
+    {
       $xml .= "<result>\n";
-      $xml .= "<UTC_START>".$k."</UTC_START>\n";
-      for ($j=0; $j<count($rkeys); $j++) {
-        $rk = $rkeys[$j]; 
-        if (($rk != "FRES_AR") && ($rk != "TRES_AR")) {
-          $xml .= "<".$rk.">".htmlspecialchars($r[$rk])."</".$rk.">\n";
+      $xml .= "<UTC_START>".$utc."</UTC_START>\n";
+      foreach ($array as $k => $v)
+      {
+        if ($k == "SOURCE")
+        {
+          // ignore
+        }
+        else if ($k == "SOURCES")
+        {
+          foreach ($v as $source => $vv)
+          {
+            $xml .= "<SOURCE name='".$source."'>\n";
+            if (is_array($vv))
+            {
+              foreach ($vv as $kkk => $vvv)
+              {
+                if ($kkk == "IMAGE")
+                {
+                  $xml .= $vvv;
+                }
+              }
+            }
+            $xml .= "</SOURCE>";
+          }
+        }
+        else
+        {
+          $xml .= "<".$k.">".htmlspecialchars($v)."</".$k.">\n";
         }
       }
       $xml .= "</result>\n";
@@ -557,7 +622,6 @@ class results extends mopsr_webpage
 
     header('Content-type: text/xml');
     echo $xml;
-
   }
 
   function handleRequest()
@@ -579,170 +643,293 @@ class results extends mopsr_webpage
 
     if (($filter_type == "") || ($filter_value == "")) 
     {
-      $observations = getSubDirs($results_dir, $offset, $length, 1);
+      $observations = getSubDirs ($results_dir, $offset, $length, 1);
     } 
     else 
     {
-
       # get a complete list
       if ($filter_type == "UTC_START") {
-        $cmd = "find ".$results_dir."/*".$filter_value."* -maxdepth 1 -name 'obs.info' -printf '%h\n' | awk -F/ '{print \$NF}' | sort -r";
+        $cmd = "find ".$results_dir."/*".$filter_value."* -maxdepth 1 ".
+               "-name 'obs.info' -printf '%h\n' | awk -F/ '{print \$NF}' | sort -r";
       } else {
-        $cmd = "find ".$results_dir." -maxdepth 2 -type f -name obs.info | xargs grep ".$filter_type." | grep ".$filter_value." | awk -F/ '{print $(NF-1)}' | sort -r";
+        $cmd = "find ".$results_dir." -maxdepth 2 -type f -name obs.info ".
+               "| xargs grep ".$filter_type." | grep ".$filter_value." ".
+               "| awk -F/ '{print $(NF-1)}' | sort -r";
       }
       $last = exec($cmd, $all_obs, $rval);
       $observations = array_slice($all_obs, $offset, $length);
     }
 
-
-    for ($i=0; $i<count($observations); $i++) {
-
+    for ($i=0; $i<count($observations); $i++)
+    {
       $o = $observations[$i];
       $dir = $results_dir."/".$o;
+
       // read the obs.info file into an array 
-      if (file_exists($dir."/obs.info")) {
-        $arr = getConfigFile($dir."/obs.info");
-        $all_results[$o]["SOURCE"] = $arr["SOURCE"];
-        $all_results[$o]["CONFIG"] = $arr["CONFIG"];
-        //$all_results[$o]["FREQ"] = sprintf("%5.2f",$arr["FREQ"]);
-        //$all_results[$o]["BW"] = $arr["BW"];
-        $all_results[$o]["PID"] = $arr["PID"];
-        if (array_key_exists("PROC_FILE", $arr))
-          $all_results[$o]["PROC_FILE"] = $arr["PROC_FILE"];
-        else
-        {
-          $all_results[$o]["AQ_PROC_FILE"] = $arr["AQ_PROC_FILE"];
-          $all_results[$o]["BF_PROC_FILE"] = $arr["BF_PROC_FILE"];
-          $all_results[$o]["BP_PROC_FILE"] = $arr["BP_PROC_FILE"];
-        }
-        // these will only exist after this page has loaded and the values have been calculated once
-        $all_results[$o]["INT"] = (array_key_exists("INT", $arr)) ? $arr["INT"] : "NA";
-        $all_results[$o]["IMG"] = (array_key_exists("IMG", $arr)) ? $arr["IMG"] : "NA";
-      }
-
-      # if this observation is finished check if any of the observations require updating of the obs.info
-      if (file_exists($dir."/obs.finished")) {
-        $finished = 1;
-      } else {
-        $finished = 0;
-      }
-
-      # get the image bp or pvf 
-      if (($all_results[$o]["IMG"] == "NA") || ($all_results[$o]["IMG"] == "")) 
+      if (file_exists($dir."/obs.info")) 
       {
-        $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -type f ".
-               "-name '*.fl.120x90.png' -printf '%f\n' ".
-               "-o -name '*CH00.ad.160x120.png' -printf '%f\n' ".
-               "| sort -n | head -n 1";
-        $img = exec($cmd, $output, $rval);
-        if (($rval == 0) && ($img != "")) {
-          $all_results[$o]["IMG"] = $img;
-        } else {
-          $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -type f ".
-                 "-name '*.FB.00.*png' -printf '%f\n' ".
-                "| sort -n | head -n 1";
-          $img = exec($cmd, $output, $rval);
-          if (($rval == 0) && ($img != "")) {
-            $all_results[$o]["IMG"] = $img;
-          } else {
-            $all_results[$o]["IMG"] = "../../../images/blankimage.gif";
+        $arr = getConfigFile($dir."/obs.info");
+        $all = array();
+
+        $all["STATE"] = "unknown";
+        if (file_exists($dir."/obs.processing"))
+          $all["STATE"] = "processing";
+        else if (file_exists($dir."/obs.finished"))
+          $all["STATE"] = "finished";
+        else if (file_exists($dir."/obs.transferred"))
+          $all["STATE"] = "transferred";
+        else if (file_exists($dir."/obs.failed"))
+          $all["STATE"] = "failed";
+        else
+           $all["STATE"] = "unknown";
+
+        $all["SOURCE"] = $arr["SOURCE"];
+
+        $all["SOURCES"] = array();
+        if ($arr["FB_ENABLED"] == "true")
+        {
+          $all["SOURCES"]["FB"] = array();
+          $all["SOURCES"]["FB"]["TYPE"] = "FB";
+          $all["SOURCES"]["FB"]["IMAGE"] = $this->getFBImage($dir, $o, $arr["FB_IMG"]);
+          if ((($all["STATE"] == "finished") || ($all["STATE"] == "transferred")) && ($arr["FB_IMG"] == ""))
+            $this->updateImage ($dir."/obs.info", "FB_IMG", $all["SOURCES"]["FB"]["IMAGE"]);
+        }
+
+        if ($arr["MB_ENABLED"] == "true")
+        {
+          $all["SOURCES"]["MB"] = array();
+          $all["SOURCES"]["MB"] = array();
+          $all["SOURCES"]["MB"]["IMAGE"] = "../../../images/blankimage.gif";
+        }
+
+        if ($arr["CORR_ENABLED"] == "true")
+        {
+          $source = $arr["SOURCE"];
+          $all["SOURCES"][$source] = array();
+          $all["SOURCES"][$source]["TYPE"] = "CORR";
+          $all["SOURCES"][$source]["IMAGE"] = $this->getCorrImage($dir, $o, $arr["CORR_IMG"]);
+          if ((($all["STATE"] == "finished") || ($all["STATE"] == "transferred")) && ($arr["CORR_IMG"] == ""))
+            $this->updateImage ($dir."/obs.info", "CORR_IMG", $all["SOURCES"][$source]["IMAGE"]);
+        }
+
+        for ($j=0; $j<4; $j++)
+        {
+          $tbe_key = "TB".$j."_ENABLED";
+          if ((array_key_exists ($tbe_key, $arr)) && ($arr[$tbe_key] == "true"))
+          {
+            $source = $arr["TB".$j."_SOURCE"];
+            $all["SOURCES"][$source] = array();
+            $all["SOURCES"][$source]["TYPE"] = "TB";
+            $all["SOURCES"][$source]["IMAGE"] = $this->getTBImage($dir, $o, $source, $arr["TB".$j."_IMG"]);
+            if ((($all["STATE"] == "finished") || ($all["STATE"] == "transferred")) && ($arr["TB".$j."_IMG"] == ""))
+              $this->updateImage ($dir."/obs.info", "TB".$j."_IMG", $all["SOURCES"][$source]["IMAGE"]);
           }
         }
-        if ($finished) {
-          system("perl -ni -e 'print unless /^IMG/' ".$results_dir."/".$o."/obs.info");
-          system("echo 'IMG                 ".$img."' >> ".$results_dir."/".$o."/obs.info");
-        }
-      }
-      # get the integration length 
-      if (($all_results[$o]["INT"] == "NA") || ($all_results[$o]["INT"] <= 0))
-      {
-        if (($all_results[$o]["IMG"] != "NA") && ($all_results[$o]["IMG"] != "") &&
-            (strpos($all_results[$o]["IMG"], "blank") === FALSE)) 
+
+        # use the primary PID
+        $all["PID"] = $arr["PID"];
+
+        $all["IMG"] = "NA";
+        # find an image of the observation, if not existing
+        if (($arr["IMG"] == "NA") || ($arr["IMG"] == ""))
         {
-          $int = $this->calcIntLength($o);
-          $all_results[$o]["INT"] = $int;
-        } else {
-          $all_results[$o]["INT"] = "NA";
-        } 
-        if ($finished) {
-          system("perl -ni -e 'print unless /^INT/' ".$results_dir."/".$o."/obs.info");
-          system("echo 'INT              ".$int."' >> ".$results_dir."/".$o."/obs.info");
+          # preferentially find a pulsar profile plot
+          $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -type f ".
+            "-name '*.fl.120x90.png' -printf '%f\n' ".
+            "| sort -n | head -n 1";
+          $img = exec ($cmd, $output, $rval);
+
+          if (($rval == 0) && ($img != "")) {
+            $all["IMG"] = $img;
+          } else {
+            $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -type f ".
+              "-name '*.*.ad.160x120.png' -printf '%f\n' ".
+              "-o -name '*.FB.00.*png' -printf '%f\n' ".
+              "| sort -n | head -n 1";
+            $img = exec ($cmd, $output, $rval);
+
+            if (($rval == 0) && ($img != "")) {
+              $all["IMG"] = $img;
+            } else {
+              $all["IMG"] = "../../../images/blankimage.gif";
+            }
+          }
         }
-      }
-      if (file_exists($dir."/obs.txt")) {
-        $all_results[$o]["annotation"] = file_get_contents($dir."/obs.txt");
-      } else {
-        $all_results[$o]["annotation"] = "";
+        else
+        {
+          $all["IMG"] = $arr["IMG"];
+        }
+      
+        # if the integration length does not yet exist
+        $int = 0;
+        if (($arr["INT"] == "NA") || ($arr["INT"] <= 0))
+        {
+          if ($arr["CORR_ENABLED"] == "true")
+            $int = $this->calcIntLengthCorr($o, $arr["SOURCE"]);
+          else if ($arr["FB_ENABLED"] == "true")
+            $int = $this->calcIntLengthFB($o, "FB");
+          else if ($arr["TB0_ENABLED"] == "true")
+            $int = $this->calcIntLengthTB($o, $arr["TB0_SOURCE"]);
+          else
+            $int = "0";
+          $all["INT"] = $int;
+        }
+        else
+          $all["INT"] = $arr["INT"];
+
+        # if the observation is 
+        if (($all["STATE"] == "finished") || ($all["STATE"] == "transferred"))
+        {
+          if (($arr["INT"] == "NA") || ($arr["INT"] <= 0) && ($all["INT"] > 0))
+          {
+            system("perl -ni -e 'print unless /^INT/' ".$results_dir."/".$o."/obs.info");
+            system("echo 'INT              ".$int."' >> ".$results_dir."/".$o."/obs.info");
+          }
+        }
       }
 
-      if (file_exists($dir."/obs.processing")) {
-        $all_results[$o]["processing"] = 1;
+      if (file_exists($dir."/obs.txt")) {
+        $all["ANNOTATION"] = file_get_contents($dir."/obs.txt");
       } else {
-        $all_results[$o]["processing"] = 0;
+        $all["ANNOATATION"] = "";
       }
+
+      $all_results[$o] = $all;
     }
 
     return $all_results;
   }
 
-  function calcIntLength($utc_start) 
+  function calcIntLengthCorr($utc_start, $source)
   {
-    $dir = $this->results_dir."/".$utc_start." ".$this->archive_dir."/".$utc_start;
-
-    if (file_exists($this->results_dir."/".$utc_start."/all_candidates.dat"))
+    $cc_file = $this->results_dir."/".$utc_start."/".$source."/cc.sum"; 
+    if (file_exists ($cc_file))
     {
-      $cmd = "tail -n 1 ".$this->results_dir."/".$utc_start."/all_candidates.dat | awk '{print $3}'";
-      $length = exec($cmd, $output, $rval);
-      return sprintf("%5.0f", $length);
-    }
-    else if (file_exists ($this->results_dir."/".$utc_start."/cc.sum"))
-    {
-      $cmd = "find ".$this->archive_dir."/".$utc_start." -name '*.ac' | sort -n | tail -n 1";
+      $cmd = "find ".$this->archive_dir."/".$utc_start."/".$source." -name '*.ac' | sort -n | tail -n 1";
       $output = array();
       $ac = exec($cmd, $output, $rval);
 
       $parts = explode("_", $ac);
-      $bytes_to = $parts[count($parts)-1];
+      $time_to = $parts[count($parts)-1];
 
-      $cmd = "grep BYTES_PER_SECOND ".$this->archive_dir."/".$utc_start."/obs.header | awk '{print $2}'";
-      $output = array();
-      $Bps = exec($cmd, $output, $rval);
+      #$cmd = "grep BYTES_PER_SECOND ".$this->results_dir."/".$utc_start."/".$source."/obs.header | awk '{print $2}'";
+      #$output = array();
+      #$Bps = exec($cmd, $output, $rval);
 
-      $length = $bytes_to / $Bps;
+      $length = $time_to;
       return sprintf ("%5.0f", $length);
     }
-    else
-    {
-      # try to find a TB/*_f.tot file
-      $cmd = "find ".$this->results_dir."/".$utc_start."/TB -mindepth 1 -maxdepth 1 -type f -name '*_f.tot' | sort -n | tail -n 1";
-      $tot = exec($cmd, $output, $rval);
-      if ($tot != "")
-      {
-        $cmd = $this->cfg["SCRIPTS_DIR"]."/psredit -Q -c length ".$tot;
-        $output = array();
-        $result = exec($cmd, $output, $rval);
-        list ($file, $length) = split(" ", $result);
-        if ($length != "" && $rval == 0)
-          return sprintf ("%5.0f",$length);
-      }
-    
-      # try to find a 2*.ar file
-      $cmd = "find ".$dir." -mindepth 2 -maxdepth 2 -type f -name '2*.ar' -printf '%f\n' | sort -n | tail -n 1";
-      $ar = exec($cmd, $output, $rval);
-      if ($ar != "")
-      {
-        $array = split("\.",$ar);
-        $ar_time_str = $array[0];
-
-        # if image is pvf, then it is a local time, convert to unix time
-        $ar_time_unix = unixTimeFromGMTime($ar_time_str);
-       
-        # add ten as the 10 second image file has a UTC referring to the first byte of the file 
-        $length = $ar_time_unix - unixTimeFromGMTime($utc_start);
-      }
-
-      return $length;
-    }
+    return 0;
   }
+
+  function calcIntLengthFB ($utc_start, $source)
+  {
+    $ac_file = $this->results_dir."/".$utc_start."/".$source."/all_candidates.dat";
+    if (file_exists($ac_file))
+    {
+      $cmd = "tail -n 1000 ".$ac_file." | awk '{print $3}' | sort -n | tail -n 1";
+      $length = exec($cmd, $output, $rval);
+      return sprintf("%5.0f", $length); 
+    }
+    return 0;
+  }
+
+  function calcIntLengthTB($utc_start, $source) 
+  {
+    $dir = $this->results_dir."/".$utc_start."/".$source." ".
+           $this->archive_dir."/".$utc_start."/".$source;
+    $length = 0;
+
+    # try to find a TB/*_f.tot file
+    $cmd = "find ".$this->results_dir."/".$utc_start."/".$source." -mindepth 1 -maxdepth 1 -type f -name '*_f.tot' | sort -n | tail -n 1";
+    $tot = exec($cmd, $output, $rval);
+    if ($tot != "")
+    {
+      $cmd = $this->cfg["SCRIPTS_DIR"]."/psredit -Q -c length ".$tot;
+      $output = array();
+      $result = exec($cmd, $output, $rval);
+      list ($file, $length) = split(" ", $result);
+      if ($length != "" && $rval == 0)
+        return sprintf ("%5.0f",$length);
+    }
+    
+    # try to find a 2*.ar file
+    $cmd = "find ".$dir." -mindepth 2 -maxdepth 2 -type f -name '2*.ar' -printf '%f\n' | sort -n | tail -n 1";
+    $ar = exec($cmd, $output, $rval);
+    if ($ar != "")
+    {
+      $array = split("\.",$ar);
+      $ar_time_str = $array[0];
+
+      # if image is pvf, then it is a local time, convert to unix time
+      $ar_time_unix = unixTimeFromGMTime($ar_time_str);
+      
+      # add ten as the 10 second image file has a UTC referring to the first byte of the file 
+      $length = $ar_time_unix - unixTimeFromGMTime($utc_start);
+    }
+
+    return $length;
+  }
+
+  function getFBImage($dir, $o, $existing)
+  {
+    if (($existing == "NA") || ($existing == ""))
+    {
+      $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -type f ".
+             " -name '*.FB.00.*png' -printf '%f\n' ".
+              "| sort -n | head -n 1";
+      $img = exec ($cmd, $output, $rval);
+      if (($rval == 0) && ($img != ""))
+      {
+        return $o."/".$img;
+      }
+      return "../../../images/blankimage.gif";
+    }
+    else
+      return $existing;
+  }
+
+  function getCorrImage ($dir, $o, $existing)
+  {
+    if (($existing == "NA") || ($existing == ""))
+    {
+      $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -type f ".
+             " -name '*.*.ad.160x120.png' -printf '%f\n' ".
+              "| sort -n | head -n 1";
+      $img = exec ($cmd, $output, $rval);
+      if (($rval == 0) && ($img != ""))
+      {
+        return $o."/".$img;
+      }
+      return "../../../images/blankimage.gif";
+    }
+    else
+      return $existing;
+  }
+
+  function getTBImage ($dir, $o, $s, $existing)
+  {
+    if (($existing == "NA") || ($existing == ""))
+    {
+      $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -type f".
+             " -name '*.".$s.".fl.120x90.png' -printf '%f\n'".
+             " | sort -n | head -n 1";
+      $img = exec ($cmd, $output, $rval);
+      if (($rval == 0) && ($img != ""))
+      {
+        return $o."/".$img;
+      }
+      return "../../../images/blankimage.gif";
+    }
+    else
+      return $existing;
+  }
+
+  function updateImage($file, $key, $value)
+  {
+    system("perl -ni -e 'print unless /^".$key."/' ".$file);
+    system("echo '".$key."            ".$value."' >> ".$file);
+  }
+
 }
 handledirect("results");

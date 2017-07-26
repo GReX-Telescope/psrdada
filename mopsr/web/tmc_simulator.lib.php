@@ -8,21 +8,23 @@ class tmc_simulator extends mopsr_webpage
   var $psrs = array();
   var $psr_keys = array();
   var $valid_psrs = array();
+  var $valid_sources = array();
   var $inst = 0;
   var $passthru = false;
   var $oversampling = false;
-  var $sixteen_inputs = true;
+  var $ntiedbeams = 1;
 
   # defaults are critically sampled PFB
-  var $bandwidth = 100;
-  var $cfreq = 849.609375;
-  var $nchan = 128;
+  var $bandwidth = 31.25;
+  var $cfreq = 834.765625;
+  var $nchan = 40;
   var $channel_bandwidth = 0.78125;
   var $oversampling_ratio = 1;
   var $sampling_time = 1.28;
   var $dsb = 1;
-  var $nant = 4;
+  var $nant = 16;
   var $resolution;
+  var $hires = 0;
 
   function tmc_simulator()
   {
@@ -30,209 +32,33 @@ class tmc_simulator extends mopsr_webpage
 
     $this->title = "MOPSR | TMC Simulator";
     $this->inst = new mopsr();
-    $this->valid_psrs = array("J0001+0001", "J0034-0721", "J0255-5304", "J0401-7608", "J1630-4733","J1715-4034","J1717-3424",
-			      "J0437-4715", "J0452-1759", "J0536-7543", "J0534+2200", "J0601-0527", "J1730-3350",
-			      "J1745-3040", "J1225-6408",
-			      "J0610-2100", "J0613-0200", "J0711-6830", "J0737-3039A", "J0737-3039B", 
-			      "J0742-2822", "J0835-4510", "J0820-1350", "J1534-5334","J1614-5048",
-                              "J0900-3144", "J0904-7459", "J0941-39", "J0942-5552", "J0953+0755", 
-			      "J1001-5939", "J1001-5507", "J1048-5832","J1544-5308", 
-			      "J0837+0610","J1202-5820", "J1305-6455",
-			      "J1721-3532","J1216-5027", "J1558-5419",
-			      "J1707-4053","J1210-5559", "J1559-5545",
-			      "J1709-4429", "J1418-3921", "J1453-0620","J1731-4744",
-			      "J1357-6228", "J1600-3053", "J1600-5751",
-			      "J1651-4246","J1603-7202","J1613-4714",
-			      "J1705-3423",
-			      "J1709-4429", "J1705-1906",
-			      "J1740-3015", "J1738+0333",
-			      "J1825-0935", "J0924-5814", "J0924-5302",
-			      "J1723-2837","J1703-3241",
-			      "J1820-0427", "J1648-3256", "J1649-3805",
-			      "J1824-1945", "J1231-6303",
-			      "J1829-1751","J1836-1008",
-			      "J1848-0123", "J1847-0402",
-			      "J1900-2600","J1913-0440","J2026-0421",
-			      "J2144-3933",
-			      "J1359-6038", "J1146-6030", "J1302-6350", "J1306-6617",
-			      "J1605-5257", "J1604-4909", "J1319-6056",
-			      "J1107-5907", "J0206-4028",
-			      "J0907-5157", "J2330-2005",
-			      "J0942-5552", "J0151-0635",
-			      "J1001-5507", "J0152-1637",
-			      "J1056-6258", "J1550-5418",
-			      "J1057-5226", "J1253-5820",
-			      "J1116-4122",
-			      "J1136-5525", "J1824-2452A",
-			      "J1401-6357", "J2053-7200",
-			      "J1428-5530", "J1557-4258",
-			      "J1430-6623", "J1623-4256", 
-			      "J1453-6413", "J1435-5954",
-			      "J1456-6843",
-			      "J1534-5334",
-			      "J1557-4258",
-			      "J1600-5044", "J1327-6301", "J1328-4357", "J1341-6220", "J1352-6803",
-			      "J1602-5100",
-                              "J1018-7154", "J1022+1001", "J1024-0719", "J1034-3224", 
-			      "J1045-4509",
-			      "J1056-6258", "J1057-5226",
-                              "J1103-5355", "J1116-4122", "J1125-5825", "J1125-6014", 
-			      "J1141-6545", "J1157-6224",
-                              "J1226-6202", "J1243-6423", "J1326-5859",  "J1327-6222",
-			      "J1224-6407", "J1243-6423", "J1312-5516", "J1320-5359", "J1326-6700",
-			      "J1326-6408",
-			      "J1430-6623", 
-			      "J1431-4717", "J1439-5501", "J1525-5544",
-                              "J1546-4552", "J1600-3053", "J1600-5044", "J1603-7202", 
-			      "J1633-5015", "J1643-1224",
-                              "J1644-4559", "J1709-1640", "J1731-4744",
-			      "J1713+0747", "J1717-4054", "J1718-3718", "J1730-2304",
-                              "J1732-5049", "J1744-1134", "J1751-4657", 
-			      "J1807-0847", "J1820-0427", "J1825-0935", "J1824-2452", 
-			      "J1844+00", "J1857+0943", 
-                              "J1909-3744", "J1900-2600", "J1913-0440", 
-			      "J1933-6211", "J1939+2134", "J2124-3358",
-                              "J2129-5721", "J2145-0750", "J2241-5236", "J1456-6843",
-			      "J0630-2834", "J1017-7156", "J0908-4913",
-                              "J0738-4042", "J0630-2834", "J0738-4042", "J0742-2822",
-                              "J0835-4510", "J0837-4135", "J0953+0755", "J1136+1551", "J1819-1458",
-                              "J1453-6413", "J1456-6843", "J1559-4438", "J1644-4559", "J2048-1616",
-                              "J1645-0317", "J1752-2806", "J1932+1059", "J1935+1616", 
-			      "J1600-5751", 
-			      "J1603-7202",
-			      "J1603-2531",
-			      "J1613-4714",
-			      "J1623-2631",
-			      "J1623-4256",
-			      "J1625-4048",
-			      "J1808-0813", 
-			      "J1812-1733",
-			      "J1812-2102",
-			      "J1816-2650",
-			      "J1822-2256",
-			      "J1637-4553",
-			      "J1646-6831",
-			      "J1650-1654" ,
-			      "J1651-5222",
-			      "J1700-3312",
-			      "J1703-4851",
-			      "J1705-3423",
-			      "J1708-3426",
-			      "J1720-2933",
-			      "J1730-3350",
-"J1848-1952",
-"J1849-0636",
-"J1854-1421",
-"J1859+00",
-"J1901-0906",
-"J1903-0632",
-"J1603-2712",
-"J1643-1224",
-"J1705-1906",
-"J1705-3423",
-"J1709-4429",
-"J1723-2837",
-"J1740-3015",
-"J1744-1134",
-"J1835-1106",
-"J1835-1020",
-"J1836-1008",
-"J1840-0809",
-"J1842-0359",
-"J1825-0935",
-"J1852-0635",
-"J1854-1421",
-"J1901-0906",
-"J1909-3744",
-"J1941-2602",
-"J2046-0421",
-"J2144-3933",
-"J2241-5236",
-"J1705-3423",
-"J1709-4429",
-"J1723-2837",
-"J1743-3150",
-"J1740-3014",
-"J1759-2205",
-"J1825-0935",
-"J1832-0827",
-"J1834-0426",
-"J1842-0359",
-"J1903-0632",
-"J1909-3744",
-"J1943-1237",
-"J2051-0827",
-"J2145-0750",
-"J2222-0137",
-"J2346-0609",
-"J2046-0421",
-"J2324-6054",
-"J2330-2005",
-"J2346-0609",		      "FRB Transit",
-			      "PEASOUP search", "FRB151206", "FRB090625", "FRB131104", "FRB121002", "FRB150418", "FRB160102", "FRB151230", "New Slowie",
-			      "SUMSS1200M80", "SUMSS1330M76", 
-                              "CenA", "3C273", "HerA", "3C353", "E1", "1hr", 
-			      "FRB010724", 
-			      "XMM/LSS", "NGC 1084", "NGC 1614",
-			      "3hr", "4hr", "5hr", 
-			      "CDF-S", 
-			      "Prime", 
-			      "SGR 0755-2933", "Vela offset",
-			      "J1644 offset 1",
-			      "J1644 offset 2",
-			      "J1644 offset 3",
-			      "J1644 offset 4",
-			      "J1644 offset 5",
-			      "J1644 offset 6",
-			      "SN1987A", "SN1987Amon", 
-			      "9hr", "Polar", 
-			      "HD94660",  "UV Ceti", "GCN18231",
-			      "CJ1744-5144", "SUMSS2030M75",
-			      "CJ0010-4153",
-			      "CJ0025-2602",
-                              "CJ0200-3053", 
-                              "CJ0252-7104", 
-                              "CJ0408-6545", 
-                              "CJ0408-7507", 
-                              "CJ0440-4333",
-			      "CJ0519-4545", 
-                              "CJ0522-3627", 
-			      "CJ0635-7516",
-			      "CJ0743-6726",
-			      "CJ0841-7540",
-			      "CJ1018-3144",
-			      "CJ1020-4251", 
-			      "CJ1154-3505", 
-			      "CJ1218-4600", 
-			      "CJ1248-4118", 
-			      "CJ1305-4928", 
-			      "CJ1325-4301", 
-			      "CJ1424-4913", 
-			      "CJ1530-4231",
-			      "CJ1556-7914", 
-			      "CJ1737-5632",
-                              "CJ1819-6345", 
-			      "CJ1830-3602", 
-			      "CJ1924-2833", 
-			      "CJ1935-4620",
-			      "CJ1939-6342",
-			      "CJ1957-4222", 
-			      "CJ2154-5150",
-			      "CJ2253-4057",
-			      "CJ2334-4125", "GLEAM0251-3325", 
-			      "GLEAM0720-3909", "GLEAM0837+0610",
-			      "GLEAM1256-2602", "GLEAM1601-3607",
-			      "GLEAM1945-3147", "GLEAM1951-0859",
-			      "GLEAM1959-0527"
-			      );
 
-    if ($this->sixteen_inputs)
+    # determine if we are configured in low or hi res mode
+    $config_name = $this->inst->config["CONFIG_NAME"];
+    if (strpos($config_name, "320chan") !== FALSE)
     {
-      $this->nant = 16;
-      $this->bandwidth = 31.25;
-      $this->cfreq = 834.765625;
-      $this->nchan = 40;
+      $this->hires = 1;
+      $this->nchan = 320;
+      $this->channel_bandwidth = 0.09765625;
+      $this->sampling_time = 10.24;
+      # AJ TODO remove for original hires mode
+      $this->nant = 8;
+      $this->cfreq = 835.4980469; # channel 204
+      $this->cfreq = 835.5957031; # channel 205
     }
+
+    $this->bf_cfg = $this->inst->configFileToHash(BF_FILE);
+    $this->bp_ct_cfg = $this->inst->configFileToHash(BP_CNR_FILE);
+    $this->ntiedbeams = $this->bf_cfg["NUM_TIED_BEAMS"];
+
+    # read in the RA/DECs for PSRCAT pulsars
+    $this->psrs = $this->inst->getPsrcatPsrs();
+
+    # Trim the list of valid pulsars to those specifiied
+    $this->load_valid_psrs();
+
+    # Add in the RA/DECs for calibrators and other sources
+    $this->load_sources();
 
     if ($this->oversampling)
     {
@@ -248,350 +74,56 @@ class tmc_simulator extends mopsr_webpage
     }
 
     $this->resolution = $this->nchan * $this->nant * 2;
+    $this->nbeams = $this->bp_ct_cfg["NBEAM"];
+  }
+  
+  function load_valid_psrs()
+  {
+    # load the calid pulsars from pulsars.list
+    $fptr = @fopen("pulsars.list","r");
+    if (!$fptr) 
+    {
+      echo "Could not open file: pulsars.list for reading<BR>\n";
+    } 
+    else 
+    {
+      while ($line = fgets($fptr, 1024)) 
+      {
+        $psr = chop($line);
+        array_push ($this->valid_psrs, $psr);
+        array_push ($this->valid_sources, $psr);
+      }
+      fclose ($fptr);
+    }
+    
+  }
+
+  function load_sources ()
+  {
+    $fptr = @fopen("sources.list","r");
+    if (!$fptr)
+    {
+      echo "Could not open file: pulsars.list for reading<BR>\n";
+    }
+    else
+    {
+      while ($line = fgets($fptr, 1024))
+      {
+        $line = chop($line);
+        //list ($source, $ra, $dec) = explode("\t ", $line);
+        list ($source, $ra, $dec) = preg_split('/\s+/', $line);
+
+        array_push ($this->valid_sources, $source);
+        $this->psrs[$source]["RAJ"] = $ra;
+        $this->psrs[$source]["DECJ"] = $dec;
+      }
+      fclose ($fptr);
+    }
   }
 
   function printJavaScriptHead()
   {
-    $this->psrs = $this->inst->getPsrcatPsrs();
-
-    $this->psrs["E1"] = array();     
-    $this->psrs["E1"]["RAJ"] = "00:30:00.0";
-    $this->psrs["E1"]["DECJ"] = "-44:00:00.0";
-
-    $this->psrs["1hr"] = array();     
-    $this->psrs["1hr"]["RAJ"] = "01:15:00.0";
-    $this->psrs["1hr"]["DECJ"] = "-50:25:00";
-
-    $this->psrs["3hr"] = array();     
-    $this->psrs["3hr"]["RAJ"] = "03:00:00.0";
-    $this->psrs["3hr"]["DECJ"] = "-55:25:00.0";
-
-    $this->psrs["4hr"] = array();     
-    $this->psrs["4hr"]["RAJ"] = "04:10:00.0";
-    $this->psrs["4hr"]["DECJ"] = "-55:00:00.0";
-
-    $this->psrs["5hr"] = array();     
-    $this->psrs["5hr"]["RAJ"] = "05:10:00.0";
-    $this->psrs["5hr"]["DECJ"] = "-55:00:00.0";
-
-    $this->psrs["9hr"] = array();     
-    $this->psrs["9hr"]["RAJ"] = "09:00:00.0";
-    $this->psrs["9hr"]["DECJ"] = "-70:00:00.0";
-
-    $this->psrs["PEASOUP search"] = array();
-    $this->psrs["PEASOUP search"]["RAJ"] = "00:00:00.0";
-    $this->psrs["PEASOUP search"]["DECJ"] = "00:00:00.0";
-
-    $this->psrs["FRB010724"] = array();     
-    $this->psrs["FRB010724"]["RAJ"] = "01:18:06.0";
-    $this->psrs["FRB010724"]["DECJ"] = "-75:12:19.0";
-
-    $this->psrs["FRB090625"] = array();     
-    $this->psrs["FRB090625"]["RAJ"] = "03:07:47.2";
-    $this->psrs["FRB090625"]["DECJ"] = "-29:55:35.9";
-
-    $this->psrs["FRB131104"] = array();     
-    $this->psrs["FRB131104"]["RAJ"] = "06:44:08.7";
-    $this->psrs["FRB131104"]["DECJ"] = "-51:16:55.1";
-
-    $this->psrs["FRB151206"] = array();     
-    $this->psrs["FRB151206"]["RAJ"] = "19:21:25.4";
-    $this->psrs["FRB151206"]["DECJ"] = "-04:07:54.5";
-
-    $this->psrs["FRB150418"] = array();     
-    $this->psrs["FRB150418"]["RAJ"] = "07:16:34.557";
-    $this->psrs["FRB150418"]["DECJ"] = "-19:00:39.954";
-
-    $this->psrs["FRB121002"] = array();     
-    $this->psrs["FRB121002"]["RAJ"] = "18:14:47.4";
-    $this->psrs["FRB121002"]["DECJ"] = "-85:11:53.0";
-
-    $this->psrs["FRB151230"] = array();
-    $this->psrs["FRB151230"]["RAJ"] = "09:40:49.9";
-    $this->psrs["FRB151230"]["DECJ"] = "-03:27:05.1";
-
-    $this->psrs["FRB160102"] = array();
-    $this->psrs["FRB160102"]["RAJ"] = "22:38:49.3";
-    $this->psrs["FRB160102"]["DECJ"] = "-30:10:49.9";
-
-    $this->psrs["New Slowie"] = array();
-    $this->psrs["New Slowie"]["RAJ"] = "22:51:56.1";
-    $this->psrs["New Slowie"]["DECJ"] = "-37:16:16.3";
-
-    $this->psrs["FRB Transit"] = array();     
-    $this->psrs["FRB Transit"]["RAJ"] = "00:00:00.0";
-    $this->psrs["FRB Transit"]["DECJ"] = "-46:00:00";
-
-    $this->psrs["XMM/LSS"] = array();     
-    $this->psrs["XMM/LSS"]["RAJ"] = "02:25:00.0";
-    $this->psrs["XMM/LSS"]["DECJ"] = "-04:39:00.0";
-
-    $this->psrs["NGC 1084"] = array();     
-    $this->psrs["NGC 1084"]["RAJ"] = "02:46:00.0";
-    $this->psrs["NGC 1084"]["DECJ"] = "-07:34:41.0";
-
-    $this->psrs["NGC 1614"] = array();     
-    $this->psrs["NGC 1614"]["RAJ"] = "04:34:00.0";
-    $this->psrs["NGC 1614"]["DECJ"] = "-08:34:46.0";
-
-    $this->psrs["CDF-S"] = array();     
-    $this->psrs["CDF-S"]["RAJ"] = "03:30:24.0";
-    $this->psrs["CDF-S"]["DECJ"] = "-28:06:00.0";
-
-    $this->psrs["SN1987A"] = array();     
-    $this->psrs["SN1987A"]["RAJ"] = "05:35:28.0";
-    $this->psrs["SN1987A"]["DECJ"] = "-69:16:11.1";
-
-    $this->psrs["SN1987Amon"] = array();     
-    $this->psrs["SN1987Amon"]["RAJ"] = "05:35:58.45";
-    $this->psrs["SN1987Amon"]["DECJ"] = "-69:13:15.9";
-
-    $this->psrs["Prime"] = array();     
-    $this->psrs["Prime"]["RAJ"] = "05:55:07.0";
-    $this->psrs["Prime"]["DECJ"] = "-61:21:00.0";
-
-    $this->psrs["SGR 0755-2933"] = array();     
-    $this->psrs["SGR 0755-2933"]["RAJ"] = "07:55:42.48";
-    $this->psrs["SGR 0755-2933"]["DECJ"] = "-29:33:49.2";
-
-    $this->psrs["Vela offset"] = array();     
-    $this->psrs["Vela offset"]["RAJ"] = "08:37:25.61149";
-    $this->psrs["Vela offset"]["DECJ"] = "-42:57:51.8751";
-
-    $this->psrs["J1644 offset 1"] = array();     
-    $this->psrs["J1644 offset 1"]["RAJ"] = "16:55:49";
-    $this->psrs["J1644 offset 1"]["DECJ"] = "-45:59:00";
-
-    $this->psrs["J1644 offset 2"] = array();     
-    $this->psrs["J1644 offset 2"]["RAJ"] = "16:52:49";
-    $this->psrs["J1644 offset 2"]["DECJ"] = "-45:59:00";
-
-    $this->psrs["J1644 offset 3"] = array();     
-    $this->psrs["J1644 offset 3"]["RAJ"] = "16:49:49";
-    $this->psrs["J1644 offset 3"]["DECJ"] = "-45:59:00";
-
-    $this->psrs["J1644 offset 4"] = array();     
-    $this->psrs["J1644 offset 4"]["RAJ"] = "16:41:49";
-    $this->psrs["J1644 offset 4"]["DECJ"] = "-45:59:00";
-
-    $this->psrs["J1644 offset 5"] = array();     
-    $this->psrs["J1644 offset 5"]["RAJ"] = "16:38:49";
-    $this->psrs["J1644 offset 5"]["DECJ"] = "-45:59:00";
-
-    $this->psrs["J1644 offset 6"] = array();     
-    $this->psrs["J1644 offset 6"]["RAJ"] = "16:35:49";
-    $this->psrs["J1644 offset 6"]["DECJ"] = "-45:59:00";
-
-    $this->psrs["Polar"] = array();     
-    $this->psrs["Polar"]["RAJ"] = "16:00:00.0";
-    $this->psrs["Polar"]["DECJ"] = "-74:00:00.0";
-
-    $this->psrs["SUMSS2030M75"] = array();     
-    $this->psrs["SUMSS2030M75"]["RAJ"] = "20:30:00.0";
-    $this->psrs["SUMSS2030M75"]["DECJ"] = "-75:00:00";
-
-    $this->psrs["SUMSS1200M80"] = array();     
-    $this->psrs["SUMSS1200M80"]["RAJ"] = "12:00:00.0";
-    $this->psrs["SUMSS1200M80"]["DECJ"] = "-80:00:00";
-
-    $this->psrs["SUMSS1330M76"] = array();     
-    $this->psrs["SUMSS1330M76"]["RAJ"] = "13:30:00.0";
-    $this->psrs["SUMSS1330M76"]["DECJ"] = "-76:00:00";
-
-    $this->psrs["CenA"] = array();     
-    $this->psrs["CenA"]["RAJ"] = "13:25:27.6";
-    $this->psrs["CenA"]["DECJ"] = "-43:01:09";
-
-    $this->psrs["HerA"] = array();     
-    $this->psrs["HerA"]["RAJ"] = "16:51:08.0";
-    $this->psrs["HerA"]["DECJ"] = "04:59:33";
-
-    $this->psrs["GCN18231"] = array();     
-    $this->psrs["GCN18231"]["RAJ"] = "16:25:42.0";
-    $this->psrs["GCN18231"]["DECJ"] = "-27:23:24";
-
-    $this->psrs["3C273"] = array();
-    $this->psrs["3C273"]["RAJ"] = "12:29:06.7";
-    $this->psrs["3C273"]["DECJ"] = "02:03:09.0";
-
-    $this->psrs["3C353"] = array();
-    $this->psrs["3C353"]["RAJ"] = "17:20:28.0";
-    $this->psrs["3C353"]["DECJ"] = "-00:58:47.0";
-
-    $this->psrs["HD94660"] = array();
-    $this->psrs["HD94660"]["RAJ"] = "10:55:01.005";
-    $this->psrs["HD94660"]["DECJ"] = "-42:15:03.93";
-
-    $this->psrs["UV Ceti"] = array();
-    $this->psrs["UV Ceti"]["RAJ"] = "01:39:01.54";
-    $this->psrs["UV Ceti"]["DECJ"] = "-17:57:00.4";
-
-    $this->psrs["CJ0010-4153"] = array();
-    $this->psrs["CJ0010-4153"]["RAJ"] = "00:10:52.44";
-    $this->psrs["CJ0010-4153"]["DECJ"] = "-41:53:10.8";
-
-    $this->psrs["CJ0025-2602"] = array();
-    $this->psrs["CJ0025-2602"]["RAJ"] = "00:25:49.2";
-    $this->psrs["CJ0025-2602"]["DECJ"] = "-26:02:12.6";
-
-    $this->psrs["CJ0200-3053"] = array();
-    $this->psrs["CJ0200-3053"]["RAJ"] = "02:00:12.13";
-    $this->psrs["CJ0200-3053"]["DECJ"] = "-30:53:25.5";
-
-    $this->psrs["CJ0252-7104"] = array();
-    $this->psrs["CJ0252-7104"]["RAJ"] = "02:52:46.3";
-    $this->psrs["CJ0252-7104"]["DECJ"] = "-71:04:36.2";
-
-    $this->psrs["CJ0408-6545"] = array();
-    $this->psrs["CJ0408-6545"]["RAJ"] = "04:08:20.3";
-    $this->psrs["CJ0408-6545"]["DECJ"] = "-65:45:08.5";
-
-    $this->psrs["CJ0408-7507"] = array();
-    $this->psrs["CJ0408-7507"]["RAJ"] = "04:08:48.5";
-    $this->psrs["CJ0408-7507"]["DECJ"] = "-75:07:20.0";
-
-    $this->psrs["CJ0440-4333"] = array();
-    $this->psrs["CJ0440-4333"]["RAJ"] = "04:40:17.07";
-    $this->psrs["CJ0440-4333"]["DECJ"] = "-43:33:09.0";
-
-    $this->psrs["CJ0519-4545"] = array();
-    $this->psrs["CJ0519-4545"]["RAJ"] = "05:19:26.6";
-    $this->psrs["CJ0519-4545"]["DECJ"] = "-45:45:58.9";
-
-    $this->psrs["CJ0522-3627"] = array();
-    $this->psrs["CJ0522-3627"]["RAJ"] = "05:22:57.8";
-    $this->psrs["CJ0522-3627"]["DECJ"] = "-36:27:31.0";
-
-    $this->psrs["CJ0635-7516"] = array();
-    $this->psrs["CJ0635-7516"]["RAJ"] = "06:35:45.05";
-    $this->psrs["CJ0635-7516"]["DECJ"] = "-75:16:15.3";
-
-    $this->psrs["CJ0743-6726"] = array();
-    $this->psrs["CJ0743-6726"]["RAJ"] = "07:43:32.63";
-    $this->psrs["CJ0743-6726"]["DECJ"] = "-67:26:28.6";
-
-    $this->psrs["CJ0841-7540"] = array();
-    $this->psrs["CJ0841-7540"]["RAJ"] = "08:41:26.19";
-    $this->psrs["CJ0841-7540"]["DECJ"] = "-75:40:31.1";
-
-    $this->psrs["CJ1018-3144"] = array();
-    $this->psrs["CJ1018-3144"]["RAJ"] = "10:18:09.19";
-    $this->psrs["CJ1018-3144"]["DECJ"] = "-31:44:14.7";
-
-    $this->psrs["CJ1020-4251"] = array();
-    $this->psrs["CJ1020-4251"]["RAJ"] = "10:20:03.5";
-    $this->psrs["CJ1020-4251"]["DECJ"] = "-42:51:33.0";
-
-    $this->psrs["CJ1154-3505"] = array();
-    $this->psrs["CJ1154-3505"]["RAJ"] = "11:54:21.9";
-    $this->psrs["CJ1154-3505"]["DECJ"] = "-35:05:32.2";
-
-    $this->psrs["CJ1218-4600"] = array();
-    $this->psrs["CJ1218-4600"]["RAJ"] = "12:18:06.0";
-    $this->psrs["CJ1218-4600"]["DECJ"] = "-46:00:29.2";
-
-    $this->psrs["CJ1248-4118"] = array();
-    $this->psrs["CJ1248-4118"]["RAJ"] = "12:48:49.8";
-    $this->psrs["CJ1248-4118"]["DECJ"] = "-41:18:42.2";
-
-    $this->psrs["CJ1305-4928"] = array();
-    $this->psrs["CJ1305-4928"]["RAJ"] = "13:05:27.4";
-    $this->psrs["CJ1305-4928"]["DECJ"] = "-49:28:06.3";
-
-    $this->psrs["CJ1325-4301"] = array();
-    $this->psrs["CJ1325-4301"]["RAJ"] = "13:25:24.0";
-    $this->psrs["CJ1325-4301"]["DECJ"] = "-43:01:38.1";
-
-    $this->psrs["CJ1424-4913"] = array();
-    $this->psrs["CJ1424-4913"]["RAJ"] = "14:24:32.18";
-    $this->psrs["CJ1424-4913"]["DECJ"] = "-49:13:17.16";
-
-    $this->psrs["CJ1530-4231"] = array();
-    $this->psrs["CJ1530-4231"]["RAJ"] = "15:30:14.28";
-    $this->psrs["CJ1530-4231"]["DECJ"] = "-42:31:53.6";
-
-    $this->psrs["CJ1556-7914"] = array();
-    $this->psrs["CJ1556-7914"]["RAJ"] = "15:56:57.8";
-    $this->psrs["CJ1556-7914"]["DECJ"] = "-79:14:03.8";
-
-    $this->psrs["CJ1737-5632"] = array();
-    $this->psrs["CJ1737-5632"]["RAJ"] = "17:37:42.85";
-    $this->psrs["CJ1737-5632"]["DECJ"] = "-56:32:46.0";
-
-    $this->psrs["CJ1744-5144"] = array();
-    $this->psrs["CJ1744-5144"]["RAJ"] = "17:44:25.47";
-    $this->psrs["CJ1744-5144"]["DECJ"] = "-51:44:43.1";
-
-    $this->psrs["CJ1819-6345"] = array();
-    $this->psrs["CJ1819-6345"]["RAJ"] = "18:19:35.0";
-    $this->psrs["CJ1819-6345"]["DECJ"] = "-63:45:48.6";
-
-    $this->psrs["CJ1830-3602"] = array();
-    $this->psrs["CJ1830-3602"]["RAJ"] = "18:30:58.8";
-    $this->psrs["CJ1830-3602"]["DECJ"] = "-36:02:30.3";
-
-    $this->psrs["CJ1924-2833"] = array();
-    $this->psrs["CJ1924-2833"]["RAJ"] = "19:24:50.2";
-    $this->psrs["CJ1924-2833"]["DECJ"] = "-28:33:39.4";
-
-    $this->psrs["CJ1935-4620"] = array();
-    $this->psrs["CJ1935-4620"]["RAJ"] = "19:35:57.2";
-    $this->psrs["CJ1935-4620"]["DECJ"] = "-46:20:43.1";
-
-    $this->psrs["CJ1939-6342"] = array();
-    $this->psrs["CJ1939-6342"]["RAJ"] = "19:39:25.42";
-    $this->psrs["CJ1939-6342"]["DECJ"] = "-63:42:43.7";
-
-    $this->psrs["CJ1957-4222"] = array();
-    $this->psrs["CJ1957-4222"]["RAJ"] = "19:57:15.19";
-    $this->psrs["CJ1957-4222"]["DECJ"] = "-42:22:19.8";
-
-    $this->psrs["CJ2154-5150"] = array();
-    $this->psrs["CJ2154-5150"]["RAJ"] = "21:54:07.28";
-    $this->psrs["CJ2154-5150"]["DECJ"] = "-51:50:18.1";
-
-    $this->psrs["CJ2253-4057"] = array();
-    $this->psrs["CJ2253-4057"]["RAJ"] = "22:53:03.37";
-    $this->psrs["CJ2253-4057"]["DECJ"] = "-40:57:47.5";
-
-    $this->psrs["CJ2334-4125"] = array();
-    $this->psrs["CJ2334-4125"]["RAJ"] = "23:34:26.1";
-    $this->psrs["CJ2334-4125"]["DECJ"] = "-41:25:25.8";
-
-    $this->psrs["GLEAM0251-3325"] = array();
-    $this->psrs["GLEAM0251-3325"]["RAJ"] = "02:51:08";
-    $this->psrs["GLEAM0251-3325"]["DECJ"] = "-33:25:47";
-
-    $this->psrs["GLEAM0720-3909"] = array();
-    $this->psrs["GLEAM0720-3909"]["RAJ"] = "07:20:47";
-    $this->psrs["GLEAM0720-3909"]["DECJ"] = "-39:09:22";
-
-    $this->psrs["GLEAM0837+0610"] = array();
-    $this->psrs["GLEAM0837+0610"]["RAJ"] = "08:37:06";
-    $this->psrs["GLEAM0837+0610"]["DECJ"] = "+06:10:12";
-
-    $this->psrs["GLEAM1256-2602"] = array();
-    $this->psrs["GLEAM1256-2602"]["RAJ"] = "12:56:22";
-    $this->psrs["GLEAM1256-2602"]["DECJ"] = "-26:02:39";
-
-    $this->psrs["GLEAM1601-3607"] = array();
-    $this->psrs["GLEAM1601-3607"]["RAJ"] = "16:01:11";
-    $this->psrs["GLEAM1601-3607"]["DECJ"] = "-36:07:17";
-
-    $this->psrs["GLEAM1945-3147"] = array();
-    $this->psrs["GLEAM1945-3147"]["RAJ"] = "19:45:14";
-    $this->psrs["GLEAM1945-3147"]["DECJ"] = "-31:47:36";
-
-    $this->psrs["GLEAM1951-0859"] = array();
-    $this->psrs["GLEAM1951-0859"]["RAJ"] = "19:51:46";
-    $this->psrs["GLEAM1951-0859"]["DECJ"] = "-08:59:57";
-
-    $this->psrs["GLEAM1959-0527"] = array();
-    $this->psrs["GLEAM1959-0527"]["RAJ"] = "19:59:15";
-    $this->psrs["GLEAM1959-0527"]["DECJ"] = "-05:27:49";
-
     $this->psr_keys = array_keys($this->psrs);
-
 ?>
     <style type='text/css'>
 
@@ -612,7 +144,7 @@ class tmc_simulator extends mopsr_webpage
       for ($i=0; $i<count($this->psr_keys); $i++)
       {
         $p = $this->psr_keys[$i];
-        if (in_array($p, $this->valid_psrs))
+        if (in_array($p, $this->valid_psrs) || in_array($p, $this->valid_sources))
         {
           echo ",'".$p."':'".$this->psrs[$p]["RAJ"]."'";
         }
@@ -623,7 +155,7 @@ class tmc_simulator extends mopsr_webpage
       for ($i=0; $i<count($this->psr_keys); $i++)
       {
         $p = $this->psr_keys[$i];
-        if (in_array($p, $this->valid_psrs))
+        if (in_array($p, $this->valid_psrs) || in_array($p, $this->valid_sources))
         {
           echo ",'".$p."':'".$this->psrs[$p]["DECJ"]."'";
         }
@@ -636,14 +168,18 @@ class tmc_simulator extends mopsr_webpage
         document.getElementById("command").value = "prepare";
 
         var i = 0;
+        var lim = <?echo $this->ntiedbeams?>;
         var psr = "";
 
-        updateRADEC();
+        for (j=0; j<=lim; j++)
+        {
+          updateRADEC(j);
+          i = document.getElementById(j+"_src_list").selectedIndex;
+          psr = document.getElementById(j+"_src_list").options[i].value;
+          document.getElementById(j+"_source").value = psr;
+        }
 
-        i = document.getElementById("src_list").selectedIndex;
-        psr = document.getElementById("src_list").options[i].value;
 
-        document.getElementById("source").value = psr;
         document.tmc.submit();
       }
 
@@ -663,13 +199,13 @@ class tmc_simulator extends mopsr_webpage
         document.tmc.submit();
       }
 
-      function updateRADEC() {
-        var i = document.getElementById("src_list").selectedIndex;
-        var psr = document.getElementById("src_list").options[i].value;
+      function updateRADEC(prefix) {
+        var i = document.getElementById(prefix+"_src_list").selectedIndex;
+        var psr = document.getElementById(prefix+"_src_list").options[i].value;
         var psr_ra = ras[psr];
         var psr_dec= decs[psr];
-        document.getElementById("ra").value = psr_ra;
-        document.getElementById("dec").value = psr_dec;
+        document.getElementById(prefix+"_ra").value = psr_ra;
+        document.getElementById(prefix+"_dec").value = psr_dec;
       }
     </script>
 
@@ -686,123 +222,82 @@ class tmc_simulator extends mopsr_webpage
     $this->openBlockHeader("TMC Simulator");
 ?>
     <form name="tmc" target="tmc_interface" method="GET">
-    <table border=0 cellpadding=5 cellspacing=0 width='100%'>
+
+    <table border=0 cellpadding=5 cellspacing=0>
       <tr>
+        <td width='150px'><b>Telescope</b></td>
 
-        <td class='key'>SOURCE</td>
-        <td class='val'>
-          <input type="hidden" id="source" name="source" value="">
-          <select id="src_list" name="src_list" onChange='updateRADEC()'>
-<?
-          for ($i=0; $i<count($this->psr_keys); $i++)
-          {
-            $p = $this->psr_keys[$i];
-            if (in_array($p, $this->valid_psrs))
-            {
-              if ($p == "J0835-4510")
-                echo "            <option value='".$p."' selected>".$p."</option>\n";
-              else
-                echo "            <option value='".$p."'>".$p."</option>\n";
-            }
-          }
-?>
-          </select>
-        </td>
+        <td class='key'>TRACKING</td>
+        <td class='val'><input type="checkbox" name="antenna_tracking"></td>
+ 
+        <td class='key'>MD Angle</td>
+        <td class='val'><input type="text" name="md_angle" size="8" value="0.0"> [degrees]</td>
 
+        <td class='key'>NS Tilt</td>
+        <td class='val'><input type="text" name="ns_tilt" size="8" value="0.0"> [degrees]</td>
+      </tr>     
+    </table>
 
-        <td class='key'>AQ PROC</td>
-        <td class='val'>
-          <select name="aq_processing_file">
-            <option value="mopsr.aqdsp.gpu">mopsr.aqdsp.gpu</option>
-            <option value="mopsr.aqdsp.unscaled.gpu">mopsr.aqdsp.unscaled.gpu</option>
-            <option value="mopsr.null">mopsr.null</option>
-            <option value="mopsr.dspsr.cpu">mopsr.dspsr.cpu</option>
-            <option value="mopsr.dspsr.cpu.odd">mopsr.dspsr.cpu.odd</option>
-            <option value="mopsr.dspsr.cpu.sk">mopsr.dspsr.cpu.sk</option>
-            <option value="mopsr.dspsr.gpu">mopsr.dspsr.gpu</option>
-            <option value="mopsr.dspsr.gpu.sk" <? if (!$this->passthru) echo "selected"?>>mopsr.dspsr.gpu.sk</option>
-            <option value="mopsr.dspsr.gpu.fb" <? if ($this->passthru) echo "selected"?>>mopsr.dspsr.gpu.fb</option>
-            <option value="mopsr.dspsr.gpu.1fold">mopsr.dspsr.gpu.1fold</option>
-            <option value="mopsr.dspsr.gpu.10fold">mopsr.dspsr.gpu.10fold</option>
-            <option value="mopsr.dbdisk">mopsr.dbdisk</option>
-            <option value="mopsr.dbib">mopsr.dbib</option>
-          </select>
-        </td>
-
-        <td class='key'>BANDWIDTH</td>
-        <td class='val'><input type="text" name="bandwidth" value="<?echo $this->bandwidth?>" size="12"></td>
-
-        <td class='key'>NPOL</td>
-        <td class='val'><input type="text" name="npol" size="1" value="1" readonly></td>
-
-      </tr>
+    <!-- Signal Parameters -->
+    <table border=0 cellpadding=5 cellspacing=0>
       <tr>
+        <td width='150px'><b>Signal</b></td>
 
-        <td class='key'>MODE</td>
-        <td class='val'>
-          <select name="mode">
-            <option value="PSR">PSR</option>
-            <option value="CORR">CORR</option>
-            <option value="CORR_CAL">CORR_CAL</option>
-          </select>
-        </td>
-
-        <td class='key'>BF PROC</td>
-        <td class='val'>
-          <select name="bf_processing_file">
-            <option value="mopsr.calib.gpu">mopsr.calib.gpu [correlator]</option>
-            <option value="mopsr.calib.xgpu">mopsr.calib.xgpu [dev correlator]</option>
-            <option value="mopsr.calib.pref8.gpu">mopsr.calib.pref8.gpu [limited baselines 176 input]</option>
-            <option value="mopsr.calib.pref16.gpu">mopsr.calib.pref16.gpu [limited baselines 352 input]</option>
-            <option value="mopsr.dspsr.cpu">mopsr.dspsr.cpu [tied-array beam]</option>
-            <option value="mopsr.dspsr.cpu.cdd">mopsr.dspsr.cpu.cdd [CDD tied-array beam]</option>
-            <option value="mopsr.digifil.cpu">mopsr.digifil.cpu [tied-array beam]</option>
-            <!--<option value="mopsr.dspsr.cpu.tied">mopsr.dspsr.cpu.tied [tied-array beam **]</option>-->
-            <!--<option value="mopsr.digifil.tied">mopsr.digifil.tied [tied-array filterbank **]</option>-->
-            <option value="mopsr.bfdsp.gpu">mopsr.bfdsp.gpu [tiled beams]</option>
-            <option value="mopsr.dbdisk.channel">mopsr.dbdisk.channel [write baseband]</option>
-            <option value="mopsr.null">mopsr.null [discard]</option>
-          </select>
-        </td>
-
-        <td class='key'>RESOLUTION</td>
-        <td class='val'><input type="text" name="resolution" size="4" value="<?echo $this->resolution?>"></td>
+        <td class='key'>NCHAN</td>
+        <td class='val'><input type="text" name="nchan" size="3" value="<?echo $this->nchan?>" readonly></td>
 
         <td class='key'>NBIT</td>
         <td class='val'><input type="text" name="nbit" size="2" value="8" readonly></td>
-
-      </tr>
-      <tr>
-
-        <td class='key'>TYPE</td>
-        <td class='val'>
-          <select name="type">
-            <option value="TRACKING">TRACKING</option>
-            <option value="TRANSITING">TRANSITING</option>
-            <option value="STATIONARY">STATIONARY</option>
-          </select>
-        </td>
-
-        <td class='key'>BP PROC</td>
-        <td class='val'>
-          <select name="bp_processing_file">
-            <option value="mopsr.heimdall">mopsr.heimdall [search transients]</option>
-            <option value="mopsr.dbdisk.beams">mopsr.dbdisk.beams [write baseband]</option>
-            <option value="mopsr.null">mopsr.null [discard]</option>
-          </select>
-        </td>
-
-
-        <td class='key'>NANT</td>
-        <td class='val'><input type="text" id="nant" name="nant" size="3" value="<?echo $this->nant?>"/></td>
-
+  
         <td class='key'>NDIM</td>
         <td class='val'><input type="text" name="ndim" size="2" value="2" readonly></td>
       
+        <td class='key'>NPOL</td>
+        <td class='val'><input type="text" name="npol" size="1" value="1" readonly></td>
 
+        <td class='key'>NANT</td>
+        <td class='val'><input type="text" id="nant" name="nant" size="3" value="<?echo $this->nant?>"/ readonly></td>
+
+        <td class='key'>BANDWIDTH</td>
+        <td class='val'><input type="text" name="bandwidth" value="<?echo $this->bandwidth?>" size="12" readonly></td>
+
+        <td class='key'>FREQ</td>
+        <td class='val'><input type="text" name="centre_frequency" size="12" value="<?echo $this->cfreq?>" readonly></td>
       </tr>
-      <tr>
+    </table>
 
+    <!-- PFB Parameters -->
+    <table border=0 cellpadding=5 cellspacing=0>
+      <tr>
+        <td width='150px'><b>PFB</b></td>
+
+        <td class='key'>OS Ratio</td>
+        <td class='val'><input type="text" name="oversampling_ratio" size="16" value="<?echo $this->oversampling_ratio?>" readonly></td>
+        
+        <td class='key'>TSAMP</td>
+        <td class='val'><input type="text" name="sampling_time" size="12" value="<?echo $this->sampling_time?>" readonly></td>
+
+        <td class='key'>CHANBW</td>
+        <td class='val'><input type="text" name="channel_bandwidth" size="12" value="<?echo $this->channel_bandwidth?>" readonly></td>
+        
+        <td class='key'>DSB</td>
+        <td class='val'><input type="text" name="dsb" size="1" value="<?echo $this->dsb?>" readonly></td>
+
+        <td class='key'>RESOLUTION</td>
+        <td class='val'><input type="text" name="resolution" size="4" value="<?echo $this->resolution?>" readonly></td>
+      </tr>
+    </table>
+
+
+    <!-- Observation Parameters -->
+    <table border=0 cellpadding=5 cellspacing=0>
+      <tr>
+        <td width='150px'><b>Common Observation</b></td>
+
+        <td class='key'>OBSERVER</td>
+        <td class='val'><input type="text" name="observer" size="6" value="None"></td>
+
+<!--
         <td class='key'>CONFIG</td>
         <td class='val'>
           <select name="config">
@@ -815,65 +310,214 @@ class tmc_simulator extends mopsr_webpage
             <option value="TIED_ARRAY_MOD_BEAM">TIED ARRAY &amp; MOD BEAM</option>
           </select>
         </td>
+-->
 
+        <td class='key'>MODE</td>
+        <td class='val'>
+          <select name="mode">
+            <option value="PSR">PSR</option>
+            <option value="CORR">CORR</option>
+            <option value="CORR_CAL">CORR_CAL</option>
+          </select>
+        </td>
 
-        <td class='key'>Project ID</td>
-        <td class='val'><input type="text" name="project_id" size="4" value="P000"></td>
-      
-        <td class='key'>OS Ratio</td>
-        <td class='val'><input type="text" name="oversampling_ratio" size="16" value="<?echo $this->oversampling_ratio?>"></td>
-
-        <td class='key'>FREQ</td>
-        <td class='val'><input type="text" name="centre_frequency" size="12" value="<?echo $this->cfreq?>"></td>
+        <td class='key'>TOBS</td>
+        <td class='val'><input type="text" name="tobs" size="6" value="-1"></td>
 
       </tr>
-  
-      <tr>
+    </table>
 
-        <td class='key'>OBSERVER</td>
-        <td class='val'><input type="text" name="observer" size="6" value="AJ"></td>
+    <!-- Boresight source parameters-->
+    <table border=0 cellpadding=5 cellspacing=0>
+      <tr>
+        <td width='150px'><b>Boresight [AQ]</b></td>
+
+        <? $prefix = "0"; ?>
+        <td class='key'>SOURCE</td>
+        <td class='val'>
+          <input type="hidden" id="<?echo $prefix?>_source" name="<?echo $prefix?>_source" value="">
+          <select id="<?echo $prefix?>_src_list" name="<?echo $prefix?>_src_list" onChange='updateRADEC("0")'>
+            <option value=''>--</option>
+<?
+          for ($j=0; $j<count($this->valid_sources); $j++)
+          {
+            $p = $this->valid_sources[$j];
+            echo "            <option value='".$p."'>".$p."</option>\n";
+          }
+?>
+          </select>
+        </td>
 
         <td class='key'>RA</td>
-        <td class='val'><input type="text" id="ra" name="ra" size="12" value="08:35:20.61149" readonly></td>
-
-        <td class='key'>NCHAN</td>
-        <td class='val'><input type="text" name="nchan" size="3" value="<?echo $this->nchan?>"></td>
-
-        <td class='key'>DSB</td>
-        <td class='val'><input type="text" name="dsb" size="1" value="<?echo $this->dsb?>"></td>
-
-      </tr>
-
-      <tr>
-        <td class='key'>TOBS</td>
-        <td class='val'><input type="text" name="tobs" size="6" value=""></td>
+        <td class='val'><input type="text" id="0_ra" name="0_ra" size="12" value="" readonly></td>
 
         <td class='key'>DEC</td>
-        <td class='val'><input type="text" id="dec" name="dec" size="12" value="-45:10:34.8751" readonly></td>
+        <td class='val'><input type="text" id="0_dec" name="0_dec" size="12" value="" readonly></td>
 
-        <td class='key'>TSAMP</td>
-        <td class='val'><input type="text" name="sampling_time" size="12" value="<?echo $this->sampling_time?>"></td>
+        <td class='key'>Project ID</td>
+        <td class='val'><input type="text" name="project_id" size="4" value="P999"></td>
 
-        <td class='key'>CHANBW</td>
-        <td class='val'><input type="text" name="channel_bandwidth" size="12" value="<?echo $this->channel_bandwidth?>"></td>
+        <td class='key'>RFI MITIGATION</td>
+        <td class='val'><input type="checkbox" name="rfi_mitigation" checked></td>
+
+        <td class='key'>DELAY TRACKING</td>
+        <td class='val'><input type="checkbox" name="delay_tracking" checked></td>
+       
+        <td class='key'>ANTENNA WEIGHTS</td>
+        <td class='val'><input type="checkbox" name="antenna_weights" checked></td>
+       
+        <td class='key'>PROC FILE</td>
+        <td class='val'>
+          <select name="0_processing_file">
+<?
+        if ($this->hires)
+          echo '<option value="mopsr.aqdsp.hires.gpu">mopsr.aqdsp.hires.gpu</option>\n';
+        else
+          echo '<option value="mopsr.aqdsp.gpu">mopsr.aqdsp.gpu</option>\n';
+?>
+            <option value="mopsr.null">mopsr.null</option>
+            <option value="mopsr.dbdisk">mopsr.dbdisk</option>
+          </select>
+        </td>
+
 
       </tr>
+    </table>
 
+<?
+    for ($i=1; $i<=$this->ntiedbeams; $i++)
+    {
+      $prefix = $i;
+?>
+
+    <table border=0 cellpadding=5 cellspacing=0>
       <tr>
-        <td class='key'>MD Angle</td>
-        <td class='val'><input type="text" name="md_angle" size="8" value="0.0"> [degrees]</td>
+        <td width='150px'><b>Tied Beam <?echo $i?></b></td>
 
-        <td class='key'>NS Tilt</td>
-        <td class='val'><input type="text" name="ns_tilt" size="8" value="0.0"> [degrees]</td>
+        <td class='key'>ENABLED</td>
+        <td class='val'><input type="checkbox" name="<?echo $prefix?>_enabled"></td>
 
-        <td colspan=4></td>
+        <td class='key'>Project ID</td>
+        <td class='val'><input type="text" name="<?echo $prefix?>_project_id" size="4" value="P999"></td>
+
+        <td class='key'>SOURCE</td>
+        <td class='val'>
+          <input type="hidden" id="<?echo $prefix?>_source" name="<?echo $prefix?>_source" value="">
+          <select id="<?echo $prefix?>_src_list" name="<?echo $prefix?>_src_list" onChange='updateRADEC("<?echo $i?>")'>
+            <option value='' selected>--</option>
+<?
+          for ($j=0; $j<count($this->psr_keys); $j++)
+          {
+            $p = $this->psr_keys[$j];
+            if (in_array($p, $this->valid_psrs))
+            {
+              echo "            <option value='".$p."'>".$p."</option>\n";
+            }
+          }
+?>
+          </select>
+        </td>
+
+        <td class='key'>RA</td>
+        <td class='val'><input type="text" id="<?echo $prefix?>_ra" name="<?echo $prefix?>_ra" size="12" value="" readonly></td>
+
+        <td class='key'>DEC</td>
+        <td class='val'><input type="text" id="<?echo $prefix?>_dec" name="<?echo $prefix?>_dec" size="12" value="" readonly></td>
+
+        <td class='key'>PROC FILE</td>
+        <td class='val'>
+          <select name="<?echo $prefix?>_processing_file">
+            <option value="mopsr.dspsr.cpu">mopsr.dspsr.cpu</option>
+            <option value="mopsr.dspsr.cpu.5s">mopsr.dspsr.cpu.5s</option>
+<?          if ($this->hires) { ?>
+            <!--<option value="mopsr.dspsr.cpu.cdd.hires">mopsr.dspsr.cpu.cdd.hires</option>-->
+<?          } else { ?>
+            <option value="mopsr.dspsr.cpu.cdd" selected>mopsr.dspsr.cpu.cdd</option>
+<?          } ?>
+            <option value="mopsr.null">mopsr.null [discard]</option>
+          </select>
+        </td>
 
       </tr>
+    </table>
+<?  } ?>
 
+    <table border=0 cellpadding=5 cellspacing=0>
       <tr>
-        <td colspan=8><hr></td>
+        <td width='150px'><b>Correlation</b></td>
+
+        <td class='key'>ENABLED</td>
+        <td class='val'><input type="checkbox" name="correlation_enabled"></td>
+
+        <td class='key'>Project ID</td>
+        <td class='val'><input type="text" name="correlation_project_id" size="4" value="P999"></td>
+
+        <td class='key'>TYPE</td>
+        <td class='val'>
+          <select name="correlation_type">
+            <option value="FX">FX</option>
+            <option value="X">X</option>
+          </select>
+        </td>
+
+        <td class='key'>DUMP TIME</td>
+        <td class='val'><input type="text" name="correlation_dump_time" size="4" value="60"></td>
+
+        <td class='key'>PROC FILE</td>
+        <td class='val'>
+          <select name="corr_processing_file">
+<?          if ($this->hires) {
+              echo '<option value="mopsr.calib.hires.pref16.gpu">mopsr.calib.hires.pref16.gpu [limited baselines 352 input]</option>\n';
+              echo '<option value="mopsr.calib.hires.gpu">mopsr.calib.hires.gpu</option>\n';
+            } else {
+              echo '<option value="mopsr.calib.pref16.gpu" selected>mopsr.calib.pref16.gpu [limited baselines 352 input]</option>\n';
+              echo '<option value="mopsr.calib.gpu">mopsr.calib.gpu [correlator]</option>\n';
+              echo '<option value="mopsr.calib.xgpu">mopsr.calib.xgpu [dev correlator]</option>\n';
+            }
+?>
+            <option value="mopsr.null">mopsr.null [discard]</option>
+          </select>
+        </td>
+
       </tr>
-      
+    </table>
+
+
+    <table border=0 cellpadding=5 cellspacing=0>
+      <tr>
+        <td width='150px'><b>Fan Beam [BP]</b></td>
+
+        <td class='key'>ENABLED</td>
+        <td class='val'><input type="checkbox" name="fan_beams_enabled"></td>
+
+        <td class='key'>Project ID</td>
+        <td class='val'><input type="text" name="fan_beams_project_id" size="4" value="P999"></td>
+
+        <td class='key'>NBEAMS</td>
+        <td class='val'><input type="text" name="nbeams" size="4" value="<?echo $this->nbeams?>" readonly></td>
+
+        <td class='key'>BEAM SPACING</td>
+        <td class='val'><input type="text" name="beam_spacing" name="ra" size="12" value="<?echo 4.0 / ($this->nbeams -1)?>"> [degrees]</td>
+
+      </tr>
+    </table>
+
+    <table border=0 cellpadding=5 cellspacing=0>
+      <tr>      
+        <td width='150px'><b>Module Beam [BP]</b></td>
+          
+        <td class='key'>ENABLED</td>
+        <td class='val'><input type="checkbox" name="mod_beams_enabled"></td>
+        
+        <td class='key'>Project ID</td>
+        <td class='val'><input type="text" name="mod_beams_project_id" size="4" value="P999"></td>
+      </tr>
+    </table>
+
+
+    <h3>Controls</h3>
+    <table border=0 cellpadding=5 cellspacing=0 width='100%'>
+
       <tr>
         <td colspan=4>
           <div class="btns" style='text-align: center'>
@@ -904,118 +548,185 @@ class tmc_simulator extends mopsr_webpage
 
   function printTMCResponse($get)
   {
-
     // Open a connection to the TMC interface script
     $host = $this->inst->config["TMC_INTERFACE_HOST"];
     $port = $this->inst->config["TMC_INTERFACE_PORT"];
     $sock = 0;
 
-    echo "<html>\n";
-    echo "<head>\n";
-    for ($i=0; $i<count($this->css); $i++)
-      echo "   <link rel='stylesheet' type='text/css' href='".$this->css[$i]."'>\n";
-    echo "</head>\n";
-
-    $xml = "<?xml version='1.0' encoding='ISO-8859-1'?>\n";
-    $xml .= "<mpsr_tmc_message>\n";
+    $xml = "<?xml version='1.0' encoding='ISO-8859-1'?>";
+    $xml .= "<mpsr_tmc_message>";
 
     if ($get["command"] == "stop")
     {
-      $xml .= "<command>stop</command>\n";
+      $xml .= "<command>stop</command>";
     }
     else if ($get["command"] == "prepare")
     {
-      $xml .= "<command>prepare</command>\n";
-      $xml .= "<source_parameters>\n";
-      $xml .= "  <name epoch='J2000'>".$get["source"]."</name>\n";
-      $xml .=   "<ra units='hh:mm:ss'>".$get["ra"]."</ra>\n";
-      $xml .=   "<dec units='hh:mm:ss'>".$get["dec"]."</dec>\n";
-      $xml .=   "<ns_tilt units='degrees'>".$get["ns_tilt"]."</ns_tilt>\n";
-      $xml .=   "<md_angle units='degrees'>".$get["md_angle"]."</md_angle>\n";
-      $xml .= "</source_parameters>\n";
-      $xml .= "<signal_parameters>\n";
-      $xml .=   "<nchan>".$get["nchan"]."</nchan>\n";
-      $xml .=   "<nbit>".$get["nbit"]."</nbit>\n";
-      $xml .=   "<ndim>".$get["ndim"]."</ndim>\n";
-      $xml .=   "<npol>".$get["npol"]."</npol>\n";
-      $xml .=   "<nant>".$get["nant"]."</nant>\n";
-      $xml .=   "<bandwidth units='MHz'>".$get["bandwidth"]."</bandwidth>\n";
-      $xml .=   "<centre_frequency units='MHz'>".$get["centre_frequency"]."</centre_frequency>\n";
-      $xml .= "</signal_parameters>\n";
-      $xml .= "<pfb_parameters>\n";
-      $xml .=   "<oversampling_ratio>".$get["oversampling_ratio"]."</oversampling_ratio>\n";
-      $xml .=   "<sampling_time units='microseconds'>".$get["sampling_time"]."</sampling_time>\n";
-      $xml .=   "<channel_bandwidth units='MHz'>".$get["channel_bandwidth"]."</channel_bandwidth>\n";
-      $xml .=   "<dual_sideband>".$get["dsb"]."</dual_sideband>\n";
-      $xml .=   "<resolution units='bytes'>".$get["resolution"]."</resolution>\n";
-      $xml .= "</pfb_parameters>\n";
-      $xml .= "<observation_parameters>\n";
-      $xml .=   "<observer>".$get["observer"]."</observer>\n";
-      $xml .=   "<aq_processing_file>".$get["aq_processing_file"]."</aq_processing_file>\n";
-      $xml .=   "<bf_processing_file>".$get["bf_processing_file"]."</bf_processing_file>\n";
-      $xml .=   "<bp_processing_file>".$get["bp_processing_file"]."</bp_processing_file>\n";
-      $xml .=   "<mode>".$get["mode"]."</mode>\n";
-      $xml .=   "<project_id>".$get["project_id"]."</project_id>\n";
-      $xml .=   "<tobs>".$get["tobs"]."</tobs>\n";
-      $xml .=   "<type>".$get["type"]."</type>\n";
-      $xml .=   "<config>".$get["config"]."</config>\n";
-      $xml .= "</observation_parameters>\n";
+      $xml .= "<command>prepare</command>";
+
+      $xml .= "<west_arm_parameters>";
+      $xml .=   "<tracking>".$this->checkbox("antenna_tracking", $get)."</tracking>";
+      $xml .=   "<ns_tilt units='degrees'>".$get["ns_tilt"]."</ns_tilt>";
+      $xml .=   "<md_angle units='degrees'>".$get["md_angle"]."</md_angle>";
+      $xml .= "</west_arm_parameters>";
+      $xml .= "<east_arm_parameters>";
+      $xml .=   "<tracking>".$this->checkbox("antenna_tracking", $get)."</tracking>";
+      $xml .=   "<ns_tilt units='degrees'>".$get["ns_tilt"]."</ns_tilt>";
+      $xml .=   "<md_angle units='degrees'>".$get["md_angle"]."</md_angle>";
+      $xml .= "</east_arm_parameters>";
+
+      $xml .= "<signal_parameters>";
+      $xml .=   "<nchan>".$get["nchan"]."</nchan>";
+      $xml .=   "<nbit>".$get["nbit"]."</nbit>";
+      $xml .=   "<ndim>".$get["ndim"]."</ndim>";
+      $xml .=   "<npol>".$get["npol"]."</npol>";
+      $xml .=   "<nant>".$get["nant"]."</nant>";
+      $xml .=   "<bandwidth units='MHz'>".$get["bandwidth"]."</bandwidth>";
+      $xml .=   "<centre_frequency units='MHz'>".$get["centre_frequency"]."</centre_frequency>";
+      $xml .= "</signal_parameters>";
+
+      $xml .= "<pfb_parameters>";
+      $xml .=   "<oversampling_ratio>".$get["oversampling_ratio"]."</oversampling_ratio>";
+      $xml .=   "<sampling_time units='microseconds'>".$get["sampling_time"]."</sampling_time>";
+      $xml .=   "<channel_bandwidth units='MHz'>".$get["channel_bandwidth"]."</channel_bandwidth>";
+      $xml .=   "<dual_sideband>".$get["dsb"]."</dual_sideband>";
+      $xml .=   "<resolution units='bytes'>".$get["resolution"]."</resolution>";
+      $xml .= "</pfb_parameters>";
+
+      $xml .= "<observation_parameters>";
+      $xml .=   "<observer>".$get["observer"]."</observer>";
+      $xml .=   "<tobs>".$get["tobs"]."</tobs>";
+      $xml .= "</observation_parameters>";
+
+      $xml .= "<boresight_parameters>";
+      $xml .=   "<project_id>".$get["project_id"]."</project_id>";
+      $xml .=   "<name epoch='J2000'>".$get["0_source"]."</name>";
+      $xml .=   "<ra units='hh:mm:ss'>".$get["0_ra"]."</ra>";
+      $xml .=   "<dec units='hh:mm:ss'>".$get["0_dec"]."</dec>";
+      $xml .=   "<rfi_mitigation>".$this->checkbox("rfi_mitigation", $get)."</rfi_mitigation>";
+      $xml .=   "<antenna_weights>".$this->checkbox("antenna_weights", $get)."</antenna_weights>";
+      $xml .=   "<delay_tracking>".$this->checkbox("delay_tracking", $get)."</delay_tracking>";
+      $xml .=   "<processing_file>".$get["0_processing_file"]."</processing_file>";
+      $xml .= "</boresight_parameters>";
+   
+      if (array_key_exists("correlation_enabled", $get))
+      {
+        $xml .= "<correlation_parameters>";
+        $xml .=   "<mode>CORR</mode>";
+        $xml .=   "<project_id>".$get["correlation_project_id"]."</project_id>";
+        $xml .=   "<type>".$get["correlation_type"]."</type>";
+        $xml .=   "<processing_file>".$get["corr_processing_file"]."</processing_file>";
+        $xml .=   "<dump_time units='seconds'>".$get["correlation_dump_time"]."</dump_time>";
+        $xml .= "</correlation_parameters>";
+      }
+
+      $ibeam = 1;
+      for ($i=1; $i<=$this->ntiedbeams; $i++)
+      {
+        if (array_key_exists($i."_enabled", $get))
+        {
+          $key = "tied_beam_".($i-1)."_parameters";
+          $xml .= "<".$key.">";
+          $xml .=   "<mode>PSR</mode>";
+          $xml .=   "<project_id>".$get[$i."_project_id"]."</project_id>";
+          $xml .=   "<processing_file>".$get[$i."_processing_file"]."</processing_file>";
+          $xml .=   "<name epoch='J2000'>".$get[$i."_source"]."</name>";
+          $xml .=   "<ra units='hh:mm:ss'>".$get[$i."_ra"]."</ra>";
+          $xml .=   "<dec units='hh:mm:ss'>".$get[$i."_dec"]."</dec>";
+          $xml .= "</".$key.">";
+          $ibeam++;
+        }
+      }
+
+      if (array_key_exists("fan_beams_enabled", $get))
+      {
+        $xml .= "<fan_beams_parameters>";
+        $xml .=   "<mode>PSR</mode>";
+        $xml .=   "<project_id>".$get["fan_beams_project_id"]."</project_id>";
+        $xml .=   "<nbeams>".$get["nbeams"]."</nbeams>";
+        $xml .=   "<beam_spacing units='degrees'>".$get["beam_spacing"]."</beam_spacing>";
+        $xml .= "</fan_beams_parameters>";
+      }
+
+      if (array_key_exists("mod_beams_enabled", $get))
+      {
+        $xml .= "<mod_beams_parameters>";
+        $xml .=   "<mode>PSR</mode>";
+        $xml .=   "<project_id>".$get["mod_beams_project_id"]."</project_id>";
+        $xml .= "</mod_beams_parameters>";
+      }
     }
     else if ($get["command"] == "start")
     {
-      $xml .= "<command>start</command>\n";
+      $xml .= "<command>start</command>";
     }
     else if ($get["command"] == "query")
     {
-      $xml .= "<command>query</command>\n";
+      $xml .= "<command>query</command>";
     }
     else
     {
-      $xml .= "<command>ignore</command>\n";
+      $xml .= "<command>ignore</command>";
     }
 
     $xml .= "</mpsr_tmc_message>\r\n";
 
-?>
-</head>
-<body>
-<table border=1 width='100%'>
- <tr>
-  <th>Command</th>
-  <th>Response</th>
- </tr>
-<?
-    list ($sock,$message) = openSocket($host,$port,2);
-    if (!($sock)) {
-      $this->printTR("Error: opening socket to TMC interface [".$host.":".$port."]: ".$message, "");
+    $transmit = true;
+    if ($transmit) 
+    {
+      echo "<html>\n";
+      echo "<head>\n";
+      for ($i=0; $i<count($this->css); $i++)
+        echo "   <link rel='stylesheet' type='text/css' href='".$this->css[$i]."'>\n";
+      echo "</head>\n";
+      echo "<body>\n";
+
+      echo "<table border=1 width='100%'>\n";
+      echo "  <tr>\n";
+      echo "    <th>Command</th>\n";
+      echo "    <th>Response</th>\n";
+      echo "  </tr>\n";
+      
+      list ($sock,$message) = openSocket($host,$port,2);
+      if (!($sock)) {
+        $this->printTR("Error: opening socket to TMC interface [".$host.":".$port."]: ".$message, "");
+        $this->printTF();
+        $this->printFooter();
+        return;
+      }
+
+      $html_cmd = str_replace("<", "[", $xml);
+      $html_cmd = str_replace(">", "]", $html_cmd);
+      $html_cmd = str_replace("\n", "<br/>", $html_cmd);
+
+      $xml = str_replace("\n", "", $xml);
+
+      $this->printTR ("Sending", $html_cmd);
+      socketWrite ($sock, $xml."\r\n");
+
+      $xml = "";
+      list ($result, $xml) = socketRead ($sock);
+
+      $html_response = str_replace("><", "]\n[", $xml);
+      $html_response = str_replace("<", "[", $html_response);
+      $html_response = str_replace(">", "]", $html_response);
+      $html_response = str_replace("\n", "<br/>", $html_response);
+
+      $this->printTR ("Received", $html_response);
       $this->printTF();
-      $this->printFooter();
+      $this->printFooter ();
+
+      socket_close($sock);
+      echo "</table>\n";
+      echo "</body>\n";
+      echo "</html>\n";
       return;
     }
-
-    $html_cmd = str_replace("<", "[", $xml);
-    $html_cmd = str_replace(">", "]", $html_cmd);
-    $html_cmd = str_replace("\n", "<br/>", $html_cmd);
-
-    $xml = str_replace("\n", "", $xml);
-
-    $this->printTR ("Sending", $html_cmd);
-    socketWrite ($sock, $xml."\r\n");
-
-    $xml = "";
-    list ($result, $xml) = socketRead ($sock);
-
-    $html_response = str_replace("><", "]\n[", $xml);
-    $html_response = str_replace("<", "[", $html_response);
-    $html_response = str_replace(">", "]", $html_response);
-    $html_response = str_replace("\n", "<br/>", $html_response);
-
-    $this->printTR ("Received", $html_response);
-    $this->printTF();
-    $this->printFooter ();
-
-    socket_close($sock);
-    return;
+    else
+    {
+      header("Content-type: text/xml");
+      echo $xml."\n";
+    }
   }
 
   function printTR($left, $right) {
@@ -1036,6 +747,13 @@ class tmc_simulator extends mopsr_webpage
     echo "</table>\n";
   }
 
+  function checkbox($key, $array)
+  {
+    if (array_key_exists($key, $array))
+      return "true";
+    else
+      return "false";
+  }
 }
 
 if (isset($_GET["command"])) {
