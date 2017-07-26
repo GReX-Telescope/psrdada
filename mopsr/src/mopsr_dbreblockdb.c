@@ -28,6 +28,8 @@
 int quit_threads = 0;
 
 int64_t dbreblockdb_write_block_SFT_to_STF (dada_client_t *, void *, uint64_t, uint64_t);
+int64_t dbreblockdb_write_block_FT_to_TF (dada_client_t *, void *, uint64_t, uint64_t);
+
 
 void usage()
 {
@@ -142,11 +144,13 @@ int dbreblockdb_open (dada_client_t* client)
     nbeam = 1;
   }
 
-  if ((nant == 1) && (nbeam == 1))
+  /*
+  if ((nant == 1) && (nbeam == 1) && 0)
   {
     multilog (log, LOG_ERR, "open: cannot transpose from ST to T with NANT=%d && NBEAM=%d\n", nant, nbeam);
     return -1;
   }
+  */
   ctx->nsig = nant > nbeam ? nant : nbeam;
 
   if (ctx->scales)
@@ -189,11 +193,13 @@ int dbreblockdb_open (dada_client_t* client)
     multilog (log, LOG_ERR, "open: header with no NCHAN\n");
     return -1;                
   }
-  if (ctx->nchan != 1 && nbeam == 1)
+  /*
+  if (ctx->nchan != 1 && nbeam == 1 && 0)
   {
     multilog (log, LOG_ERR, "open: cannot transpose from ST to T with NCHAN=%d\n", ctx->nchan);
     return -1;
   }
+  */
  
   if (ascii_header_get (client->header, "ORDER", "%s", &(ctx->order)) != 1)
   {
@@ -203,12 +209,31 @@ int dbreblockdb_open (dada_client_t* client)
   else
   {
     // for summing of data blocks we always want TF output mode
-    multilog (log, LOG_INFO, "open: ORDER=%s\n", ctx->order);
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "open: ORDER=%s\n", ctx->order);
     if ((strcmp(ctx->order, "SFT") == 0) && client->io_block_function)
     {
-      multilog (log, LOG_INFO, "open: changing order from SFT to STF\n");
-      client->io_block_function = dbreblockdb_write_block_SFT_to_STF;
-      strcpy (output_order, "STF");
+      if (ctx->nsig > 1)
+      {
+        if (ctx->verbose)
+          multilog (log, LOG_INFO, "open: changing order from SFT to STF\n");
+        client->io_block_function = dbreblockdb_write_block_SFT_to_STF;
+        strcpy (output_order, "STF");
+      }
+      else 
+      {
+        if (ctx->verbose)
+          multilog (log, LOG_INFO, "open: changing order from SFT to TF\n");
+        client->io_block_function = dbreblockdb_write_block_FT_to_TF;
+        strcpy (output_order, "TF");
+      }
+    }
+    else if ((strcmp(ctx->order, "FT") == 0) && client->io_block_function)
+    {
+      if (ctx->verbose)
+        multilog (log, LOG_INFO, "open: changing order from FT to TF\n");
+      client->io_block_function = dbreblockdb_write_block_FT_to_TF;
+      strcpy (output_order, "TF");
     }
     else
     {
@@ -410,6 +435,137 @@ int64_t dbreblockdb_write (dada_client_t* client, void* data, uint64_t data_size
   if (ctx->verbose)
     multilog (log, LOG_INFO, "write: read %"PRIu64", wrote %"PRIu64" bytes\n", data_size, data_size);
  
+  return data_size;
+}
+
+// reblock the data into a larger block size. This involes:
+//   transpose input from FT to TF 
+//   reblocking from input nsamps to output nsamps
+// 
+int64_t dbreblockdb_write_block_FT_to_TF (dada_client_t * client, void *in_data , uint64_t data_size, uint64_t block_id)
+{
+  mopsr_dbreblockdb_t* ctx = (mopsr_dbreblockdb_t*) client->context;
+
+  multilog_t * log = client->log;
+
+  if (ctx->verbose > 1)
+    multilog (log, LOG_INFO, "write_block_FT_to_TF: data_size=%"PRIu64", block_id=%"PRIu64"\n",
+              data_size, block_id);
+
+  const uint64_t nsamp_in  = data_size / (ctx->nsig * ctx->ndim * ctx->nchan * (ctx->nbit_in/8));
+  const uint64_t nsamp_out = ctx->output.block_size / (ctx->nsig * ctx->ndim * ctx->nchan * (ctx->nbit_out/8));
+
+  const uint64_t sig_stride_in  = nsamp_in * ctx->ndim * ctx->nchan;
+  const uint64_t sig_stride_out = nsamp_out * ctx->ndim * ctx->nchan;
+
+
+  if (ctx->verbose > 1)
+    multilog (log, LOG_INFO, "write_block_FT_to_TF: sig_stride_in=%"PRIu64", sig_stride_out=%"PRIu64"\n", sig_stride_in, sig_stride_out);
+
+  uint8_t * in = (uint8_t *) in_data;
+  uint8_t * out;
+
+  uint64_t out_block_id;
+  unsigned isig, isamp, ichan, ochan;
+  uint64_t nchansamp = ctx->nchan * nsamp_in;
+
+  if (!ctx->output.block_open)
+  { 
+    if (ctx->verbose > 1)
+      multilog (log, LOG_INFO, "write_block_FT_to_TF: ipcio_open_block_write()\n");
+    ctx->output.curr_block = ipcio_open_block_write(ctx->output.hdu->data_block, &out_block_id);
+    if (!ctx->output.curr_block)
+    {
+      multilog (log, LOG_ERR, "write_block_FT_to_TF: ipcio_open_block_write failed %s\n", strerror(errno));
+      return -1;
+    }
+    ctx->output.block_open = 1; 
+    ctx->output.bytes_written = 0;
+    ctx->reblock_curr = 0;
+  }
+
+  out = (uint8_t *) ctx->output.curr_block;
+  uint8_t out_val;
+  uint8_t out_limit = 255;
+
+  float out_limit_float = (float) out_limit;
+
+  float in_val;
+
+  // advance forward on the datablock pointer for the current input block offset
+  out += (nsamp_in * ctx->nchan * ctx->reblock_curr);
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "write_block_FT_to_TF: out incremented by %d bytes\n", nsamp_in * ctx->nchan * ctx->reblock_curr);
+
+  //multilog (log, LOG_INFO, "write_block_FT_to_TF: in_stride=%"PRIu64" out_stride=%"PRIu64"\n", sig_stride_in, sig_stride_out);
+
+  if (ctx->verbose > 2)
+    multilog (log, LOG_INFO, "write_block_FT_to_TF: transposing signal %u\n", isig);
+  for (ichan=0; ichan<ctx->nchan; ichan++)
+  {
+    ochan = ichan;
+    if (ctx->verbose > 2)
+      multilog (log, LOG_INFO, "write_block_FT_to_TF: ichan=%u ochan=%u\n", ichan, ochan);
+
+    for (isamp=0; isamp<nsamp_in; isamp++)
+    {
+      out[isamp * ctx->nchan + ochan] = in[ichan * nsamp_in + isamp];
+    }
+  }
+
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "write_block_FT_to_TF old: %u, %"PRIu64"\n", ctx->reblock_curr, ctx->output.bytes_written);
+  ctx->reblock_curr++;
+  ctx->output.bytes_written += data_size;
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "write_block_FT_to_TF new: %u, %"PRIu64"\n", ctx->reblock_curr, ctx->output.bytes_written);
+
+  if (ctx->output.bytes_written > ctx->output.block_size)
+    multilog (log, LOG_ERR, "write_block_FT_to_TF output block overrun by "
+              "%"PRIu64" bytes\n", ctx->output.bytes_written - ctx->output.block_size);
+
+  if (ctx->verbose > 1)
+    multilog (log, LOG_INFO, "write_block_FT_to_TF bytes_written=%"PRIu64", "
+              "block_size=%"PRIu64"\n", ctx->output.bytes_written, ctx->output.block_size);
+
+  // check if the output block is now full
+  if (ctx->output.bytes_written >= ctx->output.block_size)
+  {
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "write_block_FT_to_TF block now full bytes_written=%"PRIu64", block_size=%"PRIu64"\n", ctx->output.bytes_written, ctx->output.block_size);
+
+    // check if this is the end of data
+    if (client->transfer_bytes && ((ctx->bytes_in + data_size) == client->transfer_bytes))
+    {
+      if (ctx->verbose)
+        multilog (log, LOG_INFO, "write_block_FT_to_TF update_block_write written=%"PRIu64"\n", ctx->output.bytes_written);
+      if (ipcio_update_block_write (ctx->output.hdu->data_block, ctx->output.bytes_written) < 0)
+      {
+        multilog (log, LOG_ERR, "write_block_FT_to_TF ipcio_update_block_write failed\n");
+         return -1;
+      }
+    }
+    else
+    {
+      if (ctx->verbose > 1)
+        multilog (log, LOG_INFO, "write_block_FT_to_TF close_block_write written=%"PRIu64"\n", ctx->output.bytes_written);
+      if (ipcio_close_block_write (ctx->output.hdu->data_block, ctx->output.bytes_written) < 0)
+      {
+        multilog (log, LOG_ERR, "write_block_FT_to_TF ipcio_close_block_write failed\n");
+        return -1;
+      }
+    }
+    ctx->output.block_open = 0;
+    ctx->output.bytes_written = 0;
+  }
+
+  ctx->bytes_in += data_size;
+  ctx->bytes_out += data_size;
+
+  if (ctx->verbose > 1)
+    multilog (log, LOG_INFO, "write_block_FT_to_TF read %"PRIu64", wrote %"PRIu64" bytes\n", data_size, data_size);
+
+
   return data_size;
 }
 
@@ -673,6 +829,8 @@ int64_t dbreblockdb_write_block_SFT_to_STF (dada_client_t * client, void *in_dat
 
   return data_size;
 }
+
+
 
 int main (int argc, char **argv)
 {
