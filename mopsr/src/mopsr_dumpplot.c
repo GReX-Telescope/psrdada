@@ -91,7 +91,11 @@ int main (int argc, char **argv)
     switch (arg)
     {
       case 'a':
-        ant = mopsr_get_new_ant_index(atoi(optarg));
+#ifdef HIRES
+          ant = mopsr_get_hires_ant_index(atoi(optarg));
+#else
+          ant = mopsr_get_new_ant_index(atoi(optarg));
+#endif
         break;
 
       case 'c':
@@ -243,7 +247,13 @@ int main (int argc, char **argv)
   unsigned char lock_flags_long[opts.nant];
   for (iant=0; iant<opts.nant; iant++)
   {
-    if (opts.nant == 16)
+    if (opts.nant == 8)
+    {
+      ant_ids[iant]    = mopsr_get_hires_ant_number (iant);
+      lock_flags[iant] = mopsr_get_bit_from_16 (hdr.mgt_locks, ant_ids[iant]);
+      lock_flags_long[iant] = mopsr_get_bit_from_16 (hdr.mgt_locks_long, ant_ids[iant]);
+    }
+    else if (opts.nant == 16)
     {
       ant_ids[iant]    = mopsr_get_new_ant_number (iant);
       lock_flags[iant] = mopsr_get_bit_from_16 (hdr.mgt_locks, ant_ids[iant]);
@@ -346,6 +356,8 @@ int main (int argc, char **argv)
       opts.ymin = 0;
       opts.ymax = 0;
       cpgclos();
+      if (device)
+        sleep(1);
     }
 
     // count histogram statistics
@@ -417,6 +429,8 @@ int main (int argc, char **argv)
         set_resolution (xres, yres);
         mopsr_plot_histogram (histogram, &opts);
         cpgend();
+        if (device)
+          sleep(1);
       }
 
       if (!device)
@@ -496,6 +510,8 @@ int main (int argc, char **argv)
         set_resolution (xres, yres);
         mopsr_plot_bandpass(bandpass, &opts);
         cpgend();
+        if (device)
+          sleep(1);
       }
     }
 
@@ -522,6 +538,8 @@ int main (int argc, char **argv)
         set_resolution (xres, yres);
         mopsr_plot_waterfall (waterfall_h, nsamp, &opts);
         cpgend();
+        if (device)
+          sleep(1);
       }
     }
   }
