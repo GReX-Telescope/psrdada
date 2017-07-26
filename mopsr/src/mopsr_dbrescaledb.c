@@ -27,7 +27,8 @@ int compare (const void * a, const void * b)
   return ( *(float *)a - *(float *)b );
 }
 
-int64_t dbrescaledb_write_block_ST_to_ST (dada_client_t *, void *, uint64_t, uint64_t);
+int64_t dbrescaledb_write_block_FST_to_FST (dada_client_t *, void *, uint64_t, uint64_t);
+int64_t dbrescaledb_write_block_SFT_to_SFT (dada_client_t *, void *, uint64_t, uint64_t);
 
 void usage()
 {
@@ -35,6 +36,7 @@ void usage()
            "mopsr_dbrescaledb [options] in_key out_key\n"
            "              data type change from 32-bit float to 8-bit unsigned int\n"
            " -f val       apply val as global scale\n" 
+           " -i           individually rescale reach signal\n" 
            " -o val       apply val as global offset to data\n"
            " -t secs      calculate scales over secs\n"
            " -s           1 transfer, then exit\n"
@@ -89,9 +91,11 @@ typedef struct {
   float global_offset;
   float global_scale;
 
+  char indiv_rescale;
+
 } mopsr_dbrescaledb_t;
 
-#define DADA_DBREBLOCKDB_INIT { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", 0, 0, 0, 0, 0, 0, 0, 0, 0 }
+#define DADA_DBREBLOCKDB_INIT { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
 
 /*! Function that opens the data transfer target */
 int dbrescaledb_open (dada_client_t* client)
@@ -141,6 +145,47 @@ int dbrescaledb_open (dada_client_t* client)
   {
     ctx->nbeam = 1;
   }
+  if (ascii_header_get (client->header, "NCHAN", "%u", &(ctx->nchan)) != 1)
+  {           
+    multilog (log, LOG_ERR, "open: header with no NCHAN\n");
+    return -1;                
+  }
+
+  /*
+  // this code injects an FRB into a specific output beam
+  if (ascii_header_get (client->header, "FRB_INJECTION", "%d", &(ctx->frb_inj)) == 1)
+  {
+    if (ascii_header_get (client->header, "FRB_INJECTION_BEAM", "%d", &(ctx->frb_inj_beam)) != 1)
+    {
+      multilog (log, LOG_ERR, "open: FRB_INJECTION with no FRB_INJECTION_BEAM\n");
+      return -1;
+    }
+
+    if (ascii_header_get (client->header, "FRB_INJECTION_WIDTH", "%f", &(ctx->frb_inj_width)) != 1)
+    {
+      multilog (log, LOG_ERR, "open: FRB_INJECTION with no FRB_INJECTION_WIDTH\n");
+      return -1;
+    }
+
+    if (ascii_header_get (client->header, "FRB_INJECTION_DM", "%f", &(ctx->frb_inj_dm)) != 1)
+    {
+      multilog (log, LOG_ERR, "open: FRB_INJECTION with no FRB_INJECTION_DM\n");
+      return -1;
+    }
+
+    if (ascii_header_get (client->header, "FRB_INJECTION_SNR", "%f", &(ctx->frb_inj_snr)) != 1)
+    {
+      multilog (log, LOG_ERR, "open: FRB_INJECTION with no FRB_INJECTION_SNR\n");
+      return -1;
+    }
+
+    if (ascii_header_get (client->header, "FRB_INJECTION_UTC", "%s", &(ctx->frb_inj_utc)) != 1)
+    {
+      multilog (log, LOG_ERR, "open: FRB_INJECTION with no FRB_INJECTION_SNR\n");
+      return -1;
+    }
+  }
+  */
 
   if (ctx->nant == 1 && ctx->nbeam > 1)
     ctx->nsig = ctx->nbeam;
@@ -152,31 +197,32 @@ int dbrescaledb_open (dada_client_t* client)
     return -1;
   }
 
-  multilog (log, LOG_INFO, "open: using nant=%d, nbeam=%d, nsig=%d\n", ctx->nant, ctx->nbeam, ctx->nsig);
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "open: using nant=%d, nbeam=%d, nsig=%d nchan=%d\n", ctx->nant, ctx->nbeam, ctx->nsig, ctx->nchan);
 
   if (ctx->scales)
     free (ctx->scales);
-  ctx->scales = (float *) malloc (sizeof(float) * ctx->nsig);
+  ctx->scales = (float *) malloc (sizeof(float) * ctx->nsig * ctx->nchan);
 
   if (ctx->offsets)
     free (ctx->offsets);
-  ctx->offsets = (float *) malloc (sizeof(float) * ctx->nsig);
+  ctx->offsets = (float *) malloc (sizeof(float) * ctx->nsig * ctx->nchan);
 
   if (ctx->work)
     free (ctx->work);
-  ctx->work = (float *) malloc (sizeof(float) * ctx->nsig);
+  ctx->work = (float *) malloc (sizeof(float) * (ctx->nsig-1));
 
   if (ctx->sums)
     free (ctx->sums);
-  ctx->sums = (double *) malloc (sizeof(double) * ctx->nsig);
+  ctx->sums = (double *) malloc (sizeof(double) * ctx->nsig * ctx->nchan);
 
   if (ctx->sums_sq)
     free (ctx->sums_sq);
-  ctx->sums_sq = (double *) malloc (sizeof(double) * ctx->nsig);
+  ctx->sums_sq = (double *) malloc (sizeof(double) * ctx->nsig * ctx->nchan);
 
   if (ctx->nclipped)
     free (ctx->nclipped);
-  ctx->nclipped = (uint64_t *) malloc (sizeof(uint64_t) * ctx->nsig);
+  ctx->nclipped = (uint64_t *) malloc (sizeof(uint64_t) * ctx->nsig * ctx->nchan);
 
   if (ascii_header_get (client->header, "NBIT", "%u", &(ctx->nbit_in)) != 1)
   {
@@ -191,17 +237,6 @@ int dbrescaledb_open (dada_client_t* client)
     return -1;                
   }                             
 
-  if (ascii_header_get (client->header, "NCHAN", "%u", &(ctx->nchan)) != 1)
-  {           
-    multilog (log, LOG_ERR, "open: header with no NCHAN\n");
-    return -1;                
-  }
-  if (ctx->nchan != 1)
-  {
-    multilog (log, LOG_ERR, "open: cannot transpose from ST to T with NCHAN=%d\n", ctx->nchan);
-    return -1;
-  }
- 
   if (ascii_header_get (client->header, "ORDER", "%s", &(ctx->order)) != 1)
   {
     multilog (log, LOG_ERR, "open: header with no ORDER\n");
@@ -210,10 +245,16 @@ int dbrescaledb_open (dada_client_t* client)
   else
   {
     // for summing of data blocks we always want TF output mode
-    multilog (log, LOG_INFO, "open: ORDER=%s\n", ctx->order);
-    if ((strcmp(ctx->order, "ST") == 0) && client->io_block_function)
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "open: ORDER=%s\n", ctx->order);
+    if ((strcmp(ctx->order, "SFT") == 0) && client->io_block_function)
     {
-      client->io_block_function = dbrescaledb_write_block_ST_to_ST;
+      client->io_block_function = dbrescaledb_write_block_SFT_to_SFT;
+      strcpy (output_order, "SFT");
+    }
+    else if ((strcmp(ctx->order, "ST") == 0) && client->io_block_function)
+    {
+      client->io_block_function = dbrescaledb_write_block_FST_to_FST;
       strcpy (output_order, "ST");
     }
     else
@@ -226,7 +267,8 @@ int dbrescaledb_open (dada_client_t* client)
   char tmp[32];
   if (ascii_header_get (client->header, "UTC_START", "%s", tmp) == 1)
   {
-    multilog (log, LOG_INFO, "open: UTC_START=%s\n", tmp);
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "open: UTC_START=%s\n", tmp);
   }
   else
   {
@@ -328,14 +370,18 @@ int dbrescaledb_open (dada_client_t* client)
     return -1;    
   }                 
 
-  unsigned i;
-  for (i=0; i<ctx->nsig; i++)
+  unsigned ichan, isig, i;
+  for (ichan=0; ichan<ctx->nchan; ichan++)
   {
-    ctx->sums[i] = 0;
-    ctx->sums_sq[i] = 0;
-    ctx->nclipped[i] = 0;
-    ctx->offsets[i] = ctx->global_offset;
-    ctx->scales[i] = ctx->global_scale;
+    for (isig=0; isig<ctx->nsig; isig++)
+    {
+      i = ichan * ctx->nsig + isig;
+      ctx->sums[i] = 0;
+      ctx->sums_sq[i] = 0;
+      ctx->nclipped[i] = 0;
+      ctx->offsets[i] = ctx->global_offset;
+      ctx->scales[i] = ctx->global_scale;
+    }
   }
   ctx->offset = 0;
   ctx->scale = 1;
@@ -364,11 +410,15 @@ int dbrescaledb_close (dada_client_t* client, uint64_t bytes_written)
   
   multilog_t* log = client->log;
 
-  unsigned i = 0;
-  for (i=0; i<ctx->nsig; i++)
+  unsigned ichan, isig, i;
+  for (ichan=0; ichan<ctx->nchan; ichan++)
   {
-    if (ctx->nclipped[i] > 0 && ctx->verbose)
-      multilog (log, LOG_INFO, "close: samples from %u that exceed power limits=%"PRIu64"\n", i, ctx->nclipped[i]);
+    for (isig=0; isig<ctx->nsig; isig++)
+    {
+      i = ichan * ctx->nsig + isig;
+      if (ctx->nclipped[i] > 0 && ctx->verbose)
+        multilog (log, LOG_INFO, "close: samples from chan=%u sig=%u that exceed power limits=%"PRIu64"\n", ichan, isig, ctx->nclipped[i]);
+    }
   }
 
   if (ctx->verbose)
@@ -435,101 +485,120 @@ int64_t dbrescaledb_write (dada_client_t* client, void* data, uint64_t data_size
 }
 
 // rescale the ST data from 32-bit floats to 8-bit unsigned integers.
-int64_t dbrescaledb_write_block_ST_to_ST (dada_client_t * client, void *in_data , uint64_t data_size, uint64_t block_id)
+int64_t dbrescaledb_write_block_FST_to_FST (dada_client_t * client, void *in_data , uint64_t data_size, uint64_t block_id)
 {
   mopsr_dbrescaledb_t* ctx = (mopsr_dbrescaledb_t*) client->context;
 
   multilog_t * log = client->log;
 
   if (ctx->verbose > 1)
-    multilog (log, LOG_INFO, "write_block_ST_to_ST: data_size=%"PRIu64", block_id=%"PRIu64"\n",
+    multilog (log, LOG_INFO, "write_block_FST_to_FST: data_size=%"PRIu64", block_id=%"PRIu64"\n",
               data_size, block_id);
 
-  const uint64_t nsamp  = data_size / (ctx->nsig * ctx->ndim * (ctx->nbit_in/8));
+  const uint64_t nsamp  = data_size / (ctx->nchan * ctx->nsig * ctx->ndim * (ctx->nbit_in/8));
 
   //  assume 32-bit, detected (ndim == 1) data
   float * in = (float *) in_data;
   uint64_t out_block_id, isamp;
   double val;
-  unsigned i;
+  unsigned ichan, isig, i;
   float mean, mean_sq, variance;
 
   if (ctx->verbose > 1)
-    multilog (log, LOG_INFO, "write_block_ST_to_ST: nsamp=%lu\n", nsamp);
+    multilog (log, LOG_INFO, "write_block_FST_to_FST: nsamp=%lu\n", nsamp);
 
-  // 
+  // if the input power levels are to be measured 
   while ((!ctx->global_rescale) && (ctx->nsamps_integrated < ctx->nsamps_to_integrate))
   {
     ctx->nsamps_integrated += nsamp;
 
     // compute the mean power level across all beams and channels
-    for (i=0; i<ctx->nsig; i++)
+    for (ichan=0; ichan<ctx->nchan; ichan++)
     {
-      uint64_t total_power = 0;
-      for (isamp=0; isamp<nsamp; isamp++)
+      for (isig=0; isig<ctx->nsig; isig++)
       {
-        val = (double) in[i * nsamp + isamp];
-        ctx->sums[i] += val;
-        ctx->sums_sq[i] += (val * val);
+        // ichansig
+        i = ichan * ctx->nsig + isig;
+
+        uint64_t total_power = 0;
+        for (isamp=0; isamp<nsamp; isamp++)
+        {
+          val = (double) in[i * nsamp + isamp];
+          ctx->sums[i] += val;
+          ctx->sums_sq[i] += (val * val);
+        }
+
+        mean = (float) (ctx->sums[i] / ctx->nsamps_integrated);
+        mean_sq = (float) (ctx->sums_sq[i] / ctx->nsamps_integrated);
+        variance = mean_sq - (mean * mean);
+
+        ctx->offsets[i] = mean;
+        if (variance == 0)
+          ctx->scales[i] = 1.0;
+        else
+          ctx->scales[i] = 1.0 / sqrt(variance);
+
+        if (ctx->verbose)
+          multilog (log, LOG_INFO, "write_block_FST_to_FST: beam=%u mean=%f "
+                    "variance=%f scale=%f [%d - %d]\n", i, mean, variance, 
+                    ctx->scales[i], i*nsamp, (i+1)*nsamp);
       }
-
-      mean = (float) (ctx->sums[i] / ctx->nsamps_integrated);
-      mean_sq = (float) (ctx->sums_sq[i] / ctx->nsamps_integrated);
-      variance = mean_sq - mean * mean;
-
-      ctx->offsets[i] = mean;
-      if (variance == 0)
-        ctx->scales[i] = 1.0;
-      else
-        ctx->scales[i] = 1.0 / sqrt(variance);
-
-      if (ctx->verbose)
-        multilog (log, LOG_INFO, "write_block_ST_to_ST: beam=%u mean=%f variance=%f scale=%f [%d - %d]\n", i, mean, variance, ctx->scales[i],
-                  i*nsamp, (i+1)*nsamp);
     }
 
-    unsigned midval = (ctx->nsig-1) / 2;
+    // use all signals within a channel to calculate the median
+    unsigned nwork = ctx->nsig - 1;
+    unsigned midsig = (nwork - 1) / 2;
     if (ctx->verbose)
-      multilog (log, LOG_INFO, "write_block_ST_to_ST: calculate medians: midval=%u\n", midval);
+      multilog (log, LOG_INFO, "write_block_FST_to_FST: calculate medians: nwork=%u midsig=%u\n", nwork, midsig);
 
-    // get the median offset
-    for (i=0; i<ctx->nsig-1; i++)
-      ctx->work[i] = ctx->offsets[i+1];
-    qsort ((void *) ctx->work, ctx->nsig-1, sizeof(float), compare);
-    ctx->offset = ctx->work[midval];
+    // N.B. avoid signal 0 [incoherrent beam]
 
-    // get the median scale
-    for (i=0; i<ctx->nsig-1; i++)
-      ctx->work[i] = ctx->scales[i];
-    qsort ((void *) ctx->work, ctx->nsig, sizeof(float), compare);
-    ctx->scale = ctx->work[midval];
-
-    if (ctx->verbose > 1)
-      multilog (log, LOG_INFO, "write_block_ST_to_ST: ctx->offset=%f ctx->scale=%f\n", ctx->offset, ctx->scale);
-
-    // Fan beams, beam0 is the incoherrent beam
-    if (ctx->nbeam > 1)
+    // compute the offset and scale for each channel
+    for (ichan=0; ichan<ctx->nchan; ichan++)
     {
-      for (i=1; i<ctx->nsig; i++)
+      unsigned base = ichan * ctx->nsig;
+  
+      // get the median offset
+      for (isig=1; isig<ctx->nsig; isig++)
+        ctx->work[isig-1] = ctx->offsets[base + isig];
+      qsort ((void *) ctx->work, nwork, sizeof(float), compare);
+      ctx->offset = ctx->work[midsig];
+
+      // get the median scale
+      for (isig=1; isig<ctx->nsig; isig++)
+        ctx->work[isig-1] = ctx->scales[base + isig];
+      qsort ((void *) ctx->work, nwork, sizeof(float), compare);
+      ctx->scale = ctx->work[midsig];
+
+      if (ctx->verbose > 1)
+        multilog (log, LOG_INFO, "write_block_FST_to_FST: ichan=%u ctx->offset=%f ctx->scale=%f\n", ichan, ctx->offset, ctx->scale);
+
+      // Fan beams, beam0 is the incoherrent beam, use an independent scale for that one
+      if (ctx->nbeam > 1)
       {
-        ctx->offsets[i] = ctx->offset;
-        ctx->scales[i] = ctx->scale;
+        for (isig=1; isig<ctx->nsig; isig++)
+        {
+          i = ichan * ctx->nsig + isig;
+          ctx->offsets[i] = ctx->offset;
+          ctx->scales[i] = ctx->scale;
+        }
       }
-    }
-    
-    if (ctx->nsamps_integrated >= ctx->nsamps_to_integrate)
-      multilog (log, LOG_INFO, "offset=%f scale=%f\n", ctx->offset, ctx->scale);
+
+      if (ctx->nsamps_integrated >= ctx->nsamps_to_integrate && ctx->verbose)
+        multilog (log, LOG_INFO, "ichan=%u offset=%e scale=%e\n", ichan, ctx->offset, ctx->scale);
+    } 
   }
    
   if (ctx->verbose > 1)
-    multilog (log, LOG_INFO, "write_block_ST_to_ST: ipcio_open_block_write()\n");
+    multilog (log, LOG_INFO, "write_block_FST_to_FST: ipcio_open_block_write()\n");
   ctx->out_block = ipcio_open_block_write(ctx->out_hdu->data_block, &out_block_id);
   if (!ctx->out_block)
   {
-    multilog (log, LOG_ERR, "write_block_ST_to_ST: ipcio_open_block_write failed %s\n", strerror(errno));
+    multilog (log, LOG_ERR, "write_block_FST_to_FST: ipcio_open_block_write failed %s\n", strerror(errno));
     return -1;
   }
 
+  // 8 it values from Jenet and Anderson / digifil
   const float digi_sigma = 6;
   const float digi_mean = 127.5;
   const float digi_scale = digi_mean / digi_sigma;
@@ -546,37 +615,43 @@ int64_t dbrescaledb_write_block_ST_to_ST (dada_client_t * client, void *in_data 
   // multply by digi_scale to ideal 8-bit FP variance
   // add digi_mean to get to ideal 8-bit mean
 
-  for (i=0; i<ctx->nsig; i++)
+  for (ichan=0; ichan<ctx->nchan; ichan++)
   {
-    const float combined_scale = ctx->scales[i] * digi_scale;
-
-    for (isamp=0; isamp<nsamp; isamp++)
+    for (isig=0; isig<ctx->nsig; isig++)
     {
-      int result = ((in[idx] - ctx->offsets[i]) * combined_scale) + digi_mean + 0.5;
+      i = ichan * ctx->nsig + isig;
 
-      // clip the results
-      if (result < digi_min)
+      const float combined_scale = ctx->scales[i] * digi_scale;
+      const float mean = ctx->offsets[i];
+
+      for (isamp=0; isamp<nsamp; isamp++)
       {
-        result = digi_min;
-        ctx->nclipped[i]++;
+        int result = ((in[idx] - mean) * combined_scale) + digi_mean + 0.5;
+
+        // clip the results
+        if (result < digi_min)
+        {
+          result = digi_min;
+          ctx->nclipped[i]++;
+        }
+        if (result > digi_max)
+        {
+          result = digi_max;
+          ctx->nclipped[i]++;
+        }
+        out[idx] = (uint8_t) result;
+        idx++;
       }
-      if (result > digi_max)
-      {
-        result = digi_max;
-        ctx->nclipped[i]++;
-      }
-      out[idx] = (uint8_t) result;
-      idx++;
     }
   }
 
   uint64_t out_data_size = data_size / ctx->bitrate_factor;
 
   if (ctx->verbose > 1)
-    multilog (log, LOG_INFO, "write_block_ST_to_ST close_block_write written=%"PRIu64"\n", out_data_size);
+    multilog (log, LOG_INFO, "write_block_FST_to_FST close_block_write written=%"PRIu64"\n", out_data_size);
   if (ipcio_close_block_write (ctx->out_hdu->data_block, out_data_size) < 0)
   {
-    multilog (log, LOG_ERR, "write_block_ST_to_ST ipcio_close_block_write failed\n");
+    multilog (log, LOG_ERR, "write_block_FST_to_FST ipcio_close_block_write failed\n");
     return -1;
   }
 
@@ -584,7 +659,184 @@ int64_t dbrescaledb_write_block_ST_to_ST (dada_client_t * client, void *in_data 
   ctx->bytes_out += out_data_size;
 
   if (ctx->verbose > 1)
-    multilog (log, LOG_INFO, "write_block_ST_to_ST read %"PRIu64", wrote %"PRIu64" bytes\n", data_size, out_data_size);
+    multilog (log, LOG_INFO, "write_block_FST_to_FST read %"PRIu64", wrote %"PRIu64" bytes\n", data_size, out_data_size);
+
+  return data_size;
+}
+
+// rescale the SFT data from 32-bit floats to 8-bit unsigned integers.
+int64_t dbrescaledb_write_block_SFT_to_SFT (dada_client_t * client, void *in_data , uint64_t data_size, uint64_t block_id)
+{
+  mopsr_dbrescaledb_t* ctx = (mopsr_dbrescaledb_t*) client->context;
+
+  multilog_t * log = client->log;
+
+  if (ctx->verbose > 1)
+    multilog (log, LOG_INFO, "write_block_SFT_to_SFT: data_size=%"PRIu64", block_id=%"PRIu64"\n",
+              data_size, block_id);
+
+  const uint64_t nsamp  = data_size / (ctx->nchan * ctx->nsig * ctx->ndim * (ctx->nbit_in/8));
+
+  //  assume 32-bit, detected (ndim == 1) data
+  float * in = (float *) in_data;
+  uint64_t out_block_id, isamp;
+  double val;
+  unsigned ichan, isig, i;
+  float mean, mean_sq, variance;
+
+  if (ctx->verbose > 1)
+    multilog (log, LOG_INFO, "write_block_SFT_to_SFT: nsamp=%lu\n", nsamp);
+
+  // 
+  while ((!ctx->global_rescale) && (ctx->nsamps_integrated < ctx->nsamps_to_integrate))
+  {
+    ctx->nsamps_integrated += nsamp;
+
+    // compute the statistics of each beam and channel
+    for (isig=0; isig<ctx->nsig; isig++)
+    {
+      for (ichan=0; ichan<ctx->nchan; ichan++)
+      {
+        // isigchan
+        i = isig * ctx->nchan + ichan;
+
+        uint64_t total_power = 0;
+        for (isamp=0; isamp<nsamp; isamp++)
+        {
+          val = (double) in[i * nsamp + isamp];
+          ctx->sums[i] += val;
+          ctx->sums_sq[i] += (val * val);
+        }
+
+        mean = (float) (ctx->sums[i] / ctx->nsamps_integrated);
+        mean_sq = (float) (ctx->sums_sq[i] / ctx->nsamps_integrated);
+        variance = mean_sq - mean * mean;
+
+        ctx->offsets[i] = mean;
+        if (variance == 0)
+          ctx->scales[i] = 1.0;
+        else
+          ctx->scales[i] = 1.0 / sqrt(variance);
+
+        if (ctx->verbose)
+          multilog (log, LOG_INFO, "write_block_SFT_to_SFT: beam=%u chan=%u mean=%f variance=%f scale=%f [%d - %d]\n", isig, ichan, mean, variance, ctx->scales[i], i*nsamp, (i+1)*nsamp);
+      }
+    }
+
+    // use all signals within a channel to calculate the median
+    unsigned nwork = ctx->nsig - 1;
+    unsigned midsig = (nwork - 1) / 2;
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "write_block_SFT_to_SFT: calculate medians: nwork=%u midval=%u\n", nwork, midsig);
+
+    for (ichan=0; ichan<ctx->nchan; ichan++)
+    {
+      // N.B. avoid signal 0 [incoherrent beam]
+
+      // get the median offset for all signals within this channel
+      for (isig=1; isig<ctx->nsig; isig++)
+      {
+        ctx->work[isig-1] = ctx->offsets[isig * ctx->nchan + ichan];
+      }
+
+      qsort ((void *) ctx->work, nwork, sizeof(float), compare);
+      ctx->offset = ctx->work[midsig];
+
+      // get the median scale
+      for (isig=1; isig<ctx->nsig; isig++)
+        ctx->work[isig-1] = ctx->scales[isig * ctx->nchan + ichan];
+      qsort ((void *) ctx->work, nwork, sizeof(float), compare);
+      ctx->scale = ctx->work[midsig];
+
+      if (ctx->verbose > 1)
+        multilog (log, LOG_INFO, "write_block_SFT_to_SFT: ichan=%u ctx->offset=%e ctx->scale=%e\n", ichan, ctx->offset, ctx->scale);
+
+      // Fan beams, beam0 is the incoherrent beam
+      if (ctx->nbeam > 1 && !ctx->indiv_rescale)
+      {
+        for (isig=1; isig<ctx->nsig; isig++)
+        {
+          i = isig * ctx->nchan + ichan;
+          ctx->offsets[i] = ctx->offset;
+          ctx->scales[i] = ctx->scale;
+        }
+      }
+
+      if (ctx->nsamps_integrated >= ctx->nsamps_to_integrate)
+        multilog (log, LOG_INFO, "ichan=%u offset=%e scale=%e\n", ichan, ctx->offset, ctx->scale);
+    } 
+  }
+   
+  if (ctx->verbose > 1)
+    multilog (log, LOG_INFO, "write_block_SFT_to_SFT: ipcio_open_block_write()\n");
+  ctx->out_block = ipcio_open_block_write(ctx->out_hdu->data_block, &out_block_id);
+  if (!ctx->out_block)
+  {
+    multilog (log, LOG_ERR, "write_block_SFT_to_SFT: ipcio_open_block_write failed %s\n", strerror(errno));
+    return -1;
+  }
+
+  const float digi_sigma = 6;
+  const float digi_mean = 127.5;
+  const float digi_scale = digi_mean / digi_sigma;
+  const float digi_min = 0;
+  const float digi_max = 255;
+
+  uint8_t * out = (uint8_t *) ctx->out_block;
+
+  uint64_t idx = 0;
+
+  // we need to perform the following operations in the input FP data
+  // subtract mean
+  // multiply by scale to get to unit variance
+  // multply by digi_scale to ideal 8-bit FP variance
+  // add digi_mean to get to ideal 8-bit mean
+
+  for (isig=0; isig<ctx->nsig; isig++)
+  {
+    for (ichan=0; ichan<ctx->nchan; ichan++)
+    {
+      i = isig * ctx->nchan + ichan;
+
+      const float combined_scale = ctx->scales[i] * digi_scale;
+      const float mean = ctx->offsets[i];
+
+      for (isamp=0; isamp<nsamp; isamp++)
+      {
+        int result = ((in[idx] - mean) * combined_scale) + digi_mean + 0.5;
+
+        // clip the results
+        if (result < digi_min)
+        {
+          result = digi_min;
+          ctx->nclipped[i]++;
+        }
+        if (result > digi_max)
+        {
+          result = digi_max;
+          ctx->nclipped[i]++;
+        }
+        out[idx] = (uint8_t) result;
+        idx++;
+      }
+    }
+  }
+
+  uint64_t out_data_size = data_size / ctx->bitrate_factor;
+
+  if (ctx->verbose > 1)
+    multilog (log, LOG_INFO, "write_block_SFT_to_SFT close_block_write written=%"PRIu64"\n", out_data_size);
+  if (ipcio_close_block_write (ctx->out_hdu->data_block, out_data_size) < 0)
+  {
+    multilog (log, LOG_ERR, "write_block_SFT_to_SFT ipcio_close_block_write failed\n");
+    return -1;
+  }
+
+  ctx->bytes_in += data_size;
+  ctx->bytes_out += out_data_size;
+
+  if (ctx->verbose > 1)
+    multilog (log, LOG_INFO, "write_block_SFT_to_SFT read %"PRIu64", wrote %"PRIu64" bytes\n", data_size, out_data_size);
 
   return data_size;
 }
@@ -621,10 +873,11 @@ int main (int argc, char **argv)
   ctx->global_offset = 0;
   ctx->global_scale = 0;
   char global_rescale = 0;
+  ctx->indiv_rescale = 0;
 
   float nsecs = 30;
 
-  while ((arg=getopt(argc,argv,"df:o:st:vz")) != -1)
+  while ((arg=getopt(argc,argv,"df:io:st:vz")) != -1)
   {
     switch (arg) 
     {
@@ -637,9 +890,13 @@ int main (int argc, char **argv)
         ctx->global_scale = atof(optarg);
         break;
 
+      case 'i':
+        ctx->indiv_rescale = 1;
+        break;
+
       case 'o':
         global_rescale |= 0x10;
-        ctx->global_offset= atof(optarg);
+        ctx->global_offset = atof(optarg);
         break;
 
       case 's':
@@ -751,7 +1008,7 @@ int main (int argc, char **argv)
 
   if (zero_copy)
   {
-    client->io_block_function = dbrescaledb_write_block_ST_to_ST;
+    client->io_block_function = dbrescaledb_write_block_FST_to_FST;
   }
   else
   {
