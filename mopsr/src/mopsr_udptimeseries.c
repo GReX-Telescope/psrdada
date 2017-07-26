@@ -352,7 +352,7 @@ int main (int argc, char **argv)
   uint64_t frames_per_packet = ctx->data_size / (ctx->nant * ctx->nchan * 2);
   mopsr_hdr_t hdr;
 
-  StopWatch_Start(&wait_sw);
+  StartTimer(&wait_sw);
 
   while (!quit_threads) 
   {
@@ -436,7 +436,7 @@ int main (int argc, char **argv)
         size_t cleared = dada_sock_clear_buffered_packets(ctx->sock->fd, ctx->pkt_size);
         if (ctx->verbose)
           multilog(ctx->log, LOG_INFO, "main: cleared %d packets\n", cleared);
-        StopWatch_Start(&wait_sw);
+        StartTimer(&wait_sw);
       } 
     }
   }
