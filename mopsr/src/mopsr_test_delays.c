@@ -19,7 +19,7 @@
 #include <math.h>
 #include <cuda_runtime.h>
 
-#define SKZAP
+//#define SKZAP
 
 void usage ()
 {
@@ -296,24 +296,6 @@ int main(int argc, char** argv)
     return -1;
   }
 
-  float * h_fringe_coeffs_ds;
-  fprintf (stderr, "main: cudaMallocHost(%"PRIu64") for h_fringe_coeffs_ds\n", fringes_size);
-  error = cudaMallocHost ((void **) &h_fringe_coeffs_ds, fringes_size);
-  if (error != cudaSuccess)
-  {
-    fprintf (stderr, "main: cudaMallocHost failed for %ld bytes\n", fringes_size);
-    return -1;
-  }
-
-  float * h_delays_ds;
-  fprintf (stderr, "main: cudaMallocHost(%"PRIu64") for h_delays_ds\n", fringes_size);
-  error = cudaMallocHost ((void **) &h_delays_ds, fringes_size);
-  if (error != cudaSuccess)
-  {
-    fprintf (stderr, "main: cudaMallocHost failed for %ld bytes\n", fringes_size);
-    return -1;
-  }
-
   void * d_fractional_delays;
   fprintf (stderr, "main: cudaMalloc(%"PRIu64") for d_fractional_delays\n", delays_size);
   error = cudaMalloc(&d_fractional_delays, delays_size);
@@ -389,7 +371,8 @@ int main(int argc, char** argv)
     h_ant_scales[iant] = 1;
   mopsr_delay_copy_scales (stream, h_ant_scales, ant_scales_size);
 
-  const unsigned fixed_delay = (ntap / 2) + 1;
+  //const unsigned fixed_delay = (ntap / 2) + 1;
+  const unsigned fixed_delay = 40;
   unsigned i;
 
   int8_t * ptr;
@@ -427,16 +410,10 @@ int main(int argc, char** argv)
 
       //h_fringe_coeffs[ichan*nant + iant] = delays[iant][ichan].fringe_coeff;
       h_fringe_coeffs[ichan*nant + iant] = 0;
-
-      //h_delays_ds[ichan*nant + iant] = delays[iant][ichan].fractional_ds;
-      h_delays_ds[ichan*nant + iant] = 0;
-
-      //h_fringe_coeffs_ds[ichan*nant + iant] = delays[iant][ichan].fringe_coeff_ds;
-      h_fringe_coeffs_ds[ichan*nant + iant] = 0;
     }
   }
 
-//#define TEST_SAMPLES
+#define TEST_SAMPLES
 #ifdef TEST_SAMPLES
 
   fprintf (stderr, "WRITING SAMPLE TESTING TO INPUT\n");
@@ -541,16 +518,14 @@ int main(int argc, char** argv)
     fprintf (stderr, "main: mopsr_delay_fractional_sk_scale(%ld)\n", nbytes_out);
     mopsr_delay_fractional_sk_scale (stream, d_sample_delayed, d_fractional_delayed, d_fbuf,
                                      d_rstates, d_sigmas, d_mask, d_fractional_delays, 
-                                     d_fir_coeffs, d_means, h_fringe_coeffs, h_delays_ds,
-                                     h_fringe_coeffs_ds, fringes_size,
-                                     nbytes_out, ctx.nchan, ctx.nant, ctx.ntap, replace_noise);
+                                     d_fir_coeffs, d_means, h_fringe_coeffs, 
+                                     fringes_size, nbytes_out, ctx.nchan, ctx.nant, ctx.ntap, replace_noise);
     fprintf (stderr, "main: mopsr_delay_fractional_sk_scale returned\n");
 #else
     fprintf (stderr, "main: mopsr_delay_fractional(%ld)\n", nbytes_out);
     mopsr_delay_fractional (stream, d_sample_delayed, d_fractional_delayed,
-                            d_fractional_delays, h_fringe_coeffs, h_delays_ds,
-                            h_fringe_coeffs_ds, fringes_size,
-                            nbytes_out, ctx.nchan, ctx.nant, ctx.ntap);
+                            d_fractional_delays, h_fringe_coeffs,
+                            fringes_size, nbytes_out, ctx.nchan, ctx.nant, ctx.ntap);
     fprintf (stderr, "main: mopsr_delay_fractional returned\n");
 #endif
 
@@ -670,16 +645,15 @@ int main(int argc, char** argv)
     fprintf (stderr, "main: mopsr_delay_fractional_sk_scale(%ld)\n", nbytes_out);
     mopsr_delay_fractional_sk_scale (stream, d_sample_delayed, d_fractional_delayed, d_fbuf,
                                      d_rstates, d_sigmas, d_mask,
-                                     d_fractional_delays, d_means, h_fringe_coeffs, h_delays_ds,
-                                     h_fringe_coeffs_ds, fringes_size,
+                                     d_fractional_delays, d_means, h_fringe_coeffs,
+                                     fringes_size,
                                      nbytes_out, ctx.nchan, ctx.nant, ctx.ntap, replace_noise);
     fprintf (stderr, "main: mopsr_delay_fractional_sk_scale returned\n");
 #else
     fprintf (stderr, "main: mopsr_delay_fractional(%ld)\n", nbytes_out);
     mopsr_delay_fractional (stream, d_sample_delayed, d_fractional_delayed,
-                            d_fractional_delays, h_fringe_coeffs, h_delays_ds,
-                            h_fringe_coeffs_ds, fringes_size,
-                            nbytes_out, ctx.nchan, ctx.nant, ctx.ntap);
+                            d_fractional_delays, h_fringe_coeffs,
+                            fringes_size, nbytes_out, ctx.nchan, ctx.nant, ctx.ntap);
     fprintf (stderr, "main: mopsr_delay_fractional returned\n");
 #endif
 
@@ -789,15 +763,14 @@ int main(int argc, char** argv)
     fprintf (stderr, "main: mopsr_delay_fractional_sk_scale(%ld)\n", nbytes_out);
     mopsr_delay_fractional_sk_scale (stream, d_sample_delayed, d_fractional_delayed, d_fbuf,
                                      d_rstates, d_sigmas, d_mask,
-                                     d_fractional_delays, d_means, h_fringe_coeffs, h_delays_ds,
-                                     h_fringe_coeffs_ds, fringes_size,
+                                     d_fractional_delays, d_means, h_fringe_coeffs,
+                                     fringes_size,
                                      nbytes_out, ctx.nchan, ctx.nant, ctx.ntap, replace_noise);
 #else
     fprintf (stderr, "main: mopsr_delay_fractional(%ld)\n", nbytes_out);
     mopsr_delay_fractional (stream, d_sample_delayed, d_fractional_delayed,
-                            d_fractional_delays, h_fringe_coeffs, h_delays_ds,
-                            h_fringe_coeffs_ds, fringes_size,
-                            nbytes_out, ctx.nchan, ctx.nant, ctx.ntap);
+                            d_fractional_delays, h_fringe_coeffs, 
+                            fringes_size, nbytes_out, ctx.nchan, ctx.nant, ctx.ntap);
 #endif
 
     // copy output from device to host
@@ -922,15 +895,15 @@ int main(int argc, char** argv)
     fprintf (stderr, "main: mopsr_delay_fractional_sk_scale(%ld)\n", nbytes_out);
     mopsr_delay_fractional_sk_scale (stream, d_sample_delayed, d_fractional_delayed, d_fbuf,
                                      d_rstates, d_sigmas, d_mask,
-                                     d_fractional_delays, d_fir_coeffs, d_s1s, d_s2s, d_thresh, h_fringe_coeffs, h_delays_ds,
-                                     h_fringe_coeffs_ds, fringes_size,
+                                     d_fractional_delays, d_fir_coeffs, d_s1s, d_s2s, d_thresh, h_fringe_coeffs,
+                                     fringes_size,
                                      nbytes_out, ctx.nchan, ctx.nant, ctx.ntap,
                                      s1_memory, s1_count, replace_noise);
 #else
     fprintf (stderr, "main: mopsr_delay_fractional(%ld)\n", nbytes_out);
     mopsr_delay_fractional (stream, d_sample_delayed, d_fractional_delayed,
-                            d_fractional_delays, h_fringe_coeffs, h_delays_ds,
-                            h_fringe_coeffs_ds, fringes_size,
+                            d_fractional_delays, h_fringe_coeffs,
+                            fringes_size,
                             nbytes_out, ctx.nchan, ctx.nant, ctx.ntap);
 #endif
     fprintf (stderr, "main: mopsr_delay_fractional returned\n");
@@ -1029,14 +1002,6 @@ int main(int argc, char** argv)
   if (h_fringe_coeffs)
     cudaFreeHost(h_fringe_coeffs);
   h_fringe_coeffs = 0;
-
-  if (h_delays_ds)
-    cudaFreeHost(h_delays_ds);
-  h_delays_ds = 0;
-
-  if (h_fringe_coeffs_ds)
-    cudaFreeHost(h_fringe_coeffs_ds);
-  h_fringe_coeffs_ds = 0;
 
   if (h_fractional_delays)
     cudaFreeHost(h_fractional_delays);
