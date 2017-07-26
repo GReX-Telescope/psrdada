@@ -37,7 +37,7 @@ SERVER_DAEMONS_PERSIST  mopsr_ib_receiver
 #
 # TMC Interface configuration. Note on different interface to server
 TMC_INTERFACE_HOST        mpsr-srv0
-TMC_INTERFACE_PORT        38010      # TMC connects here
+TMC_INTERFACE_PORT        31010      # TMC connects here
 TMC_STATE_INFO_PORT       31001      # Web interface state information 
 
 
@@ -65,6 +65,18 @@ SERVER_BF_SYS_LOG_PORT    32002
 SERVER_BF_SRC_LOG_PORT    32003
 SERVER_BP_SYS_LOG_PORT    32004
 SERVER_BP_SRC_LOG_PORT    32005
+SERVER_BS_SYS_LOG_PORT    32006
+SERVER_BS_SRC_LOG_PORT    32007
+
+COINCIDENCER_PORT         32010
+
+FRB_DETECTOR_BASEPORT     32100
+FRB_DETECTOR_DUMPPORT     32200
+FRB_DETECTOR_INCOHERENT   32300
+
+SMIRF_NEPENTHES_SERVER    32400
+SMIRF_COINCIDENCER_SERVER 32500
+
 
 ###############################################################################
 # Client directory configuration
@@ -77,6 +89,7 @@ CLIENT_RESULTS_DIR      /data/mopsr/results
 CLIENT_RECORDING_DIR    /data/mopsr/rawdata
 CLIENT_SCRATCH_DIR      /data/mopsr/scratch
 CLIENT_UDP_MONITOR_DIR  /data/mopsr/monitor/udp
+CLIENT_DUMP_DIR         /data/mopsr/dump
 
 ##############################################################################
 # The config/startup script will connect to the IBOB_HOST_i:IBOB_PORT_i
