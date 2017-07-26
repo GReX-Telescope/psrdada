@@ -33,7 +33,6 @@
 #include <sys/shm.h>
 #include <math.h>
 
-//#define IPCBUF_EODACK 3   /* acknowledgement of end of data */
 #define DADA_DBEVENT_DEFAULT_PORT 30000
 #define DADA_DBEVENT_DEFAULT_INPUT_BUFFER 80
 #define DADA_DBEVENT_DEFAULT_INPUT_DELAY 60
@@ -88,6 +87,10 @@ typedef struct {
   float snr;
 
   float dm;
+
+  float width;
+
+  unsigned beam;
 
 } event_t;
 
@@ -518,7 +521,8 @@ int check_read_offset (dada_dbevent_t * dbevent)
   const time_t obs_offset = (now - dbevent->utc_start);
   if (obs_offset <= 0)
   {
-    multilog (dbevent->log, LOG_INFO, "check_read_offset: now <= obs_offset\n");
+    if (dbevent->verbose)
+      multilog (dbevent->log, LOG_INFO, "check_read_offset: now <= obs_offset\n");
     return (0);
   }
 
@@ -608,6 +612,8 @@ int receive_events (dada_dbevent_t * dbevent, int listen_fd)
   char * event_end_fractional;
   char * event_snr_str;
   char * event_dm_str;
+  char * event_width_str;
+  char * event_beam_str;
 
   time_t   event_time_secs;
   uint64_t event_time_fractional;
@@ -755,9 +761,16 @@ int receive_events (dada_dbevent_t * dbevent, int listen_fd)
     event_snr_str = strtok_r (NULL, sep_float, &saveptr);
     sscanf(event_snr_str, "%f", &(events[i].snr));
 
+    event_width_str = strtok_r (NULL, sep_float, &saveptr);
+    sscanf(event_width_str, "%f", &(events[i].width));
+
+    event_beam_str = strtok_r (NULL, sep_float, &saveptr);
+    sscanf(event_beam_str, "%u", &(events[i].beam));
+
     if (dbevent->verbose)
-      multilog (dbevent->log, LOG_INFO, "event: %"PRIi64" - %"PRIi64" SNR=%f, DM=%f\n",
-                events[i].start_byte, events[i].end_byte, events[i].snr, events[i].dm);
+      multilog (dbevent->log, LOG_INFO, "event: %"PRIi64" - %"PRIi64" SNR=%f, DM=%f WIDTH=%f beam=%u\n",
+                events[i].start_byte, events[i].end_byte, events[i].snr, events[i].dm,
+                events[i].width, events[i].beam);
 
     i++;
 
@@ -874,6 +887,8 @@ int receive_events (dada_dbevent_t * dbevent, int listen_fd)
         ascii_header_set (header, "FILE_SIZE", "%ld", to_read);
         ascii_header_set (header, "EVENT_SNR", "%f", events[i].snr);
         ascii_header_set (header, "EVENT_DM", "%f",  events[i].dm);
+        ascii_header_set (header, "EVENT_WIDTH", "%f",  events[i].width);
+        ascii_header_set (header, "EVENT_BEAM", "%u",  events[i].beam);
 
         // tag this header as filled
         ipcbuf_mark_filled (dbevent->out_hdu->header_block, header_size);
