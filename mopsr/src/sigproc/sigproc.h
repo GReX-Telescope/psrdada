@@ -7,6 +7,10 @@
 
 */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdio.h>
 
 #include "polyco.h"
@@ -170,3 +174,8 @@ void wapp2fb(FILE *input, FILE *output) ;
 void write_dedisp(float *dedisp, int nsout, int nifs, int nbands, float *offset, FILE *output);
 void write_epn(FILE *fptr, struct EPN epn) ;
 void write_profiles(float *prof,int nbins, int nchan, int nifs, FILE *out);
+
+#ifdef __cplusplus
+     }
+#endif
+

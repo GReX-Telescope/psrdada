@@ -134,6 +134,6 @@ int read_header (FILE *inputfile) /* includefile */
 
 
   /* return total number of bytes read */
-  return ftell(inputfile);
+  return (int) ftell(inputfile);
 }
 
