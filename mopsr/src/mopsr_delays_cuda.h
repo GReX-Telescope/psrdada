@@ -71,8 +71,7 @@ void * mopsr_transpose_delay (cudaStream_t stream, transpose_delay_t * ctx,
 void mopsr_delay_copy_scales (cudaStream_t stream, float * h_ant_scales, size_t nbytes);
 
 void mopsr_delay_fractional (cudaStream_t stream, void * d_in, void * d_out, 
-                             float * d_delays, float * h_fringes, float * h_delays_ds, 
-                             float * h_fringe_coeffs_ds, size_t fringes_size,
+                             float * d_delays, float * h_fringes, size_t fringes_size,
                              uint64_t nbytes, unsigned nchan, unsigned nant, unsigned ntap);
 
 void mopsr_init_rng (cudaStream_t stream, unsigned long long seed, unsigned nrngs, void * states);
@@ -80,10 +79,9 @@ void mopsr_init_rng (cudaStream_t stream, unsigned long long seed, unsigned nrng
 void mopsr_delay_fractional_sk_scale (cudaStream_t stream,
                              void * d_in, void * d_out, void * d_fbuf, void * d_rstates, 
                              void * d_sigmas, void * d_mask, float * d_delays, void * d_fir_coeffs,
-                             void * d_s1s, void * d_s2s, void * d_thresh, float * h_fringes, 
-                             float * h_delays_ds, float * h_fringe_coeffs_ds, size_t fringes_size,
-                             uint64_t nbytes, unsigned nchan,
-                             unsigned nant, unsigned ntap,
+                             void * d_s1s, void * d_s2s, void * d_thresh, 
+                             float * h_fringes, size_t fringes_size, 
+                             uint64_t nbytes, unsigned nchan, unsigned nant, unsigned ntap,
                              unsigned s1_memory, uint64_t s1_count, char replace_noise);
 
 void mopsr_fringe_rotate (cudaStream_t stream, void * d_in, float * h_fringes, size_t fringes_size,

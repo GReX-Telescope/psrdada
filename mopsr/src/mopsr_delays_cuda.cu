@@ -435,10 +435,6 @@ void * mopsr_transpose_delay (cudaStream_t stream, transpose_delay_t * ctx, void
 
 // fringe co-efficients are fast in constant memory here
 __constant__ float fringe_coeffs[MOPSR_PFB_CHANANT_MAX];
-#ifdef USE_DS_DELAYS
-__constant__ float delays_ds[MOPSR_PFB_CHANANT_MAX];
-__constant__ float fringe_coeffs_ds[MOPSR_PFB_CHANANT_MAX];
-#endif
 
 // apply a fractional delay correction to a channel / antenna, warps will always
 __global__ void mopsr_fringe_rotate_kernel (int16_t * input, uint64_t ndat)
@@ -541,17 +537,8 @@ __global__ void mopsr_delay_fractional_kernel (int16_t * input, int16_t * output
 
   const unsigned nsamp_out = nsamp_in - in_offset;
 
-#ifdef USE_DS_DELAYS
-  const float isamp_offset = (float) isamp - ((float) nsamp_out) / 2;
-
-  // using constant memory should result in broadcast for this block/half warp
-  // handle change in delay across the block
-  float delay = delays[ichanant] + (delays_ds[ichanant] * isamp_offset);
-  float fringe_coeff = fringe_coeffs[ichanant] + (fringe_coeffs_ds[ichanant] * isamp_offset);
-#else
   float delay = delays[ichanant];
   float fringe_coeff = fringe_coeffs[ichanant];
-#endif
 
   cuComplex fringe_phasor = make_cuComplex (cosf(fringe_coeff), sinf(fringe_coeff));
 
@@ -630,6 +617,8 @@ __global__ void mopsr_calculate_fir_coeffs (float * delays, float * fir_coeffs, 
   }
 
   fir_coeffs[(ichanant * ntap) + threadIdx.x] = sinc * window;
+  //if (ichanant == 1000)
+  //  printf ("fir_coeffs[%d] = %f\n", (ichanant * ntap) + threadIdx.x, sinc * window);
 }
 
 // apply a fractional delay correction to a channel / antenna, warps will always
@@ -705,7 +694,6 @@ __global__ void mopsr_delay_fractional_float_kernel (int16_t * input,
 //
 void mopsr_delay_fractional (cudaStream_t stream, void * d_in, void * d_out,
                              float * d_delays, float * h_fringes, 
-                             float * h_delays_ds, float * h_fringe_coeffs_ds, 
                              size_t fringes_size, 
                              uint64_t nbytes, unsigned nchan, 
                              unsigned nant, unsigned ntap)
@@ -729,10 +717,6 @@ void mopsr_delay_fractional (cudaStream_t stream, void * d_in, void * d_out,
 
   //fprintf (stderr, "delay_fractional: copying fringe's to symbold (%ld bytes)\n", fringes_size);
   cudaMemcpyToSymbolAsync (fringe_coeffs, (void *) h_fringes, fringes_size, 0, cudaMemcpyHostToDevice, stream);
-#ifdef USE_DS_DELAYS
-  cudaMemcpyToSymbolAsync (delays_ds, (void *) h_delays_ds, fringes_size, 0, cudaMemcpyHostToDevice, stream);
-  cudaMemcpyToSymbolAsync (fringe_coeffs_ds, (void *) h_fringe_coeffs_ds, fringes_size, 0, cudaMemcpyHostToDevice, stream);
-#endif
   cudaStreamSynchronize(stream);
 
 #if _GDEBUG
@@ -1150,7 +1134,7 @@ __global__ void mopsr_skdetect_kernel (float * s1s, float * s2s, cuFloatComplex 
 
   unsigned idx = threadIdx.x;
 
-  sk_idx_max = log2_M + 1;
+  //sk_idx_max = log2_M + 1;
   for (unsigned ival=0; ival<nval_per_thread; ival++)
   {
     if (idx < nsums)
@@ -1232,7 +1216,7 @@ __global__ void mopsr_skdetect_kernel (float * s1s, float * s2s, cuFloatComplex 
               {
                 for (unsigned ichunk=0; ichunk < to_add; ichunk++)
                 {
-                  //smask_det[cdx+ichunk] = 2;
+                  smask_det[cdx+ichunk] = 2;
                 }
                 cdx += nsums;
               }
@@ -1487,8 +1471,7 @@ void mopsr_delay_fractional_sk_scale (cudaStream_t stream,
      void * d_in, void * d_out, void * d_fbuf, void * d_rstates,
      void * d_sigmas, void * d_mask, float * d_delays, void * d_fir_coeffs,
      void * d_s1s, void * d_s2s, void * d_thresh, float * h_fringes, 
-     float * h_delays_ds, float * h_fringe_coeffs_ds, size_t fringes_size, 
-     uint64_t nbytes, unsigned nchan, unsigned nant, unsigned ntap, 
+     size_t fringes_size, uint64_t nbytes, unsigned nchan, unsigned nant, unsigned ntap, 
      unsigned s1_memory, uint64_t s1_count, char replace_noise)
 {
   const unsigned ndim = 2;
@@ -1497,10 +1480,6 @@ void mopsr_delay_fractional_sk_scale (cudaStream_t stream,
 
   // copy the fringe coeffs and delays to GPU memory
   cudaMemcpyToSymbolAsync (fringe_coeffs, (void *) h_fringes, fringes_size, 0, cudaMemcpyHostToDevice, stream);
-#ifdef USE_DS_DELAYS
-  cudaMemcpyToSymbolAsync (delays_ds, (void *) h_delays_ds, fringes_size, 0, cudaMemcpyHostToDevice, stream);
-  cudaMemcpyToSymbolAsync (fringe_coeffs_ds, (void *) h_fringe_coeffs_ds, fringes_size, 0, cudaMemcpyHostToDevice, stream);
-#endif
   cudaStreamSynchronize(stream); 
 
   // calculate the FIT co-efficients to be use in the fractional delay
