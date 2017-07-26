@@ -3,9 +3,11 @@ SUBDIRS = sigproc
 
 noinst_LTLIBRARIES = libmopsr.la
 
-mopsr_hdr = mopsr_udp.h mopsr_def.h mopsr_util.h
+mopsr_hdr = mopsr_udp.h mopsr_def.h mopsr_util.h snapsr_udp.h
 
-libmopsr_la_SOURCES = $(mopsr_hdr) mopsr_udp.c mopsr_util.c
+libmopsr_la_SOURCES = $(mopsr_hdr) mopsr_udp.c mopsr_util.c snapsr_udp.c 
+
+include_HEADERS = mopsr_delays.h mopsr_def.h 
 
 AM_CPPFLAGS = -I$(top_srcdir)/src \
               -I$(top_srcdir)/3rdparty
@@ -25,7 +27,7 @@ bin_PROGRAMS = mopsr_udpheader mopsr_udpdb_thread mopsr_dbsplitdb \
                mopsr_fringeplot mopsr_solve_delays mopsr_dadastats \
                mopsr_corr_sum mopsr_corr_fsum mopsr_plot_baseline \
                mopsr_dbtransposedb mopsr_dbselectantsdb mopsr_udpdb_selants \
-               mopsr_udphist_16bit \
+               mopsr_udphist_16bit mopsr_udpvalidate \
                mopsr_dadapowermonitor mopsr_udphist_8bit \
                mopsr_dadapearsoncoeff \
                mopsr_corr_fscr mopsr_solve_delays_spectral \
@@ -33,10 +35,14 @@ bin_PROGRAMS = mopsr_udpheader mopsr_udpdb_thread mopsr_dbsplitdb \
                mopsr_dbintegratedb mopsr_dbrescaledb \
                mopsr_test_sk_kernel mopsr_dadatestct mopsr_dadasftsplit mopsr_pulsedada \
                mopsr_dadatfssplit mopsr_dbreblockdb mopsr_dumpplot mopsr_plot_cands \
-               mopsr_maskplot mopsr_dadahistplot \
-               mopsr_udpgen mopsr_udpplot mopsr_udpfftplot \
-               mopsr_udpfftplot_16 mopsr_udpwaterfall mopsr_udphist mopsr_udptimeseries \
-               mopsr_udpundersampleplot mopsr_dadafftplot mopsr_numdb
+               mopsr_dbsigproc mopsr_maskplot mopsr_dadahistplot mopsr_test_hirespacket \
+               caspsr_udpcorr snapsr_udpplot snapsr_udpfftplot mopsr_test_sk_kernel_hires \
+               mopsr_test_mergesort snapsr_udpdb mopsr_test_rng mopsr_genbpdada mopsr_test_delays_docjer \
+               mopsr_udpgen mopsr_udpplot mopsr_udpfftplot mopsr_udpfftplot_16 mopsr_udpwaterfall mopsr_udphist \
+               mopsr_udptimeseries mopsr_udpundersampleplot mopsr_dadafftplot mopsr_numdb \
+               mopsr_plot_acs snapsr_dadacorrplot_full
+
+mopsr_dbsigproc_LDADD = $(LDADD) sigproc/libsigproc.la
 
 #############################################################################
 #
@@ -46,18 +52,15 @@ bin_PROGRAMS = mopsr_udpheader mopsr_udpdb_thread mopsr_dbsplitdb \
 
 if HAVE_SOFA
 
-mopsr_hdr += mopsr_delays.h
-libmopsr_la_SOURCES += mopsr_delays.c
+mopsr_hdr += mopsr_delays.h mopsr_delays_hires.h
+libmopsr_la_SOURCES += mopsr_delays.c mopsr_delays_hires.c
 
 bin_PROGRAMS += mopsr_phase_differencer mopsr_getmd mopsr_getns \
                 mopsr_dadacorrplot_pfb mopsr_getlst mopsr_test_signal_paths \
-                mopsr_test_delays_plot mopsr_phase_diff_transit \
-                mopsr_plot_acs mopsr_dbsigproc
+                mopsr_test_delays_plot mopsr_phase_diff_transit
 
 AM_CFLAGS += @SOFA_CFLAGS@
 LDADD += @SOFA_LIBS@
-
-mopsr_dbsigproc_LDADD = $(LDADD) sigproc/libsigproc.la
 
 endif
 
@@ -114,7 +117,8 @@ bin_PROGRAMS += mopsr_dbrephasedb mopsr_dbcalib mopsr_test_kernel \
                 mopsr_test_ant_sum mopsr_test_transpose_TS_to_ST mopsr_test_calib
 
 libmopsr_la_SOURCES += mopsr_cuda.cu mopsr_delays_cuda.cu mopsr_delays_cuda.h \
-                       mopsr_calib_cuda.cu mopsr_calib_cuda.h
+                       mopsr_calib_cuda.cu mopsr_calib_cuda.h mopsr_delays_cuda_hires.cu \
+                       mopsr_delays_cuda_hires.h
 
 AM_CFLAGS += @CUDA_CFLAGS@
 LDADD += @CUDA_LIBS@ @CUFFT_LIBS@
