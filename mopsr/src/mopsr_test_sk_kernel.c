@@ -364,6 +364,8 @@ int main (int argc, char **argv)
 
   float s1, s2, power, re, im, gpu_s1, gpu_s2;
 
+  multilog (log, LOG_INFO, "Testing the SK component calculation\n");
+
   for (ichan=0; ichan<nchan; ichan++)
   {
     for (iant=0; iant<nant; iant++)
@@ -395,6 +397,7 @@ int main (int argc, char **argv)
       }
     }
   }
+  multilog (log, LOG_INFO, "Testing the SK component complete\n");
 
   unsigned s1_count = n_memory;
   unsigned s1_memory = n_memory;
@@ -419,6 +422,7 @@ int main (int argc, char **argv)
 
   float upper, lower, gpu_median, gpu_sigma, gpu_upper, gpu_lower;
 
+  multilog (log, LOG_INFO, "Testing the SK power limits\n");
   for (ichan=0; ichan<nchan; ichan++)
   {
     for (iant=0; iant<nant; iant++)
@@ -461,6 +465,7 @@ int main (int argc, char **argv)
       h_thr += 2;
     }
   }
+  multilog (log, LOG_INFO, "Testing the power limits complete\n");
 
   // now compute the zap mask based on the s1s2 data
   mopsr_test_skdetect (stream, d_s1, d_s2, d_thresh, d_mask, d_sigmas, nsums, nant, nchan, nsamp);
@@ -486,6 +491,9 @@ int main (int argc, char **argv)
   float sk_l = 0.834186;
   float sk_h = 1.21695;
   float sk;
+
+  multilog (log, LOG_INFO, "Testing the zap mask\n");
+
   for (ichan=0; ichan<nchan; ichan++)
   {
     for (iant=0; iant<nant; iant++)
@@ -518,6 +526,7 @@ int main (int argc, char **argv)
       h_thr += 2;
     }
   }
+  multilog (log, LOG_INFO, "Testing the zap mask complete\n");
 
 #ifdef _DEBUG
   h_ptr = (int8_t *) h_mask;
