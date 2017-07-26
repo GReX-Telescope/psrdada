@@ -615,24 +615,6 @@ int aqdsp_alloc (mopsr_aqdsp_t * ctx)
     return -1;
   }
 
-  if (ctx->verbose)
-    multilog (log, LOG_INFO, "alloc: allocating %ld bytes on CPU for fringe_coeffs_ds\n", ctx->fringes_size);
-  error = cudaMallocHost ((void **) &(ctx->h_fringe_coeffs_ds), ctx->fringes_size);
-  if (error != cudaSuccess)
-  {
-    multilog (log, LOG_ERR, "alloc: could not allocate %ld bytes of host memory\n", ctx->fringes_size);
-    return -1;
-  }
-
-  if (ctx->verbose)
-    multilog (log, LOG_INFO, "alloc: allocating %ld bytes on CPU for delays_ds\n", ctx->fringes_size);
-  error = cudaMallocHost ((void **) &(ctx->h_delays_ds), ctx->fringes_size);
-  if (error != cudaSuccess)
-  {
-    multilog (log, LOG_ERR, "alloc: could not allocate %ld bytes of host memory\n", ctx->fringes_size);
-    return -1;
-  }
-
   // device memory for input data
   ctx->d_buffer_size   = (size_t) ctx->block_size;
 
@@ -804,10 +786,8 @@ int aqdsp_alloc (mopsr_aqdsp_t * ctx)
   }
  
   if (ctx->verbose)
-  {
     multilog (log, LOG_INFO, "alloc: copying delay ant_scales to GPU [%ld]\n", ctx->ant_scales_size);
-    mopsr_delay_copy_scales (ctx->stream, ctx->h_ant_scales, ctx->ant_scales_size);
-  }
+  mopsr_delay_copy_scales (ctx->stream, ctx->h_ant_scales, ctx->ant_scales_size);
 
   if (ctx->verbose)
     multilog (log, LOG_INFO, "alloc: allocating %ld bytes of device memory for d_in\n", ctx->d_buffer_size);
@@ -895,14 +875,6 @@ int aqdsp_dealloc (mopsr_aqdsp_t * ctx)
   if (ctx->h_fringes)
     cudaFreeHost(ctx->h_fringes);
   ctx->h_fringes = 0;
-
-  if (ctx->h_delays_ds)
-    cudaFreeHost(ctx->h_delays_ds);
-  ctx->h_delays_ds = 0;
-
-  if (ctx->h_fringe_coeffs_ds)
-    cudaFreeHost(ctx->h_fringe_coeffs_ds);
-  ctx->h_fringe_coeffs_ds = 0;
 
   if (ctx->correct_delays)
     mopsr_transpose_delay_dealloc (ctx->gtx);
@@ -1556,8 +1528,6 @@ int64_t aqdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
 
         ctx->h_delays[ichan*ctx->nant + iant]  = (float) ctx->delays[iant][ichan].fractional;
         ctx->h_fringes[ichan*ctx->nant + iant] = (float) ctx->delays[iant][ichan].fringe_coeff;
-        ctx->h_delays_ds[ichan*ctx->nant + iant] = (float) ctx->delays[iant][ichan].fractional_ds;
-        ctx->h_fringe_coeffs_ds[ichan*ctx->nant + iant] = (float) ctx->delays[iant][ichan].fringe_coeff_ds;
       }
     }
   }
@@ -1587,10 +1557,9 @@ int64_t aqdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
       if (ctx->verbose > 1)
         multilog (log, LOG_INFO, "io_block: mopsr_delay_fractional_sk_scale(%ld)\n", bytes_tapped);
         mopsr_delay_fractional_sk_scale (ctx->stream, d_sample_delayed, ctx->d_out, ctx->d_fbuf,
-                                ctx->d_rstates, ctx->d_sigmas, ctx->d_mask, 
-                                ctx->d_delays, ctx->d_fir_coeffs, ctx->d_s1s, ctx->d_s2s, ctx->d_thresh, 
-                                ctx->h_fringes, ctx->h_delays_ds,
-                                ctx->h_fringe_coeffs_ds, ctx->fringes_size,
+                                ctx->d_rstates, ctx->d_sigmas, ctx->d_mask, ctx->d_delays, ctx->d_fir_coeffs, 
+                                ctx->d_s1s, ctx->d_s2s, ctx->d_thresh, 
+                                ctx->h_fringes, ctx->fringes_size,
                                 bytes_tapped, ctx->nchan,
                                 ctx->nant, ctx->ntaps, ctx->s1_memory, ctx->s1_count,
                                 ctx->replace_noise);
@@ -1603,8 +1572,7 @@ int64_t aqdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
       if (ctx->verbose > 1)
         multilog (log, LOG_INFO, "io_block: mopsr_delay_fractional(%ld)\n", bytes_tapped);
         mopsr_delay_fractional (ctx->stream, d_sample_delayed, ctx->d_out, 
-                                ctx->d_delays, ctx->h_fringes, ctx->h_delays_ds, 
-                                ctx->h_fringe_coeffs_ds, ctx->fringes_size,
+                                ctx->d_delays, ctx->h_fringes, ctx->fringes_size,
                                 bytes_tapped, ctx->nchan, 
                                 ctx->nant, ctx->ntaps);
 #endif

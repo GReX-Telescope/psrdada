@@ -78,10 +78,6 @@ typedef struct {
   float * h_fringes;
   void  * d_fringes;
 
-  // per sample cororections for delay and fringe coefficient
-  float * h_delays_ds;
-  float * h_fringe_coeffs_ds;
-
   // scale factors for each antenna
   float * h_ant_scales;
   size_t  ant_scales_size;
