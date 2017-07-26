@@ -234,16 +234,16 @@ int main (int argc, char **argv)
     }
 
     multilog (log, LOG_INFO, "mopsr_input_transpose_TFS_to_FST (%d, %d, %d)\n", block_size, nchan, nant);
-    mopsr_input_transpose_TFS_to_FST (stream, d_in, d_out, block_size, nchan, nant);
+    mopsr_input_transpose_TFS_to_FST_hires (stream, d_in, d_out, block_size, nchan, nant);
     check_error_stream( "mopsr_input_transpose_TFS_to_FST", stream);
 
     //multilog (log, LOG_INFO, "mopsr_input_rephase (%d, %d, %d)\n", block_size, nchan, nant);
     //mopsr_input_rephase (stream, d_out, d_corr, block_size, nchan, nant);
     //check_error_stream( "mopsr_input_rephase", stream);
 
-    multilog (log, LOG_INFO, "mopsr_input_transpose_FST_to_STF (%d, %d, %d)\n", block_size, nchan, nant);
-    mopsr_input_transpose_FST_to_STF (stream, d_out, d_in, block_size, nchan, nant);
-    check_error_stream( "mopsr_input_transpose_FST_to_STF", stream);
+    //multilog (log, LOG_INFO, "mopsr_input_transpose_FST_to_STF (%d, %d, %d)\n", block_size, nchan, nant);
+    //mopsr_input_transpose_FST_to_STF (stream, d_out, d_in, block_size, nchan, nant);
+    //check_error_stream( "mopsr_input_transpose_FST_to_STF", stream);
 
     multilog (log, LOG_INFO, "cudaMemcpyDeviceToHost (%d)\n", block_size);
     error = cudaMemcpyAsync (h_out, d_out, block_size, cudaMemcpyDeviceToHost, stream);
@@ -259,7 +259,7 @@ int main (int argc, char **argv)
   unsigned nchanant = nchan * nant;
   unsigned in_idx;
 
-#if 0
+#if 1
   // FST test
   uint64_t nerr = 0;
   uint16_t * h_out_ptr = (uint16_t *) h_out;
@@ -288,7 +288,7 @@ int main (int argc, char **argv)
   }
 #endif
 
-#if 1
+#if 0
   // STF test
   uint64_t nerr = 0;
   int16_t * h_out_ptr = (int16_t *) h_out;
