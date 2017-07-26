@@ -40,9 +40,9 @@ void usage ()
     "  -b nbeam          generate nbeam fan beams [default nant]\n"
     "  -c core           bind processing to CPU core\n"
     "  -d <id>           use GPU device with id [default 0]\n"
-    "  -f fb_key         output integrated, tiled beams on fb_key [ST ordering]\n"
-    "  -m mb_key         output integrated, module beams on mb_key [ST ordering]\n"
-    "  -t tb_key         output baseband tied array beam on tb_key [T ordering]\n"
+    "  -f fb_key         output integrated, tiled beams on fb_key [SFT ordering]\n"
+    "  -m mb_key         output integrated, module beams on mb_key [SFT ordering]\n"
+    "  -t tb_key         output baseband tied array beams on tb_key [FT ordering]\n"
     "  -v                verbose output\n"
     "  -0                zero output data stream\n"
     "  *                 optional\n");
@@ -56,7 +56,7 @@ int main(int argc, char** argv)
   // DADA Header plus Data Units
   dada_hdu_t* in_hdu = 0;
   dada_hdu_t* fb_hdu = 0;
-  dada_hdu_t* tb_hdu = 0;
+  dada_hdu_t* tb_hdus[MAX_TBS];
   dada_hdu_t* mb_hdu = 0;
 
   // DADA Primary Read Client main loop
@@ -71,12 +71,12 @@ int main(int argc, char** argv)
 
   key_t in_key;
   key_t fb_key = 0;
-  key_t tb_key = 0;
   key_t mb_key = 0;
+  key_t tb_keys[MAX_TBS];
 
   ctx.d_in = 0;
   ctx.d_fbs = 0;
-  ctx.d_tb = 0;
+  ctx.d_tbs[MAX_TBS];
   ctx.d_mbs = 0;
 
   // default values
@@ -87,10 +87,18 @@ int main(int argc, char** argv)
   ctx.zero_data = 0;
 
   ctx.fan_beams = 0;
-  ctx.tied_beam = 0;
   ctx.mod_beams = 0;
+  ctx.n_tbs = 0;
   
   int core = -1;
+
+  unsigned i;
+  for (i=0; i<MAX_TBS; i++)
+  {
+    tb_hdus[i] = 0;
+    tb_keys[i] = 0;
+    ctx.d_tbs[i] = 0;
+  }
 
   while ((arg = getopt(argc, argv, "b:c:d:f:hm:st:v0")) != -1) 
   {
@@ -135,12 +143,17 @@ int main(int argc, char** argv)
         break;
 
       case 't':
-        ctx.tied_beam = 1;
-        if (sscanf (optarg, "%x", &tb_key) != 1)
+        if (ctx.n_tbs >= MAX_TBS)
         {
-          fprintf (stderr, "ERROR: could not parse tb_key from %s\n", optarg);
+          fprintf (stderr, "ERROR: maximum of %d Tied Beams\n", MAX_TBS);
           exit(EXIT_FAILURE);
         }
+        if (sscanf (optarg, "%x", &tb_keys[ctx.n_tbs]) != 1)
+        {
+          fprintf (stderr, "ERROR: could not parse tb_keys from %s\n", optarg);
+          exit(EXIT_FAILURE);
+        }
+        ctx.n_tbs++;
         break;
 
       case 'v':
@@ -222,13 +235,12 @@ int main(int argc, char** argv)
     }
   }
 
-
-  if (ctx.tied_beam)
+  for (i=0; i<ctx.n_tbs; i++)
   {
-    multilog (log, LOG_INFO, "preparing Tied Beam HDU\n");
-    tb_hdu = dada_hdu_create (log);
-    dada_hdu_set_key(tb_hdu, tb_key);
-    if (dada_hdu_connect (tb_hdu) < 0)
+    multilog (log, LOG_INFO, "preparing Tied Beam HDU %d\n", i);
+    tb_hdus[i] = dada_hdu_create (log);
+    dada_hdu_set_key(tb_hdus[i], tb_keys[i]);
+    if (dada_hdu_connect (tb_hdus[i]) < 0)
     {
       fprintf (stderr, "ERROR: could not connect to output HDU\n");
       return EXIT_FAILURE;
@@ -237,7 +249,7 @@ int main(int argc, char** argv)
 
   ctx.log = log;
 
-  if (bfdsp_init (&ctx, in_hdu, fb_hdu, tb_hdu, mb_hdu, bays_file, modules_file) < 0)
+  if (bfdsp_init (&ctx, in_hdu, fb_hdu, tb_hdus, mb_hdu, bays_file, modules_file) < 0)
   {
     fprintf (stderr, "ERROR: failed to initalise data structures\n");
     return EXIT_FAILURE;
@@ -311,10 +323,11 @@ int main(int argc, char** argv)
 
 /*! Perform initialization */
 int bfdsp_init ( mopsr_bfdsp_t* ctx, dada_hdu_t * in_hdu, dada_hdu_t * fb_hdu, 
-                 dada_hdu_t * tb_hdu, dada_hdu_t * mb_hdu, 
+                 dada_hdu_t ** tb_hdus, dada_hdu_t * mb_hdu, 
                  char * bays_file, char * modules_file)
 {
   multilog_t * log = ctx->log;
+  unsigned i;
 
   ctx->all_bays = read_bays_file (bays_file, &(ctx->nbays));
   if (!ctx->all_bays)
@@ -386,17 +399,20 @@ int bfdsp_init ( mopsr_bfdsp_t* ctx, dada_hdu_t * in_hdu, dada_hdu_t * fb_hdu,
     ctx->fb_hdu = fb_hdu;
   }
 
-  ctx->tb_block_size = 0;
-  ctx->tb_hdu = 0;
-  if (tb_hdu)
+  for (i=0; i<ctx->n_tbs; i++)
   {
-    ctx->tb_block_size = ipcbuf_get_bufsz ((ipcbuf_t *) tb_hdu->data_block);
-    if (ctx->in_block_size % ctx->tb_block_size != 0)
+    ctx->tb_block_sizes[i] = 0;
+    ctx->tb_hdus[i] = 0;
+    if (tb_hdus[i])
     {
-      multilog (log, LOG_ERR, "bfdsp_init: input block size must be a multiple of the output block size\n");
-      return -1;
+      ctx->tb_block_sizes[i] = ipcbuf_get_bufsz ((ipcbuf_t *) tb_hdus[i]->data_block);
+      if (ctx->in_block_size % ctx->tb_block_sizes[i] != 0)
+      {
+        multilog (log, LOG_ERR, "bfdsp_init: input block size must be a multiple of the output block size\n");
+        return -1;
+      }
+      ctx->tb_hdus[i] = tb_hdus[i];
     }
-    ctx->tb_hdu = tb_hdu;
   }
 
   ctx->mb_block_size = 0;
@@ -434,12 +450,15 @@ int bfdsp_init ( mopsr_bfdsp_t* ctx, dada_hdu_t * in_hdu, dada_hdu_t * fb_hdu,
       return -1;
     }
   }
-  if (tb_hdu)
+  for (i=0; i<ctx->n_tbs; i++)
   {
-    if (dada_cuda_dbregister(tb_hdu) < 0)
+    if (tb_hdus[i])
     {
-      fprintf (stderr, "failed to register tb_hdu DADA buffers as pinned memory\n");
-      return -1;
+      if (dada_cuda_dbregister(tb_hdus[i]) < 0)
+      {
+        fprintf (stderr, "failed to register tb_hdus[%d] DADA buffers as pinned memory\n", i);
+        return -1;
+      }
     }
   }
 
@@ -477,17 +496,20 @@ int bfdsp_init ( mopsr_bfdsp_t* ctx, dada_hdu_t * in_hdu, dada_hdu_t * fb_hdu,
     }
   }
 
-  if (tb_hdu)
+  for (i=0; i<ctx->n_tbs; i++)
   {
-    if (ctx->verbose)
-      multilog (log, LOG_INFO, "init: allocating %ld bytes of device memory for d_tbs\n", ctx->tb_block_size);
-    error = cudaMalloc( &(ctx->d_tb), ctx->tb_block_size);
-    if (ctx->verbose)
-      multilog (log, LOG_INFO, "init: d_tbs=%p\n", ctx->d_tb);
-    if (error != cudaSuccess)
+    if (tb_hdus[i])
     {
-      multilog (log, LOG_ERR, "init: could not allocate %ld bytes of device memory\n", ctx->tb_block_size);
-      return -1;
+      if (ctx->verbose)
+        multilog (log, LOG_INFO, "init: allocating %ld bytes of device memory for d_tbs[%d]\n", i, ctx->tb_block_sizes[i]);
+      error = cudaMalloc( &(ctx->d_tbs[i]), ctx->tb_block_sizes[i]);
+      if (ctx->verbose)
+        multilog (log, LOG_INFO, "init: d_tbs[%d]=%p\n", i, ctx->d_tbs[i]);
+      if (error != cudaSuccess)
+      {
+        multilog (log, LOG_ERR, "init: could not allocate %ld bytes of device memory\n", ctx->tb_block_sizes[i]);
+        return -1;
+      }
     }
   }
 
@@ -518,14 +540,14 @@ int bfdsp_alloc (mopsr_bfdsp_t * ctx)
 {
   multilog_t * log = ctx->log;
 
-  unsigned iant, ibeam;
+  unsigned iant, ibeam, ichan;
 
   if (ctx->fan_beams)
   {
 #ifdef EIGHT_BIT_PHASORS
-    ctx->phasors_size = ctx->nant * ctx->nbeam * sizeof(int8_t) * 2;
+    ctx->phasors_size = ctx->nchan * ctx->nant * ctx->nbeam * sizeof(int8_t) * 2;
 #else
-    ctx->phasors_size = ctx->nant * ctx->nbeam * sizeof(complex float);
+    ctx->phasors_size = ctx->nchan * ctx->nant * ctx->nbeam * sizeof(complex float);
 #endif
     if (ctx->verbose)
       multilog (log, LOG_INFO, "alloc: allocating %ld bytes of pinned host memory for phasors\n", ctx->phasors_size);
@@ -548,12 +570,13 @@ int bfdsp_alloc (mopsr_bfdsp_t * ctx)
     } 
   }
 
-  if (ctx->tied_beam)
+  ctx->tb_phasors_size = ctx->nchan * ctx->nant * sizeof(complex float);
+  unsigned i;
+  for (i=0; i<ctx->n_tbs; i++)
   {
-    ctx->tb_phasors_size = ctx->nant * sizeof(complex float);
     if (ctx->verbose)
       multilog (log, LOG_INFO, "alloc: allocating %ld bytes of pinned host memory for phasors\n", ctx->tb_phasors_size);
-    cudaError_t error = cudaMallocHost( (void **) &(ctx->h_tb_phasors), ctx->tb_phasors_size);
+    cudaError_t error = cudaMallocHost( (void **) &(ctx->h_tb_phasors[i]), ctx->tb_phasors_size);
     if (error != cudaSuccess)
     {
       multilog (log, LOG_ERR, "alloc: could not allocate %ld bytes of pinned host memory\n", ctx->tb_phasors_size);
@@ -562,7 +585,7 @@ int bfdsp_alloc (mopsr_bfdsp_t * ctx)
 
     if (ctx->verbose)
       multilog (log, LOG_INFO, "alloc: allocating %ld bytes of device memory for phasors\n", ctx->tb_phasors_size);
-    error = cudaMalloc( (void **) &(ctx->d_tb_phasors), ctx->tb_phasors_size);
+    error = cudaMalloc( (void **) &(ctx->d_tb_phasors[i]),  ctx->tb_phasors_size);
     if (error != cudaSuccess)
     {
       multilog (log, LOG_ERR, "alloc: could not allocate %ld bytes of device memory\n", ctx->tb_phasors_size);
@@ -586,6 +609,10 @@ int bfdsp_alloc (mopsr_bfdsp_t * ctx)
     const unsigned nbeamant = ctx->nbeam * ctx->nant;
     unsigned idx;
 
+    // *2 for cos and sin terms
+    unsigned chan_stride = ctx->nbeam * ctx->nant * 2;
+    unsigned beam_stride = ctx->nant;
+
     //double range = (4.0 / 352) * ctx->nbeam;
     double range = 4.0;
 
@@ -593,24 +620,19 @@ int bfdsp_alloc (mopsr_bfdsp_t * ctx)
     char bay[4];
 #endif
 
+    int beam_offset_idx;
     ctx->h_beam_offsets = (float *) malloc (ctx->nbeam * sizeof(float));
 
     if (ctx->verbose)
       multilog (log, LOG_INFO, "alloc: computing beam offsets nbeam=%d\n", ctx->nbeam); 
 
+    // the 0'th beam is irrelevant since it is the incoherrent beam
     for (ibeam=0; ibeam<ctx->nbeam; ibeam++)
     {
-      //fraction = (double) ibeam / (double) (ctx->nbeam-1);
-      fraction = (double) ibeam / (double) (ctx->nbeam);
-      // centred around delay midpoint
-      angle_rads = ((fraction * range) - (range/2)) * DD2R;
-      // leading edge
-      //angle_rads = (fraction * range) * DD2R;
-     
-      ctx->h_beam_offsets[ibeam] = (float) angle_rads;
+      beam_offset_idx = (int) ibeam - (ctx->nbeam / 2);
+      angle_rads = ctx->beam_spacing * beam_offset_idx;
+      ctx->h_beam_offsets[ibeam] = (float) (angle_rads / DD2R);
       sin_md = sin(angle_rads);
-
-      //fprintf (stderr, "[%d] beam angle=%f\n", ibeam, ctx->h_beam_offsets[ibeam]);
 
       for (iant=0; iant<ctx->nant; iant++)
       {
@@ -634,39 +656,51 @@ int bfdsp_alloc (mopsr_bfdsp_t * ctx)
 #endif
 
         geometric_delay = (sin_md * dist) / C;
-        theta = -2 * M_PI * ctx->channel.cfreq * 1000000 * geometric_delay;
 
-        idx = ibeam * ctx->nant + iant;
+        for (ichan=0; ichan<ctx->nchan; ichan++)
+        {
+          theta = -2 * M_PI * ctx->channels[ichan].cfreq * 1000000 * geometric_delay;
+
+          // packed in FS order with the cos, and sin terms separate
+          idx = (ichan * chan_stride) + (ibeam * ctx->nant) + iant;
+
 #ifdef EIGHT_BIT_PHASORS
-        // TODO check distribution
-        ctx->h_phasors[idx]          = (int8_t) (cos(theta) * 128);
-        ctx->h_phasors[idx+nbeamant] = (int8_t) (sin(theta) * 128);
+          // TODO check distribution
+          ctx->h_phasors[idx]          = (int8_t) (cos(theta) * 128);
+          ctx->h_phasors[idx+nbeamant] = (int8_t) (sin(theta) * 128);
 #else
-        ctx->h_phasors[idx]          = (float) cos(theta);
-        ctx->h_phasors[idx+nbeamant] = (float) sin(theta);
+          ctx->h_phasors[idx]          = (float) cos(theta);
+          ctx->h_phasors[idx+nbeamant] = (float) sin(theta);
 #endif
 
-        //fprintf (stderr, "[%d][%d] freq=%lf delay=%le angle=%lf degrees, theta=%lf (%e, i%e)\n", ibeam, iant, ctx->channel.cfreq, geometric_delay, angle_rads / DD2R, theta, ctx->h_phasors[idx], ctx->h_phasors[idx+nbeamant]);
+          //fprintf (stderr, "[%d][%d][%d] freq=%lf delay=%le angle=%lf degrees, theta=%lf (%e, i%e)\n", ichan, ibeam, iant, ctx->channels[ichan].cfreq, geometric_delay, angle_rads / DD2R, theta, ctx->h_phasors[idx], ctx->h_phasors[idx+nbeamant]);
+        }
       }
     }
   }
 
-  if (ctx->tied_beam)
+  // initialize TBs
+  for (i=0; i<ctx->n_tbs; i++)
   {
     float angle = 0.0;
-    for (iant=0; iant<ctx->nant; iant++)
+    complex float phasor = cosf(angle) + sinf(angle) * I;
+    for (ichan=0; ichan<ctx->nchan; ichan++)
     {
-      ctx->h_tb_phasors[iant] = cosf(angle) + sinf(angle) * I;
+      for (iant=0; iant<ctx->nant; iant++)
+      {
+        ctx->h_tb_phasors[i][ichan*ctx->nant+iant] = phasor;
+      }
     }
   }
 
 #ifdef USE_GPU
- 
   if (ctx->fan_beams)
   {
     if (ctx->verbose > 1)
-      multilog (log, LOG_INFO, "alloc: cudaMemcpyAsync block H2D %ld: (%p <- %p)\n", ctx->phasors_size, ctx->d_phasors, ctx->h_phasors);
-    cudaError_t error = cudaMemcpyAsync ((void *) ctx->d_phasors, (void *) ctx->h_phasors, ctx->phasors_size, cudaMemcpyHostToDevice, ctx->stream);
+      multilog (log, LOG_INFO, "alloc: cudaMemcpyAsync block H2D %ld: (%p <- %p)\n", 
+                ctx->phasors_size, ctx->d_phasors, ctx->h_phasors);
+    cudaError_t error = cudaMemcpyAsync ((void *) ctx->d_phasors, (void *) ctx->h_phasors,
+                                         ctx->phasors_size, cudaMemcpyHostToDevice, ctx->stream);
     if (error != cudaSuccess)
     {
       multilog (log, LOG_ERR, "cudaMemcpyAsyc H2D failed: %s (%p <- %p)\n", cudaGetErrorString(error),
@@ -675,16 +709,17 @@ int bfdsp_alloc (mopsr_bfdsp_t * ctx)
     }
   }
 
-  if (ctx->tied_beam)
+  for (i=0; i<ctx->n_tbs; i++)
   {
-
     if (ctx->verbose > 1)
       multilog (log, LOG_INFO, "alloc: cudaMemcpyAsync block H2D %ld: (%p <- %p)\n", ctx->tb_phasors_size, ctx->d_tb_phasors, ctx->h_tb_phasors);
-    cudaError_t error = cudaMemcpyAsync ((void *) ctx->d_tb_phasors, (void *) ctx->h_tb_phasors, ctx->tb_phasors_size, cudaMemcpyHostToDevice, ctx->stream);
+    cudaError_t error = cudaMemcpyAsync ((void *) (ctx->d_tb_phasors[i]), 
+                                         (void *) (ctx->h_tb_phasors[i]), 
+                                         ctx->tb_phasors_size, cudaMemcpyHostToDevice, ctx->stream);
     if (error != cudaSuccess)
     {
       multilog (log, LOG_ERR, "cudaMemcpyAsyc H2D failed: %s (%p <- %p)\n", cudaGetErrorString(error),
-                ctx->d_tb_phasors, ctx->h_tb_phasors);
+                ctx->d_tb_phasors[i], ctx->h_tb_phasors[i]);
       return -1;
     }
   }
@@ -721,9 +756,22 @@ int bfdsp_dealloc (mopsr_bfdsp_t * ctx)
     cudaFreeHost (ctx->h_phasors);
   ctx->h_phasors = 0;
 
-  if (ctx->tied_beam && ctx->h_tb_phasors)
-    cudaFreeHost (ctx->h_tb_phasors);
-  ctx->h_tb_phasors = 0;
+  unsigned i;
+  for (i=0; i<ctx->n_tbs; i++)
+  {
+    if (ctx->h_tb_phasors[i])
+      cudaFreeHost (ctx->h_tb_phasors[i]);
+    ctx->h_tb_phasors[i] = 0;
+
+    if (ctx->d_tb_phasors[i])
+      cudaFree (ctx->d_tb_phasors[i]);
+    ctx->d_tb_phasors[i] = 0;
+
+
+    if (ctx->d_tbs[i])
+      cudaFree (ctx->d_tbs[i]);
+    ctx->d_tbs[i] = 0;
+  }
 
   if (ctx->d_in)
     cudaFree (ctx->d_in);
@@ -733,22 +781,17 @@ int bfdsp_dealloc (mopsr_bfdsp_t * ctx)
     cudaFree (ctx->d_fbs);
    ctx->d_fbs = 0;
 
-  if (ctx->tied_beam && ctx->d_tb)
-    cudaFree (ctx->d_tb);
-  ctx->d_tb = 0;
-
   if (ctx->fan_beams && ctx->d_phasors)
     cudaFree (ctx->d_phasors);
   ctx->d_phasors = 0;
-
-  if (ctx->tied_beam && ctx->d_tb_phasors)
-    cudaFree (ctx->d_tb_phasors);
-  ctx->d_tb_phasors = 0;
 
   if (ctx->mod_beams && ctx->d_mbs)
     cudaFree (ctx->d_mbs);
   ctx->d_mbs = 0;
 
+  if (ctx->channels)
+    free (ctx->channels);
+  ctx->channels = 0;
 
 #else
   if (ctx->h_phasors)
@@ -783,11 +826,12 @@ int bfdsp_destroy (mopsr_bfdsp_t * ctx, dada_hdu_t * in_hdu)
     }
   }
 
-  if (ctx->tied_beam)
+  unsigned i;
+  for (i=0; i<ctx->n_tbs; i++)
   {
     if (ctx->verbose)
-      multilog (ctx->log, LOG_INFO, "dada_cuda_dbunregister (tb_hdu)\n");
-    if (dada_cuda_dbunregister (ctx->tb_hdu) < 0)
+      multilog (ctx->log, LOG_INFO, "dada_cuda_dbunregister (tb_hdus[%d])\n", i);
+    if (dada_cuda_dbunregister (ctx->tb_hdus[i]) < 0)
     {
       multilog (ctx->log, LOG_ERR, "failed to unregister Tied Beam DADA buffers\n");
       return -1;
@@ -819,6 +863,10 @@ int bfdsp_open (dada_client_t* client)
   if (ctx->verbose > 1)
     multilog (log, LOG_INFO, "bfdsp_open()\n");
 
+  mopsr_bfdsp_hdr_t tbs[MAX_TBS];
+  mopsr_bfdsp_hdr_t fb;
+  mopsr_bfdsp_hdr_t mb;
+
   // lock the output datablock for writing
   if (ctx->verbose)
     multilog (log, LOG_INFO, "open: locking write on output HDUs\n");
@@ -830,11 +878,13 @@ int bfdsp_open (dada_client_t* client)
       return -1;
     }
   }
-  if (ctx->tied_beam)
+  
+  unsigned i;
+  for (i=0; i<ctx->n_tbs; i++)
   {
-    if (dada_hdu_lock_write (ctx->tb_hdu) < 0)
+    if (dada_hdu_lock_write (ctx->tb_hdus[i]) < 0)
     {
-      multilog (log, LOG_ERR, "open: could not lock write on TB HDU\n");
+      multilog (log, LOG_ERR, "open: could not lock write on TB HDU[%d]\n",i);
       return -1;
     }
   }
@@ -847,19 +897,54 @@ int bfdsp_open (dada_client_t* client)
     }
   }
 
+  ascii_header_del (client->header, "RANKED_MODULES");
+  ascii_header_del (client->header, "AQ_PROC_FILE");
+  ascii_header_del (client->header, "DELAY_CORRECTED");
+  ascii_header_del (client->header, "RFI_MITIGATION");
+  ascii_header_del (client->header, "CONFIG");
+  ascii_header_del (client->header, "PFB_ID");
+  ascii_header_del (client->header, "PHASE_CORRECTED");
+
   // initialize
-  ctx->tb_block_open = 0;
+  ctx->tb_blocks_open = 0;
   ctx->fb_block_open = 0;
   ctx->mb_block_open = 0;
   ctx->bytes_read = 0;
   ctx->bytes_written = 0;
-  ctx->tb_block = 0;
   ctx->fb_block = 0;
   ctx->mb_block = 0;
+  for (i=0; i<ctx->n_tbs; i++)
+  {
+    ctx->tb_blocks[i] = 0;
+  }
   ctx->first_time = 1;
 
   if (ctx->verbose)
     multilog (log, LOG_INFO, "open: extracting params from header\n");
+
+  // read NCHAN from the incoming header
+  if (ascii_header_get (client->header, "NCHAN", "%d", &(ctx->nchan)) != 1)
+  {
+    multilog (log, LOG_ERR, "open: could not read NCHAN from header\n");
+    return -1;
+  }
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "open: NCHAN=%d\n", ctx->nchan);
+#ifndef HIRES
+  if (ctx->nchan != 1)
+  {
+    multilog (log, LOG_ERR, "open: NCHAN==%d in lowres mode\n", ctx->nchan);
+    return -1;
+  }
+#endif
+
+  // allocate some memory for channel definitions
+  ctx->channels = (mopsr_chan_t *) malloc (sizeof(mopsr_chan_t) * ctx->nchan);
+  if (!ctx->channels)
+  {
+    multilog (log, LOG_ERR, "open: failed to allocate memory for channels\n");
+    return -1;
+  }
 
   // read NANT from incoming header
   if (ascii_header_get (client->header, "NANT", "%d", &(ctx->nant)) != 1)
@@ -890,7 +975,7 @@ int bfdsp_open (dada_client_t* client)
   if (ctx->verbose)
     multilog (log, LOG_INFO, "open: NBEAM=%d\n", ctx->nbeam);
 
-  unsigned fb_divisor = 1;
+  double fb_divisor = 1;
   unsigned tb_divisor = 1;
   unsigned mb_divisor = 1;
 
@@ -917,35 +1002,48 @@ int bfdsp_open (dada_client_t* client)
   //nsamp_d = 64;
 
   // using the 2048_blk kernel
-  nbit_n = 4;
-  nchan_n = 1;
-  ndim_d  = 2;
-  nsamp_d = 512;
+  nbit_n = 4;     // 8-bit to 32-bit
+  nchan_n = 1;    // no change in channelisation
+  ndim_d  = 2;    // 2dim to 1 dim
+  nsamp_d = 512;  // reduction in tsamp by 512
+
+#ifdef HIRES
+  nsamp_d = 32;
+  // 10.24 us -> 327.68 us
+#endif
 
   if (ctx->fan_beams)
   {
     unsigned numerator   = (nbit_n * nchan_n * ctx->nbeam);
     unsigned denominator = (ndim_d * nsamp_d * ctx->nant);
 
-    if (denominator % numerator != 0)
+    //if (denominator % numerator != 0)
+    if (((ctx->in_block_size * numerator) / denominator) != ctx->fb_block_size)
     {
-      multilog (log, LOG_ERR, "open: requested nbeam did not result in integer denominator change in data rate\n");
+      multilog (log, LOG_ERR, "open: FB block size did not match input * configuration\n");
+      multilog (log, LOG_ERR, "open: numerator=%u denominator=%u\n", numerator, denominator);
       return -1;
     } 
-    fb_divisor = denominator / numerator;
+    fb_divisor = (double) denominator / (double) numerator;
     fb_tsamp = in_tsamp * nsamp_d;
     if (ctx->verbose)
       multilog (log, LOG_INFO, "open: TSAMP in=%lf FB=%lf\n", in_tsamp, fb_tsamp);
   }
 
-  if (ctx->tied_beam)
+  if (ctx->n_tbs > 0)
     tb_divisor = ctx->nant / nbit_n;
 
   if (ctx->mod_beams)
   {
+#ifdef HIRES
+    nbit_n  = 4;    // 8 - 32 bit
+    nsamp_d = 32;   // integrate 32 samples
+    ndim_d  = 2;    // detect
+#else
     nbit_n  = 4;    // 8 - 32 bit
     nsamp_d = 512;  // integrate 512 samples
     ndim_d  = 2;    // detect
+#endif
 
     unsigned numerator = nbit_n;
     unsigned denominator = nsamp_d * ndim_d;
@@ -954,7 +1052,6 @@ int bfdsp_open (dada_client_t* client)
     if (ctx->verbose)
       multilog (log, LOG_INFO, "open: TSAMP in=%lf MB=%lf\n", in_tsamp, mb_tsamp);
   }
-
 
   // calculate new BYTES_PER_SECOND
   uint64_t fb_bytes_per_second, tb_bytes_per_second, mb_bytes_per_second;
@@ -998,13 +1095,14 @@ int bfdsp_open (dada_client_t* client)
     multilog (log, LOG_INFO, "open: FILE_SIZE in=%"PRIi64" fb=%"PRIi64" tb=%"PRIi64" mb=%"PRIu64"\n", 
               in_file_size, fb_file_size, tb_file_size, mb_file_size);
 
-  if (ascii_header_get (client->header, "CHAN_OFFSET", "%u", &(ctx->channel.number)) != 1)
+  unsigned chan_offset;
+  if (ascii_header_get (client->header, "CHAN_OFFSET", "%u", &chan_offset) != 1)
   {
     multilog (log, LOG_ERR, "open: could not read CHAN_OFFSET from header\n");
     return -1;
   }
 
-  // for the boresite of the TB
+  // for the boresite
   if (ascii_header_get (client->header, "SOURCE", "%s", ctx->source.name) != 1)
   {
     multilog (log, LOG_ERR, "open: could not read SOURCE from header\n");
@@ -1056,22 +1154,32 @@ int bfdsp_open (dada_client_t* client)
     multilog (log, LOG_INFO, "open: hard coding UT1_OFFSET=%f\n", ctx->ut1_offset);
   }
 
-  char tmp[32];
-
-  if (ascii_header_get (client->header, "OBSERVING_TYPE", "%s", tmp) != 1)
+  if (ascii_header_get (client->header, "MD_ANGLE", "%f", &(ctx->md_angle)) != 1)
   {
-    multilog (log, LOG_ERR, "open: could not read OBSERVING_TYPE in header\n");
+    multilog (log, LOG_ERR, "open: could not read MD_ANGLE from header\n");
     return -1;
   }
 
-  // assume that the delay engine will be steering the boresight beam to
-  // the specified RA/DEC
-  ctx->steer_tb = 0;
+  // in degrees
+  double primary_beam_width = 4.0;
+  ctx->beam_spacing = primary_beam_width / ctx->nbeam;
+  if (ascii_header_get (client->header, "FB_BEAM_SPACING", "%lf", &(ctx->beam_spacing)) != 1)
+  {
+    multilog (log, LOG_INFO, "open: no FB_BEAM_SPACING specified, using %lf degrees\n", ctx->beam_spacing);
+  }
+  // convert to radians
+  ctx->beam_spacing *= (M_PI / 180.0);
 
-  // if the delay engine has been asked to apply no delays, then we must
-  // re-steer the primary beam boresight to the specified RA/DEC
-  if (strcmp(tmp, "STATIONARY") == 0)
-    ctx->steer_tb = 1;
+  // true if AQDSP has steered antenna to boresight
+  ctx->delay_tracking = 0;
+  char tmp[32];
+  if (ascii_header_get (client->header, "DELAY_TRACKING", "%s", tmp) != 1)
+  {
+    multilog (log, LOG_ERR, "open: could not read DELAY_TRACKING in header\n");
+    return -1;
+  }
+  if (strcmp(tmp, "true") == 0)
+    ctx->delay_tracking = 1;
 
   if (ascii_header_get (client->header, "UTC_START", "%s", tmp) == 1)
   {
@@ -1097,22 +1205,41 @@ int bfdsp_open (dada_client_t* client)
 
   struct tm * utc = gmtime (&(ctx->utc_start));
 
+  //multilog (log, LOG_INFO, "open: RA (rad) = %le\n", ctx->source.raj);
+  //multilog (log, LOG_INFO, "open: DEC (rad) = %le\n", ctx->source.decj);
   cal_app_pos_iau (ctx->source.raj, ctx->source.decj, utc, &(ctx->source.ra_curr), &(ctx->source.dec_curr));
+  //multilog (log, LOG_INFO, "open: RA curr = %le\n", ctx->source.ra_curr);
+  //multilog (log, LOG_INFO, "open: DE curr = %le\n", ctx->source.dec_curr);
 
   // multilog (log, LOG_INFO, "open: coords J2000=(%lf, %lf) CURR=(%lf, %lf)\n", 
   //           ctx->source.raj, ctx->source.decj, ctx->source.ra_curr, ctx->source.dec_curr);
 
-  if (ascii_header_get (client->header, "BW", "%lf", &(ctx->channel.bw)) != 1)
+  double bw;
+  if (ascii_header_get (client->header, "BW", "%lf", &bw) != 1)
   {
     multilog (log, LOG_ERR, "open: could not read BW from header\n");
     return -1;
   }
 
-  float freq;
-  if (ascii_header_get (client->header, "FREQ", "%lf", &(ctx->channel.cfreq)) != 1)
+  double freq;
+  if (ascii_header_get (client->header, "FREQ", "%lf", &freq) != 1)
   {
     multilog (log, LOG_ERR, "open: could not read FREQ from header\n");
     return -1;
+  }
+
+  double chan_bw = bw / ctx->nchan;
+  double base_freq = freq - (bw/2);
+  unsigned ichan;
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "open: base_freq=%lf chan_bw=%lf chan_offset=%u\n", base_freq, chan_bw, chan_offset);
+  for (ichan=0; ichan<ctx->nchan; ichan++)
+  {
+    ctx->channels[ichan].number = chan_offset + ichan;
+    ctx->channels[ichan].bw = chan_bw;
+    ctx->channels[ichan].cfreq = base_freq + (chan_bw/2) + ichan * chan_bw;
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "ctx->channels[%d] number=%u bw=%lf cfreq=%lf\n", ichan, ctx->channels[ichan].number, ctx->channels[ichan].bw, ctx->channels[ichan].cfreq);
   }
 
   char order[4];
@@ -1121,9 +1248,9 @@ int bfdsp_open (dada_client_t* client)
     multilog (log, LOG_ERR, "open: could not read ORDER from header\n");
     return -1;
   }
-  if (strcmp (order, "ST") != 0)
+  if ((strcmp (order, "ST") != 0) && (strcmp(order, "FST") != 0))
   {
-    multilog (log, LOG_ERR, "open: input ORDER was not ST\n");
+    multilog (log, LOG_ERR, "open: input ORDER was not ST or FST\n");
     return -1;
   }
 
@@ -1185,6 +1312,114 @@ int bfdsp_open (dada_client_t* client)
 
   uint64_t header_size = ipcbuf_get_bufsz (client->header_block);
 
+  // extract relevant header params for each output and clear them from
+  // the header if extracted
+  if (ctx->mb_hdu)
+  {
+    if (ascii_header_get (client->header, "MB_PID", "%s", mb.pid) != 1)
+    {
+       multilog (log, LOG_ERR, "open: could not read MB_PID from header\n");
+       return -1;
+    }
+    ascii_header_del (client->header, "MB_PID");
+  }
+
+  if (ctx->fb_hdu)
+  {
+    if (ascii_header_get (client->header, "FB_PID", "%s", fb.pid) != 1)
+    {
+      multilog (log, LOG_ERR, "open: could not read FB_PID from header\n");
+      return -1;
+    }
+    if (ascii_header_get (client->header, "FB_MODE", "%s", fb.mode) != 1)
+    {
+      multilog (log, LOG_ERR, "open: could not read FB_MODE from header\n");
+      return -1;
+    }
+
+    ascii_header_del (client->header, "FB_PID");
+    ascii_header_del (client->header, "FB_MODE");
+  }
+
+  char key[32];
+  for (i=0; i<ctx->n_tbs; i++)
+  {
+    sprintf(key, "TB%d_PID", i);
+    if (ascii_header_get (client->header, key, "%s", tbs[i].pid) != 1)
+    {
+      multilog (log, LOG_ERR, "open: could not read %s from header\n", key);
+      return -1;
+    }
+    ascii_header_del (client->header, key);
+
+    sprintf(key, "TB%d_MODE", i);
+    if (ascii_header_get (client->header, key, "%s", tbs[i].mode) != 1)
+    {
+      multilog (log, LOG_ERR, "open: could not read %s from header\n", key);
+      return -1;
+    }
+    ascii_header_del (client->header, key);
+
+    sprintf(key, "TB%d_PROC_FILE", i);
+    if (ascii_header_get (client->header, key, "%s", tbs[i].proc_file) != 1)
+    {
+      multilog (log, LOG_ERR, "open: could not read %s from header\n", key);
+      return -1;
+    }
+    ascii_header_del (client->header, key);
+
+    sprintf(key, "TB%d_SOURCE", i);
+    if (ascii_header_get (client->header, key, "%s", tbs[i].source) != 1)
+    {
+      multilog (log, LOG_ERR, "open: could not read %s from header\n", key);
+      return -1;
+    }
+    ascii_header_del (client->header, key);
+
+    sprintf(key, "TB%d_RA", i);
+    if (ascii_header_get (client->header, key, "%s", tbs[i].ra) != 1)
+    {
+      multilog (log, LOG_ERR, "open: could not read %s from header\n", key);
+      return -1;
+    }
+    ascii_header_del (client->header, key);
+
+    sprintf(key, "TB%d_DEC", i);
+    if (ascii_header_get (client->header, key, "%s", tbs[i].dec) != 1)
+    {
+      multilog (log, LOG_ERR, "open: could not read %s from header\n", key);
+      return -1;
+    }
+    ascii_header_del (client->header, key);
+
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "open: TB[%d] RA (HMS) = %s\n", i, tbs[i].ra);
+    if (mopsr_delays_hhmmss_to_rad (tbs[i].ra, &(ctx->tb_sources[i].raj)) < 0)
+    {
+      multilog (log, LOG_ERR, "open: TB[%d] could not parse RA from %s\n", i, tbs[i].ra);
+      return -1;
+    }
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "open: TB[%d] RA (rad) = %lf\n", i, ctx->tb_sources[i].raj);
+
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "open: TB[%d] DEC (DMS) = %s\n", i,  tbs[i].dec);
+    if (mopsr_delays_ddmmss_to_rad (tbs[i].dec, &(ctx->tb_sources[i].decj)) < 0)
+    {
+      multilog (log, LOG_ERR, "open: TB[%d] could not parse DEC from %s\n", i, tbs[i].dec);
+      return -1;
+    }
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "open: TB[%d] DEC (rad) = %lf\n", i, ctx->tb_sources[i].decj);
+
+    //multilog (log, LOG_INFO, "open: TB[%d] RA (rad) = %le\n", i, ctx->tb_sources[i].raj);
+    //multilog (log, LOG_INFO, "open: TB[%d] DEC (rad) = %le\n", i, ctx->tb_sources[i].decj);
+    cal_app_pos_iau (ctx->tb_sources[i].raj, ctx->tb_sources[i].decj, utc, &(ctx->tb_sources[i].ra_curr), &(ctx->tb_sources[i].dec_curr));
+    //multilog (log, LOG_INFO, "open: TB[%d] RA curr = %le\n", i, ctx->tb_sources[i].ra_curr);
+    //multilog (log, LOG_INFO, "open: TB[%d] DE curr = %le\n", i, ctx->tb_sources[i].dec_curr);
+  }
+
+  // if we have Module Beams
   if (ctx->mb_hdu)
   {
     if (ctx->verbose)
@@ -1220,9 +1455,13 @@ int bfdsp_open (dada_client_t* client)
       return -1;
     }
 
-    if (ascii_header_set (header, "ORDER", "%s", "ST") < 0)
+    if (ctx->nchan == 1)
+      sprintf (order, "%s", "ST");
+    else
+      sprintf (order, "%s", "SFT");
+    if (ascii_header_set (header, "ORDER", "%s", order) < 0)
     {
-      multilog (log, LOG_ERR, "open: could not set ORDER=ST in outgoing header\n");
+      multilog (log, LOG_ERR, "open: could not set ORDER=%s in outgoing header\n", order);
       return -1;
     }
 
@@ -1268,6 +1507,34 @@ int bfdsp_open (dada_client_t* client)
       return -1;
     }
 
+    if (ascii_header_set (header, "PID", "%s", mb.pid) < 0)
+    {
+      multilog (log, LOG_ERR, "open: could not set PID in outgoing header\n", 1);
+      return -1;
+    }
+
+    int ibeam;
+    // md offets will be [0,] 2 chars long
+    char strval[9];
+    size_t mdlist_len = (sizeof(char) * 2 * ctx->nant) + 1;
+    char * mdlist = (char *) malloc(mdlist_len);
+    mdlist[0] = '\0';
+    for (ibeam=0; ibeam<ctx->nbeam; ibeam++)
+    {
+      sprintf(strval, "0");
+      strcat (mdlist, strval);
+      if (ibeam < ctx->nbeam-1)
+        strcat (mdlist,",");
+    }
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "open: strlen(mdlist)=%d, size=%dlen=%d header_size=%d\n", strlen(mdlist), mdlist_len, strlen(header), header_size);
+    if (ascii_header_set (header, "BEAM_MD_OFFSETS", "%s", mdlist) < 0)
+    {
+      multilog (log, LOG_ERR, "open: could not set BEAM_MD_OFFSETS=%s in outgoing header\n", ibeam, mdlist);
+      return -1;
+    }
+    free (mdlist);
+
     if (ctx->verbose)
       multilog (log, LOG_INFO, "open: marking MB header filled, len=%d header_size=%d\n", strlen(header), header_size);
 
@@ -1311,9 +1578,9 @@ int bfdsp_open (dada_client_t* client)
     memcpy (header, client->header, header_size);
 
     // double check that the fb_block_size is fb_divisor times smaller than the input block size
-    if (ctx->in_block_size / ctx->fb_block_size != fb_divisor)
+    if (ctx->in_block_size / fb_divisor != ctx->fb_block_size)
     {
-      multilog (log, LOG_ERR, "open: in/out block size factor did not match fb_divisor\n");
+      multilog (log, LOG_ERR, "open: in block size did not match fb block size / fb_divisor\n");
       return -1;
     }
 
@@ -1329,10 +1596,13 @@ int bfdsp_open (dada_client_t* client)
       return -1;
     }
 
-
-    if (ascii_header_set (header, "ORDER", "%s", "ST") < 0)
+    if (ctx->nchan == 1)
+      sprintf (order, "%s", "ST");
+    else
+      sprintf (order, "%s", "SFT");
+    if (ascii_header_set (header, "ORDER", "%s", order) < 0)
     {
-      multilog (log, LOG_ERR, "open: could not set ORDER=ST in outgoing header\n");
+      multilog (log, LOG_ERR, "open: could not set ORDER=%s in outgoing header\n", order);
       return -1;
     }
 
@@ -1348,9 +1618,9 @@ int bfdsp_open (dada_client_t* client)
       return -1;    
     }
 
-    if (ascii_header_set (header, "NCHAN", "%d", nchan_n) < 0)
+    if (ascii_header_set (header, "NCHAN", "%d", ctx->nchan) < 0)
     {
-      multilog (log, LOG_ERR, "open: could not set NCHAN=%d in outgoing header\n", nchan_n);
+      multilog (log, LOG_ERR, "open: could not set NCHAN=%d in outgoing header\n", ctx->nchan);
       return -1;
     }
 
@@ -1378,28 +1648,42 @@ int bfdsp_open (dada_client_t* client)
       return -1;
     }
 
+    // md offets will be [-0.000000,] 7 or 8 chars long
     int ibeam;
-
-    // md offets will be [-0.0000,] 7 or 8 chars long
-    char strval[9];
-    char * mdlist = (char *) malloc(sizeof(char) * 7 * ctx->nbeam);
+    char strval[10];
+    size_t mdlist_len = (sizeof(char) * 11 * ctx->nbeam);
+    char * mdlist = (char *) malloc(mdlist_len);
     mdlist[0] = '\0';
     for (ibeam=0; ibeam<ctx->nbeam; ibeam++)
     {
-      //sprintf(strval, "%4.3f", ctx->h_beam_offsets[ibeam]);
-      sprintf(strval, "0");
+      sprintf(strval, "%7.6f", ctx->h_beam_offsets[ibeam]);
       strcat (mdlist, strval);
       if (ibeam < ctx->nbeam-1)
         strcat (mdlist,",");
     }
     if (ctx->verbose)
-      multilog (log, LOG_INFO, "open: mdlist=%d , len=%d header_size=%d\n", strlen(mdlist), strlen(header), header_size);
-
+      multilog (log, LOG_INFO, "open: strlen(mdlist)=%d, mdlist_len=%ld strlen(header)=%d header_size=%d\n", strlen(mdlist), mdlist_len, strlen(header), header_size);
     if (ascii_header_set (header, "BEAM_MD_OFFSETS", "%s", mdlist) < 0)
     {
       multilog (log, LOG_ERR, "open: could not set BEAM_MD_OFFSETS=%s in outgoing header\n", ibeam, mdlist);
       return -1;
     }
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "open: free (mdlist)\n");
+
+    free (mdlist);
+
+    if (ascii_header_set (header, "PID", "%s", fb.pid) < 0)
+    {
+      multilog (log, LOG_ERR, "open: could not set PID in outgoing header\n", 1);
+      return -1;
+    }
+    if (ascii_header_set (header, "MODE", "%s", fb.mode) < 0)
+    {
+      multilog (log, LOG_ERR, "open: could not set MODE in outgoing header\n", 1);
+      return -1;
+    }
+
     if (ctx->verbose)
       multilog (log, LOG_INFO, "open: marking FB header filled, len=%d header_size=%d\n", strlen(header), header_size);
 
@@ -1411,11 +1695,11 @@ int bfdsp_open (dada_client_t* client)
     }
   }
 
-  if (ctx->tb_hdu)
+  for (i=0; i<ctx->n_tbs; i++)
   {
     if (ctx->verbose)
       multilog (log, LOG_INFO, "open: getting next free TB header buffer\n");
-    char * header = ipcbuf_get_next_write (ctx->tb_hdu->header_block);
+    char * header = ipcbuf_get_next_write (ctx->tb_hdus[i]->header_block);
     if (!header)
     {
       multilog (log, LOG_ERR, "open: could not get next header block\n");
@@ -1428,21 +1712,30 @@ int bfdsp_open (dada_client_t* client)
     memcpy (header, client->header, header_size);
 
     // double check that the tb_block_size is divisor times smaller than the input block size
-    if (ctx->in_block_size / ctx->tb_block_size != tb_divisor)
+    if (ctx->in_block_size / ctx->tb_block_sizes[i] != tb_divisor)
     {
-      multilog (log, LOG_ERR, "open: in/out block size factor did not match divisor\n");
+      multilog (log, LOG_ERR, "open: in[%lu]/out[%lu] block size factor did not match divisor [%d]\n", ctx->in_block_size, ctx->tb_block_sizes[i], tb_divisor);
       return -1;
     }
 
-    if (ascii_header_set (header, "RESOLUTION", "%"PRIu64, ctx->tb_block_size) < 0)
+    //uint64_t resolution = ctx->tb_block_sizes[i];
+    uint64_t resolution = ctx->nchan * nchan_n;
+    if (ascii_header_set (header, "RESOLUTION", "%"PRIu64, resolution) < 0)
     {
-      multilog (log, LOG_ERR, "open: could not set RESOLUTION=%"PRIu64" in outgoing header\n", ctx->tb_block_size);
+      multilog (log, LOG_ERR, "open: could not set RESOLUTION=%"PRIu64" in outgoing header\n", resolution);
       return -1;
     }
 
-    if (ascii_header_set (header, "ORDER", "%s", "T") < 0)
+    if (ctx->nchan == 1)
+      sprintf (order, "%s", "T");
+    else
     {
-      multilog (log, LOG_ERR, "open: could not set ORDER=T in outgoing header\n");
+      //sprintf (order, "%s", "FT");
+      sprintf (order, "%s", "TF");
+    }
+    if (ascii_header_set (header, "ORDER", "%s", order) < 0)
+    {
+      multilog (log, LOG_ERR, "open: could not set ORDER=%s in outgoing header\n", order);
       return -1;
     }
 
@@ -1452,9 +1745,9 @@ int bfdsp_open (dada_client_t* client)
       return -1;    
     }
 
-    if (ascii_header_set (header, "NCHAN", "%d", nchan_n) < 0)
+    if (ascii_header_set (header, "NCHAN", "%d", ctx->nchan * nchan_n) < 0)
     {
-      multilog (log, LOG_ERR, "open: could not set NCHAN=%d in outgoing header\n", nchan_n);
+      multilog (log, LOG_ERR, "open: could not set NCHAN=%d in outgoing header\n", ctx->nchan * nchan_n);
       return -1;
     }
 
@@ -1476,12 +1769,42 @@ int bfdsp_open (dada_client_t* client)
       return -1;
     }
 
+    if (ascii_header_set (header, "PID", "%s", tbs[i].pid) < 0)
+    {
+      multilog (log, LOG_ERR, "open: could not set PID in outgoing header\n", 1);
+      return -1;
+    }
+    if (ascii_header_set (header, "MODE", "%s", tbs[i].mode) < 0)
+    {
+      multilog (log, LOG_ERR, "open: could not set MODE in outgoing header\n", 1);
+      return -1;
+    }
+    if (ascii_header_set (header, "PROC_FILE", "%s", tbs[i].proc_file) < 0)
+    {
+      multilog (log, LOG_ERR, "open: could not set PROC_FILE in outgoing header\n", 1);
+      return -1;
+    }
+    if (ascii_header_set (header, "SOURCE", "%s", tbs[i].source) < 0)
+    {
+      multilog (log, LOG_ERR, "open: could not set SOURCE in outgoing header\n", 1);
+      return -1;
+    }
+    if (ascii_header_set (header, "RA", "%s", tbs[i].ra) < 0)
+    {
+      multilog (log, LOG_ERR, "open: could not set RA in outgoing header\n", 1);
+      return -1;
+    }
+    if (ascii_header_set (header, "DEC", "%s", tbs[i].dec) < 0)
+    {
+      multilog (log, LOG_ERR, "open: could not set DEC in outgoing header\n", 1);
+      return -1;
+    }
 
     if (ctx->verbose)
       multilog (log, LOG_INFO, "open: marking output header filled\n");
 
     // mark the outgoing header as filled
-    if (ipcbuf_mark_filled (ctx->tb_hdu->header_block, header_size) < 0) 
+    if (ipcbuf_mark_filled (ctx->tb_hdus[i]->header_block, header_size) < 0) 
     {
       multilog (log, LOG_ERR, "open: could not mark header_block filled\n");
       return -1;
@@ -1562,12 +1885,12 @@ int bfdsp_close (dada_client_t* client, uint64_t bytes_written)
     }
   }
 
-
-  if (ctx->tied_beam)
+  unsigned i;
+  for (i=0; i<ctx->n_tbs; i++)
   {
-    if (dada_hdu_unlock_write (ctx->tb_hdu) < 0)
+    if (dada_hdu_unlock_write (ctx->tb_hdus[i]) < 0)
     {
-      multilog (log, LOG_ERR, "close: cannot unlock TB HDU\n");
+      multilog (log, LOG_ERR, "close: cannot unlock TB HDU[%d]\n",i);
       return -1;
     }
 
@@ -1596,45 +1919,52 @@ int64_t bfdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
   mopsr_bfdsp_t* ctx = (mopsr_bfdsp_t*) client->context;
   multilog_t * log = ctx->log;
 
-  if (ctx->verbose > 1)
+  if (ctx->verbose)
     multilog (log, LOG_INFO, "io_block: buffer=%p, bytes=%"PRIu64" block_id=%"PRIu64"\n", buffer, bytes, block_id);
 
   cudaError_t error;
   uint64_t out_block_id;
-  unsigned ichan, iant;
+  unsigned ichan, iant, i;
 
 #ifdef USE_GPU 
   // copy the whole block to the GPU
-  if (ctx->verbose > 1)
+  if (ctx->verbose)
     multilog (log, LOG_INFO, "io_block: cudaMemcpyAsync block H2D %ld: (%p <- %p)\n", bytes, ctx->d_in, buffer);
   error = cudaMemcpyAsync (ctx->d_in, buffer, bytes, cudaMemcpyHostToDevice, ctx->stream);
   if (error != cudaSuccess)
   {
-    multilog (log, LOG_ERR, "cudaMemcpyAsyc H2D failed: %s (%p <- %p)\n", cudaGetErrorString(error),
+    multilog (log, LOG_ERR, "cudaMemcpyAsync H2D failed: %s (%p <- %p)\n", cudaGetErrorString(error),
               ctx->d_in, buffer);
+    ctx->internal_error = 1;
     return -1;
   }
 
+  if (ctx->n_tbs > 0)
+  {
+    if (!ctx->tb_blocks_open)
+    {
+      for (i=0; i<ctx->n_tbs; i++)
+      {
+        ctx->tb_blocks[i] = ipcio_open_block_write (ctx->tb_hdus[i]->data_block, &out_block_id);
+        if (ctx->verbose > 1)
+          multilog (log, LOG_INFO, "io_block: opened TB output block %"PRIu64" %p\n", out_block_id, (void *) ctx->tb_blocks[i]);
+      }
+    }
+    ctx->tb_blocks_open = 1;
+  }
+
   // form a tied array beam if requested
-  if (ctx->tied_beam)
+  for (i=0; i<ctx->n_tbs; i++)
   {
     // update phasors for the tied array beam
-    bfdsp_update_tb (ctx);
+    bfdsp_update_tb (ctx, i);
 
-    mopsr_tie_beam (ctx->stream, ctx->d_in, ctx->d_tb, ctx->d_tb_phasors, ctx->in_block_size, ctx->nant);
-
-    if (!ctx->tb_block_open)
-    {
-      ctx->tb_block = ipcio_open_block_write (ctx->tb_hdu->data_block, &out_block_id);
-      if (ctx->verbose > 1)
-        multilog (log, LOG_INFO, "io_block: opened TB output block %"PRIu64" %p\n", out_block_id, (void *) ctx->tb_block);
-      ctx->tb_block_open = 1;
-    }
+    mopsr_tie_beam (ctx->stream, ctx->d_in, ctx->d_tbs[i], ctx->d_tb_phasors[i], ctx->in_block_size, ctx->nant, ctx->nchan);
 
     if (ctx->verbose > 1)
       multilog (log, LOG_INFO, "io_block: cudaMemcpyAsync(%p, %p, %"PRIu64", D2H)\n",
-                (void *) ctx->tb_block, ctx->d_tb, ctx->tb_block_size);
-    error = cudaMemcpyAsync ( (void *) ctx->tb_block, ctx->d_tb, ctx->tb_block_size,
+                (void *) ctx->tb_blocks[i], ctx->d_tbs[i], ctx->tb_block_sizes[i]);
+    error = cudaMemcpyAsync ( (void *) ctx->tb_blocks[i], ctx->d_tbs[i], ctx->tb_block_sizes[i],
                             cudaMemcpyDeviceToHost, ctx->stream);
     if (error != cudaSuccess)
     {
@@ -1647,8 +1977,7 @@ int64_t bfdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
   if (ctx->fan_beams)
   {
     // form the tiled, detected and integrated tied array beams
-    mopsr_tile_beams_precomp (ctx->stream, ctx->d_in, ctx->d_fbs, ctx->d_phasors, ctx->in_block_size, ctx->nbeam, ctx->nant, ctx->tdec);
-    
+    mopsr_tile_beams_precomp (ctx->stream, ctx->d_in, ctx->d_fbs, ctx->d_phasors, ctx->in_block_size, ctx->nbeam, ctx->nant, ctx->nchan);
 #endif
 
     // copy back to output buffer
@@ -1679,7 +2008,12 @@ int64_t bfdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
  
   if (ctx->mod_beams)
   {
-    mopsr_mod_beams (ctx->stream, ctx->d_in, ctx->d_mbs, ctx->in_block_size, ctx->nant, 512);
+#ifdef HIRES
+    unsigned tdec = 32;
+#else
+    unsigned tdec = 512;
+#endif
+    mopsr_mod_beams (ctx->stream, ctx->d_in, ctx->d_mbs, ctx->in_block_size, ctx->nant, ctx->nchan, tdec);
 
     // copy back to output buffer
     if (!ctx->mb_block_open)
@@ -1716,12 +2050,15 @@ int64_t bfdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
     ctx->fb_block_open = 0;
   }
 
-  if (ctx->tb_block_open)
+  if (ctx->tb_blocks_open)
   {
-    if (ctx->verbose > 1)
-      multilog (log, LOG_INFO, "io_block: closing TB data block for %"PRIu64" bytes\n", ctx->tb_block_size);
-    ipcio_close_block_write (ctx->tb_hdu->data_block, ctx->tb_block_size);
-    ctx->tb_block_open = 0;
+    for (i=0; i<ctx->n_tbs; i++)
+    {
+      if (ctx->verbose > 1)
+        multilog (log, LOG_INFO, "io_block: closing TB data block for %"PRIu64" bytes\n", ctx->tb_block_sizes[i]);
+      ipcio_close_block_write (ctx->tb_hdus[i]->data_block, ctx->tb_block_sizes[i]);
+    }
+    ctx->tb_blocks_open = 0;
   }
 
   if (ctx->mb_block_open)
@@ -1731,7 +2068,6 @@ int64_t bfdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
     ipcio_close_block_write (ctx->mb_hdu->data_block, ctx->mb_block_size);
     ctx->mb_block_open = 0;
   }
-
 
   ctx->bytes_read += bytes;
   return (int64_t) bytes;
@@ -1814,43 +2150,56 @@ int mopsr_tile_beams_cpu (void * h_in, void * h_out, void * h_phasors, uint64_t 
 }
 
 // determine if there is a pulsar to time within the primary beam
-void bfdsp_update_tb (mopsr_bfdsp_t * ctx)
+void bfdsp_update_tb (mopsr_bfdsp_t * ctx, unsigned i)
 {
-  // if the tied array beam must be steered to the source RA/DEC from MD=0
-  if (ctx->steer_tb)
+  // determine current offset between PSR and MD=0 in radians
+  // note that UT1 offset was already accounted for in the AQDSP engine
+  const double mid_byte = (double) ctx->bytes_read + (ctx->in_block_size / 2);
+  const double mid_time = (double) ctx->utc_start + (mid_byte / (double) ctx->bytes_per_second);
+
+  struct timeval timestamp;
+  timestamp.tv_sec = (long) floor (mid_time);
+  timestamp.tv_usec = (long) floor ((mid_time - (double) timestamp.tv_sec) * 1e6);
+
+  double boresight_delay = sin(ctx->md_angle);
+  // if AQDSP is tracking the source, then use the boresight delay
+  if (ctx->delay_tracking)
+    boresight_delay = calc_jer_delay (ctx->source.ra_curr, ctx->source.dec_curr, timestamp);
+  double tb_delay = calc_jer_delay (ctx->tb_sources[i].ra_curr, ctx->tb_sources[i].dec_curr, timestamp);
+  double jer_delay = tb_delay - boresight_delay;
+
+  //fprintf (stderr, "boresight ra=%le tb_ra=%le diff=%le\n", ctx->source.ra_curr, ctx->tb_sources[i].ra_curr, ctx->source.ra_curr - ctx->tb_sources[i].ra_curr);
+
+  if (ctx->verbose > 1)
+    fprintf (stderr, "tb_idx=%u, boresight_delay=%le, tb_delay=%le jer_delay=%le\n", i, boresight_delay, tb_delay, jer_delay);
+
+  unsigned iant, ichan;
+  const double C = 2.99792458e8;
+
+  // Phasors are stored in FS ordering
+  for (iant=0; iant<ctx->nant; iant++)
   {
-    // determine current offset between PSR and MD=0 in radians
-    // note that UT1 offset was already accounted for in the AQDSP engine
-    const double mid_byte = (double) ctx->bytes_read + (ctx->in_block_size / 2);
-    const double mid_time = (double) ctx->utc_start + (mid_byte / (double) ctx->bytes_per_second);
-
-    struct timeval timestamp;
-    timestamp.tv_sec = (long) floor (mid_time);
-    timestamp.tv_usec = (long) floor ((mid_time - (double) timestamp.tv_sec) * 1e6);
-
-    double jer_delay = calc_jer_delay (ctx->source.ra_curr, ctx->source.dec_curr, timestamp);
-
-    unsigned iant;
-    const double C = 2.99792458e8;
-    for (iant=0; iant<ctx->nant; iant++)
+    double geometric_delay = (jer_delay * ctx->modules[iant]->dist) / C;
+    for (ichan=0; ichan<ctx->nchan; ichan++)
     {
-      double geometric_delay = (jer_delay * ctx->modules[iant]->dist) / C;
-      double theta = -2 * M_PI * ctx->channel.cfreq * 1000000 * geometric_delay;
-      ctx->h_tb_phasors[iant] = (float) cos(theta) + (float) sin(theta) * I;
+      double theta = -2 * M_PI * ctx->channels[ichan].cfreq * 1000000 * geometric_delay;
+      //fprintf (stderr, "iant=%u geometric_delay=%le theta=%lf \n", iant, geometric_delay, theta);
+      ctx->h_tb_phasors[i][ichan*ctx->nant+iant] = (float) cos(theta) + (float) sin(theta) * I;
     }
+  }
 
-    // copy these to device memory
-    if (ctx->verbose > 1)
-      multilog (ctx->log, LOG_INFO, "update_tb: cudaMemcpyAsync block H2D %ld: (%p <- %p)\n", 
-                ctx->tb_phasors_size, ctx->d_tb_phasors, ctx->h_tb_phasors);
-    cudaError_t error = cudaMemcpyAsync ((void *) ctx->d_tb_phasors, (void *) ctx->h_tb_phasors, 
-                             ctx->tb_phasors_size, cudaMemcpyHostToDevice, ctx->stream);
-    if (error != cudaSuccess)
-    {
-      multilog (ctx->log, LOG_ERR, "cudaMemcpyAsyc H2D failed: %s (%p <- %p)\n", cudaGetErrorString(error),
-                ctx->d_tb_phasors, ctx->h_tb_phasors);
-      return;
-    }
+  // copy these to device memory
+  if (ctx->verbose > 1)
+    multilog (ctx->log, LOG_INFO, "update_tb: cudaMemcpyAsync block H2D %ld: (%p <- %p)\n", 
+              ctx->tb_phasors_size, ctx->d_tb_phasors[i], ctx->h_tb_phasors[i]);
+  cudaError_t error = cudaMemcpyAsync ((void *) ctx->d_tb_phasors[i], 
+                                       (void *) ctx->h_tb_phasors[i], 
+                                       ctx->tb_phasors_size, cudaMemcpyHostToDevice, ctx->stream);
+  if (error != cudaSuccess)
+  {
+    multilog (ctx->log, LOG_ERR, "cudaMemcpyAsyc H2D failed: %s (%p <- %p)\n", cudaGetErrorString(error),
+              ctx->d_tb_phasors[i], ctx->h_tb_phasors[i]);
+    return;
   }
 }
 
