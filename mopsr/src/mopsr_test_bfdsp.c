@@ -5,6 +5,7 @@
  *
  ****************************************************************************/
 
+#include "dada_generator.h"
 #include "dada_cuda.h"
 #include "mopsr_delays.h"
 #include "mopsr_cuda.h"
@@ -19,17 +20,21 @@
 #include <math.h>
 #include <cuda_runtime.h>
 
-#define SKZAP
+#define JUST_GPU
+
+int mopsr_tile_beams_cpu (void * h_in, void * h_out, void * h_phasors, uint64_t nbytes, unsigned nbeam, unsigned nchan, unsigned nant, unsigned tdec);
 
 void usage ()
 {
   fprintf(stdout, "mopsr_test_bfdsp bays_file modules_file\n"
     " -a nant     number of antennae\n" 
     " -b nbeam    number of beams\n" 
-    " -t nsamp    number of samples [in a block]\n" 
+    " -c nchan    number of channels\n" 
+    " -d id       cuda device id\n"
     " -l nloops   number of blocks to execute\n" 
+    " -t nsamp    number of samples [in a block]\n" 
     " -h          print this help text\n" 
-    " -v          verbose output\n" 
+    " -v          verbose output\n"
   );
 }
 
@@ -41,22 +46,32 @@ int main(int argc, char** argv)
   int nbeam = 352;
   const unsigned ndim_in = 2;
   const unsigned ndim_ou = 1;
+#ifdef HIRES
+  uint64_t nsamp = 16384;
+  unsigned tdec  = 32;
+  unsigned nchan = 10;
+#else
   uint64_t nsamp = 16384 * 6;
-  const unsigned tdec = 512;
-  const unsigned nchan_in = 1;
-  const unsigned nchan_ou = 1;
+  //uint64_t nsamp = 4096;
+  unsigned tdec  = 512;
+  unsigned nchan = 1;
+#endif
   unsigned nloop = 1;
 
   char verbose = 0;
 
   int device = 0;
 
-  while ((arg = getopt(argc, argv, "a:b:d:hl:t:v")) != -1) 
+  while ((arg = getopt(argc, argv, "a:c:b:d:hl:t:v")) != -1) 
   {
     switch (arg)
     {
       case 'a':
         nant = atoi(optarg);
+        break;
+
+      case 'c':
+        nchan = atoi(optarg);
         break;
 
       case 'b':
@@ -128,11 +143,17 @@ int main(int argc, char** argv)
 
   source.raj  = 4.82147205863433;
 
-  mopsr_chan_t channels;
-  unsigned ichan = 42;
-  channels.number = ichan;
-  channels.bw     = 0.78125;
-  channels.cfreq  = (800 + (0.78125/2) + (ichan * 0.78125));
+  mopsr_chan_t * channels = (mopsr_chan_t *) malloc (sizeof(mopsr_chan_t) * nchan);
+  unsigned schan = 204;
+  double chan_bw = 100.0 / 1024;
+  double base_freq = 800;
+  unsigned ichan;
+  for (ichan=0; ichan<nchan; ichan++)
+  {
+    channels[ichan].number = schan + ichan;
+    channels[ichan].bw     = chan_bw;
+    channels[ichan].cfreq  = base_freq + (chan_bw/2) + (ichan * chan_bw);
+  }
 
   struct timeval timestamp;
 
@@ -177,11 +198,11 @@ int main(int argc, char** argv)
   unsigned nbyte_in = sizeof(int8_t);
   unsigned nbyte_ou = sizeof(float);
 
-  uint64_t in_block_size = nsamp        * nant  * ndim_in * nbyte_in * nchan_in;
-  uint64_t ou_block_size = (nsamp/tdec) * nbeam * ndim_ou * nbyte_ou * nchan_ou;
+  uint64_t in_block_size = nsamp        * nant  * ndim_in * nbyte_in * nchan;
+  uint64_t ou_block_size = (nsamp/tdec) * nbeam * ndim_ou * nbyte_ou * nchan;
 
-  fprintf (stderr, "IN:  nant=%u  nchan=%u ndim=%u nbit=%u nsamp=%"PRIu64" block_size=%"PRIu64"\n", nant,  nchan_in, ndim_in, nbyte_in*8, nsamp, in_block_size);
-  fprintf (stderr, "OUT: nbeam=%u nchan=%u ndim=%u nbit=%u nsamp=%"PRIu64" block_size=%"PRIu64"\n", nbeam, nchan_ou, ndim_ou, nbyte_ou*8, nsamp/tdec, ou_block_size);
+  fprintf (stderr, "IN:  nant=%u  nchan=%u ndim=%u nbit=%u nsamp=%"PRIu64" block_size=%"PRIu64"\n", nant,  nchan, ndim_in, nbyte_in*8, nsamp, in_block_size);
+  fprintf (stderr, "OUT: nbeam=%u nchan=%u ndim=%u nbit=%u nsamp=%"PRIu64" block_size=%"PRIu64"\n", nbeam, nchan, ndim_ou, nbyte_ou*8, nsamp/tdec, ou_block_size);
 
   void * d_in;
   void * d_fbs;
@@ -190,7 +211,6 @@ int main(int argc, char** argv)
   void * h_out;
   void * h_out_cpu;
   float * h_ant_factors;
-  float * h_sin_thetas;
   float * h_phasors;
 
   error = cudaMallocHost( &h_in, in_block_size);
@@ -200,14 +220,20 @@ int main(int argc, char** argv)
     return -1;
   }
   int8_t * ptr = (int8_t *) h_in;
-  for (iant=0; iant<nant; iant++)
+
+  srand ( time(NULL) );
+  double stddev = 5;
+
+  for (ichan=0; ichan<nchan; ichan++)
   {
-    for (isamp=0; isamp<nsamp; isamp++)
+    for (iant=0; iant<nant; iant++)
     {
-      ptr[0] = (int8_t) iant + 1;
-      ptr[1] = (int8_t) isamp + 1;
-      ptr += 2;
-      //fprintf (stderr, "[%d][%d] = %d + i%d\n", iant, isamp, iant+1, isamp+1);
+      for (isamp=0; isamp<nsamp; isamp++)
+      {
+        ptr[0] = (int8_t) rand_normal (0, stddev);
+        ptr[1] = (int8_t) rand_normal (0, stddev);
+        ptr += 2;
+      }
     }
   }
 
@@ -239,22 +265,7 @@ int main(int argc, char** argv)
     h_ant_factors[iant] = (float) ((-2 * M_PI * cfreq * dist) / C);
   }
 
-  size_t beams_size = sizeof(float) * nbeam;
-  error = cudaMallocHost( (void **) &(h_sin_thetas), beams_size);
-  if (error != cudaSuccess)
-  {
-    fprintf(stderr, "alloc: could not allocate %ld bytes of device memory\n", beams_size);
-    return -1;
-  }
-
-  // assume that the beams tile from -2 degrees to + 2 degrees in even steps
-  for (ibeam=0; ibeam<nbeam; ibeam++)
-  {
-    float fraction = (float) ibeam / (float) (nbeam-1);
-    h_sin_thetas[ibeam] = sinf((fraction * 4) - 2);
-  }
-
-  size_t phasors_size = nant * nbeam * sizeof(float) * 2;
+  size_t phasors_size = nchan * nant * nbeam * sizeof(float) * 2;
   error = cudaMallocHost( (void **) &(h_phasors), phasors_size);
   if (error != cudaSuccess)
   {
@@ -265,15 +276,23 @@ int main(int argc, char** argv)
   unsigned nbeamant = nant * nbeam;
   float * phasors_ptr = (float *) h_phasors;
   unsigned re, im;
+  unsigned chan_stride = nbeam * nant * 2;
+
   for (ibeam=0; ibeam<nbeam; ibeam++)
   {
+    double md_angle = (double) ibeam / (double) nbeam;
     for (iant=0; iant<nant; iant++)
     {
-      re = (ibeam + iant + 2);
-      im = (ibeam + iant + 3);
+      double geometric_delay = (sin(md_angle) * modules[iant].dist) / C;
+      for (ichan=0; ichan<nchan; ichan++)
+      {
+        double theta = -2 * M_PI * channels[ichan].cfreq * 1000000 * geometric_delay;
 
-      h_phasors[ibeam * nant + iant] = (float) re;
-      h_phasors[(ibeam * nant + iant) + nbeamant] = (float) im;
+        // packed in FS order with the cos, and sin terms separate
+        unsigned idx = (ichan * chan_stride) + (ibeam * nant) + iant;
+        h_phasors[idx] = (float) cos(theta);
+        h_phasors[idx + nbeamant] = (float) sin(theta);
+      }
     }
   }
 
@@ -337,7 +356,7 @@ int main(int argc, char** argv)
     }
 
     // form the tiled, detected and integrated fan beamsa
-    mopsr_tile_beams_precomp (stream, d_in, d_fbs, d_phasors, in_block_size, nbeam, nant, tdec);
+    mopsr_tile_beams_precomp (stream, d_in, d_fbs, d_phasors, in_block_size, nbeam, nant, nchan);
 
     if (verbose > 1)
       fprintf(stderr, "io_block: cudaMemcpyAsync(%p, %p, %"PRIu64", D2H)\n",
@@ -351,6 +370,36 @@ int main(int argc, char** argv)
     }
   }
   cudaStreamSynchronize(stream);
+
+#ifndef JUST_GPU
+
+  unsigned ndim = 2;
+  unsigned nsamp_out = in_block_size / (nchan * nant * ndim * tdec);
+
+  fprintf (stderr, "mopsr_tile_beams_cpu()\n");
+  mopsr_tile_beams_cpu (h_in, h_out_cpu, h_phasors, in_block_size, nbeam, nchan, nant, tdec);
+
+  float * gpu_ptr = (float *) h_out;
+  float * cpu_ptr = (float *) h_out_cpu;
+
+  uint64_t ival=0;
+  for (ibeam=0; ibeam<nbeam; ibeam++)
+  {
+    for (ichan=0; ichan<nchan; ichan++)
+    {
+      for (isamp=0; isamp<nsamp_out; isamp++)
+      {
+        const float cpu = cpu_ptr[ival];
+        const float gpu = gpu_ptr[ival];
+        float ratio = cpu > gpu ? cpu / gpu : gpu / cpu;
+        if (fabs(ratio) > 1.00001)
+          fprintf (stderr, "[%d][%d][%d] mismatch ratio=%f (cpu==%f != gpu==%f)\n", ibeam, ichan, isamp, ratio, cpu, gpu);
+        ival++;
+      }
+    }
+  }
+
+#endif
 
   if (d_in)
   {
@@ -429,18 +478,134 @@ int main(int argc, char** argv)
   }
   h_phasors = 0;
 
-  if (h_sin_thetas)
-  {
-    error = cudaFreeHost(h_sin_thetas);
-    if (error != cudaSuccess)
-    {
-      fprintf (stderr, "cudaFreeHost(h_sin_thetas) failed: %s\n", cudaGetErrorString(error));
-      return -1;
-    }
-  }
-  h_sin_thetas = 0;
-
   free (modules);
+  free (h_out_cpu);
 
   return 0;
 }
+
+// simpler CPU version
+int mopsr_tile_beams_cpu (void * h_in, void * h_out, void * h_phasors, uint64_t nbytes, unsigned nbeam, unsigned nchan, unsigned nant, unsigned tdec)
+{
+  unsigned ndim = 2;
+
+  // data is ordered in ST order
+  unsigned nsamp = (unsigned) (nbytes / (nant * nchan * ndim));
+
+  float * phasors = (float *) h_phasors;
+
+  int16_t * in16 = (int16_t *) h_in;
+  float * ou     = (float *) h_out;
+
+  int16_t val16;
+  int8_t * val8 = (int8_t *) &val16;
+
+  const unsigned nbeamant = nbeam * nant;
+  const unsigned nantsamp = nant * nsamp;
+  const unsigned ant_stride = nsamp;
+  complex float val, beam_sum, phasor, steered;
+  float beam_power;
+  //complex double beam_sum_d;
+  //double beam_power_d;
+  const float scale = 127.5;
+
+  // intergrate samples together
+  const unsigned ndat = tdec;
+  unsigned nchunk = nsamp / tdec; // ndat_out
+
+  float re, im;
+  complex float beam_phasors[nant];
+
+  const uint64_t beam_stride = nchan * nchunk;
+  const uint64_t chan_stride = nchunk;
+
+  fprintf (stderr, "nbytes=%u nant=%u nsamp=%u, nchunk=%u\n", nbytes, nant, nsamp, nchunk);
+
+  unsigned ichan, ibeam, ichunk, idat, isamp, iant, idx;
+  unsigned ou_offset = 0;
+  for (ichan=0; ichan<nchan; ichan++)
+  {
+    int16_t * in16 = ((int16_t *) h_in) + ichan * nantsamp;
+    ou_offset = ichan * chan_stride;
+    for (ibeam=0; ibeam<nbeam; ibeam++)
+    {
+      // compute phasors for all ant for this beam
+      for (iant=0; iant<nant; iant++)
+      {
+        idx = (ichan * nbeamant * 2) + (ibeam * nant) + iant;
+        beam_phasors[iant] = phasors[idx] + phasors[idx + nbeamant] * I;
+      }
+
+      isamp = 0;
+      for (ichunk=0; ichunk<nchunk; ichunk++)
+      {
+        beam_power = 0;
+        for (idat=0; idat<ndat; idat++)
+        {
+          if (ibeam == 0)
+          {
+            float incoherent_power = 0;
+            for (iant=0; iant<nant; iant++)
+            {
+              val16 = in16[iant*nsamp + isamp];
+              re = ((float) val8[0]) / scale;
+              im = ((float) val8[1]) / scale;
+              incoherent_power += (re * re) + (im * im);
+            }
+            beam_power   += incoherent_power;
+          }
+          else
+          {
+            // compute the "beam_sum" of all antena for each time sample
+            beam_sum   = 0 + 0 * I;
+            for (iant=0; iant<nant; iant++)
+            {
+              // unpack this sample and antenna
+              val16 = in16[iant*nsamp + isamp];
+              re = ((float) val8[0]) / scale;
+              im = ((float) val8[1]) / scale;
+              val = re + im * I;
+
+              steered = val * beam_phasors[iant];
+              beam_sum += steered;
+              //beam_sum += val;
+
+              /*
+              if (ibeam == 1 && ichan == 0 && ichunk < 1)
+              {
+                fprintf (stderr, "[%u][%u] steered=(%f,%f), beam_sum=(%f,%f)\n",
+                        ichan, ibeam, 
+                        crealf(steered), cimagf(steered), 
+                        crealf(beam_sum), cimagf(beam_sum));
+              }
+              */
+            }
+            beam_power   += (crealf(beam_sum)  * crealf(beam_sum))  + (cimagf(beam_sum)  * cimagf(beam_sum));
+          }
+          /*
+          if (ibeam == 1 && ichan == 0 && ichunk < 1)
+          {
+            fprintf (stdout, "CPU %u %f %f\n", idat, crealf(beam_sum), cimagf(beam_sum));
+          }
+          */
+          isamp++;
+        }
+        /*
+        if (ibeam == 1 && ichan == 0 && ichunk < 1)
+        {
+          fprintf (stdout, "CPU %u %f\n", ichunk, beam_power);
+        }
+        */
+
+
+        //if (fabsf (beam_power / (float) beam_power_d) > 1.001)
+        //  fprintf (stderr, "[%u][%u] beam_power=%e beam_power_d=%le\n", ichan, ibeam, beam_power, beam_power_d);
+
+        // output in SFT order
+        ou[ou_offset + ichunk] = beam_power;
+      }
+      ou_offset += beam_stride;
+    }
+  }
+}
+
