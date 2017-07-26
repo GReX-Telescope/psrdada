@@ -680,8 +680,10 @@ uint64_t ipcio_tell (ipcio_t* ipc)
 
   if (current < 0)
   {
+#ifdef _DEBUG
     fprintf (stderr, "ipcio_tell: failed ipcbuf_tell"
              " mode=%c current=%"PRIi64"\n", ipc->rdwrt, current);
+#endif
     return 0;
   }
 
