@@ -169,11 +169,11 @@ sub main()
             {
               processObservation($o, $n_obs_headers);
             }
-            if (($obs_config eq "FAN_BEAM") || ($obs_config eq "TIED_ARRAY_FAN_BEAM") ||
-                ($obs_config eq "MOD_BEAM") || ($obs_config eq "TIED_ARRAY_MOD_BEAM"))
-            {
-              processCandidates($o);
-            }
+            #if (($obs_config eq "FAN_BEAM") || ($obs_config eq "TIED_ARRAY_FAN_BEAM") ||
+            #    ($obs_config eq "MOD_BEAM") || ($obs_config eq "TIED_ARRAY_MOD_BEAM"))
+            #{
+            #  processCandidates($o);
+            #}
             markObsState($o, "processing", "finished");
             cleanResultsDir($o);
           } 
@@ -185,12 +185,12 @@ sub main()
             {
               processObservation($o, $n_obs_headers);
             }
-            if (($obs_config eq "FAN_BEAM") || ($obs_config eq "TIED_ARRAY_FAN_BEAM") ||
-                ($obs_config eq "MOD_BEAM") || ($obs_config eq "TIED_ARRAY_MOD_BEAM"))
-
-            {
-              processCandidates($o);
-            }
+            #if (($obs_config eq "FAN_BEAM") || ($obs_config eq "TIED_ARRAY_FAN_BEAM") ||
+            #    ($obs_config eq "MOD_BEAM") || ($obs_config eq "TIED_ARRAY_MOD_BEAM"))
+            #
+            #{
+            #  processCandidates($o);
+            #}
           }
 
           # no archives yet received, wait
@@ -415,6 +415,16 @@ sub cleanResultsDir($)
   }
   @sources = split(/\n/, $response);
 
+  # delete the .tim files use for pulsar timing plots
+  $cmd = "find ".$results_dir." -name '*.tim' -delete";
+  Dada::logMsg(2, $dl, "cleanResultsDir: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, $dl, "cleanResultsDir: ".$result." ".$response);
+  if ($result ne "ok") {
+    Dada::logMsgWarn($warn, "cleanResultsDir: ".$cmd." failed: ".$response);
+    return ("fail", "Could not remove remove old .tim files");
+  }
+
   Dada::logMsg(2, $dl, "cleanResultsDir: deleting old pngs");
   removeOldPngs($o);
 }
@@ -546,30 +556,6 @@ sub processObservation($$)
     makePlotsFromArchives($o, $fres_ar, $tres_ar, "120x90", $latest_archive, $source);
     makePlotsFromArchives($o, $fres_ar, $tres_ar, "1024x768", $latest_archive, $source);
     removeOldPngs($o);
-  }
-
-  if ((!(-f $o."/2016-01-01-00:00:00.TB.st.1024x768.png")) && (-f "/data/mopsr/database/pulsar_gallery/".$source."-standard.png"))
-  {
-    $cmd = "cp /data/mopsr/database/pulsar_gallery/".$source."-standard.png ".$o."/2016-01-01-00:00:00.TB.st.1024x768.png";
-    ($result, $response) = Dada::mySystem($cmd);
-    $cmd = "cp /data/mopsr/database/pulsar_gallery/".$source."-standard.png ".$o."/2016-01-01-00:00:00.TB.st.120x90.png";
-    ($result, $response) = Dada::mySystem($cmd);
-  }
-
-  if ((!(-f $o."/2016-01-01-00:00:00.TB.l9.1024x768.png")) && (-f "/data/mopsr/database/pulsar_gallery/".$source."-last9.png"))
-  {
-    $cmd = "cp /data/mopsr/database/pulsar_gallery/".$source."-last9.png ".$o."/2016-01-01-00:00:00.TB.l9.1024x768.png";
-    ($result, $response) = Dada::mySystem($cmd);
-    $cmd = "cp /data/mopsr/database/pulsar_gallery/".$source."-last9.png ".$o."/2016-01-01-00:00:00.TB.l9.120x90.png";
-    ($result, $response) = Dada::mySystem($cmd);
-  }
-
-  if ((!(-f $o."/2016-01-01-00:00:00.TB.re.1024x768.png")) && -f ("/data/mopsr/database/pulsar_gallery/".$source."-residual.png"))
-  {
-    $cmd = "cp /data/mopsr/database/pulsar_gallery/".$source."-residual.png ".$o."/2016-01-01-00:00:00.TB.re.1024x768.png";
-    ($result, $response) = Dada::mySystem($cmd);
-    $cmd = "cp /data/mopsr/database/pulsar_gallery/".$source."-residual.png ".$o."/2016-01-01-00:00:00.TB.re.120x90.png";
-    ($result, $response) = Dada::mySystem($cmd);
   }
 
 }
@@ -953,6 +939,9 @@ sub makePlotsFromArchives($$$$$$)
   my $bp = $timestamp.".TB.bp.".$res.".png";
   my $pm = $timestamp.".TB.pm.".$res.".png";
   my $ta = $timestamp.".TB.ta.".$res.".png";
+  my $tc = $timestamp.".TB.tc.".$res.".png";
+  my $l9 = $timestamp.".TB.l9.".$res.".png";
+  my $st = $timestamp.".TB.st.".$res.".png";
 
   # Combine the archives from the machine into the archive to be processed
   # PHASE vs TIME
@@ -980,16 +969,45 @@ sub makePlotsFromArchives($$$$$$)
   Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
 
   # TOAS
-  $cmd = "pat -j FT -s /home/observer/Timing/ephemerides/".$source."/*.std -A FDM -f tempo2 /home/observer/Timing/profiles/".$source."/*FT  ".$total_t_res." > ".$dir."/temp.tim";
+  if ( ! ( -f $dir."/previous.tim" ) )
+  {
+    $cmd = "pat -j FT -s /home/observer/Timing/ephemerides/".$source."/*.std -A FDM -f tempo2 /home/observer/Timing/profiles/".$source."/*FT > ".$dir."/previous.tim";
+    Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
+    ($result, $response) = Dada::myShellStdout($cmd);
+    Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+  }
+
+  $cmd = "cp ".$dir."/previous.tim ".$dir."/temp.tim";
   Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
-  ($result, $response) = Dada::mySystem($cmd);
+  ($result, $response) = Dada::myShellStdout($cmd);
   Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
   if ($result eq "ok")
   {
-    $cmd = "tempo2 -gr plk -f /home/observer/Timing/ephemerides/".$source."/good.par ".$dir."/temp.tim -publish -image -grdev ".$dir."/".$ta."/png";
+    $cmd = "pat -j FT -s /home/observer/Timing/ephemerides/".$source."/*.std -A FDM -f tempo2 ".$total_t_res." >> ".$dir."/temp.tim";
     Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
-    ($result, $response) = Dada::mySystem($cmd);
+    ($result, $response) = Dada::myShellStdout($cmd);
     Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+    if ($result eq "ok")
+    {
+      $cmd = "remove-outliers2 -c ".$dir."/outlier_sweep1 -s 0.3 -m smooth -p /home/observer/Timing/ephemerides/".$source."/good.par -t ".$dir."/temp.tim > ".$dir."/temp.clean_smooth.tim";
+      $cmd = "remove-outliers2 -c ".$dir."/outlier_sweep2 -m mad -p /home/observer/Timing/ephemerides/".$source."/good.par -t ".$dir."/temp.clean_smooth.tim > ".$dir."/temp.clean.tim";
+      Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+
+      if ($result eq "ok")
+      {
+        $cmd = "tempo2 -gr plk -f /home/observer/Timing/ephemerides/".$source."/good.par ".$dir."/temp.tim -publish -image -grdev ".$dir."/".$ta."/png";
+        Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
+        ($result, $response) = Dada::mySystem($cmd);
+        Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+
+        $cmd = "tempo2 -gr plk -f /home/observer/Timing/ephemerides/".$source."/good.par ".$dir."/temp.clean.tim -publish -image -grdev ".$dir."/".$tc."/png";
+        Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
+        ($result, $response) = Dada::mySystem($cmd);
+        Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+      }
+    }
   }
 
   # POWER MONITOR
@@ -999,6 +1017,56 @@ sub makePlotsFromArchives($$$$$$)
     Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+  }
+
+  $cmd = "find ".$dir." -name '*TB.l9.".$res.".png' | wc -l";
+  Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+  if (($result eq "ok") && ($response eq "0"))
+  {
+    my $ft_dir = "/home/observer/Timing/profiles/".$source;
+    if ( -d $ft_dir )
+    {
+      $cmd = "find ".$ft_dir." -name '*.FT' | sort  | tail -n 9";
+      Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+
+      if ($result eq "ok" && $response ne "")
+      {
+        $response =~ s/\n/ /g;
+        $cmd = "psrplot -jFT -pD -N3,3 -jC ".$args." -D ".$dir."/".$l9."/png ".$response;
+        Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
+        ($result, $response) = Dada::mySystem($cmd);
+        Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+      }
+    }
+  }
+
+  $cmd = "find ".$dir." -name '*.TB.st.".$res.".png' | wc -l";
+  Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+  if (($result eq "ok") && ($response eq "0"))
+  {
+    my $par_dir = "/home/observer/Timing/ephemerides/".$source;
+    if ( -d $par_dir )
+    {
+      $cmd = "find ".$par_dir." -name '*.std' | tail -n 1";
+      Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+
+      if ($result eq "ok" && $response ne "")
+      {
+        $response =~ s/\n/ /;
+        $cmd = "psrplot -p flux -jC ".$args." -D ".$dir."/".$st."/png ".$response;
+        Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
+        ($result, $response) = Dada::mySystem($cmd);
+        Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+      }
+    }
   }
 
   # wait for each file to "appear"
@@ -1022,7 +1090,7 @@ sub makePlotsFromArchives($$$$$$)
   system("mv -f ".$dir."/pvfr_tmp ".$dir."/".$fr);
   system("mv -f ".$dir."/pvfl_tmp ".$dir."/".$fl);
   system("mv -f ".$dir."/bp_tmp ".$dir."/".$bp);
-  if (-f $dir."/TB/power_monitor.log")
+  if ((-f $dir."/TB/power_monitor.log") && (-f $dir."/pm_tmp" ))
   {
     system("mv -f ".$dir."/pm_tmp ".$dir."/".$pm);
   }

@@ -140,9 +140,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
   my $control_thread = threads->new(\&controlThread, $pid_file);
 
   my ($cmd, $result, $response, $raw_header, $full_cmd, $proc_cmd_file);
-  my ($proc_cmd, $proc_dir, $chan_dir);
-
-  $chan_dir  = "CH".sprintf("%02d", $chan_id);
+  my ($proc_cmd);
 
   # continuously run mopsr_dbib for this PWC
   while (!$quit_daemon)
@@ -169,32 +167,28 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
       my %header = Dada::headerToHash($raw_header);
       msg (0, "INFO", "UTC_START=".$header{"UTC_START"}." NCHAN=".$header{"NCHAN"}." NANT=".$header{"NANT"});
 
-      # Add the dada header file to the proc_cmd
-      $proc_cmd_file = $cfg{"CONFIG_DIR"}."/".$header{"BF_PROC_FILE"};
-
-      msg(2, "INFO", "Full path to BF_PROC_FILE: ".$proc_cmd_file);
-      if ( ! ( -f $proc_cmd_file ) ) 
-      {
-        msg(0, "ERROR", "BF_PROC_FILE did not exist: ".$proc_cmd_file);
-        $proc_cmd = "dada_dbnull -z -s -k ".$in_db_key;
-      }
-      elsif ($cfg{"BF_STATE_".$chan_id} eq "active")
+      if ($cfg{"BF_STATE_".$chan_id} eq "active")
       {
         $proc_cmd = "mopsr_dbrescaledb ".$in_db_key." ".$out_db_key." -s -z";
         msg(1, "INFO", "PROC_CMD=".$proc_cmd);
-      }   
+
+        if ($header{"MB_ENABLED"} eq "true")
+        {
+          #$proc_cmd .= " -o 43938.7 -f 0.000129795";
+          #$proc_cmd .= " -f 0.0001 -o 10000";
+          $proc_cmd .= " -i";
+        }
+      }
       else
       {
         msg(0, "INFO", "BF_STATE_".$chan_id." == ".$cfg{"BF_STATE_".$chan_id});
         $proc_cmd = "dada_dbnull -z -s -k ".$in_db_key;
         msg(1, "INFO", "PROC_CMD=".$proc_cmd);
       }
-
   
-      $cmd = "cd ".$proc_dir."; ".$proc_cmd;
-      msg(1, "INFO", "START ".$cmd);
-      ($result, $response) = Dada::mySystemPiped($cmd, $src_log_file, $src_log_sock, "src", sprintf("%02d",$chan_id), $daemon_name, "bf_xpose");
-      msg(1, "INFO", "END   ".$cmd);
+      msg(1, "INFO", "START ".$proc_cmd);
+      ($result, $response) = Dada::mySystemPiped($proc_cmd, $src_log_file, $src_log_sock, "src", sprintf("%02d",$chan_id), $daemon_name, "bf_xpose");
+      msg(1, "INFO", "END   ".$proc_cmd);
       if ($result ne "ok")
       {
         $quit_daemon = 1;
@@ -258,19 +252,19 @@ sub controlThread($)
   my ($cmd, $result, $response);
 
   $cmd = "^dada_header -k ".$in_db_key;
-  msg(1, "INFO", "controlThread: killProcess(".$cmd.", mpsr)");
+  msg(2, "INFO", "controlThread: killProcess(".$cmd.", mpsr)");
   ($result, $response) = Dada::killProcess($cmd, "mpsr");
-  msg(1, "INFO", "controlThread: killProcess() ".$result." ".$response);
+  msg(3, "INFO", "controlThread: killProcess() ".$result." ".$response);
 
   $cmd = "^dada_dbnull -k ".$in_db_key;
-  msg(1, "INFO", "controlThread: killProcess(".$cmd.", mpsr)");
+  msg(2, "INFO", "controlThread: killProcess(".$cmd.", mpsr)");
   ($result, $response) = Dada::killProcess($cmd, "mpsr");
-  msg(1, "INFO", "controlThread: killProcess() ".$result." ".$response);
+  msg(3, "INFO", "controlThread: killProcess() ".$result." ".$response);
 
   $cmd = "^mopsr_dbrescaledb ".$in_db_key;
-  msg(1, "INFO", "controlThread: killProcess(".$cmd.", mpsr)");
+  msg(2, "INFO", "controlThread: killProcess(".$cmd.", mpsr)");
   ($result, $response) = Dada::killProcess($cmd, "mpsr");
-  msg(1, "INFO", "controlThread: killProcess() ".$result." ".$response);
+  msg(3, "INFO", "controlThread: killProcess() ".$result." ".$response);
 
   if ( -f $pid_file) {
     msg(2, "INFO", "controlThread: unlinking PID file");

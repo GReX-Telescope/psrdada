@@ -21,6 +21,8 @@ use strict;         # strict mode (like -Wall)
 use threads;
 use threads::shared;
 
+use DBI;
+
 
 #
 # Sanity check to prevent multiple copies of this daemon running
@@ -44,10 +46,12 @@ our $srv_node_info : shared      = "";
 our $aq_node_info : shared       = "";
 our $bf_node_info : shared       = "";
 our $bp_node_info : shared       = "";
+our $bs_node_info : shared       = "";
 our $srv_node_info_lock : shared = "";
 our $aq_node_info_lock : shared  = "";
 our $bf_node_info_lock : shared  = "";
 our $bp_node_info_lock : shared  = "";
+our $bs_node_info_lock : shared  = "";
 our $curr_obs : shared           = "";
 our $curr_obs_lock : shared      = "";
 our $status_info : shared        = "";
@@ -192,31 +196,55 @@ our $mgt_lock_string_lock : shared = "";
           Dada::logMsg(2, DL, "<- ".$string);
           my $r = "";
 
-          if    ($string eq "srv_node_info")
+          if ($string eq "srv_node_info")
           { 
-            lock $srv_node_info_lock;
-            print $rh $srv_node_info."\n";
-            Dada::logMsg(2, DL, "-> ".$srv_node_info);
+            my $tmp_node_info;
+            {
+              lock $srv_node_info_lock;
+              $tmp_node_info = $srv_node_info;
+            }
+            print $rh $tmp_node_info."\n";
+            Dada::logMsg(2, DL, "-> ".$tmp_node_info);
           }
           elsif ($string eq "aq_node_info")
           {
-            lock $aq_node_info_lock;
-            print $rh $aq_node_info."\n";
-            Dada::logMsg(2, DL, "-> ".$aq_node_info);
+            my $tmp_node_info;
+            {
+              lock $aq_node_info_lock;
+              $tmp_node_info = $aq_node_info;
+            }
+            print $rh $tmp_node_info."\n";
+            Dada::logMsg(2, DL, "-> ".$tmp_node_info);
           }
           elsif ($string eq "bf_node_info")
           {
-            lock $bf_node_info_lock;
-            #Dada::logMsg(1, DL, "<- bf_node_info");
-            print $rh $bf_node_info."\n";
-            #Dada::logMsg(1, DL, "-> wrote ".(length($bf_node_info)+1)." bytes");
-            Dada::logMsg(2, DL, "-> ".$bf_node_info);
+            my $tmp_node_info;
+            {
+              lock $bf_node_info_lock;
+              $tmp_node_info = $bf_node_info;
+            }
+            print $rh $tmp_node_info."\n";
+            Dada::logMsg(2, DL, "-> ".$tmp_node_info);
           }
           elsif ($string eq "bp_node_info")
           {
-            lock $bp_node_info_lock;
-            print $rh $bp_node_info."\n";
-            Dada::logMsg(2, DL, "-> ".$bp_node_info);
+            my $tmp_node_info;
+            {
+              lock $bp_node_info_lock;
+              $tmp_node_info = $bp_node_info;
+            }
+            print $rh $tmp_node_info."\n";
+            Dada::logMsg(2, DL, "-> ".$tmp_node_info);
+          }
+          elsif ($string eq "bs_node_info")
+          {
+            my $tmp_node_info;
+            {
+              lock $bs_node_info_lock;
+              $tmp_node_info = $bs_node_info;
+            }
+            print $rh $tmp_node_info."\n";
+            Dada::logMsg(2, DL, "-> ".$tmp_node_info);
           }
           elsif ($string eq "img_info")
           { 
@@ -261,6 +289,7 @@ our $mgt_lock_string_lock : shared = "";
           } 
 
           # experimental!
+          #$rh->shutdown(1);
           $read_set->remove($rh);
           close($rh);
         }
@@ -380,6 +409,10 @@ sub currentInfoThread($)
       {
         lock $curr_obs_lock;
         %cfg_file = Dada::readCFGFile($results_dir."/".$obs."/obs.info"); 
+
+        #$x  = "<?xml version='1.0' encoding='ISO-8859-1'?>";
+        #$x .= "<current_obs_info>";
+        #$x .= "<source>".$cfg_file{"SOURCE"}."</source>";
 
         $curr_obs = "SOURCE:::".$cfg_file{"SOURCE"}.";;;";
         $curr_obs .= "RA:::".$cfg_file{"RA"}.";;;";
@@ -740,9 +773,43 @@ sub imageInfoThread($)
           lock $image_string_lock;
           $image_string = "";
 
+          my $tb_idx = 0;
+          my $ant_type = "";
           foreach $ant ( @ants )
           {
-            $image_string .= "<ant name='".$ant."'>";
+my $name_extras = "";
+            # determine the type of antenna
+            if (-f $results_dir."/".$utc_start."/".$ant."/".$ant."_f.tot")
+            {
+              my $driver = "SQLite";
+my $database = $results_dir."/strategy.db";
+my $dsn = "DBI:$driver:dbname = $database";
+my $userid = "";
+my $password = "";
+my $dbh = DBI->connect($dsn, $userid, $password, {RaiseError => 1}) or die $DBI::errstr;
+
+my $stmt = qq(SELECT science FROM strategy WHERE psrj = $ant;);
+my $sth = $dbh->prepare( $stmt );
+my $rv = $sth->execute () or die $DBI::errstr;
+my @row = $sth->fetchrow_array();
+$name_extras = $row[0];
+              $ant_type = "TB".$tb_idx;
+              $tb_idx++;
+            }
+            elsif (-f $results_dir."/".$utc_start."/".$ant."/cc.sum")
+            {
+              $ant_type = "CORR";
+            }
+            elsif (-f $results_dir."/".$utc_start."/".$ant."/all_candidates.dat")
+            {
+              $ant_type = "FB";
+            }
+            else
+            {
+              $ant_type = "UNKNOWN";
+            }
+
+            $image_string .= "<ant name='".$ant."\r\n".$name_extras."' type='".$ant_type."'>";
             foreach $key ( keys %{$to_use{$ant}} )
             {
               ($type, $res) = split(/\./, $key);
@@ -893,12 +960,15 @@ sub nodeInfoThread()
   my %aqs = ();
   my %bfs = ();
   my %bps = ();
+  my %bss = ();
 
   my $port = $cfg{"CLIENT_MASTER_PORT"};
   my %bf_cfg = Mopsr::getConfig("bf");
   my $bf_port = $bf_cfg{"CLIENT_MASTER_PORT"};
   my %bp_cfg = Mopsr::getConfig("bp");
   my $bp_port = $bp_cfg{"CLIENT_MASTER_PORT"};
+  my %bs_cfg = Mopsr::getConfig("bs");
+  my $bs_port = $bs_cfg{"CLIENT_MASTER_PORT"};
 
   my $machine;
   my @machines = ();
@@ -914,6 +984,7 @@ sub nodeInfoThread()
   my @aq_socks = ();
   my @bf_socks = ();
   my @bp_socks = ();
+  my @bs_socks = ();
   my @hosts = ();
 
   # setup the list of machines that we will poll
@@ -925,6 +996,9 @@ sub nodeInfoThread()
   }
   for ($i=0; $i<$bp_cfg{"NUM_BP"}; $i++) {
     $bps{$bp_cfg{"BP_".$i}} = 1;
+  }
+  for ($i=0; $i<$bs_cfg{"NUM_BS"}; $i++) {
+    $bss{$bs_cfg{"BS_".$i}} = 1;
   }
 
   @hosts = keys %aqs;
@@ -939,6 +1013,11 @@ sub nodeInfoThread()
   @hosts = keys %bps;
   for ($i=0; $i<=$#hosts; $i++) {
     $bp_socks[$i] = Dada::connectToMachine ($hosts[$i], $bp_cfg{"CLIENT_MASTER_PORT"});
+  }
+  
+  @hosts = keys %bss;
+  for ($i=0; $i<=$#hosts; $i++) {
+    $bs_socks[$i] = Dada::connectToMachine ($hosts[$i], $bs_cfg{"CLIENT_MASTER_PORT"});
   }
   
   my $srv_sock = Dada::connectToMachine($cfg{"SERVER_HOST"}, $cfg{"CLIENT_MASTER_PORT"});
@@ -1049,6 +1128,32 @@ sub nodeInfoThread()
       }
       Dada::logMsg(2, DL, "nodeInfoThread: ".$bp_node_info);
 
+      @results = ();
+      @responses = ();
+
+      for ($i=0; ((!$quit_daemon) && $i<=$#bs_socks); $i++)
+      {
+        if ($bs_socks[$i])
+        {
+          ($results[$i], $responses[$i]) = Dada::sendTelnetCommand ($bs_socks[$i], "get_status");
+        }
+        else
+        {
+          $results[$i] = "fail";
+          $responses[$i] = "<status><host>".$machine."</host></status>";
+        }
+      }
+
+      {
+        lock $bs_node_info_lock;
+        $bs_node_info = "<bs_node_statuses>";
+        for ($i=0; $i<=$#responses; $i++) {
+          $bs_node_info .= $responses[$i];
+        }
+        $bs_node_info .= "</bs_node_statuses>";
+      }
+      Dada::logMsg(2, DL, "nodeInfoThread: ".$bs_node_info);
+
       @hosts = keys %aqs;
       for ($i=0; $i<=$#hosts; $i++) {
         if (!$aq_socks[$i]) {
@@ -1067,6 +1172,13 @@ sub nodeInfoThread()
       for ($i=0; $i<=$#hosts; $i++) {
         if (!$bp_socks[$i]) {
           $bp_socks[$i] = Dada::connectToMachine ($hosts[$i], $bp_cfg{"CLIENT_MASTER_PORT"});
+        }
+      }
+
+      @hosts = keys %bss;
+      for ($i=0; $i<=$#hosts; $i++) {
+        if (!$bs_socks[$i]) {
+          $bs_socks[$i] = Dada::connectToMachine ($hosts[$i], $bs_cfg{"CLIENT_MASTER_PORT"});
         }
       }
     }

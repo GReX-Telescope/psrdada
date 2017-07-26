@@ -63,6 +63,7 @@ sub setupClientType()
   my $host = Dada::getHostMachineName();
   my $i = 0;
   my $found = 0;
+  my %bp_ct =Mopsr::getCornerturnConfig("bp");   # read the BP cornerturn
 
   %Dada::client_master_control::pwcs = ();
 
@@ -132,11 +133,83 @@ sub setupClientType()
         foreach $id (@ids) 
         {
           $key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $i, $cfg{"NUM_BF"}, $id);
+
           # check nbufs and bufsz
-          if ((!defined($cfg{"BLOCK_BUFSZ_".$id})) || (!defined($cfg{"BLOCK_NBUFS_".$id}))) {
+          if (!defined($cfg{"BLOCK_NBUFS_".$id}))
+          {
             return 0;
           }
-          $Dada::client_master_control::pwcs{$i}{"dbs"}{$id} = $key;
+          my $bufsz;
+          if (defined($cfg{"BLOCK_BUFSZ_".$id}))
+          {
+            $bufsz =  $cfg{"BLOCK_BUFSZ_".$id};
+          }
+          else
+          {
+            if (!defined($cfg{"BLOCK_NSAMP_".$id}))
+            {
+              return 0;
+            }
+
+            # compute bufsz from params
+            my $nsamp = $cfg{"BLOCK_NSAMP_".$id};
+            my $nchan = ($cfg{"RECV_CHAN_LAST_".$i} - $cfg{"RECV_CHAN_FIRST_".$i}) + 1;
+            my $nbit = 8;
+            my $npol = 1;
+            my $ndim = 2;
+            my $nant = $cfg{"NANT"};
+            my $nbeam = 1;
+
+            if ($id eq $cfg{"FAN_BEAMS_DATA_BLOCK"})
+            {
+              $nbit = 32;
+              $nant = 1;
+              $ndim = 1;
+              $nbeam = $bp_ct{"NBEAM"};
+            }
+
+            if ($id eq $cfg{"SENDING_DATA_BLOCK"})
+            {
+              $nant = 1;
+              $ndim = 1;
+              $nbeam = $bp_ct{"NBEAM"};
+            }
+
+            if (($id eq $cfg{"TIED_BEAM_0_DATA_BLOCK"}) || ($id eq $cfg{"TIED_BEAM_1_DATA_BLOCK"}) ||
+                ($id eq $cfg{"TIED_BEAM_2_DATA_BLOCK"}) || ($id eq $cfg{"TIED_BEAM_3_DATA_BLOCK"}))
+            {
+              $nant = 1;
+              $nbit = 32;
+            }
+
+            $bufsz = Dada::client_master_control::computeDBSize($nsamp, $nchan, $npol, $ndim, $nbit, $nant, $nbeam);
+            print "DB id=".$id." key=".$key." size=".$bufsz."\n";
+          }
+
+          $Dada::client_master_control::pwcs{$i}{"dbs"}{$id}{"key"} = $key;
+          $Dada::client_master_control::pwcs{$i}{"dbs"}{$id}{"nbufs"} = $cfg{"BLOCK_NBUFS_".$id};
+          $Dada::client_master_control::pwcs{$i}{"dbs"}{$id}{"bufsz"} = $bufsz;
+
+          my $nread = 1;
+          if (defined $cfg{"BLOCK_NREAD_".$id})
+          {
+            $nread = $cfg{"BLOCK_NREAD_".$id};
+          }
+          $Dada::client_master_control::pwcs{$i}{"dbs"}{$id}{"nread"} = $nread;
+
+          my $page = "false";
+          if (defined $cfg{"BLOCK_PAGE_".$id})
+          {
+            $page = $cfg{"BLOCK_PAGE_".$id};
+          }
+          $Dada::client_master_control::pwcs{$i}{"dbs"}{$id}{"page"} = $page;
+
+          my $numa = "-1";
+          if (defined $cfg{"BLOCK_NUMA_".$id})
+          {
+            $numa = $cfg{"BLOCK_NUMA_".$id};
+          }
+          $Dada::client_master_control::pwcs{$i}{"dbs"}{$id}{"numa"} = $numa;
         } 
 
         $Dada::client_master_control::pwcs{$i}{"daemons"} = [split(/ /,$cfg{"CLIENT_DAEMONS"})];

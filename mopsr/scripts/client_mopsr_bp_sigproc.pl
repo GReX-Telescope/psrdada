@@ -135,6 +135,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
 
   msg (0, "INFO", "STARTING SCRIPT");
 
+  my $bp_tag = sprintf ("BP%02d", $proc_id);
   my $control_thread = threads->new(\&controlThread, $pid_file);
 
   my ($cmd, $result, $response, $raw_header);
@@ -170,10 +171,35 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
     else
     {
       my %header = Dada::headerToHash($raw_header);
-      msg (0, "INFO", "UTC_START=".$header{"UTC_START"}." NCHAN=".$header{"NCHAN"}." NANT=".$header{"NANT"});
+      msg (0, "INFO", "UTC_START=".$header{"UTC_START"}." SOURCE=".$header{"SOURCE"}." NCHAN=".$header{"NCHAN"}." NANT=".$header{"NANT"});
 
-      $proc_dir = $cfg{"CLIENT_RECORDING_DIR"}."/".$header{"UTC_START"};
+      # Fan Beams dont really have a "SOURCE" per se
+      $proc_dir = $cfg{"CLIENT_RECORDING_DIR"}."/".$bp_tag."/".$header{"UTC_START"}."/FB";
       Dada::mkdirRecursive($proc_dir, 0755);
+
+      # create an obs.header file for the Fan Beam
+      my $file = $proc_dir."/obs.header";
+      msg(0, "INFO", "main: creating ".$file);
+      open (FH,">".$file.".tmp");
+      my $k = "";
+      foreach $k ( keys %header)
+      {
+        print FH Dada::headerFormat($k, $header{$k})."\n";
+      }
+      close FH;
+      rename($file.".tmp", $file);
+
+      # transfer this header file to the server
+      msg(1, "INFO", "main: transferObsHeader(".$proc_dir.", ".$header{"UTC_START"}.", FB");
+      ($result, $response) = transferObsHeader ($proc_dir, $header{"UTC_START"}, "FB");
+      if ($result ne "ok")
+      {
+        msg(0, "WARN", "transferObsHeader failed: ".$response);
+      }
+      else
+      {
+        unlink ($proc_dir."/obs.header");
+      }
 
       chdir $proc_dir;
 
@@ -200,7 +226,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
         }
       }
 
-      $cmd = "mv obs.processing obs.finished";
+      $cmd = "mv obs.processing obs.completed";
       msg(2, "INFO", "main: ".$cmd);
       ($result, $response) = Dada::mySystem($cmd);
       msg(3, "INFO", "main: ".$result." ".$response);
@@ -208,7 +234,6 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
       {
         msg(0, "WARN", $cmd." failed: ".$response);
       }
-
 
       chdir $cfg{"CLIENT_RECORDING_DIR"};
     }
@@ -225,6 +250,59 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
 
   exit (0);
 }
+
+
+#
+# transfers the obs.header file to the server
+#
+sub transferObsHeader($$$)
+{
+  my ($local_dir, $utc_start, $source) = @_;
+  my ($cmd, $result, $response);
+
+  my $local_file = $local_dir."/obs.header";
+  my $remote_file = $utc_start."/".$source."/obs.header.".sprintf("BP%02d", $proc_id);
+
+  msg(2, "INFO", "transferObsHeader: local_file=".$local_file);
+  msg(2, "INFO", "transferObsHeader: remote_file=".$remote_file);
+
+  if (-f $local_file)
+  {
+    my $ntries = 0;
+    while ($ntries < 3)
+    {
+      $cmd = "rsync -a --no-g --chmod=go-ws --password-file=/home/mpsr/.ssh/rsync_passwd ".
+             $local_file." upload\@172.17.228.204::results/".$remote_file;
+
+      msg(2, "INFO", "transferObsHeader: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      msg(2, "INFO", "transferObsHeader: ".$result." ".$response);
+      if ($result ne "ok")
+      {
+        if ($quit_daemon)
+        {
+          msg(0, "INFO", "transfer of ".$utc_start." interrupted");
+          return ("fail", "transfer interrupted");
+        }
+        else
+        {
+          $ntries += 1;
+          msg(0, "INFO", "transfer of ".$local_file." failed: ".$response);
+          sleep (2);
+        }
+      }
+      else
+      {
+        return ("ok", "");
+      }
+    }
+    msg(0, "WARN", "transfer of ".$local_file." failed: ".$response);
+    return ("fail", "transfer of ".$local_file." failed");
+
+  }
+  return ("ok", "file did not exist: ".$local_file);
+}
+
 
 #
 # Logs a message to the nexus logger and print to STDOUT with timestamp

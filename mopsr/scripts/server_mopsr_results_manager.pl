@@ -21,6 +21,7 @@ our %cfg;
 our $quit_daemon : shared;
 our $warn;
 our $error;
+our $hires;
 
 #
 # Initialize global variables
@@ -31,7 +32,11 @@ $daemon_name = Dada::daemonBaseName($0);
 $warn = ""; 
 $error = ""; 
 $quit_daemon = 0;
-
+$hires = 0;
+if ($cfg{"CONFIG_NAME"} =~ m/320chan/)
+{
+  $hires = 1;
+}
 
 # Autoflush STDOUT
 $| = 1;
@@ -500,7 +505,13 @@ sub processCorrObservation($$)
   }
   $nchan = $response;
 
-  if ($nchan != ($#chans + 1))
+  my $req_chans = $nchan;
+  if ($hires)
+  {
+    $req_chans = 32;
+  }
+    
+  if (($#chans + 1) != $req_chans)
   {
     Dada::logMsg(0, $dl, "processCorrObservation: only ".($#chans +1)." of ".$nchan." CH dirs");
     return ("fail", "not all chan dirs existed");
@@ -556,11 +567,11 @@ sub processCorrObservation($$)
         {
           $coarse_nchan = $filesize / ($nant * 4);
         }
-        $band_nchan = $coarse_nchan * $nchan;
+        $band_nchan = $coarse_nchan * $req_chans;
       }
     }
 
-    if ($unprocessed{$file} == $nchan) 
+    if ($unprocessed{$file} == $req_chans)
     {
       Dada::logMsg(2, $dl, "processCorrObservation: appendCorrFile(".$file.", ".$coarse_nchan.")");
       ($result, $response) = appendCorrFile($file, $coarse_nchan);
@@ -665,6 +676,10 @@ sub processCorrObservation($$)
   if (($n_appended > 0) && (-f "cc.sum"))
   {
     my $tsamp = 1.28;
+    if ($hires)
+    {
+      $tsamp = 10.24;
+    }
     my $band_tsamp = $tsamp / $nchan;
 
     # get the ranked antennas from file
@@ -693,6 +708,8 @@ sub processCorrObservation($$)
       }
     }
 
+    Dada::logMsg(1, $dl, "processCorrObservation: ant_a=".$ant_a." ant_b=".$ant_b);
+
     # now find the antenna indexes for these modules
     $cmd = "grep -n ".$ant_a." obs.antenna | awk -F: '{print \$1}'";
     Dada::logMsg(2, $dl, "processCorrObservation: ".$cmd);
@@ -717,9 +734,13 @@ sub processCorrObservation($$)
     $ant_a_idx -= 1;
     $ant_b_idx -= 1;
 
-    $cmd = "mopsr_solve_delays ".$band_nchan." cc.sum obs.antenna -t ".$band_tsamp." -p -a ".$ant_a_idx." -d ".$ant_b_idx." -r /home/dada/phonecall";
+    #$cmd = "mopsr_solve_delays ".$band_nchan." cc.sum obs.antenna -t ".$band_tsamp." -p -a ".$ant_a_idx." -d ".$ant_b_idx." -r /home/dada/phonecall";
     $cmd = "mopsr_solve_delays ".$band_nchan." cc.sum obs.antenna -t ".$band_tsamp." -p -a ".$ant_a_idx." -d ".$ant_b_idx." -r /home/dada/copradar";
-    Dada::logMsg(2, $dl, "processCorrObservation: ".$cmd);
+    if ($hires)
+    {
+      $cmd = "mopsr_solve_delays ".$band_nchan." cc.sum obs.antenna -t ".$band_tsamp." -p -a ".$ant_a_idx." -d ".$ant_b_idx." -r /home/dada/copradar_hires";
+    }
+    Dada::logMsg(1, $dl, "processCorrObservation: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     Dada::logMsg(3, $dl, "processCorrObservation: ".$result." ".$response);
     if ($result ne "ok")

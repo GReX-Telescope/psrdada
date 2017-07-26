@@ -53,21 +53,26 @@ if ($opts{h})
 my %aq_cfg = Mopsr::getConfig("aq");
 my %bf_cfg = Mopsr::getConfig("bf");
 my %bp_cfg = Mopsr::getConfig("bp");
+my %bs_cfg = Mopsr::getConfig("bs");
 
 # socket connections to each of the master control scripts
 my $num_aq = 0;
 my $num_bf = 0;
 my $num_bp = 0;
+my $num_bs = 0;
 
 my %aq_hosts_counts = ();
 my %bf_hosts_counts = ();
 my %bp_hosts_counts = ();
-my @bp_hosts = ();
+my %bs_hosts_counts = ();
 my @aq_hosts = ();
 my @bf_hosts = ();
-my @bps = ();
+my @bp_hosts = ();
+my @bs_hosts = ();
 my @aqs = ();
 my @bfs = ();
+my @bps = ();
+my @bss = ();
 my $srv;
 
 my ($i, $port, $host);
@@ -149,6 +154,31 @@ for ($i=0; $i<$num_bp; $i++)
   }
 }
 
+$port = $bs_cfg{"CLIENT_MASTER_PORT"};
+for ($i=0; $i<$bs_cfg{"NUM_BS"}; $i++)
+{
+  $host = $bs_cfg{"BS_".$i};
+  if (!defined ($bs_hosts_counts{$host}))
+  { 
+    $bs_hosts_counts{$host} = 0;
+  }
+  $bs_hosts_counts{$host} += 1;
+}
+@bs_hosts = sort keys %bs_hosts_counts;
+$num_bs = $#bs_hosts + 1;
+debugMessage(1, "Connecting to ".$num_bs." BS master control daemons");
+for ($i=0; $i<$num_bs; $i++)
+{
+  $host = $bs_hosts[$i];
+  debugMessage(2, "connecting to BS[".$i."] ".$host.":".$port);
+  $bss[$i] = Dada::connectToMachine($host, $port);
+  if (!$bss[$i])
+  {
+    debugMessage(0, "ERROR: could not connect to BS[".$i."] ".$host.":".$port);
+    exit (1);
+  }
+}
+
 $host = $cfg{"SERVER_HOST"};
 $port = $cfg{"CLIENT_MASTER_PORT"};
 debugMessage(1, "Connecting to SRV master control daemon");
@@ -175,6 +205,9 @@ threadedTelnetCommand("cmd=stop_daemons", \@bfs);
 debugMessage(1, "Stopping BP daemons");
 threadedTelnetCommand("cmd=stop_daemons", \@bps);
 
+debugMessage(1, "Stopping BS daemons");
+threadedTelnetCommand("cmd=stop_daemons", \@bss);
+
 sleep(2);
 
 debugMessage(1, "Stopping SRV daemons");
@@ -190,6 +223,9 @@ threadedTelnetCommand("cmd=destroy_dbs", \@bfs);
 debugMessage(1, "Destroying BP datablocks");
 threadedTelnetCommand("cmd=destroy_dbs", \@bps);
 
+debugMessage(1, "Destroying BS datablocks");
+threadedTelnetCommand("cmd=destroy_dbs", \@bss);
+
 sleep(2);
 
 debugMessage(1, "Stopping SRV master control");
@@ -203,6 +239,9 @@ threadedTelnetCommand("cmd=stop_daemon&args=mopsr_master_control", \@bfs);
 
 debugMessage(1, "Stopping BP master control");
 threadedTelnetCommand("cmd=stop_daemon&args=mopsr_master_control", \@bps);
+
+debugMessage(1, "Stopping BS master control");
+threadedTelnetCommand("cmd=stop_daemon&args=mopsr_master_control", \@bss);
 
 
 debugMessage(1, "Closing Sockets");
@@ -228,6 +267,13 @@ for ($i=0; $i<$num_bp; $i++)
   if ($bps[$i])
   {
     $bps[$i]->close();
+  }
+}
+for ($i=0; $i<$num_bs; $i++)
+{
+  if ($bss[$i])
+  {
+    $bss[$i]->close();
   }
 }
 

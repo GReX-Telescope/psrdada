@@ -66,7 +66,7 @@ our $tobs_secs : shared;
 #
 # global variable initialization
 #
-$dl = 2;
+$dl = 1;
 $daemon_name = Dada::daemonBaseName($0);
 %cfg = Mopsr::getConfig();
 %site_cfg = Dada::readCFGFileIntoHash($cfg{"CONFIG_DIR"}."/site.cfg", 0);
@@ -248,6 +248,7 @@ sub dumpAntennaMapping($$)
 
       if ( -f $pm_file )
       {
+        logMsg(3, $dl, "dumpAntennaMapping: pm_file=".$pm_file);
         my %pm = Dada::readCFGFileIntoHash($pm_file, 1);
         my @pfb_mods = split(/ +/, $pm{$pfb_id});
         my $pfb_mod;
@@ -282,23 +283,19 @@ sub dumpAntennaMapping($$)
         foreach $rx ( @sp_keys_sorted )
         {
           ($pfb, $pfb_input) = split(/ /, $sp{$rx});
-          logMsg(3, $dl, "dumpAntennaMapping: pfb=".$pfb." pfb_input=".$pfb_input);
+          logMsg(3, $dl, "dumpAntennaMapping: rx=".$rx." pfb=".$pfb." pfb_input=".$pfb_input);
+
+          # the this RX board matches the PFB board we are currently processing
           if ($pfb eq $pfb_id)
           {
-            my $pfb_mod;
-            foreach $pfb_mod (@pfb_mods)
+            my $j;
+            # determine which index this RX board will have in the antenna ordering
+            for ($j=0; $j<=$#pfb_mods; $j++)
             {
-              if ($pfb_input eq $pfb_mod)
+              if ($pfb_input eq $pfb_mods[$j])
               {
-                if (($imod >= $first_ant) && ($imod <= $last_ant))
-                {
-                  $mods[$imod] = $rx;
-                  $imod++;
-                }
-                else
-                {
-                  return ("fail", "failed to identify modules correctly");
-                }
+                $mods[($first_ant + $j)] = $rx;
+                logMsg(3, $dl, "getOrderedModules: mods[".($first_ant + $j)."]=".$rx);
               }
             }
           }

@@ -261,7 +261,7 @@ sub getObsToSend()
 
   # find the oldest observation (based on UTC_START) to send
   $cmd = "find ".$results_dir." -mindepth 2 -maxdepth 2 -type f -name 'obs.finished'  -printf '\%h\n' | awk -F/ '{print \$(NF)}' | sort -n";
-  Dada::logMsg(3, $dl, "getObsToSend: ".$cmd);
+  Dada::logMsg(2, $dl, "getObsToSend: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(3, $dl, "getObsToSend: ".$result." ".$response);
   if ($result ne "ok")
@@ -276,37 +276,41 @@ sub getObsToSend()
   {
     $line = $lines[$i];
 
-    if ( ! ( ( -d $results_dir."/".$line."/TB" ) && 
-             ( -d $archives_dir."/".$line."/TB") && 
-             ( -f $results_dir."/".$line."/TB/obs.header" ) ) )
+    # Tied Beams should have a Jname as a subdirectory
+    $cmd = "find ".$results_dir."/".$line." -mindepth 1 -maxdepth 1 -type d -printf '%f\n'";
+    Dada::logMsg(2, $dl, "getObsToSend: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, $dl, "getObsToSend: ".$result." ".$response);
+
+    if (($result ne "ok") || ($response eq ""))
     {
-      Dada::logMsg(3, $dl, "getObsToSend: ".$line." did not contain a TB directory");
+      Dada::logMsg(2, $dl, "getObsToSend: could not find and subdirs of ".$line);
       next;
     }
-    else
-    {
-      $obs = $line;
-      
-      $cmd = "grep ^SOURCE ".$results_dir."/".$obs."/TB/obs.header | awk '{print \$2}'";
-      ($result, $response) = Dada::mySystem($cmd);
-      Dada::logMsg(3, $dl, "getObsToSend: ".$result." ".$response);
-      if ($result ne "ok")
-      {
-        Dada::logMsgWarn($warn, "getObsToSend: could not extrat SOURCE from ".$obs."/TB/obs.header");
-        next;
-      }
-      $src = $response;
 
-      $cmd = "grep ^FREQ ".$results_dir."/".$obs."/TB/obs.header | awk '{print \$2}'";
-      ($result, $response) = Dada::mySystem($cmd);
-      Dada::logMsg(3, $dl, "getObsToSend: ".$result." ".$response);
-      if ($result ne "ok")
+    my @sources = split(/\n/, $response);
+    my $j;
+    for ($j=0; (!$found_obs && $j<=$#sources); $j++)
+    {
+      if (-f $results_dir."/".$line."/".$sources[$j]."/obs.header")
       {
-        Dada::logMsgWarn($warn, "getObsToSend: could not extrat FREQ from ".$obs."/TB/obs.header");
-        next;
+        if ($sources[$j] =~ m/^J/)
+        {
+          $obs = $line;
+          $src = $sources[$j];
+        
+          $cmd = "grep ^FREQ ".$results_dir."/".$obs."/".$src."/obs.header | awk '{print \$2}'";
+          ($result, $response) = Dada::mySystem($cmd);
+          Dada::logMsg(3, $dl, "getObsToSend: ".$result." ".$response);
+          if ($result ne "ok")
+          {
+            Dada::logMsgWarn($warn, "getObsToSend: could not extrat FREQ from ".$obs."/TB/obs.header");
+            next;
+          }
+          $freq = $response;
+          $found_obs = 1;
+        }
       }
-      $freq = $response;
-      $found_obs = 1;
     }
   }
 
@@ -352,13 +356,13 @@ sub transferTB($$$)
   $transfer_kill = "pkill -f '^rsync ".$archives_dir."/".$obs."'";
 
   # rsync the results dir 
-  $cmd = "rsync ".$results_dir."/".$obs."/TB/*.tot ".$results_dir."/".$obs."/TB/obs.header ".$user."@".$host.":".$path."/TB/".$src."/".$obs."/".$freq."/ ".$rsync_options;
+  $cmd = "rsync ".$results_dir."/".$obs."/".$src."/*.tot ".$results_dir."/".$obs."/".$src."/obs.header ".$results_dir."/".$obs."/molonglo_modules.txt ".$user."@".$host.":".$path."/TB/".$src."/".$obs."/".$freq."/ ".$rsync_options;
   Dada::logMsg(2, $dl, "transferTB: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(3, $dl, "transferTB: ".$result." ".$response);
 
   # rsync the archives dir
-  $cmd = "rsync ".$archives_dir."/".$obs."/TB/ ".$user."@".$host.":".$path."/TB/".$src."/".$obs."/".$freq." ".$rsync_options;
+  $cmd = "rsync ".$archives_dir."/".$obs."/".$src."/ ".$user."@".$host.":".$path."/TB/".$src."/".$obs."/".$freq." ".$rsync_options;
   Dada::logMsg(2, $dl, "transferTB: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(3, $dl, "transferTB: ".$result." ".$response);
@@ -492,7 +496,7 @@ sub transferFB($$$)
   $transfer_kill = "pkill -f '^rsync ".$archives_dir."/".$obs."'";
 
   # find the "central" fan beam
-  $cmd = "ls -1d ".$archives_dir."/".$obs."/BEAM_??? | awk -F/ '{print \$NF}'";
+  $cmd = "ls -1d ".$archives_dir."/".$obs."/FB/BEAM_??? | awk -F/ '{print \$NF}'";
   Dada::logMsg(2, $dl, "transferFB: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(3, $dl, "transferFB: ".$result." ".$response);
@@ -505,7 +509,7 @@ sub transferFB($$$)
     my $centre_beam = $beams[$ibeam];
 
     # rsync the archives dir 
-    $cmd = "rsync ".$archives_dir."/".$obs."/".$centre_beam." ".$user."@".$host.":".$path."/FB/".$src."/".$obs."/".$freq."/ ".$rsync_options;
+    $cmd = "rsync ".$archives_dir."/".$obs."/FB/".$centre_beam." ".$user."@".$host.":".$path."/FB/".$src."/".$obs."/".$freq."/ ".$rsync_options;
     Dada::logMsg(2, $dl, "transferFB: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     Dada::logMsg(3, $dl, "transferFB: ".$result." ".$response);

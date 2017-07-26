@@ -1,7 +1,7 @@
 #!/usr/bin/env perl
 
 # 
-# MOPSR Superb AQ -> DBEVENT -> DUMP script
+# MOPSR DBEVENT -> DUMP script
 #
 # Author:   Andrew Jameson
 # 
@@ -196,7 +196,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
 	  	else
 		  { 
         $cmd = "dada_dbevent ".$recv_db_key." ".$dump_db_key.
-               " -p ".$event_port." -t 96 -b 90";
+               " -p ".$event_port." -t 20 -b 90";
       }
 
       logMsg(1, "INFO", "START ".$cmd);
@@ -286,7 +286,7 @@ sub logMsg($$$) {
       $sys_log_sock = Dada::nexusLogOpen($log_host, $sys_log_port);
     }
     if ($sys_log_sock) {
-      Dada::nexusLogMessage($sys_log_sock, $pwc_id, $time, "sys", $type, "superb", $msg);
+      Dada::nexusLogMessage($sys_log_sock, $pwc_id, $time, "sys", $type, "dbevent", $msg);
     }
     print "[".$time."] ".$msg."\n";
   }

@@ -45,6 +45,7 @@ our $sys_log_sock;
 our $src_log_sock;
 our $sys_log_file;
 our $src_log_file;
+our $hires;
 
 
 #
@@ -64,6 +65,11 @@ $sys_log_sock = 0;
 $src_log_sock = 0;
 $sys_log_file = "";
 $src_log_file = "";
+$hires = 0;
+if (($cfg{"CONFIG_NAME"} =~ m/320chan/) || ($cfg{"CONFIG_NAME"} =~ m/312chan/))
+{
+  $hires = 1;
+}
 
 # Check command line argument
 if ($#ARGV != 0)
@@ -132,7 +138,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
     print STDERR "Could open src log port: ".$log_host.":".$src_log_port."\n";
   }
 
-  msg (0, "INFO", "STARTING SCRIPT");
+  msg (0, "INFO", "STARTING SCRIPT [".$cfg{"CONFIG_NAME"}."]");
 
   my $control_thread = threads->new(\&controlThread, $pid_file);
 
@@ -141,7 +147,11 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
   # continuously run mopsr_ibdb for this PWC
   while (!$quit_daemon)
   {
-    $cmd = "mopsr_ibdb_FST -k ".$db_key." ".$chan_id." ".$cfg{"CONFIG_DIR"}."/mopsr_cornerturn.cfg -s ";
+    $cmd = "mopsr_ibdb_FST -k ".$db_key." ".$chan_id." ".$cfg{"CONFIG_DIR"}."/mopsr_cornerturn.cfg -s -b 7";
+    if ($hires)
+    {
+      $cmd = "/home/dada/hires/linux_64/bin/".$cmd;
+    }
 
     msg(1, "INFO", "START ".$cmd);
     ($result, $response) = Dada::mySystemPiped($cmd, $src_log_file, $src_log_sock, "src", sprintf("%02d",$chan_id), $daemon_name, "muxrecv");
@@ -152,6 +162,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
       if (!$quit_daemon)
       {
         msg(0, "ERROR", $cmd." failed: ".$response);
+        sleep (1);
       }
       $quit_daemon = 1;
     }
@@ -208,8 +219,15 @@ sub controlThread($)
 
   my ($cmd, $result, $response);
 
-  $cmd = "^mopsr_ibdb_FST -k ".$db_key;
-  msg(2, "INFO", "controlThread: killProcess(".$cmd.", mpsr)");
+  if ($hires)
+  {
+    $cmd = "^/home/dada/hires/linux_64/bin/mopsr_ibdb_FST -k ".$db_key;
+  }
+  else
+  {
+    $cmd = "^mopsr_ibdb_FST -k ".$db_key;
+  }
+  msg(1, "INFO", "controlThread: killProcess(".$cmd.", mpsr)");
   ($result, $response) = Dada::killProcess($cmd, "mpsr");
   msg(3, "INFO", "controlThread: killProcess() ".$result." ".$response);
 

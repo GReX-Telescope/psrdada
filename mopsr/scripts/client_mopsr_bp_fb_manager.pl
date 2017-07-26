@@ -36,6 +36,7 @@ our $dl : shared;
 our $quit_daemon : shared;
 our $daemon_name : shared;
 our %cfg : shared;
+our %smirf_cfg : shared;
 our %ct : shared;
 our $localhost : shared;
 our $proc_id : shared;
@@ -47,6 +48,10 @@ our $sys_log_sock;
 our $src_log_sock;
 our $sys_log_file;
 our $src_log_file;
+our $bw_limit;
+our $smirf_bw_limit;
+our $srv_ip;
+our $smirf_ip;
 
 #
 # Initialize globals
@@ -55,6 +60,7 @@ $dl = 1;
 $quit_daemon = 0;
 $daemon_name = Dada::daemonBaseName($0);
 %cfg = Mopsr::getConfig("bp");
+%smirf_cfg = Dada::readCFGFileIntoHash("/home/vivek/SMIRF/config/smirf.cfg", 0);
 %ct = Mopsr::getCornerturnConfig("bp");
 $proc_id = -1;
 $db_key = "dada";
@@ -66,6 +72,14 @@ $sys_log_sock = 0;
 $src_log_sock = 0;
 $sys_log_file = "";
 $src_log_file = "";
+# For transport via Infiniband
+#$bw_limit = (128 * 1024) / $cfg{"NUM_BP"};
+#$srv_ip = "192.168.5.10";
+# For transport via 1GbE
+$bw_limit = int((64 * 1024) / $cfg{"NUM_BP"});
+$smirf_bw_limit = int((640 * 1024) / $cfg{"NUM_BP"});
+$srv_ip = "172.17.228.204";
+$smirf_ip = "192.168.5.120";
 
 # Check command line argument
 if ($#ARGV != 0)
@@ -135,17 +149,18 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
 
   msg (0, "INFO", "STARTING SCRIPT");
 
+  my $bp_tag = sprintf ("BP%02d", $proc_id);
   my $control_thread = threads->new(\&controlThread, $pid_file);
 
-  my ($cmd, $result, $response, $utc_start);
+  my ($cmd, $result, $response, $utc_start, $source, $n);
   my @parts = ();
 
-  chdir $cfg{"CLIENT_RECORDING_DIR"};
+  my $proc_dir = $cfg{"CLIENT_RECORDING_DIR"}."/".$bp_tag;
 
   # look for filterbank files to transfer to the server via rsync
   while (!$quit_daemon)
   {
-    $cmd = "find . -maxdepth 2 -type f -name 'obs.finished' | sort -nr | tail -n 1";
+    $cmd = "find ".$proc_dir." -mindepth 3 -maxdepth 3 -type f -name 'obs.finished' | sort -n -r | tail -n 1";
     msg(2, "INFO", "main: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     msg(3, "INFO", "main: ".$result." ".$response);
@@ -154,110 +169,153 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
     {
       # get the observation UTC_START
       @parts = split (/\//, $response);
+      $n = $#parts;
 
-      if ($#parts == 2)
+      $utc_start = $parts[$n-2];
+      $source = $parts[$n-1];
+
+      # also extract the PID if possible
+      $cmd = "grep ^PID ".
+
+      msg(2, "INFO", "main: utc_start=".$utc_start." source=".$source);
+      
+      if ($utc_start =~ m/\d\d\d\d-\d\d-\d\d-\d\d:\d\d:\d\d/)
       {
-        $utc_start = $parts[1];
-        msg(2, "INFO", "main: found finished observation: ".$utc_start);
+        my $local_dir = $proc_dir."/".$utc_start."/".$source;
+        msg (2, "INFO", "main: found finished observation: ".$local_dir);
+
+        # also extract the PID if possible
+        $cmd = "grep ^PID ".$local_dir."/BEAM_???/obs.header | awk '{print \$2}' | tail -n 1";
+        msg(2, "INFO", "main: ".$cmd);
+        ($result, $response) = Dada::mySystem($cmd);
+        msg(3, "INFO", "main: ".$result." ".$response);
+        my $pid = $response;
 
         # get the list of beams in this observation
-        $cmd = "find ".$utc_start." -maxdepth 1 -type d -name 'BEAM_???' -printf '%f\n' | sort -n";
+        $cmd = "find ".$proc_dir."/".$utc_start."/".$source." -maxdepth 1 -type d -name 'BEAM_???' -printf '%f\n' | sort -n";
         msg(2, "INFO", "main: ".$cmd);
         ($result, $response) = Dada::mySystem($cmd);
         msg(3, "INFO", "main: ".$result." ".$response);
     
         if (($result ne "ok") || ($response eq ""))
         {
-          msg(0, "WARN", "no beams found in ".$utc_start);
+          msg(0, "WARN", "no beams found in ".$local_dir);
 
-          $cmd = "mv ".$utc_start."/obs.finished ".$utc_start."/obs.failed";
+          $cmd = "mv ".$local_dir."/obs.finished ".$local_dir."/obs.failed";
           msg(2, "INFO", "main: ".$cmd);
           ($result, $response) = Dada::mySystem($cmd);
           msg(3, "INFO", "main: ".$result." ".$response);
         }
         else
         {
-          $cmd = "rsync -a --stats --bwlimit=8192 --no-g --chmod=go-ws --password-file=/home/mpsr/.ssh/rsync_passwd ".
-                 "./".$utc_start."/BEAM_??? upload\@172.17.228.204::archives/".$utc_start."/";
-          #$cmd = "rsync -a --stats --no-g --chmod=go-ws --password-file=/home/mpsr/.ssh/rsync_passwd ".
-          #       "./".$utc_start."/BEAM_??? upload\@192.168.5.10::archives/".$utc_start."/";
-
-          msg(2, "INFO", "main: ".$cmd);
-          ($result, $response) = Dada::mySystem($cmd);
+          my $remote_dir = $cfg{"SERVER_ARCHIVE_DIR"}."/".$utc_start."/".$source;
+          msg(2, "INFO", "main: createRemoteDir(".$remote_dir.")");
+          ($result, $response) = createRemoteDir($remote_dir);
           msg(3, "INFO", "main: ".$result." ".$response);
           if ($result ne "ok")
           {
-            if ($quit_daemon)
+            msg(0, "WARN", "failed to create remote directory: ".$response);
+            sleep (1);
+          }
+          else
+          {
+            # transfer the RFI lists from the FRB detector
+            ($result, $response) = transferRFIList ($local_dir, $utc_start, $source);
+            if ($result ne "ok")
             {
-              msg(0, "INFO", "transfer of ".$utc_start." interrupted");
+              msg(0, "WARN", "failed to transfer rfi list: ".$response);
+              $cmd = "mv ".$local_dir."/obs.finished ".$local_dir."/obs.failed";
+              msg(2, "INFO", "main: ".$cmd);
+              ($result, $response) = Dada::mySystem($cmd);
+              msg(3, "INFO", "main: ".$result." ".$response);
+              next;
+            }
+            elsif ($response ne "")
+            {
+              msg(1, "INFO", "transferRFIList: ".$response);
             }
             else
             {
-              msg(0, "ERROR", "transfer of ".$utc_start." failed: ".$response);
+              msg(2, "INFO", "transferRFIList: transferred successfully");
+            }
 
-              $cmd = "mv ".$utc_start."/obs.finished ".$utc_start."/obs.failed";
+            # if a SMIRF observation 
+            if ($pid eq "P001")
+            {
+              # also extract the PID if possible
+              $cmd = "grep ^SOURCE ".$local_dir."/BEAM_???/obs.header | awk '{print \$2}' | tail -n 1";
+              msg(2, "INFO", "main: ".$cmd);
+              ($result, $response) = Dada::mySystem($cmd);
+              msg(3, "INFO", "main: ".$result." ".$response);
+              my $smirf_source = $response;
+
+              ($result, $response) = transferSmirfBeams ($local_dir, $utc_start, $smirf_source);
+              if ($result ne "ok")
+              {
+                msg(1, "WARN", "SMIRF transfer for ".$utc_start." failed: ".$response);
+              }
+            }
+
+            # transfer beams 
+            ($result, $response) = transferBeams ($local_dir, $utc_start, $source);
+            if ($result ne "ok")
+            {
+              msg(0, "ERROR", "transfer of ".$utc_start." failed: ".$response);
+              $cmd = "mv ".$local_dir."/obs.finished ".$local_dir."/obs.failed";
               msg(2, "INFO", "main: ".$cmd);
               ($result, $response) = Dada::mySystem($cmd);
               msg(3, "INFO", "main: ".$result." ".$response);
             }
-          }
-          else
-          {
-            # determine the data rate
-            my @output_lines = split(/\n/, $response);
-            my $mbytes_per_sec = 0;
-            my $j = 0;
-            for ($j=0; $j<=$#output_lines; $j++)
+            elsif ($response ne "")
             {
-              if ($output_lines[$j] =~ m/bytes\/sec/)
+              msg(1, "INFO", "transferBeams: ".$response." skipping");
+            }
+            else
+            {
+              $cmd = "mv ".$local_dir."/obs.finished ".$local_dir."/obs.transferred";
+              msg(2, "INFO", "main: ".$cmd);
+              ($result, $response) = Dada::mySystem($cmd);
+              msg(3, "INFO", "main: ".$result." ".$response);
+              if ($result ne "ok")
               {
-                my @bits = split(/[\s]+/, $output_lines[$j]);
-                $mbytes_per_sec = $bits[6] / 1048576;
+                msg(0, "ERROR", $cmd." failed: ".$response);
+                $quit_daemon = 1;
               }
-            }
-            my $data_rate = sprintf("%5.2f", $mbytes_per_sec)." MB/s";
 
-            msg(1, "INFO", $utc_start." finished -> transferred [".$data_rate."]");
-
-            $cmd = "mv ".$utc_start."/obs.finished ".$utc_start."/obs.transferred";
-            msg(2, "INFO", "main: ".$cmd);
-            ($result, $response) = Dada::mySystem($cmd);
-            msg(3, "INFO", "main: ".$result." ".$response);
-            if ($result ne "ok")
-            {
-              msg(0, "ERROR", $cmd." failed: ".$response);
-              $quit_daemon = 1;
-            }
-
-            my $user = "dada";
-            my $host = "172.17.228.204";
-            my $rval;
-    
-            $cmd = "touch ".$cfg{"SERVER_ARCHIVE_DIR"}."/".$utc_start."/obs.finished.".$proc_id.".".$cfg{"NUM_BP"};
-            msg(2, "INFO", "main: ".$user."@".$host.":".$cmd);
-            ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
-            msg(2, "INFO", "main: ".$result." ".$rval." ".$response);
-
-            $cmd = "rm -rf ".$utc_start."/BEAM_???";
-            msg(2, "INFO", "main: ".$cmd);
-            ($result, $response) = Dada::mySystem($cmd);
-            msg(3, "INFO", "main: ".$result." ".$response);
-            if ($result ne "ok")
-            {
-              msg(0, "ERROR", $cmd." failed: ".$response);
-              $quit_daemon = 1;
-            }
-          }
-        } 
-      }
-    }
+              my $user = "dada";
+              my $host = "172.17.228.204";
+              my $rval;
       
+              $cmd = "touch ".$remote_dir."/obs.finished.".$proc_id.".".$cfg{"NUM_BP"};
+              msg(2, "INFO", "main: ".$user."@".$host.":".$cmd);
+              ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
+              msg(2, "INFO", "main: ".$result." ".$rval." ".$response);
+
+              $cmd = "rm -rf ".$local_dir."/BEAM_???";
+              msg(2, "INFO", "main: ".$cmd);
+              ($result, $response) = Dada::mySystem($cmd);
+              msg(3, "INFO", "main: ".$result." ".$response);
+              if ($result ne "ok")
+              {
+                msg(0, "ERROR", $cmd." failed: ".$response);
+                $quit_daemon = 1;
+              }
+            } # transfer beams ok
+          } # create remote dir ok
+        } # beams existed 
+      } # utc_start match regex
+    } # obs.finished file exists
+        
     my $counter = 10;
     while (!$quit_daemon && $counter > 0)
     {
       sleep(1);
       $counter --;
     }
+    msg(2, "INFO", "main: cleanTransferredDirs(".$proc_dir.")");
+    ($result, $response) = cleanTransferredDirs($proc_dir);
+    msg(2, "INFO", "main: cleanTransferredDirs: ".$result." ".$response);
+    msg(2, "INFO", "main: quit_daemon=".$quit_daemon);
   }
 
   # Rejoin our daemon control thread
@@ -270,6 +328,202 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
   Dada::nexusLogClose($sys_log_sock);
 
   exit (0);
+}
+
+sub createRemoteDir($)
+{
+  my ($remote_dir) = @_;
+
+  my $user = $cfg{"USER"};
+  my $host = $cfg{"SERVER_HOST"};
+  my $cmd = "mkdir -m 2755 -p ".$remote_dir;
+  my ($result, $rval, $response);
+
+  msg(2, "INFO", "createRemoteDir: ".$user."@".$host.":".$cmd);
+  ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
+  msg(2, "INFO", "createRemoteDir: ".$result." ".$rval." ".$response);
+
+  if (($result eq "ok") && ($rval == 0))
+  {
+    msg(2, "INFO", "createRemoteDir: remote directory created");
+    return ("ok", "");
+  }
+  else
+  {
+    return ("fail", $response);
+  }
+}
+
+sub transferRFIList($$$)
+{
+  my ($local_dir, $utc_start, $source) = @_;
+
+  my ($cmd, $result, $response);
+
+  my $rfi_file = "candidates.list.".sprintf("BP%02d", $proc_id);
+  my $local_file = "";
+
+  if (-f $local_dir."/".$rfi_file)
+  {
+    $local_file = $local_dir."/".$rfi_file;
+  }
+  elsif (-f $local_dir."/../".$rfi_file)
+  {
+    $local_file = $local_dir."/../".$rfi_file;
+  }
+  else
+  {
+    return ("ok", "Candidates file did not exist for ".$utc_start."/".$source);
+  }
+
+  $cmd = "rsync -a --stats --bwlimit=".$bw_limit." --no-g --chmod=go-ws --password-file=/home/mpsr/.ssh/rsync_passwd ".
+         $local_file." upload\@172.17.228.204::results/".$utc_start."/".$source."/";
+  msg(2, "INFO", "transferRFIList: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  msg(3, "INFO", "transferRFIList: ".$result." ".$response);
+  if ($result ne "ok")
+  {
+    if ($quit_daemon)
+    {
+      msg(0, "INFO", "transfer of ".$utc_start." interrupted");
+      return ("fail", "transfer interrupted");
+    }
+    else
+    {
+      msg(0, "WARN", "transfer of ".$local_file." failed: ".$response);
+      return ("fail", "transfer of ".$local_file." failed");
+    }
+  }
+
+  unlink $local_file;
+  return ("ok", "");
+}
+
+sub transferBeams ($$$)
+{
+  my ($local_dir, $utc_start, $source) = @_;
+  my ($cmd, $result, $response);
+
+  $cmd = "rsync -a --stats --bwlimit=".$bw_limit." --no-g --chmod=go-ws --password-file=/home/mpsr/.ssh/rsync_passwd ".
+         $local_dir."/BEAM_??? upload\@".$srv_ip."::archives/".$utc_start."/".$source."/";
+  msg(2, "INFO", "transferBeams: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  msg(3, "INFO", "transferBeams: ".$result." ".$response);
+  if ($result ne "ok")
+  { 
+    if ($quit_daemon)
+    { 
+      msg(0, "INFO", "transfer of ".$utc_start." interrupted");
+      return ("ok", "rsync of beams interrupted"); 
+    }
+    else
+    { 
+      msg(0, "ERROR", "transfer of ".$utc_start." failed: ".$response);
+      return ("fail", "rsync of beams failed"); 
+    }
+  }
+
+  # determine the data rate
+  my @output_lines = split(/\n/, $response);
+  my $mbytes_per_sec = 0;
+  my $j = 0; 
+  for ($j=0; $j<=$#output_lines; $j++)
+  { 
+    if ($output_lines[$j] =~ m/bytes\/sec/)
+    { 
+      my @bits = split(/[\s]+/, $output_lines[$j]);
+      $mbytes_per_sec = $bits[6] / 1048576;
+    }
+  }
+  my $data_rate = sprintf("%5.2f", $mbytes_per_sec)." MB/s";
+              
+  msg(1, "INFO", $utc_start."/".$source." finished -> transferred [".$data_rate."]");
+
+  return ("ok", "");
+}
+
+sub transferSmirfBeams ($$$)
+{
+  my ($local_dir, $utc_start, $source) = @_;
+  my ($cmd, $result, $response, $rval);
+
+  my $user = $smirf_cfg{"SURVEY_USER"};
+  my $host = $smirf_cfg{"SURVEY_HOST"};
+
+  $cmd = "mkdir -p -m 0755 ".$smirf_cfg{"SURVEY_DIR"}."/data/".$source."/".$utc_start."/FB";
+  msg(2, "INFO", "transferSmirfBeams: ".$user."@".$host.":".$cmd);
+  ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
+  msg(2, "INFO", "transferSmirfBeams: ".$result." ".$rval." ".$response);
+
+  $cmd = "rsync -a --stats --bwlimit=".$smirf_bw_limit." --no-g --chmod=go-ws ".
+         "--password-file=/home/mpsr/.ssh/rsync_passwd ".
+         $local_dir."/BEAM_??? upload\@".$smirf_ip."::smirf/data/".$source."/".$utc_start."/FB/";
+  msg(2, "INFO", "transferSmirfBeams: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  msg(3, "INFO", "transferSmirfBeams: ".$result." ".$response);
+  if ($result ne "ok")
+  {
+    if ($quit_daemon)
+    {
+      msg(0, "INFO", "transfer of ".$utc_start." interrupted");
+      return ("ok", "rsync of beams interrupted");
+    }
+    else
+    {
+      msg(0, "ERROR", "transfer of ".$utc_start." failed: ".$response);
+      return ("fail", "rsync of beams failed");
+    }
+  }
+
+  # determine the data rate
+  my @output_lines = split(/\n/, $response);
+  my $mbytes_per_sec = 0;
+  my $j = 0;
+  for ($j=0; $j<=$#output_lines; $j++)
+  {
+    if ($output_lines[$j] =~ m/bytes\/sec/)
+    {
+      my @bits = split(/[\s]+/, $output_lines[$j]);
+      $mbytes_per_sec = $bits[6] / 1048576;
+    }
+  }
+  my $data_rate = sprintf("%5.2f", $mbytes_per_sec)." MB/s";
+
+  msg(1, "INFO", $utc_start."/".$source." finished -> transferred [".$data_rate."]");
+
+  return ("ok", "");
+}
+
+
+sub cleanTransferredDirs ($)
+{
+  my ($proc_dir) = @_;
+  my ($cmd, $result, $response, $obs);
+
+  # look for observations marked obs.transferred that are > 1day old
+  $cmd = "find ".$proc_dir." -mindepth 3 -maxdepth 3 -type f -name 'obs.transferred' -mtime +1";
+  msg(2, "INFO", "cleanTransferredDirs: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  msg(3, "INFO", "main: ".$result." ".$response);
+
+  if (($result eq "ok") && ($response ne ""))
+  {
+    my @list = split(/\n/, $response);
+    $response = "";
+    foreach $obs (@list)
+    {
+      my @parts = split (/\//, $obs);
+      my $utc_start = $parts[$#parts-2];
+      msg(1, "INFO", "cleaning ".$utc_start);
+
+      $cmd = "rm -rf ".$proc_dir."/".$utc_start;
+      msg(2, "INFO", "main: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      msg(3, "INFO", "main: ".$result." ".$response);
+    }
+    return ("ok", "deleted ". ($#list+1)." observations");
+  }
+  return ("ok", "no observations to delete");
 }
 
 #

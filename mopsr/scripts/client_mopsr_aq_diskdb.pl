@@ -139,17 +139,28 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
 
   my $control_thread = threads->new(\&controlThread, $pid_file);
 
-  my ($pfb_id, $cmd, $result, $response, $file, $proc_cmd);
+  my ($pfb_id, $cmd, $result, $response, $file, $proc_cmd, $valid_data, $byte_offset);
 
   # ID tag for this PFB
   $pfb_id = $cfg{"PWC_PFB_ID_".$pwc_id};
 
-  $file = "/data/mopsr/scratch/".$pfb_id."/2015-11-27-02:15:03_0000000000000000.000000.dada";
+  my $utc = "2017-02-27-01:19:37";
+  my @byte_offsets = ( "0000000000000000" );
 
-  if (-f $file )
+  $cmd = "dada_diskdb -k ".$db_key." -s";
+  my $valid_data = 0;
+  foreach $byte_offset ( @byte_offsets )
   {
-    $cmd = "dada_diskdb -k ".$db_key." -s -f ".$file;
+    $file = "/data/mopsr/scratch/".$pfb_id."/".$utc."_".$byte_offset.".000000.dada";
+    if ( -f $file )
+    {
+      $cmd .= " -f ".$file;
+      $valid_data = 1;
+    }
+  }
 
+  if ($valid_data)
+  {
     msg(1, "INFO", "START ".$cmd);
     ($result, $response) = Dada::mySystemPiped ($cmd, $src_log_file, $src_log_sock, "src", sprintf("%02d",$pwc_id), $daemon_name, "aqdsp");
     if ($result ne "ok")
@@ -160,7 +171,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
   }
   else
   {
-    msg(1, "WARN", "file did not exist: ".$file);
+    msg(1, "WARN", "no .dada files existed");
   }
 
   # Rejoin our daemon control thread

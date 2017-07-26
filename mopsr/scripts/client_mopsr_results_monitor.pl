@@ -134,6 +134,9 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
   my %to_send;
   my $dump_file;
 
+  my $schan = 0;
+  my $echan = ($cfg{"PWC_END_CHAN"} - $cfg{"PWC_START_CHAN"});
+
   if (! -d $client_mon_dir)
   {
     $cmd = "mkdir -p ".$client_mon_dir;
@@ -164,7 +167,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
       {
         foreach $dump_file (@dump_files)
         {
-          $cmd = "mopsr_dumpplot -p -g 160x120 -c 0 -d 39 ".$dump_file;
+          $cmd = "mopsr_dumpplot -p -g 160x120 -c ".$schan." -d ".$echan." ".$dump_file;
           msg(2, "INFO", "main: ".$cmd);
           ($result, $response) = Dada::mySystem($cmd);
           msg(3, "INFO", "main: ".$result." ".$response);

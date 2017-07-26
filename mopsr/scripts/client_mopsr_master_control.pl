@@ -151,11 +151,57 @@ sub setupClientType()
           {
             $key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $i, $cfg{"NUM_PWC"}, $id);
             # check nbufs and bufsz
-            if ((!defined($cfg{"BLOCK_BUFSZ_".$id})) || (!defined($cfg{"BLOCK_NBUFS_".$id}))) {
+            if (!defined($cfg{"BLOCK_NBUFS_".$id}))
+            {
               return 0;
             }
-            $Dada::client_master_control::pwcs{$i}{"dbs"}{$id} = $key;
-            # print "DB id=".$id." key=".$key."\n";	
+            my $bufsz;
+            if (defined($cfg{"BLOCK_BUFSZ_".$id}))
+            {
+              $bufsz =  $cfg{"BLOCK_BUFSZ_".$id};
+            }
+            else
+            {
+              if (!defined($cfg{"BLOCK_NSAMP_".$id}))
+              {
+                return 0;
+              }
+              # compute bufsz from params
+              my $nsamp = $cfg{"BLOCK_NSAMP_".$id};
+              my $nchan = $cfg{"NCHAN"};
+              my $nbit = 8;
+              my $npol = 1;
+              my $ndim = 2;
+              my $nant = ($cfg{"ANT_LAST_SEND_".$i} - $cfg{"ANT_FIRST_SEND_".$i}) + 1;
+              my $nbeam = 1;
+              $bufsz = Dada::client_master_control::computeDBSize($nsamp, $nchan, $npol, $ndim, $nbit, $nant, $nbeam);
+              #print "DB id=".$id." key=".$key." size=".$bufsz."\n";	
+            }
+
+            $Dada::client_master_control::pwcs{$i}{"dbs"}{$id}{"key"} = $key;
+            $Dada::client_master_control::pwcs{$i}{"dbs"}{$id}{"nbufs"} = $cfg{"BLOCK_NBUFS_".$id};
+            $Dada::client_master_control::pwcs{$i}{"dbs"}{$id}{"bufsz"} = $bufsz;
+
+            my $nread = 1;
+            if (defined $cfg{"BLOCK_NREAD_".$id})
+            {
+              $nread = $cfg{"BLOCK_NREAD_".$id};
+            }
+            $Dada::client_master_control::pwcs{$i}{"dbs"}{$id}{"nread"} = $nread;
+
+            my $page = "false";
+            if (defined $cfg{"BLOCK_PAGE_".$id})
+            {
+              $page = $cfg{"BLOCK_PAGE_".$id};
+            }
+            $Dada::client_master_control::pwcs{$i}{"dbs"}{$id}{"page"} = $page;
+
+            my $numa = "-1";
+            if (defined $cfg{"BLOCK_NUMA_".$id})
+            {
+              $numa = $cfg{"BLOCK_NUMA_".$id};
+            }
+            $Dada::client_master_control::pwcs{$i}{"dbs"}{$id}{"numa"} = $numa;
           } 
 
           $Dada::client_master_control::pwcs{$i}{"daemons"} = [split(/ /,$cfg{"CLIENT_DAEMONS"})];

@@ -33,6 +33,7 @@ our $chan_tag : shared;
 our $log_host;
 our $log_port;
 our $log_sock;
+our $nchan_in;
 our $nchan_out;
 
 

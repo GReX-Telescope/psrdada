@@ -117,11 +117,12 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
 
   msg (0, "INFO", "STARTING SCRIPT");
 
+  my $bp_tag = sprintf ("BP%02d", $proc_id);
   my $control_thread = threads->new(\&controlThread, $pid_file);
 
   my ($cmd, $result, $response, $i);
 
-  my $proc_dir  = $cfg{"CLIENT_RECORDING_DIR"};
+  my $proc_dir  = $cfg{"CLIENT_RECORDING_DIR"}."/".$bp_tag;
   my $one_month = 31*24*60*60;
 
   # continuously run mopsr_dbib for this PWC

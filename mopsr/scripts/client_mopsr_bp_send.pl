@@ -144,8 +144,9 @@ Dada::preventDuplicateDaemon(basename($0)." ".$send_id);
   while (!$quit_daemon)
   {
     $cmd = "dada_header -k ".$db_key;
-    msg(1, "INFO", "main: ".$cmd);
+    msg(2, "INFO", "main: ".$cmd);
     $raw_header = `$cmd`;
+    msg(3, "INFO", "main: ".$raw_header);
     if ($? != 0)
     {
       if (!$quit_daemon)
@@ -168,7 +169,8 @@ Dada::preventDuplicateDaemon(basename($0)." ".$send_id);
       print FH $raw_header;
       close FH;
 
-      $cmd = "mopsr_dbib_SFT -k ".$db_key." ".$send_id." ".$cfg{"CONFIG_DIR"}."/mopsr_bp_cornerturn.cfg -s";
+      $cmd = "/home/dada/hires/linux_64/bin/mopsr_dbib_SFT -k ".$db_key." ".$send_id." ".$cfg{"CONFIG_DIR"}."/mopsr_bp_cornerturn.cfg -s";
+      #$cmd = "mopsr_dbib_SFT -k ".$db_key." ".$send_id." ".$cfg{"CONFIG_DIR"}."/mopsr_bp_cornerturn.cfg -s";
 
       msg(1, "INFO", "START ".$cmd);
       ($result, $response) = Dada::mySystemPiped($cmd, $src_log_file, $src_log_sock, "src", sprintf("%02d",$send_id), $daemon_name, "bp_send");
@@ -254,7 +256,8 @@ sub controlThread($)
   ($result, $response) = Dada::killProcess($cmd, "mpsr");
   msg(2, "INFO", "controlThread: killProcess() ".$result." ".$response);
 
-  $cmd = "^mopsr_dbib_SFT -k ".$db_key;
+  $cmd = "^/home/dada/hires/linux_64/bin/mopsr_dbib_SFT -k ".$db_key;
+  #$cmd = "^mopsr_dbib_SFT -k ".$db_key;
   msg(2, "INFO", "controlThread: killProcess(".$cmd.", mpsr)");
   ($result, $response) = Dada::killProcess($cmd, "mpsr");
   msg(2, "INFO", "controlThread: killProcess() ".$result." ".$response);

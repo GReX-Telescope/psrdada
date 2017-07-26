@@ -46,6 +46,7 @@ our $sys_log_sock;
 our $src_log_sock;
 our $sys_log_file;
 our $src_log_file;
+our $hires;
 
 #
 # Initialize globals
@@ -64,6 +65,11 @@ $sys_log_sock = 0;
 $src_log_sock = 0;
 $sys_log_file = "";
 $src_log_file = "";
+$hires = 0;
+if (($cfg{"CONFIG_NAME"} =~ m/320chan/) || ($cfg{"CONFIG_NAME"} =~ m/312chan/))
+{
+  $hires = 1;
+}
 
 # Check command line argument
 if ($#ARGV != 0)
@@ -136,10 +142,10 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
 
   msg (0, "INFO", "STARTING SCRIPT");
 
+  my $bp_tag = sprintf ("BP%02d", $proc_id);
   my $control_thread = threads->new(\&controlThread, $pid_file);
 
-  my ($cmd, $result, $response, $raw_header, $proc_cmd, $proc_dir);
-
+  my ($cmd, $result, $response, $raw_header, $proc_cmd, $proc_dir, $scratch_dir);
 
   # continuously run mopsr_dbib for this PWC
   while (!$quit_daemon)
@@ -166,31 +172,47 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
     }
     else
     {
+      open FH, ">/tmp/header.heimdall.".$bp_tag;
+      print FH $raw_header;
+      close FH;
+
       my %header = Dada::headerToHash($raw_header);
       msg (0, "INFO", "UTC_START=".$header{"UTC_START"}." NCHAN=".$header{"NCHAN"}." NANT=".$header{"NANT"}." NBIT=".$header{"NBIT"});
 
       # heimdall produces output in the current working directory
-      $proc_dir = $cfg{"CLIENT_RECORDING_DIR"}."/".$header{"UTC_START"};
+      $proc_dir = $cfg{"CLIENT_RECORDING_DIR"}."/".$bp_tag."/".$header{"UTC_START"};
       if (!-d $proc_dir)
       {
         mkdir $proc_dir;
       }
-     
-      msg(1, "INFO", "createLocalDirs: creating obs.header.heimdall");
-      my $file = $proc_dir."/obs.header";
-      open (FH,">".$file.".tmp");
-      my $k = "";
-      foreach $k ( keys %header)
-      {
-        print FH Dada::headerFormat($k, $header{$k})."\n";
-      }
-      close FH;
-      rename($file.".tmp", $file);
+  
+      #$scratch_dir = $cfg{"CLIENT_SCRATCH_DIR"}."/".$bp_tag;
+      #if (!-d $scratch_dir)
+      #{ 
+      #  mkdir $scratch_dir;
+      #}
+      #$scratch_dir = $cfg{"CLIENT_SCRATCH_DIR"}."/".$bp_tag."/".$header{"UTC_START"};
+      #if (!-d $scratch_dir)
+      #{ 
+      #  mkdir $scratch_dir;
+      #}
 
       # starting beam for this heimdall instance
       my $start_beam = 1 + $ct{"BEAM_FIRST_RECV_".$proc_id};
-
-      $proc_cmd = "heimdall -k ".$db_key." -gpu_id ".$cfg{"BP_GPU_ID_".$proc_id}." -dm 0 2000 -dm_tol 1.05 -boxcar_max 4096 -beam ".$start_beam." -output_dir ".$proc_dir;
+  
+      if ($hires)
+      {
+        $proc_cmd = "heimdall -k ".$db_key." -gpu_id ".$cfg{"BP_GPU_ID_".$proc_id}." -dm 0 2000 -dm_tol 1.25 -boxcar_max 4096 -beam ".$start_beam." -output_dir ".$proc_dir;
+        $proc_cmd = "heimdall -k ".$db_key." -gpu_id ".$cfg{"BP_GPU_ID_".$proc_id}." -dm 0 2000 -dm_tol 1.25 -boxcar_max 2048 -beam ".$start_beam." -coincidencer ".$cfg{"SERVER_HOST"}.":".$cfg{"COINCIDENCER_PORT"};
+        $proc_cmd = "heimdall -k ".$db_key." -gpu_id ".$cfg{"BP_GPU_ID_".$proc_id}." -dm 0 2000 -dm_tol 1.20 -boxcar_max 1024 -beam ".$start_beam." -coincidencer ".$cfg{"SERVER_HOST"}.":".$cfg{"COINCIDENCER_PORT"};
+        $proc_cmd = "heimdall -k ".$db_key." -gpu_id ".$cfg{"BP_GPU_ID_".$proc_id}." -dm 0 2000 -dm_tol 1.20 -boxcar_max 256 -beam ".$start_beam." -coincidencer ".$cfg{"SERVER_HOST"}.":".$cfg{"COINCIDENCER_PORT"};
+        #$proc_cmd = "dada_dbdisk -k ".$db_key." -s -D ".$scratch_dir;
+      }
+      else
+      {
+        $proc_cmd = "heimdall -k ".$db_key." -gpu_id ".$cfg{"BP_GPU_ID_".$proc_id}." -dm 0 2000 -dm_tol 1.05 -boxcar_max 4096 -beam ".$start_beam." -output_dir ".$proc_dir;
+        $proc_cmd = "heimdall -k ".$db_key." -gpu_id ".$cfg{"BP_GPU_ID_".$proc_id}." -dm 0 2000 -dm_tol 1.05 -boxcar_max 4096 -beam ".$start_beam." -coincidencer ".$cfg{"SERVER_HOST"}.":".$cfg{"COINCIDENCER_PORT"};
+      }
 
       my ($binary, $junk) = split(/ /,$proc_cmd, 2);
       $cmd = "ls -l ".$cfg{"SCRIPTS_DIR"}."/".$binary;

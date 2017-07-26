@@ -27,7 +27,7 @@ use threads::shared;
 
 sub usage() 
 {
-  print "Usage: ".basename($0)." CHAN_ID\n";
+  print "Usage: ".basename($0)." BF_ID\n";
 }
 
 #
@@ -38,7 +38,7 @@ our $quit_daemon : shared;
 our $daemon_name : shared;
 our %cfg : shared;
 our $localhost : shared;
-our $chan_id : shared;
+our $bf_id : shared;
 our $log_host;
 our $sys_log_port;
 our $sys_log_sock;
@@ -51,7 +51,7 @@ $dl = 1;
 $quit_daemon = 0;
 $daemon_name = Dada::daemonBaseName($0);
 %cfg = Mopsr::getConfig("bf");
-$chan_id = -1;
+$bf_id = -1;
 $localhost = Dada::getHostMachineName(); 
 $log_host = $cfg{"SERVER_HOST"};
 $sys_log_port = $cfg{"SERVER_BF_SYS_LOG_PORT"};
@@ -65,22 +65,22 @@ if ($#ARGV != 0)
   exit(1);
 }
 
-$chan_id  = $ARGV[0];
+$bf_id  = $ARGV[0];
 
-# ensure that our chan_id is valid 
-if (($chan_id >= 0) &&  ($chan_id < $cfg{"NCHAN"}))
+# ensure that our bf_id is valid 
+if (($bf_id >= 0) &&  ($bf_id < $cfg{"NUM_BF"}))
 {
   # and matches configured hostname
-  if ($cfg{"RECV_".$chan_id} ne Dada::getHostMachineName())
+  if ($cfg{"BF_".$bf_id} ne Dada::getHostMachineName())
   {
-    print STDERR "RECV_".$chan_id." did not match configured hostname [".Dada::getHostMachineName()."]\n";
+    print STDERR "BF_".$bf_id." did not match configured hostname [".Dada::getHostMachineName()."]\n";
     usage();
     exit(1);
   }
 }
 else
 {
-  print STDERR "chan_id was not a valid integer between 0 and ".($cfg{"NCHAN"}-1)."\n";
+  print STDERR "bf_id was not a valid integer between 0 and ".($cfg{"NUM_BF"}-1)."\n";
   usage();
   exit(1);
 }
@@ -88,7 +88,7 @@ else
 #
 # Sanity check to prevent multiple copies of this daemon running
 #
-Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
+Dada::preventDuplicateDaemon(basename($0)." ".$bf_id);
 
 ###############################################################################
 #
@@ -100,8 +100,8 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
   $SIG{TERM} = \&sigHandle;
   $SIG{PIPE} = \&sigPipeHandle;
 
-  $sys_log_file = $cfg{"CLIENT_LOG_DIR"}."/".$daemon_name."_".$chan_id.".log";
-  my $pid_file =  $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$chan_id.".pid";
+  $sys_log_file = $cfg{"CLIENT_LOG_DIR"}."/".$daemon_name."_".$bf_id.".log";
+  my $pid_file =  $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$bf_id.".pid";
 
   # Autoflush STDOUT
   $| = 1;
@@ -119,7 +119,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
 
   my $control_thread = threads->new(\&controlThread, $pid_file);
   
-  my $chan_dir  = "CH".sprintf("%02d", $chan_id);
+  my $bf_dir  = "BF".sprintf("%02d", $bf_id);
   my $one_month = 31*24*60*60;
   
   my ($cmd, $result, $response, $i);
@@ -129,7 +129,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
   {
     my $curr_time = time;
 
-    $cmd = "find ".$cfg{"CLIENT_RESULTS_DIR"}."/".$chan_dir." -maxdepth 1 ".
+    $cmd = "find ".$cfg{"CLIENT_RESULTS_DIR"}."/".$bf_dir." -maxdepth 1 ".
            "-type d -name '????-??-??-??:??:??' -printf '%f\n' | sort -n";
     msg(2, "INFO", "main: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
@@ -150,8 +150,8 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
         msg(2, "INFO", "main: testing ".$unixtime."+".$one_month." < ".$curr_time);
         if (($unixtime + $one_month) < $curr_time)
         { 
-          $cmd = "rm -rf ".$cfg{"CLIENT_RESULTS_DIR"}."/".$chan_dir."/".$o;
-          msg(1, "INFO", "Deleting ".$cfg{"CLIENT_RESULTS_DIR"}."/".$chan_dir."/".$o);
+          $cmd = "rm -rf ".$cfg{"CLIENT_RESULTS_DIR"}."/".$bf_dir."/".$o;
+          msg(1, "INFO", "Deleting ".$cfg{"CLIENT_RESULTS_DIR"}."/".$bf_dir."/".$o);
           msg(2, "INFO", "main: ".$cmd);
           ($result, $response) = Dada::mySystem($cmd);
           msg(3, "INFO", "main: ".$result." ".$response);
@@ -194,7 +194,7 @@ sub msg($$$)
       $sys_log_sock = Dada::nexusLogOpen($log_host, $sys_log_port);
     }
     if ($sys_log_sock) {
-      Dada::nexusLogMessage($sys_log_sock, sprintf("%02d",$chan_id), $time, "sys", $type, "bfcleaner", $msg);
+      Dada::nexusLogMessage($sys_log_sock, sprintf("%02d",$bf_id), $time, "sys", $type, "bfcleaner", $msg);
     }
     print "[".$time."] ".$msg."\n";
   }
@@ -207,7 +207,7 @@ sub controlThread($)
   msg(2, "INFO", "controlThread : starting");
 
   my $host_quit_file = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name.".quit";
-  my $pwc_quit_file  = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$chan_id.".quit";
+  my $pwc_quit_file  = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$bf_id.".quit";
 
   while ((!$quit_daemon) && (!(-f $host_quit_file)) && (!(-f $pwc_quit_file)))
   {

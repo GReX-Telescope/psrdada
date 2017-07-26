@@ -41,6 +41,7 @@ use constant PWCC_LOGFILE       => "dada_pwc_command.log";
 use constant TERMINATOR         => "\r";
 # We must always begin on a 3 second boundary since the pkt rearm UTC
 use constant PKTS_PER_3_SECONDs => 390625;
+#use constant PKTS_PER_3_SECONDs => 292969;
 
 #
 # Global variable declarations
@@ -48,6 +49,7 @@ use constant PKTS_PER_3_SECONDs => 390625;
 our $dl;
 our $daemon_name;
 our %cfg : shared;
+our %bf_cfg : shared;
 our %site_cfg : shared;
 our $current_state : shared;
 our $current_config;
@@ -65,6 +67,10 @@ our $utc_stop : shared;
 our $tobs_secs : shared;
 our $utc_start : shared;
 our $pkt_utc_start : shared;
+our $hires;
+our $packets_per_period : shared;
+our $period_length: shared;
+our $frb_detector_started : shared;
 
 #
 # global variable initialization
@@ -72,6 +78,7 @@ our $pkt_utc_start : shared;
 $dl = 1;
 $daemon_name = Dada::daemonBaseName($0);
 %cfg = Mopsr::getConfig();
+%bf_cfg = Mopsr::getConfig("bf");
 %site_cfg = Dada::readCFGFileIntoHash($cfg{"CONFIG_DIR"}."/site.cfg", 0);
 $current_state = "Idle";
 $current_config = $cfg{"CONFIG_NAME"};
@@ -89,6 +96,19 @@ $tobs_secs = -1;
 $utc_stop = "";
 $utc_start = "UNKNOWN";
 $pkt_utc_start = "UNKNOWN";
+$frb_detector_started = 0;
+if (($cfg{"CONFIG_NAME"} =~ m/320chan/) || ($cfg{"CONFIG_NAME"} =~ m/312chan/))
+{
+  $hires = 1;
+  $packets_per_period = 390625;
+  $period_length = 4;
+}
+else
+{
+  $hires = 0;
+  $packets_per_period = 390625;
+  $period_length = 3;
+}
 
 
 #
@@ -245,7 +265,7 @@ $pkt_utc_start = "UNKNOWN";
           {
             $host = $hostinfo->name;
           }
-          Dada::logMsg(1, $dl, "Accepting connection from ".$host);
+          Dada::logMsg(2, $dl, "Accepting connection from ".$host);
         }
       }
       else
@@ -260,7 +280,7 @@ $pkt_utc_start = "UNKNOWN";
           {
             $host = $hostinfo->name;
           }
-          Dada::logMsg(1, $dl, "lost connection from ".$host);
+          Dada::logMsg(2, $dl, "lost connection from ".$host);
 
           $read_set->remove($rh);
           close($rh);
@@ -352,8 +372,8 @@ sub parseXMLCommand($)
   my $utc_date = "";
   my $jun_testing = 0;
 
-  Dada::logMsg(1, $dl, "parseXMLCommand: eval XML");
-  Dada::logMsg(2, $dl, "parseXMLCommand: RAW=".$xml_in);
+  Dada::logMsg(2, $dl, "parseXMLCommand: eval XML");
+  Dada::logMsg(3, $dl, "parseXMLCommand: RAW=".$xml_in);
   eval {
     $xml = XMLin ($xml_in, ForceArray => 0, KeyAttr => 0, SuppressEmpty => 1, NoAttr => 1);
   };
@@ -387,39 +407,129 @@ sub parseXMLCommand($)
 
       if ($command eq "prepare")
       {
-        Dada::logMsg(1, $dl, "received prepare command");
-        # check all the meta-data has been supplied
-        my %required = ( 'signal_parameters' => ['bandwidth', 'centre_frequency', 'nant', 'nchan', 'ndim', 'npol', 'nbit'],
-                         'pfb_parameters' => ['oversampling_ratio', 'sampling_time', 'channel_bandwidth', 'dual_sideband', 'resolution'],
-                         'observation_parameters' => ['observer', 'aq_processing_file', 'bf_processing_file', 'bp_processing_file', 'mode', 'type', 'config'],
-                         'source_parameters' => ['name', 'ra', 'dec', 'ns_tilt', 'md_angle' ] );
-        my ($set, $param);
-        foreach $set (keys %required) 
+        if (($current_state eq "Idle") || ($current_state eq "Prepared"))
         {
-          foreach $param (@{$required{$set}})
+
+          Dada::logMsg(1, $dl, "received prepare command");
+          # check all the meta-data has been supplied
+          my %required = ('west_arm_parameters' => ['tracking', 'ns_tilt', 'md_angle'],
+            'east_arm_parameters' => ['tracking', 'ns_tilt', 'md_angle'],
+            'signal_parameters' => ['bandwidth', 'centre_frequency', 'nant', 'nchan', 'ndim', 'npol', 'nbit'],
+            'pfb_parameters' => ['oversampling_ratio', 'sampling_time', 'channel_bandwidth', 'dual_sideband', 'resolution'],
+            'observation_parameters' => ['observer', 'tobs'],
+            'boresight_parameters' => [ 'project_id', 'name', 'ra', 'dec', 'rfi_mitigation', 'antenna_weights', 'delay_tracking', 'processing_file' ] );
+
+          my ($set, $param);
+          foreach $set (keys %required) 
           {
-            Dada::logMsg(2, $dl, "parseXMLCommand: checking [".$set."][".$param."]");
-            if (! eval { exists $xml->{$set}{$param} } )
+            foreach $param (@{$required{$set}})
+            {
+              Dada::logMsg(2, $dl, "parseXMLCommand: checking [".$set."][".$param."]");
+              if (! eval { exists $xml->{$set}{$param} } )
+              {
+                $result = "fail";
+                $response .= "MISSING PARAM: ".$set."/".$param." ";
+              }
+              else
+              {
+                if ($xml->{$set}{$param} eq "")
+                {
+                  $result = "fail";
+                  $response .= "EMPTY PARAM: ".$set."/".$param." ";
+                }
+              }
+            }
+          }
+
+   
+          # correlation mode and fan/tied modes are mutually exclusive due to performance constraints
+          my ($i, $tb_key);
+          my @tb_keys = ();
+          for ($i=0; $i<$bf_cfg{"NUM_TIED_BEAMS"}; $i++)
+          {
+            push (@tb_keys, "tied_beam_".$i."_parameters");
+          }
+
+          if ((eval { exists $xml->{'correlation_parameters'} }) && (eval { exists $xml->{'fan_beams_parameters'} }))
+          {
+            $result = "fail";
+            $response .= "Cannot support Correlation && Fan Beams";
+          }
+
+          if ((eval { exists $xml->{'correlation_parameters'} }) && (eval { exists $xml->{'mod_beams_parameters'} }))
+          {
+            $result = "fail";
+            $response .= "Cannot support Correlation && Module Beams";
+          }
+
+          if ((eval { exists $xml->{'fan_beams_parameters'} }) && (eval { exists $xml->{'mod_beams_parameters'} }))
+          {
+            $result = "fail";
+            $response .= "Cannot support Fan Beams && Module Beams";
+          }
+
+          foreach $tb_key (@tb_keys)
+          {
+            if ((eval { exists $xml->{'correlation_parameters'} }) && (eval { exists $xml->{$tb_key} }))
             {
               $result = "fail";
-              $response .= "MISSING PARAM: ".$set."/".$param." ";
+              $response .= "Cannot support Correlation && Tied Beams";
+            }
+          }
+
+          my %opt_req = ('correlation_parameters' => ['mode', 'project_id', 'type', 'processing_file', 'dump_time'],
+                         'fan_beams_parameters' => ['mode', 'project_id', 'nbeams', 'beam_spacing'],
+                         'mod_beams_parameters' => ['mode', 'project_id']);
+
+          foreach $tb_key (@tb_keys)
+          {
+            $opt_req{$tb_key} = ['mode', 'project_id', 'name', 'ra', 'dec', 'processing_file'];
+          }
+
+          foreach $set (keys %opt_req)
+          {
+            if (eval { exists $xml->{$set}})
+            {
+              foreach $param (@{$opt_req{$set}})
+              {
+                Dada::logMsg(2, $dl, "parseXMLCommand: checking [".$set."][".$param."]");
+                if (! eval { exists $xml->{$set}{$param} } )
+                {
+                  $result = "fail";
+                  $response .= "MISSING PARAM: ".$set."/".$param." ";
+                }
+                else
+                {
+                  if ($xml->{$set}{$param} eq "")
+                  {
+                    $result = "fail";
+                    $response .= "EMPTY PARAM: ".$set."/".$param." ";
+                  }
+                }
+              }
+            }
+          }
+
+          if ($result ne "fail")
+          {
+            # generate specification file
+            Dada::logMsg(2, $dl, "main: genSpecFile(".$cfg{"CONFIG_DIR"}."/mopsr_tmc.spec)");
+            ($result, $response) = genSpecFile ($cfg{"CONFIG_DIR"}."/mopsr_tmc.spec", $xml);
+            Dada::logMsg(2, $dl, "main: genSpecFile() ".$result." ".$response);
+           
+            # ensure that we cannot start without a fresh specification file
+            $spec_generated = 1;
+            $current_state = "Prepared";
+            if ($result eq "ok")
+            {
+              $response =  "parsed correctly";
             }
           }
         }
-        if ($result ne "fail")
+        else
         {
-          # generate specification file
-          Dada::logMsg(2, $dl, "main: genSpecFile(".$cfg{"CONFIG_DIR"}."/mopsr_tmc.spec)");
-          ($result, $response) = genSpecFile ($cfg{"CONFIG_DIR"}."/mopsr_tmc.spec", $xml);
-          Dada::logMsg(2, $dl, "main: genSpecFile() ".$result." ".$response);
-         
-          # ensure that we cannot start without a fresh specification file
-          $spec_generated = 1;
-          $current_state = "Prepared";
-          if ($result eq "ok")
-          {
-            $response =  "parsed correctly";
-          }
+          $result = "fail";
+          $response = "Received stop command whilst ".$current_state;
         }
 
         $xml_out .=   "<reply>".$result."</reply>";
@@ -448,7 +558,6 @@ sub parseXMLCommand($)
         $spec_generated = 0;
         $xml_out .=   "<reply>".$result."</reply>";
         $xml_out .=   "<response>".$response."</response>";
-
       }
       elsif ($command eq "stop")
       {
@@ -731,36 +840,36 @@ sub start($)
 
   my %h = Dada::readCFGFileIntoHash($file, 0);
   Dada::logMsg(1, $dl, "start: MODE='".$h{"MODE"}."' PKT_UTC_START='".$pkt_utc_start."'");
-  if ((($h{"MODE"} eq "CORR") || ($h{"MODE"} eq "PSR")) && (!($pkt_utc_start =~ m/UNKNOWN/)))
+  if (!($pkt_utc_start =~ m/UNKNOWN/))
   {
     # get the unix time for the PKT UTC_START and the current time
     my $pkt_start_unix  = Dada::getUnixTimeUTC($pkt_utc_start);
     my $curr_time_unix  = time; 
 
-    Dada::logMsg(1, $dl, "pkt_start_unix=".$pkt_start_unix);
-    Dada::logMsg(1, $dl, "curr_time_unix=".$curr_time_unix);
+    Dada::logMsg(2, $dl, "start: pkt_start_unix=".$pkt_start_unix);
+    Dada::logMsg(2, $dl, "start: curr_time_unix=".$curr_time_unix);
    
     # plan to start in 5 secs, modulo 3s since pkt_start_unix
     my $obs_start_unix = $curr_time_unix + 5;
-    Dada::logMsg(1, $dl, "obs_start_unix=".$obs_start_unix);
-    my $remainder = ($obs_start_unix - $pkt_start_unix) % 3;
-    Dada::logMsg(1, $dl, "remainder=".$remainder);
+    Dada::logMsg(2, $dl, "start: obs_start_unix=".$obs_start_unix);
+    my $remainder = ($obs_start_unix - $pkt_start_unix) % $period_length;
+    Dada::logMsg(2, $dl, "start: remainder=".$remainder);
     if ($remainder > 0)
     {
-      $obs_start_unix += (3 - $remainder);
+      $obs_start_unix += ($period_length - $remainder);
     }
-    Dada::logMsg(1, $dl, "obs_start_unix=".$obs_start_unix);
+    Dada::logMsg(2, $dl, "start: obs_start_unix=".$obs_start_unix);
 
     $utc_start = Dada::printTime ($obs_start_unix, "utc");
-    Dada::logMsg(1, $dl, "utc_start=".$utc_start);
+    Dada::logMsg(1, $dl, "UTC_START=".$utc_start);
 
     # determine packet offset for this start time
     my $offset = $obs_start_unix - $pkt_start_unix;
-    Dada::logMsg(1, $dl, "offset=".$offset);
+    Dada::logMsg(2, $dl, "start: packet offset=".$offset);
 
     # the start packet necessary for the obs_start_unix
-    $start_packet = 1 + (($offset / 3) * PKTS_PER_3_SECONDs);
-    Dada::logMsg(1, $dl, "start_packet=".$start_packet);
+    $start_packet = 1 + (($offset / $period_length) * $packets_per_period);
+    Dada::logMsg(2, $dl, "start: start_packet=".$start_packet);
 
     # write the start packet to the spec file
     print FH Dada::headerFormat("UTC_START", $utc_start)."\n";
@@ -778,8 +887,6 @@ sub start($)
   {
     Dada::logMsgWarn($warn, "Could not delete status files: $response");
   }
-
-  # Here we would connect to the PFB 
 
   # connect to dada_pwc_command
   Dada::logMsg(2, $dl, "Connecting to PWCC ".$pwcc_host.":".$pwcc_port);
@@ -812,7 +919,7 @@ sub start($)
     }
 
     # wait for the PREPARED state
-    Dada::logMsg(1, $dl, "PWCC waiting for prepared");
+    Dada::logMsg(2, $dl, "PWCC waiting for prepared");
     if (Dada::waitForState("prepared",$handle,5) != 0)
     {
       return ("fail", "Nexus did not enter PREPARED state after config command");
@@ -866,9 +973,13 @@ sub start($)
       $utc_stop = Dada::addToTime($utc_start, $tobs_secs);
       logMsg(0, "INFO", "TOBS=".$tobs_secs." UTC_STOP=".$utc_stop);
     }
+    else
+    {
+      logMsg(0, "INFO", "TOBS=".$tobs_secs." No UTC_STOP specified");
+    }
 
     # Setup the server output directories before telling the clients to begin
-    Dada::logMsg(2, $dl, "start: createLocalDirs (".$utc_start.")");
+    Dada::logMsg(1, $dl, "start: createLocalDirs (".$utc_start.")");
     ($result, $response) = createLocalDirs ($utc_start);
     Dada::logMsg(2, $dl, "start: createLocalDirs() ".$result." ".$response);
     if ($result ne "ok")
@@ -899,16 +1010,147 @@ sub start($)
     # Close nexus connection
     $handle->close();
 
+    if ($h{"FB_ENABLED"} eq "true")
+    {
+      # start the FRB detector
+      startFRBDetector ($file, $utc_start);
+      $frb_detector_started = 1;
+    }
+
     return ($result, $utc_start);
   }
+}
+
+sub startFRBDetector ($$)
+{
+  my ($spec_file, $utc_start) = @_;
+  my %h = Dada::readCFGFileIntoHash($spec_file, 0);
+  my $xml;
+
+  my $observing_type = "TRACKING";
+  if ($h{"DELAY_TRACKING"} eq "false")
+  {
+    #if ($h{"MD_ANGLE"} == 0)
+    #{
+      $observing_type = "STATIONARY";
+    #}
+    #else
+    #{
+    #  $observing_type = "TRANSITING";
+    #}
+  }
+
+  $xml  = "<?xml version='1.0' encoding='ISO-8859-1'?>";
+  $xml .= "<frb_detector_message>";
+  $xml .=   "<cmd>start</cmd>";
+  $xml .=   "<source>FB</source>";
+  $xml .=   "<utc_start>".$utc_start."</utc_start>";
+  $xml .=   "<ra>".$h{"RA"}."</ra>";
+  $xml .=   "<dec>".$h{"DEC"}."</dec>";
+  $xml .=   "<md_angle>".$h{"MD_ANGLE"}."</md_angle>";
+  $xml .=   "<ns_tilt>".$h{"NS_TILT"}."</ns_tilt>";
+  $xml .=   "<pid>".$h{"PID"}."</pid>";
+  $xml .=   "<mode>PSR</mode>";
+  $xml .=   "<config>".$h{"CONFIG"}."</config>";
+  $xml .=   "<observing_type>".$observing_type."</observing_type>";
+  $xml .=   "<nchan>".$h{"NCHAN"}."</nchan>";
+  $xml .=   "<nbit>".$h{"NBIT"}."</nbit>";
+  $xml .=   "<tsamp>".$h{"TSAMP"}."</tsamp>";
+  $xml .=   "<pulsar_flagging>true</pulsar_flagging>";
+  $xml .= "</frb_detector_message>";
+
+  Dada::logMsg(2, $dl, "startFRB: ".$xml);
+  
+  Dada::logMsg(1, $dl, "FRBD <- start");
+  my ($result, $response) = sendFRBDetectorMessage($xml);
+  if ($result ne "ok")
+  {
+    Dada::logMsgWarn($warn, $response);
+  }
+  Dada::logMsg(1, $dl, "FRBD -> ".$result." ".$response);
+}
+
+sub stopFRBDetector ($)
+{
+  my ($utc_stop) = @_;
+  my $xml;
+
+  $xml  = "<?xml version='1.0' encoding='ISO-8859-1'?>";
+  $xml .= "<frb_detector_message>";
+  $xml .=   "<cmd>stop</cmd>";
+  $xml .=   "<utc_stop>".$utc_stop."</utc_stop>";
+  $xml .= "</frb_detector_message>";
+
+  Dada::logMsg(1, $dl, "FRBD <- stop");
+  my ($result, $response) = sendFRBDetectorMessage($xml);
+  if ($result ne "ok")
+  {
+    Dada::logMsgWarn($warn, $response);
+  }
+  Dada::logMsg(1, $dl, "FRBD -> ".$result." ".$response);
+}
+
+sub sendFRBDetectorMessage ($)
+{
+  my ($xml) = @_;
+
+  # open a socket to the server_mopsr_frb_detector
+  my $frb_host = $cfg{"SERVER_HOST"};
+  my $frb_port = $cfg{"FRB_DETECTOR_BASEPORT"};
+
+  my $handle = Dada::connectToMachine($frb_host, $frb_port, 1);
+  if (!$handle)
+  {
+    return ("fail", "could not connect to FRB Detector on ".$frb_host.":".$frb_port);
+  }
+  
+
+  print $handle $xml."\r\n";
+  my $response = Dada::getLine($handle);
+  #my @lines = <$handle>;
+  #my $response = "";
+  #my $line;
+  #foreach $line (@lines)
+  #{
+  #  $response .= $line;
+  #}
+    
+  close ($handle);
+
+  eval {
+    $xml = XMLin ($response, ForceArray => 0, KeyAttr => 0, SuppressEmpty => 1, NoAttr => 1);
+  };
+
+  # If the XML parsing failed 
+  if ($@)
+  {
+    return ("fail", "failed to parse XML from FRB detector");
+  }
+  else
+  {
+    # check if reply is ok | fail
+    if (! eval { exists $xml->{'reply'} } )
+    {
+      return ("fail", "Malformed XML reply from FRB detector");
+    }
+    else
+    {
+      if ($xml->{'reply'} ne "ok")
+      {
+         return ("fail", "FRB detector returned fail");
+      }
+    }
+  }
+  return ("ok", "")
 }
 
 sub createLocalDirs($)
 {
   my ($utc_start) = @_;
 
-  my %spec = Dada::readCFGFileIntoHash($cfg{"CONFIG_DIR"}."/mopsr_tmc.spec", 0);
+  Dada::logMsg(1, $dl, "createLocalDirs: reading ".$cfg{"CONFIG_DIR"}."/mopsr_tmc.spec");
 
+  my %spec = Dada::readCFGFileIntoHash($cfg{"CONFIG_DIR"}."/mopsr_tmc.spec", 0);
   my ($cmd, $result, $response); 
 
   my $rdir = $cfg{"SERVER_RESULTS_DIR"}."/".$utc_start;
@@ -916,6 +1158,7 @@ sub createLocalDirs($)
 
   # Now that we know the UTC_START, create the required results and archive
   # directories and put the observation summary file there...
+  Dada::logMsg(1, $dl, "createLocalDirs: creating local dirs");
   Dada::mkdirRecursive($adir, 0755);
   Dada::mkdirRecursive($rdir, 0755);
 
@@ -934,19 +1177,51 @@ sub createLocalDirs($)
   print FH Dada::headerFormat("BW",        $spec{"BW"})."\n";
   print FH Dada::headerFormat("MODE",      $spec{"MODE"})."\n";
   print FH Dada::headerFormat("CONFIG",    $spec{"CONFIG"})."\n";
+  #print FH Dada::headerFormat("OBSERVING_TYPE", $spec{"OBSERVING_TYPE"})."\n";
   print FH Dada::headerFormat("UTC_START", $utc_start)."\n";
   print FH "\n";
-  print FH Dada::headerFormat("NUM_PWC",   $spec{"NUM_PWC"})."\n";
+  print FH Dada::headerFormat("NUM_PWC",   $cfg{"NUM_PWC"})."\n";
   print FH Dada::headerFormat("NCHAN",     $spec{"NCHAN"})."\n";
   print FH Dada::headerFormat("NBIT",      $spec{"NBIT"})."\n";
   print FH Dada::headerFormat("NPOL",      $spec{"NPOL"})."\n";
   print FH Dada::headerFormat("NDIM",      $spec{"NDIM"})."\n";
-  print FH Dada::headerFormat("NANT",      $spec{"NANT"})."\n";
+  print FH Dada::headerFormat("NANT",      int($spec{"NANT"}) * int($cfg{"NUM_PWC"}))."\n";
   print FH Dada::headerFormat("AQ_PROC_FILE", $spec{"AQ_PROC_FILE"})."\n";
-  print FH Dada::headerFormat("BF_PROC_FILE", $spec{"BF_PROC_FILE"})."\n";
-  print FH Dada::headerFormat("BP_PROC_FILE", $spec{"BP_PROC_FILE"})."\n";
   print FH Dada::headerFormat("OBSERVER",  $spec{"OBSERVER"})."\n";
   print FH "\n";
+  print FH Dada::headerFormat("TRACKING",  $spec{"TRACKING"})."\n";
+  print FH Dada::headerFormat("DELAY_TRACKING", $spec{"DELAY_TRACKING"})."\n";
+  print FH Dada::headerFormat("ANTENNA_WEIGHTS", $spec{"ANTENNA_WEIGHTS"})."\n";
+  print FH Dada::headerFormat("RFI_MITIGATION", $spec{"RFI_MITIGATION"})."\n";
+  print FH "\n";
+  print FH Dada::headerFormat("FB_ENABLED", $spec{"FB_ENABLED"})."\n";
+  print FH Dada::headerFormat("MB_ENABLED", $spec{"MB_ENABLED"})."\n";
+  print FH Dada::headerFormat("CORR_ENABLED", $spec{"CORR_ENABLED"})."\n";
+  if ($spec{"CORR_ENABLED"} eq "true")
+  {
+    print FH Dada::headerFormat("CORR_SOURCE", $spec{"SOURCE"})."\n";
+    Dada::mkdirRecursive($rdir."/".$spec{"SOURCE"}, 0755);
+    Dada::mkdirRecursive($adir."/".$spec{"SOURCE"}, 0755);
+  }
+  if (($spec{"FB_ENABLED"} eq "true") || ($spec{"MB_ENABLED"} eq "true"))
+  {
+    Dada::mkdirRecursive($rdir."/FB", 0755);
+    Dada::mkdirRecursive($adir."/FB", 0755);
+  }
+
+  my $i;
+  for ($i=0; $i<$bf_cfg{"NUM_TIED_BEAMS"}; $i++)
+  {
+    my $prefix = "TB".$i;
+    print FH Dada::headerFormat($prefix."_ENABLED", $spec{$prefix."_ENABLED"})."\n";
+    if ($spec{$prefix."_ENABLED"} eq "true")
+    {
+      print FH Dada::headerFormat($prefix."_SOURCE", $spec{$prefix."_SOURCE"})."\n";
+      Dada::mkdirRecursive($rdir."/".$spec{$prefix."_SOURCE"}, 0755);
+      Dada::mkdirRecursive($adir."/".$spec{$prefix."_SOURCE"}, 0755);
+    }
+  }
+
   close FH;
 
   $cmd = "cp ".$rdir."/obs.info ".$adir."/";
@@ -980,7 +1255,7 @@ sub createLocalDirs($)
     {
       $tracking_flag = 0;
     }
-    Dada::logMsg(0, $dl, "createLocalDirs: dumpAntennaMapping($utc_start, $tracking_flag);");
+    Dada::logMsg(2, $dl, "createLocalDirs: dumpAntennaMapping($utc_start, $tracking_flag);");
     ($result, $response) = dumpAntennaMapping($utc_start, $tracking_flag);
     if ($result ne "ok")
     {
@@ -1027,6 +1302,8 @@ sub stopNexus($)
     return ("fail", "could not connect to nexus to issue STOP");
   }
 
+  my $utc_stop = "";
+
    # Ignore the "welcome" message
   $ignore = <$handle>;
 
@@ -1037,15 +1314,14 @@ sub stopNexus($)
     # get the current unix time 
     my $curr_time_unix = time;
 
-    my $stop_time_utc = Dada::printTime(($curr_time_unix + 2), "utc");
-
-    $cmd = "stop ".$stop_time_utc;
-    Dada::logMsg(1, $dl, "stopNexus: generated: ".$stop_time_utc);
+    $utc_stop = Dada::printTime(($curr_time_unix + 5), "utc");
+    Dada::logMsg(1, $dl, "stopNexus: generated: ".$utc_stop." (now + 5)");
   }
   else
   {
-    $cmd = "stop ".$utc;
+    $utc_stop = $utc;
   }
+  $cmd = "stop ".$utc_stop;
 
   Dada::logMsg(1, $dl, "stopNexus: nexus <- ".$cmd);
   ($result, $response) = Dada::sendTelnetCommand($handle, $cmd);
@@ -1057,6 +1333,13 @@ sub stopNexus($)
   }
 
   $handle->close();
+
+  if ($frb_detector_started)
+  {
+    # instruct the FRB detector the current observation is over
+    stopFRBDetector ($utc_stop);
+    $frb_detector_started = 0;
+  }
 
   return ($result, $response);
 }
@@ -1491,10 +1774,15 @@ sub genSpecFile($\%)
   print FH "# Created: ".Dada::getCurrentDadaTime()."\n\n";
 
   my @specs = ();
-  my $line;
+  my ($prefix, $line);
 
   push @specs, Dada::headerFormat("HDR_VERSION", $site_cfg{"HDR_VERSION"});
   push @specs, Dada::headerFormat("HDR_SIZE",    $site_cfg{"HDR_SIZE"});
+  push @specs, Dada::headerFormat("CONFIG",      $cfg{"CONFIG_NAME"});
+
+  push @specs, Dada::headerFormat("TRACKING", $xml->{'east_arm_parameters'}{'tracking'});
+  push @specs, Dada::headerFormat("MD_ANGLE", $xml->{'east_arm_parameters'}{'md_angle'});
+  push @specs, Dada::headerFormat("NS_TILT", $xml->{'east_arm_parameters'}{'ns_tilt'});
 
   # signal parameters
   push @specs, Dada::headerFormat("BW", $xml->{'signal_parameters'}{'bandwidth'});
@@ -1511,30 +1799,97 @@ sub genSpecFile($\%)
   push @specs, Dada::headerFormat("DSB", $xml->{'pfb_parameters'}{'dual_sideband'});
   push @specs, Dada::headerFormat("RESOLUTION", $xml->{'pfb_parameters'}{'resolution'});
 
-  # source parameters
-  push @specs, Dada::headerFormat("SOURCE", $xml->{'source_parameters'}{'name'});
-  push @specs, Dada::headerFormat("MD_ANGLE", $xml->{'source_parameters'}{'md_angle'});
-  push @specs, Dada::headerFormat("NS_TILT", $xml->{'source_parameters'}{'ns_tilt'});
-  push @specs, Dada::headerFormat("RA", $xml->{'source_parameters'}{'ra'});
-  push @specs, Dada::headerFormat("DEC", $xml->{'source_parameters'}{'dec'});
-
   # observation parameters
-  push @specs, Dada::headerFormat("AQ_PROC_FILE", $xml->{'observation_parameters'}{'aq_processing_file'});
-  push @specs, Dada::headerFormat("BF_PROC_FILE", $xml->{'observation_parameters'}{'bf_processing_file'});
-  push @specs, Dada::headerFormat("BP_PROC_FILE", $xml->{'observation_parameters'}{'bp_processing_file'});
-  push @specs, Dada::headerFormat("MODE", $xml->{'observation_parameters'}{'mode'});
-  push @specs, Dada::headerFormat("CONFIG", $xml->{'observation_parameters'}{'config'});
   push @specs, Dada::headerFormat("OBSERVER", $xml->{'observation_parameters'}{'observer'});
-  push @specs, Dada::headerFormat("PID", $xml->{'observation_parameters'}{'project_id'});
-  push @specs, Dada::headerFormat("OBSERVING_TYPE", $xml->{'observation_parameters'}{'type'});
-
   # TOBS is not always specified
   $tobs_secs = "-1";
-  if (eval { exists $xml->{'observation_parameters'}{'tobs'} } )
+  if (eval { exists $xml->{'observation_parameters'}{'tobs'} })
   {
     $tobs_secs =  $xml->{'observation_parameters'}{'tobs'};
   }
   push @specs, Dada::headerFormat("TOBS", $tobs_secs);
+
+  # ensure name has no whitespace
+  $xml->{'boresight_parameters'}{'name'} =~ s/\s/_/g;
+
+  # source parameters
+  push @specs, Dada::headerFormat("PID", $xml->{'boresight_parameters'}{'project_id'});
+  push @specs, Dada::headerFormat("SOURCE", $xml->{'boresight_parameters'}{'name'});
+  push @specs, Dada::headerFormat("RA", $xml->{'boresight_parameters'}{'ra'});
+  push @specs, Dada::headerFormat("DEC", $xml->{'boresight_parameters'}{'dec'});
+  push @specs, Dada::headerFormat("RFI_MITIGATION", $xml->{'boresight_parameters'}{'rfi_mitigation'});
+  push @specs, Dada::headerFormat("ANTENNA_WEIGHTS", $xml->{'boresight_parameters'}{'antenna_weights'});
+  push @specs, Dada::headerFormat("DELAY_TRACKING", $xml->{'boresight_parameters'}{'delay_tracking'});
+  push @specs, Dada::headerFormat("AQ_PROC_FILE", $xml->{'boresight_parameters'}{'processing_file'});
+
+  # correlation parameters
+  $prefix = "CORR";
+  if (eval { exists $xml->{'correlation_parameters'} })
+  {
+    push @specs, Dada::headerFormat($prefix."_ENABLED", "true");
+    push @specs, Dada::headerFormat($prefix."_PID", $xml->{'correlation_parameters'}{'project_id'});
+    push @specs, Dada::headerFormat($prefix."_MODE", $xml->{'correlation_parameters'}{'mode'});
+    push @specs, Dada::headerFormat($prefix."_DUMP_TIME", $xml->{'correlation_parameters'}{'dump_time'});
+    push @specs, Dada::headerFormat($prefix."_PROC_FILE", $xml->{'correlation_parameters'}{'processing_file'});
+    push @specs, Dada::headerFormat("MODE", $xml->{'correlation_parameters'}{'mode'});
+  }
+  else
+  {
+    push @specs, Dada::headerFormat($prefix."_ENABLED", "false");
+  }
+
+  # tied array beam parameters
+  my $i;
+  for ($i=0; $i<$bf_cfg{"NUM_TIED_BEAMS"}; $i++)
+  { 
+    my $key = "tied_beam_".$i."_parameters";
+    $prefix = "TB".$i;
+    Dada::logMsg(1, $dl, "testing for ".$key);
+    if (eval { exists $xml->{$key} })
+    {
+      $xml->{$key}{'name'} =~ s/\s/_/g;
+      push @specs, Dada::headerFormat($prefix."_ENABLED", "true");
+      push @specs, Dada::headerFormat($prefix."_PID", $xml->{$key}{'project_id'});
+      push @specs, Dada::headerFormat($prefix."_MODE", $xml->{$key}{'mode'});
+      push @specs, Dada::headerFormat($prefix."_PROC_FILE", $xml->{$key}{'processing_file'});
+      push @specs, Dada::headerFormat($prefix."_SOURCE", $xml->{$key}{'name'});
+      push @specs, Dada::headerFormat($prefix."_RA", $xml->{$key}{'ra'});
+      push @specs, Dada::headerFormat($prefix."_DEC", $xml->{$key}{'dec'});
+      push @specs, Dada::headerFormat("MODE", $xml->{$key}{'mode'});
+    }
+    else
+    {
+      push @specs, Dada::headerFormat($prefix."_ENABLED", "false");
+    }
+  }
+
+  # fan beams parameters
+  my $prefix = "FB";
+  if (eval { exists $xml->{'fan_beams_parameters'} } )
+  {
+    push @specs, Dada::headerFormat($prefix."_ENABLED", "true");
+    push @specs, Dada::headerFormat($prefix."_PID", $xml->{'fan_beams_parameters'}{'project_id'});
+    push @specs, Dada::headerFormat($prefix."_MODE", $xml->{'fan_beams_parameters'}{'mode'});
+    push @specs, Dada::headerFormat($prefix."_BEAM_SPACING", $xml->{'fan_beams_parameters'}{'beam_spacing'});
+    push @specs, Dada::headerFormat("MODE", $xml->{'fan_beams_parameters'}{'mode'});
+  }
+  else
+  {
+    push @specs, Dada::headerFormat($prefix."_ENABLED", "false");
+  }
+
+  # mod beams parameters
+  my $prefix = "MB";
+  if (eval { exists $xml->{'mod_beams_parameters'} } )
+  {
+    push @specs, Dada::headerFormat($prefix."_ENABLED", "true");
+    push @specs, Dada::headerFormat($prefix."_PID", $xml->{'mod_beams_parameters'}{'project_id'});
+    push @specs, Dada::headerFormat("MODE", $xml->{'mod_beams_parameters'}{'mode'});
+  }
+  else
+  {
+    push @specs, Dada::headerFormat($prefix."_ENABLED", "false");
+  }
 
   # hardwired / site config
   push @specs, Dada::headerFormat("OBS_OFFSET", "0");
@@ -1574,6 +1929,34 @@ sub genSpecFile($\%)
   else
   {
     push @specs, Dada::headerFormat("RANKED_MODULES", $best_mods);
+  }
+
+  # add custom parameters if they exist
+  if (eval { exists $xml->{'custom_parameters'} } )
+  {
+    my $key;
+    foreach $key (keys %{$xml->{'custom_parameters'}})
+    {
+      my $dada_key = uc($key);
+      Dada::logMsg(1, $dl, "custom_parameter: ".$key."=".$xml->{'custom_parameters'}{$key}." Dada key=".$dada_key);
+      my $spec;
+      my $matched = 0;
+      foreach $spec (@specs)
+      {
+        if ($spec =~ m/$dada_key/)
+        {
+          $matched = 1;
+        }
+      }
+      if ($matched)
+      {
+        Dada::logMsg(1, $dl, "Ignoring custom param since it already existed");
+      }
+      else
+      {
+        push @specs, Dada::headerFormat ($dada_key, $xml->{'custom_parameters'}{$key});
+      }
+    }
   }
 
   # write the file
@@ -1636,6 +2019,10 @@ sub getBestModules()
   my @mods;
   my $pm_count = 0;
   my $pm_max = 8;
+  if ($hires == 1)
+  {
+    $pm_max = 12;
+  }
   my $best_modules = "";
 
   # read all the ranked modules in, 1 line to array element
@@ -1805,7 +2192,7 @@ sub dumpAntennaMapping($$)
   {
     return ("fail", "could not get list of best modules");
   }
-  Dada::logMsg(0, $dl, "dumpAntennaMapping: best_mods=".$best_mods);
+  Dada::logMsg(2, $dl, "dumpAntennaMapping: best_mods=".$best_mods);
 
   open(FHA,">".$antenna_file) or return ("fail", "could not open antenna file for writing");
   open(FHB,">".$baselines_file) or return ("fail", "could not open baselines file for writing");

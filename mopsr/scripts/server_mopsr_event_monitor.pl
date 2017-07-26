@@ -60,7 +60,7 @@ $error = $cfg{"STATUS_DIR"}."/".$daemon_name.".error";
   my $pid_file  = $cfg{"SERVER_CONTROL_DIR"}."/".$daemon_name.".pid";
   my $quit_file = $cfg{"SERVER_CONTROL_DIR"}."/".$daemon_name.".quit";
 
-  my $listen_host = "172.17.227.103";
+  my $listen_host = "129.78.128.156";
   my $listen_port = "23456";
 
   my $tmc_host = $cfg{"TMC_INTERFACE_HOST"};
@@ -84,14 +84,6 @@ $error = $cfg{"STATUS_DIR"}."/".$daemon_name.".error";
   $SIG{INT}  = \&sigHandle;
   $SIG{TERM} = \&sigHandle;
 
-  # Sanity check for this script
-  if (index($cfg{"SERVER_ALIASES"}, $ENV{'HOSTNAME'}) < 0 ) 
-  {
-    print STDERR "ERROR: Cannot run this script on ".$ENV{'HOSTNAME'}."\n";
-    print STDERR "       Must be run on the configured server: ".$cfg{"SERVER_HOST"}."\n";
-    exit(1);
-  }
-
   if (-f $warn) {
     unlink $warn;
   }
@@ -100,7 +92,7 @@ $error = $cfg{"STATUS_DIR"}."/".$daemon_name.".error";
   }
 
   # Redirect standard output and error
-  Dada::daemonize($log_file, $pid_file);
+  # Dada::daemonize($log_file, $pid_file);
 
   Dada::logMsg(0, $dl, "STARTING SCRIPT");
 
@@ -286,13 +278,13 @@ $error = $cfg{"STATUS_DIR"}."/".$daemon_name.".error";
 
                   Dada::logMsg(1, $dl, "EVENT_".$i.": MPSR START=".$start_utc." END=".$end_utc);
 
-                  $event_message .= $start_utc." ".$end_utc." ".$dm." ".$snr."\n";
+                  $event_message .= $start_utc." ".$end_utc." ".$dm." ".$snr." ".$filter_time." 1\n";
                 }
 
                 for ($i=0; $i<$cfg{"NUM_PWC"}; $i++)
                 {
                   $host = $cfg{"PWC_".$i};
-                  $port = int($cfg{"CLIENT_EVENT_BASEPORT"}) + int($i);
+                  $port = int($cfg{"CLIENT_AQ_EVENT_BASEPORT"}) + int($i);
                   if ($cfg{"PWC_STATE_".$i} ne "inactive")
                   {
                     Dada::logMsg(1, $dl, "main: opening connection for FRB dump to ".$host.":".$port);

@@ -167,11 +167,19 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
     else
     {
       my %header = Dada::headerToHash($raw_header);
-      msg (0, "INFO", "UTC_START=".$header{"UTC_START"}." NCHAN=".$header{"NCHAN"}." NANT=".$header{"NANT"});
-      
-      my $reblock_factor = $cfg{"HEIMDALL_REBLOCK_FACTOR"};
 
-      $proc_cmd = "mopsr_dbreblockdb ".$in_db_key." ".$out_db_key." -z -s -r ".$reblock_factor;
+      msg (0, "INFO", "UTC_START=".$header{"UTC_START"}." NCHAN=".$header{"NCHAN"}." NANT=".$header{"NANT"});
+
+      # if the observation is a Module Beam, then dont reblock for heimdall
+      if ($header{"MB_ENABLED"} eq "true")
+      {
+        $proc_cmd = "dada_dbnull -k ".$in_db_key." -z -s";
+      }
+      else
+      {
+        my $reblock_factor = $cfg{"HEIMDALL_REBLOCK_FACTOR"};
+        $proc_cmd = "mopsr_dbreblockdb ".$in_db_key." ".$out_db_key." -z -s -r ".$reblock_factor;
+      }
 
       my ($binary, $junk) = split(/ /,$proc_cmd, 2);
       $cmd = "ls -l ".$cfg{"SCRIPTS_DIR"}."/".$binary;
@@ -253,7 +261,7 @@ sub controlThread($)
   ($result, $response) = Dada::killProcess($cmd, "mpsr");
   msg(3, "INFO" ,"controlThread: killProcess() ".$result." ".$response);
 
-  $cmd = "^dada_dbreblockdb ".$in_db_key;
+  $cmd = "^mopsr_dbreblockdb ".$in_db_key;
   msg(2, "INFO" ,"controlThread: killProcess(".$cmd.", mpsr)");
   ($result, $response) = Dada::killProcess($cmd, "mpsr");
   msg(3, "INFO" ,"controlThread: killProcess() ".$result." ".$response);

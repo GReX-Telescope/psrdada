@@ -119,7 +119,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
   my $pwc_logport = int($cfg{"PWC_LOGPORT"});
   if ($cfg{"USE_BASEPORT"} eq "yes")
   {
-    $pwc_port     += int($pwc_id);
+    $pwc_port    += int($pwc_id);
     $pwc_logport += int($pwc_id);
   }
 
@@ -193,10 +193,19 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
   {
     $binary = $cfg{"PWC_BINARY"};
     $regex = $binary." -m ".$pfb_id;
-    
-    $cmd = $binary." -m ".$pfb_id." -c ".$pwc_port." -k ".lc($key).
-           " -l ".$pwc_logport.  " -i ".$udp_ip." -p ".$udp_port.
-           " -b ".$udp_core." -M ".$mon_dir;
+    if ($binary eq "mopsr_udpdb_dual")
+    {
+      $cmd = $binary." -m ".$pfb_id." -c ".$pwc_port." -k ".lc($key).
+             " -l ".$pwc_logport.  " -i ".$udp_ip.":".$udp_port.
+             " -i ".$udp_ip.":".($udp_port+1).
+             " -b ".$udp_core." -M ".$mon_dir;
+    }
+    else
+    {
+      $cmd = $binary." -m ".$pfb_id." -c ".$pwc_port." -k ".lc($key).
+             " -l ".$pwc_logport.  " -i ".$udp_ip." -p ".$udp_port.
+             " -b ".$udp_core." -M ".$mon_dir;
+    }
 
     # only select channels if using selants version
     if ($binary eq "mopsr_udpdb_selants")

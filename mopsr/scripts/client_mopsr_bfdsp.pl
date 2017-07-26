@@ -41,7 +41,7 @@ our $localhost : shared;
 our $chan_id : shared;
 our $in_db_key : shared;
 our $fb_db_key : shared;
-our $tb_db_key : shared;
+our @tb_db_keys : shared;
 our $log_host;
 our $sys_log_port;
 our $src_log_port;
@@ -60,7 +60,7 @@ $daemon_name = Dada::daemonBaseName($0);
 %ct = Mopsr::getCornerturnConfig("bp");   # read the BP cornerturn
 $chan_id = -1;
 $in_db_key = "";
-$tb_db_key = "";
+@tb_db_keys = ();
 $fb_db_key = "";
 $localhost = Dada::getHostMachineName(); 
 $log_host = $cfg{"SERVER_HOST"};
@@ -121,7 +121,11 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
   # this is data stream we will be reading from
   $in_db_key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $chan_id, $cfg{"NUM_BF"}, $cfg{"RECEIVING_DATA_BLOCK"});
   $fb_db_key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $chan_id, $cfg{"NUM_BF"}, $cfg{"FAN_BEAMS_DATA_BLOCK"});
-  $tb_db_key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $chan_id, $cfg{"NUM_BF"}, $cfg{"TIED_BEAM_DATA_BLOCK"});
+  my $i;
+  for ($i=0; $i<$cfg{"NUM_TIED_BEAMS"}; $i++)
+  {
+    push (@tb_db_keys, Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $chan_id, $cfg{"NUM_BF"}, $cfg{"TIED_BEAM_".$i."_DATA_BLOCK"}));
+  }
 
   # Autoflush STDOUT
   $| = 1;
@@ -145,16 +149,16 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
   my $control_thread = threads->new(\&controlThread, $pid_file);
 
   my ($cmd, $result, $response, $raw_header, $full_cmd, $proc_cmd_file);
-  my ($proc_cmd, $proc_dir, $chan_dir, $tracking, $prev_utc_start);
+  my ($proc_cmd, $proc_dir, $bf_dir, $tracking, $prev_utc_start);
 
-  $chan_dir  = "CH".sprintf("%02d", $chan_id);
+  $bf_dir  = "BF".sprintf("%02d", $chan_id);
 
   $prev_utc_start = "";
 
   # continuously run mopsr_dbib for this PWC
   while (!$quit_daemon)
   {
-    $cmd = "dada_header -k ".$in_db_key;
+    $cmd = "dada_header -t bfdsp -k ".$in_db_key;
     msg(2, "INFO", "main: ".$cmd);
     $raw_header = `$cmd 2>&1`;
     msg(2, "INFO", "main: ".$cmd." returned");
@@ -176,62 +180,72 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
       my %header = Dada::headerToHash($raw_header);
       msg(0, "INFO", "UTC_START=".$header{"UTC_START"}." NCHAN=".$header{"NCHAN"}." NANT=".$header{"NANT"});
 
-      # create the local directories to save some information 
-      # about this step in the pipeline for this observation
-      msg(1, "INFO", "main: createLocalDirs()");
-      ($result, $response) = createLocalDirs (\%header);
-      msg(1, "INFO", "main: ".$result." ".$response);
-
-      $proc_cmd = "dada_dbnull -z -s -k <IN_DADA_KEY>";
-
-      if ($result ne "ok")
+      my $valid_obs= 0;
+      if (($header{"FB_ENABLED"} eq "true") || ($header{"MB_ENABLED"} eq "true"))
       {
-        msg(0, "ERROR", "failed to create local directories");
+        $valid_obs = 1;
       }
-      elsif ($prev_utc_start eq $header{"UTC_START"})
+      for ($i=0; $i<$cfg{"NUM_TIED_BEAMS"}; $i++)
       {
-        msg(0, "ERROR", "UTC_START repeated, jettesioning observation");
-      }
-      else
-      {
-        if ($cfg{"BF_STATE_".$chan_id} eq "active")
+        if ($header{"TB".$i."_ENABLED"} eq "true")
         {
-          # original
-          #$proc_cmd = "mopsr_bfdsp ".$in_db_key." ".$out_db_key." ".
-          #            $cfg{"MOLONGLO_BAYS_FILE"}." ".$cfg{"MOLONGLO_MODULES_FILE"}.
-          #            " -d ".$cfg{"BF_GPU_ID_".$chan_id}." -s -b ".$ct{"NBEAM"};
-
-          $proc_cmd = "mopsr_bfdsp ".$in_db_key." ". $cfg{"MOLONGLO_BAYS_FILE"}." ".
-                      $cfg{"MOLONGLO_MODULES_FILE"}." -d " .$cfg{"BF_GPU_ID_".$chan_id}." -s";
-
-          if (($header{"CONFIG"} eq "TIED_ARRAY_BEAM") || 
-              ($header{"CONFIG"} eq "TIED_ARRAY_FAN_BEAM") || 
-              ($header{"CONFIG"} eq "TIED_ARRAY_MOD_BEAM"))
-          {
-            $proc_cmd .= " -t ".$tb_db_key;
-          }
-
-          if (($header{"CONFIG"} eq "FAN_BEAM") || 
-              ($header{"CONFIG"} eq "TIED_ARRAY_FAN_BEAM"))
-          {
-            $proc_cmd .= " -f ".$fb_db_key." -b ".$ct{"NBEAM"};
-          }
-
-          if (($header{"CONFIG"} eq "MOD_BEAM") ||
-              ($header{"CONFIG"} eq "TIED_ARRAY_MOD_BEAM"))
-          {
-            $proc_cmd .= " -m ".$fb_db_key." -b ".$ct{"NBEAM"};
-          }
-
-        }   
-        else
-        {
-          msg(0, "INFO", "BF_STATE_".$chan_id." == ".$cfg{"BF_STATE_".$chan_id});
+          $valid_obs = 1;
         }
       }
-      $prev_utc_start = $header{"UTC_START"};
 
-      # $proc_cmd = "dada_dbnull -z -s -k ".$in_db_key;
+      $proc_cmd = "dada_dbnull -k ".$in_db_key." -z -s";
+
+      if ($valid_obs)
+      {
+        # create the local directories to save some information 
+        # about this step in the pipeline for this observation
+        msg(1, "INFO", "main: createLocalDirs()");
+        ($result, $response) = createLocalDirs (\%header);
+        msg(1, "INFO", "main: ".$result." ".$response);
+
+        if ($result ne "ok")
+        {
+          msg(0, "ERROR", "failed to create local directories");
+        }
+        elsif ($prev_utc_start eq $header{"UTC_START"})
+        {
+          msg(0, "ERROR", "UTC_START repeated, jettesioning observation");
+        }
+        else
+        {
+          if ($cfg{"BF_STATE_".$chan_id} eq "active")
+          {
+            $proc_cmd = "mopsr_bfdsp ".$in_db_key." ". $cfg{"MOLONGLO_BAYS_FILE"}." ".
+                        $cfg{"MOLONGLO_MODULES_FILE"}." -d " .$cfg{"BF_GPU_ID_".$chan_id}." -s ";
+
+            if ($header{"FB_ENABLED"} eq "true")
+            {
+              $proc_cmd .= " -f ".$fb_db_key." -b ".$ct{"NBEAM"};
+            }
+
+            for ($i=0; $i<$cfg{"NUM_TIED_BEAMS"}; $i++)
+            {
+              if ($header{"TB".$i."_ENABLED"} eq "true")
+              {
+                $proc_cmd .= " -t ".$tb_db_keys[$i];
+              }
+            }
+
+            if ($header{"MB_ENABLED"} eq "true")
+            {
+              $proc_cmd .= " -m ".$fb_db_key." -b ".$header{"NANT"};
+            }
+
+            $proc_cmd .= " -c ".$cfg{"BF_CORE_".$chan_id};
+          }
+          else
+          {
+            msg(0, "INFO", "BF_STATE_".$chan_id." == ".$cfg{"BF_STATE_".$chan_id});
+          }
+        }
+      }
+
+      $prev_utc_start = $header{"UTC_START"};
 
       my ($binary, $junk) = split(/ /,$proc_cmd, 2);
       $cmd = "ls -l ".$cfg{"SCRIPTS_DIR"}."/".$binary;
@@ -245,7 +259,8 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
       }
 
       msg(1, "INFO", "START ".$cmd);
-      ($result, $response) = Dada::mySystemPiped($cmd, $src_log_file, $src_log_sock, "src", sprintf("%02d",$chan_id), $daemon_name, "proc");
+      ($result, $response) = Dada::mySystemPiped ($cmd, $src_log_file, $src_log_sock, 
+                                                 "src", sprintf("%02d",$chan_id), $daemon_name, "proc");
       msg(1, "INFO", "END   ".$cmd);
       if ($result ne "ok")
       {
@@ -281,8 +296,8 @@ sub createLocalDirs(\%)
 
   my %h = %$h_ref;
   my $utc_start = $h{"UTC_START"};
-  my $chan_dir  = "CH".sprintf("%02d", $chan_id);
-  my $dir   = $cfg{"CLIENT_RESULTS_DIR"}."/".$chan_dir."/".$utc_start;
+  my $bf_dir  = "BF".sprintf("%02d", $chan_id);
+  my $dir   = $cfg{"CLIENT_RESULTS_DIR"}."/".$bf_dir."/".$utc_start;
 
   my ($cmd, $result, $response);
 
@@ -308,91 +323,6 @@ sub createLocalDirs(\%)
   rename($file.".tmp", $file);
 
   return ("ok", $dir);
-}
-
-
-#
-# Thread to create remote NFS links on the server
-#
-sub createRemoteDirs($$$)
-{
-  my ($utc_start, $ch_id, $obs_header) = @_;
-
-  msg(2, "INFO", "createRemoteDirs(".$utc_start.", ".$ch_id.", ".$obs_header.")");
-
-  my $user = $cfg{"USER"};
-  my $host = $cfg{"SERVER_HOST"};
-  my $remote_dir = $cfg{"SERVER_RESULTS_DIR"}."/".$utc_start."/".$ch_id;
-  my $cmd = "mkdir -m 2755 -p ".$remote_dir;
-
-  my $result = "";
-  my $response = "";
-  my $rval = 0;
-
-  my $attempts_left = 5;
-  my $use_nfs = 0;
-
-  while ($attempts_left > 0)
-  {
-    if ($use_nfs)
-    {
-      msg(2, "INFO", "createRemoteDirs: ".$cmd);
-      ($result, $response) = Dada::mySystem($cmd);
-      msg(2, "INFO", "createRemoteDirs: ".$result." ".$response);
-    }
-    else
-    {
-      msg(2, "INFO", "createRemoteDirs: ".$user."@".$host.":".$cmd);
-      ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
-      msg(2, "INFO", "createRemoteDirs: ".$result." ".$rval." ".$response);
-    }
-
-    if (($result eq "ok") && ($rval == 0))
-    {
-      msg(2, "INFO", "createRemoteDirs: remote directory created");
-
-      # now copy obs.header file to remote directory
-      if ($use_nfs)
-      {
-        $cmd = "cp ".$obs_header." ".$remote_dir."/";
-      }
-      else
-      {
-        $cmd = "scp ".$obs_header." ".$user."@".$host.":".$remote_dir."/";
-      }
-      msg(2, "INFO", "createRemoteDirs: ".$cmd);
-      ($result, $response) = Dada::mySystem($cmd);
-      msg(2, "INFO", "createRemoteDirs: ".$result." ".$response);
-      if ($result ne "ok")
-      {
-        msg(0, "INFO", "createRemoteDirs: ".$cmd." failed: ".$response);
-        msg(0, "WARN", "could not copy obs.header file to server");
-        return ("fail", "could not copy obs.header file");
-      }
-      else
-      {
-        return ("ok", "");
-      }
-
-    }
-    else
-    {
-      if ($result ne "ok")
-      {
-        msg(0, "INFO", "createRemoteDir: ssh failed ".$user."@".$host.": ".$response);
-        msg(0, "WARN", "could not ssh to server");
-      }
-      else
-      {
-        msg(0, "INFO", "createRemoteDir: ".$cmd." failed: ".$response);
-        msg(0, "WARN", "could not create dir on server");
-      }
-      $attempts_left--;
-      sleep(1);
-    }
-  }
-
-  return ("fail", "could not create remote directory");
 }
 
 
@@ -434,7 +364,7 @@ sub controlThread($)
 
   my ($cmd, $result, $response);
 
-  $cmd = "^dada_header -k ".$in_db_key;
+  $cmd = "^dada_header -t bfdsp -k ".$in_db_key;
   msg(2, "INFO", "controlThread: killProcess(".$cmd.", mpsr)");
   ($result, $response) = Dada::killProcess($cmd, "mpsr");
   msg(3, "INFO", "controlThread: killProcess() ".$result." ".$response);

@@ -242,7 +242,10 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
       my $primary_ants = "";
       for ($i=0; $i<=$#best_mods; $i++)
       {
-        $primary_ants .= " -p ".$best_mods[$i];
+        if ($best_mods[$i] >= 0)
+        {
+          $primary_ants .= " -p ".$best_mods[$i];
+        }
       }
 
       # replace MOPSR_PRIMARY_ANTS with the top ranked 8 antennas for this configuration
