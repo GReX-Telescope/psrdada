@@ -139,7 +139,7 @@ int dbcalib_destroy (mopsr_dbcalib_t * ctx, dada_hdu_t * in_hdu);
 #define MOPSR_DBCALIB_INIT { 0, "", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", 0, 0}
 
 //function to write ac and cc files
-int dbcalib_dump_spectra (dada_client_t* client, uint64_t start_byte, uint64_t end_byte)
+int dbcalib_dump_spectra (dada_client_t* client, uint64_t start_time, uint64_t end_time)
 {
   mopsr_dbcalib_t * ctx = (mopsr_dbcalib_t *) client->context;
 
@@ -150,7 +150,7 @@ int dbcalib_dump_spectra (dada_client_t* client, uint64_t start_byte, uint64_t e
   if (ctx->verbose)
     multilog (log, LOG_INFO, "dump_spectra()\n");
 
-  size_t bytes_to_copy = sizeof(cuComplex) * ctx->npairs * ctx->batch_size;
+  size_t bytes_to_copy = sizeof(cuFloatComplex) * ctx->npairs * ctx->batch_size * ctx->nchan;
   if (ctx->verbose)
     multilog (log, LOG_INFO, "dump_spectra: cudaMemcpyAsync copying back %ld bytes\n", bytes_to_copy);
   error = cudaMemcpyAsync (ctx->h_cross_power, ctx->d_cross_power, bytes_to_copy, cudaMemcpyDeviceToHost, ctx->stream);
@@ -167,7 +167,7 @@ int dbcalib_dump_spectra (dada_client_t* client, uint64_t start_byte, uint64_t e
   FILE *acfile, *ccfile;
   char acfilename [512];
   char ccfilename [512];
-  sprintf(acfilename,"%s_%020lu_%020lu.ac.tmp", ctx->utc_start, start_byte, end_byte);
+  sprintf(acfilename,"%s_%010lu_%010lu.ac.tmp", ctx->utc_start, start_time, end_time);
   if (ctx->verbose)
     multilog (log, LOG_INFO, "dump_spectra: opening %s\n", acfilename);
   acfile = fopen(acfilename, "w");
@@ -179,8 +179,7 @@ int dbcalib_dump_spectra (dada_client_t* client, uint64_t start_byte, uint64_t e
   if (ctx->verbose)
     multilog (log, LOG_INFO, "Opened file %s\n",acfilename);
 
-
-  sprintf (ccfilename, "%s_%020lu_%020lu.cc.tmp", ctx->utc_start, start_byte, end_byte);
+  sprintf (ccfilename, "%s_%010lu_%010lu.cc.tmp", ctx->utc_start, start_time, end_time);
   if (ctx->verbose)
     multilog (log, LOG_INFO, "dump_spectra: opening %s\n", ccfilename);
   ccfile = fopen(ccfilename, "w");
@@ -192,8 +191,8 @@ int dbcalib_dump_spectra (dada_client_t* client, uint64_t start_byte, uint64_t e
   if (ctx->verbose)
     multilog (log, LOG_INFO, "Opened file %s\n",ccfilename);
 
-  int ii,jj;
-  cuComplex * cp_spectra = (cuComplex *) ctx->h_cross_power;
+  int ii,jj,kk;
+  cuFloatComplex * cp_spectra = (cuFloatComplex *) ctx->h_cross_power;
 
   if (ctx->verbose)
     multilog (log, LOG_INFO, "dump_spectra: writing output data..\n");
@@ -201,6 +200,69 @@ int dbcalib_dump_spectra (dada_client_t* client, uint64_t start_byte, uint64_t e
   int pair_idx = 0;
 
 #ifdef DSB
+
+  const unsigned half_batch = ctx->batch_size / 2;
+
+#ifdef HIRES
+  for (ii=0;ii<ctx->npairs_total;ii++)
+  {
+    // In the case we want to write empty data
+    if (ctx->baseline_mask[ii] == 0)
+    {
+      if (ctx->autocorr_mask[ii] == 1)
+      {
+        float zero = 0.0;
+        for (jj=0; jj<ctx->nchan; jj++)
+          for (kk=0; kk<ctx->batch_size; kk++)
+            fwrite( &zero, sizeof(float), 1, acfile);
+      }
+      else
+      {
+        cuFloatComplex zero = make_cuFloatComplex(0.0,0.0);
+        for (jj=0; jj<ctx->nchan; jj++)
+          for (kk=0; kk<ctx->batch_size; kk++)
+            fwrite(&zero, sizeof(cuFloatComplex), 1, ccfile);
+      }
+    }
+    else
+    {
+      if (ctx->autocorr_mask[ii] == 1)
+      {
+        for (jj=0; jj<ctx->nchan; jj++)
+        {
+          uint64_t offset = jj * ctx->batch_size * ctx->npairs;
+          for (kk=half_batch; kk<ctx->batch_size; kk++)
+            fwrite( &(cp_spectra[offset + ctx->batch_size*pair_idx+kk].x), sizeof(float), 1, acfile);
+          for (kk=0; kk<half_batch; kk++)
+            fwrite( &(cp_spectra[offset + ctx->batch_size*pair_idx+kk].x), sizeof(float), 1, acfile);
+        }
+      }
+      else
+      {
+        // offset within the channel for this baseline
+        uint64_t offset = ctx->batch_size * pair_idx;
+        uint64_t chan_stride = ctx->batch_size * ctx->npairs;
+
+        for (jj=0; jj<ctx->nchan; jj++)
+        {
+          // zap the DC bin of each channel
+          //cp_spectra[offset + half_batch].x = 0;
+          //cp_spectra[offset + half_batch].y = 0;
+
+          //multilog (log, LOG_INFO, "dump_spectra: full cross [%d][%d] offset=%lu size=%lu\n", ii, jj, offset, ctx->batch_size);
+
+          //multilog (log, LOG_INFO, "dump_spectra: full cross [%d][%d] offset=%lu\n", ii, jj, offset + half_batch);
+          fwrite(&(cp_spectra[offset + half_batch]), sizeof(cuFloatComplex), half_batch, ccfile);
+          //multilog (log, LOG_INFO, "dump_spectra: full cross [%d][%d] offset=%lu\n", ii, jj, offset);
+          fwrite(&(cp_spectra[offset]), sizeof(cuFloatComplex), half_batch, ccfile);
+
+          offset += chan_stride;
+        }
+      }
+      pair_idx++;
+    }
+  }
+#else
   for (ii=0;ii<ctx->npairs_total;ii++)
   {
     // In the case we want to write empty data
@@ -214,9 +276,9 @@ int dbcalib_dump_spectra (dada_client_t* client, uint64_t start_byte, uint64_t e
       }
       else
       {
-        cuComplex zero = make_cuComplex(0.0,0.0);
+        cuFloatComplex zero = make_cuFloatComplex(0.0,0.0);
         for (jj=0; jj<ctx->batch_size; jj++)
-          fwrite(&zero, sizeof(cuComplex), 1, ccfile);
+          fwrite(&zero, sizeof(cuFloatComplex), 1, ccfile);
       }
     }
     else
@@ -230,12 +292,13 @@ int dbcalib_dump_spectra (dada_client_t* client, uint64_t start_byte, uint64_t e
       }
       else
       {
-        fwrite(&(cp_spectra[ctx->batch_size*pair_idx + ctx->batch_size/2]), sizeof(cuComplex), ctx->batch_size/2, ccfile);
-        fwrite(&(cp_spectra[ctx->batch_size*pair_idx]), sizeof(cuComplex), ctx->batch_size/2, ccfile);
+        fwrite(&(cp_spectra[ctx->batch_size*pair_idx + ctx->batch_size/2]), sizeof(cuFloatComplex), ctx->batch_size/2, ccfile);
+        fwrite(&(cp_spectra[ctx->batch_size*pair_idx]), sizeof(cuFloatComplex), ctx->batch_size/2, ccfile);
       }
       pair_idx++;
     }
   }
+#endif
 #else
   for (ii=0;ii<ctx->npairs_total;ii++)
     if (ctx->baseline_mask[ii] == 0)
@@ -248,9 +311,9 @@ int dbcalib_dump_spectra (dada_client_t* client, uint64_t start_byte, uint64_t e
       }
       else
       {
-        cuComplex zero = make_cuComplex(0.0,0.0);
+        cuFloatComplex zero = make_cuFloatComplex(0.0,0.0);
         for (jj=0; jj<ctx->batch_size; jj++)
-          fwrite(&zero, sizeof(cuComplex), 1, ccfile);
+          fwrite(&zero, sizeof(cuFloatComplex), 1, ccfile);
       }
     }
     else
@@ -261,7 +324,7 @@ int dbcalib_dump_spectra (dada_client_t* client, uint64_t start_byte, uint64_t e
           fwrite( &(cp_spectra[ctx->batch_size*pair_idx+jj].x), sizeof(float), 1, acfile);
       }
       else
-        fwrite(&(cp_spectra[ctx->batch_size*pair_idx]), sizeof(cuComplex), ctx->batch_size, ccfile);
+        fwrite(&(cp_spectra[ctx->batch_size*pair_idx]), sizeof(cuFloatComplex), ctx->batch_size, ccfile);
       pair_idx++;
     }
 #endif
@@ -276,10 +339,10 @@ int dbcalib_dump_spectra (dada_client_t* client, uint64_t start_byte, uint64_t e
 
   // rename files from temp names to real names
   char command[1024];
-  sprintf (command,  "mv %s_%020lu_%020lu.ac.tmp %s_%020lu_%020lu.ac", ctx->utc_start, start_byte, end_byte, ctx->utc_start, start_byte, end_byte);
+  sprintf (command,  "mv %s_%010lu_%010lu.ac.tmp %s_%010lu_%010lu.ac", ctx->utc_start, start_time, end_time, ctx->utc_start, start_time, end_time);
   system (command);
 
-  sprintf (command,  "mv %s_%020lu_%020lu.cc.tmp %s_%020lu_%020lu.cc", ctx->utc_start, start_byte, end_byte, ctx->utc_start, start_byte, end_byte);
+  sprintf (command,  "mv %s_%010lu_%010lu.cc.tmp %s_%010lu_%010lu.cc", ctx->utc_start, start_time, end_time, ctx->utc_start, start_time, end_time);
   system (command);
   
   return 0;
@@ -308,11 +371,17 @@ int dbcalib_open (dada_client_t* client)
     multilog (log, LOG_ERR, "header had no NCHAN\n");
     return -1;
   }
+
+#ifdef HIRES
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "dbcalib_open: nchan=%d\n", ctx->nchan); 
+#else
   if (ctx->nchan != 1)
   {
     multilog (log, LOG_ERR, "header specified NCHAN == %d, should be 1\n", ctx->nchan);
     return -1;
   } 
+#endif
 
   if (ascii_header_get (client->header, "NPOL", "%d", &(ctx->npol)) != 1)
   {
@@ -356,7 +425,7 @@ int dbcalib_open (dada_client_t* client)
     return -1;
   }
 
-  if (strcmp(ctx->order, "ST") != 0)
+  if ((strcmp(ctx->order, "ST") != 0) && (strcmp(ctx->order, "FST") != 0))
   {
     multilog (log, LOG_ERR, "ORDER [%s] was not ST\n", ctx->order);
     return -1;
@@ -368,7 +437,6 @@ int dbcalib_open (dada_client_t* client)
   client->transfer_bytes = 0;
   client->optimal_bytes = 64*1024*1024;
   client->header_transfer = 0;
-
 
   // EBARR 2014 EDIT
   // Below this point there needs to be a way to generate arbitrary baseline combinations
@@ -482,7 +550,7 @@ int dbcalib_open (dada_client_t* client)
     return -1;
   }
 
-  ctx->d_cross_power_bytes = ctx->batch_size * ctx->npairs * sizeof(cuComplex);
+  ctx->d_cross_power_bytes = ctx->batch_size * ctx->npairs * sizeof(cuFloatComplex) * ctx->nchan;
   if (!ctx->d_cross_power)
   {
     if (ctx->verbose)
@@ -502,17 +570,16 @@ int dbcalib_open (dada_client_t* client)
   }
   
   if (!ctx->h_cross_power)
+  {
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "open: cudaMallocHost(%"PRIu64") for h_cross_power\n", ctx->d_cross_power_bytes);
+    error = cudaMallocHost (&(ctx->h_cross_power), ctx->d_cross_power_bytes);
+    if (error != cudaSuccess)
     {
-      if (ctx->verbose)
-        multilog (log, LOG_INFO, "open: cudaMallocHost(%"PRIu64") for h_cross_power\n", ctx->d_cross_power_bytes);
-      error = cudaMallocHost (&(ctx->h_cross_power), ctx->d_cross_power_bytes);
-      if (error != cudaSuccess)
-        {
-          multilog (log, LOG_ERR, "open: could not create allocated %ld bytes of host memory\n", ctx->d_cross_power_bytes);
-          return -1;
-        }
+      multilog (log, LOG_ERR, "open: could not create allocated %ld bytes of host memory\n", ctx->d_cross_power_bytes);
+        return -1;
     }
-  
+  }
 
   // instantiate fft_plan_forward for data accululation
   cufftResult cufft_error;
@@ -565,14 +632,14 @@ int dbcalib_close (dada_client_t* client, uint64_t bytes_read)
     multilog (log, LOG_INFO, "close: bytes_read=%"PRIu64"\n", bytes_read);
   
   if (ctx->dump_counter%ctx->blocks_per_dump != 0)
-    {
-      //dump remainder of data to file
-      uint64_t start_byte = ctx->obs_offset + ctx->byte_counter;
-      uint64_t end_byte = start_byte + ctx->block_size * (ctx->dump_counter % ctx->blocks_per_dump); 
-      if (dbcalib_dump_spectra(client,start_byte,end_byte) != 0){
-        return -1;
-      }
+  {
+    // dump remainder of data to file
+    uint64_t start_time = (ctx->obs_offset + ctx->byte_counter) / ctx->bytes_per_second;
+    uint64_t end_time   = start_time + ((ctx->block_size * ctx->blocks_per_dump) / ctx->bytes_per_second); 
+    if (dbcalib_dump_spectra(client, start_time, end_time) != 0){
+      return -1;
     }
+  }
   return 0;
 }
 
@@ -630,10 +697,13 @@ int64_t dbcalib_block_gpu (dada_client_t* client, void * buffer, uint64_t bytes,
 
   // we must ensure that the data is copied across before continuing...
   cudaStreamSynchronize(ctx->stream);
+
+  unsigned nsamps = ctx->block_size/ctx->nant/ctx->ndim/ctx->nchan;
+  unsigned nbatch = nsamps/ctx->batch_size;
   
   if (ctx->verbose)
     multilog (log, LOG_INFO, "block_gpu: mopsr_byte_to_float (block_size=%"PRIu64")\n", ctx->block_size);
-  mopsr_byte_to_float ((char *)ctx->d_in, (float *) ctx->d_unpacked, ctx->block_size, ctx->stream);
+  mopsr_byte_to_float ((int16_t *) ctx->d_in, (cuFloatComplex *) ctx->d_unpacked, nsamps, ctx->nant, ctx->nchan, ctx->stream);
 
   if (ctx->skzap)
   {
@@ -662,23 +732,20 @@ int64_t dbcalib_block_gpu (dada_client_t* client, void * buffer, uint64_t bytes,
     return -1;
   }
 
-  unsigned nsamps = ctx->block_size/ctx->nant/ctx->ndim;
-  unsigned nbatch = nsamps/ctx->batch_size;
   if (ctx->verbose)
-    multilog (log, LOG_INFO, "block_gpu: mopsr_accumulate_cp_spectra(%p %p %p %d %d %d %d %p)\n",
+    multilog (log, LOG_INFO, "block_gpu: mopsr_accumulate_cp_spectra(%p %p %p %d %d %d %d %d %p)\n",
               ctx->d_unpacked, ctx->d_cross_power, ctx->d_pairs, ctx->batch_size,
-              nbatch, ctx->npairs, nsamps, ctx->stream);
+              nbatch, ctx->npairs, nsamps, ctx->nchan, ctx->stream);
   mopsr_accumulate_cp_spectra (ctx->d_unpacked, ctx->d_cross_power, ctx->d_pairs, ctx->batch_size,
-                               nbatch, ctx->npairs, nsamps, ctx->stream);
+                               nbatch, ctx->npairs, nsamps, ctx->nchan, ctx->nant, ctx->stream);
 
   //test if we want to dump
   ctx->dump_counter++;
   if (ctx->dump_counter%ctx->blocks_per_dump == 0)
   {
-    uint64_t start_byte = ctx->obs_offset + ctx->byte_counter;
-    uint64_t end_byte = start_byte + ctx->block_size * ctx->blocks_per_dump;
-      
-    if (dbcalib_dump_spectra(client, start_byte, end_byte) !=0)
+    uint64_t start_time = (ctx->obs_offset + ctx->byte_counter) / ctx->bytes_per_second;
+    uint64_t end_time   = start_time + ((ctx->block_size * ctx->blocks_per_dump) / ctx->bytes_per_second);
+    if (dbcalib_dump_spectra(client, start_time, end_time) != 0)
     {
       multilog (log, LOG_ERR, "dbcalib_block_gpu: could not dump spectra\n");
       return -1;

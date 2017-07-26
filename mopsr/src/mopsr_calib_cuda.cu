@@ -80,7 +80,9 @@ __global__
 void accumulate_cp_spectra_kernel(cuFloatComplex * in, cuFloatComplex * out,
                   mopsr_baseline_t * pairs,
                   unsigned batch_size, unsigned nbatch,
-                  unsigned npairs, unsigned nsamps)
+                  unsigned npairs, unsigned nsamps,
+                  unsigned in_stride,
+                  unsigned out_stride)
 {
   mopsr_baseline_t pair;
   unsigned ii,jj,kk;
@@ -91,19 +93,24 @@ void accumulate_cp_spectra_kernel(cuFloatComplex * in, cuFloatComplex * out,
   unsigned bin_idx;
   unsigned out_idx;
   unsigned idx_a,idx_b;
+
+  in += (blockIdx.y * in_stride);
+  out += (blockIdx.y * out_stride);
   
   //loop over npairs (should only ever execute one loop)
   for (ii=0; ii<npairs; ii+=gridDim.x)
   {
+    // each block operates on a single pair
     pair_idx = ii + blockIdx.x;
     pair = pairs[pair_idx];
     pair_pos_a = pair.a * nsamps;
     pair_pos_b = pair.b * nsamps;
 
+    // each thread operates on a bin in the CP spectrum
+
     //loop over each bin in the cross power spectrum
     for (kk=0; kk<batch_size; kk+=blockDim.x)
     {
-
       val = make_cuFloatComplex(0.0,0.0);
       bin_idx = threadIdx.x+kk;
 
@@ -129,20 +136,25 @@ void accumulate_cp_spectra_kernel(cuFloatComplex * in, cuFloatComplex * out,
 int mopsr_accumulate_cp_spectra(cuFloatComplex * in, cuFloatComplex * out,
                 mopsr_baseline_t * pairs,
                 unsigned batch_size, unsigned nbatch,
-                unsigned npairs, unsigned nsamps,
+                unsigned npairs, unsigned nsamps, 
+                unsigned nchan, unsigned nant,
                 cudaStream_t stream)
 {
   struct cudaDeviceProp props;
   cudaGetDeviceProperties(&props,0);
   int nthreads = props.maxThreadsPerBlock;
-  int nblocks = props.maxGridSize[0]; 
+  dim3 blocks = dim3(props.maxGridSize[0], nchan, 1);
   if (batch_size<nthreads)
     nthreads = batch_size;
-  if (npairs<nblocks)
-    nblocks = npairs;
+  if (npairs<blocks.x)
+    blocks.x = npairs;
+
+  // stride in bytes for each channel 
+  int in_stride = batch_size * nbatch * nant;
+  int out_stride = batch_size * npairs;
+  //fprintf (stderr, "blocks=(%d,%d,%d) nthreads=%d in_stride=%d out_stride=%d\n", blocks.x, blocks.y, blocks.z, nthreads, in_stride, out_stride);
   
-  accumulate_cp_spectra_kernel<<< nblocks, nthreads, 0, stream >>>
-    (in, out, pairs, batch_size, nbatch, npairs, nsamps);
+  accumulate_cp_spectra_kernel<<< blocks, nthreads, 0, stream >>>(in, out, pairs, batch_size, nbatch, npairs, nsamps, in_stride, out_stride);
 #if _GDEBUG
   check_error_stream( "mopsr_accumulate_cp_spectra", stream);
 #endif
@@ -354,35 +366,40 @@ int mopsr_accumulate_bandpass(cuFloatComplex* in, cuFloatComplex* accumulator,
   return 0;
 }
 
-__global__ void byte_to_float_kernel(const char* input, float* output, unsigned size)
+__global__ void byte_to_float_kernel (const char * input, float * output, uint64_t size)
 {
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
-  unsigned ii;
-  for (ii=idx; ii<size; ii+=gridDim.x*blockDim.x)
+  if (idx < size)
   {
-    output[ii] = ((float) input[ii]) / 127.0;
+    unsigned ii;
+    for (ii=idx; ii<size; ii+=gridDim.x*blockDim.x)
+    {
+      output[ii] = ((float) input[ii]) / 127.0;
+    }
   }
 }
 
-int mopsr_byte_to_float(char* input, float* output, uint64_t size, cudaStream_t stream)
+// convert complex 8-bit input to 32-bit 
+int mopsr_byte_to_float (int16_t * input, cuFloatComplex * output, unsigned nsamp, unsigned nant, unsigned nchan, cudaStream_t stream)
 {
+
   struct cudaDeviceProp props;
-  cudaGetDeviceProperties(&props,0);
+  cudaGetDeviceProperties(&props, 0);
   int nthreads = props.maxThreadsPerBlock;
+
+  const unsigned ndim = 2;
+  uint64_t size = uint64_t(nsamp) * nant * nchan * ndim;
   int max_blocks = props.maxGridSize[0];
   int nblocks;
   if (size/nthreads > max_blocks)
     nblocks = max_blocks;
   else
     nblocks = size/nthreads;
-    
-  
 #ifdef _GDEBUG
-  fprintf (stderr, "mopsr_byte_to_float size=%lu\n", size);
-  fprintf (stderr, "mopsr_byte_to_float: nblocks=%d, nthreads=%d\n", nblocks, nthreads);
+  fprintf (stderr, "mopsr_byte_to_float: nsamp=%lu nant=%u nchan=%u\n", nsamp, nant, nchan);
+  fprintf (stderr, "mopsr_byte_to_float: blocks=(%d,%d,%d) nthreads=%d\n", blocks.x, blocks.y, blocks.z, nthreads);
 #endif
-
-  byte_to_float_kernel<<<nblocks,nthreads,0,stream>>>(input,output,size);
+  byte_to_float_kernel<<<nblocks,nthreads,0,stream>>>((const char*) input, (float *)output, size);
   
 #if _GDEBUG
   check_error_stream("byte_to_float_kernel", stream);
