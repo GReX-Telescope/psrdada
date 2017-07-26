@@ -3,4 +3,4 @@
 #   -D 0  Disable coherrent de-dispersion
 #   -L 10 10 second sub-integrations
 #
-PROC_CMD dspsr <DADA_INFO> -Q -D 0 -L 10 -minram=64
+PROC_CMD dspsr <DADA_INFO> -Q -D 0 -L 20 -Lmin 15 -minram=64 -b 1024
