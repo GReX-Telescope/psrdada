@@ -1,3 +1,6 @@
+
+// gcc mopsr_plot_cands_fgbg.c -I/home/dada/linux_64/pgplot -L/home/dada/linux_64/pgplot -l cpgplot -l pgplot -L/usr/local/lib -L/usr/lib/gcc/x86_64-redhat-linux/4.4.7 -L/usr/lib/gcc/x86_64-redhat-linux/4.4.7/../../../../lib64 -L/lib/../lib64 -L/usr/lib/../lib64 -L/usr/lib/gcc/x86_64-redhat-linux/4.4.7/../../.. -lstdc++ -lgfortranbegin -lgfortran -lm -lX11 -lX11 -lpng -o mopsr_plot_cands_fgbg
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,18 +19,18 @@ int wid_col(int wid);
 
 int wid_col(int wid) {
 
-  if (wid==1) return 3;
-  else if (wid==2) return 9;
-  else if (wid==3) return 5;
-  else if (wid==4) return 11;
-  else if (wid==5) return 4;
-  else if (wid==8) return 6;
-  else if (wid==6) return 7;
-  else if (wid==7) return 8;
+  if (wid==0) return 3;
+  else if (wid==1) return 9;
+  else if (wid==2) return 5;
+  else if (wid==3) return 11;
+  else if (wid==4) return 4;
+  else if (wid==5) return 7;
+  else if (wid==6) return 8;
+  else if (wid==7) return 6;
+  else if (wid==8) return 2; 
   else if (wid==9) return 2; 
   else return 14;
 
-  
 }
 
 int main(int argc, char *argv[]) {
@@ -115,6 +118,9 @@ int main(int argc, char *argv[]) {
   float max_snr;
 
   cpgbeg(0, pg_dev, 1, 1);
+
+  cpgbbuf();
+
   set_resolution (1024, 768);
 
   cpgsch(1.0);
@@ -130,7 +136,7 @@ int main(int argc, char *argv[]) {
   // colour bar
 
   cpgsvp(0.95,1.,0.15,0.90);
-  cpgswin(0.,1.,0.5,9.5);
+  cpgswin(0.,1.,-0.5,8.5);
   cpgbox("",0.,0.,"BSTN",0.,0.);
   cpglab("","Filter width [log\\d2\\u(dt)]","");
 
@@ -139,11 +145,11 @@ int main(int argc, char *argv[]) {
   ppx[1]=1.;
   ppx[2]=1.;
   ppx[3]=0.;
-  ppy[0]=0.5;
-  ppy[1]=0.5;
-  ppy[2]=1.5;
-  ppy[3]=1.5;
-  for (i=1;i<=9;i++) {
+  ppy[0]=-0.5;
+  ppy[1]=-0.5;
+  ppy[2]=0.5;
+  ppy[3]=0.5;
+  for (i=0;i<=9;i++) {
 
     cpgsci(wid_col(i));
 
@@ -189,18 +195,6 @@ int main(int argc, char *argv[]) {
 
   cpgsvp(0.1,0.82,0.15,0.9);
   cpgswin(0,nbeams+1,t_cand1,t_cand2);
-  cpgbox("BCTN",0.,0.,"BCSTN",0.,0.);
-  cpglab("Beam number","Time (s)","");
-
-  float mid_beam = (float) (nbeams/2) + 1;
-  float xpts[2] = { mid_beam, mid_beam };
-  float ypts[2] = { t_cand1, t_cand2 };
-
-  cpgsls(2);
-  cpgsci (15);
-  cpgline (2, xpts, ypts);
-  cpgsls(2);
-  cpgsci (1);
 
   // beam lines
   /*ppy[0]=t_cand1;
@@ -218,6 +212,7 @@ int main(int argc, char *argv[]) {
 
   if (!(fin=fopen(fnam,"r"))) {
     printf("Can't open file\n");
+    printf("%s\n",fnam);
     exit(1);
   }
 
@@ -239,58 +234,114 @@ int main(int argc, char *argv[]) {
 
   float cand;
   int nread;
-  for (lp=0;lp<nlines;lp++) {
+  int round;
+
+  for (round=0;round<2;round++){
+
+    if (verbose) fprintf (stderr, "round=%d\n", round);
+
+    fin=fopen(fnam,"r");
+
+    for (lp=0;lp<nlines;lp++) {
         
-    if (!cro) 
-      nread = fscanf(fin,"%f\t%d\t%f\t%d\t%d\t%f\t%d\t%d\t%d\t%d\t%d\t%f\t%d\n",&snr,&samp,&t,&fil,&dmt,&dm,&memb,&stsamp,&midsamp,&numbeams,&prim_beam,&max_snr,&beam);
-    else {
-      nread = fscanf(fin,"%f\t%d\t%f\t%d\t%d\t%f\t%d\t%d\t%d\t%d\n",&snr,&samp,&t,&fil,&dmt,&dm,&memb,&stsamp,&midsamp,&prim_beam);
-      if (nread != 10)
-        fprintf (stderr, "misread\n");
-      numbeams=1;
-    }
-
-    cpgsci(wid_col(fil));
-    ppx[0]=prim_beam+1;
-    ppy[0]=t*1.;
-
-    //fprintf (stderr, "t=%f [%f - %f] numbeams %d<=%d, snr %f>=%f fil %d<=%d\n",
-    //         t, t_cand1, t_cand2, numbeams, nbeams_cut, snr, snr_cut, fil, max_filter_width);
-
-    if (numbeams >= nbeams_cut)
-      cpgsci (16);
-
-    if ((t>=t_cand1) && (t<=t_cand2) && (snr>=snr_cut) && (fil<=max_filter_width) && prim_beam > 1) 
-    {
-      if (snr>6.0)
-      {
-        if (snr>20.)
-          char_height = height_scale; 
-        else 
-          char_height = height_scale * powf(snr/20.,2.3);
-        cpgsch(char_height);
-        if (dm<=dm_rfi) cpgpt(1,ppx,ppy,5);
-        if (dm>dm_rfi && dm<=dm_gal) cpgpt(1,ppx,ppy,23);
-        if (dm>dm_gal) cpgpt(1,ppx,ppy,12);
-      
-        if (verbose) fprintf(stderr, "plotted %f %f %f %d %d [%f]\n",snr, t, dm, fil, prim_beam, char_height);
+      // read a line from the input candidates file
+      if (!cro) 
+        nread = fscanf(fin,"%f\t%d\t%f\t%d\t%d\t%f\t%d\t%d\t%d\t%d\t%d\t%f\t%d\n",&snr,&samp,&t,&fil,&dmt,&dm,&memb,&stsamp,&midsamp,&numbeams,&prim_beam,&max_snr,&beam);
+      else {
+        nread = fscanf(fin,"%f\t%d\t%f\t%d\t%d\t%f\t%d\t%d\t%d\t%d\n",&snr,&samp,&t,&fil,&dmt,&dm,&memb,&stsamp,&midsamp,&prim_beam);
+        if (nread != 10)
+          fprintf (stderr, "misread\n");
+        numbeams=1;
       }
-        
-    }
-  }
+      
+      // changed by CF 17/03/17
+      //ppx[0]=prim_beam+1;
+      ppx[0]=prim_beam;
 
-  fclose(fin);
-  
+      ppy[0]=t*1.;
+
+      //fprintf (stderr, "t=%f [%f - %f] numbeams %d<=%d, snr %f>=%f fil %d<=%d\n",
+      //         t, t_cand1, t_cand2, numbeams, nbeams_cut, snr, snr_cut, fil, max_filter_width);
+
+      int col, draw_cand;
+
+      if ((t>=t_cand1) && (t<=t_cand2) && (snr>=snr_cut) && (fil<=max_filter_width) && prim_beam > 1) 
+      {
+        if (snr>6.0)
+        {
+          if (snr>20.)
+            char_height = height_scale; 
+          else 
+            char_height = height_scale * powf(snr/20.,2.3);
+
+          cpgsch(char_height);
+          draw_cand = 0;
+
+          // set hidden events to dark grey
+          if ((round == 0) && (numbeams >= nbeams_cut))
+          {
+            col = 16;
+            draw_cand = 1;
+          }
+
+          if ((round == 1) && (numbeams < nbeams_cut))
+          {
+            col = wid_col(fil);
+            draw_cand = 1;
+          }
+
+          if (draw_cand)
+          {
+            cpgsci (col);
+            if (dm<=dm_rfi) cpgpt(1,ppx,ppy,5);
+            if (dm>dm_rfi && dm<=dm_gal) cpgpt(1,ppx,ppy,23);
+            if (dm>dm_gal) cpgpt(1,ppx,ppy,12);
+            if (verbose) fprintf(stderr, "plotted %f %f %f %d %d [%f]\n",snr, t, dm, fil, prim_beam, char_height);
+          }
+
+/*
+          int draw_symb;
+          draw_symb = 1;
+          if (round == 0) cpgsci (16);
+          if (round == 1 && numbeams >= nbeams_cut) draw_symb = 0;
+          if (draw_symb){
+            if (dm<=dm_rfi) cpgpt(1,ppx,ppy,5);
+            if (dm>dm_rfi && dm<=dm_gal) cpgpt(1,ppx,ppy,23);
+            if (dm>dm_gal) cpgpt(1,ppx,ppy,12);
+            if (verbose) fprintf(stderr, "plotted %f %f %f %d %d [%f]\n",snr, t, dm, fil, prim_beam, char_height);
+          }
+          */
+        }
+      }
+    }
+    
+    fclose(fin);
+  }
+    
   // pgplot interactive
   /*float x1, y1;
   while (strcmp(cpgch,"q")!=0) {
-
     cpgcurs(&x1,&y1,&cpgch[0]);
-    
-
     }*/
 
-  //cpgbox("BCTN",0.,0.,"BCSTN",0.,0.);
+  // draw box 
+  cpgsch(1.4);
+  cpgsci(1);
+  cpgbox("BCTN",0.,0.,"BCSTN",0.,0.);
+  cpglab ("Beam number", "Time (s)", "");
+
+  // draw dashed line for central beam
+  float mid_beam = (float) (nbeams/2) + 1;
+  float xpts[2] = { mid_beam, mid_beam };
+  float ypts[2] = { t_cand1, t_cand2 };
+
+  cpgsls(2);
+  cpgsci (15);
+  cpgline (2, xpts, ypts);
+  cpgsls(2);
+  cpgsci (1);
+
+  cpgebuf();
   cpgend();
 
   //  free(cpgch);
