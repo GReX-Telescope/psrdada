@@ -9,6 +9,11 @@
 #include <errno.h>
 
 #include "mopsr_udp.h"
+#ifdef HIRES
+#define MOPSR_UDP_VERSION4
+#else
+#define MOPSR_UDP_VERSION3
+#endif
 
 /*
  * create a socket with the specified number of buffers
@@ -59,6 +64,86 @@ int mopsr_get_bit_from_16 (uint16_t n, unsigned bit)
   return (n & ( 1 << bit )) >> bit;
 }
 
+
+
+// version 4 of UDP header for PFB format
+// byte [  nibble 1  |  nibble 1  ]
+// 0    [ mgtlocks_l | mgtlocks_l ]
+// 1    [ mgtlocks_l | mgtlocks_l ]
+// 2    [  mgtlocks  |  mgtlocks  ]
+// 3    [  mgtlocks  |  mgtlocks  ]
+// 4    [   schan    |   schan    ]
+// 5    [   schan    |   nbit     ]
+// 6    [   nant     |   nchan    ]
+// 7    [   nchan    |   nchan    ]
+
+void mopsr_decode_red (unsigned char * b, mopsr_hdr_t * hdr, unsigned port)
+{
+  // put b0 into the highest bits
+  if (port != 4001)
+  {
+    hdr->mgt_locks_long = (uint16_t) (b[0] & 0x00FF);
+    hdr->mgt_locks      = (uint16_t) (b[2] & 0x00FF);
+  }
+  else
+  {
+    hdr->mgt_locks_long = (uint16_t) (b[1] & 0x00FF);
+    hdr->mgt_locks      = (uint16_t) (b[3] & 0x00FF);
+  }
+
+  hdr->start_chan = (unsigned int) b[4] << 4 | (unsigned int) b[5] >> 4;
+  hdr->start_chan++;
+
+  hdr->nbit = (unsigned int) (b[5] & 0x0f) + 1;
+  hdr->nant = (unsigned int) (b[6] >> 4) + 1;
+
+  hdr->nchan = (unsigned int) (b[6] & 0x0f) << 8 | (unsigned int) b[7];
+  hdr->nchan++;
+
+  uint64_t tmp = 0;
+  unsigned i = 0;
+  hdr->seq_no = UINT64_C (0);
+
+  for (i = 0; i < 8; i++ )
+  {
+    tmp = UINT64_C (0);
+    tmp = b[16 - i - 1];
+    hdr->seq_no |= (tmp << ((i & 7) << 3));
+  }
+  hdr->nframe = 1;
+
+}
+#ifdef MOPSR_UDP_VERSION4
+void mopsr_decode (unsigned char * b, mopsr_hdr_t * hdr)
+#else
+void mopsr_decode_v4 (unsigned char * b, mopsr_hdr_t * hdr)
+#endif
+{
+  hdr->mgt_locks_long = (uint16_t) ((b[0] << 8) | b[1]);
+  hdr->mgt_locks = (uint16_t) ((b[2] << 8) | b[3]);
+
+  hdr->start_chan = (unsigned int) b[4] << 4 | (unsigned int) b[5] >> 4;
+  hdr->start_chan++;
+
+  hdr->nbit = (unsigned int) (b[5] & 0x0f) + 1;
+  hdr->nant = (unsigned int) (b[6] >> 4) + 1;
+
+  hdr->nchan = (unsigned int) (b[6] & 0x0f) << 8 | (unsigned int) b[7];
+  hdr->nchan++;
+
+  uint64_t tmp = 0;
+  unsigned i = 0;
+  hdr->seq_no = UINT64_C (0);
+
+  for (i = 0; i < 8; i++ )
+  {
+    tmp = UINT64_C (0);
+    tmp = b[16 - i - 1];
+    hdr->seq_no |= (tmp << ((i & 7) << 3));
+  }
+  hdr->nframe = 1;
+}
+
 // version 3 of UDP header for PFB format
 // byte [  nibble 1  |  nibble 1  ]
 // 0    [ mgtlocks_l | mgtlocks_l ]
@@ -69,7 +154,11 @@ int mopsr_get_bit_from_16 (uint16_t n, unsigned bit)
 // 5    [     nbit   |    nant    ]
 // 6    [   nchan    |   nchan    ]
 // 7    [   nframe   |     0x0    ]
+#ifdef MOPSR_UDP_VERSION3
 void mopsr_decode (unsigned char * b, mopsr_hdr_t * hdr)
+#else
+void mopsr_decode_v3 (unsigned char * b, mopsr_hdr_t * hdr)
+#endif
 {
   hdr->mgt_locks_long = (uint16_t) ((b[0] << 8) | b[1]);
 
@@ -230,12 +319,49 @@ void inline mopsr_decode_seq_fast (unsigned char * b, mopsr_hdr_t * hdr)
 }
 
 
+#ifdef MOPSR_UDP_VERSION4
+void mopsr_encode (unsigned char * b, mopsr_hdr_t * hdr)
+#else
+void mopsr_encode_v4 (unsigned char * b, mopsr_hdr_t * hdr)
+#endif
+{
+  b[0] = (uint8_t) (hdr->mgt_locks_long >> 8);
+  b[1] = (uint8_t) (hdr->mgt_locks_long & 0x00ff);
+  
+  b[2] = (uint8_t) (hdr->mgt_locks >> 8);
+  b[3] = (uint8_t) (hdr->mgt_locks & 0x00ff);
+  
+  b[4] = (uint8_t) (hdr->start_chan - 1) >> 4;
+
+  b[5]  = (uint8_t) ((hdr->start_chan - 1) << 4) & 0xf0;
+  b[5] |= (uint8_t) (hdr->nbit - 1) & 0xf;
+
+  b[6]  = (uint8_t) ((hdr->nant - 1) << 4) & 0xf0;
+  b[6] |= (uint8_t) ((hdr->nchan - 1) >> 8) & 0xf;
+
+  b[7] = (uint8_t) ((hdr->nchan - 1) & 0xff);
+  
+  b[8] = (uint8_t) (hdr->seq_no>>56);
+  b[9] = (uint8_t) (hdr->seq_no>>48);
+  b[10] = (uint8_t) (hdr->seq_no>>40);
+  b[11] = (uint8_t) (hdr->seq_no>>32);
+  b[12] = (uint8_t) (hdr->seq_no>>24);
+  b[13] = (uint8_t) (hdr->seq_no>>16);
+  b[14] = (uint8_t) (hdr->seq_no>>8);
+  b[15] = (uint8_t) (hdr->seq_no);
+}
+
+
 // 4    [   schan    |   schan    ]
 // 5    [     nbit   |    nant    ]
 // 6    [   nchan    |   nchan    ]
 // 7    [   nframe   |     0x0    ]
 
+#ifdef MOPSR_UDP_VERSION3
 void mopsr_encode (unsigned char * b, mopsr_hdr_t * hdr)
+#else
+void mopsr_encode_v3 (unsigned char * b, mopsr_hdr_t * hdr)
+#endif
 {
   b[0] = (uint8_t) (hdr->mgt_locks_long >> 8);
   b[1] = (uint8_t) (hdr->mgt_locks_long & 0x00ff);
@@ -405,11 +531,6 @@ int mopsr_new_ant_mapping[] = { 0, 2, 8, 10, 4, 6, 12, 14, 1, 3, 9, 11, 5, 7, 13
 unsigned int mopsr_get_new_ant_number (unsigned int index)
 {
   return mopsr_new_ant_mapping[index];
-
-  //if (index < 8)
-  //  return (index * 2);
-  //else
-  //  return ((index - 8) * 2) + 1;
 }
 
 unsigned int mopsr_get_new_ant_index (unsigned int number) 
@@ -422,10 +543,24 @@ unsigned int mopsr_get_new_ant_index (unsigned int number)
       index = i;
 
   return index;
-  //if (number % 2 == 0)
-  //  return number / 2;
-  //else
-  //  return (number / 2) + 8;
+}
+
+int mopsr_hires_ant_mapping[] = { 0, 2, 4, 6, 1, 3, 5, 7, 8, 10, 12, 14, 9, 11, 13, 15};
+
+unsigned int mopsr_get_hires_ant_number (unsigned int index)
+{
+  return mopsr_hires_ant_mapping[index];
+}
+
+unsigned int mopsr_get_hires_ant_index (unsigned int number)
+{ 
+  unsigned i, index;
+      
+  index = 0;
+  for (i=0; i<8; i++)
+    if (mopsr_hires_ant_mapping[i] == number)
+      index = i;
+  return index;
 }
 
 
