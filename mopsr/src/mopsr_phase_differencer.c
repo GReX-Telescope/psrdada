@@ -10,7 +10,12 @@
 // delta from the mopsr calculate_delays routine
 //
 
+#include "mopsr_def.h"
+#ifdef HIRES
+#include "mopsr_delays_hires.h"
+#else
 #include "mopsr_delays.h"
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,7 +36,7 @@ void usage ()
 {
 	fprintf(stdout, "mopsr_test_delays bays_file modules_file obs.header\n"
     " -D dev      use pgplot devices [default /xs]\n" 
-    " -a angle    apply md angle offset [default 0]\n" 
+    " -a angle    apply md angle offset in degrees [default 0]\n" 
     " -d nsecs    plot time unit [default 10s]\n" 
     " -l metres   apply metres delta baseline difference\n" 
     " -h          print this help text\n" 
@@ -74,7 +79,7 @@ int main(int argc, char** argv)
         break; 
 
       case 'a':
-        delta_md_angle = atof (optarg);
+        delta_md_angle = (double) atof (optarg);
         delta_md_angle *= (M_PI / 180.0);
         break;
 
@@ -117,6 +122,7 @@ int main(int argc, char** argv)
   }
 
   fprintf (stderr, "delta_freq=%lf\n", delta_freq);
+  fprintf (stderr, "delta_distance=%lf\n", delta_distance);
 
   // check and parse the command line arguments
   if (argc-optind != 3)
@@ -165,6 +171,11 @@ int main(int argc, char** argv)
     fprintf (stderr, "ERROR: failed to read modules file [%s]\n", modules_file);
     return EXIT_FAILURE;
   }
+
+  fprintf (stderr, "nmod=%d mod=%d module=%s\n", nmod, mod, modules1[mod].name);
+
+  for (imod=0; imod<nmod; imod++)
+    modules2[imod].dist += delta_distance;
 
   // apply frank module delay (if set)
   for (imod=0; imod<nmod; imod++)
@@ -287,6 +298,7 @@ int main(int argc, char** argv)
   }
 
   float start_md_angle;
+  float start_md_angle2;
   if (ascii_header_get (header, "MD_ANGLE", "%f", &start_md_angle) != 1)
   {
     fprintf (stderr, "ERROR:  could not read MD_ANGLE from header\n");
@@ -305,6 +317,15 @@ int main(int argc, char** argv)
   channels2[0].bw     = bw;
   channels2[0].cfreq  = freq + delta_freq;
 
+#ifdef HIRES
+  mopsr_delay_hires_t ** delays1 = (mopsr_delay_hires_t **) malloc(sizeof(mopsr_delay_hires_t *) * nmod);
+  for (imod=0; imod<nmod; imod++)
+    delays1[imod] = (mopsr_delay_hires_t *) malloc (sizeof(mopsr_delay_hires_t) * nchan);
+
+  mopsr_delay_hires_t ** delays2 = (mopsr_delay_hires_t **) malloc(sizeof(mopsr_delay_hires_t *) * nmod);
+  for (imod=0; imod<nmod; imod++)
+    delays2[imod] = (mopsr_delay_hires_t *) malloc (sizeof(mopsr_delay_hires_t) * nchan);
+#else
   mopsr_delay_t ** delays1 = (mopsr_delay_t **) malloc(sizeof(mopsr_delay_t *) * nmod);
   for (imod=0; imod<nmod; imod++)
     delays1[imod] = (mopsr_delay_t *) malloc (sizeof(mopsr_delay_t) * nchan);
@@ -312,6 +333,7 @@ int main(int argc, char** argv)
   mopsr_delay_t ** delays2 = (mopsr_delay_t **) malloc(sizeof(mopsr_delay_t *) * nmod);
   for (imod=0; imod<nmod; imod++)
     delays2[imod] = (mopsr_delay_t *) malloc (sizeof(mopsr_delay_t) * nchan);
+#endif
 
   cpgopen (device);
   cpgask (0);
@@ -319,7 +341,7 @@ int main(int argc, char** argv)
   char apply_instrumental = 0;
   char apply_geometric = 1;
   char is_tracking1 = 0;
-  char is_tracking2 = 1;
+  char is_tracking2 = 0;
 
   double tsamp = 1.28;
   unsigned nant = nmod;
@@ -347,10 +369,16 @@ int main(int argc, char** argv)
     timestamp1.tv_usec = (long) ((ut1_time1 - (double) timestamp1.tv_sec) * 1000000);
     timestamp2.tv_usec = (long) ((ut1_time2 - (double) timestamp2.tv_sec) * 1000000);
 
-    if (verbose)
-      fprintf (stderr, "t1=%lf t2=%lf start_md=%f\n", ut1_time1, ut1_time2, start_md_angle);
+    start_md_angle2 = start_md_angle + (float) delta_md_angle;
 
+    if (verbose)
+      fprintf (stderr, "t1=%lf t2=%lf start_md=%f start_md2=%f\n", ut1_time1, ut1_time2, start_md_angle, start_md_angle2);
+
+#ifdef HIRES
+    if (calculate_delays_hires (nbay, bays1, nant, modules1, nchan, channels1,
+#else
     if (calculate_delays (nbay, bays1, nant, modules1, nchan, channels1,
+#endif
                           source, timestamp1, delays1, start_md_angle, 
                           apply_instrumental, apply_geometric, 
                           is_tracking1, tsamp) < 0)
@@ -359,8 +387,12 @@ int main(int argc, char** argv)
       return -1;
     }
 
+#ifdef HIRES
+    if (calculate_delays_hires (nbay, bays2, nant, modules2, nchan, channels2,
+#else
     if (calculate_delays (nbay, bays2, nant, modules2, nchan, channels2,
-                          source, timestamp2, delays2, start_md_angle, 
+#endif
+                          source, timestamp2, delays2, start_md_angle2, 
                           apply_instrumental, apply_geometric, 
                           is_tracking2, tsamp) < 0)
     {
@@ -400,7 +432,8 @@ int main(int argc, char** argv)
       fringe2 = delays2[imod]->fringe_coeff;
       diff_phase = fringe1 - fringe2;
       baseline_phase_error[imod] = (float) diff_phase;
-      //fprintf (stderr, "f1=%le f2=%le diff_phase=%le error=%f\n", fringe1, fringe2, diff_phase, baseline_phase_error[imod]);
+      //if (verbose)
+      //  fprintf (stderr, "m1=%s m2=%s f1=%le f2=%le diff_phase=%le error=%f\n", modules1[imod].name, modules2[imod].name, fringe1, fringe2, diff_phase, baseline_phase_error[imod]);
     }
     
     mopsr_phase_delays_plot (phase_error, ipt, (ut1_time1 - (double) utc_start), "1/xs");
