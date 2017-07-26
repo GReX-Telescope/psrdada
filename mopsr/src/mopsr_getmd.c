@@ -23,6 +23,7 @@ void usage ()
     " RA              J2000 RA in HH:MM:SS\n"
     " DEC             J2000 DEC in DD:MM:SS\n"
     " -f fractional   add fractional seconds to the UTC\n"
+    " -u fractional   add fractional UTS1 offset to the UTC [seconds]\n"
     " -h              print this help text\n" 
     " -v              verbose output\n" 
   );
@@ -38,9 +39,11 @@ int main(int argc, char** argv)
 
   float fractional = 0;
 
+  float ut1_offset = 0;
+
   char negative_dec = 0;
 
-  while ((arg = getopt(argc, argv, "f:hnv")) != -1) 
+  while ((arg = getopt(argc, argv, "f:hnu:v")) != -1) 
   {
     switch (arg)  
     {
@@ -61,6 +64,10 @@ int main(int argc, char** argv)
       case 'h':
         usage ();
         return 0;
+
+      case 'u':
+        ut1_offset = atof(optarg);
+        break;
 
       case 'v':
         verbose++;
@@ -91,7 +98,7 @@ int main(int argc, char** argv)
   }
 
   if (verbose)
-    fprintf (stderr, "utc_start=%ld\n", utc_start);
+    fprintf (stdout, "utc_start=%ld\n", utc_start);
 
   mopsr_source_t source;
   if (mopsr_delays_hhmmss_to_rad (argv[optind+1], &(source.raj)) < 0)
@@ -115,10 +122,28 @@ int main(int argc, char** argv)
     return -1;
   }
 
-
   struct timeval timestamp;
   timestamp.tv_sec = utc_start;
   timestamp.tv_usec = (uint64_t) (fractional * 1e6);
+
+  if (ut1_offset != 0)
+  {
+    int64_t usec = (int64_t) timestamp.tv_usec;
+    usec += (ut1_offset * 1e6);
+    while (usec < -1e6)
+    {
+      timestamp.tv_sec--;
+      usec += 1e6;
+    }
+
+    while (usec > 1e6)
+    {
+      timestamp.tv_sec++;
+      usec -= 1e6;
+    }
+
+    timestamp.tv_usec = (uint64_t) usec;
+  }
   
   struct tm * utc = gmtime (&utc_start);
   cal_app_pos_iau (source.raj, source.decj, utc,
@@ -132,10 +157,10 @@ int main(int argc, char** argv)
     int NDP = 2;    // number of decimal places
 
     iauA2tf (NDP, source.ra_curr, &sign, HMSF);
-    fprintf (stderr, "Apparent RA=%02d:%02d:%02d.%d\n", HMSF[0],HMSF[1],HMSF[2],HMSF[3]);
+    fprintf (stdout, "Apparent RA=%02d:%02d:%02d.%d\n", HMSF[0],HMSF[1],HMSF[2],HMSF[3]);
 
     iauA2af(NDP, source.dec_curr, &sign, DMSF);
-    fprintf (stderr, "Apparent DEC=%c%02d:%02d:%02d.%d\n", sign, DMSF[0],DMSF[1],DMSF[2],DMSF[3]);
+    fprintf (stdout, "Apparent DEC=%c%02d:%02d:%02d.%d\n", sign, DMSF[0],DMSF[1],DMSF[2],DMSF[3]);
   }
 
   double jer_delay = calc_jer_delay (source.ra_curr, source.dec_curr, timestamp);
