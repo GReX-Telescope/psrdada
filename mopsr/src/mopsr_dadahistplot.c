@@ -241,13 +241,6 @@ int main (int argc, char **argv)
       }
 
       int idim, ibin;
-      int blank = 70;
-      for (ibin=(128-blank); ibin<(128+blank); ibin++)
-      {
-        histogram[ibin]= 0;
-        histogram[opts.nbin + ibin] = 0;
-      }
-
       float nval = nsamp;
       if (channel == -1)
         nval *= opts.nchan;
