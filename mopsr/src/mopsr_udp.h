@@ -27,9 +27,9 @@ typedef struct {
   size_t        bufsz;         // size of socket buffer
   int           have_packet;   // 
   size_t        got;           // amount of data received
-  uint64_t      prev_seq;      // previous seq_no
+  int64_t       prev_seq;      // previous seq_no
   int64_t       seq_offset;    // sequence offset to first input
-  int64_t       block_count;    // sequence offset to first input
+  int64_t       block_count;   // sequence offset to first input
 
 } mopsr_sock_t;
 
@@ -72,7 +72,10 @@ void mopsr_free_sock(mopsr_sock_t* b);
 
 int mopsr_get_bit_from_16 (uint16_t n, unsigned bit);
 void mopsr_decode_header (unsigned char * b, uint64_t *seq_no, unsigned int * ant_id);
+void mopsr_decode_red (unsigned char * b, mopsr_hdr_t * hdr, unsigned port);
 void mopsr_decode (unsigned char * b, mopsr_hdr_t * hdr);
+void mopsr_decode_v4 (unsigned char * b, mopsr_hdr_t * hdr);
+void mopsr_decode_v3 (unsigned char * b, mopsr_hdr_t * hdr);
 void mopsr_decode_v2 (unsigned char * b, mopsr_hdr_t * hdr);
 void mopsr_decode_v1 (unsigned char * b, mopsr_hdr_t * hdr);
 void mopsr_decode_seq (unsigned char * b, mopsr_hdr_t * hdr);
@@ -88,6 +91,8 @@ void mopsr_print_header(mopsr_hdr_t * hdr);
 unsigned int mopsr_get_new_ant_number (unsigned int index);
 unsigned int mopsr_get_new_ant_index (unsigned int number);
 
+unsigned int mopsr_get_hires_ant_number (unsigned int index);
+unsigned int mopsr_get_hires_ant_index (unsigned int number);
 
 #define MOPSR_UDP_COUNTER_BYTES  8          // size of header/sequence number
 #define MOPSR_UDP_DATASIZE_BYTES 2048       // obs bytes per packet

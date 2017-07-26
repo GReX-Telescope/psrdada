@@ -176,10 +176,11 @@ int udptimeseries_init (udptimeseries_t * ctx)
   // decode the header
   multilog (ctx->log, LOG_INFO, "init: decoding packet\n");
   mopsr_hdr_t hdr;
-  if (ctx->data_size == 8192)
-    mopsr_decode_v2 (ctx->sock->buf, &hdr);
-  else
-    mopsr_decode (ctx->sock->buf, &hdr);
+#ifdef HIRES
+  mopsr_decode_red (ctx->sock->buf, &hdr, ctx->port);
+#else
+  mopsr_decode (ctx->sock->buf, &hdr);
+#endif
 
   multilog (ctx->log, LOG_INFO, "init: nchan=%u nant=%u nframe=%u\n", hdr.nchan, hdr.nant, hdr.nframe);
 
@@ -351,6 +352,8 @@ int main (int argc, char **argv)
   uint64_t frames_per_packet = ctx->data_size / (ctx->nant * ctx->nchan * 2);
   mopsr_hdr_t hdr;
 
+  StopWatch_Start(&wait_sw);
+
   while (!quit_threads) 
   {
     ctx->sock->have_packet = 0;
@@ -398,8 +401,11 @@ int main (int argc, char **argv)
     if (ctx->sock->have_packet)
     {
       StartTimer(&wait_sw);
-
+#ifdef HIRES
+      mopsr_decode_red (ctx->sock->buf, &hdr, ctx->port);
+#else
       mopsr_decode (ctx->sock->buf, &hdr);
+#endif
 
       if (ctx->verbose > 1) 
         multilog (ctx->log, LOG_INFO, "main: seq_no= %"PRIu64" difference=%"PRIu64" packets\n", seq_no, (seq_no - prev_seq_no));
@@ -408,8 +414,9 @@ int main (int argc, char **argv)
       // integrate packet into totals
       timeseries_offset = ctx->num_integrated * MOPSR_NDIM;
 
-      multilog (ctx->log, LOG_INFO, "main: timeseries_offset=%u channel=%u antenna=%u nchan=%u nant=%u\n", 
-                timeseries_offset, ctx->channel, ctx->antenna, ctx->nchan, ctx->nant);
+      if (ctx->verbose > 1)
+        multilog (ctx->log, LOG_INFO, "main: timeseries_offset=%u channel=%u antenna=%u nchan=%u nant=%u\n", 
+                  timeseries_offset, ctx->channel, ctx->antenna, ctx->nchan, ctx->nant);
 
       mopsr_extract_channel (ctx->timeseries + timeseries_offset, 
                              ctx->sock->buf + UDP_HEADER, ctx->data_size, 
@@ -429,6 +436,7 @@ int main (int argc, char **argv)
         size_t cleared = dada_sock_clear_buffered_packets(ctx->sock->fd, ctx->pkt_size);
         if (ctx->verbose)
           multilog(ctx->log, LOG_INFO, "main: cleared %d packets\n", cleared);
+        StopWatch_Start(&wait_sw);
       } 
     }
   }

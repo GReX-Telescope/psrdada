@@ -152,7 +152,7 @@ void usage()
   fprintf (stdout,
      "mopsr_udpplot [options]\n"
      " -a ant         antenna to display [default all]\n"
-     " -b bw          sky bandwidth of data [default 100]\n"
+     " -b bw          sky bandwidth of data [default 31.25]\n"
      " -c nchan       number of channels in each packet [default 128]\n"
      " -d             dual side band data [default no]\n"
      " -i interface   ip/interface for inc. UDP packets [default all]\n"
@@ -165,7 +165,7 @@ void usage()
      " -r min,max     set the min,max y-value (e.g. saturate birdies) \n"
      " -s secs        sleep this many seconds between plotting [default 0.5]\n"
      " -t num         Number of FFTs to integrate into each plot [default 8]\n"
-     " -w freq        base frequnecy [default 799.609375MHz]\n"
+     " -w freq        centre frequnecy [default 835.595703]\n"
      " -z             zap DC channel [0]\n"
      " -v             verbose messages\n"
      " -h             print help text\n",
@@ -180,8 +180,12 @@ int udpplot_prepare (udpplot_t * ctx)
   if (ctx->verbose)
     multilog(ctx->log, LOG_INFO, "prepare: clearing packets at socket: %ld bytes\n", ctx->pkt_size);
   size_t cleared = dada_sock_clear_buffered_packets(ctx->sock->fd, ctx->pkt_size);
+  if (ctx->verbose)
+    multilog(ctx->log, LOG_INFO, "prepare: cleared %ld packets\n", cleared);
 
   udpplot_reset(ctx);
+  if (ctx->verbose)
+    multilog(ctx->log, LOG_INFO, "prepare: reset completed\n");
 }
 
 int udpplot_reset (udpplot_t * ctx)
@@ -189,10 +193,14 @@ int udpplot_reset (udpplot_t * ctx)
   unsigned ichan;
   float mhz_per_out_chan = ctx->bw / (float) ctx->nchan_out;
   float half_bw = mhz_per_out_chan / 2.0;
+
+  if (ctx->verbose)
+    multilog(ctx->log, LOG_INFO, "reset: setting xpoints: nchan=%u\n", ctx->nchan_out);
+
   for (ichan=0; ichan < ctx->nchan_out; ichan++)
   {
     ctx->x_points[ichan] = (ctx->base_freq + half_bw) + (((float) ichan) * mhz_per_out_chan); 
-    //fprintf (stderr, "x_points[%d]=%f\n", ichan, ctx->x_points[ichan]);
+    //fprintf (stderr, "chan[%d] %f - %f - %f\n", ichan, ctx->x_points[ichan]-half_bw, ctx->x_points[ichan], ctx->x_points[ichan]+half_bw);
   }
 
   unsigned iant;
@@ -207,7 +215,7 @@ int udpplot_reset (udpplot_t * ctx)
     }
     for (ichan=0; ichan < ctx->nchan_in; ichan++)
     {
-      for (ifft=0; ifft < ctx->nfft; ifft++)
+      for (ifft=0; ifft < ctx->nfft*2; ifft++)
       {
         ctx->fft_in[iant][ichan][ifft] = 0;
       }
@@ -279,8 +287,8 @@ int udpplot_destroy (udpplot_t * ctx)
 
 int udpplot_init (udpplot_t * ctx)
 {
-  if (ctx->verbose > 1)
-    multilog (ctx->log, LOG_INFO, "mopsr_udpdb_init()\n");
+  //if (ctx->verbose > 1)
+    multilog (ctx->log, LOG_INFO, "mopsr_udpdb_init() nfft=%u\n", ctx->nfft);
 
   // create a MOPSR socket which can hold variable num of UDP packet
   ctx->sock = mopsr_init_sock();
@@ -307,33 +315,34 @@ int udpplot_init (udpplot_t * ctx)
 
   // get a packet to determine the packet size and type of data
   ctx->pkt_size = recvfrom (ctx->sock->fd, ctx->sock->buf, 9000, 0, NULL, NULL);
-  size_t data_size = ctx->pkt_size - UDP_HEADER;
-  multilog (ctx->log, LOG_INFO, "init: pkt_size=%ld data_size=%ld\n", ctx->pkt_size, data_size);
   ctx->data_size = ctx->pkt_size - UDP_HEADER;
+  multilog (ctx->log, LOG_INFO, "init: pkt_size=%ld data_size=%ld\n", ctx->pkt_size, ctx->data_size);
 
   // decode the header
-  multilog (ctx->log, LOG_INFO, "init: decoding packet\n");
+  multilog (ctx->log, LOG_INFO, "init: decoding packet: data_size=%d\n", ctx->data_size);
   mopsr_hdr_t hdr;
-  if (ctx->data_size == 8192)
-    mopsr_decode_v2 (ctx->sock->buf, &hdr);
-  else
-    mopsr_decode (ctx->sock->buf, &hdr);
-
+#ifdef HIRES
+  mopsr_decode_red (ctx->sock->buf, &hdr, ctx->port);
+#else
+  mopsr_decode (ctx->sock->buf, &hdr);
+#endif
   multilog (ctx->log, LOG_INFO, "init: nchan=%u nant=%u nframe=%u\n", hdr.nchan, hdr.nant, hdr.nframe);
+  mopsr_print_header (&hdr);
 
   ctx->nchan_in = hdr.nchan;
   ctx->nant = hdr.nant;
+  ctx->nchan_out = ctx->nchan_in * ctx->nfft;
 
   // set the socket to non-blocking
   if (ctx->verbose)
-    multilog(ctx->log, LOG_INFO, "prepare: setting non_block\n");
-  sock_nonblock(ctx->sock->fd);
+    multilog(ctx->log, LOG_INFO, "init: setting non_block\n");
+  sock_nonblock (ctx->sock->fd);
 
   // only need to appy corrections for PFB packets
   if (ctx->nchan_in > 1)
   {
     if (ctx->verbose)
-      multilog(ctx->log, LOG_INFO, "prepare: setting up oversampling corrections\n");
+      multilog(ctx->log, LOG_INFO, "init: setting up oversampling corrections\n");
     ctx->unique_corrections = 32;
     ctx->corrections = (float complex *) malloc(sizeof(float complex) * ctx->unique_corrections * ctx->nchan_in);
     unsigned ichan, ipt, icorr;
@@ -351,12 +360,16 @@ int udpplot_init (udpplot_t * ctx)
   }
 
   if (ctx->verbose)
-    multilog(ctx->log, LOG_INFO, "prepare: nchan_in=%u\n", ctx->nchan_in);
+    multilog(ctx->log, LOG_INFO, "init: nchan_in=%u nchan_out=%u\n", ctx->nchan_in, ctx->nchan_out);
 
   ctx->x_points = (float *) malloc (sizeof(float) * ctx->nchan_out);
   ctx->y_points = (float **) malloc(sizeof(float *) * ctx->nant);
   ctx->fft_in = (float ***) malloc(sizeof(float **) * ctx->nant);
   ctx->fft_out = (float **) malloc(sizeof(float *) * ctx->nant);
+
+  size_t fft_buf_size = sizeof(float) * ctx->nfft * 2;
+  if (ctx->verbose)
+    multilog(ctx->log, LOG_INFO, "init: nfft=%u fft_buf_size=%ld\n", ctx->nfft, fft_buf_size);
 
   unsigned int iant;
   for (iant=0; iant < ctx->nant; iant++)
@@ -368,7 +381,7 @@ int udpplot_init (udpplot_t * ctx)
     unsigned int ichan;
     for (ichan=0; ichan < ctx->nchan_in; ichan++)
     {
-      ctx->fft_in[iant][ichan] = (float *) malloc (sizeof(float) * ctx->nfft * 2);
+      ctx->fft_in[iant][ichan] = (float *) malloc (fft_buf_size);
     }
   }
 
@@ -419,7 +432,7 @@ int main (int argc, char **argv)
 
   double sleep_time = 1;
 
-  float base_freq = 799.609375;
+  float centre_freq = 835.595703;
 
   unsigned int to_integrate = 1024;
 
@@ -433,7 +446,7 @@ int main (int argc, char **argv)
   unsigned zap_dc = 0;
   char dsb = 0;
   char rotate_oversampled = 0;
-  float bw = 100.0;
+  float bw = 31.25;
 
   while ((arg=getopt(argc,argv,"a:b:c:dD:f:F:i:ln:op:r:s:t:vw:zh")) != -1) {
     switch (arg) {
@@ -512,7 +525,7 @@ int main (int argc, char **argv)
       break;
 
     case 'w':
-      base_freq = atof(optarg);
+      centre_freq = atof(optarg);
       break;
 
     case 'z':
@@ -539,7 +552,7 @@ int main (int argc, char **argv)
   udpplot.interface = strdup(interface);
   udpplot.port = port;
 
-  udpplot.base_freq = base_freq;
+  udpplot.base_freq = centre_freq - (bw / 2);
   udpplot.bw = bw;
   udpplot.dsb = dsb;
 
@@ -549,13 +562,6 @@ int main (int argc, char **argv)
     xmax = udpplot.base_freq + udpplot.bw;
   }
 
-  // allocate require resources, open socket
-  if (udpplot_init (&udpplot) < 0)
-  {
-    fprintf (stderr, "ERROR: Could not create UDP socket\n");
-    exit(1);
-  }
-
   if (nchan > 0)
     udpplot.nchan_in = nchan;
   else
@@ -563,7 +569,6 @@ int main (int argc, char **argv)
     udpplot.nant = nant;
 
   udpplot.nfft = nfft;
-  udpplot.nchan_out = udpplot.nchan_in * nfft;
   udpplot.ant_code = 0;
 
   udpplot.antenna = antenna;
@@ -581,6 +586,13 @@ int main (int argc, char **argv)
   udpplot.xmax = xmax;
   udpplot.ymin = ymin;
   udpplot.ymax = ymax;
+
+  // allocate require resources, open socket
+  if (udpplot_init (&udpplot) < 0)
+  {
+    fprintf (stderr, "ERROR: Could not create UDP socket\n");
+    exit(1);
+  }
 
   multilog(log, LOG_INFO, "mopsr_udpfftplot: %f %f\n", udpplot.xmin, udpplot.xmax);
 
@@ -655,32 +667,42 @@ int main (int argc, char **argv)
 
     if (ctx->sock->have_packet)
     {
-      if (ctx->data_size == 8192)
-        mopsr_decode_v2 (ctx->sock->buf, &(ctx->hdr));
-      else
-        mopsr_decode (ctx->sock->buf, &(ctx->hdr));
+#ifdef HIRES
+      mopsr_decode_red (ctx->sock->buf, &(ctx->hdr), ctx->port);
+#else
+      mopsr_decode (ctx->sock->buf, &(ctx->hdr));
+#endif
 
-      if (prev_seq_no == 0)
-      {
-        mopsr_print_header (&ctx->hdr);
-      }
-
-      if (ctx->verbose) 
-        multilog (ctx->log, LOG_INFO, "main: seq_no=%"PRIu64" difference=%"PRIu64" packets\n", ctx->hdr.seq_no, (ctx->hdr.seq_no - prev_seq_no));
+      if ((prev_seq_no > 0) && (ctx->hdr.seq_no != prev_seq_no + 1))
+        multilog (ctx->log, LOG_INFO, "main: seq_no=%"PRIu64" prev=%"PRIu64" difference=%"PRIu64" packets\n", ctx->hdr.seq_no, prev_seq_no, (ctx->hdr.seq_no - prev_seq_no));
       prev_seq_no = ctx->hdr.seq_no;
 
       // append packet to fft input
       append_packet (ctx, ctx->sock->buf + UDP_HEADER, ctx->data_size);
 
+      // now that we have enough consecutive packets, fft and detect
       if (ctx->fft_count >= ctx->nfft)
       {
+        if (ctx->verbose)
+          multilog (ctx->log, LOG_INFO, "fft_data()\n");
         fft_data (ctx);
         detect_data (ctx);
 
         ctx->num_integrated ++;
         ctx->fft_count = 0;
+        
+        // clear buffered packets
+        if (ctx->verbose)
+          multilog(ctx->log, LOG_INFO, "main: clearing packets at socket [%ld]\n", ctx->pkt_size);
+        size_t cleared = dada_sock_clear_buffered_packets(ctx->sock->fd, ctx->pkt_size);
+        if (ctx->verbose)
+          multilog(ctx->log, LOG_INFO, "main: cleared %d packets\n", cleared);
+
+        // reset the prev_seq_no
+        prev_seq_no = 0;
       }
 
+      // we have now integrated enough packets
       if (ctx->num_integrated >= ctx->to_integrate)
       {
         multilog (ctx->log, LOG_INFO, "plotting %d FFTs in %d channels\n", ctx->num_integrated, ctx->nchan_out);
@@ -723,7 +745,7 @@ void append_packet (udpplot_t * ctx, char * buffer, unsigned int size)
   unsigned int end_fft   = start_fft + nframes;
 
   if (ctx->verbose > 1)
-    multilog (ctx->log, LOG_INFO, "append_packet: size=%u nframes=%u\n", size, nframes);
+    multilog (ctx->log, LOG_INFO, "append_packet: size=%u nframes=%u start=%u end=%u\n", size, nframes, start_fft, end_fft);
 
   unsigned icorr;
   float complex val;
@@ -791,8 +813,7 @@ void detect_data (udpplot_t * ctx)
   unsigned shift;
   float a, b;
 
-  fprintf (stderr, "detect: zap_dc=%d\n", ctx->zap_dc);
-
+  //fprintf (stderr, "detect: zap_dc=%d\n", ctx->zap_dc);
   for (iant=0; iant < ctx->nant; iant++)
   {
     if ((ctx->antenna < 0) || (ctx->antenna == iant))
@@ -834,7 +855,6 @@ void detect_data (udpplot_t * ctx)
 
             if (ctx->zap_dc && ibit == 0)
             {
-              fprintf (stderr, "zapping chan=%d\n", basechan + ibit);
               ctx->y_points[iant][basechan + ibit] = 0;
             }
           }
@@ -951,21 +971,10 @@ void plot_data (udpplot_t * ctx)
   int ant_id;
   for (iant=0; iant < ctx->nant; iant++)
   {
+
     if ((ctx->antenna < 0) || (ctx->antenna == iant))
     {
-
-      //ant_id = mopsr_get_new_ant_number(iant);
-
-      // TODO - revert! special case for 4 Input mode
-      if ((iant == 0) || (iant == 1))
-      {
-        ant_id = mopsr_get_ant_number (ctx->hdr.ant_id, iant);
-      }
-      else
-      {
-        ant_id = mopsr_get_ant_number (ctx->hdr.ant_id2, iant-2);
-      }
-
+      ant_id = mopsr_get_hires_ant_number (iant);
       sprintf(ant_label, "Ant %u", ant_id);
      
       col = (iant % 14) + 2;

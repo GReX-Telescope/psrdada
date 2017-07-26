@@ -88,6 +88,8 @@ typedef struct {
 
   int antenna;
 
+  int zap;
+
 } udpplot_t;
 
 int udpplot_init (udpplot_t * ctx);
@@ -214,10 +216,11 @@ int udpplot_init (udpplot_t * ctx)
   // decode the header
   multilog (ctx->log, LOG_INFO, "init: decoding packet\n");
   mopsr_hdr_t hdr;
-  //if (ctx->data_size == PAYLOAD_SIZE)
-  //  mopsr_decode_v2 (ctx->sock->buf, &hdr);
-  //else
+#ifdef HIRES
+  mopsr_decode_red (ctx->sock->buf, &hdr, ctx->port);
+#else
   mopsr_decode (ctx->sock->buf, &hdr);
+#endif
 
   multilog (ctx->log, LOG_INFO, "init: nchan=%u nant=%u nframe=%u\n", hdr.nchan, hdr.nant, hdr.nframe);
 
@@ -271,11 +274,13 @@ int main (int argc, char **argv)
 
   int antenna_to_plot = -1;
 
-  while ((arg=getopt(argc,argv,"a:D:hi:lp:s:vz")) != -1) {
+  unsigned to_integrate = 128;
+
+  while ((arg=getopt(argc,argv,"a:D:hi:lp:s:t:vz")) != -1) {
     switch (arg) {
 
     case 'a':
-      antenna_to_plot = atoi(optarg);
+      antenna_to_plot = atoi(optarg); 
       break;
 
     case 'D':
@@ -303,6 +308,10 @@ int main (int argc, char **argv)
       sleep_time = (double) atof (optarg);
       break;
 
+    case 't':
+      to_integrate = atoi(optarg);
+      break;
+
     case 'v':
       verbose++;
       break;
@@ -327,10 +336,12 @@ int main (int argc, char **argv)
   udpplot.interface = strdup(interface);
   udpplot.port = port;
   udpplot.ant_code = 0;
+
   udpplot.antenna = antenna_to_plot;
 
   udpplot.num_integrated = 0;
-  udpplot.to_integrate = 128;
+  udpplot.to_integrate = to_integrate;
+  udpplot.zap = zap_dc;
 
   udpplot.plot_log = plot_log;
   if (plot_log)
@@ -429,9 +440,11 @@ int main (int argc, char **argv)
     if (ctx->sock->have_packet)
     {
       StartTimer(&wait_sw);
-
+#ifdef HIRES
+      mopsr_decode_red (ctx->sock->buf, &hdr, ctx->port);
+#else
       mopsr_decode (ctx->sock->buf, &hdr);
-      //mopsr_decode_v2 (ctx->sock->buf, &hdr);
+#endif
 
       for (i=0; i<16; i++)
         mgt_locks[i] = ((char) mopsr_get_bit_from_16 (hdr.mgt_locks, i)) + '0';
@@ -443,9 +456,6 @@ int main (int argc, char **argv)
 
      if (ctx->verbose)
         multilog (ctx->log, LOG_INFO, "main: seq=%"PRIu64" nbit=%u nant=%u nchan=%u start_chan=%u nframe=%u locks=[%s] locks_long=[%s]\n", hdr.seq_no, hdr.nbit, hdr.nant, hdr.nchan, hdr.start_chan, hdr.nframe, mgt_locks, mgt_locks_long);
-
-      //mopsr_encode (ctx->sock->buf, &hdr);
-      //mopsr_decode (ctx->sock->buf, &hdr);
 
       for (i=0; i<16; i++)
         mgt_locks[i] = ((char) mopsr_get_bit_from_16 (hdr.mgt_locks, i)) + '0';
@@ -485,7 +495,6 @@ int main (int argc, char **argv)
       size_t cleared = dada_sock_clear_buffered_packets(ctx->sock->fd, ctx->pkt_size);
       if (ctx->verbose)
         multilog(ctx->log, LOG_INFO, "main: cleared %d packets\n", cleared);
-
     }
   }
 
@@ -588,26 +597,37 @@ void plot_packet (udpplot_t * ctx)
   // calculate limits
   for (iant=0; iant < ctx->nant; iant++)
   {
-    if ((ctx->antenna == -1) || (mopsr_get_new_ant_number (iant) == ctx->antenna))
+    if ((ctx->antenna == -1) || 
+#ifdef HIRES
+      (mopsr_get_hires_ant_number(iant) == ctx->antenna)
+#else
+      (mopsr_get_new_ant_number (iant) == ctx->antenna)
+#endif
+      ) 
     {
-      for (ichan=0; ichan < ctx->nchan; ichan++)
+      for (ichan=ctx->zap; ichan < ctx->nchan; ichan++)
       {
         if (ctx->plot_log)
           ctx->y_points[iant][ichan] = (ctx->y_points[iant][ichan] > 0) ? log10(ctx->y_points[iant][ichan]) : 0;
-        if (ctx->y_points[iant][ichan] > ctx->ymax) ctx->ymax = ctx->y_points[iant][ichan];
+        if (ctx->y_points[iant][ichan] > ctx->ymax) 
+        {
+          multilog (ctx->log, LOG_INFO, "plot_packet: updating max from %f to %f [%d][%d]\n", ctx->ymax, ctx->y_points[iant][ichan], iant, ichan);
+          ctx->ymax = ctx->y_points[iant][ichan];
+        }
         if (ctx->y_points[iant][ichan] < ctx->ymin) ctx->ymin = ctx->y_points[iant][ichan];
       }
     }
   }
-  //if (ctx->verbose)
+  if (ctx->verbose)
     multilog (ctx->log, LOG_INFO, "plot_packet: ctx->ymin=%f, ctx->ymax=%f\n", ctx->ymin, ctx->ymax);
 
   cpgbbuf();
   cpgeras();
 
   unsigned nx = 4;
-  unsigned ny = 4;
+  unsigned ny = ctx->nant / 4;
   unsigned ix, iy;
+  float ywidth = (1.0 - 0.2) / (float) ny;
   for (ix=0; ix<nx; ix++)
   {
     for (iy=0; iy<ny; iy++)
@@ -617,8 +637,8 @@ void plot_packet (udpplot_t * ctx)
       float xl = 0.1 + 0.2f * ix;
       float xr = xl + 0.2;
 
-      float yb = 0.1 + 0.2 * iy;
-      float yt = yb + 0.2;
+      float yb = 0.1 + ywidth * iy;
+      float yt = yb + ywidth;
 
       cpgsci(1);
       cpgswin(xmin, xmax, ctx->ymin, 1.1 * ctx->ymax);
@@ -647,7 +667,12 @@ void plot_packet (udpplot_t * ctx)
             cpgbox("BCT", 0.0, 0.0, "BCST", 0.0, 0.0);
 
       char ant_label[8];
+
+#ifdef HIRES
+      sprintf(ant_label, "Ant %u", mopsr_get_hires_ant_number(iant));
+#else
       sprintf(ant_label, "Ant %u", mopsr_get_new_ant_number (iant));
+#endif
       cpgmtxt("T", -1.0, 0.05, 0.0, ant_label);
       cpgsci(2);
       cpgline(ctx->nchan, ctx->x_points, ctx->y_points[iant]);
