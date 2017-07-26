@@ -30,7 +30,8 @@
 #include "daemon.h"
 
 void usage ();
-void plot_phase_freq (float * amps, float * phases, unsigned npts, float gradient, float offset, char * device, char * title);
+void plot_unwrapped (double * x, double * y, unsigned npts, float gradient, float offset, char * device);
+void plot_phase_freq (float * amps, float * phases, unsigned npts, float gradient, float offset, char * device, char * title, float fmin, float fmax);
 void plot_phase_time (float * x, float * amps, float * phases, unsigned npts, float gradient, float offset, char * device, char * title, float nsecs_per_subint);
 void plot_series (double * x, double * y, unsigned npts, char * device, char * title, float M, float C);
 void unwrap (double * p, int N);
@@ -40,6 +41,8 @@ void usage()
   fprintf (stdout,
      "mopsr_plot_baselines baseline npt ccfiles\n"
      " -f delay        adjust fractional delay\n"
+     " -F min,max      set the min and max frequnecy zoom\n"
+     " -d              print drift and chisq\n"
      " -D device       pgplot device name\n"
      " -h              plot this help\n"
      " -p              plot each timestep\n"
@@ -75,19 +78,38 @@ int main (int argc, char **argv)
 
   char zap_dc = 0;
 
+  char print_drift = 0;
+
   char just_xcorr_time_amps = 0;
 
   char * channel_reject_file = NULL;
   char channel_rejection = 0;
 
+  char old_filenames = 0;
+  float fmin = FLT_MAX;
+  float fmax = -FLT_MAX;
 
-  while ((arg=getopt(argc,argv,"f:D:hmpr:s:t:vxz")) != -1)
+  while ((arg=getopt(argc,argv,"f:F:dD:hmopr:s:t:vxz")) != -1)
   {
     switch (arg)
     {
+      case 'd':
+        print_drift = 1;
+        break;
+        
       case 'f':
         delay = atof (optarg);
         break;
+
+      case 'F':
+      {
+        if (sscanf (optarg, "%f,%f", &fmin, &fmax) != 2)
+        {
+          fprintf (stderr, "could not parse xrange from %s\n", optarg);
+          return (EXIT_FAILURE);
+        }
+        break;
+      }
         
       case 'D':
         device = strdup(optarg);
@@ -103,6 +125,10 @@ int main (int argc, char **argv)
 
       case 'm':
         plot_meridian_dist = 1;
+        break;
+
+      case 'o':
+        old_filenames = 1;
         break;
 
       case 'p':
@@ -465,8 +491,17 @@ int main (int argc, char **argv)
       return -1;
     }
 
-    mid_byte = (end_byte + start_byte) / 2;
-    double mid_utc_offset = (double) mid_byte / (double) bytes_per_second;
+    double mid_utc_offset;
+
+    if (old_filenames)
+    {
+      mid_byte = (end_byte + start_byte) / 2;
+      mid_utc_offset = (double) mid_byte / (double) bytes_per_second;
+    }
+    else
+    {
+      mid_utc_offset = (end_byte + start_byte) / 2;
+    }
 
     if (verbose > 1)
       fprintf (stderr, "[%d] start_byte=%"PRIu64", end_byte=%"PRIu64" mid_byte=%"PRIu64" seconds=%lf\n", ifile, start_byte, end_byte, mid_byte, mid_utc_offset);
@@ -563,6 +598,7 @@ int main (int argc, char **argv)
         }
         else
           x_t[ifile] = (float) mid_utc_offset;
+        x2[ifile] = (double) x_t[ifile];
 
         anta = i / nant;
         antb = i % nant;
@@ -610,34 +646,39 @@ int main (int argc, char **argv)
 
         unwrap (y1, N);
 
-        gsl_fit_linear (x1 + N_skip, 1, y1 + N_skip, 1, (size_t) (N - 2 * N_skip), &c0, &c1, &cov00, &cov01, &cov11, &chisq);
+        gsl_fit_linear (x1, 1, y1, 1, (size_t) N, &c0, &c1, &cov00, &cov01, &cov11, &chisq);
         
-        float fractional_delay = (float) c1 * (npt / (2 * M_PI));
+        float fractional_delay = ((float) (c1 * npt)) / (2 * M_PI);
+        //fprintf (stderr, "c1=%lf c0=%lf npt=%u fractional=%f\n", c1, c0, npt, fractional_delay);
 
-        if (!just_xcorr_time_amps)
+        if (!just_xcorr_time_amps && !print_drift)
         {
-          sprintf (title, "%s [%d -> %d] Corr vs Freq uncorrected delay %f samples", baseline_name, anta, antb, fractional_delay);
-          plot_phase_freq (amps, phases, npt, (float) c1, (float) c0, "10/xs", title);
+          sprintf (title, "%s [%d -> %d] Corr vs Freq uncorrected delay %2.1f samples", baseline_name, anta, antb, fractional_delay);
+          plot_phase_freq (amps, phases, npt, (float) c1, (float) c0, "10/xs", title, fmin, fmax);
         }
 
         c0 = 0;
         c1 = 0;
 
-        if (ifile > 0)
+        size_t N2 = ifile + 1;
+        if (ifile > 1)
         {
-          for (ipt=0; ipt<ifile; ipt++)
+          for (ipt=0; ipt<N2; ipt++)
           {
             y2[ipt] = phases_t[ipt];
           }
 
-          unwrap (y2, ifile+1);
+          unwrap (y2, N2);
 
-          gsl_fit_linear (x2, 1, y2, 1, (size_t) ifile+1, &c0, &c1, &cov00, &cov01, &cov11, &chisq);
+          gsl_fit_linear (x2, 1, y2, 1, N2, &c0, &c1, &cov00, &cov01, &cov11, &chisq);
         }
 
         float turns_per_hour = (float) c1 * (3600 / (2 * M_PI));
-
-        if (just_xcorr_time_amps)
+        if (print_drift)
+        {
+          fprintf (stdout, "%f %lf\n", turns_per_hour, chisq);
+        }
+        else if (just_xcorr_time_amps)
         {
           fprintf (stdout, "%f", amps_t[0]);
           for (i=1; i<ifile+1; i++)
@@ -646,11 +687,11 @@ int main (int argc, char **argv)
         }
         else
         {
-        sprintf (title, "%s [%d -> %d] (%d) - xCorr vs Time [%4.2f tphr, chiq=%5.2lf] ", baseline_name, anta, antb, baseline, turns_per_hour, chisq);
+          sprintf (title, "%s [%d -> %d] (%d) - xCorr vs Time [%4.2f tphr, chiq=%5.2lf] ", baseline_name, anta, antb, baseline, turns_per_hour, chisq);
         if (plot_meridian_dist)
-          plot_phase_time (x_t, amps_t, phases_t, ifile+1, (float) c1, (float) c0, device, title, 0);
+          plot_phase_time (x_t, amps_t, phases_t, N2, (float) c1, (float) c0, device, title, 0);
         else
-          plot_phase_time (x_t, amps_t, phases_t, ifile+1, (float) c1, (float) c0, device, title, nsecs_per_subint);
+          plot_phase_time (x_t, amps_t, phases_t, N2, (float) c1, (float) c0, device, title, nsecs_per_subint);
         }
         //if ((fabs(turns_per_hour) > 1) && (chisq < 200) && (abs(anta - antb) > 3))
         //  sleep (1);
@@ -684,7 +725,7 @@ int main (int argc, char **argv)
   return EXIT_SUCCESS;
 }
 
-void plot_phase_freq (float * amps, float * phases, unsigned npts, float gradient, float offset, char * device, char * title)
+void plot_unwrapped (double * x, double * y, unsigned npts, float gradient, float offset, char * device)
 {
   float xmin = 0;
   float xmax = (float) npts;
@@ -692,6 +733,64 @@ void plot_phase_freq (float * amps, float * phases, unsigned npts, float gradien
   float ymax = -FLT_MAX;
 
   float xvals[npts];
+  float yvals[npts];
+  float line[npts];
+
+  unsigned i;
+  for (i=0; i<npts; i++)
+  {
+    yvals[i] = (float) y[i];
+    xvals[i] = (float) x[i];
+
+    if (yvals[i] > ymax)
+      ymax = (float) yvals[i];
+    if (yvals[i] < ymin)
+      ymin = yvals[i];
+
+    line[i] = (gradient * i) + offset;
+  }
+
+  if (cpgbeg(0, device, 1, 1) != 1)
+  {
+    fprintf(stderr, "error opening plot device\n");
+    exit(1);
+  }
+
+  cpgbbuf();
+
+  cpgswin(xmin, xmax, ymin, ymax);
+  cpgsvp(0.1, 0.9, 0.1, 0.9);
+  cpgbox("BCNST", 0.0, 0.0, "BCNST", 0.0, 0.0);
+  cpglab("Channel", "Phase [unwraped]", "");
+
+  cpgsci(3);
+  cpgpt(npts, xvals, yvals, 17);
+  cpgsci(1);
+
+  cpgsci(2);
+  cpgline(npts, xvals, line);
+  cpgsci(1);
+
+  cpgebuf();
+  cpgend();
+}
+
+
+
+void plot_phase_freq (float * amps, float * phases, unsigned npts, float gradient, float offset, char * device, char * title, float fmin, float fmax)
+{
+  float xmin = 0;
+  float xmax = (float) npts;
+  if (fmin != FLT_MAX)
+    xmin = fmin;
+  if (fmax != -FLT_MAX)
+    xmax = fmax;
+
+  float ymin = FLT_MAX;
+  float ymax = -FLT_MAX;
+
+  float xvals[npts];
+  float line[npts];
   char label[64];
 
   unsigned i;
@@ -708,6 +807,12 @@ void plot_phase_freq (float * amps, float * phases, unsigned npts, float gradien
       ymin = amps[i];
 
     xvals[i] = (float) i;
+    line[i] = gradient * i + offset;
+    while (line[i] > M_PI)
+      line[i] -= (2 * M_PI);
+    while (line[i] < -M_PI)
+      line[i] += (2 * M_PI);
+
   }
 
   if (cpgbeg(0, device, 1, 1) != 1)
@@ -725,7 +830,7 @@ void plot_phase_freq (float * amps, float * phases, unsigned npts, float gradien
   cpglab("", "Amplitude", title);
 
   cpgsci(3);
-  cpgline (npts, xvals, amps);
+  cpgpt (npts, xvals, amps, 1);
   cpgsci(1);
 
   ymin = FLT_MAX;
@@ -745,16 +850,16 @@ void plot_phase_freq (float * amps, float * phases, unsigned npts, float gradien
   cpglab("Channel", "Phase [radians]", "");
 
   cpgsci(3);
-  cpgpt(npts, xvals, phases, 17);
+  cpgpt(npts, xvals, phases, 1);
   cpgsci(1);
 
-  float xx[2] = { 0, 255 };
-  float yy[2];
-  yy[0] = gradient * xx[0] + offset;
-  yy[1] = gradient * xx[1] + offset;
+  //float xx[2] = { 0, (npts-1) };
+  //float yy[2];
+  //yy[0] = gradient * xx[0] + offset;
+  //yy[1] = gradient * xx[1] + offset;
 
   cpgsci(2);
-  cpgline(2, xx, yy);
+  cpgline(npts, xvals, line);
   cpgsci(1);
 
 
@@ -849,8 +954,8 @@ void plot_phase_time (float * xvals, float * amps, float * phases, unsigned npts
   {
     float xx[2] = { 0, xvals[npts-1] };
     float yy[2];
-    yy[0] = gradient * xx[0] + offset;
-    yy[1] = gradient * xx[1] + offset;
+    yy[0] = (gradient * xx[0]) + offset;
+    yy[1] = (gradient * xx[1]) + offset;
 
     cpgsci(2);
     cpgline(2, xx, yy);
