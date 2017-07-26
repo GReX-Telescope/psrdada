@@ -64,6 +64,7 @@ typedef struct {
   stats_t         * bytes;
   char            * mdir;                 // directory for monitoring files
   char            * last_block;           // pointer to last full block of valid data
+  mopsr_hdr_t       last_hdr;
 
   uint64_t          n_sleeps;
   uint64_t          timeouts;

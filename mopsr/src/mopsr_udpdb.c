@@ -14,7 +14,11 @@
 #include "mopsr_def.h"
 #include "mopsr_util.h"
 
+#ifdef HIRES
+#define PFB_START_CHANNEL 205
+#else
 #define PFB_START_CHANNEL 25
+#endif
 
 #define MOPSR_UDPDB_BLOCKING
 
@@ -79,8 +83,8 @@ int mopsr_udpdb_init (mopsr_udpdb_t * ctx)
 
   // set the socket size to 64 MB
   if (ctx->verbose)
-    multilog(ctx->log, LOG_INFO, "init: setting socket buffer size to 128 MB\n");
-  dada_udp_sock_set_buffer_size (ctx->log, ctx->sock->fd, ctx->verbose, 134217728);
+    multilog(ctx->log, LOG_INFO, "init: setting socket buffer size to 64 MB\n");
+  dada_udp_sock_set_buffer_size (ctx->log, ctx->sock->fd, ctx->verbose, 67108864);
 
 #ifndef MOPSR_UDPDB_BLOCKING
   // set the socket to non-blocking
@@ -262,6 +266,22 @@ time_t mopsr_udpdb_start (dada_pwc_main_t * pwcm, time_t start_utc)
   char ant_tag[16];
   int real_ant_id;
   int i;
+#ifdef HIRES
+  for (i=0; i<8; i++)
+  {
+    sprintf (ant_tag, "ANT_ID_%d", i);
+    real_ant_id = mopsr_get_hires_ant_number (i);
+    if (ctx->verbose)
+      multilog (pwcm->log, LOG_INFO, "setting %s=%d\n", ant_tag, real_ant_id);
+
+    if (ascii_header_set (pwcm->header, ant_tag, "%d", real_ant_id) < 0)
+    {
+        sprintf (ant_tag, "ANT_ID_%d", i);
+        multilog (pwcm->log, LOG_WARNING, "start: failed to set %s=%d in header\n",
+                ant_tag, real_ant_id);
+    }
+  }
+#else
   for (i=0; i<16; i++)
   {
     sprintf (ant_tag, "ANT_ID_%d", i);
@@ -271,10 +291,12 @@ time_t mopsr_udpdb_start (dada_pwc_main_t * pwcm, time_t start_utc)
 
     if (ascii_header_set (pwcm->header, ant_tag, "%d", real_ant_id) < 0)
     {
-      multilog (pwcm->log, LOG_WARNING, "start: failed to set %s=%d in header\n",
+        sprintf (ant_tag, "ANT_ID_%d", i);
+        multilog (pwcm->log, LOG_WARNING, "start: failed to set %s=%d in header\n",
                 ant_tag, real_ant_id);
     }
   }
+#endif
 
   // set ordering if data in header
   if (ascii_header_set (pwcm->header, "ORDER", "TFS") < 0)
@@ -337,7 +359,11 @@ time_t mopsr_udpdb_start (dada_pwc_main_t * pwcm, time_t start_utc)
   if (ctx->verbose)
     multilog(ctx->log, LOG_INFO, "start: recv_from (decoding packet)\n");
   // decode so we have nframe, etc
+#ifdef HIRES
+  mopsr_decode_red (ctx->sock->buf, &(ctx->hdr), ctx->port);
+#else
   mopsr_decode (ctx->sock->buf, &(ctx->hdr));
+#endif
 
   pthread_mutex_unlock (&(ctx->mutex));
 
@@ -430,7 +456,7 @@ int64_t mopsr_udpdb_recv_block (dada_pwc_main_t * pwcm, void * block,
     // we now have a packet
     if (!ctx->got_enough && ctx->sock->have_packet)
     {
-      // just deocde the sequence number, rely on mon thread 
+      // just decode the sequence number, rely on mon thread 
       mopsr_decode_seq (ctx->sock->buf, &(ctx->hdr));
 
 #ifdef _DEBUG
@@ -445,11 +471,16 @@ int64_t mopsr_udpdb_recv_block (dada_pwc_main_t * pwcm, void * block,
         ctx->prev_seq  = ctx->pkt_start - 1;
         ctx->start_pkt = ctx->pkt_start;
         ctx->end_pkt    = ctx->start_pkt + (ctx->packets_per_buffer - 1);
-        if (ctx->verbose)
+        //if (ctx->verbose)
           multilog (pwcm->log, LOG_INFO, "recv_block: START [%"PRIu64" - "
                     "%"PRIu64"] seq_no=%"PRIu64"\n", ctx->start_pkt, 
                     ctx->end_pkt, ctx->hdr.seq_no);
         ctx->capture_started = 1;
+#ifdef HIRES
+        mopsr_decode_red (ctx->sock->buf, &(ctx->hdr), ctx->port);
+#else
+        mopsr_decode (ctx->sock->buf, &(ctx->hdr));
+#endif
       }
      
       if (ctx->capture_started)
@@ -837,6 +868,7 @@ int main (int argc, char **argv)
 
   // packet size define in the above
   ctx.packets_per_buffer = block_size / ctx.pkt_size;
+  multilog(log, LOG_INFO, "mopsr_udpdb: ctx.packets_per_buffer=%lu\n", ctx.packets_per_buffer);
 
   if (ctx.mdir)
   {
@@ -969,17 +1001,24 @@ void mon_thread (void * arg)
         got = 0;
         while  (!quit_threads && got != UDP_PAYLOAD)
         {
-         got = recvfrom (ctx->sock->fd, ctx->sock->buf, UDP_PAYLOAD, 0, NULL, NULL);
+          got = recvfrom (ctx->sock->fd, ctx->sock->buf, UDP_PAYLOAD, 0, NULL, NULL);
           if (got == UDP_PAYLOAD)
           {
             memcpy (packets, ctx->sock->buf, UDP_HEADER);
             memcpy (packets + UDP_HEADER + (ipacket * UDP_DATA), ctx->sock->buf + UDP_HEADER, UDP_DATA);
-            mopsr_decode (packets, &hdr);
+#ifdef HIRES
+            mopsr_decode_red (ctx->sock->buf, &(ctx->last_hdr), ctx->port);
+            mopsr_decode_red (ctx->sock->buf, &hdr, ctx->port);
+#else
+            mopsr_decode (ctx->sock->buf, &(ctx->last_hdr));
+            mopsr_decode (ctx->sock->buf, &hdr);
+#endif
+
             if ((prev_seq != 0) && (hdr.seq_no != prev_seq + 1) && ctx->verbose)
             {
               multilog(ctx->log, LOG_INFO, "mon_thread: hdr.seq=%"PRIu64" "
-                       "prev_seq=%"PRIu64" [%"PRIu64"]\n", hdr.seq_no, 
-                       prev_seq, hdr.seq_no - prev_seq);
+                       "prev_seq=%"PRIu64" [%"PRIu64"] ipacket=%d\n", hdr.seq_no, 
+                       prev_seq, hdr.seq_no - prev_seq, ipacket);
             }
             prev_seq = hdr.seq_no;
             ipacket++;
@@ -1007,7 +1046,12 @@ void mon_thread (void * arg)
       // release control of the socket
       pthread_mutex_unlock (&(ctx->mutex));
 
-      mopsr_decode (packets, &hdr);
+#ifdef HIRES
+      mopsr_decode_red (packets, &ctx->last_hdr, ctx->port);
+#else
+      mopsr_decode (packets, &ctx->last_hdr);
+#endif
+
       hdr.nframe *= npackets;
       mopsr_encode (packets, &hdr);
       out_size = UDP_HEADER + (npackets * UDP_DATA);
@@ -1018,9 +1062,9 @@ void mon_thread (void * arg)
       {
         memcpy (packets + UDP_HEADER, ctx->last_block, (npackets * UDP_DATA));
         out_size = UDP_HEADER + (npackets * UDP_DATA);
-        hdr.nant = 16;
-        hdr.nchan = 40; 
-        hdr.nframe = 6;
+        hdr.nant = ctx->last_hdr.nant;
+        hdr.nchan = ctx->last_hdr.nchan; 
+        hdr.nframe = ctx->last_hdr.nframe;
         mopsr_encode (packets, &hdr);
       }
       else
