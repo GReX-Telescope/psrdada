@@ -531,7 +531,6 @@ int dada_ib_dereg_buffer (dada_ib_mb_t * mr)
 int dada_ib_reg_buffers(dada_ib_cm_t * ctx, char ** buffers, uint64_t bufsz, 
                         int access_flags)
 {
-
   assert(ctx);
   multilog_t * log = ctx->log;
 
@@ -572,6 +571,90 @@ int dada_ib_reg_buffers(dada_ib_cm_t * ctx, char ** buffers, uint64_t bufsz,
                 "buf_rkey=%p\n", i, ctx->bufs[i]->buffer, ctx->local_blocks[i].buf_va, 
                 ctx->local_blocks[i].buf_lkey, ctx->local_blocks[i].buf_rkey);
 
+  }
+
+  // register the sync memory buffers use 128 bits [16 bytes]
+  ctx->sync_size     = sizeof(uint64_t) * 2;
+  ctx->sync_to_val   = (uint64_t *) malloc(ctx->sync_size);
+  ctx->sync_from_val = (uint64_t *) malloc(ctx->sync_size);
+  assert(ctx->sync_to_val != 0);
+  assert(ctx->sync_from_val != 0);
+
+  if (ctx->verbose > 1)
+    multilog(log, LOG_INFO, "reg_buffers: creating sync buffers size=%d "
+             "bytes\n", ctx->sync_size);
+
+  ctx->sync_to = dada_ib_reg_buffer(ctx, ctx->sync_to_val, ctx->sync_size, 
+                                    access_flags);
+  if (!ctx->sync_to)
+  {
+    multilog(log, LOG_ERR, "reg_buffers: dada_ib_reg_buffer sync_to failed\n");
+    return -1;
+  }
+  ctx->sync_to->wr_id = 200000;
+  ctx->sync_to_val[0] = 0;
+  ctx->sync_to_val[1] = 0;
+
+  ctx->sync_from = dada_ib_reg_buffer(ctx, ctx->sync_from_val, ctx->sync_size, 
+                                      access_flags);
+  if (!ctx->sync_from)
+  {
+    multilog(log, LOG_ERR, "reg_buffers: dada_ib_reg_buffer sync_from failed\n");
+    return -1;
+  }
+  ctx->sync_from->wr_id = 300000;
+  ctx->sync_from_val[0] = 0;
+  ctx->sync_from_val[1] = 0;
+
+  return 0;
+}
+
+/*
+ *  register the specified number of buffers to the PD (protection domain), 
+ *  register only nbytes of the buffer from the offset 
+ */
+int dada_ib_reg_buffers_partial (dada_ib_cm_t * ctx, char ** buffers, uint64_t nbytes, 
+                        uint64_t offset, int access_flags)
+{
+  assert(ctx);
+  multilog_t * log = ctx->log;
+
+  if (ctx->verbose > 1)
+    multilog(log, LOG_INFO, "dada_ib_reg_buffers()\n");
+
+  unsigned i = 0;
+
+  if (!ctx->bufs)
+  {
+    multilog(log, LOG_ERR, "reg_buffers: ctx->bufs was not defined\n");
+    return -1;
+  } 
+
+  if (!ctx->nbufs)
+  {
+    multilog(log, LOG_ERR, "reg_buffers: ctx->nbufs was not defined\n");
+    return -1;
+  }
+
+  // register the memory regions for each buffer
+  for (i=0; i < ctx->nbufs; i++)
+  {
+    ctx->bufs[i] = dada_ib_reg_buffer(ctx, buffers[i] + offset, nbytes, access_flags);
+    if (!ctx->bufs[i])
+    {
+      multilog(log, LOG_ERR, "reg_buffers: dada_ib_reg_buffer bufs[%d] failed\n", i);
+      return -1;
+    }
+    ctx->bufs[i]->wr_id = i;
+
+    ctx->local_blocks[i].buf_va = (uintptr_t) ctx->bufs[i]->buffer + offset;
+    ctx->local_blocks[i].buf_lkey = ctx->bufs[i]->mr->lkey;
+    ctx->local_blocks[i].buf_rkey = ctx->bufs[i]->mr->rkey;
+
+    if (ctx->verbose > 1)
+      multilog (log, LOG_INFO, "reg_buffers: block[%d] buffer=%p buf_va=%p buf_lkey=%p "
+                "buf_rkey=%p\n", i, ctx->bufs[i]->buffer, ctx->local_blocks[i].buf_va, 
+                ctx->local_blocks[i].buf_lkey, ctx->local_blocks[i].buf_rkey);
   }
 
   // register the sync memory buffers use 128 bits [16 bytes]

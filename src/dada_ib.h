@@ -115,6 +115,10 @@ dada_ib_mb_t * dada_ib_reg_buffer (dada_ib_cm_t * ctx, void * buffer,
 int dada_ib_reg_buffers(dada_ib_cm_t * ctx, char ** buffers, uint64_t bufsz, 
                         int access_flags);
 
+int dada_ib_reg_buffers_partial (dada_ib_cm_t * ctx, char ** buffers, uint64_t nbytes,
+                        uint64_t offset, int access_flags);
+
+
 int dada_ib_create_qp (dada_ib_cm_t * ctx);
 
 int dada_ib_accept (dada_ib_cm_t * ctx);
