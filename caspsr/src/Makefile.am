@@ -34,10 +34,6 @@ if HAVE_RDMACM
 bin_PROGRAMS += caspsr_dbib caspsr_ibdb caspsr_pwc_ibdb
 LDADD += @RDMACM_LIBS@
 
-#caspsr_dbib_LDADD = $(LDADD) $(RDMACM_LIBS)
-#caspsr_ibdb_LDADD = $(LDADD) $(RDMACM_LIBS)
-#caspsr_pwc_ibdb_LDADD = $(LDADD) $(RDMACM_LIBS)
-
 endif
 
 #############################################################################
@@ -48,10 +44,17 @@ endif
 
 if HAVE_PGPLOT
 
-bin_PROGRAMS += mulbibob_server caspsr_disknumplot
+if HAVE_FFTW3
+
+bin_PROGRAMS += caspsr_udpfftplot
+AM_CPPFLAGS += @FFTW_CFLAGS@
+caspsr_udpfftplot_LDADD = $(LDADD) @PGPLOT_LIBS@ @FFTW_LIBS@
+
+endif
+
+bin_PROGRAMS += mulbibob_server caspsr_disknumplot caspsr_udptsplot
 AM_CPPFLAGS += @PGPLOT_CFLAGS@
 LDADD += @PGPLOT_LIBS@
-#mulbibob_server_LDADD = $(LDADD) @PGPLOT_LIBS@
-#caspsr_disknumplot_LDADD = $(LDADD) @PGPLOT_LIBS@
+
 endif
 
