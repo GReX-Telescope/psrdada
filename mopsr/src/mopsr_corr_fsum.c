@@ -15,13 +15,12 @@
 #include <float.h>
 
 void usage ();
-
 void usage()
 {
   fprintf (stdout,
-     "mopsr_corr_fsum [options] npt output_file\n"
+     "mopsr_corr_fsum [options] nant output_file\n"
      " sums AC or CC files in frequency\n"
-     " npt          number of fine channels in input files\n"
+     " nant         number of nant in CC or AC files\n"
      " -a file      auto-correlation file to sum\n"
      " -c file      cross-correlation file to sum\n"
      " -h           plot this help\n"
@@ -40,6 +39,7 @@ int main (int argc, char **argv)
   unsigned nfiles = 0;
   unsigned nacfiles = 0;
   unsigned nccfiles = 0;
+  size_t filename_len;
 
   while ((arg=getopt(argc,argv,"a:c:hv")) != -1)
   {
@@ -49,15 +49,17 @@ int main (int argc, char **argv)
         nfiles++;
         nacfiles++;
         files = (char **) realloc ((void *) files, nfiles * sizeof(char *));
-        files[nfiles-1] = (char *) malloc (sizeof(char) * strlen(optarg));
-        strcpy (files[nfiles-1], optarg);
+        filename_len = sizeof(char) * (strlen(optarg) + 1);
+        files[nfiles-1] = (char *) malloc (filename_len);
+        strncpy (files[nfiles-1], optarg, filename_len);
         break;
 
       case 'c':
         nfiles++;
         nccfiles++;
         files = (char **) realloc ((void *) files, nfiles * sizeof(char *));
-        files[nfiles-1] = (char *) malloc (sizeof(char) * strlen(optarg));
+        filename_len = sizeof(char) * (strlen(optarg) + 1);
+        files[nfiles-1] = (char *) malloc (filename_len);
         strcpy (files[nfiles-1], optarg);
         break;
 
@@ -69,7 +71,7 @@ int main (int argc, char **argv)
       default:
         usage ();
         return 0;
-    } 
+    }
   }
 
   // check and parse the command line arguments
@@ -94,14 +96,30 @@ int main (int argc, char **argv)
     return (EXIT_FAILURE);
   }
 
+  if (verbose)
+    fprintf (stderr, "parsed command line arguments and options\n");
+
   int flags, perms;
   unsigned ifile, nchan; 
 
-  int npt;
-  if (sscanf(argv[optind], "%d", &npt) != 1)  
+  int nant;
+  if (sscanf(argv[optind], "%d", &nant) != 1)  
   {
-    fprintf (stderr, "ERROR: could not parse npt from %s\n", argv[optind]);
+    fprintf (stderr, "ERROR: could not parse nant from %s\n", argv[optind]);
     return (EXIT_FAILURE);
+  }
+  
+  size_t sample_stride;
+  size_t nbaselines;
+  if (nccfiles > 0)
+  {
+    sample_stride = sizeof(float) * 2;
+    nbaselines = (nant * (nant-1)) / 2;
+  }
+  else
+  {
+    sample_stride  = sizeof(float);
+    nbaselines = nant; 
   }
 
   // the output file to be written
@@ -111,11 +129,14 @@ int main (int argc, char **argv)
   // all input files must be the same size
   struct stat buf;
   size_t file_size;
+  size_t max_chunk_size = 0;
 
   flags = O_RDONLY;
   perms = S_IRUSR | S_IRGRP;
 
   int fds[nfiles];
+  size_t chunk_sizes[nfiles];
+  int nchan_total = 0;
   
   for (ifile=0; ifile<nfiles; ifile++)
   {
@@ -125,15 +146,22 @@ int main (int argc, char **argv)
       return (EXIT_FAILURE);
     }
 
-    if (ifile == 0)
-      file_size = buf.st_size;
-    else
-      if (file_size != buf.st_size)
-      {
-        fprintf (stderr, "ERROR: input file[%d] size [%ld] did not equal size of file 0 [%d]\n", 
-                 ifile, buf.st_size, file_size);
-        return (EXIT_FAILURE);
-      } 
+    file_size = buf.st_size;
+
+    // number of channels in this file
+    nchan = file_size / (sample_stride * nbaselines);
+
+    // size of a single baseline
+    chunk_sizes[ifile] = sample_stride * nchan;
+    if (chunk_sizes[ifile] > max_chunk_size)
+      max_chunk_size = chunk_sizes[ifile];
+
+#ifdef _DEBUG
+    fprintf (stderr, "file_size=%ld nchan=%ld sample_stride=%d nbaselines=%d chunk_size=%ld\n",
+              file_size, nchan, sample_stride, nbaselines, chunk_sizes[ifile]);
+#endif
+
+    nchan_total += nchan;
 
     fds[ifile] = open (files[ifile], flags, perms);
     if (!fds[ifile])
@@ -144,9 +172,9 @@ int main (int argc, char **argv)
   }
 
   if (verbose)
-    fprintf (stderr, "input filesize is %d bytes\n", file_size);
+    fprintf (stderr, "total input channels=%d\n", nchan_total);
 
-  size_t out_file_size = file_size * nfiles;
+  size_t out_file_size = nchan_total * sample_stride * nbaselines;
 
   // output file
   flags = O_WRONLY | O_CREAT | O_TRUNC;
@@ -160,27 +188,14 @@ int main (int argc, char **argv)
 
   flags = O_RDONLY;
 
-  unsigned ichunk;
-  unsigned nchunk;
-  unsigned chunk_size;
-
-  if (nccfiles > 0)
-  {
-    chunk_size = npt * sizeof(float) * 2;
-  }
-  else
-  {
-    chunk_size = npt * sizeof(float);
-  }
-
-  nchunk = (unsigned) (file_size / (chunk_size));
-
-  float * in = malloc (chunk_size);
-
-  for (ichunk=0; ichunk<nchunk; ichunk++)
+  float * in = (float *) malloc (max_chunk_size);
+  unsigned i;
+  for (i=0; i<nbaselines; i++)
   {
     for (ifile=0; ifile<nfiles; ifile++)
     {
+      const size_t chunk_size = chunk_sizes[ifile];
+
       // read the file to memory
       if (read (fds[ifile], (void *) in, chunk_size) != chunk_size)
       {
@@ -203,6 +218,7 @@ int main (int argc, char **argv)
       }
     }
   }
+
   for (ifile=0; ifile<nfiles; ifile++)
     close(fds[ifile]);
   close (ofd);
