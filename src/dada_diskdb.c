@@ -300,14 +300,14 @@ fprintf (stderr, "read HEADER START\n%sHEADER END\n", client->header);
 
 int open_next_contiguous_file (dada_client_t* client)
 {
+  dada_diskdb_t * diskdb = (dada_diskdb_t *) client->context;
+
   // close current file, incrementing static counter (cur_file)
   if (file_close_function(client, 0) < 0)
   {
     multilog (client->log, LOG_ERR, "open_next_contiguous_file: file_close_function failed\n");
     return -1;
   }
-
-  dada_diskdb_t * diskdb = (dada_diskdb_t *) client->context;
 
   // open next file
   client->fd = open (diskdb->filenames[cur_file], O_RDONLY);
