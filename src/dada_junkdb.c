@@ -22,15 +22,17 @@ void usage()
 {
   fprintf (stdout,
 	   "dada_junkdb [options] header_file\n"
-     " -b bytes total number of bytes to generate\n"
-     " -c char  fill data with char\n"
-     " -g       write gaussian distributed data\n"
-     " -k       hexadecimal shared memory key  [default: %x]\n"
-     " -r rate  data rate MB/s [default %f]\n"
-     " -R rate  data rate MiB/s [default %f]\n"
-     " -t secs  length of time to write [default %d s]\n"
-     " -z       use zero copy direct shm access\n"
-     " -h       print help\n",
+     " -b bytes   total number of bytes to generate\n"
+     " -c char    fill data with char\n"
+     " -g         write gaussian distributed data\n"
+     " -m mean    use mean for gaussian data\n"
+     " -s stddev  use stddev for gaussian data\n"
+     " -k         hexadecimal shared memory key  [default: %x]\n"
+     " -r rate    data rate MB/s [default %f]\n"
+     " -R rate    data rate MiB/s [default %f]\n"
+     " -t secs    length of time to write [default %d s]\n"
+     " -z         use zero copy direct shm access\n"
+     " -h         print help\n",
      DADA_DEFAULT_BLOCK_KEY, DEFAULT_DATA_RATE, DEFAULT_DATA_RATE, DEFAULT_WRITE_TIME);
 }
 
@@ -44,6 +46,12 @@ typedef struct {
 
   /* generate gaussian data ? */
   unsigned write_gaussian;
+
+  /* mean of gaussian data */
+  double mean;
+
+  /* stddev of gaussian data */
+  double stddev;
 
   char fill_char;
 
@@ -71,7 +79,7 @@ typedef struct {
 
 } dada_junkdb_t;
 
-#define DADA_JUNKDB_INIT { "", 0, 0, 0, 0, "", 0, 0, 0, 0, 0, 0 }
+#define DADA_JUNKDB_INIT { "", 0, 0, 0, 0, 0, 0, "", 0, 0, 0, 0, 0, 0 }
 
 
 /*! Pointer to the function that transfers data to/from the target */
@@ -249,7 +257,7 @@ int dada_junkdb_open (dada_client_t* client)
   if (junkdb->write_gaussian) 
   {
     multilog (client->log, LOG_INFO, "open: generating gaussian data %"PRIu64"\n", junkdb->data_size);
-    fill_gaussian_chars(junkdb->data, junkdb->data_size, 8, 500);
+    fill_gaussian_data(junkdb->data, junkdb->data_size, junkdb->mean, junkdb->stddev);
     multilog (client->log, LOG_INFO, "open: data generated\n");
   }
 
@@ -311,7 +319,10 @@ int main (int argc, char **argv)
 
   int arg = 0;
 
-  while ((arg=getopt(argc,argv,"b:c:ghk:r:R:t:vz")) != -1)
+  junkdb.mean = 0;
+  junkdb.stddev = 10;
+
+  while ((arg=getopt(argc,argv,"b:c:ghk:m:r:R:s:t:vz")) != -1)
     switch (arg) {
 
     case 'b':
@@ -348,6 +359,14 @@ int main (int argc, char **argv)
       }
       break;
 
+    case 'm':
+      if (sscanf (optarg, "%lf", &(junkdb.mean)) != 1) {
+        fprintf (stderr, "ERROR: could not parse mean from %s\n",optarg);
+        usage();
+        return EXIT_FAILURE;
+      }
+      break;
+
     case 'r':
       if (sscanf (optarg, "%f", &rate) != 1) {
         fprintf (stderr,"ERROR: could not parse data rate from %s\n",optarg);
@@ -364,6 +383,14 @@ int main (int argc, char **argv)
         return EXIT_FAILURE;
       }
       rate_base = 1000000;
+      break;
+
+    case 's':
+      if (sscanf (optarg, "%lf", &(junkdb.stddev)) != 1) {
+        fprintf (stderr, "ERROR: could not parse stddev from %s\n",optarg);
+        usage();
+        return EXIT_FAILURE;
+      }
       break;
 
     case 't':
