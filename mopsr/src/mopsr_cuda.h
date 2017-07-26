@@ -12,6 +12,7 @@ extern "C" {
 #define MOPSR_UNIQUE_CORRECTIONS 32
 #define MOPSR_MAX_NANT_PER_AQ    16
 #define MOPSR_MEDIAN_FILTER_MEMORY 8
+
 //#define EIGHT_BIT_PHASORS
 
 #ifdef __CUDA_ARCH__
