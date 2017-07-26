@@ -29,7 +29,9 @@
 #include <cpgplot.h>
 
 void usage ();
-void plot_phase_time (float * xvals, float * amps, unsigned npts, char * device, char * title);
+void plot_amp_time (float * xvals, float * amps, unsigned npts, char * device, char * title);
+void plot_amp_freq (float * amps, unsigned npts, char * device, char * title, float fmin, float fmax);
+
 
 void usage()
 {
@@ -228,10 +230,11 @@ int main (int argc, char **argv)
     if (verbose)
       fprintf (stderr, " DEC (rad) = %lf\n", source.decj);
 
-    if (ascii_header_get (header, "UT1_OFFSET", "%f", ut1_offset) == 1)
+    if (ascii_header_get (header, "UT1_OFFSET", "%f", &ut1_offset) == 1)
     {
       fprintf (stderr, " UT1_OFFSET=%f\n", ut1_offset);
     }
+
     if (ascii_header_get (header, "UTC_START", "%s", utc_start_str) == 1)
     {
       if (verbose)
@@ -333,12 +336,10 @@ int main (int argc, char **argv)
 
         for (ipt=0; ipt<npt; ipt++)
         {
-          if (ipt == npt/2)
-            val = 0;
-          else
-            val = ac[ipt];
-
-          amp_t += sqrtf(val);
+          val = ac[ipt];
+          const float power = sqrtf(val);
+          amp_t += power;
+          amps[ipt] = power;
         }
 
         good_file = 1;
@@ -385,7 +386,8 @@ int main (int argc, char **argv)
     close (fd);
   }
   sprintf (title, "Antenna %d - Amp vs Time", acs);
-  plot_phase_time (x_t, amps_t, ifile, device, title);
+  plot_amp_time (x_t, amps_t, ifile, device, title);
+  plot_amp_freq (amps, npt, "11/xs", title, -FLT_MAX, FLT_MAX);
 
   free (ac);
   free (amps);
@@ -395,7 +397,7 @@ int main (int argc, char **argv)
   return EXIT_SUCCESS;
 }
 
-void plot_phase_time (float * xvals, float * amps, unsigned npts, char * device, char * title)
+void plot_amp_time (float * xvals, float * amps, unsigned npts, char * device, char * title)
 {
   float xmin = FLT_MAX;
   float xmax = -FLT_MAX;
@@ -439,3 +441,47 @@ void plot_phase_time (float * xvals, float * amps, unsigned npts, char * device,
   cpgebuf();
   cpgend();
 }
+
+void plot_amp_freq (float * amps, unsigned npts, char * device, char * title, float fmin, float fmax)
+{
+  float xmin = 0;
+  float xmax = (float) npts;
+  float ymin = FLT_MAX;
+  float ymax = -FLT_MAX;
+
+  float xvals[npts];
+  char label[64];
+
+  unsigned i;
+  for (i=0; i<npts; i++)
+  {
+    if (amps[i] > ymax)
+      ymax = amps[i];
+    if (amps[i] < ymin)
+      ymin = amps[i];
+    
+    xvals[i] = (float) i;
+  }
+  
+  if (cpgbeg(0, device, 1, 1) != 1)
+  { 
+    fprintf(stderr, "error opening plot device\n");
+    exit(1);
+  }
+  
+  cpgbbuf();
+  
+  cpgswin(xmin, xmax, ymin, ymax);
+  
+  cpgsvp(0.1, 0.9, 0.1, 0.9);
+  cpgbox("BCNST", 0.0, 0.0, "BCNST", 0.0, 0.0);
+  cpglab("", "Amplitude", title);
+  
+  cpgsci(3);
+  cpgpt (npts, xvals, amps, 1);
+  cpgsci(1);
+  
+  cpgebuf();
+  cpgend();
+}
+
