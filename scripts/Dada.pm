@@ -28,7 +28,7 @@ BEGIN {
   $VERSION = '1.00';
 
   @ISA         = qw(Exporter AutoLoader);
-  @EXPORT      = qw(&sendTelnetCommand &connectToMachine &getDADABinaryDir &getCurrentBinaryVersion &getDefaultBinaryVersion &setBinaryDir &getAvailableBinaryVersions &addToTime &addToTimeFractional &getUnixTimeUTC &getUnixTimeLocal &getCurrentDadaTime &printDadaTime &printTime &getPWCCState &printPWCCState &waitForState &getLine &getLines &parseCFGLines &readCFGFile &readCFGFileIntoHash &getDADA_ROOT &getDiskInfo &getRawDisk &getDBInfo &getAllDBInfo &getDBStatus &getLoad &getUnprocessedFiles &getServerResultsNFS &getServerArchiveNFS &constructRsyncURL &headerFormat &myShell &mySystem &mySystemPiped &killProcess &getAPSRConfigVariable &nexusLogOpen &nexusLogClose &nexusLogMessage &getHostMachineName &daemonize &commThread &logMsg &logMsgWarn &remoteSshCommand &headerToHash &daemonBaseName &getProjectGroups &processHeader &getDM &getPeriod &checkScriptIsUnique &getObsDestinations &removeFiles &createDir &getDBKey &getPWCKeys &convertRadiansToRA &convertRadiansToDEC &checkPWCID &mkdirRecursive &sendEmail &convertHHMMSSToDegrees &convertDDMMSSToDegrees &inCatalogue &fileSrcLog);
+  @EXPORT      = qw(&sendTelnetCommand &connectToMachine &getDADABinaryDir &getCurrentBinaryVersion &getDefaultBinaryVersion &setBinaryDir &getAvailableBinaryVersions &addToTime &addToTimeFractional &getUnixTimeUTC &getUnixTimeLocal &getCurrentDadaTime &printDadaTime &printTime &getPWCCState &printPWCCState &waitForState &getLine &getLines &parseCFGLines &readCFGFile &readCFGFileIntoHash &getDADA_ROOT &getDiskInfo &getRawDisk &getDBInfo &getAllDBInfo &getDBStatus &getLoad &getUnprocessedFiles &getServerResultsNFS &getServerArchiveNFS &constructRsyncURL &headerFormat &myShell &mySystem &mySystemPiped &killProcess &getAPSRConfigVariable &nexusLogOpen &nexusLogClose &nexusLogMessage &getHostMachineName &daemonize &commThread &logMsg &logMsgWarn &remoteSshCommand &headerToHash &daemonBaseName &getProjectGroups &processHeader &getDM &getPeriod &checkScriptIsUnique &getObsDestinations &removeFiles &createDir &getDBKey &getPWCKeys &convertDegreesToRA &convertRadiansToRA &convertRadiansToDEC &checkPWCID &mkdirRecursive &sendEmail &convertHHMMSSToDegrees &convertDDMMSSToDegrees &inCatalogue &nexusSrcLog &fileSrcLog);
   %EXPORT_TAGS = ( );
   @EXPORT_OK   = ( );
 
@@ -877,6 +877,12 @@ sub waitForState($$$)
       sleep 1;
       $counter++;
     }
+  }
+
+  if ($ready == -1)
+  {
+    Dada::logMsg (0, 1, "waitForState: nexus did not enter ".$required_state." after ".$wait_secs);
+    Dada::logMsg (0, 1, "waitForState: ".$response);
   }
 
   return $ready;
@@ -2432,6 +2438,17 @@ sub convertHoursToHHMMSS($)
 
 }
 
+sub convertDegreesToRA($)
+{
+  (my $degrees) = @_;
+
+  my $hours = $degrees / 15.0;
+
+  my ($result, $hhmmss) = Dada::convertHoursToHHMMSS($hours);
+
+  return ($result, $hhmmss);
+}
+
 sub convertRadiansToRA($)
 {
   (my $radians) = @_;
@@ -2439,9 +2456,7 @@ sub convertRadiansToRA($)
   # convert to degrees
   my $degrees = ($radians * 180.0) / Math::Trig::pi;
 
-  my $hours = $degrees / 15.0;
-
-  my ($result, $hhmmss) = Dada::convertHoursToHHMMSS($hours);
+  my ($result, $hhmmss) = Dada::convertDegreesToRA ($degrees);
 
   return ($result, $hhmmss);
 }
