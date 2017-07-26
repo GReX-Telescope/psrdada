@@ -14,11 +14,15 @@
 // different GPUs have different cache performance profiles. Best kernel
 // I could write for the TitanX was the BLOCK2048 kernel
 
-//#define BLOCK512
-//#define BLOCK1024
 #define BLOCK2048
 
-// TODO write non shfl variant
+#ifdef __CUDA_ARCH__
+    #if (__CUDA_ARCH__ >= 300)
+        #define HAVE_SHFL
+    #else
+        #define NO_SHFL
+    #endif
+#endif
 
 // large parts of these kernels require SHFL instructions that are 
 // only available in sm_30 (kepler) or greater
@@ -83,6 +87,67 @@ __global__ void input_transpose_TFS_to_FST (
   return;
 }
 
+__global__ void input_transpose_TFS_to_FST_hires (
+     int16_t * in, int16_t * out,
+     const unsigned nchan, const unsigned nant,
+     const unsigned nval, const unsigned nval_per_thread,
+     const unsigned samp_stride, const unsigned chan_block_stride,
+     const unsigned out_chanant_stride)
+{
+  // for loaded data samples
+  extern __shared__ int16_t sdata[];
+
+  const int nsamp_per_block = 32;
+  const int nchan_per_block = 16;
+  const int nchanant_per_block = nant * nchan_per_block;
+
+  const int warp_num = threadIdx.x / 32;
+  const int warp_idx = threadIdx.x & 0x1F;  // % 32
+
+  // each warp reads a time sample, with the warp threads each reading the antenna and channels required
+
+  // offsets      time sample offset                                      +  channel block offset            + the chanant
+  unsigned idx = (blockIdx.x * nsamp_per_block + warp_num) * samp_stride  + (blockIdx.y * chan_block_stride) + warp_idx;
+
+  //              the right time sample in shm     the chanant  bank conflict trick
+  unsigned sdx = (nchanant_per_block * warp_num) + warp_idx;// + (warp_num * 2);
+
+  // read the TFS input to TFS shared memory
+  for (unsigned i=0; i<nval_per_thread; i++)
+  {
+    if (idx < nval)
+    {
+      sdata[sdx] = in[idx];
+      idx += 32;
+      sdx += 32;
+    }
+  }
+
+  __syncthreads();
+
+  // each warp will write out 32 time samples for a single antenna, for a number of channels
+  const int ant = warp_num % nant;
+  int ichan = nval_per_thread * (warp_num / nant);
+  int ichanant = ichan * nant + ant;
+
+  // offset for this thread in shared memory
+  //         sample   * sample_stride_in_shm    + chanant offset + shm bank trick
+  sdx = (warp_idx * nant * nchan_per_block) + ichanant;// + (warp_idx * 2);
+
+  // output chanant for this warp
+  const int ochanant = (blockIdx.y * nchan_per_block * nant) + ichanant;
+  int osamp = (blockIdx.x * nsamp_per_block) + warp_idx;
+  int64_t odx = ochanant * out_chanant_stride + osamp;
+
+  // loop over channels
+  for (unsigned i=0; i<nval_per_thread; i++)
+  {
+    out[odx] = sdata[sdx];
+    sdx += nant;
+    odx += out_chanant_stride * nant;
+  }
+}
+
 /*
  *  Transpose a block of data from TFS to FST
  */
@@ -129,6 +194,62 @@ void mopsr_input_transpose_TFS_to_FST (cudaStream_t stream,
 
   input_transpose_TFS_to_FST<<<nblocks,nthread,sdata_bytes,stream>>>((int16_t *)d_in, (int16_t *) d_out, nchan, nant, nval, nval_per_thread, in_block_stride, nsamp_per_block, out_chanant_stride);
 }
+
+void mopsr_input_transpose_TFS_to_FST_hires (cudaStream_t stream,
+      void * d_in, void * d_out, uint64_t nbytes, unsigned nchan, unsigned nant)
+{
+  const unsigned ndim = 2;
+  unsigned nthread = 1024;
+
+  // process 32 samples and 16 channels in a block
+  const unsigned nsamp_per_block = 32;
+  const unsigned nchan_per_block = 16;
+  const unsigned nchanblocks = nchan / nchan_per_block;
+
+  const unsigned nval_per_block  = nsamp_per_block * nchan_per_block * nant;
+  const uint64_t nsamp = nbytes / (nchan * nant * ndim);
+
+  if (nval_per_block % nthread)
+  {
+    unsigned numerator = nval_per_block;
+    while ( numerator > nthread )
+      numerator /= 2;
+    nthread = numerator;
+  }
+
+  unsigned nval_per_thread = nval_per_block / nthread;
+
+  // the total number of values we have to process is
+  const uint64_t nval = nbytes / ndim;
+
+  // the total number of samples is 
+  dim3 blocks = dim3 (nsamp / nsamp_per_block, nchanblocks);
+  if (nsamp % nsamp_per_block)
+    blocks.x++;
+
+  const size_t sdata_bytes = (nsamp_per_block * nchan_per_block * nant * ndim) + 256;
+
+  // nbytes of bytes different (for input) between each block of data
+  const unsigned samp_stride = nchan * nant;
+  const unsigned chan_block_stride = nchan_per_block * nant;
+
+
+#ifdef _GDEBUG
+  fprintf (stderr, "input_transpose_TFS_to_FST: nval_per_block=%u, nval_per_thread=%u\n", nval_per_block, nval_per_thread);
+  fprintf (stderr, "input_transpose_TFS_to_FST: nbytes=%lu, ndat=%lu, nval=%lu\n", nbytes, ndat, nval);
+  fprintf (stderr, "input_transpose_TFS_to_FST: nthread=%d, nblocks=%d\n", nthread, nblocks);
+  fprintf (stderr, "input_transpose_TFS_to_FST: input=%p output=%p sdata_bytes=%ld, in_block_stride=%d, nsamp_per_block=%u out_chan_stride=%u\n", d_in, d_out, sdata_bytes, in_block_stride, nsamp_per_block, out_chanant_stride);
+#endif
+
+  input_transpose_TFS_to_FST_hires<<<blocks,nthread,sdata_bytes,stream>>>((int16_t *) d_in,
+        (int16_t *) d_out, nchan, nant, nval, nval_per_thread, samp_stride, chan_block_stride, nsamp);
+
+#ifdef _GDEBUG
+  check_error_stream("input_transpose_TFS_to_FST_hires", stream);
+#endif
+
+}
+
 
 // this will work best in FST format
 __global__ void mopsr_input_ant_sum_kernel (const int16_t * input, int16_t * output, const uint64_t nsamp, const unsigned nchan, const unsigned nant)
@@ -912,13 +1033,11 @@ __global__ void tile_beams_kernel_512 (
 #ifdef BLOCK2048
 #ifdef EIGHT_BIT_PHASORS 
 __global__ void tile_beams_kernel_2048(
-        const __restrict__ int32_t * input, float * output,
-        int8_t * phasors,
+        const __restrict__ int32_t * input, float * output, int8_t * phasors,
         unsigned nbeam, unsigned ndat, unsigned nant)
 #else
 __global__ void tile_beams_kernel_2048(
-        const __restrict__ int32_t * input, float * output,
-        float * phasors,
+        const __restrict__ int32_t * input, float * output, float * phasors,
         unsigned nbeam, unsigned ndat, unsigned nant)
 #endif
 {
@@ -927,14 +1046,16 @@ __global__ void tile_beams_kernel_2048(
   float * re_phasors = sdata_tb_c + (2 * 32 * BEAMS_PER_LOOP);
   float * im_phasors = re_phasors + (nant * BEAMS_PER_LOOP);
 
+#ifdef HAVE_SHFL
   const int warp_num = threadIdx.x / WARP_SIZE;
   const int warp_idx = threadIdx.x & 0x1F;
+  float power;
+#endif
 
   int32_t val32;
   int8_t * ptr8 = (int8_t *) &val32;
   const unsigned nbeamant = nbeam * nant;
-  float power;
-
+  //const float scale = 127.5; 
   cuFloatComplex b1s[BEAMS_PER_LOOP];
   cuFloatComplex b2s[BEAMS_PER_LOOP];
   cuFloatComplex val;
@@ -972,6 +1093,7 @@ __global__ void tile_beams_kernel_2048(
       val32 = input[idx];
 
       // make a complex float from this input 
+      //val = make_cuComplex (((float) ptr8[0]) / scale, ((float) ptr8[1]) / scale);
       val = make_cuComplex ((float) ptr8[0], (float) ptr8[1]);
 
       unsigned pidx = iant;
@@ -985,6 +1107,7 @@ __global__ void tile_beams_kernel_2048(
         pidx += nant;
       }
 
+      //val = make_cuComplex (((float) ptr8[2] / scale), ((float) ptr8[3]) / scale);
       val = make_cuComplex ((float) ptr8[2], (float) ptr8[3]);
       pidx = iant;
       for (unsigned i=0; i<BEAMS_PER_LOOP; i++)
@@ -1002,9 +1125,8 @@ __global__ void tile_beams_kernel_2048(
 
 #ifdef HAVE_SHFL
     // detect each sample and integrate across the warp (factor of 32 in time)
-    // this takes us from 1.28us to 40.96
-    unsigned sdx = 2 * warp_num;
-    //for (unsigned i=0; i<nbeam_loop; i++)
+    // this takes us from 1.28us to 81.92
+    unsigned sdx = warp_num;
     for (unsigned i=0; i<BEAMS_PER_LOOP; i++)
     {
       if (ibeam == 0 && i == 0)
@@ -1034,33 +1156,32 @@ __global__ void tile_beams_kernel_2048(
       power += __shfl_down (power, 2);
       power += __shfl_down (power, 1);
 
+      // power now contains the integrated power for this warp (i.e. 40.96 us samples
+      // we write these to shared memory in ST order. T=32, S=8
       if (warp_idx == 0)
       {
-        sdata_tb_c[sdx+1] = power;
-        sdx += 64;
+        sdata_tb_c[sdx] += power;
+        sdx += 32;
       }
     }
 
     __syncthreads();
 
-    // power now contains the integrated power for this warp (i.e. 40.96 us samples
-    // we write these to shared memory in ST order. T=64
-    //if (warp_num < nbeam_loop * 2)
-    if (warp_num < BEAMS_PER_LOOP * 2)
+    // one warp per output beam
+    if (warp_num < BEAMS_PER_LOOP)
     {
-      power = sdata_tb_c[(warp_num*WARP_SIZE) + warp_idx];
-      power += __shfl_down (power, 16);
-      power += __shfl_down (power, 8);
+      // threads to generate 4 x 655.36 time samples from 32 x 81.92)
+      power = sdata_tb_c[(warp_num * WARP_SIZE) + warp_idx];
       power += __shfl_down (power, 4);
       power += __shfl_down (power, 2);
-    
-      // write 2 time samples values out to gmem
-      if (warp_idx < 2)
+      power += __shfl_down (power, 1);
+
+      // warp_idxs 0, 8, 16, 24 have the 4 time samples for beam warp_num
+      if (warp_idx % 8 == 0)
       {
-        const unsigned obeam = ibeam + (warp_num/2);
+        const unsigned obeam = ibeam + warp_num;
         const unsigned ndat_out = ndat / 512;
-        // & 0x1 == modulo 2 2
-        const unsigned osamp = warp_idx + (2 * (warp_num & 0x1));
+        const unsigned osamp = warp_idx / 8;
         // output is in ST format
         unsigned out_idx = (obeam * ndat_out) + (blockIdx.x * 4) + osamp;
         output[out_idx] = power;
@@ -1070,6 +1191,181 @@ __global__ void tile_beams_kernel_2048(
   }
 }
 #endif
+
+// load 2048 samples per block, form beams, scrunch down x32 to write out 
+// 64 samples. input FST output SFT
+__global__ void tile_beams_kernel_2048_32scr (
+        const __restrict__ int32_t * input, float * output, float * phasors,
+        unsigned nbeam, unsigned ndat, unsigned nant)
+{
+
+  extern __shared__ float sdata_tb_c[];
+  //const float scale = 127.5;
+
+  float * re_phasors = sdata_tb_c + (2 * 32 * BEAMS_PER_LOOP);
+  float * im_phasors = re_phasors + (nant * BEAMS_PER_LOOP);
+
+  const int warp_num = threadIdx.x / WARP_SIZE;
+  const int warp_idx = threadIdx.x & 0x1F;
+#ifdef HAVE_SHFL
+  float power;
+#endif
+
+  int32_t val32;
+  int8_t * ptr8 = (int8_t *) &val32;
+  const unsigned nbeamant = nbeam * nant;
+
+  cuFloatComplex b1s[BEAMS_PER_LOOP];
+  cuFloatComplex b2s[BEAMS_PER_LOOP];
+  cuFloatComplex val;
+
+  // shift phasors pointer by ichan * chan_stride
+  phasors += blockIdx.y * nant * nbeam * 2;
+
+  // shift input by ndat/2 (since int32_t *)
+  input   += blockIdx.y * nant * (ndat / 2);
+
+  // shift output by output_ndat to align to right channel
+  output  += blockIdx.y * (ndat / 32);
+
+  // this kernel exectutes for computes 4 beams at a time for 1024 samples
+  for (unsigned ibeam=0; ibeam<nbeam; ibeam += BEAMS_PER_LOOP)
+  {
+    unsigned ibeamant = ibeam * nant;
+
+    // use all threads in the warp to load the load phasors for this beam
+    // and all antenna into shared memory.
+    for (unsigned i=threadIdx.x; i<nant*BEAMS_PER_LOOP; i+=blockDim.x)
+    {
+      re_phasors[i] = (float) phasors[ibeamant + i];
+      im_phasors[i] = (float) phasors[nbeamant + ibeamant + i];
+    }
+
+    __syncthreads();
+
+    // for all the antenna, perform complex multiplications on the 4 beams
+    unsigned idx = (blockIdx.x * blockDim.x) + threadIdx.x;
+
+    for (unsigned i=0; i<BEAMS_PER_LOOP; i++)
+    {
+      b1s[i].x = 0;
+      b1s[i].y = 0;
+      b2s[i].x = 0;
+      b2s[i].y = 0;
+    }
+
+    for (unsigned iant=0; iant<nant; iant++)
+    {
+      // load 4 x 8bit values (2 complex samples) for this time sample and antenna
+      val32 = input[idx];
+
+      // make a complex float from this input 
+      //val = make_cuComplex ((float) ptr8[0] / scale, (float) ptr8[1] / scale);
+      val = make_cuComplex ((float) ptr8[0], (float) ptr8[1]);
+
+      unsigned pidx = iant;
+      for (unsigned i=0; i<BEAMS_PER_LOOP; i++)
+      {
+        // multiply by phasor and add to the beam (yes this is a += operation)
+        if (ibeam == 0 && i == 0)
+          b1s[0].x = fmaf( val.x, val.x, fmaf (val.y, val.y, b1s[0].x));
+        else
+        {
+          //b1s[i] = cuCaddf (val, b1s[i]);
+          b1s[i] = cuCfmaf (make_cuComplex(re_phasors[pidx], im_phasors[pidx]), val, b1s[i]);
+        }
+        pidx += nant;
+      }
+
+      //val = make_cuComplex ((float) ptr8[2] / scale, (float) ptr8[3] / scale);
+      val = make_cuComplex ((float) ptr8[2], (float) ptr8[3]);
+      pidx = iant;
+      for (unsigned i=0; i<BEAMS_PER_LOOP; i++)
+      {
+        // multiply by phasor and add to the beam (yes this is a += operation)
+        if (ibeam == 0 && i == 0)
+          b2s[0].x = fmaf( val.x, val.x, fmaf (val.y, val.y, b2s[0].x));
+        else
+        {
+          //b2s[i] = cuCaddf (val, b2s[i]);
+          b2s[i] = cuCfmaf (make_cuComplex(re_phasors[pidx],im_phasors[pidx]), val, b2s[i]);
+        }
+        pidx += nant;
+      }
+
+      idx += ndat/2;
+    }
+
+    // detect each sample and integrate across the warp (factor of 32 in time)
+    // this takes us from 10.24 to 327.68 us
+#ifdef HAVE_SHFL
+    unsigned sdx = 2 * warp_num;
+    for (unsigned i=0; i<BEAMS_PER_LOOP; i++)
+    {
+      if (ibeam == 0 && i == 0)
+        power = b1s[i].x;
+      else
+        power = (b1s[i].x * b1s[i].x) + (b1s[i].y * b1s[i].y);
+
+      //if ((blockIdx.y == 0) && (ibeam == 0) && (i == 1) && (blockIdx.x == 0) && (warp_num == 0))
+      //  printf("GPU %d %f %f %f\n", 2*threadIdx.x+0, b1s[i].x, b1s[i].y, power);
+
+      // since the consecutive samples are spread across b1 and b2 
+      power += __shfl_down (power, 8);
+      power += __shfl_down (power, 4);
+      power += __shfl_down (power, 2);
+      power += __shfl_down (power, 1);
+
+      // power now contains the integrated power for this warp (i.e. 327.68 us 
+      // samples. Write these to shared memory in ST order. T=64, S=8
+      if (warp_idx == 0 || warp_idx == 16)
+      {
+        sdata_tb_c[sdx + warp_idx/16] = power;  // sample sdx + 0 and 1
+      }
+
+      if (ibeam == 0 && i == 0)
+        power = b2s[i].x;
+      else
+        power = (b2s[i].x * b2s[i].x) + (b2s[i].y * b2s[i].y);
+
+      //if ((blockIdx.y == 0) && (ibeam == 0) && (i == 1) && (blockIdx.x == 0) && (warp_num == 0))
+      //  printf("GPU %d %f %f %f\n", 2*threadIdx.x+1, b2s[i].x, b2s[i].y, power);
+
+      power += __shfl_down (power, 8);
+      power += __shfl_down (power, 4);
+      power += __shfl_down (power, 2);
+      power += __shfl_down (power, 1);
+
+      if (warp_idx == 0 || warp_idx == 16)
+      {
+        sdata_tb_c[sdx+warp_idx/16] += power;
+        //if ((blockIdx.y == 0) && (ibeam == 0) && (i == 1) && (blockIdx.x == 0) && (warp_num == 0))
+        //  printf("GPU %d sdata_tb_c[%d]==%f\n", warp_idx, sdx+warp_idx/16, sdata_tb_c[sdx+warp_idx/16]);
+        sdx += 64;
+      }
+    }
+
+    __syncthreads();
+#endif
+
+    // there are now 8beams * (2 * 32) samples in SHM to write
+    // out to gmem, do 1 warp per beam, 
+    if (warp_num < BEAMS_PER_LOOP)
+    {
+      //              ibeam * 64                + warp_idx
+      unsigned sdx = (warp_num * WARP_SIZE * 2) + warp_idx;
+
+      const unsigned obeam = ibeam + warp_num;
+      //              obeam * nchan * ndat_out         +  osamp_block      + osamp
+      unsigned odx = (obeam * gridDim.y * (ndat / 32)) + (blockIdx.x * 64) + warp_idx;
+
+      // write out the 64 samples for this beam
+      output[odx] = sdata_tb_c[sdx];
+      output[odx+32] = sdata_tb_c[sdx+32];
+    }
+  }
+}
+
 
 #ifdef BLOCK1024
 __global__ void tile_beams_kernel_1024(
@@ -1575,10 +1871,10 @@ __global__ void tile_beams_kernel_1024_8pt (
 #endif
 
 void mopsr_tile_beams_precomp (cudaStream_t stream, void * d_in, void * d_fbs, void * d_phasors,
-                       uint64_t bytes, unsigned nbeam, unsigned nant, unsigned tdec)
+                       uint64_t bytes, unsigned nbeam, unsigned nant, unsigned nchan)
 {
   const unsigned ndim = 2;
-  const uint64_t ndat = bytes / (nant * ndim);
+  const uint64_t ndat = bytes / (nchan * nant * ndim);
 
 #ifdef BLOCK512
   const unsigned nthread = 512;
@@ -1632,7 +1928,8 @@ void mopsr_tile_beams_precomp (cudaStream_t stream, void * d_in, void * d_fbs, v
 #ifdef BLOCK2048
   const unsigned nbeam_block = BEAMS_PER_LOOP;
   unsigned ndat_per_block = 2048;
-  unsigned nblocks = ndat / ndat_per_block;
+  dim3 blocks = dim3 (ndat / ndat_per_block, nchan, 1);
+  //unsigned nblocks = ndat / ndat_per_block;
   if (ndat % ndat_per_block)
     fprintf (stderr, "WARNING: ndat not divisible by %d\n", ndat_per_block);
 
@@ -1640,13 +1937,17 @@ void mopsr_tile_beams_precomp (cudaStream_t stream, void * d_in, void * d_fbs, v
                        (nbeam_block * nant * sizeof (complex float));
 
 #ifdef _GDEBUG
-  fprintf (stderr, "bytes=%lu ndat=%lu blocks=%u threads=%u shm=%ld\n", bytes, ndat, nblocks, nthread, sdata_bytes);
+  fprintf (stderr, "bytes=%lu ndat=%lu blocks=(%u,%u,%u) threads=%u shm=%ld\n", bytes, ndat, blocks.x, blocks.y, blocks.z, nthread, sdata_bytes);
 #endif
 
 #ifdef EIGHT_BIT_PHASORS
-  tile_beams_kernel_2048<<<nblocks, nthread, sdata_bytes, stream>>>((int32_t *) d_in, (float *) d_fbs, (int8_t *) d_phasors, nbeam, ndat, nant);
+  tile_beams_kernel_2048<<<blocks, nthread, sdata_bytes, stream>>>((int32_t *) d_in, (float *) d_fbs, (int8_t *) d_phasors, nbeam, ndat, nant);
 #else
-  tile_beams_kernel_2048<<<nblocks, nthread, sdata_bytes, stream>>>((int32_t *) d_in, (float *) d_fbs, (float *) d_phasors, nbeam, ndat, nant);
+#ifdef HIRES
+  tile_beams_kernel_2048_32scr<<<blocks, nthread, sdata_bytes, stream>>>((int32_t *) d_in, (float *) d_fbs, (float *) d_phasors, nbeam, ndat, nant);
+#else
+  tile_beams_kernel_2048<<<blocks, nthread, sdata_bytes, stream>>>((int32_t *) d_in, (float *) d_fbs, (float *) d_phasors, nbeam, ndat, nant);
+#endif
 #endif
 
 #ifdef _GDEBUG
@@ -1661,23 +1962,35 @@ __global__ void tie_beam_kernel (int16_t * in, cuFloatComplex * out, cuFloatComp
 {
   extern __shared__ cuFloatComplex s_phasors[];
 
-  // the sample number in the block
-  const unsigned idx  = blockIdx.x * blockDim.x + threadIdx.x;
+  const unsigned ichan = blockIdx.y;
 
   int16_t val16;
   int8_t * ptr8 = (int8_t *) &val16;
 
   cuFloatComplex tied_beam = make_cuComplex(0.0,0.0);
 
+  // load nant phasors for the ichan
   if (threadIdx.x < nant)
   {
-    s_phasors[threadIdx.x] = d_phasors[threadIdx.x];
+    s_phasors[threadIdx.x] = d_phasors[ichan*nant + threadIdx.x];
   }
 
   __syncthreads();
 
+  // idat
+  const unsigned idx  = (blockIdx.x * blockDim.x) + threadIdx.x;
   if (idx >= ndat)
     return;
+
+  //const uint64_t out_off = ndat * ichan;
+
+  // output in TF order (isamp * nchan) + ichan
+  const uint64_t odx = idx * gridDim.y + ichan;
+  const uint64_t in_off  = ndat * ichan * nant; 
+
+  // increment to the right channel
+  in  += in_off;
+  //out += out_off;
 
   // step through the antennas, forming tied array beam
   for (unsigned iant=0; iant<nant; iant++)
@@ -1685,7 +1998,6 @@ __global__ void tie_beam_kernel (int16_t * in, cuFloatComplex * out, cuFloatComp
     val16 = in[idx];
     
     // make a complex float from this input
-    //cuFloatComplex val = make_cuComplex ((float) ptr8[0] + 0.5, (float) ptr8[1] + 0.5);
     cuFloatComplex val = make_cuComplex ((float) ptr8[0], (float) ptr8[1]);
 
     tied_beam = cuCfmaf (s_phasors[iant], val, tied_beam);
@@ -1693,31 +2005,37 @@ __global__ void tie_beam_kernel (int16_t * in, cuFloatComplex * out, cuFloatComp
     in += ndat;
   }
 
-  out[idx] = tied_beam;
+  // output ordering is good!
+  //out[idx] = tied_beam;
+  out[odx] = tied_beam;
 }
 
 /*
  * create steer a tied array beam to the target position
  */
 void mopsr_tie_beam (cudaStream_t stream, void * d_in, void * d_out, void * d_phasors,
-                     uint64_t bytes, unsigned nant)
+                     uint64_t bytes, unsigned nant, unsigned nchan)
 {
   const unsigned ndim = 2;
-  const uint64_t ndat = bytes / (nant * ndim);
+  const uint64_t ndat = bytes / (nchan * nant * ndim);
 
-  // data is blocked in SFT format
+  // input order is FST, output is FT
   unsigned nthreads = 1024;
-  unsigned nblocks = ndat / nthreads;
+  dim3 blocks = dim3 (ndat / nthreads, nchan, 1);
   size_t shm_bytes = nant * sizeof(cuFloatComplex);
-
   if (ndat % nthreads)
-    nblocks++;
+    blocks.x++;
 
 #ifdef _GDEBUG
-  fprintf (stderr, "ndat=%lu nthreads=%u nblocks=%u shm_bytes=%ld\n", ndat, nthreads, nblocks, shm_bytes);
+  fprintf (stderr, "bytes=%lu ndat=%lu nthreads=%u blocks=(%u,%u,%u) shm_bytes=%ld\n", 
+           bytes, ndat, nthreads, blocks.x, blocks.y, blocks.z, shm_bytes);
 #endif
 
-  tie_beam_kernel<<<nblocks, nthreads, shm_bytes, stream>>>((int16_t *) d_in, (cuFloatComplex *) d_out, (cuFloatComplex *) d_phasors, ndat, nant);
+  tie_beam_kernel<<<blocks, nthreads, shm_bytes, stream>>>((int16_t *) d_in, (cuFloatComplex *) d_out, (cuFloatComplex *) d_phasors, ndat, nant);
+
+#ifdef _GDEBUG
+  check_error_stream("tie_beam_kernel", stream);
+#endif
 
 }
 
@@ -1778,7 +2096,7 @@ __global__ void mod_beam_kernel_64 (int16_t * in, float * out, uint64_t ndat, un
 }
 
 // integrate 512 time samples together from each antenna
-__global__ void mod_beam_kernel_512 (int16_t * in, float * out, uint64_t ndat, unsigned nant)
+__global__ void mod_beam_kernel_512 (int16_t * in, float * out, uint64_t ndat)
 {
   extern __shared__ float block_power_sums[];
   
@@ -1786,7 +2104,7 @@ __global__ void mod_beam_kernel_512 (int16_t * in, float * out, uint64_t ndat, u
   const unsigned warp_idx = threadIdx.x % WARP_SIZE;
 
   // offset [ant_offset + block_offset]
-  const unsigned offset = (blockIdx.y * ndat) + (blockIdx.x * blockDim.x);
+  const unsigned offset = (blockIdx.z * ndat) + (blockIdx.x * blockDim.x);
 
   const unsigned idx  = blockIdx.x * blockDim.x + threadIdx.x;
   
@@ -1836,14 +2154,68 @@ __global__ void mod_beam_kernel_512 (int16_t * in, float * out, uint64_t ndat, u
   }
 }
 
+// integrate 32 time samples together from each antenna, FST -> SFT
+__global__ void mod_beam_kernel_32 (int16_t * in, float * out, uint64_t ndat)
+{
+  extern __shared__ float block_power_sums[];
+  
+  const unsigned warp_num = threadIdx.x / WARP_SIZE;
+  const unsigned warp_idx = threadIdx.x % WARP_SIZE;
+  const unsigned ichan = blockIdx.y;
+  const unsigned nchan = gridDim.y;
+  const unsigned iant  = blockIdx.z;
+  const unsigned nant = gridDim.z;
+
+  // input sample number
+  const unsigned idx  = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (idx >= ndat)
+    return;
+
+  const uint64_t ndat_out = ndat / 32;
+
+  // input offset in FST  [chan_offset + ant_offset + block_offset]
+  const unsigned in_offset = (ichan * ndat * nant) + (iant * ndat) + (blockIdx.x * blockDim.x);
+
+  // output offset in SFT [ant_offset + chan_offset + block_offset]
+  const unsigned out_offset = (iant * nchan * ndat_out) + (ichan * ndat_out) + (blockIdx.x * blockDim.x/32);
+
+  int16_t val16;
+  int8_t * ptr8 = (int8_t *) &val16;
+  
+  // load the value from this times sample into a local variable
+  val16 = in[in_offset + threadIdx.x];
+  
+  // make a complex float from this input
+  cuFloatComplex val = make_cuComplex ((float) ptr8[0], (float) ptr8[1]);
+  
+  // detect
+  float power = val.x * val.x + val.y * val.y;
+  
+  // add all of the time samples from this warp together
+  power += __shfl_down (power, 16);
+  power += __shfl_down (power, 8);
+  power += __shfl_down (power, 4);
+  power += __shfl_down (power, 2);
+  power += __shfl_down (power, 1);
+
+  if (warp_idx == 0)
+    block_power_sums[warp_num] = power;
+    
+  __syncthreads();
+
+  if (warp_num == 0)
+    out[out_offset + warp_idx] = block_power_sums[warp_idx];
+}
+
 void mopsr_mod_beams (cudaStream_t stream, void * d_in, void * d_out, uint64_t bytes, 
-                      unsigned nant, unsigned tdec)
+                      unsigned nant, unsigned nchan, unsigned tdec)
 {
   const unsigned ndim = 2;
-  const uint64_t ndat = bytes / (nant * ndim);
+  const uint64_t ndat = bytes / (nchan * nant * ndim);
 
   unsigned threads = 1024;
-  dim3 blocks (ndat / threads, nant);
+  dim3 blocks (ndat / threads, nchan, nant);
   size_t shm_bytes = sizeof(float) * WARP_SIZE;
 
   if (ndat % threads)
@@ -1853,5 +2225,10 @@ void mopsr_mod_beams (cudaStream_t stream, void * d_in, void * d_out, uint64_t b
   fprintf (stderr, "ndat=%lu threads=%u blocks=(%u,%u)\n", ndat, threads, blocks.x, blocks.y);
 #endif
 
-  mod_beam_kernel_512<<<blocks, threads, shm_bytes, stream>>>((int16_t *) d_in, (float *) d_out, ndat, nant);
+  if (tdec == 512)
+    mod_beam_kernel_512<<<blocks, threads, shm_bytes, stream>>>((int16_t *) d_in, (float *) d_out, ndat);
+  else if (tdec == 32)
+    mod_beam_kernel_32<<<blocks, threads, shm_bytes, stream>>>((int16_t *) d_in, (float *) d_out, ndat);
+  else
+    fprintf (stderr, "mopsr_mod_beams: unrecognized TDEC\n");
 }
