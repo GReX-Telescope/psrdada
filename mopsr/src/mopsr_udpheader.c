@@ -12,10 +12,6 @@
 #include "mopsr_udpheader.h"
 #include "sock.h"
 
-#define NEW_UDP_HEADER 16
-#define NEW_UDP_DATA 7680
-#define NEW_UDP_PAYLOAD 7696
-
 void stats_thread(void * arg);
 int quit_threads = 0;
 
@@ -61,8 +57,8 @@ int udpheader_prepare (udpheader_t * ctx)
 
     // clear any packets buffered by the kernel
     if (ctx->verbose)
-      multilog(ctx->log, LOG_INFO, "prepare: clearing packets at socket: UDP_PAYLOAD=%d\n", NEW_UDP_PAYLOAD);
-    size_t cleared = dada_sock_clear_buffered_packets(ctx->socks[i]->fd, NEW_UDP_PAYLOAD);
+      multilog(ctx->log, LOG_INFO, "prepare: clearing packets at socket: UDP_PAYLOAD=%d\n", UDP_PAYLOAD);
+    size_t cleared = dada_sock_clear_buffered_packets(ctx->socks[i]->fd, UDP_PAYLOAD);
   }
   udpheader_reset(ctx);
 }
@@ -116,7 +112,7 @@ void* udpheader_read_function (udpheader_t* ctx, uint64_t* size)
   unsigned int nchan = 8;
   unsigned int nant = 16;
   unsigned int ant_stride = nant * 2;
-  unsigned int nframe = NEW_UDP_DATA / (nchan * ant_stride);
+  unsigned int nframe = UDP_DATA / (nchan * ant_stride);
   unsigned int iframe;
   unsigned int ichan;
 
@@ -135,7 +131,7 @@ void* udpheader_read_function (udpheader_t* ctx, uint64_t* size)
   fd_set readset;
 
   if (ctx->verbose)
-    multilog(ctx->log, LOG_INFO, "read: entering main loop for %d byte packets\n", NEW_UDP_PAYLOAD);
+    multilog(ctx->log, LOG_INFO, "read: entering main loop for %d byte packets\n", UDP_PAYLOAD);
 
   int normal = 0;
 
@@ -150,9 +146,9 @@ void* udpheader_read_function (udpheader_t* ctx, uint64_t* size)
       while (!ctx->socks[i]->have_packet && !quit_threads)
       {
         // receive 1 packet into the socket buffer
-        ctx->socks[i]->got = recvfrom ( ctx->socks[i]->fd, ctx->socks[i]->buf, NEW_UDP_PAYLOAD, 0, NULL, NULL );
+        ctx->socks[i]->got = recvfrom ( ctx->socks[i]->fd, ctx->socks[i]->buf, UDP_PAYLOAD, 0, NULL, NULL );
 
-        if (ctx->socks[i]->got == NEW_UDP_PAYLOAD)
+        if (ctx->socks[i]->got == UDP_PAYLOAD)
         {
           ctx->socks[i]->have_packet = 1;
           timeouts = 0;
@@ -180,7 +176,7 @@ void* udpheader_read_function (udpheader_t* ctx, uint64_t* size)
         }
         else // we received a packet of the WRONG size, ignore it
         {
-          multilog (log, LOG_ERR, "receive_obs: received %d bytes, expected %d\n", ctx->socks[i]->got, NEW_UDP_PAYLOAD);
+          multilog (log, LOG_ERR, "receive_obs: received %d bytes, expected %d\n", ctx->socks[i]->got, UDP_PAYLOAD);
           quit_threads = 1;
         }
       }
@@ -195,7 +191,7 @@ void* udpheader_read_function (udpheader_t* ctx, uint64_t* size)
       {
         mopsr_decode (ctx->socks[i]->buf, &hdr);
 
-        if ((ctx->verbose > 1) && (ctx->packets->received < 10))
+        if ((ctx->verbose > 1) && (ctx->packets->received < 100))
           multilog (ctx->log, LOG_INFO, "PKT: %"PRIu64"\n", hdr.seq_no);
 
         if ((ctx->verbose) && (ctx->packets->received < 1))
@@ -208,19 +204,23 @@ void* udpheader_read_function (udpheader_t* ctx, uint64_t* size)
           if (ctx->verbose)
             multilog (ctx->log, LOG_INFO, "receive_obs: START seq_no=%"PRIu64" ant_id=%u\n", hdr.seq_no, hdr.ant_id);
           ctx->packets->received ++;
-          ctx->bytes->received += NEW_UDP_DATA;
+          ctx->bytes->received += UDP_DATA;
         }
         else
         {
           if (hdr.seq_no < 10)
             multilog (ctx->log, LOG_INFO, "receive_obs: START seq_no=%"PRIu64"\n", hdr.seq_no);
 
+          ctx->packets->received ++;
+          ctx->bytes->received += UDP_DATA;
+
+#ifdef COUNT
           if (hdr.seq_no == ctx->socks[i]->prev_seq+ 1)
           {
             // this is normal, do nothing
             ctx->packets->received ++;
-            ctx->bytes->received += NEW_UDP_DATA;
-
+            ctx->bytes->received += UDP_DATA;
+/*
             if (normal)
             {
               char * in  = ctx->socks[i]->buf + UDP_HEADER;
@@ -268,23 +268,34 @@ void* udpheader_read_function (udpheader_t* ctx, uint64_t* size)
               //normal = 1;
               if (i == ctx->ninputs -1)
               {
-                main_memory_offset = (main_memory_offset + (ctx->ninputs * NEW_UDP_DATA));
-                if (main_memory_offset + (ctx->ninputs * NEW_UDP_DATA) > main_memory_size)
+                main_memory_offset = (main_memory_offset + (ctx->ninputs * UDP_DATA));
+                if (main_memory_offset + (ctx->ninputs * UDP_DATA) > main_memory_size)
                   main_memory_offset = 0;
               }
-
             }
+            */
           }
           else if ((hdr.seq_no > ctx->socks[i]->prev_seq + 1) && (ctx->socks[i]->prev_seq))
           {
+            if (ctx->verbose)
+              multilog (ctx->log, LOG_INFO, "hdr.seq_no=%lu prev_seq=%lu\n", hdr.seq_no, ctx->socks[i]->prev_seq);
             uint64_t n_pkts_dropped = hdr.seq_no - (ctx->socks[i]->prev_seq + 1);
             ctx->packets->dropped += n_pkts_dropped;
-            ctx->bytes->dropped += n_pkts_dropped * NEW_UDP_DATA;
+            ctx->bytes->dropped += n_pkts_dropped * UDP_DATA;
+          }
+          else if (hdr.seq_no == ctx->socks[i]->prev_seq && ctx->socks[i]->prev_seq)
+          {
+            if (ctx->verbose)
+              multilog (ctx->log, LOG_INFO, "read: duplicate seq_no=%"PRIu64" prev=%"PRIu64"\n", hdr.seq_no, ctx->socks[i]->prev_seq);
+            ctx->packets->dropped++;
+            ctx->bytes->dropped += UDP_DATA;
           }
           else
           {
-            multilog (ctx->log, LOG_INFO, "read: reset ? seq_no = %"PRIu64"\n", hdr.seq_no);
+            if (ctx->verbose)
+              multilog (ctx->log, LOG_INFO, "read: reset? seq_no=%"PRIu64" prev=%"PRIu64"\n", hdr.seq_no, ctx->socks[i]->prev_seq);
           }
+#endif
         }
 
         ctx->socks[i]->prev_seq = hdr.seq_no;
