@@ -973,6 +973,8 @@ void mopsr_plot_waterfall (float * spectra, unsigned int nsamps, mopsr_util_t * 
     cpgsch(1);
   }
 
+  if (!opts->plot_plain)
+    cpgbox("BCNST", 0.0, 0.0, "BCNST", 0.0, 0.0);
 
   cpgebuf();
 }
