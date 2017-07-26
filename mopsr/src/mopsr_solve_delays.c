@@ -48,8 +48,8 @@ void plot_lags (float * yvals, unsigned npts, char * device);
 void plot_histogram_old (float * vals, unsigned npts, unsigned nbin, char * device, char * title);
 void plot_histogram (unsigned * hist, unsigned nbin, char * device, char * title, float xline, float mean_phase);
 void plot_gsl_series (double * x, double * y, unsigned npts, char * device, float M, float C, char * title);
-void plot_delays (float * delays, unsigned npts, char * device, char * title, mopsr_util_t * opt);
-void plot_phase_offsets (float * phase_offets, unsigned npts, char * device, char * title, mopsr_util_t * opt);
+void plot_delays (float * delays, float * snrs, unsigned npts, char * device, char * title, mopsr_util_t * opt);
+void plot_phase_offsets (float * phase_offets, float * snrs, unsigned npts, char * device, char * title, mopsr_util_t * opt);
 void plot_map (float * map, unsigned nx, unsigned ny, char * device, char * title, mopsr_util_t * opt);
 int  pair_from_ants (unsigned iant, unsigned jant, unsigned nant);
 
@@ -64,6 +64,7 @@ void usage()
      " -D device       pgplot device name\n"
      " -p              plot SNR and Delay maps\n"
      " -r file         reject channels listed in file\n"
+     " -s source       name of the target [default CORR]\n"
      " -t tsamp        sampling time [default 1.28, units micro seconds]\n"
      " -h              plot this help\n"
      " -v              be verbose\n");
@@ -98,7 +99,13 @@ int main (int argc, char **argv)
   char * channel_reject_file = NULL;
   char channel_rejection = 0;
 
-  while ((arg=getopt(argc,argv,"a:b:c:d:D:hpr:t:v")) != -1)
+  char source[32];
+  sprintf (source, "%s", "CORR");
+  size_t source_len;
+
+  int verbose_module = -1;
+
+  while ((arg=getopt(argc,argv,"a:b:c:d:D:hpr:s:t:vw:")) != -1)
   {
     switch (arg)
     {
@@ -131,12 +138,24 @@ int main (int argc, char **argv)
         channel_rejection = 1;
         break;
 
+      case 's':
+        source_len = strlen(optarg);
+        if (source_len > 31)
+          source_len = 31;
+        //strncpy (source, optarg, source_len);
+        strcpy (source, optarg);
+        break;
+
       case 't':
         tsamp = atof (optarg);
         break;
 
       case 'v':
         verbose++;
+        break;
+
+      case 'w':
+        verbose_module = atoi (optarg);
         break;
 
       case 'h':
@@ -213,6 +232,15 @@ int main (int argc, char **argv)
     }
   }
 
+  char * modules_file = "/home/dada/linux_64/share/molonglo_modules.txt";
+  int nmodules;
+  mopsr_module_t * modules = read_modules_file (modules_file, &nmodules);
+  if (!modules)
+  {
+    fprintf (stderr , "ERROR: failed to read modules file [%s]\n", modules_file);
+    return (EXIT_FAILURE);
+  }
+
   unsigned npairs = (unsigned) (file_size / (npt * sizeof(complex float)));
   unsigned nant = (1 + sqrt(1 + (8 * npairs))) / 2;
   if (verbose)
@@ -220,6 +248,7 @@ int main (int argc, char **argv)
 
   char line[1024];
   char antennas[nant][6];
+  float antenna_distances[nant];
   float dist;
   float delay;
   unsigned iant = 0;
@@ -296,9 +325,11 @@ int main (int argc, char **argv)
   char dead;
 
   double * coarse_phases = (double *) malloc (npt * sizeof(double));
+  char * chan_weights  = (char *) malloc (npt * sizeof(char));
 
   unsigned N_skip = npt / 20;
-  unsigned N = npt - (2 * N_skip);
+  //unsigned N = npt - (2 * N_skip);
+  unsigned N = npt;
   double * x = (double *) malloc (npt * sizeof(double));
   double * y = (double *) malloc (npt * sizeof(double));
 
@@ -309,6 +340,21 @@ int main (int argc, char **argv)
 
   if (verbose > 1)
     fprintf (stderr, "created FFT plan\n");
+
+  unsigned npt_valid = npt;
+  for (ipt=0; ipt<npt; ipt++)
+    chan_weights[ipt] = 1;
+  if (channel_rejection)
+  {
+    for (ipt=0; ipt<num_reject_channels; ipt++)
+    {
+      if (channel_reject[ipt] < npt)
+      {
+        chan_weights[channel_reject[ipt]] = 0;
+        npt_valid--;
+      }
+    }
+  }
 
   // ramp range is from -1 turn to +1 turn
   for (iramp=0; iramp<nramps; iramp++)
@@ -361,7 +407,14 @@ int main (int argc, char **argv)
     dead = 1;
     for (ipt=0; ipt<npt; ipt++)
     {
-      cc[ipt] = raw[ipt];
+      if (chan_weights[ipt] == 1)
+      {
+        cc[ipt] = raw[ipt];
+      }
+      else
+      {
+        cc[ipt] = raw[ipt] * 1e-10;
+      }
 
       // DC bin casuses weird ripples in the iFFT (probably because
       // we have shifted in the output of the CC??) perhaps un fft-shift
@@ -370,18 +423,10 @@ int main (int argc, char **argv)
       if (((cc[ipt]) != 0) && (cimag(cc[ipt]) != 0))
         dead = 0;
     }
+
     //cc[npt/2] = 0;
     if (baseline == ipair)
       dead = 0;
-
-    if (channel_rejection)
-    {
-      for (ipt=0; ipt<num_reject_channels; ipt++)
-      {
-        cc[channel_reject[ipt]] = 0;
-      }
-
-    }
 
     if (verbose > 1 || baseline == ipair)
       fprintf (stderr, "antenna=%u pair %d [%u -> %u], dead=%d\n", antenna, ipair, ant_a, ant_b, dead);
@@ -425,7 +470,13 @@ int main (int argc, char **argv)
 
       if (snr > 20 || baseline == ipair)
       {
-        if ((verbose > 1) || (baseline == ipair))
+        char plot = 0;
+        if ((verbose > 1) || (verbose_module  == ant_a) || (verbose_module == ant_b))
+          plot = (verbose - 1);
+        if (baseline == ipair)
+          plot = 2;
+
+        if (plot)
         {
           plot_lags (lags, npt, "1/xs");
           plot_cross_bin (amps, phases, npt, "2/xs", 
@@ -444,7 +495,7 @@ int main (int argc, char **argv)
             cc[ipt] *= ramp[ipt];
           }
 
-          if ((verbose > 1) || (baseline == ipair))
+          if (plot)
           {
             for (ipt=0; ipt<npt; ipt++)
             {
@@ -466,7 +517,7 @@ int main (int argc, char **argv)
           for (ipt=0; ipt<npt; ipt++)
           {
             sp[ipt] = cc[ipt] * ramps[iramp][ipt];
-            if ((verbose > 1) || (baseline == ipair))
+            if (plot)
             {
               re = creal(sp[ipt]);
               im = cimag(sp[ipt]);
@@ -475,7 +526,7 @@ int main (int argc, char **argv)
             }
           }
 
-          if ((verbose > 1) || (baseline == ipair))
+          if (plot > 1)
             plot_cross_bin (amps, phases, npt, "3/xs", "Cross Correlation - Trial Ramp");
 
           in = (fftwf_complex *) sp;
@@ -495,7 +546,7 @@ int main (int argc, char **argv)
           max = powf ((lags[npt/2] - mean), 2);
           ramp_peaks[iramp] = max;
 
-          if ((verbose > 1) || (baseline == ipair))
+          if (plot > 1)
             plot_lags (lags, npt, "1/xs");
 
           if (max > ramp_max)
@@ -509,7 +560,7 @@ int main (int argc, char **argv)
         // this is the delay to be use when SNR < 1000
         ramp_delay = (float) lag - iramp_delay;
 
-        if ((verbose) || (baseline == ipair))
+        if (plot)
           fprintf (stderr, "[%d] ramp_best=%d iramp_delay=%f ramp_delay=%f\n", 
                    ipair, ramp_best, iramp_delay, ramp_delay);
 
@@ -526,7 +577,7 @@ int main (int argc, char **argv)
           mean_value += (cc[ipt] * ramps[ramp_best][ipt]);
         }
 
-        if ((verbose > 1) || (baseline == ipair))
+        if (plot)
         {
           plot_cross_bin (amps, phases, npt, "7/xs", "Cross Correlation - Best Trial Ramp");
         }
@@ -549,22 +600,28 @@ int main (int argc, char **argv)
 
         coarse_phase_maxbin = (2 * M_PI * ((float) max_bin) / nbin) - M_PI;
 
-        if ((verbose>1) || (baseline == ipair))
-          fprintf (stderr, "coarse_phase_maxbin=%f\n", coarse_phase_maxbin);
-
+        unsigned ivalid = 0;
         for (ipt=0; ipt<npt; ipt++)
         {
-          if (phases[ipt] > coarse_phase_maxbin + M_PI)
-            coarse_phases[ipt] = (double) phases[ipt] - (2 * M_PI);
-          else if (phases[ipt] < coarse_phase_maxbin - M_PI)
-            coarse_phases[ipt] = (double) phases[ipt] + (2 * M_PI);
-          else
-            coarse_phases[ipt] = (double) phases[ipt];
+          if (chan_weights[ipt] == 1)
+          {
+            if (phases[ipt] > coarse_phase_maxbin + M_PI)
+              coarse_phases[ivalid] = (double) phases[ipt] - (2 * M_PI);
+            else if (phases[ipt] < coarse_phase_maxbin - M_PI)
+              coarse_phases[ivalid] = (double) phases[ipt] + (2 * M_PI);
+            else
+              coarse_phases[ivalid] = (double) phases[ipt];
+
+            ivalid++;
+          }
         }
 
+        if (plot)
+          fprintf (stderr, "coarse_phase_maxbin=%f npt_valid=%u\n", coarse_phase_maxbin, npt_valid);
+
 #ifdef HAVE_GSL
-        gsl_sort (coarse_phases, 1, npt);
-        centre_phase = gsl_stats_median_from_sorted_data (coarse_phases, 1, npt);
+        gsl_sort (coarse_phases, 1, npt_valid);
+        centre_phase = gsl_stats_median_from_sorted_data (coarse_phases, 1, npt_valid);
 #endif
 
         if (centre_phase > M_PI)
@@ -578,16 +635,18 @@ int main (int argc, char **argv)
           avg_phase -= 2 * M_PI;
 
         if ((verbose>1) || (baseline == ipair))
+        {
           fprintf (stderr, "centre_phase=%lf, avg_phase=%f\n", centre_phase, avg_phase);
+        }
 
-        if ((verbose > 1) || (baseline == ipair))
+        if (plot)
         {
           float mean_phase = atan2f (cimag(mean_value), creal(mean_value));
           sprintf (title, "Uncorrected Histogram: Pair %d avg=%3.2f mean=%3.2f", ipair, avg_phase, mean_phase);
           plot_histogram (hist, nbin, "4/xs", title, avg_phase, mean_phase);
         }
 
-        if ((verbose > 1) || (baseline == ipair))
+        if (plot)
         {
           // apply peak phase correction to the whole band to centre
           // this + integer correction should remove all wraps...
@@ -621,7 +680,7 @@ int main (int argc, char **argv)
 
           y[npt/2] = (y[npt/2-1] + y[npt/2+1]) / 2;
 
-          gsl_fit_linear (x + N_skip, 1, y + N_skip, 1, (size_t) N, &c0, &c1, &cov00, &cov01, &cov11, &chisq);
+          gsl_fit_linear (x + N, 1, y + N, 1, (size_t) N, &c0, &c1, &cov00, &cov01, &cov11, &chisq);
           gsl_delay = (float) lag - (float) c1;
           if (verbose)
             fprintf (stderr, "gsl_delay: %f [%d - %lf]\n", gsl_delay, lag, c1);
@@ -632,7 +691,7 @@ int main (int argc, char **argv)
           total_delay = ramp_delay;
         }
 
-        if ((verbose > 1) || (baseline == ipair))
+        if (plot)
         { 
           for (ipt=0; ipt<npt; ipt++)
           {
@@ -719,7 +778,7 @@ int main (int argc, char **argv)
           if (rel_delays[jant] == 0)
           {
             // AJ: TO remove
-            if ((abs(jant-iant) < 4) && 0)
+            if (abs(jant-iant) < 4)
             {
               // get the pair index for the jant to the reference
               jpair = pair_from_ants (jant, (unsigned) alt_antenna, nant);
@@ -735,9 +794,9 @@ int main (int argc, char **argv)
             {
               rel_delays[jant] = delays[ipair];
               rel_phases[jant] = phase_offsets[ipair];
-              rel_snrs[iant]   = snrs[ipair];
+              rel_snrs[jant]   = snrs[ipair];
               if (verbose > 2 || baseline == ipair)
-                fprintf (stderr, "1: iant=%d jant=%d ipair=%d rel_delays[%d]=%f\n", iant, jant, ipair, jant, rel_delays[jant]);
+                fprintf (stderr, "1: iant=%d jant=%d ipair=%d rel_delays[%d]=%f rel_snrs[%d]=%f\n", iant, jant, ipair, jant, rel_delays[jant], jant, rel_snrs[jant]);
             }
           }
 
@@ -750,7 +809,7 @@ int main (int argc, char **argv)
             rel_phases[iant] = phase_offsets[ipair] * -1;
             rel_snrs[iant]   = snrs[ipair];
             if (verbose > 2 || baseline == ipair)
-              fprintf (stderr, "2: iant=%d jant=%d ipair=%d rel_delays[%d]=%f\n", iant, jant, ipair, iant, rel_delays[iant]);
+              fprintf (stderr, "2: iant=%d jant=%d ipair=%d rel_delays[%d]=%f rel_snrs[%d]=%f\n", iant, jant, ipair, iant, rel_delays[iant], iant, rel_snrs[iant]);
           }
         }
       }
@@ -771,6 +830,8 @@ int main (int argc, char **argv)
   fprintf (fptr, "ref %s\n", antennas[antenna]);
   for (iant=0; iant<nant; iant++)
   {
+    //if (iant == 336)
+      //fprintf (stderr, "%s %f %f %e %f %f\n", antennas[iant], rel_delays[iant], tsamp, (rel_delays[iant] * (tsamp / 1000000)), rel_phases[iant], snrs[iant]);
     fprintf (fptr, "%s %e %f %f\n", antennas[iant], (rel_delays[iant] * (tsamp / 1000000)), rel_phases[iant], snrs[iant]);
   }
   fclose (fptr);
@@ -797,7 +858,7 @@ int main (int argc, char **argv)
 
     // high resolution
     if (!device)
-      sprintf (filename, "%s.CH%02u.bd.%dx%d.png/png", local_time, channel, 1024, 768);
+      sprintf (filename, "%s.%s.bd.%dx%d.png/png", local_time, source, 1024, 768);
     else
       sprintf (filename, "1/xs");
     if (cpgbeg(0, filename, 1, 1) != 1)
@@ -810,7 +871,7 @@ int main (int argc, char **argv)
     // low resolution (unless we are doing interactive plots)
     if (!device)
     {
-      sprintf (filename, "%s.CH%02u.bd.%dx%d.png/png", local_time, channel, 160, 120);
+      sprintf (filename, "%s.%s.bd.%dx%d.png/png", local_time, source, 160, 120);
       if (cpgbeg(0, filename, 1, 1) != 1)
         fprintf (stderr, "mopsr_solve_delays: error opening plot device [%s]\n", filename);
       set_resolution (160, 120);
@@ -826,27 +887,27 @@ int main (int argc, char **argv)
     // Plot delays for the reference antenna
     // 
     opt.plot_plain = 0;
-    sprintf (title, "Antenna Delays: CH%02d, Ref Antenna: %s [%d]", channel, antennas[antenna], antenna);
+    sprintf (title, "Antenna Delays: %s, Ref Antenna: %s [%d]", source, antennas[antenna], antenna);
     if (!device)
-      sprintf (filename, "%s.CH%02u.ad.%dx%d.png/png", local_time, channel, 1024, 768);
+      sprintf (filename, "%s.%s.ad.%dx%d.png/png", local_time, source, 1024, 768);
     else
       sprintf (filename, "2/xs");
     if (cpgbeg(0, filename, 1, 1) != 1)
       fprintf (stderr, "mopsr_solve_delays: error opening plot device [%s]\n", filename);
     if (!device)
     set_resolution (1024, 768);
-    plot_delays (rel_delays, nant, filename, title, &opt);
+    plot_delays (rel_delays, rel_snrs, nant, filename, title, &opt);
     cpgend();
 
     // low resolution (unless we are doing interactive plots)
     if (!device)
     {
-      sprintf (filename, "%s.CH%02u.ad.%dx%d.png/png", local_time, channel, 160, 120);
+      sprintf (filename, "%s.%s.ad.%dx%d.png/png", local_time, source, 160, 120);
       if (cpgbeg(0, filename, 1, 1) != 1)
         fprintf (stderr, "mopsr_solve_delays: error opening plot device [%s]\n", filename);
       set_resolution (160, 120);
       opt.plot_plain = 1;
-      plot_delays (rel_delays, nant, filename, title, &opt);
+      plot_delays (rel_delays, rel_snrs, nant, filename, title, &opt);
       cpgend();
     }
 
@@ -856,27 +917,27 @@ int main (int argc, char **argv)
     // Plot phase offsets for the reference antenna
     // 
     opt.plot_plain = 0;
-    sprintf (title, "Phase Offsets: CH%02d, Ref Antenna: %s [%d]", channel, antennas[antenna], antenna);
+    sprintf (title, "Phase Offsets: %s, Ref Antenna: %s [%d]", source, antennas[antenna], antenna);
     if (!device)
-      sprintf (filename, "%s.CH%02u.po.%dx%d.png/png", local_time, channel, 1024, 768);
+      sprintf (filename, "%s.%s.po.%dx%d.png/png", local_time, source, 1024, 768);
     else
       sprintf (filename, "3/xs");
     if (cpgbeg(0, filename, 1, 1) != 1)
       fprintf (stderr, "mopsr_solve_delays: error opening plot device [%s]\n", filename);
     if (!device)
       set_resolution (1024, 768);
-    plot_phase_offsets (rel_phases, nant, filename, title, &opt);
+    plot_phase_offsets (rel_phases, rel_snrs, nant, filename, title, &opt);
     cpgend();
 
     // low resolution (unless we are doing interactive plots)
     if (!device)
     {
-      sprintf (filename, "%s.CH%02u.po.%dx%d.png/png", local_time, channel, 160, 120);
+      sprintf (filename, "%s.%s.po.%dx%d.png/png", local_time, source, 160, 120);
       if (cpgbeg(0, filename, 1, 1) != 1)
         fprintf (stderr, "mopsr_solve_delays: error opening plot device [%s]\n", filename);
       set_resolution (160, 120);
       opt.plot_plain = 1;
-      plot_phase_offsets (rel_phases, nant, filename, title, &opt);
+      plot_phase_offsets (rel_phases, rel_snrs, nant, filename, title, &opt);
       cpgend();
     }
 
@@ -885,7 +946,7 @@ int main (int argc, char **argv)
     //  
     // Plot SNR map
     // 
-    sprintf (title, "Baseline SNRs: CH%02d", channel);
+    sprintf (title, "Baseline SNRs: %s", source);
 
     opt.plot_plain = 0;
     opt.plot_log = 1;
@@ -893,7 +954,7 @@ int main (int argc, char **argv)
     opt.ymax = 4;
 
     if (!device)
-      sprintf (filename, "%s.CH%02u.sn.%dx%d.png/png", local_time, channel, 1024, 768);
+      sprintf (filename, "%s.%s.sn.%dx%d.png/png", local_time, source, 1024, 768);
     else
       sprintf (filename, "4/xs");
     if (cpgbeg(0, filename, 1, 1) != 1)
@@ -905,7 +966,7 @@ int main (int argc, char **argv)
 
     if (!device)
     {
-      sprintf (filename, "%s.CH%02u.sn.%dx%d.png/png", local_time, channel, 160, 120);
+      sprintf (filename, "%s.%s.sn.%dx%d.png/png", local_time, source, 160, 120);
      if (cpgbeg(0, filename, 1, 1) != 1)
         fprintf (stderr, "mopsr_solve_delays: error opening plot device [%s]\n", filename);
       set_resolution (160, 120);
@@ -978,7 +1039,7 @@ void plot_cross_bin (float * amps, float * phases, unsigned npts, char * device,
   cpglab("", "Amplitude", title);
 
   cpgsci(3);
-  cpgline (npts, xvals, amps);
+  cpgpt (npts, xvals, amps, 17);
   cpgsci(1);
 
   ymin = FLT_MAX;
@@ -1365,15 +1426,31 @@ void form_histogram (unsigned * hist, unsigned nbin,
     hist[ibin] = rintf (scaled_hist[ibin] * 100);
 }
 
-void plot_delays (float * delays, unsigned npts, char * device, char * title, mopsr_util_t * opt)
+void plot_delays (float * delays, float * snrs, unsigned npts, char * device, char * title, mopsr_util_t * opt)
 {
   float xmin = 0;
   float xmax = (float) npts;
   float ymin = FLT_MAX;
   float ymax = -FLT_MAX;
 
-  float x1[npts];
-  float x2[npts];
+  const float abs_good_limit = 0.1;
+  unsigned ngood = 0;
+  float good_x[npts];
+  float good_y[npts];
+
+  const float abs_poor_limit = 5;
+  unsigned npoor = 0;
+  float poor_x[npts];
+  float poor_y[npts];
+
+  unsigned nbad = 0;
+  float bad_x[npts];
+  float bad_y[npts];
+
+  unsigned nweak = 0;
+  float weak_x[npts];
+  float weak_y[npts];
+
   float yvals[npts];
   char label[64];
 
@@ -1381,32 +1458,50 @@ void plot_delays (float * delays, unsigned npts, char * device, char * title, mo
   unsigned ipt = 0;
   for (i=0; i<npts; i++)
   {
-    if (delays[i] > ymax && delays[i] < 3)
+    if (delays[i] > ymax)
       ymax = delays[i];
-    if (delays[i] < ymin && delays[i] > 3)
+    if (delays[i] < ymin)
       ymin = delays[i];
 
-    x1[i] = (float) i + 0.5;
-    if (fabsf (delays[i]) > 0.001)
+    if (snrs[i] <= 50)
     {
-      x2[ipt] = (float) i + 0.5;
-      yvals[ipt] = delays[i];
-      ipt++;
+      weak_x[nweak] = (float) i + 0.5;
+      weak_y[nweak] = delays[i];
+      nweak++;
+    }
+    else
+    {
+      if (fabs(delays[i]) < abs_good_limit)
+      {
+        good_x[ngood] = (float) i + 0.5;
+        good_y[ngood] = delays[i];
+        ngood++;
+      }
+      else if (fabs(delays[i]) < abs_poor_limit)
+      {
+        poor_x[npoor] = (float) i + 0.5;
+        poor_y[npoor] = delays[i];
+        npoor++;
+      }
+      else
+      {
+        bad_x[nbad] = (float) i + 0.5;
+        bad_y[nbad] = delays[i] < 0 ? -1 * abs_poor_limit : abs_poor_limit;
+        nbad++;
+      }
     }
   }
 
   cpgbbuf();
 
-  float yrange = ymax - ymin;
+  float yabsmax = fabs(ymax) > fabs(ymin) ? fabs(ymax) : fabs(ymin);
+ 
+  // clamp the maximum delay plotted to +/- poor_limit
+  if (yabsmax > abs_poor_limit)
+    yabsmax = abs_poor_limit + 1;
 
-  ymax += (yrange / 10);
-  ymin -= (yrange / 10);
-
-  if (ymax < 1)
-    ymax = 1;
-  if (ymin > -1)
-    ymin = -1;
-  //fprintf (stderr, "ymin=%f ymax=%f yrange=%f\n", ymin, ymax, yrange);
+  ymax = 0 + yabsmax;
+  ymin = 0 - yabsmax;
 
   if (opt->plot_plain)
     cpgsvp(0.0,1.0,0.0,1.0);
@@ -1421,46 +1516,85 @@ void plot_delays (float * delays, unsigned npts, char * device, char * title, mo
   if (!opt->plot_plain)
     cpgbox("BCGNST", 16, 0, "BCNST", 0, 0);
 
-  cpgsci(15);
-  cpgslw(3);
-  cpgpt(npts, x1, delays, -2);
-
-  cpgsci(3);
+  unsigned lw = 4;
   if (!opt->plot_plain)
-    cpgslw(10);
-  else
-    cpgslw(4);
-  cpgpt(ipt, x2, yvals, -2);
+    lw = 9;
+
+  cpgslw(lw);
+  // plot weak in grey
+  cpgsci (15);
+  cpgpt(nweak, weak_x, weak_y, -2);
+
+  // plot poor in orange
+  cpgsci (7);
+  cpgpt(npoor, poor_x, poor_y, -2);
+
+  // plot good in green
+  cpgsci(3);
+  cpgpt(ngood, good_x, good_y, -2);
+
+  // plot bad in large red
+  //lw += 5;
+  cpgsci (2);
+  cpgslw(lw);
+  cpgpt(nbad, bad_x, bad_y, -2);
+
+
   cpgslw(1);
   cpgsci(1);
 
   cpgebuf();
 }
 
-void plot_phase_offsets (float * phase_offsets, unsigned npts, char * device, char * title, mopsr_util_t * opt)
+void plot_phase_offsets (float * phase_offsets, float * snrs, unsigned npts, char * device, char * title, mopsr_util_t * opt)
 {
   float xmin = 0;
   float xmax = (float) npts;
   float ymin = FLT_MAX;
   float ymax = -FLT_MAX;
 
-  float x1[npts];
-  float x2[npts];
-  float yvals[npts];
+  float abs_good_limit = 0.1 * M_PI;
+
+  unsigned ngood = 0;
+  float good_x[npts];
+  float good_y[npts];
+
+  unsigned nbad = 0;
+  float bad_x[npts];
+  float bad_y[npts];
+
+  unsigned nweak = 0;
+  float weak_x[npts];
+  float weak_y[npts];
+
   char label[64];
 
   ymin = -1 * M_PI;
   ymax =  1 * M_PI;
+
   unsigned i;
-  unsigned ipt = 0;
   for (i=0; i<npts; i++)
   {
-    x1[i] = (float) i + 0.5;
-    if (fabsf(phase_offsets[i]) > 0)
-    {
-      x2[ipt] = (float) i + 0.5;
-      yvals[ipt] = phase_offsets[i];
-      ipt++;
+    if (snrs[i] <= 50)
+    { 
+      weak_x[nweak] = (float) i + 0.5;
+      weak_y[nweak] = phase_offsets[i];
+      nweak++;
+    }
+    else
+    { 
+      if (fabs(phase_offsets[i]) < abs_good_limit)
+      { 
+        good_x[ngood] = (float) i + 0.5;
+        good_y[ngood] = phase_offsets[i];
+        ngood++;
+      }
+      else
+      { 
+        bad_x[nbad] = (float) i + 0.5;
+        bad_y[nbad] = phase_offsets[i];
+        nbad++;
+      }
     }
   }
 
@@ -1479,11 +1613,22 @@ void plot_phase_offsets (float * phase_offsets, unsigned npts, char * device, ch
   if (!opt->plot_plain)
     cpgbox("BCGNST", 16, 0, "BCNST", 0, 0);
 
-  cpgsci(15);
-  cpgpt(npts, x1, phase_offsets, -2);
+  if (!opt->plot_plain)
+    cpgslw(9);
+  else
+    cpgslw(4);
+
+  // plot weak in grey
+  cpgsci (15);
+  cpgpt(nweak, weak_x, weak_y, -2);
+
+  // plot bad in red
+  cpgsci (2);
+  cpgpt(nbad, bad_x, bad_y, -2);
+
+  // plot good in green
   cpgsci(3);
-  cpgpt(ipt, x2, yvals, -4);
-  cpgsci(1);
+  cpgpt(ngood, good_x, good_y, -2);
 
   cpgebuf();
 }
