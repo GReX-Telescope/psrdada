@@ -85,7 +85,7 @@ int main(int argc, char** argv)
         }
         else
         {
-          fprintf (stderr, "-b requires argument\n");
+          fprintf (stderr, "-m requires argument\n");
           return (EXIT_FAILURE);
         }
 
@@ -345,11 +345,13 @@ int main(int argc, char** argv)
     jer_delay = calc_jer_delay (source.ra_curr, source.dec_curr, timestamp);
     md_angle = asin(jer_delay);
 
+
     timestamp.tv_sec -= utc_start;
     mopsr_delays_plot (nmod, nchan, delays, timestamp);
 
     if (print_module>= 0)
-      fprintf (stderr, "%lf\t%20.10le\t%lf\n", md_angle, 
+      fprintf (stderr, "%s\t%le\t%20.10le\t%lf\n", modules[print_module].name, 
+                                          md_angle,
                                           delays[print_module][nchan/2].tot_secs, 
                                           delays[print_module][nchan/2].fringe_coeff);
 
@@ -357,7 +359,7 @@ int main(int argc, char** argv)
 
     if (timestamp.tv_sec >= 1200)
       more = 0;
-    //usleep (100000);
+    usleep (100000);
   }
 
   cpgclos();
