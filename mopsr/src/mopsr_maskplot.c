@@ -33,12 +33,13 @@ void usage ();
 void usage()
 {
   fprintf (stdout,
-     "mopsr_maskplot [options] maskfile\n"
-     " maskfile    1-bit mask file\n"
-     " -D device   pgplot device name\n"
-     " -h          print usage\n"
-     " -t num      number of time samples to display in each plot [default 512]\n"
-     " -v          be verbose\n");
+     "mopsr_maskplot [options] mask_files\n"
+     " mask_files    1-bit mask file produced by mopsr_aqdsp\n"
+     " -p            enable plotting\n"
+     " -D device     pgplot device name\n"
+     " -h            print usage\n"
+     " -t num        number of time samples to display in each plot [default 512]\n"
+     " -v            be verbose\n");
 }
 
 int main (int argc, char **argv)
@@ -62,7 +63,9 @@ int main (int argc, char **argv)
   opts.plot_plain = 0;
   opts.zap = 0;
 
-  while ((arg=getopt(argc,argv,"D:hn:t:v")) != -1)
+  char plot = 0;
+
+  while ((arg=getopt(argc,argv,"D:hn:pt:v")) != -1)
   {
     switch (arg)
     {
@@ -73,6 +76,10 @@ int main (int argc, char **argv)
       case 'h':
         usage();
         return 0;
+
+      case 'p':
+        plot = 1;
+        break;
 
       case 't':
         nsamp = atoi (optarg);
@@ -89,43 +96,61 @@ int main (int argc, char **argv)
   }
 
   // check and parse the command line arguments
-  if (argc-optind != 1)
+  if (argc-optind < 1)
   {
-    fprintf(stderr, "ERROR: 1 command line argument is required\n\n");
+    fprintf(stderr, "ERROR: At least 1 command line argument is required\n\n");
     usage();
     return (EXIT_FAILURE);
   }
 
-  char filename[256];
-  strcpy(filename, argv[optind]);
+  int nfiles = argc - optind;
+  int i;
   struct stat buf;
-  if (stat (filename, &buf) < 0)
-  {
-    fprintf (stderr, "ERROR: failed to stat dada file [%s]: %s\n", filename, strerror(errno));
-    return (EXIT_FAILURE);
-  }
-
-  size_t filesize = buf.st_size;
-  if (verbose)
-    fprintf (stderr, "filesize for %s is %d bytes\n", filename, filesize);
+  size_t filesize = 0;
 
   int flags = O_RDONLY;
   int perms = S_IRUSR | S_IRGRP;
-  int fd = open (filename, flags, perms);
-  if (fd < 0)
+  int * fds = (int *) malloc(sizeof(int) * nfiles);
+  char ** filenames = (char **) malloc(sizeof(char *) * nfiles);
+  uint64_t * zapped = (uint64_t *) malloc(sizeof(uint64_t) * nfiles);
+
+  for (i=0; i<nfiles; i++)
   {
-    fprintf(stderr, "failed to open dada file[%s]: %s\n", filename, strerror(errno));
-    exit(EXIT_FAILURE);
+    filenames[i] = (char *) malloc(strlen(argv[optind+i])+1);
+    strcpy(filenames[i], argv[optind+i]);
+    if (stat (filenames[i], &buf) < 0)
+    {
+      fprintf (stderr, "ERROR: failed to stat mask file [%s]: %s\n", filenames[i], strerror(errno));
+      return (EXIT_FAILURE);
+    }
+
+    filesize = buf.st_size;
+    if (verbose)
+      fprintf (stderr, "filesize for %s is %d bytes\n", filenames[i], filesize);
+
+    fds[i] = open (filenames[i], flags, perms);
+    if (fds[i] < 0)
+    {
+      fprintf(stderr, "failed to open dada file[%s]: %s\n", filenames[i], strerror(errno));
+      exit(EXIT_FAILURE);
+    }
+
+    zapped[i] = 0;
   }
 
   size_t data_size = filesize - 4096;
 
+  // just read the header from the first file
   char * header = (char *) malloc (4096);
   if (verbose)
     fprintf (stderr, "reading header, 4096 bytes\n");
-  size_t bytes_read = read (fd, header, 4096);
+  size_t bytes_read = read (fds[0], header, 4096);
   if (verbose)
     fprintf (stderr, "read %lu bytes\n", bytes_read);
+  for (i=1; i<nfiles; i++)
+  {
+    lseek (fds[i], 4096, SEEK_SET);
+  } 
 
   if (ascii_header_get(header, "NCHAN", "%d", &(opts.nchan)) != 1)
   {
@@ -146,13 +171,17 @@ int main (int argc, char **argv)
   if (verbose)
     fprintf(stderr, "mopsr_maskplot: using device %s\n", device);
 
-  if (cpgopen(device) != 1) {
-    fprintf(stderr, "mopsr_maskplot: error opening plot device\n");
-    exit(1);
+  if (plot)
+  {
+    if (cpgopen(device) != 1) {
+      fprintf(stderr, "mopsr_maskplot: error opening plot device\n");
+      exit(1);
+    }
+    cpgask(1);
   }
-  cpgask(1);
 
-  fprintf (stderr, "nchan=%d nsamp=%d nant=%d\n", opts.nchan, nsamp, opts.nant);
+  if (verbose)
+    fprintf (stderr, "nchan=%d nsamp=%d nant=%d\n", opts.nchan, nsamp, opts.nant);
 
   unsigned nsamp_plot = nsamp;
   float * spectra = (float *) malloc (sizeof(float) * opts.nchan * nsamp_plot);
@@ -166,55 +195,76 @@ int main (int argc, char **argv)
   size_t spectrum_stride = opts.nchan;
   size_t raw_stride = opts.nchan * opts.nant * opts.ndim;
 
-  fprintf (stderr, "bytes_to_read=%ld, data_size=%ld\n", bytes_to_read, data_size);
+  if (verbose > 1)
+    fprintf (stderr, "bytes_to_read=%ld, data_size=%ld\n", bytes_to_read, data_size);
   unsigned bin_factor = nsamp / nsamp_plot;
 
-  memset (spectra, 0, sizeof(float) * opts.nchan * nsamp_plot);
   bytes_read = 0;
+
+  unsigned nval = opts.nchan * nsamp_plot;
+  unsigned ival, ibit;
+  const unsigned short mask = 0x1;
+
+  uint64_t zapped_total = 0;
+  uint64_t nsamp_total = 0;
+
   while (bytes_read_total + bytes_to_read < data_size)
   {
-    bytes_read = read (fd, raw, bytes_to_read);
-    char * in = (char *) raw;
-    unsigned nval = opts.nchan * nsamp_plot;
-    unsigned ival;
-    const unsigned short mask = 0x1;
+    memset (spectra, 0, sizeof(float) * opts.nchan * nsamp_plot);
 
-    if (bytes_read == bytes_to_read)
+    uint64_t zapped_block = 0;
+    uint64_t nsamp_block = nfiles * nval;
+    for (i=0; i<nfiles; i++)
     {
-      bytes_read_total += bytes_read;
-      if (verbose)
-        fprintf (stderr, "read %ld bytes, nval=%u\n", bytes_read, nval);
+      bytes_read = read (fds[i], raw, bytes_to_read);
+      char * in = (char *) raw;
 
-      // new to unpack 1-bit TF data into spectra (TF order)
-      for (ival=0; ival<nval; ival+=8)
+      if (bytes_read == bytes_to_read)
       {
-        char val = *in;
-        spectra[ival+0] = (float) ((val >> 0) & mask);
-        spectra[ival+1] = (float) ((val >> 1) & mask);
-        spectra[ival+2] = (float) ((val >> 2) & mask);
-        spectra[ival+3] = (float) ((val >> 3) & mask);
-        spectra[ival+4] = (float) ((val >> 4) & mask);
-        spectra[ival+5] = (float) ((val >> 5) & mask);
-        spectra[ival+6] = (float) ((val >> 6) & mask);
-        spectra[ival+7] = (float) ((val >> 7) & mask);
-        in++;
+        if (verbose> 1)
+          fprintf (stderr, "read %ld bytes, nval=%u\n", bytes_read, nval);
+
+        // new to unpack 1-bit TF data into spectra (TF order)
+        for (ival=0; ival<nval; ival+=8)
+        {
+          char val = *in;
+          for (ibit=0; ibit<8; ibit++)
+          {
+            int b = ((val >> ibit) & mask);
+            if (plot)
+              spectra[ival+ibit] += (float) b;
+            zapped[i] += b;
+            zapped_block += b;
+          }
+          in++;
+        }
       }
+    }
 
-      uint64_t nzapped = 0;
-      unsigned ichan, isamp;
-      for (isamp=0; isamp<nsamp; isamp++)
-        for (ichan=0; ichan<opts.nchan; ichan++)
-          nzapped += (unsigned) spectra[isamp*opts.nchan+ichan];
+    bytes_read_total += bytes_read;
 
-      fprintf (stderr, "samples zapped=%lu, percentage zapped=%5.2lf%%\n", nzapped, (float)(nzapped * 100) / (float) (nsamp * opts.nchan));
+    zapped_total += zapped_block;
+    nsamp_total += nsamp_block;
 
+    if (verbose)
+      fprintf (stderr, "Block: zapped %lu (%5.2f%%)\n", zapped_block, (float) (zapped_block * 100) / (float) nsamp_block);
+
+    if (plot)
+    {
       mopsr_transpose (waterfall, spectra, nsamp_plot, &opts);
       mopsr_plot_waterfall (waterfall, nsamp_plot, &opts);
     }
   }
 
-  cpgclos();
-  close (fd);
+  fprintf (stderr, "Total: %5.2lf%% (%lu of %lu)\n", (float)(zapped_total * 100) / (float) nsamp_total, zapped_total, nsamp_total);
+
+  if (plot)
+    cpgclos();
+  for (i=0; i<nfiles; i++)
+    close (fds[i]);
+
+  free (raw);
+  free (zapped);
 
   if (spectra)
     free (spectra);
@@ -223,10 +273,6 @@ int main (int argc, char **argv)
   if (waterfall)
     free (waterfall);
   waterfall = 0;
-
-  if (raw)
-    free (raw);
-  raw = 0;
 
   return EXIT_SUCCESS;
 }
