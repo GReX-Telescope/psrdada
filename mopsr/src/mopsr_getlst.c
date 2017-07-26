@@ -17,8 +17,9 @@
 
 void usage ()
 {
-	fprintf(stdout, "mopsr_getlst utc\n"
+	fprintf(stdout, "mopsr_getlst [options] utc\n"
     " utc         UTC in YYYY-MM-DD-HH:MM:SS\n"
+    " -f seconds  fractional seconds to add to the UTC\n"
     " -h          print this help text\n" 
     " -v          verbose output\n" 
   );
@@ -32,10 +33,17 @@ int main(int argc, char** argv)
 
   int device = 0;
 
-  while ((arg = getopt(argc, argv, "hv")) != -1) 
+  double fractional_seconds = 0.0;
+  const double seconds_per_day = 86400;
+
+  while ((arg = getopt(argc, argv, "f:hv")) != -1) 
   {
     switch (arg)  
     {
+      case 'f':
+        fractional_seconds = atof(optarg);
+        break;
+
       case 'h':
         usage ();
         return 0;
@@ -69,13 +77,15 @@ int main(int argc, char** argv)
   }
 
   if (verbose)
-    fprintf (stderr, "utc_start=%ld\n", utc_start);
+    fprintf (stdout, "utc_start=%ld\n", utc_start);
 
   // calculate the MJD
   struct tm * local_t = gmtime (&utc_start);
   double mjd = mjd_from_utc (local_t);
+  mjd += (fractional_seconds / seconds_per_day);
+
   if (verbose)
-    fprintf (stderr, "mjd=%lf\n", mjd);
+    fprintf (stdout, "mjd=%lf\n", mjd);
 
 #ifdef HAVE_SLA
   // get the LST
@@ -88,7 +98,7 @@ int main(int argc, char** argv)
   int NDP = 4;    // number of decimal places
 
   iauA2tf (NDP, last, &sign, HMSF);
-  fprintf (stderr, "LAST: %02d:%02d:%02d.%d [radians=%f]\n", HMSF[0],HMSF[1],HMSF[2],HMSF[3], last);
+  fprintf (stdout, "LAST: %02d:%02d:%02d.%d [radians=%f]\n", HMSF[0],HMSF[1],HMSF[2],HMSF[3], last);
 
   return 0;
 }
