@@ -96,6 +96,28 @@ void fill_gaussian_chars(char *data, int size, int nbits, int gain) {
   }
 }
 
+// generate 8-bit integer data with the specified mean and stddev
+void fill_gaussian_data (char *data, int length, double mean, double stddev) 
+{
+  unsigned i=0;
+  double sample;
+  int sample_int;
+  for (i=0; i<length; i++) 
+  {
+    sample = rand_normal(mean, stddev);
+
+    // round to nearest integer
+    sample_int = rint(sample);
+
+    if (sample_int < -127)
+      sample_int = -127;
+    if (sample_int > 127)
+      sample_int = 127;
+
+    data[i] = (int8_t) sample_int;
+  }
+}
+
 /*
  * fill an unsigned int  array with gaussian noise 
  */
