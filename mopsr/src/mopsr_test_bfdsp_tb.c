@@ -21,15 +21,16 @@
 #include <math.h>
 #include <cuda_runtime.h>
 
-int mopsr_tie_beams_cpu (void * h_in, void * h_out, void * h_tb_phasors, uint64_t nbytes, unsigned nant);
+int mopsr_tie_beams_cpu (void * h_in, void * h_out, void * h_tb_phasors, uint64_t nbytes, unsigned nant, unsigned nchan);
 
 #define SKZAP
 
 void usage ()
 {
 	fprintf(stdout, "mopsr_test_bfdsp_tb bays_file modules_file\n"
-    " -a nant     number of antennae\n" 
-    " -t nsamp    number of samples\n" 
+    " -a nant     number of antennae [default 352]\n" 
+    " -c nchan    number of channels [default 10]\n" 
+    " -t nsamp    number of samples [default 16384]\n" 
     " -h          print this help text\n" 
     " -v          verbose output\n" 
   );
@@ -40,20 +41,23 @@ int main(int argc, char** argv)
   int arg = 0;
 
   unsigned nant = 352;
-  uint64_t nsamp = 16384 * 6;
-  const unsigned nchan_in = 1;
-  const unsigned nchan_ou = 1;
+  uint64_t nsamp = 16384;
+  unsigned nchan = 10;
 
   char verbose = 0;
 
   int device = 0;
 
-  while ((arg = getopt(argc, argv, "a:d:ht:v")) != -1) 
+  while ((arg = getopt(argc, argv, "a:c:d:ht:v")) != -1) 
   {
     switch (arg)  
     {
       case 'a':
         nant = atoi(optarg);
+        break;
+
+      case 'c':
+        nchan = atoi(optarg);
         break;
 
       case 'd':
@@ -114,11 +118,16 @@ int main(int argc, char** argv)
 
   source.raj  = 4.82147205863433;
 
-  mopsr_chan_t channels;
-  unsigned ichan = 42;
-  channels.number = ichan;
-  channels.bw     = 0.78125;
-  channels.cfreq  = (800 + (0.78125/2) + (ichan * 0.78125));
+  mopsr_chan_t * channels = (mopsr_chan_t *) malloc (sizeof(mopsr_chan_t) * nchan);
+  unsigned ichan;
+  unsigned start_channel = 204;
+  double chan_bw = 31.25 / 320.0;
+  for (ichan=0; ichan<nchan; ichan++)
+  {
+    channels[ichan].number = ichan + start_channel;
+    channels[ichan].bw     = chan_bw;
+    channels[ichan].cfreq  = (800 + (0.78125/2) + (ichan * chan_bw));
+  }
 
   struct timeval timestamp;
 
@@ -177,11 +186,11 @@ int main(int argc, char** argv)
   unsigned nbyte_in = sizeof(int8_t);
   unsigned nbyte_ou = sizeof(float);
 
-  uint64_t in_block_size = nsamp * nant  * ndim * nbyte_in * nchan_in;
-  uint64_t ou_block_size = nsamp * 1     * ndim * nbyte_ou * nchan_ou;
+  uint64_t in_block_size = nsamp * nant  * ndim * nbyte_in * nchan;
+  uint64_t ou_block_size = nsamp * 1     * ndim * nbyte_ou * nchan;
 
-  fprintf (stderr, "IN:  nant=%u  nchan=%u ndim=%u nbit=%u nsamp=%"PRIu64" block_size=%"PRIu64"\n", nant,  nchan_in, ndim, nbyte_in*8, nsamp, in_block_size);
-  fprintf (stderr, "OUT: nbeam=%u nchan=%u ndim=%u nbit=%u nsamp=%"PRIu64" block_size=%"PRIu64"\n", 1,     nchan_ou, ndim, nbyte_ou*8, nsamp, ou_block_size);
+  fprintf (stderr, "IN:  nant=%u  nchan=%u ndim=%u nbit=%u nsamp=%"PRIu64" block_size=%"PRIu64"\n", nant,  nchan, ndim, nbyte_in*8, nsamp, in_block_size);
+  fprintf (stderr, "OUT: nbeam=%u nchan=%u ndim=%u nbit=%u nsamp=%"PRIu64" block_size=%"PRIu64"\n", 1,     nchan, ndim, nbyte_ou*8, nsamp, ou_block_size);
 
   void * d_in;
   void * d_tb;
@@ -202,15 +211,19 @@ int main(int argc, char** argv)
   srand ( time(NULL) );
   double stddev = 32;
 
-  for (iant=0; iant<nant; iant++)
+  int8_t v1 = (int8_t) rand_normal (0, stddev);
+  int8_t v2 = (int8_t) rand_normal (0, stddev);
+
+  for (ichan=0; ichan<nchan; ichan++)
   {
-    for (isamp=0; isamp<nsamp; isamp++)
+    for (iant=0; iant<nant; iant++)
     {
-      //ptr[0] = (int8_t) iant + 1;
-      //ptr[1] = (int8_t) isamp + 1;
-      ptr[0] = (int8_t) rand_normal (0, stddev);
-      ptr[1] = (int8_t) rand_normal (0, stddev);
-      ptr += 2;
+      for (isamp=0; isamp<nsamp; isamp++)
+      {
+        ptr[0] = (int8_t) rand_normal (0, stddev);
+        ptr[1] = (int8_t) rand_normal (0, stddev);
+        ptr += 2;
+      }
     }
   }
 
@@ -226,7 +239,7 @@ int main(int argc, char** argv)
   double C = 2.99792458e8;
   double cfreq = 843e6;
 
-  size_t phasors_size = nant * sizeof(float) * 2;
+  size_t phasors_size = nchan * nant * sizeof(float) * 2;
   error = cudaMallocHost( (void **) &(h_tb_phasors), phasors_size);
   if (error != cudaSuccess)
   {
@@ -236,13 +249,19 @@ int main(int argc, char** argv)
 
   complex float * phasors_ptr = (complex float *) h_tb_phasors;
   unsigned re, im;
-  float md_angle = 0.0;
+  double md_angle = 10.0;
 
+  // Phasors are stored in FS ordering
   for (iant=0; iant<nant; iant++)
   {
-    phasors_ptr[iant] = cosf(md_angle) + sinf(md_angle) * I;
+    double geometric_delay = (sin(md_angle) * modules[iant].dist) / C;
+    for (ichan=0; ichan<nchan; ichan++)
+    {
+      double theta = -2 * M_PI * channels[ichan].cfreq * 1000000 * geometric_delay;
+      phasors_ptr[ichan*nant+iant] = (float) cos(theta) + (float) sin(theta) * I;
+    }
   }
-  
+
   if (verbose)
     fprintf(stderr, "alloc: allocating %ld bytes of device memory for d_in\n", in_block_size);
   error = cudaMalloc( &(d_in), in_block_size);
@@ -266,7 +285,7 @@ int main(int argc, char** argv)
   }
 
   if (verbose)
-    fprintf(stderr, "alloc: allocating %ld bytes of device memory for d_tb\n", phasors_size);
+    fprintf(stderr, "alloc: allocating %ld bytes of device memory for d_tb_phasors\n", phasors_size);
   error = cudaMalloc( &(d_tb_phasors), phasors_size);
   if (verbose)
     fprintf(stderr, "alloc: d_tb=%p\n", d_tb_phasors);
@@ -288,7 +307,7 @@ int main(int argc, char** argv)
     return -1;
   }
 
-  char check_cpu_gpu = 0;
+  char check_cpu_gpu = 1;
   unsigned itrial;
   for (itrial=0; itrial<1; itrial++)
   {
@@ -303,9 +322,15 @@ int main(int argc, char** argv)
       return -1;
     }
 
-    mopsr_tie_beam (stream, d_in, d_tb, d_tb_phasors, in_block_size, nant);
+    if (verbose > 1)
+      fprintf(stderr, "io_block: mopsr_tie_beam()\n");
+    mopsr_tie_beam (stream, d_in, d_tb, d_tb_phasors, in_block_size, nant, nchan);
     if (check_cpu_gpu)
-      mopsr_tie_beams_cpu (h_in, h_out_cpu, h_tb_phasors, in_block_size, nant);
+    {
+      if (verbose > 1)
+        fprintf(stderr, "io_block: mopsr_tie_beams_cpu()\n");
+      mopsr_tie_beams_cpu (h_in, h_out_cpu, h_tb_phasors, in_block_size, nant, nchan);
+    }
 
     if (verbose > 1)
       fprintf(stderr, "io_block: cudaMemcpyAsync(%p, %p, %"PRIu64", D2H)\n",
@@ -328,23 +353,16 @@ int main(int argc, char** argv)
     ptr = (int8_t *) h_in;
     int8_t re8, im8;
 
+    uint64_t ival = 0;
     for (isamp=0; isamp<nsamp; isamp++)
     {
-      ptr = ((int8_t *) h_in) + (2 * isamp);
-      for (iant=0; iant<nant; iant++)
+      for (ichan=0; ichan<nchan; ichan++)
       {
-        re8 = ptr[0];
-        im8 = ptr[1];
-
-        //if (isamp < 3)
-        //  fprintf (stderr, "%d=(%d,%d) ", iant, re8, im8);
-        ptr += 2 * nsamp;
+        float percent_diff = (cpu_ptr[ival] - gpu_ptr[ival]) / cpu_ptr[ival];
+        if (percent_diff > 1e-4)
+          fprintf (stderr, "[%d][%d] mismatch percent_diff=%f (cpu==%f != gpu==%f)\n", ichan, isamp, percent_diff * 100, cpu_ptr[ival], gpu_ptr[ival]);
+        ival++;
       }
-
-      if (cpu_ptr[isamp] != gpu_ptr[isamp])
-        fprintf (stderr, "mismatch on isamp=%d\n", isamp);
-      //if (isamp < 3)
-      //  fprintf (stderr, "cpu=(%f, %f) gpu=(%f,%f)\n", creal(cpu_ptr[isamp]), cimag(cpu_ptr[isamp]), creal(gpu_ptr[isamp]), cimag(gpu_ptr[isamp]));
     } 
   }
 
@@ -378,12 +396,13 @@ int main(int argc, char** argv)
 }
 
 // simpler CPU version
-int mopsr_tie_beams_cpu (void * h_in, void * h_out, void * h_tb_phasors, uint64_t nbytes, unsigned nant)
+int mopsr_tie_beams_cpu (void * h_in, void * h_out, void * h_tb_phasors, uint64_t nbytes, unsigned nant, unsigned nchan)
 {
   unsigned ndim = 2;
 
   // data is ordered in ST order
-  uint64_t nsamp = nbytes / (nant * ndim);
+  uint64_t nsamp = nbytes / (nchan * nant * ndim);
+  uint64_t nsampant = nbytes / (nchan * ndim);
 
   complex float * phasors = (complex float *) h_tb_phasors;
 
@@ -395,21 +414,23 @@ int mopsr_tie_beams_cpu (void * h_in, void * h_out, void * h_tb_phasors, uint64_
 
   complex float val, beam_sum, phasor;
 
-  unsigned iant;
+  unsigned ichan, iant;
   uint64_t isamp;
 
-  for (isamp=0; isamp<nsamp; isamp++)
+  for (ichan=0; ichan<nchan; ichan++)
   {
-    beam_sum = 0 + 0 * I;
-    for (iant=0; iant<nant; iant++)
+    for (isamp=0; isamp<nsamp; isamp++)
     {
-      // unpack this sample and antenna
-      val16 = in16[iant*nsamp + isamp];
-      val = ((float) val8[0]) + ((float) val8[1]) * I;
+      beam_sum = 0 + 0 * I;
+      for (iant=0; iant<nant; iant++)
+      {
+        // unpack this sample and antenna
+        val16 = in16[(ichan*nsampant) + (iant*nsamp) + isamp];
+        val = ((float) val8[0]) + ((float) val8[1]) * I;
 
-      beam_sum = (val * phasors[iant]) + beam_sum;
-      //beam_sum = val + beam_sum;
+        beam_sum = (val * phasors[ichan*nant+iant]) + beam_sum;
+      }
+      ou[isamp*nchan+ichan] = beam_sum;
     }
-    ou[isamp] = beam_sum;
   }
 }
