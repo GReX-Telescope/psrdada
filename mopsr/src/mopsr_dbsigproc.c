@@ -32,6 +32,7 @@ void usage()
            "mopsr_dbsigproc [options] start_beam total_nbeam\n"
            " -b <core>    bind compuation to CPU core\n"
            " -k <key>     DADA key for input\n"
+           " -r <nbit>    requantise from 8-bit to n-bit\n"
            " -s           1 transfer, then exit\n"
            " -z           use zero copy transfers\n"
            " -v           verbose mode\n"
@@ -59,6 +60,8 @@ typedef struct {
 
   unsigned int ndim;
 
+  unsigned int nbit_out;
+
   float freq;
 
   float bw;
@@ -79,7 +82,7 @@ typedef struct {
 
 } mopsr_dbsigproc_t;
 
-#define DADA_DBSIGPROC_INIT { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", 0, 0, 0, 0 }
+#define DADA_DBSIGPROC_INIT { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", 0, 0, 0, 0 }
 
 /*! Function that opens the data transfer target */
 int dbsigproc_open (dada_client_t* client)
@@ -173,6 +176,13 @@ int dbsigproc_open (dada_client_t* client)
     multilog (log, LOG_ERR, "open: header with no NBIT\n");
     return -1;
   }
+  if ((ctx->nbit != 8) && (ctx->nbit != 32))
+  {
+    multilog (log, LOG_ERR, "input NBIT=%u, must be 8 or 32\n", ctx->nbit);
+    return -1;
+  }
+  if (ctx->nbit == 32)
+    ctx->nbit_out = 32;
 
   if (ascii_header_get (client->header, "NDIM", "%u", &(ctx->ndim)) != 1)
   {           
@@ -245,7 +255,7 @@ int dbsigproc_open (dada_client_t* client)
   nifs = 1;
 
   // number of output bits
-  obits = ctx->nbit;
+  obits = ctx->nbit_out;
 
   // sampling time
   tsamp = ctx->tsamp / 1e6;
@@ -267,7 +277,10 @@ int dbsigproc_open (dada_client_t* client)
     // write ascii header to file 
     sprintf (buffer, "BEAM_%03d/obs.header", ctx->start_beam + i);
     ctx->fptrs[i] = fopen (buffer, "w");
-    size_t header_len = strlen (client->header) + 1;
+    size_t header_len = strlen (client->header);
+    client->header[header_len] = '\n';
+    header_len++;
+    client->header[header_len] = '\0';
     fwrite (client->header, header_len, 1, ctx->fptrs[i]);
     fclose (ctx->fptrs[i]);
 
@@ -286,7 +299,7 @@ int dbsigproc_open (dada_client_t* client)
     // TODO update the source positions for each beam!
   }
 
-  ctx->out_bufsz = ctx->block_size / ctx->nbeam;
+  ctx->out_bufsz = ctx->block_size / (ctx->nbeam * (ctx->nbit / ctx->nbit_out));
   ctx->out = malloc (ctx->out_bufsz);
 
   client->transfer_bytes = transfer_size; 
@@ -368,24 +381,58 @@ int64_t dbsigproc_write_block_SFT_to_TF (dada_client_t* client, void* in_data, u
   unsigned i, ichan, ochan, isamp;
   unsigned nchansamp = ctx->nchan * nsamp;
 
+  int samp_per_byte = 8 / ctx->nbit_out;
+
   if (ctx->nbit == 8)
   {
-    uint8_t * in = (uint8_t *) in_data;
-    uint8_t * out = (uint8_t *) ctx->out;
-
-    for (i=0; i<ctx->nbeam; i++)
+    if (ctx->nbit_out == 8)
     {
-      // we need to invert the channel ordering and change a beam from SFT to SxTF
-      for (ichan=0; ichan<ctx->nchan; ichan++)
+      uint8_t * in = (uint8_t *) in_data;
+      uint8_t * out = (uint8_t *) ctx->out;
+      for (i=0; i<ctx->nbeam; i++)
       {
-        ochan = ctx->nchan - (ichan+1); 
-        for (isamp=0; isamp<nsamp; isamp++)
+        // we need to invert the channel ordering and change a beam from SFT to SxTF
+        for (ichan=0; ichan<ctx->nchan; ichan++)
         {
-          out[isamp * ctx->nchan + ochan] = in[ichan * nsamp + isamp];
+          ochan = ctx->nchan - (ichan+1);
+          for (isamp=0; isamp<nsamp; isamp++)
+          {
+            out[isamp * ctx->nchan + ochan] = in[ichan * nsamp + isamp];
+          }
         }
+        fwrite (out, ctx->out_bufsz, 1, ctx->fptrs[i]);
+        in += nchansamp;
       }
-      fwrite (out, ctx->out_bufsz, 1, ctx->fptrs[i]);
-      in += nchansamp;
+    }
+    else
+    {
+      const int nsamp_per_byte = 8 / ctx->nbit_out;
+      const int nchan_per_byte = ctx->nchan / nsamp_per_byte;
+      const unsigned scale = (unsigned) powf(2, (ctx->nbit - ctx->nbit_out));
+
+      int bit_counter = 0;
+
+      uint8_t * in = (uint8_t *) in_data;
+      uint8_t * out = (uint8_t *) ctx->out;
+      for (i=0; i<ctx->nbeam; i++)
+      {
+        // we need to invert the channel ordering and change a beam from SFT to SxTF
+        for (ichan=0; ichan<ctx->nchan; ichan++)
+        {
+          bit_counter = ichan % (samp_per_byte);
+          ochan = ctx->nchan - (ichan+1);
+          const int ochan_per_byte = ochan / nsamp_per_byte;
+          for (isamp=0; isamp<nsamp; isamp++)
+          {
+            unsigned result = in[ichan * nsamp + isamp] / scale;
+            if (bit_counter == 0)
+              out[isamp * nchan_per_byte + ochan_per_byte] = (unsigned char) 0; 
+            out[isamp * nchan_per_byte + ochan_per_byte] += ((unsigned char) result) << (bit_counter*ctx->nbit_out);
+          }
+        }
+        fwrite (out, ctx->out_bufsz, 1, ctx->fptrs[i]);
+        in += nchansamp;
+      }
     }
   }
   else if (ctx->nbit == 32)
@@ -450,7 +497,10 @@ int main (int argc, char **argv)
 
   int arg = 0;
 
-  while ((arg=getopt(argc,argv,"b:k:hsvz")) != -1)
+  // by default output 8-bit data
+  int nbit_out = 8;
+
+  while ((arg=getopt(argc,argv,"b:k:hr:svz")) != -1)
   {
     switch (arg) 
     {
@@ -487,6 +537,15 @@ int main (int argc, char **argv)
         usage();
         return EXIT_SUCCESS;
 
+      case 'r':
+        nbit_out = atoi(optarg);
+        if (!((nbit_out == 1) || (nbit_out == 2) || (nbit_out == 4)))
+        {
+          fprintf (stderr, "ERROR: output nbit must be 1, 2 or 4\n");
+          return EXIT_FAILURE;
+        }
+        break;
+
       case 's':
         single_transfer = 1;
         break;
@@ -511,8 +570,9 @@ int main (int argc, char **argv)
       multilog(log, LOG_WARNING, "main: failed to bind to core %d\n", core);
 
   dbsigproc.verbose = verbose;
+  dbsigproc.nbit_out = nbit_out;
 
-  int num_args = argc-optind;
+  int num_args = argc - optind;
   int i = 0;
       
   if (num_args != 2)
