@@ -49,6 +49,7 @@ void usage()
      " -c channel      channel to use [default 0]\n"
      " -d delay        number of samples to delay files by [default 0]\n"
      " -f fractional   fractional sample to delay files by [default 0]\n"
+     " -g dir          read config files from dir\n"
      " -D device       pgplot device name\n"
      " -l ntap         number of FIR taps\n"
      " -n npt          number of points in cross-correlation signal [default 256]\n"
@@ -70,6 +71,7 @@ int main (int argc, char **argv)
 
   unsigned block_size = 1048576;
 
+  char * config_dir = 0;
 
   unsigned int plot_bin = -1;
 
@@ -81,7 +83,7 @@ int main (int argc, char **argv)
 
   int ntap = 15;
 
-  while ((arg=getopt(argc,argv,"b:c:d:f:D:hl:n:p:v")) != -1)
+  while ((arg=getopt(argc,argv,"b:c:d:f:g:D:hl:n:p:v")) != -1)
   {
     switch (arg)
     {
@@ -99,6 +101,10 @@ int main (int argc, char **argv)
 
       case 'f':
         fractional_delay = atof(optarg);
+        break;
+
+      case 'g':
+        config_dir = strdup(optarg);
         break;
 
       case 'D':
@@ -127,6 +133,9 @@ int main (int argc, char **argv)
         return 0;
     } 
   }
+
+  if (config_dir == 0)
+    config_dir = "/home/dada/linux_64/share";
 
   // check and parse the command line arguments
   if (argc-optind != 2)
@@ -304,9 +313,9 @@ int main (int argc, char **argv)
   }                 
 
   float start_md_angle;
-  if (ascii_header_get (header1, "START_MD_ANGLE", "%f", &start_md_angle) != 1)
+  if (ascii_header_get (header1, "MD_ANGLE", "%f", &start_md_angle) != 1)
   {
-    fprintf(stderr, "could not read START_MD_ANGLE from header1\n");
+    fprintf(stderr, "could not read MD_ANGLE from header1\n");
     start_md_angle = 0;
   }
 
@@ -318,7 +327,7 @@ int main (int argc, char **argv)
 
   unsigned iblock;
   const unsigned nblocks = ((file1_size - 4096) / nchan) / block_size;
-  fprintf (stderr, "main: nblocks=%u\n", nblocks);
+  fprintf (stderr, "main: block_size=%u nblocks=%u\n", block_size, nblocks);
 
   // width of 1 sample
   size_t samp_stride = nchan * MOPSR_NDIM;
@@ -335,7 +344,7 @@ int main (int argc, char **argv)
   lseek (fd2, offset, SEEK_CUR);
   lseek (fd1, offset, SEEK_CUR);
   */
-  /*
+
   offset = delay * samp_stride;
   if (delay > 0)
   {
@@ -346,7 +355,6 @@ int main (int argc, char **argv)
   {
     lseek (fd1, offset, SEEK_CUR);
   }
-  */
 
   size_t nbytes;
   nbytes = sizeof(fftwf_complex) * npt;
@@ -414,7 +422,7 @@ int main (int argc, char **argv)
   unsigned pt, i;
 
   double bytes_per_second = (double) (1000000 / tsamp) * MOPSR_NDIM;
-  fprintf (stderr, "bytes_per_second=%lf\n", bytes_per_second);
+  fprintf (stderr, "bytes_per_second=%lf seconds_per_pt=%f \n", bytes_per_second, seconds_per_pt);
 
   double total_bytes_read = 0;
 
@@ -429,8 +437,10 @@ int main (int argc, char **argv)
 
   // read the signal paths file
   int npfbs;
-  const char * signal_paths_file = "/home/dada/linux_64/share/mopsr_signal_paths.txt";
+  char signal_paths_file[1024];
+  sprintf (signal_paths_file, "%s/mopsr_signal_paths.txt", config_dir);
   mopsr_pfb_t * pfbs = read_signal_paths_file (signal_paths_file, &npfbs);
+  fprintf (stderr, "signal_paths=%s, npfbs=%d\n", signal_paths_file, npfbs);
 
   const unsigned nant= 2;
   unsigned iant;
@@ -490,15 +500,15 @@ int main (int argc, char **argv)
   fprintf (stderr, "baseline = %lf\n", baseline);
 
   double mod0_delay_secs = modules[0].fixed_delay;
-  double mod0_delay_fractional = mod0_delay_secs / (1.28 / 1000000);
+  double mod0_delay_fractional = mod0_delay_secs / (tsamp / 1000000);
   fprintf (stderr, "mod0: delay=%le secs = %7.5lf samples\n", mod0_delay_secs, mod0_delay_fractional);
 
   double mod1_delay_secs = modules[1].fixed_delay;
-  double mod1_delay_fractional = mod1_delay_secs / (1.28 / 1000000);
+  double mod1_delay_fractional = mod1_delay_secs / (tsamp / 1000000);
   fprintf (stderr, "mod1: delay=%le secs = %7.5lf samples\n", mod1_delay_secs, mod1_delay_fractional);
   //fractional_delay = (float) mod1_delay_fractional;
 
-  const double channel_bw = 0.78125;
+  const double channel_bw = 1.0 / tsamp;
   const double base_freq = 800 - (channel_bw/2);
 
   unsigned ichan = 0;
