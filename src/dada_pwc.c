@@ -303,7 +303,8 @@ int dada_pwc_parse_bytes_per_second (dada_pwc_t* primary,
   }
 
   /* IMPORTANT: TSAMP is the sampling period in microseconds */
-  bits_per_second = primary->bits_per_sample * nchan * nant * ((uint64_t)(1e6/sampling_interval));
+  uint64_t bits_per_megasample = (uint64_t) 1e6 * primary->bits_per_sample * nchan * nant;
+  bits_per_second = (uint64_t) (bits_per_megasample / (double) sampling_interval);
 
   primary->bytes_per_second = bits_per_second / 8;
 
