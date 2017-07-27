@@ -3,7 +3,6 @@
 #include <curand_kernel.h>
 #include <inttypes.h>
 #include <stdio.h>
-#include <cub/block/block_radix_sort.cuh>
 #include <assert.h>
 
 #include "mopsr_cuda.h"
@@ -1879,7 +1878,6 @@ void hires_delay_fractional_sk_scale (cudaStream_t stream,
 #ifdef MEDIAN_FILTER
   /////////////////////////////////////////////////////////
   // compute the power limits based on the S1 and S2 values
-  // this is required until we have an adaptive sorting method... (sigh cub)
 #ifdef _GDEBUG
   fprintf (stderr, "ndat=%lu ndat_sk=%lu nsums=%u\n", ndat, ndat_sk, nsums);
   fprintf (stderr, "s1_idx=%u s1_count=%u\n", s1_idx, s1_count);
