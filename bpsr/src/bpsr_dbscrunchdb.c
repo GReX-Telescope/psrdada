@@ -21,12 +21,6 @@
 
 int quit_threads = 0;
 
-int compare (const void * a, const void * b);
-int compare (const void * a, const void * b)
-{
-  return ( *(float *)a - *(float *)b );
-}
-
 int64_t dbscrunchdb_write_block_TFP_to_TF (dada_client_t *, void *, uint64_t, uint64_t);
 int64_t dbscrunchdb_write_block_TFP_to_TF_scaled (dada_client_t *, void *, uint64_t, uint64_t);
 
@@ -328,12 +322,21 @@ int dbscrunchdb_close (dada_client_t* client, uint64_t bytes_written)
   
   multilog_t* log = client->log;
 
+  uint64_t nclipped_total = 0;
+  uint64_t namps_total = ctx->bytes_out;
+
   unsigned ichan, isig, i;
   for (ichan=0; ichan<ctx->nchan; ichan++)
   {
-    if (ctx->nclipped[ichan] > 0 && ctx->verbose)
+    nclipped_total += ctx->nclipped[ichan];
+    if (ctx->nclipped[ichan] > 0 && ctx->verbose > 1)
       multilog (log, LOG_INFO, "close: samples from chan=%u that exceed power limits=%"PRIu64"\n", ichan, ctx->nclipped[ichan]);
   }
+
+  float percent_clipped = ((float) nclipped_total / (float) namps_total) * 100;
+
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "close: nclipped total=%lu of %lu (%5.3f)\n", nclipped_total, ctx->bytes_out, percent_clipped);
 
   if (ctx->verbose)
     multilog (log, LOG_INFO, "close: bytes_in=%"PRIu64", bytes_out=%"PRIu64"\n",
@@ -430,8 +433,11 @@ int64_t dbscrunchdb_write_block_TFP_to_TF_scaled (dada_client_t * client, void *
   const float digi_min = 0;
   const float digi_max = 255;
 
+  if (ctx->verbose > 1)
+    multilog (log, LOG_INFO, "write_block_TFP_to_TF: ctx->nsamps_integrated=%lu, ctx->nsamps_to_integrate=%lu\n", ctx->nsamps_integrated, ctx->nsamps_to_integrate);
+
   // if the input power levels of the pscrunch data are to be measured 
-  while ((!ctx->global_rescale) && (ctx->nsamps_integrated < ctx->nsamps_to_integrate))
+  if ((!ctx->global_rescale) && (ctx->nsamps_integrated < ctx->nsamps_to_integrate))
   {
     ctx->nsamps_integrated += nsamp;
 
@@ -465,7 +471,7 @@ int64_t dbscrunchdb_write_block_TFP_to_TF_scaled (dada_client_t * client, void *
       else
         ctx->scales[ichan] = 1.0 / sqrt(variance);
 
-      if (ctx->verbose)
+      if (ctx->verbose > 2)
         multilog (log, LOG_INFO, "write_block_TFP_to_TF: channel=%u mean=%f "
                   "variance=%f scale=%f\n", ichan, mean, variance, ctx->scales[ichan]);
 
@@ -513,7 +519,6 @@ int64_t dbscrunchdb_write_block_TFP_to_TF_scaled (dada_client_t * client, void *
           ctx->nclipped[ichan]++;
         }
 
-        // do allow for reverse channel ordering
         out[ichan] = (uint8_t) result;
 
         pscr   = (float) in[idat + 1] + (float) in[idat + 3];
@@ -530,7 +535,7 @@ int64_t dbscrunchdb_write_block_TFP_to_TF_scaled (dada_client_t * client, void *
         }
 
         // do allow for reverse channel ordering
-        out[ichan+1] = (uint8_t) result;
+        out[ichan] = (uint8_t) result;
 
         idat += (2 * ctx->npol);
       }
@@ -622,7 +627,13 @@ int64_t dbscrunchdb_write_block_TFP_to_TF (dada_client_t * client, void *in_data
       // reverse the channel ordering
       for (ichan=0; ichan<ctx->nchan; ichan++)
       {
-        out[ichan] = (uint8_t) (ctx->sums[ichan] / scr_factor);
+        float decimated = rintf (ctx->sums[ichan] / scr_factor);
+        if (decimated > 255)
+        {
+          ctx->nclipped[ichan]++;
+          decimated = 255;
+        }
+        out[ichan] = (uint8_t) decimated;
       }
       out += ctx->nchan; 
     }
@@ -740,6 +751,9 @@ int main (int argc, char **argv)
 
   ctx->global_rescale = (global_rescale == 0x11);
 
+  if (ctx->verbose)
+    fprintf (stderr, "bpsr_dbscrunchdb: global_rescale=%d\n", ctx->global_rescale);
+
   int num_args = argc-optind;
   int i = 0;
       
@@ -823,7 +837,10 @@ int main (int argc, char **argv)
 
   if (zero_copy)
   {
-    client->io_block_function = dbscrunchdb_write_block_TFP_to_TF;
+    if (ctx->indiv_rescale || ctx->global_scale)
+      client->io_block_function = dbscrunchdb_write_block_TFP_to_TF_scaled;
+    else
+      client->io_block_function = dbscrunchdb_write_block_TFP_to_TF;
   }
   else
   {
