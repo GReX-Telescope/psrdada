@@ -25,7 +25,7 @@ BEGIN {
   $VERSION = '1.00';
 
   @ISA         = qw(Exporter AutoLoader);
-  @EXPORT      = qw(&main);
+  @EXPORT      = qw(&main &computeDBSize);
   %EXPORT_TAGS = ( );     # eg: TAG => [ qw!name1 name2! ],
 
   # your exported package globals go here,
@@ -50,6 +50,7 @@ our $log_dir;
 our $host : shared;
 our $user : shared;
 our %cfg;
+our %site_cfg;
 
 #
 # non-exported package globals go here
@@ -87,6 +88,7 @@ $log_dir = "";
 $host = "";
 $user = "";
 %cfg = ();
+%site_cfg = ();
 
 #
 # initialize other variables
@@ -132,6 +134,7 @@ sub main() {
     return 1;
   }
 
+  %site_cfg       = Dada::readCFGFileIntoHash($cfg{"CONFIG_DIR"}."/site.cfg", 0);
   my $log_file       = $log_dir."/".$daemon_name.".log";;
   my $pid_file       = $control_dir."/".$daemon_name.".pid";
   my $quit_file      = $control_dir."/".$daemon_name.".quit";
@@ -686,7 +689,8 @@ sub getDBList($)
   {
     foreach $db_id ( keys %{ $pwcs{$pwc}{"dbs"} } )
     {
-      $key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc, $num_pwc, $db_id);
+      # $key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $pwc, $num_pwc, $db_id);
+      $key = $pwcs{$pwc}{"dbs"}{$db_id}{"key"};
       if ($db_keys == "")
       {
         $db_keys = $key;
@@ -740,26 +744,45 @@ sub initDBs($\@)
   
       if ($valid_db_id)
       {
-        my $key = $pwcs{$pwc}{"dbs"}{$db_id};
-        my $bufsz = $cfg{"BLOCK_BUFSZ_".$db_id};
-        my $nbufs = $cfg{"BLOCK_NBUFS_".$db_id};
-        my $nread = $cfg{"BLOCK_NREAD_".$db_id};
-        my $cmd = "dada_db -k ".lc($key)." -b ".$bufsz." -n ".$nbufs." -r ".$nread." -l";
-        if (defined $cfg{"BLOCK_PAGE_".$db_id})
+        my $key   = $pwcs{$pwc}{"dbs"}{$db_id}{"key"};
+        my $bufsz = $pwcs{$pwc}{"dbs"}{$db_id}{"bufsz"};
+        my $nbufs = $pwcs{$pwc}{"dbs"}{$db_id}{"nbufs"};
+        my $nread = $pwcs{$pwc}{"dbs"}{$db_id}{"nread"};
+        my $page  = $pwcs{$pwc}{"dbs"}{$db_id}{"page"};
+        my $numa  = $pwcs{$pwc}{"dbs"}{$db_id}{"numa"};
+
+        # check if the DB already exists
+        my $cmd = "ipcs | grep 0x0000".$key." | wc -l";
+        Dada::logMsg(1, $dl, "initDBs: pwc=".$pwc." cmd=".$cmd);
+        my ($tmp_result,$tmp_response) = Dada::mySystem($cmd);
+        Dada::logMsg(1, $dl, "initDBs: ".$tmp_result." ".$tmp_response);
+        if (($tmp_result eq "ok") && ($tmp_response eq "0"))
         {
-          if ($cfg{"BLOCK_PAGE_".$db_id} eq "true")
+          $cmd = "dada_db -a ".$site_cfg{"HDR_SIZE"}." -k ".lc($key)." -b ".$bufsz." -n ".$nbufs." -r ".$nread." -l";
+          if ($page eq "true")
           {
             $cmd .= " -p";
           }
-        }
-        Dada::logMsg(1, $dl, "initDBs: pwc=".$pwc." cmd=".$cmd);
-        my ($tmp_result,$tmp_response) = Dada::mySystem($cmd);
-        Dada::logMsg(2, $dl, "initDBs: ".$tmp_result." ".$tmp_response);
 
-        if ($tmp_result eq "fail") {
-          $result = "fail";
+          if ($numa ne "-1")
+          {
+            $cmd .= " -c ".$cfg{"BLOCK_NUMA_".$db_id};
+          }
+
+          Dada::logMsg(1, $dl, "initDBs: pwc=".$pwc." cmd=".$cmd);
+          my ($tmp_result,$tmp_response) = Dada::mySystem($cmd);
+          Dada::logMsg(2, $dl, "initDBs: ".$tmp_result." ".$tmp_response);
+
+          if ($tmp_result eq "fail") {
+            $result = "fail";
+          }
+          $response = $response.$tmp_response."<BR>";
         }
-        $response = $response.$tmp_response."<BR>";
+        else
+        {
+          $result = "fail";
+          $response = $response." DB ".$key." already existed\n";   
+        }
       }
     }
   }
@@ -770,6 +793,21 @@ sub initDBs($\@)
     $response = "No matching DBs found";
   }
   return ($result, $response);
+}
+
+################################################################################
+#
+# compute the size of data block based on the parameters of the signal
+#
+sub computeDBSize($$$$$$$)
+{
+  my ($nsamp, $nchan, $npol, $ndim, $nbit, $nant, $nbeam) = @_;
+
+  print "nsamp=".$nsamp." nchan=".$nchan." npol=".$npol." ndim=".$ndim." nant=".$nant." nbeam=".$nbeam." nbit=".$nbit."\n";
+
+  my $size = ($nsamp * $nchan * $npol * $ndim * $nant * $nbeam * $nbit) / 8;
+
+  return $size;
 }
 
 
@@ -810,7 +848,7 @@ sub destroyDBs($\@)
 
       if ($valid_db_id) 
       {
-        my $key = $pwcs{$pwc}{"dbs"}{$db_id};
+        my $key = $pwcs{$pwc}{"dbs"}{$db_id}{"key"};
         my $cmd = "dada_db -k ".lc($key)." -d";
         Dada::logMsg(2, $dl, "destroyDBs: pwc=".$pwc." cmd=".$cmd);
         my ($tmp_result,$tmp_response) = Dada::mySystem($cmd);
@@ -837,7 +875,6 @@ sub destroyDBs($\@)
 #
 sub stopDaemon($$;$$) 
 {
-    
   (my $pwc_to_stop, my $daemon, my $timeout=10, my $kill_after_timeout=1) = @_;
   
   # by default affect all scripts on this host  
@@ -865,7 +902,7 @@ sub stopDaemon($$;$$)
   }
   elsif ($script =~ m/.py$/)
   {
-    $pgrep = "^python.*".$script;
+    $pgrep = "^.*python.*".$script;
   }
 
   # if we have specified a PWC to affect, append it as the first command line arguement
@@ -880,13 +917,13 @@ sub stopDaemon($$;$$)
     
   my $counter = $timeout;
   my $running = 1;
-  my $ps_cmd = "pgrep -u ".$user." -f '".$pgrep."'";
+  my $ps_cmd = "pgrep -u ".$user." -l -f '".$pgrep."' | grep -v 'sh -c'";
 
   while ($running && ($counter > 0)) 
   {
-    Dada::logMsg(2, $dl, "stopDaemon: ".$ps_cmd);
+    Dada::logMsg(1, $dl, "stopDaemon: ".$ps_cmd);
     ($result, $response) = Dada::myShell($ps_cmd);
-    Dada::logMsg(3, $dl, "stopDaemon: ".$result." ".$response);
+    Dada::logMsg(1, $dl, "stopDaemon: ".$result." ".$response);
     if ($result eq "ok")
     {
       Dada::logMsg(0, $dl, "daemon ".$daemon." still running: ".$response);
@@ -1000,14 +1037,14 @@ sub stopDaemons($) {
         }
         elsif ($script =~ m/.py$/)
         {
-          $pgrep = "^python.*".$script;
+          $pgrep = "^.*python.*".$script;
         }
         else
         {
           return ("fail", "could not identify suffix for ".$d)
         }
 
-        $cmd = "pgrep -u ".$user." -l -f '".$pgrep.$p_add."'";
+        $cmd = "pgrep -u ".$user." -l -f '".$pgrep.$p_add."' | grep -v 'sh -c'";
         ($result, $response) = Dada::myShell($cmd);
         if ($result eq "ok")
         {
@@ -1109,9 +1146,9 @@ sub startDaemons($$$) {
           if ($daemon_result eq "ok")
           {
             $cmd = $daemon_response." ".$pwc." ".$args;
-            Dada::logMsg(2, $dl, "startDaemons: ".$cmd);
+            Dada::logMsg(1, $dl, "startDaemons: ".$cmd);
             ($daemon_result, $daemon_response) = Dada::mySystem($cmd);
-            Dada::logMsg(3, $dl, "startDaemons: ".$daemon_result.":".$daemon_response);
+            Dada::logMsg(1, $dl, "startDaemons: ".$daemon_result.":".$daemon_response);
           }
           else
           {
@@ -1145,6 +1182,7 @@ sub getDaemonName($)
   }
   else
   {
+    Dada::logMsg(1, $dl, "getDaemonName: could not identify script for ".$d);
     return ("fail", "could not identify script for ".$d);
   }
 
@@ -1251,17 +1289,27 @@ sub daemonsThread() {
       # determine the type of daemon (perl or python)
 
       ($result, $response) = getDaemonName($d);
-      Dada::logMsg(1, $dl, "daemonsThread: ".$d." -> ".$response);
+      Dada::logMsg(2, $dl, "daemonsThread: ".$d." -> ".$response." [".$result."]");
       if ($result eq "ok")
       {
         if ($response =~ m/.pl$/)
         {
           $pgreps{$d} = "^perl.*".$response;
+          Dada::logMsg(2, $dl, "daemonsThread: pgreps{".$d."}=[".$pgreps{$d}."]");
         }
-        if ($response=~ m/.py$/)
+        elsif ($response=~ m/.py$/)
         {
-          $pgreps{$d} = "^python.*".$response;
+          $pgreps{$d} = "^.*python.*".$response;
+          Dada::logMsg(2, $dl, "daemonsThread: pgreps{".$d."}=[".$pgreps{$d}."]");
         }
+        else
+        {
+          Dada::logMsg(1, $dl, "daemonsThread: could not match ".$response." to .py\$ or .pl\$");
+        }
+      }
+      else
+      {
+        Dada::logMsg(1, $dl, "daemonsThread: getDaemonName failed: ".$response);
       }
     }
   }
@@ -1295,14 +1343,17 @@ sub daemonsThread() {
             {
               $cmd = "pgrep -u ".$user." -f -l '".$pgreps{$d}." ".$pwc."'";
             }
-            Dada::logMsg(3, $dl, "daemonsThread [daemon]: ".$cmd);
+            $cmd .= " | grep -v 'sh -c'";
+            Dada::logMsg(2, $dl, "daemonsThread [daemon]: ".$cmd);
             ($result, $response) = Dada::myShell($cmd);
+            Dada::logMsg(3, $dl, "daemonsThread [daemon]: ".$result." ".$response);
             if (($result eq "ok") && ($response ne "")) 
             {
               $pwc_running{$pwc}{$d} = 1;
             } 
             else 
             {
+              Dada::logMsg(3, $dl, "daemonsThread [daemon] \$pwc_running{".$pwc."}{".$d."} = 0 result=".$result." response=".$response);
               $pwc_running{$pwc}{$d} = 0;
             }
 
@@ -1318,6 +1369,7 @@ sub daemonsThread() {
           }
           else
           {
+             Dada::logMsg(1, $dl, "daemonsThread [daemon]: [".$d."] did not exist in \$pgreps{}");
             $pwc_running{$pwc}{$d} = 0;
           }
         }
@@ -1381,7 +1433,7 @@ sub daemonsThread() {
           $db_id = "";
           foreach $db_id ( keys %{ $pwcs{$pwc}{"dbs"} } )
           {
-            $db_key = lc($pwcs{$pwc}{"dbs"}{$db_id});
+            $db_key = lc($pwcs{$pwc}{"dbs"}{$db_id}{"key"});
             if ($db_response =~ m/$db_key:ok/)
             {
               $xml .= "<buffer_".$db_id.">2</buffer_".$db_id.">";
@@ -1447,7 +1499,7 @@ sub dbThread()
     foreach $pwc (keys %pwcs) {
       foreach $db_id ( keys %{ $pwcs{$pwc}{"dbs"} } )
       {
-        my $key = $pwcs{$pwc}{"dbs"}{$db_id};
+        my $key = $pwcs{$pwc}{"dbs"}{$db_id}{"key"};
         push @dbs_to_report, lc($key);
       }
     }  
@@ -1479,11 +1531,11 @@ sub dbThread()
         {
           foreach $db_id ( keys %{ $pwcs{$pwc}{"dbs"} } )
           {
-            $key = $pwcs{$pwc}{"dbs"}{$db_id};
+            $key = $pwcs{$pwc}{"dbs"}{$db_id}{"key"};
             ($result, $nblocks, $nfull) = Dada::getDBStatus($key);
             $response .= $key.":".$result." ";
             $xml .= "<datablock pwc_id='".$pwc."' db_id='".$db_id."' key='".$key."' size='".$nblocks."'>".$nfull."</datablock>";
-            if (($nblocks > 0) && (($nfull / $nblocks) > 0.9))
+            if (($nblocks > 0) && (($nblocks - $nfull) <= 1))
             {
               Dada::logMsg(1, $dl, "dbThread: pwc_id=".$pwc." db_id=".$db_id." key=".$key." full_blocks=".$nfull." of ".$nblocks);
             }
