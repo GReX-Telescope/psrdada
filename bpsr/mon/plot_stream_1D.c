@@ -63,15 +63,15 @@ int plot_stream_1D(float x[], float y[], float y1[],
 
   if (isnan(min_y) || isnan(max_y) || (min_y == max_y))
   {
-    min_y = FLT_MAX;
-    max_y = -FLT_MAX;
+    min_y = 1e8;
+    max_y = -1e8;
     plot_y = 0;
   }
 
   if (isnan(min_y1) || isnan(max_y1) || (min_y1 == max_y1))
   {
-    min_y1 = FLT_MAX;
-    max_y1 = -FLT_MAX;
+    min_y1 = 1e8;
+    max_y1 = -1e8;
     plot_y1 = 0;
   }
 
@@ -106,6 +106,9 @@ int plot_stream_1D(float x[], float y[], float y1[],
 
   // initiate plot if display device selected 
   if(cpgbeg(0, inpdev, 1, 1) != 1) return -2;
+
+  // start buffering pgplot commands
+  cpgbbuf();
 
   // set resolution if pixels dimens selected
   if (width_pixels && height_pixels)
@@ -159,7 +162,10 @@ int plot_stream_1D(float x[], float y[], float y1[],
   }
 
   cpgsci(1);
-  cpgend();
+
+  // finish buffering pgplot commands
+  cpgebuf();
+  cpgclos();
 
   return 0;
 }
