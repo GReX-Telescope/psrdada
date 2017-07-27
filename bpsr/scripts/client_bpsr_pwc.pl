@@ -23,7 +23,6 @@ use strict;
 use threads;
 use threads::shared;
 
-sub pwcSrcLogger($);
 sub usage() 
 {
   print "Usage: ".basename($0)." PWC_ID\n";
@@ -153,7 +152,9 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
   if (!$quit_daemon)
   {
     msg(1, "INFO", "START ".$cmd);
-    ($result, $response) = Dada::mySystemPiped($cmd, $src_log_file, 0, "pwc", sprintf("%02d",$pwc_id), $daemon_name, "pwc");
+    ($result, $response) = Dada::mySystemPiped($cmd, $src_log_file, 0, 
+                                               "pwc", sprintf("%02d",$pwc_id),
+                                               $daemon_name, "pwc");
     msg(2, "INFO", "main: ".$result." ".$response);
     msg(1, "INFO", "END   ".$cmd);
     if (($result ne "ok") && (!$quit_daemon))
