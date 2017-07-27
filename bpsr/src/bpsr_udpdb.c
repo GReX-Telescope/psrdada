@@ -308,9 +308,6 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, int64_t* size)
       // If we are waiting for the "first" packet
       if ((ctx->expected_sequence_no == 0) && (data_received == 0)) 
       {
-
-        //multilog (log, LOG_INFO, "waiting for start: seq=%"PRIu64"\n", ctx->curr_sequence_no);
-
 #ifdef _DEBUG
         if ((ctx->curr_sequence_no < (ctx->prev_seq - 10)) && (ctx->prev_seq != 0)) {
           multilog(log, LOG_INFO, "packet num reset from %"PRIu64" to %"PRIu64"\n", ctx->prev_seq, ctx->curr_sequence_no);
@@ -321,6 +318,8 @@ void* udpdb_buffer_function (dada_pwc_main_t* pwcm, int64_t* size)
         // Condition for detection of a restart
         if (ctx->curr_sequence_no < ctx->max_sequence)
         {
+          multilog (log, LOG_INFO, "START: seq=%"PRIu64" raw=%"PRIu64"\n", ctx->curr_sequence_no, decode_header(ctx->sock->buf));
+
           if (ctx->verbose)
             multilog (log, LOG_INFO, "start on packet %"PRIu64"\n",ctx->curr_sequence_no);
 
