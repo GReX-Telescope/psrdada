@@ -113,8 +113,8 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
   $log_port          = $cfg{"SERVER_SYS_LOG_PORT"};
 
   my $r_user         = "bpsr";
-  my $r_host         = "192.168.3.11";
-  my $r_path         = "/lfs/raid0/bpsr/upload";
+  my $r_host         = "caspsr-raid0.atnf.csiro.au";
+  my $r_path         = "/lfs/raid1/bpsr/upload";
   my $r_module       = "bpsr_upload";
   my $a_dir          = $cfg{"CLIENT_ARCHIVE_DIR"};
   my $r_dir          = "";
@@ -137,7 +137,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
   my $j = 0;
 
   my $rsync_options = "-a --password-file=/home/bpsr/.ssh/raid0_rsync_pw --stats --no-g --chmod=go-ws ".
-                      "--exclude 'beam.finished' --exclude 'pred.tim'";
+                      "--exclude 'beam.finished' --exclude '*.cand' --exclude 'pred.tim'";
 
   if ($bwlimit > 0) 
   {
@@ -178,8 +178,8 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
   {
     @finished = ();
 
-    # look for observations marked beam.finished and more than 2 minutes old
-    $cmd = "find ".$a_dir."/".$beam." -mindepth 2 -maxdepth 2 -type f -mmin +2 -name 'beam.finished' -printf '\%h\n' | awk -F/ '{print \$(NF)}' | sort";
+    # look for observations marked beam.finished and more than 4 minutes old
+    $cmd = "find ".$a_dir."/".$beam." -mindepth 2 -maxdepth 2 -type f -mmin +4 -name 'beam.finished' -printf '\%h\n' | awk -F/ '{print \$(NF)}' | sort";
     msg(2, "INFO", "main: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     msg(3, "INFO", "main: ".$result." ".$response);
@@ -274,7 +274,10 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
             if ($output_lines[$j] =~ m/bytes\/sec/)
             {
               my @bits = split(/[\s]+/, $output_lines[$j]);
-              $mbytes_per_sec = $bits[6] / 1048576;
+              my $bytes_per_sec = $bits[6];
+              # replace commas with nothing
+              $bytes_per_sec =~ s/,//g;
+              $mbytes_per_sec = $bytes_per_sec / 1048576;
             }
           }
           my $data_rate = sprintf("%5.2f", $mbytes_per_sec)." MB/s";
