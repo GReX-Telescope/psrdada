@@ -45,7 +45,6 @@ our $sys_log_sock;
 our $src_log_port;
 our $src_log_sock;
 our $testing;
-our $hires;
 
 #
 # Initialize globals
@@ -63,11 +62,6 @@ $sys_log_sock = 0;
 $src_log_port = $cfg{"SERVER_SRC_LOG_PORT"};
 $src_log_sock = 0;
 $testing = 0;
-$hires = 0;
-if (($cfg{"CONFIG_NAME"} =~ m/320chan/) || ($cfg{"CONFIG_NAME"} =~ m/312chan/))
-{
-  $hires = 1;
-}
 
 # Check command line argument
 if ($#ARGV != 0)
@@ -177,10 +171,6 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
 
       # note all instances of dbib are bound to CPU core 5
       $cmd = "mopsr_dbib_FST -k ".$db_key." ".$send_id." ".$cfg{"CONFIG_DIR"}."/mopsr_cornerturn.cfg -s";
-      if ($hires)
-      {
-        $cmd = "/home/dada/hires/linux_64/bin/".$cmd;
-      }
 
       msg(1, "INFO", "START ".$cmd);
       ($result, $response) = Dada::mySystemPiped($cmd, $src_log_file, $src_log_sock, "src", sprintf("%02d",$pwc_id), $daemon_name, "muxsend");
@@ -266,14 +256,7 @@ sub controlThread($)
   ($result, $response) = Dada::killProcess($cmd, "mpsr");
   msg(3, "INFO" ,"controlThread: killProcess() ".$result." ".$response);
 
-  if ($hires)
-  {
-    $cmd = "^/home/dada/hires/linux_64/bin/mopsr_dbib_FST -k ".$db_key;
-  }
-  else
-  {
-    $cmd = "^mopsr_dbib_FST -k ".$db_key;
-  }
+  $cmd = "^mopsr_dbib_FST -k ".$db_key;
   msg(2, "INFO" ,"controlThread: killProcess(".$cmd.", mpsr)");
   ($result, $response) = Dada::killProcess($cmd, "mpsr");
   msg(3, "INFO" ,"controlThread: killProcess() ".$result." ".$response);

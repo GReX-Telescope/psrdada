@@ -143,9 +143,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$recv_id);
   # continuously run mopsr_ibdb for this PWC
   while (!$quit_daemon)
   {
-    #$cmd = "mopsr_ibdb_SFT -k ".$db_key." ".$recv_id." ".$cfg{"CONFIG_DIR"}."/mopsr_bp_cornerturn.cfg -s";
-    $cmd = "/home/dada/hires/linux_64/bin/mopsr_ibdb_SFT -k ".$db_key." ".$recv_id." ".$cfg{"CONFIG_DIR"}."/mopsr_bp_cornerturn.cfg -s";
-
+    $cmd = "mopsr_ibdb_SFT -k ".$db_key." ".$recv_id." ".$cfg{"CONFIG_DIR"}."/mopsr_bp_cornerturn.cfg -s";
     msg(1, "INFO", "START ".$cmd);
     ($result, $response) = Dada::mySystemPiped($cmd, $src_log_file, $src_log_sock, "src", sprintf("%02d",$recv_id), $daemon_name, "bp_recv");
     msg(1, "INFO", "END   ".$cmd." ".$result." ".$response);
@@ -213,8 +211,7 @@ sub controlThread($)
 
   my ($cmd, $result, $response);
 
-  #$cmd = "^mopsr_ibdb_SFT -k ".$db_key;
-  $cmd = "^/home/dada/hires/linux_64/bin/mopsr_ibdb_SFT -k ".$db_key;
+  $cmd = "^mopsr_ibdb_SFT -k ".$db_key;
   msg(2, "INFO" ,"controlThread: killProcess(".$cmd.", mpsr)");
   ($result, $response) = Dada::killProcess($cmd, "mpsr");
   msg(3, "INFO" ,"controlThread: killProcess() ".$result." ".$response);
