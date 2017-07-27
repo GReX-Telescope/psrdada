@@ -8,11 +8,16 @@
 #ifndef __MOPSR_DELAYS_H
 #define __MOPSR_DELAYS_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include "mopsr_def.h"
+
 #include <stdlib.h>
 #include <math.h>
 #include <time.h>
 #include <inttypes.h>
-#include <mopsr_def.h>
 #include <complex.h>
 
 // degrees to radians
@@ -57,7 +62,7 @@ typedef struct {
 
 typedef struct {
   // PFB ID (WG44 -> WG01 -> EG01 -> EG44)
-  char id[5];
+  char id[7];
   
   // 16 inputs per PFB each begin [E|W][\d\d]-\d
   char modules[MOPSR_MAX_MODULES_PER_PFB][6];
@@ -86,9 +91,7 @@ typedef struct delay_vals
 {
   unsigned  samples;         // integer samples to delay
   double    fractional;      // fractional samples to delay
-  double    fractional_ds;   // fractional samples to delay
   double    fringe_coeff;    // coefficient for complex fringe correction
-  double    fringe_coeff_ds; // coefficient for complex fringe correction
   double    tot_samps;       // total delay [samples]
   double    tot_secs;        // total delay [seconds]
 } mopsr_delay_t;
@@ -149,6 +152,12 @@ double ns_tilt (double ha_source, double dec_source, double md_tilt);
 double jer_delay(double ha_source, double dec_source,
              double tilt, double skew, double latitude);
 double calc_jer_delay (double RA, double DEC, struct timeval timestamp);
+double calc_doc_delay (double RA, double DEC, struct timeval timestamp);
+double doc_delay(double ha, double dec, double tilt, double skew, double latitude);
 
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

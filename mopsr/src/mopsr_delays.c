@@ -95,9 +95,10 @@ void sinc_filter_float (complex float * series_in, complex float * series_out,
   float *fptr;
   complex float *dptr;
   int ntaps_by_2 = ntaps/2;
+  const float filter_order = (float) ntaps - 1;
 
   //Only perform subsample delay
-  if (delay >= 1.0)
+  if (delay >= 1.0 || delay < -1.0)
   {
     fprintf (stderr, "delay must be between -1 and 1\n");
     return;
@@ -109,6 +110,7 @@ void sinc_filter_float (complex float * series_in, complex float * series_out,
   {
     x = (float) ii - delay;
     window = 0.54 - 0.46 * cos(2.0 * M_PI * (x+0.5) / ntaps);
+    //window = 0.54 - 0.46 * cos(2.0 * M_PI * x / filter_order);
     filter[ii] = sinc((ii-ntaps_by_2)-delay) * window;
   }
 
@@ -294,6 +296,23 @@ mopsr_pfb_t * read_signal_paths_file (const char * fname, int * npfb)
   }
 
   unsigned i, j;
+#ifdef HIRES
+  for (i=0; i<11; i++)
+  {
+    sprintf(pfbs[2*i+0].id,    "EG%02d-B", i+1);
+    sprintf(pfbs[2*i+1].id,    "EG%02d-R", i+1);
+    sprintf(pfbs[2*i+22+0].id, "WG%02d-B", i+1);
+    sprintf(pfbs[2*i+22+1].id, "WG%02d-R", i+1);
+
+    for (j=0; j<MOPSR_MAX_MODULES_PER_PFB; j++)
+    {
+      sprintf(pfbs[2*i+0].modules[j],    "-");
+      sprintf(pfbs[2*i+1].modules[j],    "-");
+      sprintf(pfbs[2*i+22+0].modules[j], "-");
+      sprintf(pfbs[2*i+22+1].modules[j], "-");
+    }
+  }
+#else
   for (i=0; i<12; i++)
   {
     sprintf(pfbs[i].id,    "EG%02d", i+1);
@@ -304,6 +323,7 @@ mopsr_pfb_t * read_signal_paths_file (const char * fname, int * npfb)
       sprintf(pfbs[i+12].modules[j], "-");
     }
   }
+#endif
 
   FILE * fptr = fopen (fname, "r");
   if (!fptr)
@@ -327,7 +347,11 @@ mopsr_pfb_t * read_signal_paths_file (const char * fname, int * npfb)
     }
     else
     {
+#ifdef HIRES
+      nscanned = sscanf (line, "%5s %6s %d", mod, pfb, &mod_idx);
+#else
       nscanned = sscanf (line, "%5s %4s %d", mod, pfb, &mod_idx);
+#endif
       if (nscanned != 3)
       {
         nscanned = sscanf (line, "%5s - -", mod);
@@ -487,7 +511,7 @@ double calc_jer_delay (double RA_curr, double DEC_curr, struct timeval timestamp
 
   double hour_angle = calc_ha_source (RA_curr, DEC_curr, timestamp);
 
-  double projected_delay = jer_delay (hour_angle, DEC_curr,
+  double projected_delay = doc_delay (hour_angle, DEC_curr,
                                       MOLONGLO_ARRAY_SLOPE,
                                       MOLONGLO_AZIMUTH_CORR,
                                       MOLONGLO_LATITUDE);
@@ -512,14 +536,15 @@ int calc_app_ha_dec (double RA_J2000, double DEC_J2000, struct timeval timestamp
   *DEC_app = dec;
 }
 
-
+// is_tracking: if the ring antenna are following the source
+// apply_geometric: steer boresight to source
 int calculate_delays (unsigned nbay, mopsr_bay_t * bays, 
                       unsigned nmod, mopsr_module_t * mods, 
                       unsigned nchan, mopsr_chan_t * chans,
                       mopsr_source_t source, struct timeval timestamp,
                       mopsr_delay_t ** delays, float start_md_angle,
                       char apply_instrumental, char apply_geometric, 
-                      char  is_tracking, double tsamp)
+                      char is_tracking, double tsamp)
 {
   // delays should be an array allocat to nmod * nchan
   if (!delays)
@@ -528,30 +553,19 @@ int calculate_delays (unsigned nbay, mopsr_bay_t * bays,
     return -1;
   }
 
-  // compute the timestamp for 1 sample in the future
-  struct timeval timestamp_next;
-  timestamp_next.tv_sec = timestamp.tv_sec;
-  timestamp_next.tv_usec = timestamp.tv_usec + (long) tsamp;
-  if (timestamp_next.tv_usec >= 1000000)
-  {
-    timestamp_next.tv_sec ++;
-    timestamp_next.tv_usec -= 1000000;
-  }
-
   double jer_delay = calc_jer_delay (source.ra_curr, source.dec_curr, timestamp);
-  double jer_delay_next = calc_jer_delay (source.ra_curr, source.dec_curr, timestamp_next);
-  double jer_delay_ds   = jer_delay_next - jer_delay;
 
   unsigned ichan, imod, ibay;
   double C = 2.99792458e8;
   double dist, ant_dist, bay_dist;
 
+#ifdef HIRES
+  const double fixed_delay  = 40.96e-5;
+#else
   const double fixed_delay  = 5.12e-5;
+#endif
   double instrumental_delay;
   double geometric_delay = 0;
-  double geometric_delay_next = 0;
-  double fractional_delay_ds;
-  double fringe_coeff_next;
 
   double total_delay, coarse_delay, fractional_delay, delta_dist;
   double module_offset, freq_ratio, frank_dist;
@@ -573,7 +587,9 @@ int calculate_delays (unsigned nbay, mopsr_bay_t * bays,
 
   //const double sin_start_md_minus_jer = (sin_start_md_angle * cos_jer_delay) - (cos_start_md_angle * sin_jer_delay);
 
-  //fprintf (stderr, "jer_delay=%lf, sin_start_md_angle=%lf\n", jer_delay, sin_start_md_angle);
+  //double R2D = 180.0 / M_PI;
+  //fprintf (stderr, "md_angle=%lf, start_md_angle=%lf\n", md_angle*R2D, start_md_angle*R2D);
+  //fprintf (stderr, "sin_start_md_angle=%lf sin_start_minus_md=%lf\n", sin_start_md_angle, sin_start_minus_md);
 
   for (imod=0; imod < nmod; imod++)
   {
@@ -604,49 +620,41 @@ int calculate_delays (unsigned nbay, mopsr_bay_t * bays,
     for (ichan=0; ichan<nchan; ichan++)
     {
       total_delay = fixed_delay;
+      geometric_delay = 0;
 
       if (apply_instrumental)
         total_delay -= instrumental_delay;
 
-      // calculate the geometric delay from md_tilt angle
+      // the frank distance
+      freq_ratio = (1.0 - (843.0 / chans[ichan].cfreq));
+      frank_dist = module_offset * freq_ratio;
 
+      // are the ring antennae following the source
       if (is_tracking)
       {
-        freq_ratio = (1.0 - (843.0 / chans[ichan].cfreq));
-        frank_dist = module_offset * freq_ratio;
         dist = bay_dist + frank_dist;
-
-        geometric_delay = (jer_delay * dist) / C;
+        if (apply_geometric)
+          geometric_delay = (jer_delay * dist) / C;
       }
+      // the ring antenna are stationary, use the starting MD_ANGLE to determine the base phasing
       else
       {
-        geometric_delay = ((sin_start_md_angle * bay_dist / C) - ((sin_start_minus_md * ant_dist) / C));
+        // the starting MD angle defines the geometric delay experienced
+        geometric_delay = sin_start_md_angle * bay_dist / C;
 
-        //geometric_delay = (sin_start_md_angle * bay_dist / C);
-
-        dist = ant_dist;
+        // if the ring antennae are not tracking, but we wish to steer the beam to the source
+        if (apply_geometric)
+        {
+          geometric_delay -= sin_start_minus_md * ant_dist / C;
+        }
       }
 
-      // calculate the geometric delay for 1 sample offset into the future
-      geometric_delay_next = (jer_delay_next * dist) / C;
-
-      if (apply_geometric)
-        total_delay -= geometric_delay;
-      else
-      {
-        geometric_delay = 0;
-        geometric_delay_next = 0;
-      }
+      total_delay -= geometric_delay;
 
       //fprintf (stderr, "[%d][%d] total=%le = (%le + %le - %le) dist=%le\n", imod, ichan, total_delay, fixed_delay, instrumental_delay, geometric_delay, dist);
 
-      // now calculate the fractional delay (rate in samples) per sample
-      fractional_delay_ds = (geometric_delay_next - geometric_delay) / sampling_period;
-
       coarse_delay_samples = (unsigned) floor (total_delay / sampling_period);  
-
       coarse_delay = coarse_delay_samples * sampling_period;
-
       fractional_delay = total_delay - coarse_delay;
 
       delays[imod][ichan].tot_secs      = total_delay;
@@ -654,23 +662,22 @@ int calculate_delays (unsigned nbay, mopsr_bay_t * bays,
 
       delays[imod][ichan].samples       = coarse_delay_samples;
       delays[imod][ichan].fractional    = fractional_delay / sampling_period;
-      delays[imod][ichan].fractional_ds = fractional_delay_ds;
 
       //if (ichan == 0)
        // fprintf (stderr, "jer_delay=%lf instrumental_delay=%lf geometric_delay=%lf sample_delay=%u fractional_delay=%lf [samples]\n", jer_delay, instrumental_delay * 1e9, geometric_delay *1e9,  delays[imod][ichan].samples, delays[imod][ichan].fractional);
 
       delays[imod][ichan].fringe_coeff    = -2 * M_PI * chans[ichan].cfreq * 1000000 * geometric_delay;
-      fringe_coeff_next                   = -2 * M_PI * chans[ichan].cfreq * 1000000 * geometric_delay_next;
-      delays[imod][ichan].fringe_coeff_ds = fringe_coeff_next - delays[imod][ichan].fringe_coeff;
 
-      double delay_in_turns = instrumental_delay * (1000000 / 1.28);
-      double channel_turns = ((double) ichan - ((double) nchan / 2) + 0.5) * delay_in_turns;
-      double channel_phase_offset = channel_turns * 2 * M_PI;
+      if (apply_instrumental)
+      {
+        double delay_in_turns = instrumental_delay / sampling_period;
+        double channel_turns = ((double) ichan - ((double) nchan / 2) + 0.5) * delay_in_turns;
+        double channel_phase_offset = channel_turns * 2 * M_PI;
 
       //fprintf (stderr, "[%d][%d] instrumental_delay=%le delay_in_turns=%lf channel_turns=%lf channel_phase_offset=%lf\n", imod, ichan, instrumental_delay, delay_in_turns, channel_turns, channel_phase_offset);
 
-      if (apply_instrumental)
         delays[imod][ichan].fringe_coeff    -= (mods[imod].phase_offset + channel_phase_offset);
+      }
 
     }
 
@@ -793,7 +800,10 @@ int mopsr_delays_hhmmss_to_rad (char * hhmmss, double * rads)
   const char *sep = ":";
   char * saveptr;
 
-  char * str = strtok_r(hhmmss, sep, &saveptr);
+  char * copy = (char *) malloc (strlen(hhmmss) + 1);
+  strcpy (copy, hhmmss);
+
+  char * str = strtok_r(copy, sep, &saveptr);
   if (str != NULL)
   {
     if (sscanf(str, "%d", &ihour) != 1)
@@ -813,6 +823,7 @@ int mopsr_delays_hhmmss_to_rad (char * hhmmss, double * rads)
       }
     }
   }
+  free (copy);
 
   char s = '\0';
   if (ihour < 0)
@@ -833,8 +844,11 @@ int mopsr_delays_hhmmss_to_sigproc (char * hhmmss, double * sigproc)
   double sec = 0; 
   const char *sep = ":";
   char * saveptr;
+
+  char * copy = (char *) malloc (strlen(hhmmss) + 1);
+  strcpy (copy, hhmmss);
   
-  char * str = strtok_r(hhmmss, sep, &saveptr);
+  char * str = strtok_r(copy, sep, &saveptr);
   if (str != NULL)
   { 
     if (sscanf(str, "%d", &ihour) != 1)
@@ -854,6 +868,7 @@ int mopsr_delays_hhmmss_to_sigproc (char * hhmmss, double * sigproc)
       }
     }
   }
+  free (copy);
 
   char s = '\0';
   if (ihour < 0)
@@ -874,7 +889,10 @@ int mopsr_delays_ddmmss_to_rad (char * ddmmss, double * rads)
   const char *sep = ":";
   char * saveptr;
 
-  char * str = strtok_r(ddmmss, sep, &saveptr);
+  char * copy = (char *) malloc (strlen(ddmmss) + 1);
+  strcpy (copy, ddmmss);
+
+  char * str = strtok_r(copy, sep, &saveptr);
   if (str != NULL)
   {
     if (sscanf(str, "%d", &ideg) != 1)
@@ -894,6 +912,7 @@ int mopsr_delays_ddmmss_to_rad (char * ddmmss, double * rads)
       }
     }
   }
+  free (copy);
 
   char s = '\0';
   if (ideg < 0)
@@ -916,6 +935,9 @@ int mopsr_delays_ddmmss_to_sigproc (char * ddmmss, double * sigproc)
   const char *sep = ":";
   char * saveptr;
 
+  char * copy = (char *) malloc (strlen(ddmmss) + 1);
+  strcpy (copy, ddmmss);
+
   char * str = strtok_r(ddmmss, sep, &saveptr);
   if (str != NULL)
   {
@@ -936,6 +958,8 @@ int mopsr_delays_ddmmss_to_sigproc (char * ddmmss, double * sigproc)
       }
     }
   }
+
+  free (copy);
 
   if (ideg < 0)
     *sigproc = ((double) ideg*1e4 - (double) iamin*1e2) - asec;
@@ -964,10 +988,37 @@ double ns_tilt (double ha_source, double dec_source, double md_angle)
 double jer_delay(double ha_source, double dec_source,
          double tilt, double skew, double latitude)
 {
+
   return( sin(ha_source)*cos(dec_source)*cos(tilt) + 
-          cos(ha_source)*cos(dec_source)* (skew*sin(latitude)-sin(tilt)*cos(latitude))-
+          cos(ha_source)*cos(dec_source) * (skew*sin(latitude)-sin(tilt)*cos(latitude)) -
           sin(dec_source)*(skew*cos(latitude)+sin(tilt)*sin(latitude)) );
 }
+
+double calc_doc_delay (double RA_curr, double DEC_curr, struct timeval timestamp)
+{
+
+  double hour_angle = calc_ha_source (RA_curr, DEC_curr, timestamp);
+
+  double projected_delay = doc_delay (hour_angle, DEC_curr,
+                                      MOLONGLO_ARRAY_SLOPE,
+                                      MOLONGLO_AZIMUTH_CORR,
+                                      MOLONGLO_LATITUDE);
+
+  return projected_delay;
+}
+
+double doc_delay(double ha, double dec,
+             double tilt, double skew, double lat)
+{
+    // Differences to jer_delay
+    //   1. doesn't use the sin(skew) == skew small angle approximation
+    //   2. doesn't use the cos(tilt) == 1 approximation
+
+    return( cos(dec)*sin(ha)*cos(tilt)*cos(skew)
+            - cos(dec)*cos(ha) * (sin(lat)*cos(tilt)*sin(skew) + cos(lat)*sin(tilt))
+            - sin(dec) * (sin(lat)*sin(tilt) - cos(lat)*cos(tilt)*sin(skew)) );
+}
+
 
 // simple PGPLOT of the delays across the array
 int mopsr_delays_plot (unsigned nmod, unsigned nchan, mopsr_delay_t ** delays, struct timeval timestamp)
