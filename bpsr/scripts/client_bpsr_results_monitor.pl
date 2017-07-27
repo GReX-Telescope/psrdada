@@ -179,6 +179,9 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
         @finished_obs = split(/\n/, $response);
         logMsg(2, "INFO", "main: found ".($#finished_obs+1)." obs marked finished");
 
+        my $curr_utc_time = Dada::getUnixTimeUTC(Dada::printTime(time, "utc"));
+        my $day_in_secs = 24 * 60 * 60;
+
         for ($i=0; ((!$quit_daemon) && ($i<=$#all_obs)); $i++) 
         {
           $obs = $all_obs[$i];
@@ -189,6 +192,27 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
             {
               $finished = 1; 
             } 
+          }
+
+          if (!$finished)
+          {
+            my $obs_time_unix  = Dada::getUnixTimeUTC($obs);
+            if ($obs_time_unix + $day_in_secs < $curr_utc_time)
+            {
+              $finished = 1;
+
+              if (! -f $archive_dir."/".$obs."/beam.finished")
+              {
+                logMsg(1, "INFO", $obs." processing -> finished");
+                push (@finished_obs, $obs);
+
+                $cmd = "touch ".$archive_dir."/".$obs."/beam.finished";
+                logMsg(2, "INFO", "main: ".$cmd);  
+                ($result, $response) = Dada::mySystem($cmd);
+                logMsg(2, "INFO", "main: ".$result." ".$response);
+                sleep (1);
+              }
+            }
           }
 
           if (!$finished) 
@@ -458,14 +482,20 @@ sub processDspsrFiles($)
 
       foreach $plot_file (@plot_files)
       {
-        $send_files .= " ".$plot_file;
+        if (-f $plot_file)
+        {
+          $send_files .= " ".$plot_file;
+        }
       }
       logMsg(2, "INFO", "processDspsrFiles: sendToServer(".$send_files.", ".$remote_dir.")");
       ($result, $response) = sendToServer($send_files, $remote_dir);
       logMsg(3, "INFO", "processDspsrFiles: sendToServer() ".$result." ".$response);
       foreach $plot_file (@plot_files)
       {
-        unlink $plot_file;
+        if (-f $plot_file)
+        {
+          unlink $plot_file;
+        }
       }
 
       my $tar_file = $file_dir."/archives.tar";
@@ -572,13 +602,31 @@ sub makePhaseVsFreqPlotFromArchive($$$$)
   logMsg(2, "INFO", $cmd);
   ($result, $response) = Dada::mySystem($cmd);
 
-  if ($result ne "ok") {
+  if ($result ne "ok") 
+  {
     logMsg(0, "ERROR", "plot cmd \"".$cmd."\" failed: ".$response);
     $plotfile = "none";
   }
+  else
+  {
+    # sometimes the plot file takes some time before it appears on disk, wait up to 5 seconds
+    my $waitMax = 3;
+    while ($waitMax > 0)
+    {
+      if (-f $dir."/".$plotfile)
+      {
+        $waitMax = 0;
+      }
+      else
+      {
+        logMsg(2, "INFO", "makePhaseVsFreqPlotFromArchive: waiting for ".$dir."/".$plotfile);
+        sleep(1);
+        $waitMax --;
+      }
+    }
+  }
 
   return $plotfile;
-
 }
 
 sub plotMonFile($$) 
