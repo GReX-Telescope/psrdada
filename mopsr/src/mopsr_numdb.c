@@ -17,16 +17,29 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+#define USE_FST
+
+static void fsleep (double seconds)
+{
+  struct timeval t ;
+
+  t.tv_sec = seconds;
+  seconds -= t.tv_sec;
+  t.tv_usec = seconds * 1e6;
+  select (0, 0, 0, 0, &t) ;
+}
+
 void usage()
 {
   fprintf (stdout,
 	   "mopsr_numdb [options] header_file\n"
      " -a nant    number of antenna [default 4]\n"
-     " -c nchan   number of channels [default 40]\n"
-     " -e type    encode type where: e=time a=ant c=chan\n"
+     " -c schan   start channel number [default 0]\n"
+     " -e type    encode type where: t=time a=ant c=chan\n"
      " -h         print help\n"
-     " -k         hexadecimal shared memory key  [default: %x]\n"
      " -i iant    starting index number for antenna [default 0]\n"
+     " -k         hexadecimal shared memory key  [default: %x]\n"
+     " -n nchan   number of channels [default 40]\n"
      " -s secs    generate secs worth of data\n"
      " -v         verbose\n",
      DADA_DEFAULT_BLOCK_KEY);
@@ -36,6 +49,9 @@ typedef struct {
 
   // header file to use
   char * header_file;
+
+  // index of first channel
+  unsigned schan;
 
   // number of channels
   unsigned nchan;
@@ -66,7 +82,7 @@ typedef struct {
 
 } mopsr_numdb_t;
 
-#define DADA_NUMDB_INIT { "", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
+#define DADA_NUMDB_INIT { "", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
 
 int64_t mopsr_numdb_io (dada_client_t* client, void* data, uint64_t data_size)
 {
@@ -100,7 +116,8 @@ int64_t mopsr_numdb_io_block (dada_client_t* client, void* data, uint64_t data_s
   const uint64_t nsamp = data_size / (ctx->nant * ctx->nchan * ndim);
 
   if (ctx->verbose)
-    multilog (client->log, LOG_INFO, "io_block: nsamp=%"PRIu64"\n", nsamp);
+    multilog (client->log, LOG_INFO, "io_block: nant=%d nchan=%d ndim=%d nsamp=%lu\n", 
+              ctx->nant, ctx->nchan, ndim, nsamp);
 
   // encoding is FST order
   unsigned ichan, iant;
@@ -116,6 +133,7 @@ int64_t mopsr_numdb_io_block (dada_client_t* client, void* data, uint64_t data_s
     for (iant=0; iant<ctx->nant; iant++)
     {
       aval = (uint16_t) ctx->sant + iant;
+      //fprintf (stderr, "[%d][%d] nsamp=%lu aval=%u\n", ichan, iant, nsamp, aval);
       ctx->seq = seq_start;
       for (isamp=0; isamp<nsamp; isamp++)
       {
@@ -211,6 +229,8 @@ int mopsr_numdb_open (dada_client_t* client)
   // set flag so that the io function knows to expect a header read...
   ctx->header_read = 0;
 
+  
+
   uint64_t hdr_size;
   if (ascii_header_get (client->header, "HDR_SIZE", "%"PRIu64, &hdr_size) != 1)
   {
@@ -279,15 +299,16 @@ int main (int argc, char **argv)
 
   int arg = 0;
 
+  ctx.schan = 0;
   ctx.nchan = 40;
-  ctx.nant = 4;
+  ctx.nant = 8;
   ctx.sant = 0;
   ctx.seconds = 10;
   ctx.encode_ant  = 1;
   ctx.encode_chan = 0;
   ctx.encode_seq  = 0;
 
-  while ((arg=getopt(argc,argv,"a:c:e:hi:k:s:v")) != -1)
+  while ((arg=getopt(argc,argv,"a:c:e:hi:k:n:s:v")) != -1)
     switch (arg) {
 
     case 'a':
@@ -295,7 +316,7 @@ int main (int argc, char **argv)
       break;
 
     case 'c':
-      ctx.nchan = atoi(optarg);
+      ctx.schan = atoi(optarg);
       break;
 
     case 'e':
@@ -318,6 +339,10 @@ int main (int argc, char **argv)
         usage();
         return EXIT_FAILURE;
       }
+      break;
+
+    case 'n':
+      ctx.nchan = atoi(optarg);
       break;
 
     case 's':

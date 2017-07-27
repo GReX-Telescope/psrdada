@@ -29,8 +29,9 @@ void usage()
   fprintf (stdout,
 	   "mopsr_dbnum [options]\n"
      " -a nant    number of antenna to expect\n"
-     " -c chan    channel to expect\n"
-     " -e type    check type where: e=time a=ant c=chan\n"
+     " -c schan   start channel number\n"
+     " -n nchan   number of channels to expect\n"
+     " -e type    check type where: t=time a=ant c=chan\n"
      " -k         hexadecimal shared memory key  [default: %x]\n"
      " -s         process only one observation\n"
      " -h         print help\n",
@@ -40,7 +41,10 @@ void usage()
 typedef struct {
 
   // channel number
-  unsigned ichan;
+  unsigned schan;
+
+  // number of channels
+  unsigned nchan;
 
   // nant
   unsigned nant;
@@ -64,7 +68,7 @@ typedef struct {
 
 } mopsr_dbnum_t;
 
-#define DADA_DBNUM_INIT { 0, 0, 0, 0, 0, 0, 0, 0, 0 }
+#define DADA_DBNUM_INIT { 0, 1, 1, 0, 0, 0, 0, 0, 0, 0 }
 
 /*! Pointer to the function that transfers data to/from the target */
 int64_t mopsr_dbnum_io (dada_client_t* client, void* data, uint64_t data_size)
@@ -85,67 +89,73 @@ int64_t mopsr_dbnum_io_block (dada_client_t* client, void* data, uint64_t data_s
   mopsr_dbnum_t * ctx = (mopsr_dbnum_t*) client->context;
 
   const unsigned ndim = 2;
-  const uint64_t nsamp = data_size / (ctx->nant * ndim);
+  const uint64_t nsamp = data_size / (ctx->nant * ctx->nchan * ndim);
   uint64_t isamp;
   unsigned ichan, iant;
 
   uint16_t * ptr16 = (uint16_t *) data;
   uint16_t aval, cval;
 
-  cval = (uint16_t) ctx->ichan;
-
   if (ctx->verbose)
     multilog (client->log, LOG_INFO, "io_block: data_size=%"PRIu64" block_id=%"PRIu64"\n", data_size, block_id);
 
   uint32_t seq_start = ctx->seq;
 
-  for (iant=0; iant<ctx->nant; iant++)
-  {
-    aval = (uint16_t) iant;
-    ctx->seq = seq_start;
-    for (isamp=0; isamp<nsamp; isamp++)
-    {
-      if (ctx->check_seq)
-      {
-        if (ptr16[0] != (uint16_t) ctx->seq)
-        {
-          if (ctx->nerr < 10)
-          {
-            multilog (client->log, LOG_ERR, "[%"PRIu64"][%u][%"PRIu64"] data=%"PRIu16" expected=%"PRIu32" nerr=%"PRIu64"\n", block_id, iant, isamp, ptr16[0], ctx->seq, ctx->nerr);
-          }
-          ctx->nerr++;
-        }
-        ctx->seq = (ctx->seq + 1) % 65536;
-      }
-      else if (ctx->check_ant)
-      {
-        if (ptr16[0] != aval)
-        {
-          if (ctx->nerr < 10)
-          {
-            multilog (client->log, LOG_ERR, "check_ant ptr16[%"PRIu16"] != aval"
-                      " [%"PRIu16"] failed\n", ptr16[0], aval);
-          }
-          ctx->nerr++; 
-        }
-      }
-      else if (ctx->check_chan)
-      {
+  //multilog (client->log, LOG_INFO, "io_block: nchan=%d, nant=%d nsamp=%"PRIu64"\n", ctx->nchan, ctx->nant, nsamp);
 
-        if (ptr16[0] != cval)
-        {
-          if (ctx->nerr < 10) 
-          {
-            multilog (client->log, LOG_ERR, "check_chan ptr16[%"PRIu16"] != cval [%"PRIu16"]\n", ptr16[0], cval);
-          }
-          ctx->nerr++;
-        }
-      }
-      else
+  // assume FST ordering
+  for (ichan=0; ichan<ctx->nchan; ichan++)
+  {
+    cval = (uint16_t) (ctx->schan + ichan);
+    for (iant=0; iant<ctx->nant; iant++)
+    {
+      aval = (uint16_t) iant;
+      ctx->seq = seq_start;
+      for (isamp=0; isamp<nsamp; isamp++)
       {
-        ;
+        if (ctx->check_seq)
+        {
+          if (ptr16[0] != (uint16_t) ctx->seq)
+          {
+            if (ctx->nerr < 10)
+            {
+              multilog (client->log, LOG_ERR, "[%"PRIu64"][%u][%"PRIu64
+                        "] data=%"PRIu16" expected=%"PRIu32" nerr=%"PRIu64"\n",
+                        block_id, iant, isamp, ptr16[0], ctx->seq, ctx->nerr);
+            }
+            ctx->nerr++;
+          }
+          ctx->seq = (ctx->seq + 1) % 65536;
+        }
+        else if (ctx->check_ant)
+        {
+          if (ptr16[0] != aval)
+          {
+            if (ctx->nerr < 10)
+            {
+              multilog (client->log, LOG_ERR, "check_ant [%d][%d][%"PRIu64"] ptr16[%"PRIu16"] != aval"
+                      " [%"PRIu16"] failed\n", ichan, iant, isamp,  ptr16[0], aval);
+            }
+            ctx->nerr++; 
+          }
+        }
+        else if (ctx->check_chan)
+        {
+          if (ptr16[0] != cval)
+          {
+            if (ctx->nerr < 10) 
+            {
+              multilog (client->log, LOG_ERR, "check_chan ptr16[%"PRIu16"] != cval [%"PRIu16"]\n", ptr16[0], cval);
+            }
+            ctx->nerr++;
+          }
+        }
+        else
+        {
+          ;
+        }
+        ptr16++;
       }
-      ptr16++;
     }
   }
 
@@ -209,7 +219,8 @@ int main (int argc, char **argv)
   ctx.check_seq = 0;
   ctx.check_ant = 1;
   ctx.check_chan = 0;
-
+  ctx.nant = 8;
+  ctx.nchan = 10;
 
   while ((arg=getopt(argc,argv,"a:c:e:hk:n:sv")) != -1)
     switch (arg) {
@@ -219,7 +230,7 @@ int main (int argc, char **argv)
       break;
 
     case 'c':
-      ctx.ichan = atoi(optarg);
+      ctx.schan = atoi(optarg);
       break;
 
     case 'e':
@@ -239,6 +250,10 @@ int main (int argc, char **argv)
         usage();
         return EXIT_FAILURE;
       }
+      break;
+
+    case 'n':
+      ctx.nchan = atoi(optarg);
       break;
 
     case 's':
