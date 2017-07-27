@@ -13,6 +13,21 @@
 
 #include "mopsr_def.h"
 
+#ifdef USE_SEGMENTS
+// Cornerturn segment for more efficient memory registration by IB
+typedef struct {
+
+  uint64_t local_offset;
+
+  uint64_t local_length;
+
+  uint64_t remote_offset;
+
+  uint64_t remote_length;
+
+} mopsr_ct_segment_t;
+#endif
+
 // Beam Former cornerturn connection info
 typedef struct {
 
@@ -26,13 +41,25 @@ typedef struct {
 
   int pfb;
 
-  int chan;
+  int chan_first;
+
+  int chan_last;
+
+  int nchan;
 
   int npfb;
 
   int ant_first;
 
   int ant_last;
+
+  int nant;
+
+#ifdef USE_SEGMENTS
+  unsigned nsegments;
+
+  mopsr_ct_segment_t * segments;
+#endif
 
 } mopsr_bf_conn_t;
 
@@ -65,6 +92,10 @@ typedef struct {
 
   char obs_ending;
 
+  // byte offsets for each [conn][chan]
+  uint64_t ** in_offsets;
+  uint64_t ** out_offsets;
+
 } mopsr_bf_ib_t;
 
 #define MOPSR_IB_INIT { 0, 0, 0, 0, 0, 0, 0, "", 0, 0 }
@@ -86,12 +117,15 @@ typedef struct {
   // sender limits
   unsigned chan_first;
   unsigned chan_last;
+  unsigned nchan;
+
   unsigned isend;
   unsigned nsend;
 
   // receiver limits
   unsigned beam_first;
   unsigned beam_last;
+  unsigned nbeam;
   unsigned irecv;
 
 } mopsr_bp_conn_t;
@@ -111,13 +145,10 @@ typedef struct {
   unsigned nsend;
 
   // total number of beams [e.g. 352]
-  unsigned nbeam_send;
+  unsigned nbeam;
 
-  unsigned nbeam_recv;
-
-  unsigned nchan_send;
-
-  unsigned nchan_recv;
+  // total nuber of channels [e.g. 320]
+  unsigned nchan;
 
   // number of IB connections
   unsigned nconn;
@@ -128,6 +159,12 @@ typedef struct {
   // number of dimensions (2 == complex)
   unsigned ndim;
 
+  // number of polarisations 
+  unsigned npol;
+
+  // number of bits per sample
+  unsigned nbit;
+
   unsigned verbose;
 
   char * header;
@@ -137,9 +174,13 @@ typedef struct {
 
   char obs_ending;
 
+  // byte offsets for each [conn][ibeam]
+  uint64_t ** in_offsets;
+  uint64_t ** out_offsets;
+
 } mopsr_bp_ib_t;
 
-#define MOPSR_BP_IB_INIT { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", 0, 0 }
+#define MOPSR_BP_IB_INIT { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", 0, 0, 0, 0 }
 
 int mopsr_setup_bp_read_config (mopsr_bp_ib_t * ctx, const char * config_file, char * config);
 mopsr_bp_conn_t * mopsr_setup_bp_cornerturn_send (const char * config_file, mopsr_bp_ib_t * ctx, unsigned int send_id);

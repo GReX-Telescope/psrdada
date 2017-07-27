@@ -20,6 +20,7 @@
 #include <signal.h>
 #include <limits.h>
 
+#include "dada_affinity.h"
 #include "dada_client.h"
 #include "dada_hdu.h"
 #include "dada_def.h"
@@ -41,6 +42,7 @@ void usage()
 {
   fprintf (stdout,
            "mopsr_dbib [options] send_id cornerturn.cfg\n"
+     " -b <core>         bind computation to specified cpu core\n"
      " -k <key>          hexadecimal shared memory key  [default: %x]\n"
      " -s                single transfer only\n"
      " -v                verbose output\n"
@@ -196,7 +198,6 @@ int64_t mopsr_dbib_send (dada_client_t* client, void * buffer, uint64_t bytes)
   }
 
   unsigned int old_nchan, new_nchan;
-  new_nchan = 1;
   if (ascii_header_get (buffer, "NCHAN", "%d", &old_nchan) != 1)
   {
     multilog (log, LOG_WARNING, "send: failed to read NCHAN from header\n");
@@ -204,14 +205,10 @@ int64_t mopsr_dbib_send (dada_client_t* client, void * buffer, uint64_t bytes)
   if (ctx->verbose)
     multilog (log, LOG_INFO, "send: old NCHAN=%d\n", old_nchan);
 
-  unsigned int nant;
-  if (ascii_header_get (buffer, "NANT", "%d", &nant) != 1)
-  {
-    multilog (log, LOG_WARNING, "send: failed to read NANT from header\n");
-  }
+  // Delete antenna id from the header
   unsigned iant;
   char ant_id[16];
-  for (iant=0; iant<nant; iant++)
+  for (iant=0; iant<ctx->conn_info[0].nant; iant++)
   {
     sprintf (ant_id, "ANT_ID_%u", iant);
     if (ascii_header_del (buffer, ant_id) < 0)
@@ -267,72 +264,81 @@ int64_t mopsr_dbib_send (dada_client_t* client, void * buffer, uint64_t bytes)
     multilog (log, LOG_INFO, "send: chan_bw=%f\n", chan_bw);
   }
 
-  new_bw = chan_bw;
+  // The order is the same for all connections
   if (ctx->verbose)
-    multilog (log, LOG_INFO, "send: setting BW=%f in header\n", new_bw);
-  if (ascii_header_set (buffer, "BW", "%f", new_bw) < 0)
+   multilog (log, LOG_INFO, "open: setting ORDER=FST\n");
+  if (ascii_header_set (buffer, "ORDER", "%s", "FST") < 0)
   {
-    multilog (log, LOG_WARNING, "send: failed to set BW=%f in header\n", new_bw);
-  }
-
-  new_bytes_per_second = old_bytes_per_second / old_nchan;
-  if (ctx->verbose)
-    multilog (log, LOG_INFO, "send: setting BYTES_PER_SECOND=%"PRIu64" in header\n", new_bytes_per_second);
-  if (ascii_header_set (buffer, "BYTES_PER_SECOND", "%"PRIu64"", new_bytes_per_second) < 0)
-  {
-    multilog (log, LOG_WARNING, "send: failed to set BYTES_PER_SECOND=%"PRIu64" in header\n", new_bytes_per_second);
-  }
-
-  new_resolution = old_resolution / old_nchan;
-  if (ctx->verbose)
-    multilog (log, LOG_INFO, "send: setting RESOLUTION=%"PRIu64" in header\n", new_resolution);
-  if (ascii_header_set (buffer, "RESOLUTION", "%"PRIu64"", new_resolution) < 0)
-  {
-    multilog (log, LOG_WARNING, "send: failed to set RESOLUTION=%"PRIu64" in header\n", new_resolution);
-  }
-
-  if (old_file_size > 0)
-  {
-    new_file_size = old_file_size / old_nchan;
-    if (ctx->verbose)
-      multilog (log, LOG_INFO, "send: setting FILE_SIZE=%"PRIi64" in header\n", new_file_size);
-    if (ascii_header_set (buffer, "FILE_SIZE", "%"PRIi64"", new_file_size) < 0)
-    {
-      multilog (log, LOG_WARNING, "send: failed to set FILE_SIZE=%"PRIi64" in header\n", new_file_size);
-    }
-  }
-
-  if (ctx->verbose)
-    multilog (log, LOG_INFO, "send: setting NCHAN=%d in header\n",new_nchan);
-  if (ascii_header_set (buffer, "NCHAN", "%d", new_nchan) < 0)
-  {
-    multilog (log, LOG_WARNING, "send: failed to set NCHAN=%d in header\n", new_nchan);
-  }
-
-  if (ctx->verbose)
-   multilog (log, LOG_INFO, "open: setting ORDER=ST\n");
-  if (ascii_header_set (buffer, "ORDER", "%s", "ST") < 0)
-  {
-    multilog (log, LOG_ERR, "open: could not set ORDER=ST in outgoing header\n");
+    multilog (log, LOG_ERR, "open: could not set ORDER=FST in outgoing header\n");
     return -1;
   }
 
-
-
-  // copy the header to the header memory buffer
+  // copy the header to the header memory buffer, allowing for different metadata in every connection
   for (i=0; i<ctx->nconn; i++)
   {
-    // each conn / channel will have a unique FREQ
-    new_freq = freq_low + (chan_bw / 2) + (chan_bw * ctx->conn_info[i].chan);
+    // Need to manipulate the connection specific header buffer
+    memcpy (ib_cms[i]->header_mb->buffer, buffer, bytes);
+    // Calculate the new nchan for the current connection:
+    new_nchan = ctx->conn_info[i].chan_last - ctx->conn_info[i].chan_first + 1;
     if (ctx->verbose)
-      multilog (log, LOG_INFO, "send: setting FREQ=%f in header\n", new_freq);
-    if (ascii_header_set (buffer, "FREQ", "%f", new_freq) < 0)
-    { 
-      multilog (log, LOG_WARNING, "send: failed to set FREQ=%f in header\n", new_freq);
+      multilog (log, LOG_INFO, "send: setting NCHAN=%d in header for connection id=%d\n", new_nchan, i);
+    if (ascii_header_set (ib_cms[i]->header_mb->buffer, "NCHAN", "%d", new_nchan) < 0)
+    {
+      multilog (log, LOG_WARNING, "send: failed to set NCHAN=%d in header for connection id=%d\n", new_nchan, i);
     }
 
-    memcpy (ib_cms[i]->header_mb->buffer, buffer, bytes);
-  }
+    // Calculate the new bandwidth
+    new_bw = chan_bw * new_nchan;
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "send: setting BW=%f in header for connection id=%d\n", new_bw, i);
+    if (ascii_header_set (ib_cms[i]->header_mb->buffer, "BW", "%f", new_bw) < 0)
+    {
+      multilog (log, LOG_WARNING, "send: failed to set BW=%f in header for connection id=%d\n", new_bw, i);
+    }
+
+    // Calculate the new data rate
+    new_bytes_per_second = old_bytes_per_second / old_nchan * new_nchan;
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "send: setting BYTES_PER_SECOND=%"PRIu64" in header for connection id=%d\n", new_bytes_per_second, i);
+    if (ascii_header_set (ib_cms[i]->header_mb->buffer, "BYTES_PER_SECOND", "%"PRIu64"", new_bytes_per_second) < 0)
+    {
+      multilog (log, LOG_WARNING, "send: failed to set BYTES_PER_SECOND=%"PRIu64" in header for connection id=%d\n", new_bytes_per_second, i);
+    }
+
+    // Calculate the new resolution
+    new_resolution = old_resolution / old_nchan * new_nchan;
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "send: setting RESOLUTION=%"PRIu64" in header for connection id=%d\n", new_resolution, i);
+    if (ascii_header_set (ib_cms[i]->header_mb->buffer, "RESOLUTION", "%"PRIu64"", new_resolution) < 0)
+    {
+      multilog (log, LOG_WARNING, "send: failed to set RESOLUTION=%"PRIu64" in header for connection id=%d\n", new_resolution, i);
+    }
+
+    // Calculate the new file size if it was set previously
+    if (old_file_size > 0)
+    {
+      new_file_size = old_file_size / old_nchan * new_nchan;
+      if (ctx->verbose)
+        multilog (log, LOG_INFO, "send: setting FILE_SIZE=%"PRIi64" in header for connection id=%d\n", new_file_size, i);
+      if (ascii_header_set (ib_cms[i]->header_mb->buffer, "FILE_SIZE", "%"PRIi64"", new_file_size) < 0)
+      {
+        multilog (log, LOG_WARNING, "send: failed to set FILE_SIZE=%"PRIi64" in header for connection id=%d\n", new_file_size, i);
+      }
+    }
+
+    // Determine the new centre frequency as:
+    // F_new = F_low + F_off + BW_new/2
+    // where F_low is the lowest frequency in the input data,
+    // F_off is the offset corresponding to the first channel in the current connection
+    // BW_new/2 is half the bandwidth corresponding to the new number of channels
+    new_freq = freq_low + chan_bw * ctx->conn_info[i].chan_first + chan_bw * new_nchan / 2;
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "send: setting FREQ=%f in header for connection id=%d\n", new_freq, i);
+    if (ascii_header_set (ib_cms[i]->header_mb->buffer, "FREQ", "%f", new_freq) < 0)
+    { 
+      multilog (log, LOG_WARNING, "send: failed to set FREQ=%f in header for connection id=%d\n", new_freq, i);
+    }
+  } // end of loop through connections
 
   uint64_t transfer_size = 0;
   for (i=0; i<ctx->nconn; i++)
@@ -373,7 +379,6 @@ int64_t mopsr_dbib_send (dada_client_t* client, void * buffer, uint64_t bytes)
     multilog(log, LOG_INFO, "send: returning %"PRIu64" bytes\n", bytes);
 
   return bytes;
-
 }
 
 
@@ -423,10 +428,10 @@ int64_t mopsr_dbib_send_block (dada_client_t* client, void * buffer,
   }
 
   // tell ibdb how many bytes we are sending
-  uint64_t bytes_to_xfer = bytes / ctx->nchan;
+  uint64_t bytes_to_xfer_per_channel = bytes / ctx->nchan;
   if (ctx->verbose)
-    multilog(log, LOG_INFO, "send_block: send_messages [BYTES TO XFER]=%"PRIu64"\n", bytes_to_xfer);
-  if (dada_ib_send_messages (ib_cms, ctx->nconn, DADA_IB_BYTES_TO_XFER_KEY, bytes_to_xfer) < 0)
+    multilog(log, LOG_INFO, "send_block: send_messages [BYTES TO XFER]=%"PRIu64" (per channel)\n", bytes_to_xfer_per_channel);
+  if (dada_ib_send_messages (ib_cms, ctx->nconn, DADA_IB_BYTES_TO_XFER_KEY, bytes_to_xfer_per_channel) < 0)
   {
     multilog(log, LOG_INFO, "send_block: send_messages [BYTES TO XFER] failed\n");
     return -1;
@@ -453,56 +458,80 @@ int64_t mopsr_dbib_send_block (dada_client_t* client, void * buffer,
                 "remote_buf_rkey=%p\n", i, block_id, remote_buf_va[i], remote_buf_rkey[i]);
   }
 
+#ifdef ORIGINAL_METHOD
   const unsigned int ndim = 2;
 
-  // number of antenna's in source data
-  const unsigned int src_nant = (ctx->conn_info[0].ant_last - ctx->conn_info[0].ant_first) + 1;
-
   // number of time samples in the block
-  const uint64_t nsamp = bytes_to_xfer / (src_nant * ndim);
+  const uint64_t nsamp = bytes_to_xfer_per_channel / (ctx->conn_info[0].nant * ndim);
 
-  // destination remote address offset for these antenna
+  // destination remote address offset for these antenna, same for every channel
   const uint64_t dst_ant_offset = nsamp * ndim * ctx->conn_info[0].ant_first;
 
   if (ctx->verbose)
     multilog (log, LOG_INFO, "send_block: ctx->conn_info[0].ant_first=%u, nsamp=%"PRIu64", dst_ant_offset=%"PRIu64"\n", ctx->conn_info[0].ant_first, nsamp, dst_ant_offset);
+#endif
 
   // RDMA WRITES now!
   struct ibv_sge       sge;
   struct ibv_send_wr   send_wr = { };
   struct ibv_send_wr * bad_send_wr;
 
-  //sge.addr = (uintptr_t) buffer;
-  sge.length = bytes_to_xfer;
+  sge.length = bytes_to_xfer_per_channel;
 
   send_wr.sg_list  = &sge;
   send_wr.num_sge  = 1;
   send_wr.next     = NULL;
 
+#ifdef ORIGINAL_METHOD
   if (ctx->verbose)
-    multilog (log, LOG_INFO, "send_block: bytes=%"PRIu64" nsamp=%"PRIu64" bytes_to_xfer=%"PRIu64"\n", bytes, nsamp, bytes_to_xfer);
+    multilog (log, LOG_INFO, "send_block: bytes=%"PRIu64" nsamp=%"PRIu64" bytes_to_xfer_per_channel=%"PRIu64"\n", bytes, nsamp, bytes_to_xfer_per_channel);
+#endif
 
   char * buf_ptr = (char *) buffer;
 
-  // we have 1 channel per connection !
+  // input channel stride is bytes_to_xfer_per_channel
+    
+  // each connection may have a different number of channels being sent to it
   for (i=0; i<ctx->nconn; i++)
   {
-    sge.lkey = ib_cms[i]->local_blocks[block_id].buf_lkey,
-    sge.addr = (uintptr_t) (buf_ptr + (bytes_to_xfer * ctx->conn_info[i].chan));
+    // number of output channels for this connection
+    const unsigned nchan = ctx->conn_info[i].nchan;
 
-    // increase remote channel memory address by relevant amount 
-    send_wr.wr.rdma.remote_addr = remote_buf_va[i] + dst_ant_offset;
-    send_wr.wr.rdma.rkey        = remote_buf_rkey[i];
-    send_wr.opcode              = IBV_WR_RDMA_WRITE;
-    send_wr.send_flags          = 0;
-    send_wr.wr_id               = i;
+#ifdef ORIGINAL_METHOD
+    const unsigned schan = ctx->conn_info[i].chan_first;
+#endif
+    unsigned ochan;
 
-    if (ibv_post_send (ib_cms[i]->cm_id->qp, &send_wr, &bad_send_wr))
+    // local access key
+    sge.lkey = ib_cms[i]->local_blocks[block_id].buf_lkey;
+
+    for (ochan=0; ochan < nchan; ++ochan) 
     {
-      multilog(log, LOG_ERR, "send_block: ibv_post_send [%d] failed\n", i);
-      return -1;
+#ifdef ORIGINAL_METHOD
+      const unsigned ichan = ochan + schan;
+
+      // base address of local buffer
+      sge.addr = (uintptr_t) (buf_ptr + (bytes_to_xfer_per_channel * ichan));
+
+      // increase remote channel memory address by relevant amount 
+      send_wr.wr.rdma.remote_addr = remote_buf_va[i] + dst_ant_offset + ochan * ctx->nant * nsamp * ndim;
+#else
+      sge.addr = (uintptr_t) (buf_ptr + ctx->in_offsets[i][ochan]);
+      send_wr.wr.rdma.remote_addr = remote_buf_va[i] + ctx->out_offsets[i][ochan];
+#endif
+      send_wr.wr.rdma.rkey        = remote_buf_rkey[i];
+      send_wr.opcode              = IBV_WR_RDMA_WRITE;
+      send_wr.send_flags          = 0;
+      send_wr.wr_id               = (i * nchan) + ochan;
+
+      //multilog (log, LOG_INFO, "send_block: i=%d ochan=%i iffset=%lu offset=%d nant=%d wr_id=%d\n", i, ochan, bytes_to_xfer_per_channel * ichan, ochan * ctx->nant * nsamp * ndim, ctx->nant, send_wr.wr_id);
+
+      if (ibv_post_send (ib_cms[i]->cm_id->qp, &send_wr, &bad_send_wr))
+      {
+        multilog(log, LOG_ERR, "send_block: ibv_post_send [%d] failed\n", i);
+        return -1;
+      }
     }
-    //sge.addr += bytes_to_xfer;
   }
 
   // post a recv for the next call to send_block
@@ -517,13 +546,12 @@ int64_t mopsr_dbib_send_block (dada_client_t* client, void * buffer,
     }
   }
 
-  // tell each ibdb how many bytes we actually sent
-  uint64_t bytes_xferred = bytes / ctx->nchan;
+  // tell each ibdb how many bytes we actually sent in total
   if (ctx->verbose)
-    multilog(log, LOG_INFO, "send_block: send_messages [BYTES XFERRED]=%"PRIu64"\n", bytes_xferred);
-  if (dada_ib_send_messages (ib_cms, ctx->nconn, DADA_IB_BYTES_XFERRED_KEY, bytes_xferred) < 0)
+    multilog(log, LOG_INFO, "send_block: send_messages [BYTES XFERRED]=%"PRIu64"\n", bytes_to_xfer_per_channel);
+  if (dada_ib_send_messages (ib_cms, ctx->nconn, DADA_IB_BYTES_XFERRED_KEY, bytes_to_xfer_per_channel) < 0)
   {
-    multilog(log, LOG_INFO, "send_block: send_messages [BYTES XFERRED]=%"PRIu64" failed\n", bytes_xferred);
+    multilog(log, LOG_INFO, "send_block: send_messages [BYTES XFERRED]=%"PRIu64" failed\n", bytes_to_xfer_per_channel);
     return -1;
   }
 
@@ -542,8 +570,7 @@ int mopsr_dbib_ib_init (mopsr_bf_ib_t * ctx, dada_hdu_t * hdu, multilog_t * log)
     multilog (ctx->log, LOG_INFO, "mopsr_dbib_ib_init()\n");
 
   const unsigned ndim = 2;
-  const unsigned src_nant = (ctx->conn_info[0].ant_last - ctx->conn_info[0].ant_first) + 1;
-  const unsigned int modulo_size = ctx->nchan * src_nant * ndim;
+  const unsigned int modulo_size = ctx->nchan * ctx->conn_info[0].nant * ndim;
 
   uint64_t db_nbufs = 0;
   uint64_t db_bufsz = 0;
@@ -586,7 +613,7 @@ int mopsr_dbib_ib_init (mopsr_bf_ib_t * ctx, dada_hdu_t * hdu, multilog_t * log)
     }
     ctx->conn_info[i].ib_cm = ctx->ib_cms[i];
     ctx->ib_cms[i]->verbose = ctx->verbose;
-    ctx->ib_cms[i]->send_depth = ctx->nconn + 1; // only ever have this many outstanding post sends
+    ctx->ib_cms[i]->send_depth = ctx->conn_info[i].chan_last - ctx->conn_info[i].chan_first + 2; // only ever have this many outstanding post sends
     ctx->ib_cms[i]->recv_depth = 1;
     ctx->ib_cms[i]->bufs_size = db_bufsz;
     ctx->ib_cms[i]->header_size = hb_bufsz;
@@ -801,6 +828,53 @@ void * mopsr_dbib_init_thread (void * arg)
 }
 
 
+void setup_conn_offsets (mopsr_bf_ib_t * ctx, uint64_t bufsz)
+{
+  multilog_t * log = ctx->log;
+
+  // constant for mopsr
+  const unsigned int ndim = 2;
+
+  // number of bytes to send per xfer per channel
+  uint64_t bytes_to_xfer_per_channel = bufsz / ctx->nchan;
+
+  // number of time samples in the block
+  const uint64_t nsamp = bytes_to_xfer_per_channel / (ctx->conn_info[0].nant * ndim);
+
+  // destination remote address offset for these antenna, same for every channel
+  const uint64_t dst_ant_offset = nsamp * ndim * ctx->conn_info[0].ant_first;
+
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "setup_conn_offsets: ctx->conn_info[0].ant_first=%u, "
+              "nsamp=%"PRIu64", dst_ant_offset=%"PRIu64"\n", ctx->conn_info[0].ant_first, 
+              nsamp, dst_ant_offset);
+
+  ctx->in_offsets  = (uint64_t **) malloc(sizeof(uint64_t *) * ctx->nconn);
+  ctx->out_offsets = (uint64_t **) malloc(sizeof(uint64_t *) * ctx->nconn);
+
+  unsigned iconn;
+  for (iconn=0; iconn < ctx->nconn; iconn++)
+  {
+    if (ctx->verbose)
+    {
+      multilog (log, LOG_INFO, "conn_info[%d] antennas: %d -> %d\n", iconn, ctx->conn_info[iconn].ant_first, ctx->conn_info[iconn].ant_last);
+      multilog (log, LOG_INFO, "conn_info[%d] channels: %d -> %d\n", iconn, ctx->conn_info[iconn].chan_first, ctx->conn_info[iconn].chan_last);
+    }
+
+    unsigned nchan = ctx->conn_info[iconn].nchan;
+    ctx->in_offsets[iconn]  = (uint64_t *) malloc (sizeof(uint64_t) * nchan);
+    ctx->out_offsets[iconn] = (uint64_t *) malloc (sizeof(uint64_t) * nchan);
+
+    unsigned ochan;
+    for (ochan=0; ochan < nchan; ++ochan)
+    {
+      const unsigned ichan = ochan + ctx->conn_info[iconn].chan_first;
+      ctx->in_offsets[iconn][ochan]  = bytes_to_xfer_per_channel * ichan;
+      ctx->out_offsets[iconn][ochan] = dst_ant_offset + ochan * ctx->nant * nsamp * ndim;
+    }
+  }
+}
+
 /*! Simple signal handler for SIGINT */
 void signal_handler(int signalValue)
 {
@@ -842,12 +916,18 @@ int main (int argc, char **argv)
 
   unsigned int send_id = 0;
 
+  int core = -1;
+
   int arg = 0;
 
-  while ((arg=getopt(argc,argv,"hk:sv")) != -1)
+  while ((arg=getopt(argc,argv,"b:hk:sv")) != -1)
   {
     switch (arg) 
     {
+      case 'b':
+        core = atoi(optarg);
+        break;
+
       case 'h':
         usage ();
         return 0;
@@ -879,6 +959,11 @@ int main (int argc, char **argv)
     usage();
     exit(EXIT_FAILURE);
   }
+
+  if (core >= 0)
+    if (dada_bind_thread_to_core(core) < 0)
+      multilog(log, LOG_WARNING, "mopsr_dbib_FST: failed to bind to core %d\n", core);
+
 
   send_id = atoi(argv[optind]);
   cornerturn_cfg = strdup(argv[optind+1]);
@@ -938,14 +1023,10 @@ int main (int argc, char **argv)
     return EXIT_FAILURE;
   }
 
-  if (ctx.verbose)
-  {
-    unsigned iconn;
-    for (iconn=0; iconn < ctx.nconn; iconn++)
-    {
-      multilog (log, LOG_INFO, "conn_info[%d] %d -> %d\n", iconn, ctx.conn_info[iconn].ant_first, ctx.conn_info[iconn].ant_last);
-    }
-  }
+  uint64_t bufsz = ipcbuf_get_bufsz ( (ipcbuf_t *) hdu->data_block);
+
+  // configure connection input and output offsets
+  setup_conn_offsets (&ctx, bufsz);
 
   // deal breaker!
   if (ctx.nchan < ctx.nconn)

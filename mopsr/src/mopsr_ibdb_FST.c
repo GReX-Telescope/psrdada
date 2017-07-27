@@ -14,6 +14,7 @@
 #include <signal.h>
 #include <limits.h>
 
+#include "dada_affinity.h"
 #include "dada_client.h"
 #include "dada_hdu.h"
 #include "dada_def.h"
@@ -33,12 +34,13 @@ void * mopsr_ibdb_init_thread (void * arg);
 void usage()
 {
   fprintf (stdout,
-    "mopsr_ibdb_FST [options] channel cornerturn.cfg\n"
+    "mopsr_ibdb_FST [options] receiver cornerturn.cfg\n"
+    " -b <core>         bind computation to specified cpu core\n"
     " -k <key>          hexadecimal shared memory key  [default: %x]\n"
     " -s                single transfer only\n"
     " -v                verbose output\n"
     " -h                print this usage\n\n"
-    " channel           channel to receive data for\n"
+    " receiver          receiver id to receive data for\n"
     " cornerturn.cfg    ascii configuration file defining cornerturn\n",
     DADA_DEFAULT_BLOCK_KEY);
 }
@@ -154,58 +156,122 @@ int64_t mopsr_ibdb_recv (dada_client_t* client, void * buffer, uint64_t bytes)
   // copy header from just first src, up to a maximum of bytes
   memcpy (buffer, ctx->ib_cms[0]->header_mb->buffer, bytes);
 
-  unsigned old_nant, new_nant;
-  if (ascii_header_get (buffer, "NANT", "%u", &old_nant) != 1)
+  // the number of channels, bandwidth and centre frequnecy must be the same from each connection
+  unsigned int nchan;
+  if (ascii_header_get (buffer, "NCHAN", "%d", &nchan) != 1)
   {
-    multilog (log, LOG_ERR, "recv: failed to read NANT from header\n");
-    return 0;
+    multilog (log, LOG_WARNING, "recv: failed to read NCHAN from header for connection id=0\n");
+  }
+  float bw;
+  if (ascii_header_get (buffer, "BW", "%f", &bw) != 1)
+  {
+    multilog (log, LOG_WARNING, "recv: failed to read BW from header for connection id=0\n");
+  }
+  float freq;
+  if (ascii_header_get (buffer, "FREQ", "%f", &freq) != 1)
+  {
+    multilog (log, LOG_WARNING, "recv: failed to read FREQ from header for connection id=0\n");
+  }
+
+  // Assume that obs_offset is the same for all the input streams in terms of time and convert to bytes using the new bytes per second
+  uint64_t old_obs_offset, new_obs_offset;
+  if (ascii_header_get (buffer, "OBS_OFFSET", "%"PRIu64"", &old_obs_offset) != 1)
+  {
+    multilog (log, LOG_WARNING, "recv: failed to read OBS_OFFSET from header for connection id=%d\n", i);
   }
   if (ctx->verbose)
-    multilog (log, LOG_INFO, "recv: old NANT=%u\n", old_nant);
+    multilog (log, LOG_INFO, "recv: old OBS_OFFSET=%"PRIu64" for connection id=%d\n", old_obs_offset, i);
 
-  // update the NANT *= number of connections
-  new_nant = old_nant * ctx->nconn;
+  // Accumulate number of antennas, bytes per second, resolution, file size from all the input streams
+  unsigned int new_nant=0;
+  float freq_low = -1.0; // used to find the lowest frequency available in the incoming data
+  uint64_t new_bytes_per_second=0, new_resolution=0;
+  int64_t new_file_size=0;
+  for (i=0; i<ctx->nconn; i++)
+  {
+    unsigned int old_nant = (ctx->conn_info[i].ant_last - ctx->conn_info[i].ant_first) + 1;
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "recv: old NANT=%u for connection id=%d\n", old_nant, i);
+    new_nant += old_nant;
+
+    unsigned int this_nchan;
+    if (ascii_header_get (ctx->ib_cms[i]->header_mb->buffer, "NCHAN", "%d", &this_nchan) != 1)
+    {
+      multilog (log, LOG_WARNING, "recv: failed to read NCHAN from header for connection id=%d\n", i);
+    }
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "recv: NCHAN=%d for connection id=%d\n", this_nchan, i);
+    if (this_nchan != nchan)
+      multilog (log, LOG_WARNING, "recv: NCHAN mismatch on connection id=%d\n", i);
+
+    float this_bw;
+    if (ascii_header_get (ctx->ib_cms[i]->header_mb->buffer, "BW", "%f", &this_bw) != 1)
+    {
+      multilog (log, LOG_WARNING, "recv: failed to read BW from header for connection id=%d\n", i);
+    }
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "recv: BW=%f for connection id=%d\n", this_bw, i);
+    if (this_bw != bw)
+      multilog (log, LOG_WARNING, "recv: BW mismatch on connection id=%d\n", i);
+
+    // Need to make sure we catch the lowest incoming frequency to determine the new centre frequency
+    float this_freq;
+    if (ascii_header_get (ctx->ib_cms[i]->header_mb->buffer, "FREQ", "%f", &this_freq) != 1)
+    {
+      multilog (log, LOG_WARNING, "recv: failed to read FREQ from header for connection id=%d\n", i);
+    }
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "recv: FREQ=%f for connection id=%d\n", this_freq, i);
+    if (this_freq != freq)
+      multilog (log, LOG_WARNING, "recv: FREQ mismatch on connection id=%d\n", i);
+
+    uint64_t old_bytes_per_second;
+    if (ascii_header_get (ctx->ib_cms[i]->header_mb->buffer, "BYTES_PER_SECOND", "%"PRIu64"", &old_bytes_per_second) != 1)
+    {
+      multilog (log, LOG_WARNING, "recv: failed to read BYTES_PER_SECOND from header for connection id=%d\n", i);
+    }
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "recv: old BYTES_PER_SECOND=%"PRIu64" for connection id=%d\n", old_bytes_per_second, i);
+    new_bytes_per_second += old_bytes_per_second;
+
+    // We read OBS_OFFSET from the first stream, update with the bytes per second from the first stream:
+    if (i == 0)
+      new_obs_offset = old_obs_offset / old_bytes_per_second;
+
+    uint64_t old_resolution;
+    if (ascii_header_get (ctx->ib_cms[i]->header_mb->buffer, "RESOLUTION", "%"PRIu64"", &old_resolution) != 1)
+    {
+      multilog (log, LOG_WARNING, "recv: failed to read RESOLUTION from header for connection id=%d\n", i);
+    }
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "recv: old RESOLUTION=%"PRIu64" for connection id=%d\n", old_resolution, i);
+    new_resolution += old_resolution;
+
+    int64_t old_file_size;
+    if (ascii_header_get (ctx->ib_cms[i]->header_mb->buffer, "FILE_SIZE", "%"PRIi64"", &old_file_size) != 1)
+    {
+      old_file_size = -1;
+    }
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "recv: old FILE_SIZE=%"PRIi64" for connection id=%d\n", old_file_size, i);
+    if (old_file_size > 0)
+    {
+      new_file_size += old_file_size;
+    }
+
+  } // end of loop through incoming connections
 
   if (ctx->verbose)
+  {
     multilog (log, LOG_INFO, "recv: setting NANT=%u in header\n",new_nant);
+    if (new_nant != ctx->nant )
+      multilog (log, LOG_WARNING, "recv: sum of antennas from senders not equal to total number of antennas in the configuration %d != %d\n", new_nant, ctx->nant);
+  }
   if (ascii_header_set (buffer, "NANT", "%u", new_nant) < 0)
   {
     multilog (log, LOG_ERR, "recv: failed to set NANT=%u in header\n", new_nant);
   }
 
-  uint64_t old_bytes_per_second, new_bytes_per_second;
-  if (ascii_header_get (buffer, "BYTES_PER_SECOND", "%"PRIu64"", &old_bytes_per_second) != 1)
-  {
-    multilog (log, LOG_WARNING, "recv: failed to read BYTES_PER_SECOND from header\n");
-  }
-  if (ctx->verbose)
-    multilog (log, LOG_INFO, "recv: old BYTES_PER_SECOND=%"PRIu64"\n", old_bytes_per_second);
-
-  uint64_t old_obs_offset, new_obs_offset;
-  if (ascii_header_get (buffer, "OBS_OFFSET", "%"PRIu64"", &old_obs_offset) != 1)
-  {
-    multilog (log, LOG_WARNING, "recv: failed to read OBS_OFFSET from header\n");
-  }
-  if (ctx->verbose)
-    multilog (log, LOG_INFO, "recv: old OBS_OFFSET=%"PRIu64"\n", old_obs_offset);
-
-  uint64_t old_resolution, new_resolution;
-  if (ascii_header_get (buffer, "RESOLUTION", "%"PRIu64"", &old_resolution) != 1)
-  {
-    multilog (log, LOG_WARNING, "recv: failed to read RESOLUTION from header\n");
-  }
-  if (ctx->verbose)
-    multilog (log, LOG_INFO, "recv: old RESOLUTION=%"PRIu64"\n", old_resolution);
-
-  int64_t old_file_size, new_file_size;
-  if (ascii_header_get (buffer, "FILE_SIZE", "%"PRIi64"", &old_file_size) != 1)
-  {
-    old_file_size = -1;
-  }
-  if (ctx->verbose)
-    multilog (log, LOG_INFO, "recv: old FILE_SIZE=%"PRIi64"\n", old_file_size);
-
-  new_bytes_per_second = old_bytes_per_second * ctx->nconn;
   if (ctx->verbose)
     multilog (log, LOG_INFO, "recv: setting BYTES_PER_SECOND=%"PRIu64" in header\n", new_bytes_per_second);
   if (ascii_header_set (buffer, "BYTES_PER_SECOND", "%"PRIu64"", new_bytes_per_second) < 0)
@@ -213,7 +279,8 @@ int64_t mopsr_ibdb_recv (dada_client_t* client, void * buffer, uint64_t bytes)
     multilog (log, LOG_WARNING, "recv: failed to set BYTES_PER_SECOND=%"PRIu64" in header\n", new_bytes_per_second);
   }
 
-  new_obs_offset = old_obs_offset * ctx->nconn;
+  // We now have all the info to calculate the final OBS_OFFSET and set it in the outgoing header:
+  new_obs_offset *= new_bytes_per_second;
   if (ctx->verbose)
     multilog (log, LOG_INFO, "recv: setting OBS_OFFSET=%"PRIu64" in header\n", new_obs_offset);
   if (ascii_header_set (buffer, "OBS_OFFSET", "%"PRIu64"", new_obs_offset) < 0)
@@ -221,7 +288,6 @@ int64_t mopsr_ibdb_recv (dada_client_t* client, void * buffer, uint64_t bytes)
     multilog (log, LOG_WARNING, "recv: failed to set OBS_OFFSET=%"PRIu64" in header\n", new_obs_offset);
   }
 
-  new_resolution = old_resolution * ctx->nconn;
   if (ctx->verbose)
     multilog (log, LOG_INFO, "recv: setting RESOLUTION=%"PRIu64" in header\n", new_resolution);
   if (ascii_header_set (buffer, "RESOLUTION", "%"PRIu64"", new_resolution) < 0)
@@ -229,9 +295,8 @@ int64_t mopsr_ibdb_recv (dada_client_t* client, void * buffer, uint64_t bytes)
     multilog (log, LOG_WARNING, "recv: failed to set RESOLUTION=%"PRIu64" in header\n", new_resolution);
   }
 
-  if (old_file_size > 0)
+  if (new_file_size > 0)
   {
-    new_file_size = old_file_size * ctx->nconn;
     if (ctx->verbose)
       multilog (log, LOG_INFO, "recv: setting FILE_SIZE=%"PRIi64" in header\n", new_file_size);
     if (ascii_header_set (buffer, "FILE_SIZE", "%"PRIi64"", new_file_size) < 0)
@@ -297,7 +362,6 @@ int64_t mopsr_ibdb_recv (dada_client_t* client, void * buffer, uint64_t bytes)
   return (int64_t) bytes;
 }
 
-
 /*! Transfers 1 datablock at a time to mopsr_ibdb */
 int64_t mopsr_ibdb_recv_block (dada_client_t* client, void * buffer, 
                                uint64_t data_size, uint64_t block_id)
@@ -322,7 +386,7 @@ int64_t mopsr_ibdb_recv_block (dada_client_t* client, void * buffer,
     return -1;
   }
 
-  // wait for the number of bytes to be received
+  // wait for the number of bytes per channel to be received
   if (ctx->verbose)
         multilog(ctx->log, LOG_INFO, "recv_block: recv_messages [BYTES TO XFER]\n");
   if (dada_ib_recv_messages(ib_cms, ctx->nconn, DADA_IB_BYTES_TO_XFER_KEY) < 0)
@@ -331,29 +395,29 @@ int64_t mopsr_ibdb_recv_block (dada_client_t* client, void * buffer,
     return -1;
   }
 
-  // count the number of bytes to be received
-  uint64_t bytes_to_xfer = 0;
+  // count the number of bytes per channel to be received
+  uint64_t bytes_to_xfer_per_channel = 0;
   for (i=0; i<ctx->nconn; i++)
   {
-    bytes_to_xfer += ib_cms[i]->sync_from_val[1];
+    bytes_to_xfer_per_channel += ib_cms[i]->sync_from_val[1];
     if (ctx->verbose > 1)
       multilog (ctx->log, LOG_INFO, "recv_block: [%d] bytes to be recvd=%"PRIu64"\n",
                 i, ib_cms[i]->sync_from_val[1]);
   }
 
   // special case where we end observation on precise end of block
-  if (bytes_to_xfer == 0)
+  if (bytes_to_xfer_per_channel == 0)
   {
     //if (ctx->verbose)
-      multilog(ctx->log, LOG_INFO, "recv_block: bytes_to_xfer=0, obs ended [EOD]\n");
+      multilog(ctx->log, LOG_INFO, "recv_block: bytes_to_xfer_per_channel=0, obs ended [EOD]\n");
     return 0;
   }
 
   // if the number of bytes to be received is less than the block size, this is the end of the observation
-  if (bytes_to_xfer < data_size)
+  if (bytes_to_xfer_per_channel*ctx->nchan < data_size)
   {
     //if (ctx->verbose)
-      multilog(ctx->log, LOG_INFO, "recv_block: bytes_to_xfer=%"PRIu64" < %"PRIu64", obs ending\n", bytes_to_xfer, data_size);
+      multilog(ctx->log, LOG_INFO, "recv_block: bytes_to_xfer_per_channel=%"PRIu64" < %"PRIu64", obs ending\n", bytes_to_xfer_per_channel, data_size);
     ctx->obs_ending = 1;
   }
 
@@ -396,8 +460,7 @@ int64_t mopsr_ibdb_recv_block (dada_client_t* client, void * buffer,
     multilog(ctx->log, LOG_INFO, "recv_block: waiting for completion "
              "on block %"PRIu64"...\n", block_id);
 
-  // wait for the number of bytes transferred
-  int64_t bytes_received = 0;
+  // wait for the total number of bytes transferred
   if (ctx->verbose)
     multilog(ctx->log, LOG_INFO, "recv_block: recv_messages [BYTES XFERRED]\n");
   if (dada_ib_recv_messages(ib_cms, ctx->nconn, DADA_IB_BYTES_XFERRED_KEY) < 0)
@@ -405,13 +468,16 @@ int64_t mopsr_ibdb_recv_block (dada_client_t* client, void * buffer,
     multilog(ctx->log, LOG_ERR, "recv_block: recv_messages [BYTES XFERRED] failed\n");
     return -1;
   }
+  int64_t bytes_received_per_channel = 0;
   for (i=0; i<ctx->nconn; i++)
   {
-    bytes_received += ib_cms[i]->sync_from_val[1];
+    bytes_received_per_channel += ib_cms[i]->sync_from_val[1];
     if (ctx->verbose > 1)
       multilog (ctx->log, LOG_INFO, "recv_block: [%d] bytes recvd=%"PRIu64"\n",
                 i, ib_cms[i]->sync_from_val[1]);
   }
+  if (ctx->verbose)
+    multilog(ctx->log, LOG_INFO, "recv_block: total bytes received per channel=%"PRIi64" nchan=%d\n", bytes_received_per_channel, ctx->nchan);
 
   // post receive for the BYTES TO XFER in next block function call
   if (ctx->verbose)
@@ -427,7 +493,9 @@ int64_t mopsr_ibdb_recv_block (dada_client_t* client, void * buffer,
     }
   }
 
-  if (ctx->verbose > 1)
+  int64_t bytes_received = (int64_t) bytes_received_per_channel * ctx->nchan;
+  
+  if (ctx->verbose)
     multilog(ctx->log, LOG_INFO, "recv_block: bytes transferred=%"PRIi64"\n", bytes_received);
 
   return bytes_received;
@@ -784,16 +852,22 @@ int main (int argc, char **argv)
 
   char * cornerturn_cfg = 0;
 
-  int channel = -1;
+  int irecv = -1;
 
   int arg = 0;
 
   unsigned i = 0;
 
-  while ((arg=getopt(argc,argv,"hk:sv")) != -1)
+  int core = -1;
+
+  while ((arg=getopt(argc,argv,"b:hk:sv")) != -1)
   {
     switch (arg) 
     {
+      case 'b':
+        core = atoi(optarg);
+        break;
+
       case 'h':
         usage ();
         return 0;
@@ -826,7 +900,7 @@ int main (int argc, char **argv)
     exit(EXIT_FAILURE);
   }
 
-  channel = atoi(argv[optind]);
+  irecv = atoi(argv[optind]);
 
   cornerturn_cfg = strdup(argv[optind+1]);
 
@@ -865,10 +939,15 @@ int main (int argc, char **argv)
   // handle SIGINT gracefully
   signal(SIGINT, signal_handler);
 
+  if (core >= 0)
+    if (dada_bind_thread_to_core(core) < 0)
+      multilog(log, LOG_WARNING, "mopsr_ibdb_FST: failed to bind to core %d\n", core);
+
+
   // parse the cornerturn configuration
   if (verbose)
-    multilog (log, LOG_INFO, "main: mopsr_setup_cornerturn_recv(channel=%d)\n", channel);
-  ctx.conn_info = mopsr_setup_cornerturn_recv (cornerturn_cfg, &ctx, channel);
+    multilog (log, LOG_INFO, "main: mopsr_setup_cornerturn_recv(receiver=%d)\n", irecv);
+  ctx.conn_info = mopsr_setup_cornerturn_recv (cornerturn_cfg, &ctx, irecv);
   if (!ctx.conn_info)
   {
     multilog (log, LOG_ERR, "Failed to parse cornerturn configuration file\n");

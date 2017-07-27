@@ -13,6 +13,7 @@
 #include <assert.h>
 #include <signal.h>
 #include <limits.h>
+#include <float.h>
 
 #include "dada_client.h"
 #include "dada_hdu.h"
@@ -154,36 +155,109 @@ int64_t mopsr_ibdb_recv (dada_client_t* client, void * buffer, uint64_t bytes)
   // copy header from just first connection, up to a maximum of bytes
   memcpy (buffer, ctx->ib_cms[0]->header_mb->buffer, bytes);
 
-  unsigned old_nchan, new_nchan;
-  if (ascii_header_get (buffer, "NCHAN", "%u", &old_nchan) != 1)
+  // extract parameters that MUST be common for all connections
+  unsigned int nbeam;
+  if (ascii_header_get (buffer, "NBEAM", "%d", &nbeam) != 1)
   {
-    multilog (log, LOG_ERR, "recv: failed to read NCHAN from header\n");
-    return 0;
+    multilog (log, LOG_WARNING, "recv: failed to read BEAM from header for connection id=0\n");
   }
-  if (ctx->verbose)
-    multilog (log, LOG_INFO, "recv: old NCHAN=%u\n", old_nchan);
 
-  // update the NCHAN *= number of connections
-  new_nchan = old_nchan * ctx->nconn;
+  unsigned new_nchan = 0;
+  float new_bw = 0;
+  float freq_low = FLT_MAX;
+  float freq_high = -FLT_MAX;
+  uint64_t new_obs_offset = 0;
+  uint64_t new_bytes_per_second = 0;
+  uint64_t new_resolution = 0;
+  int64_t new_file_size = 0;
 
-  // verify the the NCHAN computed from the header matches the cornerturn
+  for (i=0; i<ctx->nconn; i++)
+  {
+    // nchan expected by this cornerturn thread
+    unsigned ct_nchan = (ctx->conn_info[i].chan_last - ctx->conn_info[i].chan_first) + 1;
+
+    unsigned nchan;
+    if (ascii_header_get (ctx->ib_cms[i]->header_mb->buffer, "NCHAN", "%d", &nchan) != 1)
+    {
+      multilog (log, LOG_ERR, "recv: failed to read NCHAN from header for connection id=%d\n", i);
+      return 0;
+    }
+    if (ct_nchan != nchan)
+    {
+      multilog (log, LOG_ERR, "recv: NCHAN mismatch on connection id=%d\n", i);
+      return 0;
+    }
+    new_nchan += nchan;
+
+    float this_bw;
+    if (ascii_header_get (ctx->ib_cms[i]->header_mb->buffer, "BW", "%f", &this_bw) != 1)
+    {
+      multilog (log, LOG_ERR, "recv: failed to read BW from header for connection id=%d\n", i);
+      return 0;
+    }
+    new_bw += this_bw;
+
+    float this_freq;
+    if (ascii_header_get (ctx->ib_cms[i]->header_mb->buffer, "FREQ", "%f", &this_freq) != 1)
+    {
+      multilog (log, LOG_ERR, "recv: failed to read FREQ from header for connection id=%d\n", i);
+      return 0;
+    }
+    float this_freq_low = this_freq - this_bw/2;
+    if (this_freq_low < freq_low)
+      freq_low = this_freq_low;
+    float this_freq_high = this_freq - this_bw/2;
+    if (this_freq_high < freq_high)
+      freq_high = this_freq_high;
+
+    uint64_t old_bytes_per_second;
+    if (ascii_header_get (ctx->ib_cms[i]->header_mb->buffer, "BYTES_PER_SECOND", "%"PRIu64"", &old_bytes_per_second) != 1)
+    {
+      multilog (log, LOG_ERR, "recv: failed to read BYTES_PER_SECOND from header\n");
+      return 0;
+    }
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "recv: old BYTES_PER_SECOND=%"PRIu64"\n", old_bytes_per_second);
+    new_bytes_per_second += old_bytes_per_second;
+
+    uint64_t old_obs_offset;
+    if (ascii_header_get (ctx->ib_cms[i]->header_mb->buffer, "OBS_OFFSET", "%"PRIu64"", &old_obs_offset) != 1)
+    {
+      multilog (log, LOG_ERR, "recv: failed to read OBS_OFFSET from header\n");
+      return 0;
+    }
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "recv: old OBS_OFFSET=%"PRIu64"\n", old_obs_offset);
+    new_obs_offset += old_obs_offset;
+
+    uint64_t old_resolution;
+    if (ascii_header_get (ctx->ib_cms[i]->header_mb->buffer, "RESOLUTION", "%"PRIu64"", &old_resolution) != 1)
+    {
+      multilog (log, LOG_ERR, "recv: failed to read RESOLUTION from header\n");
+      return 0;
+    }
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "recv: old RESOLUTION=%"PRIu64"\n", old_resolution);
+    new_resolution += old_resolution;
+
+    int64_t old_file_size;
+    if (ascii_header_get (ctx->ib_cms[i]->header_mb->buffer, "FILE_SIZE", "%"PRIi64"", &old_file_size) != 1)
+    {
+      old_file_size = -1;
+    }
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "recv: old FILE_SIZE=%"PRIi64"\n", old_file_size);
+    if (old_file_size >= 0)
+      new_file_size += old_file_size;
+  }
+
   // configuration
-  if (old_nchan != ctx->nchan_send)
-  {
-    multilog (log, LOG_ERR, "recv: old NCHAN [%u] did not match cornerturn config [%u]\n",
-                            old_nchan, ctx->nchan_send);
-    return 0;
-  }
-
-  if (new_nchan != ctx->nchan_recv)
+  if (new_nchan != ctx->nchan)
   {
     multilog (log, LOG_ERR, "recv: new NCHAN [%u] did not match cornerturn config [%u]\n",
-                            new_nchan, ctx->nchan_recv);
+                            new_nchan, ctx->nchan);
     return 0;
   }
-
-  // the data rate will increase by this factor due to NSEND channels
-  unsigned factor = new_nchan / old_nchan;
 
   if (ctx->verbose)
     multilog (log, LOG_INFO, "recv: setting NCHAN=%u in header\n", new_nchan);
@@ -192,73 +266,19 @@ int64_t mopsr_ibdb_recv (dada_client_t* client, void * buffer, uint64_t bytes)
     multilog (log, LOG_ERR, "recv: failed to set NCHAN=%u in header\n", new_nchan);
   }
 
-  float old_freq, new_freq;
-  if (ascii_header_get (buffer, "FREQ", "%f", &old_freq) != 1)
-  {
-    multilog (log, LOG_ERR, "recv: failed to read FREQfrom header\n");
-    return 0;
-  }
-  if (ctx->verbose)
-    multilog (log, LOG_INFO, "recv: old FREQ=%f\n", old_freq);
-
-  float old_bw, new_bw;
-  if (ascii_header_get (buffer, "BW", "%f", &old_bw) != 1)
-  {
-    multilog (log, LOG_ERR, "recv: failed to read FREQfrom header\n");
-    return 0;
-  }
-  if (ctx->verbose)
-    multilog (log, LOG_INFO, "recv: old BW=%f\n", old_bw);
-
-  new_bw = old_bw * factor;
-  float freq_low = old_freq - (old_bw / 2);
-  new_freq = freq_low + (new_bw / 2);
-
   if (ascii_header_set (buffer, "BW", "%f", new_bw) < 0)
   {
     multilog (log, LOG_ERR, "recv: failed to set BW=%f in header\n", new_bw);
     return 0;
   }
 
+  float new_freq = freq_low + (new_bw / 2);
   if (ascii_header_set (buffer, "FREQ", "%f", new_freq) < 0)
   {
     multilog (log, LOG_ERR, "recv: failed to set FREQ=%f in header\n", new_freq);
     return 0;
   }
 
-  uint64_t old_bytes_per_second, new_bytes_per_second;
-  if (ascii_header_get (buffer, "BYTES_PER_SECOND", "%"PRIu64"", &old_bytes_per_second) != 1)
-  {
-    multilog (log, LOG_WARNING, "recv: failed to read BYTES_PER_SECOND from header\n");
-  }
-  if (ctx->verbose)
-    multilog (log, LOG_INFO, "recv: old BYTES_PER_SECOND=%"PRIu64"\n", old_bytes_per_second);
-
-  uint64_t old_obs_offset, new_obs_offset;
-  if (ascii_header_get (buffer, "OBS_OFFSET", "%"PRIu64"", &old_obs_offset) != 1)
-  {
-    multilog (log, LOG_WARNING, "recv: failed to read OBS_OFFSET from header\n");
-  }
-  if (ctx->verbose)
-    multilog (log, LOG_INFO, "recv: old OBS_OFFSET=%"PRIu64"\n", old_obs_offset);
-
-  uint64_t old_resolution, new_resolution;
-  if (ascii_header_get (buffer, "RESOLUTION", "%"PRIu64"", &old_resolution) != 1)
-  {
-    multilog (log, LOG_WARNING, "recv: failed to read RESOLUTION from header\n");
-  }
-  if (ctx->verbose)
-    multilog (log, LOG_INFO, "recv: old RESOLUTION=%"PRIu64"\n", old_resolution);
-
-  int64_t old_file_size, new_file_size;
-  if (ascii_header_get (buffer, "FILE_SIZE", "%"PRIi64"", &old_file_size) != 1)
-  {
-    old_file_size = -1;
-  }
-  if (ctx->verbose)
-    multilog (log, LOG_INFO, "recv: old FILE_SIZE=%"PRIi64"\n", old_file_size);
-
-  new_bytes_per_second = old_bytes_per_second * factor; 
   if (ctx->verbose)
     multilog (log, LOG_INFO, "recv: setting BYTES_PER_SECOND=%"PRIu64" in header\n", new_bytes_per_second);
   if (ascii_header_set (buffer, "BYTES_PER_SECOND", "%"PRIu64"", new_bytes_per_second) < 0)
@@ -266,7 +286,6 @@ int64_t mopsr_ibdb_recv (dada_client_t* client, void * buffer, uint64_t bytes)
     multilog (log, LOG_WARNING, "recv: failed to set BYTES_PER_SECOND=%"PRIu64" in header\n", new_bytes_per_second);
   }
 
-  new_obs_offset = old_obs_offset * factor;
   if (ctx->verbose)
     multilog (log, LOG_INFO, "recv: setting OBS_OFFSET=%"PRIu64" in header\n", new_obs_offset);
   if (ascii_header_set (buffer, "OBS_OFFSET", "%"PRIu64"", new_obs_offset) < 0)
@@ -274,7 +293,6 @@ int64_t mopsr_ibdb_recv (dada_client_t* client, void * buffer, uint64_t bytes)
     multilog (log, LOG_WARNING, "recv: failed to set OBS_OFFSET=%"PRIu64" in header\n", new_obs_offset);
   }
 
-  new_resolution = old_resolution * factor;
   if (ctx->verbose)
     multilog (log, LOG_INFO, "recv: setting RESOLUTION=%"PRIu64" in header\n", new_resolution);
   if (ascii_header_set (buffer, "RESOLUTION", "%"PRIu64"", new_resolution) < 0)
@@ -282,9 +300,8 @@ int64_t mopsr_ibdb_recv (dada_client_t* client, void * buffer, uint64_t bytes)
     multilog (log, LOG_WARNING, "recv: failed to set RESOLUTION=%"PRIu64" in header\n", new_resolution);
   }
 
-  if (old_file_size > 0)
+  if (new_file_size >= 0)
   {
-    new_file_size = old_file_size * factor;
     if (ctx->verbose)
       multilog (log, LOG_INFO, "recv: setting FILE_SIZE=%"PRIi64" in header\n", new_file_size);
     if (ascii_header_set (buffer, "FILE_SIZE", "%"PRIi64"", new_file_size) < 0)
@@ -344,29 +361,29 @@ int64_t mopsr_ibdb_recv_block (dada_client_t* client, void * buffer,
     return -1;
   }
 
-  // count the number of bytes to be received
-  uint64_t bytes_to_xfer = 0;
+  // count the number of bytes to be received (per beam)
+  uint64_t bytes_to_xfer_per_beam = 0;
   for (i=0; i<ctx->nconn; i++)
   {
-    bytes_to_xfer += ib_cms[i]->sync_from_val[1];
+    bytes_to_xfer_per_beam += ib_cms[i]->sync_from_val[1];
     if (ctx->verbose > 1)
       multilog (ctx->log, LOG_INFO, "recv_block: [%d] bytes to be recvd=%"PRIu64"\n",
                 i, ib_cms[i]->sync_from_val[1]);
   }
 
   // special case where we end observation on precise end of block
-  if (bytes_to_xfer == 0)
+  if (bytes_to_xfer_per_beam == 0)
   {
     //if (ctx->verbose)
-      multilog(ctx->log, LOG_INFO, "recv_block: bytes_to_xfer=0, obs ended [EOD]\n");
+      multilog(ctx->log, LOG_INFO, "recv_block: bytes_to_xfer_per_beam=0, obs ended [EOD]\n");
     return 0;
   }
 
   // if the number of bytes to be received is less than the block size, this is the end of the observation
-  if (bytes_to_xfer < data_size)
+  if (bytes_to_xfer_per_beam * ctx->conn_info[0].nbeam < data_size)
   {
     //if (ctx->verbose)
-      multilog(ctx->log, LOG_INFO, "recv_block: bytes_to_xfer=%"PRIu64" < %"PRIu64", obs ending\n", bytes_to_xfer, data_size);
+      multilog(ctx->log, LOG_INFO, "recv_block: bytes_to_xfer=%"PRIu64" < %"PRIu64", obs ending\n", bytes_to_xfer_per_beam * ctx->conn_info[0].nbeam, data_size);
     ctx->obs_ending = 1;
   }
 
@@ -410,7 +427,6 @@ int64_t mopsr_ibdb_recv_block (dada_client_t* client, void * buffer,
              "on block %"PRIu64"...\n", block_id);
 
   // wait for the number of bytes transferred
-  int64_t bytes_received = 0;
   if (ctx->verbose)
     multilog(ctx->log, LOG_INFO, "recv_block: recv_messages [BYTES XFERRED]\n");
   if (dada_ib_recv_messages(ib_cms, ctx->nconn, DADA_IB_BYTES_XFERRED_KEY) < 0)
@@ -418,16 +434,16 @@ int64_t mopsr_ibdb_recv_block (dada_client_t* client, void * buffer,
     multilog(ctx->log, LOG_ERR, "recv_block: recv_messages [BYTES XFERRED] failed\n");
     return -1;
   }
+  int64_t bytes_received_per_beam = 0;
   for (i=0; i<ctx->nconn; i++)
   {
-    bytes_received += ib_cms[i]->sync_from_val[1];
+    bytes_received_per_beam += ib_cms[i]->sync_from_val[1];
     if (ctx->verbose > 1)
       multilog (ctx->log, LOG_INFO, "recv_block: [%d] bytes recvd=%"PRIu64"\n",
                 i, ib_cms[i]->sync_from_val[1]);
   }
 
-  // could optionall do conversion from SFT tos STF order here ?
-
+  int64_t bytes_received = (int64_t) bytes_received_per_beam * ctx->conn_info[0].nbeam;
 
   // post receive for the BYTES TO XFER in next block function call
   if (ctx->verbose)
@@ -458,11 +474,11 @@ int mopsr_ibdb_ib_init (mopsr_bp_ib_t * ctx, dada_hdu_t * hdu, multilog_t * log)
   if (ctx->verbose > 1)
     multilog (ctx->log, LOG_INFO, "mopsr_ibdb_ib_init()\n");
 
-  unsigned int modulo_size = ctx->nchan_recv * ctx->nbeam_recv * ctx->ndim * ctx->nbyte;
+  unsigned int modulo_size = ctx->conn_info[0].nbeam * ctx->nchan * ctx->ndim * ctx->npol * ctx->nbyte;
 
   if (ctx->verbose > 1)
-    multilog (ctx->log, LOG_INFO, "ib_init: nbeam=%u nchan=%u ndim=%u nbyte=%u modulo_size=%u\n", 
-             ctx->nbeam_recv, ctx->nchan_recv, ctx->ndim, ctx->nbyte, modulo_size);
+    multilog (ctx->log, LOG_INFO, "ib_init: nbeam=%u nchan=%u ndim=%u npol=%u, nbyte=%u modulo_size=%u\n", 
+             ctx->conn_info[0].nbeam, ctx->nchan, ctx->ndim, ctx->npol, ctx->nbyte, modulo_size);
 
   uint64_t db_nbufs = 0;
   uint64_t db_bufsz = 0;

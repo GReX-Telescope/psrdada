@@ -77,7 +77,7 @@ mopsr_bf_conn_t * mopsr_setup_cornerturn_send (const char * config_file, mopsr_b
   mopsr_bf_conn_t * conns = (mopsr_bf_conn_t *) malloc (sizeof(mopsr_bf_conn_t) * ctx->nconn);
 
   char host[64];
-  unsigned int irecv, ichan;
+  unsigned int irecv, chan_first, chan_last;
   for (irecv=0; irecv<nrecv; irecv++)
   {
     sprintf (key, "RECV_%d", irecv);
@@ -87,9 +87,16 @@ mopsr_bf_conn_t * mopsr_setup_cornerturn_send (const char * config_file, mopsr_b
       return 0;
     }
 
-    // get the channel to be sent to this receiver
-    sprintf (key, "RECV_CHAN_%d", irecv);
-    if (ascii_header_get (config , key, "%u", &ichan) != 1)
+    // get the first / last channel to be sent to this receiver
+    sprintf (key, "RECV_CHAN_FIRST_%d", irecv);
+    if (ascii_header_get (config , key, "%u", &chan_first) != 1)
+    {
+      multilog (ctx->log, LOG_ERR, "setup_cornerturn_send: config with no %s\n", key);
+      return 0;
+    }
+
+    sprintf (key, "RECV_CHAN_LAST_%d", irecv);
+    if (ascii_header_get (config , key, "%u", &chan_last) != 1)
     {
       multilog (ctx->log, LOG_ERR, "setup_cornerturn_send: config with no %s\n", key);
       return 0;
@@ -108,73 +115,34 @@ mopsr_bf_conn_t * mopsr_setup_cornerturn_send (const char * config_file, mopsr_b
     strcpy (conns[irecv].ib_host, host);
 
     // set destination port for opening IB connection
-    conns[irecv].pfb       = send_id;
-    conns[irecv].port      = chan_baseport + (send_id * nrecv) + irecv;
-    conns[irecv].chan      = ichan;
-    conns[irecv].npfb      = nsend;
-    conns[irecv].ant_first = ant_first;
-    conns[irecv].ant_last  = ant_last;
-    conns[irecv].ib_cm     = 0;
-  }
+    conns[irecv].pfb        = send_id;
+    conns[irecv].port       = chan_baseport + (send_id * nrecv) + irecv;
+    conns[irecv].chan_first = chan_first;
+    conns[irecv].chan_last  = chan_last;
+    conns[irecv].nchan      = (chan_last - chan_first) + 1;
+    conns[irecv].npfb       = nsend;
+    conns[irecv].ant_first  = ant_first;
+    conns[irecv].ant_last   = ant_last;
+    conns[irecv].nant       = (ant_last - ant_first) + 1;
+    conns[irecv].ib_cm      = 0;
 
-#if 0
-  unsigned irecv;
-  char host[64];
-  unsigned int chan_first;
-  unsigned int chan_last;
-  unsigned int prev_chan = -1;
-  for (irecv=0; irecv<nrecv; irecv++)
-  {
-    sprintf (key, "RECV_%d", irecv);
-    if (ascii_header_get (config , key, "%s", host) != 1)
-    {
-      multilog (ctx->log, LOG_ERR, "setup_cornerturn_send: config with no %s\n", key);
-      return 0;
-    }
-
-    sprintf (key, "CHAN_FIRST_RECV_%d", irecv);
-    if (ascii_header_get (config , key, "%d", &chan_first) != 1)
-    {
-      multilog (ctx->log, LOG_ERR, "setup_cornerturn_send: config with no %s\n", key);
-      return 0;
-    }
-
-    sprintf (key, "CHAN_LAST_RECV_%d", irecv);
-    if (ascii_header_get (config , key, "%d", &chan_last) != 1)
-    {
-      multilog (ctx->log, LOG_ERR, "setup_cornerturn_send: config with no %s\n", key);
-      return 0;
-    }
-
-    unsigned int ichan;
-    for (ichan=chan_first; ichan<=chan_last; ichan++)
-    {
-      if (ichan != prev_chan + 1)
-      {
-        multilog (ctx->log, LOG_ERR, "setup_cornerturn_send: non-continuous channels for %s\n", host);
-        return 0;
-      }
-        
-      // set destination host for opening IB connection
-      strcpy (conns[ichan].host, host);
-
-      // set destination port for opening IB connection
-      conns[ichan].port      = chan_baseport + (send_id * ctx->nchan) + ichan;
-      conns[ichan].chan      = ichan;
-      conns[ichan].ant_first = ant_first;
-      conns[ichan].ant_last  = ant_last;
-      conns[ichan].ib_cm     = 0;
-      prev_chan = ichan;
-    }
-  }
+#ifdef USE_SEGMENTS
+    conns[irecv].nsegments = 1;
+    conns[irecv].segments  = (mopsr_ct_segment_t *) malloc (sizeof(mopsr_ct_segment_t) * conns[irecv].nsegments);
+    conns[irecv].segments[0].local_offset = ichan * bytes_per_chan;
+    conns[irecv].segments[0].local_length = bytes_per_chan;
+    conns[irecv].segments[0].remote_offset = irecv * bytes_per_chan;
+    conns[irecv].segments[0].remote_length = bytes_per_chan;
 #endif
+  }
+
   return conns;
 }
 
 /*
  *  
  */
-mopsr_bf_conn_t * mopsr_setup_cornerturn_recv (const char * config_file, mopsr_bf_ib_t * ctx, unsigned int channel)
+mopsr_bf_conn_t * mopsr_setup_cornerturn_recv (const char * config_file, mopsr_bf_ib_t * ctx, unsigned int irecv)
 {
   char config[65536];
 
@@ -193,7 +161,7 @@ mopsr_bf_conn_t * mopsr_setup_cornerturn_recv (const char * config_file, mopsr_b
     return 0;
   }
 
-  // numner of output channels from cornerturn
+  // number of output streams from cornerturn
   unsigned int nrecv;
   if (ascii_header_get (config , "NRECV", "%d", &nrecv) != 1)
   {
@@ -223,7 +191,7 @@ mopsr_bf_conn_t * mopsr_setup_cornerturn_recv (const char * config_file, mopsr_b
     return 0;
   }
 
-  // senders will maintain nchan connections
+  // receivers will maintain nsend connections
   ctx->nconn = nsend;
   mopsr_bf_conn_t * conns = (mopsr_bf_conn_t *) malloc (sizeof(mopsr_bf_conn_t) * ctx->nconn);
 
@@ -231,6 +199,8 @@ mopsr_bf_conn_t * mopsr_setup_cornerturn_recv (const char * config_file, mopsr_b
   char host[64];
   unsigned int ant_first;
   unsigned int ant_last;
+  unsigned int chan_first;
+  unsigned int chan_last;
   unsigned int isend;
   for (isend=0; isend<nsend; isend++)
   {
@@ -265,17 +235,47 @@ mopsr_bf_conn_t * mopsr_setup_cornerturn_recv (const char * config_file, mopsr_b
       return 0;
     } 
 
-    conns[isend].pfb       = isend;
-    conns[isend].port      = chan_baseport + (isend * nrecv) + channel;
-    conns[isend].chan      = channel;
-    conns[isend].npfb      = nsend;
-    conns[isend].ant_first = ant_first;
-    conns[isend].ant_last  = ant_last;
+    // get the first / last channel to be sent to this receiver
+    sprintf (key, "RECV_CHAN_FIRST_%d", irecv);
+    if (ascii_header_get (config , key, "%u", &chan_first) != 1)
+    {
+      multilog (ctx->log, LOG_ERR, "setup_cornerturn_send: config with no %s\n", key);
+      return 0;
+    }
+
+    sprintf (key, "RECV_CHAN_LAST_%d", irecv);
+    if (ascii_header_get (config , key, "%u", &chan_last) != 1)
+    {
+      multilog (ctx->log, LOG_ERR, "setup_cornerturn_send: config with no %s\n", key);
+      return 0;
+    }
+
+    conns[isend].pfb        = isend;
+    conns[isend].port       = chan_baseport + (isend * nrecv) + irecv;
+    conns[isend].chan_first = chan_first;
+    conns[isend].chan_last  = chan_last;
+    conns[isend].nchan      = (chan_last - chan_first) + 1;
+    conns[isend].npfb       = nsend;
+    conns[isend].ant_first  = ant_first;
+    conns[isend].ant_last   = ant_last;
+    conns[isend].nant       = (ant_last - ant_first) + 1;
 
     if (ctx->verbose)
       multilog (ctx->log, LOG_INFO, "setup_cornerturn_recv: conns[%d].port=%d "
-                "ctx->nchan=%d nrecv=%u channel=%d\n", isend, conns[isend].port, ctx->nchan, nrecv, channel);
+                "ctx->nchan=%d nrecv=%u irecv=%d\n", isend, conns[isend].port, ctx->nchan, nrecv, irecv);
+#ifdef USE_SEGMENTS
+    conns[isend].nsegments = 1;
+    conns[isend].segments  = (mopsr_ct_segment_t *) malloc (sizeof(mopsr_ct_segment_t) * conns[isend].nsegments);
+
+    conns[isend].segments[0].local_offset = isend * bytes_per_conn;
+    conns[isend].segments[0].local_length = bytes_per_conn;
+    conns[isend].segments[0].remote_offset = channel * bytes_per_conn;
+    conns[isend].segments[0].remote_length = bytes_per_conn;
+#endif
+
   }
+
+  ctx->nchan = (chan_last - chan_first) + 1;
   return conns;
 }
 
@@ -296,13 +296,18 @@ int mopsr_setup_bp_read_config (mopsr_bp_ib_t * ctx, const char * config_file, c
     return -1;
   }
 
-  int nbit;
-  if (ascii_header_get (config , "NBIT", "%d", &nbit) != 1)
+  if (ascii_header_get (config , "NBIT", "%d", &(ctx->nbit)) != 1)
   {
     multilog (ctx->log, LOG_ERR, "setup_bp_read_config: config with no NBIT\n");
     return -1;
   }
-  ctx->nbyte = nbit * 8;
+  ctx->nbyte = ctx->nbit / 8;
+
+  if (ascii_header_get (config , "NPOL", "%d", &(ctx->npol)) != 1) 
+  { 
+    multilog (ctx->log, LOG_WARNING, "setup_bp_read_config: config with no NPOL, assuming 1\n"); 
+    ctx->npol = 1;    
+  } 
 
   // get the number of coarse and fine channels
   int nchan_coarse, nchan_fine;
@@ -317,10 +322,11 @@ int mopsr_setup_bp_read_config (mopsr_bp_ib_t * ctx, const char * config_file, c
     return -1;
   }
 
-  ctx->nchan_recv = nchan_coarse * nchan_fine;
+  // get the total number of channels
+  ctx->nchan = nchan_coarse * nchan_fine;
 
   // total number of backend beams
-  if (ascii_header_get (config , "NBEAM", "%d", &(ctx->nbeam_send)) != 1)
+  if (ascii_header_get (config , "NBEAM", "%d", &(ctx->nbeam)) != 1)
   {
     multilog (ctx->log, LOG_ERR, "setup_bp_read_config: config with no NBEAM\n");
     return -1;
@@ -339,9 +345,6 @@ int mopsr_setup_bp_read_config (mopsr_bp_ib_t * ctx, const char * config_file, c
   }
   if (ctx->verbose)
     multilog (ctx->log, LOG_INFO, "setup_bp_read_config: NRECV=%d\n", nrecv);
-
-  ctx->nbeam_recv = ctx->nbeam_send / nrecv;
-  ctx->nchan_send = ctx->nchan_recv / ctx->nsend;
 
   return 0;
 }
@@ -434,8 +437,10 @@ mopsr_bp_conn_t * mopsr_setup_bp_cornerturn_send (const char * config_file, mops
     conns[iconn].port       = chan_baseport + (send_id * ctx->nsend) + iconn;
     conns[iconn].chan_first = chan_first;
     conns[iconn].chan_last  = chan_last;
+    conns[iconn].nchan      = (chan_last - chan_first) + 1;
     conns[iconn].beam_first = beam_first;
     conns[iconn].beam_last  = beam_last;
+    conns[iconn].nbeam      = (beam_last - beam_first) + 1;
     conns[iconn].ib_cm      = 0;
     conns[iconn].isend      = send_id;
     conns[iconn].nsend      = ctx->nsend;
@@ -526,15 +531,20 @@ mopsr_bp_conn_t * mopsr_setup_bp_cornerturn_recv (const char * config_file, mops
     conns[iconn].port       = chan_baseport + (iconn * ctx->nconn) + recv_id;
     conns[iconn].chan_first = chan_first;
     conns[iconn].chan_last  = chan_last;
+    conns[iconn].nchan      = (chan_last - chan_first) + 1;
     conns[iconn].beam_first = beam_first;
     conns[iconn].beam_last  = beam_last;
+    conns[iconn].nbeam      = (beam_last - beam_first) + 1;
     conns[iconn].isend      = iconn;
     conns[iconn].nsend      = ctx->nsend;
     conns[iconn].irecv      = recv_id;
 
+    unsigned nchan_send = (chan_last - chan_first) + 1;
+    unsigned nbeam_recv = (beam_last - beam_first) + 1;
+
     if (ctx->verbose)
       multilog (ctx->log, LOG_INFO, "setup_bp_cornerturn_recv: conns[%d].port=%d "
-                "ctx->nchan_send=%d recv_id=%d\n", iconn, conns[iconn].port, ctx->nchan_send, recv_id);
+                "nchan_send=%d  nbeam_recv=%d recv_id=%d\n", iconn, conns[iconn].port, nchan_send, nbeam_recv, recv_id);
 
   }
   return conns;
