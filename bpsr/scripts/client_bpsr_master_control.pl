@@ -95,11 +95,14 @@ sub setupClientType()
 		my @dirs = ($cfg{"CLIENT_LOCAL_DIR"}, $cfg{"CLIENT_CONTROL_DIR"}, $cfg{"CLIENT_LOG_DIR"}, 
 							  $cfg{"CLIENT_ARCHIVE_DIR"}, $cfg{"CLIENT_RECORDING_DIR"}, $cfg{"CLIENT_SCRATCH_DIR"});
 
+
     for ($i=0; ($i<$cfg{"NUM_PWC"}); $i++)
     {
+      print "i=".$i." testing ".$host." match ".$cfg{"PWC_".$i}."\n";
       if ($host =~ m/$cfg{"PWC_".$i}/)
       {
         my $beam = $roach{"BEAM_".$i};
+        print $host." ".$i." matched ".$beam."\n";
         push @dirs, $cfg{"CLIENT_ARCHIVE_DIR"}."/".$beam;
       }
     }
@@ -135,14 +138,41 @@ sub setupClientType()
         my @ids = split(/ /,$cfg{"DATA_BLOCK_IDS"});
         my $key = "";
         my $id = 0;
+        my ($nbufs, $bufsz);
         foreach $id (@ids) 
         {
           $key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $i, $cfg{"NUM_PWC"}, $id);
-          # check nbufs and bufsz
-          if ((!defined($cfg{"BLOCK_BUFSZ_".$id})) || (!defined($cfg{"BLOCK_NBUFS_".$id}))) {
+          if (!defined($cfg{"BLOCK_NBUFS_".$id}))
+          {
             return 0;
           }
-          $Dada::client_master_control::pwcs{$i}{"dbs"}{$id} = $key;
+          $nbufs = $cfg{"BLOCK_NBUFS_".$id};
+
+          # if a BUFSZ is specfied use that
+          if (defined($cfg{"BLOCK_NBUFS_".$id}))
+          {
+            $bufsz = $cfg{"BLOCK_BUFSZ_".$id};
+          }
+          else
+          {
+            if (!defined($cfg{"BLOCK_NSAMP_".$id}))
+            { 
+              return 0;
+            }
+            # compute bufsz from params
+            my $nsamp = $cfg{"BLOCK_NSAMP_".$id};
+            my $nchan = $cfg{"NCHAN"};
+            my $nbit = 8;
+            my $npol = 1;
+            my $ndim = 2;
+            my $nant = ($cfg{"ANT_LAST_SEND_".$i} - $cfg{"ANT_FIRST_SEND_".$i}) + 1;
+            my $nbeam = 1;
+            $bufsz = Dada::client_master_control::computeDBSize($nsamp, $nchan, $npol, $ndim, $nbit, $nant, $nbeam);
+          } 
+
+          $Dada::client_master_control::pwcs{$i}{"dbs"}{$id}{"key"} = $key;
+          $Dada::client_master_control::pwcs{$i}{"dbs"}{$id}{"nbufs"} = $cfg{"BLOCK_NBUFS_".$id};
+          $Dada::client_master_control::pwcs{$i}{"dbs"}{$id}{"bufsz"} = $bufsz;
         }
 
         $Dada::client_master_control::pwcs{$i}{"daemons"} = [split(/ /,$cfg{"CLIENT_DAEMONS"})];
@@ -152,6 +182,5 @@ sub setupClientType()
   }
 
   return $found;
-
 }
 
