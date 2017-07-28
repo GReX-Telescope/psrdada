@@ -1240,6 +1240,8 @@ sub getTempInfo() {
     ($result, $response) = Dada::myShell($cmd);
     if ($result eq "ok") {
       $temp_str = $response.".0";
+    } else {
+      $temp_str = "0.0";
     }
 
   } else {
@@ -1625,7 +1627,7 @@ sub nexusPipeLog($$$$$$$)
 
   if ($sock)
   {
-    nexusLogMessage($sock, $id, $time, $type, $class, $daemon, $line);
+    nexusLogMessage($sock, $id, $time, $type, $class, $tag, $line);
   }
 
   if ($file)
