@@ -49,7 +49,7 @@ our $hires;
 #
 # Initialize globals
 #
-$dl = 2;
+$dl = 1;
 $quit_daemon = 0;
 $daemon_name = Dada::daemonBaseName($0);
 $pwc_id = 0;
