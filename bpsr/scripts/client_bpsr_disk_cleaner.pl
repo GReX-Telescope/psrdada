@@ -125,27 +125,52 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
   my $archive_dir = $cfg{"CLIENT_ARCHIVE_DIR"}."/".$beam;
 
   # Main Loop
-  while (!$quit_daemon) {
-
+  while (!$quit_daemon) 
+  {
     ($result, $response, $obs) = findCompletedBeam($archive_dir);
 
-    if (($result eq "ok") && ($obs ne "none")) {
-      logMsg(1, "INFO", "Deleting ".$beam."/".$obs);
+    if (($result eq "ok") && ($obs ne "none"))
+    {
+      logMsg(1, "INFO", "Deleting Files ".$beam."/".$obs);
       ($result, $response) = deleteCompletedBeam($archive_dir, $obs);
       if ($result ne "ok")
       {
         logMsg(0, "WARN", "Failed to delete ".$obs."/".$beam." ".$response);
         $quit_daemon = 1;
       }
-
-    } else {
+      else
+      {
+        sleep(1);
+      }
+    } 
+    else
+    {
       logMsg(2, "INFO", "Found no beams to delete for ".$beam);
+
+      ($result, $response, $obs) = findDeletedBeam($archive_dir);
+      if (($result eq "ok") && ($obs ne "none"))
+      {
+        logMsg(1, "INFO", "Deleting Dir ".$beam."/".$obs);
+        ($result, $response) = deleteDeletedBeam($archive_dir, $obs);
+        if ($result ne "ok")
+        {
+          logMsg(0, "WARN", "Failed to delete ".$obs."/".$beam." ".$response);
+          $quit_daemon = 1;
+        }
+        else
+        {
+          sleep (1);
+        }
+      }
     }
 
     my $counter = 120;
-    logMsg(2, "INFO", "Sleeping ".($counter)." seconds");
     while ((!$quit_daemon) && ($counter > 0) && ($obs eq "none")) 
     {
+      if ($counter == 120)
+      {
+        logMsg(2, "INFO", "Sleeping ".($counter)." seconds");
+      }
       sleep(1);
       $counter--;
     }
@@ -294,13 +319,49 @@ sub findCompletedBeam($)
   return ($result, $response, $obs);
 }
 
+#
+# Find an obs/beam that has been deleted and is > 1month old
+#
+sub findDeletedBeam($) 
+{
+  (my $archives_dir) = @_;
+
+  logMsg(2, "INFO", "findDeletedBeam(".$archives_dir.")");
+
+  my ($cmd, $result, $response);
+  my $obs = "none";
+
+  # look for observations that were marked as deleted over 31 days ago
+  $cmd = "find ".$archives_dir." -mindepth 2 -maxdepth 2 -type f -name beam.deleted -mtime +31 ".
+         " -printf '\%h\\n' | awk -F/ '{print \$NF}' | sort -n | head -n 1";
+  logMsg(2, "INFO", "findCompletedBeam: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  logMsg(3, "INFO", "findCompletedBeam: ".$result." ".$response);
+  if ($result ne "ok")
+  {
+    logMsg(3, "INFO", "findCompletedBeam: ".$cmd." failed: ".$response);
+    return ("fail", "find command failed");
+  }
+  else
+  {
+    if ($response eq "")
+    {
+      $response = "no beams to delete";
+    }
+    else
+    {
+      $obs = $response;  
+      $response = "";
+    }
+    return ("ok", $response, $obs);
+  }
+}
 
 #
 # Delete the specified obs/beam 
 #
 sub deleteCompletedBeam($$) 
 {
-
   my ($dir, $obs) = @_;
 
   my $result = "";
@@ -315,8 +376,10 @@ sub deleteCompletedBeam($$)
     unlink $rm_file;
   }
 
-  my $cmd = "find ".$path." -name '*.fil' -o -name '*.ar' -o -name '*.png' -o -name '*.bp*' -o -name '*.ts?' -o -name '*.cand' -o -name 'rfi.*' -o -name '*.dada' > ".$rm_file;
-
+  my $cmd = "find ".$path." -name '*.fil' -o -name '*.psrxml' -o -name '*.ar' ".
+            "-o -name '*.tar' -o -name '*.png' -o -name '*.bp*' ".
+            "-o -name '*.ts?' -o -name '*.cand' -o -name 'rfi.*' ".
+            "-o -name '*.dada' > ".$rm_file;
   logMsg(2, "INFO", $cmd);
   ($result, $response) = Dada::mySystem($cmd);
   logMsg(2, "INFO", $result." ".$response);
@@ -383,7 +446,36 @@ sub deleteCompletedBeam($$)
 }
 
 
+#
+# Delete the specified obs/beam 
+#
+sub deleteDeletedBeam($$) 
+{
+  my ($dir, $obs) = @_;
 
+  my ($cmd, $result, $response);
+  my $path = $dir."/".$obs;
+
+  logMsg(2, "INFO", "Deleting archived files in ".$path);
+
+  if (-d $path)
+  {
+    $cmd = "rm -rf ".$path;
+    logMsg(2, "INFO", "deleteDeletedBeam: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    logMsg(3, "INFO", "deleteDeletedBeam: ".$result." ".$response);
+    if ($result ne "ok")
+    {
+      logMsg(1, "ERROR", "deleteDeletedBeam: ".$cmd." failed: ".$response);
+      return ("fail", "could not delete beam ".$obs);
+    }
+    return ("ok", "");
+  }
+  else
+  {
+    return ("fail", $path." did not exist");
+  }
+}
 
 sub controlThread($) 
 {
