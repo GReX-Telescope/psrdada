@@ -94,7 +94,7 @@ typedef struct {
 
 int udpplot_init (udpplot_t * ctx);
 int udpplot_prepare (udpplot_t * ctx);
-int udpplot_destroy (udpplot_t * ctx);
+void udpplot_destroy (udpplot_t * ctx);
 
 void integrate_packet (udpplot_t * ctx, char * buffer, unsigned int size);
 void dump_packet (udpplot_t * ctx, char * buffer, unsigned int size);
@@ -128,6 +128,7 @@ int udpplot_prepare (udpplot_t * ctx)
   size_t cleared = dada_sock_clear_buffered_packets(ctx->sock->fd, ctx->pkt_size);
 
   udpplot_reset(ctx);
+  return 0;
 }
 
 int udpplot_reset (udpplot_t * ctx)
@@ -144,9 +145,10 @@ int udpplot_reset (udpplot_t * ctx)
       ctx->y_points[iant][ichan] = 0;
   }
   ctx->num_integrated = 0;
+  return 0;
 }
 
-int udpplot_destroy (udpplot_t * ctx)
+void udpplot_destroy (udpplot_t * ctx)
 {
   unsigned int iant;
   for (iant=0; iant<ctx->nant; iant++)

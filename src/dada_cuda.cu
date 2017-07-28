@@ -113,7 +113,7 @@ void * dada_cuda_device_malloc ( size_t bytes)
   error_id = cudaMalloc (&device_memory, bytes);
   if (error_id != cudaSuccess)
   {
-    fprintf (stderr, "dada_cuda_device_malloc: could not allocate %d bytes: %s\n", 
+    fprintf (stderr, "dada_cuda_device_malloc: could not allocate %ld bytes: %s\n", 
                       bytes, cudaGetErrorString(error_id));
     return 0;
   }
@@ -135,14 +135,14 @@ int dada_cuda_device_free (void * memory)
 }
 
 /*! return a pointer to GPU host memory of bytes size */
-void * dada_cuda_host_malloc ( size_t bytes)
+void * dada_cuda_host_malloc (size_t bytes)
 {
   cudaError_t error_id;
   void * host_memory; 
   error_id = cudaMallocHost (&host_memory, bytes);
   if (error_id != cudaSuccess)
   {
-    fprintf (stderr, "dada_cuda_host_malloc: could not allocate %d bytes: %s\n",
+    fprintf (stderr, "dada_cuda_host_malloc: could not allocate %ld bytes: %s\n",
                       bytes, cudaGetErrorString(error_id));
     return 0;
   }
@@ -186,8 +186,8 @@ float dada_cuda_device_transfer (void * from, void * to, size_t size, memory_mod
     error_id = cudaStreamSynchronize (stream);
     if (error_id != cudaSuccess)    
     {    
-      fprintf (stderr, "dada_cuda_device_transfer: cudaStreamSyncrhonize (%d) failed: %s\n",
-               stream, cudaGetErrorString(error_id));
+      fprintf (stderr, "dada_cuda_device_transfer: cudaStreamSynchronize failed: %s\n",
+               cudaGetErrorString(error_id));
       return -1;
     }
   }

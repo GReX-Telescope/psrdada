@@ -82,6 +82,7 @@ int64_t mopsr_dbnum_io (dada_client_t* client, void* data, uint64_t data_size)
       multilog (client->log, LOG_INFO, "mopsr_dbnum_io: read header\n");
     return data_size;
   }
+  return data_size;
 }
 
 int64_t mopsr_dbnum_io_block (dada_client_t* client, void* data, uint64_t data_size, uint64_t block_id)

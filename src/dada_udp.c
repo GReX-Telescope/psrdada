@@ -178,7 +178,7 @@ int dada_udp_sock_out(int *fd, struct sockaddr_in * dagram, char *client,
   /* ensure the socket is reuseable without the painful timeout */
   int on = 1;
   if (setsockopt(*fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) != 0)
-    fprintf(stderr, "dada_udp_sock_out: setsockopt(SO_REUSEADDR) failed", 
+    fprintf(stderr, "dada_udp_sock_out: setsockopt(SO_REUSEADDR) failed: %s", 
               strerror(errno));
 
   /* Setup the UDP socket parameters*/
@@ -273,7 +273,7 @@ size_t dada_sock_clear_buffered_packets (int fd, size_t size)
 
   char * buffer = (char *) malloc(size);
   if (!buffer) {
-    fprintf(stderr, "dada_sock_clear_buffered_packets: malloc %d bytes failed\n", size);
+    fprintf(stderr, "dada_sock_clear_buffered_packets: malloc %ld bytes failed\n", size);
     return -1;
   }
 
@@ -293,7 +293,7 @@ size_t dada_sock_clear_buffered_packets (int fd, size_t size)
     }
     else 
     {
-      fprintf(stderr, "dada_sock_clear_buffered_packets: received %d byte packet, expected %d\n", bytes_read, size);
+      fprintf(stderr, "dada_sock_clear_buffered_packets: received %ld byte packet, expected %ld\n", bytes_read, size);
       keep_reading = 0;
     }
   }

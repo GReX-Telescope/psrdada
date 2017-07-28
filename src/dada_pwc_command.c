@@ -71,6 +71,8 @@ int main (int argc, char **argv)
 
   if (daemon)
   {
+    if (verbose)
+      fprintf (stderr, "daemonizing\n");
     be_a_daemon ();
     multilog_serve (log, 123);
   }

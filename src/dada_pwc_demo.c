@@ -107,7 +107,8 @@ int main (int argc, char** argv)
   if (connect_hdu) {
 
     /* connect to the shared memory */
-    fprintf (stderr, "Connecting to shared memory\n");
+    if (verbose)
+      fprintf (stderr, "Connecting to shared memory\n");
     hdu = dada_hdu_create (log);
     
     if (dada_hdu_connect (hdu) < 0)
@@ -121,7 +122,8 @@ int main (int argc, char** argv)
 
   }
 
-  fprintf (stderr, "Creating dada pwc control interface\n");
+  if (verbose)
+    fprintf (stderr, "Creating dada pwc control interface\n");
   pwcm->pwc = dada_pwc_create ();
 
   if (dada_pwc_serve (pwcm->pwc) < 0) {

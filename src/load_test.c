@@ -91,7 +91,7 @@ int main (int argc, char** argv)
       return -1;
     } else {
       if (verbose)
-        fprintf(stderr, "thread[%d] == %d\n", i, thread_ids[i]);
+        fprintf(stderr, "thread[%d] == %d\n", i, (int) thread_ids[i]);
     } 
   }
 

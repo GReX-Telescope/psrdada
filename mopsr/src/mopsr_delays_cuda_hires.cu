@@ -766,7 +766,7 @@ void hires_delay_fractional (cudaStream_t stream, void * d_in, void * d_out,
 }
 
 
-#ifdef HAVE_CUDA_SHUFFLE
+#ifdef HAVE_SHFL
 __inline__ __device__
 float warpReduceSumF(float val) {
   for (int offset = warpSize/2; offset > 0; offset /= 2) 
@@ -879,7 +879,7 @@ __global__ void hires_measure_means_kernel (cuFloatComplex * in, cuFloatComplex 
     idx += blockDim.x;
   }
 
-#ifdef HAVE_CUDA_SHUFFLE
+#ifdef HAVE_SHFL
   // compute via block reduce sum
   sum_re = blockReduceSumF(sum_re);
   sum_im = blockReduceSumF(sum_im);
@@ -928,7 +928,7 @@ __global__ void hires_skcompute_kernel (cuFloatComplex * in, float * s1s, float 
     idx += blockDim.x;
   }
 
-#ifdef HAVE_CUDA_SHUFFLE
+#ifdef HAVE_SHFL
   const unsigned warp_idx = threadIdx.x % 32;
   const unsigned warp_num = threadIdx.x / 32;
 

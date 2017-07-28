@@ -920,6 +920,7 @@ int dbcalib_destroy (mopsr_dbcalib_t * ctx, dada_hdu_t * in_hdu)
       return -1;
     }
   }
+  return 0;
 }
 
 

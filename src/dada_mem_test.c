@@ -12,7 +12,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <assert.h>
-
+#include <time.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 
@@ -24,8 +24,7 @@ void usage()
 {
   fprintf (stdout,
 	   "dada_mem_test\n"
-     " -t secs  length of test [default %d s]\n"
-     " -r       do a read test instead of write\n",
+     " -t secs  length of test [default %d s]\n",
      DEFAULT_WRITE_TIME);
 }
 
@@ -35,17 +34,12 @@ int main (int argc, char **argv)
   /* Flag set in verbose mode */
   char verbose = 0;
 
-  /* Quit flag */
-  char quit = 0;
-
   /* write time [s] */
   unsigned write_time = DEFAULT_WRITE_TIME;
 
-  unsigned read_test = 0;
-
   int arg = 0;
 
-  while ((arg=getopt(argc,argv,"rvt:")) != -1)
+  while ((arg=getopt(argc,argv,"vt:")) != -1)
     switch (arg) {
 
     case 't':
@@ -56,9 +50,6 @@ int main (int argc, char **argv)
       }
       fprintf(stderr, "writing for %d seconds\n", write_time);
       break;
-
-    case 'r':
-      read_test = 1;
 
     case 'v':
       verbose=1;
@@ -93,7 +84,8 @@ int main (int argc, char **argv)
     exit(1);
   }
 
-  fprintf(stderr, "filling array1\n");
+  if (verbose)
+    fprintf(stderr, "filling array1\n");
   for (i=0; i<chunk; i++) {
     array1[i] = i % 255;
   }
@@ -110,7 +102,8 @@ int main (int argc, char **argv)
   int ptr = 0;
   long int bytes = 0;
 
-  fprintf(stderr, "starting: chunk=%d, size=%d\n", chunk, size);
+  if (verbose)
+    fprintf(stderr, "starting: chunk=%d, size=%d\n", chunk, size);
 
   while (now < end) {
 

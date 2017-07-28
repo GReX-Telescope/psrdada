@@ -117,11 +117,13 @@ int udpdump_prepare (udpdump_t * ctx)
   size_t cleared = dada_sock_clear_buffered_packets(ctx->sock->fd, ctx->pkt_size);
 
   udpdump_reset(ctx);
+  return 0;
 }
 
 int udpdump_reset (udpdump_t * ctx)
 {
   memset (ctx->data, 0, ctx->data_size);
+  return 0;
 }
 
 int udpdump_destroy (udpdump_t * ctx)
@@ -136,6 +138,7 @@ int udpdump_destroy (udpdump_t * ctx)
     mopsr_free_sock (ctx->sock);
   }
   ctx->sock = 0;
+  return 0;
 }
 
 /*

@@ -131,8 +131,7 @@ int calculate_delays (unsigned nbay, mopsr_bay_t * bays,
                       char is_tracking, double tsamp);
 
 int cal_app_pos_iau (double RA, double DEC, struct tm * utc, double * RA_app, double * DEC_app);
-
-int calc_observed_pos (double rc, double dc, struct tm * utc, double dut1, double * RA_obs, double * DEC_obs, double * sha);
+void calc_observed_pos (double rc, double dc, struct tm * utc, double dut1, double * RA_obs, double * DEC_obs, double * sha);
 
 double mjd_from_utc (struct tm * utc);
 double lmst_from_mjd (double mjd);
@@ -146,7 +145,8 @@ int mopsr_delays_hhmmss_to_sigproc (char * hhmmss, double * sigprocs);
 int mopsr_delays_ddmmss_to_rad (char * ddmmss, double * rads);
 int mopsr_delays_ddmmss_to_sigproc (char * ddmmss, double * sigprocs);
 
-int calc_app_ha_dec (double RA_J2000, double DEC_J2000, struct timeval timestamp, double * HA_app, double * DEC_app);
+void calc_app_ha_dec (double RA_J2000, double DEC_J2000, struct timeval timestamp, double * HA_app, double * DEC_app);
+
 double calc_ha_source ( double RA_curr, double DEC_curr, struct timeval timestamp);
 double ns_tilt (double ha_source, double dec_source, double md_tilt);
 double jer_delay(double ha_source, double dec_source,

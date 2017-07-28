@@ -6,6 +6,7 @@
  ****************************************************************************/
 
 #include "mopsr_ib.h"
+#include "futils.h"
 
 mopsr_bf_conn_t * mopsr_setup_cornerturn_send (const char * config_file, mopsr_bf_ib_t * ctx, unsigned int send_id)
 {

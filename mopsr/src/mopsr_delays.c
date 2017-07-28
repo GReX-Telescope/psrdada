@@ -95,7 +95,6 @@ void sinc_filter_float (complex float * series_in, complex float * series_out,
   float *fptr;
   complex float *dptr;
   int ntaps_by_2 = ntaps/2;
-  const float filter_order = (float) ntaps - 1;
 
   //Only perform subsample delay
   if (delay >= 1.0 || delay < -1.0)
@@ -110,7 +109,6 @@ void sinc_filter_float (complex float * series_in, complex float * series_out,
   {
     x = (float) ii - delay;
     window = 0.54 - 0.46 * cos(2.0 * M_PI * (x+0.5) / ntaps);
-    //window = 0.54 - 0.46 * cos(2.0 * M_PI * x / filter_order);
     filter[ii] = sinc((ii-ntaps_by_2)-delay) * window;
   }
 
@@ -176,7 +174,6 @@ mopsr_module_t * read_modules_file (const char* fname, int *nmod)
 
   unsigned imod = 0;
   int nscanned;
-  double ref_dist = 0;
   while (imod < max_modules && fgets(line, 1024, fptr))
   {
     mopsr_module_t * mod = &(modules[imod]);
@@ -210,9 +207,6 @@ mopsr_module_t * read_modules_file (const char* fname, int *nmod)
       *nmod = -1;
       return 0;
     }
-
-    if (strcmp(mod->name, "E01-B") == 0)
-      ref_dist = mod->dist * -1;
   }
   fclose (fptr);
   *nmod = imod;
@@ -244,7 +238,6 @@ mopsr_bay_t * read_bays_file (const char* fname, int *nbay)
 
   unsigned ibay = 0;
   int nscanned;
-  double ref_dist = 0;
   while (ibay < max_bays && fgets(line, 1024, fptr))
   {
     mopsr_bay_t * bay = &(bays[ibay]);
@@ -259,12 +252,6 @@ mopsr_bay_t * read_bays_file (const char* fname, int *nbay)
     else
       ibay++;
 
-    if (strcmp(bay->name, "E01") == 0)
-    {
-      ref_dist = bay->dist;
-      ref_dist *= -1;
-    }
-
     if ((bay->name[0] == 'E') || (bay->name[0] == 'e'))
     {
       bay->dist *= -1;
@@ -273,13 +260,6 @@ mopsr_bay_t * read_bays_file (const char* fname, int *nbay)
 
   fclose (fptr);
   *nbay = ibay;
-
-/*
-  for (ibay=0; ibay < *nbay; ibay++)
-  {
-    bays[ibay].dist -= ref_dist;
-  }
-*/
 
   return bays;
 }
@@ -408,9 +388,10 @@ int cal_app_pos_iau (double RA, double DEC, struct tm * utc, double * RA_app, do
   *RA_app = ri - eo;
   *DEC_app = di;
 
+  return 0 ;
 }
 
-int calc_observed_pos (double rc, double dc, struct tm * utc, double dut1, double * RA_obs, double * DEC_obs, double * HA)
+void calc_observed_pos (double rc, double dc, struct tm * utc, double dut1, double * RA_obs, double * DEC_obs, double * HA)
 {
   // proper motion (RA, DEC derivatives)
   double pr = atan2 ( -354.45e-3 * DAS2R, cos(dc) );
@@ -465,6 +446,8 @@ int calc_observed_pos (double rc, double dc, struct tm * utc, double dut1, doubl
   fprintf (stderr, "  HOB: %02d:%02d:%02d.%d [%20.15lf]\n",
                       HMSF[0],HMSF[1],HMSF[2],HMSF[3], hob);
 #endif
+
+  return;
 }
 
 double calc_ha_source ( double RA_curr, double DEC_curr, struct timeval timestamp)
@@ -519,9 +502,10 @@ double calc_jer_delay (double RA_curr, double DEC_curr, struct timeval timestamp
   return projected_delay;
 }
 
-int calc_app_ha_dec (double RA_J2000, double DEC_J2000, struct timeval timestamp, double * HA_app, double * DEC_app)
+void calc_app_ha_dec (double RA_J2000, double DEC_J2000, struct timeval timestamp, double * HA_app, double * DEC_app)
 {
-  double ra, dec;
+  double ra = 0;
+  double dec = 0;
 
   // convert the integer time to an MJD
   struct tm * utc = gmtime (&timestamp.tv_sec);
@@ -534,6 +518,8 @@ int calc_app_ha_dec (double RA_J2000, double DEC_J2000, struct timeval timestamp
 
   *HA_app = ha;
   *DEC_app = dec;
+
+  return;
 }
 
 // is_tracking: if the ring antenna are following the source
@@ -567,7 +553,7 @@ int calculate_delays (unsigned nbay, mopsr_bay_t * bays,
   double instrumental_delay;
   double geometric_delay = 0;
 
-  double total_delay, coarse_delay, fractional_delay, delta_dist;
+  double total_delay, coarse_delay, fractional_delay;
   double module_offset, freq_ratio, frank_dist;
   unsigned int coarse_delay_samples;
 
@@ -775,8 +761,6 @@ double gmrt_lmst(double mjd)
 double last_from_mjd (double mjd)
 {
   double gast, last;
-  double mjd_integer = floor (mjd);
-  double day_fraction = mjd - mjd_integer;
 
 #ifdef _DEBUG
   int HMSF[4];
@@ -1026,12 +1010,6 @@ int mopsr_delays_plot (unsigned nmod, unsigned nchan, mopsr_delay_t ** delays, s
   float * xvals = (float *) malloc(sizeof(float) * nmod);
   float * yvals = (float *) malloc(sizeof(float) * nmod);
   float * yvals2 = (float *) malloc(sizeof(float) * nmod);
-  //float * samples = (float *) malloc(sizeof(float) * nmod);
-  //float * fractional = (float *) malloc(sizeof(float) * nmod);
-  //float * fringes = (float *) malloc(sizeof(float) * nmod);
-  //float * delay_ds = (float *) malloc(sizeof(float) * nmod);
-  //float * fringe_ds = (float *) malloc(sizeof(float) * nmod);
-
   double time = (double) timestamp.tv_sec + ((double) timestamp.tv_usec / 1000000);
 
   int nm = nmod / 2;
@@ -1140,7 +1118,6 @@ int mopsr_delays_plot (unsigned nmod, unsigned nchan, mopsr_delay_t ** delays, s
 
   free (xvals);
   free (yvals);
-  //free (samples);
-  //free (fractional);
 
+  return 0;
 }

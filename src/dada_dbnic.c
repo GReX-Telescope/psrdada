@@ -68,8 +68,6 @@ int setup_nodes (dada_client_t* client)
   /* the host name */
   char* name = 0;
 
-  int port = DADA_DEFAULT_NICDB_PORT;
-
   /* target nodes, as defined by TARGET_NODES attribute */
   char target_nodes [256];
 
@@ -134,6 +132,8 @@ int setup_nodes (dada_client_t* client)
     else
       inode ++;
   }
+
+  int port;
 
   /* open the connections that are not already open */
   for (inode=0; inode < string_array_size (hosts); inode++) {
@@ -387,9 +387,6 @@ int main (int argc, char **argv)
   /* Quit flag */
   char quit = 0;
 
-  /* Destination port */
-  int port = DADA_DEFAULT_NICDB_PORT;
-
   /* hexadecimal shared memory key */
   key_t dada_key = DADA_DEFAULT_BLOCK_KEY;
 
@@ -410,10 +407,6 @@ int main (int argc, char **argv)
       string_array_append (dbnic.usr_node_names, optarg);
       break;
 
-    case 'p':
-      port = atoi (optarg);
-      break;
-
     case 'k':
       if (sscanf (optarg, "%x", &dada_key) != 1) {
         fprintf (stderr,"dada_dbnic: could not parse key from %s\n",optarg);
@@ -424,7 +417,6 @@ int main (int argc, char **argv)
     case 's':
       quit = 1;
       break;
-
       
     case 'v':
       verbose=1;

@@ -13,6 +13,9 @@
 #include <math.h>
 #include <unistd.h>
 #include <time.h>
+#include <sys/time.h>
+
+#include "tmutil.h"
 #include "dada_def.h"
 
 void usage() {
@@ -31,9 +34,8 @@ int main (int argc, char** argv)
 
   int verbose = 0;
   int arg = 0;
-  int r = 0;
   int modulo = 0;
-  unsigned long from_time = 0;
+  time_t from_time = 0;
 
   while ((arg=getopt(argc,argv,"m:hv")) != -1) {
 
@@ -62,7 +64,7 @@ int main (int argc, char** argv)
     usage();
     return EXIT_FAILURE;
   } else {
-    from_time = atoi(argv[optind]);
+    from_time = (time_t) atoi(argv[optind]);
   }
 
   struct timeval t_stamp;
@@ -77,9 +79,7 @@ int main (int argc, char** argv)
   {
     gettimeofday(&t_stamp, NULL);
     strftime (local_time, 64, DADA_TIMESTR, localtime(&(t_stamp.tv_sec)));
-    fprintf(stderr, "[%s.%06d] entering busy wait loop for next 1sec tick\n", local_time, t_stamp.tv_usec);
-    //strftime (utc_time, 64, DADA_TIMESTR, gmtime(&current));
-    //fprintf(stdout, "entering busy wait loop for next time tick, current utc=%s, current local=%s\n", utc_time, local_time);
+    fprintf(stderr, "[%s.%06d] entering busy wait loop for next 1sec tick\n", local_time, (int) (t_stamp.tv_usec));
   }
 
   // if we have been asked to start on a second that is modulo the number of seconds since midnight
@@ -113,7 +113,7 @@ int main (int argc, char** argv)
   if (verbose) {
     gettimeofday(&t_stamp, NULL);
     strftime (local_time, 64, DADA_TIMESTR, localtime(&(t_stamp.tv_sec)));
-    fprintf(stderr, "[%s.%06d] start_time = %s [%d]\n", local_time, t_stamp.tv_usec, start_time, start);
+    fprintf(stderr, "[%s.%06d] start_time = %s [%d]\n", local_time, (int) t_stamp.tv_usec, start_time, (int) start);
   }
 
   strftime (utc_time, 64, DADA_TIMESTR, gmtime(&start));

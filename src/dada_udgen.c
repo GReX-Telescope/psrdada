@@ -78,20 +78,11 @@ int main(int argc, char *argv[])
   // hostname to establish TCP connection 
   char * dest_host;
 
-  // The generated signal arrays
-  char packet[IB_PAYLOAD];
-
   // data rate
   unsigned int data_rate_mbytes = DADA_UDGEN_DATA_RATE;
 
   // number of packets to send every second
   uint64_t packets_ps = 0;
-
-  // start of transmission
-  time_t start_time;
-
-  // end of transmission
-  time_t end_time;
 
   // sequence number
   uint64_t seq_no = 0;
@@ -238,7 +229,6 @@ int main(int argc, char *argv[])
   size_t bytes_sent = 0;
   uint64_t total_bytes_sent = 0;
 
-  uint64_t bytes_sent_thistime = 0;
   uint64_t prev_bytes_sent = 0;
   
   time_t current_time = time(0);
@@ -249,10 +239,8 @@ int main(int argc, char *argv[])
   multilog (log, LOG_INFO, "IB data size = %"PRIu64" bytes\n", IB_DATAGRAM);
   multilog (log, LOG_INFO, "Wire Rate\t\tUseful Rate\tPacket\tSleep Time\n");
 
-  unsigned int s_off = 0;
-  unsigned char * buffer;
+  char * buffer;
   seq_no = 0;
-  uint64_t decoded_seq = 0;
 
   struct ibv_cq *ev_cq;
   void          *ev_ctx;
@@ -264,8 +252,8 @@ int main(int argc, char *argv[])
   // post the WR to send WQ
   for (i=0; i<nbufs; i++)
   {
-    buffer = (unsigned char *) ib_dg->bufs[i]->buffer;
-    dada_ib_dg_encode_header(buffer + 40, seq_no);
+    buffer = (char *) ib_dg->bufs[i]->buffer;
+    dada_ib_dg_encode_header (buffer + 40, seq_no);
     seq_no ++;
   }
 

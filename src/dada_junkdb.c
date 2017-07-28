@@ -3,6 +3,8 @@
 #include "dada_def.h"
 #include "dada_generator.h"
 #include "ascii_header.h"
+#include "tmutil.h"
+#include "futils.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -292,9 +294,6 @@ int main (int argc, char **argv)
 
   /* Flag set in verbose mode */
   char verbose = 0;
-
-  /* Quit flag */
-  char quit = 0;
 
   /* ascii char to fill data with */
   char fill_char = 0;

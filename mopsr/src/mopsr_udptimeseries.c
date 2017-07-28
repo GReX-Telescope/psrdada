@@ -110,6 +110,7 @@ int udptimeseries_prepare (udptimeseries_t * ctx)
   size_t cleared = dada_sock_clear_buffered_packets(ctx->sock->fd, ctx->pkt_size);
 
   udptimeseries_reset(ctx);
+  return 0;
 }
 
 int udptimeseries_reset (udptimeseries_t * ctx)
@@ -118,6 +119,7 @@ int udptimeseries_reset (udptimeseries_t * ctx)
   for (i=0; i<ctx->nsamps * MOPSR_NDIM; i++)
     ctx->timeseries[i] = 0;
   ctx->num_integrated = 0;
+  return 0;
 }
 
 int udptimeseries_destroy (udptimeseries_t * ctx)
@@ -133,6 +135,7 @@ int udptimeseries_destroy (udptimeseries_t * ctx)
     mopsr_free_sock (ctx->sock);
   }
   ctx->sock = 0;
+  return 0;
 }
 
 /*

@@ -1257,7 +1257,7 @@ int dada_pwc_main_transfer_data_block (dada_pwc_main_t* pwcm)
             multilog (pwcm->log, LOG_INFO, "transfer_data_block: transit_byte == total_bytes_written\n");
           void * ending_buffer = 0;
           uint64_t ending_block_size = 0;
-          uint64_t eod_bytes_written = pwcm->block_function (pwcm, ending_buffer, ending_block_size, block_id);
+          pwcm->block_function (pwcm, ending_buffer, ending_block_size, block_id);
         }
 
         // check on the status of the XFER

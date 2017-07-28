@@ -74,6 +74,8 @@ int64_t dada_client_io_loop (dada_client_t* client)
     if (buffer)
       free (buffer);
     int rval = posix_memalign ( (void **) &buffer, 512, client->optimal_bytes);
+    if (rval != 0)
+      multilog (log, LOG_ERR, "io_loop posix_memalign failed\n");
     assert (buffer != 0);
 
 #ifdef _DEBUG
@@ -321,9 +323,6 @@ int64_t dada_client_transfer (dada_client_t* client)
   /* Byte count */
   int64_t bytes_transfered = 0;
 
-  /* Time at start and end of transfer loop */
-  struct timeval start_loop, end_loop;
-
   /* the size of the header buffer */
   uint64_t header_size = 0;
 
@@ -495,6 +494,11 @@ int dada_client_read (dada_client_t* client)
     if (client->header)
       free (client->header);
     int rval = posix_memalign ( (void **) &(client->header), 512, header_size);
+    if (rval != 0)
+    {
+      multilog (log, LOG_ERR, "dada_client_read: posix_memalign failed\n");
+      return -1;
+    }
 
     assert (client->header != 0);
     client->header_size = header_size;

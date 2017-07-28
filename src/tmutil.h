@@ -3,13 +3,13 @@
    $Date$
    $Author$ */
 
-#ifndef DADA_UTC_H
-#define DADA_UTC_H
+#ifndef DADA_TMUTIL_H
+#define DADA_TMUTIL_H
 
-#ifndef _XOPEN_SOURCE
-#define _XOPEN_SOURCE /* glibc2 needs this for strptime  */
-#endif
-#include <time.h>
+//#ifndef _XOPEN_SOURCE
+//#define _XOPEN_SOURCE /* glibc2 needs this for strptime  */
+//#endif
+//#include <time.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -37,4 +37,3 @@ extern "C" {
 #endif
 
 #endif
-

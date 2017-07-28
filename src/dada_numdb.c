@@ -25,7 +25,7 @@ void usage()
 {
   fprintf (stdout,
 	   "dada_numdb [options] header_file\n"
-     " -b bytes number of bytes to write [default %"PRIu64"]\n"
+     " -b bytes number of bytes to write [default %d]\n"
      " -i num   number of bytes to interleave [default 8192]\n"
      " -s num   number to start on [default 0]\n"
      " -k       hexadecimal shared memory key  [default: %x]\n"
@@ -170,9 +170,6 @@ int main (int argc, char **argv)
 
   /* Flag set in verbose mode */
   unsigned verbose = 0;
-
-  /* Quit flag */
-  char quit = 0;
 
   /* start number */
   uint64_t start_num = 0;

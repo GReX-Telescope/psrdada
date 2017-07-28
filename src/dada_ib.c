@@ -182,7 +182,6 @@ int dada_ib_bind_cm (dada_ib_cm_t * ctx, int port)
   }
 
   int err = 0;
-  struct rdma_cm_event * event;
   struct sockaddr_in     sin;
 
   // ensure the cm_id is not set
@@ -376,6 +375,7 @@ int dada_ib_listen_cm_only (dada_ib_cm_t * ctx)
   //multilog(log, LOG_INFO, "dada_ib_listen_cm_only: cm_id=%p cm_id->verbs=%p\n", ctx->cm_id, ctx->verbs);
 
   rdma_ack_cm_event(event);
+  return 0;
 }
 
 int dada_ib_create_verbs(dada_ib_cm_t * ctx)
@@ -782,11 +782,13 @@ int dada_ib_accept (dada_ib_cm_t * ctx)
     multilog(log, LOG_ERR, "accept: rdma_get_cm_event returned %s event, expected "
                            "RDMA_CM_EVENT_ESTABLISHED [port=%d]\n", rdma_event_str(event->event), ctx->port);
     multilog(log, LOG_ERR, "accept: event->status=%d [port=%d]\n", event->status, ctx->port);
+#ifdef _DEBUG
     if (event->status == 28)
     {
       const struct cm_priv_reject *rej = event->param.conn.private_data;
-      //multilog(log, LOG_ERR, "accept: rej->reason=%d\n", rej->reason);
+      multilog(log, LOG_ERR, "accept: rej->reason=%d\n", rej->reason);
     }
+#endif
   }
   else
   {
@@ -1334,14 +1336,15 @@ int dada_ib_rdma_disconnect (dada_ib_cm_t * ctx)
   multilog_t * log = ctx->log;
 
   if (ctx->verbose > 1)
-    multilog(log, LOG_INFO, "client_destroy: rdma_disconnect\n");
+    multilog(log, LOG_INFO, "rdma_disconnect: rdma_disconnect\n");
   err = rdma_disconnect(ctx->cm_id);
   if (err)
   {
-    multilog(log, LOG_ERR, "client_destroy: rdma_disconnect failed: %s\n", strerror(errno));
+    multilog(log, LOG_ERR, "rdma_disconnect: rdma_disconnect failed: %s\n", strerror(errno));
     return -1;
   }
   ctx->ib_connected = 0;
+  return 0;
 }
 
 /*
@@ -1357,10 +1360,8 @@ int dada_ib_client_destroy (dada_ib_cm_t * ctx)
       return -1;
     }
   } 
-
   return dada_ib_destroy(ctx);
 }
-
 
 /*
  * Disconnect the IB connection  

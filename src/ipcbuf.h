@@ -1,6 +1,8 @@
 #ifndef __DADA_IPCBUF_H
 #define __DADA_IPCBUF_H
 
+//#include "config.h"
+
 /* ************************************************************************
 
    ipcbuf_t - a struct and associated routines for creation and management
@@ -10,6 +12,8 @@
 
 #include <inttypes.h> 
 #include <sys/types.h>
+
+#include "config.h"
 
 #ifdef __cplusplus
 extern "C" {

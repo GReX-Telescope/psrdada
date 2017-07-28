@@ -1,5 +1,4 @@
 
-
 #include <sys/types.h>
 #include <sys/time.h>
 #include <unistd.h>
@@ -16,10 +15,8 @@
 
 #include <time.h>
 
-#include <emmintrin.h>
-
-#include "config.h"
 #include "ipcbuf.h"
+#include "tmutil.h"
 #include "ipcutil.h"
 
 #ifdef HAVE_CUDA
@@ -289,20 +286,19 @@ int ipcbuf_create (ipcbuf_t* id, key_t key, uint64_t nbufs, uint64_t bufsz, unsi
   {
     if (ipc_semop (id->semid_data[iread], IPCBUF_SODACK, IPCBUF_XFERS, 0) < 0)
     {
-      fprintf (stderr, "ipcbuf_create: error incrementing IPCBUF_SODACK for reader %d\n", iread);
+      fprintf (stderr, "ipcbuf_create: error incrementing IPCBUF_SODACK for reader %lu\n", iread);
       return -1;
     }
     if (ipc_semop (id->semid_data[iread], IPCBUF_EODACK, IPCBUF_XFERS, 0) < 0)
     {
-      fprintf (stderr, "ipcbuf_create: error incrementing IPCBUF_EODACK for reader %d\n", iread);
+      fprintf (stderr, "ipcbuf_create: error incrementing IPCBUF_EODACK for reader %lu\n", iread);
       return -1;
     }
     if (ipc_semop (id->semid_data[iread], IPCBUF_READER_CONN, 1, 0) < 0)
     {
-      fprintf (stderr, "ipcbuf_create: error incrementing IPCBUF_READER_CONN for reader %d\n", iread);
+      fprintf (stderr, "ipcbuf_create: error incrementing IPCBUF_READER_CONN for reader %lu\n", iread);
       return -1;
     }
-
   }
 
   id->state = IPCBUF_VIEWER;
@@ -763,7 +759,9 @@ int ipcbuf_zero_next_write (ipcbuf_t *id)
         have_cleared = 0;
     }
     if (!have_cleared)
+    {
       float_sleep(0.01);
+    }
   }
 
   // zap bufnum
@@ -1023,7 +1021,9 @@ int ipcbuf_unlock_read (ipcbuf_t* id)
   }
 
   id->state = IPCBUF_VIEWER;
+#ifdef _DEBUG
   int iread = id->iread;
+#endif
   id->iread = -1;
 
 #ifdef _DEBUG
@@ -1094,6 +1094,7 @@ char* ipcbuf_get_next_read_work (ipcbuf_t* id, uint64_t* bytes, int flag)
     }
 
     bufnum = sync->r_bufs[iread];
+
   }
   else
   {

@@ -334,7 +334,6 @@ dada_ib_cm_t * dada_ibdb_ib_init(dada_ibdb_t * ctx, dada_hdu_t * hdu, multilog_t
   uint64_t hb_nbufs = 0;
   uint64_t hb_bufsz = 0;
   char ** db_buffers = 0;
-  char ** hb_buffers = 0;
 
   assert (ctx != 0);
   assert (hdu != 0);
@@ -346,7 +345,7 @@ dada_ib_cm_t * dada_ibdb_ib_init(dada_ibdb_t * ctx, dada_hdu_t * hdu, multilog_t
   db_buffers = dada_hdu_db_addresses(hdu, &db_nbufs, &db_bufsz);
 
   // get the header block buffer size
-  hb_buffers = dada_hdu_hb_addresses(hdu, &hb_nbufs, &hb_bufsz);
+  dada_hdu_hb_addresses(hdu, &hb_nbufs, &hb_bufsz);
 
   // this a strict requirement at this stage
   if (db_bufsz % ctx->chunk_size != 0)

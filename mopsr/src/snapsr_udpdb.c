@@ -91,6 +91,7 @@ int snapsr_init (snapsr_udpdb_t * ctx)
       multilog(ctx->log, LOG_WARNING, "receive_obs: failed to bind to core %d\n", ctx->recv_core);
 #endif
 
+  return 0;
 }
 
 

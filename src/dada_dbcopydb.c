@@ -3,7 +3,6 @@
 #include "dada_def.h"
 
 #include "ascii_header.h"
-#include "daemon.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,6 +24,7 @@ void usage()
 {
   fprintf (stdout,
            "dada_dbcopydb [options] in_key out_keys+\n"
+           " -p port   control port to use\n"
            " -s        1 transfer, then exit\n"
            " -S        1 observation with multiple transfers, then exit\n"
            " -z        use zero copy transfers\n"
@@ -237,8 +237,6 @@ int64_t dbdecidb_write_block (dada_client_t* client, void* data, uint64_t data_s
                 data_size, block_id);
 
   uint64_t out_block_id;
-  uint64_t idat = 0;
-  const uint64_t ndat = data_size;
   char * indat = (char *) data;
   char * outdat = 0;
 
@@ -330,9 +328,6 @@ int main (int argc, char **argv)
   /* DADA Logger */
   multilog_t* log = 0;
 
-  /* Flag set in daemon mode */
-  char daemon = 0;
-
   /* Flag set in verbose mode */
   char verbose = 0;
 
@@ -348,19 +343,12 @@ int main (int argc, char **argv)
   // input data block HDU key
   key_t in_key = 0;
 
-  pthread_t control_thread_id;
-
   int arg = 0;
 
-  while ((arg=getopt(argc,argv,"dp:sSvz")) != -1)
+  while ((arg=getopt(argc,argv,"p:sSvz")) != -1)
   {
     switch (arg) 
     {
-      
-      case 'd':
-        daemon = 1;
-        break;
-
       case 'p':
         if (optarg)
         {

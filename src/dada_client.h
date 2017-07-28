@@ -87,6 +87,9 @@ extern "C" {
   /*! Run the DADA client write loop */
   int dada_client_write (dada_client_t* client);
 
+  /*! Close the dada client */
+  int dada_client_close (dada_client_t* client);
+
 #ifdef __cplusplus
 	   }
 #endif

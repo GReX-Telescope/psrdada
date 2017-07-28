@@ -121,22 +121,15 @@ void fill_gaussian_data (char *data, int length, double mean, double stddev)
 /*
  * fill an unsigned int  array with gaussian noise 
  */
-void fill_gaussian_unsigned(unsigned int *data, int size, int nbits, int gain) {
-
+void fill_gaussian_unsigned (unsigned int *data, int size, int nbits, int gain) 
+{
   double max = powf(2, nbits);
   double y = 0;
-
-  int val;
-  int twos;
   int i;
-
   double centre = max * ((double) (gain-500) / 1000);
   double div = 4.0;
 
-  unsigned int mask = 0x000000ff;
-
   for (i=0; i < size; i++) {
-    val = 0;
     y = rand_normal(centre, max/div);
     data[i] = (unsigned int) y;
   }
@@ -200,9 +193,6 @@ void fill_cal_unsigned(unsigned int *data, int size, int nbits, int gain) {
     
   double max = powf(2, nbits);
   double y = 0;
-
-  int val; 
-  int twos;
   int i;
 
   double centre = max * ((double) (gain-500) / 1000);
@@ -210,8 +200,6 @@ void fill_cal_unsigned(unsigned int *data, int size, int nbits, int gain) {
   double off = centre / 1.3;
   double on = centre * 1.3;
   
-  unsigned int mask = 0x000000ff;
-
   for (i=0; i < size; i++) {
 
     if ((i < (size*0.25)) || (i > (size*0.75) )) {

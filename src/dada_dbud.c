@@ -71,9 +71,6 @@ typedef struct dada_dbud {
 int64_t dada_dbud_send (dada_client_t* client, void* data, uint64_t data_size)
 {
   dada_dbud_t * dbud = (dada_dbud_t *) client->context;
-
-  dada_ib_datagram_t * ib_dg = dbud->ib_dg;
-
   multilog_t* log = client->log;
 
   if (dbud->verbose)
@@ -125,8 +122,6 @@ int dada_dbud_close (dada_client_t* client, uint64_t bytes_written)
 
   dada_dbud_t * dbud = (dada_dbud_t *) client->context;
 
-  dada_ib_datagram_t * ib_dg = dbud->ib_dg;
-
   if (dbud->verbose)
     multilog (client->log, LOG_INFO, "dada_dbud_close()\n");
 
@@ -141,8 +136,6 @@ int dada_dbud_open (dada_client_t* client)
   assert (client != 0);
 
   dada_dbud_t * dbud = (dada_dbud_t *) client->context;
-
-  dada_ib_datagram_t * ib_dg = dbud->ib_dg;
 
   if (dbud->verbose)
     multilog(client->log, LOG_INFO, "dada_dbud_open()\n");

@@ -150,6 +150,7 @@ int udpplot_prepare (udpplot_t * ctx)
   size_t cleared = dada_sock_clear_buffered_packets(ctx->sock->fd, UDP_PAYLOAD);
 
   udpplot_reset(ctx);
+  return 0;
 }
 
 int udpplot_reset (udpplot_t * ctx)
@@ -183,6 +184,7 @@ int udpplot_reset (udpplot_t * ctx)
   }
   ctx->num_integrated = 0;
   ctx->fft_count = 0;
+  return 0;
 }
 
 int udpplot_destroy (udpplot_t * ctx)
@@ -239,6 +241,7 @@ int udpplot_destroy (udpplot_t * ctx)
     mopsr_free_sock (ctx->sock);
   }
   ctx->sock = 0;
+  return 0;
 }
 
 /*

@@ -66,6 +66,7 @@ int mopsr_ibdb_open (dada_client_t* client)
   client->optimal_bytes = 0;
 
   ctx->obs_ending = 0;
+  return 0;
 }
 
 /*! Function that closes the data file */

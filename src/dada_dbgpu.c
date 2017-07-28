@@ -247,6 +247,7 @@ int dbgpu_init ( dada_dbgpu_t* ctx, multilog_t* log )
   multilog (log, LOG_INFO, "Using stream %d\n", ctx->stream);
 
   free(device_name);
+  return 0;
 }
  
 

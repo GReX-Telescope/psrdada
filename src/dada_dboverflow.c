@@ -119,7 +119,6 @@ int main (int argc, char **argv)
   ipcbuf_t *db     = (ipcbuf_t *) hdu->data_block;
 
   uint64_t full_bufs = 0;
-  uint64_t clear_bufs = 0;
   uint64_t bufs_read = 0;
   uint64_t bufs_read_last = 0;
   uint64_t bufs_written = 0;
@@ -136,7 +135,6 @@ int main (int argc, char **argv)
     multilog_fprintf(stderr, LOG_INFO, "size=%"PRIu64" bytes, %4.2f MB\n", nbytes, nmbytes);
   }
 
-  unsigned current_read_xfer = 0;
   unsigned wait_count = 5;
 
   while (!quit) 
@@ -154,7 +152,6 @@ int main (int argc, char **argv)
       bufs_written = ipcbuf_get_write_count (db);
       bufs_read = ipcbuf_get_read_count (db);
       full_bufs = ipcbuf_get_nfull (db);
-      clear_bufs = ipcbuf_get_nclear (db);
       available_bufs = (nbufs - full_bufs);
 
       if (verbose)

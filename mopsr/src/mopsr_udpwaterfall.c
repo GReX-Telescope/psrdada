@@ -117,6 +117,7 @@ int udpwaterfall_prepare (udpwaterfall_t * ctx)
   size_t cleared = dada_sock_clear_buffered_packets(ctx->sock->fd, UDP_PAYLOAD);
 
   udpwaterfall_reset(ctx);
+  return 0;
 }
 
 int udpwaterfall_reset (udpwaterfall_t * ctx)
@@ -126,6 +127,7 @@ int udpwaterfall_reset (udpwaterfall_t * ctx)
   for (idat=0; idat < ndat; idat++)
     ctx->data[idat] = 0;
   ctx->num_integrated = 0;
+  return 0;
 }
 
 int udpwaterfall_destroy (udpwaterfall_t * ctx)
@@ -140,6 +142,7 @@ int udpwaterfall_destroy (udpwaterfall_t * ctx)
     mopsr_free_sock (ctx->sock);
   }
   ctx->sock = 0;
+  return 0;
 }
 
 /*

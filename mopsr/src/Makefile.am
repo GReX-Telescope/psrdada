@@ -142,7 +142,8 @@ endif
 
 if HAVE_SOFA
 
-bin_PROGRAMS += mopsr_aqdsp mopsr_bfdsp mopsr_test_delays mopsr_test_bfdsp \
+bin_PROGRAMS += mopsr_aqdsp mopsr_aqdsp_hires mopsr_bfdsp mopsr_test_delays \
+                mopsr_test_delays_hires mopsr_test_bfdsp \
                 mopsr_dbdelaydb mopsr_test_bfdsp_tb
 
 endif

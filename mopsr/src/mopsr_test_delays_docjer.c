@@ -18,7 +18,7 @@
 #include <cpgplot.h>
 #include <float.h>
 
-int mopsr_docjer_plot (unsigned nmod, float * jers, float * docs);
+void mopsr_docjer_plot (unsigned nmod, float * jers, float * docs);
 
 void usage ()
 {
@@ -381,7 +381,7 @@ int main(int argc, char** argv)
 
 
 // simple PGPLOT of the delays across the array
-int mopsr_docjer_plot (unsigned nmod, float * jers, float * docs)
+void mopsr_docjer_plot (unsigned nmod, float * jers, float * docs)
 {
   float * xvals = (float *) malloc(sizeof(float) * nmod);
   float * diff = (float *) malloc(sizeof(float) * nmod);

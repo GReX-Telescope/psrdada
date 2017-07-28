@@ -108,6 +108,7 @@ int mopsr_udpdb_destroy_receiver (udpdb_t * ctx)
   if (ctx->sock)
     mopsr_free_sock(ctx->sock);
   ctx->sock = 0;
+  return 0;
 }
 
 /*

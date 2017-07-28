@@ -321,6 +321,7 @@ int open_next_contiguous_file (dada_client_t* client)
 
   // not strictly necessary to read file into header, could just lseek
   lseek (client->fd, client->header_size, SEEK_SET);
+  return 0;
 }
 
 

@@ -848,8 +848,8 @@ int bfdsp_destroy (mopsr_bfdsp_t * ctx, dada_hdu_t * in_hdu)
       return -1;
     }
   }
-
 #endif
+  return 0;
 }
  
 
@@ -2147,6 +2147,7 @@ int mopsr_tile_beams_cpu (void * h_in, void * h_out, void * h_phasors, uint64_t 
       ou[ibeam * nchunk + ichunk] = beam_power;
     }
   }
+  return 0;
 }
 
 // determine if there is a pulsar to time within the primary beam

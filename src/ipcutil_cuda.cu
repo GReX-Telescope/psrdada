@@ -26,7 +26,7 @@ void* ipc_alloc_cuda (key_t key, size_t size, int flag, int* shmid, int device_i
   cudaError_t error;
 
 #ifdef _DEBUG
-  fprintf (stderr, "ipc_alloc_cuda: shmget(key=%x size=%d, flag=%x\n", 
+  fprintf (stderr, "ipc_alloc_cuda: shmget(key=%x size=%ld, flag=%x\n", 
            key, handle_size, flag);
 #endif
 
@@ -34,7 +34,7 @@ void* ipc_alloc_cuda (key_t key, size_t size, int flag, int* shmid, int device_i
   id = shmget (key, handle_size, flag);
   if (id < 0) 
   {
-     fprintf (stderr, "ipc_alloc_cuda: shmget (key=%x, size=%d, flag=%x) %s\n",
+     fprintf (stderr, "ipc_alloc_cuda: shmget (key=%x, size=%ld, flag=%x) %s\n",
               key, handle_size, flag, strerror(errno));
      return 0;
   }
@@ -49,7 +49,7 @@ void* ipc_alloc_cuda (key_t key, size_t size, int flag, int* shmid, int device_i
   {
     fprintf (stderr,
        "ipc_alloc_cuda: shmat (shmid=%d) %s\n"
-       "ipc_alloc_cuda: after shmget (key=%x, size=%d, flag=%x)\n",
+       "ipc_alloc_cuda: after shmget (key=%x, size=%ld, flag=%x)\n",
        id, strerror(errno), key, size, flag);
     return 0;
   }

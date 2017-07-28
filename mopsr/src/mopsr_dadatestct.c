@@ -176,4 +176,5 @@ int main (int argc, char **argv)
   close (ct_fds[1]);
   for (ichan=0; ichan<20; ichan++)
     close (ch_fds[ichan]);
+  return 0;
 }

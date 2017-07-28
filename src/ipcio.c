@@ -4,7 +4,7 @@
 
 #include "ipcio.h"
 
-//#define _DEBUG 1
+// #define _DEBUG 1
 
 void ipcio_init (ipcio_t* ipc)
 {
@@ -20,9 +20,15 @@ void ipcio_init (ipcio_t* ipc)
 }
 
 /* create a new shared memory block and initialize an ipcio_t struct */
+#ifdef HAVE_CUDA
+int ipcio_create (ipcio_t* ipc, key_t key, uint64_t nbufs, uint64_t bufsz, unsigned num_read, int device_id)
+{
+  if (ipcbuf_create ((ipcbuf_t*)ipc, key, nbufs, bufsz, num_read, device_id) < 0) {
+#else
 int ipcio_create (ipcio_t* ipc, key_t key, uint64_t nbufs, uint64_t bufsz, unsigned num_read)
 {
   if (ipcbuf_create ((ipcbuf_t*)ipc, key, nbufs, bufsz, num_read) < 0) {
+#endif
     fprintf (stderr, "ipcio_create: ipcbuf_create error\n");
     return -1;
   }
@@ -527,7 +533,6 @@ int ipcio_zero_next_block (ipcio_t *ipc)
   return ipcbuf_zero_next_write ((ipcbuf_t*)ipc);
 }
 
-
 /*
  * Update the number of bytes written to a Data Block unit that was opened
  * for "direct" write access. This does not mark the buffer as filled. 
@@ -680,10 +685,10 @@ uint64_t ipcio_tell (ipcio_t* ipc)
 
   if (current < 0)
   {
-#ifdef _DEBUG
+//#ifdef _DEBUG
     fprintf (stderr, "ipcio_tell: failed ipcbuf_tell"
              " mode=%c current=%"PRIi64"\n", ipc->rdwrt, current);
-#endif
+//#endif
     return 0;
   }
 

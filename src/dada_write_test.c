@@ -106,12 +106,14 @@ int main (int argc, char **argv)
 
   header_buf = ipcbuf_get_next_write (hdu->header_block);
 
-  if (!header_buf)  {
+  if (!header_buf) 
+  {
     multilog (log, LOG_ERR, "Could not get next header block\n");
     return EXIT_FAILURE;
   }
 
-  if (header_file)  {
+  if (header_file) 
+  {
     if (fileread (header_file, header_buf, header_size) < 0)  {
       multilog (log, LOG_ERR, "Could not read header from %s\n", header_file);
       return EXIT_FAILURE;
@@ -134,7 +136,10 @@ int main (int argc, char **argv)
     return EXIT_FAILURE;
   }
 
-  fprintf (stderr, "Writing %"PRIu64" bytes to data block\n", bytes_to_write);
+  if (verbose)
+  {
+    fprintf (stderr, "Writing %"PRIu64" bytes to data block\n", bytes_to_write);
+  }
 
   while (bytes_to_write)  {
 

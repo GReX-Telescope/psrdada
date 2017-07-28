@@ -288,6 +288,8 @@ int main (int argc, char **argv)
 
   signal (SIGPIPE, SIG_IGN);
 
+  if (verbose)
+    multilog (log, LOG_INFO, "opening socket on port: %d\n", port);
   listen_fd = sock_create (&port);
   if (listen_fd < 0)  {
     multilog (log, LOG_ERR, "Error creating socket: %s\n", strerror(errno));

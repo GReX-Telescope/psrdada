@@ -3,7 +3,7 @@
 #include "dada_def.h"
 
 #include "ascii_header.h"
-#include "daemon.h"
+#include "tmutil.h"
 
 #include <pthread.h>
 #include <stdio.h>
@@ -65,7 +65,7 @@ void add_to_dadatime (dada_timeval_t * time1, uint64_t psecs);
 
 int dbmergedb_init_hdu (dada_dbmergedb_t * ctx, dada_block_t * hdu, char reader);
 int dbmergedb_init (dada_dbmergedb_t * ctx);
-int dbmergedb_destroy (dada_dbmergedb_t * ctx);
+void dbmergedb_destroy (dada_dbmergedb_t * ctx);
 
 void usage()
 {
@@ -130,7 +130,8 @@ int dbmergedb_init_hdu (dada_dbmergedb_t * ctx, dada_block_t * db, char reader)
   }
 
   db->bufsz = ipcbuf_get_bufsz((ipcbuf_t *) (db->hdu->data_block));
-  db->block_open = db->bytes = db->bytes = 0;
+  db->block_open = 0;
+  db->bytes = 0;
   db->curr_buf = 0;
   db->header = 0;
   db->mutex = &(ctx->mutex);
@@ -183,7 +184,7 @@ int dbmergedb_init (dada_dbmergedb_t * ctx)
   return 0;
 }
 
-int dbmergedb_destroy (dada_dbmergedb_t * ctx)
+void dbmergedb_destroy (dada_dbmergedb_t * ctx)
 {
   pthread_mutex_lock (&(ctx->mutex));
   pthread_mutex_unlock (&(ctx->mutex));
@@ -196,12 +197,6 @@ int dbmergedb_open (dada_client_t* client)
   // the dada_dbmergedb specific data
   dada_dbmergedb_t* ctx = (dada_dbmergedb_t *) client->context;
 
-  // status and error logging facilty
-  multilog_t* log = client->log;
-
-  // header to copy from in to out
-  char * header = 0;
-  
   // wait for both input polarisations to be aligned onto a UTC
   // second boundary, join input threads first
   void* result = 0;
@@ -292,8 +287,6 @@ int dbmergedb_close (dada_client_t* client, uint64_t bytes_written)
 /*! Pointer to the function that transfers data to/from the target */
 int64_t dbmergedb_write (dada_client_t* client, void* data, uint64_t data_size)
 {
-  dada_dbmergedb_t* ctx = (dada_dbmergedb_t*) client->context;
-
   multilog_t * log = client->log;
 
   multilog (log, LOG_ERR, "write: should not be called\n");
@@ -378,7 +371,7 @@ int64_t dbmergedb_write_block (dada_client_t* client, void* data, uint64_t data_
     if (drain_pola)
     {
       multilog (log, LOG_INFO, "write_block: draining pol A\n");
-      int rval;
+      int rval = 0;
       if (ctx->pola.block_open)
       {
         if (ctx->pola.bytes == 0)
@@ -398,7 +391,7 @@ int64_t dbmergedb_write_block (dada_client_t* client, void* data, uint64_t data_
     if (drain_polb)
     {
       multilog (log, LOG_INFO, "write_block: draining pol B\n");
-      int rval;
+      int rval = 0;
       if (ctx->polb.block_open)
       {
         if (ctx->polb.bytes == 0)
@@ -453,7 +446,7 @@ int64_t dbmergedb_write_block (dada_client_t* client, void* data, uint64_t data_
  * Thread to align the input polarisation to the same UTC second as the other
  * polarisation
  */
-void * input_thread (void * arg)
+void input_thread (void * arg)
 {
   dada_block_t * db = (dada_block_t*) arg;
 
@@ -703,9 +696,6 @@ int main (int argc, char **argv)
 
   dada_client_t* client = 0;
 
-  // Flag set in daemon mode
-  char daemon = 0;
-
   // Flag set in verbose mode
   char verbose = 0;
 
@@ -717,15 +707,10 @@ int main (int argc, char **argv)
 
   int arg = 0;
 
-  while ((arg=getopt(argc,argv,"dsvw")) != -1)
+  while ((arg=getopt(argc,argv,"svw")) != -1)
   {
     switch (arg) 
     {
-      
-      case 'd':
-        daemon = 1;
-        break;
-
       case 's':
         single_transfer = 1;
         break;
@@ -749,11 +734,9 @@ int main (int argc, char **argv)
   dbmergedb.wait_for_both = wait_for_both;
 
   int num_args = argc-optind;
-  int i = 0;
-      
-  if ((argc-optind) != 3)
+  if (num_args != 3)
   {
-    fprintf(stderr, "dada_dbmergedb: 3 arguments required\n");
+    fprintf(stderr, "dada_dbmergedb: 3 arguments required, %d provided\n", num_args);
     usage();
     exit(EXIT_FAILURE);
   } 

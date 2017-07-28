@@ -120,6 +120,7 @@ int udplongprbs_prepare (udplongprbs_t * ctx)
     size_t cleared = dada_sock_clear_buffered_packets(ctx->socks[i]->fd, UDP_PAYLOAD);
   }
   udplongprbs_reset(ctx);
+  return 0;
 }
 
 int udplongprbs_reset (udplongprbs_t * ctx)
@@ -129,6 +130,7 @@ int udplongprbs_reset (udplongprbs_t * ctx)
 
   reset_stats_t(ctx->packets);
   reset_stats_t(ctx->bytes);
+  return 0;
 }
 
 

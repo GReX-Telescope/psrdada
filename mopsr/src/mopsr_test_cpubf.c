@@ -157,5 +157,6 @@ int main (int argc, char **argv)
 
   free (h_in);
   free (h_out);
+  return 0;
 }
 

@@ -11,7 +11,9 @@
 #include <assert.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <inttypes.h>
+#include <pthread.h>
 
 #define DEFAULT_CHUNK_SIZE 8225280
 #define DEFAULT_FILE_SIZE_GB 24
@@ -80,7 +82,7 @@ int file_open_function (dada_diskperf_t* diskperf)
   assert (diskperf->chunk_size > 0);
   if (posix_memalign ( (void **) &(diskperf->buffer), 512, diskperf->chunk_size) != 0) {
     if (! diskperf->buffer ) {
-      fprintf(stderr, "Failed to allocated %d bytes of aligned "
+      fprintf(stderr, "Failed to allocated %ld bytes of aligned "
                 "memory: %s\n", diskperf->chunk_size, strerror(errno));
       return -1;
     }
@@ -153,7 +155,7 @@ int file_open_function (dada_diskperf_t* diskperf)
       
     if (diskperf->verbose) {
       fprintf(stderr, "%s opened for writing %"PRIu64" bytes in "
-                "%d byte chunks\n", diskperf->file_name, diskperf->total_bytes,
+                "%ld byte chunks\n", diskperf->file_name, diskperf->total_bytes,
                 diskperf->chunk_size);
     }
   }
@@ -197,7 +199,7 @@ int64_t file_io_function (dada_diskperf_t* diskperf)
         diskperf->bytes += bytes_iod;
 
       } else if (bytes_iod < 0) {
-        fprintf(stderr, "failed to read %d bytes: %s\n",
+        fprintf(stderr, "failed to read %ld bytes: %s\n",
                   bytes_to_io, strerror(errno));
         return -1;
 
@@ -219,7 +221,7 @@ int64_t file_io_function (dada_diskperf_t* diskperf)
         diskperf->bytes += bytes_iod;
   
       } else if (bytes_iod < 0) {
-        fprintf(stderr, "failed to write %d bytes: %s\n",
+        fprintf(stderr, "failed to write %ld bytes: %s\n",
                   bytes_to_io, strerror(errno));
         return -1;
 

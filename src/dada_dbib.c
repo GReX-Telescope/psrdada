@@ -73,24 +73,15 @@ typedef struct {
 /*! Function that opens the data transfer target */
 int dbib_open (dada_client_t* client)
 {
-
   // the dada_dbib specific data
   assert (client != 0);
   dada_dbib_t* dbib = (dada_dbib_t*) client->context;
 
-  // the ib communcation manager
-  assert(dbib->ib_cm != 0);
-  dada_ib_cm_t * ib_cm = dbib->ib_cm;
-  
   if (dbib->verbose)
     multilog (client->log, LOG_INFO, "dbib_open()\n");
 
   // the header
   assert(client->header != 0);
-  char* header = client->header;
-
-  // observation id, as defined by OBS_ID attribute
-  char obs_id [DADA_OBS_ID_MAXLEN] = "";
 
   uint64_t transfer_size;
   if (ascii_header_get (client->header, "TRANSFER_SIZE", "%"PRIu64, &transfer_size) != 1)
@@ -365,8 +356,7 @@ dada_ib_cm_t * dbib_ib_init(dada_dbib_t * ctx, dada_hdu_t * hdu, multilog_t * lo
   uint64_t db_bufsz = 0;
   uint64_t hb_nbufs = 0;
   uint64_t hb_bufsz = 0;
-  char ** db_buffers = 0;
-  char ** hb_buffers = 0;
+  char ** db_buffers;
 
   assert (ctx != 0);
   assert (hdu != 0);
@@ -376,7 +366,7 @@ dada_ib_cm_t * dbib_ib_init(dada_dbib_t * ctx, dada_hdu_t * hdu, multilog_t * lo
 
   // get the datablock addresses for memory registration
   db_buffers = dada_hdu_db_addresses(hdu, &db_nbufs, &db_bufsz);
-  hb_buffers = dada_hdu_hb_addresses(hdu, &hb_nbufs, &hb_bufsz);
+  dada_hdu_hb_addresses(hdu, &hb_nbufs, &hb_bufsz);
 
   // check that the chunk size is a factor of DB size
   if (db_bufsz % ctx->chunk_size != 0)

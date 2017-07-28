@@ -61,6 +61,7 @@ int udpheader_prepare (udpheader_t * ctx)
     size_t cleared = dada_sock_clear_buffered_packets(ctx->socks[i]->fd, UDP_PAYLOAD);
   }
   udpheader_reset(ctx);
+  return 0;
 }
 
 int udpheader_reset (udpheader_t * ctx)
@@ -70,6 +71,7 @@ int udpheader_reset (udpheader_t * ctx)
 
   reset_stats_t(ctx->packets);
   reset_stats_t(ctx->bytes);
+  return 0;
 }
 
 

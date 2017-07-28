@@ -433,4 +433,5 @@ int mopsr_tie_beams_cpu (void * h_in, void * h_out, void * h_tb_phasors, uint64_
       ou[isamp*nchan+ichan] = beam_sum;
     }
   }
+  return 0;
 }

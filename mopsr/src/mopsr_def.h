@@ -11,6 +11,7 @@
 #define MOPSR_NDIM   2
 
 #define HIRES
+
 #ifdef HIRES
 
 #define MOPSR_MAX_MODULES_PER_PFB  8

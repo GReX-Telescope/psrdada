@@ -128,6 +128,7 @@ int udphist_prepare (udphist_t * ctx)
   size_t cleared = dada_sock_clear_buffered_packets(ctx->sock->fd, UDP_PAYLOAD);
 
   udphist_reset(ctx);
+  return 0;
 }
 
 int udphist_reset (udphist_t * ctx)
@@ -147,6 +148,7 @@ int udphist_reset (udphist_t * ctx)
     }
   }
   ctx->num_integrated = 0;
+  return 0;
 }
 
 int udphist_destroy (udphist_t * ctx)
@@ -179,6 +181,7 @@ int udphist_destroy (udphist_t * ctx)
     mopsr_free_sock (ctx->sock);
   }
   ctx->sock = 0;
+  return 0;
 }
 
 /*

@@ -179,11 +179,13 @@ int main (int argc, char** argv)
     }
   }
 
+#ifdef HAVE_CUDA
   if (device_id >= 0 && !persist)
   {
     fprintf (stderr, "ERROR: use of GPU memory mandates persistence mode\n");
     return -1;
   }
+#endif
 
   if (hdrsz < DADA_DEFAULT_HEADER_SIZE)
   {

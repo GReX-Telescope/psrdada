@@ -275,8 +275,8 @@ int main (int argc, char **argv)
       if (verbose > 1)
         multilog(log, LOG_INFO, "main: seq_no=%"PRIu64"\n", seq_no);
 
-      //if (prev_seq_no && (prev_seq_no + 1 != seq_no))
-      //  multilog(log, LOG_ERR, "main: seq_no mismatch: seq=%"PRIu64" prev=%"PRIu64", diff=%"PRIu64"\n", seq_no, prev_seq_no, (seq_no - prev_seq_no));
+      if (prev_seq_no && (prev_seq_no + 1 != seq_no))
+        multilog(log, LOG_ERR, "main: seq_no mismatch: seq=%"PRIu64" prev=%"PRIu64", diff=%"PRIu64"\n", seq_no, prev_seq_no, (seq_no - prev_seq_no));
 
       prev_seq_no = seq_no;
 

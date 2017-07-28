@@ -3,6 +3,7 @@
 #include "dada_def.h"
 #include "dada_generator.h"
 #include "ascii_header.h"
+#include "futils.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -136,8 +137,6 @@ int dada_zero_open (dada_client_t* client)
   assert (zerodb != 0);
 
   uint64_t hdr_size = 0;
-  time_t current_time = 0;
-  time_t prev_time = 0;
   
   // read the header
   if (fileread (zerodb->header_file, client->header, client->header_size) < 0) {
@@ -199,9 +198,6 @@ int main (int argc, char **argv)
 
   /* Flag set in verbose mode */
   char verbose = 0;
-
-  /* Quit flag */
-  char quit = 0;
 
   /* data rate [MB/s | MiB/s] */
   float rate = DEFAULT_DATA_RATE;

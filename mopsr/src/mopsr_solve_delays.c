@@ -20,6 +20,8 @@
 #include <cpgplot.h>
 #include <fftw3.h>
 
+#include "config.h"
+
 #ifdef HAVE_GSL
 #include <gsl/gsl_sort.h>
 #include <gsl/gsl_statistics.h>

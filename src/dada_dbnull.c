@@ -213,10 +213,6 @@ int main (int argc, char **argv)
 
   int arg = 0;
 
-  /* TODO the amount to conduct a busy sleep inbetween clearing each sub
-   * block */
-  int busy_sleep = 0;
-
   char local_copy = 0;
 
   while ((arg=getopt(argc,argv,"dlN:vk:o:O:qsSx:X:z")) != -1)
@@ -224,10 +220,6 @@ int main (int argc, char **argv)
       
     case 'd':
       daemon=1;
-      break;
-
-    case 'b':
-      busy_sleep = atoi(optarg);
       break;
       
     case 'v':

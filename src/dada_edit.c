@@ -91,6 +91,8 @@ int main (int argc, char **argv)
 
   for (arg = optind; arg < argc; arg++)
   {
+    if (verbose)
+      fprintf (stderr, "dada_edit: opening %s\n", argv[arg]);
     current_file = fopen (argv[arg], mode);
     if (!current_file)
     {
@@ -198,6 +200,8 @@ int main (int argc, char **argv)
       fprintf (stdout, current_header);
     }
 
+    if (verbose)
+      fprintf (stderr, "dada_edit: closing %s\n", argv[arg]);
     fclose (current_file);
   }
 

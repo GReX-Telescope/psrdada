@@ -1,7 +1,3 @@
-#include "dada_hdu.h"
-#include "dada_def.h"
-#include "multilog.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -17,6 +13,12 @@
 #include <sys/sem.h>
 #include <sys/shm.h>
 
+#include "dada_hdu.h"
+#include "dada_def.h"
+#include "multilog.h"
+#include "futils.h"
+#include "ipcutil.h"
+
 // constants taken from ipcbuf.c
 #define IPCBUF_READ   1   /* semaphore locks reader (+clear) status */
 #define IPCBUF_VIEWER  1  /* connected */
@@ -31,7 +33,7 @@ void usage()
      " output     output datablock key\n"
      " -H file    write file to output datablock header\n"
      " -v         be verbose\n"
-     " -d         run as daemon\n", DADA_DEFAULT_BLOCK_KEY);
+     " -d         run as daemon\n");
 }
 
 void signal_handler(int signalValue) 
@@ -78,11 +80,9 @@ int main (int argc, char **argv)
     }
 
   int num_args = argc-optind;
-  int i = 0;
-
-  if ((argc-optind) != 2)
+  if (num_args != 2)
   {
-    fprintf (stderr, "ERROR: 2 command line arguments required\n");
+    fprintf (stderr, "ERROR: 2 command line arguments required, encountered %d\n", num_args);
     usage();
     return (EXIT_FAILURE);
   }
@@ -198,7 +198,6 @@ int main (int argc, char **argv)
     return EXIT_FAILURE;
   }
 
-  ipcbuf_t * hb = hdu->header_block;
   ipcbuf_t * db = (ipcbuf_t *) hdu->data_block;
   ipcio_t * ipc = hdu->data_block;
 

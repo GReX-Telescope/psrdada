@@ -72,7 +72,8 @@ if HAVE_CUDA
 
 include $(top_srcdir)/cuda.mk
 
-libpsrdada_la_SOURCES += dada_cuda.cu dada_cuda.h ipcio_cuda.cu ipcbuf_cuda.cu ipcio_cuda.h ipcbuf_cuda.h ipcutil_cuda.cu
+libpsrdada_la_SOURCES += dada_cuda.cu dada_cuda.h ipcio_cuda.cu ipcbuf_cuda.cu \
+	ipcio_cuda.h ipcbuf_cuda.h ipcutil_cuda.cu
 
 include_HEADERS += dada_cuda.h ipcio_cuda.h ipcbuf_cuda.h ipcutil_cuda.h
 

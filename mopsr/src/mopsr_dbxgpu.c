@@ -684,6 +684,7 @@ int dbxgpu_destroy (mopsr_dbxgpu_t * ctx, dada_hdu_t * in_hdu)
       return -1;
     }
   }
+  return 0;
 }
 
 

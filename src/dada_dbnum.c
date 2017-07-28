@@ -88,12 +88,11 @@ int64_t dada_dbnum_io (dada_client_t* client, void* data, uint64_t data_size)
   unsigned j = 0;
   uint64_t i = 0;
   unsigned char * ptr = 0;
-  unsigned char ch;
 
   for (i=0; i<uint64_count; i++)
   {
     // decode the uint64_t 
-    ptr = (char *) data + i*uint64_size;
+    ptr = (unsigned char *) data + i*uint64_size;
     seq = UINT64_C (0);
     for (j = 0; j < 8; j++ )
     {
@@ -186,9 +185,6 @@ int main (int argc, char **argv)
 
   /* Flag set in verbose mode */
   unsigned verbose = 0;
-
-  /* Quit flag */
-  char quit = 0;
 
   /* start number */
   uint64_t start_num = 0;

@@ -97,4 +97,6 @@ int main(int argc, char** argv)
   }
 
   free (pfbs);
+
+  return EXIT_SUCCESS;
 }

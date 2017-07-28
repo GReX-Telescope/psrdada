@@ -418,6 +418,7 @@ int dbdelaydb_destroy (mopsr_dbdelaydb_t * ctx, dada_hdu_t * in_hdu, dada_hdu_t 
       return -1;
     }
   }
+  return 0;
 }
  
 

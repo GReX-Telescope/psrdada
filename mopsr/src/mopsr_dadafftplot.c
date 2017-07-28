@@ -441,6 +441,7 @@ int udpplot_reset (udpplot_t * ctx)
   }
   ctx->num_integrated = 0;
   ctx->fft_count = 0;
+  return 0;
 }
 
 int udpplot_destroy (udpplot_t * ctx)
@@ -483,6 +484,7 @@ int udpplot_destroy (udpplot_t * ctx)
   if (ctx->x_points)
     free(ctx->x_points);
   ctx->x_points = 0;
+  return 0;
 
 }
 

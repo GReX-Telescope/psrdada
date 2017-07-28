@@ -178,6 +178,7 @@ int udpcorr_prepare (udpcorr_t * ctx)
 
   udpcorr_reset(ctx);
   ctx->idump = 0;
+  return 0;
 }
 
 int udpcorr_reset (udpcorr_t * ctx)
@@ -189,6 +190,7 @@ int udpcorr_reset (udpcorr_t * ctx)
   {
     ctx->sum[ipt] = 0;
   }
+  return 0;
 }
 
 int udpcorr_destroy (udpcorr_t * ctx)
@@ -221,6 +223,7 @@ int udpcorr_destroy (udpcorr_t * ctx)
     mopsr_free_sock (ctx->sock);
   }
   ctx->sock = 0;
+  return 0;
 }
 
 /*
@@ -631,6 +634,7 @@ int udpcorr_acquire (udpcorr_t * ctx)
 
   if (ctx->verbose)
     multilog(ctx->log, LOG_INFO, "main: bytes_collected=%ld\n", offset);
+  return 0;
 }
 
 // extract the samples for both ant for a specific batch and channel
@@ -688,6 +692,7 @@ int udpcorr_unpack (udpcorr_t * ctx)
     im = (((float) raw2[2*ipt+1]) + 0.0) / 127.5;
     ctx->fwd2_in[ipt] = re + im * I;
   }
+  return 0;
 }
 
 int udpcorr_correlate (udpcorr_t * ctx)
@@ -799,7 +804,6 @@ int udpcorr_correlate (udpcorr_t * ctx)
   */
 
   return 0;
-
 }
 
 // plot the cross correlation as a function of frequnecy

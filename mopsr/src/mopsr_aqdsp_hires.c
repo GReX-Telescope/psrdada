@@ -989,6 +989,7 @@ int aqdsp_destroy (aqdsp_hires_t * ctx, dada_hdu_t * in_hdu, dada_hdu_t * out_hd
     multilog (ctx->log, LOG_ERR, "failed to unregister input DADA buffers\n");
     return -1;
   }
+  return 0;
 }
  
 
@@ -1856,4 +1857,5 @@ int aqdsp_append_mask (aqdsp_hires_t* ctx)
       fwrite (&val, sizeof(char), 1, ctx->mask_fptrs[iant]);
     }
   }
+  return 0;
 }

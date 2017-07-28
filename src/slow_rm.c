@@ -86,7 +86,6 @@ int main (int argc, char **argv)
   unsigned n_files = 0;
   int file_i = 0;
   int i = 0;
-  unsigned error = 0;
 
   if (!metafile) {
     n_files = argc-optind;

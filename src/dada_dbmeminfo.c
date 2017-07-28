@@ -88,14 +88,11 @@ int main (int argc, char **argv)
     return EXIT_FAILURE;
 
   /* get a pointer to the data block */
- 
-  ipcbuf_t *hb = hdu->header_block;
-  ipcbuf_t *db = (ipcbuf_t *) hdu->data_block;
-          
-  uint64_t bufsz;
-  uint64_t nhbufs;
+  uint64_t bufsz, nhbufs, ndbufs;
 
-  char ** hb_buffers = dada_hdu_db_addresses(hdu, &nhbufs, &bufsz);
+  dada_hdu_db_addresses(hdu, &nhbufs, &bufsz);
+  dada_hdu_db_addresses(hdu, &ndbufs, &bufsz);
+
   uint64_t total_bytes = nhbufs * bufsz;
   if (verbose) {
     fprintf(stderr,"HEADER BLOCK:\n");
@@ -105,24 +102,6 @@ int main (int argc, char **argv)
                                                        (1024.0*1024.0));
   }
 
-  unsigned i = 0;
-  uintptr_t addr = 0;
-  uintptr_t addr2 = 0;
-  uint64_t num = 0;
-
-  for (i=0; i<nhbufs; i++)
-  {
-    addr = (uintptr_t) hb_buffers[i];
-    num = (uint64_t) addr;
-    addr2 = (uintptr_t) num;
-    fprintf(stdout, "hb_buf[%02d] raw=%p addr=%p num=%"PRIu64", num=%p, addr2=%p\n",i, hb_buffers[i], addr, num, num, addr2);
-  }
-
-
-  uint64_t ndbufs;
-
-  char ** db_buffers = dada_hdu_db_addresses(hdu, &ndbufs, &bufsz);
-
   total_bytes = ndbufs * bufsz;
 
   fprintf(stderr,"DATA BLOCK:\n");
@@ -130,14 +109,6 @@ int main (int argc, char **argv)
   fprintf(stderr,"Buffer size: %"PRIu64"\n",bufsz);
   fprintf(stderr,"Total buffer memory: %5.0f MB\n", ((double) total_bytes) / 
                                                        (1024.0*1024.0));
-
-  for (i=0; i<ndbufs; i++)
-  {
-    addr = (uintptr_t) db_buffers[i];
-    num = (uint64_t) addr;
-    addr2 = (uintptr_t) num;
-    fprintf(stdout, "db_buf[%02d] raw=%p addr=%p num=%"PRIu64", num=%p, addr2=%p\n",i, db_buffers[i], addr, num, num, addr2);
-  }
 
   if (dada_hdu_disconnect (hdu) < 0)
     return EXIT_FAILURE;

@@ -607,5 +607,6 @@ int mopsr_tile_beams_cpu (void * h_in, void * h_out, void * h_phasors, uint64_t 
       ou_offset += beam_stride;
     }
   }
+  return 0;
 }
 

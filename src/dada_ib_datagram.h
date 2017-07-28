@@ -94,6 +94,8 @@ int dada_ib_dg_post_sends (dada_ib_datagram_t * ctx, dada_ib_mb_t ** mbs, int nm
 int dada_ib_dg_post_send (dada_ib_datagram_t * ctx, dada_ib_mb_t * mb, int remote_qpn);
 int dada_ib_dg_wait_send (dada_ib_datagram_t * ctx, dada_ib_mb_t * mb);
 
+int dada_ib_dg_wait_cq (dada_ib_datagram_t * ctx, dada_ib_mb_t * mb, struct ibv_comp_channel * comp_chan, struct ibv_cq * cq);
+
 dada_ib_datagram_dest_t * dada_ib_dg_server_exch_dest(dada_ib_datagram_t * ctx, int ib_port, int port, int sl, dada_ib_datagram_dest_t * my_dest, int sgid_idx);
 dada_ib_datagram_dest_t * dada_ib_dg_client_exch_dest (const char *servername, int port, const dada_ib_datagram_dest_t * my_dest);
 

@@ -1,6 +1,7 @@
 #include "dada_hdu.h"
 #include "dada_def.h"
 #include "multilog.h"
+#include "ipcutil.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -149,9 +150,6 @@ int main (int argc, char **argv)
     multilog_fprintf(stderr, LOG_ERR, "not a designated reader\n");
     quit = 1;
   }
-
-  uint64_t header_size = 0;
-  char * header = 0;
 
   if (verbose > 1)
     multilog_fprintf(stderr, LOG_INFO, "HB: ipcbuf_mark_cleared()\n");

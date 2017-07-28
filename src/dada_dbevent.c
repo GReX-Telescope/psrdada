@@ -11,11 +11,14 @@
  * back in time over cleared data blocks
  */
 
+#include "ascii_header.h"
 #include "dada_hdu.h"
 #include "dada_def.h"
 #include "node_array.h"
 #include "multilog.h"
 #include "diff_time.h"
+#include "sock.h"
+#include "tmutil.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -110,6 +113,8 @@ int check_read_offset (dada_dbevent_t * dbevent);
 
 int64_t calculate_byte_offset (dada_dbevent_t * dbevent, char * time_str_secs, char * time_str_frac);
 
+int receive_events (dada_dbevent_t * dbevent, int listen_fd);
+
 int dump_event(dada_dbevent_t * dbevent, double event_start_utc, double event_end_utc, float event_snr, float event_dm);
 
 void usage();
@@ -120,7 +125,7 @@ void usage()
      "dada_dbevent [options] inkey outkey\n"
      " inkey       input hexadecimal shared memory key\n"
      " outkey      input hexadecimal shared memory key\n"
-     " -b percent  delay procesing of the input buffer up to this amount [default %d %]\n"
+     " -b percent  delay procesing of the input buffer up to this amount [default %d %%]\n"
      " -t delay    maximum delay (s) to retain data for [default %ds]\n"
      " -h          print this help text\n"
      " -p port     port to listen for event commands [default %d]\n"
@@ -156,11 +161,9 @@ int main (int argc, char **argv)
   // output hexadecimal shared memory key
   key_t out_dada_key;
 
-  char daemon = 0;
-
   float input_data_block_threshold = DADA_DBEVENT_DEFAULT_INPUT_BUFFER;
 
-  time_t input_maximum_delay = DADA_DBEVENT_DEFAULT_INPUT_DELAY;
+  int input_maximum_delay = DADA_DBEVENT_DEFAULT_INPUT_DELAY;
 
   int arg = 0;
 
@@ -234,7 +237,7 @@ int main (int argc, char **argv)
 
   dbevent.verbose = verbose;
   dbevent.log = log;
-  dbevent.input_maximum_delay = input_maximum_delay;
+  dbevent.input_maximum_delay = (time_t) input_maximum_delay;
   dbevent.work_buffer_size = 1024 * 1024; 
   dbevent.work_buffer = malloc (dbevent.work_buffer_size);
   if (!dbevent.work_buffer)
@@ -359,17 +362,11 @@ int main (int argc, char **argv)
     }
   }
 
-  uint64_t ibuf = 0;
-
   ipcbuf_t * db = (ipcbuf_t *) dbevent.in_hdu->data_block;
 
   // get the number and size of buffers in the input data block
   dbevent.in_nbufs = ipcbuf_get_nbufs (db);
   dbevent.in_bufsz = ipcbuf_get_bufsz (db);
-
-  uint64_t bytes = 0;
-  uint64_t block_id = 0;
-  char * buffer;
 
   while (!quit)
   {
@@ -506,8 +503,6 @@ int main (int argc, char **argv)
 
 int check_read_offset (dada_dbevent_t * dbevent)
 {
-  multilog_t * log = dbevent->log;
-
   const uint64_t max_delay_bytes = dbevent->input_maximum_delay * dbevent->bytes_per_second;
 
   unsigned have_old_buffers = 1;
@@ -600,7 +595,6 @@ int receive_events (dada_dbevent_t * dbevent, int listen_fd)
 
   int    fd     = 0;
   FILE * sockin = 0;
-  char * rgot   = 0;
   unsigned more_events = 1;
 
   unsigned buffer_size = 1024;
@@ -615,13 +609,9 @@ int receive_events (dada_dbevent_t * dbevent, int listen_fd)
   char * event_width_str;
   char * event_beam_str;
 
-  time_t   event_time_secs;
-  uint64_t event_time_fractional;
-  double   event_time;
-
   // arrays for n_events
   uint64_t  n_events = 0;
-  event_t * events;
+  event_t * events = NULL;
 
   int events_recorded = 0;
   int events_missed = 0;
@@ -646,7 +636,7 @@ int receive_events (dada_dbevent_t * dbevent, int listen_fd)
   setbuf (sockin, 0);
 
   // first line on the socket should be the number of events
-  rgot = fgets (buffer, buffer_size, sockin);
+  fgets (buffer, buffer_size, sockin);
   if (sscanf (buffer, "N_EVENTS %"PRIu64, &n_events) != 1)
   {
     multilog(log, LOG_WARNING, "failed to parse N_EVENTS\n");
@@ -658,14 +648,13 @@ int receive_events (dada_dbevent_t * dbevent, int listen_fd)
   }
 
   // second line on the socket should be the UTC_START of the obsevation
-  rgot = fgets (buffer, buffer_size, sockin);
+  fgets (buffer, buffer_size, sockin);
   time_t event_utc_start = str2utctime (buffer);
 
   char * comment = 0;
   unsigned i = 0;
   const char * sep_time = ". \t";
   const char * sep_float = " \t";
-  char * word;
   int64_t offset;
   uint64_t remainder;
   
@@ -675,7 +664,7 @@ int receive_events (dada_dbevent_t * dbevent, int listen_fd)
       multilog (log, LOG_INFO, "getting new line\n");
     char * saveptr = 0;
 
-    rgot = fgets (buffer, buffer_size, sockin);
+    fgets (buffer, buffer_size, sockin);
 
     //if (dbevent->verbose > 1)
     multilog (log, LOG_INFO, " <- %s", buffer);
@@ -964,9 +953,11 @@ int64_t calculate_byte_offset (dada_dbevent_t * dbevent, char * time_str_secs, c
 
 /*
  * dump the specified event to the output datablock */
-int dump_event(dada_dbevent_t * dbevent, double event_start_utc, double event_end_utc, float event_snr, float event_dm)
+int dump_event (dada_dbevent_t * dbevent, double event_start_utc, 
+                double event_end_utc, float event_snr, float event_dm)
 {
   multilog (dbevent->log, LOG_INFO, "event time: %lf - %lf [seconds]\n", event_start_utc, event_end_utc);
   multilog (dbevent->log, LOG_INFO, "event SNR: %f\n", event_snr);
   multilog (dbevent->log, LOG_INFO, "event DM: %f\n", event_dm);
+  return 0;
 }

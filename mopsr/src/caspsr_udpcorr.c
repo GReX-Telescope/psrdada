@@ -177,6 +177,7 @@ int udpcorr_prepare (udpcorr_t * ctx)
 
   udpcorr_reset(ctx);
   ctx->idump = 0;
+  return 0;
 }
 
 int udpcorr_reset (udpcorr_t * ctx)
@@ -194,6 +195,7 @@ int udpcorr_reset (udpcorr_t * ctx)
     ctx->power1[ipt] = 0;
     ctx->power2[ipt] = 0;
   }
+  return 0;
 }
 
 int udpcorr_destroy (udpcorr_t * ctx)
@@ -226,6 +228,7 @@ int udpcorr_destroy (udpcorr_t * ctx)
     mopsr_free_sock (ctx->sock);
   }
   ctx->sock = 0;
+  return 0;
 }
 
 /*
@@ -578,6 +581,7 @@ int udpcorr_acquire (udpcorr_t * ctx)
         have_enough = 1;
     }
   }
+  return 0;
 }
 
 int udpcorr_unpack (udpcorr_t * ctx)
@@ -600,7 +604,7 @@ int udpcorr_unpack (udpcorr_t * ctx)
       ctx->fwd2_in[idat+ival] = ((float) raw[i+ival] + 0.5) / scale;
     i += 4;
   }
-  return;
+  return 0;
 }
 
 int udpcorr_correlate (udpcorr_t * ctx)
@@ -632,6 +636,7 @@ int udpcorr_correlate (udpcorr_t * ctx)
       ctx->xcorr[ichan] += xcorr;
     }
   }
+  return 0;
 }
    
 int udpcorr_endblock (udpcorr_t * ctx)
