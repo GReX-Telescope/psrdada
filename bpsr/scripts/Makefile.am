@@ -30,6 +30,11 @@ dist_bin_SCRIPTS = Bpsr.pm \
                    server_bpsr_web_monitor.pl \
                    client_bpsr_auxiliary.pl \
                    client_bpsr_disk_cleaner.pl \
+                   client_bpsr_clean_send.pl \
+                   client_bpsr_clean_recv.pl \
+                   client_bpsr_svd.pl \
+                   client_bpsr_dirty_send.pl \
+                   client_bpsr_dirty_recv.pl \
                    client_bpsr_dumper.pl \
                    client_bpsr_events.pl \
                    client_bpsr_heimdall.pl \
@@ -37,6 +42,7 @@ dist_bin_SCRIPTS = Bpsr.pm \
                    client_bpsr_command.pl \
                    client_bpsr_observation_manager.pl \
                    client_bpsr_results_monitor.pl \
+                   client_bpsr_pscrunch.pl \
                    client_ibob_level_setter.pl \
                    client_bpsr_proc.pl \
                    client_bpsr_pwc.pl \
