@@ -26,6 +26,7 @@ require AutoLoader;
   &clientCommand
   &getObsDestinations
   &getConfig
+  &getCornerturnConfig
   &getIBOBConfig
   &getROACHConfig
   &getBeamForPWCHost
@@ -337,7 +338,7 @@ sub getConfig(;$)
   my $config_file = $DADA_ROOT."/share/bpsr.cfg";
   my %config = Dada::readCFGFileIntoHash($config_file, 0);
 
-  my $ct_file = $DADA_ROOT."/bpsr_cornerturn.cfg";
+  my $ct_file = $DADA_ROOT."/share/bpsr_cornerturn.cfg";
   my %ct_config = Dada::readCFGFileIntoHash($ct_file, 0);
   my %combined = (%config, %ct_config);
 
@@ -354,6 +355,23 @@ sub getConfig(;$)
 
   return %combined;
 }
+
+sub getCornerturnConfig()
+{
+  my $config_file = $DADA_ROOT."/share/bpsr_cornerturn.cfg";
+  my %config = ();
+  if (-f $config_file)
+  {
+    %config = Dada::readCFGFileIntoHash($config_file, 0);
+  }
+  else
+  {
+    print "ERROR: cornerturn config file [".$config_file."] did not exist\n";
+  }
+
+  return %config;
+}
+
 
 sub getIBOBConfig()
 {
