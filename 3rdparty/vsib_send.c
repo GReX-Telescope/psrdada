@@ -91,8 +91,6 @@ int main (int argc, char * const argv[]) {
   unsigned short fnamesize;
   int i, status, file, opt, tmp, ntime, maxtimes, ibuf, jbuf, nfile;
   int bread, nupdate;
-  //  int foff;
-  int sock;
   char msg[MAXSTR+50], *fname;
   double firsttime, dtime;
   disktime *times;
@@ -111,6 +109,7 @@ int main (int argc, char * const argv[]) {
   struct stat filestat;
   unsigned long long filesize;
   int quiet = 0;
+  nfile = 0;
 
   bufsize   = DEFAULT_BUFSIZE * 1024 * 1024;
   file = -1;
@@ -574,6 +573,7 @@ int setup_net(int isserver, int port, int window_size, writesocks *socks, int qu
   socklen_t client_len;
   struct hostent     *hostptr;
   unsigned long ip_addr;
+  ssock = 0;
 
   memset((char *) &server, 0, sizeof(server));
   server.sin_family = AF_INET;
@@ -731,11 +731,12 @@ void kill_signal (int sig) {
 void *netwrite(void *arg) {
 
   char *poff;
-  int ntowrite, nwrote, sock;
+  int ntowrite, nwrote;
   int ibuf = 0;
   int jbuf = NBUF-1;
   unsigned i=0;
 
+  nwrote = 0;
   writesocks * socks = (writesocks *) arg;
 
   while (1) {

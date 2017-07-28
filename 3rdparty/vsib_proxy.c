@@ -67,7 +67,7 @@ pthread_mutex_t globalmutex = PTHREAD_MUTEX_INITIALIZER;
 int main (int argc, char * const argv[]) {
   int i, j, status, ofile, opt, tmp, nwrote;
   int ibuf, jbuf, nupdate, ntowrite;
-  int serversock, clientsock, listensock;
+  int serversock, listensock;
   char msg[MAXSTR+50], *poff;
     
   int quiet = 0;          /* verbosity control */
@@ -211,6 +211,7 @@ int main (int argc, char * const argv[]) {
   }
 
   nupdate = timeupdate/(bufsize/1e6);
+  nwrote = 0;
     
   // Initialise buffers and syncronisation variables
   for (i=0; i<NBUF; i++) {

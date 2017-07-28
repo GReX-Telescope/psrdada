@@ -113,7 +113,10 @@ int main (int argc, char * const argv[]) {
   char hostname[MAXSTR+1] = ""; /* Host name to send data to */
   int one_transfer = 0;
   int quiet = 0;
+  fname = NULL;
+  currentfilesize = 0;
   
+  /*
   struct option options[] = {
     {"memory", 0, 0, 'm'},
     {"port", 1, 0, 'p'},
@@ -127,6 +130,7 @@ int main (int argc, char * const argv[]) {
     {"help", 0, 0, 'h'},
     {0, 0, 0, 0}
   };
+  */
 
   bufsize   = DEFAULT_BUFSIZE * 1024 * 1024;
   ofile = -1;
@@ -362,7 +366,7 @@ int main (int argc, char * const argv[]) {
         }
         pthread_mutex_unlock(&globalmutex);
 #ifdef _DEBUG
-        fprintf(stderr, "MAIN: nbufsize = %d\n", nbufsize[ibuf]);
+        fprintf(stderr, "MAIN: nbufsize = %ld\n", nbufsize[ibuf]);
 #endif
         
         if (newfile) { // Need to read filename
@@ -455,7 +459,7 @@ int main (int argc, char * const argv[]) {
             pthread_mutex_unlock( &bufmutex[ibuf] );
             pthread_exit(NULL);
           } else if (nwrote!=nbufsize[ibuf]) {
-            fprintf(stderr, "Warning: Did not write all bytes! (%d/%d)\n",
+            fprintf(stderr, "Warning: Did not write all bytes! (%d/%ld)\n",
                     nwrote, nbufsize[ibuf]);
           }
           completed += nwrote;
