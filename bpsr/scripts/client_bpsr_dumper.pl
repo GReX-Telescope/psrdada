@@ -40,8 +40,12 @@ our $beam : shared;
 our %cfg : shared;
 our %roach : shared;
 our $log_host;
-our $log_port;
-our $log_sock;
+our $sys_log_port;
+our $src_log_port;
+our $sys_log_sock;
+our $src_log_sock;
+our $sys_log_file;
+our $src_log_file;
 
 #
 # Initialize globals
@@ -54,13 +58,16 @@ $beam = "";
 %cfg = Bpsr::getConfig();
 %roach = Bpsr::getROACHConfig();
 $log_host = $cfg{"SERVER_HOST"};
-$log_port = $cfg{"SERVER_SYS_LOG_PORT"};
-$log_sock = 0;
+$sys_log_port = $cfg{"SERVER_SYS_LOG_PORT"};
+$src_log_port = $cfg{"SERVER_SRC_LOG_PORT"};
+$sys_log_sock = 0;
+$src_log_sock = 0;
+$sys_log_file = "";
+$src_log_file = "";
 
 #
 # Local Variable Declarations
 #
-my $log_file = "";
 my $pid_file = "";
 my $control_thread = 0;
 my $prev_header = "";
@@ -113,7 +120,8 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
   my ($cmd, $result, $response, $proc_cmd, $full_cmd);
   my (%h);
 
-  $log_file = $cfg{"CLIENT_LOG_DIR"}."/".$daemon_name."_".$pwc_id.".log";
+  $sys_log_file = $cfg{"CLIENT_LOG_DIR"}."/".$daemon_name."_".$pwc_id.".log";
+  $src_log_file = $cfg{"CLIENT_LOG_DIR"}."/".$daemon_name."_".$pwc_id.".src.log";
   $pid_file = $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$pwc_id.".pid";
 
   # register Signal handlers
@@ -122,15 +130,20 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
   $SIG{PIPE} = \&sigPipeHandle;
 
   # become a daemon
-  Dada::daemonize($log_file, $pid_file);
+  Dada::daemonize($sys_log_file, $pid_file);
 
   # Auto flush output
   $| = 1;
 
   # Open a connection to the server_sys_monitor.pl script
-  $log_sock = Dada::nexusLogOpen($log_host, $log_port);
-  if (!$log_sock) {
-    print STDERR "Could open log port: ".$log_host.":".$log_port."\n";
+  $sys_log_sock = Dada::nexusLogOpen($log_host, $sys_log_port);
+  if (!$sys_log_sock) {
+    print STDERR "Could open log port: ".$log_host.":".$sys_log_port."\n";
+  }
+
+  $src_log_sock = Dada::nexusLogOpen($log_host, $src_log_port);
+  if (!$src_log_sock) {
+    print STDERR "Could open src log port: ".$log_host.":".$src_log_port."\n";
   }
 
   logMsg(1,"INFO", "STARTING SCRIPT");
@@ -182,7 +195,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
   {
 
 		# next header to read from the receiving data_block
-    $cmd = "dada_header -k ".$dump_db_key;
+    $cmd = "dada_header -t dumper -k ".$dump_db_key;
     logMsg(2, "INFO", "main: ".$cmd);
     ($result, $curr_raw_header) = Dada::mySystem ($cmd);
     logMsg(3, "INFO", "main: ".$curr_raw_header);
@@ -248,15 +261,14 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
         $cmd = "dada_dbnull -k ".$dump_db_key." -s  -z";
       }
 
-      # setup the full processing command
-      $full_cmd = $cmd." 2>&1 | ".$cfg{"SCRIPTS_DIR"}."/client_bpsr_src_logger.pl ".$pwc_id." dump";
-
-      logMsg(1, "INFO", "START [dump] ".$proc_cmd);
-      ($result, $response) = Dada::mySystem($full_cmd);
-      logMsg(1, "INFO", "END   [dump] ".$proc_cmd);
+      logMsg(1, "INFO", "START [dump] ".$cmd);
+      ($result, $response) = Dada::mySystemPiped($cmd, $src_log_file, $src_log_sock,
+                                                 "src", sprintf("%02d",$pwc_id),
+                                                 $daemon_name, "dump");
+      logMsg(1, "INFO", "END   [dump] ".$cmd);
       if ($result ne "ok")
       {
-        logMsg(1, "WARN", "main: ".$proc_cmd." failed ".$response);
+        logMsg(1, "WARN", "main: ".$cmd." failed ".$response);
       }
 
       # if we dumped successfully, make a backup copy on the local disk
@@ -282,7 +294,8 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
   $control_thread->join();
 
   logMsg(0, "INFO", "STOPPING SCRIPT");
-  Dada::nexusLogClose($log_sock);
+  Dada::nexusLogClose($sys_log_sock);
+  Dada::nexusLogClose($src_log_sock);
 
   exit(0);
 }
@@ -308,12 +321,12 @@ sub controlThread($)
 
   # we have dada_headers listening on the receiving, event and dump data blocks - kill them, 
   # then allow a short time for those threads to exit
-  $process = "^dada_header -k ".$dump_db_key;
+  $process = "^dada_header -t dumper -k ".$dump_db_key;
   $user = "bpsr";
 
-  logMsg(1, "INFO", "controlThread: killProcess(".$process.", ".$user.", ".$$.")");
+  logMsg(2, "INFO", "controlThread: killProcess(".$process.", ".$user.", ".$$.")");
   ($result, $response) = Dada::killProcess($process, $user, $$);
-  logMsg(1, "INFO", "controlThread: killProcess ".$result." ".$response);
+  logMsg(2, "INFO", "controlThread: killProcess ".$result." ".$response);
   if ($result ne "ok")
   {
     logMsg(1, "WARN", "controlThread: killProcess for ".$process." failed: ".$response);
@@ -364,11 +377,11 @@ sub logMsg($$$) {
     $msg =~ s/`/'/;
 
     my $time = Dada::getCurrentDadaTime();
-    if (!($log_sock)) {
-      $log_sock = Dada::nexusLogOpen($log_host, $log_port);
+    if (!($sys_log_sock)) {
+      $sys_log_sock = Dada::nexusLogOpen($log_host, $sys_log_port);
     }
-    if ($log_sock) {
-      Dada::nexusLogMessage($log_sock, $pwc_id, $time, "sys", $type, "dump", $msg);
+    if ($sys_log_sock) {
+      Dada::nexusLogMessage($sys_log_sock, $pwc_id, $time, "sys", $type, "dump", $msg);
     }
     print STDERR "[".$time."] ".$msg."\n";
   }
@@ -390,8 +403,8 @@ sub sigHandle($) {
   } else {
 
     $quit_daemon = 1;
-    if ($log_sock) {
-      close($log_sock);
+    if ($sys_log_sock) {
+      close($sys_log_sock);
     }
   }
 }
@@ -400,9 +413,9 @@ sub sigPipeHandle($)
 {
   my $sigName = shift;
   print STDERR $daemon_name." : Received SIG".$sigName."\n";
-  $log_sock = 0;
-  if ($log_host && $log_port) {
-    $log_sock = Dada::nexusLogOpen($log_host, $log_port);
+  $sys_log_sock = 0;
+  if ($log_host && $sys_log_port) {
+    $sys_log_sock = Dada::nexusLogOpen($log_host, $sys_log_port);
   }
 }
 
