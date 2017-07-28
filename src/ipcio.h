@@ -8,7 +8,6 @@
 
    ************************************************************************ */
 
-#include "config.h"
 #include "ipcbuf.h"
 
 #ifdef __cplusplus
@@ -37,11 +36,10 @@ extern "C" {
   static const ipcio_t IPCIO_INIT = { IPCBUF_INIT, 0,0, 0, 0, 0, 0,0,0 };
 
   /*! create a new shared memory block and initialize an ipcio_t struct */
-#ifdef HAVE_CUDA
-  int ipcio_create (ipcio_t* ipc, key_t key, uint64_t nbufs, uint64_t bufsz, unsigned num_read, int device_id);
-#else
   int ipcio_create (ipcio_t* ipc, key_t key, uint64_t nbufs, uint64_t bufsz, unsigned num_read);
-#endif
+
+  /*! create a new shared memory block and initialize an ipcio_t struct, on GPU device_id */
+  int ipcio_create_work (ipcio_t* ipc, key_t key, uint64_t nbufs, uint64_t bufsz, unsigned num_read, int device_id);
 
   /*! connect to an already created ipcbuf_t struct in shared memory */
   int ipcio_connect (ipcio_t* ipc, key_t key);
@@ -100,9 +98,7 @@ extern "C" {
 
   ssize_t ipcio_close_block_write (ipcio_t *ipc, uint64_t bytes);
 
-#ifdef MOL_BUG
   int ipcio_zero_next_block (ipcio_t *ipc);
-#endif
 
 #ifdef __cplusplus
 	   }

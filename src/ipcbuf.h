@@ -13,8 +13,6 @@
 #include <inttypes.h> 
 #include <sys/types.h>
 
-#include "config.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -65,9 +63,8 @@ extern "C" {
     /* the last valid byte when sod is raised */
     uint64_t e_byte [IPCBUF_XFERS];
 
-#ifdef HAVE_CUDA
+    /* CUDA device upon which buffers may reside, -1 for host */
     int on_device_id;
-#endif
 
   } ipcsync_t;
 
@@ -104,11 +101,8 @@ extern "C" {
      //////////////////////////////////////////////////////////////////// */
 
   /*! Initialize an ipcbuf_t struct, creating shm and sem */
-#ifdef HAVE_CUDA
-  int ipcbuf_create (ipcbuf_t*, key_t key, uint64_t nbufs, uint64_t bufsz, unsigned num_readers, int device_id);
-#else
   int ipcbuf_create (ipcbuf_t*, key_t key, uint64_t nbufs, uint64_t bufsz, unsigned num_readers);
-#endif
+  int ipcbuf_create_work (ipcbuf_t*, key_t key, uint64_t nbufs, uint64_t bufsz, unsigned num_readers, int device_id);
 
   /*! Connect to an already created ipcsync_t struct in shm */
   int ipcbuf_connect (ipcbuf_t*, key_t key);

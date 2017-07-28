@@ -20,15 +20,15 @@ void ipcio_init (ipcio_t* ipc)
 }
 
 /* create a new shared memory block and initialize an ipcio_t struct */
-#ifdef HAVE_CUDA
-int ipcio_create (ipcio_t* ipc, key_t key, uint64_t nbufs, uint64_t bufsz, unsigned num_read, int device_id)
-{
-  if (ipcbuf_create ((ipcbuf_t*)ipc, key, nbufs, bufsz, num_read, device_id) < 0) {
-#else
 int ipcio_create (ipcio_t* ipc, key_t key, uint64_t nbufs, uint64_t bufsz, unsigned num_read)
 {
-  if (ipcbuf_create ((ipcbuf_t*)ipc, key, nbufs, bufsz, num_read) < 0) {
-#endif
+  return ipcio_create_work (ipc, key, nbufs, bufsz, num_read, -1);
+}
+
+int ipcio_create_work (ipcio_t* ipc, key_t key, uint64_t nbufs, uint64_t bufsz, unsigned num_read, int device_id)
+{
+  if (ipcbuf_create_work ((ipcbuf_t*)ipc, key, nbufs, bufsz, num_read, device_id) < 0)
+  {
     fprintf (stderr, "ipcio_create: ipcbuf_create error\n");
     return -1;
   }

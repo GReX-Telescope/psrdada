@@ -24,7 +24,7 @@ void usage ()
           " -c node     assign memory from NUMA node  [default: all nodes]\n"
 #endif
           " -d          destroy the shared memory area [default: create]\n"
-#ifdef HAVE_CUDA
+#ifdef HAVE_CUDA_DB
           " -g id       allocate data buffers on GPU with device id\n"
 #endif
           " -h          show help\n"
@@ -63,9 +63,7 @@ int main (int argc, char** argv)
   int arg;
   unsigned num_readers = 1;
 
-#ifdef HAVE_CUDA
   int device_id = -1;
-#endif
 
 #ifdef HAVE_HWLOC
   hwloc_topology_t topology;
@@ -78,13 +76,13 @@ int main (int argc, char** argv)
 
   // numa node to bind to
   int numa_node = -1;
-#ifdef HAVE_CUDA
+#ifdef HAVE_CUDA_DB
   while ((arg = getopt(argc, argv, "a:b:c:dg:hk:ln:pr:w")) != -1) {
 #else
   while ((arg = getopt(argc, argv, "a:b:c:dhk:ln:pr:w")) != -1) {
 #endif
 #else
-#ifdef HAVE_CUDA
+#ifdef HAVE_CUDA_DB
   while ((arg = getopt(argc, argv, "a:b:dg:hk:ln:pr:")) != -1) {
 #else
   while ((arg = getopt(argc, argv, "a:b:dhk:ln:pr:")) != -1) {
@@ -133,7 +131,7 @@ int main (int argc, char** argv)
       destroy = 1;
       break;
 
-#ifdef HAVE_CUDA
+#ifdef HAVE_CUDA_DB
     case 'g':
       if (sscanf (optarg, "%d", &device_id) != 1)
       {
@@ -179,7 +177,7 @@ int main (int argc, char** argv)
     }
   }
 
-#ifdef HAVE_CUDA
+#ifdef HAVE_CUDA_DB
   if (device_id >= 0 && !persist)
   {
     fprintf (stderr, "ERROR: use of GPU memory mandates persistence mode\n");
@@ -223,11 +221,8 @@ int main (int argc, char** argv)
 #endif
 
     // create data ring buffer
-#ifdef HAVE_CUDA
-    if (ipcbuf_create (&data_block, dada_key, nbufs, bufsz, num_readers, device_id) < 0) {
-#else
-    if (ipcbuf_create (&data_block, dada_key, nbufs, bufsz, num_readers) < 0) {
-#endif
+    if (ipcbuf_create_work (&data_block, dada_key, nbufs, bufsz, num_readers, device_id) < 0) 
+    {
       fprintf (stderr, "Could not create DADA data block\n");
       return -1;
     }
@@ -235,11 +230,8 @@ int main (int argc, char** argv)
             " nbufs=%"PRIu64" bufsz=%"PRIu64" nread=%d\n", nbufs, bufsz, num_readers);
 
     // create header ring buffer
-#ifdef HAVE_CUDA
-    if (ipcbuf_create (&header, dada_key + 1, nhdrs, hdrsz, num_readers, -1) < 0) {
-#else
-    if (ipcbuf_create (&header, dada_key + 1, nhdrs, hdrsz, num_readers) < 0) {
-#endif
+    if (ipcbuf_create (&header, dada_key + 1, nhdrs, hdrsz, num_readers) < 0) 
+    {
       fprintf (stderr, "Could not create DADA header block\n");
       return -1;
     }
