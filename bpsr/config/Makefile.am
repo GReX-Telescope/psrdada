@@ -4,6 +4,8 @@ dist_data_DATA = bpsr.cfg \
                  bpsr.info \
                  bpsr.viewer \
                  bpsr_pwcs.cfg \
+                 bpsr_cornerturn.cfg \
+                 bpsr_svd.cfg \
                  ibob_default.cfg \
                  ibob.cfg \
                  roach.cfg \
