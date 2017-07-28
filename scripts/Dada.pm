@@ -1224,6 +1224,9 @@ sub getTempInfo() {
     ($result, $response) = Dada::myShell($cmd);
     if ($result eq "ok") {
       $temp_str = $response;
+    } else {
+      $result = "ok";
+      $temp_str = "0.0";
     }
 
   } elsif ( -f "/opt/dell/srvadmin/bin/omreport" ) {
@@ -1232,6 +1235,9 @@ sub getTempInfo() {
     ($result, $response) = Dada::myShell($cmd);
     if ($result eq "ok") {
       $temp_str = $response;
+    } else {
+      $result = "ok";
+      $temp_str = "0.0";
     }
 
   } elsif ( -f "/usr/bin/ipmitool") {
@@ -1241,6 +1247,7 @@ sub getTempInfo() {
     if ($result eq "ok") {
       $temp_str = $response.".0";
     } else {
+      $result = "ok";
       $temp_str = "0.0";
     }
 
