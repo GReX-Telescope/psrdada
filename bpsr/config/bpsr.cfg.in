@@ -13,8 +13,8 @@ PROCESSING_DB_KEY       @PSRDADA_INSTALL@/share/bpsr.info
 # Server directory configuration
 #
 
-SERVER_HOST             hipsr-srv0.hipsr.local
-SERVER_ALIASES          hipsr-srv0.atnf.CSIRO.AU hipsr-srv0.hipsr.local
+SERVER_HOST             hipsr-srv0.atnf.csiro.au
+SERVER_ALIASES          hipsr-srv0.atnf.csiro.au hipsr-srv0.hipsr.local
 SERVER_RESULTS_DIR      /data/bpsr/results
 SERVER_OLD_RESULTS_DIR  /data/bpsr/old_results
 SERVER_ARCHIVE_DIR      /data/bpsr/archives
@@ -30,13 +30,13 @@ SERVER_DAEMONS_PERSIST  bpsr_swin_tape_controller bpsr_parkes_tape_controller bp
 # Port Configuration for BPSR, start @ 51000
 #
 # TCS Interface configuration. Note on different interface to server
-TCS_INTERFACE_HOST        hipsr-srv0.atnf.CSIRO.AU
+TCS_INTERFACE_HOST        hipsr-srv0.atnf.csiro.au
 TCS_INTERFACE_PORT        58010      # TCS connects here
-TCS_STATE_INFO_PORT       51001      # Web interface state information 
+TCS_STATE_INFO_PORT       31001      # Web interface state information 
 
 
 # PWCC -> PWC configuration
-PWCC_HOST               hipsr-srv0.hipsr.local
+PWCC_HOST               hipsr-srv0.atnf.csiro.au
 PWCC_PORT               50100
 PWCC_LOGPORT            50101
 PWC_PORT                50200
@@ -45,24 +45,24 @@ USE_BASEPORT            yes
 
 
 # For clients to log system messages
-SERVER_SRC_LOG_PORT        51002
-SERVER_SYS_LOG_PORT        51003
-SERVER_GAIN_CONTROL_PORT   51004
-SERVER_PWC_RESPONSE_PORT   51005
-SERVER_PWCC_LOG_PORT       51006
-SERVER_WEB_MONITOR_PORT    51024
-SERVER_XFER_PID_PORT       51025
-SERVER_PARKESTAPE_PID_PORT 51026
-SERVER_SWINTAPE_PID_PORT   51027
+SERVER_SRC_LOG_PORT        31002
+SERVER_SYS_LOG_PORT        31003
+SERVER_GAIN_CONTROL_PORT   31004
+SERVER_PWC_RESPONSE_PORT   31005
+SERVER_PWCC_LOG_PORT       31006
+SERVER_WEB_MONITOR_PORT    31024
+SERVER_XFER_PID_PORT       31025
+SERVER_PARKESTAPE_PID_PORT 31026
+SERVER_SWINTAPE_PID_PORT   31027
 
-SERVER_bpsr_transfer_manager_PID_PORT  51025
-SERVER_bpsr_swin_tape_controller_PID_PORT 51027
-SERVER_bpsr_parkes_tape_controller_PID_PORT 51026
+SERVER_bpsr_transfer_manager_PID_PORT  31025
+SERVER_bpsr_swin_tape_controller_PID_PORT 31027
+SERVER_bpsr_parkes_tape_controller_PID_PORT 31026
 
-SERVER_COINCIDENCER_PORT  51028
+SERVER_COINCIDENCER_PORT  31028
 
 RAID_HOST                 caspsr-raid0.atnf.csiro.au
-RAID_WEB_MONITOR_PORT     51102
+RAID_WEB_MONITOR_PORT     31102
 
 ###############################################################################
 # ROACH Simluator configuration
@@ -70,10 +70,10 @@ RAID_WEB_MONITOR_PORT     51102
 USE_SIM                   1                   # 1 means tcs_interface will launch sim
 SIM_BINARY                bpsr_udpgenerator
 SIM_HOST                  hipsr-srv0 # host which runs DFB_SIM_BINARY
-SIM_PORT                  51007      # port to connect/configure DFB_DIM_BINARY
+SIM_PORT                  31007      # port to connect/configure DFB_DIM_BINARY
 SIM_DEST_PORT             4001       # SHOULD mactch CLIENT_UDPDB_PORT below
 IBOB_SIM_HOST             srv0       # host masquerading as ibob for the PWC's
-IBOB_SIM_PORT             51008      # port for PWC's to connect to is simulating
+IBOB_SIM_PORT             31008      # port for PWC's to connect to is simulating
 
 
 ###############################################################################
@@ -85,7 +85,7 @@ SWIN_S4_DEVICE          /dev/nst0
 SWIN_DB_DIR             pulsar:tapeserv01:/home/pulsar/bookkeeping/tape_archiver
 
 NUM_PARKES_DIRS         1
-PARKES_DIR_0            bpsr:caspsr-raid0.atnf.CSIRO.AU:/lfs/raid0/bpsr/parkes
+PARKES_DIR_0            bpsr:caspsr-raid0.atnf.CSIRO.AU:/lfs/raid1/bpsr/parkes
 PARKES_S4_DEVICE        /dev/nst0
 PARKES_DB_DIR           dada:jura.atnf.CSIRO.AU:/home/dada/bookkeeping/tape_archiver
 
@@ -93,55 +93,89 @@ PARKES_DB_DIR           dada:jura.atnf.CSIRO.AU:/home/dada/bookkeeping/tape_arch
 ###############################################################################
 # Client directory configuration
 #
-CLIENT_LOCAL_DIR        /data/bpsr
-CLIENT_CONTROL_DIR      /data/bpsr/control
-CLIENT_LOG_DIR          /data/bpsr/logs
-CLIENT_ARCHIVE_DIR      /data/bpsr/archives
-CLIENT_RECORDING_DIR    /data/bpsr/rawdata
-CLIENT_SCRATCH_DIR      /data/bpsr/scratch
+CLIENT_LOCAL_DIR        /data/local/bpsr
+CLIENT_CONTROL_DIR      /data/local/bpsr/control
+CLIENT_LOG_DIR          /data/local/bpsr/logs
+CLIENT_ARCHIVE_DIR      /data/local/bpsr/archives
+CLIENT_RECORDING_DIR    /data/local/bpsr/rawdata
+CLIENT_SCRATCH_DIR      /data/local/bpsr/scratch
 
-CLIENT_DAEMONS          bpsr_observation_manager bpsr_results_monitor bpsr_disk_cleaner bpsr_transfer_raid
+CLIENT_DAEMONS          bpsr_pwc bpsr_proc bpsr_events bpsr_dumper bpsr_heimdall bpsr_auxiliary bpsr_results_monitor bpsr_disk_cleaner bpsr_transfer_raid bpsr_pscrunch
 
 CLIENT_UDPDB_PORT       4001      # udp packets arrive on this port
-CLIENT_MASTER_PORT      51009     # client master script listens on this port
-CLIENT_PROC_LOAD_PORT   51010     # reports load information
-CLIENT_BG_PROC_PORT     51011     # reports observation current active
+CLIENT_MASTER_PORT      31009     # client master script listens on this port
+CLIENT_PROC_LOAD_PORT   31010     # reports load information
+CLIENT_BG_PROC_PORT     31011     # reports observation current active
 CLIENT_NUM_CORES        8         # total number of processing cores
-CLIENT_UDPDB_STATS_PORT 51012     # udpdb reports stats on this port
+CLIENT_UDPDB_STATS_PORT 31012     # udpdb reports stats on this port
+CLIENT_EVENT_BASEPORT   31200     # PORT + PWC_ID for raw event triggering
 
 ################################################################################
 # Data block definitions
 #
 DATA_BLOCK_PREFIX       b
-DATA_BLOCK_IDS          0 1
+DATA_BLOCK_IDS          0 1 2
+PSCRUNCHED_DATA_BLOCK   1
+TRANSIENT_DATA_BLOCK    1
+DUMP_DATA_BLOCK         2
+EVENT_DATA_BLOCK        0
 RECEIVING_DATA_BLOCK    0
 PROCESSING_DATA_BLOCK   0
-TRANSIENT_DATA_BLOCK    1
-                                                                                                             
+
+# primary receiving data block
 BLOCK_NBUFS_0           512
 BLOCK_BUFSZ_0           16777216
-BLOCK_NREAD_0           2
+BLOCK_NREAD_0           4
+BLOCK_PAGE_0            true
+BLOCK_NUMA_0            0
+
+# pscrunched dirty block
 BLOCK_NBUFS_1           128
-BLOCK_BUFSZ_1           16777216
+BLOCK_BUFSZ_1           4194304
 BLOCK_NREAD_1           1
+BLOCK_PAGE_1            true
+BLOCK_NUMA_1            0
+
+# FRB dump data block
+BLOCK_NBUFS_2           16
+BLOCK_BUFSZ_2           8388608
+BLOCK_NREAD_2           1
 
 # Primary Write Client (PWC) configuration
 PWC_BINARY              bpsr_udpdb
 
 NUM_PWC                 13
-PWC_0                   hipsr0
-PWC_1                   hipsr0
-PWC_2                   hipsr1
-PWC_3                   hipsr1
-PWC_4                   hipsr2
-PWC_5                   hipsr2
-PWC_6                   hipsr3
-PWC_7                   hipsr3
-PWC_8                   hipsr4
-PWC_9                   hipsr4
-PWC_10                  hipsr5
-PWC_11                  hipsr5
-PWC_12                  hipsr6
+
+# host names for PWC
+PWC_0                   pkbe-gpu0
+PWC_1                   pkbe-gpu0
+PWC_2                   pkbe-gpu1
+PWC_3                   pkbe-gpu1
+PWC_4                   pkbe-gpu2
+PWC_5                   pkbe-gpu2
+PWC_6                   pkbe-gpu3
+PWC_7                   pkbe-gpu3
+PWC_8                   pkbe-gpu4
+PWC_9                   pkbe-gpu4
+PWC_10                  pkbe-gpu5
+PWC_11                  pkbe-gpu5
+PWC_12                  pkbe-gpu6
+
+# IPs for UDP data
+PWC_UDP_IP_0            192.168.2.180
+PWC_UDP_IP_1            192.168.2.180
+PWC_UDP_IP_2            192.168.2.182
+PWC_UDP_IP_3            192.168.2.182
+PWC_UDP_IP_4            192.168.2.184
+PWC_UDP_IP_5            192.168.2.184
+PWC_UDP_IP_6            192.168.2.186
+PWC_UDP_IP_7            192.168.2.186
+PWC_UDP_IP_8            192.168.2.188
+PWC_UDP_IP_9            192.168.2.188
+PWC_UDP_IP_10           192.168.2.190
+PWC_UDP_IP_11           192.168.2.190
+PWC_UDP_IP_12           192.168.2.192
+
 
 # ports for UDP data
 PWC_UDP_PORT_0          4001
@@ -157,6 +191,22 @@ PWC_UDP_PORT_9          4002
 PWC_UDP_PORT_10         4001
 PWC_UDP_PORT_11         4002
 PWC_UDP_PORT_12         4001
+
+# CPU cores to bind UDP process
+PWC_UDP_CORE_0          1
+PWC_UDP_CORE_1          9
+PWC_UDP_CORE_2          1
+PWC_UDP_CORE_3          9
+PWC_UDP_CORE_4          1
+PWC_UDP_CORE_5          9
+PWC_UDP_CORE_6          1
+PWC_UDP_CORE_7          9
+PWC_UDP_CORE_8          1
+PWC_UDP_CORE_9          9
+PWC_UDP_CORE_10         1
+PWC_UDP_CORE_11         9
+PWC_UDP_CORE_12         1
+
 
 # gpu designation for PWC's
 PWC_GPU_ID_0            0
