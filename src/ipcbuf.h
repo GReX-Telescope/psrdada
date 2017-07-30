@@ -79,6 +79,7 @@ extern "C" {
 
     ipcsync_t* sync;       /* pointer to sync structure in shared memory */
     char**     buffer;     /* base addresses of sub-blocks in shared memory */
+    void**     shm_addr;   /* shm addresses of sub-blocks in shared memory */
     char*      count;      /* the pending xfer count in each buffer in the ring */
     key_t*     shmkey;     /* shared memory keys */
 
@@ -92,7 +93,7 @@ extern "C" {
 
   } ipcbuf_t;
 
-#define IPCBUF_INIT {0, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1}
+#define IPCBUF_INIT {0, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1}
 
   /* ////////////////////////////////////////////////////////////////////
      
@@ -262,6 +263,12 @@ extern "C" {
 
   /*! set the start of clocking data buffer  */
   uint64_t ipcbuf_set_soclock_buf(ipcbuf_t*);
+
+#ifdef HAVE_CUDA
+  /*! return CUDA device_id for the data buffer, -1 for host */
+  int ipcbuf_get_device (ipcbuf_t* id);
+#endif
+
 
 #ifdef __cplusplus
 	   }

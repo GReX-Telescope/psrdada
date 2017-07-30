@@ -16,10 +16,9 @@
 /*!
   Returns a device pointer to a shared memory block and its shmid
 */
-void* ipc_alloc_cuda (key_t key, size_t size, int flag, int* shmid, int device_id)
+void* ipc_alloc_cuda (key_t key, size_t size, int flag, int* shmid, void * shm_addr, int device_id)
 {
   void * devPtr = 0;
-  void * buf = 0;
   cudaIpcMemHandle_t * handlePtr = 0;
   int id = 0;
   size_t handle_size = sizeof(cudaIpcMemHandle_t);
@@ -44,8 +43,8 @@ void* ipc_alloc_cuda (key_t key, size_t size, int flag, int* shmid, int device_i
 #endif
 
   // pointer to cudaIpcMemHandle_t
-  buf = shmat (id, 0, flag);
-  if (buf == (void *)-1) 
+  shm_addr = shmat (id, 0, flag);
+  if (shm_addr == (void *)-1) 
   {
     fprintf (stderr,
        "ipc_alloc_cuda: shmat (shmid=%d) %s\n"
@@ -54,10 +53,10 @@ void* ipc_alloc_cuda (key_t key, size_t size, int flag, int* shmid, int device_i
     return 0;
   }
 
-  handlePtr = (cudaIpcMemHandle_t *) buf;
+  handlePtr = (cudaIpcMemHandle_t *) shm_addr;
 
 #ifdef _DEBUG
-  fprintf (stderr, "ipc_alloc_cuda: buf=%p handlePtr=%p\n", buf, handlePtr);
+  fprintf (stderr, "ipc_alloc_cuda: shm_addr=%p handlePtr=%p\n", shm_addr, handlePtr);
   fprintf (stderr, "ipc_alloc_cuda: selecting device %d\n", device_id);
 #endif
 
@@ -92,6 +91,7 @@ void* ipc_alloc_cuda (key_t key, size_t size, int flag, int* shmid, int device_i
   }
   else
   {
+    // get a pointer to existing device memory using handlePtr
     error = cudaIpcOpenMemHandle (&devPtr, *handlePtr, cudaIpcMemLazyEnablePeerAccess);
     if (error != cudaSuccess)
     {
@@ -121,6 +121,8 @@ int ipc_disconnect_cuda (void * devPtr)
              cudaGetErrorString (error));
     return -1;
   }
+
+  // now restore 
 
   return 0;
 }

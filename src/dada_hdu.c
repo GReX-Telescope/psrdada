@@ -227,11 +227,19 @@ int dada_hdu_unlock_write (dada_hdu_t* hdu)
   }
 
   if (ipcio_is_open (hdu->data_block))
+  {
+#ifdef _DEBUG
+    fprintf (stderr, "dada_hdu_unlock_write: ipcio_close (hdu->data_block)\n");
+#endif
     if (ipcio_close (hdu->data_block) < 0) {
       multilog (hdu->log, LOG_ERR, "Could not unlock Data Block write\n");
       return -1;
     }
+  }
 
+#ifdef _DEBUG
+    fprintf (stderr, "dada_hdu_unlock_write: ipcbuf_unlock_write (hdu->header_block)\n");
+#endif
   if (ipcbuf_unlock_write (hdu->header_block) < 0) {
     multilog (hdu->log, LOG_ERR, "Could not unlock Header Block write\n");
     return -1;

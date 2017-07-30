@@ -24,7 +24,7 @@ void usage ()
           " -c node     assign memory from NUMA node  [default: all nodes]\n"
 #endif
           " -d          destroy the shared memory area [default: create]\n"
-#ifdef HAVE_CUDA_DB
+#ifdef HAVE_CUDA
           " -g id       allocate data buffers on GPU with device id\n"
 #endif
           " -h          show help\n"
@@ -76,13 +76,13 @@ int main (int argc, char** argv)
 
   // numa node to bind to
   int numa_node = -1;
-#ifdef HAVE_CUDA_DB
+#ifdef HAVE_CUDA
   while ((arg = getopt(argc, argv, "a:b:c:dg:hk:ln:pr:w")) != -1) {
 #else
   while ((arg = getopt(argc, argv, "a:b:c:dhk:ln:pr:w")) != -1) {
 #endif
 #else
-#ifdef HAVE_CUDA_DB
+#ifdef HAVE_CUDA
   while ((arg = getopt(argc, argv, "a:b:dg:hk:ln:pr:")) != -1) {
 #else
   while ((arg = getopt(argc, argv, "a:b:dhk:ln:pr:")) != -1) {
@@ -131,7 +131,7 @@ int main (int argc, char** argv)
       destroy = 1;
       break;
 
-#ifdef HAVE_CUDA_DB
+#ifdef HAVE_CUDA
     case 'g':
       if (sscanf (optarg, "%d", &device_id) != 1)
       {
@@ -177,7 +177,7 @@ int main (int argc, char** argv)
     }
   }
 
-#ifdef HAVE_CUDA_DB
+#ifdef HAVE_CUDA
   if (device_id >= 0 && !persist)
   {
     fprintf (stderr, "ERROR: use of GPU memory mandates persistence mode\n");

@@ -1,14 +1,19 @@
-#include "dada_client.h"
-#include "dada_def.h"
-
-#include "ascii_header.h"
-#include "diff_time.h"
 
 #include <stdlib.h>
 #include <assert.h>
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
+
+#include "config.h"
+#include "dada_client.h"
+#include "dada_def.h"
+#include "ascii_header.h"
+#include "diff_time.h"
+
+#ifdef HAVE_CUDA
+#include <cuda_runtime.h>
+#endif
 
 // #define _DEBUG 1
 
@@ -193,10 +198,28 @@ int64_t dada_client_io_loop_block (dada_client_t* client)
 
   // current Data Block buffer on which to operate
   char * buffer;
- 
+
+#ifdef HAVE_CUDA
+  int device_id = ipcbuf_get_device ((ipcbuf_t*)client->data_block);
+  void * local_buffer;
+  cudaError_t err;
+  if (device_id >= 0)
+  {
+    cudaSetDevice (device_id);
+    if (!client->io_block_function_cuda)
+    {
+      err = cudaMallocHost (&local_buffer, block_size);
+      if (err != cudaSuccess)
+      {
+        multilog (log, LOG_ERR, "io_loop_block: cudaMallocHost failed %s\n", cudaGetErrorString(err));
+        return -1;
+      }
+    }
+  }
+#endif
+       
   while (!client->transfer_bytes || bytes_transfered < client->transfer_bytes)
   {
-
 #ifdef _DEBUG
     fprintf(stderr, "io_loop_block: bytes_transferred=%"PRIu64", client->transfer_bytes=%"PRIu64"\n", 
             bytes_transfered, client->transfer_bytes);
@@ -244,10 +267,50 @@ int64_t dada_client_io_loop_block (dada_client_t* client)
     // call the io_block function
     if (bytes)
     {
-#ifdef _DEBUG
-      fprintf (stderr, "io_loop_block: io_block_function() addr=%p id=%"PRIu64", bytes=%"PRIi64"\n", buffer, block_id, bytes);
+#ifdef HAVE_CUDA
+      if (device_id >= 0)
+      {
+        // if the client supports cuda block transfers
+        if (client->io_block_function_cuda)
+        {
+          bytes_operated = client->io_block_function_cuda (client, buffer, bytes, block_id); 
+        }
+        // the client does not support cuda block transfers, use a host buffer for staging
+        else
+        {
+          if (client->direction == dada_client_reader)
+          {
+            err = cudaMemcpy (buffer, local_buffer, bytes, cudaMemcpyDeviceToHost);
+            if (err != cudaSuccess)
+            {
+              multilog (log, LOG_ERR, "io_loop_block: cudaMemcpy failed: %s\n",
+                        cudaGetErrorString(err));
+            }
+          }
+
+          bytes_operated = client->io_block_function (client, local_buffer, bytes, block_id);
+
+          if (client->direction == dada_client_writer)
+          {
+            err = cudaMemcpy (buffer, local_buffer, bytes, cudaMemcpyHostToDevice);
+            if (err != cudaSuccess)
+            {
+              multilog (log, LOG_ERR, "io_loop_block: cudaMemcpy failed: %s\n",
+                        cudaGetErrorString(err));
+            }
+          }
+        }
+      }
+      // data block resides in host memory
+      else
 #endif
-      bytes_operated = client->io_block_function (client, buffer, bytes, block_id);
+      {
+
+#ifdef _DEBUG
+        fprintf (stderr, "io_loop_block: io_block_function() addr=%p id=%"PRIu64", bytes=%"PRIi64"\n", buffer, block_id, bytes);
+#endif
+        bytes_operated = client->io_block_function (client, buffer, bytes, block_id);
+      }
     }
     else
     {
@@ -307,6 +370,13 @@ int64_t dada_client_io_loop_block (dada_client_t* client)
     bytes_transfered += bytes_operated;
   }
 
+#ifdef HAVE_CUDA
+  if ((device_id >= 0) && (!client->io_block_function_cuda))
+  {
+    cudaFreeHost (local_buffer);
+  }
+#endif
+
 #ifdef DEBUG
   multilog (log, LOG_INFO, "io_loop_block: transferred %"PRIi64" bytes\n", bytes_transfered);
 #endif
@@ -363,7 +433,7 @@ int64_t dada_client_transfer (dada_client_t* client)
   if (client->header_transfer)
   {
     bytes_transfered = client->io_function (client, client->header,
-					    header_size);
+              header_size);
     if (bytes_transfered < header_size) 
     {
       multilog (log, LOG_ERR, "Error transfering header: %s\n", 
@@ -403,6 +473,10 @@ int64_t dada_client_transfer (dada_client_t* client)
     return -1;
   }
 
+#ifdef _DEBUG
+  multilog (log, LOG_INFO, "dada_client_transfer: end of function, returning  %"PRIu64"\n", bytes_transfered);
+#endif
+ 
   return bytes_transfered;
 }
 
@@ -619,8 +693,11 @@ int dada_client_write (dada_client_t* client)
       multilog (log, LOG_INFO, "%"PRIu64" bytes transferred in %lfs "
                                "(%lg MB/s)\n", bytes_read, transfer_time,
                                bytes_read/(1024*1024*transfer_time));
-
   }
+
+#ifdef _DEBUG
+  fprintf(stderr,"dada_client_write: end of function, returning 0\n");
+#endif
 
   return 0;
 }
@@ -639,12 +716,12 @@ int dada_client_stop (dada_client_t* client)
 
 int dada_client_close (dada_client_t* client)
 {
-	  multilog_t* log = client->log;
+  multilog_t* log = client->log;
 
-	//	signal end of data on Data Block
-	if (ipcio_close (client->data_block) < 0)  {
-		multilog (log, LOG_ERR, "Could not close Data Block\n");
-		return -1;
-	}
-	return 0;
+  //  signal end of data on Data Block
+  if (ipcio_close (client->data_block) < 0)  {
+    multilog (log, LOG_ERR, "Could not close Data Block\n");
+    return -1;
+  }
+  return 0;
 }

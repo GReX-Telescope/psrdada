@@ -291,11 +291,19 @@ int main (int argc, char **argv)
     return -1;
   }
 
+  if (verbose)
+    multilog (log, LOG_INFO, "dada_hdu_unlock_write()\n");
   if (dada_hdu_unlock_write (hdu) < 0)
     return EXIT_FAILURE;
 
+  if (verbose)
+    multilog (log, LOG_INFO, "dada_hdu_disconnect()\n");
   if (dada_hdu_disconnect (hdu) < 0)
     return EXIT_FAILURE;
+
+  if (verbose)
+    multilog (log, LOG_INFO, "dada_hdu_destroy()\n");
+  dada_hdu_destroy (hdu);
 
   return EXIT_SUCCESS;
 }
