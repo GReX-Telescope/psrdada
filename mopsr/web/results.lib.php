@@ -96,7 +96,9 @@ class results extends mopsr_webpage
 
         var offset = getOffset()
 
-        var url = "results.lib.php?single=true&offset="+offset+"&length="+length+"&inline_images="+show_inline;
+        var filename = window.location.pathname;
+        filename = filename.substring(filename.lastIndexOf('/')+1);
+        var url = filename + "?single=true&offset="+offset+"&length="+length+"&inline_images="+show_inline;
 
         i = document.getElementById("filter_type").selectedIndex;
         var filter_type = document.getElementById("filter_type").options[i].value;
@@ -146,7 +148,9 @@ class results extends mopsr_webpage
         var offset = getOffset();
         var length = getLength();
 
-        var url = "results.lib.php?update=true&offset="+offset+"&length="+length+"&class=<?echo $this->class?>";
+        var filename = window.location.pathname;
+        filename = filename.substring(filename.lastIndexOf('/')+1);
+        var url = filename + "?update=true&offset="+offset+"&length="+length+"&class=<?echo $this->class?>";
 
         // check if inline images has been specified
         if (document.getElementById("inline_images").checked)
@@ -343,10 +347,10 @@ class results extends mopsr_webpage
         </td>
       </tr>
       <tr>
-        <td colspan=2><a href="/mopsr/results.lib.php?single=true">Recent MOPSR Results</a></td>
+        <td colspan=2><a href="/mopsr/<?php echo basename(__FILE__);?>?single=true">Recent MOPSR Results</a></td>
       </tr>
       <tr>
-        <td colspan=2><a href="/mopsr/results.lib.php?single=true&class=old">Archived MOPSR Results</a></td>
+        <td colspan=2><a href="/mopsr/<?php echo basename(__FILE__);?>?single=true&class=old">Archived MOPSR Results</a></td>
       </tr>
 
     </table>
@@ -791,7 +795,7 @@ class results extends mopsr_webpage
       if (file_exists($dir."/obs.txt")) {
         $all["ANNOTATION"] = file_get_contents($dir."/obs.txt");
       } else {
-        $all["ANNOATATION"] = "";
+        $all["ANNOTATION"] = "";
       }
 
       $all_results[$o] = $all;
