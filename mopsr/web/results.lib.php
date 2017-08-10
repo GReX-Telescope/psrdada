@@ -362,21 +362,36 @@ class results extends mopsr_webpage
     $this->openBlockHeader("Matching Observations");
 
     $cmd = "";
-
+    $using_db = $this->filter_type === "SOURCE" && strpos($this->filter_value, "J") === 0;
     if (($this->filter_type == "") && ($this->filter_value == "")) {
       $cmd = "find ".$this->results_dir." -maxdepth 2 -name 'obs.info' | wc -l";
     } else {
       if ($this->filter_type == "UTC_START") {
         $cmd = "find ".$this->results_dir."/*".$this->filter_value."* -maxdepth 1 -name 'obs.info' | wc -l";
+      } elseif ($using_db) {
+        # Handle requests for pulsar observations using the asteria database
+        $pdo = new PDO ('sqlite:/home/dada/linux_64/web/mopsr/asteria.db');
+        $q = 'SELECT count(*) FROM (Pulsars JOIN Observations ON Pulsars.id = Observations.psr_id AND Pulsars.name
+LIKE "'.$this->filter_value.'%")';
+        //echo $q.'<br>'; #TODO REMOVE ME
+        $stmt = $pdo -> query($q);
+        $row = $stmt->fetch();
+        $total_num_results = $row[0];
       } else {
         $cmd = "find ".$this->results_dir." -maxdepth 2 -type f -name obs.info | xargs grep ".$this->filter_type." | grep ".$this->filter_value." | wc -l";
       }
     }
-    $total_num_results = exec($cmd);
-
-    $results = $this->getResultsArray($this->results_dir,
-                                      $this->offset, $this->length, 
-                                      $this->filter_type, $this->filter_value);
+    if (!$using_db) {
+      $total_num_results = exec($cmd);
+      $results = $this->getResultsArray($this->results_dir,
+                                        $this->offset, $this->length, 
+                                        $this->filter_type, $this->filter_value);
+    } else {
+      $results = $this->getResultsArray_db($pdo, $this->results_dir,
+                                           $this->offset, $this->length, 
+                                           $this->filter_type, $this->filter_value);
+      $pdo = null;
+    }
 
 
     ?>
@@ -473,7 +488,15 @@ class results extends mopsr_webpage
           $k = $keys[$i];
           $r = $results[$k];
 
-          $url = $result_url."?single=true&utc_start=".$k."&class=".$this->class;
+          if (strpos($r["ANNOTATION"], '<i>Data in old_results.</i>') === 0) {
+            $_results_link = "/mopsr/old_results";
+            $_class = "old";
+          } else {
+            $_results_link = "/mopsr/results";
+            $_class = "new";
+          }
+
+          $url = $result_url."?single=true&utc_start=".$k."&class=".$_class;
 
           // guess the larger image size
           $image = $r["IMG"];
@@ -492,14 +515,15 @@ class results extends mopsr_webpage
 
           $bg_style = "class='processing'";
 
-          echo "    <td ".$bg_style."><img style='".$style."' id='img_".$i."' src=".$this->results_link."/".$k."/".$r["IMG"]." width=64 height=48>\n";
+          echo "    <td ".$bg_style."><img style='".$style."' id='img_".$i."' src=".$_results_link."/".$k."/".$r["IMG"]." width=64 height=48>\n";
           
           // UTC_START 
           echo "    <td ".$bg_style."><span id='UTC_START_".$i."'><a id='link_".$i."' href='".$url."'>".$k."</a></span></td>\n";
 
           $sources = "";
 
-          foreach ($r["SOURCES"] as $s => $v)
+          // Cast to array to handle cases when no SOURCES column was set (i.e., data in DB only)
+          foreach ((array)$r["SOURCES"] as $s => $v)
           {
             $sources .= $s." ";
 /*
@@ -579,9 +603,18 @@ class results extends mopsr_webpage
    ***************************************************************************************************/
   function printUpdateHTML($get)
   {
-    $results = $this->getResultsArray($this->results_dir,
-                                      $this->offset, $this->length, 
-                                      $this->filter_type, $this->filter_value);
+    $using_db = $this->filter_type =="SOURCE" && strpos($this->filter_value, "J") === 0;
+    if (!$using_db) {
+      $results = $this->getResultsArray($this->results_dir,
+                                        $this->offset, $this->length, 
+                                        $this->filter_type, $this->filter_value);
+    } else {
+      $pdo = new PDO ('sqlite:/home/dada/linux_64/web/mopsr/asteria.db');
+      $results = $this->getResultsArray_db($pdo, $this->results_dir,
+                                        $this->offset, $this->length, 
+                                        $this->filter_type, $this->filter_value);
+      $pdo = null;
+    }
     $keys = array_keys($results);
     rsort($keys);
 
@@ -800,6 +833,202 @@ class results extends mopsr_webpage
 
       $all_results[$o] = $all;
     }
+
+    return $all_results;
+  }
+
+  function getResultsArray_db($pdo, $results_dir, $offset=0, $length=0, $filter_type, $filter_value) 
+  {
+    if ($filter_type != "SOURCE") {
+      throw new Exception('getResultsArray_db only works for SOURCE filter');
+    } elseif (strpos($filter_value, 'J') !== 0) {
+      throw new Exception('getResultsArray_db only works for pulsar SOURCE (starting with J)');
+    }
+
+    $all_results = array();
+
+    $observations = array();
+    $dir = $results_dir;
+    
+    $q = 'SELECT utc FROM (Pulsars JOIN UTCs JOIN Observations ON Pulsars.id = Observations.psr_id AND UTCs.id =
+Observations.utc_id) WHERE name LIKE "'.$filter_value.'%" ORDER BY utc DESC LIMIT '.$length.' OFFSET '.$offset;
+    $stmt = $pdo -> query ($q);
+
+    $observations = $stmt->fetchall(PDO::FETCH_COLUMN, 0);
+
+    $_results_dir = $this->cfg["SERVER_RESULTS_DIR"];
+    $_old_results_dir = $this->cfg["SERVER_OLD_RESULTS_DIR"];
+    $_archive_dir = $this->cfg["SERVER_ARCHIVE_DIR"];
+    $_old_archive_dir = $this->cfg["SERVER_OLD_ARCHIVE_DIR"];
+    for ($i=0; $i<count($observations); $i++)
+    {
+      $o = $observations[$i]; // This sets o to a UTC
+      $dir = $_results_dir."/".$o;
+      if (file_exists($_results_dir."/".$o)) {
+        $dir = $_results_dir."/".$o;
+        $this->results_dir  = $_results_dir;
+        $this->archive_dir  = $_archive_dir;
+        $is_new_old_db = "new";
+      } elseif (file_exists($_old_results_dir."/".$o)) {
+        $dir = $_old_results_dir."/".$o;
+        $this->results_dir  = $_old_results_dir;
+        $this->archive_dir  = $_old_archive_dir;
+        $is_new_old_db = "old";
+      } else {
+        $is_new_old_db = "DB";
+        $dir = "";
+      }
+
+      // read the obs.info file into an array 
+      if ($dir != "")
+      {
+        # this branch is for observations which are still present on the backend drives
+        $arr = getConfigFile($dir."/obs.info");
+        $all = array();
+
+        $all["STATE"] = "unknown";
+        if (file_exists($dir."/obs.processing"))
+          $all["STATE"] = "processing";
+        else if (file_exists($dir."/obs.finished"))
+          $all["STATE"] = "finished";
+        else if (file_exists($dir."/obs.transferred"))
+          $all["STATE"] = "transferred";
+        else if (file_exists($dir."/obs.failed"))
+          $all["STATE"] = "failed";
+        else
+           $all["STATE"] = "unknown";
+
+        $all["SOURCE"] = $arr["SOURCE"];
+
+        $all["SOURCES"] = array();
+        if ($arr["FB_ENABLED"] == "true")
+        {
+          $all["SOURCES"]["FB"] = array();
+          $all["SOURCES"]["FB"]["TYPE"] = "FB";
+          $all["SOURCES"]["FB"]["IMAGE"] = $this->getFBImage($dir, $o, $arr["FB_IMG"]);
+          if ((($all["STATE"] == "finished") || ($all["STATE"] == "transferred")) && ($arr["FB_IMG"] == ""))
+            $this->updateImage ($dir."/obs.info", "FB_IMG", $all["SOURCES"]["FB"]["IMAGE"]);
+        }
+
+        if ($arr["MB_ENABLED"] == "true")
+        {
+          $all["SOURCES"]["MB"] = array();
+          $all["SOURCES"]["MB"] = array();
+          $all["SOURCES"]["MB"]["IMAGE"] = "../../../images/blankimage.gif";
+        }
+
+        if ($arr["CORR_ENABLED"] == "true")
+        {
+          $source = $arr["SOURCE"];
+          $all["SOURCES"][$source] = array();
+          $all["SOURCES"][$source]["TYPE"] = "CORR";
+          $all["SOURCES"][$source]["IMAGE"] = $this->getCorrImage($dir, $o, $arr["CORR_IMG"]);
+          if ((($all["STATE"] == "finished") || ($all["STATE"] == "transferred")) && ($arr["CORR_IMG"] == ""))
+            $this->updateImage ($dir."/obs.info", "CORR_IMG", $all["SOURCES"][$source]["IMAGE"]);
+        }
+
+        for ($j=0; $j<4; $j++)
+        {
+          $tbe_key = "TB".$j."_ENABLED";
+          if ((array_key_exists ($tbe_key, $arr)) && ($arr[$tbe_key] == "true"))
+          {
+            $source = $arr["TB".$j."_SOURCE"];
+            $all["SOURCES"][$source] = array();
+            $all["SOURCES"][$source]["TYPE"] = "TB";
+            $all["SOURCES"][$source]["IMAGE"] = $this->getTBImage($dir, $o, $source, $arr["TB".$j."_IMG"]);
+            if ((($all["STATE"] == "finished") || ($all["STATE"] == "transferred")) && ($arr["TB".$j."_IMG"] == ""))
+              $this->updateImage ($dir."/obs.info", "TB".$j."_IMG", $all["SOURCES"][$source]["IMAGE"]);
+          }
+        }
+
+        # use the primary PID
+        $all["PID"] = $arr["PID"];
+
+        $all["IMG"] = "NA";
+        # find an image of the observation, if not existing
+        if (($arr["IMG"] == "NA") || ($arr["IMG"] == ""))
+        {
+          # preferentially find a pulsar profile plot
+          $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -type f ".
+            "-name '*.fl.120x90.png' -printf '%f\n' ".
+            "| sort -n | head -n 1";
+          $img = exec ($cmd, $output, $rval);
+
+          if (($rval == 0) && ($img != "")) {
+            $all["IMG"] = $img;
+          } else {
+            $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -type f ".
+              "-name '*.*.ad.160x120.png' -printf '%f\n' ".
+              "-o -name '*.FB.00.*png' -printf '%f\n' ".
+              "| sort -n | head -n 1";
+            $img = exec ($cmd, $output, $rval);
+
+            if (($rval == 0) && ($img != "")) {
+              $all["IMG"] = $img;
+            } else {
+              $all["IMG"] = "../../../images/blankimage.gif";
+            }
+          }
+        }
+        else
+        {
+          $all["IMG"] = $arr["IMG"];
+        }
+      
+        # if the integration length does not yet exist
+        $int = 0;
+        if (($arr["INT"] == "NA") || ($arr["INT"] <= 0))
+        {
+          if ($arr["CORR_ENABLED"] == "true")
+            $int = $this->calcIntLengthCorr($o, $arr["SOURCE"]);
+          else if ($arr["FB_ENABLED"] == "true")
+            $int = $this->calcIntLengthFB($o, "FB");
+          else if ($arr["TB0_ENABLED"] == "true")
+            $int = $this->calcIntLengthTB($o, $arr["TB0_SOURCE"]);
+          else
+            $int = "0";
+          $all["INT"] = $int;
+        }
+        else
+          $all["INT"] = $arr["INT"];
+
+        # if the observation is 
+        if (($all["STATE"] == "finished") || ($all["STATE"] == "transferred"))
+        {
+          if (($arr["INT"] == "NA") || ($arr["INT"] <= 0) && ($all["INT"] > 0))
+          {
+            system("perl -ni -e 'print unless /^INT/' ".$dir."/obs.info");
+            system("echo 'INT              ".$int."' >> ".$dir."/obs.info");
+          }
+        }
+        if (file_exists($dir."/obs.txt")) {
+          $all["ANNOTATION"] = file_get_contents($dir."/obs.txt");
+        } else {
+          $all["ANNOTATION"] = "";
+        }
+        if ($is_new_old_db == "old") {
+          $all["ANNOTATION"] = "<i>Data in old_results.</i> ".$all["ANNOTATION"];
+        }
+      } else {
+        // this branch is for observations with entries only in the DB
+        // TODO needs to be actually implemeneted
+        $all = array();
+        if ($is_new_old_db == "DB") {
+          $all["ANNOTATION"] = "Data in database only, check Timing dir or on gstar. ".$all["ANNOTATION"];
+        } else {
+          print "This should never happen";
+        }
+      }
+      $all_results[$o] = $all;
+    }
+    // Restore page config to its original state:
+    if ($this->class == "new") {
+      $this->results_dir = $_results_dir;
+      $this->archive_dir= $_archive_dir;
+    } else {
+      $this->results_dir = $_old_results_dir;
+      $this->archive_dir= $_ol_archive_dir;
+    } // Do I actually need to do this?
 
     return $all_results;
   }
