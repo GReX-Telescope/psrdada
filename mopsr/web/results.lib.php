@@ -239,17 +239,25 @@ class results extends mopsr_webpage
               if (key == "UTC_START") {
 
               } else if (key == "IMG") {
+                var _class, _results_link;
+                if (this_result["ANNOTATION"].startsWith("<i>Data in old_results.</i>")) {
+                  _class = "old";
+                  _results_link = "/mopsr/old_results";
+                } else {
+                  _class = "new";
+                  _results_link = "/mopsr/results";
+                }
 
-                var url = "result.lib.php?single=true&utc_start="+utc_start+"&class=<?echo $this->class?>";
+                var url = "result.lib.php?single=true&utc_start="+utc_start+"&class="+_class;
                 var link = document.getElementById("link_"+i);
                 var img = value.replace("112x84","400x300");
                 link.href = url;
-                link.onmouseover = new Function("Tip(\"<img src='<?echo $this->results_link?>/"+utc_start+"/"+img+"' width=401 height=301>\")");
+                link.onmouseover = new Function("Tip(\"<img src='"+_results_link+"/"+utc_start+"/"+img+"' width=401 height=301>\")");
                 link.onmouseout = new Function("UnTip()");
                 link.innerHTML = this_result["UTC_START"];
 
                 try {
-                  document.getElementById("img_"+i).src = "<?echo $this->results_link?>/"+utc_start+"/"+value;
+                  document.getElementById("img_"+i).src = _results_link+"/"+utc_start+"/"+value;
                 } catch (e) {
                   // do nothing
                 }
