@@ -363,7 +363,7 @@ class result extends mopsr_webpage
     {
       $this->printPlotCell($this->imgs[$source][$t."_120x90"], $this->imgs[$source][$t."_1024x768"], "120", "90");
       $counter++;
-      if ($counter % 5 == 0)
+      if ($counter % 6 == 0)
         echo "</tr>\n<tr>";
     }
     echo   "</tr>\n";
