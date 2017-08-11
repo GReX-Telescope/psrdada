@@ -987,62 +987,88 @@ sub makePlotsFromArchives($$$$$$)
   Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
 
   # TOAS
-  if ( ! ( -f $sdir."/previous.tim" ) )
-  {
-    $cmd = "pat -j FT -s /home/observer/Timing/ephemerides/".$source."/*.std -A FDM -f tempo2 /home/observer/Timing/profiles/".$source."/*FT > ".$sdir."/previous.tim";
+  my $timing_repo_topdir = "/home/observer/Timing/";
+  my $template_pattern = $timing_repo_topdir."ephemerides/".$source."/*.std";
+  my @template = glob($template_pattern);
+  my $ephem_pattern = $timing_repo_topdir."ephemerides/".$source."/good.par";
+  my @ephem = glob($ephem_pattern);
+  if (@template and @ephem) {
+    if ( ! ( -f $sdir."/previous.tim" ) ) {
+      $cmd = "pat -j FT -s ".$template[0]." -A FDM -f tempo2 /home/observer/Timing/profiles/".$source."/*FT > ".$sdir."/previous.tim";
+      Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
+      ($result, $response) = Dada::myShellStdout($cmd);
+      Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+    }
+
+    $cmd = "cp ".$sdir."/previous.tim ".$sdir."/temp.tim";
     Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
     ($result, $response) = Dada::myShellStdout($cmd);
     Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
-  }
-
-  $cmd = "cp ".$sdir."/previous.tim ".$sdir."/temp.tim";
-  Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
-  ($result, $response) = Dada::myShellStdout($cmd);
-  Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
-  if ($result eq "ok")
-  {
-    $cmd = "pat -j FT -s /home/observer/Timing/ephemerides/".$source."/*.std -A FDM -f tempo2 ".$total_t_res." | grep -v ^FORMAT >> ".$sdir."/temp.tim";
-    Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$cmd);
-    ($result, $response) = Dada::myShellStdout($cmd);
-    Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
-    if ($result eq "ok")
-    {
-      $cmd = "tempo2 -gr plk -f /home/observer/Timing/ephemerides/".$source."/good.par ".$sdir."/temp.tim -publish -image -grdev ".$dir."/".$ta."/png";
-      Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
-      ($result, $response) = Dada::mySystem($cmd);
+    if ($result eq "ok") {
+      $cmd = "pat -j FT -s ".$template[0]." -A FDM -f tempo2 ".$total_t_res." | grep -v ^FORMAT | sed 's/\$/-last yes/' >> ".$sdir."/temp.tim";
+      Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$cmd);
+      ($result, $response) = Dada::myShellStdout($cmd);
       Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
-
-      # $cmd = "remove-outliers -p /home/observer/Timing/ephemerides/".$source."/good.par -t ".$sdir."/temp.tim > ".$sdir."/temp.clean.tim";
-      $cmd = "remove-outliers2 -c ".$sdir."/outlier_sweep1 -s 0.3 -m smooth -p /home/observer/Timing/ephemerides/".$source."/good.par -t ".$sdir."/temp.tim > ".$sdir."/temp.clean_smooth.tim";
-      Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
-      ($result, $response) = Dada::mySystem($cmd);
-      Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
-      $cmd = "remove-outliers2 -c ".$sdir."/outlier_sweep2 -m mad -p /home/observer/Timing/ephemerides/".$source."/good.par -t ".$sdir."/temp.clean_smooth.tim > ".$sdir."/temp.clean.tim";
-      Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
-      ($result, $response) = Dada::mySystem($cmd);
-      Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
-
-      if ($result eq "ok")
-      {
-        # check if anything survived the cleaning:
-        $cmd ="grep -v -e ^C -e ^FORMAT ".$sdir."/temp.clean.tim | wc -l";
+      if ($result eq "ok") {
+        $cmd = "tempo2 -gr plk -set FINISH 99999 -setup ".$ENV{"TEMPO2"}."/plugin_data/plk_setup_image_molo.dat -f ".$ephem[0]." ".$sdir."/temp.tim -nofit -xplot 10 -showchisq -grdev ".$dir."/".$ta."/png";
         Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
         ($result, $response) = Dada::mySystem($cmd);
         Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
-        
-        if ($response gt 0)
-        {
-          $cmd = "tempo2 -gr plk -f /home/observer/Timing/ephemerides/".$source."/good.par ".$sdir."/temp.clean.tim -publish -image -grdev ".$dir."/".$tc."/png";
+
+        $cmd = "remove-outliers2 -c ".$sdir."/outlier_sweep1 -s 0.3 -m smooth -p ".$ephem[0]." -t ".$sdir."/temp.tim > ".$sdir."/temp.clean_smooth.tim";
+        Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
+        ($result, $response) = Dada::mySystem($cmd);
+        Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+        $cmd = "remove-outliers2 -c ".$sdir."/outlier_sweep2 -m mad -p ".$ephem[0]." -t ".$sdir."/temp.clean_smooth.tim > ".$sdir."/temp.clean.tim";
+        Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
+        ($result, $response) = Dada::mySystem($cmd);
+        Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+
+        if ($result eq "ok") {
+          # check if anything survived the cleaning:
+          $cmd ="grep -v -e ^C -e ^FORMAT ".$sdir."/temp.clean.tim | wc -l";
           Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
           ($result, $response) = Dada::mySystem($cmd);
           Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
-        } else {
-          $cmd = "cp ".$dir."/".$ta." ".$dir."/".$tc;
-          Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
-          ($result, $response) = Dada::mySystem($cmd);
-          Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+
+          if ($response gt 0) {
+            $cmd = "tempo2 -gr plk -set FINISH 99999 -setup ".$ENV{"TEMPO2"}."/plugin_data/plk_setup_image_molo.dat -f ".$ephem[0]." ".$sdir."/temp.clean.tim -nofit -xplot 10 -showchisq -grdev ".$dir."/".$tc."/png";
+            Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
+            ($result, $response) = Dada::mySystem($cmd);
+            Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+          } else {
+            $cmd = "cp ".$dir."/".$ta." ".$dir."/".$tc;
+            Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
+            ($result, $response) = Dada::mySystem($cmd);
+            Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+          }
         }
       }
+    }
+  } else {
+    # Don't have a template and/or ephemeris:
+    # Images generated with:
+    # convert -size 1024x768 -gravity center -background white -fill "#FF00B8" label:"No template" no_template_1024x768.png
+    # convert -size 120x90 -gravity center -background white -fill "#FF00B8" label:"No template" no_template_120x90.png
+    # convert -size 1024x768 -gravity center -background white -fill "#FF00B8" label:"No ephemeris" no_ephemeris_1024x768.png
+    # convert -size 120x90 -gravity center -background white -fill "#FF00B8" label:"No ephemeris" no_ephemeris_120x90.png
+    # convert -size 1024x768 -gravity center -background white -fill "#FF00B8" label:"No template\nNo ephemeris" no_template_ephemeris_1024x768.png
+    # convert -size 120x90 -gravity center -background white -fill "#FF00B8" label:"No template\nNo ephemeris" no_template_ephemeris_120x90.png
+    if (not @template and not @ephem) {
+      $cmd = "cp ".$dir."/../no_template_ephemeris_".$res.".png ".$dir."/".$tc;
+      Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+    } elsif (not @template) {
+      $cmd = "cp ".$dir."/../no_template_".$res.".png ".$dir."/".$tc;
+      Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+    } elsif (not @ephem) {
+      $cmd = "cp ".$dir."/../no_ephemeris_".$res.".png ".$dir."/".$tc;
+      Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
     }
   }
 
