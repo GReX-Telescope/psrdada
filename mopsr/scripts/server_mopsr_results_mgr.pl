@@ -1059,13 +1059,29 @@ sub makePlotsFromArchives($$$$$$)
       Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
       ($result, $response) = Dada::mySystem($cmd);
       Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+      $cmd = "cp ".$dir."/../no_template_ephemeris_".$res.".png ".$dir."/".$ta;
+      Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
     } elsif (not @template) {
       $cmd = "cp ".$dir."/../no_template_".$res.".png ".$dir."/".$tc;
       Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
       ($result, $response) = Dada::mySystem($cmd);
       Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+      $cmd = "cp ".$dir."/../no_template_".$res.".png ".$dir."/".$ta;
+      Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+      $cmd = "cp ".$dir."/../no_template_".$res.".png ".$dir."/".$st;
+      Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
     } elsif (not @ephem) {
       $cmd = "cp ".$dir."/../no_ephemeris_".$res.".png ".$dir."/".$tc;
+      Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+      $cmd = "cp ".$dir."/../no_ephemeris_".$res.".png ".$dir."/".$ta;
       Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
       ($result, $response) = Dada::mySystem($cmd);
       Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
