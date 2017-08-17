@@ -105,10 +105,15 @@ class plot_window extends mopsr_webpage
               var ant = ants[i];
               var ant_name = ant.getAttribute("name");
               var ant_type = ant.getAttribute("type");
+              var ant_reason = ant.getAttribute("reason");
               var j = 0;
 
-              var td_name_id = "pw_name_" + ant_type
-              document.getElementById(td_name_id).innerHTML = ant_name;
+              var td_name_id = "pw_name_" + ant_type;
+              if ( ant_reason ) {
+                document.getElementById(td_name_id).innerHTML = ant_name + "<br>" + ant_reason;
+              } else {
+                document.getElementById(td_name_id).innerHTML = ant_name;
+              }
 
               for (j=0; j<ant.childNodes.length; j++)
               {
@@ -218,7 +223,6 @@ class plot_window extends mopsr_webpage
             echo "</a>";
             echo "</td>\n";
           }
-        echo "</tr>\n";
       }
           
 ?>
