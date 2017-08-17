@@ -75,7 +75,7 @@ class asteria extends mopsr_webpage
         else
           show_inline = "false";
 
-        var url = "results.lib_dev.php?single=true&length="+length+"&inline_images="+show_inline;
+        var url = "results.lib.php?single=true&length="+length+"&inline_images="+show_inline;
 
         i = document.getElementById("filter_type").selectedIndex;
         var filter_type = document.getElementById("filter_type").options[i].value;
@@ -182,7 +182,7 @@ echo "<tr><td>".$count[0]." observations</td></tr>\n";
 echo "<tr><td>Updated at:<br><span class=best_snr>".$updated[0]."</span></td></tr>\n";
 ?>
       <tr>
-        <td colspan=2><a href="/mopsr/Asteria_bests.php">Best per pulsar</a></td>
+        <td colspan=2><a href="/mopsr/Asteria_bests.php?single=true">Best per pulsar</a></td>
       </tr>
       <tr><td><hr/></td><tr>
 <?php
@@ -194,7 +194,7 @@ echo "<tr><td>Updated at:<br><span class=best_snr>".$updated[0]."</span></td></t
     if ($counter == 0) {
       $updated = $line;
     } elseif ($counter == 1) {
-      echo "<tr><td><span class=best_snr>".str_replace('*', '', $line)."</span></td></tr>";
+      echo "<tr><td><span class=best_snr>SUMMARY OF LAST 24hrs</span></td></tr>";
       echo "<tr><td><h5>As of:<br>".$updated."</h5></td></tr>";
     } elseif (strpos($line, "FRB Statistics") === 0) {
       echo "<tr><td><hr></td></tr>";
@@ -267,7 +267,7 @@ foreach ($results as $row)
     $is_best_class = '"best_snr"';
   }
   //
-  echo '<td width=300 align="center"><a href=/mopsr/results.lib_dev.php?single=true&offset=0&length=20&inline_images=true&filter_type=SOURCE&filter_value=';
+  echo '<td width=300 align="center"><a href=/mopsr/results.lib.php?single=true&offset=0&length=20&inline_images=true&filter_type=SOURCE&filter_value=';
   echo $pulsar.">".$pulsar."</a><br>DM : ".round($dm, 2)."<br>period : ".round($period,2 )." ms <br>\n";
   echo '<a href='.$fl_hr[0].'><img src='.$fl_lr[0].'></a>'."\n";
   echo '<br><a href="'.$fr_hr.'"><img src="'.$fr_lr.'"></a><br><a href="'.$ti_hr.'"><img src="'.$ti_lr.'"></a><br>'."\n";
