@@ -21,8 +21,6 @@ use strict;         # strict mode (like -Wall)
 use threads;
 use threads::shared;
 
-use DBI;
-
 
 #
 # Sanity check to prevent multiple copies of this daemon running
@@ -425,6 +423,9 @@ sub currentInfoThread($)
         $curr_obs .= "PROC_FILE:::".$cfg_file{"PROC_FILE"}.";;;";
         $curr_obs .= "NANT:::".$cfg_file{"NANT"}.";;;";
         $curr_obs .= "OBSERVER:::".$cfg_file{"OBSERVER"}.";;;";
+        $curr_obs .= "DELAY_TRACKING:::".$cfg_file{"DELAY_TRACKING"}.";;;";
+        $curr_obs .= "ANTENNA_WEIGHTS:::".$cfg_file{"ANTENNA_WEIGHTS"}.";;;";
+        $curr_obs .= "RFI_MITIGATION:::".$cfg_file{"RFI_MITIGATION"}.";;;";
         $curr_obs .= "INTERGRATED:::0;;;";
         Dada::logMsg(2, DL, "currInfoThread: ".$curr_obs);
       }
@@ -775,26 +776,18 @@ sub imageInfoThread($)
 
           my $tb_idx = 0;
           my $ant_type = "";
-          foreach $ant ( @ants )
+          my $reason = "";
+          my @sorted_ants = sort @ants;
+          foreach $ant ( @sorted_ants )
           {
-my $name_extras = "";
             # determine the type of antenna
             if (-f $results_dir."/".$utc_start."/".$ant."/".$ant."_f.tot")
             {
-              my $driver = "SQLite";
-my $database = $results_dir."/strategy.db";
-my $dsn = "DBI:$driver:dbname = $database";
-my $userid = "";
-my $password = "";
-my $dbh = DBI->connect($dsn, $userid, $password, {RaiseError => 1}) or die $DBI::errstr;
-
-my $stmt = qq(SELECT science FROM strategy WHERE psrj = $ant;);
-my $sth = $dbh->prepare( $stmt );
-my $rv = $sth->execute () or die $DBI::errstr;
-my @row = $sth->fetchrow_array();
-$name_extras = $row[0];
               $ant_type = "TB".$tb_idx;
               $tb_idx++;
+              #%cfg_file = Dada::readCFGFile($results_dir."/".$obs."/obs.info"); 
+              my %science_cases = Dada::readCFGFile($cfg{"WEB_DIR"}."/mopsr/science_cases.list");
+              $reason = $science_cases{$ant};
             }
             elsif (-f $results_dir."/".$utc_start."/".$ant."/cc.sum")
             {
@@ -809,7 +802,7 @@ $name_extras = $row[0];
               $ant_type = "UNKNOWN";
             }
 
-            $image_string .= "<ant name='".$ant."\r\n".$name_extras."' type='".$ant_type."'>";
+            $image_string .= "<ant name='".$ant."' reason = '".$reason."' type='".$ant_type."'>";
             foreach $key ( keys %{$to_use{$ant}} )
             {
               ($type, $res) = split(/\./, $key);
