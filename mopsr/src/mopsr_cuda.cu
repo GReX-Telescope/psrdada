@@ -1529,11 +1529,13 @@ __global__ void mod_beam_kernel_32 (int16_t * in, float * out, uint64_t ndat)
   float power = val.x * val.x + val.y * val.y;
   
   // add all of the time samples from this warp together
+#ifdef HAVE_SHFL
   power += __shfl_down (power, 16);
   power += __shfl_down (power, 8);
   power += __shfl_down (power, 4);
   power += __shfl_down (power, 2);
   power += __shfl_down (power, 1);
+#endif
 
   if (warp_idx == 0)
     block_power_sums[warp_num] = power;

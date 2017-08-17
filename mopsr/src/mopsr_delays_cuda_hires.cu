@@ -1245,6 +1245,7 @@ __global__ void hires_compute_power_limits_kernel (float * in, cuFloatComplex * 
   //  printf ("[%d] s1=%f centre=%u median=%f sigma=%f\n", threadIdx.x, s1, centre, median, sigma);
 
   // now sum S1 across threads
+#ifdef HAVE_SHFL
   s1 += __shfl_down (s1, 16);
   s1 += __shfl_down (s1, 8);
   s1 += __shfl_down (s1, 4);
@@ -1256,6 +1257,7 @@ __global__ void hires_compute_power_limits_kernel (float * in, cuFloatComplex * 
   s1_count += __shfl_down (s1_count, 4);
   s1_count += __shfl_down (s1_count, 2);
   s1_count += __shfl_down (s1_count, 1);
+#endif
 
   unsigned warp_idx = threadIdx.x % 32;
   unsigned warp_num = threadIdx.x / 32;
@@ -1273,6 +1275,7 @@ __global__ void hires_compute_power_limits_kernel (float * in, cuFloatComplex * 
     s1 = keys[warp_idx];
     s1_count = keys[32+warp_idx];
 
+#ifdef HAVE_SHFL
     s1 += __shfl_down (s1, 16);
     s1 += __shfl_down (s1, 8);
     s1 += __shfl_down (s1, 4);
@@ -1284,6 +1287,7 @@ __global__ void hires_compute_power_limits_kernel (float * in, cuFloatComplex * 
     s1_count += __shfl_down (s1_count, 4);
     s1_count += __shfl_down (s1_count, 2);
     s1_count += __shfl_down (s1_count, 1);
+#endif
 
     // this sigma is the stddev of the voltages (hence 1024 * 2)
     if (warp_idx == 0)
