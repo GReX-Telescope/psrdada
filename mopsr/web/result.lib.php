@@ -1,5 +1,13 @@
 <?PHP
 
+function cmp($a, $b) {
+  # Sort such that FB is after J*
+  if (!(substr($a, 0, 1) == substr($b, 0,1)))
+    return -1 * strcmp(substr($a, 0, 1), substr($b, 0, 1));
+  # otherwise, sort normally
+  return strcmp($a, $b);
+}
+
 include ("mopsr.lib.php" );
 include ("mopsr_webpage.lib.php");
 
@@ -186,6 +194,7 @@ class result extends mopsr_webpage
     $this->closeBlockHeader();
   }
 
+
   /*************************************************************************************************** 
    *
    * HTML for this page 
@@ -197,7 +206,7 @@ class result extends mopsr_webpage
 
     $sources = array_keys($this->source_info);
 
-    rsort($sources);
+    usort($sources, "cmp");
 
     for ($i=0; $i<count($sources); $i++)
     {
