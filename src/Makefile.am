@@ -80,7 +80,7 @@ include_HEADERS += dada_cuda.h ipcio_cuda.h ipcbuf_cuda.h ipcutil_cuda.h
 bin_PROGRAMS += dada_dbgpu
 
 AM_CPPFLAGS = @CUDA_CFLAGS@ 
-#LDADD += @CUDA_LIBS@
+LDADD += @CUDA_LIBS@
 
 endif
 
