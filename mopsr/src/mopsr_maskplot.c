@@ -38,6 +38,7 @@ void usage()
      " -p            enable plotting\n"
      " -D device     pgplot device name\n"
      " -h            print usage\n"
+     " -s            skip this many time samples [default 0]\n"
      " -t num        number of time samples to display in each plot [default 512]\n"
      " -v            be verbose\n");
 }
@@ -52,6 +53,7 @@ int main (int argc, char **argv)
 
   int arg = 0;
 
+  unsigned int nsamp_skip = 0;
   unsigned int nsamp = 512;
 
   mopsr_util_t opts;
@@ -65,7 +67,7 @@ int main (int argc, char **argv)
 
   char plot = 0;
 
-  while ((arg=getopt(argc,argv,"D:hn:pt:v")) != -1)
+  while ((arg=getopt(argc,argv,"D:hn:ps:t:v")) != -1)
   {
     switch (arg)
     {
@@ -79,6 +81,10 @@ int main (int argc, char **argv)
 
       case 'p':
         plot = 1;
+        break;
+
+      case 's':
+        nsamp_skip = atoi (optarg);
         break;
 
       case 't':
@@ -207,6 +213,20 @@ int main (int argc, char **argv)
 
   uint64_t zapped_total = 0;
   uint64_t nsamp_total = 0;
+
+  if (nsamp_skip > 0) {
+    bytes_read_total += nsamp_skip * opts.nchan * opts.nant * opts.ndim / 8;
+    if (bytes_read_total > data_size) {
+      fprintf(stderr, "Requested skipping beyond the end of the file\n");
+      fprintf(stderr, "nsamp_skip=%ld corresponding bytes=%ld data_size=%ld\n", nsamp_skip, bytes_read_total, data_size);
+      exit(-1);
+    }
+    if (verbose > 1)
+      fprintf(stderr, "Skipping %ld samples (%ld bytes) past the header\n", nsamp_skip, bytes_read_total);
+    for (i=1; i<nfiles; i++) {
+      lseek(fds[i], 4096+bytes_read_total, SEEK_SET);
+    }
+  }
 
   while (bytes_read_total + bytes_to_read < data_size)
   {
