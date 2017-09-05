@@ -217,7 +217,8 @@ echo "<tr><td>Updated at:<br><span class=best_snr>".$updated[0]."</span></td></t
 <p>
 <h3>Please choose SNR range</h3>
 
-<form action="" method="post">
+<form action="" method="get">
+<input type="hidden" name="single" value="true"/>
 <select name="snr_cut" onchange="this.form.submit()">
 <option value="">SNR cut</option>
 <option value=">= 10">&#62;= 10</option>
@@ -234,10 +235,10 @@ function rescale_snr_to5min($fSNR, $ftint_m) {
 }
 
 
-if ($_REQUEST['snr_cut'] ) {
+if ($_GET['snr_cut'] ) {
 
-echo '<p><h2>Displaying data with SNR '.$_REQUEST['snr_cut'].'</h2><br></p>';
-  $q = 'SELECT name, dm, period, max_snr_in5min, utc, snr, tint/60. as tint FROM (Pulsars JOIN UTCs JOIN Observations ON Pulsars.id = Observations.psr_id AND UTCs.id = Pulsars.max_snr_obs_id AND Observations.utc_id = UTCs.id) WHERE tint > 1.0 AND max_snr_in5min '.$_REQUEST['snr_cut'].' ORDER BY name ASC';
+echo '<p><h2>Displaying data with SNR '.$_GET['snr_cut'].'</h2><br></p>';
+$q = 'SELECT name, dm, period, max_snr_in5min, utc, snr, tint/60. as tint FROM (Pulsars JOIN UTCs JOIN Observations ON Pulsars.id = Observations.psr_id AND UTCs.id = Pulsars.max_snr_obs_id AND Observations.utc_id = UTCs.id) WHERE tint > 1.0 AND max_snr_in5min '.$_GET['snr_cut'].' ORDER BY name ASC';
 
   $stmt = $pdo -> query($q);
 
