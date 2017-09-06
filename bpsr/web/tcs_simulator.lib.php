@@ -25,6 +25,7 @@ class tcs_simulator extends bpsr_webpage
     array_push($this->groups, "P858");
     array_push($this->groups, "P864");
     array_push($this->groups, "P878");
+    array_push($this->groups, "P892");
     array_push($this->groups, "PX025");
     array_push($this->groups, "P999");
 
