@@ -62,8 +62,9 @@ $frb_actions{"default"} = { "snr_cut" => 10.0, "filter_cut" => 8.0, "egal_dm" =>
                             "excise_psr" => "true", "cps_cut" => "5", "cc_email" => "" };
 
 # custom (per project) FRB detection options
-$frb_actions{"P999"}    = { "snr_cut" => 45.0, "filter_cut" => 9.0, "excise_psr" => "true", "egal_dm" => "true", "cps_cut" => "70", 
-                            "cc_email" => "manishacaleb\@gmail.com, cflynn\@swin.edu.au, ebpetroff\@gmail.com, evan.keane\@gmail.com" };
+$frb_actions{"P999"}    = { "snr_cut" => 45.0, "filter_cut" => 9.0, "snr_cut" => 9.0, "excise_psr" => "true", "egal_dm" => "true", "cps_cut" => "70" }; 
+                            
+$frb_actions{"P456"}     = { "cc_email" => "stefan.oslowski\@gmail.com, ryanmshannon\@gmail.com" };
 
 $frb_actions{"P864"}    = { "egal_dm" => "false", "excise_psr" => "false", 
                             "cps_cut" => "50", "filter_cut" => "9",
@@ -320,12 +321,12 @@ sub processCandidates($)
       return;
     }
 
-    # check if more than 50000 rows
+    # check if more than 10000 rows
     my $nrows = $response;
     my $rows_args = "";
-    if ($nrows > 50000)
+    if ($nrows > 10000)
     {
-      $rows_args = " -skip_rows ".($nrows - 50000);
+      $rows_args = " -skip_rows ".($nrows - 10000);
     }
 
     chdir $obs_dir;
@@ -775,7 +776,18 @@ sub detectFRBs($$$$)
       # don't email people unless its a brightish one
       if ($max_snr < 10)
       {
-        $cc_email = "";
+        if ($pid eq "P892")
+        {
+          $cc_email = "ebpetroff\@gmail.com, shivanibhandari58\@gmail.com, evan.keane\@gmail.com, cmlflynn\@gmail.com";
+        }
+        elsif ($pid eq "P999")
+        {
+          $cc_email = ""; 
+        }
+        else
+        {
+          $cc_email = "";
+        }
       }
 
       my $msg = MIME::Lite->new(
@@ -984,7 +996,7 @@ sub detectFRBs($$$$)
           # the event time at top of band in UTC
           $event_utc = Dada::addToTimeFractional($obs, $time);
 
-          $frb_event_string .= $start_utc." ".$end_utc." ".$dm." ".$snr."\n";
+          $frb_event_string .= $start_utc." ".$end_utc." ".$dm." ".$snr." ".$prim_beam."\n";
           $mpsr_event_string .= $event_utc." ".$snr." ".$dm." ".$filter."\n";
         }
       }
