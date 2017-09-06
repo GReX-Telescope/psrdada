@@ -12,6 +12,8 @@ putenv("PATH=/bin:/usr/bin:".SCRIPTS_DIR);
 $snr_cut = isset($_GET["snr_cut"]) ? $_GET["snr_cut"] : 6;
 $filter_cut = isset($_GET["filter_cut"]) ? $_GET["filter_cut"] : 99;
 $dm_cut = isset($_GET["dm_cut"]) ? $_GET["dm_cut"] : 1.5;
+$from_cut = isset($_GET["from_cut"]) ? $_GET["from_cut"] : 0;
+$to_cut = isset($_GET["to_cut"]) ? $_GET["to_cut"] : -1;
 $beam_mask = isset($_GET["beam_mask"]) ? $_GET["beam_mask"] : 8191;
 $utc_start = isset($_GET["utc_start"]) ? $_GET["utc_start"] : "unknown";
 $trans_cmd = "/home/dada/linux_64/bin/trans_all.sh $snr_cut $beam_mask";
@@ -72,7 +74,19 @@ if (($lastline != "") || (count($output) > 0))
 else 
 {
 */
-  $cmd = SCRIPTS_DIR."/trans_gen_overview.py -cands_file ".RESULTS_DIR."/".$utc_start."/all_candidates.dat -snr_cut ".$snr_cut." -beam_mask ".$beam_mask." -filter_cut ".$filter_cut." -dm_cut ".$dm_cut." -std_out";
+  // try to work out if there are too many lines in the file
+  $cmd = "wc -l ".RESULTS_DIR."/".$utc_start."/all_candidates.dat | awk '{print $1}'";
+  $arr = array();
+  $num_rows = exec($cmd, $arr, $rval);
+
+  $max_rows = 10000;
+  $skip_rows = "";
+  if ($num_rows > $max_rows)
+  {
+    #$skip_rows = " -skip_rows ".($num_rows - $max_rows);
+  }
+
+  $cmd = SCRIPTS_DIR."/trans_gen_overview.py -cands_file ".RESULTS_DIR."/".$utc_start."/all_candidates.dat -snr_cut ".$snr_cut." -beam_mask ".$beam_mask." -filter_cut ".$filter_cut." -dm_cut ".$dm_cut." -std_out -from_cut ".$from_cut." -to_cut ".$to_cut.$skip_rows;
 
   # now generate out plot
   header("Cache-Control: no-cache, must-revalidate"); // HTTP/1.1
