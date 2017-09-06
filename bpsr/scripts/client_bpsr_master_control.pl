@@ -169,6 +169,31 @@ sub setupClientType()
             $bufsz = Dada::client_master_control::computeDBSize($nsamp, $nchan, $npol, $ndim, $nbit, $nant, $nbeam);
           } 
 
+          # the number of reader for this data block
+          my $nread = 1;
+          if (defined $cfg{"BLOCK_NREAD_".$id})
+          {
+            $nread = $cfg{"BLOCK_NREAD_".$id};
+          }
+          $Dada::client_master_control::pwcs{$i}{"dbs"}{$id}{"nread"} = $nread;
+
+          # if this data block is to be paged into RAM
+          my $page = "false";
+          if (defined $cfg{"BLOCK_PAGE_".$id})
+          {
+            $page = $cfg{"BLOCK_PAGE_".$id};
+          }
+          $Dada::client_master_control::pwcs{$i}{"dbs"}{$id}{"page"} = $page;
+
+          # numa node for this datablock
+          my $numa = "-1";
+          if (defined $cfg{"BLOCK_NUMA_".$id})
+          {
+            $numa = $cfg{"BLOCK_NUMA_".$id};
+          }
+          $Dada::client_master_control::pwcs{$i}{"dbs"}{$id}{"numa"} = $numa;
+
+
           $Dada::client_master_control::pwcs{$i}{"dbs"}{$id}{"key"} = $key;
           $Dada::client_master_control::pwcs{$i}{"dbs"}{$id}{"nbufs"} = $cfg{"BLOCK_NBUFS_".$id};
           $Dada::client_master_control::pwcs{$i}{"dbs"}{$id}{"bufsz"} = $bufsz;
