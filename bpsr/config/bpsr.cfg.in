@@ -147,35 +147,34 @@ PWC_BINARY              bpsr_udpdb
 NUM_PWC                 13
 
 # host names for PWC
-PWC_0                   pkbe-gpu0
-PWC_1                   pkbe-gpu0
-PWC_2                   pkbe-gpu1
-PWC_3                   pkbe-gpu1
-PWC_4                   pkbe-gpu2
-PWC_5                   pkbe-gpu2
-PWC_6                   pkbe-gpu3
-PWC_7                   pkbe-gpu3
-PWC_8                   pkbe-gpu4
-PWC_9                   pkbe-gpu4
-PWC_10                  pkbe-gpu5
-PWC_11                  pkbe-gpu5
-PWC_12                  pkbe-gpu6
+PWC_0                   medusa-gpu0
+PWC_1                   medusa-gpu0
+PWC_2                   medusa-gpu1
+PWC_3                   medusa-gpu1
+PWC_4                   medusa-gpu2
+PWC_5                   medusa-gpu2
+PWC_6                   medusa-gpu3
+PWC_7                   medusa-gpu3
+PWC_8                   medusa-gpu4
+PWC_9                   medusa-gpu4
+PWC_10                  medusa-gpu5
+PWC_11                  medusa-gpu5
+PWC_12                  medusa-gpu6
 
 # IPs for UDP data
-PWC_UDP_IP_0            192.168.2.180
-PWC_UDP_IP_1            192.168.2.180
-PWC_UDP_IP_2            192.168.2.182
-PWC_UDP_IP_3            192.168.2.182
-PWC_UDP_IP_4            192.168.2.184
-PWC_UDP_IP_5            192.168.2.184
-PWC_UDP_IP_6            192.168.2.186
-PWC_UDP_IP_7            192.168.2.186
-PWC_UDP_IP_8            192.168.2.188
-PWC_UDP_IP_9            192.168.2.188
-PWC_UDP_IP_10           192.168.2.190
-PWC_UDP_IP_11           192.168.2.190
-PWC_UDP_IP_12           192.168.2.192
-
+PWC_UDP_IP_0            192.168.2.10
+PWC_UDP_IP_1            192.168.2.10
+PWC_UDP_IP_2            192.168.2.12
+PWC_UDP_IP_3            192.168.2.12
+PWC_UDP_IP_4            192.168.2.14
+PWC_UDP_IP_5            192.168.2.14
+PWC_UDP_IP_6            192.168.2.16
+PWC_UDP_IP_7            192.168.2.16
+PWC_UDP_IP_8            192.168.2.18
+PWC_UDP_IP_9            192.168.2.18
+PWC_UDP_IP_10           192.168.2.20
+PWC_UDP_IP_11           192.168.2.20
+PWC_UDP_IP_12           192.168.2.22
 
 # ports for UDP data
 PWC_UDP_PORT_0          4001
