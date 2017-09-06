@@ -558,8 +558,6 @@ sub tapeInfoThread() {
   my $secondary_counter = 0;
 
   my $control_dir = $cfg{"SERVER_CONTROL_DIR"};
-  my $swin_file   = $control_dir."/bpsr.swin.state";
-  my $xfer_file   = $control_dir."/bpsr.xfer.state";
 
   my ($xml, $cmd, $result, $response, $tmp_str, $key, $val);
   my ($swin_tape, $swin_percent, $swin_time_left, $swin_pid, $num_swin, $swin_state);
@@ -584,9 +582,6 @@ sub tapeInfoThread() {
     $s_paths[$i] = $arr[2];
   }
   
-  my $xfer_state = "";
-  my $xfer_pid = "";
-
   my $ready_to_send = 0;
   my @obs_fin = ();
   my %processing_count = ();
@@ -626,40 +621,11 @@ sub tapeInfoThread() {
 
       $sleep_counter = $sleep_time;
 
-      # determine the PID's of the current transfer manager and swin tapes
-      $xfer_pid   = getDaemonPID($cfg{"SERVER_HOST"}, $cfg{"SERVER_XFER_PID_PORT"});
-      $swin_pid   = getDaemonPID($cfg{"SERVER_HOST"}, $cfg{"SERVER_SWINTAPE_PID_PORT"});
-
-      open FH, "<".$swin_file;
-      read FH, $swin_state, 4096;
-      close FH;
-      chomp $swin_state;
-
-      open FH, "<".$xfer_file;
-      read FH, $xfer_state, 4096;
-      close FH;
-      chomp $xfer_state;
-
       # Update this information less frequently
       if ($secondary_counter > 0 ) {
         $secondary_counter--;
       } else {
         $secondary_counter = $secondary_freq;
-
-        $swin_tape = "none";
-        $swin_percent = 0;
-        $swin_time_left = 0;
-        for ($i=0; (($swin_tape eq "none") && ($i<=$#swin_files_db)); $i++) {
-          @arr = split(/ /,$swin_files_db[$i]);
-          if ($arr[3] eq "0") {
-            $swin_tape = $arr[0];
-            $swin_percent = sprintf("%5.2f",(int($arr[2]) / int($arr[1]))*100);
-            $swin_time_left = sprintf("%5.1f",(((int($arr[1]) - int($arr[2])) * 1024.0) / (40.0 * 60.0)));
-          }
-        }
-
-        Dada::logMsg(2, DL, "tapeInfoThread: percent swin=".$swin_percent."%");
-        Dada::logMsg(2, DL, "tapeInfoThread: names swin=".$swin_tape);
 
         %processing_count = ();
         %processing_size = ();
@@ -670,7 +636,7 @@ sub tapeInfoThread() {
 
         for ($i=0; (($i<8) && (!$quit_daemon)); $i++)
         {
-          $cmd = "ssh -l bpsr hipsr".$i." \"web_results_helper.pl\"";
+          $cmd = "ssh -l bpsr medusa-gpu".$i." \"web_results_helper.pl\"";
           Dada::logMsg(2, DL, "tapeInfoThread: ".$cmd);
           ($result, $tmp_str) = Dada::mySystem($cmd);
           Dada::logMsg(3, DL, "tapeInfoThread: ".$result." ".$tmp_str);
@@ -818,13 +784,6 @@ sub tapeInfoThread() {
       $xml .= "<xfer_to_swin>".$beams_to_swin."</xfer_to_swin>";
       $xml .= "<xfer_to_atnf>".$beams_to_atnf."</xfer_to_atnf>";
       #$xml .= "<xfer_archived>".$beams_archived."</xfer_archived>";
-
-      $xml .= "<swin_state>".$swin_state."</swin_state>";
-      $xml .= "<swin_tape>".$swin_tape."</swin_tape>";
-      $xml .= "<swin_percent>".$swin_percent."</swin_percent>";
-      $xml .= "<swin_time_left>".$swin_time_left."</swin_time_left>";
-      $xml .= "<swin_num>".$num_swin."</swin_num>";
-      $xml .= "<swin_pid>".$swin_pid."</swin_pid>";
 
       $xml .= "</tape_info>";
 
