@@ -37,6 +37,7 @@ class machine_summary extends bpsr_webpage
     for ($i=0; $i<$this->config["NUM_PWC"]; $i++) 
     {
       $host = $this->config["PWC_".$i];
+      $host = str_replace("medusa-", "", $host);
       $this->pwcs[$i] = $host;
       $this->machines[$host] = "pwc";
     }
@@ -245,6 +246,7 @@ class machine_summary extends bpsr_webpage
               for (i=0; i<node_statuses.length; i++) 
               {
                 host = node_statuses[i].getAttribute("host");
+                host = host.replace("medusa-","");
                 host = host.replace("-","_");
 
                 pwcs_per_host[host] = 0;
