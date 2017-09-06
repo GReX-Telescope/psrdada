@@ -44,6 +44,7 @@ class live_candidate_viewer extends bpsr_webpage
     $this->nchan = isset($_GET["nchan"]) ? $_GET["nchan"] : "";
     $this->nbin = isset($_GET["nbin"]) ? $_GET["nbin"] : "";
     $this->length= isset($_GET["length"]) ? $_GET["length"] : "0";
+    $this->dedisperse= isset($_GET["dedisperse"]) ? $_GET["dedisperse"] : "0";
     $this->proc_type = isset($_GET["proc_type"]) ? $_GET["proc_type"] : "cand";
 
     $this->cand_url = "live_candidate_viewer.lib.php?update=true";
@@ -54,9 +55,11 @@ class live_candidate_viewer extends bpsr_webpage
     if ($this->dm != "") $this->cand_url .= "&dm=".$this->dm;
     if ($this->snr != "") $this->cand_url .= "&snr=".$this->snr;
     if ($this->length != "") $this->cand_url .= "&length=".$this->length;
+    if ($this->dedisperse != "") $this->cand_url .= "&dedisperse=".$this->dedisperse;
     if ($this->proc_type != "") $this->cand_url .= "&proc_type=".$this->proc_type;
 
     $this->cand_url .= "&length=".$this->length;
+    $this->cand_url .= "&dedisperse=".$this->dedisperse;
     $this->cand_url .= "&nchan=".$this->nchan;
     $this->cand_url .= "&nbin=".$this->nbin;
 
@@ -86,7 +89,10 @@ class live_candidate_viewer extends bpsr_webpage
         var i = document.getElementById("length").selectedIndex;
         var length = document.getElementById("length").options[i].value;
 
-        url += "&nbin=" + nbin + "&nchan=" + nchan + "&length=" + length;
+        var i = document.getElementById("dedisperse").selectedIndex;
+        var dedisperse = document.getElementById("dedisperse").options[i].value;
+
+        url += "&nbin=" + nbin + "&nchan=" + nchan + "&length=" + length + "&dedisperse=" + dedisperse;
 
         document.getElementById("candidate_image").src = url;
 
@@ -142,6 +148,7 @@ class live_candidate_viewer extends bpsr_webpage
             <option value="256">256</option>
             <option value="512">512</option>
             <option value="1024">1024</option>
+            <option value="2048">2048</option>
           </select>
         </td>
       </tr>
@@ -179,8 +186,15 @@ class live_candidate_viewer extends bpsr_webpage
             <option value="10">10</option>
           </select>
         </td>
-
-
+       </tr>
+       <tr>
+        <td>Dedisperse</td>
+        <td>
+         <select name="dedisperse" id="dedisperse" onchange="update_live_candidate_image()">
+          <option value="0">No</option>
+          <option value="1">Yes</option>
+         </select>
+        </td>
       </tr>
       <tr>
         <td>Proc Type</td>
@@ -225,8 +239,9 @@ class live_candidate_viewer extends bpsr_webpage
       $plot_cmd .= " -nbin ".$this->nbin;
     if ($this->length != "")
       $plot_cmd .= " -length ".$this->length;
+    if ($this->dedisperse != "0")
+      $plot_cmd .= " -dedisperse";
     $cmd = "ssh -o BatchMode=yes -x ".$cfg["USER"]."@".$host." '".$plot_cmd."'";
-
     $img_data = `$cmd`;
 
     header('Content-Type: image/png');
