@@ -22,12 +22,12 @@ SERVER_OLD_ARCHIVE_DIR  /data/bpsr/old_archives
 SERVER_STATS_DIR        /data/bpsr/results/stats
 SERVER_LOG_DIR          /data/bpsr/logs
 SERVER_CONTROL_DIR      @PSRDADA_INSTALL@/control
-SERVER_DAEMONS          bpsr_pwc_monitor bpsr_src_monitor bpsr_sys_monitor bpsr_tcs_interface bpsr_results_manager bpsr_roach_manager bpsr_web_monitor
-SERVER_DAEMONS_PERSIST  bpsr_swin_tape_controller bpsr_parkes_tape_controller bpsr_raid_pipeline
+SERVER_DAEMONS          bpsr_pwc_monitor bpsr_src_monitor bpsr_sys_monitor bpsr_tcs_interface bpsr_results_manager bpsr_roach_manager bpsr_web_monitor bpsr_frb_manager
+SERVER_DAEMONS_PERSIST  bpsr_swin_tape_controller bpsr_raid_pipeline
 
 ###############################################################################
 #
-# Port Configuration for BPSR, start @ 51000
+# Port Configuration for BPSR, start @ 31000
 #
 # TCS Interface configuration. Note on different interface to server
 TCS_INTERFACE_HOST        hipsr-srv0.atnf.csiro.au
@@ -75,20 +75,13 @@ SIM_DEST_PORT             4001       # SHOULD mactch CLIENT_UDPDB_PORT below
 IBOB_SIM_HOST             srv0       # host masquerading as ibob for the PWC's
 IBOB_SIM_PORT             31008      # port for PWC's to connect to is simulating
 
-
 ###############################################################################
 # Tape Archive Locations
 # 
 NUM_SWIN_DIRS           1
-SWIN_DIR_0              pulsar:tapeserv01:/projects/p002_swin/bpsr
+SWIN_DIR_0              pulsar:sstar003:/projects/p002_swin/bpsr
 SWIN_S4_DEVICE          /dev/nst0
-SWIN_DB_DIR             pulsar:tapeserv01:/home/pulsar/bookkeeping/tape_archiver
-
-NUM_PARKES_DIRS         1
-PARKES_DIR_0            bpsr:caspsr-raid0.atnf.CSIRO.AU:/lfs/raid1/bpsr/parkes
-PARKES_S4_DEVICE        /dev/nst0
-PARKES_DB_DIR           dada:jura.atnf.CSIRO.AU:/home/dada/bookkeeping/tape_archiver
-
+SWIN_DB_DIR             pulsar:sstar003:/home/pulsar/bookkeeping/tape_archiver
 
 ###############################################################################
 # Client directory configuration
@@ -205,7 +198,6 @@ PWC_UDP_CORE_9          9
 PWC_UDP_CORE_10         1
 PWC_UDP_CORE_11         9
 PWC_UDP_CORE_12         1
-
 
 # gpu designation for PWC's
 PWC_GPU_ID_0            0
