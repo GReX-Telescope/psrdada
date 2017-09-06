@@ -5,6 +5,7 @@ AC_PREREQ(2.57)
 AC_INIT([DADA],[1.0],[straten@astron.nl])
 
 AC_CONFIG_SRCDIR([src/dada_def.h])
+AC_CONFIG_MACRO_DIR([config])
 AC_CANONICAL_TARGET
 
 AC_ARG_VAR([PSRHOME],    [Standard pulsar home directory])
