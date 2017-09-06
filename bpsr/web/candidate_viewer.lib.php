@@ -25,6 +25,10 @@ class candidate_viewer extends bpsr_webpage
 
   var $proc_type;
 
+  var $zap_from;
+
+  var $zap_to;
+
   var $inst;
 
   function candidate_viewer()
@@ -44,6 +48,8 @@ class candidate_viewer extends bpsr_webpage
     $this->nbin = isset($_GET["nbin"]) ? $_GET["nbin"] : "0";
     $this->length = isset($_GET["length"]) ? $_GET["length"] : "0";
     $this->proc_type = isset($_GET["proc_type"]) ? $_GET["proc_type"] : "cand";
+    $this->zap_from = isset($_GET["zap_from"]) ? $_GET["zap_from"] : "-1";
+    $this->zap_to = isset($_GET["zap_to"]) ? $_GET["zap_to"] : "-1";
 
     $this->cand_url = "candidate_viewer.lib.php?update=true";
     if ($this->utc_start != "") $this->cand_url .= "&utc_start=".$this->utc_start;
@@ -53,6 +59,8 @@ class candidate_viewer extends bpsr_webpage
     if ($this->dm != "") $this->cand_url .= "&dm=".$this->dm;
     if ($this->snr != "") $this->cand_url .= "&snr=".$this->snr;
     if ($this->proc_type != "") $this->cand_url .= "&proc_type=".$this->proc_type;
+    if ($this->zap_from != "") $this->cand_url .= "&zap_from=".$this->zap_from;
+    if ($this->zap_to != "") $this->cand_url .= "&zap_to=".$this->zap_to;
     $this->cand_url .= "&length=".$this->length;
     $this->cand_url .= "&nchan=".$this->nchan;
     $this->cand_url .= "&nbin=".$this->nbin;
@@ -75,7 +83,10 @@ class candidate_viewer extends bpsr_webpage
         var i = document.getElementById("length").selectedIndex;
         var length = document.getElementById("length").options[i].value;
 
-        url += "&nbin=" + nbin + "&nchan=" + nchan + "&length=" + length;
+        var zap_from = document.getElementById("zap_from").value;
+        var zap_to = document.getElementById("zap_to").value;
+
+        url += "&nbin=" + nbin + "&nchan=" + nchan + "&length=" + length + "&zap_from="+zap_from + "&zap_to=" + zap_to;
 
         document.getElementById("candidate_image").src = url;
 
@@ -172,6 +183,14 @@ class candidate_viewer extends bpsr_webpage
         </td>
       </tr>
       <tr>
+        <td>Zap From</td>
+        <td><input name="zap_from" id="zap_from" value="<?echo $this->zap_from?>" onchange="update_candidate_image()"/></td>
+      </tr>
+      <tr>
+        <td>Zap To</td>
+        <td><input name="zap_to" id="zap_to" value="<?echo $this->zap_to?>" onchange="update_candidate_image()"/></td>
+      </tr>
+      <tr>
         <td>Proc Type</td>
         <td><?echo $this->proc_type?></td>
       </tr>
@@ -194,7 +213,7 @@ class candidate_viewer extends bpsr_webpage
   # get the candidate plot from the gpu cand server
   function printUpdateHTML($get)
   {
-    $host = "hipsr7";
+    $host = "caspsr-raid0";
     $port = "55555";
 
     $params  = "";
@@ -207,7 +226,9 @@ class candidate_viewer extends bpsr_webpage
     $params .= "proc_type=".$get["proc_type"]." ";
     $params .= "nchan=".$get["nchan"]." ";
     $params .= "nbin=".$get["nbin"]." ";
-    $params .= "length=".$get["length"];
+    $params .= "length=".$get["length"]." ";
+    $params .= "zap_from=".$get["zap_from"]." ";
+    $params .= "zap_to=".$get["zap_to"];
 
     list ($socket, $result) = openSocket($host, $port);
     $img_data = "";
