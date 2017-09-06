@@ -118,25 +118,6 @@ class archival_summary extends bpsr_webpage
           </tr>
         </table>
       </td>
-      <td align="center" valign="top">
-        <table class='archival_summary'>
-          <tr>
-            <td colspan=2 id="SWIN_TAPE_td" align="center">
-              <b>Swin Tape</b>&nbsp;&nbsp;&nbsp;
-              <span id ="swin_tape"></span>
-            </td>
-            <td id="SWIN_PID_td"><span id="swin_pid"></span></td> 
-          </tr>
-          <tr> 
-            <td colspan=3 id="SWIN_STATE_td" align="center" width=100%><span id ="swin_state"></span></td>
-          </tr>
-          <tr>
-            <td id="SWIN_NUM_td" align="center">Queued: <span id ="swin_num"></span></td>
-            <td id="SWIN_PERCENT_td" align="center"><span id ="swin_percent"></span>&#37; full</td>
-            <td id="SWIN_TIME_LEFT_td" align="center"><span id ="swin_time_left"></span> m</td>
-          </tr>
-        </table>
-      </td>
     </tr>
   </table>
 
@@ -149,16 +130,19 @@ class archival_summary extends bpsr_webpage
     $port = $get["port"];
     $response = "";
     $data = "";
-
+    
+    #echo "opening ".$host.":".$port."<br>\n";
     list ($socket, $result) = openSocket($host, $port);
     if ($result == "ok")
     {
+      #echo "sock <- tape_info<BR>\n";
       $bytes_written = socketWrite($socket, "tape_info\r\n");
       $max = 100;
       $response = "initial";
       while ($socket && ($result == "ok") && ($response != "") && ($max > 0))
       {
         list ($result, $response) = socketRead($socket);
+        #echo "sock -> ".$response."<BR>\n";
         if ($result == "ok")
         {
           $data .= $response;
