@@ -98,7 +98,6 @@ sub setupClientType()
 
     for ($i=0; ($i<$cfg{"NUM_PWC"}); $i++)
     {
-      print "i=".$i." testing ".$host." match ".$cfg{"PWC_".$i}."\n";
       if ($host =~ m/$cfg{"PWC_".$i}/)
       {
         my $beam = $roach{"BEAM_".$i};
