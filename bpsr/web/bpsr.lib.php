@@ -4,6 +4,7 @@ include_once("functions_i.php");
 
 define("INSTRUMENT", "bpsr");
 define("CFG_FILE", "/home/dada/linux_64/share/bpsr.cfg");
+define("SVD_FILE", "/home/dada/linux_64/share/bpsr_svd.cfg");
 define("ROACH_FILE", "/home/dada/linux_64/share/roach.cfg");
 define("BEAMS_FILE", "/home/dada/linux_64/share/bpsr_active_beams.cfg");
 define("PWC_FILE", "/home/dada/linux_64/share/bpsr_pwcs.cfg");
@@ -70,6 +71,12 @@ class bpsr extends instrument
     $arr["processor"]                = array("logfile" => "nexus.src.log", "name" => "Processor", "tag" => "proc");
     $arr["bpsr_disk_cleaner"]        = array("logfile" => "nexus.sys.log", "name" => "Disk Cleaner", "tag" => "cleaner");
     $arr["bpsr_transfer_raid"]       = array("logfile" => "nexus.sys.log", "name" => "Transfer RAID", "tag" => "xfer");
+    $arr["bpsr_pscrunch"]            = array("logfile" => "nexus.sys.log", "name" => "Pol Scrunch", "tag" => "pscrunch");
+    $arr["bpsr_dirty_send"]          = array("logfile" => "nexus.sys.log", "name" => "Dirty Send", "tag" => "dirty_send");
+    $arr["bpsr_clean_recv"]          = array("logfile" => "nexus.sys.log", "name" => "Clean Recv", "tag" => "clean_send");
+    $arr["bpsr_dirty_recv"]          = array("logfile" => "nexus.sys.log", "name" => "Dirty Recv", "tag" => "dirty_recv");
+    $arr["bpsr_svd"]                 = array("logfile" => "nexus.sys.log", "name" => "SVD", "tag" => "svd");
+    $arr["bpsr_clean_send"]          = array("logfile" => "nexus.sys.log", "name" => "Clean Send", "tag" => "clean_send");
     return $arr;
 
   }
