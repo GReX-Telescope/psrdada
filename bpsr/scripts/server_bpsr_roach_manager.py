@@ -8,7 +8,7 @@
 #   * retrieve bram data
 
 import Dada, Bpsr, threading, sys, time, socket, select, signal, traceback
-import corr, time, numpy, math, os, fnmatch
+import time, numpy, math, os, fnmatch
 import fullpol as spec
 #import dualpol as spec
 
