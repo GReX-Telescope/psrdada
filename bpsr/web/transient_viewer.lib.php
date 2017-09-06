@@ -13,9 +13,15 @@ class transient_viewer extends bpsr_webpage
 
   var $default_filter_cut;
 
+  var $from_cut;
+
+  var $to_cut;
+
   var $inst;
 
   var $max_candidates;
+
+  var $max_rows;
 
   var $update_required;
 
@@ -30,6 +36,9 @@ class transient_viewer extends bpsr_webpage
     $this->default_filter_cut = 11;
     $this->default_dm_cut = 1.5;
     $this->max_candidates = 20;
+    $this->max_rows = 10000;
+    $this->from_cut = "";
+    $this->to_cut = "";
 
     $this->utc_start = isset($_GET["utc_start"]) ? $_GET["utc_start"] : "";
 
@@ -61,6 +70,8 @@ class transient_viewer extends bpsr_webpage
       var default_snr_cut = <?echo $this->default_snr_cut;?>;
       var default_filter_cut = <? echo $this->default_filter_cut;?>;
       var default_dm_cut = <? echo $this->default_dm_cut;?>;
+      var default_from_cut = ""
+      var default_to_cut = ""
       var default_beam_mask = 8191
 
       function calculate_beam_mask()
@@ -96,6 +107,11 @@ class transient_viewer extends bpsr_webpage
       }
 
       function update_dm()
+      {
+        transient_viewer_request();
+      }
+
+      function update_time()
       {
         transient_viewer_request();
       }
@@ -232,15 +248,16 @@ class transient_viewer extends bpsr_webpage
 
                 if (utc_start != "") 
                 { 
-                  var link1 = "<a href='/bpsr/candidate_viewer.lib.php?single=true&utc_start="+utc_start+
-                              "&beam="+beam+"&sample="+samp_idx+"&filter="+filter+"&dm="+dm+"&snr="+snr+
-                              "' target='cand_popup'>cand</a>";
+                  //var link1 = "<a href='/bpsr/candidate_viewer.lib.php?single=true&utc_start="+utc_start+
+                  //            "&beam="+beam+"&sample="+samp_idx+"&filter="+filter+"&dm="+dm+"&snr="+snr+
+                  //            "' target='cand_popup'>cand</a>";
 
                   var link2 = "<a href='/bpsr/candidate_viewer.lib.php?single=true&utc_start="+utc_start+
                               "&beam="+beam+"&sample="+samp_idx+"&filter="+filter+"&dm="+dm+"&snr="+snr+"&proc_type=dspsr"+
                               "' target='cand_popup'>dspsr</a>";
 
-                  document.getElementById("cand_"+j+"_link").innerHTML = link1 + "&nbsp;&nbsp;" + link2
+                  //document.getElementById("cand_"+j+"_link").innerHTML = link1 + "&nbsp;&nbsp;" + link2
+                  document.getElementById("cand_"+j+"_link").innerHTML = link2
                 }
                 else
                 {
@@ -295,6 +312,8 @@ class transient_viewer extends bpsr_webpage
         var snr_cut    = document.getElementById('snr_cut').value;
         var filter_cut = document.getElementById('filter_cut').value;
         var dm_cut     = document.getElementById('dm_cut').value;
+        var from_cut     = document.getElementById('from_cut').value;
+        var to_cut     = document.getElementById('to_cut').value;
         var beam_mask  = calculate_beam_mask();
 
         var url  = "transient_viewer.lib.php?update=true";
@@ -304,6 +323,10 @@ class transient_viewer extends bpsr_webpage
         url_args += "&beam_mask="+beam_mask
         url_args += "&filter_cut="+filter_cut
         url_args += "&dm_cut="+dm_cut
+        if (from_cut != "")
+          url_args += "&from_cut="+from_cut
+        if (to_cut != "")
+          url_args += "&to_cut="+to_cut
 
         if (utc_start != "")
           url_args = url_args + "&utc_start="+utc_start;
@@ -321,6 +344,8 @@ class transient_viewer extends bpsr_webpage
                              (beam_mask == default_beam_mask) && 
                              (filter_cut == default_filter_cut) &&
                              (dm_cut == default_dm_cut) &&
+                             (from_cut == default_from_cut) &&
+                             (to_cut == default_to_cut) &&
                              (utc_start == "") );
 
         if (default_cands)
@@ -417,6 +442,11 @@ class transient_viewer extends bpsr_webpage
         <td><b>DM</b></td>
         <td><input type='text' name='dm_cut' id='dm_cut' size='2' value='<? echo $this->default_dm_cut;?>' onChange='update_dm()'></input></td>
      </tr>
+      <tr>
+        <td><b>Time</b></td>
+        <td><input type='text' name='from_cut' id='from_cut' size='8' value='<? echo $this->from_cut;?>' onChange='update_time()'></input> - 
+            <input type='text' name='to_cut' id='to_cut' size='8' value='<? echo $this->to_cut;?>' onChange='update_time()'></input></td>
+     </tr>
     </table>
 <?
     $this->closeBlockHeader();
@@ -479,14 +509,21 @@ class transient_viewer extends bpsr_webpage
 ?>
    <center>
      <img src="/images/blankimage.gif" border=0 width='1024px' height='768px'; id="candidate" TITLE="Current Candidate" alt="alt"></br>
+<?
+    if ($this->update_required)
+    {
+?>
      <font size="-1">image updates every <?echo ($this->callback_freq / 1000)." seconds";?></font>
+<?
+    }
+?>
     </center>
 <?
     if (!$this->update_required)
     {
 ?>
     <script type="text/javascript">
-      transient_viewer_request();
+      setTimeout('transient_viewer_request()', 1);
     </script>
 <?  } 
 
@@ -612,6 +649,16 @@ class transient_viewer extends bpsr_webpage
       }
       else
       {
+        $cmd = "wc -l ".$this->results_dir."/".$utc_start."/all_candidates.dat | awk '{print $1}'";
+        $arr = array();
+        $num_rows = exec($cmd, $arr, $rval);
+
+        $skip_rows = "";
+        if ($num_rows > $this->max_rows)
+        {
+          #$skip_rows = " -skip_rows ".($num_rows - $this->max_rows);
+        }
+
         $cmd = $this->inst->config["SCRIPTS_DIR"]."/trans_gen_overview.py -cand_list_xml";
         $cmd .= " -cands_file ".$this->results_dir."/".$utc_start."/all_candidates.dat";
         if (isset($get["filter_cut"]) && ($get["filter_cut"] != ""))
@@ -622,6 +669,13 @@ class transient_viewer extends bpsr_webpage
           $cmd .= " -snr_cut ".$get["snr_cut"];
         if (isset($get["dm_cut"]) && ($get["dm_cut"] != ""))
           $cmd .= " -dm_cut ".$get["dm_cut"];
+        if (isset($get["from_cut"]) && ($get["from_cut"] != ""))
+          $cmd .= " -from_cut ".$get["from_cut"];
+        if (isset($get["to_cut"]) && ($get["to_cut"] != ""))
+          $cmd .= " -to_cut ".$get["to_cut"];
+
+        # to control long plot times
+        $cmd .= $skip_rows;
 
         $cands_list = array();
         $last_line = exec($cmd, $cands_list, $rval);
