@@ -558,6 +558,7 @@ void * svdzap_thread (void * arg)
 long create_xcorr(float** datagulp, long gulpsize, FILE **currentFile,int numbeams, float** xcorr_matrix) {
   int i,j;
   int ia,ib;
+  int some_inf;
   long num_read;
   float mean_dataia;
   float mean_dataib;
@@ -574,7 +575,7 @@ long create_xcorr(float** datagulp, long gulpsize, FILE **currentFile,int numbea
   //printf("initializing xcorr\n");
   for (i=0;i<numbeams*numbeams;i++) {
     for (j=0;j<gulpsize;j++) {
-            xcorr_matrix[i][j] = 0;
+      xcorr_matrix[i][j] = 0;
     }
   }
 
@@ -586,6 +587,14 @@ long create_xcorr(float** datagulp, long gulpsize, FILE **currentFile,int numbea
   //printf("reading data\n");
   for (i=0;i<numbeams;i++) {
     num_read = fread(datagulp[i],sizeof(float),gulpsize,currentFile[i]);
+    some_inf = 0;
+    for (j=0; j<gulpsize; j++)
+    {
+      if (isinf(datagulp[i][j]))
+        some_inf = 1; 
+    }
+    if (some_inf)
+      bzero(datagulp[i], sizeof(float) * gulpsize);
   }
   //printf("correlating\n");
   for (ia=0;ia<numbeams;ia++) {
