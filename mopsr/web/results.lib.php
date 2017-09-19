@@ -103,7 +103,7 @@ class results extends mopsr_webpage
         i = document.getElementById("filter_type").selectedIndex;
         var filter_type = document.getElementById("filter_type").options[i].value;
 
-        var filter_value = document.getElementById("filter_value").value;
+        var filter_value = encodeURIComponent(document.getElementById("filter_value").value);
 
         if ((filter_value != "") && (filter_type != "")) {
           url = url + "&filter_type="+filter_type+"&filter_value="+filter_value;
@@ -381,7 +381,6 @@ class results extends mopsr_webpage
         $pdo = new PDO ('sqlite:/home/dada/linux_64/web/mopsr/asteria.db');
         $q = 'SELECT count(*) FROM (Pulsars JOIN Observations ON Pulsars.id = Observations.psr_id AND Pulsars.name
 LIKE "'.$this->filter_value.'%")';
-        //echo $q.'<br>'; #TODO REMOVE ME
         $stmt = $pdo -> query($q);
         $row = $stmt->fetch();
         $total_num_results = $row[0];
@@ -723,6 +722,8 @@ LIKE "'.$this->filter_value.'%")';
           $all["STATE"] = "finished";
         else if (file_exists($dir."/obs.transferred"))
           $all["STATE"] = "transferred";
+        else if (file_exists($dir."/obs.completed"))
+          $all["STATE"] = "completed";
         else if (file_exists($dir."/obs.failed"))
           $all["STATE"] = "failed";
         else
@@ -901,6 +902,8 @@ Observations.utc_id) WHERE name LIKE "'.$filter_value.'%" ORDER BY utc DESC LIMI
           $all["STATE"] = "finished";
         else if (file_exists($dir."/obs.transferred"))
           $all["STATE"] = "transferred";
+        else if (file_exists($dir."/obs.completed"))
+          $all["STATE"] = "completed";
         else if (file_exists($dir."/obs.failed"))
           $all["STATE"] = "failed";
         else
@@ -1022,7 +1025,7 @@ Observations.utc_id) WHERE name LIKE "'.$filter_value.'%" ORDER BY utc DESC LIMI
         // TODO needs to be actually implemeneted
         $all = array();
         if ($is_new_old_db == "DB") {
-          $all["ANNOTATION"] = "Data in database only, check Timing dir or on gstar. ".$all["ANNOTATION"];
+          $all["ANNOTATION"] = "<i>Data in database only, check Timing dir or on gstar.<i> ".$all["ANNOTATION"];
         } else {
           print "This should never happen";
         }
