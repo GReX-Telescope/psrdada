@@ -221,6 +221,9 @@ echo "<tr><td>Updated at:<br><span class=best_snr>".$updated[0]."</span></td></t
 <input type="hidden" name="single" value="true"/>
 <select name="snr_cut" onchange="this.form.submit()">
 <option value="">SNR cut</option>
+<option value=">= 10">&#62;= 500</option>
+<option value=">= 10">&#62;= 100</option>
+<option value=">= 10">&#62;= 50</option>
 <option value=">= 10">&#62;= 10</option>
 <option value="< 10">&#60; 10</option>
 </select>
@@ -238,7 +241,7 @@ function rescale_snr_to5min($fSNR, $ftint_m) {
 if ($_GET['snr_cut'] ) {
 
 echo '<p><h2>Displaying data with SNR '.$_GET['snr_cut'].'</h2><br></p>';
-$q = 'SELECT name, dm, period, max_snr_in5min, utc, snr, tint/60. as tint FROM (Pulsars JOIN UTCs JOIN Observations ON Pulsars.id = Observations.psr_id AND UTCs.id = Pulsars.max_snr_obs_id AND Observations.utc_id = UTCs.id) WHERE tint > 1.0 AND max_snr_in5min '.$_GET['snr_cut'].' ORDER BY name ASC';
+$q = 'SELECT name, dm, period, max_snr_in5min, utc, snr, tint/60. as tint FROM (Pulsars JOIN UTCs JOIN Observations ON Pulsars.id = Observations.psr_id AND UTCs.id = Pulsars.max_snr_obs_id AND Observations.utc_id = UTCs.id) WHERE tint > 1.0 AND dm>0 AND max_snr_in5min '.$_GET['snr_cut'].' ORDER BY name ASC';
 
   $stmt = $pdo -> query($q);
 
@@ -275,49 +278,29 @@ $q = 'SELECT name, dm, period, max_snr_in5min, utc, snr, tint/60. as tint FROM (
         $class = "&class=old";
       }
 
-      $fl_hr = str_replace("/data", "", glob($top_dir.$utc."/20*".$psr.".fl.1024x768.png"));
-      if ($fl_hr[0] == "") {
-        $fl_hr = str_replace("/data", "", glob($alt_top_dir.$utc."/20*".$psr.".fl.1024x768.png"));
-      }
-      $fl_lr = str_replace("/data", "", glob($top_dir.$utc."/20*".$psr.".fl.120x90.png"));
-      if ($fl_lr[0] == "") {
-        $fl_lr = str_replace("/data", "", glob($alt_top_dir.$utc."/20*".$psr.".fl.1024x768.png"));
-      }
-      if ($fl_lr[0] == "") {
-        $fl_lr[0] = $fl_hr[0];
-      }
+      $plot_types = array("fl", "fr", "ti");
+      $resolutions = array("hr"=>"1024x768", "lr"=>"120x90");
 
-      $fr_hr = str_replace("/data", "", glob($top_dir.$utc."/20*".$psr.".fr.1024x768.png"));
-      if ($fr_hr[0] == "") {
-        $fr_hr = str_replace("/data", "", glob($alt_top_dir.$utc."/20*".$psr.".fr.1024x768.png"));
+      foreach ($plot_types as $type) {
+        foreach ($resolutions as $resolution_name => $resolution ) {
+          $cur = $type."_".$resolution_name;
+          $$cur = str_replace("/data", "", glob($top_dir.$utc."/20*".$pulsar.".".$type.".".$resolution.".png"));
+          if (${$cur}[0] == "") {
+            $$cur = str_replace("/data", "", glob($alt_top_dir.$utc."/20*".$pulsar.".".$type.".".$resolution.".png"));
+          }
+          if (${$cur}[0] == "") {
+            $$cur = str_replace("/data", "", glob($alt_top_dir.$utc."/20*TB.".$type.".".$resolution.".png"));
+          }
+        }
       }
-      $fr_lr = str_replace("/data", "", glob($top_dir.$utc."/20*".$psr.".fr.120x90.png"));
-      if ($fr_lr[0] == "") {
-        $fr_lr = str_replace("/data", "", glob($alt_top_dir.$utc."/20*".$psr.".fr.1024x768.png"));
-      }
-      if ($fr_lr[0] == "") {
-        $fr_lr[0] = $fr_hr[0];
-      }
-
-      $ti_hr = str_replace("/data", "", glob($top_dir.$utc."/20*".$psr.".ti.1024x768.png"));
-      if ($ti_hr[0] == "") {
-        $ti_hr = str_replace("/data", "", glob($alt_top_dir.$utc."/20*".$psr.".ti.1024x768.png"));
-      }
-      $ti_lr = str_replace("/data", "", glob($top_dir.$utc."/20*".$psr.".ti.120x90.png"));
-      if ($ti_lr[0] == "") {
-        $ti_lr = str_replace("/data", "", glob($alt_top_dir.$utc."/20*".$psr.".ti.1024x768.png"));
-      }
-      if ($ti_lr[0] == "") {
-        $ti_lr[0] = $ti_hr[0];
-      }
-
-
-
+      
       echo "<td width=300><a href=/mopsr/results.lib.php?single=true&offset=0&length=20&inline_images=true&filter_type=SOURCE&filter_value=";
       echo $pulsar.">".$pulsar."</a><br>DM : ".round($dm, 2)."<br>period : ".round($period,2 )." ms <br>\n";
-      echo '<a href='.$fl_hr[0].'><img src='.$fl_lr[0].' width="120" height="90"></a><br>'."\n";
-      echo '<a href="'.$fr_hr[0].'"><img src="'.$fr_lr[0].'" width="120" height="90"></a><br>'."\n";
-      echo '<a href="'.$ti_hr[0].'"><img src="'.$ti_lr[0].'" width="120" height="90"></a><br>'."\n";
+      foreach ($plot_types as $type) {
+        $hr= $type . "_hr";
+        $lr= $type . "_lr";
+        echo '<a href="'.${$hr}[0].'"><img src="'.${$lr}[0].'" width="120" height="90"></a><br>'."\n";
+      }
       echo "SNR = ".round($snr, 2)."<br>t = ".round($tint_m, 2)." minutes<br>SNR(5min) = ".round(rescale_snr_to5min($snr, $tint_m), 2)."\n";
       echo "<br><a href=/mopsr/result.lib.php?single=true".$class."&utc_start=".$utc.">".$utc."</a></td>\n";
       if ($counter %5 == 0) {
