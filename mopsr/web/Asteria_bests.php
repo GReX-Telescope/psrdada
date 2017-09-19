@@ -295,7 +295,7 @@ $q = 'SELECT name, dm, period, max_snr_in5min, utc, snr, tint/60. as tint FROM (
       }
       
       echo "<td width=300><a href=/mopsr/results.lib.php?single=true&offset=0&length=20&inline_images=true&filter_type=SOURCE&filter_value=";
-      echo $pulsar.">".$pulsar."</a><br>DM : ".round($dm, 2)."<br>period : ".round($period,2 )." ms <br>\n";
+      echo urlencode($pulsar).">".$pulsar."</a><br>DM : ".round($dm, 2)."<br>period : ".round($period,2 )." ms <br>\n";
       foreach ($plot_types as $type) {
         $hr= $type . "_hr";
         $lr= $type . "_lr";

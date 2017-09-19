@@ -268,7 +268,7 @@ foreach ($results as $row)
   }
   //
   echo '<td width=300 align="center"><a href=/mopsr/results.lib.php?single=true&offset=0&length=20&inline_images=true&filter_type=SOURCE&filter_value=';
-  echo $pulsar.">".$pulsar."</a><br>DM : ".round($dm, 2)."<br>period : ".round($period,2 )." ms <br>\n";
+  echo urlencode($pulsar).">".$pulsar."</a><br>DM : ".round($dm, 2)."<br>period : ".round($period,2 )." ms <br>\n";
   echo '<a href='.$fl_hr[0].'><img src='.$fl_lr[0].'></a>'."\n";
   echo '<br><a href="'.$fr_hr.'"><img src="'.$fr_lr.'"></a><br><a href="'.$ti_hr.'"><img src="'.$ti_lr.'"></a><br>'."\n";
   echo "SNR = ".round($snr, 2)."<br>t = ".round($tint_m, 2)." minutes<br>";
