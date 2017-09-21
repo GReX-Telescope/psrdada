@@ -483,6 +483,21 @@ class result extends mopsr_webpage
             $results[$source]["snr"]     = instrument::getSNR($tot_file);
           }
         }
+      } else if ($i == 0 && strpos($info["CONFIG"], "TIED_ARRAY") !== false ) {
+        $source = $info["SOURCE"];
+        if (file_exists($dir."/TB"))
+        {
+          $results[$source] = array();
+          $results[$source]["type"] = "TB";
+
+          $tot_file = $dir."/".$source."/".$source."_t.tot";
+          if (file_exists($tot_file))
+          {
+            $results[$source]["int"]     = $this->inst->getIntergrationLength($tot_file);
+            $results[$source]["nsubint"] = $this->inst->getNumSubints($tot_file);
+            $results[$source]["snr"]     = instrument::getSNR($tot_file);
+          }
+        }
       }
     }
     return $results;

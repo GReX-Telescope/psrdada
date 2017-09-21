@@ -190,6 +190,11 @@ class mopsr extends instrument
         
       if ($line != "")
       {
+        if ( $source == "TB" ) {
+          $cmd = "ls ".$dir."/TB/J*_f.tot | awk -F/ '{print \$NF}' | awk -F_ '{print $1}'";
+          $line = exec($cmd, $source_from_tb, $rval);
+          $source = $source_from_tb[0];
+        }
         $results[$source] = array();
         foreach ($images as $image)
         {
