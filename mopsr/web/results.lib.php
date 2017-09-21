@@ -959,10 +959,16 @@ Observations.utc_id) WHERE name LIKE "'.$filter_value.'%" ORDER BY utc DESC LIMI
         # find an image of the observation, if not existing
         if (($arr["IMG"] == "NA") || ($arr["IMG"] == ""))
         {
-          # preferentially find a pulsar profile plot
-          $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -type f ".
-            "-name '*.fl.120x90.png' -printf '%f\n' ".
-            "| sort -n | head -n 1";
+          if ($filter_type === "SOURCE" && strpos($this->filter_value, "J") === 0) {
+            $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -type f ".
+              "-name '*".$filter_value."*.fl.120x90.png' -printf '%f\n' ".
+              "| sort -n | head -n 1";
+          } else {
+            # preferentially find a pulsar profile plot
+            $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -type f ".
+              "-name '*.fl.120x90.png' -printf '%f\n' ".
+              "| sort -n | head -n 1";
+          }
           $img = exec ($cmd, $output, $rval);
 
           if (($rval == 0) && ($img != "")) {
