@@ -906,7 +906,8 @@ void * bibob_level_setter(void * context)
 
   bibob_bramdump_reset(bibob);
 
-  return ;
+  void * result;
+  return result;
 }
 
 

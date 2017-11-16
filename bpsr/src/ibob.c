@@ -746,7 +746,8 @@ void * ibob_level_setter(void * context)
 
   ibob_bramdump_reset(ibob);
 
-  return ;
+  void * result;
+  return result;
 }
 
 void extract_counts(char * bram, long * vals, int n_chan) {
