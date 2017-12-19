@@ -127,10 +127,6 @@ sub main()
 
   chdir $obs_results_dir;
 
-  $coincidencer_thread = threads->new(\&coincidencerThread);
-
-  $dump_thread = threads->new(\&dumperThread);
-
   my $testing = 0;
   if ($testing)
   {
@@ -138,14 +134,14 @@ sub main()
     $c{"start_utc"}   = "2017-06-27-21:41:02.6";
     $c{"utc"}         = "2017-06-27-21:41:02.7";
     $c{"end_utc"}     = "2017-06-27-21:41:02.8";
-    $c{"dm"}          = 3;
-    $c{"width"}       = 0.00524288;
-    $c{"snr"}         = 9.233;
+    $c{"dm"}          = 175;
+    $c{"width"}       = 0.00065536;
+    $c{"snr"}         = 47;
     $c{"sample"}      = 99377;
     $c{"filter"}      = 5;
     $c{"probability"} = 0.1235;
 
-    $c{"utc_start"}   = "2017-06-27-20:54:32";
+    $c{"utc_start"}   = "2017-08-27-16:05:48";
     $c{"beam"}        = 257;
 
     %c = supplementCand(\%c);
@@ -157,8 +153,22 @@ sub main()
       $c{"extra_galactic"} = 1;
     }
 
-    generateEmail ("ajameson\@swin.edu.au", "", "false", \%c);
+    my $to_email = "ajameson\@swin.edu.au";
+    my $cc_email = "";
+    my $did_dump = "false";
+    Dada::logMsg(1, $dl, "main: threads->new(\&generateEmail");
+    my $email_thread = threads->new(\&generateEmail, $to_email, $cc_email, $did_dump, \%c);
+    Dada::logMsg(1, $dl, "main: email_thread->join()");
+    $email_thread->join();
+    Dada::logMsg(1, $dl, "main: email_thread joined");
     $quit_daemon = 1;
+    $coincidencer_thread = 0;
+    $dump_thread = 0;
+  }
+  else
+  {
+    $coincidencer_thread = threads->new(\&coincidencerThread);
+    $dump_thread = threads->new(\&dumperThread);
   }
 
   while (!$quit_daemon)
@@ -214,11 +224,17 @@ sub main()
   Dada::logMsg(2, $dl, "main: joining controlThread");
   $control_thread->join();
 
-  Dada::logMsg(2, $dl, "main: joining coincidencerThread");
-  $coincidencer_thread->join();
+  if ($coincidencer_thread)
+  {
+    Dada::logMsg(2, $dl, "main: joining coincidencerThread");
+    $coincidencer_thread->join();
+  }
 
-  Dada::logMsg(2, $dl, "main: joining dumpThread");
-  $dump_thread->join();
+  if ($dump_thread)
+  {
+    Dada::logMsg(2, $dl, "main: joining dumpThread");
+    $dump_thread->join();
+  }
 
   Dada::logMsg(0, $dl, "STOPPING SCRIPT");
 
@@ -447,7 +463,7 @@ sub processCandidates($)
     # create the plot
     $cmd = "mopsr_plot_cands -f ".$cands_dir."/all_candidates.dat ".
            "-time1 ".$obs_start." -time2 ".$obs_end." -nbeams ".$bp_ct{"NBEAM"}.
-           " -snr_cut 7 -scale 6 -nbeams_cut 10 ".
+           " -max_beam ".$bp_ct{"NBEAM"}." -snr_cut 7 -scale 6 -nbeams_cut 10 ".
            "-dev ".$utc_start."/".$timestamp.".FB.".sprintf("%02d", $img_idx).
            ".850x680.png/png";
     Dada::logMsg(2, $dl, "processCandidates: ".$cmd);
@@ -472,6 +488,7 @@ sub coincidencerThread()
   my $port = $cfg{"COINCIDENCER_PORT"};
   my $nbeam = $bp_ct{"NBEAM"};
   my $log = $cfg{"SERVER_LOG_DIR"}."/mopsr_coincidencer.log";
+  #my $cmd = "coincidencer -a ".$host." -p ".$port." -n ".$nbeam." | awk '{print strftime(\"%Y-%m-%d-%H:%M:%S\")\" \"$0 }' >> ".$log;
   my $cmd = "coincidencer -a ".$host." -p ".$port." -n ".$nbeam." >> ".$log;
 
   Dada::logMsg(1, $dl, "coincidencerThread: ".$cmd);
@@ -494,8 +511,8 @@ sub dumperThread ()
 
   my $host = $cfg{"SERVER_HOST"};
   my $port = $cfg{"FRB_DETECTOR_DUMPPORT"};
-  my $min_dump_separation = 60;   # seconds
-  my $min_email_separation = 30;  # seconds
+  my $min_dump_separation = 10;   # seconds
+  my $min_email_separation = 10;  # seconds
 
   my $socket = new IO::Socket::INET (
     LocalHost => $host,
@@ -608,6 +625,7 @@ sub dumperThread ()
                 %c = supplementCand(\%c);
  
                 # test for extra galacitcity
+                # TODO Change this value back to 0 after geting a J1644 dump
                 $c{"extra_galactic"} = 0;
                 if (($c{"galactic_dm"} ne "None") && ($c{"dm"} ne "None") && ($c{"dm"} > $c{"galactic_dm"}))
                 {
@@ -673,14 +691,18 @@ sub dumperThread ()
                                  "cflynn\@swin.edu.au,".
                                  "fjankowsk\@gmail.com,".
                                  "kaplant\@ucsc.edu,".
+                                 "adityapartha3112\@gmail.com,".
                                  "manisha.caleb\@anu.edu.au,".
                                  "mbailes\@swin.edu.au,".
                                  "stefanoslowski\@swin.edu.au,".
                                  "shivanibhandari58\@gmail.com,".
                                  "v.vikram.ravi\@gmail.com,".
+                                 "cday\@swin.edu.au,".
+                                 "vivekgupta\@swin.edu.au,".
                                  "vivekvenkris\@gmail.com,".
                                  "wfarah\@swin.edu.au";
-                  generateEmail ($to_email, $cc_email, $did_dump, \%c);
+                  my $email_thread = threads->new(\&generateEmail, $to_email, $cc_email, $did_dump, \%c);
+                  $email_thread->detach();
                 }
                 else
                 {
@@ -714,8 +736,10 @@ sub supplementCand(\%)
   my ($yyyy, $mm, $dd, $rest) = split("-",$h{"utc"}, 4);
   my ($hours, $mins, $secs) = split(":", $rest);
 
-  $h{"frb_name"} = "FRB ".$yyyy."-".$mm."-".$dd."-".$hours.":".$mins.":".$secs;
-  $h{"frb_prefix"} = "FRB".$yyyy.$mm.$dd;
+  $h{"frb_name"}  = "FRB ".$yyyy."-".$mm."-".$dd."-".$hours.":".$mins.":".$secs;
+  $h{"cand_name"} = "CAND ".$yyyy."-".$mm."-".$dd."-".$hours.":".$mins.":".$secs;
+  $h{"frb_prefix"}  = "FRB".$yyyy.$mm.$dd;
+  $h{"cand_prefix"} = "CAN".$yyyy.$mm.$dd;
 
   $h{"delta_md_deg"} = 0;
   $h{"nbeam"} = "None";
@@ -734,7 +758,9 @@ sub supplementCand(\%)
 
     my $centre_fanbeam = ($h{"nbeam"} / 2) + 1;
     my $delta_beam = $centre_fanbeam - $h{"beam"};
-    $h{"delta_md_deg"} = $h{"beam_spacing"} * $delta_beam;
+    # offset from HA=0 to MD=0
+    my $md_offset = 0.1976;
+    $h{"delta_md_deg"} = ($h{"beam_spacing"} * $delta_beam) - $md_offset;
   }
   else
   {
@@ -828,17 +854,7 @@ sub generateEmail ($$$\%)
   my ($to_email, $cc_email, $dumped, $cand_ref) = @_;
   my %h = %$cand_ref;
   my ($cmd, $result, $response);
-  my $bp_tag;
-
-  # try and determine the RA/DEC of the boresight beam
-  my $msg = MIME::Lite->new(
-   From    => 'UTMOST Transient Detector <noreply@utmost.usyd.edu.au>',
-    To      => $to_email,
-    Cc      => $cc_email,
-    Subject => $h{"frb_prefix"},
-    Type    => 'multipart/mixed',
-    Data    => "Here's the PNG file you wanted"
-  );
+  my ($bp_tag, $subject, $name);
 
   # generate HTML part of email
   my $html = "<body>";
@@ -847,17 +863,34 @@ sub generateEmail ($$$\%)
   if ($h{"extra_galactic"} == 1)
   {
     $html .= "<h3>FRB Candidate</h3>\n";
+    $subject = $h{"frb_prefix"};
+    $name = $h{"frb_name"};
   }
   else
   {
     $html .= "<h3>Transient Candidate</h3>\n";
+    $subject = $h{"cand_prefix"};
+    $name = $h{"cand_name"};
+    $to_email = "wfarah\@swin.edu.au";
+    $cc_email = "cflynn\@swin.edu.au,bateman.tim\@gmail.com,stefanoslowski\@swin.edu.au,vivekvenkris\@gmail.com";
   }
+
+  # try and determine the RA/DEC of the boresight beam
+  my $msg = MIME::Lite->new(
+   From    => 'UTMOST Transient Detector <noreply@utmost.usyd.edu.au>',
+    To      => $to_email,
+    Cc      => $cc_email,
+    Subject => $subject,
+    Type    => 'multipart/mixed',
+    Data    => "Here's the PNG file you wanted"
+  );
+
   $html .= "<table cellpadding=2 cellspacing=2>\n";
   $html .= "<tr><th style='text-align: left;'>SNR</th><td>".sprintf("%5.2f",$h{"snr"})."</td></tr>\n";
   $html .= "<tr><th style='text-align: left;'>DM</th><td>".sprintf("%5.2f",$h{"dm"})."</td></tr>\n";
   $html .= "<tr><th style='text-align: left;'>Width</th><td>".sprintf("%5.2f",$h{"width"}*1000)." ms</td></tr>\n";
   $html .= "<tr><th style='text-align: left;'>Probability</th><td>".sprintf("%5.3f",$h{"probability"})."</td></tr>\n";
-  $html .= "<tr><th style='text-align: left;'>Name</th><td>".$h{"frb_name"}."</td></tr>\n";
+  $html .= "<tr><th style='text-align: left;'>Name</th><td>".$name."</td></tr>\n";
   $html .= "<tr><th style='text-align: left;'>UTC</th><td>".$h{"utc"}."</td></tr>\n";
   $html .= "</table>\n";
 
@@ -980,7 +1013,7 @@ sub generateEmail ($$$\%)
   }
 
   $local_img = $h{"frb_prefix"}."_localisation_".$h{"sample"}.".png";
-  $cmd = "/home/observer/chris/fb2sky/frb_pos_jt.py -s ".$h{"utc_start"}." -e ".$h{"utc"}." -f ".$h{"beam"}." -n /tmp/".$local_img;
+  $cmd = "/home/observer/chris/fb2sky/frb_pos_jt.py -s ".$h{"utc_start"}." -e ".$h{"utc"}." -f ".$h{"beam"}." -n /tmp/".$local_img." -N ".$bp_ct{"NBEAM"};
   if ($h{"DELAY_TRACKING"} ne "true")
   {
     $cmd .= " -t";
@@ -1016,7 +1049,10 @@ sub generateEmail ($$$\%)
 
   $msg->send;
 
-  sleep (1);
+  # sleep allow the email to be sent with attachments
+  my $email_wait = 30;
+  Dada::logMsg(1, $dl, "generateEmail: waiting ".$email_wait." for postfix to send email + attachements");
+  sleep($email_wait);
 
   $cmd = "rm -f /tmp/".$h{"frb_prefix"}."_*_".$h{"sample"}.".png";
   Dada::logMsg(1, $dl, "generateEmail: ".$cmd);
