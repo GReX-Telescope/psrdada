@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "config.h"
 #include "ipcio_cuda.h"
 #include "ipcbuf_cuda.h"
 
@@ -17,6 +18,13 @@ ssize_t ipcio_read_cuda (ipcio_t* ipc, char* ptr, size_t bytes, cudaStream_t str
     fprintf (stderr, "ipcio_read_cuda invalid ipcio_t (rdwrt=%c)\n", ipc->rdwrt);
     return -1;
   }
+ 
+  cudaMemcpyKind kind = cudaMemcpyHostToDevice; 
+  // >= 0 if buffers are located in device memory
+  if (ipcbuf_get_device((ipcbuf_t*)ipc) >= 0)
+  {
+    kind = cudaMemcpyDeviceToDevice;
+  }
 
   while (!ipcbuf_eod((ipcbuf_t*)ipc))
   {
@@ -25,8 +33,8 @@ ssize_t ipcio_read_cuda (ipcio_t* ipc, char* ptr, size_t bytes, cudaStream_t str
       ipc->curbuf = ipcbuf_get_next_read ((ipcbuf_t*)ipc, &(ipc->curbufsz));
 
 #ifdef _DEBUG
-      fprintf (stderr, "ipcio_read buffer:%"PRIu64" %"PRIu64" bytes. buf[0]=%x\n",
-               ipc->buf.sync->r_buf, ipc->curbufsz, ipc->curbuf[0]);
+      fprintf (stderr, "ipcio_read buffer: %"PRIu64" bytes. buf[0]=%p\n",
+               ipc->curbufsz, (void *) ipc->curbuf);
 #endif
 
       if (!ipc->curbuf)
@@ -46,9 +54,9 @@ ssize_t ipcio_read_cuda (ipcio_t* ipc, char* ptr, size_t bytes, cudaStream_t str
       if (ptr)
       {
         if (stream)
-          cudaMemcpyAsync (ptr, ipc->curbuf + ipc->bytes, space, cudaMemcpyHostToDevice, stream);
+          cudaMemcpyAsync (ptr, ipc->curbuf + ipc->bytes, space, kind, stream);
         else
-          cudaMemcpy (ptr, ipc->curbuf + ipc->bytes, space, cudaMemcpyHostToDevice);
+          cudaMemcpy (ptr, ipc->curbuf + ipc->bytes, space, kind);
         ptr += space;
       }
 
