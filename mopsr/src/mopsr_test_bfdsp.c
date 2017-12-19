@@ -19,6 +19,7 @@
 #include <assert.h>
 #include <math.h>
 #include <cuda_runtime.h>
+#include <cuda_fp16.h>
 
 #define JUST_GPU
 
@@ -43,13 +44,13 @@ int main(int argc, char** argv)
   int arg = 0;
 
   unsigned nant = 352;
-  int nbeam = 352;
+  int nbeam = 512;
   const unsigned ndim_in = 2;
   const unsigned ndim_ou = 1;
 #ifdef HIRES
   uint64_t nsamp = 16384;
   unsigned tdec  = 32;
-  unsigned nchan = 10;
+  unsigned nchan = 24;
 #else
   uint64_t nsamp = 16384 * 6;
   //uint64_t nsamp = 4096;
@@ -205,13 +206,21 @@ int main(int argc, char** argv)
   fprintf (stderr, "OUT: nbeam=%u nchan=%u ndim=%u nbit=%u nsamp=%"PRIu64" block_size=%"PRIu64"\n", nbeam, nchan, ndim_ou, nbyte_ou*8, nsamp/tdec, ou_block_size);
 
   void * d_in;
+  void * d_in_fts;
   void * d_fbs;
+  void * d_fbs_eb;
   void * d_phasors;
+  void * d_phasors_16;
+  void * d_phasors_8;
   void * h_in;
   void * h_out;
+  void * h_out_eb;
   void * h_out_cpu;
   float * h_ant_factors;
   float * h_phasors;
+  float * h_phasors_16;
+  float * h_phasors_32;
+  int8_t * h_phasors_8;
 
   error = cudaMallocHost( &h_in, in_block_size);
   if (error != cudaSuccess)
@@ -244,6 +253,14 @@ int main(int argc, char** argv)
     return -1;
   }
 
+  error = cudaMallocHost( &h_out_eb, ou_block_size);
+  if (error != cudaSuccess)
+  {
+    fprintf(stderr, "alloc: could not allocate %ld bytes of pinned host memory\n", ou_block_size);
+    return -1;
+  }
+
+
   h_out_cpu = malloc(ou_block_size);
 
   // allocte CPU memory for each re-phasor
@@ -266,6 +283,9 @@ int main(int argc, char** argv)
   }
 
   size_t phasors_size = nchan * nant * nbeam * sizeof(float) * 2;
+  size_t phasors_8_size = nchan * nant * nbeam * sizeof(int8_t) * 2;
+  size_t phasors_16_size = nchan * nant * nbeam * sizeof(float);
+  size_t phasors_32_size = nchan * nant * nbeam * sizeof(float) * 2;
   error = cudaMallocHost( (void **) &(h_phasors), phasors_size);
   if (error != cudaSuccess)
   {
@@ -273,10 +293,37 @@ int main(int argc, char** argv)
     return -1;
   }
 
+  if (verbose)
+    fprintf(stderr, "allocating %ld bytes of host memory for phasors_8\n", phasors_8_size);
+  error = cudaMallocHost( (void **) &(h_phasors_8), phasors_8_size);
+  if (error != cudaSuccess)
+  {
+    fprintf(stderr, "alloc: could not allocate %ld bytes of device memory\n", phasors_8_size);
+    return -1;
+  }
+
+  error = cudaMallocHost( (void **) &(h_phasors_16), phasors_16_size);
+  if (error != cudaSuccess)
+  {
+    fprintf(stderr, "alloc: could not allocate %ld bytes of device memory\n", phasors_16_size);
+    return -1;
+  }
+
+  error = cudaMallocHost( (void **) &(h_phasors_32), phasors_32_size);
+  if (error != cudaSuccess)
+  {
+    fprintf(stderr, "alloc: could not allocate %ld bytes of device memory\n", phasors_32_size);
+    return -1;
+  }
+
+
   unsigned nbeamant = nant * nbeam;
   float * phasors_ptr = (float *) h_phasors;
-  unsigned re, im;
-  unsigned chan_stride = nbeam * nant * 2;
+  uint16_t * phasors_16_ptr = (uint16_t *) h_phasors_16;
+  float * phasors_32_ptr = (float *) h_phasors_32;
+  int8_t * phasors_8_ptr = (int8_t *) h_phasors_8;
+  unsigned re, im, idx;
+  unsigned chan_stride = nbeam * nant;
 
   for (ibeam=0; ibeam<nbeam; ibeam++)
   {
@@ -287,20 +334,39 @@ int main(int argc, char** argv)
       for (ichan=0; ichan<nchan; ichan++)
       {
         double theta = -2 * M_PI * channels[ichan].cfreq * 1000000 * geometric_delay;
+        //theta = 0.0;
 
         // packed in FS order with the cos, and sin terms separate
-        unsigned idx = (ichan * chan_stride) + (ibeam * nant) + iant;
-        h_phasors[idx] = (float) cos(theta);
-        h_phasors[idx + nbeamant] = (float) sin(theta);
+        idx = (ichan * chan_stride * 2) + (ibeam * nant) + iant;
+        phasors_ptr[idx] = (float) cos(theta);
+        phasors_ptr[idx + nbeamant] = (float) sin(theta);
+
+        idx = (ichan * chan_stride) + (ibeam * nant) + iant;
+        phasors_32_ptr[2*idx] = phasors_ptr[idx];
+        phasors_32_ptr[2*idx + 1] = phasors_ptr[idx+nbeamant];
       }
     }
   }
+
+  // convert from 32-bit phasors to 16-bit
+  //mopsr_convert_float_to_half (h_phasors_32, h_phasors_16,  nchan * nant * nbeam * 2);
 
   if (verbose)
     fprintf(stderr, "alloc: allocating %ld bytes of device memory for d_in\n", in_block_size);
   error = cudaMalloc( &(d_in), in_block_size);
   if (verbose)
     fprintf(stderr, "alloc: d_in=%p\n", d_in);
+  if (error != cudaSuccess)
+  {
+    fprintf(stderr, "alloc: could not allocate %ld bytes of device memory\n", in_block_size);
+    return -1;
+  }
+
+  if (verbose)
+    fprintf(stderr, "alloc: allocating %ld bytes of device memory for d_in_fts\n", in_block_size);
+  error = cudaMalloc( &(d_in_fts), in_block_size);
+  if (verbose)
+    fprintf(stderr, "alloc: d_in_fts=%p\n", d_in_fts);
   if (error != cudaSuccess)
   {
     fprintf(stderr, "alloc: could not allocate %ld bytes of device memory\n", in_block_size);
@@ -319,15 +385,50 @@ int main(int argc, char** argv)
   }
 
   if (verbose)
-    fprintf(stderr, "alloc: allocating %ld bytes of device memory for d_fbs\n", phasors_size);
+    fprintf(stderr, "alloc: allocating %ld bytes of device memory for d_fbs_eb\n", ou_block_size);
+  error = cudaMalloc( &(d_fbs_eb), ou_block_size);
+  if (verbose)
+    fprintf(stderr, "alloc: d_fbs_eb=%p\n", d_fbs_eb);
+  if (error != cudaSuccess)
+  {
+    fprintf(stderr, "alloc: could not allocate %ld bytes of device memory\n", ou_block_size);
+    return -1;
+  }
+
+
+  if (verbose)
+    fprintf(stderr, "alloc: allocating %ld bytes of device memory for d_phasors\n", phasors_size);
   error = cudaMalloc( &(d_phasors), phasors_size);
   if (verbose)
-    fprintf(stderr, "alloc: d_fbs=%p\n", d_phasors);
+    fprintf(stderr, "alloc: d_phasors=%p\n", d_phasors);
   if (error != cudaSuccess)
   {
     fprintf(stderr, "alloc: could not allocate %ld bytes of device memory\n", phasors_size);
     return -1;
   }
+
+  if (verbose)
+    fprintf(stderr, "alloc: allocating %ld bytes of device memory for d_phasors_16\n", phasors_16_size);
+  error = cudaMalloc( &(d_phasors_16), phasors_16_size);
+  if (verbose)
+    fprintf(stderr, "alloc: d_phasors_16=%p\n", d_phasors_16);
+  if (error != cudaSuccess)
+  {
+    fprintf(stderr, "alloc: could not allocate %ld bytes of device memory\n", phasors_16_size);
+    return -1;
+  }
+
+  if (verbose)
+    fprintf(stderr, "alloc: allocating %ld bytes of device memory for d_phasors_8\n", phasors_8_size);
+  error = cudaMalloc( &(d_phasors_8), phasors_8_size);
+  if (verbose)
+    fprintf(stderr, "alloc: d_phasors_8=%p\n", d_phasors_8);
+  if (error != cudaSuccess)
+  {
+    fprintf(stderr, "alloc: could not allocate %ld bytes of device memory\n", phasors_8_size);
+    return -1;
+  }
+
 
   cudaStreamSynchronize(stream);
 
@@ -338,6 +439,27 @@ int main(int argc, char** argv)
   {
     fprintf(stderr, "cudaMemcpyAsyc H2D failed: %s (%p <- %p)\n", cudaGetErrorString(error),
               d_phasors, h_phasors);
+    return -1;
+  }
+
+  if (verbose > 1)
+    fprintf(stderr, "io_block: cudaMemcpyAsync block H2D %ld: (%p <- %p)\n", phasors_8_size, d_phasors_8, h_phasors_8);
+  error = cudaMemcpyAsync (d_phasors_8, h_phasors_8, phasors_8_size, cudaMemcpyHostToDevice, stream);
+  if (error != cudaSuccess)
+  {
+    fprintf(stderr, "cudaMemcpyAsyc H2D failed: %s (%p <- %p)\n", cudaGetErrorString(error),
+              d_phasors_8, h_phasors_8);
+    return -1;
+  }
+
+
+  if (verbose > 1)
+    fprintf(stderr, "io_block: cudaMemcpyAsync block H2D %ld: (%p <- %p)\n", phasors_16_size, d_phasors_16, h_phasors_16);
+  error = cudaMemcpyAsync (d_phasors_16, h_phasors_16, phasors_16_size, cudaMemcpyHostToDevice, stream);
+  if (error != cudaSuccess)
+  {
+    fprintf(stderr, "cudaMemcpyAsyc H2D failed: %s (%p <- %p)\n", cudaGetErrorString(error),
+              d_phasors_16, h_phasors_16);
     return -1;
   }
 
@@ -368,6 +490,27 @@ int main(int argc, char** argv)
       fprintf(stderr, "cudaMemcpyAsync D2H failed: %s\n", cudaGetErrorString(error));
       return -1;
     }
+    // now do it the other way
+
+    /*
+    // transpose
+    mopsr_input_transpose_FST_to_FTS (stream, d_in, d_in_fts, in_block_size, nchan, nant);
+
+    // and beam form
+    mopsr_tile_beams_transpose (stream, d_in_fts, d_fbs_eb, d_phasors_16, in_block_size, nbeam, nant, nchan);
+
+    if (verbose > 1)
+      fprintf(stderr, "io_block: cudaMemcpyAsync(%p, %p, %"PRIu64", D2H)\n",
+                h_out_eb, d_fbs_eb, ou_block_size);
+    error = cudaMemcpyAsync ( h_out_eb, d_fbs_eb, ou_block_size,
+                              cudaMemcpyDeviceToHost, stream);
+    if (error != cudaSuccess)
+    {
+      fprintf(stderr, "cudaMemcpyAsync D2H failed: %s\n", cudaGetErrorString(error));
+      return -1;
+    }
+    */
+
   }
   cudaStreamSynchronize(stream);
 
@@ -375,12 +518,37 @@ int main(int argc, char** argv)
 
   unsigned ndim = 2;
   unsigned nsamp_out = in_block_size / (nchan * nant * ndim * tdec);
-
+/*
   fprintf (stderr, "mopsr_tile_beams_cpu()\n");
   mopsr_tile_beams_cpu (h_in, h_out_cpu, h_phasors, in_block_size, nbeam, nchan, nant, tdec);
 
+  fprintf (stderr, "comparing AJ version()\n");
+
   float * gpu_ptr = (float *) h_out;
   float * cpu_ptr = (float *) h_out_cpu;
+
+  uint64_t ival=0;
+  for (ibeam=0; ibeam<nbeam; ibeam++)
+  {
+    for (ichan=0; ichan<nchan; ichan++)
+    {
+      for (isamp=0; isamp<nsamp_out; isamp++)
+      {
+        const float cpu = cpu_ptr[ival];
+        const float gpu = gpu_ptr[ival];
+        float ratio = cpu > gpu ? cpu / gpu : gpu / cpu;
+        if (fabs(ratio) > 1.00001)
+          fprintf (stderr, "[%d][%d][%d] mismatch ratio=%f (cpu==%f != gpu==%f)\n", ibeam, ichan, isamp, ratio, cpu, gpu);
+
+        ival++;
+      }
+    }
+  }
+*/
+  fprintf (stderr, "comparing EB version()\n");
+
+  float * gpu_ptr = (float *) h_out_eb;
+  float * cpu_ptr = (float *) h_out;
 
   uint64_t ival=0;
   for (ibeam=0; ibeam<nbeam; ibeam++)
@@ -399,6 +567,8 @@ int main(int argc, char** argv)
     }
   }
 
+
+
 #endif
 
   if (d_in)
@@ -411,6 +581,18 @@ int main(int argc, char** argv)
     }
   }
   d_in = 0;
+
+  if (d_in_fts)
+  {
+    error = cudaFree(d_in_fts);
+    if (error != cudaSuccess)
+    {
+      fprintf (stderr, "cudaFree(d_in_stf) failed: %s\n", cudaGetErrorString(error));
+      return -1;
+    }
+  }
+  d_in_fts = 0;
+
 
   if (d_fbs)
   {
@@ -548,8 +730,10 @@ int mopsr_tile_beams_cpu (void * h_in, void * h_out, void * h_phasors, uint64_t 
             for (iant=0; iant<nant; iant++)
             {
               val16 = in16[iant*nsamp + isamp];
-              re = ((float) val8[0]) / scale;
-              im = ((float) val8[1]) / scale;
+              //re = ((float) val8[0]) / scale;
+              //im = ((float) val8[1]) / scale;
+              re = (float) val8[0];
+              im = (float) val8[1];
               incoherent_power += (re * re) + (im * im);
             }
             beam_power   += incoherent_power;
@@ -562,8 +746,10 @@ int mopsr_tile_beams_cpu (void * h_in, void * h_out, void * h_phasors, uint64_t 
             {
               // unpack this sample and antenna
               val16 = in16[iant*nsamp + isamp];
-              re = ((float) val8[0]) / scale;
-              im = ((float) val8[1]) / scale;
+              //re = ((float) val8[0]) / scale;
+              //im = ((float) val8[1]) / scale;
+              re = (float) val8[0];
+              im = (float) val8[1];
               val = re + im * I;
 
               steered = val * beam_phasors[iant];
@@ -609,4 +795,3 @@ int mopsr_tile_beams_cpu (void * h_in, void * h_out, void * h_phasors, uint64_t 
   }
   return 0;
 }
-
