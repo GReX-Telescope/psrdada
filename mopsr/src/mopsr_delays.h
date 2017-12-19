@@ -43,6 +43,8 @@ extern "C" {
 #define MOLONGLO_HALF_MODULE_LENGTH  2.21
 #define MOLONGLO_AZIMUTH_CORR  (4.9 * AS2D * DD2R)
 #define MOLONGLO_ARRAY_SLOPE   (1.0 / 289.9)
+#define MOLONGLO_ARRAY_SLOPE_EAST   (1.0 / 290.80)
+#define MOLONGLO_ARRAY_SLOPE_WEST   (1.0 / 289.52)
 
 typedef struct {
   char  name[4];        // bay name
@@ -152,7 +154,10 @@ double ns_tilt (double ha_source, double dec_source, double md_tilt);
 double jer_delay(double ha_source, double dec_source,
              double tilt, double skew, double latitude);
 double calc_jer_delay (double RA, double DEC, struct timeval timestamp);
+double calc_jer_delay_west (double RA, double DEC, struct timeval timestamp);
+double calc_jer_delay_east (double RA, double DEC, struct timeval timestamp);
 double calc_doc_delay (double RA, double DEC, struct timeval timestamp);
+double jer_delay(double ha_source, double dec_source, double tilt, double skew, double latitude);
 double doc_delay(double ha, double dec, double tilt, double skew, double latitude);
 
 

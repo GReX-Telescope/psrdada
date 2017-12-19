@@ -489,12 +489,33 @@ double calc_ha_source ( double RA_curr, double DEC_curr, struct timeval timestam
 }
 
 
+double calc_jer_delay_west (double RA_curr, double DEC_curr, struct timeval timestamp)
+{
+  double hour_angle = calc_ha_source (RA_curr, DEC_curr, timestamp);
+  double projected_delay = jer_delay (hour_angle, DEC_curr,
+                                      MOLONGLO_ARRAY_SLOPE_WEST,
+                                      MOLONGLO_AZIMUTH_CORR,
+                                      MOLONGLO_LATITUDE);
+  return projected_delay;
+}
+
+double calc_jer_delay_east (double RA_curr, double DEC_curr, struct timeval timestamp)
+{
+  double hour_angle = calc_ha_source (RA_curr, DEC_curr, timestamp);
+  double projected_delay = jer_delay (hour_angle, DEC_curr,
+                                      MOLONGLO_ARRAY_SLOPE_EAST,
+                                      MOLONGLO_AZIMUTH_CORR,
+                                      MOLONGLO_LATITUDE);
+  return projected_delay;
+}
+
+
 double calc_jer_delay (double RA_curr, double DEC_curr, struct timeval timestamp)
 {
 
   double hour_angle = calc_ha_source (RA_curr, DEC_curr, timestamp);
 
-  double projected_delay = doc_delay (hour_angle, DEC_curr,
+  double projected_delay = jer_delay (hour_angle, DEC_curr,
                                       MOLONGLO_ARRAY_SLOPE,
                                       MOLONGLO_AZIMUTH_CORR,
                                       MOLONGLO_LATITUDE);
