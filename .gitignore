@@ -172,6 +172,7 @@ mopsr/src/mopsr_dbstats
 mopsr/src/mopsr_dbsumdb
 mopsr/src/mopsr_dbtransposedb
 mopsr/src/mopsr_dumpplot
+mopsr/src/mopsr_dbxgpu
 mopsr/src/mopsr_fringeplot
 mopsr/src/mopsr_genbpdada
 mopsr/src/mopsr_getlst
@@ -183,11 +184,15 @@ mopsr/src/mopsr_maskplot
 mopsr/src/mopsr_numdb
 mopsr/src/mopsr_phase_diff_transit
 mopsr/src/mopsr_phase_differencer
+mopsr/src/mopsr_phase_differencer_slope_test
+mopsr/src/mopsr_phase_differencer_slope_test2
 mopsr/src/mopsr_plot_acs
+mopsr/src/mopsr_plot_antmasks
 mopsr/src/mopsr_plot_baseline
 mopsr/src/mopsr_plot_baselines
 mopsr/src/mopsr_plot_baselines_vivek
 mopsr/src/mopsr_plot_cands
+mopsr/src/mopsr_plot_masks
 mopsr/src/mopsr_print_drifts
 mopsr/src/mopsr_pulsedada
 mopsr/src/mopsr_solve_delays
@@ -201,6 +206,7 @@ mopsr/src/mopsr_test_delays
 mopsr/src/mopsr_test_delays_docjer
 mopsr/src/mopsr_test_delays_hires
 mopsr/src/mopsr_test_delays_plot
+mopsr/src/mopsr_test_delays_skew
 mopsr/src/mopsr_test_hirespacket
 mopsr/src/mopsr_test_kernel
 mopsr/src/mopsr_test_mergesort
@@ -211,6 +217,7 @@ mopsr/src/mopsr_test_sk_kernel_hires
 mopsr/src/mopsr_test_transpose_FT_to_TF
 mopsr/src/mopsr_test_transpose_TS_to_ST
 mopsr/src/mopsr_udpcorr
+mopsr/src/mopsr_udpcorr_hires
 mopsr/src/mopsr_udpdb
 mopsr/src/mopsr_udpdb_16
 mopsr/src/mopsr_udpdb_dual
@@ -234,6 +241,7 @@ mopsr/src/snapsr_dadacorrplot_full
 mopsr/src/snapsr_udpdb
 mopsr/src/snapsr_udpfftplot
 mopsr/src/snapsr_udpplot
+mopsr/src/mopsr_xgpu_convert
 ska1/src/ska1_udpdb
 ska1/src/ska1_udpdb_thread
 ska1/src/ska1_udpgen
