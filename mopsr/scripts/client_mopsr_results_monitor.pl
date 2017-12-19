@@ -225,7 +225,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
 
         # get any stats files
         @stats_files = ();
-        $cmd = "find ".$client_mon_dir." -mindepth 1 -maxdepth 1 -type f -name '*.stats' -printf '%f\n' | sort";
+        $cmd = "find ".$client_mon_dir." -mindepth 1 -maxdepth 1 -type f -name '*stats' -printf '%f\n' | sort";
         msg(2, "INFO", "main: ".$cmd);
         ($result, $response) = Dada::mySystem($cmd);
         if (($result eq "ok") && ($response ne ""))
@@ -233,7 +233,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
           @stats_files = split (/\n/, $response);
           foreach $file (@stats_files)
           {
-            $file_list .= $client_mon_dir."/".$file;
+            $file_list .= $client_mon_dir."/".$file." ";
           }
         }
         msg(2, "INFO", "main: file_list=".$file_list);
