@@ -272,44 +272,105 @@ sub getObsToSend()
 
   @lines = split(/\n/, $response);
   
-  for ($i=0; (!$found_obs && $i<=$#lines); $i++)
+  for ($i=0; (!$quit_daemon && !$found_obs && $i<=$#lines); $i++)
   {
     $line = $lines[$i];
 
-    # Tied Beams should have a Jname as a subdirectory
-    $cmd = "find ".$results_dir."/".$line." -mindepth 1 -maxdepth 1 -type d -printf '%f\n'";
+    # get the boresight source name
+    $cmd = "grep ^SOURCE ".$results_dir."/".$line."/obs.info | awk '{print \$2}'";
     Dada::logMsg(2, $dl, "getObsToSend: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     Dada::logMsg(3, $dl, "getObsToSend: ".$result." ".$response);
-
-    if (($result ne "ok") || ($response eq ""))
+    if ($result ne "ok" || $response eq "")
     {
-      Dada::logMsg(2, $dl, "getObsToSend: could not find and subdirs of ".$line);
+      Dada::logMsg(1, $dl, "getObsToSend: could not determine SOURCE in obs.info");
       next;
     }
+    my $boresight_source = $response;
 
-    my @sources = split(/\n/, $response);
-    my $j;
-    for ($j=0; (!$found_obs && $j<=$#sources); $j++)
+    # if the boresight source is a pulsar and we have filterbank data...
+    if ( ($boresight_source =~ m/^J/) && (-d ( $archives_dir."/FB")) )
     {
-      if (-f $results_dir."/".$line."/".$sources[$j]."/obs.header")
+      # look for obs.finished.#.# files
+      $cmd = "find ".$archives_dir."/".$line."/FB -mindepth 1 -maxdepth 1 -type f -name 'obs.finished.*.*' -printf '%f\n'";
+      Dada::logMsg(2, $dl, "getObsToSend: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      Dada::logMsg(3, $dl, "getObsToSend: ".$result." ".$response);
+      if ($result ne "ok")
       {
-        if ($sources[$j] =~ m/^J/)
+        Dada::logMsgWarn($warn, "getObsToSend: failed to count obs.finished.*.* files");
+        next;
+      }
+      if ($response eq "")
+      {
+        Dada::logMsg(1, $dl, "getObsToSend: no FB obs.finished.*.* files found yet");
+        next;
+      }
+
+      my @files = split(/\n/, $response);
+      my $file = $files[0];
+      my @file_parts = split (/\./, $file);
+      my $nfiles_expected = $file_parts[$#file_parts];
+      my $nfiles_actual = $#file_parts + 1;
+      Dada::logMsg(1, $dl, "getObsToSend: ".$nfiles_actual." of ".$nfiles_expected." found");
+
+      if ($nfiles_actual < $nfiles_expected)
+      {
+        Dada::logMsg(1, $dl, "getObsToSend: still waiting for FB files to be transferred");
+        next;
+      }
+      $found_obs = 1;
+      $obs = $line;
+      $src = "FB";
+    }
+
+    if ($found_obs == 0)
+    {
+      # Tied Beams should have a Jname as a subdirectory
+      $cmd = "find ".$results_dir."/".$line." -mindepth 1 -maxdepth 1 -type d -printf '%f\n'";
+      Dada::logMsg(3, $dl, "getObsToSend: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      Dada::logMsg(3, $dl, "getObsToSend: ".$result." ".$response);
+
+      if (($result ne "ok") || ($response eq ""))
+      {
+        Dada::logMsg(2, $dl, "getObsToSend: could not find and subdirs of ".$line);
+        next;
+      }
+
+      my @sources = split(/\n/, $response);
+      my $j;
+      for ($j=0; (!$found_obs && $j<=$#sources); $j++)
+      {
+        if (-f $results_dir."/".$line."/".$sources[$j]."/obs.header")
         {
-          $obs = $line;
-          $src = $sources[$j];
-        
-          $cmd = "grep ^FREQ ".$results_dir."/".$obs."/".$src."/obs.header | awk '{print \$2}'";
-          ($result, $response) = Dada::mySystem($cmd);
-          Dada::logMsg(3, $dl, "getObsToSend: ".$result." ".$response);
-          if ($result ne "ok")
+          if ($sources[$j] =~ m/^J/)
           {
-            Dada::logMsgWarn($warn, "getObsToSend: could not extrat FREQ from ".$obs."/TB/obs.header");
-            next;
+            $obs = $line;
+            $src = $sources[$j];
+          
+            $cmd = "grep ^FREQ ".$results_dir."/".$obs."/".$src."/obs.header | awk '{print \$2}'";
+            ($result, $response) = Dada::mySystem($cmd);
+            Dada::logMsg(3, $dl, "getObsToSend: ".$result." ".$response);
+            if ($result ne "ok")
+            {
+              Dada::logMsgWarn($warn, "getObsToSend: could not extrat FREQ from ".$obs."/TB/obs.header");
+              next;
+            }
+            $freq = $response;
+            $found_obs = 1;
           }
-          $freq = $response;
-          $found_obs = 1;
         }
+      }
+
+      # this observation cannot be transferred, change from finished to completed 
+      if (!$found_obs)
+      {
+        $cmd = "mv ".$results_dir."/".$line."/obs.finished ".$results_dir."/".$line."/obs.completed";
+        Dada::logMsg(2, $dl, "getObsToSend: ".$cmd);
+        ($result, $response) = Dada::mySystem($cmd);
+        Dada::logMsg(3, $dl, "getObsToSend: ".$result." ".$response);
+        Dada::logMsg(1, $dl, $line." finished -> completed");
       }
     }
   }
