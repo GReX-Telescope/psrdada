@@ -223,6 +223,13 @@ int dada_junkdb_open (dada_client_t* client)
     }
   }
 
+  int nbit;
+  if (ascii_header_get (client->header, "NBIT", "%d", &nbit) != 1)
+  {
+    multilog (client->log, LOG_ERR, "Header with no NBIT\n");
+    return -1;
+  }
+
   // ensure that the incoming header fits in the client header buffer
   if (hdr_size > client->header_size) {
     multilog (client->log, LOG_ERR, "HDR_SIZE=%u > Block size=%"PRIu64"\n",
@@ -259,7 +266,14 @@ int dada_junkdb_open (dada_client_t* client)
   if (junkdb->write_gaussian) 
   {
     multilog (client->log, LOG_INFO, "open: generating gaussian data %"PRIu64"\n", junkdb->data_size);
-    fill_gaussian_data(junkdb->data, junkdb->data_size, junkdb->mean, junkdb->stddev);
+    if (nbit == 8)
+    {
+      fill_gaussian_data(junkdb->data, junkdb->data_size, junkdb->mean, junkdb->stddev);
+    }
+    else if (nbit == 32)
+    {
+      fill_gaussian_float ((float *) junkdb->data, junkdb->data_size / sizeof(float), junkdb->mean, junkdb->stddev);
+    }
     multilog (client->log, LOG_INFO, "open: data generated\n");
   }
 

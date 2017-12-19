@@ -688,7 +688,7 @@ sub state_reporter_thread($$)
     LocalHost => $host,
     LocalPort => $port,
     Proto => 'tcp',
-    Listen => 1,
+    Listen => 8,
     Reuse => 1,
   );
 
@@ -1057,6 +1057,7 @@ sub startFRBDetector ($$)
   $xml .=   "<nbit>".$h{"NBIT"}."</nbit>";
   $xml .=   "<tsamp>".$h{"TSAMP"}."</tsamp>";
   $xml .=   "<pulsar_flagging>true</pulsar_flagging>";
+  $xml .=   "<beam_spacing units='degrees'>".$h{"FB_BEAM_SPACING"}."</beam_spacing>";
   $xml .= "</frb_detector_message>";
 
   Dada::logMsg(2, $dl, "startFRB: ".$xml);

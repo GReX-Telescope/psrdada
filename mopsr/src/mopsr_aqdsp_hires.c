@@ -1368,11 +1368,13 @@ int aqdsp_open (dada_client_t* client)
   // setup masks if zapping 
   if (ctx->zap)
   {
+    unsigned header_size = 4096;
     char mask_header[4096];
     strcpy (mask_header, header);
     ascii_header_set (mask_header, "NBIT", "%d", 1);
     float mask_tsamp = ctx->tsamp * (1024);
     ascii_header_set (mask_header, "TSAMP", "%f", mask_tsamp);
+    ascii_header_set (mask_header, "HDR_SIZE", "%u", header_size);
     ascii_header_del (mask_header, "ANTENNAE");
     
     ctx->mask_fptrs = (FILE **) malloc (sizeof (FILE *) * ctx->nant);

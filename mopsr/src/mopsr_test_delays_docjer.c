@@ -51,7 +51,7 @@ int main(int argc, char** argv)
   char apply_geometric = 1;
 
   int print_module = -1;
-  float delta_dec = 1;
+  float delta_dec = 1.0 * M_PI / 180;
 
   while ((arg = getopt(argc, argv, "b:d:ghim:p:v")) != -1) 
   {
@@ -70,7 +70,7 @@ int main(int argc, char** argv)
         }
 
       case 'd':
-        delta_dec = atof (optarg);
+        delta_dec = atof (optarg) * M_PI / 180;
         break;
 
       case 'g':

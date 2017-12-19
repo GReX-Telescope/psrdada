@@ -311,7 +311,7 @@ int main (int argc, char **argv)
   mopsr_init_rng (stream, seed, nrngs, d_rstates);
 
   srand ( time(NULL) );
-  fill_gaussian_float ((float *) h_in, (nchan * nant * nsamp * ndim), 10.0f);
+  fill_gaussian_float ((float *) h_in, (nchan * nant * nsamp * ndim), 0.0f, 10.0f);
 
   // mask some bad!
   float * in = (float * ) h_in;

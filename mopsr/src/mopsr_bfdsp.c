@@ -184,6 +184,10 @@ int main(int argc, char** argv)
     exit(EXIT_FAILURE);
   }
 
+  if (core >= 0)
+    if (dada_bind_thread_to_core(core) < 0)
+      multilog(log, LOG_WARNING, "mopsr_bfdsp: failed to bind to core %d\n", core);
+
   // read the modules file that describes the array
   char * bays_file = argv[optind+1];
 

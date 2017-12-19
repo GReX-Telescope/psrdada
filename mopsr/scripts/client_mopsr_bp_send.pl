@@ -138,63 +138,37 @@ Dada::preventDuplicateDaemon(basename($0)." ".$send_id);
 
   my ($cmd, $result, $response, $raw_header, $full_cmd, $sleep_time);
 
-  $sleep_time = 1;
+  $sleep_time = 10;
 
   # continuously run mopsr_dbib for this BF
   while (!$quit_daemon)
   {
-    $cmd = "dada_header -k ".$db_key;
-    msg(2, "INFO", "main: ".$cmd);
-    $raw_header = `$cmd`;
-    msg(3, "INFO", "main: ".$raw_header);
-    if ($? != 0)
+    msg (0, "INFO", "waiting ".$sleep_time." seconds for mux_recv to configure");
+    while ((!$quit_daemon) && ($sleep_time > 0))
     {
-      if (!$quit_daemon)
-      {
-        msg(0, "ERROR", $cmd." failed: ".$response);
-        $quit_daemon = 1;
-        sleep (1);
-      }
-      else
-      {
-        msg(0, "INFO", $cmd." failed, but quit_daemon==true");
-      }
+      sleep(1);
+      $sleep_time--;
     }
-    else
+
+    if (!$quit_daemon)
     {
-      my %header = Dada::headerToHash ($raw_header);
-      msg (0, "INFO", "UTC_START=".$header{"UTC_START"}." NCHAN=".$header{"NCHAN"}." NANT=".$header{"NANT"});
-
-      open FH, ">/tmp/header.bp_send.".$send_id;
-      print FH $raw_header;
-      close FH;
-
-      $cmd = "mopsr_dbib_SFT -k ".$db_key." ".$send_id." ".$cfg{"CONFIG_DIR"}."/mopsr_bp_cornerturn.cfg -s";
+      # note all instances of dbib are bound to CPU core 6
+      $cmd = "mopsr_dbib_SFT -k ".$db_key." ".$send_id." ".$cfg{"CONFIG_DIR"}."/mopsr_bp_cornerturn.cfg -s -b 6";
 
       msg(1, "INFO", "START ".$cmd);
       ($result, $response) = Dada::mySystemPiped($cmd, $src_log_file, $src_log_sock, "src", sprintf("%02d",$send_id), $daemon_name, "bp_send");
-      msg(1, "INFO", "END   ".$cmd." ".$result." ".$response);
-
+      msg(1, "INFO", "END   ".$cmd);
       if ($result ne "ok")
       {
         if (!$quit_daemon)
         {
-          msg(0, "INFO", $cmd." failed: ".$response);
-          $sleep_time += 5;
-
-          # this can occurr when not all receivers are ready
-          msg(0, "INFO", "Trying again after ".$sleep_time." seconds");
-          sleep ($sleep_time);
-        }
-        if ($sleep_time > 20)
-        {
-          msg(0, "ERR", "Failed to create connection to ibdb");
-          $quit_daemon = 1;
+          msg(0, "INFO", "dbib failed, will try again");
+          $sleep_time = 5;
         }
       }
       else
       {
-        $sleep_time = 1;
+        $sleep_time = 10;
       }
     }
   }

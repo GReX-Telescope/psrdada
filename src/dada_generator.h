@@ -21,7 +21,7 @@ void fill_gaussian_chars(char *data, int size, int nbits, int gain);
 void fill_gaussian_data (char *data, int length, double mean, double stddev);
 void fill_cal_chars(char *data, int size, int nbits, int gain);
 void fill_gaussian_unsigned(unsigned int *data, int size, int nbits, int gain);
-void fill_gaussian_float (float * data, int nvals, float stddev);
+void fill_gaussian_float (float * data, int length, double mean, double stddev);
 void fill_cal_unsigned(unsigned int *data, int size, int nbits, int gain);
 char * int8_to_binary_string(int8_t value);
 char * int16_to_binary_string(int16_t value);

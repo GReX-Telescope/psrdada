@@ -198,6 +198,8 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
           msg(0, "ERROR", $cmd." failed: ".$response);
         }
       }
+      msg(1, "INFO", "sleep(5)");
+      sleep(5);
     }
   }
 

@@ -284,7 +284,7 @@ int main (int argc, char **argv)
     multilog (log, LOG_ERR, "could not open socket: %s\n", strerror(errno));
     quit = 2;
   }
-  else
+  else if (verbose)
     multilog (log, LOG_INFO, "listening on port %d for dump requests\n", port);
 
 

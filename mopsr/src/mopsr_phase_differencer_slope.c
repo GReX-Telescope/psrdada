@@ -34,7 +34,7 @@ void mopsr_baseline_phase_delays_plot (float * phases, unsigned nmod, unsigned m
 
 void usage ()
 {
-	fprintf(stdout, "mopsr_test_delays bays_file modules_file obs.header\n"
+	fprintf(stdout, "mopsr_phase_difference_slope bays_file modules_file obs.header\n"
     " -D dev      use pgplot devices [default /xs]\n" 
     " -a angle    apply md angle offset in degrees [default 0]\n" 
     " -d nsecs    plot time unit [default 10s]\n" 
@@ -121,13 +121,11 @@ int main(int argc, char** argv)
     }
   }
 
-/*
   fprintf (stderr, "delta_md_angle=%le radians\n", delta_md_angle);
   fprintf (stderr, "delta_freq=%le\n", delta_freq);
   fprintf (stderr, "delta_distance=%le\n", delta_distance);
   fprintf (stderr, "frank_nmod=%d\n", frank_nmod);
   fprintf (stderr, "delta_time=%f\n", delta_time);
-*/
 
   // check and parse the command line arguments
   if (argc-optind != 3)
@@ -136,6 +134,15 @@ int main(int argc, char** argv)
     usage();
     exit(EXIT_FAILURE);
   }
+
+
+  // read the calibration results into module_t 
+  mopsr_module_t * 3c273 = read_modules_file ("3C273.delays.sorted", &nmod);
+  mopsr_module_t * CJ0408_6545 = read_modules_file ("CJ0408-6545.delays.sorted", &nmod);
+  mopsr_module_t * CJ0408_7507 = read_modules_file ("CJ0408-7507.delays.sorted", &nmod);
+  mopsr_module_t * CJ0440_4333 = read_modules_file ("CJ0440-4333.delays.sorted", &nmod);
+  mopsr_module_t * CJ1018_3144 = read_modules_file ("CJ1018-3144.delays.sorted", &nmod);
+  mopsr_module_t * CJ1935_4620 = read_modules_file ("CJ1935-4620.delays.sorted", &nmod);
 
   unsigned ichan, imod;
 
@@ -196,47 +203,27 @@ int main(int argc, char** argv)
     fprintf (stderr, "ERROR: could not read header from %s\n", header_file);
     return EXIT_FAILURE;
   }
-      
-  // read source information from header
-  mopsr_source_t source;
 
-  if (ascii_header_get (header, "SOURCE", "%s", source.name) != 1)
-  {
-    fprintf (stderr, "ERROR:  could not read SOURCE from header\n");
-    return -1;
-  }
+  const unsigned nsources = 6;
+  mopsr_source_t sources[nsources];
 
-  char position[32];
-  if (ascii_header_get (header, "RA", "%s", position) != 1)
-  {
-    fprintf (stderr, "ERROR:  could not read RA from header\n");
-    return -1;
-  }
+  mopsr_delays_hhmmss_to_rad ("12:29:06.7", &(sources[0].raj));
+  mopsr_delays_ddmmss_to_rad ("02:03:09.0", &(sources[0].raj));
 
-  if (verbose)
-    fprintf (stderr, "RA (HMS) = %s\n", position);
-  if (mopsr_delays_hhmmss_to_rad (position, &(source.raj)) < 0)
-  {
-    fprintf (stderr, "ERROR:  could not parse RA from %s\n", position);
-    return -1;
-  }
-  if (verbose)
-    fprintf (stderr, " RA (rad) = %lf\n", source.raj);
+  mopsr_delays_hhmmss_to_rad ("04:08:20.3", &(sources[1].raj));
+  mopsr_delays_ddmmss_to_rad ("-65:45:08.5", &(sources[1].raj));
 
-  if (ascii_header_get (header, "DEC", "%s", position) != 1)
-  {
-    fprintf (stderr, "ERROR:  could not read RA from header\n");
-    return -1;
-  }
-  if (verbose)
-    fprintf (stderr, " DEC (DMS) = %s\n", position);
-  if (mopsr_delays_ddmmss_to_rad (position, &(source.decj)) < 0)
-  {
-    fprintf (stderr, "ERROR:  could not parse DEC from %s\n", position);
-    return -1;
-  }
-  if (verbose)
-    fprintf (stderr, " DEC (rad) = %lf\n", source.decj);
+  mopsr_delays_hhmmss_to_rad ("04:08:48.5", &(sources[2].raj));
+  mopsr_delays_ddmmss_to_rad ("-75:07:20.0", &(sources[2].raj));
+
+  mopsr_delays_hhmmss_to_rad ("04:40:17.07", &(sources[3].raj));
+  mopsr_delays_ddmmss_to_rad ("-43:33:09.0", &(sources[3].raj));
+
+  mopsr_delays_hhmmss_to_rad ("10:18:09.19", &(sources[4].raj));
+  mopsr_delays_ddmmss_to_rad ("-31:44:14.7", &(sources[4].raj));
+
+  mopsr_delays_hhmmss_to_rad ("19:35:57.2", &(sources[5].raj));
+  mopsr_delays_ddmmss_to_rad ("-46:20:43.1", &(sources[5].raj));
 
   float ut1_offset;
   if (ascii_header_get (header, "UT1_OFFSET", "%f", &ut1_offset) == 1)
@@ -272,8 +259,8 @@ int main(int argc, char** argv)
   timestamp.tv_usec = (long) (ut1_offset * 1000000);
 
   struct tm * utc = gmtime (&utc_start);
-  cal_app_pos_iau (source.raj, source.decj, utc,
-                    &(source.ra_curr), &(source.dec_curr));
+  for (i=0; i<nsources; i++)
+    cal_app_pos_iau (sources[i].raj, sources[i].decj, utc, &(sources[i].ra_curr), &(sources[i].dec_curr));
 
   // extract required metadata from header
   int nchan;
@@ -361,93 +348,83 @@ int main(int argc, char** argv)
   struct timeval timestamp1;
   struct timeval timestamp2;
 
-  unsigned npts = 1048576;
+  unsigned npts = 100;
   unsigned ipt = 0;
   float * phase_error = (float *) malloc (sizeof(float) * npts);
   float * baseline_phase_error = (float *) malloc(sizeof(float) * nmod);
 
   fprintf (stderr, "freq1=%lf freq2=%lf delta_freq=%le\n", channels1[0].cfreq, channels2[0].cfreq, channels1[0].cfreq - channels2[0].cfreq);
 
+  double slope_error = 0.01 * MOLONGLO_ARRAY_SLOPE;
+  double slope = MOLONGLO_ARRAY_SLOPE - slope_error;
+  double slope_step = slope_error * 2 / npts;
+
+  timestamp1.tv_sec = floor (ut1_time1);
+  timestamp2.tv_sec = floor (ut1_time2);
+  timestamp1.tv_usec = (long) ((ut1_time1 - (double) timestamp1.tv_sec) * 1000000);
+  timestamp2.tv_usec = (long) ((ut1_time2 - (double) timestamp2.tv_sec) * 1000000);
+
+  float results[nsources][352];
+
   while ( ipt < npts )
   {
-    timestamp1.tv_sec = floor (ut1_time1);
-    timestamp2.tv_sec = floor (ut1_time2);
-
-    timestamp1.tv_usec = (long) ((ut1_time1 - (double) timestamp1.tv_sec) * 1000000);
-    timestamp2.tv_usec = (long) ((ut1_time2 - (double) timestamp2.tv_sec) * 1000000);
+    slope += slope_step;
 
     start_md_angle2 = start_md_angle + (float) delta_md_angle;
 
-    if (verbose)
-      fprintf (stderr, "t1=%lf t2=%lf start_md=%f start_md2=%f\n", ut1_time1, ut1_time2, start_md_angle, start_md_angle2);
-
-#ifdef HIRES
-    if (calculate_delays_hires (nbay, bays1, nant, modules1, nchan, channels1,
-#else
-    if (calculate_delays (nbay, bays1, nant, modules1, nchan, channels1,
-#endif
-                          source, timestamp1, delays1, start_md_angle, 
+    // calculate the effect of this slope error on 3C273, which would have been absorbed into the calibration
+    if (calculate_delays_hires_slope (nbay, bays1, nant, modules1, nchan, channels1,
+                          sources[0], timestamp1, delays1, start_md_angle, 
                           apply_instrumental, apply_geometric, 
-                          is_tracking1, tsamp) < 0)
+                          is_tracking1, tsamp, MOLONGLO_ARRAY_SLOPE
+                         ) < 0)
     {
       fprintf (stderr, "failed to update delays\n");
       return -1;
     }
 
-#ifdef HIRES
-    if (calculate_delays_hires (nbay, bays2, nant, modules2, nchan, channels2,
-#else
-    if (calculate_delays (nbay, bays2, nant, modules2, nchan, channels2,
-#endif
-                          source, timestamp2, delays2, start_md_angle2, 
+    if (calculate_delays_hires_slope (nbay, bays2, nant, modules2, nchan, channels2,
+                          sources[0], timestamp2, delays2, start_md_angle2, 
                           apply_instrumental, apply_geometric, 
-                          is_tracking2, tsamp) < 0)
+                          is_tracking2, tsamp, slope) < 0)
     {
       fprintf (stderr, "failed to update delays\n");
       return -1;
     }
 
-    // for the specified antenna, compute the phase difference between 
-    // the 2 regeimes
-    double fringe1 = delays1[mod]->fringe_coeff;
-    double fringe2 = delays2[mod]->fringe_coeff;
-    double diff_phase = fringe1 - fringe2;
-
-    /*
-    fprintf (stderr, "fdiff=%le\n", fringe1 - fringe2);
-
-    complex double phasor1 = cos(fringe1) + sin(fringe1) * I;
-    complex double phasor2 = cos(fringe2) + sin(fringe2) * I;
-    complex double diff_phasor = phasor2 - phasor1;
-
-    fprintf (stderr, "(%lf, %lf) - (%lf, %lf) == (%le, %le) \n", creal(phasor1), cimag(phasor1), creal(phasor2), cimag(phasor2), creal(diff_phasor), cimag(diff_phasor));
-
-    double diff_phase = atan2(cimag(diff_phasor), creal(diff_phasor));
-*/
-    // compute the phase error for the module in question
-
-    phase_error[ipt] = (float) diff_phase;
-    if (verbose)
-      fprintf (stderr, "f1=%le f2=%le diff_phase=%le error=%f\n", fringe1, fringe2, diff_phase, phase_error[ipt]);
-
-    ipt++;
-
-    // compute the phase offset for each baseline against the reference module
     for (imod=0; imod<nmod; imod++)
     {
       fringe1 = delays1[imod]->fringe_coeff;
       fringe2 = delays2[imod]->fringe_coeff;
-      diff_phase = fringe1 - fringe2;
-      baseline_phase_error[imod] = (float) diff_phase;
-      if (verbose > 1)
-        fprintf (stderr, "m1=%s m2=%s f1=%le f2=%le diff_phase=%le error=%f\n", modules1[imod].name, modules2[imod].name, fringe1, fringe2, diff_phase, baseline_phase_error[imod]);
+      correction[imod] = fringe1 - fringe2;
     }
-    
-    mopsr_phase_delays_plot (phase_error, ipt, (ut1_time1 - (double) utc_start), "1/xs");
-    mopsr_baseline_phase_delays_plot (baseline_phase_error, nmod, mod, modules1, "2/xs");
 
-    ut1_time1 += delta_time_plot;
-    ut1_time2 += delta_time_plot;
+    // now subtract this "absorbed correction for each source
+    for (i=0; i<nsources; i++)
+    {
+      calculate_delays_hires_slope (nbay, bays1, nant, modules1, nchan, channels1,
+                                    sources[i], timestamp1, delays1, start_md_angle,
+                                    apply_instrumental, apply_geometric,
+                                    is_tracking1, tsamp, MOLONGLO_ARRAY_SLOPE);
+      calculate_delays_hires_slope (nbay, bays1, nant, modules1, nchan, channels1,
+                                    sources[i], timestamp1, delays1, start_md_angle,
+                                    apply_instrumental, apply_geometric,
+                                    is_tracking1, tsamp, slope);
+      for (imod=0; imod<nmod; imod++)
+      {     
+        fringe1 = delays1[imod]->fringe_coeff;
+        fringe2 = delays2[imod]->fringe_coeff;
+        results[i][imod] = fringe1 - fringe2;
+        results[i][imod] -= correction[imod];
+      }
+    }
+
+    mopsr_phase_delays_plot (results[0], 352, (ut1_time1 - (double) utc_start), "1/xs");
+    mopsr_phase_delays_plot (results[1], 352, (ut1_time1 - (double) utc_start), "2/xs");
+    mopsr_phase_delays_plot (results[2], 352, (ut1_time1 - (double) utc_start), "3/xs");
+    mopsr_phase_delays_plot (results[3], 352, (ut1_time1 - (double) utc_start), "4/xs");
+    mopsr_phase_delays_plot (results[4], 352, (ut1_time1 - (double) utc_start), "5/xs");
+    mopsr_phase_delays_plot (results[5], 352, (ut1_time1 - (double) utc_start), "6/xs");
 
     usleep (100000);
   }
@@ -475,7 +452,7 @@ int main(int argc, char** argv)
 void mopsr_phase_delays_plot (float * phases, unsigned npts, double obs_offset, char * device)
 {
   float xmin = 0;
-  float xmax = (float) obs_offset;
+  float xmax = (float) npts;
   float ymin = -1 * M_PI;
   float ymax =  1 * M_PI;
   float factor;

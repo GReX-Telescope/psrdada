@@ -76,7 +76,7 @@ FRB_DETECTOR_INCOHERENT   32300
 
 SMIRF_NEPENTHES_SERVER    32400
 SMIRF_COINCIDENCER_SERVER 32500
-
+SMIRF_INTER_NEPENTHES_SERVER 32450
 
 ###############################################################################
 # Client directory configuration

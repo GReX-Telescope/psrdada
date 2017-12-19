@@ -118,6 +118,19 @@ void fill_gaussian_data (char *data, int length, double mean, double stddev)
   }
 }
 
+// generate floating point data with the specified mean and stddev
+void fill_gaussian_float (float *data, int length, double mean, double stddev)
+{
+  unsigned i=0;
+  double sample;
+  int sample_int;
+  for (i=0; i<length; i++)
+  {
+    sample = rand_normal(mean, stddev);
+    data[i] = (float) sample;
+  }
+}
+
 /*
  * fill an unsigned int  array with gaussian noise 
  */
@@ -134,18 +147,6 @@ void fill_gaussian_unsigned (unsigned int *data, int size, int nbits, int gain)
     data[i] = (unsigned int) y;
   }
 }
-
-void fill_gaussian_float (float * data, int nvals, float stddev)
-{
-  printf ("data=%p nvals=%d stddev=%f\n", data, nvals, stddev);
-  int i;
-  for (i=0; i < nvals; i++) 
-  {
-    data[i] = (float) rand_normal (0, (double) stddev);
-    //printf ("data[%d] = %f (0, %f)\n", i, data[i], stddev);
-  }
-}
-
 
 /*
  * Fill char array of length size with a cal signal _--_ 
