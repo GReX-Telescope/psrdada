@@ -231,6 +231,18 @@ Dada::preventDuplicateDaemon(basename($0)." ".$bs_id);
               {
                 msg(1, "INFO", "No stiching was performed, touching obs.peasouped");
 
+                # since we have no candidates, client_mopsr_bs_dspsr will not mark this
+                # observation as processing -> finished, so lets do it here
+                my $dir = $cfg{"CLIENT_RESULTS_DIR"}."/".$bs_tag."/".$utc_start;
+                $cmd = "mv ".$dir."/obs.processing ".$dir."/obs.finished";
+                msg(2, "INFO", "main: ".$cmd);
+                ($result, $response) = Dada::mySystem($cmd);
+                msg(3, "INFO", "main: ".$result." ".$response);
+                if ($result ne "ok")
+                {
+                  msg(1, "ERROR", "Failed to move obs.processing to obs.finished");
+                }
+
                 # but we need to tell the local instances of BP that the peasouping are finished
                 $cmd = "ls -1 ".$cfg{"CLIENT_RECORDING_DIR"}."/BP??/".$utc_start."/FB/obs.completed";
                 msg(2, "INFO", "main: ".$cmd);
