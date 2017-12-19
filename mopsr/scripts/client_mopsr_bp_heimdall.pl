@@ -219,7 +219,14 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
       ($result, $response) = Dada::mySystem($cmd);
       msg(2, "INFO", "main: ".$cmd.": ".$result." ".$response);
 
-      $cmd = $proc_cmd;
+      if (exists($cfg{"BP_CORE_".$proc_id}))
+      {
+        $cmd = "numactl -C ".$cfg{"BP_CORE_".$proc_id}." ".$proc_cmd;
+      }
+      else
+      {
+        $cmd = $proc_cmd;
+      }
       msg(1, "INFO", "START ".$cmd);
       ($result, $response) = Dada::mySystemPiped($cmd, $src_log_file, $src_log_sock, "src", sprintf("%02d",$proc_id), $daemon_name, "bp_heimdall");
       msg(1, "INFO", "END   ".$cmd);
