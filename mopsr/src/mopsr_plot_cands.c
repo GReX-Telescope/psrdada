@@ -9,7 +9,7 @@
 
 void help() {
 
-  printf("Usage: >plot_cands -f <coincidenced cands file> -time1 <time1> -time2 <time2> -nbeams <nbeams> -nbeams_cut <max number of coincident beams> -snr_cut <snr cut> -max_filter_width <max filter width> -dev <> -scale <pixel_scale> -catted_raw_output -verbose\n");
+  printf("Usage: >plot_cands -f <coincidenced cands file> -time1 <time1> -time2 <time2> -nbeams <nbeams> -nbeams_cut <max number of coincident beams> -snr_cut <snr cut> -max_filter_width <max filter width> -dev <> -scale <pixel_scale> -min_beam <num> -max_beam <num> -catted_raw_output -verbose\n");
   exit(1);
   
 }
@@ -42,7 +42,9 @@ int main(int argc, char *argv[]) {
   char lgnd[100];
   sprintf(pg_dev,"/xs");
 
-  int nbeams = 1;
+  int nbeams = 352;
+  int min_beam = 1;
+  int max_beam = 352;
   int nbeams_cut = 10;
   float t_cand1 = 0.;
   float t_cand2 = 100.;
@@ -77,6 +79,12 @@ int main(int argc, char *argv[]) {
     if (strcmp(argv[i],"-nbeams_cut")==0) {
       nbeams_cut = atoi(argv[++i]);
     }
+    if (strcmp(argv[i],"-min_beam")==0) {
+      min_beam = atoi(argv[++i]);
+    }
+    if (strcmp(argv[i],"-max_beam")==0) {
+      max_beam = atoi(argv[++i]);
+    }
     if (strcmp(argv[i],"-scale")==0) {
       height_scale = atoi(argv[++i]);
     }
@@ -99,7 +107,7 @@ int main(int argc, char *argv[]) {
 
   if (verbose)
   {
-    fprintf (stderr, "nbeams=%d\n", nbeams);
+    fprintf (stderr, "nbeams=%d [%d-%d]\n", nbeams, min_beam, max_beam);
     fprintf (stderr, "max_filter_width=%d\n", max_filter_width);
     fprintf (stderr, "snr_cut=%f\n", snr_cut);
     fprintf (stderr, "verbose=%d\n", verbose);
@@ -194,7 +202,8 @@ int main(int argc, char *argv[]) {
   // main plot
 
   cpgsvp(0.1,0.82,0.15,0.9);
-  cpgswin(0,nbeams+1,t_cand1,t_cand2);
+  //cpgswin(0,nbeams+1,t_cand1,t_cand2);
+  cpgswin(min_beam,max_beam,t_cand1,t_cand2);
 
   // beam lines
   /*ppy[0]=t_cand1;
