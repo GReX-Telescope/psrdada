@@ -16,7 +16,7 @@
 /*!
   Returns a device pointer to a shared memory block and its shmid
 */
-void* ipc_alloc_cuda (key_t key, size_t size, int flag, int* shmid, void * shm_addr, int device_id)
+void* ipc_alloc_cuda (key_t key, size_t size, int flag, int* shmid, void ** shm_addr, int device_id)
 {
   void * devPtr = 0;
   cudaIpcMemHandle_t * handlePtr = 0;
@@ -43,8 +43,8 @@ void* ipc_alloc_cuda (key_t key, size_t size, int flag, int* shmid, void * shm_a
 #endif
 
   // pointer to cudaIpcMemHandle_t
-  shm_addr = shmat (id, 0, flag);
-  if (shm_addr == (void *)-1) 
+  *shm_addr = shmat (id, 0, flag);
+  if (*shm_addr == (void *)-1) 
   {
     fprintf (stderr,
        "ipc_alloc_cuda: shmat (shmid=%d) %s\n"
@@ -53,10 +53,10 @@ void* ipc_alloc_cuda (key_t key, size_t size, int flag, int* shmid, void * shm_a
     return 0;
   }
 
-  handlePtr = (cudaIpcMemHandle_t *) shm_addr;
+  handlePtr = (cudaIpcMemHandle_t *) *shm_addr;
 
 #ifdef _DEBUG
-  fprintf (stderr, "ipc_alloc_cuda: shm_addr=%p handlePtr=%p\n", shm_addr, handlePtr);
+  fprintf (stderr, "ipc_alloc_cuda: shm_addr=%p handlePtr=%p\n", *shm_addr, handlePtr);
   fprintf (stderr, "ipc_alloc_cuda: selecting device %d\n", device_id);
 #endif
 
@@ -114,6 +114,9 @@ void* ipc_alloc_cuda (key_t key, size_t size, int flag, int* shmid, void * shm_a
 // detach from memory segment
 int ipc_disconnect_cuda (void * devPtr)
 {
+#ifdef _DEBUG
+  fprintf (stderr, "ipc_disconnect_cuda: ipc_disconnect_cuda(%p)\n", devPtr);
+#endif
   cudaError_t error = cudaIpcCloseMemHandle (devPtr);
   if (error != cudaSuccess)
   {
@@ -123,7 +126,6 @@ int ipc_disconnect_cuda (void * devPtr)
   }
 
   // now restore 
-
   return 0;
 }
 
@@ -131,6 +133,9 @@ int ipc_disconnect_cuda (void * devPtr)
 int ipc_dealloc_cuda (void * devPtr, int device_id)
 {
   cudaSetDevice (device_id);
+#ifdef _DEBUG
+  fprintf (stderr, "ipc_disconnect_cuda: cudaFree(%p)\n", devPtr);
+#endif
   cudaError_t error = cudaFree (devPtr);
   if (error != cudaSuccess)
   {
