@@ -15,7 +15,7 @@ extern "C" {
 
   /* allocate size bytes in shared memory with the specified flags and key.
      returns the pointer to the base address and the shmid, id */
-  void* ipc_alloc_cuda (key_t key, size_t size, int flag, int* id, void * shm_addr, int device_id);
+  void* ipc_alloc_cuda (key_t key, size_t size, int flag, int* id, void ** shm_addr, int device_id);
 
   int ipc_disconnect_cuda (void * devPtr);
 
