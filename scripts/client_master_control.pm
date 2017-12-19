@@ -766,7 +766,7 @@ sub initDBs($\@)
 
           if ($numa ne "-1")
           {
-            $cmd .= " -c ".$cfg{"BLOCK_NUMA_".$db_id};
+            $cmd .= " -c ".$numa;
           }
 
           Dada::logMsg(1, $dl, "initDBs: pwc=".$pwc." cmd=".$cmd);
