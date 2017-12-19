@@ -549,6 +549,7 @@ sub udpMonitorThread ($)
       Dada::logMsg(2, DL, "udpMonitorThread: removeOldFiles");
       removeOldFiles($monitor_dir, 0, "png");
       removeOldFiles($monitor_dir, 0, "stats");
+      backupStatsFiles($monitor_dir, "bpstats");
       $img_clean_counter = $img_clean_time;
     }
   }
@@ -802,14 +803,16 @@ sub imageInfoThread($)
               $ant_type = "UNKNOWN";
             }
 
-            $image_string .= "<ant name='".$ant."' reason = '".$reason."' type='".$ant_type."'>";
+            $reason =~ s/'/\\'/g;
+            $image_string .= "<ant name='".$ant."' reason='".$reason."' type='".$ant_type."'>";
+
             foreach $key ( keys %{$to_use{$ant}} )
             {
               ($type, $res) = split(/\./, $key);
               ($xres, $yres) = split(/x/, $res);
               $image_string .= "<img type='".$type."' width='".$xres."' height='".$yres."'>results/".$utc_start."/".$to_use{$ant}{$key}."</img>";
             }
-            $image_string .= "</ant>\n";
+            $image_string .= "</ant>";
           }
 
           if ($img_clean_counter <= 0)
@@ -1237,4 +1240,63 @@ sub removeOldFiles($$$)
       Dada::logMsg(3, DL, "removeOldFiles: keeping ".$dir."/".$images[$i].", newest, age=".($now-$time_unix));
     }
   }
+}
+
+sub backupStatsFiles ($$)
+{
+  my ($dir, $ext) = @_;
+
+  my ($cmd, $result, $response, $i);
+  my ($time, $pfb, $mod, $rest, $year, $month, $day, $time);
+  my ($save_dir, $save_file, $backup_dir);
+      
+  $cmd = "find ".$dir." -ignore_readdir_race -mindepth 1 -maxdepth 1 -name '2*.*.".$ext."' -printf '%f\n' | sort -n";
+  Dada::logMsg(2, DL, "backupStatsFiles: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(2, DL, "backupStatsFiles: ".$result." ".$response);
+  if ($result ne "ok")
+  {
+    return ("fail", "find command failed");
+  }
+  my @files = split(/\n/, $response);
+
+  $backup_dir = "/data/mopsr/backup";
+  if (! -d $backup_dir)
+  {
+    mkdir $backup_dir;
+  }
+
+  for ($i=0; $i<=$#files; $i++)
+  {
+    ($time, $pfb, $mod, $rest) = split(/\./, $files[$i], 4);
+    ($year, $month, $day, $time) = split(/-/, $time, 4);
+
+    $save_dir = $backup_dir."/".$year."-".$month."-".$day;
+
+    if (! -d $save_dir)
+    {
+      mkdir $save_dir;
+    }
+    $save_file = $pfb.".".$mod.".".$rest;
+    if (! -f $save_file)
+    {
+      $cmd = "touch ".$save_dir."/".$save_file;
+      Dada::logMsg(2, DL, "backupStatsFiles: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      Dada::logMsg(2, DL, "backupStatsFiles: ".$result." ".$response);
+    }
+
+    $cmd = "cat ".$dir."/".$files[$i]." >>  ".$save_dir."/".$save_file;
+    Dada::logMsg(2, DL, "backupStatsFiles: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(2, DL, "backupStatsFiles: ".$result." ".$response);
+    if ($result ne "ok")
+    {
+      Dada::logMsgWarn($warn, "backupStatsFiles: could not move stats files: ".$response);
+    }
+
+    # delete the file
+    unlink $dir."/".$files[$i];
+  }
+  return ("ok");
 }
