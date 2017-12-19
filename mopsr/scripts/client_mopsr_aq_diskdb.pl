@@ -144,14 +144,14 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
   # ID tag for this PFB
   $pfb_id = $cfg{"PWC_PFB_ID_".$pwc_id};
 
-  my $utc = "2017-02-27-01:19:37";
-  my @byte_offsets = ( "0000000000000000" );
+  my $utc = "2017-09-12-08:31:04";
+  my @byte_offsets = ( "0000057649996800" );
 
   $cmd = "dada_diskdb -k ".$db_key." -s";
   my $valid_data = 0;
   foreach $byte_offset ( @byte_offsets )
   {
-    $file = "/data/mopsr/scratch/".$pfb_id."/".$utc."_".$byte_offset.".000000.dada";
+    $file = "/data/mopsr/dump/".$pfb_id."/".$utc."_".$byte_offset.".000000.dada";
     if ( -f $file )
     {
       $cmd .= " -f ".$file;
