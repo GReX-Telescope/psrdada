@@ -41,7 +41,8 @@ void * mopsr_dbib_init_thread (void * arg);
 void usage()
 {
   fprintf (stdout,
-           "mopsr_dbib_SFT [options] send_id cornerturn.cfg\n"
+     "mopsr_dbib_SFT [options] send_id cornerturn.cfg\n"
+     " -b <core>         bind computation to specified cpu core\n"
      " -k <key>          hexadecimal shared memory key  [default: %x]\n"
      " -s                single transfer only\n"
      " -v                verbose output\n"
@@ -970,10 +971,16 @@ int main (int argc, char **argv)
 
   int arg = 0;
 
-  while ((arg=getopt(argc,argv,"hk:sv")) != -1)
+  int core = -1;
+
+  while ((arg=getopt(argc,argv,"b:hk:sv")) != -1)
   {
     switch (arg) 
     {
+      case 'b':
+        core = atoi(optarg);
+        break;
+      
       case 'h':
         usage ();
         return 0;
@@ -1005,6 +1012,10 @@ int main (int argc, char **argv)
     usage();
     exit(EXIT_FAILURE);
   }
+
+  if (core >= 0)
+    if (dada_bind_thread_to_core(core) < 0)
+      multilog(log, LOG_WARNING, "mopsr_dbib_SFT: failed to bind to core %d\n", core);
 
   send_id = atoi(argv[optind]);
   cornerturn_cfg = strdup(argv[optind+1]);
