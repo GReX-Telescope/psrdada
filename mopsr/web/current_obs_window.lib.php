@@ -96,24 +96,24 @@ class current_obs extends mopsr_webpage
         <td><span id ="SOURCE"></span></td>
         <th>UTC_START</th>
         <td><span id ="UTC_START"></span></td>
-        <th>FREQ</th>
-        <td><span id ="FREQ"></span>&nbsp;MHz</td>
+        <th>DELAY_TRACKING</th>
+        <td><span id ="DELAY_TRACKING"></span></td>
       </tr>
       <tr>
         <th>RA</th>
         <td><span id ="RA"></span></td>
-        <th>PROC_FILE</th>
-        <td><span id ="PROC_FILE"></span></td>
-        <th>BW</th>
-        <td><span id ="BW"></span>&nbsp;MHz</td>
+        <th>PID</th>
+        <td><span id ="PID"></span></td>
+        <th>RFI_MITIGATION</th>
+        <td><span id ="RFI_MITIGATION"></span></td>
       </tr>
       <tr>
         <th>DEC</th>
         <td><span id ="DEC"></span></td>
         <th>OBSERVER</th>
         <td><span id="OBSERVER"></span></td>
-        <th>NANT</th>
-        <td><span id ="NANT"></span></td>
+        <th>ANTENNA_WEIGHTS</th>
+        <td><span id ="ANTENNA_WEIGHTS"></span></td>
       </tr>
     </table>
 <?
