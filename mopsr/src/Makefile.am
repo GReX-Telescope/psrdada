@@ -30,7 +30,7 @@ bin_PROGRAMS = mopsr_udpheader mopsr_udpdb_thread mopsr_dbsplitdb \
                mopsr_udphist_16bit mopsr_udpvalidate \
                mopsr_dadapowermonitor mopsr_udphist_8bit \
                mopsr_dadapearsoncoeff mopsr_corr_fscr\
-               mopsr_udpcorr mopsr_test_cpubf mopsr_dbTBdb \
+               mopsr_udpcorr mopsr_udpcorr_hires mopsr_test_cpubf mopsr_dbTBdb \
                mopsr_dbintegratedb mopsr_dbrescaledb \
                mopsr_test_sk_kernel mopsr_dadatestct mopsr_dadasftsplit mopsr_pulsedada \
                mopsr_dadatfssplit mopsr_dbreblockdb mopsr_dumpplot mopsr_plot_cands \
@@ -38,7 +38,8 @@ bin_PROGRAMS = mopsr_udpheader mopsr_udpdb_thread mopsr_dbsplitdb \
                caspsr_udpcorr snapsr_udpplot snapsr_udpfftplot mopsr_test_sk_kernel_hires \
                mopsr_test_mergesort snapsr_udpdb mopsr_test_rng mopsr_genbpdada \
                mopsr_udpgen mopsr_udpplot mopsr_udpfftplot mopsr_udpfftplot_16 mopsr_udpwaterfall mopsr_udphist \
-               mopsr_udptimeseries mopsr_udpundersampleplot mopsr_dadafftplot mopsr_numdb
+               mopsr_udptimeseries mopsr_udpundersampleplot mopsr_dadafftplot mopsr_numdb \
+               mopsr_plot_antmasks
 
 #############################################################################
 #
@@ -78,7 +79,9 @@ if HAVE_SOFA
 AM_CPPFLAGS += @GSL_CFLAGS@
 LDADD += @GSL_LIBS@
 
-bin_PROGRAMS += mopsr_solve_delays mopsr_solve_delays_spectral
+bin_PROGRAMS += mopsr_solve_delays mopsr_solve_delays_spectral mopsr_phase_differencer_slope_test mopsr_phase_differencer_slope_test2 mopsr_test_delays_skew
+# depends on GSL 2+
+# mopsr_phase_differencer_slope_test3
 bin_PROGRAMS += mopsr_plot_baselines_vivek mopsr_plot_baselines mopsr_print_drifts
 
 endif
