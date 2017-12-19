@@ -458,19 +458,6 @@ int64_t mopsr_dbib_send_block (dada_client_t* client, void * buffer,
                 "remote_buf_rkey=%p\n", i, block_id, remote_buf_va[i], remote_buf_rkey[i]);
   }
 
-#ifdef ORIGINAL_METHOD
-  const unsigned int ndim = 2;
-
-  // number of time samples in the block
-  const uint64_t nsamp = bytes_to_xfer_per_channel / (ctx->conn_info[0].nant * ndim);
-
-  // destination remote address offset for these antenna, same for every channel
-  const uint64_t dst_ant_offset = nsamp * ndim * ctx->conn_info[0].ant_first;
-
-  if (ctx->verbose)
-    multilog (log, LOG_INFO, "send_block: ctx->conn_info[0].ant_first=%u, nsamp=%"PRIu64", dst_ant_offset=%"PRIu64"\n", ctx->conn_info[0].ant_first, nsamp, dst_ant_offset);
-#endif
-
   // RDMA WRITES now!
   struct ibv_sge       sge;
   struct ibv_send_wr   send_wr = { };
@@ -482,11 +469,6 @@ int64_t mopsr_dbib_send_block (dada_client_t* client, void * buffer,
   send_wr.num_sge  = 1;
   send_wr.next     = NULL;
 
-#ifdef ORIGINAL_METHOD
-  if (ctx->verbose)
-    multilog (log, LOG_INFO, "send_block: bytes=%"PRIu64" nsamp=%"PRIu64" bytes_to_xfer_per_channel=%"PRIu64"\n", bytes, nsamp, bytes_to_xfer_per_channel);
-#endif
-
   char * buf_ptr = (char *) buffer;
 
   // input channel stride is bytes_to_xfer_per_channel
@@ -497,9 +479,6 @@ int64_t mopsr_dbib_send_block (dada_client_t* client, void * buffer,
     // number of output channels for this connection
     const unsigned nchan = ctx->conn_info[i].nchan;
 
-#ifdef ORIGINAL_METHOD
-    const unsigned schan = ctx->conn_info[i].chan_first;
-#endif
     unsigned ochan;
 
     // local access key
@@ -507,18 +486,8 @@ int64_t mopsr_dbib_send_block (dada_client_t* client, void * buffer,
 
     for (ochan=0; ochan < nchan; ++ochan) 
     {
-#ifdef ORIGINAL_METHOD
-      const unsigned ichan = ochan + schan;
-
-      // base address of local buffer
-      sge.addr = (uintptr_t) (buf_ptr + (bytes_to_xfer_per_channel * ichan));
-
-      // increase remote channel memory address by relevant amount 
-      send_wr.wr.rdma.remote_addr = remote_buf_va[i] + dst_ant_offset + ochan * ctx->nant * nsamp * ndim;
-#else
       sge.addr = (uintptr_t) (buf_ptr + ctx->in_offsets[i][ochan]);
       send_wr.wr.rdma.remote_addr = remote_buf_va[i] + ctx->out_offsets[i][ochan];
-#endif
       send_wr.wr.rdma.rkey        = remote_buf_rkey[i];
       send_wr.opcode              = IBV_WR_RDMA_WRITE;
       send_wr.send_flags          = 0;
