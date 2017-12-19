@@ -5,6 +5,7 @@
  * 
  ****************************************************************************/
 
+#include "config.h"
 #include "dada_cuda.h"
 #include "sys/time.h"
 
@@ -53,7 +54,6 @@ char * dada_cuda_get_device_name (int index)
 /*! register the data_block in the hdu via cudaHostRegister */
 int dada_cuda_dbregister (dada_hdu_t * hdu)
 {
-
   ipcbuf_t * db = (ipcbuf_t *) hdu->data_block;
 
   // ensure that the data blocks are SHM locked
@@ -62,6 +62,10 @@ int dada_cuda_dbregister (dada_hdu_t * hdu)
     perror("dada_dbregister: ipcbuf_lock failed\n");
     return -1;
   }
+
+  // dont register buffers if they reside on the device
+  if (ipcbuf_get_device(db) >= 0)
+    return 0;
 
   size_t bufsz = db->sync->bufsz;
   unsigned int flags = 0;
@@ -85,9 +89,12 @@ int dada_cuda_dbregister (dada_hdu_t * hdu)
 /*! unregister the data_block in the hdu via cudaHostUnRegister */
 int dada_cuda_dbunregister (dada_hdu_t * hdu)
 {
-
   ipcbuf_t * db = (ipcbuf_t *) hdu->data_block;
   cudaError_t error_id;
+
+  // dont unregister buffers if they reside on the device
+  if (ipcbuf_get_device(db) >= 0)
+    return 0;
 
   // lock each data block buffer as cuda memory
   uint64_t ibuf;
