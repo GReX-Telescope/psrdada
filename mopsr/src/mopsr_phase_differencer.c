@@ -84,11 +84,11 @@ int main(int argc, char** argv)
         break;
 
       case 'd':
-        delta_time_plot = atof (optarg);
+        delta_time_plot = (double) atof (optarg);
         break;
       
       case 'f':
-        delta_freq = atof (optarg);
+        delta_freq = (double) atof (optarg);
         break;
 
       case 'F':
@@ -96,7 +96,7 @@ int main(int argc, char** argv)
         break;
 
       case 'l':
-        delta_distance = atof (optarg);
+        delta_distance = (double) atof (optarg);
         break;
       
       case 'h':
@@ -108,7 +108,7 @@ int main(int argc, char** argv)
         break;
 
       case 't':
-        delta_time = atof (optarg);
+        delta_time = (double) atof (optarg);
         break;
       
       case 'v':
@@ -121,8 +121,13 @@ int main(int argc, char** argv)
     }
   }
 
-  fprintf (stderr, "delta_freq=%lf\n", delta_freq);
-  fprintf (stderr, "delta_distance=%lf\n", delta_distance);
+/*
+  fprintf (stderr, "delta_md_angle=%le radians\n", delta_md_angle);
+  fprintf (stderr, "delta_freq=%le\n", delta_freq);
+  fprintf (stderr, "delta_distance=%le\n", delta_distance);
+  fprintf (stderr, "frank_nmod=%d\n", frank_nmod);
+  fprintf (stderr, "delta_time=%f\n", delta_time);
+*/
 
   // check and parse the command line arguments
   if (argc-optind != 3)
@@ -306,6 +311,8 @@ int main(int argc, char** argv)
   }
   start_md_angle *= (M_PI / 180.0);
 
+  fprintf (stderr, "start MD angle=%f\n", start_md_angle);
+
   // configure the channels
   mopsr_chan_t * channels1 = (mopsr_chan_t *) malloc(sizeof(mopsr_chan_t));
   channels1[0].number = 0;
@@ -432,8 +439,8 @@ int main(int argc, char** argv)
       fringe2 = delays2[imod]->fringe_coeff;
       diff_phase = fringe1 - fringe2;
       baseline_phase_error[imod] = (float) diff_phase;
-      //if (verbose)
-      //  fprintf (stderr, "m1=%s m2=%s f1=%le f2=%le diff_phase=%le error=%f\n", modules1[imod].name, modules2[imod].name, fringe1, fringe2, diff_phase, baseline_phase_error[imod]);
+      if (verbose > 1)
+        fprintf (stderr, "m1=%s m2=%s f1=%le f2=%le diff_phase=%le error=%f\n", modules1[imod].name, modules2[imod].name, fringe1, fringe2, diff_phase, baseline_phase_error[imod]);
     }
     
     mopsr_phase_delays_plot (phase_error, ipt, (ut1_time1 - (double) utc_start), "1/xs");
@@ -541,6 +548,7 @@ void mopsr_baseline_phase_delays_plot (float * phases, unsigned nmod, unsigned m
   for (imod=0; imod<nmod; imod++)
   {
     xvals[imod] = (mods[imod].dist - mods[mod].dist);
+    //xvals[imod] = mods[imod].dist;
     //xvals[imod] =(float) imod;
 
     if (xvals[imod] > xmax)
