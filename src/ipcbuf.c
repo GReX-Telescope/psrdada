@@ -149,7 +149,7 @@ int ipcbuf_get (ipcbuf_t* id, int flag, int n_readers)
     if (sync->on_device_id >= 0)
     {
       id->buffer[ibuf] = ipc_alloc_cuda (id->shmkey[ibuf], sync->bufsz,
-                                         flag, id->shmid + ibuf, id->shm_addr[ibuf],
+                                         flag, id->shmid + ibuf, &(id->shm_addr[ibuf]),
                                          sync->on_device_id);
     }
     else
@@ -159,10 +159,6 @@ int ipcbuf_get (ipcbuf_t* id, int flag, int n_readers)
             flag, id->shmid + ibuf);
       id->shm_addr[ibuf] = id->buffer[ibuf];
     }
-
-#ifdef _DEBUG
-    fprintf (stderr, "ipcbuf_get: id->buffer[%u]=%p\n", ibuf, (void *) id->buffer[ibuf]);
-#endif
 
     if ( id->buffer[ibuf] == 0 )
     {
@@ -367,9 +363,15 @@ int ipcbuf_disconnect (ipcbuf_t* id)
     if (id->sync->on_device_id >= 0)
     {
       if (id->buffer[ibuf])
-        ipc_disconnect_cuda (id->buffer[ibuf]);
+      {
+        if (ipc_disconnect_cuda (id->buffer[ibuf])< 0)  
+          fprintf (stderr, "ipc_disconnect_cuda failed on buffer[%lu]\n", ibuf);
+      }
       if (id->shm_addr[ibuf] && shmdt (id->shm_addr[ibuf]) < 0)
+      {
+        fprintf (stderr, "ipcbuf_disconnect: shmdt(shm_addr[%lu]) failed\n", ibuf);
         perror ("ipcbuf_disconnect: shmdt(buffer)");
+      }
     } 
     else
 #endif
