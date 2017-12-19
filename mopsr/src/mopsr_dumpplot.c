@@ -39,6 +39,7 @@ void usage()
   fprintf (stdout,
      "mopsr_dumpplot [options] dumpfile\n"
      " -a ant     use the specified ant for interactive plots [default 0]\n"
+     " -b         generate bandpass stats files [.bpstats] as well\n"
      " -c chan    use the specified channel for the hist and timeseries\n"
      " -d chan    use the specified channel for the hist and timeseries\n"
      " -D device  pgplot device name [default create PNG files]\n"
@@ -66,6 +67,8 @@ int main (int argc, char **argv)
   // Plotting options
   mopsr_util_t opts;
 
+  char bandpass_stats = 0;
+
   // plotting defaults
   opts.lock_flag  = -1;
   opts.lock_flag_long  = -1;
@@ -86,7 +89,7 @@ int main (int argc, char **argv)
 
   int ant = 0;
 
-  while ((arg=getopt(argc,argv,"a:c:d:D:g:lpt:vz")) != -1)
+  while ((arg=getopt(argc,argv,"a:bc:d:D:g:lpt:vz")) != -1)
   {
     switch (arg)
     {
@@ -96,6 +99,10 @@ int main (int argc, char **argv)
 #else
           ant = mopsr_get_new_ant_index(atoi(optarg));
 #endif
+        break;
+
+      case 'b':
+        bandpass_stats = 1;
         break;
 
       case 'c':
@@ -513,6 +520,25 @@ int main (int argc, char **argv)
         if (device)
           sleep(1);
       }
+    }
+
+    // record bandpass stats for this antenna, only allow 64 samples per dump
+    if (bandpass_stats && !device && nsamp == 64)
+    {
+      strcpy(png_file, filename);
+      char * str_ptr = strstr (png_file, ".dump");
+      sprintf (str_ptr, ".%d.%d.bpstats", opts.ant_id, opts.nchan);
+ 
+      int flags = O_WRONLY | O_CREAT | O_TRUNC;
+      int perms = S_IRUSR | S_IRGRP | S_IROTH;
+      int fd = open (png_file, flags, perms);
+      if (fd < 0)
+      {
+        fprintf(stderr, "failed to open bp stats file[%s]: %s\n", filename, strerror(errno));
+        exit(EXIT_FAILURE);
+      }
+      write (fd, bandpass, sizeof(float) * opts.nchan);
+      close (fd);
     }
 
     // waterfall plot
