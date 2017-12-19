@@ -416,7 +416,7 @@ int dbrescaledb_close (dada_client_t* client, uint64_t bytes_written)
     for (isig=0; isig<ctx->nsig; isig++)
     {
       i = ichan * ctx->nsig + isig;
-      if (ctx->nclipped[i] > 0 && ctx->verbose)
+      if (ctx->nclipped[i] && ctx->verbose)
         multilog (log, LOG_INFO, "close: samples from chan=%u sig=%u that exceed power limits=%"PRIu64"\n", ichan, isig, ctx->nclipped[i]);
     }
   }
