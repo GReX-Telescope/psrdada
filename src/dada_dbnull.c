@@ -166,6 +166,14 @@ int64_t sock_send_block_function (dada_client_t* client,
   return data_size;
 }
 
+/*! Pointer to the function that transfers data to/from the target */
+int64_t sock_send_block_cuda_function (dada_client_t* client,
+                  void* data, uint64_t data_size, uint64_t block_id)
+{
+  return data_size;
+}
+
+
 int main (int argc, char **argv)
 {
 
@@ -317,6 +325,7 @@ int main (int argc, char **argv)
 
   if (zero_copy)
     client->io_block_function = sock_send_block_function;
+  client->io_block_function_cuda = sock_send_block_cuda_function;
 
   client->io_function    = sock_send_function;
   client->close_function = sock_close_function;
