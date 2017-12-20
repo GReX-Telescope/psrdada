@@ -73,6 +73,9 @@ function handleDirect($child_class)
     echo $obj->doc_type."\n";
     echo "<html>\n";
     echo "  <head>\n";
+    if (get_class($obj) == "asteria") {
+      echo '    <meta http-equiv="refresh" content="600;URL=Asteria.php?single=true">'."\n";
+    }
     echo "    <title>".$obj->title."</title>\n";
     echo "    <link rel='shortcut icon' href='/mopsr/images/mopsr_favicon.ico'/>\n";
 
