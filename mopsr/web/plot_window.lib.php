@@ -15,7 +15,7 @@ class plot_window extends mopsr_webpage
 
   var $ants_per_pfb = 16;
 
-  var $types = array ("fl", "fr", "ti", "bp", "pm", "ta");
+  var $types = array ("fl", "fr", "ti", "bp", "pm", "tc");
 
   var $corr_types = array ("ad", "po", "sn", "bd");
 
@@ -338,7 +338,7 @@ class plot_window extends mopsr_webpage
 
       $xml .= $data;
       $xml .="</images>";
-    } 
+    }
 
     $xml .= "</plot_update>";
 

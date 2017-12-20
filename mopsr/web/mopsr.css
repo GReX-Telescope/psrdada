@@ -414,3 +414,8 @@ table.result span {
   font-size: 8pt;
 }
 
+span.best_snr {
+  font-weight: bold;
+  color: #005700;/*green;*/
+}
+

@@ -147,7 +147,9 @@ class asteria_bests extends mopsr_webpage
     <table>
 <?php
 
-$pdo = new PDO ('sqlite:/home/dada/linux_64/web/mopsr/asteria.db');
+include MYSQL_DB_CONFIG_FILE;
+
+$pdo = new PDO ('mysql:dbname='.MYSQL_DB.';host='.MYSQL_HOST, MYSQL_USER, MYSQL_PWD);
 
 $q = 'SELECT date FROM Updates';
 
@@ -168,7 +170,7 @@ if (!$stmt) {
 
 $since = $stmt ->fetch();
 
-$q = 'SELECT COUNT(*) FROM Observations';
+$q = 'SELECT COUNT(*) FROM TB_Obs';
 $stmt = $pdo -> query($q);
 if (!$stmt) {
   echo "Failed to query:<br>".$q;
@@ -181,6 +183,9 @@ echo "<tr><td>Data since ".substr($since[0], 0, 10)."<td><tr>\n";
 echo "<tr><td>".$count[0]." observations</td></tr>\n";
 echo "<tr><td>Updated at:<br><span class=best_snr>".$updated[0]."</span></td></tr>\n";
 ?>
+      <tr>
+        <td colspan=2><a href="/mopsr/Asteria_500.php?single=true">Timing Programme Pulsars</a></td>
+      </tr>
       <tr>
         <td colspan=2><a href="/mopsr/Asteria.php?single=true">Last 100 pulsar</a></td>
       </tr>
@@ -221,9 +226,9 @@ echo "<tr><td>Updated at:<br><span class=best_snr>".$updated[0]."</span></td></t
 <input type="hidden" name="single" value="true"/>
 <select name="snr_cut" onchange="this.form.submit()">
 <option value="">SNR cut</option>
-<option value=">= 10">&#62;= 500</option>
-<option value=">= 10">&#62;= 100</option>
-<option value=">= 10">&#62;= 50</option>
+<option value=">= 500">&#62;= 500</option>
+<option value=">= 100">&#62;= 100</option>
+<option value=">= 50">&#62;= 50</option>
 <option value=">= 10">&#62;= 10</option>
 <option value="< 10">&#60; 10</option>
 </select>
@@ -240,8 +245,8 @@ function rescale_snr_to5min($fSNR, $ftint_m) {
 
 if ($_GET['snr_cut'] ) {
 
-echo '<p><h2>Displaying data with SNR '.$_GET['snr_cut'].'</h2><br></p>';
-$q = 'SELECT name, dm, period, max_snr_in5min, utc, snr, tint/60. as tint FROM (Pulsars JOIN UTCs JOIN Observations ON Pulsars.id = Observations.psr_id AND UTCs.id = Pulsars.max_snr_obs_id AND Observations.utc_id = UTCs.id) WHERE tint > 1.0 AND dm>0 AND max_snr_in5min '.$_GET['snr_cut'].' ORDER BY name ASC';
+echo '<p><h2>Displaying data with SNR '.$_GET['snr_cut'].' in 5 minutes</h2><br></p>';
+$q = 'SELECT name, dm, period, max_snr_in5min, utc, snr, tint/60. as tint FROM (Pulsars JOIN UTCs JOIN TB_Obs ON Pulsars.id = TB_Obs.psr_id AND UTCs.id = Pulsars.max_snr_obs_id AND TB_Obs.utc_id = UTCs.id) WHERE tint > 1.0 AND dm>0 AND max_snr_in5min '.$_GET['snr_cut'].' ORDER BY name ASC';
 
   $stmt = $pdo -> query($q);
 

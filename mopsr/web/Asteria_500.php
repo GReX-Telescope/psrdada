@@ -3,7 +3,7 @@
 include_once("mopsr.lib.php");
 include_once("mopsr_webpage.lib.php");
 
-class asteria extends mopsr_webpage 
+class asteria_bests extends mopsr_webpage 
 {
 
   var $filter_types = array("", "SOURCE", "FREQ", "BW", "UTC_START", "PROC_FILE");
@@ -183,7 +183,7 @@ echo "<tr><td>".$count[0]." observations</td></tr>\n";
 echo "<tr><td>Updated at:<br><span class=best_snr>".$updated[0]."</span></td></tr>\n";
 ?>
       <tr>
-        <td colspan=2><a href="/mopsr/Asteria_500.php?single=true">Timing Programme Pulsars</a></td>
+        <td colspan=2><a href="/mopsr/Asteria.php?single=true">Last 100 pulsar</a></td>
       </tr>
       <tr>
         <td colspan=2><a href="/mopsr/Asteria_bests.php?single=true">Best per pulsar</a></td>
@@ -215,85 +215,101 @@ echo "<tr><td>Updated at:<br><span class=best_snr>".$updated[0]."</span></td></t
 
     echo "</td><td>\n";
 
-    $this->openBlockHeader("Last 100 pulsars observed");
+    $this->openBlockHeader("Timing Programme Pulsars");
 ?>
+
+<p>
+<h3>Please choose SNR range</h3>
+
+<form action="" method="get">
+<input type="hidden" name="single" value="true"/>
+<select name="snr_cut" onchange="this.form.submit()">
+<option value="">SNR cut</option>
+<option value=">= 500">&#62;= 500</option>
+<option value=">= 100">&#62;= 100</option>
+<option value=">= 50">&#62;= 50</option>
+<option value=">= 10">&#62;= 10</option>
+<option value="< 10">&#60; 10</option>
+</select>
+</form>
+
+</p>
+
 
 <?php
 function rescale_snr_to5min($fSNR, $ftint_m) {
   return $fSNR * sqrt(5./$ftint_m);
 }
 
-$q = 'SELECT name, dm, period, max_snr_in5min, utc, snr, tint/60. as tint, psr_id FROM (Pulsars JOIN UTCs JOIN TB_Obs ON Pulsars.id = TB_Obs.psr_id AND UTCs.id = TB_Obs.utc_id) WHERE tint > 0.5 ORDER BY utc DESC LIMIT 100';
-#$q = 'SELECT name, dm, period, max_snr_in5min, utc, snr, tint/60. as tint, psr_id FROM Pulsars JOIN UTCs JOIN TB_Obs ON Pulsars.id = TB_Obs.psr_id AND UTCs.id = TB_Obs.utc_id WHERE tint > 0.5 ORDER BY utc DESC LIMIT 100';
-
-$stmt = $pdo -> query($q);
-
-if (!$stmt)
-{
-  echo "Failed to query:<br>".$q;
-  exit(-1);
-} else {
-  echo "<table>\n<tr>\n";
-}
+$psr500_str = file_get_contents('500psrs.txt');
+$psr500 = explode("\n", $psr500_str);
 
 $counter = 0;
-$top_dir = "/data/mopsr/results/";
+echo "<p><table>\n<tr>\n";
+foreach ($psr500 as $psr) {
+  $q = 'SELECT name, dm, period, max_snr_in5min, utc, snr, tint/60. as tint FROM (Pulsars JOIN UTCs JOIN TB_Obs ON Pulsars.id = TB_Obs.psr_id AND UTCs.id = Pulsars.max_snr_obs_id AND TB_Obs.utc_id = UTCs.id) WHERE tint > 1.0 AND dm>0 AND max_snr_in5min '.$_GET['snr_cut'].' AND name="'.$psr.'" ORDER BY name ASC';
+  $stmt = $pdo -> query($q);
 
-$results = $stmt ->fetchAll(PDO::FETCH_NUM);
+  if (!$stmt)
+  {
+    echo "Failed to query:<br>".$q;
+    exit(-1);
+  } 
+  $results = $stmt->fetchAll(PDO::FETCH_NUM);
 
-#while ($row = $stmt -> fetch())
-foreach ($results as $row)
-{
-  $counter = $counter + 1;
-  $pulsar = $row[0];
-  $dm = $row[1];
-  $period = $row[2]*1000;
-  $max_snr = $row[3];
-  $utc = $row[4];
-  $snr = $row[5];
-  $tint_m = $row[6];
-  $psr_id = $row[7];
-  
+  $top_dir = "/data/mopsr/results/";
+  $alt_top_dir = "/data/mopsr/old_results/";
+  try {
+    #while ($row = $stmt -> fetch())
+    foreach ($results as $row)
+    {
+      $counter = $counter + 1;
+      $pulsar = $row[0];
+      $dm = $row[1];
+      $period = $row[2]*1000;
+      $max_snr = $row[3];
+      $utc = $row[4];
+      $snr = $row[5];
+      $tint_m = $row[6];
 
-  $fl_hr = str_replace("/data", "", glob($top_dir.$utc."/20*".$pulsar.".fl.1024x768.png"));
-  $fl_lr = str_replace("/data", "", glob($top_dir.$utc."/20*".$pulsar.".fl.120x90.png"));
-  if ($fl_lr[0] == "") {
-    $fl_lr[0] = $fl_hr[0];
-  }
-  $fr_hr = str_replace(".fl.", ".fr.", $fl_hr[0]);
-  $fr_lr = str_replace(".fl.", ".fr.", $fl_lr[0]);
-  $ti_hr = str_replace(".fl.", ".ti.", $fl_hr[0]);
-  $ti_lr = str_replace(".fl.", ".ti.", $fl_lr[0]);
+      $class = "&class=new";
+      $_result_dir = glob($top_dir.$utc);
+      if (empty($_result_dir)) {
+        $class = "&class=old";
+      }
 
-  $is_best_class = '"normal_snr"';
-  $snr_5m = rescale_snr_to5min($snr, $tint_m);
-  if (round($max_snr, 2) == round($snr_5m, 2)) {
-    $is_best_class = '"best_snr"';
-  }
-  //
-  echo '<td width=300 align="center"><a href=/mopsr/results.lib.php?single=true&offset=0&length=20&inline_images=true&filter_type=SOURCE&filter_value=';
-  echo urlencode($pulsar).">".$pulsar."</a><br>DM : ".round($dm, 2)."<br>period : ".round($period,2 )." ms <br>\n";
-  echo '<a href='.$fl_hr[0].'><img src='.$fl_lr[0].'></a>'."\n";
-  echo '<br><a href="'.$fr_hr.'"><img src="'.$fr_lr.'"></a><br><a href="'.$ti_hr.'"><img src="'.$ti_lr.'"></a><br>'."\n";
-  echo "SNR = ".round($snr, 2)."<br>t = ".round($tint_m, 2)." minutes<br>";
-  if (round($snr_5m, 2) == round($max_snr, 2)) {
-    $q = 'SELECT snr, tint/60. as tint FROM TB_Obs WHERE psr_id = '.$psr_id.' AND tint > 0.5;';
-    $stmt = $pdo -> query($q);
-    $snrs_in5min = $stmt->fetchAll(PDO::FETCH_FUNC, "rescale_snr_to5min");
-    rsort($snrs_in5min);
-    echo "<span class=".$is_best_class.">SNR(5min) best= ".round($snr_5m, 2)."</span>\n";
-    echo "<br>SNR(5min) 2nd best: ".round($snrs_in5min[1], 2);
-  } else { 
-    echo "<span class=".$is_best_class.">SNR(5min) = ".round($snr_5m, 2)."</span>\n";
-    echo "<br>SNR(5min) best: ".round($max_snr, 2);
-  }
-  echo "<br><a href=/mopsr/result.lib.php?single=true&utc_start=".$utc.">".$utc."</a></td>\n";
-  if ($counter %5 == 0) {
-    echo "</tr><tr><td>&nbsp;</td></tr>";
-  }
+      $plot_types = array("fl", "fr", "ti");
+      $resolutions = array("hr"=>"1024x768", "lr"=>"120x90");
+
+      foreach ($plot_types as $type) {
+        foreach ($resolutions as $resolution_name => $resolution ) {
+          $cur = $type."_".$resolution_name;
+          $$cur = str_replace("/data", "", glob($top_dir.$utc."/20*".$pulsar.".".$type.".".$resolution.".png"));
+          if (${$cur}[0] == "") {
+            $$cur = str_replace("/data", "", glob($alt_top_dir.$utc."/20*".$pulsar.".".$type.".".$resolution.".png"));
+          }
+          if (${$cur}[0] == "") {
+            $$cur = str_replace("/data", "", glob($alt_top_dir.$utc."/20*TB.".$type.".".$resolution.".png"));
+          }
+        }
+      }
+      
+      echo "<td width=300><a href=/mopsr/results.lib.php?single=true&offset=0&length=20&inline_images=true&filter_type=SOURCE&filter_value=";
+      echo urlencode($pulsar).">".$pulsar."</a><br>DM : ".round($dm, 2)."<br>period : ".round($period,2 )." ms <br>\n";
+      foreach ($plot_types as $type) {
+        $hr= $type . "_hr";
+        $lr= $type . "_lr";
+        echo '<a href="'.${$hr}[0].'"><img src="'.${$lr}[0].'" width="120" height="90"></a><br>'."\n";
+      }
+      echo "SNR = ".round($snr, 2)."<br>t = ".round($tint_m, 2)." minutes<br>SNR(5min) = ".round(rescale_snr_to5min($snr, $tint_m), 2)."\n";
+      echo "<br><a href=/mopsr/result.lib.php?single=true".$class."&utc_start=".$utc.">".$utc."</a></td>\n";
+      if ($counter %5 == 0) {
+        echo "</tr><tr><td>&nbsp;</td></tr>";
+      }
+    }
+  } catch (Exception $e){echo $e->getMessage();}
 }
 
-echo "<p></table>\n";
 ?>
 
 <?
@@ -674,4 +690,4 @@ echo "<p></table>\n";
   }
 
 }
-handledirect("asteria");
+handledirect("asteria_bests");

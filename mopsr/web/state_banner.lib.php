@@ -136,7 +136,7 @@ class state_banner extends mopsr_webpage
           <div class="btns" align="right" style="float:right">
             <a href="javascript:popUp('/ganglia/', 'gang')" class="btn"><span>Ganglia</span></a>
             <a href="javascript:popUp('results.lib.php?single=true', 'res')" class="btn"><span>Results</span></a>
-            <a href="javascript:popUp('Asteria.php', 'Asteria')" class="btn"><span>Asteria</span></a>
+            <a href="javascript:popUp('Asteria.php?single=true', 'Asteria')" class="btn"><span>Asteria</span></a>
             <!--<a href="javascript:popUp('pfb_monitor.lib.php?single=true', 'pfb')" class="btn"><span>PFB Monitor</span></a>-->
             <a href="javascript:popUp('tmc_simulator.lib.php?single=true', 'tmc')" class="btn"><span>Manual Ctrl</span></a>
             <a href="javascript:popUp('control.lib.php?single=true', 'ctrl')" class="btn"><span>Controls</span></a>

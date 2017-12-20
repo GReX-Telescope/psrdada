@@ -13,6 +13,9 @@ define("BP_CNR_FILE", "/home/dada/linux_64/share/mopsr_bp_cornerturn.cfg");
 define("SP_FILE",  "/home/dada/linux_64/share/mopsr_signal_paths.txt");
 define("CSS_FILE", "/mopsr/mopsr.css");
 
+/* MySQL config file location */
+define(MYSQL_DB_CONFIG_FILE, "/home/dada/linux_64/share/mysql-config.php");
+
 include_once("site_definitions_i.php");
 include_once("instrument.lib.php");
 date_default_timezone_set('Australia/Sydney');
