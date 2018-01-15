@@ -186,6 +186,9 @@ echo "<tr><td>Updated at:<br><span class=best_snr>".$updated[0]."</span></td></t
         <td colspan=2><a href="/mopsr/Asteria_500.php?single=true">Timing Programme Pulsars</a></td>
       </tr>
       <tr>
+        <td colspan=2><a href="/mopsr/Asteria_500_when.php?single=true">Time since last observation</a></td>
+      </tr>
+      <tr>
         <td colspan=2><a href="/mopsr/Asteria_bests.php?single=true">Best per pulsar</a></td>
       </tr>
       <tr><td><hr/></td><tr>
