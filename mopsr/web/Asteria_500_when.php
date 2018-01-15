@@ -129,7 +129,7 @@ th.tablesorter {
   text-transform: uppercase;
   text-align: left;
   padding: 6px 6px 6px 12px;
-  background: #99B090 url(images/bg_header.jpg) no-repeat;
+  background: #99B090;
 }
 
 th.nobg {
@@ -175,7 +175,7 @@ tr.alarm td {
 $(document).ready(
 function() {
   $("#psrs").tablesorter();
-}
+})
 </script>
 
 <?
@@ -274,7 +274,7 @@ echo "<tr><td>Updated at:<br><span class=best_snr>".$updated[0]."</span></td></t
   }
 ?>
     </table>
-  <?
+<?
     $this->closeBlockHeader();
 
     echo "</td><td>\n";
@@ -285,19 +285,26 @@ function rescale_snr_to5min($fSNR, $ftint_m) {
   return $fSNR * sqrt(5./$ftint_m);
 }
 
-$psr500_str = file_get_contents('500psrs.txt');
-$psr500 = explode("\n", $psr500_str);
+$psr500 = file('500psrs.txt', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
 
 $counter_7 = 0;
+$counter_7_detected = 0;
 $counter_30 = 0;
+$counter_30_detected = 0;
 $counter_superold = 0;
+$counter_superold_detected = 0;
+$counter_never_detected = 0;
 ?>
 <?
 $timezone = new DateTimeZone('UTC');
 $date_now = date_create("now", $timezone);
 
 $utcs = array();
+$utcs_detected = array();
 $days = array();
+$days_detected = array();
+$detections_count_ever = array();
+$observed_count_ever = array();
 
 foreach ($psr500 as $psr) {
   $q = 'SELECT utc FROM UTCs WHERE id = (SELECT max(utc_id) from (TB_Obs JOIN Pulsars ON Pulsars.id=TB_Obs.psr_id) WHERE Pulsars.name="'.$psr.'")';
@@ -310,8 +317,6 @@ foreach ($psr500 as $psr) {
   } 
   $results = $stmt->fetchAll(PDO::FETCH_NUM);
 
-  $top_dir = "/data/mopsr/results/";
-  $alt_top_dir = "/data/mopsr/old_results/";
   try {
     $row = $stmt -> fetch();
     $date_last = DateTime::createFromFormat("Y-m-d-H:i:s", $results[0][0], $timezone);
@@ -329,11 +334,86 @@ foreach ($psr500 as $psr) {
       array_push($days, $date_diff_int);
     }
   } catch (Exception $e){echo $e->getMessage();};
+
+  $q = 'SELECT utc FROM UTCs WHERE id = (SELECT max(utc_id) from (TB_Obs JOIN Pulsars ON Pulsars.id=TB_Obs.psr_id) WHERE Pulsars.name="'.$psr.'" AND TB_Obs.snr>10);';
+  $stmt = $pdo -> query($q);
+
+  if (!$stmt)
+  {
+    echo "Failed to query:<br>".$q;
+    exit(-1);
+  } 
+  $results = $stmt->fetchAll(PDO::FETCH_NUM);
+
+  try {
+    $row = $stmt -> fetch();
+    $date_last_detected = DateTime::createFromFormat("Y-m-d-H:i:s", $results[0][0], $timezone);
+    if (gettype($date_last_detected) == "object") {
+      $date_diff = $date_last_detected->diff($date_now);
+      $date_diff_int = intval($date_diff->format("%a"));
+      if ( $date_diff_int <=7)
+        $counter_7_detected++;
+      elseif ($date_diff_int <=30)
+        $counter_30_detected++;
+      else
+        $counter_superold_detected++;
+
+      array_push($utcs_detected, $results[0][0]);
+      array_push($days_detected, $date_diff_int);
+    }
+    else {
+      array_push($utcs_detected, "Never, inspect");
+      array_push($days_detected, 10000);
+      $counter_never_detected++;
+    }
+
+  } catch (Exception $e){
+    echo $e->getMessage();
+  };
+
+  $q = 'SELECT count(*) from (TB_Obs JOIN Pulsars ON Pulsars.id=TB_Obs.psr_id) WHERE Pulsars.name="'.$psr.'" AND TB_Obs.snr>10;';
+  $stmt = $pdo -> query($q);
+
+  if (!$stmt)
+  {
+    echo "Failed to query:<br>".$q;
+    exit(-1);
+  } 
+  $results = $stmt->fetchAll(PDO::FETCH_NUM);
+
+  try {
+    $row = $stmt -> fetch();
+      array_push($detections_count_ever, $results[0][0]);
+    } catch (Exception $e){
+    echo $e->getMessage();
+  };
+
+  $q = 'SELECT count(*) from (TB_Obs JOIN Pulsars ON Pulsars.id=TB_Obs.psr_id) WHERE Pulsars.name="'.$psr.'";';
+  $stmt = $pdo -> query($q);
+
+  if (!$stmt)
+  {
+    echo "Failed to query:<br>".$q;
+    exit(-1);
+  } 
+  $results = $stmt->fetchAll(PDO::FETCH_NUM);
+
+  try {
+    $row = $stmt -> fetch();
+    array_push($observed_count_ever, $results[0][0]);
+  } catch (Exception $e){
+    echo $e->getMessage();
+  };
 }
-$number_of_psrs = count($psr500) -1;
-echo '<h3>Number of pulsars observed within last 7 days: '.$counter_7.' out of '.$number_of_psrs.'</h3>';
-echo '<h3>Number of pulsars observed within last 30 days: '.$counter_30.' out of '.$number_of_psrs.'</h3>';
-echo '<h3>Number of pulsars not observed in the last month: '.$counter_superold.' out of '.$number_of_psrs.'</h3>';
+
+$number_of_psrs = count($psr500);
+echo '<h3>Number of pulsars observed (detected) within last 7 days: '.$counter_7.' ('.$counter_7_detected.')</h3>';
+echo '<h3>Number of pulsars observed (detected) within last 30 days: '.$counter_30.' ('.$counter_30_detected.')</h3>';
+echo '<h3>Number of pulsars not observed (detected) in the last month: '.$counter_superold.' ('.$counter_superold_detected.')</h3>';
+echo '<h3>Number of pulsars never detected: '.$counter_never_detected.'</h3>';
+echo '<h4>All numbers are relative to '.$number_of_psrs.' from a curated list.</h4>';
+echo "Note that currently detections (SN>10) are based on S/N without much RFI cleaning<br>";
+echo '<b>Everything in red below is 10 days since observation or more</b>';
 ?>
 
 
@@ -343,6 +423,11 @@ echo '<h3>Number of pulsars not observed in the last month: '.$counter_superold.
 <th class="tablesorter">JNAME</th>
 <th class="tablesorter">Last observed</th>
 <th class="tablesorter">Days since observed</th>
+<th class="tablesorter">Last detected</th>
+<th class="tablesorter">Days since detected</th>
+<th class="tablesorter">Number of times ever detected</th>
+<th class="tablesorter">Number of times ever observed</th>
+<th class="tablesorter">Fraction of times ever detected</th>
 </tr>
 </thead>
 <tbody>
@@ -357,8 +442,12 @@ foreach ($psr500 as $i => $psr) {
 
     echo '<td>'.$psr.'</th>';
     echo '<td>'.$utcs[$i].'</th>';
-
     echo '<td>'.$days[$i].'</th>';
+    echo '<td>'.$utcs_detected[$i].'</th>';
+    echo '<td>'.$days_detected[$i].'</th>';
+    echo '<td>'.$detections_count_ever[$i].'</th>';
+    echo '<td>'.$observed_count_ever[$i].'</th>';
+    echo '<td>'.round(intval($detections_count_ever[$i])/intval($observed_count_ever[$i]), 2).'</th>';
     echo '</tr>';
   } catch (Exception $e){echo $e->getMessage();};
 }
