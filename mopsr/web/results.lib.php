@@ -378,10 +378,16 @@ class results extends mopsr_webpage
         $cmd = "find ".$this->results_dir."/*".$this->filter_value."* -maxdepth 1 -name 'obs.info' | wc -l";
       } elseif ($using_db) {
         # Handle requests for pulsar observations using the asteria database
-        $pdo = new PDO ('sqlite:/home/dada/linux_64/web/mopsr/asteria.db');
-        $q = 'SELECT count(*) FROM (Pulsars JOIN Observations ON Pulsars.id = Observations.psr_id AND Pulsars.name
-LIKE "'.$this->filter_value.'%")';
-        $stmt = $pdo -> query($q);
+        include MYSQL_DB_CONFIG_FILE;
+
+        $pdo = new PDO ('mysql:dbname='.MYSQL_DB.';host='.MYSQL_HOST, MYSQL_USER, MYSQL_PWD);
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $q = 'SELECT count(*) FROM (Pulsars JOIN TB_Obs ON Pulsars.id = TB_Obs.psr_id AND Pulsars.name LIKE "'.$this->filter_value.'%")';
+        try {
+          $stmt = $pdo -> query($q);
+        } catch (PDOException $ex) {
+          print $ex->getMessage();
+        }
         $row = $stmt->fetch();
         $total_num_results = $row[0];
       } else {
@@ -859,9 +865,13 @@ LIKE "'.$this->filter_value.'%")';
     $observations = array();
     $dir = $results_dir;
     
-    $q = 'SELECT utc FROM (Pulsars JOIN UTCs JOIN Observations ON Pulsars.id = Observations.psr_id AND UTCs.id =
-Observations.utc_id) WHERE name LIKE "'.$filter_value.'%" ORDER BY utc DESC LIMIT '.$length.' OFFSET '.$offset;
-    $stmt = $pdo -> query ($q);
+    $q = 'SELECT utc FROM (Pulsars JOIN UTCs JOIN TB_Obs ON Pulsars.id = TB_Obs.psr_id AND UTCs.id =
+      TB_Obs.utc_id) WHERE name LIKE "'.$filter_value.'%" ORDER BY utc DESC LIMIT '.$length.' OFFSET '.$offset;
+    try {
+      $stmt = $pdo -> query ($q);
+    } catch (PDOException $ex) {
+      print $ex->getMessage();
+    }
 
     $observations = $stmt->fetchall(PDO::FETCH_COLUMN, 0);
 
