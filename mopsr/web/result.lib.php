@@ -151,7 +151,7 @@ class result extends mopsr_webpage
       $row = $this->source_info[$source];
         
       echo "        <tr>\n";
-      echo "          <td class='module'>".$source."</td>\n";
+      echo "          <td class='module'><a href=/mopsr/results.lib.php?single=true&offset=0&length=20&inline_images=true&filter_type=SOURCE&filter_value=".urlencode($source).">".$source."</a></td>\n";
 
       for ($j=0; $j<count($vals); $j++) 
       {
@@ -159,7 +159,7 @@ class result extends mopsr_webpage
         $v = $row[$vals[$j]];
         echo "          <td class='module'>".$v."</td>\n";
       }
-      $regen_url = "/mopsr/result.lib.php?script=true&script_name=manual_plot_make.pl&utc_start=".$this->utc_start."&source=".$source
+      $regen_url = "/mopsr/result.lib.php?script=true&script_name=manual_plot_make.pl&utc_start=".$this->utc_start."&source=".rawurlencode($source);
 ?>
     <td class='module'><input type="button" onclick="popWindow('<?echo $regen_url?>')" value="Regenerate"<?echo $delete?>></td>;
 <?
@@ -570,7 +570,7 @@ class result extends mopsr_webpage
     echo "<br>\n";
     flush();
     //$script = "source /home/dada/.bashrc; ".$script_name." ".$this->utc_start." ".$source." 2>&1";
-    $script = "source /home/dada/.dadarc; ".$script_name." ".$this->utc_start." ".$source." 2>&1";
+    $script = "source /home/dada/.dadarc; ".$script_name." ".$this->utc_start." ".rawurldecode($source)." 2>&1";
     echo "<pre>\n";
     system($script);
     echo "</pre>\n";

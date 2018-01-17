@@ -443,19 +443,23 @@ echo '<b>Everything in red below is 10 days since observation or more</b>';
 
 foreach ($psr500 as $i => $psr) {
   try {
-    if ( $days[$i] > 7)
+    if ( $days[$i] > 10)
       echo '<tr class="alarm">';
     else
       echo '<tr class="even">';
 
-    echo '<td>'.$psr.'</th>';
-    echo '<td>'.$utcs[$i].'</th>';
+    echo '<td><a href=/mopsr/results.lib.php?single=true&offset=0&length=20&inline_images=true&filter_type=SOURCE&filter_value='.urlencode($psr).'>'.$psr.'</th>';
+    echo '<td><a href=/mopsr/result.lib.php?single=true&utc_start='.urlencode($utcs[$i]).'>'.$utcs[$i].'</th>';
     echo '<td>'.$days[$i].'</th>';
-    echo '<td>'.$utcs_detected[$i].'</th>';
+    echo '<td><a href=/mopsr/result.lib.php?single=true&utc_start='.urlencode($utcs_detected[$i]).'>'.$utcs_detected[$i].'</th>';
     echo '<td>'.$days_detected[$i].'</th>';
     echo '<td>'.$detections_count_ever[$i].'</th>';
     echo '<td>'.$observed_count_ever[$i].'</th>';
-    echo '<td>'.round(intval($detections_count_ever[$i])/intval($observed_count_ever[$i]), 2).'</th>';
+    if ($observed_count_ever[$i] > 0)
+      echo '<td>'.round(intval($detections_count_ever[$i])/intval($observed_count_ever[$i]), 2).'</th>';
+    else {
+      echo '<td>'.round(0, 2).'</th>'; 
+    }
     echo '</tr>';
   } catch (Exception $e){echo $e->getMessage();};
 }
