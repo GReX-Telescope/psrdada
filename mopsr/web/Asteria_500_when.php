@@ -127,9 +127,10 @@ th.tablesorter {
   border-top: 1px solid #C1DAD7;
   letter-spacing: 2px;
   text-transform: uppercase;
-  text-align: left;
+  text-align: center;
   padding: 6px 6px 6px 12px;
   background: #99B090;
+  margin: 0px auto;
 }
 
 th.nobg {
@@ -293,6 +294,7 @@ $counter_30 = 0;
 $counter_30_detected = 0;
 $counter_superold = 0;
 $counter_superold_detected = 0;
+$counter_never_observed = 0;
 $counter_never_detected = 0;
 ?>
 <?
@@ -332,6 +334,10 @@ foreach ($psr500 as $psr) {
 
       array_push($utcs, $results[0][0]);
       array_push($days, $date_diff_int);
+    } else {
+      $counter_never_observed++;
+      array_push($utcs, "Never observed");
+      array_push($days, 10000);
     }
   } catch (Exception $e){echo $e->getMessage();};
 
@@ -383,8 +389,8 @@ foreach ($psr500 as $psr) {
 
   try {
     $row = $stmt -> fetch();
-      array_push($detections_count_ever, $results[0][0]);
-    } catch (Exception $e){
+    array_push($detections_count_ever, $results[0][0]);
+  } catch (Exception $e){
     echo $e->getMessage();
   };
 
@@ -407,10 +413,12 @@ foreach ($psr500 as $psr) {
 }
 
 $number_of_psrs = count($psr500);
-echo '<h3>Number of pulsars observed (detected) within last 7 days: '.$counter_7.' ('.$counter_7_detected.')</h3>';
-echo '<h3>Number of pulsars observed (detected) within last 30 days: '.$counter_30.' ('.$counter_30_detected.')</h3>';
-echo '<h3>Number of pulsars not observed (detected) in the last month: '.$counter_superold.' ('.$counter_superold_detected.')</h3>';
-echo '<h3>Number of pulsars never detected: '.$counter_never_detected.'</h3>';
+echo '<h3>Number of unique pulsars detected (observed) within last 7 days: '.$counter_7_detected.' ('.$counter_7.')</h3>';
+echo '<h3>Number of unique pulsars detected (observed) between last 7 and 30 days: '.$counter_30_detected.' ('.$counter_30.')</h3>';
+echo '<h3>Number of unique pulsars not observed in the last month: '.$counter_superold.'</h3>';
+echo '<h3>Number of unique pulsars observed but not detected in the last month: '.$counter_superold_detected.'</h3>';
+echo '<h3>Number of unique pulsars never detected: '.$counter_never_detected.'</h3>';
+echo '<h3>Number of unique pulsars never observed: '.$counter_never_observed.'</h3>';
 echo '<h4>All numbers are relative to '.$number_of_psrs.' from a curated list.</h4>';
 echo "Note that currently detections (SN>10) are based on S/N without much RFI cleaning<br>";
 echo '<b>Everything in red below is 10 days since observation or more</b>';
