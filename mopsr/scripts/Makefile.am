@@ -99,7 +99,8 @@ dist_bin_SCRIPTS = Mopsr.pm \
                    client_mopsr_src_logger.pl \
 									 mopsr_backend_start.pl \
 									 mopsr_backend_stop.pl \
-									 mopsr_pkt_reset.pl
+									 mopsr_pkt_reset.pl \
+									 manual_plot_make.pl
 
 include $(top_srcdir)/config/Makefile.targets
 

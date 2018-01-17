@@ -133,7 +133,7 @@ class result extends mopsr_webpage
     $this->openBlockHeader("Source Summary");
 
     $vals = array("int", "snr");
-    $names = array("Length", "SNR");
+    $names = array("Length", "SNR", "Plot");
 
     $sources = array_keys($this->source_info);
 
@@ -159,6 +159,10 @@ class result extends mopsr_webpage
         $v = $row[$vals[$j]];
         echo "          <td class='module'>".$v."</td>\n";
       }
+      $regen_url = "/mopsr/result.lib.php?script=true&script_name=manual_plot_make.pl&utc_start=".$this->utc_start."&source=".$source
+?>
+    <td class='module'><input type="button" onclick="popWindow('<?echo $regen_url?>')" value="Regenerate"<?echo $delete?>></td>;
+<?
       echo "      </tr>\n";
     }
     echo "</table>\n";
@@ -536,6 +540,50 @@ class result extends mopsr_webpage
     }
     return 0;
   }
+
+  #
+  # Run the specified perl script printing the output
+  # to the screen
+  #
+  function printScript($get)
+  {
+    $script_name = $get["script_name"];
+    if (!array_key_exists("source", $get)) {
+      print "Error: Forgot to pass source";
+      return -1;
+    }
+    $source= $get["source"];
+
+?>
+<html>
+<head>
+<?  
+    for ($i=0; $i<count($this->css); $i++)
+      echo "   <link rel='stylesheet' type='text/css' href='".$this->css[$i]."'>\n";
+?>
+</head>
+<body>
+<?
+    $this->openBlockHeader("Running ".$script_name);
+    echo "<p>Script is now running in background, please wait...</p>\n";
+    echo "<br>\n";
+    echo "<br>\n";
+    flush();
+    //$script = "source /home/dada/.bashrc; ".$script_name." ".$this->utc_start." ".$source." 2>&1";
+    $script = "source /home/dada/.dadarc; ".$script_name." ".$this->utc_start." ".$source." 2>&1";
+    echo "<pre>\n";
+    system($script);
+    echo "</pre>\n";
+    echo "<p>It is now safe to close this window</p>\n";
+    $this->closeBlockHeader();
+?>  
+</body>
+</html>
+
+<?
+  }
+
+
 }
 
 handleDirect("result");

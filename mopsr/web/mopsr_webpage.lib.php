@@ -152,6 +152,11 @@ function handleDirect($child_class)
     $obj = new $child_class();
     $obj->printActionHTML($_GET);
 
+  } else if (array_key_exists("script", $_GET) && ($_GET["script"] == "true")) {
+    if (array_key_exists("script_name", $_GET) && ($_GET["script_name"] != "")) {
+      $obj = new $child_class();
+      $obj->printScript($_GET);
+    }
   } else {
     # do nothing :)
   }
