@@ -352,7 +352,7 @@ class result extends mopsr_webpage
       echo "<a href=\"/mopsr/".$this->results_link."/".$this->utc_start."/".$image_hires."\">";
     }
       
-    echo "<img src=\"/mopsr/".$this->results_link."/".$this->utc_start."/".$image."\" width='".$width."px' height=".$height."px'>";
+    echo "<img src=\"/mopsr/".$this->results_link."/".$this->utc_start."/".$image."\" width='".$width."px' height=".$height."px' alt='Missing image'>";
 
     if ($have_hires) {
       echo "</a>";
