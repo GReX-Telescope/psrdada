@@ -250,6 +250,18 @@ sub makePlotsFromArchives($$$$$$$\%)
         Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
         ($result, $response) = Dada::mySystem($cmd);
         Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+        # the above command occasionally deletes everything. In that case, just copy the original file
+        $cmd ="grep -v -e ^C -e ^FORMAT ".$sdir."/temp.clean_smooth.tim | wc -l";
+        Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
+        ($result, $response) = Dada::mySystem($cmd);
+        Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+        if ($response lt 2) {
+          $cmd ="cp ".$sdir."/temp.tim ".$sdir."/temp.clean_smooth.tim";
+          Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
+          ($result, $response) = Dada::mySystem($cmd);
+          Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+        }
+
         $cmd = "remove-outliers2 -c ".$sdir."/outlier_sweep2 -m mad -p ".$ephem[0]." -t ".$sdir."/temp.clean_smooth.tim > ".$sdir."/temp.clean.tim";
         Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
         ($result, $response) = Dada::mySystem($cmd);
