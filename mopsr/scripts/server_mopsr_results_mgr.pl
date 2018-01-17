@@ -1005,12 +1005,15 @@ sub makePlotsFromArchives($$$$$$)
     ($result, $response) = Dada::myShellStdout($cmd);
     Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
     if ($result eq "ok") {
-      $cmd = "pat -j FT -s ".$template[0]." -A FDM -f tempo2 ".$total_t_res." | grep -v ^FORMAT | sed 's/\$/-last yes/' >> ".$sdir."/temp.tim";
+      # add the current ToA, mark as last, filter 0 uncertainty
+      $cmd = "pat -j FT -s ".$template[0]." -A FDM -f tempo2 ".$total_t_res." | grep -v ^FORMAT | sed 's/\$/-last yes/' | awk '{if (NF==2 || \$4>0) {print \$0} else print \"C \"\$0}' >> ".$sdir."/temp.tim";
       Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$cmd);
       ($result, $response) = Dada::myShellStdout($cmd);
       Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+
+      Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
       if ($result eq "ok") {
-        $cmd = "tempo2 -gr plk -set FINISH 99999 -select ".$ENV{"DADA_ROOT"}."/share/TOA_ERR_GT_0.select -setup ".$ENV{"TEMPO2"}."/plugin_data/plk_setup_image_molo.dat -f ".$ephem[0]." ".$sdir."/temp.tim -nofit -xplot 10 -showchisq -grdev ".$dir."/".$ta."/png";
+        $cmd = "tempo2 -gr plk -set FINISH 99999 -setup ".$ENV{"TEMPO2"}."/plugin_data/plk_setup_image_molo.dat -f ".$ephem[0]." ".$sdir."/temp.tim -nofit -xplot 10 -showchisq -grdev ".$dir."/".$ta."/png";
         Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
         ($result, $response) = Dada::mySystem($cmd);
         Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
@@ -1024,6 +1027,12 @@ sub makePlotsFromArchives($$$$$$)
         ($result, $response) = Dada::mySystem($cmd);
         Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
 
+        # ensure last point survives
+        $cmd = "cat ".$sdir."/temp.clean.tim | grep -v last > ".$sdir."/temp.clean.tim2 ; cat ".$sdir."/temp.clean.tim | grep last | sed 's/^C//' >> ".$sdir."/temp.clean.tim2; mv ".$sdir."/temp.clean.tim2 ".$sdir."/temp.clean.tim";
+        Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
+        ($result, $response) = Dada::mySystem($cmd);
+        Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+
         if ($result eq "ok") {
           # check if anything survived the cleaning:
           $cmd ="grep -v -e ^C -e ^FORMAT ".$sdir."/temp.clean.tim | wc -l";
@@ -1032,7 +1041,7 @@ sub makePlotsFromArchives($$$$$$)
           Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
 
           if ($response gt 0) {
-            $cmd = "tempo2 -gr plk -set FINISH 99999 -select ".$ENV{"DADA_ROOT"}."/share/TOA_ERR_GT_0.select -setup ".$ENV{"TEMPO2"}."/plugin_data/plk_setup_image_molo.dat -f ".$ephem[0]." ".$sdir."/temp.clean.tim -nofit -xplot 10 -showchisq -grdev ".$dir."/".$tc."/png";
+            $cmd = "tempo2 -gr plk -set FINISH 99999 -setup ".$ENV{"TEMPO2"}."/plugin_data/plk_setup_image_molo.dat -f ".$ephem[0]." ".$sdir."/temp.clean.tim -nofit -xplot 10 -showchisq -grdev ".$dir."/".$tc."/png";
             Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
             ($result, $response) = Dada::mySystem($cmd);
             Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
