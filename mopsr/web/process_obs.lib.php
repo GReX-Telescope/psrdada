@@ -103,7 +103,7 @@ class process_obs extends mopsr_webpage
       }
 ?>
       <p>This text will be archived with the observation in a file named
-         obs.txt</p>
+         obs.txt and update the database</p>
       <form name="annotation" action="process_obs.lib.php" method="get">
       <p>
 <?
@@ -131,6 +131,18 @@ class process_obs extends mopsr_webpage
       if ($this->annotation == "") 
       {
         echo "<p>ERROR: no annotation provided</p>";
+        return;
+      }
+      include MYSQL_DB_CONFIG_FILE;
+
+      $pdo = new PDO ('mysql:dbname='.MYSQL_DB.';host='.MYSQL_HOST, MYSQL_USER, MYSQL_PWD);
+      $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+      $q = "UPDATE UTCs SET annotation = ".$pdo->quote($this->annotation)." WHERE utc = ".$pdo->quote($this->utc_start)."";
+      try {
+        $stmt = $pdo -> query($q);
+      } catch (Exception $ex) {
+        echo $ex->getMessage();
         return;
       }
 
