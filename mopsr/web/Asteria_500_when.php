@@ -147,6 +147,7 @@ tr.even td {
   background:white;
 
   }
+
 tr.odd td {
   /* orig?:
  *   background:#f7fbff*/
@@ -160,22 +161,33 @@ tr.odd td {
   padding: 6px 6px 6px 12px;
   color: #0F4D0D;
   background: #99B090;
-  }
+}
+
+a:link, a:visited {
+  color: #0F4D0D;
+}
+
 
 tr.alarm td {
   border-right: 1px solid #C1DAD7;
   border-bottom: 1px solid #C1DAD7;
   padding: 6px 6px 6px 12px;
-  color: #0F4D0D;
-  background: #FF0000;
+  color: #000000;
+  background: #90a2b0;
+}
+.alarm a:link, .alarm a:visited {
+  color: #000000;
 }
 </style>
-<script src="./js/tablesorter/jquery-latest.js"></script>
+<script src="./js/jquery-3.3.1.min.js"></script>
 <script src="./js/tablesorter/jquery.tablesorter.js"></script>
+<script src="./js/jquery.floatThead.min.js"></script>
 <script>
 $(document).ready(
-function() {
-  $("#psrs").tablesorter();
+  function() {
+    var $table = $("#psrs");
+    $table.tablesorter();
+    $table.floatThead();
 })
 </script>
 
@@ -245,7 +257,7 @@ echo "<tr><td>".$count[0]." observations</td></tr>\n";
 echo "<tr><td>Updated at:<br><span class=best_snr>".$updated[0]."</span></td></tr>\n";
 ?>
       <tr>
-        <td colspan=2><a href="/mopsr/Asteria.php?single=true">Last 100 pulsar</a></td>
+        <td colspan=2><a href="/mopsr/Asteria.php?single=true">Last 100 pulsars</a></td>
       </tr>
       <tr>
         <td colspan=2><a href="/mopsr/Asteria_500.php?single=true">Timing Programme Pulsars</a></td>
@@ -286,7 +298,13 @@ function rescale_snr_to5min($fSNR, $ftint_m) {
   return $fSNR * sqrt(5./$ftint_m);
 }
 
-$psr500 = file('500psrs.txt', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+$q = 'SELECT name FROM Pulsars WHERE observe=1 ORDER BY name';
+$stmt = $pdo -> query($q);
+if (!$stmt) {
+  echo 'Failed to query:<br>'.$q;
+  exit(-1);
+}
+$psr500 = $stmt->fetchAll(PDO::FETCH_COLUMN, 0);
 
 $counter_7 = 0;
 $counter_7_detected = 0;
@@ -308,20 +326,19 @@ $days_detected = array();
 $detections_count_ever = array();
 $observed_count_ever = array();
 
-foreach ($psr500 as $psr) {
-  $q = 'SELECT utc FROM UTCs WHERE id = (SELECT max(utc_id) from (TB_Obs JOIN Pulsars ON Pulsars.id=TB_Obs.psr_id) WHERE Pulsars.name="'.$psr.'")';
-  $stmt = $pdo -> query($q);
+$q = 'SELECT Pulsars.name, MAX(UTCs.utc) FROM TB_Obs LEFT JOIN UTCs ON (TB_Obs.utc_id = UTCs.id) LEFT JOIN Pulsars ON TB_Obs.psr_id = Pulsars.id  WHERE Pulsars.observe = 1 GROUP BY Pulsars.name';
+$stmt = $pdo -> query($q);
 
-  if (!$stmt)
-  {
-    echo "Failed to query:<br>".$q;
-    exit(-1);
-  } 
-  $results = $stmt->fetchAll(PDO::FETCH_NUM);
+if (!$stmt)
+{
+  echo "Failed to query:<br>".$q;
+  exit(-1);
+} 
+$utcs_result = $stmt->fetchAll(PDO::FETCH_NUM);
 
-  try {
-    $row = $stmt -> fetch();
-    $date_last = DateTime::createFromFormat("Y-m-d-H:i:s", $results[0][0], $timezone);
+try {
+  foreach ($utcs_result as $utc) {
+    $date_last = DateTime::createFromFormat("Y-m-d-H:i:s", $utc[1], $timezone);
     if (gettype($date_last) == "object") {
       $date_diff = $date_last->diff($date_now);
       $date_diff_int = intval($date_diff->format("%a"));
@@ -332,28 +349,29 @@ foreach ($psr500 as $psr) {
       else
         $counter_superold++;
 
-      array_push($utcs, $results[0][0]);
-      array_push($days, $date_diff_int);
+      $utcs[$utc[0]] = $utc[1];
+      $days[$utc[0]] = $date_diff_int;
     } else {
       $counter_never_observed++;
-      array_push($utcs, "Never observed");
-      array_push($days, 10000);
+      $utcs[$utc[0]] = "Never observed";
+      $days[$utc[0]] = 10000;
     }
-  } catch (Exception $e){echo $e->getMessage();};
+  }
+} catch (Exception $e){echo $e->getMessage();};
 
-  $q = 'SELECT utc FROM UTCs WHERE id = (SELECT max(utc_id) from (TB_Obs JOIN Pulsars ON Pulsars.id=TB_Obs.psr_id) WHERE Pulsars.name="'.$psr.'" AND TB_Obs.snr>10);';
-  $stmt = $pdo -> query($q);
+$q = 'SELECT Pulsars.name, max(UTCs.utc) from TB_Obs left join UTCs on (TB_Obs.utc_id = UTCs.id) left join Pulsars on TB_Obs.psr_id = Pulsars.id  WHERE Pulsars.observe = 1 AND TB_Obs.snr > 10 group by Pulsars.name';
+$stmt = $pdo -> query($q);
 
-  if (!$stmt)
-  {
-    echo "Failed to query:<br>".$q;
-    exit(-1);
-  } 
-  $results = $stmt->fetchAll(PDO::FETCH_NUM);
+if (!$stmt)
+{
+  echo "Failed to query:<br>".$q;
+  exit(-1);
+} 
+$utcs_result = $stmt->fetchAll(PDO::FETCH_NUM);
 
-  try {
-    $row = $stmt -> fetch();
-    $date_last_detected = DateTime::createFromFormat("Y-m-d-H:i:s", $results[0][0], $timezone);
+try {
+  foreach($utcs_result as $utc) {
+    $date_last_detected = DateTime::createFromFormat("Y-m-d-H:i:s", $utc[1], $timezone);
     if (gettype($date_last_detected) == "object") {
       $date_diff = $date_last_detected->diff($date_now);
       $date_diff_int = intval($date_diff->format("%a"));
@@ -364,64 +382,68 @@ foreach ($psr500 as $psr) {
       else
         $counter_superold_detected++;
 
-      array_push($utcs_detected, $results[0][0]);
-      array_push($days_detected, $date_diff_int);
+      $utcs_detected[$utc[0]] = $utc[1];
+      $days_detected[$utc[0]] = $date_diff_int;
     }
     else {
-      array_push($utcs_detected, "Never, inspect");
-      array_push($days_detected, 10000);
+      $utcs_detected[$utc[0]] = "Never, inspect";
+      $days_detected[$utc[0]] = 10000;
       $counter_never_detected++;
     }
+  }
+} catch (Exception $e){
+  echo $e->getMessage();
+};
 
-  } catch (Exception $e){
-    echo $e->getMessage();
-  };
+$q = 'SELECT Pulsars.name, count(*) from (TB_Obs JOIN Pulsars ON Pulsars.id=TB_Obs.psr_id) WHERE Pulsars.observe = 1 AND TB_Obs.snr>10 GROUP BY Pulsars.name;';
+$stmt = $pdo -> query($q);
 
-  $q = 'SELECT count(*) from (TB_Obs JOIN Pulsars ON Pulsars.id=TB_Obs.psr_id) WHERE Pulsars.name="'.$psr.'" AND TB_Obs.snr>10;';
-  $stmt = $pdo -> query($q);
-
-  if (!$stmt)
-  {
-    echo "Failed to query:<br>".$q;
-    exit(-1);
-  } 
-  $results = $stmt->fetchAll(PDO::FETCH_NUM);
-
-  try {
-    $row = $stmt -> fetch();
-    array_push($detections_count_ever, $results[0][0]);
-  } catch (Exception $e){
-    echo $e->getMessage();
-  };
-
-  $q = 'SELECT count(*) from (TB_Obs JOIN Pulsars ON Pulsars.id=TB_Obs.psr_id) WHERE Pulsars.name="'.$psr.'";';
-  $stmt = $pdo -> query($q);
-
-  if (!$stmt)
-  {
-    echo "Failed to query:<br>".$q;
-    exit(-1);
-  } 
-  $results = $stmt->fetchAll(PDO::FETCH_NUM);
-
-  try {
-    $row = $stmt -> fetch();
-    array_push($observed_count_ever, $results[0][0]);
-  } catch (Exception $e){
-    echo $e->getMessage();
-  };
+if (!$stmt)
+{
+  echo "Failed to query:<br>".$q;
+  exit(-1);
 }
+$results = $stmt->fetchAll(PDO::FETCH_NUM);
+
+try {
+  foreach($results as $row) {
+    $detections_count_ever[$row[0]] = $row[1];
+  }
+} catch (Exception $e){
+  echo $e->getMessage();
+}
+
+$q = 'SELECT Pulsars.name, count(*) from (TB_Obs JOIN Pulsars ON Pulsars.id=TB_Obs.psr_id) WHERE Pulsars.observe = 1 GROUP BY Pulsars.name;';
+$stmt = $pdo -> query($q);
+
+if (!$stmt)
+{
+  echo "Failed to query:<br>".$q;
+  exit(-1);
+} 
+$results = $stmt->fetchAll(PDO::FETCH_NUM);
+
+try {
+  foreach($results as $row) {
+    #array_push($observed_count_ever, $results[0][0]);
+    $observed_count_ever[$row[0]] = $row[1];
+  }
+} catch (Exception $e){
+  echo $e->getMessage();
+};
 
 $number_of_psrs = count($psr500);
 echo '<h3>Number of unique pulsars detected (observed) within last 7 days: '.$counter_7_detected.' ('.$counter_7.')</h3>';
 echo '<h3>Number of unique pulsars detected (observed) between last 7 and 30 days: '.$counter_30_detected.' ('.$counter_30.')</h3>';
 echo '<h3>Number of unique pulsars not observed in the last month: '.$counter_superold.'</h3>';
 echo '<h3>Number of unique pulsars observed but not detected in the last month: '.$counter_superold_detected.'</h3>';
+$counter_never_detected = $number_of_psrs - $counter_7_detected - $counter_30_detected - $counter_superold_detected;
 echo '<h3>Number of unique pulsars never detected: '.$counter_never_detected.'</h3>';
+$counter_never_observed = $number_of_psrs - $counter_7 - $counter_30 - $counter_superold;
 echo '<h3>Number of unique pulsars never observed: '.$counter_never_observed.'</h3>';
 echo '<h4>All numbers are relative to '.$number_of_psrs.' from a curated list.</h4>';
 echo "Note that currently detections (SN>10) are based on S/N without much RFI cleaning<br>";
-echo '<b>Everything in red below is 10 days since observation or more</b>';
+echo '<b>Everything with <span style="background: #90a2b0">blue-ish</span> background below is 10 days since observation or more</b>';
 ?>
 
 
@@ -441,24 +463,42 @@ echo '<b>Everything in red below is 10 days since observation or more</b>';
 <tbody>
 <?
 
-foreach ($psr500 as $i => $psr) {
+foreach ($psr500 as $psr) {
   try {
-    if ( $days[$i] > 10)
+    if ( $days[$psr] > 10 || $days[$psr] === NULL)
       echo '<tr class="alarm">';
     else
       echo '<tr class="even">';
 
-    echo '<td><a href=/mopsr/results.lib.php?single=true&offset=0&length=20&inline_images=true&filter_type=SOURCE&filter_value='.urlencode($psr).'>'.$psr.'</th>';
-    echo '<td><a href=/mopsr/result.lib.php?single=true&utc_start='.urlencode($utcs[$i]).'>'.$utcs[$i].'</th>';
-    echo '<td>'.$days[$i].'</th>';
-    echo '<td><a href=/mopsr/result.lib.php?single=true&utc_start='.urlencode($utcs_detected[$i]).'>'.$utcs_detected[$i].'</th>';
-    echo '<td>'.$days_detected[$i].'</th>';
-    echo '<td>'.$detections_count_ever[$i].'</th>';
-    echo '<td>'.$observed_count_ever[$i].'</th>';
-    if ($observed_count_ever[$i] > 0)
-      echo '<td>'.round(intval($detections_count_ever[$i])/intval($observed_count_ever[$i]), 2).'</th>';
+    echo '<td><a href=/mopsr/results.lib.php?single=true&offset=0&length=20&inline_images=true&filter_type=SOURCE&filter_value='.urlencode($psr).'>'.$psr.'</td>';
+    if ($utcs[$psr] === NULL)
+      echo '<td>Never observed</td>';
+    else
+      echo '<td><a href=/mopsr/result.lib.php?single=true&utc_start='.urlencode($utcs[$psr]).'>'.$utcs[$psr].'</td>';
+    if ($days[$psr] === NULL)
+      echo '<td>10000</td>';
+    else
+      echo '<td>'.$days[$psr].'</td>';
+    if ($utcs_detected[$psr] === NULL)
+      echo '<td>Never, inspect</td>';
+    else
+      echo '<td><a href=/mopsr/result.lib.php?single=true&utc_start='.urlencode($utcs_detected[$psr]).'>'.$utcs_detected[$psr].'</td>';
+    if ($days_detected[$psr] === NULL)
+      echo '<td>10000</td>';
+    else
+      echo '<td>'.$days_detected[$psr].'</td>';
+    if ($detections_count_ever[$psr] === NULL)
+      echo '<td>0</td>';
+    else
+      echo '<td>'.$detections_count_ever[$psr].'</td>';
+    if ($observed_count_ever[$psr] === NULL)
+      echo '<td>0</td>';
+    else
+    echo '<td>'.$observed_count_ever[$psr].'</td>';
+    if ($observed_count_ever[$psr] > 0)
+      echo '<td>'.round(intval($detections_count_ever[$psr])/intval($observed_count_ever[$psr]), 2).'</td>';
     else {
-      echo '<td>'.round(0, 2).'</th>'; 
+      echo '<td>'.round(0, 2).'</td>'; 
     }
     echo '</tr>';
   } catch (Exception $e){echo $e->getMessage();};
