@@ -6,8 +6,7 @@ include_once("mopsr_webpage.lib.php");
 class results_db extends mopsr_webpage 
 {
 
-  //var $filter_types = array("", "SOURCE", "FREQ", "BW", "UTC_START", "PROC_FILE");
-  var $filter_types = array("", "SOURCE", "FREQ", "BW", "UTC_START", "OBSERVER", "PID");
+  var $filter_types = array("", "SOURCE", "FREQ", "BW", "UTC_START", "OBSERVER", "PID", "ANNOTATION");
   var $cfg = array();
   var $length;
   var $offset;
@@ -165,16 +164,16 @@ class results_db extends mopsr_webpage
           show_inline = "false";
         url = url + "&inline_images="+show_inline;
 
-        console.log("requesting " + url);
 
         // check if a filter has been specified
         var u, filter_type, filter_vaule;
         i = document.getElementById("filter_type").selectedIndex;
         filter_type = document.getElementById("filter_type").options[i].value;
-        filter_value = document.getElementById("filter_value").value;
+        filter_value = encodeURIComponent(document.getElementById("filter_value").value);
         if ((filter_value != "") && (filter_type != "")) {
           url = url + "&filter_type="+filter_type+"&filter_value="+filter_value;
         }
+
 
         if (window.XMLHttpRequest)
           ru_http_request = new XMLHttpRequest()
@@ -201,6 +200,7 @@ class results_db extends mopsr_webpage
           var i, j, k, result, key, value, span, this_result;
 
           var results = xmlObj.getElementsByTagName("result");
+
 
           // for each result returned in the XML DOC
           for (i=0; i<results.length; i++) {
@@ -287,10 +287,17 @@ class results_db extends mopsr_webpage
               }
             } // end for
           }
-          
+
           // update then showing_from and showing_to spans
           var offset = getOffset();
           var length = getLength();
+
+          if (results.length < length) {
+            console.log("less results than needed to populate the page", results.length, length);
+            for (i=results.length; i<length; i++)
+              document.getElementById("row_"+i).style.display = "none";
+          }
+          
           document.getElementById("showing_from").innerHTML = offset;
           document.getElementById("showing_to").innerHTML = (offset + length);
         }
@@ -382,7 +389,7 @@ class results_db extends mopsr_webpage
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $q = '';
     if (($this->filter_type == "") && ($this->filter_value == "")) {
-      $q = 'SELECT COUNT(*) FROM Infos';
+      $q = 'SELECT COUNT(*) FROM Infos LEFT JOIN UTCs ON UTCs.id = Infos.utc_id';
       try {
         $stmt = $pdo -> query($q);
       } catch (PDOException $ex) {
@@ -391,7 +398,8 @@ class results_db extends mopsr_webpage
       $row = $stmt->fetch();
       $total_num_results = $row[0];
     } else {
-      $q = 'SELECT COUNT(*) FROM Infos WHERE Infos.'.$this->filter_type.' LIKE "'.$this->filter_value.'%"';
+      $filter = $this->prepFilter($this->filter_type, $this->filter_value);
+      $q = 'SELECT COUNT(*) FROM Infos LEFT JOIN UTCs ON UTCs.id = Infos.utc_id '.$filter;
       try {
         $stmt = $pdo -> query($q);
       } catch (Exception $ex) {
@@ -681,14 +689,27 @@ class results_db extends mopsr_webpage
 
   }
 
+  function prepFilter($filter_type, $filter_value)
+  {
+    $filter = "WHERE ";
+    if ($filter_type == "SOURCE") {
+      $filter .= 'Infos.SOURCE LIKE "%'.$filter_value.'%" OR ';
+      for ($j=0; $j<4; $j++) {
+        $filter .= 'Infos.TB'.$j.'_SOURCE LIKE "%'.$filter_value.'%" OR ';
+      }
+      $filter .= ' Infos.CORR_SOURCE LIKE "%'.$filter_value.'%"';
+    } else if ($filter_type == "ANNOTATION") {
+      $filter .= ' UTCs.annotation COLLATE LATIN1_GENERAL_CI LIKE "%'.$filter_value.'%"';
+    } else if ($filter_value == "" || $filter_value === NULL) {
+      $filter = "";
+    } else {
+      $filter .= ' Infos.'.$filter_type.' LIKE "%'.$filter_value.'%"';
+    }
+    return $filter;
+  }
+
   function getResultsArray_db($pdo, $results_dir, $offset=0, $length=0, $filter_type, $filter_value) 
   {
-    //if ($filter_type != "SOURCE") {
-    //  throw new Exception('getResultsArray_db only works for SOURCE filter');
-    //} elseif (strpos($filter_value, 'J') !== 0) {
-    //  throw new Exception('getResultsArray_db only works for pulsar SOURCE (starting with J)');
-    //}
-
     $all_results = array();
 
     $observations = array();
@@ -700,16 +721,8 @@ class results_db extends mopsr_webpage
     if ($filter_type == "" || $filter_value == "") {
       $q = 'SELECT UTCs.utc, UTCs.id, UTCs.annotation, Infos.INT, Infos.SOURCE, Infos.FB_ENABLED, Infos.FB_IMG, Infos.TB0_ENABLED, Infos.TB1_ENABLED, Infos.TB2_ENABLED, Infos.TB3_ENABLED, Infos.TB0_SOURCE, Infos.TB1_SOURCE, Infos.TB2_SOURCE, Infos.TB3_Source, Infos.TB0_IMG, Infos.TB1_IMG, Infos.TB2_IMG, Infos.TB3_IMG, Infos.CORR_ENABLED, Infos.CORR_SOURCE, Infos.MB_ENABLED, Infos.MB_ENABLED, Infos.OBSERVER, Infos.PID, States.state FROM UTCs JOIN Infos JOIN States ON UTCs.id = Infos.utc_id and UTCs.state_id = States.id ORDER BY UTCs.utc DESC LIMIT '.$length.' OFFSET '.$offset;
     } else {
-      if ($filter_type = "SOURCE") {
-        $filter='Infos.SOURCE LIKE "%'.$filter_value.'%" OR ';
-        for ($j=0; $j<4; $j++) {
-          $filter .= 'Infos.TB'.$j.'_SOURCE LIKE "%'.$filter_value.'%" OR ';
-        }
-        $filter .= 'Infos.CORR_SOURCE LIKE "%'.$filter_value.'%"';
-      } else {
-        $filter = 'Infos.'.$filter_type.' LIKE "%'.$filter_value.'"%';
-      }
-      $q = 'SELECT UTCs.utc, UTCs.id, UTCs.annotation, Infos.INT, Infos.SOURCE, Infos.FB_ENABLED, Infos.FB_IMG, Infos.TB0_ENABLED, Infos.TB1_ENABLED, Infos.TB2_ENABLED, Infos.TB3_ENABLED, Infos.TB0_SOURCE, Infos.TB1_SOURCE, Infos.TB2_SOURCE, Infos.TB3_Source, Infos.TB0_IMG, Infos.TB1_IMG, Infos.TB2_IMG, Infos.TB3_IMG, Infos.CORR_ENABLED, Infos.CORR_SOURCE, Infos.MB_ENABLED, Infos.MB_ENABLED, Infos.OBSERVER, Infos.PID, States.state FROM UTCs JOIN Infos JOIN States ON UTCs.id = Infos.utc_id and UTCs.state_id = States.id WHERE '.$filter.' ORDER BY UTCs.utc DESC LIMIT 20 OFFSET 0';
+      $filter = $this->prepFilter($filter_type, $filter_value);
+      $q = 'SELECT UTCs.utc, UTCs.id, UTCs.annotation, Infos.INT, Infos.SOURCE, Infos.FB_ENABLED, Infos.FB_IMG, Infos.TB0_ENABLED, Infos.TB1_ENABLED, Infos.TB2_ENABLED, Infos.TB3_ENABLED, Infos.TB0_SOURCE, Infos.TB1_SOURCE, Infos.TB2_SOURCE, Infos.TB3_Source, Infos.TB0_IMG, Infos.TB1_IMG, Infos.TB2_IMG, Infos.TB3_IMG, Infos.CORR_ENABLED, Infos.CORR_SOURCE, Infos.MB_ENABLED, Infos.MB_ENABLED, Infos.OBSERVER, Infos.PID, States.state FROM UTCs JOIN Infos JOIN States ON UTCs.id = Infos.utc_id and UTCs.state_id = States.id '.$filter.' ORDER BY UTCs.utc DESC LIMIT '.$length.' OFFSET '.$offset;
     }
     try {
       $stmt = $pdo -> query ($q);
@@ -766,26 +779,8 @@ class results_db extends mopsr_webpage
         $dir = "";
       }
 
-      // read the obs.info file into an array 
-#      if ($dir != "")
-#      {
-      # this branch is for observations which are still present on the backend drives
-      #$arr = getConfigFile($dir."/obs.info");
       $all = array();
 
-      #$all["STATE"] = "unknown";
-      #if (file_exists($dir."/obs.processing"))
-      #  $all["STATE"] = "processing";
-      #else if (file_exists($dir."/obs.finished"))
-      #  $all["STATE"] = "finished";
-      #else if (file_exists($dir."/obs.transferred"))
-      #  $all["STATE"] = "transferred";
-      #else if (file_exists($dir."/obs.completed"))
-      #  $all["STATE"] = "completed";
-      #else if (file_exists($dir."/obs.failed"))
-      #  $all["STATE"] = "failed";
-      #else
-      #   $all["STATE"] = "unknown";
       $all["STATE"] = $states[$i];
 
       $all["SOURCE"] = $SOURCEs[$i];
@@ -874,7 +869,6 @@ class results_db extends mopsr_webpage
       }
       else
       {
-        #$all["IMG"] = $arr["IMG"];
         $all["IMG"] = "";
       }
       
@@ -908,7 +902,6 @@ class results_db extends mopsr_webpage
           system("echo 'INT              ".$int."' >> ".$dir."/obs.info");
           $q_int = "UPDATE Infos SET `INT` = ".$all["INT"]." WHERE utc_id = ".$utc_ids[$i];
           try {
-        #    print $q_int;
             $stmt = $pdo->query($q_int);
           } catch (Exception $ex) {
             echo $ex->getMessage();
