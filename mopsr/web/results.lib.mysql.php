@@ -6,7 +6,7 @@ include_once("mopsr_webpage.lib.php");
 class results_db extends mopsr_webpage 
 {
 
-  var $filter_types = array("", "SOURCE", "FREQ", "BW", "UTC_START", "OBSERVER", "PID", "ANNOTATION");
+  var $filter_types = array("", "SOURCE", "UTC_START", "ANNOTATION", "FREQ", "BW", "OBSERVER", "PID", "AQ_PROC_FILE");
   var $cfg = array();
   var $length;
   var $offset;
@@ -379,10 +379,9 @@ class results_db extends mopsr_webpage
 
     echo "</td><td>\n";
 
-    $this->openBlockHeader("Matching Observations");
+    $this->openBlockHeader("Matching Observations (processing observations not displayed)");
 
     $cmd = "";
-    $using_db = true;
     include MYSQL_DB_CONFIG_FILE;
 
     $pdo = new PDO ('mysql:dbname='.MYSQL_DB.';host='.MYSQL_HOST, MYSQL_USER, MYSQL_PWD);

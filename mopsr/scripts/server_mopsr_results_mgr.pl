@@ -212,10 +212,18 @@ sub main()
         if ($age > 120)
         {
           markObsState($o, "processing", "finished");
+          $cmd = "asteria_utc.py --config-dir /home/dada/linux_64/share/ -U ".$o;
+          Dada::logMsg(3, $dl, "main: ".$cmd);
+          ($result, $response) = Dada::mySystem($cmd);
+          Dada::logMsg(3, $dl, "main: ".$result." ".$response);
         }
         elsif ($age < -120)
         {
           markObsState($o, "processing", "failed");
+          $cmd = "asteria_utc.py --config-dir /home/dada/linux_64/share/ -U ".$o;
+          Dada::logMsg(3, $dl, "main: ".$cmd);
+          ($result, $response) = Dada::mySystem($cmd);
+          Dada::logMsg(3, $dl, "main: ".$result." ".$response);
         }
         else
         {
@@ -559,7 +567,7 @@ sub processFbObservation($$$)
     }
 
     $cmd = "cp ".$obs_header_file." ".$archive_dir."/";
-    Dada::logMsg(2, $dl, "processTbObservation: ".$cmd);
+    Dada::logMsg(2, $dl, "processFbObservation: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     if ($result ne "ok")
     {

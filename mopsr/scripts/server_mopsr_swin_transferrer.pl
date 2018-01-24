@@ -198,6 +198,11 @@ $transfer_kill = "";
             Dada::logMsg(1, $dl, $src."/".$obs." finished -> transferred ".$response);
             Dada::logMsg(2, $dl, "checkTransferred: markState(".$obs.", obs.finished, obs.transferred)");
             ($result, $response) = markState($obs, "obs.finished", "obs.transferred");
+            # update status in the DB:
+            $cmd = "asteria_utc.py --config-dir /home/dada/linux_64/share/ -U ".$obs;
+            Dada::logMsg(3, $dl, "main: ".$cmd);
+            ($result, $response) = Dada::mySystem($cmd);
+            Dada::logMsg(3, $dl, "main: ".$result." ".$response);
           }
         }
       }
@@ -371,6 +376,11 @@ sub getObsToSend()
         ($result, $response) = Dada::mySystem($cmd);
         Dada::logMsg(3, $dl, "getObsToSend: ".$result." ".$response);
         Dada::logMsg(1, $dl, $line." finished -> completed");
+        # update status in the DB:
+        $cmd = "asteria_utc.py --config-dir /home/dada/linux_64/share/ -U ".$line;
+        Dada::logMsg(3, $dl, "main: ".$cmd);
+        ($result, $response) = Dada::mySystem($cmd);
+        Dada::logMsg(3, $dl, "main: ".$result." ".$response);
       }
     }
   }
