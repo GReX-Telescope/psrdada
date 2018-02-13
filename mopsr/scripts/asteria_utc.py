@@ -15,6 +15,9 @@ import time
 import re
 import numpy as np
 
+import ephem
+from math import degrees
+
 """
 This script goes through a list of recent observations and if they weren't yet
 processed it will extract basic metadata about them. It then stores the results
@@ -211,6 +214,10 @@ INSERT IGNORE INTO UTCs (utc)
   VALUES (%s)
 '''
 
+update_utc_ts = '''
+UPDATE UTCs SET utc_ts = TIMESTAMP(%s) WHERE id = %s
+'''
+
 get_utcid = '''
 SELECT id from UTCs WHERE utc = %s
 '''
@@ -337,6 +344,7 @@ def insert_utc_into_DB(UTC, cur, verbose):
     cur.execute(get_utcid, [UTC, ])
     answer = cur.fetchone()
   utc_id = answer[0]
+  cur.execute(update_utc_ts, [UTC, utc_id, ])
   return utc_id
 
 def insert_infos_into_DB(top_dir, utc, utc_id, cur, config_dir, verbose):
@@ -431,7 +439,8 @@ def parse_infos(top_dir, UTC, utc_id, cur, config_dir, verbose):
       if infos["FB_ENABLED"] == "true":
         if "SOURCE" in infos:
           src = infos["SOURCE"]
-        parse_header(src, "FB", top_dir, utc_id, cur, config_dir + "/obs.fb_header_params.only_common", "FB_Obs", "FB_Headers", verbose)
+        FB_Obs_id = parse_header(src, "FB", top_dir, utc_id, cur, config_dir + "/obs.fb_header_params.only_common", "FB_Obs", "FB_Headers", verbose)
+        set_galb(FB_Obs_id, utc_id, cur, verbose)
     if "MB_ENABLED" in infos:
       if infos["MB_ENABLED"] == "true":
         if "SOURCE" in infos:
@@ -442,6 +451,21 @@ def parse_infos(top_dir, UTC, utc_id, cur, config_dir, verbose):
   else:
     print "More than one or no obs.info found for", UTC, "in", top_dir
     return -1
+
+def set_galb(FB_Obs_id, utc_id, cur, verbose):
+  q = "SELECT FB_Headers.RA, FB_Headers.DEC FROM FB_Headers JOIN FB_Obs ON FB_Headers.utc_id = FB_Obs.utc_id WHERE FB_Obs.id = %s"
+  cur.execute(q, [FB_Obs_id, ])
+  answer = cur.fetchone()
+  RA = answer[0]
+  DEC = answer[1]
+
+  radec = ephem.Equatorial(RA, DEC)
+  g = ephem.Galactic(radec)
+  gb = degrees(g.lat)
+
+  q = "UPDATE FB_Obs SET gb=%s WHERE id = %s"
+  cur.execute(q, [gb, FB_Obs_id, ])
+  return 0
 
 def parse_annotation(top_dir, utc, utc_id, cur, verbose):
   if verbose:
