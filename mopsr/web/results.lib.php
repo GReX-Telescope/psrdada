@@ -3,10 +3,10 @@
 include_once("mopsr.lib.php");
 include_once("mopsr_webpage.lib.php");
 
-class results extends mopsr_webpage 
+class results_db extends mopsr_webpage 
 {
 
-  var $filter_types = array("", "SOURCE", "FREQ", "BW", "UTC_START", "PROC_FILE");
+  var $filter_types = array("", "SOURCE", "UTC_START", "ANNOTATION", "FREQ", "BW", "OBSERVER", "PID", "AQ_PROC_FILE");
   var $cfg = array();
   var $length;
   var $offset;
@@ -18,7 +18,7 @@ class results extends mopsr_webpage
   var $results_link;
   var $archive_dir;
 
-  function results()
+  function results_db()
   {
     mopsr_webpage::mopsr_webpage();
     $inst = new mopsr();
@@ -27,6 +27,7 @@ class results extends mopsr_webpage
     $this->length = (isset($_GET["length"])) ? $_GET["length"] : 20;
     $this->offset = (isset($_GET["offset"])) ? $_GET["offset"] : 0;
     $this->inline_images = (isset($_GET["inline_images"])) ? $_GET["inline_images"] : "false";
+    $this->show_boresight = (isset($_GET["show_boresight"])) ? $_GET["show_boresight"] : "false";
     $this->filter_type = (isset($_GET["filter_type"])) ? $_GET["filter_type"] : "";
     $this->filter_value = (isset($_GET["filter_value"])) ? $_GET["filter_value"] : "";
     $this->results_dir = $this->cfg["SERVER_RESULTS_DIR"];
@@ -83,7 +84,7 @@ class results extends mopsr_webpage
       }
 
       // If a page reload is required
-      function changeLength() {
+      function changeLength(reset_offset=true) {
 
         var i = document.getElementById("displayLength").selectedIndex;
         var length = document.getElementById("displayLength").options[i].value;
@@ -94,11 +95,22 @@ class results extends mopsr_webpage
         else
           show_inline = "false";
 
-        var offset = getOffset()
+        var show_boresight;
+        if (document.getElementById("show_boresight").checked)
+          show_boresight = "true";
+        else
+          show_boresight = "false";
+
+        var offset;
+        if (reset_offset) {
+          offset = getOffset();
+        } else {
+          offset = 0;
+        }
 
         var filename = window.location.pathname;
         filename = filename.substring(filename.lastIndexOf('/')+1);
-        var url = filename + "?single=true&offset="+offset+"&length="+length+"&inline_images="+show_inline;
+        var url = filename + "?single=true&offset="+offset+"&length="+length+"&inline_images="+show_inline+"&show_boresight="+show_boresight;
 
         i = document.getElementById("filter_type").selectedIndex;
         var filter_type = document.getElementById("filter_type").options[i].value;
@@ -116,7 +128,7 @@ class results extends mopsr_webpage
         var i = document.getElementById("displayLength").selectedIndex;
         var length = document.getElementById("displayLength").options[i].value;
         var img;
-        var show_inline
+        var show_inline;
 
         if (document.getElementById("inline_images").checked) {
           show_inline = true;
@@ -136,6 +148,35 @@ class results extends mopsr_webpage
           else
           {
             img.style.display = "none";
+          }
+        }
+      }
+      
+      function toggle_boresight()
+      {
+        var i = document.getElementById("displayLength").selectedIndex;
+        var length = document.getElementById("displayLength").options[i].value;
+        var boresight;
+        var show_boresight;
+
+        if (document.getElementById("show_boresight").checked) {
+          show_boresight = true;
+          document.getElementById("BORESIGHT_TR").innerHTML = "BORESIGHT";
+        } else {
+          show_boresight = false;
+          document.getElementById("BORESIGHT_TR").innerHTML = "";
+        }
+
+        for (i=0; i<length; i++) {
+          boresight = document.getElementById("BORESIGHT_"+i);
+          if (show_boresight) 
+          {
+            boresight.style.display = "";
+            boresight.className = "processing";
+          }
+          else
+          {
+            boresight.style.display = "none";
           }
         }
       }
@@ -159,14 +200,22 @@ class results extends mopsr_webpage
           show_inline = "false";
         url = url + "&inline_images="+show_inline;
 
+        // check if boresight source has been specified
+        if (document.getElementById("show_boresight").checked)
+          show_boresight = "true";
+        else
+          show_boresight = "false";
+        url = url + "&show_boresight="+show_boresight;
+
         // check if a filter has been specified
         var u, filter_type, filter_vaule;
         i = document.getElementById("filter_type").selectedIndex;
         filter_type = document.getElementById("filter_type").options[i].value;
-        filter_value = document.getElementById("filter_value").value;
+        filter_value = encodeURIComponent(document.getElementById("filter_value").value);
         if ((filter_value != "") && (filter_type != "")) {
           url = url + "&filter_type="+filter_type+"&filter_value="+filter_value;
         }
+
 
         if (window.XMLHttpRequest)
           ru_http_request = new XMLHttpRequest()
@@ -193,6 +242,7 @@ class results extends mopsr_webpage
           var i, j, k, result, key, value, span, this_result;
 
           var results = xmlObj.getElementsByTagName("result");
+
 
           // for each result returned in the XML DOC
           for (i=0; i<results.length; i++) {
@@ -279,10 +329,17 @@ class results extends mopsr_webpage
               }
             } // end for
           }
-          
+
           // update then showing_from and showing_to spans
           var offset = getOffset();
           var length = getLength();
+
+          if (results.length < length) {
+            console.log("less results than needed to populate the page", results.length, length);
+            for (i=results.length; i<length; i++)
+              document.getElementById("row_"+i).style.display = "none";
+          }
+          
           document.getElementById("showing_from").innerHTML = offset;
           document.getElementById("showing_to").innerHTML = (offset + length);
         }
@@ -332,7 +389,7 @@ class results extends mopsr_webpage
       </tr>
       <tr>
         <td>For</td>
-        <td><input name="filter_value" id="filter_value" value="<?echo $this->filter_value?>" onChange="changeLength()"></td>
+        <td><input name="filter_value" id="filter_value" value="<?echo $this->filter_value?>" onChange="changeLength(false)"></td>
       </tr>
 
       <tr>
@@ -340,6 +397,13 @@ class results extends mopsr_webpage
         <td>
           <input type=checkbox id="inline_images" name="inline_images" onChange="toggle_images()"<? if($this->inline_images == "true") echo " checked";?>>
         </td>
+      </tr>
+
+      <tr>
+      <td>Boresight</td>
+      <td>
+        <input type=checkbox id="show_boresight" name="show_boresight" onChange="toggle_boresight()"<? if($this->show_boresight == "true") echo " checked";?>>
+      </td>
       </tr>
 
       <tr>
@@ -357,9 +421,6 @@ class results extends mopsr_webpage
       <tr>
         <td colspan=2><a href="/mopsr/<?php echo basename(__FILE__);?>?single=true">Recent MOPSR Results</a></td>
       </tr>
-      <tr>
-        <td colspan=2><a href="/mopsr/<?php echo basename(__FILE__);?>?single=true&class=old">Archived MOPSR Results</a></td>
-      </tr>
 
     </table>
   <?
@@ -367,44 +428,40 @@ class results extends mopsr_webpage
 
     echo "</td><td>\n";
 
-    $this->openBlockHeader("Matching Observations");
+    $this->openBlockHeader("Matching Observations (processing observations not displayed)");
 
     $cmd = "";
-    $using_db = $this->filter_type === "SOURCE" && strpos($this->filter_value, "J") === 0;
-    if (($this->filter_type == "") && ($this->filter_value == "")) {
-      $cmd = "find ".$this->results_dir." -maxdepth 2 -name 'obs.info' | wc -l";
-    } else {
-      if ($this->filter_type == "UTC_START") {
-        $cmd = "find ".$this->results_dir."/*".$this->filter_value."* -maxdepth 1 -name 'obs.info' | wc -l";
-      } elseif ($using_db) {
-        # Handle requests for pulsar observations using the asteria database
-        include MYSQL_DB_CONFIG_FILE;
+    $using_db = true;
+    include MYSQL_DB_CONFIG_FILE;
 
-        $pdo = new PDO ('mysql:dbname='.MYSQL_DB.';host='.MYSQL_HOST, MYSQL_USER, MYSQL_PWD);
-        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-        $q = 'SELECT count(*) FROM (Pulsars JOIN TB_Obs ON Pulsars.id = TB_Obs.psr_id AND Pulsars.name LIKE "'.$this->filter_value.'%")';
-        try {
-          $stmt = $pdo -> query($q);
-        } catch (PDOException $ex) {
-          print $ex->getMessage();
-        }
-        $row = $stmt->fetch();
-        $total_num_results = $row[0];
-      } else {
-        $cmd = "find ".$this->results_dir." -maxdepth 2 -type f -name obs.info | xargs grep ".$this->filter_type." | grep ".$this->filter_value." | wc -l";
+    $pdo = new PDO ('mysql:dbname='.MYSQL_DB.';host='.MYSQL_HOST, MYSQL_USER, MYSQL_PWD);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $q = '';
+    if (($this->filter_type == "") && ($this->filter_value == "")) {
+      $q = 'SELECT COUNT(*) FROM Infos LEFT JOIN UTCs ON UTCs.id = Infos.utc_id';
+      try {
+        $stmt = $pdo -> query($q);
+      } catch (PDOException $ex) {
+        print $ex->getMessage();
       }
-    }
-    if (!$using_db) {
-      $total_num_results = exec($cmd);
-      $results = $this->getResultsArray($this->results_dir,
-                                        $this->offset, $this->length, 
-                                        $this->filter_type, $this->filter_value);
+      $row = $stmt->fetch();
+      $total_num_results = $row[0];
     } else {
-      $results = $this->getResultsArray_db($pdo, $this->results_dir,
-                                           $this->offset, $this->length, 
-                                           $this->filter_type, $this->filter_value);
-      $pdo = null;
+      $filter = $this->prepFilter($this->filter_type, $this->filter_value);
+      $q = 'SELECT COUNT(*) FROM Infos LEFT JOIN UTCs ON UTCs.id = Infos.utc_id '.$filter;
+      try {
+        $stmt = $pdo -> query($q);
+      } catch (Exception $ex) {
+        print $ex->getMessage();
+      }
+      $row = $stmt->fetch();
+      $total_num_results = $row[0];
     }
+
+    $results = $this->getResultsArray_db($pdo, $this->results_dir,
+                                         $this->offset, $this->length, 
+                                         $this->filter_type, $this->filter_value);
+    $pdo = null;
 
 
     ?>
@@ -485,6 +542,13 @@ class results extends mopsr_webpage
 ?>
         <th align=left>UTC START</th>
         <th align=left>SOURCEs</th>
+<?
+     // if ($this->show_boresight == "true")
+      //  echo "        <th id='BORESIGHT_TR' align=left>BORESIGHT</th>\n";
+     // else
+      //  echo "        <th id='BORSEIGHT_TR' align=left></th>\n";
+?>
+        <th id='BORESIGHT_TR' align=left></th>
         <th align=left>STATE</th>
         <th align=left>PID</th>
         <th align=left>LENGTH</th>
@@ -553,6 +617,13 @@ class results extends mopsr_webpage
           // SOURCE 
           echo "    <td ".$bg_style."><span id='SOURCE_".$i."'>".$sources."</span></td>\n";
 
+          // BORESIGHT
+          if ($this->show_boresight == "true")
+            $style = "";
+          else
+            $style = "display: none;";
+          echo "    <td ".$bg_style."><span id='BORESIGHT_".$i."' style='".$style."'>".$r["SOURCE"]."</span></td>";
+
           // Observation State
           echo "    <td ".$bg_style."><span id='STATE_".$i."'>".$r["STATE"]."</span></td>\n";
 
@@ -616,18 +687,15 @@ class results extends mopsr_webpage
    ***************************************************************************************************/
   function printUpdateHTML($get)
   {
-    $using_db = $this->filter_type =="SOURCE" && strpos($this->filter_value, "J") === 0;
-    if (!$using_db) {
-      $results = $this->getResultsArray($this->results_dir,
-                                        $this->offset, $this->length, 
-                                        $this->filter_type, $this->filter_value);
-    } else {
-      $pdo = new PDO ('sqlite:/home/dada/linux_64/web/mopsr/asteria.db');
-      $results = $this->getResultsArray_db($pdo, $this->results_dir,
-                                        $this->offset, $this->length, 
-                                        $this->filter_type, $this->filter_value);
-      $pdo = null;
-    }
+    include MYSQL_DB_CONFIG_FILE;
+
+    $pdo = new PDO ('mysql:dbname='.MYSQL_DB.';host='.MYSQL_HOST, MYSQL_USER, MYSQL_PWD);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $results = $this->getResultsArray_db($pdo, $this->results_dir,
+                                      $this->offset, $this->length, 
+                                      $this->filter_type, $this->filter_value);
+    $pdo = null;
+
     $keys = array_keys($results);
     rsort($keys);
 
@@ -641,7 +709,8 @@ class results extends mopsr_webpage
       {
         if ($k == "SOURCE")
         {
-          // ignore
+          // ignore // no longer
+          $xml .= "<BORESIGHT>\n".$v."</BORESIGHT>";;
         }
         else if ($k == "SOURCES")
         {
@@ -684,204 +753,80 @@ class results extends mopsr_webpage
 
   }
 
-  function getResultsArray($results_dir, $offset=0, $length=0, $filter_type, $filter_value) 
+  function prepFilter($filter_type, $filter_value)
   {
-    $all_results = array();
-
-    $observations = array();
-    $dir = $results_dir;
-
-    if (($filter_type == "") || ($filter_value == "")) 
-    {
-      $observations = getSubDirs ($results_dir, $offset, $length, 1);
-    } 
-    else 
-    {
-      # get a complete list
-      if ($filter_type == "UTC_START") {
-        $cmd = "find ".$results_dir."/*".$filter_value."* -maxdepth 1 ".
-               "-name 'obs.info' -printf '%h\n' | awk -F/ '{print \$NF}' | sort -r";
-      } else {
-        $cmd = "find ".$results_dir." -maxdepth 2 -type f -name obs.info ".
-               "| xargs grep ".$filter_type." | grep ".$filter_value." ".
-               "| awk -F/ '{print $(NF-1)}' | sort -r";
+    $filter = "WHERE ";
+    if ($filter_type == "SOURCE") {
+      $filter .= '(Infos.SOURCE LIKE "%'.$filter_value.'%" AND Infos.SOURCE NOT LIKE "%IFTB%") OR ';
+      for ($j=0; $j<4; $j++) {
+        $filter .= 'Infos.TB'.$j.'_SOURCE LIKE "%'.$filter_value.'%" OR ';
       }
-      $last = exec($cmd, $all_obs, $rval);
-      $observations = array_slice($all_obs, $offset, $length);
+      $filter .= ' Infos.CORR_SOURCE LIKE "%'.$filter_value.'%"';
+    } else if ($filter_type == "ANNOTATION") {
+      $filter .= ' UTCs.annotation COLLATE LATIN1_GENERAL_CI LIKE "%'.$filter_value.'%"';
+    } else if ($filter_value == "" || $filter_value === NULL) {
+      $filter = "";
+    } else {
+      $filter .= ' Infos.'.$filter_type.' LIKE "%'.$filter_value.'%"';
     }
-
-    for ($i=0; $i<count($observations); $i++)
-    {
-      $o = $observations[$i];
-      $dir = $results_dir."/".$o;
-
-      // read the obs.info file into an array 
-      if (file_exists($dir."/obs.info")) 
-      {
-        $arr = getConfigFile($dir."/obs.info");
-        $all = array();
-
-        $all["STATE"] = "unknown";
-        if (file_exists($dir."/obs.processing"))
-          $all["STATE"] = "processing";
-        else if (file_exists($dir."/obs.finished"))
-          $all["STATE"] = "finished";
-        else if (file_exists($dir."/obs.transferred"))
-          $all["STATE"] = "transferred";
-        else if (file_exists($dir."/obs.completed"))
-          $all["STATE"] = "completed";
-        else if (file_exists($dir."/obs.failed"))
-          $all["STATE"] = "failed";
-        else
-           $all["STATE"] = "unknown";
-
-        $all["SOURCE"] = $arr["SOURCE"];
-
-        $all["SOURCES"] = array();
-        if ($arr["FB_ENABLED"] == "true")
-        {
-          $all["SOURCES"]["FB"] = array();
-          $all["SOURCES"]["FB"]["TYPE"] = "FB";
-          $all["SOURCES"]["FB"]["IMAGE"] = $this->getFBImage($dir, $o, $arr["FB_IMG"]);
-          if ((($all["STATE"] == "finished") || ($all["STATE"] == "transferred")) && ($arr["FB_IMG"] == ""))
-            $this->updateImage ($dir."/obs.info", "FB_IMG", $all["SOURCES"]["FB"]["IMAGE"]);
-        }
-
-        if ($arr["MB_ENABLED"] == "true")
-        {
-          $all["SOURCES"]["MB"] = array();
-          $all["SOURCES"]["MB"] = array();
-          $all["SOURCES"]["MB"]["IMAGE"] = "../../../images/blankimage.gif";
-        }
-
-        if ($arr["CORR_ENABLED"] == "true")
-        {
-          $source = $arr["SOURCE"];
-          $all["SOURCES"][$source] = array();
-          $all["SOURCES"][$source]["TYPE"] = "CORR";
-          $all["SOURCES"][$source]["IMAGE"] = $this->getCorrImage($dir, $o, $arr["CORR_IMG"]);
-          if ((($all["STATE"] == "finished") || ($all["STATE"] == "transferred")) && ($arr["CORR_IMG"] == ""))
-            $this->updateImage ($dir."/obs.info", "CORR_IMG", $all["SOURCES"][$source]["IMAGE"]);
-        }
-
-        for ($j=0; $j<4; $j++)
-        {
-          $tbe_key = "TB".$j."_ENABLED";
-          if ((array_key_exists ($tbe_key, $arr)) && ($arr[$tbe_key] == "true"))
-          {
-            $source = $arr["TB".$j."_SOURCE"];
-            $all["SOURCES"][$source] = array();
-            $all["SOURCES"][$source]["TYPE"] = "TB";
-            $all["SOURCES"][$source]["IMAGE"] = $this->getTBImage($dir, $o, $source, $arr["TB".$j."_IMG"]);
-            if ((($all["STATE"] == "finished") || ($all["STATE"] == "transferred")) && ($arr["TB".$j."_IMG"] == ""))
-              $this->updateImage ($dir."/obs.info", "TB".$j."_IMG", $all["SOURCES"][$source]["IMAGE"]);
-          }
-        }
-
-        # use the primary PID
-        $all["PID"] = $arr["PID"];
-
-        $all["IMG"] = "NA";
-        # find an image of the observation, if not existing
-        if (($arr["IMG"] == "NA") || ($arr["IMG"] == ""))
-        {
-          # preferentially find a pulsar profile plot
-          $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -type f ".
-            "-name '*.fl.120x90.png' -printf '%f\n' ".
-            "| sort -n | head -n 1";
-          $img = exec ($cmd, $output, $rval);
-
-          if (($rval == 0) && ($img != "")) {
-            $all["IMG"] = $img;
-          } else {
-            $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -type f ".
-              "-name '*.*.ad.160x120.png' -printf '%f\n' ".
-              "-o -name '*.FB.00.*png' -printf '%f\n' ".
-              "| sort -n | head -n 1";
-            $img = exec ($cmd, $output, $rval);
-
-            if (($rval == 0) && ($img != "")) {
-              $all["IMG"] = $img;
-            } else {
-              $all["IMG"] = "../../../images/blankimage.gif";
-            }
-          }
-        }
-        else
-        {
-          $all["IMG"] = $arr["IMG"];
-        }
-      
-        # if the integration length does not yet exist
-        $int = 0;
-        if (($arr["INT"] == "NA") || ($arr["INT"] <= 0))
-        {
-          if ($arr["CORR_ENABLED"] == "true")
-            $int = $this->calcIntLengthCorr($o, $arr["SOURCE"]);
-          else if ($arr["FB_ENABLED"] == "true")
-            $int = $this->calcIntLengthFB($o, "FB");
-          else if ($arr["TB0_ENABLED"] == "true")
-            $int = $this->calcIntLengthTB($o, $arr["TB0_SOURCE"]);
-          else
-            $int = "0";
-          $all["INT"] = $int;
-        }
-        else
-          $all["INT"] = $arr["INT"];
-
-        # if the observation is 
-        if (($all["STATE"] == "finished") || ($all["STATE"] == "transferred"))
-        {
-          if (($arr["INT"] == "NA") || ($arr["INT"] <= 0) && ($all["INT"] > 0))
-          {
-            system("perl -ni -e 'print unless /^INT/' ".$results_dir."/".$o."/obs.info");
-            system("echo 'INT              ".$int."' >> ".$results_dir."/".$o."/obs.info");
-          }
-        }
-      }
-
-      if (file_exists($dir."/obs.txt")) {
-        $all["ANNOTATION"] = file_get_contents($dir."/obs.txt");
-      } else {
-        $all["ANNOTATION"] = "";
-      }
-
-      $all_results[$o] = $all;
-    }
-
-    return $all_results;
+    return $filter;
   }
 
   function getResultsArray_db($pdo, $results_dir, $offset=0, $length=0, $filter_type, $filter_value) 
   {
-    if ($filter_type != "SOURCE") {
-      throw new Exception('getResultsArray_db only works for SOURCE filter');
-    } elseif (strpos($filter_value, 'J') !== 0) {
-      throw new Exception('getResultsArray_db only works for pulsar SOURCE (starting with J)');
-    }
-
     $all_results = array();
 
     $observations = array();
     $dir = $results_dir;
-    
-    $q = 'SELECT utc FROM (Pulsars JOIN UTCs JOIN TB_Obs ON Pulsars.id = TB_Obs.psr_id AND UTCs.id =
-      TB_Obs.utc_id) WHERE name LIKE "'.$filter_value.'%" ORDER BY utc DESC LIMIT '.$length.' OFFSET '.$offset;
+
+    $q = "";
+    $filter ="";
+
+    if ($filter_type == "" || $filter_value == "") {
+      $q = 'SELECT UTCs.utc, UTCs.id, UTCs.annotation, Infos.INT, Infos.SOURCE, Infos.FB_ENABLED, Infos.FB_IMG, Infos.TB0_ENABLED, Infos.TB1_ENABLED, Infos.TB2_ENABLED, Infos.TB3_ENABLED, Infos.TB0_SOURCE, Infos.TB1_SOURCE, Infos.TB2_SOURCE, Infos.TB3_Source, Infos.TB0_IMG, Infos.TB1_IMG, Infos.TB2_IMG, Infos.TB3_IMG, Infos.CORR_ENABLED, Infos.CORR_SOURCE, Infos.MB_ENABLED, Infos.MB_ENABLED, Infos.OBSERVER, Infos.PID, States.state FROM UTCs JOIN Infos JOIN States ON UTCs.id = Infos.utc_id and UTCs.state_id = States.id ORDER BY UTCs.utc DESC LIMIT '.$length.' OFFSET '.$offset;
+    } else {
+      $filter = $this->prepFilter($filter_type, $filter_value);
+      $q = 'SELECT UTCs.utc, UTCs.id, UTCs.annotation, Infos.INT, Infos.SOURCE, Infos.FB_ENABLED, Infos.FB_IMG, Infos.TB0_ENABLED, Infos.TB1_ENABLED, Infos.TB2_ENABLED, Infos.TB3_ENABLED, Infos.TB0_SOURCE, Infos.TB1_SOURCE, Infos.TB2_SOURCE, Infos.TB3_Source, Infos.TB0_IMG, Infos.TB1_IMG, Infos.TB2_IMG, Infos.TB3_IMG, Infos.CORR_ENABLED, Infos.CORR_SOURCE, Infos.MB_ENABLED, Infos.MB_ENABLED, Infos.OBSERVER, Infos.PID, States.state FROM UTCs JOIN Infos JOIN States ON UTCs.id = Infos.utc_id and UTCs.state_id = States.id '.$filter.' ORDER BY UTCs.utc DESC LIMIT '.$length.' OFFSET '.$offset;
+    }
     try {
       $stmt = $pdo -> query ($q);
     } catch (PDOException $ex) {
       print $ex->getMessage();
     }
 
-    $observations = $stmt->fetchall(PDO::FETCH_COLUMN, 0);
+    $rows = $stmt->fetchall();
+    $utcs = array_map(function ($value) {return $value['utc'];}, $rows);
+    $utc_ids = array_map(function ($value) {return $value['id'];}, $rows);
+    $boresights = array_map(function ($value) {return $value['SOURCE'];}, $rows);
+    $FB_ENABLEDs = array_map(function ($value) {return $value['FB_ENABLED'];}, $rows);
+    $FB_IMGs = array_map(function ($value) {return $value['FB_IMG'];}, $rows);
+    $TB0_ENABLEDs = array_map(function ($value) {return $value['TB0_ENABLED'];}, $rows);
+    $TB1_ENABLEDs = array_map(function ($value) {return $value['TB1_ENABLED'];}, $rows);
+    $TB2_ENABLEDs = array_map(function ($value) {return $value['TB2_ENABLED'];}, $rows);
+    $TB3_ENABLEDs = array_map(function ($value) {return $value['TB3_ENABLED'];}, $rows);
+    $TB0_SOURCEs = array_map(function ($value) {return $value['TB0_SOURCE'];}, $rows);
+    $TB1_SOURCEs = array_map(function ($value) {return $value['TB1_SOURCE'];}, $rows);
+    $TB2_SOURCEs = array_map(function ($value) {return $value['TB2_SOURCE'];}, $rows);
+    $TB3_SOURCEs = array_map(function ($value) {return $value['TB3_SOURCE'];}, $rows);
+    $TB0_IMGs = array_map(function ($value) {return $value['TB0_IMG'];}, $rows);
+    $TB1_IMGs = array_map(function ($value) {return $value['TB1_IMG'];}, $rows);
+    $TB2_IMGs = array_map(function ($value) {return $value['TB2_IMG'];}, $rows);
+    $TB3_IMGs = array_map(function ($value) {return $value['TB3_IMG'];}, $rows);
+    $CORR_ENABLEDs = array_map(function ($value) {return $value['CORR_ENABLED'];}, $rows);
+    $CORR_SOURCEs = array_map(function ($value) {return $value['CORR_SOURCE'];}, $rows);
+    $MB_SOURCEs = array_map(function ($value) {return $value['MB_SOURCE'];}, $rows);
+    $PIDs = array_map(function ($value) {return $value['PID'];}, $rows);
+    $states = array_map(function ($value) {return $value['state'];}, $rows);
+    $annotations = array_map(function ($value) {return $value['annotation'];}, $rows);
+    $INTs = array_map(function ($value) {return $value['INT'];}, $rows);
 
     $_results_dir = $this->cfg["SERVER_RESULTS_DIR"];
     $_old_results_dir = $this->cfg["SERVER_OLD_RESULTS_DIR"];
     $_archive_dir = $this->cfg["SERVER_ARCHIVE_DIR"];
     $_old_archive_dir = $this->cfg["SERVER_OLD_ARCHIVE_DIR"];
-    for ($i=0; $i<count($observations); $i++)
+    for ($i=0; $i<count($rows); $i++)
     {
-      $o = $observations[$i]; // This sets o to a UTC
+      $o = $rows[$i]["utc"]; // This sets o to a UTC
       $dir = $_results_dir."/".$o;
       if (file_exists($_results_dir."/".$o)) {
         $dir = $_results_dir."/".$o;
@@ -898,156 +843,143 @@ class results extends mopsr_webpage
         $dir = "";
       }
 
-      // read the obs.info file into an array 
-      if ($dir != "")
+      $all = array();
+
+      $all["STATE"] = $states[$i];
+
+      $all["SOURCE"] = $boresights[$i];
+
+      $all["SOURCES"] = array();
+      if ($FB_ENABLEDs[$i] == 1)
       {
-        # this branch is for observations which are still present on the backend drives
-        $arr = getConfigFile($dir."/obs.info");
-        $all = array();
+        $all["SOURCES"]["FB"] = array();
+        $all["SOURCES"]["FB"]["TYPE"] = "FB";
+        if ($dir != "")
+          $all["SOURCES"]["FB"]["IMAGE"] = $this->getFBImage($dir, $o, $FB_IMGs[$i]);
+        else 
+          $all["SOURCES"]["FB"]["IMAGE"] = "";
+        if ((($states[$i] == "finished") || ($states[$i] == "transferred")) && ($FB_IMGs[$i] == ""))
+          $this->updateImage_db ($dir."/obs.info", "FB_IMG", $all["SOURCES"]["FB"]["IMAGE"]);
+      }
 
-        $all["STATE"] = "unknown";
-        if (file_exists($dir."/obs.processing"))
-          $all["STATE"] = "processing";
-        else if (file_exists($dir."/obs.finished"))
-          $all["STATE"] = "finished";
-        else if (file_exists($dir."/obs.transferred"))
-          $all["STATE"] = "transferred";
-        else if (file_exists($dir."/obs.completed"))
-          $all["STATE"] = "completed";
-        else if (file_exists($dir."/obs.failed"))
-          $all["STATE"] = "failed";
+      if ($MB_ENABLEDs[$i] == 1)
+      {
+        $all["SOURCES"]["MB"] = array();
+        $all["SOURCES"]["MB"]["IMAGE"] = "../../../images/blankimage.gif";
+      }
+
+      if ($CORR_ENABLEDs[$i] == 1)
+      {
+        $source = $CORR_SOURCEs[$i];
+        $all["SOURCES"][$source] = array();
+        $all["SOURCES"][$source]["TYPE"] = "CORR";
+        if (1 == 0 && $dir != "") # TODO CORR_IMG not stored in DB, can't find it in any obs.info either
+          $all["SOURCES"][$source]["IMAGE"] = $this->getCorrImage($dir, $o, $arr["CORR_IMG"]); 
         else
-           $all["STATE"] = "unknown";
+          $all["SOURCES"][$source]["IMAGE"] = "";
+        #if ((($all["STATE"] == "finished") || ($all["STATE"] == "transferred")) && ($arr["CORR_IMG"] == "")) # TODO
+        #  $this->updateImage ($dir."/obs.info", "CORR_IMG", $all["SOURCES"][$source]["IMAGE"]); # TODO
+      }
 
-        $all["SOURCE"] = $arr["SOURCE"];
-
-        $all["SOURCES"] = array();
-        if ($arr["FB_ENABLED"] == "true")
-        {
-          $all["SOURCES"]["FB"] = array();
-          $all["SOURCES"]["FB"]["TYPE"] = "FB";
-          $all["SOURCES"]["FB"]["IMAGE"] = $this->getFBImage($dir, $o, $arr["FB_IMG"]);
-          if ((($all["STATE"] == "finished") || ($all["STATE"] == "transferred")) && ($arr["FB_IMG"] == ""))
-            $this->updateImage ($dir."/obs.info", "FB_IMG", $all["SOURCES"]["FB"]["IMAGE"]);
-        }
-
-        if ($arr["MB_ENABLED"] == "true")
-        {
-          $all["SOURCES"]["MB"] = array();
-          $all["SOURCES"]["MB"] = array();
-          $all["SOURCES"]["MB"]["IMAGE"] = "../../../images/blankimage.gif";
-        }
-
-        if ($arr["CORR_ENABLED"] == "true")
-        {
-          $source = $arr["SOURCE"];
+      for ($j=0; $j<4; $j++)
+      {
+        $tbe_key = "TB".$j."_ENABLEDs";
+        if (${$tbe_key}[$i] == 1) {
+          $tbs_key = "TB".$j."_SOURCEs";
+          $tbi_key = "TB".$j."_IMGs";
+          $source = ${$tbs_key}[$i];
           $all["SOURCES"][$source] = array();
-          $all["SOURCES"][$source]["TYPE"] = "CORR";
-          $all["SOURCES"][$source]["IMAGE"] = $this->getCorrImage($dir, $o, $arr["CORR_IMG"]);
-          if ((($all["STATE"] == "finished") || ($all["STATE"] == "transferred")) && ($arr["CORR_IMG"] == ""))
-            $this->updateImage ($dir."/obs.info", "CORR_IMG", $all["SOURCES"][$source]["IMAGE"]);
+          $all["SOURCES"][$source]["TYPE"] = "TB";
+          $all["SOURCES"][$source]["IMAGE"] = $this->getTBImage($dir, $o, $source, ${$tbi_key}[$i]);
+          if ((($all["STATE"] == "finished") || ($all["STATE"] == "transferred")) && (${$tbi_key}[$j] == ""))
+            $this->updateImage_db ($dir."/obs.info", "TB".$j."_IMG", $all["SOURCES"][$source]["IMAGE"]);
         }
+      }
 
-        for ($j=0; $j<4; $j++)
-        {
-          $tbe_key = "TB".$j."_ENABLED";
-          if ((array_key_exists ($tbe_key, $arr)) && ($arr[$tbe_key] == "true"))
-          {
-            $source = $arr["TB".$j."_SOURCE"];
-            $all["SOURCES"][$source] = array();
-            $all["SOURCES"][$source]["TYPE"] = "TB";
-            $all["SOURCES"][$source]["IMAGE"] = $this->getTBImage($dir, $o, $source, $arr["TB".$j."_IMG"]);
-            if ((($all["STATE"] == "finished") || ($all["STATE"] == "transferred")) && ($arr["TB".$j."_IMG"] == ""))
-              $this->updateImage ($dir."/obs.info", "TB".$j."_IMG", $all["SOURCES"][$source]["IMAGE"]);
-          }
+      # use the primary PID
+      $all["PID"] = $PIDs[$i];
+
+      $all["IMG"] = "NA";
+      # find an image of the observation, if not existing
+      if (($arr["IMG"] == "NA") || ($arr["IMG"] == "")) # TODO
+      {
+        if ($filter_type === "SOURCE" && strpos($this->filter_value, "J") === 0) {
+          $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -type f ".
+            "-name '*".$filter_value."*.fl.120x90.png' -printf '%f\n' ".
+            "| sort -n | head -n 1";
+        } else {
+          # preferentially find a pulsar profile plot
+          $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -type f ".
+            "-name '*.fl.120x90.png' -printf '%f\n' ".
+            "| sort -n | head -n 1";
         }
+        $img = exec ($cmd, $output, $rval);
 
-        # use the primary PID
-        $all["PID"] = $arr["PID"];
-
-        $all["IMG"] = "NA";
-        # find an image of the observation, if not existing
-        if (($arr["IMG"] == "NA") || ($arr["IMG"] == ""))
-        {
-          if ($filter_type === "SOURCE" && strpos($this->filter_value, "J") === 0) {
-            $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -type f ".
-              "-name '*".$filter_value."*.fl.120x90.png' -printf '%f\n' ".
-              "| sort -n | head -n 1";
-          } else {
-            # preferentially find a pulsar profile plot
-            $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -type f ".
-              "-name '*.fl.120x90.png' -printf '%f\n' ".
-              "| sort -n | head -n 1";
-          }
+        if (($rval == 0) && ($img != "")) {
+          $all["IMG"] = $img;
+        } else {
+          $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -type f ".
+            "-name '*.*.ad.160x120.png' -printf '%f\n' ".
+            "-o -name '*.FB.00.*png' -printf '%f\n' ".
+            "| sort -n | head -n 1";
           $img = exec ($cmd, $output, $rval);
 
           if (($rval == 0) && ($img != "")) {
             $all["IMG"] = $img;
           } else {
-            $cmd = "find ".$dir." -mindepth 1 -maxdepth 1 -type f ".
-              "-name '*.*.ad.160x120.png' -printf '%f\n' ".
-              "-o -name '*.FB.00.*png' -printf '%f\n' ".
-              "| sort -n | head -n 1";
-            $img = exec ($cmd, $output, $rval);
-
-            if (($rval == 0) && ($img != "")) {
-              $all["IMG"] = $img;
-            } else {
-              $all["IMG"] = "../../../images/blankimage.gif";
-            }
+            $all["IMG"] = "../../../images/blankimage.gif";
           }
-        }
-        else
-        {
-          $all["IMG"] = $arr["IMG"];
-        }
-      
-        # if the integration length does not yet exist
-        $int = 0;
-        if (($arr["INT"] == "NA") || ($arr["INT"] <= 0))
-        {
-          if ($arr["CORR_ENABLED"] == "true")
-            $int = $this->calcIntLengthCorr($o, $arr["SOURCE"]);
-          else if ($arr["FB_ENABLED"] == "true")
-            $int = $this->calcIntLengthFB($o, "FB");
-          else if ($arr["TB0_ENABLED"] == "true")
-            $int = $this->calcIntLengthTB($o, $arr["TB0_SOURCE"]);
-          else
-            $int = "0";
-          $all["INT"] = $int;
-        }
-        else
-          $all["INT"] = $arr["INT"];
-
-        # if the observation is 
-        if (($all["STATE"] == "finished") || ($all["STATE"] == "transferred"))
-        {
-          if (($arr["INT"] == "NA") || ($arr["INT"] <= 0) && ($all["INT"] > 0))
-          {
-            system("perl -ni -e 'print unless /^INT/' ".$dir."/obs.info");
-            system("echo 'INT              ".$int."' >> ".$dir."/obs.info");
-          }
-        }
-        if (file_exists($dir."/obs.txt")) {
-          $all["ANNOTATION"] = file_get_contents($dir."/obs.txt");
-        } else {
-          $all["ANNOTATION"] = "";
-        }
-        if ($is_new_old_db == "old") {
-          $all["ANNOTATION"] = "<i>Data in old_results.</i> ".$all["ANNOTATION"];
-        }
-      } else {
-        // this branch is for observations with entries only in the DB
-        // TODO needs to be actually implemeneted
-        $all = array();
-        if ($is_new_old_db == "DB") {
-          $all["ANNOTATION"] = "<i>Data in database only, check Timing dir or on gstar.<i> ".$all["ANNOTATION"];
-        } else {
-          print "This should never happen";
         }
       }
+      else
+      {
+        $all["IMG"] = "";
+      }
+      
+      # if the integration length does not yet exist
+      $int = 0;
+      if (($INTs[$i] == "NA") || ($INTs[$i] <= 0))
+      {
+        #print "Checking ".$i." INT ".$INTs[$i]." x<br>";
+        if ($CORR_ENABLEDs[$i] == 1)
+          $int = $this->calcIntLengthCorr($o, $CORR_SOURCEs[$i]);
+        else if ($FB_ENABLEDs[$i] == 1)
+          $int = $this->calcIntLengthFB($o, "FB");
+        else if ($TB0_ENABLEDs[$i] == 1)
+          $int = $this->calcIntLengthTB($o, $TB0_SOURCEs[$i]);
+        else
+          $int = "0";
+        $all["INT"] = $int;
+      }
+      else {
+        $all["INT"] = $INTs[$i];
+      }
+
+      # if the observation is 
+      if (($all["STATE"] == "finished") || ($all["STATE"] == "transferred") || ($all["STATE"] == "completed" && $TB0_ENABLEDs[$i] == 0))
+      {
+        #print "Trying to set... ".$INTs[$i]." <-> ".$all["INT"]." ";
+        if (($INTs[$i] == "NA") || ($INTs[$i] <= 0) && ($all["INT"] > 0))
+        {
+        #  print "entered<br>";
+          system("perl -ni -e 'print unless /^INT/' ".$dir."/obs.info");
+          system("echo 'INT              ".$int."' >> ".$dir."/obs.info");
+          $q_int = "UPDATE Infos SET `INT` = ".$all["INT"]." WHERE utc_id = ".$utc_ids[$i];
+          try {
+            $stmt = $pdo->query($q_int);
+          } catch (Exception $ex) {
+            echo $ex->getMessage();
+          }
+        } else {
+         # print "Failed<br>";
+        }
+      }
+      $all["ANNOTATION"] = $annotations[$i];
+      if ($is_new_old_db == "old") {
+        $all["ANNOTATION"] = "<i>Data in old_results.</i> ".$all["ANNOTATION"];
+      }
       $all_results[$o] = $all;
-    }
+    } # end of for loop through rows
     // Restore page config to its original state:
     if ($this->class == "new") {
       $this->results_dir = $_results_dir;
@@ -1191,5 +1123,11 @@ class results extends mopsr_webpage
     system("echo '".$key."            ".$value."' >> ".$file);
   }
 
+  function updateImage_db($file, $key, $value)
+  {
+    # TODO IMPLEMENT ME
+  }
+
+
 }
-handledirect("results");
+handledirect("results_db");
