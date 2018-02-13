@@ -249,7 +249,7 @@ function rescale_snr_to5min($fSNR, $ftint_m) {
 if ($_GET['snr_cut'] ) {
 
 echo '<p><h2>Displaying data with SNR '.$_GET['snr_cut'].' in 5 minutes</h2><br></p>';
-$q = 'SELECT name, dm, period, max_snr_in5min, utc, snr, tint/60. as tint FROM (Pulsars JOIN UTCs JOIN TB_Obs ON Pulsars.id = TB_Obs.psr_id AND UTCs.id = Pulsars.max_snr_obs_id AND TB_Obs.utc_id = UTCs.id) WHERE tint > 1.0 AND dm>0 AND max_snr_in5min '.$_GET['snr_cut'].' ORDER BY name ASC';
+$q = 'SELECT name, dm, period, max_snr_in5min, utc, snr, tint/60., science_case as tint FROM (Pulsars JOIN UTCs JOIN TB_Obs ON Pulsars.id = TB_Obs.psr_id AND UTCs.id = Pulsars.max_snr_obs_id AND TB_Obs.utc_id = UTCs.id) WHERE tint > 1.0 AND dm>0 AND max_snr_in5min '.$_GET['snr_cut'].' ORDER BY name ASC';
 
   $stmt = $pdo -> query($q);
 
@@ -279,6 +279,7 @@ $q = 'SELECT name, dm, period, max_snr_in5min, utc, snr, tint/60. as tint FROM (
       $utc = $row[4];
       $snr = $row[5];
       $tint_m = $row[6];
+      $case = $row[7];
 
       $class = "&class=new";
       $_result_dir = glob($top_dir.$utc);
@@ -303,7 +304,10 @@ $q = 'SELECT name, dm, period, max_snr_in5min, utc, snr, tint/60. as tint FROM (
       }
       
       echo "<td width=300><a href=/mopsr/results.lib.php?single=true&offset=0&length=20&inline_images=true&filter_type=SOURCE&filter_value=";
-      echo urlencode($pulsar).">".$pulsar."</a><br>DM : ".round($dm, 2)."<br>period : ".round($period,2 )." ms <br>\n";
+      if ($case === null)
+        echo urlencode($pulsar).">".$pulsar."</a><br>DM : ".round($dm, 2)."<br>period : ".round($period,2 )." ms <br>\n";
+      else
+        echo urlencode($pulsar).">".$pulsar."</a><br>".$case."<br>DM : ".round($dm, 2)."<br>period : ".round($period,2 )." ms <br>\n";
       foreach ($plot_types as $type) {
         $hr= $type . "_hr";
         $lr= $type . "_lr";
