@@ -167,7 +167,6 @@ a:link, a:visited {
   color: #0F4D0D;
 }
 
-
 tr.alarm td {
   border-right: 1px solid #C1DAD7;
   border-bottom: 1px solid #C1DAD7;
@@ -180,13 +179,30 @@ tr.alarm td {
 }
 </style>
 <script src="./js/jquery-3.3.1.min.js"></script>
-<script src="./js/tablesorter/jquery.tablesorter.js"></script>
+<script src="./js/jquery.tablesorter.min.js"></script>
+<script src="./js/jquery.tablesorter.widgets.js"></script>
 <script src="./js/jquery.floatThead.min.js"></script>
 <script>
+// add custom numbering widget
+$.tablesorter.addWidget({
+    id: "numbering",
+    format: function(table) {
+        var c = table.config;
+        $("tr:visible", table.tBodies[0]).each(function(i) {
+            $(this).find('td').eq(0).text(i + 1);
+        });
+    }
+});
+
 $(document).ready(
   function() {
     var $table = $("#psrs");
-    $table.tablesorter();
+    $table.tablesorter({
+      headers: {
+        0: {sorter: false }
+      },
+      widgets: ['numbering']
+    });
     $table.floatThead();
 })
 </script>
@@ -325,6 +341,7 @@ $days = array();
 $days_detected = array();
 $detections_count_ever = array();
 $observed_count_ever = array();
+$observed_count_last_Ndays = array();
 
 $q = 'SELECT Pulsars.name, MAX(UTCs.utc) FROM TB_Obs LEFT JOIN UTCs ON (TB_Obs.utc_id = UTCs.id) LEFT JOIN Pulsars ON TB_Obs.psr_id = Pulsars.id  WHERE Pulsars.observe = 1 GROUP BY Pulsars.name';
 $stmt = $pdo -> query($q);
@@ -432,6 +449,31 @@ try {
   echo $e->getMessage();
 };
 
+if ($_GET['days_for_table'] ) {
+  $days_for_table = $_GET['days_for_table'];
+} else {
+  $days_for_table = 10;
+}
+
+$q = 'SELECT Pulsars.name, COUNT(*) from TB_Obs LEFT JOIN UTCs ON (TB_Obs.utc_id = UTCs.id) LEFT JOIN Pulsars ON TB_Obs.psr_id = Pulsars.id  WHERE Pulsars.observe = 1 AND TIMESTAMPDIFF(MINUTE, UTCs.utc_ts, UTC_TIMESTAMP()) < '.$days_for_table.'*24*60 AND TIMESTAMPDIFF(MINUTE, UTCs.utc_ts, UTC_TIMESTAMP()) > 0 GROUP BY Pulsars.name;';
+
+$stmt = $pdo -> query($q);
+
+if (!$stmt)
+{
+  echo "Failed to query:<br>".$q;
+  exit(-1);
+}
+$results = $stmt -> fetchAll(PDO::FETCH_NUM);
+
+try {
+  foreach($results as $row) {
+    $observed_count_last_Ndays[$row[0]] = $row[1];
+  }
+} catch (Exception $e) {
+  echo $e->getMessage();
+}
+
 $number_of_psrs = count($psr500);
 echo '<h3>Number of unique pulsars detected (observed) within last 7 days: '.$counter_7_detected.' ('.$counter_7.')</h3>';
 echo '<h3>Number of unique pulsars detected (observed) between last 7 and 30 days: '.$counter_30_detected.' ('.$counter_30.')</h3>';
@@ -444,12 +486,18 @@ echo '<h3>Number of unique pulsars never observed: '.$counter_never_observed.'</
 echo '<h4>All numbers are relative to '.$number_of_psrs.' from a curated list.</h4>';
 echo "Note that currently detections (SN>10) are based on S/N without much RFI cleaning<br>";
 echo '<b>Everything with <span style="background: #90a2b0">blue-ish</span> background below is 10 days since observation or more</b>';
-?>
 
+echo '<form action="" method="get">';
+echo '  Number of days for the last column';
+echo '  <input type="number" name="days_for_table" min="1" max="365" value="'.$days_for_table.'">';
+?>
+  <input type="hidden" name="single" value="true">
+</form>
 
 <table id="psrs" class="tablesorter">
 <thead>
 <tr>
+<th class="tablesorter">#</th>
 <th class="tablesorter">JNAME</th>
 <th class="tablesorter">Last observed</th>
 <th class="tablesorter">Days since observed</th>
@@ -458,6 +506,9 @@ echo '<b>Everything with <span style="background: #90a2b0">blue-ish</span> backg
 <th class="tablesorter">Number of times ever detected</th>
 <th class="tablesorter">Number of times ever observed</th>
 <th class="tablesorter">Fraction of times ever detected</th>
+<?php
+echo '<th class="tablesorter">Number of observations in the last '.$days_for_table.' days</th>';
+?>
 </tr>
 </thead>
 <tbody>
@@ -469,7 +520,7 @@ foreach ($psr500 as $psr) {
       echo '<tr class="alarm">';
     else
       echo '<tr class="even">';
-
+    echo '<td></td>';
     echo '<td><a href=/mopsr/results.lib.php?single=true&offset=0&length=20&inline_images=true&filter_type=SOURCE&filter_value='.urlencode($psr).'>'.$psr.'</td>';
     if ($utcs[$psr] === NULL)
       echo '<td>Never observed</td>';
@@ -499,6 +550,11 @@ foreach ($psr500 as $psr) {
       echo '<td>'.round(intval($detections_count_ever[$psr])/intval($observed_count_ever[$psr]), 2).'</td>';
     else {
       echo '<td>'.round(0, 2).'</td>'; 
+    }
+    if ($observed_count_last_Ndays[$psr] > 0)
+      echo '<td>'.$observed_count_last_Ndays[$psr].'</td>';
+    else {
+      echo '<td>0</td>'; 
     }
     echo '</tr>';
   } catch (Exception $e){echo $e->getMessage();};
