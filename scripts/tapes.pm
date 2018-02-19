@@ -27,7 +27,7 @@ BEGIN {
   @ISA         = qw(Exporter AutoLoader);
   @EXPORT      = qw(&loadTapeGeneral &unloadCurrentTape &tapeFSF &tapeIsLoaded &tapeIsReady &tapeGetID &tapeRewind &getTapeStatus);
   %EXPORT_TAGS = ( );
-  @EXPORT_OK   = qw($dl $dev $robot $quit_daemon);
+  @EXPORT_OK   = qw($dl $dev $robot $drive_id $quit_daemon);
 
 }
 
@@ -39,6 +39,7 @@ our @EXPORT_OK;
 our $dl;
 our $dev;
 our $robot;
+our $drive_id;
 our $quit_daemon : shared;
 
 #
@@ -51,6 +52,7 @@ our $quit_daemon : shared;
 $dl = 1;
 $dev = "/dev/nst0";
 $robot = 0;
+$drive_id = 0;
 $quit_daemon = 0;
 
 #
@@ -73,14 +75,14 @@ sub tapeFSF($) {
 
   (my $nfiles) = @_;
 
-  Dada::logMsg(2, $dl, "tapeFSF(".$nfiles.")");
+  Dada::logMsg(3, $dl, "tapeFSF(".$nfiles.")");
 
   my $cmd = "";
   my $result = "";
   my $response = "";
 
   $cmd = "mt -f ".$dev." fsf ".$nfiles;
-  Dada::logMsg(3, $dl, "tapeFSF: ".$cmd);
+  Dada::logMsg(2, $dl, "tapeFSF: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(3, $dl, "tapeFSF: ".$result." ".$response);
 
@@ -89,7 +91,7 @@ sub tapeFSF($) {
     return ("fail", "FSF failed: ".$response);
   }
 
-  Dada::logMsg(2, $dl, "tapeFSF() ok");
+  Dada::logMsg(3, $dl, "tapeFSF() ok");
   return ("ok", "");
 
 }
@@ -125,7 +127,7 @@ sub tapeBSFM($) {
 #
 sub tapeStatusBits() {
 
-  Dada::logMsg(2, $dl, "tapeStatusBits()");
+  Dada::logMsg(3, $dl, "tapeStatusBits()");
 
   my $cmd = "";
   my $result = "";
@@ -164,7 +166,7 @@ sub tapeStatusBits() {
     if ($f eq "CLN") { $cln = 1; }
   }
 
-  Dada::logMsg(2, $dl, "tapeStatusBits() ".$eof.", ".$eod.", ".$wrp.", ".$onl.", ".$dro.", ".$ire.", ".$cln);
+  Dada::logMsg(3, $dl, "tapeStatusBits() ".$eof.", ".$eod.", ".$wrp.", ".$onl.", ".$dro.", ".$ire.", ".$cln);
   return ($eof, $eod, $wrp, $onl, $dro, $ire, $cln);
 
 }
@@ -175,11 +177,11 @@ sub tapeStatusBits() {
 #
 sub tapeIsLoaded() {
 
-  Dada::logMsg(2, $dl, "tapeIsLoaded()");
+  Dada::logMsg(3, $dl, "tapeIsLoaded()");
 
   my ($eof, $eod, $wrp, $onl, $dro, $ire, $cln) = tapeStatusBits();
 
-  Dada::logMsg(2, $dl, "tapeIsLoaded() ".$onl);
+  Dada::logMsg(3, $dl, "tapeIsLoaded() ".$onl);
   return ("ok", $onl);
 
 }
@@ -276,7 +278,7 @@ sub tapeInit($) {
 #
 sub tapeGetID() {
 
-  Dada::logMsg(2, $dl, "tapeGetID()");
+  Dada::logMsg(3, $dl, "tapeGetID()");
 
   my $cmd = "";
   my $result = "";
@@ -426,7 +428,7 @@ sub getTapeStatus() {
   my $filenum = 0;
   my $blocknum = 0;
 
-  Dada::logMsg(2, $dl, "getTapeStatus()");
+  Dada::logMsg(3, $dl, "getTapeStatus()");
 
   $cmd="mt -f ".$dev." status | grep 'File number' | awk -F, '{print \$1}' | awk -F= '{print \$2}'";
   Dada::logMsg(3, $dl, "getTapeStatus: cmd= $cmd");
@@ -452,7 +454,7 @@ sub getTapeStatus() {
     }
   }
 
-  Dada::logMsg(2, $dl, "getTapeStatus() ".$result." ".$filenum." ".$blocknum);
+  Dada::logMsg(2, $dl, "getTapeStatus: ".$result." ".$filenum." ".$blocknum);
   return ($result,$filenum,$blocknum);
 }
 
@@ -514,7 +516,7 @@ sub getCurrentTapeSlotRobot() {
   my $result = "";
   my $response = "";
 
-  $cmd = "mtx status | grep 'Data Transfer Element 1' | awk '{print \$7}'";
+  $cmd = "mtx status | grep 'Data Transfer Element ".$drive_id."' | awk '{print \$7}'";
   Dada::logMsg(3, $dl, "getCurrentTapeSlotRobot: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(3, $dl, "getCurrentTapeSlotRobot: ".$result." ".$response);
@@ -541,7 +543,7 @@ sub getCurrentTapeRobot() {
   my $result = "";
   my $response = "";
 
-  $cmd = "mtx status | grep 'Data Transfer Element 1' | awk '{print \$10}'";
+  $cmd = "mtx status | grep 'Data Transfer Element ".$drive_id."' | awk '{print \$10}'";
   Dada::logMsg(3, $dl, "getCurrentTapeRobot: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(3, $dl, "getCurrentTapeRobot: ".$result." ".$response);
@@ -596,10 +598,10 @@ sub getStatusRobot() {
     @tokens = ();
     @tokens = split(/ +/,$line);
 
-    if ($line =~ m/^Data Transfer Element 1/) {
+    if ($line =~ m/^Data Transfer Element $drive_id/) {
 
       Dada::logMsg(3, $dl, "Transfer: $line");
-      if ($tokens[3] eq "1:Full") {
+      if ($tokens[3] eq $drive_id.":Full") {
         $results{"transfer"} = $tokens[9];
       } else {
         $results{"transfer"} = "Empty";
@@ -630,6 +632,8 @@ sub getStatusRobot() {
           $results{$slotid} = "Empty";
         } elsif ($#tokens == 2) {
           $results{$slotid} = "Empty"; 
+        } elsif ($#tokens == 3) {
+          $results{$slotid} = "NoBarcode"; 
         } else {
           ($junk, $tapeid) = split(/=/,$tokens[4]);
           $results{$slotid} = $tapeid;
@@ -722,7 +726,7 @@ sub loadTapeFromSlot($) {
   my $result = "";
   my $response = "";
 
-  $cmd = "mtx load ".$slot." 1";
+  $cmd = "mtx load ".$slot." ".$drive_id;
   Dada::logMsg(3, $dl, "loadTapeFromSlot: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(3, $dl, "loadTapeFromSlot: ".$result." ".$response);
@@ -766,7 +770,7 @@ sub unloadCurrentTapeRobot() {
     return ("fail", "eject command failed");
   }
 
-  $cmd = "mtx unload ".$current_tape_slot." 1";
+  $cmd = "mtx unload ".$current_tape_slot." ".$drive_id;
   Dada::logMsg(3, $dl, "unloadCurrentTapeRobot: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(3, $dl, "unloadCurrentTapeRobot: ".$result." ".$response);
