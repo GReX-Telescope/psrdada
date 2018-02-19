@@ -17,6 +17,7 @@ dist_bin_SCRIPTS = Mopsr.pm \
                    server_mopsr_event_monitor.pl \
                    server_mopsr_ib_receiver.pl \
                    server_mopsr_baseband_logger.pl \
+									 server_mopsr_dir_archiver.pl \
                    server_mopsr_results_mgr.pl \
                    server_mopsr_results_manager.pl \
                    server_mopsr_results_manager_tb.pl \
