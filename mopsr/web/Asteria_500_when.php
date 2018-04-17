@@ -391,6 +391,12 @@ if ($_GET['days_for_table'] ) {
   $days_for_table = 10;
 }
 
+if ($_GET['days_for_alert'] ) {
+  $days_for_alert = $_GET['days_for_alert'];
+} else {
+  $days_for_alert = 10;
+}
+
 $q = 'SELECT Pulsars.name, COUNT(*) from TB_Obs LEFT JOIN UTCs ON (TB_Obs.utc_id = UTCs.id) LEFT JOIN Pulsars ON TB_Obs.psr_id = Pulsars.id  WHERE Pulsars.observe = 1 AND TIMESTAMPDIFF(MINUTE, UTCs.utc_ts, UTC_TIMESTAMP()) < '.$days_for_table.'*24*60 AND TIMESTAMPDIFF(MINUTE, UTCs.utc_ts, UTC_TIMESTAMP()) > 0 GROUP BY Pulsars.name;';
 
 $stmt = $pdo -> query($q);
@@ -421,14 +427,18 @@ $counter_never_observed = $number_of_psrs - $counter_7 - $counter_30 - $counter_
 echo '<h3>Number of unique pulsars never observed: '.$counter_never_observed.'</h3>';
 echo '<h4>All numbers are relative to '.$number_of_psrs.' from a curated list.</h4>';
 echo "Note that currently detections (SN>10) are based on S/N without much RFI cleaning<br>";
-echo '<b>Everything with <span style="background: #90a2b0">blue-ish</span> background below is 10 days since observation or more</b>';
+echo '<b><form action="" method="get">Everything with <span style="background: #90a2b0">blue-ish</span> background below is ';
+echo '<input type="number" name="days_for_alert" min="1" value="'.$days_for_alert.'"><input type="hidden" name="single" value="true">';
+echo '<input type="hidden" name="days_for_table" value="'.$days_for_table.'">';
+echo 'days since observation or more</b></form>';
 
 echo '<form action="" method="get">';
-echo '  Number of days for the last column';
-echo '  <input type="number" name="days_for_table" min="1" max="365" value="'.$days_for_table.'">';
+echo 'Number of days for the last column';
+echo '<input type="number" name="days_for_table" min="1" max="365" value="'.$days_for_table.'">';
+echo '<input type="hidden" name="single" value="true">';
+echo '<input type="hidden" name="days_for_alert" value="'.$days_for_alert.'">';
+echo '</form>';
 ?>
-  <input type="hidden" name="single" value="true">
-</form>
 
 <table id="psrs" class="tablesorter">
 <thead>
@@ -452,7 +462,7 @@ echo '<th class="tablesorter">Number of observations in the last '.$days_for_tab
 
 foreach ($psr500 as $psr) {
   try {
-    if ( $days[$psr] > 10 || $days[$psr] === NULL)
+    if ( $days[$psr] > $days_for_alert || $days[$psr] === NULL)
       echo '<tr class="alarm">';
     else
       echo '<tr class="even">';
