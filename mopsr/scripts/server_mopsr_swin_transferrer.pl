@@ -51,8 +51,8 @@ our $warn;
 our $error;
 our $transfer_kill : shared;
 our $user = "pulsar";
-our $host = "g2.hpc.swin.edu.au";
-our $path = "/projects/p002_swin/utmost";
+our $host = "farnarkle1.hpc.swin.edu.au";
+our $path = "/fred/oz002/utmost";
 
 our $results_dir = DATA_DIR."/results";
 our $archives_dir = DATA_DIR."/archives";
@@ -181,6 +181,19 @@ $transfer_kill = "";
           Dada::logMsg(3, $dl, "main: ".$cmd);
           ($result, $response) = Dada::mySystem($cmd);
           Dada::logMsg(3, $dl, "main: ".$result." ".$response);
+
+          # Add the utc / src to list of desired transfers
+          my $transfer_list = $path."/Config/Transfers/list";
+          $cmd = "cp ".$transfer_list." ".$transfer_list.".tmp; echo ".$obs." @srcs >> ".$transfer_list.".tmp; mv ".$transfer_list.".tmp ".$transfer_list;
+          Dada::logMsg(2, $dl, "transferTB: ".$cmd);
+          ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
+          Dada::logMsg(3, $dl, "transferTB: ".$result." ".$response);
+
+          # Request a batch processing job
+          $cmd = $path."/soft/bin/submit_timing_job.sh";
+          Dada::logMsg(2, $dl, "transferTB: ".$cmd);
+          ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
+          Dada::logMsg(3, $dl, "transferTB: ".$result." ".$response);
         }
 =begin comment
         # no longer transfer central FB
