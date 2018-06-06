@@ -155,6 +155,11 @@ class asteria extends mopsr_webpage
 
     echo "</td><td>\n";
 
+    if (file_exists("/data/mopsr/results/sky_scan/mo_fields_latest.png")) {
+      $this->openBlockHeader("Overview of last 24 h");
+      echo '<a href="/mopsr/results/sky_scan/mo_fields_latest.pdf"><img src="/mopsr/results/sky_scan/mo_fields_latest.png"></a>';
+    }
+
     $this->openBlockHeader("Last 100 pulsars observed");
 
     function rescale_snr_to5min($fSNR, $ftint_m) {
