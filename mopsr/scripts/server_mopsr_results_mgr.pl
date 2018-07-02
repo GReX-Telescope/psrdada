@@ -59,6 +59,8 @@ $| = 1;
 sub main();
 sub getObsAge($);
 sub markObsState($$$);
+sub calculateIntLength($$);
+sub saveIntToObsInfo($$);
 sub processCorrObservation($$$);
 sub processTbObservation($$$);
 sub processFbObservation($$$);
@@ -159,9 +161,11 @@ sub main()
         my $age = getObsAge($o);
         Dada::logMsg(2, $dl, "main: getObsAge() ".$age);
 
+        my $obs_type = "";
+
         foreach $source (keys %obs_infos)
         {
-          my $obs_type = $obs_infos{$source};
+          $obs_type = $obs_infos{$source};
           my $results_dir = $obs_results_dir."/".$o."/".$source;
 
           Dada::logMsg(2, $dl, "main: utc_start=".$o." source=".$source." type=".$obs_type);
@@ -212,6 +216,9 @@ sub main()
         if ($age > 120)
         {
           markObsState($o, "processing", "finished");
+          my $tint = calculateIntLength($o, $obs_type);
+          Dada::logMsg(3, $dl, "main: calculated tint: ".$tint);
+          saveIntToObsInfo($o, $tint);
           $cmd = "asteria_utc.py --config-dir /home/dada/linux_64/share/ -U ".$o;
           Dada::logMsg(3, $dl, "main: ".$cmd);
           ($result, $response) = Dada::mySystem($cmd);
@@ -220,6 +227,7 @@ sub main()
         elsif ($age < -120)
         {
           markObsState($o, "processing", "failed");
+          saveIntToObsInfo($o, -1);
           $cmd = "asteria_utc.py --config-dir /home/dada/linux_64/share/ -U ".$o;
           Dada::logMsg(3, $dl, "main: ".$cmd);
           ($result, $response) = Dada::mySystem($cmd);
@@ -417,6 +425,68 @@ sub markObsState($$$)
   }
 }
 
+
+
+###############################################################################
+#
+# Calculate the lenght of an observation
+# Supports TB, FB, and corr observations
+#
+sub calculateIntLength($$)
+{
+  my ($o, $obs_type) = @_;
+  my ($cmd, $result, $response);
+
+  if ($obs_type eq "TB") {
+    $cmd = "find ".$cfg{"SERVER_RESULTS_DIR"}."/".$o." -mindepth 2 -maxdepth 2 -type f -name '*_f.tot' | sort -n | tail -n 1";
+    Dada::logMsg(2, $dl, "calculateIntLength".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, $dl, "calculateIntLength".$result." ".$response);
+    if (($result ne "ok") || ($response eq "")) {
+      Dada::logMsg(0, $dl, "calculateIntLength: ".$cmd." failed to find an archive ".$response);
+      return -1;
+    }
+
+    $cmd = "psredit -Q -c length ".$response;
+    Dada::logMsg(2, $dl, "calculateIntLength".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, $dl, "calculateIntLength".$result." ".$response);
+    if ($result ne "ok") {
+      Dada::logMsg(0, $dl, "calculateIntLength: ".$cmd." failed: ".$response);
+      return -1
+    }
+    return $response;
+  } elsif ($obs_type eq "FB") {
+    my $ac_file = $cfg{"SERVER_RESULTS_DIR"}."/".$o."/FB/all_candidates.dat";
+    if (-e $ac_file) {
+      $cmd = "tail -n 1000 ".$ac_file." | awk '{print \$3}' | sort -n | tail -n 1";
+      Dada::logMsg(2, $dl, "calculateIntLength: ".$cmd);
+      ($result, $response) = Dada::mySystem($cmd);
+      Dada::logMsg(3, $dl, "calculateIntLength: ".$result." ".$response);
+      return $response;
+    } else {
+      Dada::logMsg(0, $dl, "calculateIntLength: ".$cfg{"SERVER_RESULTS_DIR"}."/".$o."/FB/all_candidates.dat not found");
+      return -1;
+    }
+  } elsif ($obs_type eq "CORR") {
+    $cmd = "find ".$cfg{"SERVER_ARCHIVE_DIR"}."/".$o." -mindepth 2 -maxdepth 2 -type f -name '*.ac' | sort -n | tail -n 1| awk -F_ '{print \$NF}' | awk -F. '{print int(\$1)}'";
+    Dada::logMsg(2, $dl, "calculateIntLength".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, $dl, "calculateIntLength".$result." ".$response);
+    return $response;
+  } else {
+    Dada::logMsg(2, $dl, "calculateIntLength unsupported obs type ".$obs_type);
+  }
+}
+
+sub saveIntToObsInfo($$) {
+  my ($o, $tint) = @_;
+
+  open(my $fh, '>>', $cfg{"SERVER_RESULTS_DIR"}."/".$o."/obs.info") or return -1;
+  say $fh "INT                    ".$tint;
+  close $fh;
+  return 0;
+}
 
 ###############################################################################
 # 
