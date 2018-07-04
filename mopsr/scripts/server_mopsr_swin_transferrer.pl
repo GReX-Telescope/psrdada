@@ -53,6 +53,7 @@ our $transfer_kill : shared;
 our $user = "pulsar";
 our $host = "farnarkle1.hpc.swin.edu.au";
 our $path = "/fred/oz002/utmost";
+our $meta_path = "/home/pulsar/utmost_timing_aux";
 
 our $results_dir = DATA_DIR."/results";
 our $archives_dir = DATA_DIR."/archives";
@@ -183,7 +184,7 @@ $transfer_kill = "";
           Dada::logMsg(3, $dl, "main: ".$result." ".$response);
 
           # Add the utc / src to list of desired transfers
-          my $transfer_list = $path."/Config/Transfers/list";
+          my $transfer_list = $meta_path."/list";
           $cmd = "cp ".$transfer_list." ".$transfer_list.".tmp; echo ".$obs." @srcs >> ".$transfer_list.".tmp; mv ".$transfer_list.".tmp ".$transfer_list;
           Dada::logMsg(2, $dl, "transferTB: ".$cmd);
           ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
@@ -435,7 +436,7 @@ sub transferTB($$&)
   my $response = "";
   my $rval = 0;
   my $rsync_options = "-az --stats --no-g --chmod=go-ws --bwlimit ".BANDWIDTH.
-                      " --exclude 'obs.finished' ";
+                      " --exclude 'obs.finished' --inplace ";
   # loop through tied array beams
   foreach (@srcs) {
     my $src = $_;
@@ -714,9 +715,9 @@ sub getDest()
   my $cmd = "";
 
   # test how much space is remaining on this disk
-  $cmd = "df -B 1048576 -P ".$path." | tail -n 1 | awk '{print \$4}'";
+  $cmd = "df -B 1048576 -P ".$path;
   Dada::logMsg(3, $dl, "getDest: ".$user."@".$host.":".$cmd);
-  ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
+  ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd, "", "tail -n 1 | awk '{print \$4}'");
   Dada::logMsg(3, $dl, "getDest: ".$result." ".$rval." ".$response);
 
   if ($result ne "ok") 
