@@ -110,7 +110,8 @@ TOBS             INTEGER,
 TRACKING         INTEGER,
 TSAMP            REAL,
 UT1_OFFSET       REAL,
-UTC_START        TEXT
+UTC_START        TEXT,
+UTC_STOP         TEXT
 );
 
 CREATE TABLE IF NOT EXISTS `Infos` (
