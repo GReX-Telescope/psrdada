@@ -216,9 +216,10 @@ sub main()
         if ($age > 120)
         {
           markObsState($o, "processing", "finished");
-          my $tint = calculateIntLength($o, $obs_type);
-          Dada::logMsg(3, $dl, "main: calculated tint: ".$tint);
-          saveIntToObsInfo($o, $tint);
+          # No longer need to do this - tmc now handles INT calculation
+          # my $tint = calculateIntLength($o, $obs_type);
+          # Dada::logMsg(3, $dl, "main: calculated tint: ".$tint);
+          # saveIntToObsInfo($o, $tint);
           $cmd = "asteria_utc.py --config-dir /home/dada/linux_64/share/ -U ".$o;
           Dada::logMsg(3, $dl, "main: ".$cmd);
           ($result, $response) = Dada::mySystem($cmd);
@@ -447,7 +448,7 @@ sub calculateIntLength($$)
       return -1;
     }
 
-    $cmd = "psredit -Q -c length ".$response;
+    $cmd = "psredit -qQ -c length ".$response;
     Dada::logMsg(2, $dl, "calculateIntLength".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     Dada::logMsg(3, $dl, "calculateIntLength".$result." ".$response);
