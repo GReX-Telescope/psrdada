@@ -560,7 +560,7 @@ class results_db extends mopsr_webpage
         rsort($keys);
         $result_url = "result.lib.php";
 
-        for ($i=0; $i < count($keys); $i++) 
+        for ($i=0; $i < $this->length; $i++) 
         {
           $k = $keys[$i];
           $r = $results[$k];
@@ -783,7 +783,7 @@ class results_db extends mopsr_webpage
     $filter ="";
 
     if ($filter_type == "" || $filter_value == "") {
-      $q = 'SELECT UTCs.utc, UTCs.id, UTCs.annotation, Infos.INT, Infos.SOURCE, Infos.FB_ENABLED, Infos.FB_IMG, Infos.TB0_ENABLED, Infos.TB1_ENABLED, Infos.TB2_ENABLED, Infos.TB3_ENABLED, Infos.TB0_SOURCE, Infos.TB1_SOURCE, Infos.TB2_SOURCE, Infos.TB3_Source, Infos.TB0_IMG, Infos.TB1_IMG, Infos.TB2_IMG, Infos.TB3_IMG, Infos.CORR_ENABLED, Infos.CORR_SOURCE, Infos.MB_ENABLED, Infos.MB_ENABLED, Infos.OBSERVER, Infos.PID, States.state FROM UTCs JOIN Infos JOIN States ON UTCs.id = Infos.utc_id and UTCs.state_id = States.id ORDER BY UTCs.utc DESC LIMIT '.$length.' OFFSET '.$offset;
+      $q = 'SELECT UTCs.utc, UTCs.id, UTCs.annotation, Infos.INT, Infos.SOURCE, Infos.FB_ENABLED, Infos.FB_IMG, Infos.TB0_ENABLED, Infos.TB1_ENABLED, Infos.TB2_ENABLED, Infos.TB3_ENABLED, Infos.TB0_SOURCE, Infos.TB1_SOURCE, Infos.TB2_SOURCE, Infos.TB3_Source, Infos.TB0_IMG, Infos.TB1_IMG, Infos.TB2_IMG, Infos.TB3_IMG, Infos.CORR_ENABLED, Infos.CORR_SOURCE, Infos.MB_ENABLED, Infos.MB_ENABLED, Infos.OBSERVER, Infos.PID, States.state FROM UTCs JOIN Infos JOIN States ON UTCs.id = Infos.utc_id and UTCs.state_id = States.id GROUP BY UTCs.utc ORDER BY UTCs.utc DESC LIMIT '.$length.' OFFSET '.$offset;
     } else {
       $filter = $this->prepFilter($filter_type, $filter_value);
       $q = 'SELECT UTCs.utc, UTCs.id, UTCs.annotation, Infos.INT, Infos.SOURCE, Infos.FB_ENABLED, Infos.FB_IMG, Infos.TB0_ENABLED, Infos.TB1_ENABLED, Infos.TB2_ENABLED, Infos.TB3_ENABLED, Infos.TB0_SOURCE, Infos.TB1_SOURCE, Infos.TB2_SOURCE, Infos.TB3_Source, Infos.TB0_IMG, Infos.TB1_IMG, Infos.TB2_IMG, Infos.TB3_IMG, Infos.CORR_ENABLED, Infos.CORR_SOURCE, Infos.MB_ENABLED, Infos.MB_ENABLED, Infos.OBSERVER, Infos.PID, States.state FROM UTCs JOIN Infos JOIN States ON UTCs.id = Infos.utc_id and UTCs.state_id = States.id '.$filter.' ORDER BY UTCs.utc DESC LIMIT '.$length.' OFFSET '.$offset;
