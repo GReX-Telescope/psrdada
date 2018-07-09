@@ -223,7 +223,7 @@ int main (int argc, char **argv)
     }
     if (verbose > 1)
       fprintf(stderr, "Skipping %ld samples (%ld bytes) past the header\n", nsamp_skip, bytes_read_total);
-    for (i=1; i<nfiles; i++) {
+    for (i=0; i<nfiles; i++) {
       lseek(fds[i], 4096+bytes_read_total, SEEK_SET);
     }
   }
