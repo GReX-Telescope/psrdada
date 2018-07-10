@@ -221,7 +221,7 @@ $(document).ready(
 
   function printActionHTML($get) {
     if (array_key_exists("action", $get) && ($get["action"] == "csv")) {
-      list($psr500, $utcs, $days, $utcs_detected, $days_detected, $detections_count_ever, $observed_count_ever, $observed_count_last_Ndays) = $this->generate_table($get);
+      list($psr500, $utcs, $days, $utcs_detected, $days_detected, $detections_count_ever, $observed_count_ever, $observed_count_last_Ndays, $counter_7, $counter_7_detected, $counter_30, $counter_30_detected, $counter_superold, $counter_superold_detected, $counter_never_observed, $counter_never_detected) = $this->generate_table($get);
 
       $this->get_csv($get["days_for_table"], $psr500, $utcs, $days, $utcs_detected, $days_detected, $detections_count_ever, $observed_count_ever, $observed_count_last_Ndays);
     } elseif (array_key_exists("action", $get)) {
@@ -267,7 +267,7 @@ $(document).ready(
       $days_for_alert = $get['days_for_alert'];
     } else {
       $days_for_alert = 10;
-    }    list($psr500, $utcs, $days, $utcs_detected, $days_detected, $detections_count_ever, $observed_count_ever, $observed_count_last_Ndays) = $this->generate_table($_GET);
+    }    list($psr500, $utcs, $days, $utcs_detected, $days_detected, $detections_count_ever, $observed_count_ever, $observed_count_last_Ndays, $counter_7, $counter_7_detected, $counter_30, $counter_30_detected, $counter_superold, $counter_superold_detected, $counter_never_observed, $counter_never_detected) = $this->generate_table($_GET);
 
     $number_of_psrs = count($psr500);
     echo '<h3>Number of unique pulsars detected (observed) within last 7 days: '.$counter_7_detected.' ('.$counter_7.')</h3>';
@@ -536,7 +536,7 @@ $(document).ready(
       echo $e->getMessage();
     }
 
-    return array($psr500, $utcs, $days, $utcs_detected, $days_detected, $detections_count_ever, $observed_count_ever, $observed_count_last_Ndays);
+    return array($psr500, $utcs, $days, $utcs_detected, $days_detected, $detections_count_ever, $observed_count_ever, $observed_count_last_Ndays, $counter_7, $counter_7_detected, $counter_30, $counter_30_detected, $counter_superold, $counter_superold_detected, $counter_never_observed, $counter_never_detected);
   }
 
   function get_csv($days_for_table, $psrs, $utcs, $days, $utcs_detected, $days_detected, $detections_count_ever, $observed_count_ever, $observed_count_last_Ndays, $fname="Asteria_500_when.csv") {
