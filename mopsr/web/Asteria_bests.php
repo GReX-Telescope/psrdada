@@ -339,16 +339,6 @@ $q = 'SELECT name, dm, period, max_snr_in5min, utc, snr, tint/60., science_case 
     echo $xml;
   }
 
-  function handleRequest()
-  {
-    if ($_GET["update"] == "true") {
-      $this->printUpdateHTML($_GET);
-    } else {
-      $this->printHTML($_GET);
-    }
-
-  }
-
   function getResultsArray($results_dir, $offset=0, $length=0, $filter_type, $filter_value) 
   {
     $all_results = array();
