@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
 # Stefan Oslowski, Chris Flynn
 
@@ -10,6 +10,8 @@ import sys
 
 from math import sqrt
 import time
+from datetime import datetime
+from os.path import getmtime
 
 import re
 import numpy as np
@@ -167,10 +169,59 @@ CREATE TABLE Updates (
   date TEXT
 );
 INSERT INTO Updates (date) VALUES ("never");
+
+CREATE TABLE IF NOT EXISTS `Cal_solutions` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `utc_id` bigint(20) DEFAULT NULL,
+  `solution_date` datetime,
+  `ref_ant` int(11),
+  `best_ants` text,
+  `script_version_id` TEXT,
+  PRIMARY KEY (`id`)
+);
+
+CREATE TABLE IF NOT EXISTS `Cal_phases` (
+  `utc_id` int(11),
+  `solution_id` int(11),
+  `ant_id` int,
+  `pfb_id` int,
+  `delay` REAL,
+  `phase` REAL,
+  `weight` REAL,
+  `weight_err` REAL,
+  `SEFD` REAL,
+  `snr` REAL,
+  PRIMARY KEY (`utc_id`, `solution_id`, `ant_id`)
+);
+
+CREATE TABLE IF NOT EXISTS `Antennas` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `name` varchar(6),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `name` (`name`)
+);
+
+CREATE TABLE IF NOT EXISTS `PFBs` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `name` varchar(7),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `name` (`name`)
+);
+
+CREATE TABLE IF NOT EXISTS `Cal_script_versions` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `version` varchar(40),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `version` (`version`)
+);
 '''
 
 get_id_DM_period_SNR = '''
 SELECT id, dm, period, max_snr_in5min FROM Pulsars WHERE name = %s
+'''
+
+get_CORR_SOURCE_query = '''
+SELECT CORR_SOURCE FROM Infos WHERE utc_id = %s
 '''
 
 set_name_DM_period = '''
@@ -199,6 +250,17 @@ SELECT COUNT(*) FROM TB_Obs
   WHERE psr_id = %s AND utc_id = %s
 '''
 
+insert_solution_meta = '''
+INSERT INTO Cal_solutions (utc_id, solution_date, ref_ant, best_ants,
+  script_version_id) VALUES (%s, %s, %s, %s, %s)
+'''
+
+insert_per_ant_solution = '''
+INSERT INTO Cal_phases (utc_id, solution_id, ant_id, pfb_id, delay, phase,
+  weight, weight_err, SEFD, snr) VALUES (%s, %s, %s, %s, %s, %s, %s, %s,
+  %s, %s)
+'''
+
 insert_annot = '''
 UPDATE UTCs SET annotation = %s
   WHERE id = %s
@@ -217,12 +279,43 @@ INSERT IGNORE INTO UTCs (utc)
   VALUES (%s)
 '''
 
+insert_ant = '''
+INSERT IGNORE INTO Antennas (name)
+  VALUES (%s)
+'''
+
+insert_pfb = '''
+INSERT IGNORE INTO PFBs (name)
+  VALUES (%s)
+'''
+
+insert_scriptid = '''
+INSERT IGNORE INTO Cal_script_versions(version)
+  VALUES (%s)
+'''
+
 update_utc_ts = '''
 UPDATE UTCs SET utc_ts = TIMESTAMP(%s) WHERE id = %s
 '''
 
 get_utcid = '''
 SELECT id from UTCs WHERE utc = %s
+'''
+
+get_solution_id = '''
+SELECT id FROM Cal_solutions WHERE solution_date = %s AND utc_id = %s
+'''
+
+get_antid = '''
+SELECT id FROM Antennas WHERE name = %s
+'''
+
+get_scriptid = '''
+SELECT id FROM Cal_script_versions WHERE version = %s
+'''
+
+get_pfbid = '''
+SELECT id FROM PFBs WHERE name = %s
 '''
 
 get_infosid = '''
@@ -349,6 +442,53 @@ def insert_full_obs_into_DB(id_last, psr, UTC, snr, tint, bw, freq, nbin,
     conn.commit
 
 
+def insert_ant_into_DB(ant, cur, verbose):
+    cur.execute(get_antid, [ant, ])
+    answer = cur.fetchone()
+    if not answer:
+        if verbose:
+            print "ant", ant, "not yet in DB"
+        cur.execute(insert_ant, [ant, ])
+        cur.execute(get_antid, [ant, ])
+        answer = cur.fetchone()
+    ant_id = answer[0]
+    return ant_id
+
+
+def insert_pfb_into_DB(pfb, cur, verbose):
+    cur.execute(get_pfbid, [pfb, ])
+    answer = cur.fetchone()
+    if not answer:
+        if verbose:
+            print "pfb", pfb, "not yet in DB"
+        cur.execute(insert_pfb, [pfb, ])
+        cur.execute(get_pfbid, [pfb, ])
+        answer = cur.fetchone()
+    pfb_id = answer[0]
+    return pfb_id
+
+
+def insert_script_into_DB(script_version, cur, verbose):
+    cur.execute(get_scriptid, [script_version, ])
+    answer = cur.fetchone()
+    if not answer:
+        if verbose:
+            print "script", script_version, "not yet in DB"
+        cur.execute(insert_scriptid, [script_version, ])
+        cur.execute(get_scriptid, [script_version, ])
+        answer = cur.fetchone()
+    script_id = answer[0]
+    return script_id
+
+
+def insert_solution_into_DB(utc_id, solution_date, ref_ant, best_ants,
+                            script_version_id):
+    cur.execute(insert_solution_meta, [utc_id, solution_date, ref_ant,
+                best_ants, script_version_id])
+    cur.execute(get_solution_id, [solution_date, utc_id, ])
+    return cur.fetchone()[0]
+
+
 def insert_utc_into_DB(UTC, cur, verbose):
     cur.execute(get_utcid, [UTC, ])
     answer = cur.fetchone()
@@ -389,6 +529,80 @@ def rescale_snr_to_5min(snr, tint):
         return snr * sqrt(300./tint)
     else:
         return -1.
+
+
+def ingest_calib_out(calib_out_fn, UTC, utc_id, ants, pfb, dels, phs, w, w_e,
+                     sefds, snrs, cur, verbose):
+    script_version, ref_ant, best_ants =\
+            parse_calib_out_header(calib_out_fn, verbose)
+    ref_ant_id = insert_ant_into_DB(ref_ant, cur, verbose)
+    solution_date = str(datetime.utcfromtimestamp(getmtime(calib_out_fn)))
+    script_version_id = insert_script_into_DB(script_version, cur, verbose)
+    solution_id = insert_solution_into_DB(utc_id, solution_date, ref_ant_id,
+                                          best_ants, script_version_id)
+
+    for i in xrange(len(ants)):
+        ant_id = insert_ant_into_DB(ants[i], cur, verbose)
+        pfb_id = insert_pfb_into_DB(pfb[i], cur, verbose)
+        cur.execute(insert_per_ant_solution, [utc_id, solution_id, ant_id,
+                    pfb_id, dels[i], phs[i], w[i], w_e[i], sefds[i],
+                    snrs[i], ])
+
+    return 0
+
+
+# def insert_phases_into_DB(utc_id, solution_id, ant_id, pfb_id, delay, phae,
+#                           weigh, weight_error, sefd, snr):
+#     return 0
+
+
+def parse_calib_out_header(calib_out_fn, verbose):
+    script_version = "unknown"
+    ref_ant = "-1"
+    best_ants = ""
+    try:
+        with open(calib_out_fn, "r") as fh:
+            line = fh.readline().rstrip("\n")
+            line_split = line.split(" ")
+            if len(line_split) == 4 and line_split[0] == "#calib.py_version":
+                script_version = line_split[2]
+
+            line = fh.readline().rstrip("\n")
+            line_split = line.split(" ")
+            if len(line_split) == 2 and line_split[0] == "#ref":
+                ref_ant = line_split[1]
+
+            line = fh.readline().rstrip("\n")
+            line_split = line.split(" ")
+            if len(line_split) > 2 and line_split[0] == "#best":
+                for iant in xrange(2, len(line_split)):
+                    if iant == 2:
+                        best_ants = line_split[iant]
+                    else:
+                        best_ants = best_ants + " " + line_split[iant]
+
+    except Exception:
+        print "parse_calib_out_header: couldn't read calib.out", calib_out_fn
+    return script_version, ref_ant, best_ants
+
+
+def parse_calib_out(top_dir, UTC, utc_id, cal, cur, verbose):
+    calib_out_fn = top_dir + "/" + cal + "/calib.out"
+    calib_out = glob.glob(calib_out_fn)
+    if len(calib_out) == 1:
+        ants, pfb, dels, phs, w, w_e, sefds, snrs = \
+            np.genfromtxt(calib_out_fn, dtype="str", unpack=True)
+        return ingest_calib_out(calib_out_fn, UTC, utc_id, ants, pfb, dels,
+                                phs, w, w_e, sefds, snrs, cur, verbose)
+    else:
+        print "Couldn't find calib.out for", UTC, "checked", calib_out_fn
+        return -1
+
+
+def get_CORR_source(utc_id, cur, verbose):
+    cur.execute(get_CORR_SOURCE_query, [utc_id, ])
+    answer = cur.fetchone()
+    return answer[0]
 
 
 def parse_infos(top_dir, UTC, utc_id, cur, config_dir, verbose):
@@ -602,7 +816,8 @@ def construct_header_query(src, utc_id, fn, allowed_keys_fn, id_table, table,
                     values += cfg[key] + ','
         else:
             with open("headers_missing.log", "a") as fh:
-                fh.write(src + " " + utc_id + " " + key + " not present in DB")
+                fh.write(src + " " + str(utc_id) + " " + key
+                         + " not present in DB")
 
     query = query[0:-1] + ")"  # replace last comma with closing parenthesis
     values = values[0:-1] + ")"  # replace last comma with closing parenthesis
@@ -610,25 +825,25 @@ def construct_header_query(src, utc_id, fn, allowed_keys_fn, id_table, table,
     return query
 
 
-def parse_header(src, src_dir, top_dir, utc_id, cur, allowed_keys_fn, id_table,
-                 table, verbose):
+def parse_header(src, src_dir, top_dir, _utc_id, cur, allowed_keys_fn,
+                 id_table, table, verbose):
     obs_table_prefill_query = "INSERT INTO " + id_table + " (utc_id) VALUES ("\
-                              + str(utc_id) + ")"
+                              + str(_utc_id) + ")"
     cur.execute(obs_table_prefill_query)
     id_table_id = cur.lastrowid
     obs_head_fns = glob.glob(top_dir + "/" + src_dir + "/obs.header")
     if len(obs_head_fns) == 1:
-        query = construct_header_query(src, utc_id, obs_head_fns[0],
+        query = construct_header_query(src, _utc_id, obs_head_fns[0],
                                        allowed_keys_fn, id_table, table,
                                        verbose)
         try:
             cur.execute(query)
         except (sql.OperationalError, sql.ProgrammingError) as err:
-            print "got sql error for", src, utc_id
+            print "got sql error for", src, _utc_id
             print err
             with open("sqlite_errors.log", "a") as fh:
-                fh.write(src + " " + str(utc_id) + " " + str(sys.exc_info()[1])
-                         + "\n")
+                fh.write(src + " " + str(_utc_id) + " "
+                         + str(sys.exc_info()[1]) + "\n")
                 fh.write(query + "\n")
     return id_table_id
 
@@ -648,6 +863,8 @@ if __name__ == "__main__":
                         help="UTC of the observation to ingest")
     parser.add_argument("-H", "--headers", dest="headers",
                         help="Ingest obs.header")
+    parser.add_argument("-C", "--CAL", dest="ingestCal", action="store_true",
+                        help="Ingest calibration solution", default=False)
 
     args = parser.parse_args()
 
@@ -688,6 +905,12 @@ if __name__ == "__main__":
     parse_state(_dir, args.UTC, utc_id, cur, args.Verbose)
     infos_id = insert_infos_into_DB(_dir, args.UTC, utc_id, cur,
                                     args.configDir, args.Verbose)
+    if args.ingestCal:
+        cal = get_CORR_source(utc_id, cur, args.Verbose)
+        if cal is not None:
+            parse_calib_out(_dir, args.UTC, utc_id, cal, cur, args.Verbose)
+        else:
+            print "CORR_SOURCE missing for", args.UTC, "could not ingest cal"
 
     cur_time = time.strftime('%a %d %b %Y %H:%M %Z')
     cur.execute('UPDATE Updates SET date = %s WHERE id = 1', [cur_time, ])
