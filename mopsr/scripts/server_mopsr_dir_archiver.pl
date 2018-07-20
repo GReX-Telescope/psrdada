@@ -23,8 +23,8 @@ $Dada::server_general_dir_archiver::dl = 1;
 $Dada::server_general_dir_archiver::daemon_name = Dada::daemonBaseName($0);
 $Dada::server_general_dir_archiver::robot = 0;
 $Dada::server_general_dir_archiver::drive_id = 0;
-$Dada::server_general_dir_archiver::type = "swin";
-$Dada::server_general_dir_archiver::pid = "SMIRF";
+$Dada::server_general_dir_archiver::type = "mopsr";
+$Dada::server_general_dir_archiver::pid = "P001";
 $Dada::server_general_dir_archiver::required_host = "mpsr-bf08.obs.molonglo.local";
 
 # Autoflush STDOUT
