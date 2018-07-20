@@ -22,7 +22,7 @@ void inline_dedisperse_all_help(){
   fprintf(stderr,"-k killfilename    kill all channels in killfilename\n");
   fprintf(stderr,"-d st_DM end_DM    dedisperse from st_DM to end_DM\n");
   fprintf(stderr,"-i [40] psr width  intrinsic pulse width in us\n");
-  fprintf(stderr,"-tol [1.25]        smear tolerance, e.g. 25\% = 1.25\n");
+  fprintf(stderr,"-tol [1.25]        smear tolerance, e.g. 25%% = 1.25\n");
   fprintf(stderr,"-g gulpsize        number of samples to dedisp at once\n");
   fprintf(stderr,"-n Nsamptotal      Only do Nsamptotal samples\n");
   fprintf(stderr,"-s Nsamps          Skip Nsamp samples before starting\n");
@@ -152,7 +152,9 @@ void do_dedispersion(unsigned short int ** storage, unsigned short int * unpacke
 	  if (killdata[k]==1){
 	    idelay = DM_shift(DMtrial,k-start_chan,tsamp,fch1_subband,foff);
 	    int stride = k*ntoload+idelay;
-#pragma omp parallel j for private(j)
+#if HAVE_OPENMP
+#pragma omp parallel for private(j)
+#endif
 	    for (int j=0;j<ntodedisp/4;j++){
 		casted_times[j]+=*((LONG64BIT*) (unpackeddata+(j*4+stride)));
 	    }
@@ -516,7 +518,9 @@ int main (int argc, char *argv[])
       // all time samples for a given freq channel in order in RAM
 
       for (ibyte=0;ibyte<nchans/sampperbyte;ibyte++){
+#if HAVE_OPENMP
 #pragma omp parallel for private (abyte,k,j)
+#endif
         for (j=0;j<ntoload;j++){
           abyte = rawdata[ibyte+j*nchans/sampperbyte];
 	  for (k=0;k<8;k+=nbits)
@@ -529,7 +533,9 @@ int main (int argc, char *argv[])
 	for (int i=0;i<nchans;i++){
 	  if (!killdata[i]){
 	    cout << i << " " ;
+#if HAVE_OPENMP
 #pragma omp parallel for private(j)	  
+#endif
 	    for (int j=0;j<ntoload;j++)
 	      unpacked[j+i*ntoload]=0;
 	  }
