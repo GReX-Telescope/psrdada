@@ -76,7 +76,7 @@ $src_log_file = "";
 #$bw_limit = (128 * 1024) / $cfg{"NUM_BP"};
 #$srv_ip = "192.168.5.10";
 # For transport via 1GbE
-$bw_limit = int((64 * 1024) / $cfg{"NUM_BP"});
+$bw_limit = int((32 * 1024) / $cfg{"NUM_BP"});
 $smirf_bw_limit = int((640 * 1024) / $cfg{"NUM_BP"});
 $srv_ip = "172.17.228.204";
 $smirf_ip = "192.168.5.120";

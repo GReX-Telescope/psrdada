@@ -138,7 +138,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$send_id);
 
   my ($cmd, $result, $response, $raw_header, $full_cmd, $sleep_time);
 
-  $sleep_time = 10;
+  $sleep_time = 20;
 
   # continuously run mopsr_dbib for this BF
   while (!$quit_daemon)
@@ -168,7 +168,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$send_id);
       }
       else
       {
-        $sleep_time = 10;
+        $sleep_time = 20;
       }
     }
   }
