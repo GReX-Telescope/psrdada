@@ -26,6 +26,7 @@
 #include <sys/socket.h>
 
 //#define _DEBUG
+#define NO_1PPS
 
 int quit_threads = 0;
 void stats_thread(void * arg);
@@ -367,11 +368,10 @@ int64_t snapsr_udpdb_recv_block (dada_client_t* client, void* data, uint64_t dat
       {
         ctx->buffer_start_byte = 0;
 #endif
-        multilog (client->log, LOG_ERR, "recv_block: Start on packet with subband_id=%u seq=%lu\n", ctx->hdr.subband_id, ctx->hdr.seq_no);
-        ctx->buffer_end_byte   = (ctx->buffer_start_byte + data_size) - SNAPSR_UDP_DATA_BYTES;
+        ctx->buffer_end_byte = (ctx->buffer_start_byte + data_size) - SNAPSR_UDP_DATA_BYTES;
         ctx->capture_started = 1;
         if (ctx->verbose)
-          multilog (client->log, LOG_INFO, "recv_block: START [%"PRIu64" - %"PRIu64"]\n", ctx->buffer_start_byte, ctx->buffer_end_byte);
+          multilog (client->log, LOG_INFO, "recv_block: START [%"PRIu64" - %"PRIu64"] data_size=%lu\n", ctx->buffer_start_byte, ctx->buffer_end_byte, data_size);
       }
 
       if (ctx->capture_started)
@@ -399,7 +399,7 @@ int64_t snapsr_udpdb_recv_block (dada_client_t* client, void* data, uint64_t dat
             unsigned i;
             for (i=0; i<SNAPSR_NFRAME_PER_PACKET; i++)
             {
-              //fprintf(stderr, "%d subband_id=%u offset=%ld\n", i, ctx->hdr.subband_id, to - (char *) data);
+              //fprintf(stderr, "%d subband_id=%u seq_byte=%lu end_byte=%lu offset=%ld\n", i, ctx->hdr.subband_id, seq_byte, ctx->buffer_start_byte, to - (char *) data);
               memcpy (to, from, packet_sample_stride);
               from += packet_sample_stride;
               to   += block_sample_stride;
