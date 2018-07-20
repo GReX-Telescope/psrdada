@@ -1771,9 +1771,11 @@ uint64_t ipcbuf_set_soclock_buf (ipcbuf_t* id)
   return id->soclock_buf;
 }
 
-#ifdef HAVE_CUDA
 int ipcbuf_get_device (ipcbuf_t* id)
 {
+#ifdef HAVE_CUDA
   return id->sync->on_device_id;
-}
+#else
+  return -1;
 #endif
+}

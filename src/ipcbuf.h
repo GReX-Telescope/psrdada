@@ -1,8 +1,6 @@
 #ifndef __DADA_IPCBUF_H
 #define __DADA_IPCBUF_H
 
-//#include "config.h"
-
 /* ************************************************************************
 
    ipcbuf_t - a struct and associated routines for creation and management
@@ -264,11 +262,8 @@ extern "C" {
   /*! set the start of clocking data buffer  */
   uint64_t ipcbuf_set_soclock_buf(ipcbuf_t*);
 
-#ifdef HAVE_CUDA
   /*! return CUDA device_id for the data buffer, -1 for host */
   int ipcbuf_get_device (ipcbuf_t* id);
-#endif
-
 
 #ifdef __cplusplus
 	   }
