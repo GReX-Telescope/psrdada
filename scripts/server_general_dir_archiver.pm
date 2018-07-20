@@ -350,8 +350,13 @@ sub main()
     }
     else
     {
-      $quit_daemon = 1;
-      Dada::logMsg(0, $dl, "main: nothing to archive, exiting");
+      Dada::logMsg(2, $dl, "main: nothing to archive, waiting 60s");
+      my $to_wait = 60;
+      while (($to_wait > 0) && (!$quit_daemon))
+      {
+        $to_wait--;
+        sleep (1);
+      }
     }
   } # main loop
 
@@ -1223,14 +1228,8 @@ sub loadTape($) {
   if ($robot) {
     $string = "Changing to ".$tape;
   } else {
-    Dada::logMsg(3, $dl, "loadTape: manualClearResponse()");
-    ($result, $response) = manualClearResponse();
-    Dada::logMsg(3, $dl, "loadTape: manualClearResponse() ".$result." ".$response);
-    if ($result ne "ok") {
-      Dada::logMsg(0, $dl, "loadTape: manualClearResponse() failed: ".$response);
-      return ("fail", "could not clear response file in web interface");
-    }
     $string = "Insert Tape:::".$tape;
+    Dada::logMsg(1, $dl, $string);
   }
 
   Dada::logMsg(3, $dl, "loadTape: Dada::tapes::loadTapeGeneral(".$tape.")");
@@ -1403,8 +1402,6 @@ sub seekToFile($$)  {
   return ("ok", "");
 }
 
-
-
 sub good($) {
 
   my ($quit_file) = @_;
@@ -1425,8 +1422,8 @@ sub good($) {
                     ", not ".Dada::getHostMachineName());
   }
 
-  if ($type ne "swin") {
-    return ("fail", "Error: package global type [".$type."] was not swin");
+  if (($type ne "swin") && ($type ne "mopsr")) {
+    return ("fail", "Error: package global type [".$type."] was not swin or mopsr");
   }
 
   if (! -f ($db_dir."/".$tapes_db)) {
