@@ -247,6 +247,7 @@ ska1/src/ska1_udpdb_thread
 ska1/src/ska1_udpgen
 ska1/src/ska1_udptest
 ska1/src/ska1_udptest_vma
+src/dada_corrplot
 src/dada_db
 src/dada_dbNdb
 src/dada_dbcopydb

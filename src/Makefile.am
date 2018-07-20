@@ -102,4 +102,22 @@ LDADD += @RDMACM_LIBS@  $(top_builddir)/3rdparty/libtimers.la
 
 endif
 
+###############################################################################
+#
+# Depends on FFTW and PGPLOT
+#
+###############################################################################
+
+if HAVE_FFTW3
+
+if HAVE_PGPLOT
+
+bin_PROGRAMS += dada_corrplot
+
+AM_CFLAGS = @PGPLOT_CFLAGS@ @FFTW_CFLAGS@
+LDADD += @PGPLOT_LIBS@ @FFTW_LIBS@
+
+endif
+
+endif
 
