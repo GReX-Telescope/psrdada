@@ -861,8 +861,14 @@ int main (int argc, char **argv)
   pwcm->pwc->port = control_port;
 
   if (recv_core >= 0)
+  {
     if (dada_bind_thread_to_core(recv_core) < 0)
       multilog(log, LOG_WARNING, "mopsr_udpdb: failed to bind to core %d\n", recv_core);
+    else
+      multilog(log, LOG_INFO, "Bound process to core: %d\n", recv_core);
+  }
+  else
+    multilog(log, LOG_INFO, "Not binding process to core [%d]\n", recv_core);
 
   mopsr_udpdb_init (&ctx);
 
@@ -1055,9 +1061,26 @@ void mon_thread (void * arg)
       hdr.nframe *= npackets;
       mopsr_encode (packets, &hdr);
       out_size = UDP_HEADER + (npackets * UDP_DATA);
+
+      now = time(0);
+      strftime (local_time, 32, DADA_TIMESTR, localtime(&now));
+      sprintf (mon_file, "%s/%s.%s.dump", ctx->mdir, local_time, ctx->pfb_id);
+      if (ctx->verbose)
+        multilog (ctx->log, LOG_INFO, "mon_thread: creating %s\n", mon_file);
+      fd = open(mon_file, flags, perms);
+      if (fd < 0)
+      {
+        multilog (ctx->log, LOG_ERR, "mon_thread: failed to open '%s' for writing: %s\n", mon_file, strerror(errno));
+      }
+      else
+      {
+        nwrote = write (fd, packets, out_size);
+        close (fd);
+      }
     }
     else
     {
+#if STATS_WHILE_OBSERVING
       if (ctx->last_block)
       {
         memcpy (packets + UDP_HEADER, ctx->last_block, (npackets * UDP_DATA));
@@ -1072,22 +1095,25 @@ void mon_thread (void * arg)
         memcpy (packets, ctx->sock->buf, UDP_PAYLOAD);
         out_size = UDP_PAYLOAD;
       }
-    }
 
-    now = time(0);
-    strftime (local_time, 32, DADA_TIMESTR, localtime(&now));
-    sprintf (mon_file, "%s/%s.%s.dump", ctx->mdir, local_time, ctx->pfb_id);
-    if (ctx->verbose)
-      multilog (ctx->log, LOG_INFO, "mon_thread: creating %s\n", mon_file);
-    fd = open(mon_file, flags, perms);
-    if (fd < 0)
-    {
-      multilog (ctx->log, LOG_ERR, "mon_thread: failed to open '%s' for writing: %s\n", mon_file, strerror(errno));
-    }
-    else
-    {
-      nwrote = write (fd, packets, out_size);
-      close (fd);
+      now = time(0);
+      strftime (local_time, 32, DADA_TIMESTR, localtime(&now));
+      sprintf (mon_file, "%s/%s.%s.dump", ctx->mdir, local_time, ctx->pfb_id);
+      if (ctx->verbose)
+        multilog (ctx->log, LOG_INFO, "mon_thread: creating %s\n", mon_file);
+      fd = open(mon_file, flags, perms);
+      if (fd < 0)
+      {
+        multilog (ctx->log, LOG_ERR, "mon_thread: failed to open '%s' for writing: %s\n", mon_file, strerror(errno));
+      }
+      else
+      {
+        nwrote = write (fd, packets, out_size);
+        close (fd);
+      }
+#else
+      now = time(0);
+#endif
     }
 
     // wait the appointed amount of time
