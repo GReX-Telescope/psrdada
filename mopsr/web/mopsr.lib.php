@@ -78,6 +78,7 @@ class mopsr extends instrument
     $arr["mopsr_aq_diskdb"]           = array("logfile" => "nexus.sys.log", "name" => "DiskDB", "tag" => "aqdisk");
     $arr["mopsr_aq_cleaner"]          = array("logfile" => "nexus.sys.log", "name" => "Cleaner", "tag" => "aqcleaner");
     $arr["mopsr_aq_mask_manager"]     = array("logfile" => "nexus.sys.log", "name" => "Mask Manager", "tag" => "aqmask");
+    $arr["mopsr_aq_dump_manager"]     = array("logfile" => "nexus.sys.log", "name" => "Dump Manager", "tag" => "dump_xfer");
     $arr["mopsr_aq_dbevent"]          = array("logfile" => "nexus.sys.log", "name" => "Event", "tag" => "event");
     $arr["mopsr_aq_dumper"]           = array("logfile" => "nexus.sys.log", "name" => "Dumper", "tag" => "aqdumper");
     $arr["mopsr_superb"]              = array("logfile" => "nexus.sys.log", "name" => "Superb Mon", "tag" => "superb");
@@ -111,6 +112,7 @@ class mopsr extends instrument
     $arr["mopsr_bp_recv"]             = array("logfile" => "bps.sys.log", "name" => "Recv", "tag" => "bp_recv");
     $arr["mopsr_bp_split"]            = array("logfile" => "bps.sys.log", "name" => "Split", "tag" => "bp_split");
     $arr["mopsr_bp_sigproc"]          = array("logfile" => "bps.sys.log", "name" => "Sigproc", "tag" => "bp_sigproc");
+    $arr["mopsr_bp_injector"]          = array("logfile" => "bps.sys.log", "name" => "Injector", "tag" => "bpinjector");
     $arr["mopsr_bp_digifil"]          = array("logfile" => "bps.sys.log", "name" => "Digifil", "tag" => "bp_digifil");
     $arr["mopsr_bp_fb_manager"]       = array("logfile" => "bps.sys.log", "name" => "FB Manager", "tag" => "bp_fb_mngr");
     $arr["mopsr_bp_fb_decimate"]      = array("logfile" => "bps.sys.log", "name" => "FB Decimator", "tag" => "bp_fb_deci");
