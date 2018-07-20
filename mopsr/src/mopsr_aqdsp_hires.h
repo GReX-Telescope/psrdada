@@ -85,6 +85,11 @@ typedef struct {
   int8_t * h_mask_scr;
   FILE ** mask_fptrs;
 
+  char s1s_files;
+  void * h_s1s;
+  float * h_s1s_stf;
+  FILE ** s1s_fptrs;
+
   // corrections for rephasing coarse channels
   // void * d_corr;  
  
@@ -184,3 +189,6 @@ int64_t aqdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
 int64_t aqdsp_transfer (dada_client_t* client, void * buffer, size_t bytes, memory_mode_t mode);
 
 int aqdsp_append_mask (aqdsp_hires_t * ctx);
+int aqdsp_write_mask (aqdsp_hires_t* ctx, unsigned count);
+int aqdsp_append_s1s (aqdsp_hires_t* ctx);
+
