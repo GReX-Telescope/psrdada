@@ -22,7 +22,7 @@ void inline_dedisperse_all_help(){
   fprintf(stderr,"-k killfilename    kill all channels in killfilename\n");
   fprintf(stderr,"-d st_DM end_DM    dedisperse from st_DM to end_DM\n");
   fprintf(stderr,"-i [40] psr width  intrinsic pulse width in us\n");
-  fprintf(stderr,"-tol [1.25]        smear tolerance, e.g. 25% = 1.25\n");
+  fprintf(stderr,"-tol [1.25]        smear tolerance, e.g. 25\% = 1.25\n");
   fprintf(stderr,"-g gulpsize        number of samples to dedisp at once\n");
   fprintf(stderr,"-n Nsamptotal      Only do Nsamptotal samples\n");
   fprintf(stderr,"-s Nsamps          Skip Nsamp samples before starting\n");
@@ -152,7 +152,7 @@ void do_dedispersion(unsigned short int ** storage, unsigned short int * unpacke
 	  if (killdata[k]==1){
 	    idelay = DM_shift(DMtrial,k-start_chan,tsamp,fch1_subband,foff);
 	    int stride = k*ntoload+idelay;
-#pragma omp parallel for private(j)
+#pragma omp parallel j for private(j)
 	    for (int j=0;j<ntodedisp/4;j++){
 		casted_times[j]+=*((LONG64BIT*) (unpackeddata+(j*4+stride)));
 	    }
