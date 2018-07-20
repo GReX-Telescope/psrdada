@@ -55,7 +55,7 @@ libmopsr_la_SOURCES += mopsr_delays.c mopsr_delays_hires.c
 bin_PROGRAMS += mopsr_phase_differencer mopsr_getmd mopsr_getns \
                 mopsr_dadacorrplot_pfb mopsr_getlst mopsr_test_signal_paths \
                 mopsr_test_delays_plot mopsr_phase_diff_transit \
-								mopsr_test_delays_docjer mopsr_plot_acs mopsr_dbsigproc \
+                mopsr_test_delays_docjer mopsr_plot_acs mopsr_dbsigproc \
                 snapsr_dadacorrplot_full
 
 AM_CFLAGS += @SOFA_CFLAGS@
