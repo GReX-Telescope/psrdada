@@ -66,6 +66,8 @@ int mopsr_ibdb_open (dada_client_t* client)
   client->optimal_bytes = 0;
 
   ctx->obs_ending = 0;
+
+  //multilog (client->log, LOG_INFO, "mopsr_ibdb_open()\n");
   return 0;
 }
 
@@ -153,6 +155,8 @@ int64_t mopsr_ibdb_recv (dada_client_t* client, void * buffer, uint64_t bytes)
     if (ib_cms[i]->verbose > ctx->verbose)
       ctx->verbose = ib_cms[i]->verbose;
   }
+
+  multilog(log, LOG_INFO, "recv: headers received\n");
 
   // copy header from just first src, up to a maximum of bytes
   memcpy (buffer, ctx->ib_cms[0]->header_mb->buffer, bytes);
@@ -628,8 +632,7 @@ int mopsr_ibdb_open_connections (mopsr_bf_ib_t * ctx, multilog_t * log)
     }
   }
 
-  if (ctx->verbose)
-    multilog (ctx->log, LOG_INFO, "open_connections: waiting for connection threads to return\n");
+  multilog (ctx->log, LOG_INFO, "open_connections: launched connection threads\n");
 
   // join all the connection threads
   void * result;

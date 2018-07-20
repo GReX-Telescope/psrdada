@@ -55,6 +55,9 @@ void mopsr_tie_beam (cudaStream_t stream, void * d_in, void * d_out, void * d_ph
 void mopsr_mod_beams (cudaStream_t stream, void * d_in, void * d_out, uint64_t bytes, unsigned nant, unsigned nchan, unsigned tdec);
 //void mopsr_convert_float_to_half(void * in, void * out, size_t num);
 
+void mopsr_transpose_BFST_FST (cudaStream_t stream, void * d_in, void * d_out, uint64_t bytes, unsigned nant, unsigned nchan);
+
+
 
 void check_error_stream (const char* method, cudaStream_t stream);
 

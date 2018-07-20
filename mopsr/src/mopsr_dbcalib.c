@@ -87,6 +87,10 @@ typedef struct {
 
   cudaStream_t stream;    // cuda stream for engine
 
+#ifndef PER_CHANNEL_TRANSFERS
+  void * d_raw;            // device memory for input
+#endif
+
   void * d_in;            // device memory for input
 
   void * d_unpacked;      // device memory for unpacked data
@@ -136,7 +140,7 @@ typedef struct {
 int dbcalib_init (mopsr_dbcalib_t * ctx, dada_hdu_t * in_hdu);
 int dbcalib_destroy (mopsr_dbcalib_t * ctx, dada_hdu_t * in_hdu);
 
-#define MOPSR_DBCALIB_INIT { 0, "", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", 0, 0}
+#define MOPSR_DBCALIB_INIT { 0, "", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", 0, 0}
 
 //function to write ac and cc files
 int dbcalib_dump_spectra (dada_client_t* client, uint64_t start_time, uint64_t end_time)
@@ -687,6 +691,7 @@ int64_t dbcalib_block_gpu (dada_client_t* client, void * buffer, uint64_t bytes,
   cudaError_t error;
   cufftResult cufft_error;
 
+#ifdef PER_CHANNEL_TRANSERS
   // copy from the [pinned] shared memory block to d_in
   error = cudaMemcpyAsync (ctx->d_in, buffer, bytes, cudaMemcpyHostToDevice, ctx->stream);
   if (error != cudaSuccess)
@@ -694,6 +699,17 @@ int64_t dbcalib_block_gpu (dada_client_t* client, void * buffer, uint64_t bytes,
     multilog (log, LOG_ERR, "cudaMemcpyAsync H2D failed: %s\n", cudaGetErrorString(error));
     return -1;
   }
+#else
+  // copy from the [pinned] shared memory block to d_in
+  error = cudaMemcpyAsync (ctx->d_raw, buffer, bytes, cudaMemcpyHostToDevice, ctx->stream);
+  if (error != cudaSuccess)
+  {
+    multilog (log, LOG_ERR, "cudaMemcpyAsync H2D failed: %s\n", cudaGetErrorString(error));
+    return -1;
+  }
+
+  mopsr_transpose_BFST_FST (ctx->stream, ctx->d_raw, ctx->d_in, bytes, ctx->nant, ctx->nchan);
+#endif
 
   // we must ensure that the data is copied across before continuing...
   cudaStreamSynchronize(ctx->stream);
@@ -829,6 +845,20 @@ int dbcalib_init (mopsr_dbcalib_t * ctx, dada_hdu_t * in_hdu)
     if (ctx->verbose)
       multilog (log, LOG_INFO, "init: stream=%p\n", (void *) ctx->stream);
 
+#ifndef PER_CHANNEL_TRANSFERS
+    if (!ctx->d_raw)
+    {
+      if (ctx->verbose)
+        multilog (log, LOG_INFO, "init: cudaMalloc(%"PRIu64") for d_raw\n", ctx->block_size);
+      error = cudaMalloc (&(ctx->d_raw), ctx->block_size);
+      if (error != cudaSuccess)
+      {
+        multilog (log, LOG_ERR, "dbcalib_init: could not create allocated %ld bytes of device memory\n", ctx->block_size);
+        return -1;
+      }
+    }
+#endif
+
     // d_in should be same size as PSRDADA block
     if (!ctx->d_in)
     {
@@ -886,6 +916,12 @@ int dbcalib_destroy (mopsr_dbcalib_t * ctx, dada_hdu_t * in_hdu)
 {
   if (ctx->device >= 0)
   {
+#ifndef PER_CHANNEL_TRANSFERS
+    if (ctx->d_raw)
+      cudaFree (ctx->d_raw);
+    ctx->d_raw = 0;
+#endif
+
     if (ctx->d_in)
       cudaFree (ctx->d_in);
     ctx->d_in = 0;

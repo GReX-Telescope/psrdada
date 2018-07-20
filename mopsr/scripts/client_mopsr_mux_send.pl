@@ -147,6 +147,13 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
 
   my ($cmd, $result, $response, $raw_header, $full_cmd, $sleep_time);
 
+  ($result, $response) = checkEndpoints();
+  if ($result ne "ok")
+  {
+    msg (0, "ERR", "failed to resolve IB enpoints: ".$response);
+    $quit_daemon = 1;
+  }
+
   # allow 10 seconds for the receving instances to be ready
   $sleep_time = 10;
 
@@ -162,9 +169,9 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
 
     if (!$quit_daemon)
     {
-      # note all instances of dbib are bound to CPU core 5
+      # command to perform all processing
       $cmd = "mopsr_dbib_FST -k ".$db_key." ".$send_id." ".$cfg{"CONFIG_DIR"}."/mopsr_cornerturn.cfg -s";
-      
+
       msg(1, "INFO", "START ".$cmd);
       ($result, $response) = Dada::mySystemPiped($cmd, $src_log_file, $src_log_sock, "src", sprintf("%02d",$pwc_id), $daemon_name, "muxsend");
       msg(1, "INFO", "END   ".$cmd);
@@ -253,6 +260,56 @@ sub controlThread($)
 
   msg(2, "INFO", "controlThread: exiting");
 
+}
+
+sub checkEndpoints ()
+{
+  my ($i, $host, $cmd, $result, $response, $ib_addr, $h);
+  my @hosts = ();
+
+  for ($i=0; $i<$cfg{"NRECV"}; $i++)
+  {
+    my $host = $cfg{"RECV_".$i};
+    msg(3, "INFO" ,"checkEndpoints: i=".$i." host=".$host);
+    my $found = 0;
+    foreach $h ( @hosts )
+    {
+      if ($h == $host)
+      {
+        $found = 1;
+      }
+    }
+    push @hosts, $host;
+  }
+
+  my $endpoints_valid = 1;
+  my $endpoints_response = "Could not resolve";
+  for ($i=0; $i<$#hosts; $i++)
+  {
+    $host = $hosts[$i];
+    $ib_addr = $cfg{$host."_IB"};
+    msg(2, "INFO" ,"checkEndpoints: host=".$host." ib_addr=".$ib_addr);
+
+    $cmd = "ib_acme -d ".$ib_addr;
+    msg(3, "INFO" ,"checkEndpoints: cmd=".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    msg(3, "INFO" ,"checkEndpoints: result=".$result." response=".$response);
+    if (($result ne "ok") || (!($response =~ m/Path information/)))
+    {
+      msg(1, "INFO" ,"checkEndpoints: ".$host."[".$ib_addr."] not valid");
+      $endpoints_valid = 0;
+      $endpoints_response .= " ".$host."[".$ib_addr."]";
+    }
+  }
+
+  if ($endpoints_valid)
+  {
+    return ("ok", "");
+  }
+  else
+  {
+    return ("fail", $endpoints_response);
+  }
 }
 
 sub sigHandle($)

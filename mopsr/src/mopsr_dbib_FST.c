@@ -90,6 +90,8 @@ int mopsr_dbib_open (dada_client_t* client)
 
   ctx->obs_ending = 0;
 
+  multilog (client->log, LOG_INFO, "open transfers()\n");
+
   return 0;
 }
 
@@ -279,7 +281,7 @@ int64_t mopsr_dbib_send (dada_client_t* client, void * buffer, uint64_t bytes)
     // Need to manipulate the connection specific header buffer
     memcpy (ib_cms[i]->header_mb->buffer, buffer, bytes);
     // Calculate the new nchan for the current connection:
-    new_nchan = ctx->conn_info[i].chan_last - ctx->conn_info[i].chan_first + 1;
+    new_nchan = (ctx->conn_info[i].chan_last - ctx->conn_info[i].chan_first) + 1;
     if (ctx->verbose)
       multilog (log, LOG_INFO, "send: setting NCHAN=%d in header for connection id=%d\n", new_nchan, i);
     if (ascii_header_set (ib_cms[i]->header_mb->buffer, "NCHAN", "%d", new_nchan) < 0)
@@ -463,7 +465,9 @@ int64_t mopsr_dbib_send_block (dada_client_t* client, void * buffer,
   struct ibv_send_wr   send_wr = { };
   struct ibv_send_wr * bad_send_wr;
 
+#ifdef PER_CHANNEL_TRANSFERS
   sge.length = bytes_to_xfer_per_channel;
+#endif
 
   send_wr.sg_list  = &sge;
   send_wr.num_sge  = 1;
@@ -471,19 +475,19 @@ int64_t mopsr_dbib_send_block (dada_client_t* client, void * buffer,
 
   char * buf_ptr = (char *) buffer;
 
-  // input channel stride is bytes_to_xfer_per_channel
-    
   // each connection may have a different number of channels being sent to it
   for (i=0; i<ctx->nconn; i++)
   {
     // number of output channels for this connection
     const unsigned nchan = ctx->conn_info[i].nchan;
 
-    unsigned ochan;
-
     // local access key
     sge.lkey = ib_cms[i]->local_blocks[block_id].buf_lkey;
 
+#ifdef PER_CHANNEL_TRANSFERS
+    // input channel stride is bytes_to_xfer_per_channel
+    //
+    unsigned ochan;
     for (ochan=0; ochan < nchan; ++ochan) 
     {
       sge.addr = (uintptr_t) (buf_ptr + ctx->in_offsets[i][ochan]);
@@ -491,7 +495,7 @@ int64_t mopsr_dbib_send_block (dada_client_t* client, void * buffer,
       send_wr.wr.rdma.rkey        = remote_buf_rkey[i];
       send_wr.opcode              = IBV_WR_RDMA_WRITE;
       send_wr.send_flags          = 0;
-      send_wr.wr_id               = (i * nchan) + ochan;
+      send_wr.wr_id               = ctx->conn_info[i].chan_first + ochan;
 
       //multilog (log, LOG_INFO, "send_block: i=%d ochan=%i iffset=%lu offset=%d nant=%d wr_id=%d\n", i, ochan, bytes_to_xfer_per_channel * ichan, ochan * ctx->nant * nsamp * ndim, ctx->nant, send_wr.wr_id);
 
@@ -501,6 +505,24 @@ int64_t mopsr_dbib_send_block (dada_client_t* client, void * buffer,
         return -1;
       }
     }
+#else
+    sge.length = bytes_to_xfer_per_channel * nchan;
+    sge.addr = (uintptr_t) (buf_ptr + ctx->in_offsets[i][0]);
+    send_wr.wr.rdma.remote_addr = remote_buf_va[i] + ctx->out_offsets[i][0];
+    send_wr.wr.rdma.rkey        = remote_buf_rkey[i];
+    send_wr.opcode              = IBV_WR_RDMA_WRITE;
+    send_wr.send_flags          = 0;
+    send_wr.wr_id               = i;
+
+    //multilog (log, LOG_INFO, "send_block: i=%d ochan=%i iffset=%lu offset=%d nant=%d wr_id=%d\n", i, ochan, bytes_to_xfer_per_channel * ichan, ochan * ctx->nant * nsamp * ndim, ctx->nant, send_wr.wr_id);
+    
+    if (ibv_post_send (ib_cms[i]->cm_id->qp, &send_wr, &bad_send_wr))
+    {
+      multilog(log, LOG_ERR, "send_block: ibv_post_send [%d] failed\n", i);
+      return -1;
+    }
+
+#endif
   }
 
   // post a recv for the next call to send_block
@@ -582,7 +604,12 @@ int mopsr_dbib_ib_init (mopsr_bf_ib_t * ctx, dada_hdu_t * hdu, multilog_t * log)
     }
     ctx->conn_info[i].ib_cm = ctx->ib_cms[i];
     ctx->ib_cms[i]->verbose = ctx->verbose;
-    ctx->ib_cms[i]->send_depth = ctx->conn_info[i].chan_last - ctx->conn_info[i].chan_first + 2; // only ever have this many outstanding post sends
+#ifdef PER_CHANNEL_TRANSFERS
+    // only ever have this many outstanding post sends
+    ctx->ib_cms[i]->send_depth = (ctx->conn_info[i].chan_last - ctx->conn_info[i].chan_first) + 2;
+#else
+    ctx->ib_cms[i]->send_depth = 2;
+#endif
     ctx->ib_cms[i]->recv_depth = 1;
     ctx->ib_cms[i]->bufs_size = db_bufsz;
     ctx->ib_cms[i]->header_size = hb_bufsz;
@@ -624,6 +651,8 @@ int mopsr_dbib_open_connections (mopsr_bf_ib_t * ctx, multilog_t * log)
 
   char all_connected = 0;
   int attempts = 0;
+
+  multilog (ctx->log, LOG_INFO, "open_connections: starting connection threads\n");
 
   // open a connection to all the receivers
   while (!all_connected && attempts < 1)
@@ -691,6 +720,8 @@ int mopsr_dbib_open_connections (mopsr_bf_ib_t * ctx, multilog_t * log)
     }
     attempts++;
   }
+
+  multilog (ctx->log, LOG_INFO, "open_connections: joined connection threads\n");
 
   free(connections);
 
@@ -810,6 +841,7 @@ void setup_conn_offsets (mopsr_bf_ib_t * ctx, uint64_t bufsz)
   // number of time samples in the block
   const uint64_t nsamp = bytes_to_xfer_per_channel / (ctx->conn_info[0].nant * ndim);
 
+#ifdef PER_CHANNEL_TRANSFERS
   // destination remote address offset for these antenna, same for every channel
   const uint64_t dst_ant_offset = nsamp * ndim * ctx->conn_info[0].ant_first;
 
@@ -817,6 +849,7 @@ void setup_conn_offsets (mopsr_bf_ib_t * ctx, uint64_t bufsz)
     multilog (log, LOG_INFO, "setup_conn_offsets: ctx->conn_info[0].ant_first=%u, "
               "nsamp=%"PRIu64", dst_ant_offset=%"PRIu64"\n", ctx->conn_info[0].ant_first, 
               nsamp, dst_ant_offset);
+#endif
 
   ctx->in_offsets  = (uint64_t **) malloc(sizeof(uint64_t *) * ctx->nconn);
   ctx->out_offsets = (uint64_t **) malloc(sizeof(uint64_t *) * ctx->nconn);
@@ -824,6 +857,7 @@ void setup_conn_offsets (mopsr_bf_ib_t * ctx, uint64_t bufsz)
   unsigned iconn;
   for (iconn=0; iconn < ctx->nconn; iconn++)
   {
+#ifdef PER_CHANNEL_TRANSFERS
     if (ctx->verbose)
     {
       multilog (log, LOG_INFO, "conn_info[%d] antennas: %d -> %d\n", iconn, ctx->conn_info[iconn].ant_first, ctx->conn_info[iconn].ant_last);
@@ -841,6 +875,22 @@ void setup_conn_offsets (mopsr_bf_ib_t * ctx, uint64_t bufsz)
       ctx->in_offsets[iconn][ochan]  = bytes_to_xfer_per_channel * ichan;
       ctx->out_offsets[iconn][ochan] = dst_ant_offset + ochan * ctx->nant * nsamp * ndim;
     }
+#else
+
+    ctx->in_offsets[iconn]  = (uint64_t *) malloc (sizeof(uint64_t));
+    ctx->out_offsets[iconn]  = (uint64_t *) malloc (sizeof(uint64_t));
+
+    // destination block number
+    uint64_t dst_block_size = ctx->conn_info[iconn].nchan * ctx->conn_info[iconn].nant * nsamp * ndim;
+    uint64_t dst_iblock = (ctx->conn_info[0].ant_first / 8);
+
+    // input data are ordered FST output Blocks of FST for 8 ant and 16384 samples
+    ctx->in_offsets[iconn][0] = bytes_to_xfer_per_channel * ctx->conn_info[iconn].chan_first;
+    ctx->out_offsets[iconn][0] = dst_iblock * dst_block_size;
+
+    //multilog (log, LOG_INFO, "offsets iconn=%u in=%lu out=%lu\n", iconn, ctx->in_offsets[iconn][0], ctx->out_offsets[iconn][0]);
+
+#endif
   }
 }
 
@@ -930,8 +980,10 @@ int main (int argc, char **argv)
   }
 
   if (core >= 0)
+  {
     if (dada_bind_thread_to_core(core) < 0)
       multilog(log, LOG_WARNING, "mopsr_dbib_FST: failed to bind to core %d\n", core);
+  }
 
 
   send_id = atoi(argv[optind]);

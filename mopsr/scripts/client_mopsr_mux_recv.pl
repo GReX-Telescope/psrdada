@@ -138,12 +138,17 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
 
   my ($cmd, $result, $response, $raw_header, $full_cmd);
 
+  my $core = $cfg{"BF_RECV_CORE_".$chan_id};
+
   # continuously run mopsr_ibdb for this PWC
   while (!$quit_daemon)
   {
-    $cmd = "mopsr_ibdb_FST -k ".$db_key." ".$chan_id." ".$cfg{"CONFIG_DIR"}."/mopsr_cornerturn.cfg -s -b 7";
+    $cmd = "mopsr_ibdb_FST -k ".$db_key." ".$chan_id." ".$cfg{"CONFIG_DIR"}."/mopsr_cornerturn.cfg -s";
+
+    my $numa_cmd = "numactl -C ".$core." ".$cmd;
+
     msg(1, "INFO", "START ".$cmd);
-    ($result, $response) = Dada::mySystemPiped($cmd, $src_log_file, $src_log_sock, "src", sprintf("%02d",$chan_id), $daemon_name, "muxrecv");
+    ($result, $response) = Dada::mySystemPiped($numa_cmd, $src_log_file, $src_log_sock, "src", sprintf("%02d",$chan_id), $daemon_name, "muxrecv");
     msg(1, "INFO", "END   ".$cmd);
 
     if ($result ne "ok")
