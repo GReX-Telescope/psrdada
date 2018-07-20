@@ -74,6 +74,7 @@ int main(int argc, char** argv)
   key_t mb_key = 0;
   key_t tb_keys[MAX_TBS];
 
+  ctx.d_raw = 0;
   ctx.d_in = 0;
   ctx.d_fbs = 0;
   ctx.d_tbs[MAX_TBS];
@@ -185,8 +186,12 @@ int main(int argc, char** argv)
   }
 
   if (core >= 0)
+  {
     if (dada_bind_thread_to_core(core) < 0)
-      multilog(log, LOG_WARNING, "mopsr_bfdsp: failed to bind to core %d\n", core);
+      fprintf (stderr, "WARNING: failed to bind to core %d\n", core);
+    else
+      fprintf (stderr, "Bound processing to core %d\n", core);
+  }
 
   // read the modules file that describes the array
   char * bays_file = argv[optind+1];
@@ -474,6 +479,19 @@ int bfdsp_init ( mopsr_bfdsp_t* ctx, dada_hdu_t * in_hdu, dada_hdu_t * fb_hdu,
       return -1;
     }
   }
+
+#ifndef PER_CHANNEL_TRANSFERS
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "init: initating %ld bytes of device memory for d_raw\n", ctx->in_block_size);
+  error = cudaMalloc( &(ctx->d_raw), ctx->in_block_size);
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "rawit: d_raw=%p\n", ctx->d_raw);
+  if (error != cudaSuccess)
+  {
+    multilog (log, LOG_ERR, "init: could not allocate %ld bytes of device memory\n", ctx->in_block_size);
+    return -1;
+  }
+#endif
 
   if (ctx->verbose)
     multilog (log, LOG_INFO, "init: initating %ld bytes of device memory for d_in\n", ctx->in_block_size);
@@ -776,6 +794,11 @@ int bfdsp_dealloc (mopsr_bfdsp_t * ctx)
       cudaFree (ctx->d_tbs[i]);
     ctx->d_tbs[i] = 0;
   }
+#ifndef PER_CHANNEL_TRANSFERS
+  if (ctx->d_raw)
+    cudaFree (ctx->d_raw);
+  ctx->d_raw = 0;
+#endif
 
   if (ctx->d_in)
     cudaFree (ctx->d_in);
@@ -1932,6 +1955,7 @@ int64_t bfdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
 
 #ifdef USE_GPU 
   // copy the whole block to the GPU
+#ifdef PER_CHANNEL_TRANSFERS
   if (ctx->verbose)
     multilog (log, LOG_INFO, "io_block: cudaMemcpyAsync block H2D %ld: (%p <- %p)\n", bytes, ctx->d_in, buffer);
   error = cudaMemcpyAsync (ctx->d_in, buffer, bytes, cudaMemcpyHostToDevice, ctx->stream);
@@ -1942,6 +1966,23 @@ int64_t bfdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
     ctx->internal_error = 1;
     return -1;
   }
+#else
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "io_block: cudaMemcpyAsync block H2D %ld: (%p <- %p)\n", bytes, ctx->d_raw, buffer);
+  error = cudaMemcpyAsync (ctx->d_raw, buffer, bytes, cudaMemcpyHostToDevice, ctx->stream);
+  if (error != cudaSuccess)
+  {
+    multilog (log, LOG_ERR, "cudaMemcpyAsync H2D failed: %s (%p <- %p)\n", cudaGetErrorString(error),
+              ctx->d_raw, buffer);
+    ctx->internal_error = 1;
+    return -1;
+  }
+
+  if (ctx->verbose)
+    multilog (log, LOG_INFO, "io_block: mopsr_transpose_BFST_FST()\n");
+  mopsr_transpose_BFST_FST(ctx->stream, ctx->d_raw, ctx->d_in, bytes, ctx->nant, ctx->nchan);
+#endif
+
 
   if (ctx->n_tbs > 0)
   {

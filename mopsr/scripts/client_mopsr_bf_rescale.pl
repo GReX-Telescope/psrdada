@@ -169,7 +169,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$chan_id);
 
       if ($cfg{"BF_STATE_".$chan_id} eq "active")
       {
-        $proc_cmd = "mopsr_dbrescaledb ".$in_db_key." ".$out_db_key." -s -z";
+        $proc_cmd = "mopsr_dbrescaledb ".$in_db_key." ".$out_db_key." -s -z ";
         msg(2, "INFO", "PROC_CMD=".$proc_cmd);
 
         if ($header{"MB_ENABLED"} eq "true")

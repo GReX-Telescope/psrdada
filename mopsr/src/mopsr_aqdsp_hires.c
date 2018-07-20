@@ -27,6 +27,11 @@
 #include <complex.h>
 #include <float.h>
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
+
 void usage ()
 {
 	fprintf(stdout, "mopsr_aqdsp_hires [options] inkey outkey bays_file modules_file signal_path_file\n"
@@ -93,6 +98,11 @@ int main(int argc, char** argv)
   ctx.d_delays = 0;
   ctx.d_fir_coeffs = 0;
 
+  ctx.h_s1s = 0;
+  ctx.h_s1s_stf = 0;
+  ctx.s1s_files = 0;
+  ctx.s1s_fptrs = 0;
+
   ctx.d_s1s = 0;
   ctx.d_s2s = 0;
   ctx.d_in = 0;
@@ -119,7 +129,7 @@ int main(int argc, char** argv)
   ctx.gtx = NULL;
   ctx.zap = 0;
 
-  while ((arg = getopt(argc, argv, "ab:cd:gihl:n:op:rstvz")) != -1) 
+  while ((arg = getopt(argc, argv, "ab:cd:gihl:mn:op:rstvz")) != -1) 
   {
     switch (arg)  
     {
@@ -159,6 +169,10 @@ int main(int argc, char** argv)
           fprintf(stderr, "main: could not parse lock utc time from '%s'\n", optarg);
           return (EXIT_FAILURE);
         }
+        break;
+
+      case 'm':
+        ctx.s1s_files = 1;
         break;
 
       case 'n':
@@ -743,6 +757,17 @@ int aqdsp_alloc (aqdsp_hires_t * ctx)
     }
     cudaMemsetAsync (ctx->d_s1s, 0, ctx->s1s_size, ctx->stream);
 
+    if (ctx->verbose)
+      multilog (log, LOG_INFO, "alloc: allocating %ld bytes on HOST for h_s1s\n", ctx->s2s_size);
+    error = cudaMallocHost( &(ctx->h_s1s), ctx->s2s_size);
+    if (error != cudaSuccess)
+    {
+      multilog (log, LOG_ERR, "alloc: could not allocate %ld bytes of device memory\n", ctx->s2s_size);
+      return -1;
+    }
+
+    ctx->h_s1s_stf = (float *) malloc(ctx->s2s_size);
+
     size_t thresh_size = ctx->nchan * ctx->nant * sizeof(float) * 2;
     if (ctx->verbose)
       multilog (log, LOG_INFO, "alloc: allocating %ld bytes on GPU for thresh\n", thresh_size);
@@ -901,7 +926,15 @@ int aqdsp_dealloc (aqdsp_hires_t * ctx)
   {
     if (ctx->d_s1s)
       cudaFree (ctx->d_s1s);
-    ctx->d_s1s= 0;
+    ctx->d_s1s = 0;
+
+    if (ctx->h_s1s)
+      cudaFreeHost (ctx->h_s1s);
+    ctx->h_s1s = 0;
+
+    if (ctx->h_s1s_stf)
+      cudaFreeHost (ctx->h_s1s_stf);
+    ctx->h_s1s_stf = 0;
 
     if (ctx->d_s2s)
       cudaFree (ctx->d_s2s);
@@ -956,6 +989,10 @@ int aqdsp_dealloc (aqdsp_hires_t * ctx)
     if (ctx->mask_fptrs)
       free (ctx->mask_fptrs);
     ctx->mask_fptrs = 0;
+
+    if (ctx->s1s_fptrs)
+      free (ctx->s1s_fptrs);
+    ctx->s1s_fptrs = 0;
   }
 
   if (ctx->d_out)
@@ -1390,6 +1427,24 @@ int aqdsp_open (dada_client_t* client)
       }
       fwrite (mask_header, sizeof(char), 4096, ctx->mask_fptrs[iant]);
     }
+
+    if (ctx->s1s_files)
+    {
+      ascii_header_set (mask_header, "NBIT", "%d", 32);
+      ctx->s1s_fptrs = (FILE **) malloc (sizeof (FILE *) * ctx->nant);
+      for (iant=0; iant<ctx->nant; iant++)
+      {
+        sprintf (ant_list, "%s.s1s", ctx->modules[iant].name);
+        ascii_header_set (mask_header, "ANTENNA", "%s", ctx->modules[iant].name);
+        ctx->s1s_fptrs[iant] = fopen (ant_list, "w");
+        if (!ctx->s1s_fptrs[iant])
+        { 
+          multilog (log, LOG_ERR, "open: could not open file: %s\n", ant_list);
+          return -1;
+        }
+        fwrite (mask_header, sizeof(char), 4096, ctx->s1s_fptrs[iant]);
+      }
+    }
   }
 
   if (ctx->verbose)
@@ -1443,6 +1498,11 @@ int aqdsp_close (dada_client_t* client, uint64_t bytes_written)
     unsigned iant;
     for (iant=0; iant<ctx->nant; iant++)
       fclose (ctx->mask_fptrs[iant]);
+    if (ctx->s1s_files)
+    {
+      for (iant=0; iant<ctx->nant; iant++)
+        fclose (ctx->s1s_fptrs[iant]);
+    }
   }
 
   if (aqdsp_dealloc (ctx) < 0)
@@ -1494,6 +1554,7 @@ int64_t aqdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
   uint64_t out_block_id;
   unsigned ichan, iant;
   uint64_t bytes_out = bytes;
+  float * d_s1s_curr = NULL;
 
   // copy the whole block to the GPU
   if (ctx->verbose > 1)
@@ -1621,7 +1682,20 @@ int64_t aqdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
 
         // write out the host mask from the previous iteration whilst this kernel is executing
         if (ctx->s1_count > 1)
+        {
           aqdsp_append_mask (ctx);
+          if (ctx->s1s_files)
+          {
+            aqdsp_append_s1s (ctx);
+          }
+        }
+
+        // pointer to the part of device memory with the current s1s block
+        unsigned ndat_s1 = ctx->block_size / (ctx->nchan * ctx->nant * ctx->ndim) / 1024;
+        unsigned s1_idx = (ctx->s1_count - 1) % MOPSR_MEMORY_BLOCKS;
+        d_s1s_curr = ctx->d_s1s + (s1_idx * ndat_s1 * ctx->nant * ctx->nchan);
+
+        // increment count for next block
         ctx->s1_count++;
       }
       else
@@ -1788,6 +1862,18 @@ int64_t aqdsp_io_block (dada_client_t* client, void * buffer, uint64_t bytes, ui
         ctx->internal_error = 1;
         return -1;
       }
+
+      if (ctx->verbose > 1)
+        multilog (log, LOG_INFO, "io_block: cudaMemcpyAsync(%p, %p, %"PRIu64", D2H)\n",
+                  (void *) ctx->h_s1s, d_s1s_curr,  ctx->s2s_size);
+      error = cudaMemcpyAsync ( (void *) ctx->h_s1s, d_s1s_curr,  ctx->s2s_size,
+                                cudaMemcpyDeviceToHost, ctx->stream);
+      if (error != cudaSuccess)
+      {
+        multilog (log, LOG_ERR, "cudaMemcpyAsync D2H failed: %s\n", cudaGetErrorString(error));
+        ctx->internal_error = 1;
+        return -1;
+      }
     }
 
     if (ctx->verbose > 1)
@@ -1814,14 +1900,12 @@ int aqdsp_append_mask (aqdsp_hires_t* ctx)
   // mask is stored in FST order
   unsigned ichan, iant, isamp, i;
   uint64_t nsamp = ctx->block_size / (ctx->nchan * ctx->nant * ctx->ndim * 1024);
-  uint64_t nsamp_scr = nsamp / 16;
-  nsamp_scr = nsamp;
 
   // output to be written in S x TF order
   int8_t * in = ctx->h_mask;
   int8_t o;
 
-  const uint64_t ant_stride = ctx->nchan * nsamp_scr;
+  const uint64_t ant_stride = ctx->nchan * nsamp;
   const uint64_t samp_stride = ctx->nchan;
 
   // further integrate up to 16 samples (20.97152 milli seconds), reorder to STF
@@ -1829,11 +1913,11 @@ int aqdsp_append_mask (aqdsp_hires_t* ctx)
   {
     for (iant=0; iant<ctx->nant; iant++)
     {
-      for (isamp=0; isamp<nsamp_scr; isamp++)
+      for (isamp=0; isamp<nsamp; isamp++)
       {
         ctx->h_mask_scr[iant*ant_stride + isamp*samp_stride + ichan] = in[isamp];
       }
-      in += nsamp_scr;
+      in += nsamp;
     }
   }
 
@@ -1845,7 +1929,7 @@ int aqdsp_append_mask (aqdsp_hires_t* ctx)
   for (iant=0; iant<ctx->nant; iant++)
   {
     out = ctx->h_mask_scr + iant*ant_stride;
-    for (ival=0; ival < ctx->nchan*nsamp_scr; ival+=8)
+    for (ival=0; ival < ctx->nchan*nsamp; ival+=8)
     {
       val = 0;
       if (out[ival + 0]) val |= 1 << 0;
@@ -1861,3 +1945,88 @@ int aqdsp_append_mask (aqdsp_hires_t* ctx)
   }
   return 0;
 }
+
+int aqdsp_write_mask (aqdsp_hires_t* ctx, unsigned count)
+{
+  int8_t * in = ctx->h_mask;
+  int8_t * out = ctx->h_mask_scr;
+  uint64_t odx = 0;
+
+  // repack from SFT to TFS
+  unsigned isamp, ichan, iant;
+  uint64_t nsamp = ctx->block_size / (ctx->nchan * ctx->nant * ctx->ndim * 1024);
+
+  const uint64_t ant_stride = nsamp;
+  const uint64_t chan_stride = ant_stride * ctx->nant;
+
+  for (isamp=0; isamp<nsamp; isamp++)
+  {
+    for (ichan=0; ichan<ctx->nchan; ichan++)
+    {
+      char val = 0;
+      // this only works for nant == 8!
+      for (iant=0; iant<ctx->nant; iant++)
+      {
+        // parse input as FST
+        if (in[iant * ant_stride + ichan * chan_stride + isamp])
+        {
+          val |= (1 << iant);
+        }
+      }
+
+      out[odx] = val;
+      odx++;
+    }
+  }
+
+  int flags = O_WRONLY | O_CREAT | O_TRUNC;
+  int perms = S_IRUSR | S_IWUSR | S_IRGRP;
+  char mask_filename[1024];
+
+  sprintf (mask_filename, "%s_%010d.mask", ctx->utc_start, count);
+  int fd = open (mask_filename, flags, perms);
+
+  size_t bytes_to_write = odx - 1;
+  write (fd, out, bytes_to_write);
+  close (fd);
+
+  return 0;
+}
+
+
+int aqdsp_append_s1s (aqdsp_hires_t* ctx)
+{
+  // s1s are stored in FST order
+  uint64_t nsamp = ctx->block_size / (ctx->nchan * ctx->nant * ctx->ndim * 1024);
+
+  //output to be written in S x TF order
+  uint64_t idx = 0;
+  float * in = (float *) ctx->h_s1s;
+
+  const uint64_t ant_stride = ctx->nchan * nsamp;
+  const uint64_t samp_stride = ctx->nchan;
+
+  // reorder from FST to STF
+  unsigned ichan, iant, isamp;
+  for (ichan=0; ichan<ctx->nchan; ichan++)
+  {
+    for (iant=0; iant<ctx->nant; iant++)
+    {
+      for (isamp=0; isamp<nsamp; isamp++)
+      {
+        ctx->h_s1s_stf[iant*ant_stride + isamp*samp_stride + ichan] = in[idx];
+        idx++;
+      }
+    }
+  }
+
+  in = (float *) ctx->h_s1s_stf;
+  size_t to_write = ctx->s2s_size / ctx->nant;
+  for (iant=0; iant<ctx->nant; iant++)
+  {
+    fwrite (in, sizeof(float), to_write, ctx->s1s_fptrs[iant]);
+    in += to_write;
+  }
+  return 0;
+}
+

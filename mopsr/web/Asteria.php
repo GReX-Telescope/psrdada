@@ -2,6 +2,7 @@
 
 include_once("mopsr.lib.php");
 include_once("mopsr_webpage.lib.php");
+include_once("Asteria.lib.php");
 
 class asteria extends mopsr_webpage 
 {
@@ -143,87 +144,29 @@ class asteria extends mopsr_webpage
         <td valign="top" width="200px">
 <?
     $this->openBlockHeader("Summary");
-?>
-    <table>
-<?php
-include MYSQL_DB_CONFIG_FILE;
+    
+    include MYSQL_DB_CONFIG_FILE;
 
-$pdo = new PDO ('mysql:dbname='.MYSQL_DB.';host='.MYSQL_HOST, MYSQL_USER, MYSQL_PWD);
+    $pdo = new PDO ('mysql:dbname='.MYSQL_DB.';host='.MYSQL_HOST, MYSQL_USER, MYSQL_PWD);
 
-$q = 'SELECT date FROM Updates';
+    print_summary($pdo);
 
-$stmt = $pdo -> query($q);
-if (!$stmt) {
-  echo "Failed to query:<br>".$q;
-  exit(-1);
-}
-
-$updated = $stmt ->fetch();
-
-$q = 'SELECT utc FROM UTCs ORDER BY utc LIMIT 1';
-$stmt = $pdo -> query($q);
-if (!$stmt) {
-  echo "Failed to query:<br>".$q;
-  exit(-1);
-}
-
-$since = $stmt ->fetch();
-
-$q = 'SELECT COUNT(*) FROM TB_Obs';
-$stmt = $pdo -> query($q);
-if (!$stmt) {
-  echo "Failed to query:<br>".$q;
-  exit(-1);
-}
-
-$count = $stmt ->fetch();
-
-echo "<tr><td>Data since ".substr($since[0], 0, 10)."<td><tr>\n";
-echo "<tr><td>".$count[0]." observations</td></tr>\n";
-echo "<tr><td>Updated at:<br><span class=best_snr>".$updated[0]."</span></td></tr>\n";
-?>
-      <tr>
-        <td colspan=2><a href="/mopsr/Asteria_500.php?single=true">Timing Programme Pulsars</a></td>
-      </tr>
-      <tr>
-        <td colspan=2><a href="/mopsr/Asteria_bests.php?single=true">Best per pulsar</a></td>
-      </tr>
-      <tr><td><hr/></td><tr>
-<?php
-  $summary_filename = "/home/dada/linux_64/web/mopsr/latest_summary";
-  $summary_contents = file_get_contents($summary_filename);
-  $summary_array = explode(PHP_EOL, $summary_contents);
-  $counter = 0;
-  foreach($summary_array as $line) {
-    if ($counter == 0) {
-      $updated = $line;
-    } elseif ($counter == 1) {
-      echo "<tr><td><span class=best_snr>SUMMARY OF LAST 24hrs</span></td></tr>";
-      echo "<tr><td><h5>As of:<br>".$updated."</h5></td></tr>";
-    } elseif (strpos($line, "FRB Statistics") === 0) {
-      echo "<tr><td><hr></td></tr>";
-      echo "<tr><td><span class=best_snr>".$line.'</span></td></tr>';
-    }else {
-      echo "<tr><td>".$line.'</td></tr>';
-    }
-    $counter += 1;
-  }
-?>
-    </table>
-  <?
     $this->closeBlockHeader();
 
     echo "</td><td>\n";
 
+    if (file_exists("/data/mopsr/results/sky_scan/mo_fields_latest.png")) {
+      $this->openBlockHeader("Overview of last 24 h");
+      echo '<a href="/mopsr/results/sky_scan/mo_fields_latest.pdf"><img src="/mopsr/results/sky_scan/mo_fields_latest.png"></a>';
+    }
+
     $this->openBlockHeader("Last 100 pulsars observed");
-?>
 
-<?php
-function rescale_snr_to5min($fSNR, $ftint_m) {
-  return $fSNR * sqrt(5./$ftint_m);
-}
+    function rescale_snr_to5min($fSNR, $ftint_m) {
+      return $fSNR * sqrt(5./$ftint_m);
+    }
 
-$q = 'SELECT name, dm, period, max_snr_in5min, utc, snr, tint/60. as tint, psr_id FROM (Pulsars JOIN UTCs JOIN TB_Obs ON Pulsars.id = TB_Obs.psr_id AND UTCs.id = TB_Obs.utc_id) WHERE tint > 0.5 ORDER BY utc DESC LIMIT 100';
+    $q = 'SELECT name, dm, period, max_snr_in5min, utc, snr, tint/60. as tint, psr_id, science_case FROM (Pulsars JOIN UTCs JOIN TB_Obs ON Pulsars.id = TB_Obs.psr_id AND UTCs.id = TB_Obs.utc_id) WHERE tint > 0.5 ORDER BY utc DESC LIMIT 100';
 #$q = 'SELECT name, dm, period, max_snr_in5min, utc, snr, tint/60. as tint, psr_id FROM Pulsars JOIN UTCs JOIN TB_Obs ON Pulsars.id = TB_Obs.psr_id AND UTCs.id = TB_Obs.utc_id WHERE tint > 0.5 ORDER BY utc DESC LIMIT 100';
 
 $stmt = $pdo -> query($q);
@@ -253,6 +196,7 @@ foreach ($results as $row)
   $snr = $row[5];
   $tint_m = $row[6];
   $psr_id = $row[7];
+  $case = $row[8];
   
 
   $fl_hr = str_replace("/data", "", glob($top_dir.$utc."/20*".$pulsar.".fl.1024x768.png"));
@@ -272,7 +216,10 @@ foreach ($results as $row)
   }
   //
   echo '<td width=300 align="center"><a href=/mopsr/results.lib.php?single=true&offset=0&length=20&inline_images=true&filter_type=SOURCE&filter_value=';
-  echo urlencode($pulsar).">".$pulsar."</a><br>DM : ".round($dm, 2)."<br>period : ".round($period,2 )." ms <br>\n";
+  if ($case === null)
+    echo urlencode($pulsar).">".$pulsar."</a><br><br>DM : ".round($dm, 2)."<br>period : ".round($period,2 )." ms <br>\n";
+  else
+    echo urlencode($pulsar).">".$pulsar."</a><br>".$case."<br>DM : ".round($dm, 2)."<br>period : ".round($period,2 )." ms <br>\n";
   echo '<a href='.$fl_hr[0].'><img src='.$fl_lr[0].'></a>'."\n";
   echo '<br><a href="'.$fr_hr.'"><img src="'.$fr_lr.'"></a><br><a href="'.$ti_hr.'"><img src="'.$ti_lr.'"></a><br>'."\n";
   echo "SNR = ".round($snr, 2)."<br>t = ".round($tint_m, 2)." minutes<br>";
@@ -364,16 +311,6 @@ echo "<p></table>\n";
 
     header('Content-type: text/xml');
     echo $xml;
-  }
-
-  function handleRequest()
-  {
-    if ($_GET["update"] == "true") {
-      $this->printUpdateHTML($_GET);
-    } else {
-      $this->printHTML($_GET);
-    }
-
   }
 
   function getResultsArray($results_dir, $offset=0, $length=0, $filter_type, $filter_value) 

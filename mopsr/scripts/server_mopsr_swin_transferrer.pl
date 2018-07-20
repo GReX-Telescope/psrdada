@@ -35,7 +35,7 @@ use Mopsr;
 sub good($);
 sub getObsToSend();
 sub getDest();
-sub transferTB($$$);
+sub transferTB($$&);
 sub transferFB($$$);
 sub markState($$$);
 
@@ -51,8 +51,9 @@ our $warn;
 our $error;
 our $transfer_kill : shared;
 our $user = "pulsar";
-our $host = "g2.hpc.swin.edu.au";
-our $path = "/projects/p002_swin/utmost";
+our $host = "farnarkle1.hpc.swin.edu.au";
+our $path = "/fred/oz002/utmost";
+our $meta_path = "/home/pulsar/utmost_timing_aux";
 
 our $results_dir = DATA_DIR."/results";
 our $archives_dir = DATA_DIR."/archives";
@@ -84,7 +85,7 @@ $transfer_kill = "";
   my $control_thread = 0;
 
   my $obs = "";
-  my $src= "";
+  my @srcs = ();
   my $freq = "";
 
   my $counter = 0;
@@ -127,8 +128,8 @@ $transfer_kill = "";
   {
     # find and observation to send
     Dada::logMsg(2, $dl, "main: getObsToSend()");
-    ($obs, $src, $freq) = getObsToSend();
-    Dada::logMsg(2, $dl, "main: getObsToSend(): ".$obs." ".$src." ".$freq);
+    ($obs, $freq, @srcs) = getObsToSend();
+    Dada::logMsg(2, $dl, "main: getObsToSend(): ".$obs." ".$freq." @srcs");
 
     if ($obs ne "none") 
     {
@@ -150,8 +151,8 @@ $transfer_kill = "";
         $sleeping = 0;
 
         # transfer the observation
-        Dada::logMsg(2, $dl, "main: transferTB() ".$obs." to ".$user."@".$host."/".$path);
-        ($result, $response) = transferTB($obs, $src, $freq);
+        Dada::logMsg(2, $dl, "main: transferTB() ".$obs." to ".$user."@".$host.":/".$path);
+        ($result, $response) = transferTB($obs, $freq, \@srcs);
         Dada::logMsg(2, $dl, "main: transferTB() ".$result." ".$response);
 
         if ($result ne "ok")
@@ -164,7 +165,7 @@ $transfer_kill = "";
           else
           {
             Dada::logMsgWarn($warn, "main: transferTB failed: ".$response);
-            Dada::logMsg(1, $dl, $src."/".$obs." finished -> failed");
+            Dada::logMsg(1, $dl, @srcs."/".$obs." finished -> failed");
             Dada::logMsg(2, $dl, "checkTransferred: markState(".$obs.", obs.finished, obs.transfer_error)");
             ($result, $response) = markState($obs, "obs.finished", "obs.transfer_error");
             Dada::logMsg(2, $dl, "checkTransferred: markState() ".$result." ".$response);
@@ -172,9 +173,36 @@ $transfer_kill = "";
         }
         else
         {
+          Dada::logMsg(1, $dl, @srcs."/".$obs." finished -> transferred ".$response);
+          Dada::logMsg(2, $dl, "checkTransferred: markState(".$obs.", obs.finished, obs.transferred)");
+          ($result, $response) = markState($obs, "obs.finished", "obs.transferred");
+          Dada::logMsg(3, $dl, "main: ".$result." ".$response);
+          # update status in the DB:
+          $cmd = "asteria_utc.py --config-dir /home/dada/linux_64/share/ -U ".$obs;
+          Dada::logMsg(3, $dl, "main: ".$cmd);
+          ($result, $response) = Dada::mySystem($cmd);
+          Dada::logMsg(3, $dl, "main: ".$result." ".$response);
+
+          # Add the utc / src to list of desired transfers
+          my $transfer_list = $meta_path."/list";
+          $cmd = "cp ".$transfer_list." ".$transfer_list.".tmp; echo ".$obs." @srcs >> ".$transfer_list.".tmp; mv ".$transfer_list.".tmp ".$transfer_list;
+          Dada::logMsg(2, $dl, "transferTB: ".$cmd);
+          ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
+          Dada::logMsg(3, $dl, "transferTB: ".$result." ".$response);
+
+          # Request a batch processing job
+          $cmd = $path."/soft/bin/submit_timing_job.sh";
+          Dada::logMsg(2, $dl, "transferTB: ".$cmd);
+          ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
+          Dada::logMsg(3, $dl, "transferTB: ".$result." ".$response);
+        }
+=begin comment
+        # no longer transfer central FB
+        else
+        {
           # transfer central FB
           Dada::logMsg(2, $dl, "main: transferFB() ".$obs." to ".$user."@".$host."/".$path);
-          ($result, $response) = transferFB($obs, $src, $freq);
+          ($result, $response) = transferFB($obs, @srcs, $freq);
           Dada::logMsg(2, $dl, "main: transferFB() ".$result." ".$response);
 
           if ($result ne "ok")
@@ -187,7 +215,7 @@ $transfer_kill = "";
             else
             {
               Dada::logMsgWarn($warn, "main: transferFB failed: ".$response);
-              Dada::logMsg(1, $dl, $src."/".$obs." finished -> failed");
+              Dada::logMsg(1, $dl, @srcs."/".$obs." finished -> failed");
               Dada::logMsg(2, $dl, "checkTransferred: markState(".$obs.", obs.finished, obs.transfer_error)");
               ($result, $response) = markState($obs, "obs.finished", "obs.transfer_error");
               Dada::logMsg(2, $dl, "checkTransferred: markState() ".$result." ".$response);
@@ -195,11 +223,19 @@ $transfer_kill = "";
           }
           else
           {
-            Dada::logMsg(1, $dl, $src."/".$obs." finished -> transferred ".$response);
+            Dada::logMsg(1, $dl, @srcs."/".$obs." finished -> transferred ".$response);
             Dada::logMsg(2, $dl, "checkTransferred: markState(".$obs.", obs.finished, obs.transferred)");
             ($result, $response) = markState($obs, "obs.finished", "obs.transferred");
+            # update status in the DB:
+            $cmd = "asteria_utc.py --config-dir /home/dada/linux_64/share/ -U ".$obs;
+            Dada::logMsg(3, $dl, "main: ".$cmd);
+            ($result, $response) = Dada::mySystem($cmd);
+            Dada::logMsg(3, $dl, "main: ".$result." ".$response);
           }
         }
+=end comment
+
+=cut
       }
     }
     else
@@ -237,24 +273,23 @@ $transfer_kill = "";
 #
 # Functions
 #
-
-#
 # Find an observation to send, search chronologically. Look for observations that have 
 # an obs.finished in them
+# Return the UTC of an observation, its centre frequency and a list of tied array beams
 #
 sub getObsToSend() 
 {
   Dada::logMsg(3, $dl, "getObsToSend()");
 
-  my $freq = "none";
-  my $src = "none";
+  my $freq = "none"; # assuming the same freq for all tied beams
+  my @srcs = ();
   my $obs = "none";
 
   my $cmd = "";
   my $result = "";
   my $response = "";
-  my @lines = ();
-  my $line = "";
+  my @utcs = ();
+  my $utc = "";
   my @bits = ();
   my $i = 0;
   my $found_obs = 0;
@@ -267,17 +302,17 @@ sub getObsToSend()
   if ($result ne "ok")
   {
     Dada::logMsgWarn($warn, "getObsToSend: find failed: ".$response);
-    return ($obs, $src, $freq);
+    return ($obs, $freq, @srcs);
   }
 
-  @lines = split(/\n/, $response);
+  @utcs = split(/\n/, $response);
   
-  for ($i=0; (!$quit_daemon && !$found_obs && $i<=$#lines); $i++)
+  for ($i=0; (!$quit_daemon && !$found_obs && $i<=$#utcs ); $i++)
   {
-    $line = $lines[$i];
+    $utc = $utcs[$i];
 
     # get the boresight source name
-    $cmd = "grep ^SOURCE ".$results_dir."/".$line."/obs.info | awk '{print \$2}'";
+    $cmd = "grep ^SOURCE ".$results_dir."/".$utc."/obs.info | awk '{print \$2}'";
     Dada::logMsg(2, $dl, "getObsToSend: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     Dada::logMsg(3, $dl, "getObsToSend: ".$result." ".$response);
@@ -292,7 +327,7 @@ sub getObsToSend()
     if ( ($boresight_source =~ m/^J/) && (-d ( $archives_dir."/FB")) )
     {
       # look for obs.finished.#.# files
-      $cmd = "find ".$archives_dir."/".$line."/FB -mindepth 1 -maxdepth 1 -type f -name 'obs.finished.*.*' -printf '%f\n'";
+      $cmd = "find ".$archives_dir."/".$utc."/FB -mindepth 1 -maxdepth 1 -type f -name 'obs.finished.*.*' -printf '%f\n'";
       Dada::logMsg(2, $dl, "getObsToSend: ".$cmd);
       ($result, $response) = Dada::mySystem($cmd);
       Dada::logMsg(3, $dl, "getObsToSend: ".$result." ".$response);
@@ -320,36 +355,37 @@ sub getObsToSend()
         next;
       }
       $found_obs = 1;
-      $obs = $line;
-      $src = "FB";
+      $obs = $utc;
+      push @srcs, "FB";
     }
 
     if ($found_obs == 0)
     {
       # Tied Beams should have a Jname as a subdirectory
-      $cmd = "find ".$results_dir."/".$line." -mindepth 1 -maxdepth 1 -type d -printf '%f\n'";
+      $cmd = "find ".$results_dir."/".$utc." -mindepth 1 -maxdepth 1 -type d -printf '%f\n'";
       Dada::logMsg(3, $dl, "getObsToSend: ".$cmd);
       ($result, $response) = Dada::mySystem($cmd);
       Dada::logMsg(3, $dl, "getObsToSend: ".$result." ".$response);
 
       if (($result ne "ok") || ($response eq ""))
       {
-        Dada::logMsg(2, $dl, "getObsToSend: could not find and subdirs of ".$line);
+        Dada::logMsg(2, $dl, "getObsToSend: could not find and subdirs of ".$utc);
         next;
       }
 
       my @sources = split(/\n/, $response);
       my $j;
-      for ($j=0; (!$found_obs && $j<=$#sources); $j++)
+      for ($j=0; ($j<=$#sources); $j++)
       {
-        if (-f $results_dir."/".$line."/".$sources[$j]."/obs.header")
+        if (-f $results_dir."/".$utc."/".$sources[$j]."/obs.header")
         {
           if ($sources[$j] =~ m/^J/)
           {
-            $obs = $line;
-            $src = $sources[$j];
+            $obs = $utc;
+            # $src = $sources[$j];
+            push @srcs, $sources[$j];
           
-            $cmd = "grep ^FREQ ".$results_dir."/".$obs."/".$src."/obs.header | awk '{print \$2}'";
+            $cmd = "grep ^FREQ ".$results_dir."/".$obs."/".$sources[$j]."/obs.header | awk '{print \$2}'";
             ($result, $response) = Dada::mySystem($cmd);
             Dada::logMsg(3, $dl, "getObsToSend: ".$result." ".$response);
             if ($result ne "ok")
@@ -366,25 +402,32 @@ sub getObsToSend()
       # this observation cannot be transferred, change from finished to completed 
       if (!$found_obs)
       {
-        $cmd = "mv ".$results_dir."/".$line."/obs.finished ".$results_dir."/".$line."/obs.completed";
+        $cmd = "mv ".$results_dir."/".$utc."/obs.finished ".$results_dir."/".$utc."/obs.completed";
         Dada::logMsg(2, $dl, "getObsToSend: ".$cmd);
         ($result, $response) = Dada::mySystem($cmd);
         Dada::logMsg(3, $dl, "getObsToSend: ".$result." ".$response);
-        Dada::logMsg(1, $dl, $line." finished -> completed");
+        Dada::logMsg(1, $dl, $utc." finished -> completed");
+        # update status in the DB:
+        $cmd = "asteria_utc.py --config-dir /home/dada/linux_64/share/ -U ".$utc;
+        Dada::logMsg(3, $dl, "main: ".$cmd);
+        ($result, $response) = Dada::mySystem($cmd);
+        Dada::logMsg(3, $dl, "main: ".$result." ".$response);
       }
     }
   }
 
-  Dada::logMsg(2, $dl, "getObsToSend: returning ".$obs." ".$src." ".$freq);
-  return ($obs, $src, $freq);
+  Dada::logMsg(2, $dl, "getObsToSend: returning ".$obs." ".$freq." @srcs");
+  return ($obs, $freq, @srcs);
 }
 
 #
 # Transfers the specified observation to the specified destination
 #
-sub transferTB($$$) 
+sub transferTB($$&) 
 {
-  my ($obs, $src, $freq) = @_;
+  my ($obs, $freq, @tmp) = @_;
+  my @srcs = @{$tmp[0]};
+  Dada::logMsg(2, $dl, "transferTB S: @srcs");
 
   my $cmd = "";
   my $xfer_result = "ok";
@@ -393,126 +436,131 @@ sub transferTB($$$)
   my $response = "";
   my $rval = 0;
   my $rsync_options = "-az --stats --no-g --chmod=go-ws --bwlimit ".BANDWIDTH.
-                      " --exclude 'obs.finished' ";
+                      " --exclude 'obs.finished' --inplace ";
+  # loop through tied array beams
+  foreach (@srcs) {
+    my $src = $_;
+    Dada::logMsg(2, $dl, "transferTB S: ".$src);
 
-  # create the remote destination direectories
-  $cmd = "mkdir -m 0755 -p ".$path."/TB/".$src."; ".
-         "mkdir -m 0755 -p ".$path."/TB/".$src."/".$obs."; ".
-         "mkdir -m 0755 -p ".$path."/TB/".$src."/".$obs."/".$freq;
-        
-  Dada::logMsg(2, $dl, "transferTB: ".$cmd);
-  ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
-  Dada::logMsg(3, $dl, "transferTB: ".$result." ".$response);
-  if ($result ne "ok")
-  {
-    Dada::logMsgWarn($warn, "transferTB: ssh for ".$user."@".$host." failed: ".$response);
-    return ("fail", "ssh failed: ".$response);
-  }
-  if ($rval != 0)
-  {
-    Dada::logMsgWarn($warn, "transferTB: failed to create ".$src."/".$obs." directory: ".$response);
-    return ("fail", "could not create remote dir");
-  }
+    # create the remote destination direectories
+    $cmd = "mkdir -m 0755 -p ".$path."/TB/".$src."; ".
+    "mkdir -m 0755 -p ".$path."/TB/".$src."/".$obs."; ".
+    "mkdir -m 0755 -p ".$path."/TB/".$src."/".$obs."/".$freq;
 
-  $transfer_kill = "pkill -f '^rsync ".$archives_dir."/".$obs."'";
-
-  # rsync the results dir 
-  $cmd = "rsync ".$results_dir."/".$obs."/".$src."/*.tot ".$results_dir."/".$obs."/".$src."/obs.header ".$results_dir."/".$obs."/molonglo_modules.txt ".$user."@".$host.":".$path."/TB/".$src."/".$obs."/".$freq."/ ".$rsync_options;
-  Dada::logMsg(2, $dl, "transferTB: ".$cmd);
-  ($result, $response) = Dada::mySystem($cmd);
-  Dada::logMsg(3, $dl, "transferTB: ".$result." ".$response);
-
-  # rsync the archives dir
-  $cmd = "rsync ".$archives_dir."/".$obs."/".$src."/ ".$user."@".$host.":".$path."/TB/".$src."/".$obs."/".$freq." ".$rsync_options;
-  Dada::logMsg(2, $dl, "transferTB: ".$cmd);
-  ($result, $response) = Dada::mySystem($cmd);
-  Dada::logMsg(3, $dl, "transferTB: ".$result." ".$response);
-
-  $transfer_kill = "";
-
-  if ($result eq "ok")
-  {
-    # determine the data rate
-    my @output_lines = split(/\n/, $response);
-    my $mbytes_per_sec = 0;
-    my $mbytes = 0;
-    my $seconds = 0;
-    my $i = 0;
-    for ($i=0; $i<=$#output_lines; $i++)
+    Dada::logMsg(2, $dl, "transferTB: ".$cmd);
+    ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
+    Dada::logMsg(3, $dl, "transferTB: ".$result." ".$response);
+    if ($result ne "ok")
     {
-      if ($output_lines[$i] =~ m/bytes\/sec/)
-      {
-        my @bits = split(/[\s]+/, $output_lines[$i]);
-        $mbytes_per_sec = $bits[6] / 1048576;
-        $mbytes = $bits[1] / 1048576;
-        $seconds = $mbytes / $mbytes_per_sec;
+      Dada::logMsgWarn($warn, "transferTB: ssh for ".$user."@".$host." failed: ".$response);
+      return ("fail", "ssh failed: ".$response);
+    }
+    if ($rval != 0)
+    {
+      Dada::logMsgWarn($warn, "transferTB: failed to create ".$src."/".$obs." directory: ".$response);
+      return ("fail", "could not create remote dir");
+    }
 
+    $transfer_kill = "pkill -f '^rsync ".$archives_dir."/".$obs."'";
+
+    # rsync the results dir 
+    $cmd = "rsync ".$results_dir."/".$obs."/".$src."/*.tot ".$results_dir."/".$obs."/".$src."/obs.header ".$results_dir."/".$obs."/molonglo_modules.txt ".$user."@".$host.":".$path."/TB/".$src."/".$obs."/".$freq."/ ".$rsync_options;
+    Dada::logMsg(2, $dl, "transferTB: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, $dl, "transferTB: ".$result." ".$response);
+
+    # rsync the archives dir
+    $cmd = "rsync ".$archives_dir."/".$obs."/".$src."/* ".$user."@".$host.":".$path."/TB/".$src."/".$obs."/".$freq."/ ".$rsync_options;
+    Dada::logMsg(2, $dl, "transferTB: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, $dl, "transferTB: ".$result." ".$response);
+
+    $transfer_kill = "";
+
+    if ($result eq "ok")
+    {
+      # determine the data rate
+      my @output_lines = split(/\n/, $response);
+      my $mbytes_per_sec = 0;
+      my $mbytes = 0;
+      my $seconds = 0;
+      my $i = 0;
+      for ($i=0; $i<=$#output_lines; $i++)
+      {
+        if ($output_lines[$i] =~ m/bytes\/sec/)
+        {
+          my @bits = split(/[\s]+/, $output_lines[$i]);
+          $mbytes_per_sec = $bits[6] / 1048576;
+          $mbytes = $bits[1] / 1048576;
+          $seconds = $mbytes / $mbytes_per_sec;
+
+        }
+      }
+      $xfer_response = sprintf("%2.0f", $mbytes)." MB in ".sprintf("%2.0f",$seconds).
+      "s, ".sprintf("%2.0f", $mbytes_per_sec)." MB/s";
+
+      Dada::logMsg(2, $dl, $src."/".$obs." ".$response);
+
+      $cmd = "touch ".$path."/TB/".$src."/".$obs."/".$freq."/obs.transferred";
+      Dada::logMsg(2, $dl, "transferTB: remoteSsh(".$user.", ".$host.", ".$cmd.")");
+      ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
+      Dada::logMsg(2, $dl, "transferTB: ".$result." ".$rval." ".$response);
+      if (   $result ne "ok")
+      {
+        Dada::logMsgWarn($warn, "transferTB: ssh ".$user."@".$host." for ".$cmd." failed: ".$response);
+        return ("fail", "ssh to ".$user."@".$host." failed: ".$response);
+      }
+      if ($rval != 0)
+      {
+        Dada::logMsgWarn($warn, "transferTB: failed to touch obs.transferred on: ".$path."/TB/".$src."/".$obs);
+        return ("fail", "failed to touch obs.transferred on remote obs");
+      }
+
+      $cmd = "chmod -R a-w ".$path."/TB/".$src."/".$obs;
+      Dada::logMsg(2, $dl, "transferTB: remoteSsh(".$user.", ".$host.", ".$cmd.")");
+      ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
+      Dada::logMsg(2, $dl, "transferTB: ".$result." ".$rval." ".$response);
+      if ($result ne "ok")
+      {
+        Dada::logMsgWarn($warn, "transferTB: ssh ".$user."@".$host." for ".$cmd." failed: ".$response);
+        return ("fail", "ssh to ".$user."@".$host." failed: ".$response);
+      }
+      if ($rval != 0)
+      {
+        Dada::logMsgWarn($warn, "transferTB: failed to remove write permissions on: ".$path."/TB/".$src."/".$obs);
+        return ("fail", "failed to remove write premissions on remote obs");
       }
     }
-    $xfer_response = sprintf("%2.0f", $mbytes)." MB in ".sprintf("%2.0f",$seconds).
-                     "s, ".sprintf("%2.0f", $mbytes_per_sec)." MB/s";
+    else 
+    {
+      if ($quit_daemon)
+      {
+        Dada::logMsg(1, $dl, "transferTB: rsync interrupted");
+        $xfer_response = "rsync interrupted for quit";
+      }
+      else
+      {
+        Dada::logMsg(0, $dl, "transferTB: rsync failed for ".$src."/".$obs.": ".$response);
+        $xfer_response = "rsync failure";
+      }
+      $xfer_result = "fail";
 
-    Dada::logMsg(2, $dl, $src."/".$obs." ".$response);
-
-    $cmd = "touch ".$path."/TB/".$src."/".$obs."/".$freq."/obs.transferred";
-    Dada::logMsg(2, $dl, "transferTB: remoteSsh(".$user.", ".$host.", ".$cmd.")");
-    ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
-    Dada::logMsg(2, $dl, "transferTB: ".$result." ".$rval." ".$response);
-    if (   $result ne "ok")
-    {
-      Dada::logMsgWarn($warn, "transferTB: ssh ".$user."@".$host." for ".$cmd." failed: ".$response);
-      return ("fail", "ssh to ".$user."@".$host." failed: ".$response);
-    }
-    if ($rval != 0)
-    {
-      Dada::logMsgWarn($warn, "transferTB: failed to touch obs.transferred on: ".$path."/TB/".$src."/".$obs);
-      return ("fail", "failed to touch obs.transferred on remote obs");
-    }
-  
-    $cmd = "chmod -R a-w ".$path."/TB/".$src."/".$obs;
-    Dada::logMsg(2, $dl, "transferTB: remoteSsh(".$user.", ".$host.", ".$cmd.")");
-    ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
-    Dada::logMsg(2, $dl, "transferTB: ".$result." ".$rval." ".$response);
-    if ($result ne "ok")
-    {
-      Dada::logMsgWarn($warn, "transferTB: ssh ".$user."@".$host." for ".$cmd." failed: ".$response);
-      return ("fail", "ssh to ".$user."@".$host." failed: ".$response);
-    }
-    if ($rval != 0)
-    {
-      Dada::logMsgWarn($warn, "transferTB: failed to remove write permissions on: ".$path."/TB/".$src."/".$obs);
-      return ("fail", "failed to remove write premissions on remote obs");
-    }
-  }
-  else 
-  {
-    if ($quit_daemon)
-    {
-      Dada::logMsg(1, $dl, "transferTB: rsync interrupted");
-      $xfer_response = "rsync interrupted for quit";
-    }
-    else
-    {
-      Dada::logMsg(0, $dl, "transferTB: rsync failed for ".$src."/".$obs.": ".$response);
-      $xfer_response = "rsync failure";
-    }
-    $xfer_result = "fail";
-
-    # Delete the partially transferred observation
-    Dada::logMsg(1, $dl, "transferTB: rsync failed, deleting partial transfer at ".$path."/TB/".$src."/".$obs);
-    $cmd = "rm -rf ".$path."/TB/".$src."/".$obs;
-    Dada::logMsg(2, $dl, "transferTB: remoteSsh(".$user.", ".$host.", ".$cmd.")"); 
-    ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
-    Dada::logMsg(2, $dl, "transferTB: ".$result." ".$rval." ".$response);
-    if ($result ne "ok")
-    {
-      Dada::logMsgWarn($warn, "transferTB: ssh ".$user."@".$host." for ".$cmd." failed: ".$response);
-      return ("fail", "ssh to ".$user."@".$host." failed: ".$response);
-    }
-    if ($rval != 0) 
-    {
-      Dada::logMsgWarn($warn, "transferTB: failed to delete partial transfer at: ".$path."/TB/".$src."/".$obs);
-      return ("fail", "failed to delete partial transfer for: ".$path."/TB/".$src."/".$obs);
+      # Delete the partially transferred observation
+      Dada::logMsg(1, $dl, "transferTB: rsync failed, deleting partial transfer at ".$path."/TB/".$src."/".$obs);
+      $cmd = "rm -rf ".$path."/TB/".$src."/".$obs;
+      Dada::logMsg(2, $dl, "transferTB: remoteSsh(".$user.", ".$host.", ".$cmd.")"); 
+      ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
+      Dada::logMsg(2, $dl, "transferTB: ".$result." ".$rval." ".$response);
+      if ($result ne "ok")
+      {
+        Dada::logMsgWarn($warn, "transferTB: ssh ".$user."@".$host." for ".$cmd." failed: ".$response);
+        return ("fail", "ssh to ".$user."@".$host." failed: ".$response);
+      }
+      if ($rval != 0) 
+      {
+        Dada::logMsgWarn($warn, "transferTB: failed to delete partial transfer at: ".$path."/TB/".$src."/".$obs);
+        return ("fail", "failed to delete partial transfer for: ".$path."/TB/".$src."/".$obs);
+      }
     }
   }
 
@@ -667,9 +715,9 @@ sub getDest()
   my $cmd = "";
 
   # test how much space is remaining on this disk
-  $cmd = "df -B 1048576 -P ".$path." | tail -n 1 | awk '{print \$4}'";
+  $cmd = "df -B 1048576 -P ".$path;
   Dada::logMsg(3, $dl, "getDest: ".$user."@".$host.":".$cmd);
-  ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
+  ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd, "", "tail -n 1 | awk '{print \$4}'");
   Dada::logMsg(3, $dl, "getDest: ".$result." ".$rval." ".$response);
 
   if ($result ne "ok") 

@@ -6,7 +6,14 @@ dist_data_DATA = mopsr.cfg \
 								 mopsr.dspsr.gpu \
                  mopsr.dspsr.cpu.sk \
                  mopsr.dspsr.cpu.tied \
-								 mopsr.null
+								 mopsr.null \
+								 mysql-config.php \
+								 obs.corr_header_params.only_common \
+								 obs.fb_header_params.only_common \
+								 obs.info_params.only_common \
+								 obs.mb_header_params.only_common \
+								 obs.tb_header_params.only_common \
+								 TOA_ERR_GT_0.select
 
 include $(top_srcdir)/config/Makefile.targets
 

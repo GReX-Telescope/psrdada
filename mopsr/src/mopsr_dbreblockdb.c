@@ -19,11 +19,18 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+
+
+//VG: The code can only support two modes: 32-bit input, any bit output or 8-bit input and 8-bit output. 
+//VG: For OUT_SAME, we assume that the input is 8-bit, and do not apply the bandpass calibration, yet flip the channel ordering. Whereas for OUT_FLOAT we keep the same channel order and apply the bandpass calibration.
+//VG: Choose the mode you want to operate in by commenting out the corresponding definition below. In no case should two definitions be used simultaneously.
+//VG: Changing the used mode to OUT_16BIT
+
 //#define OUT_FLOAT
 //#define OUT_32BIT
-//#define OUT_16BIT
+#define OUT_16BIT
 //#define OUT_8BIT
-#define OUT_SAME
+//#define OUT_SAME
 
 int quit_threads = 0;
 
@@ -35,11 +42,12 @@ void usage()
 {
   fprintf (stdout,
            "mopsr_dbreblockdb [options] in_key out_key\n"
-           "              data type change from 32-bit float to 8-bit unsigned int\n"
+           "              reblock, rescale  and quantize from 32-bit float to n-bit(32/16/8) unsigned int or keep floats. Bandpass scaling optional.\n"
            " -r factor    reblock by factor from input to output\n"
            " -s           1 transfer, then exit\n"
            " -z           use zero copy transfers\n"
            " -v           verbose mode\n"
+           " -b                  Apply bandpass calibration\n"
            " in_key       DADA key for input data block\n"
            " out_key      DADA key for output data blocks\n");
 }
@@ -73,6 +81,16 @@ typedef struct {
   // verbose output
   int verbose;
 
+  //VG: Apply bandpass calibration
+  unsigned bp_calibration;
+  //VG: bandpass correction file
+  char bp_file[512];
+  //VG: array to store the bandpass correction values
+  float * bandpass;
+  //FILE * bp_file;
+  //VG: Vairable to store bandwidth
+  float BW;
+
   unsigned int nsig;
   unsigned int nchan;
   unsigned int ndim; 
@@ -80,7 +98,7 @@ typedef struct {
   unsigned int nbit_out;
   
   float * scales;
-
+  
   unsigned quit;
 
   char order[4];
@@ -92,7 +110,10 @@ typedef struct {
 
 } mopsr_dbreblockdb_t;
 
-#define DADA_DBREBLOCKDB_INIT { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+//VG: Editing the DADA_DBREBLOCKDB_INIT to intialise bp_calibration, bp_file, BW and bandpass variables to 0
+//#define DADA_DBREBLOCKDB_INIT { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+
+#define DADA_DBREBLOCKDB_INIT { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 
 /*! Function that opens the data transfer target */
 int dbreblockdb_open (dada_client_t* client)
@@ -126,6 +147,8 @@ int dbreblockdb_open (dada_client_t* client)
     multilog (log, LOG_ERR, "open: header with no BW\n");
     return -1;
   }
+  //VG: 
+  ctx->BW = bw;
 
   // get the transfer size (if it is set)
   int64_t transfer_size = 0;
@@ -152,10 +175,6 @@ int dbreblockdb_open (dada_client_t* client)
   }
   */
   ctx->nsig = nant > nbeam ? nant : nbeam;
-
-  if (ctx->scales)
-    free (ctx->scales);
-  ctx->scales = (float *) malloc (sizeof(float) * ctx->nsig);
 
   if (ctx->exceeds)
     free (ctx->exceeds);
@@ -193,6 +212,13 @@ int dbreblockdb_open (dada_client_t* client)
     multilog (log, LOG_ERR, "open: header with no NCHAN\n");
     return -1;                
   }
+
+  if (ctx->scales)
+    free (ctx->scales);
+  //VG: Changing these scales to be per channel scaling in order to apply the bandpass correction, instead of per beam scaling
+  //ctx->scales = (float *) malloc (sizeof(float) * ctx->nsig);
+  ctx->scales = (float *) malloc (sizeof(float) * ctx->nchan);
+
   /*
   if (ctx->nchan != 1 && nbeam == 1 && 0)
   {
@@ -200,6 +226,54 @@ int dbreblockdb_open (dada_client_t* client)
     return -1;
   }
   */
+//---------------------------------------------
+//VG: Reading in the bandpass calibration file
+  FILE * bp_f;
+  char line[500]; int chi = 0;
+  char stopstr[500] = {0};
+  ctx->bandpass = (float *) malloc(sizeof(float) * 320);                //VG: 320 is hardwired here because there are 320 values in the bp file.
+  strcpy(ctx->bp_file, "/home/dada/linux_64/share/mopsr_bandpass.txt");
+
+  if(ctx->bp_calibration)
+  {
+    if (ctx->nchan != 320)
+    {
+        multilog(log, LOG_ERR, "open: Can apply bandpass calibration only on 320 channels, got %d.", ctx->nchan);
+        return -1;
+    }
+    if (ctx->verbose)
+        multilog(log, LOG_INFO, "open: Reading the bandpass calibration file: %s", ctx->bp_file);
+    bp_f = fopen(ctx->bp_file, "r");
+    if (bp_f == NULL)
+    {   multilog(log, LOG_ERR, "open: Could not open bandpass file: %s", ctx->bp_file);
+        return -1;
+    }        
+    while(fgets(line, 500, bp_f)!=NULL)
+    {
+        //multilog(log, LOG_INFO, "open: line is : %s\n", line);
+        if(line[0] == '#')                //VG: Ignoring the commented out lines in the input file
+          continue;
+        ctx->bandpass[chi]=-999;
+        ctx->bandpass[chi] = strtof(line, &stopstr);
+        //fprintf(stderr,"%f\n",ctx->bandpass[chi]);
+        
+        if (ctx->bandpass[chi]==-999)
+        {
+          multilog(log, LOG_ERR, "open: Could not parse line: %s from the bandpass file. Stop string: %s", line, stopstr);
+          return -1;
+        }
+        chi++;
+    }
+    if (chi != 320)
+    {
+        multilog(log, LOG_ERR, "open: Could not read the bandpass file correctly. No. of channels read: %d. Expected = 320", chi);
+        return -1;
+    }
+    fclose(bp_f);
+  }
+//----------------------------------------        
+
+
  
   if (ascii_header_get (client->header, "ORDER", "%s", &(ctx->order)) != 1)
   {
@@ -300,15 +374,16 @@ int dbreblockdb_open (dada_client_t* client)
     return -1;
   }
 
+// since we are inverting the channel order, unless OUT_FLOAT, flip the bandwidth
 #ifndef OUT_FLOAT
-  // since we are inverting the channel order, flip the bandwidth
   bw *= -1;
+#endif
+
   if (ascii_header_set (header, "BW", "%f", bw) < 0)
   {
     multilog (log, LOG_ERR, "open: failed to write BW=%f to header\n", bw);
     return -1;
   }
-#endif
 
   new_bytes_per_second = bytes_per_second / ctx->bitrate_factor;
   if (ascii_header_set (header, "BYTES_PER_SECOND", "%"PRIu64, new_bytes_per_second) < 0)
@@ -338,9 +413,16 @@ int dbreblockdb_open (dada_client_t* client)
   }
 
   unsigned isig;
-  for (isig=0; isig<ctx->nsig; isig++)
+  //VG: Changing this loop over nchan instead of nsig
+  //for (isig=0; isig<ctx->nsig; isig++)
+  unsigned ichan;
+  for (ichan=0; ichan<ctx->nchan; ichan++)
   {
-    ctx->scales[isig] = -1;
+    //ctx->scales[isig] = -1;
+    ctx->scales[ichan] = -1;
+  }
+  for (isig = 0; isig<ctx->nsig; isig++)
+  {
     ctx->exceeds[isig] = 0;
   }
 
@@ -444,6 +526,8 @@ int64_t dbreblockdb_write (dada_client_t* client, void* data, uint64_t data_size
 // 
 int64_t dbreblockdb_write_block_FT_to_TF (dada_client_t * client, void *in_data , uint64_t data_size, uint64_t block_id)
 {
+
+//This complete function assumes an 8 bit input and 8 bit output. Leaving this untouched
   mopsr_dbreblockdb_t* ctx = (mopsr_dbreblockdb_t*) client->context;
 
   multilog_t * log = client->log;
@@ -603,13 +687,52 @@ int64_t dbreblockdb_write_block_SFT_to_STF (dada_client_t * client, void *in_dat
   float * in = (float *) in_data;
 #endif
 
+//VG:This was put in to do a general case, but could not get it to work
+
+  /*
+  if (ctx->nbit_in == 32)
+
+  {
+    //VG: assume 32 bit data is always float and not 32-bit unsigned integer
+    float * in = (float *) in_data;
+    #ifdef OUT_SAME
+    float * out;
+    #endif
+  }
+  else if (ctx->nbit_in == 16)
+  { 
+   uint16_t * in = (uint16_t *) in_data;
+   #ifdef OUT_SAME
+   uint16_t * out;
+   #endif
+  }
+  else if (ctx->nbit_in == 8 )
+  {
+   uint8_t * in = (uint8_t *) in_data;
+   #ifdef OUT_SAME
+   uint8_t * out;
+   #endif
+  }
+  //VG: Adding this else
+  else
+  {
+   multilog(log, LOG_ERR, "write_block_SFT_to_STF: Unsupported NBIT input : %u", ctx->nbit_in);
+   return -1;
+  }
+ */
+
+
+
 #ifdef OUT_FLOAT
-  float * out;
+  float * out;                        //VG: This will clash with if nbit==32 and #out_same, but the user should be careful to not use more than one OUT_* flags at once.
 #endif
 #ifdef OUT_32BIT
   uint32_t * out;
 #endif
-#ifdef OUT_16_BIT
+
+//VG: This might be a typo - ifdef OUT_16BIT should present here instead of OUT_16_BIT
+//ifdef OUT_16_BIT
+#ifdef OUT_16BIT
   uint16_t * out; 
 #endif
 #ifdef OUT_8BIT
@@ -622,9 +745,16 @@ int64_t dbreblockdb_write_block_SFT_to_STF (dada_client_t * client, void *in_dat
   unsigned isig, isamp, ichan, ochan;
   uint64_t nchansamp = ctx->nchan * nsamp_in;
 
+  //VG: Adding digi_mean and other digifil values from Jenet and Anderson;
+  float digi_sigma;
+  float digi_max;
+  float digi_min;
+  float digi_mean;
 #ifndef OUT_SAME
+  //VG: No need of measuring the average power and going through the following loop, removing it
   if (ctx->scales[0] < 0)
   {
+    /*
     // compute the mean power level across all beams and channels
     for (isig=0; isig<ctx->nsig; isig++)
     {
@@ -639,29 +769,65 @@ int64_t dbreblockdb_write_block_SFT_to_STF (dada_client_t * client, void *in_dat
       in += sig_stride_in;
 
       uint64_t avg_power = total_power / nchansamp;
+    */
 
+  //VG: changing the ctx->scales to useful values
 #ifdef OUT_FLOAT
-      ctx->scales[isig] = 1.0f;
+      //VG: Check with AJ about these values. Should I put in FLT_MAX here?
+      digi_mean = 0.0;
+      digi_max = 2147483648.0;                //VG: 2**31 because floats are signed
+      digi_min = -2147483647.0;
+      digi_sigma = 6;
+
+      //ctx->scales[isig] = 1.0f;
 #endif
 #ifdef OUT_32BIT
+      digi_max = 4294967295;
+      digi_mean = 2147483647.5;
+      digi_min = 0;
+      digi_sigma = 6;
+
       // power level around 24-bits
-      ctx->scales[isig] = 16777216.0f / avg_power;
+      //ctx->scales[isig] = 16777216.0f / avg_power;
 #endif
 #ifdef OUT_16BIT
+      digi_max = 65535;
+      digi_mean = 32767.5;
+      digi_min = 0;
+      digi_sigma = 16;
+
       // we want the average power to be around 12-bits of unsigned integer (4096)
-      ctx->scales[isig] = 4096.0f / avg_power;
+      //ctx->scales[isig] = 4096.0f / avg_power;
 #endif
 #ifdef OUT_8BIT
-      // we want the average power to be around the 6-bit level (4-bit)
-      ctx->scales[isig] = 64.0f / avg_power;
-#endif
-      ctx->exceeds[isig] = 0;
+      digi_max = 255;
+      digi_mean = 127.5;
+      digi_min = 0;
+      digi_sigma = 6;
 
-      multilog (log, LOG_INFO, "write_block_SFT_to_STF: beam=%u total_power=%"PRIu64" avg_power=%"PRIu64" scale=%e\n", isig, total_power, avg_power, ctx->scales[isig]);
+      // we want the average power to be around the 6-bit level (4-bit)
+      //ctx->scales[isig] = 64.0f / avg_power;
+#endif
+    //VG: Adding this loop below
+    for (isig=0; isig<ctx->nsig; isig++)
+    {
+      ctx->exceeds[isig] = 0;
     }
 
-    // reset the pointer
-    in = (float *) in_data;
+  //multilog (log, LOG_INFO, "write_block_SFT_to_STF: beam=%u total_power=%"PRIu64" avg_power=%"PRIu64" scale=%e\n", isig, total_power, avg_power, ctx->scales[isig]);
+    //}
+
+  const float digi_scale = (digi_max - digi_mean) / digi_sigma;
+  // reset the pointer
+  in = (float *) in_data;
+
+  //VG: setting the scales as digi_scale * bandpass (if bp_coorection ==1 )
+  for (ichan = 0; ichan <ctx->nchan;ichan++)
+   {
+      ctx->scales[ichan] = digi_scale;
+      if (ctx->bp_calibration)
+        ctx->scales[ichan] = digi_scale * ctx->bandpass[ichan];        //VG: The order of channels (High freq to low freq) matters here. Make sure that the scales are applied when the data has the same channel ordering.
+   }
   }
 #endif
 
@@ -740,11 +906,21 @@ int64_t dbreblockdb_write_block_SFT_to_STF (dada_client_t * client, void *in_dat
       {
         if (ctx->verbose > 2)
           multilog (log, LOG_INFO, "write_block_SFT_to_STF: ioff=%u off=%u\n", ichan * nsamp_in + isamp, isamp * ctx->nchan + ochan);
-        in_val = in[ichan * nsamp_in + isamp] * ctx->scales[isig];
+        //VG: Editing here to apply the correct scales
+        //in_val = in[ichan * nsamp_in + isamp] * ctx->scales[isig];
+        if (ctx->BW >0)
+#ifndef OUT_FLOAT        //We have to put this check only because ochan=ichan ifdef OUT_FLOAT, so we have to manually put correct value of ochan here. The operation performed is same as in else below
+          in_val = in[ichan * nsamp_in + isamp] * ctx->scales[(ctx->nchan - 1) - ichan];                //This assumes that the bandpass is from High freq (Chan 0) to Low freq (chan 319)
+#else
+          in_val = in[ichan * nsamp_in + isamp] * ctx->scales[ochan];
+#endif
+        else
+          in_val = in[ichan * nsamp_in + isamp] * ctx->scales[ichan];
+        in_val = in_val + digi_mean + 0.5;
 
         if (in_val > out_limit_float)
         {
-          if (ctx->exceeds[isig] < 2)
+          if (ctx->exceeds[isig] < 2)                //VG: Why this <2 check? Ask AJ.
             multilog (log, LOG_INFO, "reblocking power level for beam %u [%f] exceeded output limit [%f]\n", isig, in_val, out_limit_float);
           ctx->exceeds[isig]++;
           out_val = out_limit;
@@ -860,6 +1036,9 @@ int main (int argc, char **argv)
   int arg = 0;
 
   ctx->verbose = 0;
+
+//VG: Do these bit-rate factors assume a 32 bit input??
+//VG: Check with AJ what can be done to avoid this assumption, because we may need a bitrate factor to open a db block where we can read in the nbits. 
   ctx->reblock_factor = 1;
 #ifdef OUT_SAME
   ctx->bitrate_factor = 1;
@@ -877,8 +1056,13 @@ int main (int argc, char **argv)
   ctx->bitrate_factor = 4;
 #endif
 
+//VG: Adding default of bp_calibrartion valriable as 0
+  ctx->bp_calibration = 0;
 
-  while ((arg=getopt(argc,argv,"dp:r:svz")) != -1)
+
+  //VG: Adding the command line argument (b) to apply bandpass calibration or not
+  //while ((arg=getopt(argc,argv,"dp:r:svz")) != -1)
+  while ((arg=getopt(argc,argv,"dp:r:svbz")) != -1)
   {
     switch (arg) 
     {
@@ -898,6 +1082,10 @@ int main (int argc, char **argv)
       case 'v':
         ctx->verbose++;
         break;
+
+      case 'b':
+        ctx->bp_calibration = 1;
+        break;
         
       case 'z':
         zero_copy = 1;
@@ -912,7 +1100,7 @@ int main (int argc, char **argv)
 
   int num_args = argc-optind;
   int i = 0;
-      
+
   if ((argc-optind) != 2)
   {
     fprintf(stderr, "mopsr_dbreblockdb: 2 arguments required\n");
@@ -977,9 +1165,9 @@ int main (int argc, char **argv)
 
   if (ctx->verbose)
     multilog (log, LOG_INFO, "main: ctx->output.block_size=%"PRIu64"\n", ctx->output.block_size);
-  if (zero_copy && (ctx->output.block_size != (block_size * ctx->reblock_factor / ctx->bitrate_factor)))
+  if (zero_copy && (ctx->output.block_size != ((block_size * ctx->reblock_factor) / ctx->bitrate_factor)))
   {
-    multilog (log, LOG_ERR, "output block size [%"PRIu64"]  must be input block size [%"PRIu64"] * reblocking factor [%u]\n", ctx->output.block_size, block_size, ctx->reblock_factor);
+    multilog (log, LOG_ERR, "output block size [%"PRIu64"]  must be input block size [%"PRIu64"] * reblocking factor [%u] / bitrate_factor [%d]\n", ctx->output.block_size, block_size, ctx->reblock_factor, ctx->bitrate_factor);
    return EXIT_FAILURE;
   }
 

@@ -112,6 +112,10 @@ sub main()
   # become a daemon
   Dada::daemonize($sys_log_file, $pid_file);
 
+  # constraint task to processor core
+  # $core_list = $cfg{"BF_TB_CORELIST"};
+  # $cmd = "taskset -pc " + $core_list + " " + pid
+
   # Open a connection to the server_sys_monitor.pl script
   $sys_log_sock = Dada::nexusLogOpen($log_host, $sys_log_port);
   if (!$sys_log_sock) {

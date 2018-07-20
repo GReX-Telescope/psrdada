@@ -156,6 +156,7 @@ mopsr/src/mopsr_dbTBdb
 mopsr/src/mopsr_dbcalib
 mopsr/src/mopsr_dbchandb
 mopsr/src/mopsr_dbdelaydb
+mopsr/src/mopsr_dbfurbydb
 mopsr/src/mopsr_dbib_FST
 mopsr/src/mopsr_dbib_SFT
 mopsr/src/mopsr_dbintegratedb
@@ -200,6 +201,7 @@ mopsr/src/mopsr_solve_delays_spectral
 mopsr/src/mopsr_test_ant_sum
 mopsr/src/mopsr_test_bfdsp
 mopsr/src/mopsr_test_bfdsp_tb
+mopsr/src/mopsr_test_bfst
 mopsr/src/mopsr_test_calib
 mopsr/src/mopsr_test_cpubf
 mopsr/src/mopsr_test_delays

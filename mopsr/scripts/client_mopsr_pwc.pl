@@ -202,7 +202,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
     }
     else
     {
-      $cmd = $binary." -m ".$pfb_id." -c ".$pwc_port." -k ".lc($key).
+      $cmd = "numactl -C ".$udp_core." ".$binary." -m ".$pfb_id." -c ".$pwc_port." -k ".lc($key).
              " -l ".$pwc_logport.  " -i ".$udp_ip." -p ".$udp_port.
              " -b ".$udp_core." -M ".$mon_dir;
     }

@@ -278,8 +278,14 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
 
       chdir $local_dir;
 
+      my $numa_cmd = $proc_cmd;
+      if (exists($cfg{"PWC_AQDSP_CORE_".$pwc_id}))
+      {
+        $numa_cmd = "numactl -C ".$cfg{"PWC_AQDSP_CORE_".$pwc_id}." ".$proc_cmd;
+      }
+
       msg(1, "INFO", "START ".$proc_cmd);
-      ($result, $response) = Dada::mySystemPiped ($proc_cmd, $src_log_file, 
+      ($result, $response) = Dada::mySystemPiped ($numa_cmd, $src_log_file, 
                                                   $src_log_sock, "src", sprintf("%02d",$pwc_id), 
                                                   $daemon_name, "aqdsp");
 

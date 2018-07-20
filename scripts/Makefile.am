@@ -20,6 +20,8 @@ nobase_dist_mod_SCRIPTS = client_archive_manager.pm \
                           client_processing_manager.pm \
                           server_auxiliary_manager.pm \
                           server_gain_manager.pm \
+													server_general_dir_archiver.pm \
+												  server_general_file_archiver.pm \
                           server_logger.pm \
                           server_pwc_monitor.pm \
                           server_results_manager.pm \

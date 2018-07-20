@@ -19,6 +19,9 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+
+//Edited by VG on 15/5/2018
+
 int quit_threads = 0;
 
 int compare (const void * a, const void * b);
@@ -34,7 +37,8 @@ void usage()
 {
   fprintf (stdout,
            "mopsr_dbrescaledb [options] in_key out_key\n"
-           "              data type change from 32-bit float to 8-bit unsigned int\n"
+	   "		  data rescale to 0 mean unit variance, out put in 32 bit floats\n"
+           //"              data type change from 32-bit float to 8-bit unsigned int\n"
            " -f val       apply val as global scale\n" 
            " -i           individually rescale reach signal\n" 
            " -o val       apply val as global offset to data\n"
@@ -229,7 +233,9 @@ int dbrescaledb_open (dada_client_t* client)
     multilog (log, LOG_ERR, "open: header with no NBIT\n");
     return -1;
   }
-  ctx->nbit_out = 8;
+
+  //ctx->nbit_out = 8;
+  ctx ->nbit_out = 32;
 
   if (ascii_header_get (client->header, "NDIM", "%u", &(ctx->ndim)) != 1)
   {           
@@ -394,6 +400,7 @@ int dbrescaledb_open (dada_client_t* client)
   if (ctx->verbose) 
     multilog (log, LOG_INFO, "open: HDU (key=%x) opened for writing\n", ctx->out_key);
 
+  //VG: not sure about these two things below.. They are not used anywhere in this script. Do we need to change their values because we are changing output from 8 bit to 32 bit? Check with AJ
   client->transfer_bytes = transfer_size; 
   client->optimal_bytes = 64*1024*1024;
 
@@ -485,6 +492,7 @@ int64_t dbrescaledb_write (dada_client_t* client, void* data, uint64_t data_size
 }
 
 // rescale the ST data from 32-bit floats to 8-bit unsigned integers.
+//VG: rescale 32 bit FST data to 0 mean and unit variance 32 bit data (floats)
 int64_t dbrescaledb_write_block_FST_to_FST (dada_client_t * client, void *in_data , uint64_t data_size, uint64_t block_id)
 {
   mopsr_dbrescaledb_t* ctx = (mopsr_dbrescaledb_t*) client->context;
@@ -574,7 +582,9 @@ int64_t dbrescaledb_write_block_FST_to_FST (dada_client_t * client, void *in_dat
         multilog (log, LOG_INFO, "write_block_FST_to_FST: ichan=%u ctx->offset=%f ctx->scale=%f\n", ichan, ctx->offset, ctx->scale);
 
       // Fan beams, beam0 is the incoherrent beam, use an independent scale for that one
-      if (ctx->nbeam > 1)
+      // VG: adding the check for ctx->indiv_scale != 1. This is present in the other (SFT to SFT function), but was absent here for some reason, ask AJ if by mistake or there is some reason.
+      //if (ctx->nbeam > 1)
+      if (ctx->nbeam > 1 && !ctx->indiv_rescale)
       {
         for (isig=1; isig<ctx->nsig; isig++)
         {
@@ -586,7 +596,7 @@ int64_t dbrescaledb_write_block_FST_to_FST (dada_client_t * client, void *in_dat
 
       if (ctx->nsamps_integrated >= ctx->nsamps_to_integrate && ctx->verbose)
         multilog (log, LOG_INFO, "ichan=%u offset=%e scale=%e\n", ichan, ctx->offset, ctx->scale);
-    } 
+    }
   }
    
   if (ctx->verbose > 1)
@@ -605,7 +615,9 @@ int64_t dbrescaledb_write_block_FST_to_FST (dada_client_t * client, void *in_dat
   const float digi_min = 0;
   const float digi_max = 255;
 
-  uint8_t * out = (uint8_t *) ctx->out_block;
+  //VG: These data types need to be changed to accomodate floats
+  //uint8_t * out = (uint8_t *) ctx->out_block;
+  float * out = (float *) ctx->out_block;
 
   unsigned idx = 0;
 
@@ -626,9 +638,12 @@ int64_t dbrescaledb_write_block_FST_to_FST (dada_client_t * client, void *in_dat
 
       for (isamp=0; isamp<nsamp; isamp++)
       {
-        int result = ((in[idx] - mean) * combined_scale) + digi_mean + 0.5;
+        //VG: Removing digi_mean+0.5 to keep the mean as 0; and changing the scale factor from combined_scale to individual scales
+	//int result = ((in[idx] - mean) * combined_scale) + digi_mean + 0.5;
+	float result = ((in[idx] - mean) * ctx->scales[i]);
 
-        // clip the results
+        /*VG:  No need for checking for clipping when output is in floats
+	// clip the results
         if (result < digi_min)
         {
           result = digi_min;
@@ -639,7 +654,11 @@ int64_t dbrescaledb_write_block_FST_to_FST (dada_client_t * client, void *in_dat
           result = digi_max;
           ctx->nclipped[i]++;
         }
-        out[idx] = (uint8_t) result;
+	*/
+
+	//VG: Removing the type_casting to 8 bit integers
+        //out[idx] = (uint8_t) result;
+        out[idx] = result;
         idx++;
       }
     }
@@ -718,8 +737,8 @@ int64_t dbrescaledb_write_block_SFT_to_SFT (dada_client_t * client, void *in_dat
         else
           ctx->scales[i] = 1.0 / sqrt(variance);
 
-        if (ctx->verbose)
-          multilog (log, LOG_INFO, "write_block_SFT_to_SFT: beam=%u chan=%u mean=%f variance=%f scale=%f [%d - %d]\n", isig, ichan, mean, variance, ctx->scales[i], i*nsamp, (i+1)*nsamp);
+        //if (ctx->verbose)
+        //  multilog (log, LOG_INFO, "write_block_SFT_to_SFT: beam=%u chan=%u mean=%f variance=%f scale=%f [%d - %d]\n", isig, ichan, mean, variance, ctx->scales[i], i*nsamp, (i+1)*nsamp);
       }
     }
 
@@ -761,10 +780,11 @@ int64_t dbrescaledb_write_block_SFT_to_SFT (dada_client_t * client, void *in_dat
           ctx->scales[i] = ctx->scale;
         }
       }
-
-      if (ctx->nsamps_integrated >= ctx->nsamps_to_integrate)
-        multilog (log, LOG_INFO, "ichan=%u offset=%e scale=%e\n", ichan, ctx->offset, ctx->scale);
-    } 
+      //VG: Commented out for hte tiume being
+      //if (ctx->nsamps_integrated >= ctx->nsamps_to_integrate)
+        //multilog (log, LOG_INFO, "ichan=%u offset=%e scale=%e\n", ichan, ctx->offset, ctx->scale);
+    }
+ 
   }
    
   if (ctx->verbose > 1)
@@ -781,8 +801,9 @@ int64_t dbrescaledb_write_block_SFT_to_SFT (dada_client_t * client, void *in_dat
   const float digi_scale = digi_mean / digi_sigma;
   const float digi_min = 0;
   const float digi_max = 255;
-
-  uint8_t * out = (uint8_t *) ctx->out_block;
+  //VG: Need to change these data_types
+  //uint8_t * out = (uint8_t *) ctx->out_block;
+  float * out = (float *) ctx->out_block;
 
   uint64_t idx = 0;
 
@@ -803,8 +824,11 @@ int64_t dbrescaledb_write_block_SFT_to_SFT (dada_client_t * client, void *in_dat
 
       for (isamp=0; isamp<nsamp; isamp++)
       {
-        int result = ((in[idx] - mean) * combined_scale) + digi_mean + 0.5;
+        //VG: removing the addition of digi_mean + 0.5 to keep the output as 0 mean; and changing the scaling factor from combined to individual
+	//int result = ((in[idx] - mean) * combined_scale) + digi_mean + 0.5;
+	float result = ((in[idx] - mean) * ctx->scales[i]);
 
+	/*VG: No need to check for clipping when keeping output as floats
         // clip the results
         if (result < digi_min)
         {
@@ -816,7 +840,11 @@ int64_t dbrescaledb_write_block_SFT_to_SFT (dada_client_t * client, void *in_dat
           result = digi_max;
           ctx->nclipped[i]++;
         }
-        out[idx] = (uint8_t) result;
+	*/
+
+	//VG: removing the type casting
+        //out[idx] = (uint8_t) result;
+        out[idx] = result;
         idx++;
       }
     }
@@ -869,7 +897,11 @@ int main (int argc, char **argv)
   int arg = 0;
 
   ctx->verbose = 0;
-  ctx->bitrate_factor = 4;
+  
+  //VG: This bitrate_factor is probably because we are going from 32 bit to 8 bit. Changing this to 1.
+  //ctx->bitrate_factor = 4;
+  ctx->bitrate_factor = 1;
+  
   ctx->global_offset = 0;
   ctx->global_scale = 0;
   char global_rescale = 0;
@@ -1020,12 +1052,15 @@ int main (int argc, char **argv)
   client->direction      = dada_client_reader;
 
   client->context = &dbrescaledb;
+
   client->quiet = (ctx->verbose > 0) ? 0 : 1;
 
   while (!client->quit)
   {
     if (ctx->verbose)
       multilog (log, LOG_INFO, "main: dada_client_read()\n");
+
+    //We can avoid global_rescaling by just giving a command line argument as indiv_scale True
 
     if (dada_client_read (client) < 0)
       multilog (log, LOG_ERR, "Error during transfer\n");

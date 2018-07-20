@@ -39,6 +39,9 @@ use constant LOGFILE            => "mopsr_tmc_interface.log";
 use constant QUITFILE           => "mopsr_tmc_interface.quit";
 use constant PWCC_LOGFILE       => "dada_pwc_command.log";
 use constant TERMINATOR         => "\r";
+
+use constant FURBY_DATABASE	=> "/home/dada/furby_database";
+
 # We must always begin on a 3 second boundary since the pkt rearm UTC
 use constant PKTS_PER_3_SECONDs => 390625;
 #use constant PKTS_PER_3_SECONDs => 292969;
@@ -370,7 +373,6 @@ sub parseXMLCommand($)
   my $response = "";
   my $command = "";
   my $utc_date = "";
-  my $jun_testing = 0;
 
   Dada::logMsg(2, $dl, "parseXMLCommand: eval XML");
   Dada::logMsg(3, $dl, "parseXMLCommand: RAW=".$xml_in);
@@ -462,6 +464,24 @@ sub parseXMLCommand($)
             $response .= "Cannot support Correlation && Module Beams";
           }
 
+          if ((eval { exists $xml->{'correlation_parameters'} }) && (eval { exists $xml->{'furbies'} }))
+          {
+            if ((eval { exists $xml->{'furbies'}{'num_furbies'} }) && ($xml->{'furbies'}{'num_furbies'} > 0))
+            {
+              $result = "fail";
+              $response .= "Cannot add furbies in Correlation mode";
+            }
+          }
+
+          if ((eval { exists $xml->{'furbies'} }) && (eval { exists $xml->{'mod_beams_parameters'} }))
+          {
+            if ((eval { exists $xml->{'furbies'}{'num_furbies'} }) && ($xml->{'furbies'}{'num_furbies'} > 0))
+            {
+              $result = "fail";
+              $response .= "Cannot add furbies in Module beam mode";
+            }
+          }
+
           if ((eval { exists $xml->{'fan_beams_parameters'} }) && (eval { exists $xml->{'mod_beams_parameters'} }))
           {
             $result = "fail";
@@ -477,9 +497,11 @@ sub parseXMLCommand($)
             }
           }
 
+	  #VG: Adding furby params here in optionals
           my %opt_req = ('correlation_parameters' => ['mode', 'project_id', 'type', 'processing_file', 'dump_time'],
                          'fan_beams_parameters' => ['mode', 'project_id', 'nbeams', 'beam_spacing'],
-                         'mod_beams_parameters' => ['mode', 'project_id']);
+                         'mod_beams_parameters' => ['mode', 'project_id'], 
+                         'furbies' => ['num_furbies']);
 
           foreach $tb_key (@tb_keys)
           {
@@ -546,12 +568,9 @@ sub parseXMLCommand($)
         else
         {
           $current_state = "Starting";
-          if (!$jun_testing)
-          {
-            Dada::logMsg(2, $dl, "parseXMLCommand: start(".$cfg{"CONFIG_DIR"}."/mopsr_tmc.spec)");
-            ($result, $response) = start($cfg{"CONFIG_DIR"}."/mopsr_tmc.spec");
-            Dada::logMsg(2, $dl, "parseXMLCommand: start() ".$result." ".$response);
-          }
+          Dada::logMsg(2, $dl, "parseXMLCommand: start(".$cfg{"CONFIG_DIR"}."/mopsr_tmc.spec)");
+          ($result, $response) = start($cfg{"CONFIG_DIR"}."/mopsr_tmc.spec");
+          Dada::logMsg(2, $dl, "parseXMLCommand: start() ".$result." ".$response);
           $current_state = "Recording";
 
         }
@@ -582,12 +601,9 @@ sub parseXMLCommand($)
           $utc_stop = "";
 
           # issue stop command to nexus
-          if (!$jun_testing)
-          {
-            Dada::logMsg(2, $dl, "parseXMLCommand: stopNexus(".$utc_date.")");
-            ($result, $response) = stopNexus($utc_date);
-            Dada::logMsg(2, $dl, "parseXMLCommand: stopNexus ".$result." ".$response);
-          }
+          Dada::logMsg(2, $dl, "parseXMLCommand: stopNexus(".$utc_date.")");
+          ($result, $response) = stopNexus($utc_date);
+          Dada::logMsg(2, $dl, "parseXMLCommand: stopNexus ".$result." ".$response);
 
           if ($result ne "ok")
           {
@@ -1208,6 +1224,12 @@ sub createLocalDirs($)
   {
     Dada::mkdirRecursive($rdir."/FB", 0755);
     Dada::mkdirRecursive($adir."/FB", 0755);
+    
+    if ( ($spec{"INJECTED_FURBYS"} + 0)  > 0)
+    {
+	Dada::mkdirRecursive($adir."/Furbys", 0755);
+        print FH Dada::headerFormat("INJECTED_FURBYS", $spec{"INJECTED_FURBYS"})."\n";
+    }
   }
 
   my $i;
@@ -1245,6 +1267,33 @@ sub createLocalDirs($)
     if ($result ne "ok")
     {
       return ("fail", "could not copy molonglo_modules.txt to results dir: ".$response);
+    }
+  }
+
+  if ( ($spec{"INJECTED_FURBYS"} + 0) > 0 )		#Adding zero to interpret the string as a number
+  {
+    my $f_id;
+    my @f_ids = split(",", $spec{"FURBY_IDS"} );
+    my $furby_file;
+    foreach $f_id (@f_ids)
+    {
+        $furby_file = FURBY_DATABASE."/furby_".$f_id;
+        if ( -f $furby_file )
+        {
+          $cmd = "cp ".$furby_file." ".$adir."/Furbys/";
+          Dada::logMsg(2, $dl, "createLocalDirs: ".$cmd);
+          ($result, $response) = Dada::mySystem($cmd);
+          Dada:logMsg(3, $dl, "createLocalDirs: ".$result." ".$response);
+          if ($result ne "ok")
+          {
+            Dada::logMsg(0, $dl, "createLocalDirs: Could not copy ".$furby_file);
+          }
+        }
+        else
+        {
+          Dada::logMsg(0, $dl, "createLocalDirs: ".$furby_file." does not exist");
+          return("fail", "Requested furby id (".$furby_file.") does not exist");
+        }
     }
   }
 
@@ -1341,6 +1390,19 @@ sub stopNexus($)
     stopFRBDetector ($utc_stop);
     $frb_detector_started = 0;
   }
+
+  # insert the UTC_STOP into the obs.info fil
+
+  my $unixtime_start = Dada::getUnixTimeUTC($utc_start);
+  my $unixtime_stop = Dada::getUnixTimeUTC($utc_stop);
+  my $integrated = $unixtime_stop - $unixtime_start;
+
+  Dada::logMsg(1, $dl, "stopNexus: start=".$utc_start." stop=".$utc_stop." int=".$integrated);
+  my $fname = $cfg{"SERVER_RESULTS_DIR"}."/".$utc_start."/obs.info";
+  open FH, ">>$fname" or return ("fail","Could not append writeable file: ".$fname);
+  print FH "UTC_STOP ".$utc_stop."\n";
+  print FH "INT ".$integrated."\n";
+  close FH;
 
   return ($result, $response);
 }
@@ -1877,6 +1939,39 @@ sub genSpecFile($\%)
   else
   {
     push @specs, Dada::headerFormat($prefix."_ENABLED", "false");
+  }
+
+#VG: Adding furby parameters
+  # furby parameters
+  my $prefix = "FURBY";
+  if (eval { exists $xml->{'furbies'} } )
+  {
+    #ensure that none of the furby params have leading white spaces
+    $xml->{'furbies'}{'furby_ids'} =~ s/^\s+//;
+    $xml->{'furbies'}{'furby_beam'} =~ s/^\s+//;
+    $xml->{'furbies'}{'furby_tstamps'} =~ s/^\s+//;
+    
+    #ensure that none of the furby params have trailing white spaces
+    $xml->{'furbies'}{'furby_ids'} =~ s/\s+$//;
+    $xml->{'furbies'}{'furby_beam'} =~ s/\s+$//;
+    $xml->{'furbies'}{'furby_tstamps'} =~ s/\s+$//;
+    
+    #replacing any white spaces in the middle with comma ","
+    $xml->{'furbies'}{'furby_ids'} =~ s/\s/,/g;
+    $xml->{'furbies'}{'furby_beam'} =~ s/\s/,/g;
+    $xml->{'furbies'}{'furby_tstamps'} =~ s/\s/,/g;
+    push @specs, Dada::headerFormat("INJECTED_FURBYS", $xml->{'furbies'}{'num_furbies'});
+    if ($xml->{'furbies'}{'num_furbies'} > 0)
+    {
+      push @specs, Dada::headerFormat($prefix."_IDS", $xml->{'furbies'}{'furby_ids'});
+      push @specs, Dada::headerFormat($prefix."_BEAMS", $xml->{'furbies'}{'furby_beams'});
+      push @specs, Dada::headerFormat($prefix."_TSTAMPS", $xml->{'furbies'}{'furby_tstamps'});
+    }
+  }
+  else
+  {
+    #Nothing to do in else, even putting 0 is not necessary. Putting it anyway
+    push @specs, Dada::headerFormat("INJECTED_FURBYS", "0");
   }
 
   # mod beams parameters

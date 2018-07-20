@@ -803,7 +803,13 @@ sub imageInfoThread($)
               $ant_type = "UNKNOWN";
             }
 
-            $reason =~ s/'/\\'/g;
+            $reason =~ s/'/&#39;/g;
+            $reason =~ s/</&lt;/g;
+            $reason =~ s/>/&gt;/g;
+            $reason =~ s/"/&quot;/g;
+            $reason =~ s/&/&amp;/g;
+            $reason =~ s/\\/&#92;/g;
+            $reason =~ s/\\/&#92;/g;
             $image_string .= "<ant name='".$ant."' reason='".$reason."' type='".$ant_type."'>";
 
             foreach $key ( keys %{$to_use{$ant}} )

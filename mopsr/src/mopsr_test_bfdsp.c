@@ -19,7 +19,7 @@
 #include <assert.h>
 #include <math.h>
 #include <cuda_runtime.h>
-#include <cuda_fp16.h>
+//#include <cuda_fp16.h>
 
 #define JUST_GPU
 

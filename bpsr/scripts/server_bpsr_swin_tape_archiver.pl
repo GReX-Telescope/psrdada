@@ -23,10 +23,14 @@ sub usage() {
 $Dada::server_tape_archiver::dl = 1;
 $Dada::server_tape_archiver::daemon_name = Dada::daemonBaseName($0);
 $Dada::server_tape_archiver::robot = 1;
+$Dada::server_tape_archiver::drive_id = 0;
 $Dada::server_tape_archiver::type = "swin";
-$Dada::server_tape_archiver::ssh_prefix = "ssh -l pulsar shrek210 'ssh -l dada apsr-evlbi.atnf.csiro.au \"";
-$Dada::server_tape_archiver::ssh_suffix = "\"'";
-$Dada::server_tape_archiver::required_host = "shrek201.ssi.swin.edu.au";
+$Dada::server_tape_archiver::ctrl_dir = "/home/dada/linux_64/control";
+$Dada::server_tape_archiver::ctrl_prefix = "bpsr";
+$Dada::server_tape_archiver::ssh_prefix = "ssh -o Batchmode=yes -x -l dada hipsr-srv0 \"";
+$Dada::server_tape_archiver::ssh_suffix = "\"";
+$Dada::server_tape_archiver::required_host = "tapeserv01.hpc.swin.edu.au";
+$Dada::server_tape_archiver::local_fs = 1;
 
 # Autoflush STDOUT
 $| = 1;

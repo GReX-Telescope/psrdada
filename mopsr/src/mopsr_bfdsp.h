@@ -37,6 +37,9 @@ typedef struct {
 
   // GPU buffers for input and output of delayed data
   size_t d_buffer_size;
+#ifndef PER_CHANNEL_TRANSFERS
+  void * d_raw;           // input data buffer on GPU
+#endif
   void * d_in;            // input data buffer on GPU
   void * d_fbs;           // fan beam output on GPU
   void * d_tbs[MAX_TBS];  // tied array beam output on GPU

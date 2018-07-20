@@ -109,10 +109,11 @@ class plot_window extends mopsr_webpage
               var j = 0;
 
               var td_name_id = "pw_name_" + ant_type;
+              var uri = "/mopsr/results.lib.php?single=true&inline_images=true&filter_type=SOURCE&filter_value=" + encodeURIComponent(ant_name);
               if ( ant_reason ) {
-                document.getElementById(td_name_id).innerHTML = ant_name + "<br>" + ant_reason;
+                document.getElementById(td_name_id).innerHTML = "<a href='" + uri +"'>" + ant_name + "</a><br>" + ant_reason;
               } else {
-                document.getElementById(td_name_id).innerHTML = ant_name;
+                document.getElementById(td_name_id).innerHTML = "<a href='" + uri +"'>" + ant_name + "</a><br>";
               }
 
               for (j=0; j<ant.childNodes.length; j++)

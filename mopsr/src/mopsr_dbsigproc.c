@@ -76,6 +76,8 @@ typedef struct {
 
   uint64_t block_size;
 
+  uint64_t * nclipped;
+
   void * out;
 
   uint64_t out_bufsz;
@@ -181,8 +183,9 @@ int dbsigproc_open (dada_client_t* client)
     multilog (log, LOG_ERR, "input NBIT=%u, must be 8 or 32\n", ctx->nbit);
     return -1;
   }
-  if (ctx->nbit == 32)
-    ctx->nbit_out = 32;
+  //VG: It seems that the code currently assumes that 32 bit input has to be written as 32 bit output. Not sure why. Ask AJ. Commenting it out.
+  //if (ctx->nbit == 32)
+  //  ctx->nbit_out = 32;
 
   if (ascii_header_get (client->header, "NDIM", "%u", &(ctx->ndim)) != 1)
   {           
@@ -197,12 +200,18 @@ int dbsigproc_open (dada_client_t* client)
   }
   else
   {
+    //VG: TODO - add handling of STF ordered data
     if (strcmp(ctx->order, "SFT") != 0)
     {
       multilog (log, LOG_ERR, "require SFT input ordering");
       return -1;
     }
   }
+
+  //VG: Adding the nclipped array to count the number of clipped elements
+  if (ctx->nclipped)
+    free(ctx->nclipped);
+  ctx->nclipped = (uint64_t *) malloc(sizeof(uint64_t) * ctx->nbeam * ctx->nchan);
    
   // at this point we fill in the SIGPROC global variables (yuck)
   // source_name -> char[80]
@@ -271,11 +280,12 @@ int dbsigproc_open (dada_client_t* client)
   {
     ibeam = i;
 
-    sprintf (buffer, "mkdir BEAM_%03d", ctx->start_beam + i);
+    sprintf (buffer, "mkdir -p BEAM_%03d", ctx->start_beam + i);
     system (buffer);
 
     // write ascii header to file 
-    sprintf (buffer, "BEAM_%03d/obs.header", ctx->start_beam + i);
+    // VG: We write out obs.header for each beam here.
+    sprintf (buffer, "BEAM_%03d/obs.header", ctx->start_beam + i);	//VG: variable 'buffer' is reused. :\ Not good. Take care.
     ctx->fptrs[i] = fopen (buffer, "w");
     size_t header_len = strlen (client->header);
     client->header[header_len] = '\n';
@@ -294,12 +304,12 @@ int dbsigproc_open (dada_client_t* client)
     ctx->fptrs[i] = fopen (buffer, "w");
 
     // write the header to the file pointer
-    filterbank_header (ctx->fptrs[i]);
+    filterbank_header (ctx->fptrs[i]);				//VG: This is weird. This function 'filterbank_header' is not defined anywhere. ask AJ
 
     // TODO update the source positions for each beam!
   }
 
-  ctx->out_bufsz = ctx->block_size / (ctx->nbeam * (ctx->nbit / ctx->nbit_out));
+  ctx->out_bufsz = ctx->block_size / (ctx->nbeam * (ctx->nbit / ctx->nbit_out));	//VG: ctx->nbit will have 32, so the out_bufsz would get reduced by factor of 4 after the change. Looks fine, no need to change anything here.
   ctx->out = malloc (ctx->out_bufsz);
 
   client->transfer_bytes = transfer_size; 
@@ -318,6 +328,7 @@ int dbsigproc_close (dada_client_t* client, uint64_t bytes_written)
   multilog_t* log = client->log;
 
   unsigned i = 0;
+  int ichan;
 
   if (ctx->verbose)
     multilog (log, LOG_INFO, "close: bytes_read=%"PRIu64"\n", ctx->bytes_in);
@@ -333,6 +344,16 @@ int dbsigproc_close (dada_client_t* client, uint64_t bytes_written)
         fclose (ctx->fptrs[i]);
       }
       ctx->fptrs[i] = 0;
+
+      //VG: Adding a loop for logging the nclipped per channel per beam
+      if (ctx->nclipped && ctx->verbose)
+      {
+	for (ichan=0; ichan<ctx->nchan; ichan++)
+	{
+	  multilog(log, LOG_INFO, "dbsigproc_close: samples from chan=%u beam=%u that exceed power limits=%"PRIu64"\n", ichan, ctx->start_beam+ i, ctx->nclipped[ i * ctx->nchan + ctx->nchan - (ichan+1) ]);
+	}
+      }
+
     }
     free (ctx->fptrs);
   }
@@ -370,13 +391,16 @@ int64_t dbsigproc_write_block_SFT_to_TF (dada_client_t* client, void* in_data, u
   if (ctx->verbose > 1)
     multilog (log, LOG_INFO, "write_block_SFT_to_TF: data_size=%"PRIu64", block_id=%"PRIu64"\n",
               in_data_size, block_id);
-
-  const uint64_t out_data_size = in_data_size / ctx->nbeam;
+  
+  //VG: Need to take into account the reduction in nbits for calculating the out_data_size?
+  
+  const uint64_t out_data_size = in_data_size / ctx->nbeam;		//VG: I think the name out_data_size is in fact the per beam in_data_size, just a misnomer. It is olny used to compute nsamp, which comes out right, so now worries
+  //const uint64_t out_data_size = in_data_size / ctx->nbeam * ctx->nbit_out / ctx->nbit;	//VG: this would have been the correct out_data_soze, but not required.
   const uint64_t nsamp = out_data_size / (ctx->ndim * (ctx->nbit/8) * ctx->nchan);
 
   if (ctx->verbose > 1)
     multilog (log, LOG_INFO, "write_block_SFT_to_TF: in_data_size=%"PRIu64", "
-              "out_data_size=%"PRIu64" nsamp=%"PRIu64"\n", in_data_size, out_data_size, nsamp);
+              "out_data_size=%"PRIu64" nsamp=%"PRIu64"\n", in_data_size, out_data_size, nsamp);		//The logs will contain incorrect out_data_size after we give 32 bit as input and 8 bit as output
 
   unsigned i, ichan, ochan, isamp;
   unsigned nchansamp = ctx->nchan * nsamp;
@@ -437,8 +461,18 @@ int64_t dbsigproc_write_block_SFT_to_TF (dada_client_t* client, void* in_data, u
   }
   else if (ctx->nbit == 32)
   {
+    //VG: Adding the digifil constants
+    const float digi_sigma = 6;
+    const float digi_mean = 127.5;
+    const float digi_scale = digi_mean / digi_sigma;
+    const float digi_min = 0;
+    const float digi_max = 255;
+
     float * in = (float *) in_data;
-    float * out = (float *) ctx->out;
+    //VG: changing the output data type to 8-bit integers
+    //float * out = (float *) ctx->out;
+    uint8_t * out = (uint8_t *) ctx-> out;
+    int new_ind, old_ind, chan_ind;
 
     for (i=0; i<ctx->nbeam; i++)
     {
@@ -446,9 +480,29 @@ int64_t dbsigproc_write_block_SFT_to_TF (dada_client_t* client, void* in_data, u
       for (ichan=0; ichan<ctx->nchan; ichan++)
       {
         ochan = ctx->nchan - (ichan+1);
+	chan_ind = i * ctx->nchan + ochan;		//VG: Indexing channels for logging nclipped. Keep in mind, the channel indices are logged according the output channels and not input channels
         for (isamp=0; isamp<nsamp; isamp++)
         {
-          out[isamp * ctx->nchan + ochan] = in[ichan * nsamp + isamp];
+	  //VG: Heavily editing this block to rescale and quantize the values along with changing the order from SFT to SxTF
+          //out[isamp * ctx->nchan + ochan] = in[ichan * nsamp + isamp];
+	  new_ind = isamp * ctx->nchan + ochan;
+	  old_ind = ichan * nsamp + isamp;
+          float tmp_val = in[old_ind] * digi_scale + digi_mean + 0.5;		//VG: This line assumes that incoming data is 0 mean, unit variance
+	  
+	  if (tmp_val > digi_max)
+	  {
+	    //fprintf(stderr, "In beam: [%u], chan: [%u], input_value: [%f] is above maxx: [%f]\n", ctx->start_beam+i,ichan, tmp_val, digi_max);
+	    tmp_val = digi_max;
+	    ctx->nclipped[chan_ind]++;
+	  }
+	  if (tmp_val < digi_min)
+	  {
+	    //fprintf(stderr, "In beam: [%u], chan: [%u], input_value: [%f] is below min: [%f]\n", ctx->start_beam +i, ichan, tmp_val, digi_min);
+	    tmp_val = digi_min;
+	    ctx->nclipped[chan_ind]++;
+	  }
+
+	  out[new_ind] = (uint8_t) tmp_val;
         }
       }
       fwrite (out, ctx->out_bufsz, 1, ctx->fptrs[i]);

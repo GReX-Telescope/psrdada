@@ -2,6 +2,7 @@
 
 include_once("mopsr.lib.php");
 include_once("mopsr_webpage.lib.php");
+include_once("Asteria.lib.php");
 
 class asteria_bests extends mopsr_webpage 
 {
@@ -143,74 +144,13 @@ class asteria_bests extends mopsr_webpage
         <td valign="top" width="200px">
 <?
     $this->openBlockHeader("Summary");
-?>
-    <table>
-<?php
-include MYSQL_DB_CONFIG_FILE;
 
-$pdo = new PDO ('mysql:dbname='.MYSQL_DB.';host='.MYSQL_HOST, MYSQL_USER, MYSQL_PWD);
+    include MYSQL_DB_CONFIG_FILE;
 
-$q = 'SELECT date FROM Updates';
+    $pdo = new PDO ('mysql:dbname='.MYSQL_DB.';host='.MYSQL_HOST, MYSQL_USER, MYSQL_PWD);
 
-$stmt = $pdo -> query($q);
-if (!$stmt) {
-  echo "Failed to query:<br>".$q;
-  exit(-1);
-}
+    print_summary($pdo);
 
-$updated = $stmt ->fetch();
-
-$q = 'SELECT utc FROM UTCs ORDER BY utc LIMIT 1';
-$stmt = $pdo -> query($q);
-if (!$stmt) {
-  echo "Failed to query:<br>".$q;
-  exit(-1);
-}
-
-$since = $stmt ->fetch();
-
-$q = 'SELECT COUNT(*) FROM TB_Obs';
-$stmt = $pdo -> query($q);
-if (!$stmt) {
-  echo "Failed to query:<br>".$q;
-  exit(-1);
-}
-
-$count = $stmt ->fetch();
-
-echo "<tr><td>Data since ".substr($since[0], 0, 10)."<td><tr>\n";
-echo "<tr><td>".$count[0]." observations</td></tr>\n";
-echo "<tr><td>Updated at:<br><span class=best_snr>".$updated[0]."</span></td></tr>\n";
-?>
-      <tr>
-        <td colspan=2><a href="/mopsr/Asteria.php?single=true">Last 100 pulsar</a></td>
-      </tr>
-      <tr>
-        <td colspan=2><a href="/mopsr/Asteria_bests.php?single=true">Best per pulsar</a></td>
-      </tr>
-      <tr><td><hr/></td><tr>
-<?php
-  $summary_filename = "/home/dada/linux_64/web/mopsr/latest_summary";
-  $summary_contents = file_get_contents($summary_filename);
-  $summary_array = explode(PHP_EOL, $summary_contents);
-  $counter = 0;
-  foreach($summary_array as $line) {
-    if ($counter == 0) {
-      $updated = $line;
-    } elseif ($counter == 1) {
-      echo "<tr><td><span class=best_snr>SUMMARY OF LAST 24hrs</span></td></tr>";
-      echo "<tr><td><h5>As of:<br>".$updated."</h5></td></tr>";
-    } elseif (strpos($line, "FRB Statistics") === 0) {
-      echo "<tr><td><hr></td></tr>";
-      echo "<tr><td><span class=best_snr>".$line.'</span></td></tr>';
-    }else {
-      echo "<tr><td>".$line.'</td></tr>';
-    }
-    $counter += 1;
-  }
-?>
-    </table>
-  <?
     $this->closeBlockHeader();
 
     echo "</td><td>\n";
@@ -247,7 +187,7 @@ $psr500 = explode("\n", $psr500_str);
 $counter = 0;
 echo "<p><table>\n<tr>\n";
 foreach ($psr500 as $psr) {
-  $q = 'SELECT name, dm, period, max_snr_in5min, utc, snr, tint/60. as tint FROM (Pulsars JOIN UTCs JOIN TB_Obs ON Pulsars.id = TB_Obs.psr_id AND UTCs.id = Pulsars.max_snr_obs_id AND TB_Obs.utc_id = UTCs.id) WHERE tint > 1.0 AND dm>0 AND max_snr_in5min '.$_GET['snr_cut'].' AND name="'.$psr.'" ORDER BY name ASC';
+  $q = 'SELECT name, dm, period, max_snr_in5min, utc, snr, tint/60., science_case as tint FROM (Pulsars JOIN UTCs JOIN TB_Obs ON Pulsars.id = TB_Obs.psr_id AND UTCs.id = Pulsars.max_snr_obs_id AND TB_Obs.utc_id = UTCs.id) WHERE tint > 1.0 AND dm>0 AND max_snr_in5min '.$_GET['snr_cut'].' AND name="'.$psr.'" ORDER BY name ASC';
   $stmt = $pdo -> query($q);
 
   if (!$stmt)
@@ -271,6 +211,7 @@ foreach ($psr500 as $psr) {
       $utc = $row[4];
       $snr = $row[5];
       $tint_m = $row[6];
+      $case = $row[7];
 
       $class = "&class=new";
       $_result_dir = glob($top_dir.$utc);
@@ -295,7 +236,10 @@ foreach ($psr500 as $psr) {
       }
       
       echo "<td width=300><a href=/mopsr/results.lib.php?single=true&offset=0&length=20&inline_images=true&filter_type=SOURCE&filter_value=";
-      echo urlencode($pulsar).">".$pulsar."</a><br>DM : ".round($dm, 2)."<br>period : ".round($period,2 )." ms <br>\n";
+      if ($case === null)
+        echo urlencode($pulsar).">".$pulsar."</a><br>DM : ".round($dm, 2)."<br>period : ".round($period,2 )." ms <br>\n";
+      else
+        echo urlencode($pulsar).">".$pulsar."</a><br>".$case."<br>DM : ".round($dm, 2)."<br>period : ".round($period,2 )." ms <br>\n";
       foreach ($plot_types as $type) {
         $hr= $type . "_hr";
         $lr= $type . "_lr";
@@ -380,16 +324,6 @@ foreach ($psr500 as $psr) {
 
     header('Content-type: text/xml');
     echo $xml;
-  }
-
-  function handleRequest()
-  {
-    if ($_GET["update"] == "true") {
-      $this->printUpdateHTML($_GET);
-    } else {
-      $this->printHTML($_GET);
-    }
-
   }
 
   function getResultsArray($results_dir, $offset=0, $length=0, $filter_type, $filter_value) 

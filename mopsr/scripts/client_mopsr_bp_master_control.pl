@@ -156,13 +156,18 @@ sub setupClientType()
             my $nsamp = $cfg{"BLOCK_NSAMP_".$id};
             my $nchan = ($bp_ct{"NCHAN_COARSE"} * $bp_ct{"NCHAN_FINE"});
             my $nbeam = ($bp_ct{"BEAM_LAST_RECV_".$i} - $bp_ct{"BEAM_FIRST_RECV_".$i}) + 1;
-            my $nbit = 8;
+            my $nbit = 32;
             my $npol = 1;
             my $ndim = 1;
             my $nant = 1;
 
+            if ($id eq $cfg{"HEIMDALL_DATA_BLOCK"})
+            {
+              $nbit = 16;
+            }
+
             $bufsz = Dada::client_master_control::computeDBSize($nsamp, $nchan, $npol, $ndim, $nbit, $nant, $nbeam);  
-            print "bufsz=".$bufsz."\n";
+            #print "bufsz=".$bufsz."\n";
           }
 
           $Dada::client_master_control::pwcs{$i}{"dbs"}{$id}{"key"} = $key;
