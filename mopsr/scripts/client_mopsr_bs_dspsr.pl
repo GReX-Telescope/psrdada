@@ -213,7 +213,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$bs_id);
 
         my $cpu_core = $cfg{"BS_DSPSR_CORE_".$bs_id};
         #$proc_cmd = "numactl -C ".$cpu_core." ".$bin_dir."/dspsr -e car -L 60 -Lmin 10 -A -w ".$cand_file." ".$tmp_info_file;
-        $proc_cmd = "export T2USER=".$cfg{"USER"}.$bs_tag."; ".$bin_dir."/dspsr -e car -L 60 -Lmin 10 -A -b 128 -w ".$cand_file." ".$tmp_info_file;
+        $proc_cmd = "export T2USER=".$cfg{"USER"}.$bs_tag."; ".$bin_dir."/dspsr -e car -L 10 -Lmin 9.5 -A -b 128 -w ".$cand_file." ".$tmp_info_file;
         $binary =  "dspsr -e car";
       }
   
