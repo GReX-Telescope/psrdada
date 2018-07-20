@@ -195,11 +195,13 @@ sub main()
 
         $obs_mode = getObsInfo($o);
 
+        Dada::logMsg(2, $dl, "main: assessing observation=".$o." obs_mode=".$obs_mode);
+
         if ($obs_mode eq "FB")
         {
           Dada::logMsg(2, $dl, "main: processCandidates(".$o.")");
           ($result, $response) = processCandidates($o);
-          Dada::logMsg(3, $dl, "main: processCandidates ".$result." ".$response);
+          Dada::logMsg(2, $dl, "main: processCandidates ".$result." ".$response);
           if ($result ne "ok")
           {
             Dada::logMsgWarn($warn, "processCandidates(".$o.") failed: ".$response);       
@@ -371,7 +373,7 @@ sub processCandidates($)
 
       if ($ncands_over9 > 0)
       {
-        Dada::logMsg(2, $dl, "processCandidates: connecting to ".$frb_host.":".$frb_port);
+        Dada::logMsg(1, $dl, "processCandidates: connecting to ".$frb_host.":".$frb_port);
         my $handle = Dada::connectToMachine($frb_host, $frb_port, 1);
         if ($handle)
         {
@@ -393,15 +395,23 @@ sub processCandidates($)
           }
           else
           {
+            my $reply = "unknown";
             # check if reply is ok | fail
             if (! eval { exists $xml->{'reply'} } )
             {
               Dada::logMsgWarn($warn, "Malformed XML reply from FRB detector");
             }
+            else
+            {
+              $reply =  $xml->{'reply'};
+            }
+            Dada::logMsg(1, $dl, "processCandidates: FRB detector replied: ".$reply);
           }
         }
       }
     }
+
+    Dada::logMsg(2, $dl, "processCandidates: appending ".$utc_start."/".$timestamp."_all.cand to all_candidates.dat");
 
     # add this timestamp to the accumulated total
     if ( -f $cands_dir."/all_candidates.dat")
@@ -434,8 +444,11 @@ sub processCandidates($)
     }
   }
 
+  Dada::logMsg(2, $dl, "processCandidates: processed all .cand files for ".$utc_start);
+
   if (( -f $cands_dir."/all_candidates.dat") && ($n_processed > 0))
   {
+
     # determine end of observation
     $cmd = "tail -n 1000 ".$cands_dir."/all_candidates.dat | sort -k 3 | tail -n 1 | awk '{print \$3}'";
     Dada::logMsg(2, $dl, "processCandidates: ".$cmd);
@@ -474,7 +487,10 @@ sub processCandidates($)
       Dada::logMsgWarn($warn, "processCandidates: ".$cmd." failed");
       return ("fail", "plot command failed");
     }
+    Dada::logMsg(1, $dl, "processCandidates: updated candidate plots for ".$utc_start);
   }
+
+  Dada::logMsg(2, $dl, "processCandidates: completed");
   return ("ok", "");
 }
 
@@ -489,7 +505,7 @@ sub coincidencerThread()
   my $nbeam = $bp_ct{"NBEAM"};
   my $log = $cfg{"SERVER_LOG_DIR"}."/mopsr_coincidencer.log";
   #my $cmd = "coincidencer -a ".$host." -p ".$port." -n ".$nbeam." | awk '{print strftime(\"%Y-%m-%d-%H:%M:%S\")\" \"$0 }' >> ".$log;
-  my $cmd = "coincidencer -a ".$host." -p ".$port." -n ".$nbeam." >> ".$log;
+  my $cmd = "coincidencer -a ".$host." -p ".$port." -n ".$nbeam." -v >> ".$log;
 
   Dada::logMsg(1, $dl, "coincidencerThread: ".$cmd);
   my ($result, $response) = Dada::mySystem($cmd);
@@ -540,6 +556,9 @@ sub dumperThread ()
     # Get all the readable handles from the server
     my ($readable_handles) = IO::Select->select($read_set, undef, undef, 1);
     Dada::logMsg(3, $dl, "select on read_set returned");
+
+    my $obs_results_dir  = $cfg{"SERVER_RESULTS_DIR"};
+    my $obs_archives_dir = $cfg{"SERVER_ARCHIVE_DIR"};
 
     foreach $rh (@$readable_handles)
     {
@@ -623,6 +642,98 @@ sub dumperThread ()
 
                 # supplement additional information for the event
                 %c = supplementCand(\%c);
+
+                my $obs_info_file = $obs_results_dir."/".$c{"utc_start"}."/obs.info";
+                my $obs_header_file = $obs_results_dir."/".$c{"utc_start"}."/FB/obs.header.BP00";
+                # Check if Furby
+                my $cmd = "grep INJECTED_FURBYS ".$obs_info_file." | awk '{print \$2}'";
+                my ($result, $response) = Dada::mySystem($cmd);
+
+                my (@furby_ids, @furby_beams, @furby_tstamps);
+                my $is_furby = 0;
+                if (($result eq "ok") && ($response) )
+                {
+                  my $nfurbies = int($response);
+                  my %obs_header = Dada::readCFGFileIntoHash ($obs_header_file, 0);
+
+                  # get FURBY_IDS
+                  if (exists $obs_header{"FURBY_IDS"})
+                  {
+                    @furby_ids = split(/,/, $obs_header{"FURBY_IDS"});
+                  }
+                  else
+                  {
+                    Dada::logMsg(0, $dl, "main: FURBY_IDS doesn't exist in file: ".$obs_header_file);
+                  }
+
+                  # get FURBY_BEAMS
+                  if (exists $obs_header{"FURBY_BEAMS"})
+                  {
+                    @furby_beams = split(/,/, $obs_header{"FURBY_BEAMS"});
+                  }
+                  else
+                  {
+                    Dada::logMsg(0, $dl, "main: FURBY_BEAMS doesn't exist in file: ".$obs_header_file);
+                  }
+
+                  # get furby_tstamps
+                  if (exists $obs_header{"FURBY_TSTAMPS"})
+                  {
+                    @furby_tstamps = split(/,/, $obs_header{"FURBY_TSTAMPS"});
+                  }
+                  else
+                  {
+                    Dada::logMsg(0, $dl, "main: FURBY_TSTAMPS doesn't exist in file: ".$obs_header_file);
+                  }
+
+                  # furby tsamp is relative to centre of the molonglo band. Heimdall's 
+                  # tsamp is relative to the top of the band:
+                  my $centre_tstamp = int((8.3*0.015*$c{"dm"}*(0.8435)**(-3)*1000)/327.68) + $c{"sample"};
+
+                  # Check if any of the furbys coincides with FRB trigger
+
+                  my $i;
+                  for ($i=0; $i<$nfurbies; $i++)
+                  {
+                    my $furby_id = $furby_ids[$i];
+                    my $furby_beam = $furby_beams[$i];
+                    my $furby_tstamp = $furby_tstamps[$i]/0.00032768;
+                    if (($furby_beam == $c{"beam"}) && 
+                      ($furby_tstamp <= ($centre_tstamp + 1500)) && ($furby_tstamp >= ($centre_tstamp - 1500)) && 
+                      (!($is_furby))) 
+                    {
+                      # Furby found
+                      Dada::logMsg(0, $dl, "main: Found a furby - id: ".$furby_id.", beam: ".$furby_beam.", tstamp: ".$furby_tstamp);
+
+                      $is_furby = 1;
+                      # log it
+                      my $furby_log_file = $obs_archives_dir."/".$c{"utc_start"}."/Furbys/furbys.log";
+
+                      # Write header if file doesn't exist
+                      if (!( -f $furby_log_file))
+                      {
+                        open FH, ">$furby_log_file" or DADA::logMsg(0, $dl, 
+                          "main: couldn't open ".$furby_log_file." for writing");
+                        print FH "#furby_id tstamp beam boxcar dm snr proba\n";
+                      }
+                      else
+                      {
+                        open FH, ">>$furby_log_file" or DADA::logMsg(0, $dl, 
+                          "main: couldn't open ".$furby_log_file." for appending");
+                      }
+                      print FH $furby_id." ".$c{"sample"}." ".$c{"beam"}." ".$c{"filter"}.
+                        " ".$c{"dm"}." ".$c{"snr"}." ".$c{"probability"}."\n";
+                      close FH;
+                    }
+                  }
+                                    
+
+                }
+                else
+                {
+                  Dada:logMsg(0, $dl, "Could not read INJECTED_FURBYS from ".$obs_info_file);
+                }
+
  
                 # test for extra galacitcity
                 # TODO Change this value back to 0 after geting a J1644 dump
@@ -633,7 +744,7 @@ sub dumperThread ()
                 }
 
                 my $did_dump = "false";
-                if ($c{"extra_galactic"} && ($event_unix > $last_dump_unix + $min_dump_separation))
+                if ($c{"extra_galactic"} && ($event_unix > $last_dump_unix + $min_dump_separation) && !($is_furby))
                 {
                   $last_dump_unix = $event_unix;
 
@@ -676,38 +787,40 @@ sub dumperThread ()
                   }
                 }
 
-                if ($event_unix > $last_email_unix + $min_email_separation)
+                if (!($is_furby))
                 {
-                  Dada::logMsg(0, $dl, "FRB: UTC_START=".$c{"utc_start"}." BEAM=".$c{"beam"});
-                  Dada::logMsg(0, $dl, "FRB: DUMP ".$c{"start_utc"}." to ".$c{"end_utc"});
-                  Dada::logMsg(0, $dl, "FRB: EVENT DM=".$c{"dm"}." WIDTH=".($c{"width"}*1000)."ms ".
-                                       "SNR=".$c{"snr"}." PROB=".$c{"probability"});
-                  $last_email_unix = $event_unix;
-
-                  my $to_email = "ajameson\@swin.edu.au";
-                  my $cc_email = "adeller\@swin.edu.au,".
-                                 "bateman.tim\@gmail.com,".
-                                 "Timothy.Bateman\@sydney.edu.au,".
-                                 "cflynn\@swin.edu.au,".
-                                 "fjankowsk\@gmail.com,".
-                                 "kaplant\@ucsc.edu,".
-                                 "adityapartha3112\@gmail.com,".
-                                 "manisha.caleb\@anu.edu.au,".
-                                 "mbailes\@swin.edu.au,".
-                                 "stefanoslowski\@swin.edu.au,".
-                                 "shivanibhandari58\@gmail.com,".
-                                 "v.vikram.ravi\@gmail.com,".
-                                 "cday\@swin.edu.au,".
-                                 "vivekgupta\@swin.edu.au,".
-                                 "vivekvenkris\@gmail.com,".
-                                 "wfarah\@swin.edu.au";
-                  my $email_thread = threads->new(\&generateEmail, $to_email, $cc_email, $did_dump, \%c);
-                  $email_thread->detach();
-                }
-                else
-                {
-                  Dada::logMsg(0, $dl, "FRB: IGNORE EVENT DM=".$c{"dm"}." WIDTH=".($c{"width"}*1000)."ms ".
-                                       "SNR=".$c{"snr"}." BEAM=".$c{"beam"}." PROB=".$c{"probability"});
+                  if (($event_unix > $last_email_unix + $min_email_separation))
+                  {
+                    Dada::logMsg(0, $dl, "FRB: UTC_START=".$c{"utc_start"}." BEAM=".$c{"beam"});
+                    Dada::logMsg(0, $dl, "FRB: DUMP ".$c{"start_utc"}." to ".$c{"end_utc"});
+                    Dada::logMsg(0, $dl, "FRB: EVENT DM=".$c{"dm"}." WIDTH=".($c{"width"}*1000)."ms ".
+                                         "SNR=".$c{"snr"}." PROB=".$c{"probability"});
+                    $last_email_unix = $event_unix;
+                    my $to_email = "ajameson\@swin.edu.au";
+                    my $cc_email = "adeller\@swin.edu.au,".
+                                   "bateman.tim\@gmail.com,".
+                                   "Timothy.Bateman\@sydney.edu.au,".
+                                   "cflynn\@swin.edu.au,".
+                                   "fjankowsk\@gmail.com,".
+                                   "kaplant\@ucsc.edu,".
+                                   "adityapartha3112\@gmail.com,".
+                                   "mbailes\@swin.edu.au,".
+                                   "stefanoslowski\@swin.edu.au,".
+                                   "manishacaleb\@gmail.com,".
+                                   "shivanibhandari58\@gmail.com,".
+                                   "v.vikram.ravi\@gmail.com,".
+                                   "cday\@swin.edu.au,".
+                                   "vivekgupta\@swin.edu.au,".
+                                   "vivekvenkris\@gmail.com,".
+                                   "wfarah\@swin.edu.au";
+                    my $email_thread = threads->new(\&generateEmail, $to_email, $cc_email, $did_dump, \%c);
+                    $email_thread->detach();
+                  }
+                  else
+                  {
+                    Dada::logMsg(0, $dl, "FRB: IGNORE EVENT DM=".$c{"dm"}." WIDTH=".($c{"width"}*1000)."ms ".
+                                         "SNR=".$c{"snr"}." BEAM=".$c{"beam"}." PROB=".$c{"probability"});
+                  }
                 }
               }
               else
@@ -872,7 +985,7 @@ sub generateEmail ($$$\%)
     $subject = $h{"cand_prefix"};
     $name = $h{"cand_name"};
     $to_email = "wfarah\@swin.edu.au";
-    $cc_email = "cflynn\@swin.edu.au,bateman.tim\@gmail.com,stefanoslowski\@swin.edu.au,vivekvenkris\@gmail.com";
+    $cc_email = "cflynn\@swin.edu.au,bateman.tim\@gmail.com,stefanoslowski\@swin.edu.au,vivekvenkris\@gmail.com,vivekgupta\@swin.edu.au";
   }
 
   # try and determine the RA/DEC of the boresight beam
@@ -1156,6 +1269,12 @@ sub good($) {
 
   return ("ok", "");
 }
+
+# 
+# Check if furby coincides with FRB trigger
+# 
+sub furby_check($) {
+  }
 
 
 END { }

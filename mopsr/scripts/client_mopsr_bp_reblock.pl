@@ -114,8 +114,8 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
   $src_log_file = $cfg{"CLIENT_LOG_DIR"}."/".$daemon_name."_".$proc_id.".src.log";
   my $pid_file =  $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$proc_id.".pid";
 
-  # this is data stream we will be reading from
-  $in_db_key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $proc_id, $cfg{"NUM_BP"}, $cfg{"RECEIVING_DATA_BLOCK"});
+  # this is data stream we will be reading from [AJ this was receiving]
+  $in_db_key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $proc_id, $cfg{"NUM_BP"}, $cfg{"INJECTED_DATA_BLOCK"});
   $out_db_key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $proc_id, $cfg{"NUM_BP"}, $cfg{"HEIMDALL_DATA_BLOCK"});
 
   # Autoflush STDOUT
@@ -178,7 +178,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
       else
       {
         my $reblock_factor = $cfg{"HEIMDALL_REBLOCK_FACTOR"};
-        $proc_cmd = "mopsr_dbreblockdb ".$in_db_key." ".$out_db_key." -z -s -r ".$reblock_factor;
+        $proc_cmd = "mopsr_dbreblockdb ".$in_db_key." ".$out_db_key." -z -b -s -r ".$reblock_factor;
       }
 
       my ($binary, $junk) = split(/ /,$proc_cmd, 2);

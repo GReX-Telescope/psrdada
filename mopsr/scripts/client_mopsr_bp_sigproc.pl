@@ -114,7 +114,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
   my $pid_file =  $cfg{"CLIENT_CONTROL_DIR"}."/".$daemon_name."_".$proc_id.".pid";
 
   # this is data stream we will be reading from
-  $db_key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $proc_id, $cfg{"NUM_BP"}, $cfg{"PROCESSING_DATA_BLOCK"});
+  $db_key = Dada::getDBKey($cfg{"DATA_BLOCK_PREFIX"}, $proc_id, $cfg{"NUM_BP"}, $cfg{"INJECTED_DATA_BLOCK"});
 
   # Autoflush STDOUT
   $| = 1;

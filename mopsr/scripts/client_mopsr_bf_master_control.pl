@@ -170,6 +170,7 @@ sub setupClientType()
 
             if ($id eq $cfg{"SENDING_DATA_BLOCK"})
             {
+              $nbit = 32;
               $nant = 1;
               $ndim = 1;
               $nbeam = $bp_ct{"NBEAM"};

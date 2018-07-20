@@ -429,6 +429,7 @@ class tmc_simulator extends mopsr_webpage
           <select name="<?echo $prefix?>_processing_file">
             <option value="mopsr.dspsr.cpu">mopsr.dspsr.cpu</option>
             <option value="mopsr.dspsr.cpu.5s">mopsr.dspsr.cpu.5s</option>
+            <option value="mopsr.dspsr.cpu.single">mopsr.dspsr.cpu.single</option>
 <?          if ($this->hires) { ?>
             <!--<option value="mopsr.dspsr.cpu.cdd.hires">mopsr.dspsr.cpu.cdd.hires</option>-->
 <?          } else { ?>
@@ -514,6 +515,31 @@ class tmc_simulator extends mopsr_webpage
       </tr>
     </table>
 
+    <table border=0 cellpadding=5 cellspacing=0>
+      <tr>      
+        <td width='150px'><b>FRB Injection</b></br><font size="-1">comma delim, no whitespace</font></td>
+
+        <td class='key'>NUMBER</td>
+        <td class='val'>
+          <select name="num_furbies">
+<?
+            for ($i=0; $i<=5; $i++)
+              echo "<option value='".$i."'>".$i."</option>\n";
+?>
+          </select> 
+
+        <td class='key'>IDs</td>
+        <td class='val'><input type="text" name="furby_ids" id="furby_ids" value="0309" size="24"></input></td>
+
+        <td class='key'>BEAMs</td>
+        <td class='val'><input type="text" name="furby_beams" id="furby_beams" value="177" size="24"></input></td>
+
+        <td class='key'>TIMESTAMP</td>
+        <td class='val'><input type="text" name="furby_tstamps" id="furby_tstamps" size="32" value="60"></td>
+
+      </tr>
+
+    </table>
 
     <h3>Controls</h3>
     <table border=0 cellpadding=5 cellspacing=0 width='100%'>
@@ -527,9 +553,7 @@ class tmc_simulator extends mopsr_webpage
             <a href="javascript:queryButton()"  class="btn" > <span>Query</span> </a>
           </div>
         </td>
-        <td colspan=4 style='text-align: right;'>
-          <font size="-1">* has no effect on MOPSR, for future use</font>
-        </td>
+      </tr>
     </table>
     <input type="hidden" id="command" name="command" value="">
     </form>
@@ -655,6 +679,17 @@ class tmc_simulator extends mopsr_webpage
         $xml .=   "<project_id>".$get["mod_beams_project_id"]."</project_id>";
         $xml .= "</mod_beams_parameters>";
       }
+
+      $xml .= "<furbies>";
+      $xml .=   "<num_furbies>".$get["num_furbies"]."</num_furbies>";
+      if ($get["num_furbies"] > 0)
+      {
+        $xml .=   "<furby_ids>".$get["furby_ids"]."</furby_ids>";
+        $xml .=   "<furby_beams>".$get["furby_beams"]."</furby_beams>";
+        $xml .=   "<furby_tstamps>".$get["furby_tstamps"]."</furby_tstamps>";
+      }
+      $xml .= "</furbies>";
+
     }
     else if ($get["command"] == "start")
     {
