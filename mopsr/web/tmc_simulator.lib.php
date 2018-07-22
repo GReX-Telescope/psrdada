@@ -103,7 +103,7 @@ class tmc_simulator extends mopsr_webpage
     $fptr = @fopen("sources.list","r");
     if (!$fptr)
     {
-      echo "Could not open file: pulsars.list for reading<BR>\n";
+      echo "Could not open file: sources.list for reading<BR>\n";
     }
     else
     {
@@ -173,12 +173,12 @@ class tmc_simulator extends mopsr_webpage
 
         for (j=0; j<=lim; j++)
         {
-          updateRADEC(j);
           i = document.getElementById(j+"_src_list").selectedIndex;
           psr = document.getElementById(j+"_src_list").options[i].value;
+          if (psr != "FRB_Transit")
+            updateRADEC(j);
           document.getElementById(j+"_source").value = psr;
         }
-
 
         document.tmc.submit();
       }
@@ -202,6 +202,13 @@ class tmc_simulator extends mopsr_webpage
       function updateRADEC(prefix) {
         var i = document.getElementById(prefix+"_src_list").selectedIndex;
         var psr = document.getElementById(prefix+"_src_list").options[i].value;
+        if (psr == "FRB_Transit") {
+          document.getElementById(prefix+"_ra").removeAttribute('readonly');
+          document.getElementById(prefix+"_dec").removeAttribute('readonly');
+        } else {
+          document.getElementById(prefix+"_ra").setAttribute("readonly", "readonly");
+          document.getElementById(prefix+"_dec").setAttribute("readonly", "readonly");
+        }
         var psr_ra = ras[psr];
         var psr_dec= decs[psr];
         document.getElementById(prefix+"_ra").value = psr_ra;
