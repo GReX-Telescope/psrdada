@@ -81,7 +81,7 @@ include_HEADERS += dada_cuda.h ipcio_cuda.h ipcbuf_cuda.h ipcutil_cuda.h
 
 bin_PROGRAMS += dada_dbgpu
 
-AM_CPPFLAGS = @CUDA_CFLAGS@ 
+AM_CPPFLAGS += @CUDA_CFLAGS@ 
 LDADD += @CUDA_LIBS@
 
 endif
@@ -98,7 +98,7 @@ libpsrdada_la_SOURCES += dada_ib.c dada_ib_datagram.c
 include_HEADERS += dada_ib.h dada_ib_datagram.h
 bin_PROGRAMS += dada_ibdb dada_dbib dada_udheader dada_dbud dada_udgen
 
-AM_CFLAGS = -I$(top_srcdir)/3rdparty
+AM_CPPFLAGS += -I$(top_srcdir)/3rdparty
 libpsrdada_la_LIBADD += @RDMACM_LIBS@
 LDADD += @RDMACM_LIBS@  $(top_builddir)/3rdparty/libtimers.la
 
