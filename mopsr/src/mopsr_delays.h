@@ -115,7 +115,7 @@ static inline float sinc(float x)
 void sinc_filter(complex16* series_in, complex16* series_out,
                  float * filter, int size, int ntaps, float delay);
 
-void sinc_filter_float (complex float * series_in, complex float * series_out,
+void sinc_filter_float (float _Complex * series_in, float _Complex * series_out,
                         float * filter, int size, int ntaps, float delay);
 
 mopsr_module_t * read_modules_file (const char* fname, int * nmod);

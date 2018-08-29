@@ -46,6 +46,8 @@ check_PROGRAMS = test_multilog test_ipcbuf loop_ipcio	\
 TESTS = test_uint64_t test_disk_array test_ipcio test_ascii_header
 
 LDADD = libpsrdada.la 
+AM_CFLAGS = 
+AM_CPPFLAGS = 
 
 EXTRA_DIST=ipcrme loopssh
 
@@ -114,7 +116,7 @@ if HAVE_PGPLOT
 
 bin_PROGRAMS += dada_corrplot
 
-AM_CFLAGS = @PGPLOT_CFLAGS@ @FFTW_CFLAGS@
+AM_CPPFLAGS += @PGPLOT_CFLAGS@ @FFTW_CFLAGS@
 LDADD += @PGPLOT_LIBS@ @FFTW_LIBS@
 
 endif
