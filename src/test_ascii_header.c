@@ -1,15 +1,17 @@
 #include "ascii_header.h"
+#include "dada_def.h"
 #include <stdio.h>
+#include <string.h>
 
 int main ()
 {
-  char header[DADA_DEFAULT_HEADER_SIZE] = 
-  "VERSION 4.5         # the header version\n"
+  char * header = (char *) malloc (DADA_DEFAULT_HEADER_SIZE);
+  strcpy (header, "VERSION 4.5         # the header version\n"
   "CALFREQ 1.234       # the modulation frequency of the diode\n"
   "DATA_0  0\n"
   "DATA_1  1\n"
   "DATA_10 10\n"
-  "FREQ    1400.5      # the radio frequency in MHz\n";
+  "FREQ    1400.5      # the radio frequency in MHz\n");
 
   double frequency = 0.0;
   float version = 0.0;
