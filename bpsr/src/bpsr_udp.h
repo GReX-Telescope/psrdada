@@ -21,6 +21,8 @@
 #define BPSR_IBOB_CLOCK         400        // MHz
 #define BPSR_IBOB_NCHANNELS     1024
 
+#define UINT64_C(c) c ## ULL
+
 /* Temp constants for the conversion function */
 # define LITTLE 0
 # define BIG 1
