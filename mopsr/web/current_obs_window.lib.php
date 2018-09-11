@@ -58,7 +58,12 @@ class current_obs extends mopsr_webpage
               if (values[0]) 
               {
                 if (document.getElementById(values[0])) {
-                  document.getElementById(values[0]).innerHTML = values[1];
+                  if (values[0] == "UTC_START") {
+                    var start = '<a target="_blank" href=result.lib.php?single=true&utc_start=';
+                    document.getElementById(values[0]).innerHTML = start + values[1] + ">" + values[1] + "</a>";
+                  }
+                  else
+                    document.getElementById(values[0]).innerHTML = values[1];
                 }
               }
             }

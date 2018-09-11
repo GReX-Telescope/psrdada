@@ -156,9 +156,12 @@ class asteria extends mopsr_webpage
     echo "</td><td>\n";
 
     if (file_exists("/data/mopsr/results/sky_scan/mo_fields_latest.png")) {
-      $this->openBlockHeader("Overview of last 24 h");
-      echo '<a href="/mopsr/results/sky_scan/mo_fields_latest.pdf"><img src="/mopsr/results/sky_scan/mo_fields_latest.png"></a>';
+      $this->openBlockHeader("Overview of last full day of observing");
+      echo '<a href="/mopsr/results/sky_scan/mo_fields_latest.pdf"><img title="red: failed or unknown TINT; green: PSR or FRB search; purple: search while waiting for source; blue: correlator" src="/mopsr/results/sky_scan/mo_fields_latest.png"></a>';
     }
+    echo '<br><a href=/mopsr/sky_plots.php?single=true>Historical on-sky plots</a><br>';
+
+    echo '<a><img src="/mopsr/results/sky_scan/efficiency.png"></a>';
 
     $this->openBlockHeader("Last 100 pulsars observed");
 
@@ -216,10 +219,12 @@ foreach ($results as $row)
   }
   //
   echo '<td width=300 align="center"><a href=/mopsr/results.lib.php?single=true&offset=0&length=20&inline_images=true&filter_type=SOURCE&filter_value=';
+  echo urlencode($pulsar).">".$pulsar."</a><br>";
+  echo "<a href=/mopsr/result.lib.php?single=true&utc_start=".$utc.">".$utc."</a><br>";
   if ($case === null)
-    echo urlencode($pulsar).">".$pulsar."</a><br><br>DM : ".round($dm, 2)."<br>period : ".round($period,2 )." ms <br>\n";
+    echo "DM : ".round($dm, 2)."<br>period : ".round($period,2 )." ms <br>\n";
   else
-    echo urlencode($pulsar).">".$pulsar."</a><br>".$case."<br>DM : ".round($dm, 2)."<br>period : ".round($period,2 )." ms <br>\n";
+    echo $case."<br>DM : ".round($dm, 2)."<br>period : ".round($period,2 )." ms <br>\n";
   echo '<a href='.$fl_hr[0].'><img src='.$fl_lr[0].'></a>'."\n";
   echo '<br><a href="'.$fr_hr.'"><img src="'.$fr_lr.'"></a><br><a href="'.$ti_hr.'"><img src="'.$ti_lr.'"></a><br>'."\n";
   echo "SNR = ".round($snr, 2)."<br>t = ".round($tint_m, 2)." minutes<br>";
@@ -234,7 +239,7 @@ foreach ($results as $row)
     echo "<span class=".$is_best_class.">SNR(5min) = ".round($snr_5m, 2)."</span>\n";
     echo "<br>SNR(5min) best: ".round($max_snr, 2);
   }
-  echo "<br><a href=/mopsr/result.lib.php?single=true&utc_start=".$utc.">".$utc."</a></td>\n";
+  echo "</td>\n";
   if ($counter %5 == 0) {
     echo "</tr><tr><td>&nbsp;</td></tr>";
   }
