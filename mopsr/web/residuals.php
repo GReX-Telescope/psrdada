@@ -235,32 +235,6 @@ tr.alarm td {
 <script src="./js/jquery-3.3.1.min.js"></script>
 <script src="./js/jquery.tablesorter.min.js"></script>
 <script src="./js/jquery.tablesorter.widgets.js"></script>
-<script src="./js/jquery.floatThead.min.js"></script>
-<script>
-// add custom numbering widget
-/*$.tablesorter.addWidget({
-    id: "numbering",
-    format: function(table) {
-        var c = table.config;
-        $("tr:visible", table.tBodies[0]).each(function(i) {
-            $(this).find('td').eq(0).text(i + 1);
-        });
-    }
-  });*/
-
-$(document).ready(
-  function() {
-    var $table = $("#psrs");
-    $table.tablesorter({
-      headers: {
-        0: {sorter: false }
-      },
-      widgets: ['numbering']
-    });
-    $table.floatThead();
-})
-</script>
-
 <?
   }
 
@@ -286,14 +260,15 @@ $(document).ready(
       <tr>
         <td valign="top" width="200px">
 <?php
-    $this->openBlockHeader("Summary");
 
     include MYSQL_DB_CONFIG_FILE;
-
     $pdo = new PDO ('mysql:dbname='.MYSQL_DB.';host='.MYSQL_HOST, MYSQL_USER, MYSQL_PWD);
 
+    echo '<div class="sticky">';
+    $this->openBlockHeader("Summary");
     print_summary($pdo, get_class($this));
     $this->closeBlockHeader();
+    echo "</div>";
 
     echo "</td><td>\n";
 
