@@ -4,9 +4,8 @@ include_once("mopsr.lib.php");
 include_once("mopsr_webpage.lib.php");
 include_once("Asteria.lib.php");
 
-class asteria_bests extends mopsr_webpage 
+class residuals extends mopsr_webpage 
 {
-
   var $filter_types = array("", "SOURCE", "FREQ", "BW", "UTC_START", "PROC_FILE");
   var $cfg = array();
   var $length;
@@ -16,10 +15,11 @@ class asteria_bests extends mopsr_webpage
   var $filter_value;
   var $class = "new";
   var $results_dir;
+  var $old_results_dir;
   var $results_link;
   var $archive_dir;
 
-  function asteria()
+  function residuals()
   {
     mopsr_webpage::mopsr_webpage();
     $inst = new mopsr();
@@ -31,9 +31,10 @@ class asteria_bests extends mopsr_webpage
     $this->filter_type = (isset($_GET["filter_type"])) ? $_GET["filter_type"] : "";
     $this->filter_value = (isset($_GET["filter_value"])) ? $_GET["filter_value"] : "";
     $this->results_dir = $this->cfg["SERVER_RESULTS_DIR"];
+    $this->old_results_dir = $this->cfg["SERVER_OLD_RESULTS_DIR"];
     $this->archive_dir = $this->cfg["SERVER_ARCHIVE_DIR"];
     $this->results_link = "/mopsr/results";
-    $this->results_title = "Tied Array Beam Pulsar Gallery -- Recent Results";
+    $this->results_title = "Timing programme residuals";
     $this->class = (isset($_GET["class"])) ? $_GET["class"] : "new";
     if ($this->class == "old")
     {
@@ -47,22 +48,72 @@ class asteria_bests extends mopsr_webpage
   function printJavaScriptHead()
   {
 ?>
-    <style type="text/css">
-      .processing {
-        background-color: #FFFFFF;
-        padding-right: 10px;
-      }
-
-      .finished {
-        background-color: #cae2ff;
-      }
-
-      .transferred {
-        background-color: #caffe2;
-      }
-    </style>
-
     <script type='text/javascript'>
+
+    function vote(id, psr_id, voter_id, vote) {
+      img_id = "img_" + id + "_" + vote;
+      console.log("vote: img id:" + img_id);
+      console.log("psr_id: " + psr_id);
+      console.log("voter_id: " + voter_id);
+      console.log("vote: " + vote);
+      current_src = document.getElementById(img_id).src;
+      console.log("vote: " + psr_id + " " + voter_id + " " + vote);
+      var found = current_src.search("Green");
+      if (found == -1) {
+        var action = "insert";
+        console.log("img_"+id + "_" + vote);
+        document.getElementById("img_"+id + "_" + vote).src = current_src.replace(/.png/gi, "Green.png");
+        var other_vote = vote == 0 ? 1 : 0;
+        console.log("img_"+id + "_" + other_vote);
+        console.log(document.getElementById("img_"+id + "_" + other_vote).src);
+        document.getElementById("img_"+id + "_" + other_vote).src = document.getElementById("img_"+id + "_" + other_vote).src.replace(/Green.png/gi, ".png");
+        console.log(document.getElementById("img_"+id + "_" + other_vote).src);
+      } else {
+        var action = "cancel";
+        document.getElementById("img_"+id + "_" + vote).src = current_src.replace(/Green.png/gi, ".png");
+      }
+      $.ajax({
+        type: "POST",
+          url: "vote.lib.php",
+          data: {action:action, voter_id:voter_id, psr_id:psr_id, vote:vote},
+          dataType: "JSON",
+          success: function(data) { $("#message").html(data); },
+          error: function(err) {
+            alert(err);
+          }
+      });
+    }
+
+    function edit_science_case(id, psr_id) {
+      var scase_id = "science_case_"+id;
+      var scase_el = document.getElementById(scase_id);
+      var scase = scase_el.value;
+      $.ajax({
+        type: "POST",
+          url: 'vote.lib.php',
+          data: {action: "science", scase: scase, psr_id : psr_id}
+      });
+    }
+
+    function edit_cadence(id, psr_id) {
+      var cadence_id = "cadence_"+id;
+      var cadence = document.getElementById(cadence_id).value;
+      console.log("Got cadence ");
+      console.log(cadence);
+
+      $.ajax({
+        type: "POST",
+        url: 'vote.lib.php',
+        data: {action: "cadence", cadence: cadence, psr_id : psr_id}
+      });
+    }
+
+    function popWindow(URL) {
+      day = new Date();
+      id = day.getTime();
+      eval("page" + id + " = window.open(URL, '" + id + "', 'toolbar=1,"+
+           "scrollbars=1,location=1,statusbar=1,menubar=1,resizable=1,width=640,height=520');");
+    } 
 
       // If a page reload is required
       function changeLength() {
@@ -118,6 +169,98 @@ class asteria_bests extends mopsr_webpage
         }
       }
     </script>
+<style>
+th.tablesorter {
+  font: bold 11px "Trebuchet MS", Verdana, Arial, Helvetica,
+  sans-serif;
+  color: #0F4D0D;
+  border-right: 1px solid #C1DAD7;
+  border-bottom: 1px solid #C1DAD7;
+  border-top: 1px solid #C1DAD7;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  text-align: center;
+  padding: 6px 6px 6px 12px;
+  background: #99B090;
+  margin: 0px auto;
+}
+
+th.nobg {
+  border-top: 0;
+  border-left: 0;
+  border-right: 1px solid #C1DAD7;
+  background: none;
+}
+tr.even td {
+  border-right: 1px solid #C1DAD7;
+  border-bottom: 1px solid #C1DAD7;
+  padding: 6px 6px 6px 12px;
+  color: #0F4D0D;
+  background:white;
+  font-size: large;
+  }
+
+tr.odd td {
+  /* orig?:
+ *   background:#f7fbff*/
+  /* orig?:
+    *   background: #CAE8EA */
+    /* dark:
+      *   background: #A8C6C8 */
+    /* light:*/
+  border-right: 1px solid #C1DAD7;
+  border-bottom: 1px solid #C1DAD7;
+  padding: 6px 6px 6px 12px;
+  color: #0F4D0D;
+  background: #99B090;
+  font-size: large;
+}
+
+a:link, a:visited {
+  color: #0F4D0D;
+}
+
+tr.alarm td {
+  border-right: 1px solid #C1DAD7;
+  border-bottom: 1px solid #C1DAD7;
+  padding: 6px 6px 6px 12px;
+  color: #000000;
+  background: #90a2b0;
+  font-size: large;
+}
+.alarm a:link, .alarm a:visited {
+  color: #000000;
+}
+</style>
+<script src="./js/jquery-3.3.1.min.js"></script>
+<script src="./js/jquery.tablesorter.min.js"></script>
+<script src="./js/jquery.tablesorter.widgets.js"></script>
+<script src="./js/jquery.floatThead.min.js"></script>
+<script>
+// add custom numbering widget
+/*$.tablesorter.addWidget({
+    id: "numbering",
+    format: function(table) {
+        var c = table.config;
+        $("tr:visible", table.tBodies[0]).each(function(i) {
+            $(this).find('td').eq(0).text(i + 1);
+        });
+    }
+  });*/
+
+$(document).ready(
+  function() {
+    var $table = $("#psrs");
+    $table.tablesorter({
+      headers: {
+        0: {sorter: false }
+      },
+      widgets: ['numbering']
+    });
+    $table.floatThead();
+})
+</script>
+
 <?
   }
 
@@ -150,42 +293,191 @@ class asteria_bests extends mopsr_webpage
     $pdo = new PDO ('mysql:dbname='.MYSQL_DB.';host='.MYSQL_HOST, MYSQL_USER, MYSQL_PWD);
 
     print_summary($pdo, get_class($this));
-
     $this->closeBlockHeader();
 
     echo "</td><td>\n";
 
-    $this->openBlockHeader("Best S/N for all pulsars observed ");
-?>
+    $this->openBlockHeader("Timing Programme Pulsars");
 
-<p>
-<h3>Please choose SNR range</h3>
-
-<form action="" method="get">
-<input type="hidden" name="single" value="true"/>
-<select name="snr_cut" onchange="this.form.submit()">
-<option value="">SNR cut</option>
-<option value=">= 500">&#62;= 500</option>
-<option value=">= 100">&#62;= 100</option>
-<option value=">= 50">&#62;= 50</option>
-<option value=">= 10">&#62;= 10</option>
-<option value="< 10">&#60; 10</option>
-</select>
-</form>
-
-</p>
-
-
-<?php
 function rescale_snr_to5min($fSNR, $ftint_m) {
   return $fSNR * sqrt(5./$ftint_m);
 }
 
+$my_votes = array();
 
-if ($_GET['snr_cut'] ) {
 
-echo '<p><h2>Displaying data with SNR '.$_GET['snr_cut'].' in 5 minutes</h2><br></p>';
-$q = 'SELECT name, dm, period, max_snr_in5min, utc, snr, tint/60., science_case as tint FROM (Pulsars JOIN UTCs JOIN TB_Obs ON Pulsars.id = TB_Obs.psr_id AND UTCs.id = Pulsars.max_snr_obs_id AND TB_Obs.utc_id = UTCs.id) WHERE tint > 1.0 AND dm>0 AND max_snr_in5min '.$_GET['snr_cut'].' ORDER BY name ASC';
+  $q = 'SELECT psr_id, vote FROM Cadence_votes WHERE voter_id ='.$_GET['inspector_id'];
+  $stmt = $pdo->prepare($q);
+  $stmt->execute();
+  $results = $stmt->fetchall();
+  foreach ($results as $row) {
+    $my_votes[$row[0]] = $row[1];
+  }
+
+
+  $observe_clause = "";
+  $observe_clause_and = "WHERE";
+  if (($_GET['observe']) == 0) {
+    $observe_clause = "WHERE observe = 0";
+    $observe_clause_and = "WHERE observe = 0 AND";
+  } else if (($_GET['observe']) == 1) {
+    $observe_clause = "WHERE observe = 1";
+    $observe_clause_and = "WHERE observe = 1 AND";
+  }
+
+  $q = 'SELECT name FROM Pulsars '.$observe_clause.' ORDER BY name';
+  $stmt = $pdo -> query($q);
+  if (!$stmt) {
+    echo 'Failed to query:<br>'.$q;
+    exit(-1);
+  }
+  $psr500 = file("/home/dada/linux_64/share/Marcus.list", FILE_IGNORE_NEW_LINES);
+
+  $counter_7 = 0;
+  $counter_7_detected = 0;
+  $counter_30 = 0;
+  $counter_30_detected = 0;
+  $counter_superold = 0;
+  $counter_superold_detected = 0;
+  $counter_never_observed = 0;
+  $counter_never_detected = 0;
+?>
+<?
+  $timezone = new DateTimeZone('UTC');
+  $date_now = date_create("now", $timezone);
+
+  $utcs = array();
+  $utcs_detected = array();
+  $days = array();
+  $days_detected = array();
+  $detections_count_ever = array();
+  $observed_count_ever = array();
+  $observed_count_last_Ndays = array();
+  $observing = array();
+  $science_cases = array();
+  $psr_ids = array();
+  $periods = array();
+  $cadences = array();
+
+  $q = 'SELECT Pulsars.name, Pulsars.science_case, Pulsars.observe, Pulsars.id, MAX(UTCs.utc), Pulsars.period, Pulsars.desired_cadence FROM TB_Obs LEFT JOIN UTCs ON (TB_Obs.utc_id = UTCs.id) LEFT JOIN Pulsars ON TB_Obs.psr_id = Pulsars.id GROUP BY Pulsars.name';
+  $stmt = $pdo -> query($q);
+
+  if (!$stmt)
+  {
+    echo "Failed to query:<br>".$q;
+    exit(-1);
+  } 
+  $results = $stmt->fetchAll(PDO::FETCH_NUM);
+
+  try {
+    foreach ($results as $row) {
+      $date_last = DateTime::createFromFormat("Y-m-d-H:i:s", $row[4], $timezone);
+      if (gettype($date_last) == "object") {
+        $date_diff = $date_last->diff($date_now);
+        $date_diff_int = intval($date_diff->format("%a"));
+        if ( $date_diff_int <=7)
+          $counter_7++;
+        elseif ($date_diff_int <=30)
+          $counter_30++;
+        else
+          $counter_superold++;
+
+        $utcs[$row[0]] = $row[4];
+        $days[$row[0]] = $date_diff_int;
+      } else {
+        $counter_never_observed++;
+        $utcs[$row[0]] = "Never observed";
+        $days[$row[0]] = 10000;
+      }
+      $science_cases[$row[0]] = $row[1];
+      $observing[$row[0]] = $row[2];
+      $psr_ids[$row[0]] = $row[3];
+      $periods[$row[0]] = $row[5];
+      $cadences[$row[0]] = $row[6];
+    }
+  } catch (Exception $e){echo $e->getMessage();};
+  # print_r($utcs);
+
+  $q = 'SELECT Pulsars.name, max(UTCs.utc) from TB_Obs left join UTCs on (TB_Obs.utc_id = UTCs.id) left join Pulsars on TB_Obs.psr_id = Pulsars.id  '.$observe_clause_and.' TB_Obs.snr > 10 GROUP BY Pulsars.name';
+  $stmt = $pdo -> query($q);
+
+  if (!$stmt)
+  {
+    echo "Failed to query:<br>".$q;
+    exit(-1);
+  } 
+  $utcs_result = $stmt->fetchAll(PDO::FETCH_NUM);
+
+  try {
+    foreach($utcs_result as $utc) {
+      $date_last_detected = DateTime::createFromFormat("Y-m-d-H:i:s", $utc[1], $timezone);
+      if (gettype($date_last_detected) == "object") {
+        $date_diff = $date_last_detected->diff($date_now);
+        $date_diff_int = intval($date_diff->format("%a"));
+        if ( $date_diff_int <=7)
+          $counter_7_detected++;
+        elseif ($date_diff_int <=30)
+          $counter_30_detected++;
+        else
+          $counter_superold_detected++;
+
+        $utcs_detected[$utc[0]] = $utc[1];
+        $days_detected[$utc[0]] = $date_diff_int;
+      }
+      else {
+        $utcs_detected[$utc[0]] = "Never, inspect";
+        $days_detected[$utc[0]] = 10000;
+        $counter_never_detected++;
+      }
+    }
+  } catch (Exception $e){
+    echo $e->getMessage();
+  };
+
+  $q = 'SELECT Pulsars.name, count(*) from (TB_Obs JOIN Pulsars ON Pulsars.id=TB_Obs.psr_id) '.$observe_clause_and.' TB_Obs.snr > 10 GROUP BY Pulsars.name;';
+  $stmt = $pdo -> query($q);
+
+  if (!$stmt)
+  {
+    echo "Failed to query:<br>".$q;
+    exit(-1);
+  }
+  $results = $stmt->fetchAll(PDO::FETCH_NUM);
+
+  try {
+    foreach($results as $row) {
+      $detections_count_ever[$row[0]] = $row[1];
+    }
+  } catch (Exception $e){
+    echo $e->getMessage();
+  }
+
+  $q = 'SELECT Pulsars.name, count(*) from (TB_Obs JOIN Pulsars ON Pulsars.id=TB_Obs.psr_id) '.$observe_clause.' GROUP BY Pulsars.name;';
+  $stmt = $pdo -> query($q);
+
+  if (!$stmt)
+  {
+    echo "Failed to query:<br>".$q;
+    exit(-1);
+  } 
+  $results = $stmt->fetchAll(PDO::FETCH_NUM);
+
+  try {
+    foreach($results as $row) {
+      #array_push($observed_count_ever, $results[0][0]);
+      $observed_count_ever[$row[0]] = $row[1];
+    }
+  } catch (Exception $e){
+    echo $e->getMessage();
+  };
+
+  if ($_GET['days_for_table'] ) {
+    $days_for_table = $_GET['days_for_table'];
+  } else {
+    $days_for_table = 10;
+  }
+
+  $q = 'SELECT Pulsars.name, COUNT(*) from TB_Obs LEFT JOIN UTCs ON (TB_Obs.utc_id = UTCs.id) LEFT JOIN Pulsars ON TB_Obs.psr_id = Pulsars.id  '.$observe_clause.' AND TIMESTAMPDIFF(MINUTE, UTCs.utc_ts, UTC_TIMESTAMP()) < '.$days_for_table.'*24*60 AND TIMESTAMPDIFF(MINUTE, UTCs.utc_ts, UTC_TIMESTAMP()) > 0 GROUP BY Pulsars.name;';
 
   $stmt = $pdo -> query($q);
 
@@ -193,86 +485,91 @@ $q = 'SELECT name, dm, period, max_snr_in5min, utc, snr, tint/60., science_case 
   {
     echo "Failed to query:<br>".$q;
     exit(-1);
-  } else {
-    echo "<p><table>\n<tr>\n";
   }
+  $results = $stmt -> fetchAll(PDO::FETCH_NUM);
 
-  $results = $stmt->fetchAll(PDO::FETCH_NUM);
-  echo "<p><h3>Found ".count($results)." detection in the specified S/N range</p2></h3><br>\n";
-
-  $counter = 0;
-  $top_dir = "/data/mopsr/results/";
-  $alt_top_dir = "/data/mopsr/old_results/";
   try {
-    #while ($row = $stmt -> fetch())
-    foreach ($results as $row)
-    {
-      $counter = $counter + 1;
-      $pulsar = $row[0];
-      $dm = $row[1];
-      $period = $row[2]*1000;
-      $max_snr = $row[3];
-      $utc = $row[4];
-      $snr = $row[5];
-      $tint_m = $row[6];
-      $case = $row[7];
-
-      $class = "&class=new";
-      $_result_dir = glob($top_dir.$utc);
-      if (empty($_result_dir)) {
-        $class = "&class=old";
-      }
-
-      $plot_types = array("fl", "fr", "ti");
-      $resolutions = array("hr"=>"1024x768", "lr"=>"120x90");
-
-      foreach ($plot_types as $type) {
-        foreach ($resolutions as $resolution_name => $resolution ) {
-          $cur = $type."_".$resolution_name;
-          $$cur = str_replace("/data", "", glob($top_dir.$utc."/20*".$pulsar.".".$type.".".$resolution.".png"));
-          if (${$cur}[0] == "") {
-            $$cur = str_replace("/data", "", glob($alt_top_dir.$utc."/20*".$pulsar.".".$type.".".$resolution.".png"));
-          }
-          if (${$cur}[0] == "") {
-            $$cur = str_replace("/data", "", glob($alt_top_dir.$utc."/20*TB.".$type.".".$resolution.".png"));
-          }
-        }
-      }
-      
-      echo "<td width=300><a href=/mopsr/results.lib.php?single=true&offset=0&length=20&inline_images=true&filter_type=SOURCE&filter_value=";
-      if ($case === null)
-        echo urlencode($pulsar).">".$pulsar."</a><br>DM : ".round($dm, 2)."<br>period : ".round($period,2 )." ms <br>\n";
-      else
-        echo urlencode($pulsar).">".$pulsar."</a><br>".$case."<br>DM : ".round($dm, 2)."<br>period : ".round($period,2 )." ms <br>\n";
-      foreach ($plot_types as $type) {
-        $hr= $type . "_hr";
-        $lr= $type . "_lr";
-        echo '<a href="'.${$hr}[0].'"><img src="'.${$lr}[0].'" width="120" height="90"></a><br>'."\n";
-      }
-      echo "SNR = ".round($snr, 2)."<br>t = ".round($tint_m, 2)." minutes<br>SNR(5min) = ".round(rescale_snr_to5min($snr, $tint_m), 2)."\n";
-      echo "<br><a href=/mopsr/result.lib.php?single=true".$class."&utc_start=".$utc.">".$utc."</a></td>\n";
-      if ($counter %5 == 0) {
-        echo "</tr><tr><td>&nbsp;</td></tr>";
-      }
+    foreach($results as $row) {
+      $observed_count_last_Ndays[$row[0]] = $row[1];
     }
-  } catch (Exception $e){echo $e->getMessage();}
-
-} else {
-  # generate an empty table for nicer formatting of the page:
-  echo "<p><table>\n<tr>\n";
-  for ($i=0; $i<60; $i++) {
-    echo "<td width=300>&nbsp;</td></tr>";
-    if ($i %5 == 0) {
-      echo "</tr><tr><td>&nbsp;</td></tr>";
-    }
+  } catch (Exception $e) {
+    echo $e->getMessage();
   }
-}
+
+  $number_of_psrs = count($psr500);
+//  echo '<h3>Number of unique pulsars detected (observed) within last 7 days: '.$counter_7_detected.' ('.$counter_7.')</h3>';
+//  echo '<h3>Number of unique pulsars detected (observed) between last 7 and 30 days: '.$counter_30_detected.' ('.$counter_30.')</h3>';
+//  echo '<h3>Number of unique pulsars not observed in the last month: '.$counter_superold.'</h3>';
+//  echo '<h3>Number of unique pulsars observed but not detected in the last month: '.$counter_superold_detected.'</h3>';
+//  $counter_never_detected = $number_of_psrs - $counter_7_detected - $counter_30_detected - $counter_superold_detected;
+//  echo '<h3>Number of unique pulsars never detected: '.$counter_never_detected.'</h3>';
+//  $counter_never_observed = $number_of_psrs - $counter_7 - $counter_30 - $counter_superold;
+//  echo '<h3>Number of unique pulsars never observed: '.$counter_never_observed.'</h3>';
+//  echo '<h4>All numbers are relative to '.$number_of_psrs.' from a curated list.</h4>';
+//  echo "Note that currently detections (SN>10) are based on S/N without much RFI cleaning<br>";
+//  echo '<b>Everything with <span style="background: #90a2b0">blue-ish</span> background below is 10 days since observation or more</b>';
 ?>
 
+<table id="psrs" class="tablesorter">
+<thead>
+<tr>
+<th class="tablesorter" style="width:18%">Residuals</th>
+<th class="tablesorter" style="width:18%">Residuals</th>
+<th class="tablesorter" style="width:18%">Residuals</th>
+</tr>
+</thead>
+<tbody>
 <?
+
+  $counter = 0;
+  foreach ($psr500 as $psr) {
+    //print "BAR ".$psr."<br>";
+    $voted_on_this = array_key_exists($psr_ids[$psr], $my_votes);
+    if (($_GET['voted'] == 0 && $voted_on_this) || ($_GET['voted'] == 1 && !$voted_on_this) || ($_GET['voted'] == 1 && $_GET['voted_filter'] == 1 && $my_votes[$psr_ids[$psr]] == 0)  || ($_GET['voted'] == 1 && $_GET['voted_filter'] == 0 && $my_votes[$psr_ids[$psr]] == 1 )) {
+      continue;
+    }
+    try {
+      if ($counter>0 && $counter%3 == 0)
+        echo '<tr>';
+      # Residuals
+      $tc = "";
+      $tc_big = "";
+      $results_link = "";
+      if (file_exists($this->results_dir."/".$utcs[$psr])) {
+        $tc = glob($this->results_dir."/".$utcs[$psr]."/2*".$psr.".tc.120x90.png");
+        $tc_big = glob($this->results_dir."/".$utcs[$psr]."/2*".$psr.".tc.1024x768.png");
+        $results_link = "/mopsr/result.lib.php?single=true&utc_start=".$utcs[$psr]."&class=new";
+      } else {
+        $tc = glob($this->old_results_dir."/".$utcs[$psr]."/2*".$psr.".tc.120x90.png");
+        $tc_big = glob($this->old_results_dir."/".$utcs[$psr]."/2*".$psr.".tc.1024x768.png");
+        $results_link = "/mopsr/result.lib.php?single=true&utc_start=".$utcs[$psr]."&class=old";
+      }
+      $tc_big = str_replace("/data/mopsr/", "", $tc_big);
+      $tc_big = $tc_big[count($tc_big) - 1];
+      $tc = str_replace("/data/mopsr/", "", $tc);
+      $tc = $tc[count($tc)-1];
+      # echo '<td style="width:18%"><a href="'.$tc_big.'"><img src="'.$tc.'" alt="Not found" width="100%"></a></td>';
+      echo '<td><a href="'.$results_link.'"><img src="'.$tc.'" alt="Not found" width="100%"></a></td>';
+
+      # Vote
+      # if (array_key_exists($psr_ids[$psr], $my_votes));
+      if ($cadences[$psr] === NULL) {
+        $cadence = -1;
+      } else {
+        $cadence = $cadences[$psr];
+      }
+      echo '<input type="hidden" name="single" value="true"></form></td>';
+      # echo '<input type="hidden" name="single" value="true"><button type="button" ';
+      # echo ' onclick="edit_cadence(\''.$counter.'\', \''.$psr_ids[$psr].'\')">Submit</button></form></td>'; echo '</tr>';
+    } catch (Exception $e){echo $e->getMessage();};
+    $counter = $counter + 1;
+    if ($counter>0 && $counter%3 == 0)
+      echo '</tr>';
+  }
+  
     $this->closeBlockHeader();
 
-    echo "</td></tr></table>\n";
+    echo "</tbody></table>\n";
   }
 
   function tippedimage($i, $url, $image, $color, $text)
@@ -337,6 +634,16 @@ $q = 'SELECT name, dm, period, max_snr_in5min, utc, snr, tint/60., science_case 
 
     header('Content-type: text/xml');
     echo $xml;
+  }
+
+  function handleRequest()
+  {
+    if ($_GET["update"] == "true") {
+      $this->printUpdateHTML($_GET);
+    } else {
+      $this->printHTML($_GET);
+    }
+
   }
 
   function getResultsArray($results_dir, $offset=0, $length=0, $filter_type, $filter_value) 
@@ -637,4 +944,4 @@ $q = 'SELECT name, dm, period, max_snr_in5min, utc, snr, tint/60., science_case 
   }
 
 }
-handledirect("asteria_bests");
+handledirect("residuals");

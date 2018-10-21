@@ -248,7 +248,7 @@ $(document).ready(
     include MYSQL_DB_CONFIG_FILE;
     $pdo = new PDO ('mysql:dbname='.MYSQL_DB.';host='.MYSQL_HOST, MYSQL_USER, MYSQL_PWD);
 
-    print_summary($pdo);
+    print_summary($pdo, get_class($this));
 
     $pdo = null;
     $this->closeBlockHeader();
