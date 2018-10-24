@@ -137,6 +137,8 @@ AC_CONFIG_FILES([Makefile
     caspsr/config/Makefile
     caspsr/config/caspsr.cfg
     caspsr/web/Makefile
+    comap/Makefile
+    comap/src/Makefile
     examples/Makefile
     examples/src/Makefile
     gmrt/Makefile
