@@ -18,6 +18,7 @@ class residuals extends mopsr_webpage
   var $old_results_dir;
   var $results_link;
   var $archive_dir;
+  var $resid_type;
 
   function residuals()
   {
@@ -43,6 +44,7 @@ class residuals extends mopsr_webpage
       $this->results_link = "/mopsr/old_results";
       $this->results_title = "Archived Results";
     }
+    $this->resid_type = (isset($_GET["type"])) ? $_GET["type"] : "tc";
   }
 
   function printJavaScriptHead()
@@ -306,7 +308,13 @@ $my_votes = array();
     echo 'Failed to query:<br>'.$q;
     exit(-1);
   }
-  $psr500 = file("/home/dada/linux_64/share/Marcus.list", FILE_IGNORE_NEW_LINES);
+  $q = 'SELECT name FROM Pulsars WHERE observe=1 ORDER BY name';
+  $stmt = $pdo -> query($q);
+  if (!$stmt) {
+    echo 'Failed to query:<br>'.$q;
+    exit(-1);
+  }
+  $psr500 = $stmt->fetchAll(PDO::FETCH_COLUMN, 0);
 
   $counter_7 = 0;
   $counter_7_detected = 0;
@@ -511,12 +519,12 @@ $my_votes = array();
       $tc_big = "";
       $results_link = "";
       if (file_exists($this->results_dir."/".$utcs[$psr])) {
-        $tc = glob($this->results_dir."/".$utcs[$psr]."/2*".$psr.".tc.120x90.png");
-        $tc_big = glob($this->results_dir."/".$utcs[$psr]."/2*".$psr.".tc.1024x768.png");
+        $tc = glob($this->results_dir."/".$utcs[$psr]."/2*".$psr.".".$this->resid_type.".120x90.png");
+        $tc_big = glob($this->results_dir."/".$utcs[$psr]."/2*".$psr.".".$this->resid_type.".1024x768.png");
         $results_link = "/mopsr/result.lib.php?single=true&utc_start=".$utcs[$psr]."&class=new";
       } else {
-        $tc = glob($this->old_results_dir."/".$utcs[$psr]."/2*".$psr.".tc.120x90.png");
-        $tc_big = glob($this->old_results_dir."/".$utcs[$psr]."/2*".$psr.".tc.1024x768.png");
+        $tc = glob($this->old_results_dir."/".$utcs[$psr]."/2*".$psr.".".$this->resid_type.".120x90.png");
+        $tc_big = glob($this->old_results_dir."/".$utcs[$psr]."/2*".$psr.".".$this->resid_type.".1024x768.png");
         $results_link = "/mopsr/result.lib.php?single=true&utc_start=".$utcs[$psr]."&class=old";
       }
       $tc_big = str_replace("/data/mopsr/", "", $tc_big);
