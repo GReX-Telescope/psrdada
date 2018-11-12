@@ -521,11 +521,11 @@ $my_votes = array();
       if (file_exists($this->results_dir."/".$utcs[$psr])) {
         $tc = glob($this->results_dir."/".$utcs[$psr]."/2*".$psr.".".$this->resid_type.".120x90.png");
         $tc_big = glob($this->results_dir."/".$utcs[$psr]."/2*".$psr.".".$this->resid_type.".1024x768.png");
-        $results_link = "/mopsr/result.lib.php?single=true&utc_start=".$utcs[$psr]."&class=new";
+        $results_link = "/mopsr/result.lib.php?single=true&class=new&utc_start=".$utcs[$psr];
       } else {
         $tc = glob($this->old_results_dir."/".$utcs[$psr]."/2*".$psr.".".$this->resid_type.".120x90.png");
         $tc_big = glob($this->old_results_dir."/".$utcs[$psr]."/2*".$psr.".".$this->resid_type.".1024x768.png");
-        $results_link = "/mopsr/result.lib.php?single=true&utc_start=".$utcs[$psr]."&class=old";
+        $results_link = "/mopsr/result.lib.php?single=true&class=old&utc_start=".$utcs[$psr];
       }
       $tc_big = str_replace("/data/mopsr/", "", $tc_big);
       $tc_big = $tc_big[count($tc_big) - 1];
