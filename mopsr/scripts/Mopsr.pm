@@ -216,9 +216,13 @@ sub makePlotsFromArchives($$$$$$$\%)
   my @template = glob($template_pattern);
   my $ephem_pattern = $timing_repo_topdir."ephemerides/".$source."/good.par";
   my @ephem = glob($ephem_pattern);
+  my $select = "-select /home/observer/Timing/snr_thresh.select";
+  if (-r "/home/observer/Timing/ephemerides/".$source."/clean.select") {
+    $select = "-select /home/observer/Timing/ephemerides/".$source."/clean.select";
+  }
   if (@template and @ephem) {
     if ( ! ( -f $sdir."/previous.tim" ) ) {
-      $cmd = "pat -j FT -s ".$template[0]." -A FDM -f tempo2 /home/observer/Timing/profiles/".$source."/*FT > ".$sdir."/previous.tim";
+      $cmd = "pat -j FT -s ".$template[0]." -C snr -C gof -A FDM -f tempo2 /home/observer/Timing/profiles/".$source."/*FT > ".$sdir."/previous.tim";
       Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
       ($result, $response) = Dada::myShellStdout($cmd);
       Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
@@ -230,6 +234,7 @@ sub makePlotsFromArchives($$$$$$$\%)
     Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
     if ($result eq "ok") {
       # add the current ToA, mark as last, filter 0 uncertainty
+      # don't use snr/gof flags to prevent filtering the current ToA
       $cmd = "pat -j FT -s ".$template[0]." -A FDM -f tempo2 ".$total_t_res." | grep -v ^FORMAT | sed 's/\$/-last yes/' >> ".$sdir."/temp_all.tim";
       Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$cmd);
       ($result, $response) = Dada::myShellStdout($cmd);
@@ -239,14 +244,23 @@ sub makePlotsFromArchives($$$$$$$\%)
       ($result, $response) = Dada::myShellStdout($cmd);
       Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
 
+      $cmd = "tempo2 -set FINISH 99999 -f ".$ephem[0]." ".$sdir."/temp.tim -nofit ".$select." -writeTim";
+      Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$cmd);
+      ($result, $response) = Dada::myShellStdout($cmd);
+      Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+      $cmd = "mv out.tim ".$sdir."/out.tim";
+      Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$cmd);
+      ($result, $response) = Dada::myShellStdout($cmd);
+      Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
+
       Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
       if ($result eq "ok") {
-        $cmd = "tempo2 -gr plk -set FINISH 99999 -setup ".$ENV{"TEMPO2"}."/plugin_data/plk_setup_image_molo.dat -f ".$ephem[0]." ".$sdir."/temp.tim -nofit -xplot 10 -showchisq -grdev ".$dir."/".$ta."/png";
+        $cmd = "tempo2 -gr plk -set FINISH 99999 -setup ".$ENV{"TEMPO2"}."/plugin_data/plk_setup_image_molo.dat -f ".$ephem[0]." ".$sdir."/out.tim -nofit -xplot 10 -showchisq -grdev ".$dir."/".$ta."/png";
         Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
         ($result, $response) = Dada::mySystem($cmd);
         Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
 
-        $cmd = "remove-outliers2 -c ".$sdir."/outlier_sweep1 -s 0.3 -m smooth -p ".$ephem[0]." -t ".$sdir."/temp.tim > ".$sdir."/temp.clean_smooth.tim";
+        $cmd = "remove-outliers3 -c ".$sdir."/outlier_sweep1 -s 0.3 -m smooth -p ".$ephem[0]." -t ".$sdir."/out.tim > ".$sdir."/temp.clean_smooth.tim";
         Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
         ($result, $response) = Dada::mySystem($cmd);
         Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
@@ -262,7 +276,7 @@ sub makePlotsFromArchives($$$$$$$\%)
           Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
         }
 
-        $cmd = "remove-outliers2 -c ".$sdir."/outlier_sweep2 -m mad -p ".$ephem[0]." -t ".$sdir."/temp.clean_smooth.tim > ".$sdir."/temp.clean.tim";
+        $cmd = "remove-outliers3 -c ".$sdir."/outlier_sweep2 -m mad -p ".$ephem[0]." -t ".$sdir."/temp.clean_smooth.tim > ".$sdir."/temp.clean.tim";
         Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
         ($result, $response) = Dada::mySystem($cmd);
         Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
