@@ -283,6 +283,7 @@ src/dada_pwc_demo
 src/dada_udgen
 src/dada_udheader
 src/dada_write_test
+src/dada_write_block_test
 src/dada_zerodb
 src/daemon_test
 src/dspsr_start_time

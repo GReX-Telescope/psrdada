@@ -27,7 +27,7 @@ include_HEADERS = ascii_header.h multilog.h sock.h monitor.h	  \
 	dada_pwc_main.h dada_pwc_main_multi.h dada_client.h udp.h \
 	dada_udp.h dada_generator.h dada_affinity.h dada_msg.h
 
-bin_PROGRAMS = dada_db dada_write_test dada_dbdisk dada_diskdb	 \
+bin_PROGRAMS = dada_db dada_write_test dada_write_block_test dada_dbdisk dada_diskdb	 \
 	dada_dbnic dada_nicdb dada_dbNdb			 \
 	dada_install_header dada_pwc_command dada_pwc_demo	 \
 	dada_dbnull dada_dbmonitor dada_dbxferinfo dada_dbmetric \
