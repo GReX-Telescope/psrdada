@@ -6,6 +6,8 @@
 #include <string.h>
 #include <assert.h>
 
+// #define _DEBUG
+
 /*! Create a new DADA Header plus Data Unit */
 dada_hdu_t* dada_hdu_create (multilog_t* log)
 {
@@ -63,6 +65,9 @@ int dada_hdu_connect (dada_hdu_t* hdu)
   *(hdu->data_block) = ipcio_init;
 
   /* connect to the shared memory */
+#ifdef _DEBUG
+  fprintf (stderr, "dada_hdu_connect: ipcbuf_connect (header_block, %x)\n", hdu->header_block_key);
+#endif
   if (ipcbuf_connect (hdu->header_block, hdu->header_block_key) < 0)
   {
     multilog (hdu->log, LOG_ERR, "Failed to connect to Header Block\n");
@@ -73,6 +78,9 @@ int dada_hdu_connect (dada_hdu_t* hdu)
     return -1;
   }
 
+#ifdef _DEBUG
+  fprintf (stderr, "dada_hdu_connect: ipcio_connect (data_block, %x)\n", hdu->data_block_key);
+#endif
   if (ipcio_connect (hdu->data_block, hdu->data_block_key) < 0)
   {
     multilog (hdu->log, LOG_ERR, "Failed to connect to Data Block\n");
@@ -120,6 +128,9 @@ int dada_hdu_disconnect (dada_hdu_t* hdu)
 /*! Lock DADA Header plus Data Unit designated reader */
 int dada_hdu_lock_read (dada_hdu_t* hdu)
 {
+#ifdef _DEBUG
+  fprintf (stderr, "dada_hdu_lock_read\n");
+#endif
   assert (hdu != 0);
 
   if (!hdu->data_block) {
@@ -127,11 +138,17 @@ int dada_hdu_lock_read (dada_hdu_t* hdu)
     return -1;
   }
 
+#ifdef _DEBUG
+  fprintf (stderr, "dada_hdu_lock_read: ipcbuf_lock_read(hdu->header_block)\n");
+#endif
   if (ipcbuf_lock_read (hdu->header_block) < 0) {
     multilog (hdu->log, LOG_ERR, "Could not lock Header Block for reading\n");
     return -1;
   }
 
+#ifdef _DEBUG
+  fprintf (stderr, "dada_hdu_lock_read: ipcio_open(hdu->data_block)\n");
+#endif
   if (ipcio_open (hdu->data_block, 'R') < 0) {
     multilog (hdu->log, LOG_ERR, "Could not lock Data Block for reading\n");
     return -1;
@@ -196,10 +213,13 @@ int dada_hdu_lock_write (dada_hdu_t* hdu)
 /*! Lock DADA Header plus Data Unit designated writer with specified mode */
 int dada_hdu_lock_write_spec (dada_hdu_t* hdu, char writemode)
 {
+#ifdef _DEBUG
+  fprintf (stderr, "dada_hdu_lock_write_spec()\n");
+#endif
   assert (hdu != 0);
 
   if (!hdu->data_block) {
-    fprintf (stderr, "dada_hdu_disconnect: not connected\n");
+    fprintf (stderr, "dada_hdu_lock_write_spec: not connected\n");
     return -1;
   }
 
@@ -208,6 +228,9 @@ int dada_hdu_lock_write_spec (dada_hdu_t* hdu, char writemode)
     return -1;
   }
 
+#ifdef _DEBUG
+  fprintf (stderr, "dada_hdu_lock_write_spec: ipcio_open()\n");
+#endif
   if (ipcio_open (hdu->data_block, writemode) < 0) {
     multilog (hdu->log, LOG_ERR, "Could not lock Data Block for writing\n");
     return -1;

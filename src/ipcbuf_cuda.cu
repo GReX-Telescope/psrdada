@@ -23,7 +23,7 @@ ssize_t ipcbuf_zero_next_block_cuda (ipcbuf_t* id, char * dev_ptr, size_t dev_by
   }
 
   // get the next buffer to be written
-  uint64_t next_buf = (sync->w_buf + 1) % sync->nbufs;
+  uint64_t next_buf = (sync->w_buf_next + 1) % sync->nbufs;
 
   char have_cleared = 0;
   unsigned iread;

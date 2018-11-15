@@ -244,7 +244,8 @@ int ipcbuf_create_work (ipcbuf_t* id, key_t key, uint64_t nbufs, uint64_t bufsz,
     id->shmkey[ibuf] = key;
   }
 
-  id->sync->w_buf = 0;
+  id->sync->w_buf_curr = 0;
+  id->sync->w_buf_next = 0;
   id->sync->w_xfer = 0;
   id->sync->w_state = IPCBUF_DISCON;
 
@@ -557,13 +558,12 @@ uint64_t ipcbuf_get_sod_minbuf (ipcbuf_t* id)
 
   /* Since we may have multiple transfers, the minimum sod will be relative
    * to the first buffer we clocked data onto */
-  uint64_t new_bufs_written = sync->w_buf - id->soclock_buf;
+  uint64_t new_bufs_written = sync->w_buf_next - id->soclock_buf;
 
   if (new_bufs_written < sync->nbufs) 
     return id->soclock_buf;
   else
-    return sync->w_buf - sync->nbufs + 1;
-    
+    return sync->w_buf_next - sync->nbufs + 1;
 }
 
   /* start buf should be the buffer to begin on, and should be aware 
@@ -577,7 +577,7 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
   uint64_t bufnum = 0;
   int iread = 0;
 
-  /* must be the designated writer */
+  /* must be the designated writer, but not writing */
   if (id->state != IPCBUF_WRITER && id->state != IPCBUF_WCHANGE)
   {
     fprintf (stderr, "ipcbuf_enable_sod: not writer state=%d\n", id->state);
@@ -585,16 +585,18 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
   }
 
 #ifdef _DEBUG
-  fprintf (stderr, "ipcbuf_enable_sod: start buf=%"PRIu64" w_buf=%"PRIu64"\n",
-                   start_buf, sync->w_buf);
+  fprintf (stderr, "ipcbuf_enable_sod: start buf=%"PRIu64" "
+                   "w_buf_curr=%"PRIu64" w_buf_next=%"PRIu64"\n",
+                   start_buf, sync->w_buf_curr, sync->w_buf_next);
 #endif
 
-  /* start_buf must be less than or equal to the number of buffers written */
-  if (start_buf > sync->w_buf)
+  /* start_buf must be less than or equal to the number of buffers 
+   * written, or partially written */
+  if (start_buf > sync->w_buf_next)
   {
     fprintf (stderr,
-       "ipcbuf_enable_sod: start_buf=%"PRIu64" > w_buf=%"PRIu64"\n",
-       start_buf, sync->w_buf);
+       "ipcbuf_enable_sod: start_buf=%"PRIu64" > w_buf_next=%"PRIu64"\n",
+       start_buf, sync->w_buf_next);
     return -1;
   }
 
@@ -637,7 +639,7 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
 
   /* changed by AJ to fix a bug where a reader is still reading this xfer
    * and the writer wants to start writing to it... */
-  if (sync->w_buf == 0) 
+  if (sync->w_buf_curr == 0) 
     sync->eod [id->xfer] = 0;
 
 #ifdef _DEBUG
@@ -647,20 +649,22 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
 #endif
 
 #ifdef _DEBUG
-  fprintf (stderr, "ipcbuf_enable_sod: w_buf=%"PRIu64"\n", sync->w_buf);
+  fprintf (stderr, "ipcbuf_enable_sod: w_buf_curr=%"PRIu64" w_buf_next=%"
+                   PRIu64"\n", sync->w_buf_curr, sync->w_buf_next);
 #endif
 
-  for (new_bufs = sync->s_buf[id->xfer]; new_bufs < sync->w_buf; new_bufs++)
+  /* increment the count for all buffers that have been written already */
+  for (new_bufs = sync->s_buf[id->xfer]; new_bufs < sync->w_buf_curr; new_bufs++)
   {
     bufnum = new_bufs % sync->nbufs;
     id->count[bufnum] ++;
 #ifdef _DEBUG
     fprintf (stderr, "ipcbuf_enable_sod: count[%"PRIu64"]=%u\n",
-                      bufnum, id->count[bufnum]);
+        bufnum, id->count[bufnum]);
 #endif
   }
 
-  new_bufs = sync->w_buf - sync->s_buf[id->xfer];
+  new_bufs = sync->w_buf_curr - sync->s_buf[id->xfer];
 
 #ifdef _DEBUG
   fprintf (stderr, "ipcbuf_enable_sod: new_bufs=%"PRIu64"\n", new_bufs);
@@ -674,8 +678,8 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
 
 #ifdef _DEBUG
     fprintf (stderr, "ipcbuf_enable_sod: increment FULL[%d]=%d by %"PRIu64"\n",
-                      iread, 
-                      semctl (id->semid_data[iread], IPCBUF_FULL, GETVAL), new_bufs);
+        iread, 
+        semctl (id->semid_data[iread], IPCBUF_FULL, GETVAL), new_bufs);
 #endif
 
     /* increment the buffers written semaphore */
@@ -685,6 +689,9 @@ int ipcbuf_enable_sod (ipcbuf_t* id, uint64_t start_buf, uint64_t start_byte)
       return -1;
     }
   }
+#ifdef _DEBUG
+  fprintf (stderr, "ipcbuf_enable_sod: done\n");
+#endif
 
   return 0;
 }
@@ -708,22 +715,30 @@ char* ipcbuf_get_next_write (ipcbuf_t* id)
     return NULL;
   }
 
+  /* if changing from WRITER to WRITING */
   if (id->state == IPCBUF_WCHANGE)
   {
 #ifdef _DEBUG
-  fprintf (stderr, "ipcbuf_get_next_write: WCHANGE->WRITING enable_sod"
-	                 " w_buf=%"PRIu64"\n", id->sync->w_buf);
+    fprintf (stderr, "ipcbuf_get_next_write: WCHANGE->WRITING enable_sod"
+        " w_buf=%"PRIu64"\n", id->sync->w_buf_curr);
 #endif
 
-    if (ipcbuf_enable_sod (id, id->sync->w_buf, 0) < 0)
+    if (ipcbuf_enable_sod (id, id->sync->w_buf_curr, 0) < 0)
     {
       fprintf (stderr, "ipcbuf_get_next_write: ipcbuf_enable_sod error\n");
       return NULL;
     }
   }
 
-  bufnum = sync->w_buf % sync->nbufs;
+  /* get the buffer number of the next empty buffer to write */
+  bufnum = sync->w_buf_next % sync->nbufs;
+#ifdef _DEBUG
+  fprintf (stderr, "ipcbuf_get_next_write: bufnum=%"PRIu64"\n", bufnum);
+#endif
 
+#ifdef _DEBUG
+  fprintf (stderr, "ipcbuf_get_next_write: id->count[%"PRIu64"]=%d\n", bufnum, id->count[bufnum]);
+#endif
   while (id->count[bufnum])
   {
 #ifdef _DEBUG
@@ -747,6 +762,15 @@ char* ipcbuf_get_next_write (ipcbuf_t* id)
     id->count[bufnum] --;
   }
 
+  /* increment the next write buffer count */
+#ifdef _DEBUG
+  fprintf (stderr, "ipcbuf_get_next_write: incrememting sync->w_buf_next\n");
+#endif
+  sync->w_buf_next++;
+
+#ifdef _DEBUG
+  fprintf (stderr, "ipcbuf_get_next_write: returning %p\n", id->buffer[bufnum]);
+#endif
   return id->buffer[bufnum];
 }
 
@@ -763,7 +787,7 @@ int ipcbuf_zero_next_write (ipcbuf_t *id)
   }
 
   // get the next buffer to be written
-  uint64_t next_buf = (sync->w_buf + 1) % sync->nbufs;
+  uint64_t next_buf = (sync->w_buf_next) % sync->nbufs;
 
   char have_cleared = 0;
   unsigned iread;
@@ -808,7 +832,7 @@ int ipcbuf_mark_filled (ipcbuf_t* id, uint64_t nbytes)
   /* increment the buffers written semaphore only if WRITING */
   if (id->state == IPCBUF_WRITER)
   {
-    id->sync->w_buf ++;
+    id->sync->w_buf_curr ++;
     return 0;
   }
 
@@ -836,7 +860,7 @@ int ipcbuf_mark_filled (ipcbuf_t* id, uint64_t nbytes)
       }
     }
 
-    sync->e_buf  [id->xfer] = sync->w_buf;
+    sync->e_buf  [id->xfer] = sync->w_buf_curr;
     sync->e_byte [id->xfer] = nbytes;
     sync->eod    [id->xfer] = 1;
 
@@ -853,14 +877,14 @@ int ipcbuf_mark_filled (ipcbuf_t* id, uint64_t nbytes)
     id->sync->w_state = 0;
   }
 
-  bufnum = sync->w_buf % sync->nbufs;
+  bufnum = sync->w_buf_curr % sync->nbufs;
 
   id->count[bufnum] ++;
-  sync->w_buf ++;
+  sync->w_buf_curr ++;
 
 #ifdef _DEBUG
-  fprintf (stderr, "ipcbuf_mark_filled: count[%"PRIu64"]=%u w_buf=%"PRIu64"\n",
-                   bufnum, id->count[bufnum], sync->w_buf);
+  fprintf (stderr, "ipcbuf_mark_filled: count[%"PRIu64"]=%u w_buf_curr=%"PRIu64"\n",
+                   bufnum, id->count[bufnum], sync->w_buf_curr);
 #endif
 
   for (iread = 0; iread < sync->n_readers; iread++)
@@ -1150,23 +1174,23 @@ char* ipcbuf_get_next_read_work (ipcbuf_t* id, uint64_t* bytes, int flag)
 
         Willem van Straten - 22 Oct 2008
       */
-      if (sync->w_buf > id->viewbuf + 1)
+      if (sync->w_buf_curr > id->viewbuf + 1)
       {
 #ifdef _DEBUG
         fprintf (stderr, "ipcbuf_get_next_read: viewer seek to end of data\n");
 #endif
-        id->viewbuf = sync->w_buf - 1;
+        id->viewbuf = sync->w_buf_curr - 1;
         start_byte = 0;
       }
     }
 
 #ifdef _DEBUG
-    fprintf (stderr, "ipcbuf_get_next_read: sync->w_buf=%"PRIu64" id->viewbuf=%"PRIu64"\n",
-             sync->w_buf, id->viewbuf);
+    fprintf (stderr, "ipcbuf_get_next_read: sync->w_buf_curr=%"PRIu64" id->viewbuf=%"PRIu64"\n",
+             sync->w_buf_curr, id->viewbuf);
 #endif
 
-    /* Viewers wait until w_buf is incremented without semaphore operations */
-    while (sync->w_buf <= id->viewbuf)
+    /* Viewers wait until w_buf_curr is incremented without semaphore operations */
+    while (sync->w_buf_curr <= id->viewbuf)
     {
 #ifdef _DEBUG
       fprintf (stderr, "ipcbuf_get_next_read: sync->eod[%d]=%d sync->r_bufs[%d]=%"PRIu64" sync->e_buf[%d]=%"PRIu64"\n",
@@ -1183,8 +1207,8 @@ char* ipcbuf_get_next_read_work (ipcbuf_t* id, uint64_t* bytes, int flag)
       float_sleep (0.1);
     }
 
-    if (id->viewbuf + sync->nbufs < sync->w_buf)
-      id->viewbuf = sync->w_buf - sync->nbufs + 1;
+    if (id->viewbuf + sync->nbufs < sync->w_buf_curr)
+      id->viewbuf = sync->w_buf_curr - sync->nbufs + 1;
 
     bufnum = id->viewbuf;
     id->viewbuf ++;
@@ -1255,7 +1279,7 @@ int64_t ipcbuf_tell_write (ipcbuf_t* id)
   if (!ipcbuf_is_writer (id))
     return -1;
 
-  return ipcbuf_tell (id, id->sync->w_buf);
+  return ipcbuf_tell (id, id->sync->w_buf_curr);
 }
 
 int64_t ipcbuf_tell_read (ipcbuf_t* id)
@@ -1351,7 +1375,8 @@ int ipcbuf_reset (ipcbuf_t* id)
     return -1;
   }
 
-  if (sync->w_buf == 0)
+  // TODO AJ check this logic
+  if (sync->w_buf_curr == 0 && sync->w_buf_next == 0)
     return 0;
 
   for (ibuf = 0; ibuf < nbufs; ibuf++)
@@ -1416,7 +1441,8 @@ int ipcbuf_reset (ipcbuf_t* id)
     sync->r_bufs[iread] = 0;
     sync->r_xfers[iread] = 0;
   }
-  sync->w_buf = 0;
+  sync->w_buf_curr = 0;
+  sync->w_buf_next = 0;
   sync->w_xfer = 0;
 
   for (ix=0; ix < IPCBUF_XFERS; ix++)
@@ -1433,7 +1459,8 @@ int ipcbuf_hard_reset (ipcbuf_t* id)
   int val = 0;
   int iread = 0;
 
-  sync->w_buf = 0;
+  sync->w_buf_curr = 0;
+  sync->w_buf_next = 0;
   sync->w_xfer = 0;
 
   for (ix=0; ix < IPCBUF_XFERS; ix++)
@@ -1570,13 +1597,13 @@ uint64_t ipcbuf_get_write_byte_xfer (ipcbuf_t* id)
   if (id->sync->eod[id->xfer])
     return id->sync->e_byte[id->xfer];
   else
-    return ipcbuf_tell (id, id->sync->w_buf);
+    return ipcbuf_tell (id, id->sync->w_buf_curr);
 }
 
 uint64_t ipcbuf_get_write_count_xfer (ipcbuf_t* id)
 {
   if (id->sync->w_xfer == id->xfer)
-    return id->sync->w_buf;
+    return id->sync->w_buf_curr;
   else
     return id->sync->e_byte[id->xfer];
 }
@@ -1584,12 +1611,17 @@ uint64_t ipcbuf_get_write_count_xfer (ipcbuf_t* id)
 
 uint64_t ipcbuf_get_write_count (ipcbuf_t* id)
 {
-  return id->sync->w_buf;
+  return id->sync->w_buf_curr;
 }
 
+// return the write index of the current buffer
 uint64_t ipcbuf_get_write_index (ipcbuf_t* id)
 {
-  return id->sync->w_buf % id->sync->nbufs;
+  // if multiple write buffers open, return the most recent
+  if (id->sync->w_buf_next > id->sync->w_buf_curr)
+    return (id->sync->w_buf_next-1) % id->sync->nbufs;
+  else
+    return id->sync->w_buf_curr % id->sync->nbufs;
 }
 
 uint64_t ipcbuf_get_read_count (ipcbuf_t* id)

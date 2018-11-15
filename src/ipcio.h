@@ -31,6 +31,10 @@ extern "C" {
     uint64_t sod_buf;   /* buffer of start-of-data */
     uint64_t sod_byte;  /* byte of start-of-data */
 
+    char ** buf_ptrs;   /* pointers to already opened buffers */
+    unsigned bufs_opened; /* counter of opened buffers*/
+    unsigned bufs_opened_max; /* limit on the number of opened buffers */
+
   } ipcio_t;
 
   static const ipcio_t IPCIO_INIT = { IPCBUF_INIT, 0,0, 0, 0, 0, 0,0,0 };
