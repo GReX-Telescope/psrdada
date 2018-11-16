@@ -311,7 +311,7 @@ sub processCandidates($)
     }
   }
 
-  my $snr_cut = 9;
+  my $snr_cut = 6;
   foreach $file (@files)
   {
     ($timestamp, $suffix) = split(/_/, $file, 2);
@@ -797,7 +797,9 @@ sub dumperThread ()
                                          "SNR=".$c{"snr"}." PROB=".$c{"probability"});
                     $last_email_unix = $event_unix;
                     my $to_email = "ajameson\@swin.edu.au";
-                    my $cc_email = "adeller\@swin.edu.au,".
+                    my $cc_email = "101615311\@student.swin.edu.au,".
+                                   "adeller\@swin.edu.au,".
+                                   "asuth82\@gmail.com,".
                                    "bateman.tim\@gmail.com,".
                                    "Timothy.Bateman\@sydney.edu.au,".
                                    "cflynn\@swin.edu.au,".
@@ -812,9 +814,11 @@ sub dumperThread ()
                                    "cday\@swin.edu.au,".
                                    "vivekgupta\@swin.edu.au,".
                                    "vivekvenkris\@gmail.com,".
+                                   "marcus.e.lower\@gmail.com,".
                                    "wfarah\@swin.edu.au";
                     my $email_thread = threads->new(\&generateEmail, $to_email, $cc_email, $did_dump, \%c);
                     $email_thread->detach();
+
                   }
                   else
                   {
@@ -985,7 +989,7 @@ sub generateEmail ($$$\%)
     $subject = $h{"cand_prefix"};
     $name = $h{"cand_name"};
     $to_email = "wfarah\@swin.edu.au";
-    $cc_email = "cflynn\@swin.edu.au,bateman.tim\@gmail.com,stefanoslowski\@swin.edu.au,vivekvenkris\@gmail.com,vivekgupta\@swin.edu.au";
+    $cc_email = "cflynn\@swin.edu.au,bateman.tim\@gmail.com,stefanoslowski\@swin.edu.au,vivekvenkris\@gmail.com,vivekgupta\@swin.edu.au,marcus.e.lower\@gmail.com";
   }
 
   # try and determine the RA/DEC of the boresight beam
@@ -1056,7 +1060,12 @@ sub generateEmail ($$$\%)
   my @beams = (1, $centre_beam, ($h{"beam"}-1), ($h{"beam"}), ($h{"beam"}+1));
   my @beam_names = ();
   my ($beam, $beam_name, $beam_idx, $host, $i);
-  my ($fil_file, $plot_cmd, $local_img);
+  my ($fil_file, $plot_cmd, $local_img, $local_coords);
+  my @line;
+  my ($refined_ra,$refined_dec);
+  my ($refined_ra_deg, $refined_dec_deg);
+  my ($refined_gl, $refined_gb);
+
   foreach $beam (@beams)
   {
     $beam_name = sprintf("BEAM_%03d", $beam);
@@ -1126,7 +1135,8 @@ sub generateEmail ($$$\%)
   }
 
   $local_img = $h{"frb_prefix"}."_localisation_".$h{"sample"}.".png";
-  $cmd = "/home/observer/chris/fb2sky/frb_pos_jt.py -s ".$h{"utc_start"}." -e ".$h{"utc"}." -f ".$h{"beam"}." -n /tmp/".$local_img." -N ".$bp_ct{"NBEAM"};
+  $local_coords = $h{"frb_prefix"}."_localisation_".$h{"sample"}.".coords";
+  $cmd = "/home/observer/chris/fb2sky/frb_pos_jt.py -s ".$h{"utc_start"}." -e ".$h{"utc"}." -f ".$h{"beam"}." -n /tmp/".$local_img." -N ".$bp_ct{"NBEAM"}." -c /tmp/".$local_coords;
   if ($h{"DELAY_TRACKING"} ne "true")
   {
     $cmd .= " -t";
@@ -1160,6 +1170,42 @@ sub generateEmail ($$$\%)
     }
   }
 
+  if (-f "/tmp/".$local_coords)
+  {
+    open FH, "</tmp/".$local_coords or Dada::logMsg(0, $dl,
+      "generateEmail: couldn't open /tmp/".$local_coords." for reading");
+    @line = <FH>;
+    chomp $line[0];
+
+    ($refined_ra, $refined_dec) = split(/ /, $line[0]);
+
+    ($result, $refined_ra_deg) = Dada::convertHHMMSSToDegrees($refined_ra);
+    ($result, $refined_dec_deg) = Dada::convertDDMMSSToDegrees($refined_dec);
+
+    $cmd = "eq2gal.py ".$refined_ra_deg." ".$refined_dec_deg;
+    Dada::logMsg(1, $dl, "generateEmail: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(1, $dl, "generateEmail: ".$result." ".$response);
+    if ($result eq "ok")
+    {
+      ($refined_gl, $refined_gb) = split(/ /, $response, 2);
+    }
+
+    $cmd = "rm -f /tmp/".$local_coords;
+    Dada::logMsg(1, $dl, "generateEmail: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(2, $dl, "generateEmail: ".$result." ".$response);
+  }
+  else
+  {
+    Dada::logMsg(1, $dl, "generateEmail: Coords file /tmp/".$local_coords." doesn't exist. Reverting to inaccurate coordinates");
+
+    $refined_ra = $h{"cand_ra"};
+    $refined_dec = $h{"dec"};
+    $refined_gl = $h{"gl"};
+    $refined_gl = $h{"gb"};
+  }
+
   $msg->send;
 
   # sleep allow the email to be sent with attachments
@@ -1171,6 +1217,14 @@ sub generateEmail ($$$\%)
   Dada::logMsg(1, $dl, "generateEmail: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(2, $dl, "generateEmail: ".$result." ".$response);
+
+  # VOevent (to be filled)
+  $cmd = "/home/dada/voe/src/voE_generator.py -utc ".$h{"utc"}." -role test -author CFlynn -ra ".$refined_ra." -dec ".$refined_dec." -gl ".$refined_gl." -gb ".$refined_gb." -ne2001_dm ".$h{"galactic_dm"}." -pid ".$h{"PID"}." -beam ".$h{"beam"}." -dm ".$h{"dm"}." -snr ".$h{"snr"}." -width ".($h{"width"}*1000)." -prob ".$h{"probability"};
+
+  Dada::logMsg(1, $dl, "generateEmail: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(1, $dl, "generateEmail: ".$result." ".$response);
+
 
   return ("ok", "");
 }
