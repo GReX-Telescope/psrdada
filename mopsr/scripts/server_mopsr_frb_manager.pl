@@ -18,6 +18,8 @@ use Math::Trig ':pi';
 use Dada;
 use Mopsr;
 
+use Digest::MD5 qw(md5_hex);
+
 #
 # Global Variable Declarations
 #
@@ -974,18 +976,18 @@ sub generateEmail ($$$\%)
   my ($bp_tag, $subject, $name);
 
   # generate HTML part of email
-  my $html = "<body>";
+  my $html_top = "<body>";
 
   # print the candidate update first
   if ($h{"extra_galactic"} == 1)
   {
-    $html .= "<h3>FRB Candidate</h3>\n";
+    $html_top .= "<h3>FRB Candidate</h3>\n";
     $subject = $h{"frb_prefix"};
     $name = $h{"frb_name"};
   }
   else
   {
-    $html .= "<h3>Transient Candidate</h3>\n";
+    $html_top .= "<h3>Transient Candidate</h3>\n";
     $subject = $h{"cand_prefix"};
     $name = $h{"cand_name"};
     $to_email = "wfarah\@swin.edu.au";
@@ -1001,6 +1003,7 @@ sub generateEmail ($$$\%)
     Type    => 'multipart/mixed',
     Data    => "Here's the PNG file you wanted"
   );
+  my $html = "";
 
   $html .= "<table cellpadding=2 cellspacing=2>\n";
   $html .= "<tr><th style='text-align: left;'>SNR</th><td>".sprintf("%5.2f",$h{"snr"})."</td></tr>\n";
@@ -1053,6 +1056,17 @@ sub generateEmail ($$$\%)
   $html .= "</table>\n";
 
   $html .= "<hr/>\n";
+
+  my ($csum, $csum_html);
+
+  $csum = md5_hex($html_top.$html);
+  $csum = substr($csum, 0, 8);
+  $csum_html = "<table cellpadding=2 cellspacing=2>\n";
+  $csum_html .= "<tr><th style='text-align: left;'>Alert ID</th><td>".$csum."</td></tr>\n";
+  $csum_html .= "</table>\n";
+  $csum_html .= "<hr/>\n";
+
+  $html = $html_top.$csum_html.$html;
 
   my $centre_beam = ($bp_ct{"NBEAM"} / 2) + 1;
 
