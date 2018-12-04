@@ -117,6 +117,9 @@ caspsr/src/caspsr_udptester
 caspsr/src/caspsr_udpthreaded
 caspsr/src/caspsr_udptsplot
 caspsr/src/mulbibob_server
+comap/src/comap_udpdb_preset
+comap/src/comap_udpdb_thread
+comap/src/comap_udptest
 examples/src/dada_example_client_writer
 examples/src/dada_example_writer
 gmrt/src/gmrt_correlator
