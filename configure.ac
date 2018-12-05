@@ -159,6 +159,7 @@ AC_CONFIG_FILES([Makefile
     hispec/scripts/Makefile
     hispec/src/Makefile
     hispec/web/Makefile
+	psrix/Makefile	
     ska1/Makefile
     ska1/src/Makefile
 		3rdparty/Makefile])
