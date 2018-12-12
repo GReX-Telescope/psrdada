@@ -2,6 +2,7 @@
 # scripts distributed as is (installed in share/)
 dist_data_DATA = mopsr.cfg \
                  mopsr.2ant_128chan.header \
+								 mopsr_2kbins_25s.dspsr.cpu \
 								 mopsr.dspsr.cpu \
 								 mopsr.dspsr.gpu \
                  mopsr.dspsr.cpu.sk \

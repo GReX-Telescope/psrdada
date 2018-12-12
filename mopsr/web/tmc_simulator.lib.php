@@ -435,6 +435,7 @@ class tmc_simulator extends mopsr_webpage
         <td class='val'>
           <select name="<?echo $prefix?>_processing_file">
             <option value="mopsr.dspsr.cpu">mopsr.dspsr.cpu</option>
+            <option value="mopsr_2kbins_25s.dspsr.cpu">mopsr_2kbins_25s.dspsr.cpu</option>
             <option value="mopsr.dspsr.cpu.5s">mopsr.dspsr.cpu.5s</option>
             <option value="mopsr.dspsr.cpu.single">mopsr.dspsr.cpu.single</option>
 <?          if ($this->hires) { ?>
