@@ -213,6 +213,16 @@ int ipcio_stop_close (ipcio_t* ipc, char unlock)
 
     if (ipcbuf_is_writing((ipcbuf_t*)ipc)) {
 
+      // ensure that any multiple opened blocks are closed
+      while (ipc->bufs_opened > 0)
+      {
+        uint64_t bufsz = ipcbuf_get_bufsz((ipcbuf_t*)ipc);
+#ifdef _DEBUG
+        fprintf (stderr, "ipcio_close: bufs_opened=%u, close_block_write(%lu)\n", ipc->bufs_opened, bufsz);
+#endif
+        ipcio_close_block_write(ipc, bufsz);
+      }
+
       if (ipcbuf_enable_eod ((ipcbuf_t*)ipc) < 0) {
         fprintf (stderr, "ipcio_close:W error ipcbuf_enable_eod\n");
         return -1;
@@ -818,7 +828,7 @@ ssize_t ipcio_read (ipcio_t* ipc, char* ptr, size_t bytes)
         if (device_id >= 0)
         {
 #ifdef _DEBUG
-          fprintf (stderr, "ipcio_read: cudaMemcpy (%p, %p, :%"PRIu64", cudaMemcpyHostToDevice\n",
+          fprintf (stderr, "ipcio_read: cudaMemcpy (%p, %p, ,%"PRIu64", cudaMemcpyHostToDevice)\n",
                    (void *) ptr, (void *) ipc->curbuf + ipc->bytes, space);
 #endif
           err = cudaMemcpy(ptr, ipc->curbuf + ipc->bytes, space, cudaMemcpyDeviceToHost);
@@ -835,7 +845,7 @@ ssize_t ipcio_read (ipcio_t* ipc, char* ptr, size_t bytes)
 #endif
         {
 #ifdef _DEBUG
-        fprintf (stderr, "ipcio_read: memcpy (%p, %p, :%"PRIu64"\n",
+        fprintf (stderr, "ipcio_read: memcpy (%p, %p, ,%"PRIu64")\n",
                          (void *) ptr, (void *) ipc->curbuf + ipc->bytes, space);
 #endif
           memcpy (ptr, ipc->curbuf + ipc->bytes, space);

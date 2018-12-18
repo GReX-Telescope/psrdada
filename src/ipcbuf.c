@@ -764,7 +764,7 @@ char* ipcbuf_get_next_write (ipcbuf_t* id)
 
   /* increment the next write buffer count */
 #ifdef _DEBUG
-  fprintf (stderr, "ipcbuf_get_next_write: incrememting sync->w_buf_next\n");
+  fprintf (stderr, "ipcbuf_get_next_write: incrementing sync->w_buf_next\n");
 #endif
   sync->w_buf_next++;
 
@@ -822,6 +822,10 @@ int ipcbuf_mark_filled (ipcbuf_t* id, uint64_t nbytes)
   uint64_t bufnum = 0;
   int iread = 0;
 
+#ifdef _DEBUG
+  fprintf (stderr, "ipcbuf_mark_filled(%lu) w_buf_curr=%lu w_buf_next=%lu\n", nbytes, id->sync->w_buf_curr, id->sync->w_buf_next);
+#endif
+
   /* must be the designated writer */
   if (!ipcbuf_is_writer(id))
   {
@@ -832,12 +836,16 @@ int ipcbuf_mark_filled (ipcbuf_t* id, uint64_t nbytes)
   /* increment the buffers written semaphore only if WRITING */
   if (id->state == IPCBUF_WRITER)
   {
+#ifdef _DEBUG
+    fprintf (stderr, "ipcbuf_mark_filled: incrementing id->sync->w_buf_curr=%lu\n", id->sync->w_buf_curr);
+#endif
     id->sync->w_buf_curr ++;
     return 0;
   }
 
   sync = id->sync;
 
+  // end of a transfers, mark end of data on this transfer
   if (id->state == IPCBUF_WCHANGE || nbytes < sync->bufsz)
   {
 #ifdef _DEBUG
@@ -875,6 +883,13 @@ int ipcbuf_mark_filled (ipcbuf_t* id, uint64_t nbytes)
 
     id->state = IPCBUF_WRITER;
     id->sync->w_state = 0;
+
+    // corner case where EOD occured on first byte of the block
+    if (nbytes == 0)
+    {
+      // open the next write buffer which will be immediately closed
+      ipcbuf_get_next_write (id);
+    }
   }
 
   bufnum = sync->w_buf_curr % sync->nbufs;
@@ -899,7 +914,11 @@ int ipcbuf_mark_filled (ipcbuf_t* id, uint64_t nbytes)
       return -1;
     }
   }
-  
+
+#ifdef _DEBUG
+  fprintf (stderr, "ipcbuf_mark_filled DONE w_buf_curr=%lu w_buf_next=%lu\n", id->sync->w_buf_curr, id->sync->w_buf_next);
+#endif
+
   return 0;
 }
 

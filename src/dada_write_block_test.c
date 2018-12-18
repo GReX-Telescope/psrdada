@@ -122,25 +122,26 @@ int main (int argc, char **argv)
   }
 
   /* Set the header size attribute */ 
-  multilog (log, LOG_INFO, "setting HDR_SIZE=%"PRIu64"\n", header_size);
+  if (verbose)
+    multilog (log, LOG_INFO, "setting HDR_SIZE=%"PRIu64"\n", header_size);
   if (ascii_header_set (header_buf, "HDR_SIZE", "%"PRIu64"", header_size) < 0) {
     multilog (log, LOG_ERR, "Could not write HDR_SIZE to header\n");
     return -1;
   }
 
-  multilog (log, LOG_INFO, "marking header filled\n");
+  if (verbose)
+    multilog (log, LOG_INFO, "marking header filled\n");
   if (ipcbuf_mark_filled (hdu->header_block, header_size) < 0)  {
     multilog (log, LOG_ERR, "Could not mark filled header block\n");
     return EXIT_FAILURE;
   }
 
   uint64_t bufsz = ipcbuf_get_bufsz ((ipcbuf_t *)hdu->data_block);
-  multilog (log, LOG_INFO, "data block bufsz=%"PRIu64"\n", bufsz);
-
   if (verbose)
-  {
-    fprintf (stderr, "Writing %"PRIu64" bytes to data block in blocks of %"PRIu64"\n", bytes_to_write, bufsz);
-  }
+    multilog (log, LOG_INFO, "data block bufsz=%"PRIu64"\n", bufsz);
+
+  double nwrites = (double) bytes_to_write / (double) bufsz;
+  fprintf (stderr, "Writing %"PRIu64" bytes to data block in blocks of %"PRIu64" (%lf writes)\n", bytes_to_write, bufsz, nwrites);
 
   data = (char*) malloc (bufsz);
   assert (data != 0);
@@ -152,6 +153,9 @@ int main (int argc, char **argv)
   uint64_t index = 0;
   uint64_t interleave_num = 1024;
 
+  uint64_t n_opened = 0;
+  uint64_t n_closed = 0;
+
   uint64_t bufid;
   char * buf;
   while (bytes_to_write)
@@ -162,54 +166,63 @@ int main (int argc, char **argv)
       if (bytess[i] > bytes_to_write)
         bytess[i] = bytes_to_write;
 
-      multilog (log, LOG_INFO, "ipcio_open_block_write()\n");
-      buf = ipcio_open_block_write (hdu->data_block, &bufid);
-      if (buf)
+      if (bytess[i] > 0)
       {
-        multilog (log, LOG_INFO, "buf=%p id=%"PRIu64"\n", buf, bufid);
-
-        // data_size is the number of bytes to write, uint64_size is the 
-        // number of uint64s to write
-        uint64_t uint64_count = bufsz / sizeof(uint64_t);
-
-        unsigned k = 0;
-        uint64_t j = 0;
-        char * ptr = 0;
-        unsigned char ch;
-
-        multilog (log, LOG_INFO, "writing %lu 64-bit uints\n", uint64_count);
-        for (j=0; j<uint64_count; j++)
+        //if (verbose)
+          multilog (log, LOG_INFO, "ipcio_open_block_write() opened=%lu closed=%lu\n", n_opened, n_closed);
+        buf = ipcio_open_block_write (hdu->data_block, &bufid);
+        n_opened++;
+        if (buf)
         {
-          // set the ptr to the correct place in the array
-          ptr = buf + j * sizeof(uint64_t);
-          for (k = 0; k < 8; k++ )
-          {
-            ch = (index >> ((k & 7) << 3)) & 0xFF;
-            ptr[8 - k - 1] = ch;
-          }
+          if (verbose)
+            multilog (log, LOG_INFO, "buf=%p id=%"PRIu64"\n", buf, bufid);
 
-          index++;
-          if (index % interleave_num == 0)
+          // data_size is the number of bytes to write, uint64_size is the 
+          // number of uint64s to write
+          uint64_t uint64_count = bufsz / sizeof(uint64_t);
+
+          unsigned k = 0;
+          uint64_t j = 0;
+          char * ptr = 0;
+          unsigned char ch;
+
+          if (verbose)
+            multilog (log, LOG_INFO, "writing %lu 64-bit uints\n", uint64_count);
+          for (j=0; j<uint64_count; j++)
           {
-            if (verbose)
-              fprintf(stderr, "increment %"PRIu64" -> ", index);
-            index += interleave_num;
-            if (verbose)
-              fprintf(stderr, "%"PRIu64"\n", index);
+            // set the ptr to the correct place in the array
+            ptr = buf + j * sizeof(uint64_t);
+            for (k = 0; k < 8; k++ )
+            {
+              ch = (index >> ((k & 7) << 3)) & 0xFF;
+              ptr[8 - k - 1] = ch;
+            }
+
+            index++;
+            if (index % interleave_num == 0)
+            {
+              if (verbose)
+                fprintf(stderr, "increment %"PRIu64" -> ", index);
+              index += interleave_num;
+              if (verbose)
+                fprintf(stderr, "%"PRIu64"\n", index);
+            }
           }
+          bytes_to_write -= bytess[i];
         }
-        bytes_to_write -= bytess[i];
+        else
+          bytess[i] = 0;
       }
-      else
-        bytess[i] = 0;
     }
 
     for (i=0; i<opened; i++)
     {
       if (bytess[i] > 0)
       {
-        multilog (log, LOG_INFO, "ipcio_close_block_write(%"PRIu64")\n", bytess[i]);
+        //if (verbose)
+          multilog (log, LOG_INFO, "ipcio_close_block_write(%"PRIu64")\n", bytess[i]);
         ipcio_close_block_write (hdu->data_block, bytess[i]);
+        n_closed++;
       }
     }
   }

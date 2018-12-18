@@ -247,6 +247,7 @@ mopsr/src/snapsr_udpdb
 mopsr/src/snapsr_udpfftplot
 mopsr/src/snapsr_udpplot
 mopsr/src/mopsr_xgpu_convert
+psrix/udp2db
 ska1/src/ska1_udpdb
 ska1/src/ska1_udpdb_thread
 ska1/src/ska1_udpgen
