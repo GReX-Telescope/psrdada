@@ -341,20 +341,12 @@ int64_t dada_client_io_loop_block (dada_client_t* client)
     {
       if (bytes_operated == 0) 
         multilog (log, LOG_INFO, "io_loop_block: end of input\n");
-
-      if (bytes_transfered + bytes_operated == client->transfer_bytes)
-      {
-        if (ipcio_update_block_write (client->data_block, (uint64_t) bytes_operated) < 0) {
-          multilog (log, LOG_ERR, "io_loop_block: ipcio_update_block_write error %s\n", strerror(errno));
-          return -1;
-        }
-      }
-      else 
-      {
-        if (ipcio_close_block_write (client->data_block, (uint64_t) bytes_operated) < 0) {
-          multilog (log, LOG_ERR, "io_loop_block: ipcio_close_block_write error %s\n", strerror(errno));
-          return -1;
-        }
+#ifdef _DEBUG
+      multilog (log, LOG_INFO, "io_loop_block: ipcio_close_block_write (%ld)\n", bytes_operated);
+#endif
+      if (ipcio_close_block_write (client->data_block, (uint64_t) bytes_operated) < 0) {
+        multilog (log, LOG_ERR, "io_loop_block: ipcio_close_block_write error %s\n", strerror(errno));
+        return -1;
       }
       
       if (bytes_operated < block_size)

@@ -207,8 +207,8 @@ int ipcio_stop_close (ipcio_t* ipc, char unlock)
 #ifdef _DEBUG
     if (ipc->curbuf)
       fprintf (stderr, "ipcio_close:W curbuf: %"PRIu64" nextbuf: %"PRIu64" %"
-                        PRIu64" bytes. buf[0]=%x\n", ipc->buf.sync->w_buf_next,
-                        ipc->bytes, (void *) ipc->curbuf);
+                        PRIu64" bytes. buf[0]=%x\n", ipc->buf.sync->w_buf_curr, 
+                        ipc->buf.sync->w_buf_next, ipc->bytes, (void *) ipc->curbuf);
 #endif
 
     if (ipcbuf_is_writing((ipcbuf_t*)ipc)) {
