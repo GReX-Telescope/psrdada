@@ -357,6 +357,37 @@ class results_db extends mopsr_webpage
 <?
   }
 
+  function printP0DM($pdo)
+  {
+      $q = 'SELECT period, dm, desired_cadence FROM Pulsars WHERE name LIKE "'.$this->filter_value.'%"';
+      try {
+        $stmt = $pdo -> query ($q);
+      } catch (PDOException $ex) {
+        print $ex->getMessage();
+      }
+
+      $row = $stmt->fetch();
+      $period = round($row[0] * 100000)/100;
+      $dm = round($row[1] * 100)/100;
+      $cadence = $row[2];
+?>
+      <script type="text/javascript">
+      var element;
+      element = document.getElementById("P0");
+      element.innerText = "P0: <?echo $period;?> ms";
+      element.style.display = "";
+
+      element = document.getElementById("DM");
+      element.innerText = "DM: <?echo $dm;?> pc cm^-3";
+      element.style.display = "";
+
+      element = document.getElementById("cadence");
+      element.innerText = "cadence: <?echo $cadence;?> days";
+      element.style.display = "";
+      </script>
+<?
+  }
+
   function printHTML() 
   {
 ?>
@@ -464,6 +495,23 @@ class results_db extends mopsr_webpage
       $row = $stmt->fetch();
       $total_num_results = $row[0];
     }
+
+    if (strpos($this->filter_value, "J") === 0) {
+      $this->printP0DM($pdo);
+    } else {
+?>
+      <script type="text/javascript">
+      var element;
+      element = document.getElementById("cadence");
+      element.style.display = "none";
+      element = document.getElementById("DM");
+      element.style.display = "none";
+      element = document.getElementById("P0");
+      element.style.display = "none";
+      </script>
+<?
+  }
+
 
     $results = $this->getResultsArray_db($pdo, $this->results_dir,
                                          $this->offset, $this->length, 
@@ -779,47 +827,6 @@ class results_db extends mopsr_webpage
     $q = "";
     $filter ="";
 
-    if (strpos($filter_value, "J") === 0) {
-      $q = 'SELECT period, dm, desired_cadence FROM Pulsars WHERE name LIKE "'.$filter_value.'%"';
-      try {
-        $stmt = $pdo -> query ($q);
-      } catch (PDOException $ex) {
-        print $ex->getMessage();
-      }
-
-      $row = $stmt->fetch();
-      $period = round($row[0] * 100000)/100;
-      $dm = round($row[1] * 100)/100;
-      $cadence = $row[2];
-?>
-      <script type="text/javascript">
-      var element;
-      element = document.getElementById("P0");
-      element.innerText = "P0: <?echo $period;?> ms";
-      element.style.display = "";
-
-      element = document.getElementById("DM");
-      element.innerText = "DM: <?echo $dm;?> pc cm^-3";
-      element.style.display = "";
-
-      element = document.getElementById("cadence");
-      element.innerText = "cadence: <?echo $cadence;?> days";
-      element.style.display = "";
-      </script>
-<?
-    } else {
-?>
-      <script type="text/javascript">
-      var element;
-      element = document.getElementById("cadence");
-      element.style.display = "none";
-      element = document.getElementById("DM");
-      element.style.display = "none";
-      element = document.getElementById("P0");
-      element.style.display = "none";
-      </script>
-<?
-    }
 
     if ($filter_type == "" || $filter_value == "") {
       # GROUP BY utc below is to handle a potential problem in the database 
