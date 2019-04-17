@@ -421,6 +421,13 @@ class results_db extends mopsr_webpage
       <tr>
         <td colspan=2><a href="/mopsr/<?php echo basename(__FILE__);?>?single=true">Recent MOPSR Results</a></td>
       </tr>
+      <tr>
+        <td id="P0" style="display: none;">P0</td>
+        <td id="DM" style="display: none;">DM</td>
+      </tr>
+      <tr>
+      <td id="cadence" style="display: none;" colspan=2>cadence</td>
+      </tr>
 
     </table>
   <?
@@ -771,6 +778,48 @@ class results_db extends mopsr_webpage
 
     $q = "";
     $filter ="";
+
+    if (strpos($filter_value, "J") === 0) {
+      $q = 'SELECT period, dm, desired_cadence FROM Pulsars WHERE name LIKE "'.$filter_value.'%"';
+      try {
+        $stmt = $pdo -> query ($q);
+      } catch (PDOException $ex) {
+        print $ex->getMessage();
+      }
+
+      $row = $stmt->fetch();
+      $period = round($row[0] * 100000)/100;
+      $dm = round($row[1] * 100)/100;
+      $cadence = $row[2];
+?>
+      <script type="text/javascript">
+      var element;
+      element = document.getElementById("P0");
+      element.innerText = "P0: <?echo $period;?> ms";
+      element.style.display = "";
+
+      element = document.getElementById("DM");
+      element.innerText = "DM: <?echo $dm;?> pc cm^-3";
+      element.style.display = "";
+
+      element = document.getElementById("cadence");
+      element.innerText = "cadence: <?echo $cadence;?> days";
+      element.style.display = "";
+      </script>
+<?
+    } else {
+?>
+      <script type="text/javascript">
+      var element;
+      element = document.getElementById("cadence");
+      element.style.display = "none";
+      element = document.getElementById("DM");
+      element.style.display = "none";
+      element = document.getElementById("P0");
+      element.style.display = "none";
+      </script>
+<?
+    }
 
     if ($filter_type == "" || $filter_value == "") {
       # GROUP BY utc below is to handle a potential problem in the database 
