@@ -889,6 +889,10 @@ sub start($)
 
     # write the start packet to the spec file
     print FH Dada::headerFormat("UTC_START", $utc_start)."\n";
+
+    open(my $fh, '>', $cfg{"CONFIG_DIR"}.'/last_utc.start');
+    print $fh $utc_start;
+    close $fh;
   }
 
   print FH Dada::headerFormat("PKT_START", $start_packet)."\n";
