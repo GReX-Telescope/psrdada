@@ -37,6 +37,7 @@ sub getObsToSend();
 sub getDest();
 sub transferTB($$&);
 sub transferFB($$$);
+sub transferFB_allcand_only($);
 sub markState($$$);
 
 #
@@ -236,6 +237,7 @@ $transfer_kill = "";
 =end comment
 
 =cut
+
       }
     }
     else
@@ -427,6 +429,7 @@ sub transferTB($$&)
 {
   my ($obs, $freq, @tmp) = @_;
   my @srcs = @{$tmp[0]};
+  transferFB_allcand_only($obs);
   Dada::logMsg(2, $dl, "transferTB S: @srcs");
 
   my $cmd = "";
@@ -562,6 +565,134 @@ sub transferTB($$&)
         return ("fail", "failed to delete partial transfer for: ".$path."/TB/".$src."/".$obs);
       }
     }
+  }
+
+  return ($xfer_result, $xfer_response);
+}
+
+sub transferFB_allcand_only($)
+{
+  my ($obs) = @_;
+
+  my $cmd = "";
+  my $xfer_result = "ok";
+  my $xfer_response = "ok";
+  my $result = "";
+  my $response = "";
+  my $rval = 0;
+  my $rsync_options = "-a --stats --no-g --chmod=go-ws --bwlimit ".BANDWIDTH.
+                      " --exclude 'obs.finished' ";
+
+  # create the remote destination direectories
+  my $remote_path = $path."/FB/all_candidates/".$obs."/";
+  $cmd = "mkdir -m 0755 -p ".$remote_path;
+       
+  Dada::logMsg(2, $dl, "transferFB_allcand_only: ".$cmd);
+  ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
+  Dada::logMsg(3, $dl, "transferFB_allcand_only: ".$result." ".$response);
+  if ($result ne "ok")
+  {
+    Dada::logMsgWarn($warn, "transferFB_allcand_only: ssh for ".$user."@".$host." failed: ".$response);
+    return ("fail", "ssh failed: ".$response);
+  }
+  if ($rval != 0)
+  {
+    Dada::logMsgWarn($warn, "transferFB_allcand_only: failed to create ".$remote_path." directory: ".$response);
+    return ("fail", "could not create remote dir");
+  }
+
+  $transfer_kill = "pkill -f '^rsync ".$results_dir."/".$obs."'";
+
+  # find the all_candidates.dat
+  $cmd = "ls -1d ".$results_dir."/".$obs."/FB/all_candidates.dat | awk -F/ '{print \$NF}'";
+  Dada::logMsg(2, $dl, "transferFB_allcand_only: ".$cmd);
+  ($result, $response) = Dada::mySystem($cmd);
+  Dada::logMsg(3, $dl, "transferFB_allcand_only: ".$result." ".$response);
+
+  if (($result eq "ok") && ($response ne ""))
+  {
+    # rsync the all_candidates.dat
+    $cmd = "rsync ".$results_dir."/".$obs."/FB/all_candidates.dat ".$user."@".$host.":".$remote_path." ".$rsync_options;
+
+    Dada::logMsg(2, $dl, "transferFB_allcand_only: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, $dl, "transferFB_allcand_only: ".$result." ".$response);
+
+    $transfer_kill = "";
+
+    if ($result eq "ok")
+    {
+      # determine the data rate
+      my @output_lines = split(/\n/, $response);
+      my $mbytes_per_sec = 0;
+      my $mbytes = 0;
+      my $seconds = 0;
+      my $i = 0;
+      for ($i=0; $i<=$#output_lines; $i++)
+      {
+        if ($output_lines[$i] =~ m/bytes\/sec/)
+        {
+          my @bits = split(/[\s]+/, $output_lines[$i]);
+          $mbytes_per_sec = $bits[6] / 1048576;
+          $mbytes = $bits[1] / 1048576;
+          $seconds = $mbytes / $mbytes_per_sec;
+
+        }
+      }
+      $xfer_response = sprintf("%2.0f", $mbytes)." MB in ".sprintf("%2.0f",$seconds).
+                       "s, ".sprintf("%2.0f", $mbytes_per_sec)." MB/s";
+
+      Dada::logMsg(2, $dl, $remote_path." ".$response);
+
+      # remote write permissions on transferred observation
+      $cmd = "chmod -R a-w ".$remote_path;
+      Dada::logMsg(2, $dl, "transferFB_allcand_only: remoteSsh(".$user.", ".$host.", ".$cmd.")");
+      ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
+      Dada::logMsg(2, $dl, "transferFB_allcand_only: ".$result." ".$rval." ".$response);
+      if ($result ne "ok")
+      {
+        Dada::logMsgWarn($warn, "transferFB_allcand_only: ssh ".$user."@".$host." for ".$cmd." failed: ".$response);
+        return ("fail", "ssh to ".$user."@".$host." failed: ".$response);
+      }
+      if ($rval != 0)
+      {
+        Dada::logMsgWarn($warn, "transferFB_allcand_only: failed to remove write permissions on: ".$remote_path.": ".$response);
+        return ("fail", "failed to remove write premissions on remote obs");
+      }
+    }
+    else 
+    {
+      if ($quit_daemon)
+      {
+        Dada::logMsg(1, $dl, "transferFB_allcand_only: rsync interrupted");
+        $xfer_response = "rsync interrupted for quit";
+      }
+      else
+      {
+        Dada::logMsg(0, $dl, "transferFB_allcand_only: rsync failed for ".$obs.": ".$response);
+        $xfer_response = "rsync failure";
+      }
+      $xfer_result = "fail";
+
+      # Delete the partially transferred observation
+      Dada::logMsg(1, $dl, "transferFB_allcand_only: rsync failed, deleting partial transfer at ".$remote_path);
+      $cmd = "rm -rf ".$remote_path;
+      Dada::logMsg(2, $dl, "transferFB_allcand_only: remoteSsh(".$user.", ".$host.", ".$cmd.")"); 
+      ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
+      Dada::logMsg(2, $dl, "transferFB_allcand_only: ".$result." ".$rval." ".$response);
+      if ($result ne "ok")
+      {
+        Dada::logMsgWarn($warn, "transferFB_allcand_only: ssh ".$user."@".$host." for ".$cmd." failed: ".$response);
+        return ("fail", "ssh to ".$user."@".$host." failed: ".$response);
+      }
+      if ($rval != 0) 
+      {
+        Dada::logMsgWarn($warn, "transferFB_allcand_only: failed to delete partial transfer at: ".$remote_path);
+        return ("fail", "failed to delete partial transfer for: ".$remote_path);
+      }
+    }
+  } else {
+    Dada::logMsg(1, $dl, "transferFB_allcand_only: couldn't find all_candidates.dat for ".$obs);
   }
 
   return ($xfer_result, $xfer_response);
