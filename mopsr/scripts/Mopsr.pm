@@ -255,7 +255,7 @@ sub makePlotsFromArchives($$$$$$$\%)
 
       Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
       if ($result eq "ok") {
-        $cmd = "tempo2 -gr plk -set FINISH 99999 -setup ".$ENV{"TEMPO2"}."/plugin_data/plk_setup_image_molo.dat -f ".$ephem[0]." ".$sdir."/out.tim -nofit -xplot 10 -showchisq -grdev ".$dir."/".$ta."/png";
+        $cmd = "tempo2 -gr plk -set FINISH 99999 -setup ".$ENV{"TEMPO2"}."/plugin_data/plk_setup_image_molo.dat -f ".$ephem[0]." ".$sdir."/out.tim -nofit -xplot 10 -showchisq -grdev ".$dir."/".$ta."/png -yplot 2 -fit F0 -fit F1";
         Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
         ($result, $response) = Dada::mySystem($cmd);
         Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
@@ -295,7 +295,7 @@ sub makePlotsFromArchives($$$$$$$\%)
           Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
 
           if ($response gt 0) {
-            $cmd = "tempo2 -gr plk -set FINISH 99999 -setup ".$ENV{"TEMPO2"}."/plugin_data/plk_setup_image_molo.dat -f ".$ephem[0]." ".$sdir."/temp.clean.tim -nofit -xplot 10 -showchisq -grdev ".$dir."/".$tc."/png";
+            $cmd = "tempo2 -gr plk -set FINISH 99999 -setup ".$ENV{"TEMPO2"}."/plugin_data/plk_setup_image_molo.dat -f ".$ephem[0]." ".$sdir."/temp.clean.tim -nofit -xplot 10 -showchisq -grdev ".$dir."/".$tc."/png -yplot 2 -fit F0 -fit F1";
             Dada::logMsg(2, $dl, "makePlotsFromArchives: ".$cmd);
             ($result, $response) = Dada::mySystem($cmd);
             Dada::logMsg(3, $dl, "makePlotsFromArchives: ".$result." ".$response);
