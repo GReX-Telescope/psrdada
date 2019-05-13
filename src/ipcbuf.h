@@ -37,7 +37,7 @@ extern "C" {
     uint64_t nbufs;    /* the number of buffers in the ring */
     uint64_t bufsz;    /* the size of the buffers in the ring */
 
-    uint64_t w_buf;    /* count of next buffer to write */
+    uint64_t w_buf;    /* count of oldest buffer to write */
     int w_state;       /* the state of the writer */
     uint64_t w_xfer;   /* the current write transfer number */
 
