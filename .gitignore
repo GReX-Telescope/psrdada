@@ -117,6 +117,9 @@ caspsr/src/caspsr_udptester
 caspsr/src/caspsr_udpthreaded
 caspsr/src/caspsr_udptsplot
 caspsr/src/mulbibob_server
+comap/src/comap_udpdb_preset
+comap/src/comap_udpdb_thread
+comap/src/comap_udptest
 examples/src/dada_example_client_writer
 examples/src/dada_example_writer
 gmrt/src/gmrt_correlator
@@ -244,6 +247,7 @@ mopsr/src/snapsr_udpdb
 mopsr/src/snapsr_udpfftplot
 mopsr/src/snapsr_udpplot
 mopsr/src/mopsr_xgpu_convert
+psrix/udp2db
 ska1/src/ska1_udpdb
 ska1/src/ska1_udpdb_thread
 ska1/src/ska1_udpgen
@@ -283,6 +287,7 @@ src/dada_pwc_demo
 src/dada_udgen
 src/dada_udheader
 src/dada_write_test
+src/dada_write_block_test
 src/dada_zerodb
 src/daemon_test
 src/dspsr_start_time

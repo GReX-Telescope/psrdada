@@ -143,15 +143,16 @@ class asteria_bests extends mopsr_webpage
       <tr>
         <td valign="top" width="200px">
 <?php
-    $this->openBlockHeader("Summary");
 
     include MYSQL_DB_CONFIG_FILE;
-
     $pdo = new PDO ('mysql:dbname='.MYSQL_DB.';host='.MYSQL_HOST, MYSQL_USER, MYSQL_PWD);
 
-    print_summary($pdo);
+    echo '<div class="sticky">';
+    $this->openBlockHeader("Summary");
+    print_summary($pdo, get_class($this));
 
     $this->closeBlockHeader();
+    echo "</div>";
 
     echo "</td><td>\n";
 

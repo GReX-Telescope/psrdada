@@ -31,9 +31,13 @@ extern "C" {
     uint64_t sod_buf;   /* buffer of start-of-data */
     uint64_t sod_byte;  /* byte of start-of-data */
 
+    char ** buf_ptrs;   /* pointers to already opened buffers */
+    unsigned bufs_opened; /* counter of opened buffers*/
+    unsigned bufs_opened_max; /* limit on the number of opened buffers */
+
   } ipcio_t;
 
-  static const ipcio_t IPCIO_INIT = { IPCBUF_INIT, 0,0, 0, 0, 0, 0,0,0 };
+  static const ipcio_t IPCIO_INIT = { IPCBUF_INIT, 0,0, 0, 0, 0, 0,0,0, 0,0,0 };
 
   /*! create a new shared memory block and initialize an ipcio_t struct */
   int ipcio_create (ipcio_t* ipc, key_t key, uint64_t nbufs, uint64_t bufsz, unsigned num_read);

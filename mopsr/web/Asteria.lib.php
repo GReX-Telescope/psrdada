@@ -1,5 +1,5 @@
 <?php
-function print_summary($pdo) {
+function print_summary($pdo, $class) {
   echo "<table>";
   $q = 'SELECT date FROM Updates';
 
@@ -32,16 +32,42 @@ function print_summary($pdo) {
   echo "<tr><td>Data since ".substr($since[0], 0, 10)."<td><tr>\n";
   echo "<tr><td>".$count[0]." observations</td></tr>\n";
   echo "<tr><td>Updated at:<br><span class=best_snr>".$updated[0]."</span></td></tr>\n";
+  if ($class !="asteria") {
+?>
+      <tr>
+        <td colspan=2><a href="/mopsr/Asteria.php?single=true">Last 100 pulsars</a></td>
+      </tr>
+<?php 
+  }
+  if ($class != "residuals") {
+?>
+      <tr>
+        <td colspan=2><a href="/mopsr/residuals.php?single=true">Timing residuals</a></td>
+      </tr>
+<?php
+  }
+  if ($class  != "asteria_fivehundred") {
 ?>
       <tr>
         <td colspan=2><a href="/mopsr/Asteria_500.php?single=true">Timing Programme Pulsars</a></td>
       </tr>
+<?php
+  }
+  if ($class != "asteria_500_when"){
+?>
       <tr>
         <td colspan=2><a href="/mopsr/Asteria_500_when.php?single=true">Time since last observation</a></td>
       </tr>
+<?php
+  }
+  if ($class  != "asteria_bests") {
+?>
       <tr>
         <td colspan=2><a href="/mopsr/Asteria_bests.php?single=true">Best per pulsar</a></td>
       </tr>
+<?php
+  }
+?>
       <tr><td><hr/></td><tr>
 <?php
   $q = 'SELECT COUNT(*) FROM UTCs JOIN Infos ON UTCs.id = Infos.utc_id WHERE TIMESTAMPDIFF(MINUTE, utc_ts, UTC_TIMESTAMP()) < 24*60';
@@ -110,6 +136,7 @@ function print_summary($pdo) {
   $summary_contents = file_get_contents($summary_filename);
   $summary_array = explode(PHP_EOL, $summary_contents);
   $counter = 0;
+  echo "<tr><td><b>Temporarily not updating further down due to disk I/O issues</b></td></tr>";
   foreach($summary_array as $line) {
     if (strpos($line, "Number of classified") === 0 || strpos($line, "Number of single") === 0 || strpos($line, "Number of RFI") === 0) {
       echo "<tr><td>".$line.'</td></tr>';

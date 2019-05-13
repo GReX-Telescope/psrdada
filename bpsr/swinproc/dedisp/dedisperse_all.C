@@ -153,7 +153,7 @@ void do_dedispersion(unsigned short int ** storage, unsigned short int * unpacke
 	    idelay = DM_shift(DMtrial,k-start_chan,tsamp,fch1_subband,foff);
 	    int stride = k*ntoload+idelay;
 #if HAVE_OPENMP
-#pragma omp parallel for private(j)
+//#pragma omp parallel for private(j)
 #endif
 	    for (int j=0;j<ntodedisp/4;j++){
 		casted_times[j]+=*((LONG64BIT*) (unpackeddata+(j*4+stride)));

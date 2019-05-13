@@ -129,8 +129,9 @@ int main (int argc, char **argv)
   fprintf(stderr,"Number of readers: %d\n", nreaders);
 
   fprintf(stderr, "\n");
-  fprintf(stderr, "sync->w_buf:     %"PRIu64"\n", db->sync->w_buf);
-  fprintf(stderr, "sync->w_state:   %s\n", state_to_str(db->sync->w_state));
+  fprintf(stderr, "sync->w_buf_curr: %"PRIu64"\n", db->sync->w_buf_curr);
+  fprintf(stderr, "sync->w_buf_next: %"PRIu64"\n", db->sync->w_buf_next);
+  fprintf(stderr, "sync->w_state:    %s\n", state_to_str(db->sync->w_state));
 
   fprintf(stderr, "Reader\tr_buf\tSOD\tEOD\tRSEM\tCONN\tFULL\tCLEAR\tr_state\n");
   for (iread=0; iread < nreaders; iread++)
@@ -188,7 +189,8 @@ int main (int argc, char **argv)
      * a proper xfer concept in it */
           
     fprintf(stderr,"\nHeader Block Xfers:\n");
-    fprintf(stderr, "sync->w_buf:   %"PRIu64"\n", hb->sync->w_buf);
+    fprintf(stderr, "sync->w_buf_curr:   %"PRIu64"\n", hb->sync->w_buf_curr);
+    fprintf(stderr, "sync->w_buf_next:   %"PRIu64"\n", hb->sync->w_buf_next);
     for (iread=0; iread < nreaders; iread++)
     {
       fprintf(stderr, "sync->r_bufs[%d]: %"PRIu64"\n", iread, hb->sync->r_bufs[iread]);

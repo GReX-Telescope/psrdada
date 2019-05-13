@@ -4,7 +4,7 @@ include_once("mopsr.lib.php");
 include_once("mopsr_webpage.lib.php");
 include_once("Asteria.lib.php");
 
-class asteria_bests extends mopsr_webpage 
+class asteria_fivehundred extends mopsr_webpage 
 {
 
   var $filter_types = array("", "SOURCE", "FREQ", "BW", "UTC_START", "PROC_FILE");
@@ -143,15 +143,17 @@ class asteria_bests extends mopsr_webpage
       <tr>
         <td valign="top" width="200px">
 <?
-    $this->openBlockHeader("Summary");
 
     include MYSQL_DB_CONFIG_FILE;
 
     $pdo = new PDO ('mysql:dbname='.MYSQL_DB.';host='.MYSQL_HOST, MYSQL_USER, MYSQL_PWD);
 
-    print_summary($pdo);
+    echo '<div class="sticky">';
+    $this->openBlockHeader("Summary");
+    print_summary($pdo, get_class($this));
 
     $this->closeBlockHeader();
+    echo "</div>";
 
     echo "</td><td>\n";
 
@@ -181,8 +183,15 @@ function rescale_snr_to5min($fSNR, $ftint_m) {
   return $fSNR * sqrt(5./$ftint_m);
 }
 
-$psr500_str = file_get_contents('500psrs.txt');
-$psr500 = explode("\n", $psr500_str);
+// $psr500_str = file_get_contents('500psrs.txt');
+// $psr500 = explode("\n", $psr500_str);
+$q = 'SELECT name FROM Pulsars WHERE observe=1 ORDER BY name';
+$stmt = $pdo -> query($q);
+if (!$stmt) {
+  echo 'Failed to query:<br>'.$q;
+  exit(-1);
+}
+$psr500 = $stmt->fetchAll(PDO::FETCH_COLUMN, 0);
 
 $counter = 0;
 echo "<p><table>\n<tr>\n";
@@ -624,4 +633,4 @@ foreach ($psr500 as $psr) {
   }
 
 }
-handledirect("asteria_bests");
+handledirect("asteria_fivehundred");

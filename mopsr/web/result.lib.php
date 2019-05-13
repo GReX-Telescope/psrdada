@@ -161,7 +161,7 @@ class result extends mopsr_webpage
       }
       $regen_url = "/mopsr/result.lib.php?script=true&script_name=manual_plot_make.pl&utc_start=".$this->utc_start."&source=".rawurlencode($source);
 ?>
-    <td class='module'><input type="button" onclick="popWindow('<?echo $regen_url?>')" value="Regenerate"<?echo $delete?>></td>;
+    <td class='module'><input type="button" onclick="popWindow('<?echo $regen_url?>')" value="Regenerate"<?echo $delete?>></td>
 <?
       echo "      </tr>\n";
     }

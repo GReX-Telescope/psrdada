@@ -6,9 +6,9 @@
  ****************************************************************************/
 
 /*
- * leda_udpdb_thread
+ * comap_udpdb_thread
  *
- * Reads UDP packets for LEDA correlator, uses:
+ * Reads UDP packets for COMAP correlator, uses:
  *  * separate thread for primary UDP capture
  *  * direct block access for performance
  *  * variable missed packet buffers for out of order packets 
@@ -31,7 +31,7 @@
 #include <sys/mman.h>
 #include <sched.h>
 
-#include "leda_udpdb_thread.h"
+#include "comap_udpdb_thread.h"
 #include "dada_generator.h"
 #include "dada_affinity.h"
 
@@ -49,7 +49,7 @@ uint64_t stop_byte = 0;
 void usage()
 {
   fprintf (stdout,
-     "leda_udpdb [options]\n"
+     "comap_udpdb [options]\n"
      " -b core          bind process to run on CPU core\n"
      " -c port          port for 'telnet' control commands\n"
      " -f header_file   ascii header file\n"
@@ -62,20 +62,20 @@ void usage()
      " -v               verbose messages\n"
      " -h               print help text\n",
      DADA_DEFAULT_BLOCK_KEY ,
-     LEDA_DEFAULT_UDPDB_PORT);
+     COMAP_DEFAULT_UDPDB_PORT);
 }
 
 
 /* 
  *  intialize UDP receiver resources
  */
-int leda_udpdb_init_receiver (udpdb_t * ctx)
+int comap_udpdb_init_receiver (udpdb_t * ctx)
 {
   if (ctx->verbose > 1)
-    multilog (ctx->log, LOG_INFO, "leda_udpdb_init_receiver()\n");
+    multilog (ctx->log, LOG_INFO, "comap_udpdb_init_receiver()\n");
 
-  // create a LEDA socket which can hold variable num of UDP packet
-  ctx->sock = leda_init_sock();
+  // create a COMAP socket which can hold variable num of UDP packet
+  ctx->sock = comap_init_sock();
 
   //ctx->packets_this_xfer = 0;
   ctx->ooo_packets = 0;
@@ -99,20 +99,20 @@ int leda_udpdb_init_receiver (udpdb_t * ctx)
 /* 
  *  destory UDP receiver resources 
  */
-int leda_udpdb_destroy_receiver (udpdb_t * ctx)
+int comap_udpdb_destroy_receiver (udpdb_t * ctx)
 {
   if (ctx->sock)
-    leda_free_sock(ctx->sock);
+    comap_free_sock(ctx->sock);
   ctx->sock = 0;
 }
 
 /*
  *  reset receiver before an observation commences
  */
-void leda_udpdb_reset_receiver (udpdb_t * ctx) 
+void comap_udpdb_reset_receiver (udpdb_t * ctx) 
 {
   if (ctx->verbose)
-    multilog (ctx->log, LOG_INFO, "leda_udpdb_reset_receiver()\n");
+    multilog (ctx->log, LOG_INFO, "comap_udpdb_reset_receiver()\n");
 
   ctx->capture_started = 0;
   ctx->last_seq = 0;
@@ -123,10 +123,10 @@ void leda_udpdb_reset_receiver (udpdb_t * ctx)
   reset_stats_t(ctx->bytes);
 }
 
-int leda_udpdb_prepare (udpdb_t * ctx)
+int comap_udpdb_prepare (udpdb_t * ctx)
 {
   if (ctx->verbose)
-    multilog(ctx->log, LOG_INFO, "leda_udpdb_prepare()\n");
+    multilog(ctx->log, LOG_INFO, "comap_udpdb_prepare()\n");
 
   // open socket
   if (ctx->verbose)
@@ -172,7 +172,7 @@ int leda_udpdb_prepare (udpdb_t * ctx)
  *  start the observation on the data block, completing the header and marking
  *  the buffer as filled
  */
-time_t leda_udpdb_start (udpdb_t * ctx, char * obs_header)
+time_t comap_udpdb_start (udpdb_t * ctx, char * obs_header)
 {
   // get the next available header block
   uint64_t header_size = ipcbuf_get_bufsz (ctx->hdu->header_block);
@@ -213,9 +213,9 @@ time_t leda_udpdb_start (udpdb_t * ctx, char * obs_header)
   }
 
   // open a block of the data block, ready for writing
-  if (leda_udpdb_open_buffer (ctx) < 0)
+  if (comap_udpdb_open_buffer (ctx) < 0)
   {
-    multilog (ctx->log, LOG_ERR, "start: leda_udpdb_open_buffer failed\n");
+    multilog (ctx->log, LOG_ERR, "start: comap_udpdb_open_buffer failed\n");
     return -1;
   }
 
@@ -226,11 +226,11 @@ time_t leda_udpdb_start (udpdb_t * ctx, char * obs_header)
 /* 
  *  open a data block buffer ready for direct access
  */
-int leda_udpdb_open_buffer (udpdb_t * ctx)
+int comap_udpdb_open_buffer (udpdb_t * ctx)
 {
 
   if (ctx->verbose > 1)
-    multilog (ctx->log, LOG_INFO, "leda_udpdb_open_buffer()\n");
+    multilog (ctx->log, LOG_INFO, "comap_udpdb_open_buffer()\n");
 
   if (ctx->block_open)
   {
@@ -253,17 +253,20 @@ int leda_udpdb_open_buffer (udpdb_t * ctx)
   ctx->block_open = 1;
   ctx->block_count = 0;
 
+  //udpdb.hdu_bufsz = ipcbuf_get_bufsz ((ipcbuf_t *) hdu->data_block);
+  //memset(ctx->block,1,ctx->hdu_bufsz);
+
   return 0;
 }
 
 /*
  *  close a data buffer, assuming a full block has been written
  */
-int leda_udpdb_close_buffer (udpdb_t * ctx, uint64_t bytes_written, unsigned eod)
+int comap_udpdb_close_buffer (udpdb_t * ctx, uint64_t bytes_written, unsigned eod)
 {
 
   if (ctx->verbose && stop_pending || ctx->verbose > 1)
-    multilog (ctx->log, LOG_INFO, "leda_udpdb_close_buffer(%"PRIu64", %d)\n", bytes_written, eod);
+    multilog (ctx->log, LOG_INFO, "comap_udpdb_close_buffer(%"PRIu64", %d)\n", bytes_written, eod);
 
   if (!ctx->block_open)
   { 
@@ -304,21 +307,21 @@ int leda_udpdb_close_buffer (udpdb_t * ctx, uint64_t bytes_written, unsigned eod
 /* 
  *  move to the next ring buffer element. return pointer to base address of new buffer
  */
-int leda_udpdb_new_buffer (udpdb_t * ctx)
+int comap_udpdb_new_buffer (udpdb_t * ctx)
 {
 
   if (ctx->verbose > 1)
-    multilog (ctx->log, LOG_INFO, "leda_udpdb_new_buffer()\n");
+    multilog (ctx->log, LOG_INFO, "comap_udpdb_new_buffer()\n");
 
-  if (leda_udpdb_close_buffer (ctx, ctx->hdu_bufsz, 0) < 0)
+  if (comap_udpdb_close_buffer (ctx, ctx->hdu_bufsz, 0) < 0)
   {
-    multilog (ctx->log, LOG_INFO, "new_buffer: leda_udpdb_close_buffer failed\n");
+    multilog (ctx->log, LOG_INFO, "new_buffer: comap_udpdb_close_buffer failed\n");
     return -1;
   }
 
-  if (leda_udpdb_open_buffer (ctx) < 0) 
+  if (comap_udpdb_open_buffer (ctx) < 0) 
   {
-    multilog (ctx->log, LOG_INFO, "new_buffer: leda_udpdb_open_buffer failed\n");
+    multilog (ctx->log, LOG_INFO, "new_buffer: comap_udpdb_open_buffer failed\n");
     return -1;
   }
 
@@ -338,7 +341,7 @@ int leda_udpdb_new_buffer (udpdb_t * ctx)
  * Receive UDP data for 1 observation, continually writing it to 
  * datablocks
  */
-void * leda_udpdb_receive_obs (void * arg)
+void * comap_udpdb_receive_obs (void * arg)
 {
   udpdb_t * ctx = (udpdb_t *) arg;
 
@@ -352,7 +355,7 @@ void * leda_udpdb_receive_obs (void * arg)
   unsigned char * b = (unsigned char *) ctx->sock->buf;
 
   // decoded channel id
-  uint16_t ant_id = 0;
+  uint8_t ant_id = 0;
 
   // data received from a recv_from call
   size_t got = 0;
@@ -376,7 +379,7 @@ void * leda_udpdb_receive_obs (void * arg)
   int thread_result = 0;
 
   if (ctx->verbose)
-    multilog(log, LOG_INFO, "leda_udpdb_receive_obs()\n");
+    multilog(log, LOG_INFO, "comap_udpdb_receive_obs()\n");
 
   // set the CPU that this thread shall run on
   if (ctx->recv_core >= 0)
@@ -451,25 +454,18 @@ void * leda_udpdb_receive_obs (void * arg)
       seq_no = UINT64_C (0);
       for (i = 0; i < 8; i++ )
       {
-        tmp = b[8 - i - 1];
+        //tmp = b[8 - i - 1];
+	tmp = b[i];
         seq_no |= (tmp << ((i & 7) << 3));
       }
 
-      ch_id = UINT64_C (0);
-      for (i = 0; i < 8; i++ )
-      {
-        tmp = UINT64_C (0);
-        tmp = b[16 - i - 1];
-        ch_id |= (tmp << ((i & 7) << 3));
-      }
-
+      ant_id = b[8];
       //if (ctx->num_inputs == 1)
       //  ant_id = 0;
       //else
-        ant_id = (uint16_t) ch_id;
 
       // decode sequence number
-      //leda_decode_header(ctx->sock->buf, &seq_no, &ant_id);
+      //comap_decode_header(ctx->sock->buf, &seq_no, &ant_id);
 
       // if first packet
       if (!ctx->capture_started)
@@ -550,9 +546,9 @@ void * leda_udpdb_receive_obs (void * arg)
         }
 
         // get a new buffer and write any temp packets saved 
-        if (leda_udpdb_new_buffer (ctx) < 0)
+        if (comap_udpdb_new_buffer (ctx) < 0)
         {
-          multilog(ctx->log, LOG_ERR, "receive_obs: leda_udpdb_new_buffer failed\n");
+          multilog(ctx->log, LOG_ERR, "receive_obs: comap_udpdb_new_buffer failed\n");
           thread_result = -1;
           pthread_exit((void *) &thread_result);
         }
@@ -615,9 +611,9 @@ void * leda_udpdb_receive_obs (void * arg)
         }
 
         // close buffer signalling EOD
-        if (leda_udpdb_close_buffer (ctx, bytes_just_written, 1) < 0)
+        if (comap_udpdb_close_buffer (ctx, bytes_just_written, 1) < 0)
         {
-          multilog(ctx->log, LOG_ERR, "receive_obs: leda_udpdb_close_hdu failed\n");
+          multilog(ctx->log, LOG_ERR, "receive_obs: comap_udpdb_close_hdu failed\n");
           thread_result = -1;
           pthread_exit((void *) &thread_result);
         }
@@ -690,10 +686,10 @@ int main (int argc, char **argv)
   int control_port = 0;
 
   /* port for incoming UDP packets */
-  int inc_port = LEDA_DEFAULT_UDPDB_PORT;
+  int inc_port = COMAP_DEFAULT_UDPDB_PORT;
 
   /* multilog output port */
-  int l_port = LEDA_DEFAULT_PWC_LOGPORT;
+  int l_port = COMAP_DEFAULT_PWC_LOGPORT;
 
   /* Flag set in daemon mode */
   char daemon = 0;
@@ -836,7 +832,7 @@ int main (int argc, char **argv)
   int rval = 0;
   void* result = 0;
 
-  log = multilog_open ("leda_udpdb_thread", 0);
+  log = multilog_open ("comap_udpdb_thread", 0);
 
   if (daemon)
     be_a_daemon ();
@@ -845,8 +841,8 @@ int main (int argc, char **argv)
   udpdb.log = log;
 
   // initialize the data structure
-  multilog (log, LOG_INFO, "main: leda_udpdb_init_receiver()\n");
-  if (leda_udpdb_init_receiver (&udpdb) < 0)
+  multilog (log, LOG_INFO, "main: comap_udpdb_init_receiver()\n");
+  if (comap_udpdb_init_receiver (&udpdb) < 0)
   {
     multilog (log, LOG_ERR, "could not initialize socket\n");
     return EXIT_FAILURE;
@@ -894,8 +890,8 @@ int main (int argc, char **argv)
 
 
   if (verbose)
-    multilog(log, LOG_INFO, "main: leda_udpdb_prepare()\n");
-  if (leda_udpdb_prepare (&udpdb) < 0)
+    multilog(log, LOG_INFO, "main: comap_udpdb_prepare()\n");
+  if (comap_udpdb_prepare (&udpdb) < 0)
   {
     multilog(log, LOG_ERR, "could allocate required resources\n");
     return EXIT_FAILURE;
@@ -927,8 +923,8 @@ int main (int argc, char **argv)
   while (!quit_threads) 
   {
     if (verbose)
-      multilog(log, LOG_INFO, "main: leda_udpdb_reset_receiver()\n");
-    leda_udpdb_reset_receiver (&udpdb);
+      multilog(log, LOG_INFO, "main: comap_udpdb_reset_receiver()\n");
+    comap_udpdb_reset_receiver (&udpdb);
 
     // wait for a START command before initialising receivers
     while (!start_pending && !quit_threads && control_port) 
@@ -941,8 +937,8 @@ int main (int argc, char **argv)
     if (header_file)
     {
       if (verbose)
-        multilog(log, LOG_INFO, "main: leda_udpdb_start()\n");
-      time_t utc = leda_udpdb_start (&udpdb, obs_header);
+        multilog(log, LOG_INFO, "main: comap_udpdb_start()\n");
+      time_t utc = comap_udpdb_start (&udpdb, obs_header);
       if (utc == -1 ) {
         multilog(log, LOG_ERR, "Could not run start function\n");
         return EXIT_FAILURE;
@@ -960,19 +956,19 @@ int main (int argc, char **argv)
         multilog(log, LOG_INFO, "Acquiring data indefinitely\n");
     }
 
-    //rval = pthread_create (&receiving_thread_id, &recv_attr, (void *) leda_udpdb_receive_obs , (void *) &udpdb);
+    //rval = pthread_create (&receiving_thread_id, &recv_attr, (void *) comap_udpdb_receive_obs , (void *) &udpdb);
     if (verbose)
-      multilog(log, LOG_INFO, "starting leda_udpdb_receive_obs thread\n");
-    rval = pthread_create (&receiving_thread_id, 0, (void *) leda_udpdb_receive_obs , (void *) &udpdb);
+      multilog(log, LOG_INFO, "starting comap_udpdb_receive_obs thread\n");
+    rval = pthread_create (&receiving_thread_id, 0, (void *) comap_udpdb_receive_obs , (void *) &udpdb);
     if (rval != 0) {
-      multilog(log, LOG_INFO, "Error creating leda_udpdb_receive_obs thread: %s\n", strerror(rval));
+      multilog(log, LOG_INFO, "Error creating comap_udpdb_receive_obs thread: %s\n", strerror(rval));
       return -1;
     }
 
     if (verbose) 
-      multilog(log, LOG_INFO, "joining leda_udpdb_receive_obs thread\n");
+      multilog(log, LOG_INFO, "joining comap_udpdb_receive_obs thread\n");
     pthread_join (receiving_thread_id, &result);
-    multilog(log, LOG_INFO, "joined leda_udpdb_receive_obs thread\n");
+    multilog(log, LOG_INFO, "joined comap_udpdb_receive_obs thread\n");
 
     if (verbose) 
       multilog(log, LOG_INFO, "udpdb_stop_function\n");
@@ -997,7 +993,7 @@ int main (int argc, char **argv)
   pthread_join (stats_thread_id, &result);
 
   // clean up memory 
-  if ( leda_udpdb_destroy_receiver (&udpdb) < 0) 
+  if ( comap_udpdb_destroy_receiver (&udpdb) < 0) 
     fprintf(stderr, "failed to clean up receivers\n");
 
   // disconnect from HDU

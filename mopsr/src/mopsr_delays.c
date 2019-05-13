@@ -88,12 +88,12 @@ void sinc_filter(complex16* series_in, complex16* series_out,
   return;
 }
 
-void sinc_filter_float (complex float * series_in, complex float * series_out,
+void sinc_filter_float (float _Complex * series_in, float _Complex * series_out,
                         float * filter, int size, int ntaps, float delay)
 {
   int ii,jj,filter_size;
   float *fptr;
-  complex float *dptr;
+  float _Complex * dptr;
   int ntaps_by_2 = ntaps/2;
 
   //Only perform subsample delay

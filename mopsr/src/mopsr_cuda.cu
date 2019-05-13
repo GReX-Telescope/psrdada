@@ -1521,7 +1521,7 @@ void mopsr_tile_beams_precomp (cudaStream_t stream, void * d_in, void * d_fbs, v
     fprintf (stderr, "WARNING: ndat not divisible by %d\n", ndat_per_block);
 
   size_t sdata_bytes = (nbeam_block * (nthread/WARP_SIZE) * sizeof(float) * 2) +
-                       (nbeam_block * nant * sizeof (complex float));
+                       (nbeam_block * nant * sizeof (float _Complex));
 
 #ifdef _GDEBUG
   fprintf (stderr, "bytes=%lu ndat=%lu blocks=(%u,%u,%u) threads=%u shm=%ld\n", bytes, ndat, blocks.x, blocks.y, blocks.z, nthread, sdata_bytes);

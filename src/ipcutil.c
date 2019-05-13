@@ -20,6 +20,9 @@ void* ipc_alloc (key_t key, size_t size, int flag, int* shmid)
 {
   void* buf = 0;
   int id = 0;
+#ifdef _DEBUG
+  fprintf (stderr, "ipc_alloc: key=%x size=%ld flag=%x\n", key, size, flag);
+#endif
 
   id = shmget (key, size, flag);
   if (id < 0) {
