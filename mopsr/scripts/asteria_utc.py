@@ -477,8 +477,24 @@ def extract_snr_tint_bw_freq_nbin_int0mjd(dir, archive_fn, verbose):
             print psrstat_err
             sys.exit(process.returncode)
         out = psrstat_out.split()
-        return float(out[0]), float(out[1]), float(out[2]), float(out[3]),\
-            int(out[4]), out[5]
+        # smooth_mmw error is printed to stdout, not stderr so need to handle this.
+        # the idea is that default estimator will work
+        if out[0] == "smooth_mmw":
+            cmd = ['/home/dada/linux_64/bin/psrstat', '-c',
+                   'snr,length,bw,freq,nbin,int[0]:mjd',
+                   '-qQ', '-j', 'DFTp', archive_fn]
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                                       stderr=subprocess.PIPE, shell=False)
+            (psrstat_out, psrstat_err) = process.communicate()
+            out = psrstat_out.split()
+
+        try:
+            return float(out[0]), float(out[1]), float(out[2]), float(out[3]),\
+              int(out[4]), out[5]
+        except ValueError:
+            print "Failed to convert psrstat output, got:"
+            print out
+            return -1., -1., -1., -1., -1, -1
     else:
         if verbose:
             print "No archive present for", dir
