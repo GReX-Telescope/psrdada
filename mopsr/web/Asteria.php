@@ -157,13 +157,13 @@ class asteria extends mopsr_webpage
     echo "</td><td>\n";
 
     if (file_exists("/data/mopsr/results/sky_scan/mo_fields_latest.png")) {
-      $this->openBlockHeader("Overview of last 24h of observing (updated every 6 hours)");
+      $this->openBlockHeader("Overview of last 24h of observing (updated at 6.01 AM)");
       echo '<a href="/mopsr/results/sky_scan/mo_fields_latest.pdf"><img title="red: failed or unknown TINT; green: PSR or FRB search; purple: search while waiting for source; blue: correlator" src="/mopsr/results/sky_scan/mo_fields_latest.png"></a>';
     }
     echo '<br><a href=/mopsr/sky_plots.php?single=true>Historical on-sky plots</a><br>';
 
     echo '<a><img src="/mopsr/results/sky_scan/efficiency.png"></a><br>';
-    echo '<a><img title="green: good obs; red: not on boresight; grey: long obs" src="/mopsr/results/sky_scan/1644.png"></a>';
+    echo '<a href="/mopsr/results/sky_scan/1644.snrs.final"><img title="green: good obs; red: not on boresight; grey: long obs" src="/mopsr/results/sky_scan/1644.png"></a>';
 
     $this->openBlockHeader("Last 100 pulsars observed");
 
