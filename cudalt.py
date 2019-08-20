@@ -51,7 +51,7 @@ args = sys.argv[2:]
 args.append("-o")
 args.append(npic_filepath)
 command = " ".join(args)
-print command
+print(command)
 
 # compile the .cu
 rv = os.system(command)
@@ -59,7 +59,11 @@ if rv != 0:
     sys.exit(1)
 
 # get libtool version
-fd = os.popen(basedir + "/libtool --version")
+fd = 0
+if os.path.exists(basedir + "/libtool"):
+  fd = os.popen(basedir + "/libtool --version")
+else:
+  fd = os.popen("libtool --version")
 libtool_version = fd.readline()
 # this loop supresses the broken pipe errors
 # you get by not reading all the data
