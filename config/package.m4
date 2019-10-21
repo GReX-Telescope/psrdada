@@ -137,6 +137,9 @@ AC_DEFUN([SWIN_PACKAGE_TRY_LINK],
     if test -d $swin_base/lib; then
       swin_search_path="$swin_search_path $swin_base/lib"
     fi
+    if test -d $swin_base/lib64; then
+      swin_search_path="$swin_search_path $swin_base/lib64"
+    fi
   fi
 
   cf_lib_path_list="$with_[$1]_lib_dir $swin_search_path [$5] ."
