@@ -15,6 +15,7 @@
 #define WARP_SIZE             32
 #define MEDIAN_FILTER         1
 #define TWO_SIGMA             
+#define FULLMASK              0xFFFFFFFF
 //#define ONE_SIGMA
 //#define SK_FREQ_AVG
 //#define SHOW_MASK             // this puts the SK/TP masks into the output data!
@@ -766,32 +767,43 @@ void hires_delay_fractional (cudaStream_t stream, void * d_in, void * d_out,
 }
 
 
-#ifdef HAVE_SHFL
+#if (__CUDA_ARCH__ >= 300)
 __inline__ __device__
 float warpReduceSumF(float val) {
   for (int offset = warpSize/2; offset > 0; offset /= 2) 
+#if (__CUDACC_VER_MAJOR__>= 9)
+    val += __shfl_down_sync(FULLMASK, val, offset);
+#else
     val += __shfl_down(val, offset);
+#endif
   return val;
 }
 
 __inline__ __device__
 float blockReduceSumF(float  val) 
 {
-  static __shared__ float shared[32]; // Shared mem for 32 partial sums
+  // Shared mem for 32 partial sums
+  static __shared__ float shared[32];
 
   int lane = threadIdx.x % warpSize;
   int wid = threadIdx.x / warpSize;
 
-  val = warpReduceSumF(val);      // Each warp performs partial reduction
+  // Each warp performs partial reduction
+  val = warpReduceSumF(val);
 
-  if (lane==0) shared[wid] = val; // Write reduced value to shared memory
+  // Write reduced value to shared memory
+  if (lane==0)
+    shared[wid] = val;
 
-  __syncthreads();                // Wait for all partial reductions
+  // Wait for all partial reductions
+  __syncthreads();
 
-  //read from shared memory only if that warp existed
+  // Read from shared memory only if that warp existed
   val = (threadIdx.x < blockDim.x / warpSize) ? shared[lane] : 0;
 
-  if (wid==0) val = warpReduceSumF(val); //Final reduce within first warp
+  // Final reduce within first warp
+  if (wid==0)
+    val = warpReduceSumF(val);
 
   return val;
 }
@@ -818,36 +830,48 @@ float blockReduceSumFS(float * vals)
   return val;
 }
 
-
 __inline__ __device__
-int warpReduceSumI(int val) {
+int warpReduceSumI(int val)
+{
   for (int offset = warpSize/2; offset > 0; offset /= 2)
+  {
+#if (__CUDACC_VER_MAJOR__>= 9)
+    val += __shfl_down_sync(FULLMASK, val, offset);
+#else
     val += __shfl_down(val, offset);
+#endif
+  }
   return val;
 }
 
 __inline__ __device__
-int blockReduceSumI(int val) {
-
-  static __shared__ int shared[32]; // Shared mem for 32 partial sums
+int blockReduceSumI(int val)
+{
+  // Shared mem for 32 partial sums
+  static __shared__ int shared[32];
   int lane = threadIdx.x % warpSize;
   int wid = threadIdx.x / warpSize;
 
-  val = warpReduceSumI(val);     // Each warp performs partial reduction
+  // Each warp performs partial reduction
+  val = warpReduceSumI(val);
 
-  if (lane==0) shared[wid]=val; // Write reduced value to shared memory
+  // Write reduced value to shared memory
+  if (lane==0)
+    shared[wid]=val;
 
-  __syncthreads();              // Wait for all partial reductions
+  // Wait for all partial reductions
+  __syncthreads();
 
-  //read from shared memory only if that warp existed
+  // Read from shared memory only if that warp existed
   val = (threadIdx.x < blockDim.x / warpSize) ? shared[lane] : 0;
 
-  if (wid==0) val = warpReduceSumI(val); //Final reduce within first warp
+  // Final reduce within first warp
+  if (wid==0)
+    val = warpReduceSumI(val);
 
   return val;
 }
 #endif
-
 
 // Compute the mean of the re and imginary compoents for 
 __global__ void hires_measure_means_kernel (cuFloatComplex * in, cuFloatComplex * means, const unsigned nval_per_thread, const uint64_t ndat)
@@ -879,7 +903,7 @@ __global__ void hires_measure_means_kernel (cuFloatComplex * in, cuFloatComplex 
     idx += blockDim.x;
   }
 
-#ifdef HAVE_SHFL
+#if ( __CUDA_ARCH__ >= 300)
   // compute via block reduce sum
   sum_re = blockReduceSumF(sum_re);
   sum_im = blockReduceSumF(sum_im);
@@ -928,21 +952,12 @@ __global__ void hires_skcompute_kernel (cuFloatComplex * in, float * s1s, float 
     idx += blockDim.x;
   }
 
-#ifdef HAVE_SHFL
+#if ( __CUDA_ARCH__ >= 300)
   const unsigned warp_idx = threadIdx.x % 32;
   const unsigned warp_num = threadIdx.x / 32;
 
-  s1_sum += __shfl_down (s1_sum, 16);
-  s1_sum += __shfl_down (s1_sum, 8);
-  s1_sum += __shfl_down (s1_sum, 4);
-  s1_sum += __shfl_down (s1_sum, 2);
-  s1_sum += __shfl_down (s1_sum, 1);
-
-  s2_sum += __shfl_down (s2_sum, 16);
-  s2_sum += __shfl_down (s2_sum, 8);
-  s2_sum += __shfl_down (s2_sum, 4);
-  s2_sum += __shfl_down (s2_sum, 2);
-  s2_sum += __shfl_down (s2_sum, 1);
+  s1_sum = warpReduceSumF(s1_sum);
+  s2_sum = warpReduceSumF(s2_sum);
 
   if (warp_idx == 0)
   {
@@ -957,17 +972,8 @@ __global__ void hires_skcompute_kernel (cuFloatComplex * in, float * s1s, float 
     s1_sum = skc_shm [warp_idx];
     s2_sum = skc_shm [32 + warp_idx];
 
-    s1_sum += __shfl_down (s1_sum, 16);
-    s1_sum += __shfl_down (s1_sum, 8);
-    s1_sum += __shfl_down (s1_sum, 4);
-    s1_sum += __shfl_down (s1_sum, 2);
-    s1_sum += __shfl_down (s1_sum, 1);
-
-    s2_sum += __shfl_down (s2_sum, 16);
-    s2_sum += __shfl_down (s2_sum, 8);
-    s2_sum += __shfl_down (s2_sum, 4);
-    s2_sum += __shfl_down (s2_sum, 2);
-    s2_sum += __shfl_down (s2_sum, 1);
+    s1_sum = warpReduceSumF(s1_sum);
+    s2_sum = warpReduceSumF(s2_sum);
   }
 #endif
 
@@ -975,8 +981,6 @@ __global__ void hires_skcompute_kernel (cuFloatComplex * in, float * s1s, float 
   {
     // FST ordered
     const unsigned out_idx = (ichanant * gridDim.x) +  blockIdx.x;
-    //if (iant == 0 && ichan == 168)
-    //  printf ("s1s[%u]=%f\n", out_idx, s1_sum);
     s1s[out_idx] = s1_sum;
     s2s[out_idx] = s2_sum;
   }
@@ -1245,18 +1249,9 @@ __global__ void hires_compute_power_limits_kernel (float * in, cuFloatComplex * 
   //  printf ("[%d] s1=%f centre=%u median=%f sigma=%f\n", threadIdx.x, s1, centre, median, sigma);
 
   // now sum S1 across threads
-#ifdef HAVE_SHFL
-  s1 += __shfl_down (s1, 16);
-  s1 += __shfl_down (s1, 8);
-  s1 += __shfl_down (s1, 4);
-  s1 += __shfl_down (s1, 2);
-  s1 += __shfl_down (s1, 1);
-
-  s1_count += __shfl_down (s1_count, 16);
-  s1_count += __shfl_down (s1_count, 8);
-  s1_count += __shfl_down (s1_count, 4);
-  s1_count += __shfl_down (s1_count, 2);
-  s1_count += __shfl_down (s1_count, 1);
+#if ( __CUDA_ARCH__ >= 300)
+  s1 = warpReduceSumF(s1);
+  s1_count = warpReduceSumF(s1_count);
 #endif
 
   unsigned warp_idx = threadIdx.x % 32;
@@ -1275,18 +1270,9 @@ __global__ void hires_compute_power_limits_kernel (float * in, cuFloatComplex * 
     s1 = keys[warp_idx];
     s1_count = keys[32+warp_idx];
 
-#ifdef HAVE_SHFL
-    s1 += __shfl_down (s1, 16);
-    s1 += __shfl_down (s1, 8);
-    s1 += __shfl_down (s1, 4);
-    s1 += __shfl_down (s1, 2);
-    s1 += __shfl_down (s1, 1);
-
-    s1_count += __shfl_down (s1_count, 16);
-    s1_count += __shfl_down (s1_count, 8);
-    s1_count += __shfl_down (s1_count, 4);
-    s1_count += __shfl_down (s1_count, 2);
-    s1_count += __shfl_down (s1_count, 1);
+#if ( __CUDA_ARCH__ >= 300)
+    s1 = warpReduceSumF(s1);
+    s1_count = warpReduceSumF(s1_count);
 #endif
 
     // this sigma is the stddev of the voltages (hence 1024 * 2)
