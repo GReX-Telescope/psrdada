@@ -358,6 +358,9 @@ int ipcbuf_disconnect (ipcbuf_t* id)
     return -1;
   }
 
+#ifdef HAVE_OPENMP
+  #pragma omp parallel for
+#endif
   for (ibuf = 0; ibuf < id->sync->nbufs; ibuf++)
   {
 #ifdef HAVE_CUDA
@@ -424,6 +427,9 @@ int ipcbuf_destroy (ipcbuf_t* id)
     id->semid_data[iread] = -1;
   }
 
+#ifdef HAVE_OPENMP
+  #pragma omp parallel for
+#endif
   for (ibuf = 0; ibuf < id->sync->nbufs; ibuf++)
   {
 #ifdef _DEBUG
@@ -1578,6 +1584,9 @@ int ipcbuf_page (ipcbuf_t* id)
   if (id->syncid < 0 || id->shmid == 0)
     return -1;
 
+#ifdef HAVE_OPENMP
+  #pragma omp parallel for
+#endif
   for (ibuf = 0; ibuf < id->sync->nbufs; ibuf++)
   {
 #ifdef HAVE_CUDA
@@ -1585,7 +1594,7 @@ int ipcbuf_page (ipcbuf_t* id)
       ipc_zero_buffer_cuda( id->buffer[ibuf], id->sync->bufsz );
     else
 #endif
-      bzero (id->buffer[ibuf], id->sync->bufsz); 
+      bzero (id->buffer[ibuf], id->sync->bufsz);
   }
 
   return 0;

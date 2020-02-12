@@ -208,7 +208,7 @@ int main (int argc, char** argv)
     if (obj)
     {
       hwloc_membind_policy_t policy = HWLOC_MEMBIND_BIND;
-      hwloc_membind_flags_t flags = HWLOC_MEMBIND_STRICT;
+      hwloc_membind_flags_t flags = HWLOC_MEMBIND_MIGRATE |  HWLOC_MEMBIND_STRICT;
 
       int result = hwloc_set_membind_nodeset (topology, obj->nodeset, policy, flags);
       if (result < 0)
@@ -218,6 +218,8 @@ int main (int argc, char** argv)
         return -1;
       }
     }
+    else
+      fprintf (stderr, "dada_db: failed to get_obj_by_type()\n");
 #endif
 
     // create data ring buffer

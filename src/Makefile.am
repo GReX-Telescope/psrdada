@@ -46,8 +46,8 @@ check_PROGRAMS = test_multilog test_ipcbuf loop_ipcio	\
 TESTS = test_uint64_t test_disk_array test_ipcio test_ascii_header
 
 LDADD = libpsrdada.la 
-AM_CFLAGS = 
-AM_CPPFLAGS = 
+AM_CFLAGS = @OPENMP_CFLAGS@
+AM_CPPFLAGS = @OPENMP_CFLAGS@
 
 EXTRA_DIST=ipcrme loopssh
 
