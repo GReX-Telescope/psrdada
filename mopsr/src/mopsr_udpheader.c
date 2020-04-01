@@ -10,6 +10,7 @@
 #include <math.h>
 
 #include "mopsr_udpheader.h"
+#include "mopsr_udp.h"
 #include "sock.h"
 
 void stats_thread(void * arg);

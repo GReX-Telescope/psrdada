@@ -336,9 +336,9 @@ int dbfurbydb_open (dada_client_t* client)
     char * f_ids;
     char * f_beams;
     char * f_tstamps;
-    f_ids = malloc(sizeof(char) * ctx->inj_furbys * 10);
-    f_beams = malloc(sizeof(char) * ctx->inj_furbys * 10);
-    f_tstamps = malloc(sizeof(char) * ctx->inj_furbys * 10);
+    f_ids = malloc(sizeof(char) * ctx->inj_furbys * 50);
+    f_beams = malloc(sizeof(char) * ctx->inj_furbys * 50);
+    f_tstamps = malloc(sizeof(char) * ctx->inj_furbys * 50);
 
     if (ascii_header_get (client->header, "FURBY_IDS", "%s", f_ids) != 1)
     {

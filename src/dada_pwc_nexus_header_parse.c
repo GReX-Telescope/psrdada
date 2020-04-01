@@ -12,14 +12,14 @@ int dada_pwc_specify_header (char keep, const char* filter,
 			     char* header, FILE* fptr)
 {
   // each line read from fptr
-  char file_line [256];
+  char file_line [4096];
 
   // result of search for '#' in file_line
   char* comment = 0;
 
   // parameter name and value strings
   char param_name  [128] = "";
-  char param_value [128] = "";
+  char param_value [3968] = "";
 
   // set true if the parameter name prefix matches the filter
   char match = 0;
@@ -50,7 +50,7 @@ int dada_pwc_specify_header (char keep, const char* filter,
 
   filter_length = strlen(filter);
 
-  while ( fgets( file_line, 256, fptr ) ) {
+  while ( fgets( file_line, 4096, fptr ) ) {
 
     comment = strchr( file_line, '#' );
     if (comment)
@@ -61,7 +61,7 @@ int dada_pwc_specify_header (char keep, const char* filter,
 #endif
 
     //if ( sscanf( file_line, "%s %s", param_name, param_value ) != 2 )
-    if ( sscanf( file_line, "%s %128[^\n]", param_name, param_value ) != 2 )
+    if ( sscanf( file_line, "%s %3968[^\n]", param_name, param_value ) != 2 )
       continue;
 
     // Remove trailing whitespace

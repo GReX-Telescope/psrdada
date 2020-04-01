@@ -1419,6 +1419,13 @@ int bfdsp_open (dada_client_t* client)
     }
     ascii_header_del (client->header, key);
 
+    sprintf(key, "TB%d_DM", i);
+    if (ascii_header_get (client->header, key, "%s", tbs[i].dm) != 1)
+    {
+      multilog (log, LOG_WARNING, "open: could not read %s from header\n", key);
+    }
+    ascii_header_del (client->header, key);
+
     if (ctx->verbose)
       multilog (log, LOG_INFO, "open: TB[%d] RA (HMS) = %s\n", i, tbs[i].ra);
     if (mopsr_delays_hhmmss_to_rad (tbs[i].ra, &(ctx->tb_sources[i].raj)) < 0)
@@ -1824,6 +1831,11 @@ int bfdsp_open (dada_client_t* client)
     if (ascii_header_set (header, "DEC", "%s", tbs[i].dec) < 0)
     {
       multilog (log, LOG_ERR, "open: could not set DEC in outgoing header\n", 1);
+      return -1;
+    }
+    if (ascii_header_set (header, "DM", "%s", tbs[i].dm) < 0)
+    {
+      multilog (log, LOG_ERR, "open: could not set DM in outgoing header\n", 1);
       return -1;
     }
 

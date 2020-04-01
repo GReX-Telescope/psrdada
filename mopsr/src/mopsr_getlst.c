@@ -98,7 +98,7 @@ int main(int argc, char** argv)
   int NDP = 4;    // number of decimal places
 
   iauA2tf (NDP, last, &sign, HMSF);
-  fprintf (stdout, "LAST: %02d:%02d:%02d.%d [radians=%f]\n", HMSF[0],HMSF[1],HMSF[2],HMSF[3], last);
+  fprintf (stdout, "LAST: %02d:%02d:%02d.%04d [radians=%f]\n", HMSF[0],HMSF[1],HMSF[2],HMSF[3], last);
 
   return 0;
 }

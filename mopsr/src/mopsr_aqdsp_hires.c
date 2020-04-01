@@ -1405,9 +1405,25 @@ int aqdsp_open (dada_client_t* client)
   // setup masks if zapping 
   if (ctx->zap)
   {
-    unsigned header_size = 4096;
-    char mask_header[4096];
-    strcpy (mask_header, header);
+
+    unsigned header_size;
+    if (ascii_header_get (header, "HDR_SIZE", "%u", &header_size) != 1)
+    {
+      multilog (log, LOG_ERR, "open: could not read HDR_SIZE from ascii header\n");
+      return -1;
+    }
+
+    char * mask_header = (char *) malloc (header_size);
+    if (!mask_header)
+    {
+      multilog (log, LOG_ERR, "open: could not allocated %u bytes for mask_header\n", header_size);
+      return -1;
+    }
+
+    // copy the header to the mask header ensuring it is null terminated
+    strncpy (mask_header, header, header_size);
+    mask_header[header_size-1] = '\0';
+
     ascii_header_set (mask_header, "NBIT", "%d", 1);
     float mask_tsamp = ctx->tsamp * (1024);
     ascii_header_set (mask_header, "TSAMP", "%f", mask_tsamp);
@@ -1445,6 +1461,7 @@ int aqdsp_open (dada_client_t* client)
         fwrite (mask_header, sizeof(char), 4096, ctx->s1s_fptrs[iant]);
       }
     }
+    free (mask_header);
   }
 
   if (ctx->verbose)

@@ -110,6 +110,13 @@ int main (int argc, char **argv)
   }
 
   int nfiles = argc - optind;
+  if (nfiles <= 0)
+  {
+    fprintf(stderr, "ERROR: At least file is required\n\n");
+    usage();
+    return (EXIT_FAILURE);
+  }
+
   int i;
   struct stat buf;
   size_t filesize = 0;
@@ -144,18 +151,19 @@ int main (int argc, char **argv)
     zapped[i] = 0;
   }
 
-  size_t data_size = filesize - 4096;
+  size_t header_size = ascii_header_get_size_fd (fds[0]);
+  size_t data_size = filesize - header_size;
 
   // just read the header from the first file
-  char * header = (char *) malloc (4096);
+  char * header = (char *) malloc (header_size);
   if (verbose)
-    fprintf (stderr, "reading header, 4096 bytes\n");
-  size_t bytes_read = read (fds[0], header, 4096);
+    fprintf (stderr, "reading header, %d bytes\n", header_size);
+  size_t bytes_read = read (fds[0], header, header_size);
   if (verbose)
     fprintf (stderr, "read %lu bytes\n", bytes_read);
   for (i=1; i<nfiles; i++)
   {
-    lseek (fds[i], 4096, SEEK_SET);
+    lseek (fds[i], header_size, SEEK_SET);
   } 
 
   if (ascii_header_get(header, "NCHAN", "%d", &(opts.nchan)) != 1)
@@ -224,7 +232,7 @@ int main (int argc, char **argv)
     if (verbose > 1)
       fprintf(stderr, "Skipping %ld samples (%ld bytes) past the header\n", nsamp_skip, bytes_read_total);
     for (i=0; i<nfiles; i++) {
-      lseek(fds[i], 4096+bytes_read_total, SEEK_SET);
+      lseek(fds[i], header_size+bytes_read_total, SEEK_SET);
     }
   }
 

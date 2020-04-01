@@ -354,7 +354,9 @@ int main (int argc, char **argv)
   else
   {
     lseek (fd1, offset, SEEK_CUR);
+    fprintf (stderr, "FD1 seeking delay bytes %ld\n", offset);
   }
+
 
   size_t nbytes;
   nbytes = sizeof(fftwf_complex) * npt;

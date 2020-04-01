@@ -99,7 +99,7 @@ void sinc_filter_float (float _Complex * series_in, float _Complex * series_out,
   //Only perform subsample delay
   if (delay >= 1.0 || delay < -1.0)
   {
-    fprintf (stderr, "delay must be between -1 and 1\n");
+    fprintf (stderr, "delay [%f] must be between -1 and 1\n", delay);
     return;
   }
 

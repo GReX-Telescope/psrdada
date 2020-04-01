@@ -153,6 +153,7 @@ typedef struct {
   char source[32];
   char ra[32];
   char dec[32];
+  char dm[32];
   char proc_file[64];
   
 } mopsr_bfdsp_hdr_t;

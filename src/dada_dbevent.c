@@ -1,8 +1,8 @@
 /***************************************************************************
- *  
+ *
  *    Copyright (C) 2012 by Andrew Jameson
  *    Licensed under the Academic Free License version 2.1
- * 
+ *
  ****************************************************************************/
 
 /*
@@ -46,12 +46,12 @@ int quit = 0;
 typedef struct {
 
   // input HDU
-  dada_hdu_t * in_hdu;  
+  dada_hdu_t * in_hdu;
 
   // output HDU
   dada_hdu_t * out_hdu;
 
-  // multilog 
+  // multilog
   multilog_t * log;
 
   // input data block's UTC_START
@@ -129,13 +129,13 @@ void usage()
      " -t delay    maximum delay (s) to retain data for [default %ds]\n"
      " -h          print this help text\n"
      " -p port     port to listen for event commands [default %d]\n"
-     " -v          be verbose\n", 
-     DADA_DBEVENT_DEFAULT_INPUT_BUFFER, 
-     DADA_DBEVENT_DEFAULT_INPUT_DELAY, 
+     " -v          be verbose\n",
+     DADA_DBEVENT_DEFAULT_INPUT_BUFFER,
+     DADA_DBEVENT_DEFAULT_INPUT_DELAY,
      DADA_DBEVENT_DEFAULT_PORT);
 }
 
-void signal_handler(int signalValue) 
+void signal_handler(int signalValue)
 {
   fprintf(stderr, "dada_dbevent: SIGINT/TERM\n");
   quit = 1;
@@ -188,7 +188,7 @@ int main (int argc, char **argv)
         break;
 
       case 'p':
-        if (sscanf (optarg, "%d", &port) != 1) 
+        if (sscanf (optarg, "%d", &port) != 1)
         {
           fprintf (stderr, "dada_dbevent: could not parse port from %s\n", optarg);
           return EXIT_FAILURE;
@@ -210,19 +210,19 @@ int main (int argc, char **argv)
   }
 
   if (argc - optind != 2)
-  { 
+  {
     fprintf (stderr, "dada_dbevent: expected 2 command line arguments\n");
     usage();
     return EXIT_FAILURE;
   }
 
-  if (sscanf (argv[optind], "%x", &in_dada_key) != 1) 
+  if (sscanf (argv[optind], "%x", &in_dada_key) != 1)
   {
     fprintf (stderr,"dada_dbevent: could not parse in_key from %s\n", argv[optind]);
     return EXIT_FAILURE;
   }
 
-  if (sscanf (argv[optind+1], "%x", &out_dada_key) != 1) 
+  if (sscanf (argv[optind+1], "%x", &out_dada_key) != 1)
   {
     fprintf (stderr,"dada_dbevent: could not parse out_key from %s\n", argv[optind+1]);
     return EXIT_FAILURE;
@@ -238,7 +238,7 @@ int main (int argc, char **argv)
   dbevent.verbose = verbose;
   dbevent.log = log;
   dbevent.input_maximum_delay = (time_t) input_maximum_delay;
-  dbevent.work_buffer_size = 1024 * 1024; 
+  dbevent.work_buffer_size = 1024 * 1024;
   dbevent.work_buffer = malloc (dbevent.work_buffer_size);
   if (!dbevent.work_buffer)
   {
@@ -280,7 +280,7 @@ int main (int argc, char **argv)
     multilog (log, LOG_INFO, "main: sock_create(%d)\n", port);
   int listen_fd = sock_create (&port);
   if (listen_fd < 0)
-  { 
+  {
     multilog (log, LOG_ERR, "could not open socket: %s\n", strerror(errno));
     quit = 2;
   }
@@ -291,7 +291,7 @@ int main (int argc, char **argv)
   fd_set fds;
   struct timeval timeout;
   int fds_read;
-  
+
   // now get the header from the input data block
   if (verbose)
     multilog(log, LOG_INFO, "waiting for input header\n");
@@ -325,8 +325,8 @@ int main (int argc, char **argv)
       ipcbuf_mark_cleared (dbevent.in_hdu->header_block);
 
       char utc_buffer[64];
-      // get the UTC_START and TSAMP / BYTES_PER_SECOND for this observation    
-      if (ascii_header_get (dbevent.header, "UTC_START", "%s", utc_buffer) < 0) 
+      // get the UTC_START and TSAMP / BYTES_PER_SECOND for this observation
+      if (ascii_header_get (dbevent.header, "UTC_START", "%s", utc_buffer) < 0)
       {
         multilog (log, LOG_ERR, "could not extract UTC_START from input datablock header\n");
         quit = 2;
@@ -336,14 +336,14 @@ int main (int argc, char **argv)
         if (verbose)
           multilog(log, LOG_INFO, "input UTC_START=%s\n", utc_buffer);
         dbevent.utc_start = str2utctime (utc_buffer);
-        if (dbevent.utc_start == (time_t)-1) 
+        if (dbevent.utc_start == (time_t)-1)
         {
           multilog (log, LOG_ERR, "could not parse UTC_START from '%s'\n", utc_buffer);
           quit = 2;
         }
       }
 
-      if (ascii_header_get (dbevent.header, "BYTES_PER_SECOND", "%"PRIu64, &(dbevent.bytes_per_second)) < 0) 
+      if (ascii_header_get (dbevent.header, "BYTES_PER_SECOND", "%"PRIu64, &(dbevent.bytes_per_second)) < 0)
       {
         multilog (log, LOG_ERR, "could not extract BYTES_PER_SECOND from input datablock header\n");
         quit = 2;
@@ -421,7 +421,7 @@ int main (int argc, char **argv)
     {
       if (verbose)
         multilog (log, LOG_INFO, "percent_full=%5.2f threshold=%5.2f\n", percent_full, input_data_block_threshold);
-      // since we are too full, seek forward 1 block 
+      // since we are too full, seek forward 1 block
       read_offset = ipcio_tell (dbevent.in_hdu->data_block);
 
       // if the current read offset is a full block, make it so
@@ -443,9 +443,9 @@ int main (int argc, char **argv)
       if (seeked_byte < 0)
       {
         multilog (log, LOG_INFO, "main: ipcio_seek failed\n");
-        quit = 1; 
+        quit = 1;
       }
- 
+
       // sleep a short space to allow writer to write!
       usleep(10000);
 
@@ -534,7 +534,7 @@ int check_read_offset (dada_dbevent_t * dbevent)
     // get the current read offset in bytes
     read_offset = ipcio_tell (dbevent->in_hdu->data_block);
 
-    // if the current read offset + the maximum allowed delay is still less than 
+    // if the current read offset + the maximum allowed delay is still less than
     // the current byte offset, then we MUST read while it is not
     if (read_offset + max_delay_bytes < now_byte_offset)
     {
@@ -575,7 +575,7 @@ int check_read_offset (dada_dbevent_t * dbevent)
     }
     else
       have_old_buffers = 0;
-  
+
     // also check for end of data
     if (ipcbuf_eod ((ipcbuf_t *) dbevent->in_hdu->data_block))
     {
@@ -640,7 +640,7 @@ int receive_events (dada_dbevent_t * dbevent, int listen_fd)
   if (sscanf (buffer, "N_EVENTS %"PRIu64, &n_events) != 1)
   {
     multilog(log, LOG_WARNING, "failed to parse N_EVENTS\n");
-    more_events = 0;  
+    more_events = 0;
   }
   else
   {
@@ -657,10 +657,10 @@ int receive_events (dada_dbevent_t * dbevent, int listen_fd)
   const char * sep_float = " \t";
   int64_t offset;
   uint64_t remainder;
-  
+
   while (more_events > 0 && !feof(sockin))
   {
-    if (dbevent->verbose > 1) 
+    if (dbevent->verbose > 1)
       multilog (log, LOG_INFO, "getting new line\n");
     char * saveptr = 0;
 
@@ -732,7 +732,7 @@ int receive_events (dada_dbevent_t * dbevent, int listen_fd)
     event_end_fractional = strtok_r (NULL, sep_time, &saveptr);
 
     if (dbevent->verbose)
-      multilog (log, LOG_INFO, "event_end=%s event_end_fractional=%s\n", event_start, event_start_fractional);
+      multilog (log, LOG_INFO, "event_end=%s event_end_fractional=%s\n", event_end, event_end_fractional);
     offset = calculate_byte_offset (dbevent, event_end, event_end_fractional);
     if (offset >= 0)
     {
@@ -808,7 +808,8 @@ int receive_events (dada_dbevent_t * dbevent, int listen_fd)
         }
 
         current_byte = ipcio_tell (dbevent->in_hdu->data_block);
-        //multilog (dbevent->log, LOG_INFO, "current_byte=%"PRIu64"\n", current_byte);
+        if (dbevent->verbose)
+          multilog (dbevent->log, LOG_INFO, "events[%u].start_byte=%"PRIu64" current_byte=%"PRIu64"\n", i, events[i].start_byte, current_byte);
 
         if (events[i].start_byte < current_byte)
         {
@@ -831,27 +832,37 @@ int receive_events (dada_dbevent_t * dbevent, int listen_fd)
         if (dbevent->verbose)
           multilog (dbevent->log, LOG_INFO, "seeked_byte=%"PRIi64"\n", seeked_byte);
 
+        if (dbevent->verbose)
+          multilog (dbevent->log, LOG_INFO, "end_byte=%lu start_byte=%lu\n", events[i].end_byte, events[i].start_byte);
         // determine how much to read
         size_t to_read = events[i].end_byte - events[i].start_byte;
-        multilog (dbevent->log, LOG_INFO, "to read = %d [%"PRIu64" - %"PRIu64"]\n", to_read, events[i].end_byte, events[i].start_byte);
+        if (dbevent->verbose)
+          multilog (dbevent->log, LOG_INFO, "to_read=%ld\n", to_read);
+        multilog (dbevent->log, LOG_INFO, "to read = %ld [%"PRIu64" - %"PRIu64"]\n", to_read, events[i].end_byte, events[i].start_byte);
 
         if (dbevent->work_buffer_size < to_read)
         {
           dbevent->work_buffer_size = to_read;
           if (dbevent->verbose)
-            multilog (dbevent->log, LOG_INFO, "reallocating work_buffer [%p] to %d bytes\n", 
+            multilog (dbevent->log, LOG_INFO, "reallocating work_buffer [%p] to %ld bytes\n",
                       dbevent->work_buffer, dbevent->work_buffer_size);
           dbevent->work_buffer = realloc (dbevent->work_buffer, dbevent->work_buffer_size);
+          if (dbevent->work_buffer == NULL)
+          {
+            multilog (dbevent->log, LOG_ERR, "Could not re-allocat work buffer to %ld bytes\n", dbevent->work_buffer_size);
+            return -1;
+          }
+
           if (dbevent->verbose)
             multilog (dbevent->log, LOG_INFO, "reallocated work_buffer [%p]\n", dbevent->work_buffer);
         }
-         
-        // read the event from the input buffer 
+
+        // read the event from the input buffer
         if (dbevent->verbose)
-          multilog (dbevent->log, LOG_INFO, "reading %d bytes from input HDU into work buffer\n", to_read);
+          multilog (dbevent->log, LOG_INFO, "reading %ld bytes from input HDU into work buffer\n", to_read);
         ssize_t bytes_read = ipcio_read (dbevent->in_hdu->data_block, dbevent->work_buffer, to_read);
         if (dbevent->verbose)
-          multilog (dbevent->log, LOG_INFO, "read %d bytes from input HDU into work buffer\n", bytes_read);
+          multilog (dbevent->log, LOG_INFO, "read %ld bytes from input HDU into work buffer\n", bytes_read);
         if (bytes_read < 0)
         {
           multilog (dbevent->log, LOG_WARNING, "receive_events: ipcio_read on input HDU failed\n");
@@ -889,7 +900,7 @@ int receive_events (dada_dbevent_t * dbevent, int listen_fd)
         if (dada_hdu_unlock_write (dbevent->out_hdu) < 0)
         {
           multilog (log, LOG_ERR, "could not close output HDU as writer\n");
-          return -1; 
+          return -1;
         }
 
         // lock write again to re-open for the next event
@@ -923,13 +934,13 @@ int64_t calculate_byte_offset (dada_dbevent_t * dbevent, char * time_str_secs, c
   int64_t  event_byte_offset = -1;
   uint64_t event_byte;
   uint64_t event_byte_frac;
- 
+
   time_secs = str2utctime (time_str_secs);
   sscanf (time_str_frac, "%"PRIu64, &time_frac_numer);
   time_frac_denom = (uint64_t) powf(10,strlen(time_str_frac));
 
   if (dbevent->verbose > 1)
-    multilog (dbevent->log, LOG_INFO, "calculate_byte_offset: time_secs=%d, time_frac_numer=%"PRIu64", time_frac_denom=%"PRIu64"\n", 
+    multilog (dbevent->log, LOG_INFO, "calculate_byte_offset: time_secs=%d, time_frac_numer=%"PRIu64", time_frac_denom=%"PRIu64"\n",
               time_secs, time_frac_numer, time_frac_denom);
 
   // check we have utc_start and that this event is in the future
@@ -953,7 +964,7 @@ int64_t calculate_byte_offset (dada_dbevent_t * dbevent, char * time_str_secs, c
 
 /*
  * dump the specified event to the output datablock */
-int dump_event (dada_dbevent_t * dbevent, double event_start_utc, 
+int dump_event (dada_dbevent_t * dbevent, double event_start_utc,
                 double event_end_utc, float event_snr, float event_dm)
 {
   multilog (dbevent->log, LOG_INFO, "event time: %lf - %lf [seconds]\n", event_start_utc, event_end_utc);

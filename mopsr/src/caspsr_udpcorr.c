@@ -40,6 +40,16 @@
 
 #define CHECK_ALIGN(x) assert ( ( ((uintptr_t)x) & 15 ) == 0 )
 
+#define TIMS_VERSION
+#ifdef TIMS_VERSION
+#define LO 805.46
+#define BW 47.38
+#else
+#define LO 800
+#define BW 100
+#endif
+
+
 typedef struct {
 
   multilog_t * log;
@@ -115,7 +125,6 @@ typedef struct {
   float * power2;
 
   fftwf_plan plan_fwd;
-  fftwf_plan plan_bwd;
 
   float ymin;
 
@@ -130,6 +139,10 @@ typedef struct {
   char dsb;
 
   char zap_dc;
+
+  unsigned nzap;
+  unsigned zap_from[64];
+  unsigned zap_to[64];
 
 } udpcorr_t;
 
@@ -156,11 +169,11 @@ void usage()
      " -b nbatch      number of fft batches to integrate into each dump\n"
      " -d             dual side band data [default no]\n"
      " -i interface   ip/interface for inc. UDP packets [default all]\n"
-     " -n npt         number of points in each fft [hardcoded 4096]\n"
+     " -n npt         number of points in each fft [hardcoded 2048]\n"
      " -p port        port on which to listen [default %d]\n"
      " -s secs        sleep this many seconds between correlator dumps [default 0.5]\n"
      " -t ndump       total number of correlator dumps [default 1024]\n"
-     " -z             zap DC channel [0]\n"
+     " -z from:to     zap specified channel range\n"
      " -v             verbose messages\n"
      " -h             print help text\n",
      MOPSR_DEFAULT_UDPDB_PORT);
@@ -201,7 +214,6 @@ int udpcorr_reset (udpcorr_t * ctx)
 int udpcorr_destroy (udpcorr_t * ctx)
 {
   fftwf_destroy_plan (ctx->plan_fwd);
-  fftwf_destroy_plan (ctx->plan_bwd);
 
   fftwf_free (ctx->fwd1_in);
   fftwf_free (ctx->fwd2_in);
@@ -335,15 +347,16 @@ int udpcorr_init (udpcorr_t * ctx)
   bzero (ctx->power1, nbytes);
   bzero (ctx->power2, nbytes);
 
-  unsigned ichan=0; 
+  unsigned ichan=0;
 
   for (ichan=0; ichan<ctx->nchan_out; ichan++)
   {
-    float freq = (((float) ichan / (float) ctx->nchan_out) * 100) + 800;
+    //float freq = (((float) ichan / (float) ctx->nchan_out) * 100) + 800;
+    float freq = (((float) ichan / (float) ctx->nchan_out) * BW) + LO;
     ctx->channels[ichan] = freq;
   }
 
-  nbytes = ctx->ndump * sizeof(float); 
+  nbytes = ctx->ndump * sizeof(float);
   ctx->phases_t = (float *) malloc (nbytes);
   ctx->amps_t = (float *) malloc (nbytes);
   ctx->ac1_t = (float *) malloc (nbytes);
@@ -352,7 +365,6 @@ int udpcorr_init (udpcorr_t * ctx)
   int direction_flags = FFTW_FORWARD;
   int flags = FFTW_ESTIMATE;
   ctx->plan_fwd = fftwf_plan_dft_r2c_1d (ctx->npt, ctx->fwd1_in, ctx->fwd1_out, FFTW_ESTIMATE);
-  ctx->plan_bwd = fftwf_plan_dft_1d (ctx->nchan_out, ctx->fwd1_out, ctx->lag, FFTW_BACKWARD, FFTW_ESTIMATE);
 
   return 0;
 }
@@ -380,9 +392,10 @@ int main (int argc, char **argv)
   udpcorr.interface = "any";
   udpcorr.port = MOPSR_DEFAULT_UDPDB_PORT;
   udpcorr.verbose = 0;
-  udpcorr.zap_dc = 0;
 
-  while ((arg=getopt(argc,argv,"b:dD:i:n:op:r:s:t:vw:zh")) != -1) 
+  udpcorr.nzap = 0;
+
+  while ((arg=getopt(argc,argv,"b:dD:i:n:op:r:s:t:vw:z:h")) != -1)
   {
     switch (arg)
     {
@@ -423,17 +436,29 @@ int main (int argc, char **argv)
         break;
 
       case 'z':
-        udpcorr.zap_dc= 1;
+        if (udpcorr.nzap < 64)
+        {
+          char * token;
+          token = strsep(&optarg,":");
+          udpcorr.zap_from[udpcorr.nzap] = atoi(token);
+          token = strsep(&optarg,":");
+          udpcorr.zap_to[udpcorr.nzap] = atoi(token);
+          udpcorr.nzap++;
+        }
+        else
+        {
+          fprintf (stderr, "cannot zap more than 64 bad chans\n");
+        }
         break;
 
     case 'h':
       usage();
       return 0;
-      
+
     default:
       usage ();
       return 0;
-      
+
     }
   }
 
@@ -460,7 +485,7 @@ int main (int argc, char **argv)
     exit(1);
   }
 
-  // initialise data rate timing library 
+  // initialise data rate timing library
   stopwatch_t wait_sw;
 
   // clear packets ready for capture
@@ -468,7 +493,7 @@ int main (int argc, char **argv)
 
   StartTimer(&wait_sw);
 
-  while (!quit_threads && ctx->idump < ctx->ndump) 
+  while (!quit_threads && ctx->idump < ctx->ndump)
   {
     // acquire input data and correlate each packet
     if (ctx->verbose)
@@ -506,7 +531,7 @@ int main (int argc, char **argv)
 
 void signal_handler(int signalValue)
 {
-  if (quit_threads) 
+  if (quit_threads)
   {
     fprintf(stderr, "received signal %d twice, hard exit\n", signalValue);
     exit(EXIT_FAILURE);
@@ -597,9 +622,9 @@ int udpcorr_unpack (udpcorr_t * ctx)
   for (idat=0; idat<ndat; idat+=4)
   {
     for (ival=0; ival<4; ival++)
-      ctx->fwd1_in[idat+ival] = ((float) raw[i+ival] + 0.5) / scale;;
+      ctx->fwd1_in[idat+ival] = ((float) raw[i+ival] + 0.5) / scale;
     i += 4;
-    
+
     for (ival=0; ival<4; ival++)
       ctx->fwd2_in[idat+ival] = ((float) raw[i+ival] + 0.5) / scale;
     i += 4;
@@ -614,17 +639,29 @@ int udpcorr_correlate (udpcorr_t * ctx)
 
   complex float val;
 
-  unsigned ichan;
+  unsigned ichan, jchan;
   for (ichan=0; ichan<ctx->nchan_out; ichan++)
   {
-    if (ichan != 0)
+    char bad_chan = 0;
+    for (jchan=0; jchan<ctx->nzap; jchan++)
+    {
+      if ((ichan >= ctx->zap_from[jchan]) && (ichan < ctx->zap_to[jchan]))
+        bad_chan = 1;
+    }
+
+    if (bad_chan)
+    {
+      ctx->fwd1_out[ichan] = ctx->fwd2_out[ichan] == 0;
+    }
+
+    if (!bad_chan)
     {
       const complex float p1 = ctx->fwd1_out[ichan] / ctx->nchan_out;
       const complex float p2 = ctx->fwd2_out[ichan] / ctx->nchan_out;
       const complex float xcorr = p1 * conj(p2);
 
-      const float ac1 = cabsf(p1)*cabsf(p1);
-      const float ac2 = cabsf(p2)*cabsf(p2);
+      const float ac1 = cabsf(p1) * cabsf(p1);
+      const float ac2 = cabsf(p2) * cabsf(p2);
 
       ctx->ac1 += ac1;
       ctx->ac2 += ac2;
@@ -638,7 +675,7 @@ int udpcorr_correlate (udpcorr_t * ctx)
   }
   return 0;
 }
-   
+
 int udpcorr_endblock (udpcorr_t * ctx)
 {
   unsigned ichan;
@@ -658,14 +695,17 @@ int udpcorr_endblock (udpcorr_t * ctx)
 
   mean1 /= (ctx->nchan_out);
   mean2 /= (ctx->nchan_out);
+
+  // AJ changed this - cant remember the details
   xcorr_scale = sqrtf(mean1 * mean2);
+  //xcorr_scale = mean1 * mean2;
 
   for (ichan=0; ichan<ctx->nchan_out; ichan++)
   {
     if (ichan != 0)
     {
-      ctx->power1[ichan] /= mean1;
-      ctx->power2[ichan] /= mean2;
+      //ctx->power1[ichan] /= mean1;
+      //ctx->power2[ichan] /= mean2;
 
       ctx->xcorr_sum[ichan] += ctx->xcorr[ichan];
       ctx->amps[ichan] = cabsf(ctx->xcorr[ichan]) / xcorr_scale;
@@ -673,9 +713,9 @@ int udpcorr_endblock (udpcorr_t * ctx)
     }
   }
 
-  ctx->xcorr_fscr /= xcorr_scale;
-  ctx->amps_t[ctx->idump] = cabsf(ctx->xcorr_fscr) / xcorr_scale;
-  ctx->phases_t[ctx->idump] = cargf(ctx->xcorr_fscr) * (180/M_PI);
+  //ctx->xcorr_fscr /= xcorr_scale;
+  ctx->amps_t[ctx->idump] = cabsf(ctx->xcorr_fscr);
+  ctx->phases_t[ctx->idump] = cargf(ctx->xcorr_fscr);
   ctx->ac1_t[ctx->idump] = ctx->ac1;
   ctx->ac2_t[ctx->idump] = ctx->ac2;
   ctx->idump++;
@@ -952,7 +992,8 @@ void plot_ps (float * yvals, unsigned npts, char * device, const char * title, f
       ymin = yvals[i];
     }
 
-    xvals[i] = 800.0 + (((float) i / npts) * 100);
+    xvals[i] = LO + (((float) i / npts) * BW);
+    //xvals[i] = 805.46 + (((float) i / npts) * 94.76);
     xvals[i] = (float) i;
   }
 
