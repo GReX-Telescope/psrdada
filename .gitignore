@@ -145,6 +145,7 @@ mopsr/src/mopsr_corr_fscr
 mopsr/src/mopsr_corr_fsum
 mopsr/src/mopsr_corr_sum
 mopsr/src/mopsr_dadacorrplot_pfb
+mopsr/src/mopsr_dadacorrplot_tiedbeam
 mopsr/src/mopsr_dadafftplot
 mopsr/src/mopsr_dadahistplot
 mopsr/src/mopsr_dadapearsoncoeff
