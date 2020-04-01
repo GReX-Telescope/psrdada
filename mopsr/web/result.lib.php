@@ -237,7 +237,9 @@ class result extends mopsr_webpage
     /* print the full dada header */
     $this->openBlockHeader("DADA Header");
 
-    $cmd = "find ".$this->obs_results_dir." -mindepth 2 -maxdepth 2 -type f -name 'obs.header' | tail -n 1";
+    #Edited by VG to fix the 'Missing obs.header problem for calib observations
+    $cmd = "find ".$this->obs_results_dir." -mindepth 1 -maxdepth 2 -type f -name 'obs.header' | head -n 1";
+    #$cmd = "find ".$this->obs_results_dir."/FB -mindepth 1 -maxdepth 1 -type f -name 'obs.header' | tail -n 1";
     $array = array();
     $rval = 0;
     $file = exec($cmd, $array, $rval);

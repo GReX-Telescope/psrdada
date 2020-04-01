@@ -275,6 +275,16 @@ tr.alarm td {
     echo "</td><td>\n";
 
     $this->openBlockHeader("Timing Programme Pulsars");
+?>
+Choose plot type:<br>
+<form action="" method="get">
+<input type="hidden" name="single" value="true"/>
+<select name="type" onchange="this.form.submit()">
+<option value="tc">Clean</option>
+<option value="ta">All</option>
+</select>
+</form>
+<?
 
 function rescale_snr_to5min($fSNR, $ftint_m) {
   return $fSNR * sqrt(5./$ftint_m);

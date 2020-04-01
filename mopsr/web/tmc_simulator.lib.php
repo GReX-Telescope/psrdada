@@ -431,6 +431,9 @@ class tmc_simulator extends mopsr_webpage
         <td class='key'>DEC</td>
         <td class='val'><input type="text" id="<?echo $prefix?>_dec" name="<?echo $prefix?>_dec" size="12" value="" readonly></td>
 
+        <td class='key'>DM</td>
+        <td class='val'><input type="text" id="<?echo $prefix?>_dm" name="<?echo $prefix?>_dm" size="8" value="-1"></td>
+
         <td class='key'>PROC FILE</td>
         <td class='val'>
           <select name="<?echo $prefix?>_processing_file">
@@ -438,6 +441,7 @@ class tmc_simulator extends mopsr_webpage
             <option value="mopsr_2kbins_25s.dspsr.cpu">mopsr_2kbins_25s.dspsr.cpu</option>
             <option value="mopsr.dspsr.cpu.5s">mopsr.dspsr.cpu.5s</option>
             <option value="mopsr.dspsr.cpu.single">mopsr.dspsr.cpu.single</option>
+            <option value="mopsr.digifits.cpu">mopsr.digifits.cpu</option>
 <?          if ($this->hires) { ?>
             <!--<option value="mopsr.dspsr.cpu.cdd.hires">mopsr.dspsr.cpu.cdd.hires</option>-->
 <?          } else { ?>
@@ -665,6 +669,7 @@ class tmc_simulator extends mopsr_webpage
           $xml .=   "<name epoch='J2000'>".$get[$i."_source"]."</name>";
           $xml .=   "<ra units='hh:mm:ss'>".$get[$i."_ra"]."</ra>";
           $xml .=   "<dec units='hh:mm:ss'>".$get[$i."_dec"]."</dec>";
+          $xml .=   "<dm units='pccm-3'>".$get[$i."_dm"]."</dm>";
           $xml .= "</".$key.">";
           $ibeam++;
         }

@@ -819,6 +819,9 @@ class results_db extends mopsr_webpage
 
   function getResultsArray_db($pdo, $results_dir, $offset=0, $length=0, $filter_type, $filter_value) 
   {
+    if ($filter_value == "Vela")
+      $filter_value = "J0835-4510";
+
     $all_results = array();
 
     $observations = array();
