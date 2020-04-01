@@ -736,67 +736,87 @@ void mopsr_delay_fractional (cudaStream_t stream, void * d_in, void * d_out,
 #endif
 }
 
-#if (__CUDA_ARCH__ >= 300)
+
+#if ( __CUDA_ARCH__ >= 300)
 __inline__ __device__
-float warpReduceSumF(float val) {
-  for (int offset = warpSize/2; offset > 0; offset /= 2)
+float warpReduceSumF(float val)
+{
+  for (int offset = warpSize/2; offset > 0; offset /= 2) 
+  {
 #if (__CUDACC_VER_MAJOR__>= 9)
     val += __shfl_down_sync(FULLMASK, val, offset);
 #else
     val += __shfl_down(val, offset);
 #endif
+  }
   return val;
 }
 
 __inline__ __device__
-float blockReduceSumF(float val) {
-
+float blockReduceSumF(float val)
+{
   __shared__ float shared[32]; // Shared mem for 32 partial sums
   int lane = threadIdx.x % warpSize;
   int wid = threadIdx.x / warpSize;
 
-  val = warpReduceSumF(val);     // Each warp performs partial reduction
+  // Each warp performs partial reduction
+  val = warpReduceSumF(val);
 
-  if (lane==0) shared[wid]=val; // Write reduced value to shared memory
+  // Write reduced value to shared memory
+  if (lane==0)
+    shared[wid]=val;
 
-  __syncthreads();              // Wait for all partial reductions
+  // Wait for all partial reductions
+  __syncthreads();
 
-  //read from shared memory only if that warp existed
+  // Read from shared memory only if that warp existed
   val = (threadIdx.x < blockDim.x / warpSize) ? shared[lane] : 0;
 
-  if (wid==0) val = warpReduceSumF(val); //Final reduce within first warp
+  // Final reduce within first warp
+  if (wid==0)
+    val = warpReduceSumF(val);
 
   return val;
 }
 
 __inline__ __device__
-int warpReduceSumI(int val) {
+int warpReduceSumI(int val)
+{
   for (int offset = warpSize/2; offset > 0; offset /= 2)
+  {
 #if (__CUDACC_VER_MAJOR__>= 9)
     val += __shfl_down_sync(FULLMASK, val, offset);
 #else
     val += __shfl_down(val, offset);
 #endif
+  }
   return val;
 }
 
 __inline__ __device__
-int blockReduceSumI(int val) {
-
-  __shared__ int shared[32]; // Shared mem for 32 partial sums
+int blockReduceSumI(int val)
+{
+  // Shared mem for 32 partial sums
+  __shared__ int shared[32];
   int lane = threadIdx.x % warpSize;
   int wid = threadIdx.x / warpSize;
 
-  val = warpReduceSumI(val);     // Each warp performs partial reduction
+  // Each warp performs partial reduction
+  val = warpReduceSumI(val);
 
-  if (lane==0) shared[wid]=val; // Write reduced value to shared memory
+  // Write reduced value to shared memory
+  if (lane==0)
+    shared[wid]=val;
 
-  __syncthreads();              // Wait for all partial reductions
+  // Wait for all partial reductions
+  __syncthreads();
 
-  //read from shared memory only if that warp existed
+  // Read from shared memory only if that warp existed
   val = (threadIdx.x < blockDim.x / warpSize) ? shared[lane] : 0;
 
-  if (wid==0) val = warpReduceSumI(val); //Final reduce within first warp
+  // Final reduce within first warp
+  if (wid==0)
+    val = warpReduceSumI(val);
 
   return val;
 }
