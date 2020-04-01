@@ -123,8 +123,10 @@ int snapsr_udpdb_open (dada_client_t* client)
   // correct until we add a scheme to synchronise the SNAP with the 1PPS and pass that
   // information in via a header
 
-  // write current UTC_START to the header as an rough guide...
-  start = time(0);
+  time_t prev = time(0);
+  start = prev + 1;
+  while (start > prev)
+    prev = time(0);
 
 #else
 
@@ -709,15 +711,17 @@ void stats_thread(void * arg)
     bytes_received_this_sec = ctx->bytes->received - bytes_received_total;
     bytes_dropped_this_sec  = ctx->bytes->dropped - bytes_dropped_total;
 
+    if (bytes_received_total > 0 || bytes_dropped_total > 0)
+    {
+      mb_received_ps = (double) bytes_received_this_sec / (1024*1024);
+      mb_dropped_ps = (double) bytes_dropped_this_sec / (1024*1024);
+
+      fprintf(stderr,"%7.1f MB/s\t%7.1f MB/s\t%"PRIu64" pkts\t\t%"PRIu64" pkts\n", mb_received_ps, mb_dropped_ps, ctx->packets->received, ctx->packets->dropped);
+    }
+
     bytes_received_total = ctx->bytes->received;
     bytes_dropped_total = ctx->bytes->dropped;
 
-    mb_received_ps = (double) bytes_received_this_sec / (1024*1024);
-    mb_dropped_ps = (double) bytes_dropped_this_sec / (1024*1024);
-
-    //fprintf(stderr,"T=%5.2f, R=%5.2f MB/s\t D=%5.2f MB/s packets=%"PRIu64" dropped=%"PRIu64"\n", (mb_received_ps+mb_dropped_ps), mb_received_ps, mb_dropped_ps, ctx->packets->received, ctx->packets->dropped);
-   
-    fprintf(stderr,"%7.1f MB/s\t%7.1f MB/s\t%"PRIu64" pkts\t\t%"PRIu64" pkts\n", (mb_received_ps+mb_dropped_ps), mb_received_ps, mb_dropped_ps, ctx->packets->received, ctx->packets->dropped);
 
     sleep(1);
   }
