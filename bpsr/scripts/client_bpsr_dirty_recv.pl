@@ -174,12 +174,25 @@ Dada::preventDuplicateDaemon(basename($0)." ".$svd_id);
 		  {
         %h = Dada::headerToHash ($curr_raw_header);
 
+        my $tobs = 0;
+        if (exists($h{"OBS_VAL"}))
+        {
+          my $tobs = $h{"OBS_VAL"};
+          if (exists($h{"OBS_UNIT"}))
+          {
+            if ($h{"OBS_UNIT"} eq "MINUTES")
+            {
+              $tobs = $tobs * 60;
+            }
+          }
+        }
+
         if ($h{"MODE"} eq "CAL")
         {
           logMsg(0, "INFO", "main: MODE=CAL, ignoring observation");
           $proc_cmd = "dada_dbnull -k ".$db_key." -s";
         }
-        elsif (exists($h{"OBS_VAL"}) && (int($h{"OBS_VAL"}) < 30))
+        elsif ($tobs < 30)
         {
           logMsg(0, "INFO", "main: OBS_VAL < 30s, ignoring observation");
           $proc_cmd = "dada_dbnull -k ".$db_key." -s";

@@ -137,6 +137,8 @@ AC_CONFIG_FILES([Makefile
     caspsr/config/Makefile
     caspsr/config/caspsr.cfg
     caspsr/web/Makefile
+    comap/Makefile
+    comap/src/Makefile
     examples/Makefile
     examples/src/Makefile
     gmrt/Makefile
@@ -157,6 +159,7 @@ AC_CONFIG_FILES([Makefile
     hispec/scripts/Makefile
     hispec/src/Makefile
     hispec/web/Makefile
+	psrix/Makefile	
     ska1/Makefile
     ska1/src/Makefile
 		3rdparty/Makefile])

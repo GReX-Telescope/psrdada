@@ -1,5 +1,6 @@
 
 #include <cuda_runtime.h>
+#include <cuda_runtime_api.h>
 #include <cuComplex.h>
 #include <inttypes.h>
 #include <stdio.h>
@@ -11,15 +12,8 @@
 #define WARP_SIZE      32
 #define NWARPS_PER_BLOCK 32
 #define NSUM 32
+#define FULLMASK 0xffffffff
 //#define _GDEBUG      1
-
-#ifdef __CUDA_ARCH__
-    #if (__CUDA_ARCH__ >= 300)
-        #define HAVE_SHFL
-    #else
-        #define NO_SHFL
-    #endif
-#endif
 
 // large parts of these kernels require SHFL instructions that are 
 // only available in sm_30 (kepler) or greater
@@ -995,6 +989,7 @@ __global__ void tile_beams_kernel (int16_t * input, float * output,
   }
 }
 
+/*
 #ifdef HAVE_SHFL
 __device__ __forceinline__ cuFloatComplex shflComplex( cuFloatComplex r, int lane )
 {
@@ -1006,6 +1001,7 @@ __device__ __forceinline__ cuFloatComplex shfl_xor_Complex ( cuFloatComplex r, i
   return make_cuComplex ( __shfl_xor( r.x, lane ), __shfl_xor( r.y, lane ) );
 }
 #endif
+*/
 
 #ifdef EIGHT_BIT_PHASORS 
 __global__ void tile_beams_kernel_2048(
@@ -1022,7 +1018,7 @@ __global__ void tile_beams_kernel_2048(
   float * re_phasors = sdata_tb_c + (2 * 32 * BEAMS_PER_LOOP);
   float * im_phasors = re_phasors + (nant * BEAMS_PER_LOOP);
 
-#ifdef HAVE_SHFL
+#if ( __CUDA_ARCH__ >= 300)
   const int warp_num = threadIdx.x / WARP_SIZE;
   const int warp_idx = threadIdx.x & 0x1F;
   float power;
@@ -1099,7 +1095,7 @@ __global__ void tile_beams_kernel_2048(
       idx += ndat/2;
     }
 
-#ifdef HAVE_SHFL
+#if ( __CUDA_ARCH__ >= 300)
     // detect each sample and integrate across the warp (factor of 32 in time)
     // this takes us from 1.28us to 81.92
     unsigned sdx = warp_num;
@@ -1109,11 +1105,19 @@ __global__ void tile_beams_kernel_2048(
         power = b1s[i].x;
       else
         power = (b1s[i].x * b1s[i].x) + (b1s[i].y * b1s[i].y);
+#if (__CUDACC_VER_MAJOR__ >= 9)
+      power += __shfl_down_sync (FULLMASK, power, 16);
+      power += __shfl_down_sync (FULLMASK, power, 8);
+      power += __shfl_down_sync (FULLMASK, power, 4);
+      power += __shfl_down_sync (FULLMASK, power, 2);
+      power += __shfl_down_sync (FULLMASK, power, 1);
+#else
       power += __shfl_down (power, 16);
       power += __shfl_down (power, 8);
       power += __shfl_down (power, 4);
       power += __shfl_down (power, 2);
       power += __shfl_down (power, 1);
+#endif
 
       // power now contains the integrated power for this warp (i.e. 40.96 us samples
       // we write these to shared memory in ST order. T=64, S=8
@@ -1126,11 +1130,19 @@ __global__ void tile_beams_kernel_2048(
         power = b2s[i].x;
       else
         power = (b2s[i].x * b2s[i].x) + (b2s[i].y * b2s[i].y);
+#if (__CUDACC_VER_MAJOR__ >= 9)
+      power += __shfl_down_sync (FULLMASK, power, 16);
+      power += __shfl_down_sync (FULLMASK, power, 8);
+      power += __shfl_down_sync (FULLMASK, power, 4);
+      power += __shfl_down_sync (FULLMASK, power, 2);
+      power += __shfl_down_sync (FULLMASK, power, 1);
+#else
       power += __shfl_down (power, 16);
       power += __shfl_down (power, 8);
       power += __shfl_down (power, 4);
       power += __shfl_down (power, 2);
       power += __shfl_down (power, 1);
+#endif
 
       // power now contains the integrated power for this warp (i.e. 40.96 us samples
       // we write these to shared memory in ST order. T=32, S=8
@@ -1148,9 +1160,15 @@ __global__ void tile_beams_kernel_2048(
     {
       // threads to generate 4 x 655.36 time samples from 32 x 81.92)
       power = sdata_tb_c[(warp_num * WARP_SIZE) + warp_idx];
+#if (__CUDACC_VER_MAJOR__ >= 9)
+      power += __shfl_down_sync (FULLMASK, power, 4);
+      power += __shfl_down_sync (FULLMASK, power, 2);
+      power += __shfl_down_sync (FULLMASK, power, 1);
+#else
       power += __shfl_down (power, 4);
       power += __shfl_down (power, 2);
       power += __shfl_down (power, 1);
+#endif
 
       // warp_idxs 0, 8, 16, 24 have the 4 time samples for beam warp_num
       if (warp_idx % 8 == 0)
@@ -1182,7 +1200,7 @@ __global__ void tile_beams_kernel_2048_32scr (
 
   const int warp_num = threadIdx.x / WARP_SIZE;
   const int warp_idx = threadIdx.x & 0x1F;
-#ifdef HAVE_SHFL
+#if ( __CUDA_ARCH__ >= 300)
   float power;
 #endif
 
@@ -1282,7 +1300,7 @@ __global__ void tile_beams_kernel_2048_32scr (
 
     // detect each sample and integrate across the warp (factor of 32 in time)
     // this takes us from 10.24 to 327.68 us
-#ifdef HAVE_SHFL
+#if ( __CUDA_ARCH__ >= 300)
     unsigned sdx = 2 * warp_num;
     for (unsigned i=0; i<BEAMS_PER_LOOP; i++)
     {
@@ -1295,10 +1313,17 @@ __global__ void tile_beams_kernel_2048_32scr (
       //  printf("GPU %d %f %f %f\n", 2*threadIdx.x+0, b1s[i].x, b1s[i].y, power);
 
       // since the consecutive samples are spread across b1 and b2 
+#if (__CUDACC_VER_MAJOR__ >= 9)
+      power += __shfl_down_sync (FULLMASK, power, 8);
+      power += __shfl_down_sync (FULLMASK, power, 4);
+      power += __shfl_down_sync (FULLMASK, power, 2);
+      power += __shfl_down_sync (FULLMASK, power, 1);
+#else
       power += __shfl_down (power, 8);
       power += __shfl_down (power, 4);
       power += __shfl_down (power, 2);
       power += __shfl_down (power, 1);
+#endif
 
       // power now contains the integrated power for this warp (i.e. 327.68 us 
       // samples. Write these to shared memory in ST order. T=64, S=8
@@ -1315,10 +1340,17 @@ __global__ void tile_beams_kernel_2048_32scr (
       //if ((blockIdx.y == 0) && (ibeam == 0) && (i == 1) && (blockIdx.x == 0) && (warp_num == 0))
       //  printf("GPU %d %f %f %f\n", 2*threadIdx.x+1, b2s[i].x, b2s[i].y, power);
 
+#if (__CUDACC_VER_MAJOR__ >= 9)
+      power += __shfl_down_sync (FULLMASK, power, 8);
+      power += __shfl_down_sync (FULLMASK, power, 4);
+      power += __shfl_down_sync (FULLMASK, power, 2);
+      power += __shfl_down_sync (FULLMASK, power, 1);
+#else
       power += __shfl_down (power, 8);
       power += __shfl_down (power, 4);
       power += __shfl_down (power, 2);
       power += __shfl_down (power, 1);
+#endif
 
       if (warp_idx == 0 || warp_idx == 16)
       {
@@ -1332,8 +1364,6 @@ __global__ void tile_beams_kernel_2048_32scr (
     __syncthreads();
 
 #endif
-
-
 
     // there are now 8beams * (2 * 32) samples in SHM to write
     // out to gmem, do 1 warp per beam, 
@@ -1687,12 +1717,21 @@ __global__ void mod_beam_kernel_64 (int16_t * in, float * out, uint64_t ndat, un
   float power = val.x * val.x + val.y * val.y;
 
   // add all of the time samples from this warp together
-#ifdef HAVE_SHFL
+
+#if ( __CUDA_ARCH__ >= 300)
+#if (__CUDACC_VER_MAJOR__ >= 9)
+  power += __shfl_down_sync (FULLMASK, power, 16);
+  power += __shfl_down_sync (FULLMASK, power, 8);
+  power += __shfl_down_sync (FULLMASK, power, 4);
+  power += __shfl_down_sync (FULLMASK, power, 2);
+  power += __shfl_down_sync (FULLMASK, power, 1);
+#else
   power += __shfl_down (power, 16);
   power += __shfl_down (power, 8);
   power += __shfl_down (power, 4);
   power += __shfl_down (power, 2);
   power += __shfl_down (power, 1);
+#endif
 #endif
 
   if (warp_idx == 0)
@@ -1703,8 +1742,12 @@ __global__ void mod_beam_kernel_64 (int16_t * in, float * out, uint64_t ndat, un
   if (warp_num == 0)
   {
     power = block_power_sums[warp_idx];
-#ifdef HAVE_SHFL
+#if ( __CUDA_ARCH__ >= 300)
+#if (__CUDACC_VER_MAJOR__ >= 9)
+    power += __shfl_down_sync (FULLMASK, power, 16);
+#else
     power += __shfl_down (power, 16);
+#endif
 #endif
 
     if (warp_idx < 16)
@@ -1743,12 +1786,20 @@ __global__ void mod_beam_kernel_512 (int16_t * in, float * out, uint64_t ndat)
   float power = val.x * val.x + val.y * val.y;
   
   // add all of the time samples from this warp together
-#ifdef HAVE_SHFL
+#if ( __CUDA_ARCH__ >= 300)
+#if (__CUDACC_VER_MAJOR__ >= 9)
+  power += __shfl_down_sync (FULLMASK, power, 16);
+  power += __shfl_down_sync (FULLMASK, power, 8);
+  power += __shfl_down_sync (FULLMASK, power, 4);
+  power += __shfl_down_sync (FULLMASK, power, 2);
+  power += __shfl_down_sync (FULLMASK, power, 1);
+#else
   power += __shfl_down (power, 16);
   power += __shfl_down (power, 8);
   power += __shfl_down (power, 4);
   power += __shfl_down (power, 2);
   power += __shfl_down (power, 1);
+#endif
 #endif
 
   if (warp_idx == 0)
@@ -1759,11 +1810,18 @@ __global__ void mod_beam_kernel_512 (int16_t * in, float * out, uint64_t ndat)
   if (warp_num == 0)
   { 
     power = block_power_sums[warp_idx];
-#ifdef HAVE_SHFL
+#if ( __CUDA_ARCH__ >= 300)
+#if (__CUDACC_VER_MAJOR__ >= 9)
+    power += __shfl_down_sync (FULLMASK, power, 8);
+    power += __shfl_down_sync (FULLMASK, power, 4);
+    power += __shfl_down_sync (FULLMASK, power, 2);
+    power += __shfl_down_sync (FULLMASK, power, 1);
+#else
     power += __shfl_down (power, 8);
     power += __shfl_down (power, 4);
     power += __shfl_down (power, 2);
     power += __shfl_down (power, 1);
+#endif
 #endif
   
     if (warp_idx == 0 || warp_idx == 16)
@@ -1812,12 +1870,20 @@ __global__ void mod_beam_kernel_32 (int16_t * in, float * out, uint64_t ndat)
   float power = val.x * val.x + val.y * val.y;
   
   // add all of the time samples from this warp together
-#ifdef HAVE_SHFL
+#if ( __CUDA_ARCH__ >= 300)
+#if (__CUDACC_VER_MAJOR__ >= 9)
+  power += __shfl_down_sync (FULLMASK, power, 16);
+  power += __shfl_down_sync (FULLMASK, power, 8);
+  power += __shfl_down_sync (FULLMASK, power, 4);
+  power += __shfl_down_sync (FULLMASK, power, 2);
+  power += __shfl_down_sync (FULLMASK, power, 1);
+#else
   power += __shfl_down (power, 16);
   power += __shfl_down (power, 8);
   power += __shfl_down (power, 4);
   power += __shfl_down (power, 2);
   power += __shfl_down (power, 1);
+#endif
 #endif
 
   if (warp_idx == 0)

@@ -192,32 +192,47 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
 		  {
         %h = Dada::headerToHash ($curr_raw_header);
 
+        my $tobs = 0;
+        if (exists($h{"OBS_VAL"}))
+        {
+          $tobs = $h{"OBS_VAL"};
+          if (exists($h{"OBS_UNIT"}))
+          {
+            if ($h{"OBS_UNIT"} eq "MINUTES")
+            {
+              $tobs = $tobs * 60;
+            }
+          }
+        }
+
         if ($h{"MODE"} eq "CAL")
         {
           logMsg(0, "INFO", "main: MODE=CAL, ignoring observation");
           $proc_cmd = "dada_dbnull -k ".$trans_db_key." -s";
         }
-        elsif (exists($h{"OBS_VAL"}) && (int($h{"OBS_VAL"}) < 30))
+        elsif ($tobs < 30)
         {
-          logMsg(0, "INFO", "main: OBS_VAL < 30s, ignoring observation");
+          logMsg(0, "INFO", "main: tobs[".$tobs."] < 30s, ignoring observation");
           $proc_cmd = "dada_dbnull -k ".$trans_db_key." -s";
         }
         else
         {
           $proc_dir = $cfg{"CLIENT_ARCHIVE_DIR"}."/".$beam."/".$h{"UTC_START"};
           $proc_cmd = "heimdall -k ".$trans_db_key.
-                      " -dm 0 4000".
+                      " -dm 0 3000".
                       " -dm_tol 1.20".
                       " -gpu_id ".$gpu_id.
                       " -zap_chans 0 150".
                       " -zap_chans 181 183".
                       " -zap_chans 335 338".
                       " -zap_chans 573 607".
+                      " -zap_chans 691 700".
+                      " -zap_chans 807 816".
                       " -beam ".$beam.
-                      " -output_dir ".$proc_dir;
-                      #" -boxcar_max 4096".
-                      #" -min_tscrunch_width 8".
-                      #" -max_giant_rate 100000".
+                      " -output_dir ".$proc_dir.
+                      " -max_giant_rate 100000 ".
+                      " -boxcar_max 4096".
+                      " -min_tscrunch_width 8";
                       #"-coincidencer ".$cfg{"SERVER_HOST"}.":".$cfg{"SERVER_COINCIDENCER_PORT"};
         }
       }

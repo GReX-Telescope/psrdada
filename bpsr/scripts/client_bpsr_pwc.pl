@@ -139,6 +139,14 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
 
   my $control_thread = threads->new(\&controlThread, $pid_file);
 
+  $ENV{'VMA_MTU'} = "9216";
+  $ENV{'VMA_THREAD_MODE'} = "0";
+  $ENV{'VMA_RING_ALLOCATION_LOGIC_RX'} = "0";
+  $ENV{'VMA_INTERNAL_THREAD_AFFINITY'} = $udp_core;
+  $ENV{'VMA_MEM_ALLOC_TYPE'} = "1";
+  $ENV{'VMA_TRACELEVEL'} = "WARNING";
+  $ENV{'LD_PRELOAD'} = "libvma.so";
+
   $binary = $cfg{"PWC_BINARY"};
   $regex = $binary." -k ".lc($key);
   $cmd = $binary." -k ".lc($key).

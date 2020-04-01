@@ -259,6 +259,14 @@ int sock_open_function (dada_client_t* client)
       return -1;
     }
   }
+  else
+  {
+    if (ascii_header_set (header, "TRANSFER_SIZE", "%"PRIu64, xfer_size) < 0)
+    {
+      multilog (log, LOG_ERR, "Could not set TRANSFER_SIZE in Header\n");
+      return -1;
+    }
+  }
 
 #ifdef _DEBUG
   fprintf (stderr, "dbnic: open the socket\n");

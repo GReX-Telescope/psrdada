@@ -220,10 +220,22 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
           $run_heimdall = 0;
         }
 
-        if (exists($h{"OBS_VAL"}) && (int($h{"OBS_VAL"}) < 30))
+        my $tobs = 0;
+        if (exists($h{"OBS_VAL"}))
         {
-          logMsg(1, "INFO", "ignoring since OBS_VAL < 30s");
-          $run_heimdall = 0;
+          $tobs = $h{"OBS_VAL"};
+          if (exists($h{"OBS_UNIT"}))
+          {
+            if ($h{"OBS_UNIT"} eq "MINUTES")
+            {
+              $tobs = $tobs * 60;
+            }
+          }
+          if ($tobs < 30)
+          {
+            logMsg(1, "INFO", "ignoring since OBS_VAL < 30s");
+            $run_heimdall = 0;
+          }
         }
 
         if ($run_heimdall)

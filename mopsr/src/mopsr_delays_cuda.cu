@@ -18,6 +18,7 @@
 #define MOPSR_MAX_ANT         352
 #define WARP_SIZE             32
 #define MEDIAN_FILTER         1
+#define FULLMASK              0xFFFFFFFF
 //#define TRANSPOSE_32SAMPS         // more efficient to use 16-samp variant
 //#define SHOW_MASK                 // this puts the SK/TP masks into the output data!
 //#define _GDEBUG               1
@@ -735,12 +736,15 @@ void mopsr_delay_fractional (cudaStream_t stream, void * d_in, void * d_out,
 #endif
 }
 
-
-#ifdef HAVE_SHFL
+#if (__CUDA_ARCH__ >= 300)
 __inline__ __device__
 float warpReduceSumF(float val) {
-  for (int offset = warpSize/2; offset > 0; offset /= 2) 
+  for (int offset = warpSize/2; offset > 0; offset /= 2)
+#if (__CUDACC_VER_MAJOR__>= 9)
+    val += __shfl_down_sync(FULLMASK, val, offset);
+#else
     val += __shfl_down(val, offset);
+#endif
   return val;
 }
 
@@ -768,7 +772,11 @@ float blockReduceSumF(float val) {
 __inline__ __device__
 int warpReduceSumI(int val) {
   for (int offset = warpSize/2; offset > 0; offset /= 2)
+#if (__CUDACC_VER_MAJOR__>= 9)
+    val += __shfl_down_sync(FULLMASK, val, offset);
+#else
     val += __shfl_down(val, offset);
+#endif
   return val;
 }
 
@@ -825,7 +833,7 @@ __global__ void mopsr_measure_means_kernel (cuFloatComplex * in, cuFloatComplex 
     idx += blockDim.x;
   }
 
-#ifdef HAVE_SHFL
+#if ( __CUDA_ARCH__ >= 300)
   // compute via block reduce sum
   sum_re = blockReduceSumF(sum_re);
   sum_im = blockReduceSumF(sum_im);
@@ -872,7 +880,7 @@ __global__ void mopsr_skcompute_kernel (cuFloatComplex * in, float * s1s, float 
     idx += blockDim.x;
   }
 
-#ifdef HAVE_SHFL
+#if ( __CUDA_ARCH__ >= 300)
   // compute via block reduce sum  
   s1_sum = blockReduceSumF(s1_sum);
   s2_sum = blockReduceSumF(s2_sum);
@@ -1233,7 +1241,7 @@ __global__ void mopsr_skdetect_kernel (float * s1s, float * s2s, cuFloatComplex 
   // since s1 will have twice the variance of the Re/Im components, / 2
   s1_thread /= (2 * M);
 
-#ifdef HAVE_SHFL
+#if ( __CUDA_ARCH__ >= 300)
   // compute the sum of the sums[].x for all the block
   s1_thread = blockReduceSumF (s1_thread);
   s1_count = blockReduceSumI (s1_count);

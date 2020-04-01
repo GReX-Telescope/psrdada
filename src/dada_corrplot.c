@@ -31,7 +31,7 @@
 #define CHECK_ALIGN(x) assert ( ( ((uintptr_t)x) & 15 ) == 0 )
 
 void usage ();
-inline int16_t convert_offset_binary (int16_t in);
+int16_t convert_offset_binary (int16_t in);
 void plot_delays (float * yvals, unsigned npts, char * device);
 void plot_power_spectrum (float * yvals, unsigned npts, char * device, const char * title, float ymin_in, float ymax_in, char use_pts);
 void plot_complex_spectrum (complex float * data, unsigned npts, char * device);
@@ -630,7 +630,7 @@ int main (int argc, char **argv)
   return EXIT_SUCCESS;
 }
 
-inline int16_t convert_offset_binary (int16_t in)
+int16_t convert_offset_binary (int16_t in)
 {
   return in ^ 0x8000;
 }

@@ -109,10 +109,11 @@ typedef struct {
 
 } udptsplot_t;
 
-inline int get_packet (caspsr_sock_t * sock, unsigned pkt_size);
+int get_packet (caspsr_sock_t * sock, unsigned pkt_size);
 int udptsplot_init (udptsplot_t * ctx);
 int udptsplot_prepare (udptsplot_t * ctx);
 int udptsplot_destroy (udptsplot_t * ctx);
+int udptsplot_reset (udptsplot_t * ctx);
 void udptsplot_thread (void * arg);
 
 void append_data (udptsplot_t * ctx);
@@ -275,7 +276,7 @@ int udptsplot_init (udptsplot_t * ctx)
   return 0;
 }
 
-inline int get_packet (caspsr_sock_t * sock, unsigned pkt_size)
+int get_packet (caspsr_sock_t * sock, unsigned pkt_size)
 {
   int got;
   uint64_t timeouts = 0;

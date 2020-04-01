@@ -120,19 +120,58 @@ BLOCK_NBUFS_0           512
 BLOCK_BUFSZ_0           16777216
 BLOCK_NREAD_0           4
 BLOCK_PAGE_0            true
-BLOCK_NUMA_0            0
+BLOCK_NUMA_0_0          0
+BLOCK_NUMA_0_1          1
+BLOCK_NUMA_0_2          0
+BLOCK_NUMA_0_3          1
+BLOCK_NUMA_0_4          0
+BLOCK_NUMA_0_5          1
+BLOCK_NUMA_0_6          0
+BLOCK_NUMA_0_7          1
+BLOCK_NUMA_0_8          0
+BLOCK_NUMA_0_9          1
+BLOCK_NUMA_0_10         0
+BLOCK_NUMA_0_11         1
+BLOCK_NUMA_0_12         0
 
 # pscrunched dirty block
 BLOCK_NBUFS_1           128
 BLOCK_BUFSZ_1           4194304
 BLOCK_NREAD_1           1
 BLOCK_PAGE_1            true
-BLOCK_NUMA_1            0
+BLOCK_NUMA_1_0          0
+BLOCK_NUMA_1_1          1
+BLOCK_NUMA_1_2          0
+BLOCK_NUMA_1_3          1
+BLOCK_NUMA_1_4          0
+BLOCK_NUMA_1_5          1
+BLOCK_NUMA_1_6          0
+BLOCK_NUMA_1_7          1
+BLOCK_NUMA_1_8          0
+BLOCK_NUMA_1_9          1
+BLOCK_NUMA_1_10         0
+BLOCK_NUMA_1_11         1
+BLOCK_NUMA_1_12         0
 
 # FRB dump data block
 BLOCK_NBUFS_2           16
 BLOCK_BUFSZ_2           8388608
 BLOCK_NREAD_2           1
+BLOCK_PAGE_2            true
+BLOCK_NUMA_2_0          0
+BLOCK_NUMA_2_1          1
+BLOCK_NUMA_2_2          0
+BLOCK_NUMA_2_3          1
+BLOCK_NUMA_2_4          0
+BLOCK_NUMA_2_5          1
+BLOCK_NUMA_2_6          0
+BLOCK_NUMA_2_7          1
+BLOCK_NUMA_2_8          0
+BLOCK_NUMA_2_9          1
+BLOCK_NUMA_2_10         0
+BLOCK_NUMA_2_11         1
+BLOCK_NUMA_2_12         0
+
 
 # Primary Write Client (PWC) configuration
 PWC_BINARY              bpsr_udpdb
@@ -156,17 +195,17 @@ PWC_12                  medusa-gpu6
 
 # IPs for UDP data
 PWC_UDP_IP_0            192.168.2.10
-PWC_UDP_IP_1            192.168.2.10
+PWC_UDP_IP_1            192.168.2.11
 PWC_UDP_IP_2            192.168.2.12
-PWC_UDP_IP_3            192.168.2.12
+PWC_UDP_IP_3            192.168.2.13
 PWC_UDP_IP_4            192.168.2.14
-PWC_UDP_IP_5            192.168.2.14
+PWC_UDP_IP_5            192.168.2.15
 PWC_UDP_IP_6            192.168.2.16
-PWC_UDP_IP_7            192.168.2.16
+PWC_UDP_IP_7            192.168.2.17
 PWC_UDP_IP_8            192.168.2.18
-PWC_UDP_IP_9            192.168.2.18
+PWC_UDP_IP_9            192.168.2.19
 PWC_UDP_IP_10           192.168.2.20
-PWC_UDP_IP_11           192.168.2.20
+PWC_UDP_IP_11           192.168.2.21
 PWC_UDP_IP_12           192.168.2.22
 
 # ports for UDP data
@@ -201,17 +240,17 @@ PWC_UDP_CORE_12         1
 
 # gpu designation for PWC's
 PWC_GPU_ID_0            0
-PWC_GPU_ID_1            1
+PWC_GPU_ID_1            2
 PWC_GPU_ID_2            0
-PWC_GPU_ID_3            1
+PWC_GPU_ID_3            2
 PWC_GPU_ID_4            0
-PWC_GPU_ID_5            1
+PWC_GPU_ID_5            2
 PWC_GPU_ID_6            0
-PWC_GPU_ID_7            1
+PWC_GPU_ID_7            2
 PWC_GPU_ID_8            0
-PWC_GPU_ID_9            1
+PWC_GPU_ID_9            2
 PWC_GPU_ID_10           0
-PWC_GPU_ID_11           1
+PWC_GPU_ID_11           2
 PWC_GPU_ID_12           0
 
 # The config/startup script will connect to the IBOB_HOST_i:IBOB_PORT_i

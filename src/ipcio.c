@@ -22,6 +22,34 @@ void ipcio_init (ipcio_t* ipc)
   ipc -> sod_pending = 0;
   ipc -> sod_buf  = 0;
   ipc -> sod_byte = 0;
+
+  ipc -> bufs_opened_max = 0;
+  ipc -> bufs_opened = 0;
+  ipc -> buf_ptrs = NULL;
+}
+
+void ipcio_alloc (ipcio_t* ipc)
+{
+  uint64_t nbufs = ipcbuf_get_nbufs ((ipcbuf_t *) ipc);
+  ipc->bufs_opened_max = nbufs - 1;
+#ifdef _DEBUG
+  fprintf (stderr, "ipcio_alloc: nbufs=%"PRIu64" buf_ptrs=%p\n", nbufs, ipc->buf_ptrs);
+#endif
+  if (ipc->buf_ptrs)
+    free (ipc->buf_ptrs);
+  ipc->buf_ptrs = malloc(sizeof(char *) * nbufs);
+#ifdef _DEBUG
+  fprintf (stderr, "ipc->buf_ptrs=()\n");
+#endif
+}
+
+void ipcio_dealloc (ipcio_t* ipc)
+{
+  if (ipc->buf_ptrs)
+    free (ipc->buf_ptrs);
+  ipc -> buf_ptrs = NULL;
+  ipc -> bufs_opened_max = 0;
+  ipc -> bufs_opened = 0;
 }
 
 /* create a new shared memory block and initialize an ipcio_t struct */
@@ -95,11 +123,15 @@ int ipcio_open (ipcio_t* ipc, char rdwrt)
     }
 
     ipc -> rdwrt = rdwrt;
-    return 0;
 
+    ipcio_alloc (ipc);
+    return 0;
   }
 
   if (rdwrt == 'R') {
+#ifdef _DEBUG
+    fprintf (stderr, "ipcio_open: ipcbuf_lock_read(ipc)\n");
+#endif
     if (ipcbuf_lock_read ((ipcbuf_t*)ipc) < 0) {
       fprintf (stderr, "ipcio_open: error ipcbuf_lock_read\n");
       return -1;
@@ -107,6 +139,10 @@ int ipcio_open (ipcio_t* ipc, char rdwrt)
   }
 
   ipc -> rdwrt = rdwrt;
+
+  // allocate required structures
+  ipcio_alloc (ipc);
+
   return 0;
 }
 
@@ -170,12 +206,22 @@ int ipcio_stop_close (ipcio_t* ipc, char unlock)
 
 #ifdef _DEBUG
     if (ipc->curbuf)
-      fprintf (stderr, "ipcio_close:W buffer:%"PRIu64" %"PRIu64" bytes. "
-                       "buf[0]=%x\n", ipc->buf.sync->w_buf, ipc->bytes, 
-                       (void *) ipc->curbuf);
+      fprintf (stderr, "ipcio_close:W curbuf: %"PRIu64" nextbuf: %"PRIu64" %"
+                        PRIu64" bytes. buf[0]=%x\n", ipc->buf.sync->w_buf_curr, 
+                        ipc->buf.sync->w_buf_next, ipc->bytes, (void *) ipc->curbuf);
 #endif
 
     if (ipcbuf_is_writing((ipcbuf_t*)ipc)) {
+
+      // ensure that any multiple opened blocks are closed
+      while (ipc->bufs_opened > 0)
+      {
+        uint64_t bufsz = ipcbuf_get_bufsz((ipcbuf_t*)ipc);
+#ifdef _DEBUG
+        fprintf (stderr, "ipcio_close: bufs_opened=%u, close_block_write(%lu)\n", ipc->bufs_opened, bufsz);
+#endif
+        ipcio_close_block_write(ipc, bufsz);
+      }
 
       if (ipcbuf_enable_eod ((ipcbuf_t*)ipc) < 0) {
         fprintf (stderr, "ipcio_close:W error ipcbuf_enable_eod\n");
@@ -231,7 +277,8 @@ int ipcio_stop_close (ipcio_t* ipc, char unlock)
       uint64_t prev_xfer = ipc->buf.sync->w_xfer - 1;
       /* Ensure the w_buf pointer is pointing buffer after the 
        * most recent EOD */
-      ipc->buf.sync->w_buf = ipc->buf.sync->e_buf[prev_xfer % IPCBUF_XFERS]+1;
+      ipc->buf.sync->w_buf_curr = ipc->buf.sync->e_buf[prev_xfer % IPCBUF_XFERS]+1;
+      ipc->buf.sync->w_buf_next = ipc->buf.sync->w_buf_curr;
 
       // TODO CHECK IF WE NEED TO DECREMENT the count??
       
@@ -339,7 +386,7 @@ ssize_t ipcio_write (ipcio_t* ipc, char* ptr, size_t bytes)
 
 #ifdef _DEBUG
         fprintf (stderr, "ipcio_write buffer:%"PRIu64" mark_filled\n",
-                 ipc->buf.sync->w_buf);
+                 ipc->buf.sync->w_buf_curr);
 #endif
         
         /* the buffer has been filled */
@@ -365,7 +412,7 @@ ssize_t ipcio_write (ipcio_t* ipc, char* ptr, size_t bytes)
 
 #ifdef _DEBUG
       fprintf (stderr, "ipcio_write buffer:%"PRIu64" ipcbuf_get_next_write\n",
-               ipc->buf.sync->w_buf);
+               ipc->buf.sync->w_buf_next);
 #endif
 
       ipc->curbuf = ipcbuf_get_next_write ((ipcbuf_t*)ipc);
@@ -395,7 +442,7 @@ ssize_t ipcio_write (ipcio_t* ipc, char* ptr, size_t bytes)
 
 #ifdef _DEBUG
       fprintf (stderr, "ipcio_write buffer:%"PRIu64" offset:%"PRIu64
-	       " count=%"PRIu64"\n", ipc->buf.sync->w_buf, ipc->bytes, space);
+	       " count=%"PRIu64"\n", ipc->buf.sync->w_buf_curr, ipc->bytes, space);
 #endif
 
 #ifdef HAVE_CUDA
@@ -540,39 +587,69 @@ ssize_t ipcio_close_block_read (ipcio_t *ipc, uint64_t bytes)
  */
 char * ipcio_open_block_write (ipcio_t *ipc, uint64_t *block_id)
 {
-
   if (ipc->bytes != 0) 
   {
     fprintf (stderr, "ipcio_open_block_write: ipc->bytes != 0\n");
     return 0;
   }
 
-  if (ipc->curbuf) 
+  if (ipc->curbuf && ipc->bufs_opened == 0) 
   {
-    fprintf(stderr, "ipcio_open_block_write: ipc->curbuf != 0\n");
+    fprintf (stderr, "ipcio_open_block_write: ipc->curbuf != 0\n");
     return 0;
   }
 
   if (ipc -> rdwrt != 'W')
   {
-    fprintf(stderr, "ipcio_open_block_write: ipc -> rdwrt != W\n");
+    fprintf (stderr, "ipcio_open_block_write: ipc -> rdwrt != W\n");
     return 0;
-  } 
+  }
 
-  ipc->curbuf = ipcbuf_get_next_write ((ipcbuf_t*)ipc);
+  if (ipc->bufs_opened >= ipc->bufs_opened_max)
+  {
+    fprintf (stderr, "ipcio_open_block_write: cannot open more than %"
+             PRIu64" bufs\n", ipc->bufs_opened_max);
+    return 0;
+  }
 
-  if (!ipc->curbuf)
+#ifdef _DEBUG
+  fprintf (stderr, "ipcio_open_block_write: ipcbuf_get_next_write(ipc)\n");
+#endif
+  char * buf_ptr = ipcbuf_get_next_write ((ipcbuf_t*) ipc);
+  if (!buf_ptr)
   {
     fprintf (stderr, "ipcio_open_block_write: could not get next block rdwrt=%c\n", ipc -> rdwrt);
     return 0;
   }
 
+#ifdef _DEBUG
+  fprintf (stderr, "ipcio_open_block_write: saving buf_ptr=%p to ipc->buf_ptrs[%u]=%p\n",
+           buf_ptr, ipc->bufs_opened, ipc->buf_ptrs[ipc->bufs_opened]);
+#endif
+
+  // save this pointer in the stack
+  ipc->buf_ptrs[ipc->bufs_opened] = buf_ptr;
+
+  // assign this to curbuf if required
+  if (ipc->bufs_opened == 0)
+  {
+    ipc->curbuf = ipc->buf_ptrs[ipc->bufs_opened];
+
+    // only reset these params if opening the 0th buf
+    ipc->marked_filled = 0;
+    ipc->bytes = 0;
+  }
+
+  // increment the count of open bufs
+  ipc->bufs_opened++;
+
+  // returns the write index of the most recently opened buf
+#ifdef _DEBUG
+  fprintf (stderr, "ipcio_open_block_write: ipcbuf_get_write_index (ipc)\n");
+#endif
   *block_id = ipcbuf_get_write_index ((ipcbuf_t*)ipc);
 
-  ipc->marked_filled = 0;
-  ipc->bytes = 0;
-
-  return ipc->curbuf;
+  return buf_ptr;
 }
 
 int ipcio_zero_next_block (ipcio_t *ipc)
@@ -652,10 +729,33 @@ ssize_t ipcio_close_block_write (ipcio_t *ipc, uint64_t bytes)
       return -3;
     }
 
-    ipc->marked_filled = 1;
-    ipc->curbuf = 0;
-    ipc->bytes = 0;
+    // decrement the number of current buffers open
+    ipc->bufs_opened--;
+
+    // if only 1 buf was open
+    if (ipc->bufs_opened == 0)
+    {
+      ipc->buf_ptrs[0] = NULL;
+      ipc->curbuf = 0;
+      ipc->marked_filled = 1;
+      ipc->bytes = 0;
+    }
+    // if multiple buffers were open
+    else
+    {
+      // shift the curbuf ptrs down 1, discarding the last
+      int idx;
+      for (idx=0; idx<ipc->bufs_opened; idx++)
+        ipc->buf_ptrs[idx] = ipc->buf_ptrs[idx+1];
+      ipc->buf_ptrs[ipc->bufs_opened] = NULL;
+
+      // assign the next buffer to the curbuf
+      ipc->curbuf = ipc->buf_ptrs[0];
+      ipc->marked_filled = 0;
+      ipc->bytes = 0;
+    }
   }
+
   return 0;
 }
 
@@ -728,7 +828,7 @@ ssize_t ipcio_read (ipcio_t* ipc, char* ptr, size_t bytes)
         if (device_id >= 0)
         {
 #ifdef _DEBUG
-          fprintf (stderr, "ipcio_read: cudaMemcpy (%p, %p, :%"PRIu64", cudaMemcpyHostToDevice\n",
+          fprintf (stderr, "ipcio_read: cudaMemcpy (%p, %p, ,%"PRIu64", cudaMemcpyHostToDevice)\n",
                    (void *) ptr, (void *) ipc->curbuf + ipc->bytes, space);
 #endif
           err = cudaMemcpy(ptr, ipc->curbuf + ipc->bytes, space, cudaMemcpyDeviceToHost);
@@ -745,7 +845,7 @@ ssize_t ipcio_read (ipcio_t* ipc, char* ptr, size_t bytes)
 #endif
         {
 #ifdef _DEBUG
-        fprintf (stderr, "ipcio_read: memcpy (%p, %p, :%"PRIu64"\n",
+        fprintf (stderr, "ipcio_read: memcpy (%p, %p, ,%"PRIu64")\n",
                          (void *) ptr, (void *) ipc->curbuf + ipc->bytes, space);
 #endif
           memcpy (ptr, ipc->curbuf + ipc->bytes, space);

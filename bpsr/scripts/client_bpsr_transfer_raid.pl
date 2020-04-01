@@ -178,8 +178,8 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
   {
     @finished = ();
 
-    # look for observations marked beam.finished and more than 4 minutes old
-    $cmd = "find ".$a_dir."/".$beam." -mindepth 2 -maxdepth 2 -type f -mmin +4 -name 'beam.finished' -printf '\%h\n' | awk -F/ '{print \$(NF)}' | sort";
+    # look for observations marked beam.finished and more than 10 minutes old
+    $cmd = "find ".$a_dir."/".$beam." -mindepth 2 -maxdepth 2 -type f -mmin +10 -name 'beam.finished' -printf '\%h\n' | awk -F/ '{print \$(NF)}' | sort";
     msg(2, "INFO", "main: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     msg(3, "INFO", "main: ".$result." ".$response);
@@ -198,6 +198,17 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
         $o = $finished[$i];
         $b = $beam;
         msg(2, "INFO", "main: processing ".$b."/".$o);
+
+        # ensure no monitoring files exist
+        $cmd = "find ".$a_dir."/".$b."/".$o." -mindepth 1 -maxdepth 1 -type f -regex '.*[ts|bp|bps][0|1]' | wc -l";
+        msg(3, "INFO", "main: ".$cmd);
+        ($result, $response) = Dada::mySystem($cmd);
+        msg(3, "INFO", "main: ".$result." ".$response);
+        if (($result ne "ok") || ($response ne "0"))
+        {
+          msg(1, "WARN", "main: found ".$response." monitoring files for ".$o);
+          next;
+        }
 
         # get the PID
         $cmd = "grep PID ".$a_dir."/".$b."/".$o."/obs.start | awk '{print \$2}'";
@@ -303,7 +314,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
 
     my $counter = 10;
     msg(2, "INFO", "main: sleeping ".($counter)." seconds");
-    while ((!$quit_daemon) && ($counter > 0) && ($#finished == -1)) 
+    while ((!$quit_daemon) && ($counter > 0)) 
     {
       sleep(1);
       $counter--;

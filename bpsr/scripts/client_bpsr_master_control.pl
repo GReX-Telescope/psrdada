@@ -191,8 +191,11 @@ sub setupClientType()
           {
             $numa = $cfg{"BLOCK_NUMA_".$id};
           }
+          if (defined $cfg{"BLOCK_NUMA_".$id."_".$i})
+          {
+            $numa = $cfg{"BLOCK_NUMA_".$id."_".$i};
+          }
           $Dada::client_master_control::pwcs{$i}{"dbs"}{$id}{"numa"} = $numa;
-
 
           $Dada::client_master_control::pwcs{$i}{"dbs"}{$id}{"key"} = $key;
           $Dada::client_master_control::pwcs{$i}{"dbs"}{$id}{"nbufs"} = $cfg{"BLOCK_NBUFS_".$id};
