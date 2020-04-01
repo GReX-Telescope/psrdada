@@ -105,6 +105,7 @@ struct rdma_cm_id * dada_rdma_resolve_addr (const char * host, const char * port
 
 dada_ib_cm_t * dada_ib_create_cm (unsigned nbufs, multilog_t * log);
 
+int dada_ib_bind_cm (dada_ib_cm_t * ctx, const char * host, int port);
 int dada_ib_listen_cm (dada_ib_cm_t * ctx, int port);
 int dada_ib_listen_cm_only (dada_ib_cm_t * ctx);
 

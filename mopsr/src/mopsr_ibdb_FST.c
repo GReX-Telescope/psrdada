@@ -740,9 +740,9 @@ void * mopsr_ibdb_init_thread (void * arg)
   }
 #else
   if (ib_cm->verbose > 1)
-    multilog(log, LOG_INFO, "init_thread: dada_ib_bind_cm (port=%d)\n", ib_cm->port);
+    multilog(log, LOG_INFO, "init_thread: dada_ib_bind_cm (dst_addr=%s, port=%d)\n", conn->dst_addr, ib_cm->port);
 
-  if (dada_ib_bind_cm(ib_cm, ib_cm->port) < 0)
+  if (dada_ib_bind_cm(ib_cm, conn->dst_addr, ib_cm->port) < 0)
   {
     multilog(log, LOG_ERR, "init_thread: dada_ib_bind_cm failed\n");
     pthread_exit((void *) &(ib_cm->cm_connected));

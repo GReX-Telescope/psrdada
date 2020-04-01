@@ -35,7 +35,9 @@ typedef struct {
 
   char host[64]; 
 
-  char ib_host[64]; 
+  char src_addr[64];
+
+  char dst_addr[64];
 
   int port;
 
@@ -110,7 +112,9 @@ typedef struct {
 
   char host[64];
 
-  char ib_host[64];
+  char src_addr[64];
+
+  char dst_addr[64];
 
   int port;
 

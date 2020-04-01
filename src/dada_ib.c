@@ -164,7 +164,7 @@ int dada_ib_listen_cm (dada_ib_cm_t * ctx, int port)
 }
 
 // creates event channel and binds a port to the CM_ID ready for a rdma_listen call
-int dada_ib_bind_cm (dada_ib_cm_t * ctx, int port)
+int dada_ib_bind_cm (dada_ib_cm_t * ctx, const char * address, int port)
 {
   assert(ctx);
   multilog_t * log = ctx->log;
@@ -210,7 +210,7 @@ int dada_ib_bind_cm (dada_ib_cm_t * ctx, int port)
 
   sin.sin_family      = AF_INET;
   sin.sin_port        = htons(port);
-  sin.sin_addr.s_addr = INADDR_ANY;
+  sin.sin_addr.s_addr = inet_addr(address);
 
   // Bind to local port and listen for connection request 
   if (ctx->verbose > 1)
@@ -269,7 +269,7 @@ int dada_ib_connect_cm (dada_ib_cm_t * ctx, const char *host, unsigned port)
     return -1;
   }
 
-  // convert the host:port inot an addrinfo struct
+  // convert the host:port into an addrinfo struct
   err = getaddrinfo(host, port_str, &hints, &res);
   if (err < 0)
   {

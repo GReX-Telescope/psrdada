@@ -78,15 +78,47 @@ mopsr_bf_conn_t * mopsr_setup_cornerturn_send (const char * config_file, mopsr_b
   mopsr_bf_conn_t * conns = (mopsr_bf_conn_t *) malloc (sizeof(mopsr_bf_conn_t) * ctx->nconn);
 
   char host[64];
+  char src_addr[64];
+  char dst_addr[64];
+
+  // determine the send IB address
+  sprintf (key, "SEND_%d", send_id);
+  if (ascii_header_get (config , key, "%s", host) != 1)
+  {
+    multilog (ctx->log, LOG_ERR, "setup_cornerturn_send: config with no %s\n", key);
+    return 0;
+  }
+
+  sprintf (key, "%s_IB", host);
+  if (ascii_header_get (config, key, "%s", src_addr) != 1)
+  {
+    multilog (ctx->log, LOG_ERR, "setup_cornerturn_send: config with no %s\n", key);
+    return 0;
+  }
+
   unsigned int irecv, chan_first, chan_last;
   for (irecv=0; irecv<nrecv; irecv++)
   {
+    strcpy (conns[irecv].src_addr, src_addr);
+
     sprintf (key, "RECV_%d", irecv);
     if (ascii_header_get (config , key, "%s", host) != 1)
     {
       multilog (ctx->log, LOG_ERR, "setup_cornerturn_send: config with no %s\n", key);
       return 0;
     }
+
+    // set destination host for opening IB connection
+    strcpy (conns[irecv].host, host);
+
+    // now get the IB address for this hostname
+    sprintf (key, "%s_IB", host);
+    if (ascii_header_get (config, key, "%s", dst_addr) != 1)
+    {
+      multilog (ctx->log, LOG_ERR, "setup_cornerturn_send: config with no %s\n", key);
+      return 0;
+    }
+    strcpy (conns[irecv].dst_addr, dst_addr);
 
     // get the first / last channel to be sent to this receiver
     sprintf (key, "RECV_CHAN_FIRST_%d", irecv);
@@ -102,18 +134,6 @@ mopsr_bf_conn_t * mopsr_setup_cornerturn_send (const char * config_file, mopsr_b
       multilog (ctx->log, LOG_ERR, "setup_cornerturn_send: config with no %s\n", key);
       return 0;
     }
-
-    // set destination host for opening IB connection
-    strcpy (conns[irecv].host, host);
-
-    // now get the IB address for this hostname
-    sprintf (key, "%s_IB", host);
-    if (ascii_header_get (config, key, "%s", host) != 1)
-    {
-      multilog (ctx->log, LOG_ERR, "setup_cornerturn_send: config with no %s\n", key);
-      return 0;
-    }
-    strcpy (conns[irecv].ib_host, host);
 
     // set destination port for opening IB connection
     conns[irecv].pfb        = send_id;
@@ -198,13 +218,36 @@ mopsr_bf_conn_t * mopsr_setup_cornerturn_recv (const char * config_file, mopsr_b
 
   char key[32];
   char host[64];
+  char src_addr[64];
+  char dst_addr[64];
   unsigned int ant_first;
   unsigned int ant_last;
   unsigned int chan_first;
   unsigned int chan_last;
   unsigned int isend;
+
+  // determine the RECV local hostname
+  sprintf (key, "RECV_%d", irecv);
+  if (ascii_header_get (config , key, "%s", host) != 1)
+  {
+    multilog (ctx->log, LOG_ERR, "setup_bp_cornerturn_recv: config with no %s\n", key);
+    return 0;
+  }
+
+  // configure the IB destination address
+  sprintf (key, "%s_IB", host);
+  if (ascii_header_get (config, key, "%s", dst_addr) != 1)
+  {
+    multilog (ctx->log, LOG_ERR, "setup_bp_cornerturn_recv: config with no %s\n", key);
+    return 0;
+  }
+
   for (isend=0; isend<nsend; isend++)
   {
+    // set the IB destination address
+    strcpy (conns[isend].dst_addr, dst_addr);
+
+    // configure the  IB source address
     sprintf (key, "SEND_%d", isend);
     if (ascii_header_get (config , key, "%s", host) != 1)
     {
@@ -215,12 +258,12 @@ mopsr_bf_conn_t * mopsr_setup_cornerturn_recv (const char * config_file, mopsr_b
 
     // now get the IB address for this hostname
     sprintf (key, "%s_IB", host);
-    if (ascii_header_get (config, key, "%s", host) != 1)
+    if (ascii_header_get (config, key, "%s", src_addr) != 1)
     {
       multilog (ctx->log, LOG_ERR, "setup_cornerturn_recv: config with no %s\n", key);
       return 0;
     } 
-    strcpy (conns[isend].ib_host, host);
+    strcpy (conns[isend].src_addr, src_addr);
 
     sprintf (key, "ANT_FIRST_SEND_%d", isend);
     if (ascii_header_get (config , key, "%d", &ant_first) != 1)
@@ -398,9 +441,28 @@ mopsr_bp_conn_t * mopsr_setup_bp_cornerturn_send (const char * config_file, mops
   mopsr_bp_conn_t * conns = (mopsr_bp_conn_t *) malloc (sizeof(mopsr_bp_conn_t) * ctx->nconn);
 
   char host[64];
+  char src_addr[64];
+  char dst_addr[64];
+
+  sprintf (key, "SEND_%d", send_id);
+  if (ascii_header_get (config , key, "%s", host) != 1)
+  {
+    multilog (ctx->log, LOG_ERR, "setup_bp_cornerturn_send: config with no %s\n", key);
+    return 0;
+  }
+
+  sprintf (key, "%s_IB", host);
+  if (ascii_header_get (config, key, "%s", src_addr) != 1)
+  {
+    multilog (ctx->log, LOG_ERR, "setup_bp_cornerturn_send: config with no %s\n", key);
+    return 0;
+  }
+
   unsigned int iconn;
   for (iconn=0; iconn<ctx->nconn; iconn++)
   {
+    strcpy (conns[iconn].src_addr, src_addr);
+
     sprintf (key, "RECV_%d", iconn);
     if (ascii_header_get (config , key, "%s", host) != 1)
     {
@@ -413,12 +475,12 @@ mopsr_bp_conn_t * mopsr_setup_bp_cornerturn_send (const char * config_file, mops
 
     // now get the IB address for this hostname
     sprintf (key, "%s_IB", host);
-    if (ascii_header_get (config, key, "%s", host) != 1)
+    if (ascii_header_get (config, key, "%s", dst_addr) != 1)
     {
       multilog (ctx->log, LOG_ERR, "setup_bp_cornerturn_send: config with no %s\n", key);
       return 0;
     }
-    strcpy (conns[iconn].ib_host, host);
+    strcpy (conns[iconn].dst_addr, dst_addr);
 
     sprintf (key, "BEAM_FIRST_RECV_%u", iconn);
     if (ascii_header_get (config , key, "%u", &beam_first) != 1)
@@ -477,6 +539,8 @@ mopsr_bp_conn_t * mopsr_setup_bp_cornerturn_recv (const char * config_file, mops
 
   char key[32];
   char host[64];
+  char src_addr[64];
+  char dst_addr[64];
   unsigned int beam_first;
   unsigned int beam_last;
 
@@ -495,9 +559,25 @@ mopsr_bp_conn_t * mopsr_setup_bp_cornerturn_recv (const char * config_file, mops
   }
 
   unsigned chan_first, chan_last, iconn;
-  
   for (iconn=0; iconn<ctx->nconn; iconn++)
   {
+    // determine the RECV local hostname
+    sprintf (key, "RECV_%d", recv_id);
+    if (ascii_header_get (config , key, "%s", host) != 1)
+    {
+      multilog (ctx->log, LOG_ERR, "setup_bp_cornerturn_recv: config with no %s\n", key);
+      return 0;
+    }
+
+    // now get the IB address for this hostname
+    sprintf (key, "%s_IB", host);
+    if (ascii_header_get (config, key, "%s", host) != 1)
+    {
+      multilog (ctx->log, LOG_ERR, "setup_bp_cornerturn_recv: config with no %s\n", key);
+      return 0;
+    }
+    strcpy (conns[iconn].dst_addr, host);
+
     sprintf (key, "SEND_%d", iconn);
     if (ascii_header_get (config , key, "%s", host) != 1)
     {
@@ -513,7 +593,7 @@ mopsr_bp_conn_t * mopsr_setup_bp_cornerturn_recv (const char * config_file, mops
       multilog (ctx->log, LOG_ERR, "setup_bp_cornerturn_recv: config with no %s\n", key);
       return 0;
     }
-    strcpy (conns[iconn].ib_host, host);
+    strcpy (conns[iconn].src_addr, src_addr);
 
     sprintf (key, "CHAN_FIRST_SEND_%u", iconn);
     if (ascii_header_get (config , key, "%u", &chan_first) != 1)

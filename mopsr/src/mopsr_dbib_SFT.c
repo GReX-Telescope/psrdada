@@ -794,8 +794,8 @@ void * mopsr_dbib_init_thread (void * arg)
 
   // resolve the route to the server
   if (ib_cm->verbose)
-    multilog(log, LOG_INFO, "ib_init_thread: connecting to cm at %s:%d\n", conn->ib_host, conn->port);
-  if (dada_ib_connect_cm (ib_cm, conn->ib_host, conn->port) < 0)
+    multilog(log, LOG_INFO, "ib_init_thread: connecting to cm at %s:%d\n", conn->dst_addr, conn->port);
+  if (dada_ib_connect_cm (ib_cm, conn->dst_addr, conn->port) < 0)
   {
     multilog(log, LOG_ERR, "ib_init_thread: dada_ib_connect_cm failed\n");
     pthread_exit((void *) &(ib_cm->cm_connected));
