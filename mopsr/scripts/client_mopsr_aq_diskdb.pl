@@ -144,7 +144,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
   # ID tag for this PFB
   $pfb_id = $cfg{"PWC_PFB_ID_".$pwc_id};
 
-  my $utc = "2018-05-28-04:19:19"
+  my $utc = "2018-05-28-04:19:19";
   my @byte_offsets = ( "0000140849996800" );
 
   $cmd = "dada_diskdb -k ".$db_key." -s";

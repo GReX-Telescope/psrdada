@@ -134,7 +134,11 @@ Dada::preventDuplicateDaemon(basename($0)." ".$bf_id);
   while (!$quit_daemon)
   {
     # get list of archives to process in the results dir
-    $cmd = "find ".$results_dir." -mindepth 3 -maxdepth 3 -name '????-??-??-??:??:??.ar' -o -name 'pulse_*.ar' | sort -n";
+    $cmd = "find ".$results_dir." -mindepth 3 -maxdepth 3 ".
+           "-name '????-??-??-??:??:??.ar' ".
+           "-o -name '????-??-??-??:??:??.sf' ".
+           "-o -name 'pulse_*.ar' ".
+           "| sort -n";
     msg(2, "INFO", "main: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     msg(3, "INFO", "main: ".$result." ".$response);

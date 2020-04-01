@@ -159,7 +159,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
   # look for filterbank files to transfer to the server via rsync
   while (!$quit_daemon)
   {
-    $cmd = "find ".$proc_dir." -mindepth 3 -maxdepth 3 -type f -name 'obs.completed' -printf '%h\n' | awk -F/ '{print \$(NF-1)\"/\"\$(NF)}' | sort -n";
+    $cmd = "find ".$proc_dir." -mindepth 3 -maxdepth 3 -type f -mmin +2 -name 'obs.completed' -printf '%h\n' | awk -F/ '{print \$(NF-1)\"/\"\$(NF)}' | sort -n";
     msg(2, "INFO", "main: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     msg(3, "INFO", "main: ".$result." ".$response);

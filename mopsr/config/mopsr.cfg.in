@@ -109,3 +109,8 @@ SRV_0                   mpsr-srv0
 MOLONGLO_BAYS_FILE          @PSRDADA_INSTALL@/share/molonglo_bays.txt
 MOLONGLO_MODULES_FILE       @PSRDADA_INSTALL@/share/molonglo_modules.txt
 MOLONGLO_SIGNAL_PATHS_FILE  @PSRDADA_INSTALL@/share/mopsr_signal_paths.txt
+
+NUM_MOPSR_DIRS           1
+MOPSR_DIR_0              dada:mpsr-bf08:/smirf/backup
+MOPSR_S4_DEVICE          /dev/nst0
+MOPSR_DB_DIR             dada:mpsr-bf08:/home/dada/bookkeeping/tape_archiver

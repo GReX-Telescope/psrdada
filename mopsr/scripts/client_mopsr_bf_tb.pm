@@ -222,6 +222,16 @@ sub main()
       # replace DADA_CH_ID with bf_dir
       $proc_cmd =~ s/<DADA_CH_ID>/$bf_dir/;
 
+      # replace <SEARCH_DM>
+      if ($header{"DM"} > 0)
+      {
+        $proc_cmd =~ s/-do_dedisp true -D <SEARCH_DM>/-do_dedisp true -D $header{"DM"}/;
+      }
+      else
+      {
+        $proc_cmd =~ s/-do_dedisp true -D <SEARCH_DM>//;
+      }
+
       # replace <DADA_INFO> tags with the matching input .info file
       my $tmp_info_file = "";
       if ($proc_cmd =~ m/<DADA_INFO>/)

@@ -155,8 +155,8 @@ sub main()
       $c{"extra_galactic"} = 1;
     }
 
-    my $to_email = "ajameson\@swin.edu.au";
-    my $cc_email = "";
+    my $to_email = "vivekgupta\@swin.edu.au";
+    my $cc_email = "wael.a.farah\@gmail.com";
     my $did_dump = "false";
     Dada::logMsg(1, $dl, "main: threads->new(\&generateEmail");
     my $email_thread = threads->new(\&generateEmail, $to_email, $cc_email, $did_dump, \%c);
@@ -173,22 +173,62 @@ sub main()
     $dump_thread = threads->new(\&dumperThread);
   }
 
+  my $curr_utc_start = "";
+  my $prev_utc_start = "";
+
+  my $tmc_host = $cfg{"SERVER_HOST"};
+  my $tmc_port = $cfg{"TMC_STATE_INFO_PORT"};
+
   while (!$quit_daemon)
   {
+    Dada::logMsg(2, $dl, "opening socket to ".$tmc_host.":".$tmc_port);
+    # open a socket to the TMC interface
+    my $handle = Dada::connectToMachine($tmc_host, $tmc_port, 1);
+    if (!$handle)
+    {
+      Dada::logMsgWarn($warn, "Failed to connect to ".$tmc_host.":".$tmc_port);
+      next;
+    }
+
+    Dada::logMsg(2, $dl, "-> utc_start");
+    # open a socket to the TMC interface
+
+    print $handle "utc_start\r\n";
+    $response = Dada::getLine($handle);
+    chomp $response;
+    Dada::logMsg(2, $dl, "<- [".$response."]");
+    $handle->close();
+
+    if ($response ne $curr_utc_start)
+    {
+      $prev_utc_start = $curr_utc_start;
+      $curr_utc_start = $response;
+    }
+
+    my @observations = ();
+    if (($prev_utc_start ne "") && ($prev_utc_start ne "UNKNOWN"))
+    {
+      push @observations, $prev_utc_start;
+    }
+    if (($curr_utc_start ne "") && ($curr_utc_start ne "UNKNOWN"))
+    {
+      push @observations, $curr_utc_start;
+    }
+
     # TODO check that directories are correctly sorted by UTC_START time
-    Dada::logMsg(2, $dl, "main: looking for obs.processing in ".$obs_results_dir);
+    # Dada::logMsg(2, $dl, "main: looking for obs.processing in ".$obs_results_dir);
 
     # Only get observations that are marked as procesing
-    $cmd = "find ".$obs_results_dir." -mindepth 2 -maxdepth 2 -name 'obs.processing' ".
-           "-printf '\%h\\n' | awk -F/ '{print \$NF}' | sort -n";
+    # $cmd = "find ".$obs_results_dir." -mindepth 2 -maxdepth 2 -name 'obs.processing' ".
+    #        "-printf '\%h\\n' | awk -F/ '{print \$NF}' | sort -n";
 
-    Dada::logMsg(2, $dl, "main: ".$cmd);
-    ($result, $response) = Dada::mySystem($cmd);
-    Dada::logMsg(3, $dl, "main: ".$result." ".$response);
+    # Dada::logMsg(2, $dl, "main: ".$cmd);
+    # ($result, $response) = Dada::mySystem($cmd);
+    # Dada::logMsg(3, $dl, "main: ".$result." ".$response);
 
-    if ($result eq "ok") 
+    # if ($result eq "ok") 
     {
-      @observations = split(/\n/,$response);
+      #@observations = split(/\n/,$response);
 
       # For process all valid observations
       for ($i=0; (($i<=$#observations) && (!$quit_daemon)); $i++)
@@ -201,9 +241,9 @@ sub main()
 
         if ($obs_mode eq "FB")
         {
-          Dada::logMsg(2, $dl, "main: processCandidates(".$o.")");
+          Dada::logMsg(1, $dl, "main: processCandidates(".$o.")");
           ($result, $response) = processCandidates($o);
-          Dada::logMsg(2, $dl, "main: processCandidates ".$result." ".$response);
+          Dada::logMsg(1, $dl, "main: processCandidates ".$result." ".$response);
           if ($result ne "ok")
           {
             Dada::logMsgWarn($warn, "processCandidates(".$o.") failed: ".$response);       
@@ -264,7 +304,6 @@ sub getObsInfo($)
     }
     else
     {
-      Dada::logMsg(2, $dl, "main: obs_info=".$obs_info);
       my $cmd = "grep MB_ENABLED ".$obs_info." | awk '{print \$2}'";
       my ($result, $response) = Dada::mySystem($cmd);
       if (($result eq "ok") && ($response eq "true"))
@@ -655,6 +694,7 @@ sub dumperThread ()
                 my $is_furby = 0;
                 if (($result eq "ok") && ($response) )
                 {
+                  $c{"has_injections"} = "true";
                   my $nfurbies = int($response);
                   my %obs_header = Dada::readCFGFileIntoHash ($obs_header_file, 0);
 
@@ -701,7 +741,7 @@ sub dumperThread ()
                     my $furby_beam = $furby_beams[$i];
                     my $furby_tstamp = $furby_tstamps[$i]/0.00032768;
                     if (($furby_beam == $c{"beam"}) && 
-                      ($furby_tstamp <= ($centre_tstamp + 1500)) && ($furby_tstamp >= ($centre_tstamp - 1500)) && 
+                      ($furby_tstamp <= ($centre_tstamp + 5000)) && ($furby_tstamp >= ($centre_tstamp - 5000)) && 
                       (!($is_furby))) 
                     {
                       # Furby found
@@ -733,6 +773,7 @@ sub dumperThread ()
                 }
                 else
                 {
+                  $c{"has_injections"} = "false";
                   Dada:logMsg(0, $dl, "Could not read INJECTED_FURBYS from ".$obs_info_file);
                 }
 
@@ -805,11 +846,9 @@ sub dumperThread ()
                                    "bateman.tim\@gmail.com,".
                                    "Timothy.Bateman\@sydney.edu.au,".
                                    "cflynn\@swin.edu.au,".
-                                   "fjankowsk\@gmail.com,".
                                    "kaplant\@ucsc.edu,".
                                    "adityapartha3112\@gmail.com,".
                                    "mbailes\@swin.edu.au,".
-                                   "stefanoslowski\@swin.edu.au,".
                                    "manishacaleb\@gmail.com,".
                                    "shivanibhandari58\@gmail.com,".
                                    "v.vikram.ravi\@gmail.com,".
@@ -817,6 +856,8 @@ sub dumperThread ()
                                    "vivekgupta\@swin.edu.au,".
                                    "vivekvenkris\@gmail.com,".
                                    "marcus.e.lower\@gmail.com,".
+                                   "swebb\@swin.edu.au,".
+                                   "amandlik\@swin.edu.au,".
                                    "wfarah\@swin.edu.au";
                     my $email_thread = threads->new(\&generateEmail, $to_email, $cc_email, $did_dump, \%c);
                     $email_thread->detach();
@@ -946,7 +987,7 @@ sub supplementCand(\%)
   $h{"gb"} = "Unknown";
   $h{"galactic_dm"} = "Unknown";
 
-  $cmd = "eq2gal.py ".$cand_ra_deg." ".$dec_deg;
+  $cmd = "eq2gal.csh ".$cand_ra_deg." ".$dec_deg;
   Dada::logMsg(3, $dl, "supplementCand: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(3, $dl, "supplementCand: ".$result." ".$response);
@@ -991,7 +1032,7 @@ sub generateEmail ($$$\%)
     $subject = $h{"cand_prefix"};
     $name = $h{"cand_name"};
     $to_email = "wfarah\@swin.edu.au";
-    $cc_email = "cflynn\@swin.edu.au,bateman.tim\@gmail.com,stefanoslowski\@swin.edu.au,vivekvenkris\@gmail.com,vivekgupta\@swin.edu.au,marcus.e.lower\@gmail.com";
+    $cc_email = "cflynn\@swin.edu.au,bateman.tim\@gmail.com,vivekvenkris\@gmail.com,vivekgupta\@swin.edu.au,marcus.e.lower\@gmail.com,cday\@swin.edu.au,amandlik\@swin.edu.au";
   }
 
   # try and determine the RA/DEC of the boresight beam
@@ -1030,6 +1071,7 @@ sub generateEmail ($$$\%)
     $html .= "<tr><th style='text-align: left;'>Dump Start</th><td>".$h{"start_utc"}."</td></tr>\n";
     $html .= "<tr><th style='text-align: left;'>Dump End</th><td>".$h{"end_utc"}."</td></tr>\n";
   }
+  $html .= "<tr><th style='text-align: left;'>Has Injections</th><td>".$h{"has_injections"}."</td></tr>\n";
   $html .= "</table>\n";
 
   $html .= "<hr/>\n";
@@ -1046,23 +1088,13 @@ sub generateEmail ($$$\%)
 
   $html .= "<h3>Candidate Position Properties</h3>\n";
 
-  $html .= "<table cellpadding=2 cellspacing=2>\n";
-  $html .= "<tr><th style='text-align: left;'>RA</th><td>".$h{"cand_ra"}."</td></tr>\n";
-  $html .= "<tr><th style='text-align: left;'>DEC</th><td>".$h{"dec"}."</td></tr>\n";
-  $html .= "<tr><th style='text-align: left;'>Gl</th><td>".$h{"gl"}."</td></tr>\n";
-  $html .= "<tr><th style='text-align: left;'>Gb</th><td>".$h{"gb"}."</td></tr>\n";
-  $html .= "<tr><th style='text-align: left;'>NE2001 DM</th><td>".$h{"galactic_dm"}."</td></tr>\n";
-
-  $html .= "</table>\n";
-
-  $html .= "<hr/>\n";
 
   my ($csum, $csum_html);
 
   $csum = md5_hex($html_top.$html);
   $csum = substr($csum, 0, 8);
   $csum_html = "<table cellpadding=2 cellspacing=2>\n";
-  $csum_html .= "<tr><th style='text-align: left;'>Alert ID</th><td>".$csum."</td></tr>\n";
+  $csum_html .= "<tr><th style='text-align: left;'>Alert ID </th><td>".$csum."</td></tr>\n";
   $csum_html .= "</table>\n";
   $csum_html .= "<hr/>\n";
 
@@ -1086,14 +1118,6 @@ sub generateEmail ($$$\%)
     push @beam_names, $beam_name;
   }
 
-  $html .= "</body>\n";
-  $html .= "</html>\n";
-
-  ### Add the html message part:
-  $msg->attach (
-    Type     => 'text/html',
-    Data     => $html,
-  );
 
   my $j;
   for ($j=0; $j<=$#beams; $j++)
@@ -1119,7 +1143,8 @@ sub generateEmail ($$$\%)
     {
       $fil_file = $cfg{"CLIENT_RECORDING_DIR"}."/".$bp_tag."/".$h{"utc_start"}."/FB/".$beam_name."/".$h{"utc_start"}.".fil";
   
-      $plot_cmd = "trans_freqplus_plot.py -beam ".$beam_name ." ".$fil_file." ".$h{"sample"}." ".$h{"dm"}." ".$h{"filter"}." ".$h{"snr"};
+      #$plot_cmd = "trans_freqplus_plot.py -beam ".$beam_name ." ".$fil_file." ".$h{"sample"}." ".$h{"dm"}." ".$h{"filter"}." ".$h{"snr"}." -logfile ".$cfg{"CLIENT_LOG_DIR"}."/trans_freqplus.".$bp_tag.".log";
+      $plot_cmd = "trans_freqplus_plot.csh -beam ".$beam_name ." ".$fil_file." ".$h{"sample"}." ".$h{"dm"}." ".$h{"filter"}." ".$h{"snr"}." -logfile ".$cfg{"CLIENT_LOG_DIR"}."/trans_freqplus.".$bp_tag.".log";
       $local_img = $h{"frb_prefix"}."_".$beam_name."_".$h{"sample"}.".png";
 
       # create a freq_plus file
@@ -1145,12 +1170,19 @@ sub generateEmail ($$$\%)
           Disposition => 'attachment'
         );
       }
+      else
+      {
+        $html .= "<p>Error generating FRB plot for beam ".$beam_name.": check ".$host.":".$cfg{"CLIENT_LOG_DIR"}."/trans_freqplus.".$bp_tag.".log</p>";
+      }
     }
   }
 
   $local_img = $h{"frb_prefix"}."_localisation_".$h{"sample"}.".png";
   $local_coords = $h{"frb_prefix"}."_localisation_".$h{"sample"}.".coords";
-  $cmd = "/home/observer/chris/fb2sky/frb_pos_jt.py -s ".$h{"utc_start"}." -e ".$h{"utc"}." -f ".$h{"beam"}." -n /tmp/".$local_img." -N ".$bp_ct{"NBEAM"}." -c /tmp/".$local_coords;
+  # original FRB localistaion plot
+  # $cmd = "/home/observer/chris/fb2sky/frb_pos_jt.py -s ".$h{"utc_start"}." -e ".$h{"utc"}." -f ".$h{"beam"}." -n /tmp/".$local_img." -N ".$bp_ct{"NBEAM"}." -c /tmp/".$local_coords;
+  # new FRB localisation plot
+  $cmd = "/home/observer/software/localiser/frb_pos_jt.csh -s ".$h{"utc_start"}." -e ".$h{"utc"}." -f ".$h{"beam"}." -n /tmp/".$local_img." -N ".$bp_ct{"NBEAM"}." -c /tmp/".$local_coords;
   if ($h{"DELAY_TRACKING"} ne "true")
   {
     $cmd .= " -t";
@@ -1196,7 +1228,7 @@ sub generateEmail ($$$\%)
     ($result, $refined_ra_deg) = Dada::convertHHMMSSToDegrees($refined_ra);
     ($result, $refined_dec_deg) = Dada::convertDDMMSSToDegrees($refined_dec);
 
-    $cmd = "eq2gal.py ".$refined_ra_deg." ".$refined_dec_deg;
+    $cmd = "eq2gal.csh ".$refined_ra_deg." ".$refined_dec_deg;
     Dada::logMsg(1, $dl, "generateEmail: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     Dada::logMsg(1, $dl, "generateEmail: ".$result." ".$response);
@@ -1217,8 +1249,27 @@ sub generateEmail ($$$\%)
     $refined_ra = $h{"cand_ra"};
     $refined_dec = $h{"dec"};
     $refined_gl = $h{"gl"};
-    $refined_gl = $h{"gb"};
+    $refined_gb = $h{"gb"};
   }
+
+  $html .= "<table cellpadding=2 cellspacing=2>\n";
+  $html .= "<tr><th style='text-align: left;'>RA</th><td>".$refined_ra."</td></tr>\n";
+  $html .= "<tr><th style='text-align: left;'>DEC</th><td>".$refined_dec."</td></tr>\n";
+  $html .= "<tr><th style='text-align: left;'>Gl</th><td>".$refined_gl."</td></tr>\n";
+  $html .= "<tr><th style='text-align: left;'>Gb</th><td>".$refined_gb."</td></tr>\n";
+  $html .= "<tr><th style='text-align: left;'>NE2001 DM</th><td>".$h{"galactic_dm"}."</td></tr>\n";
+
+  $html .= "</table>\n";
+
+  $html .= "<hr/>\n";
+  $html .= "</body>\n";
+  $html .= "</html>\n";
+
+  ### Add the html message part:
+  $msg->attach (
+    Type     => 'text/html',
+    Data     => $html,
+  );
 
   $msg->send;
 
@@ -1232,12 +1283,15 @@ sub generateEmail ($$$\%)
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(2, $dl, "generateEmail: ".$result." ".$response);
 
-  # VOevent (to be filled)
-  $cmd = "/home/dada/voe/src/voE_generator.py -utc ".$h{"utc"}." -role test -author CFlynn -ra ".$refined_ra." -dec ".$refined_dec." -gl ".$refined_gl." -gb ".$refined_gb." -ne2001_dm ".$h{"galactic_dm"}." -pid ".$h{"PID"}." -beam ".$h{"beam"}." -dm ".$h{"dm"}." -snr ".$h{"snr"}." -width ".($h{"width"}*1000)." -prob ".$h{"probability"};
+  # VOevent
+  #if ($h{"extra_galactic"} == 1)
+  #{
+    $cmd = "/home/dada/voe/src/voE_generator.py -utc ".$h{"utc"}." -role test -author CFlynn -ra ".$refined_ra." -dec ".$refined_dec." -gl ".$refined_gl." -gb ".$refined_gb." -ne2001_dm ".$h{"galactic_dm"}." -pid ".$h{"PID"}." -beam ".$h{"beam"}." -dm ".$h{"dm"}." -snr ".$h{"snr"}." -width ".($h{"width"}*1000)." -prob ".$h{"probability"};
 
-  Dada::logMsg(1, $dl, "generateEmail: ".$cmd);
-  ($result, $response) = Dada::mySystem($cmd);
-  Dada::logMsg(1, $dl, "generateEmail: ".$result." ".$response);
+    Dada::logMsg(1, $dl, "generateEmail: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(1, $dl, "generateEmail: ".$result." ".$response);
+    #}
 
 
   return ("ok", "");

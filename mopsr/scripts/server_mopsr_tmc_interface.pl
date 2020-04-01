@@ -40,7 +40,7 @@ use constant QUITFILE           => "mopsr_tmc_interface.quit";
 use constant PWCC_LOGFILE       => "dada_pwc_command.log";
 use constant TERMINATOR         => "\r";
 
-use constant FURBY_DATABASE	=> "/home/dada/furby_database";
+use constant FURBY_DATABASE	    => "/home/dada/furby_database";
 
 # We must always begin on a 3 second boundary since the pkt rearm UTC
 use constant PKTS_PER_3_SECONDs => 390625;
@@ -890,9 +890,9 @@ sub start($)
     # write the start packet to the spec file
     print FH Dada::headerFormat("UTC_START", $utc_start)."\n";
 
-    open(my $fh, '>', $cfg{"CONFIG_DIR"}.'/last_utc.start');
-    print $fh $utc_start;
-    close $fh;
+    open FH2, ">".$cfg{"CONFIG_DIR"}."/last_utc.start";
+    print FH2 $utc_start."\n";
+    close FH2;
   }
 
   print FH Dada::headerFormat("PKT_START", $start_packet)."\n";
@@ -1922,6 +1922,14 @@ sub genSpecFile($\%)
       push @specs, Dada::headerFormat($prefix."_SOURCE", $xml->{$key}{'name'});
       push @specs, Dada::headerFormat($prefix."_RA", $xml->{$key}{'ra'});
       push @specs, Dada::headerFormat($prefix."_DEC", $xml->{$key}{'dec'});
+      if (eval { exists $xml->{$key}{'dm'} })
+      {
+        push @specs, Dada::headerFormat($prefix."_DM", $xml->{$key}{'dm'});
+      }
+      else
+      {
+        push @specs, Dada::headerFormat($prefix."_DM", -1);
+      }
       push @specs, Dada::headerFormat("MODE", $xml->{$key}{'mode'});
     }
     else

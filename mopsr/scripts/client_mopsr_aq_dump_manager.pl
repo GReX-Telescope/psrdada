@@ -203,7 +203,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$pwc_id);
         }
         else
         {
-          msg(1, "WARN", "failed to create remote directory");
+          msg(1, "WARN", "failed to create remote directory: result=".$result." rval=".$rval." response=".$response);
         }
       }
     }

@@ -206,6 +206,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
         $proc_cmd = "heimdall -k ".$db_key." -gpu_id ".$cfg{"BP_GPU_ID_".$proc_id}." -dm 0 2000 -dm_tol 1.25 -boxcar_max 2048 -beam ".$start_beam." -coincidencer ".$cfg{"SERVER_HOST"}.":".$cfg{"COINCIDENCER_PORT"};
         $proc_cmd = "heimdall -k ".$db_key." -gpu_id ".$cfg{"BP_GPU_ID_".$proc_id}." -dm 0 2000 -dm_tol 1.20 -boxcar_max 1024 -beam ".$start_beam." -coincidencer ".$cfg{"SERVER_HOST"}.":".$cfg{"COINCIDENCER_PORT"};
         $proc_cmd = "heimdall -k ".$db_key." -gpu_id ".$cfg{"BP_GPU_ID_".$proc_id}." -dm 0 2000 -dm_tol 1.20 -boxcar_max 256 -beam ".$start_beam." -coincidencer ".$cfg{"SERVER_HOST"}.":".$cfg{"COINCIDENCER_PORT"};
+        $proc_cmd = "heimdall -k ".$db_key." -gpu_id ".$cfg{"BP_GPU_ID_".$proc_id}." -dm 0 5000 -dm_tol 1.20 -boxcar_max 256 -beam ".$start_beam." -coincidencer ".$cfg{"SERVER_HOST"}.":".$cfg{"COINCIDENCER_PORT"};
         #$proc_cmd = "dada_dbdisk -k ".$db_key." -s -D ".$scratch_dir;
       }
       else

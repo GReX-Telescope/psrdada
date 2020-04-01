@@ -460,6 +460,7 @@ sub transferTB($$&)
     # create the remote destination directories
     my $remote_path = $path."/timing/utmost/TB/".$src."/".$obs."/".$freq;
     $cmd = "mkdir -m 0755 -p ".$remote_path;
+    my $remote_path_tims = $path."/timing/utmost/TB/".$src;
 
     Dada::logMsg(2, $dl, "transferTB: ".$cmd);
     ($result, $rval, $response) = Dada::remoteSshCommand($user, $host, $cmd);
@@ -482,6 +483,12 @@ sub transferTB($$&)
     Dada::logMsg(2, $dl, "transferTB: ".$cmd);
     ($result, $response) = Dada::mySystem($cmd);
     Dada::logMsg(3, $dl, "transferTB: ".$result." ".$response);
+    # also the tims, overwrite with the latest:
+    $cmd = "rsync ".$results_dir."/".$obs."/".$src."/out.tim ".$results_dir."/".$obs."/".$src."/temp.clean.tim ".$user."@".$host.":".$remote_path_tims."/ ".$rsync_options;
+    Dada::logMsg(2, $dl, "transferTB: ".$cmd);
+    ($result, $response) = Dada::mySystem($cmd);
+    Dada::logMsg(3, $dl, "transferTB: ".$result." ".$response);
+
 
     # rsync the archives dir
     $cmd = "rsync ".$archives_dir."/".$obs."/".$src."/* ".$user."@".$host.":".$remote_path."/ ".$rsync_options;

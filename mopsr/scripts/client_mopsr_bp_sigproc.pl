@@ -226,7 +226,7 @@ Dada::preventDuplicateDaemon(basename($0)." ".$proc_id);
         }
       }
 
-      $cmd = "mv obs.processing obs.completed";
+      $cmd = "rm -f obs.processing; touch obs.completed";
       msg(2, "INFO", "main: ".$cmd);
       ($result, $response) = Dada::mySystem($cmd);
       msg(3, "INFO", "main: ".$result." ".$response);

@@ -3,6 +3,7 @@
 dist_bin_SCRIPTS = Mopsr.pm \
                    Mopsr.py \
                    auxiliary_plotter.py \
+                   eq2gal.py \
                    last_60s_snr.psh \
                    power_mon.psh \
                    power_mon20.psh \

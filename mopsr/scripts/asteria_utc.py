@@ -516,7 +516,7 @@ def insert_full_obs_into_DB(id_last, psr, UTC, snr, tint, bw, freq, nbin,
 
     cur.execute(update_all_meta_Obs, [psr_id, snr, tint, bw, freq, nbin,
                 mjd_start, id_last])
-    conn.commit
+    conn.commit()
 
 
 def insert_ant_into_DB(ant, cur, verbose):
