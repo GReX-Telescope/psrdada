@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 # libtoolish hack: compile a .cu file like libtool does
 import sys
 import os
@@ -39,7 +39,7 @@ args.extend(["-Xcompiler","-fPIC"]) # position indep code
 args.append("-o")
 args.append(pic_filepath)
 command = " ".join(args)
-print command
+print(command)
 
 # compile the .cu
 rv = os.system(command)
