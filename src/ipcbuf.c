@@ -1703,7 +1703,7 @@ uint64_t ipcbuf_get_nfull_iread (ipcbuf_t* id, int iread)
       if (nfull > max_nfull)
         max_nfull = nfull;
     }
-    return nfull;
+    return max_nfull;
   }
 }
 
@@ -1729,7 +1729,7 @@ uint64_t ipcbuf_get_nclear_iread (ipcbuf_t* id, int iread)
       if (nclear > max_nclear)
         max_nclear = nclear;
     }
-    return nclear;
+    return max_nclear;
   }
 }
 
@@ -1754,7 +1754,7 @@ uint64_t ipcbuf_get_sodack_iread (ipcbuf_t* id, int iread)
       if (sodack > max_sodack)
         max_sodack = sodack;
     }
-    return sodack;
+    return max_sodack;
   }
 }
 
@@ -1780,7 +1780,7 @@ uint64_t ipcbuf_get_eodack_iread (ipcbuf_t* id, int iread)
       if (eodack > max_eodack)
         max_eodack = eodack;
     }
-    return eodack;
+    return max_eodack;
   }
 }
 
