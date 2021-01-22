@@ -46,10 +46,15 @@ check_PROGRAMS = test_multilog test_ipcbuf loop_ipcio	\
 TESTS = test_uint64_t test_disk_array test_ipcio test_ascii_header
 
 LDADD = libpsrdada.la 
-AM_CFLAGS = @OPENMP_CFLAGS@
+AM_CFLAGS = 
 AM_CPPFLAGS =
+libpsrdada_la_LIBADD = 
+libpsrdada_la_LDFLAGS =
 
 EXTRA_DIST=ipcrme loopssh
+
+AM_CFLAGS += @OPENMP_CFLAGS@
+libpsrdada_la_LIBADD += @OPENMP_CFLAGS@
 
 ###############################################################################
 #
@@ -63,7 +68,7 @@ dada_db_LDFLAGS = $(LDADD) @HWLOC_LIBS@
 
 endif
 
-libpsrdada_la_LIBADD = @CUDA_LIBS@
+libpsrdada_la_LIBADD += @CUDA_LIBS@
 
 ###############################################################################
 #
