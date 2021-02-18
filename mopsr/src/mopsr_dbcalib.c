@@ -716,10 +716,11 @@ int64_t dbcalib_block_gpu (dada_client_t* client, void * buffer, uint64_t bytes,
 
   unsigned nsamps = ctx->block_size/ctx->nant/ctx->ndim/ctx->nchan;
   unsigned nbatch = nsamps/ctx->batch_size;
+  float scale = 127.0 * ctx->batch_size;
   
   if (ctx->verbose)
     multilog (log, LOG_INFO, "block_gpu: mopsr_byte_to_float (block_size=%"PRIu64")\n", ctx->block_size);
-  mopsr_byte_to_float ((int16_t *) ctx->d_in, (cuFloatComplex *) ctx->d_unpacked, nsamps, ctx->nant, ctx->nchan, ctx->stream);
+  mopsr_byte_to_float ((int16_t *) ctx->d_in, (cuFloatComplex *) ctx->d_unpacked, nsamps, ctx->nant, ctx->nchan, scale, ctx->stream);
 
   if (ctx->skzap)
   {

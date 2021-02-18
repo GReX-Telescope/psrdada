@@ -37,7 +37,7 @@ int mopsr_accumulate_cp_spectra(cuFloatComplex * in, cuFloatComplex * out,
 				cudaStream_t stream);
   
 int mopsr_byte_to_float (int16_t * input, cuFloatComplex * output,
-			unsigned nsamp, unsigned nant, unsigned nchan, cudaStream_t stream);
+			unsigned nsamp, unsigned nant, unsigned nchan, float scale, cudaStream_t stream);
   
 int mopsr_multiply_baselines(cuFloatComplex * out, cuFloatComplex * in,
                              mopsr_baseline_t * pairs, unsigned batch_size,
