@@ -178,6 +178,7 @@ mopsr/src/mopsr_dbsumdb
 mopsr/src/mopsr_dbtransposedb
 mopsr/src/mopsr_dumpplot
 mopsr/src/mopsr_dbxgpu
+mopsr/src/mopsr_eq2gal
 mopsr/src/mopsr_fringeplot
 mopsr/src/mopsr_genbpdada
 mopsr/src/mopsr_getlst
