@@ -204,22 +204,25 @@ int main (int argc, char** argv)
   {
     // binding to a numa node
 #ifdef HAVE_HWLOC
-    hwloc_obj_t obj = hwloc_get_obj_by_type (topology, HWLOC_OBJ_NODE, numa_node);
-    if (obj)
+    if (numa_node >= 0)
     {
-      hwloc_membind_policy_t policy = HWLOC_MEMBIND_BIND;
-      hwloc_membind_flags_t flags = HWLOC_MEMBIND_MIGRATE |  HWLOC_MEMBIND_STRICT;
-
-      int result = hwloc_set_membind_nodeset (topology, obj->nodeset, policy, flags);
-      if (result < 0)
+      hwloc_obj_t obj = hwloc_get_obj_by_type (topology, HWLOC_OBJ_NODE, numa_node);
+      if (obj)
       {
-        fprintf (stderr, "dada_db: failed to set memory binding policy: %s\n",
-                 strerror(errno));
-        return -1;
+        hwloc_membind_policy_t policy = HWLOC_MEMBIND_BIND;
+        hwloc_membind_flags_t flags = HWLOC_MEMBIND_MIGRATE |  HWLOC_MEMBIND_STRICT;
+
+        int result = hwloc_set_membind_nodeset (topology, obj->nodeset, policy, flags);
+        if (result < 0)
+        {
+          fprintf (stderr, "dada_db: failed to set memory binding policy: %s\n",
+                   strerror(errno));
+          return -1;
+        }
       }
+      else
+        fprintf (stderr, "dada_db: failed to get_obj_by_type for numa_node=%d\n", numa_node);
     }
-    else
-      fprintf (stderr, "dada_db: failed to get_obj_by_type()\n");
 #endif
 
     // create data ring buffer

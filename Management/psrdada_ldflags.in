@@ -2,5 +2,5 @@
 
 # @configure_input@
 
-echo -n " -LPREFIX/lib -lpsrdada @CUDA_LIBS@ @GSL_LIBS@ @HWLOC_LIBS@"
+echo -n " -LPREFIX/lib -lpsrdada @CUDA_LIBS@ @GSL_LIBS@ @HWLOC_LIBS@ @RDMACM_LIBS@"
 

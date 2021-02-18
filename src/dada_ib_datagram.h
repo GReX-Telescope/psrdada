@@ -24,7 +24,6 @@
 #include <netdb.h>
 #include <inttypes.h>
 
-#include <infiniband/arch.h>
 #include <infiniband/verbs.h>
 #include <rdma/rdma_cma.h>
 

@@ -2,5 +2,5 @@
 
 # @configure_input@
 
-echo -IPREFIX/include
+echo -IPREFIX/include @OPENMP_CFLAGS@
 

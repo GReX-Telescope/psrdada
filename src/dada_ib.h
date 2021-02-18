@@ -5,7 +5,6 @@
  * 
  ****************************************************************************/
 
-
 #ifndef __DADA_IB_H
 #define __DADA_IB_H
 
@@ -24,7 +23,7 @@
 #include <netdb.h>
 #include <inttypes.h>
 
-#include <infiniband/arch.h>
+//#include <infiniband/arch.h>
 #include <rdma/rdma_cma.h>
 
 #include "multilog.h"
@@ -44,6 +43,10 @@
 #define DADA_IB_BYTES_XFERRED_KEY 3
 #define DADA_IB_XFER_BYTES_KEY 4
 #define DADA_IB_XFER_CONTINUING_KEY 5
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct dada_ib_mb
 {
@@ -160,5 +163,8 @@ int dada_ib_destroy (dada_ib_cm_t * ctx);
 int dada_ib_rdma_disconnect (dada_ib_cm_t * ctx);
 int dada_ib_disconnect (dada_ib_cm_t * ctx);
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif // __DADA_IB_H */
