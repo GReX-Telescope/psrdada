@@ -49,7 +49,7 @@ LDADD = libpsrdada.la
 AM_CFLAGS = 
 AM_CPPFLAGS =
 libpsrdada_la_LIBADD = 
-libpsrdada_la_LDFLAGS =
+#libpsrdada_la_LDFLAGS =
 
 EXTRA_DIST=ipcrme loopssh
 
