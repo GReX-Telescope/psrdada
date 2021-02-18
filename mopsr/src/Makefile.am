@@ -56,7 +56,8 @@ bin_PROGRAMS += mopsr_phase_differencer mopsr_getmd mopsr_getns \
                 mopsr_dadacorrplot_pfb mopsr_getlst mopsr_test_signal_paths \
                 mopsr_test_delays_plot mopsr_phase_diff_transit \
                 mopsr_test_delays_docjer mopsr_plot_acs mopsr_dbsigproc \
-                mopsr_dadacorrplot_tiedbeam snapsr_dadacorrplot_full
+                mopsr_dadacorrplot_tiedbeam snapsr_dadacorrplot_full \
+                mopsr_eq2gal
 
 AM_CFLAGS += @SOFA_CFLAGS@
 LDADD += @SOFA_LIBS@
