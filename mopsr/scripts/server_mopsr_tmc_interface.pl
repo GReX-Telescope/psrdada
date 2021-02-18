@@ -1284,7 +1284,7 @@ sub createLocalDirs($)
         $furby_file = FURBY_DATABASE."/furby_".$f_id;
         if ( -f $furby_file )
         {
-          $cmd = "cp ".$furby_file." ".$adir."/Furbys/";
+          $cmd = "cp -s ".$furby_file." ".$adir."/Furbys/";
           Dada::logMsg(2, $dl, "createLocalDirs: ".$cmd);
           ($result, $response) = Dada::mySystem($cmd);
           Dada:logMsg(3, $dl, "createLocalDirs: ".$result." ".$response);
@@ -2129,7 +2129,8 @@ sub getBestModules()
   my $pm_max = 8;
   if ($hires == 1)
   {
-    $pm_max = 12;
+    # AJ dropped this from 12 to 11 for performance reasons
+    $pm_max = 11;
   }
   my $best_modules = "";
 
