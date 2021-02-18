@@ -63,6 +63,7 @@ SWIN_LIB_HWLOC
 SWIN_LIB_XGPU
 
 AC_CHECK_LIB([m], [sin])
+AC_CHECK_LIB([gomp], [omp_get_num_threads])
 
 #
 # Checks for header files.
