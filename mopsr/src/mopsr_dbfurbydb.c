@@ -39,7 +39,7 @@ void usage()
            "mopsr_dbfurbydb [options] bp_node in_key out_key\n"
 	   "		  add furby in SFT ordered float data\n"
            //"              data type change from 32-bit float to 8-bit unsigned int\n"
-           " -D path      complete path to the furby database directory\n\t\tDef: /home/dada/furby_databse/"
+           " -D path      complete path to the furby database directory\n\t\tDef: /home/dada/furby_databse/\n"
            " -s           1 transfer, then exit\n"
            " -z           use zero copy transfers\n"
            " -c           copy live data snippets into dada files whenever furbies are added\n"
@@ -85,12 +85,14 @@ typedef struct {
   int inj_furbys;
   float furby_BW;
   char **furby_ids;
-  int * furby_beams; 
+  //FA --> Changing this int * to float *
+  float * furby_beams; 
   float * furby_tstamps; 
   int furby_nsamps;
  
   int * furby_samp_indices;
-  int * furby_beam_indices;
+  //FA --> Changing this int * to float *
+  float * furby_beam_indices;
   int furby_chansamp;
   float * furby_buffer;
 
@@ -106,7 +108,7 @@ typedef struct {
 } mopsr_dbfurbydb_t;
 
 
-#define DADA_DBFURBYDB_INIT { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,"", "", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", 0, 0, 0}
+#define DADA_DBFURBYDB_INIT { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,"", "", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 
 /*! Function that opens the data transfer target */
 int dbfurbydb_open (dada_client_t* client)
@@ -361,7 +363,8 @@ int dbfurbydb_open (dada_client_t* client)
 
     //ctx->furby_ids = (int *)malloc(sizeof(int) * ctx->inj_furbys);
     ctx->furby_ids = malloc(sizeof(char*) * ctx->inj_furbys);
-    ctx->furby_beams = (int *)malloc(sizeof(int) * ctx->inj_furbys);
+    //FA --> Changing the type cast (int *) and sizeof(int) to floats respectively
+    ctx->furby_beams = (float *)malloc(sizeof(float) * ctx->inj_furbys);
     ctx->furby_tstamps = (float *)malloc(sizeof(float) * ctx->inj_furbys);
 
     int ff = 0;
@@ -419,20 +422,24 @@ int dbfurbydb_open (dada_client_t* client)
 
         ctx->furby_ids[ff] = malloc((ID_MAX_LEN+1) * sizeof(char));
 	strcpy(ctx->furby_ids[ff], temp_a);
-        ctx->furby_beams[ff] = atoi(temp_b) -1 ;	//Subtracting one because all other beam_numbers are 0 indexed, while user requests a 1 indexed beam_number.
+        //FA --> Changing this 'atoi' to 'atof'
+        ctx->furby_beams[ff] = atof(temp_b) -1 ;	//Subtracting one because all other beam_numbers are 0 indexed, while user requests a 1 indexed beam_number.
         ctx->furby_tstamps[ff] = atof(temp_c);
 	
 	if(ctx->verbose)
-	  multilog(log, LOG_INFO, "open: parsed -> ID: %s  ===  BEAM: %i  ===  TSTAMP: %f\n", ctx->furby_ids[ff], ctx->furby_beams[ff]+1, ctx->furby_tstamps[ff]);
+          //FA --> Changing this logging %i to %float
+	  multilog(log, LOG_INFO, "open: parsed -> ID: %s  ===  BEAM: %f  ===  TSTAMP: %f\n", ctx->furby_ids[ff], ctx->furby_beams[ff]+1, ctx->furby_tstamps[ff]);
     }
 
 
     char **ord_f_ids;
-    int * ord_f_beams;
+    //FA --> Chanigng this int to float declaration of ord_f_beams
+    float * ord_f_beams;
     float * ord_f_tstamps;
 
     ord_f_ids = malloc(sizeof(char *) * ctx->inj_furbys);
-    ord_f_beams = (int *)malloc(sizeof(int) * ctx->inj_furbys);
+    //FA --> Changing the (int) typecasting and the sizeof(int) to (float) and sizeof(float)
+    ord_f_beams = (float *)malloc(sizeof(float) * ctx->inj_furbys);
     ord_f_tstamps = (float *)malloc(sizeof(float) * ctx->inj_furbys);
 
     int kk= 0;
@@ -453,8 +460,9 @@ int dbfurbydb_open (dada_client_t* client)
 
 
     for(ff=0; ff<ctx->inj_furbys; ff++)
-    {	
-	if( (ord_f_beams[ff] >= ctx->first_beam) & (ord_f_beams[ff] <= ctx->last_beam) )
+    {
+        //FA --> Changing this logic here to add furbys even if they are fractionally one beam too left or too right      
+	if( (ord_f_beams[ff] > ctx->first_beam-1) & (ord_f_beams[ff] < ctx->last_beam+1) )
 	    ctx->N_furbys_to_add_here++;
     }
 
@@ -519,13 +527,15 @@ int dbfurbydb_open (dada_client_t* client)
         }
 
 	ctx->furby_samp_indices = (int *)malloc(sizeof(int) * (ctx->N_furbys_to_add_here+1));
-	ctx->furby_beam_indices = (int *)malloc(sizeof(int) * (ctx->N_furbys_to_add_here+1));
+        //FA --> Chaniging the (int) typecasting and sizeof(int) to (float)
+	ctx->furby_beam_indices = (float *)malloc(sizeof(float) * (ctx->N_furbys_to_add_here+1));
 	ctx->furby_chansamp = furby_nchan * ctx->furby_nsamps;
 	int bytes_per_furby = ctx->furby_chansamp * furby_nbits/8;
 
 	ctx->furby_buffer = (float *)malloc(ctx->N_furbys_to_add_here * bytes_per_furby);
 
-        memset(ctx->furby_beam_indices, 0, sizeof(int) * (ctx->N_furbys_to_add_here+1));
+        //FA --> changing the sizeof(int) to sizeof(float) below
+        memset(ctx->furby_beam_indices, 0, sizeof(float) * (ctx->N_furbys_to_add_here+1));
         memset(ctx->furby_samp_indices, 0, sizeof(int) * (ctx->N_furbys_to_add_here+1));
         memset(ctx->furby_buffer, 0, ctx->N_furbys_to_add_here * bytes_per_furby);	//setting all memory to zero, so that any failed attempt to add furby which slips through the checks below will be added as zeros (No additional data) into the live data stream
         //This is keeping in mind that in the worst case, it is better to not have a fake FRB when we want one, rather than have one Fake FRB when we did not expect one.
@@ -546,7 +556,8 @@ int dbfurbydb_open (dada_client_t* client)
         char fdir[128];
         if(ctx->copy_furby)
         {
-          ctx->FURBY_ptrs = (FILE **) malloc(sizeof(FILE *) * ctx->N_furbys_to_add_here);
+          //FA --> changing (ctx->N_furbys_to_add_here) to (ctx->N_furbys_to_add_here*2)
+          ctx->FURBY_ptrs = (FILE **) malloc(sizeof(FILE *) * ctx->N_furbys_to_add_here * 2);
         }
 
 	//loading the furbies to add onto RAM now.
@@ -556,7 +567,9 @@ int dbfurbydb_open (dada_client_t* client)
 	int kk = 0;
 	for (ff=0; ff<ctx->inj_furbys; ff++)
 	{
-	if ((ord_f_beams[ff] >= ctx->first_beam) & (ord_f_beams[ff] <= ctx->last_beam) )
+        //FA --> Once again changing the logic to beam > first_beam -1 & beam < last_beam +1
+        //if ((ord_f_beams[ff] >= ctx->first_beam) & (ord_f_beams[ff] <= ctx->last_beam) )
+	if ((ord_f_beams[ff] > ctx->first_beam-1) && (ord_f_beams[ff] < ctx->last_beam+1) )
 	{
 	  //get the sample index where to add the furby; ignore furbies with incorrect samples indices.
 	  ctx->furby_samp_indices[kk] = (int)(ord_f_tstamps[ff] * samples_per_second); 
@@ -621,27 +634,47 @@ int dbfurbydb_open (dada_client_t* client)
 	  fclose(fu);
 	  f_index += ctx->furby_chansamp;
 	  if(ctx->verbose)
-	    multilog(log, LOG_INFO, "open: Loaded %s into memory buffer to be added in BEAM_%i at SAMPLE: %i\n", furby_tmp, ctx->furby_beam_indices[kk]+1, ctx->furby_samp_indices[kk]);
+	    multilog(log, LOG_INFO, "open: Loaded %s into memory buffer to be added in BEAM_%f at SAMPLE: %i\n", furby_tmp, ctx->furby_beam_indices[kk]+1, ctx->furby_samp_indices[kk]);
 
           if(ctx->copy_furby)
           {
+            int cbeam=0;
+            int beam_identifier = 0;
             //Opening files to copy the inejcted furby + live data.        
-            sprintf(fdir, "/data/mopsr/rawdata/BP%02d/%s/FB/BEAM_%03d", ctx->bp_node, UTC_START, ctx->furby_beam_indices[kk]+1);
-            sprintf(fbuffer, "mkdir -p %s", fdir);
-            system(fbuffer);
-
-            sprintf(fbuffer, "%s/FURBY_%s_B%03d_S%i.dada", fdir, UTC_START, ctx->furby_beam_indices[kk]+1, ctx->furby_samp_indices[kk]);
-            multilog(log, LOG_INFO, "open: Opening %s\n", fbuffer);
-            ctx->FURBY_ptrs[kk] = fopen(fbuffer, "w");
-
-            if(ctx->FURBY_ptrs[kk] == NULL)
+            //FA --> modifying this section to open two files for each furby, except when the requested beam is an edge beam for the current bp_node
+            for(cbeam=(int)ord_f_beams[ff];cbeam<=(1+(int)ord_f_beams[ff]);cbeam++)
             {
-              multilog(log, LOG_ERR, "open: Could not open: %s to write the furby+live data into it\n", fbuffer);
-              return -1;
-            }
-            //Copying the header of the input furby into the header of output FURBY
-            fwrite(furby_header, furby_header_size, 1, ctx->FURBY_ptrs[kk]);
-          }
+              if( (cbeam < ctx->first_beam) || (cbeam > ctx->last_beam) )
+              {
+                //This means the cbeam is not on this bp-node but either on the left, or on the right of the current BP node 
+                continue;
+              }
+              
+              //FA --> Chaning ctx->furby_beam_indices[kk]+1 to cbeam+1
+              sprintf(fdir, "/data/mopsr/rawdata/BP%02d/%s/FB/BEAM_%03d", ctx->bp_node, UTC_START, cbeam+1);
+              sprintf(fbuffer, "mkdir -p %s", fdir);
+              system(fbuffer);
+
+              //FA --> Chaning ctx->furby_beam_indices[kk]+1 to cbeam+1
+              sprintf(fbuffer, "%s/FURBY_%s_B%03d_S%i.dada", fdir, UTC_START, cbeam+1, ctx->furby_samp_indices[kk]);
+              multilog(log, LOG_INFO, "open: Opening %s\n", fbuffer);
+
+              //FA--> Adding this part to differentiate between left and right beams
+              beam_identifier = cbeam - (int)ord_f_beams[ff]; //beam_identifier =0 would mean left beam, and =1 would mean right beam
+
+              //FA --> Now changing the indexing of FURBY_ptrs from kk to 2*kk + beam_identifier
+              ctx->FURBY_ptrs[2*kk + beam_identifier] = fopen(fbuffer, "w");
+
+              if(ctx->FURBY_ptrs[2*kk + beam_identifier] == NULL)
+              {
+                multilog(log, LOG_ERR, "open: Could not open: %s to write the furby+live data into it\n", fbuffer);
+                return -1;
+              }
+              //Copying the header of the input furby into the header of output FURBY
+              fwrite(furby_header, furby_header_size, 1, ctx->FURBY_ptrs[2*kk + beam_identifier]);
+
+            }//cbeam loop
+          }//if-copy_furby
 
 	  kk++;
           fu = NULL;
@@ -777,7 +810,8 @@ int dbfurbydb_close (dada_client_t* client, uint64_t bytes_written)
   {
     int i;
     multilog(log, LOG_INFO, "close: Closing all the file ptrs to FURBYs\n");
-    for(i= 0;i<ctx->N_furbys_to_add_here; i++)
+    //FA --> Changing the loop counter limit to 2*ctx->N_furbys_to_add_here
+    for(i= 0;i<2*ctx->N_furbys_to_add_here; i++)
     {
       if(ctx->FURBY_ptrs[i])
         fclose(ctx->FURBY_ptrs[i]);
@@ -858,6 +892,9 @@ int64_t dbfurbydb_SFT (dada_client_t * client, void *in_data , uint64_t data_siz
   uint64_t furby_index=0;
   int skip_loop = 0;
   int switched = 0;
+  int adj_beam;
+  float beam_fractional_factor;
+  int is_last_beam;
 
   int buff_index = 0;
 
@@ -887,8 +924,27 @@ int64_t dbfurbydb_SFT (dada_client_t * client, void *in_data , uint64_t data_siz
     {
 
       isig = ibeam - ctx->first_beam;
-      if (ibeam == ctx->furby_beam_indices[ctx->furbies_added] )
+      is_last_beam=0;
+      if ( (ibeam > ctx->furby_beam_indices[ctx->furbies_added] -1) && (ibeam < ctx->furby_beam_indices[ctx->furbies_added] +1))
       {
+         
+         if (ibeam < ctx->furby_beam_indices[ctx->furbies_added])
+         {
+           adj_beam = 0;
+           beam_fractional_factor = ctx->furby_beam_indices[ctx->furbies_added] - ibeam;
+         }
+         else
+         {
+           adj_beam = 1;
+           beam_fractional_factor = ibeam - ctx->furby_beam_indices[ctx->furbies_added];
+         }
+         //Checking if this beam is the last beam for the current injection (second beam normally, but first if the injection beam is on the right edge of the bp node)
+         if( (adj_beam==1) || (ibeam == ctx->last_beam)  )
+         {
+           is_last_beam=1;
+         }
+         
+
          for(ichan = 0; ichan < ctx->nchan; ichan++)
          {
            if ( (ctx->bw * ctx->furby_BW) < 0)
@@ -906,11 +962,11 @@ int64_t dbfurbydb_SFT (dada_client_t * client, void *in_data , uint64_t data_siz
 
              out[index] = in[index];
              
-             if ( (curr_samp >= furby_start_samp) & (curr_samp <= furby_end_samp) )
+             if ( (curr_samp >= furby_start_samp) && (curr_samp <= furby_end_samp) )
              {
                furby_index = ctx->furbies_added * ctx->furby_chansamp + (curr_samp - furby_start_samp)*ctx->nchan + furby_chan;
                
-               out[index] = in[index] + ctx->furby_buffer[furby_index];
+               out[index] = in[index] + ctx->furby_buffer[furby_index] * (1.0-beam_fractional_factor);
              }
 
              if(ctx->copy_furby)
@@ -918,10 +974,14 @@ int64_t dbfurbydb_SFT (dada_client_t * client, void *in_data , uint64_t data_siz
                ctx->tmp_buff[buff_index] = out[index];
              }
              
-             if ( (curr_samp == furby_end_samp) & (ichan == (ctx->nchan - 1)) )
+             if ( (curr_samp == furby_end_samp) && (ichan == (ctx->nchan - 1)) )
              {
-               ctx->furbies_added++;
-               switched = 1;
+               //FA --> Added this check now because we have two beams to inject into
+               if (is_last_beam==1)
+               {
+                ctx->furbies_added++;
+                switched = 1;
+               }
                multilog(log, LOG_INFO, "dbfurbydb_SFT: Added one Furby in BEAM_%i starting at sample: %"PRIu64", ending at sample: %"PRIu64".\nTotal furbies added uptill now: %i\n", ibeam+1, furby_start_samp, furby_end_samp, ctx->furbies_added);
              }//if_last_samp
 
@@ -930,10 +990,11 @@ int64_t dbfurbydb_SFT (dada_client_t * client, void *in_data , uint64_t data_siz
 
          if(ctx->copy_furby)
          {
+           //FA --> Changing the index of FURBY_ptrs from ctx->furbies_added to 2*ctx->furbies_added + adj_beam
            if(switched)
-             fwrite(ctx->tmp_buff, ctx->tmp_buff_size, 1, ctx->FURBY_ptrs[ctx->furbies_added-1]);
+             fwrite(ctx->tmp_buff, ctx->tmp_buff_size, 1, ctx->FURBY_ptrs[2*(ctx->furbies_added-1)+adj_beam]);
            else
-             fwrite(ctx->tmp_buff, ctx->tmp_buff_size, 1, ctx->FURBY_ptrs[ctx->furbies_added]);
+             fwrite(ctx->tmp_buff, ctx->tmp_buff_size, 1, ctx->FURBY_ptrs[2*ctx->furbies_added+adj_beam]);
          }
   
       }//if_injection_beam
