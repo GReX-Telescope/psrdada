@@ -241,9 +241,9 @@ sub main()
 
         if ($obs_mode eq "FB")
         {
-          Dada::logMsg(1, $dl, "main: processCandidates(".$o.")");
+          Dada::logMsg(2, $dl, "main: processCandidates(".$o.")");
           ($result, $response) = processCandidates($o);
-          Dada::logMsg(1, $dl, "main: processCandidates ".$result." ".$response);
+          Dada::logMsg(2, $dl, "main: processCandidates ".$result." ".$response);
           if ($result ne "ok")
           {
             Dada::logMsgWarn($warn, "processCandidates(".$o.") failed: ".$response);       
@@ -619,7 +619,7 @@ sub dumperThread ()
         $hostinfo = gethostbyaddr($peeraddr);
         my $host = "None";
         if (defined $hostinfo)
-        { 
+        {
           $host = $hostinfo->name;
         }
         Dada::logMsg(2, $dl, "Accepting connection from ".$host);
@@ -633,7 +633,7 @@ sub dumperThread ()
         {
           my $host = "localhost";
           if (defined $hostinfo)
-          { 
+          {
             $host = $hostinfo->name;
           }
           Dada::logMsg(2, $dl, "Lost connection from ".$host);
@@ -740,9 +740,37 @@ sub dumperThread ()
                     my $furby_id = $furby_ids[$i];
                     my $furby_beam = $furby_beams[$i];
                     my $furby_tstamp = $furby_tstamps[$i]/0.00032768;
-                    if (($furby_beam == $c{"beam"}) && 
-                      ($furby_tstamp <= ($centre_tstamp + 5000)) && ($furby_tstamp >= ($centre_tstamp - 5000)) && 
-                      (!($is_furby))) 
+
+                    my @furby_beam_list = ();
+                    my $furby_beam_int = int($furby_beam);
+                    my $furby_beam_remainder = $furby_beam - $furby_beam_int;
+                    if ($furby_beam_remainder >= 0.5)
+                    {
+                      push @furby_beam_list, $furby_beam_int;
+                      push @furby_beam_list, $furby_beam_int + 1;
+                      push @furby_beam_list, $furby_beam_int + 2;
+                    }
+                    else
+                    {
+                      push @furby_beam_list, $furby_beam_int - 1;
+                      push @furby_beam_list, $furby_beam_int;
+                      push @furby_beam_list, $furby_beam_int + 1;
+                    }
+
+                    my $furby_beam_match = 0;
+                    my $j =0;
+                    for ($j=0; $j<=$#furby_beam_list; $j++)
+                    {
+                      if ($furby_beam_list[$j] == $c{"beam"})
+                      {
+                        $furby_beam_match = 1;
+                      }
+                    }
+
+                    if (($furby_beam_match) &&
+                        ($furby_tstamp <= ($centre_tstamp + 5000)) &&
+                        ($furby_tstamp >= ($centre_tstamp - 5000)) &&
+                        (!($is_furby)))
                     {
                       # Furby found
                       Dada::logMsg(0, $dl, "main: Found a furby - id: ".$furby_id.", beam: ".$furby_beam.", tstamp: ".$furby_tstamp);
@@ -825,6 +853,29 @@ sub dumperThread ()
                       else
                       {
                          Dada::logMsg(2, $dl, "main: skipping ".$host.":".$port." since marked inactive PWC");
+                      }
+                    }
+
+                    my $ns_dump = 0;
+                    if ($ns_dump)
+                    {
+                      $host = "mpsr-bf07";
+                      $port = int($cfg{"CLIENT_AQ_EVENT_BASEPORT"});
+                      Dada::logMsg(1, $dl, "main: opening connection for FRB dump to ".$host.":".$port);
+                      my $sock = Dada::connectToMachine($host, $port, 1);
+                      if ($sock)
+                      {
+                        Dada::logMsg(1, $dl, "main: connection to ".$host.":".$port." established");
+                        print $sock "N_EVENTS 1\n";
+                        # TODO determine the NSBE UTC_START somehow
+                        print $sock $c{"utc_start"}."\n";
+                        print $sock $event_message."\n";
+                        close ($sock);
+                        $sock = 0;
+                      }
+                      else
+                      {
+                        Dada::logMsg(0, $dl, "main: connection to ".$host.":".$port." failed");
                       }
                     }
                   }
@@ -987,7 +1038,7 @@ sub supplementCand(\%)
   $h{"gb"} = "Unknown";
   $h{"galactic_dm"} = "Unknown";
 
-  $cmd = "eq2gal.csh ".$cand_ra_deg." ".$dec_deg;
+  $cmd = "mopsr_eq2gal -- ".$cand_ra_deg." ".$dec_deg;
   Dada::logMsg(3, $dl, "supplementCand: ".$cmd);
   ($result, $response) = Dada::mySystem($cmd);
   Dada::logMsg(3, $dl, "supplementCand: ".$result." ".$response);
