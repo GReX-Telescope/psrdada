@@ -1464,6 +1464,11 @@ sub myShell($)
     $result = "fail";
   }
 
+  if ($response eq undef)
+  {
+    $response = "";
+  }
+
   return ($result,$response);
 }
 
