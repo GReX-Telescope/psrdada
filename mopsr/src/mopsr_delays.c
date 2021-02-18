@@ -376,9 +376,21 @@ int cal_app_pos_iau (double RA, double DEC, struct tm * utc, double * RA_app, do
   double tai1, tai2;
   double tt1, tt2;
 
-  if (iauDtf2d ( "UTC", utc->tm_year + 1900, utc->tm_mon + 1, utc->tm_mday, utc->tm_hour, utc->tm_min, utc->tm_sec, &utc1, &utc2 ) ) return -1;
-  if ( iauUtctai ( utc1, utc2, &tai1, &tai2 ) ) return -1;
-  if ( iauTaitt ( tai1, tai2, &tt1, &tt2 ) ) return -1;
+  if (iauDtf2d ( "UTC", utc->tm_year + 1900, utc->tm_mon + 1, utc->tm_mday, utc->tm_hour, utc->tm_min, utc->tm_sec, &utc1, &utc2 ) < 0)
+  {
+    fprintf (stderr, "cal_app_pos_iau::iauDtf2d failed\n");
+    return -1;
+  }
+  if (iauUtctai ( utc1, utc2, &tai1, &tai2 ) < 0)
+  {
+    fprintf (stderr, "cal_app_pos_iau::iauUtctai failed\n");
+    return -1;
+  }
+  if (iauTaitt ( tai1, tai2, &tt1, &tt2 ) < 0)
+  {
+    fprintf (stderr, "cal_app_pos_iau::iauTaitt failed\n");
+    return -1;
+  }
 
   double ri, di, eo;
 
