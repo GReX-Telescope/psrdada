@@ -106,6 +106,8 @@ int main(int argc, char** argv)
     fprintf (stderr, "ERROR:  could not parse RA from %s\n", argv[optind+1]);
     return -1;
   }
+  if (verbose)
+    fprintf (stdout, "RA str=%s deg=%lf\n", argv[optind+1], source.raj);
 
   char dec[32];
   if (negative_dec)
@@ -121,6 +123,8 @@ int main(int argc, char** argv)
     fprintf (stderr, "ERROR:  could not parse DEC from %s\n", argv[optind+2]);
     return -1;
   }
+  if (verbose)
+    fprintf (stdout, "DEC str=%s deg=%lf\n", argv[optind+2], source.decj);
 
   struct timeval timestamp;
   timestamp.tv_sec = utc_start;
@@ -146,8 +150,10 @@ int main(int argc, char** argv)
   }
   
   struct tm * utc = gmtime (&utc_start);
-  cal_app_pos_iau (source.raj, source.decj, utc,
-                   &(source.ra_curr), &(source.dec_curr));
+  int rval = cal_app_pos_iau (source.raj, source.decj, utc,
+                              &(source.ra_curr), &(source.dec_curr));
+  if (rval < 0)
+    fprintf(stderr, "ERROR: cal_app_pos_iau failed\n");
 
   if (verbose)
   {
