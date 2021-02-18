@@ -413,11 +413,23 @@ class tmc_simulator extends mopsr_webpage
           <select id="<?echo $prefix?>_src_list" name="<?echo $prefix?>_src_list" onChange='updateRADEC("<?echo $i?>")'>
             <option value='' selected>--</option>
 <?
-          for ($j=0; $j<count($this->psr_keys); $j++)
+          $just_pulsars = false;
+          if ($just_pulsars)
           {
-            $p = $this->psr_keys[$j];
-            if (in_array($p, $this->valid_psrs))
+            for ($j=0; $j<count($this->psr_keys); $j++)
             {
+              $p = $this->psr_keys[$j];
+              if (in_array($p, $this->valid_psrs))
+              {
+                echo "            <option value='".$p."'>".$p."</option>\n";
+              }
+            }
+          }
+          else
+          {
+            for ($j=0; $j<count($this->valid_sources); $j++)
+            {
+              $p = $this->valid_sources[$j];
               echo "            <option value='".$p."'>".$p."</option>\n";
             }
           }
@@ -447,6 +459,7 @@ class tmc_simulator extends mopsr_webpage
 <?          } else { ?>
             <option value="mopsr.dspsr.cpu.cdd" selected>mopsr.dspsr.cpu.cdd</option>
 <?          } ?>
+            <option value="mopsr.bf.dbdisk">mopsr.bf.dbdisk</option>
             <option value="mopsr.null">mopsr.null [discard]</option>
           </select>
         </td>
@@ -535,7 +548,7 @@ class tmc_simulator extends mopsr_webpage
         <td class='val'>
           <select name="num_furbies">
 <?
-            for ($i=0; $i<=5; $i++)
+            for ($i=0; $i<=15; $i++)
               echo "<option value='".$i."'>".$i."</option>\n";
 ?>
           </select> 

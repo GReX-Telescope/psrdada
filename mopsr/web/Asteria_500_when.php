@@ -259,6 +259,9 @@ $(document).ready(
 
     $this->openBlockHeader("Timing Programme Pulsars");
 
+    echo '<img src="/mopsr/results/sky_scan/timing_sky.png">';
+
+
     if ($_GET['days_for_table'] ) {
       $days_for_table = $_GET['days_for_table'];
     } else {
