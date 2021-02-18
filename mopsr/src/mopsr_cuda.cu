@@ -4,6 +4,7 @@
 #include <cuComplex.h>
 #include <inttypes.h>
 #include <stdio.h>
+#include <assert.h>
 
 #include "dada_cuda.h"
 #include "mopsr_cuda.h"
@@ -1383,6 +1384,200 @@ __global__ void tile_beams_kernel_2048_32scr (
   }
 }
 
+__forceinline__ __device__
+void dp4a(int &c, const int &a, const int &b) {
+#if __CUDA_ARCH__ >= 610
+  asm("dp4a.s32.s32 %0, %1, %2, %3;" : "+r"(c) : "r"(a), "r"(b), "r"(c));
+#else
+  char4 &a4 = *((char4*)&a);
+  char4 &b4 = *((char4*)&b);
+  c += a4.x * b4.x;
+  c += a4.y * b4.y;
+  c += a4.z * b4.z;
+  c += a4.w * b4.w;
+#endif
+}
+
+struct char2x4
+{
+  char2 x;
+  char2 y;
+  char2 z;
+  char2 w;
+};
+
+struct char4x2
+{
+  char4 x;
+  char4 y;
+};
+
+__forceinline__ __device__
+int2 int2_load_antennae(const char2 a1, const char2 a2, const char2 a3, const char2 a4)
+{
+  char4x2 b;
+  b.x.x = a1.x;
+  b.x.y = a2.x;
+  b.x.z = a3.x;
+  b.x.w = a4.x;
+  b.y.x = a1.y;
+  b.y.y = a2.y;
+  b.y.z = a3.y;
+  b.y.w = a4.y;
+  return (*(int2*)&b);
+}
+
+__forceinline__ __device__
+int2 int2_load_weights(int64_t const &weight)
+{
+  char2x4 a = (*(char2x4*)&weight);
+  char4x2 b;
+  b.x.x = a.x.x;
+  b.x.y = a.y.x;
+  b.x.z = a.z.x;
+  b.x.w = a.w.x;
+  b.y.x = a.x.y;
+  b.y.y = a.y.y;
+  b.y.z = a.z.y;
+  b.y.w = a.w.y;
+  return (*(int2*)&b);
+}
+
+__forceinline__ __device__
+int int_incoherent_weight()
+{
+  char4 a = {1, 0, 0, 0};
+  return (*(int*)&a);
+}
+
+#define NANT 352
+
+// load 1024 samples per block, form beams, scrunch down x32 to write out
+// 64 samples. input FST output SFT
+__global__ void tile_beams_kernel_1024_32scr_dp4a (
+        const __restrict__ char2 * input, float * output,
+        const __restrict__ int64_t * phasors,
+        unsigned nbeam, unsigned ndat, unsigned nant)
+{
+  __shared__ float sums[BEAMS_PER_LOOP * 128];
+
+  // each weight holds 4 antenna
+  __shared__ int2 weights[BEAMS_PER_LOOP * NANT/4];
+
+  const int warp_num = threadIdx.x / WARP_SIZE;
+  const int warp_idx = threadIdx.x & 0x1F;
+
+  // shift phasors pointer by ichan * chan_stride
+  phasors += (blockIdx.y * nant * nbeam * 2) / 8;
+
+  // shift input by ndat, handling *= 2/8
+  input   += blockIdx.y * nant * ndat;
+
+  // shift output by output_ndat to align to right channel
+  output  += blockIdx.y * (ndat / 32);
+
+  int4 beams[BEAMS_PER_LOOP];
+  for (unsigned i=0; i<BEAMS_PER_LOOP; i++)
+    beams[i].x = beams[i].y = beams[i].z = beams[i].w = 0;
+
+  // this kernel exectutes for computes 4 beams at a time for 4096 samples
+  for (unsigned ibeam=0; ibeam<nbeam; ibeam+=BEAMS_PER_LOOP)
+  {
+    // load 4 weights per iteration across the block
+    for (unsigned i=threadIdx.x; i<nant*BEAMS_PER_LOOP/4; i+=blockDim.x)
+    {
+      // stored in blocks BEAM, ANT ordering
+      weights[i] = int2_load_weights(phasors[i]);
+    }
+
+    __syncthreads();
+
+    // input is ordered FST
+    unsigned idx = (blockIdx.x * blockDim.x) + threadIdx.x;
+
+    for (unsigned iant=0; iant<nant; iant+=4)
+    {
+      // transpose 4 antenna samples from RIRIRIRI to RRRRIIII
+      const int2 antennas4 = int2_load_antennae(input[idx],
+                                                input[idx+ndat],
+                                                input[idx+2*ndat],
+                                                input[idx+3*ndat]);
+
+      for (unsigned i=0; i<BEAMS_PER_LOOP; i++)
+      {
+        if ((ibeam == 0) && (i == 0))
+        {
+          dp4a (beams[i].x, antennas4.x, antennas4.x);
+          dp4a (beams[i].y, antennas4.y, antennas4.y);
+        }
+        else
+        {
+          // read the weights from shared memory
+          const int2 weights4 = weights[((i * nant) + iant)/4];
+
+          // form the 4 cross products for 4 antenna
+          dp4a (beams[i].x, weights4.x, antennas4.x);
+          dp4a (beams[i].y, weights4.y, antennas4.y);
+          dp4a (beams[i].z, weights4.x, antennas4.y);
+          dp4a (beams[i].w, weights4.y, antennas4.x);
+        }
+      }
+      idx += 4*ndat;
+    }
+
+    for (unsigned i=0; i<BEAMS_PER_LOOP; i++)
+    {
+      // form the full complex number for 4 antenna
+      const float real = float(beams[i].x - beams[i].y) / 127.0;
+      const float imag = float(beams[i].z + beams[i].w) / 127.0;
+      float power;
+
+      if (ibeam == 0 && i == 0)
+        power = float(beams[0].x) + float(beams[0].y);
+      else
+        power = (real*real + imag*imag);
+
+      // detect each sample and integrate across the warp (factor of 32 in time)
+      // this takes us from 10.24 to 327.68 us
+#if (__CUDACC_VER_MAJOR__ >= 9)
+      power += __shfl_down_sync (FULLMASK, power, 16);
+      power += __shfl_down_sync (FULLMASK, power, 8);
+      power += __shfl_down_sync (FULLMASK, power, 4);
+      power += __shfl_down_sync (FULLMASK, power, 2);
+      power += __shfl_down_sync (FULLMASK, power, 1);
+#else
+      power += __shfl_down (power, 16);
+      power += __shfl_down (power, 8);
+      power += __shfl_down (power, 4);
+      power += __shfl_down (power, 2);
+      power += __shfl_down (power, 1);
+#endif
+      // write the power from this
+      if (warp_idx == 0)
+      {
+        sums[i * 32 + warp_num] = power;
+      }
+
+      // reset this beam
+      beams[i].x = beams[i].y = beams[i].z = beams[i].w = 0;
+    }
+
+    __syncthreads();
+
+    // out to gmem, do 1 warp per beam
+    if (warp_num < BEAMS_PER_LOOP)
+    {
+      // Output is ordered as SFT, F offset already handled above
+      //                   obeam         *  nchan    *  ndat_out    +  osamp_block      + osamp
+      unsigned odx = ((ibeam + warp_num) * gridDim.y * (ndat / 32)) + (blockIdx.x * 32) + warp_idx;
+      output[odx] = sums[threadIdx.x];
+    }
+
+    // incrememnt the phasors array by the required amount
+    phasors += (BEAMS_PER_LOOP * nant * 2) / 8;
+  }
+}
+
 /*
 __host__ __device__
 cuFloatComplex ComplexInt8_to_cuFloatComplex(ComplexInt8 input)
@@ -1544,7 +1739,15 @@ void mopsr_tile_beams_precomp (cudaStream_t stream, void * d_in, void * d_fbs, v
   const unsigned nthread = 1024;
 
   const unsigned nbeam_block = BEAMS_PER_LOOP;
+#ifdef EIGHT_BIT_PHASORS
+#ifdef HIRES
+  unsigned ndat_per_block = 1024;
+#else
   unsigned ndat_per_block = 2048;
+#endif
+#else
+  unsigned ndat_per_block = 2048;
+#endif
   dim3 blocks = dim3 (ndat / ndat_per_block, nchan, 1);
   //unsigned nblocks = ndat / ndat_per_block;
   if (ndat % ndat_per_block)
@@ -1558,7 +1761,11 @@ void mopsr_tile_beams_precomp (cudaStream_t stream, void * d_in, void * d_fbs, v
 #endif
 
 #ifdef EIGHT_BIT_PHASORS
+#ifdef HIRES
+  tile_beams_kernel_1024_32scr_dp4a<<<blocks, nthread, 0, stream>>>((char2 *) d_in, (float *) d_fbs, (int64_t *) d_phasors, nbeam, ndat, nant);
+#else
   tile_beams_kernel_2048<<<blocks, nthread, sdata_bytes, stream>>>((int32_t *) d_in, (float *) d_fbs, (int8_t *) d_phasors, nbeam, ndat, nant);
+#endif
 #else
 #ifdef HIRES
   tile_beams_kernel_2048_32scr<<<blocks, nthread, sdata_bytes, stream>>>((int32_t *) d_in, (float *) d_fbs, (float *) d_phasors, nbeam, ndat, nant);

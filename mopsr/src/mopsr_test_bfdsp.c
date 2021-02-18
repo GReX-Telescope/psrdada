@@ -44,13 +44,13 @@ int main(int argc, char** argv)
   int arg = 0;
 
   unsigned nant = 352;
-  int nbeam = 512;
+  int nbeam = 352;
   const unsigned ndim_in = 2;
   const unsigned ndim_ou = 1;
 #ifdef HIRES
   uint64_t nsamp = 16384;
   unsigned tdec  = 32;
-  unsigned nchan = 24;
+  unsigned nchan = 2;
 #else
   uint64_t nsamp = 16384 * 6;
   //uint64_t nsamp = 4096;
@@ -222,6 +222,7 @@ int main(int argc, char** argv)
   float * h_phasors_32;
   int8_t * h_phasors_8;
 
+  fprintf(stderr, "cudaMallocHost %ld bytes for input_block\n", in_block_size);
   error = cudaMallocHost( &h_in, in_block_size);
   if (error != cudaSuccess)
   {
@@ -233,19 +234,28 @@ int main(int argc, char** argv)
   srand ( time(NULL) );
   double stddev = 5;
 
+  fprintf(stderr, "Generating noise\n");
   for (ichan=0; ichan<nchan; ichan++)
   {
     for (iant=0; iant<nant; iant++)
     {
       for (isamp=0; isamp<nsamp; isamp++)
       {
+#ifdef JUST_GPU
+        ptr[0] = (int8_t) (ichan + iant + isamp) % 127;
+        ptr[1] = (int8_t) (ichan + iant - isamp) % 127;
+#else
         ptr[0] = (int8_t) rand_normal (0, stddev);
         ptr[1] = (int8_t) rand_normal (0, stddev);
+#endif
+        //if (isamp == 0)
+        //  fprintf (stderr, "iant[%u] (%d, %d)\n", iant, (int) (ptr[0]), (int) (ptr[1]));
         ptr += 2;
       }
     }
   }
 
+  fprintf(stderr, "cudaMallocHost %ld bytes for h_out\n", ou_block_size);
   error = cudaMallocHost( &h_out, ou_block_size);
   if (error != cudaSuccess)
   {
@@ -259,7 +269,6 @@ int main(int argc, char** argv)
     fprintf(stderr, "alloc: could not allocate %ld bytes of pinned host memory\n", ou_block_size);
     return -1;
   }
-
 
   h_out_cpu = malloc(ou_block_size);
 
@@ -325,9 +334,12 @@ int main(int argc, char** argv)
   unsigned re, im, idx;
   unsigned chan_stride = nbeam * nant;
 
+  if (verbose)
+    fprintf(stderr, "Computing phasors\n");
+
   for (ibeam=0; ibeam<nbeam; ibeam++)
   {
-    double md_angle = (double) ibeam / (double) nbeam;
+    double md_angle = (double) (ibeam + 1) / (double) nbeam;
     for (iant=0; iant<nant; iant++)
     {
       double geometric_delay = (sin(md_angle) * modules[iant].dist) / C;
@@ -344,6 +356,14 @@ int main(int argc, char** argv)
         idx = (ichan * chan_stride) + (ibeam * nant) + iant;
         phasors_32_ptr[2*idx] = phasors_ptr[idx];
         phasors_32_ptr[2*idx + 1] = phasors_ptr[idx+nbeamant];
+
+        // packet is FSD order
+        idx = (ichan * chan_stride * 2) + (ibeam * nant * 2) + (iant * 2);
+        phasors_8_ptr[idx + 0] = (int8_t) (cos(theta) * 128);
+        phasors_8_ptr[idx + 1] = (int8_t) (sin(theta) * 128);
+
+        //if (ibeam == 0 && ichan == 0)
+        //  fprintf (stderr, "iant=%u weights=(%d, %d)\n", iant, (int) phasors_8_ptr[idx + 0] , (int) phasors_8_ptr[idx + 1]);
       }
     }
   }
@@ -478,7 +498,11 @@ int main(int argc, char** argv)
     }
 
     // form the tiled, detected and integrated fan beamsa
+#ifdef EIGHT_BIT_PHASORS
+    mopsr_tile_beams_precomp (stream, d_in, d_fbs, d_phasors_8, in_block_size, nbeam, nant, nchan);
+#else
     mopsr_tile_beams_precomp (stream, d_in, d_fbs, d_phasors, in_block_size, nbeam, nant, nchan);
+#endif
 
     if (verbose > 1)
       fprintf(stderr, "io_block: cudaMemcpyAsync(%p, %p, %"PRIu64", D2H)\n",
@@ -515,14 +539,14 @@ int main(int argc, char** argv)
   cudaStreamSynchronize(stream);
 
 #ifndef JUST_GPU
-
   unsigned ndim = 2;
   unsigned nsamp_out = in_block_size / (nchan * nant * ndim * tdec);
-/*
+
   fprintf (stderr, "mopsr_tile_beams_cpu()\n");
   mopsr_tile_beams_cpu (h_in, h_out_cpu, h_phasors, in_block_size, nbeam, nchan, nant, tdec);
 
   fprintf (stderr, "comparing AJ version()\n");
+  fprintf (stderr, "[Beam][Chan][Samp]\n");
 
   float * gpu_ptr = (float *) h_out;
   float * cpu_ptr = (float *) h_out_cpu;
@@ -537,14 +561,19 @@ int main(int argc, char** argv)
         const float cpu = cpu_ptr[ival];
         const float gpu = gpu_ptr[ival];
         float ratio = cpu > gpu ? cpu / gpu : gpu / cpu;
+#ifdef EIGHT_BIT_PHASORS
+        if (fabs(ratio) > 1.01)
+#else
         if (fabs(ratio) > 1.00001)
+#endif
           fprintf (stderr, "[%d][%d][%d] mismatch ratio=%f (cpu==%f != gpu==%f)\n", ibeam, ichan, isamp, ratio, cpu, gpu);
 
         ival++;
       }
     }
   }
-*/
+
+  /*
   fprintf (stderr, "comparing EB version()\n");
 
   float * gpu_ptr = (float *) h_out_eb;
@@ -566,7 +595,7 @@ int main(int argc, char** argv)
       }
     }
   }
-
+  */
 
 
 #endif
@@ -689,7 +718,6 @@ int mopsr_tile_beams_cpu (void * h_in, void * h_out, void * h_phasors, uint64_t 
   float beam_power;
   //complex double beam_sum_d;
   //double beam_power_d;
-  const float scale = 127.5;
 
   // intergrate samples together
   const unsigned ndat = tdec;
@@ -730,11 +758,13 @@ int mopsr_tile_beams_cpu (void * h_in, void * h_out, void * h_phasors, uint64_t 
             for (iant=0; iant<nant; iant++)
             {
               val16 = in16[iant*nsamp + isamp];
-              //re = ((float) val8[0]) / scale;
-              //im = ((float) val8[1]) / scale;
               re = (float) val8[0];
               im = (float) val8[1];
               incoherent_power += (re * re) + (im * im);
+              /*
+              if (ichunk == 0 && idat == 0)
+                fprintf(stderr, "idat=%u iant=%u real=%f imag=%f incoherent=%f\n", idat, iant, re, im, incoherent_power);
+              */
             }
             beam_power   += incoherent_power;
           }
@@ -746,21 +776,17 @@ int mopsr_tile_beams_cpu (void * h_in, void * h_out, void * h_phasors, uint64_t 
             {
               // unpack this sample and antenna
               val16 = in16[iant*nsamp + isamp];
-              //re = ((float) val8[0]) / scale;
-              //im = ((float) val8[1]) / scale;
               re = (float) val8[0];
               im = (float) val8[1];
               val = re + im * I;
 
               steered = val * beam_phasors[iant];
               beam_sum += steered;
-              //beam_sum += val;
-
               /*
-              if (ibeam == 1 && ichan == 0 && ichunk < 1)
+              if (ibeam == 1 && ichan == 0 && ichunk < 1 && idat == 0)
               {
-                fprintf (stderr, "[%u][%u] steered=(%f,%f), beam_sum=(%f,%f)\n",
-                        ichan, ibeam, 
+                fprintf (stderr, "[%u][%u][%u][%u] steered=(%f,%f), beam_sum=(%f,%f)\n",
+                        ichan, ibeam, iant, idat,
                         crealf(steered), cimagf(steered), 
                         crealf(beam_sum), cimagf(beam_sum));
               }

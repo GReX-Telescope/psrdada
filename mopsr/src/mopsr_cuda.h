@@ -15,7 +15,7 @@ extern "C" {
 #define MOPSR_MAX_NANT_PER_AQ    16
 #define MOPSR_MEDIAN_FILTER_MEMORY 8
 
-//#define EIGHT_BIT_PHASORS
+#define EIGHT_BIT_PHASORS
 
 #ifdef __CUDA_ARCH__
       #if (__CUDA_ARCH__ >= 300)

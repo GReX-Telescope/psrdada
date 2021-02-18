@@ -9,6 +9,7 @@
 #include "mopsr_delays_cuda_hires.h"
 
 // maximum number of channels [320] * antenna [16] from 1 PFB
+//#define DP4A                  1
 #define MOPSR_PFB_ANT_MAX     8
 #define MOPSR_PFB_CHANANT_MAX 2560
 #define MOPSR_MAX_ANT         352
@@ -696,6 +697,103 @@ __global__ void hires_delay_fractional_float_kernel (int16_t * input,
 
     unsigned ou_data_idx = (ichanant * nsamp_out) + osamp;
     output[ou_data_idx] = sum;
+  }
+}
+
+__forceinline__ __device__
+void dp4a(int &c, const int &a, const int &b) {
+#if __CUDA_ARCH__ >= 610
+  asm("dp4a.s32.s32 %0, %1, %2, %3;" : "+r"(c) : "r"(a), "r"(b), "r"(c));
+#else
+  char4 &a4 = *((char4*)&a);
+  char4 &b4 = *((char4*)&b);
+  c += a4.x * b4.x;
+  c += a4.y * b4.y;
+  c += a4.z * b4.z;
+  c += a4.w * b4.w;
+#endif
+}
+
+__forceinline__ __device__
+int int_load_fir(char4 const &a)
+{
+  char4 b;
+  b.x = a.w;
+  b.y = a.z;
+  b.z = a.y;
+  b.w = a.x;
+  return (*(int*)&b);
+}
+
+// apply a fractional delay correction to a channel / antenna, warps will always
+__global__ void hires_delay_fractional_dp4a_kernel (const char2 __restrict__ * input,
+                    cuFloatComplex * output, 
+                    char4 * fir_coeffs,
+                    float * fringe_coeffs,
+                    unsigned nthread_run, uint64_t nsamp_in,
+                    const unsigned chan_stride, const unsigned ant_stride,
+                    const unsigned ntap)
+{
+  extern __shared__ int fk_shared_dp4a[];
+  char * in_shm_re = (char *) (fk_shared_dp4a + ((ntap/4) + 1));
+  char * in_shm_im = in_shm_re + nthread_run;
+
+  const unsigned half_ntap = ntap / 2;
+  const unsigned in_offset = 2 * half_ntap;
+
+  const unsigned isamp = blockIdx.x * nthread_run + threadIdx.x;
+  const unsigned iant  = blockIdx.y;
+  const unsigned nant  = gridDim.y;
+  const unsigned ichan = blockIdx.z;
+  const unsigned ichanant  = ichan * nant + iant;
+
+  const unsigned nsamp_out = nsamp_in - in_offset;
+
+  // compute the complex term required for fringe stopping
+  cuFloatComplex fringe_phasor;
+  sincosf (fringe_coeffs[ichanant], &(fringe_phasor.y), &(fringe_phasor.x));
+
+  // read in the FIR cofficients [filters are padded to be multiples of 4]
+  if (threadIdx.x < ntap/4)
+  {
+    fk_shared_dp4a[threadIdx.x] = int_load_fir(fir_coeffs[(ichanant * ntap/4) + threadIdx.x]);
+  }
+
+  // final block check for data input (not data output!)
+  if (isamp >= nsamp_in)
+  {
+    return;
+  }
+
+  // each thread must also load its data from main memory here chan_stride + ant_stride
+  const unsigned in_data_idx  = (ichanant * nsamp_in) + isamp;
+
+  const char2 in = input[in_data_idx];
+  cuFloatComplex val = make_cuComplex ((float) (in.x) + 0.33, (float) (in.y) + 0.33);
+  val = cuCmulf (val, fringe_phasor);
+
+  // convert back to an int8
+  in_shm_re[threadIdx.x] = int8_t(rintf(val.x));
+  in_shm_im[threadIdx.x] = int8_t(rintf(val.y));
+
+  __syncthreads();
+
+  const unsigned osamp = (blockIdx.x * nthread_run) + threadIdx.x;
+
+  // there are 2 * half_ntap threads that dont calculate anything
+  if (threadIdx.x < nthread_run && osamp < nsamp_out)
+  {
+    int2 sum = make_int2(0, 0);
+    int * shm_re = (int *) in_shm_re;
+    int * shm_im = (int *) in_shm_im;
+    for (unsigned i=0; i<ntap/4; i++)
+    {
+      dp4a (sum.x,  shm_re[i], fk_shared_dp4a[i]);
+      dp4a (sum.y,  shm_im[i], fk_shared_dp4a[i]);
+    }
+
+    unsigned ou_data_idx = (ichanant * nsamp_out) + osamp;
+    output[ou_data_idx] = make_cuComplex(sum.x/127, sum.y/127);
   }
 }
 
@@ -1805,9 +1903,15 @@ void hires_delay_fractional_sk_scale (cudaStream_t stream,
               (cuFloatComplex *) d_fbuf, (float *) d_fir_coeffs, nthread_run,
               ndat, chan_stride, ant_stride, ntap);
 #else
+#ifdef DP4A
+  hires_delay_fractional_dp4a_kernel<<<blocks, nthread_load, sdata_bytes, stream>>>((char2 *) d_in,
+              (cuFloatComplex *) d_fbuf, (char4 *) d_fir_coeffs, (float *) d_fringes,
+              nthread_run, ndat, chan_stride, ant_stride, ntap);
+#else
   hires_delay_fractional_float_kernel<<<blocks, nthread_load, sdata_bytes, stream>>>((int16_t *) d_in,
               (cuFloatComplex *) d_fbuf, (float *) d_fir_coeffs, (float *) d_fringes,
               nthread_run, ndat, chan_stride, ant_stride, ntap);
+#endif
 #endif
 
 #if _GDEBUG

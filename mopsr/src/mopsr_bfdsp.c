@@ -683,14 +683,19 @@ int bfdsp_alloc (mopsr_bfdsp_t * ctx)
         {
           theta = -2 * M_PI * ctx->channels[ichan].cfreq * 1000000 * geometric_delay;
 
+
+#ifdef EIGHT_BIT_PHASORS
+          // packet is FSD order
+          idx = (ichan * chan_stride) + (ibeam * ctx->nant * 2) + (iant * 2);
+
+          // TODO check distribution
+          ctx->h_phasors[idx + 0] = (int8_t) (cos(theta) * 127);
+          ctx->h_phasors[idx + 1] = (int8_t) (sin(theta) * 127);
+          //fprintf(stderr, "ibeam=%u iant=%u ichan=%u idx=(%u, %u) vals=(%d, %d)\n", ibeam, iant, ichan, idx + 0, idx + 1, int(ctx->h_phasors[idx + 0]), ctx->h_phasors[idx + 1]);
+#else
           // packed in FS order with the cos, and sin terms separate
           idx = (ichan * chan_stride) + (ibeam * ctx->nant) + iant;
 
-#ifdef EIGHT_BIT_PHASORS
-          // TODO check distribution
-          ctx->h_phasors[idx]          = (int8_t) (cos(theta) * 128);
-          ctx->h_phasors[idx+nbeamant] = (int8_t) (sin(theta) * 128);
-#else
           ctx->h_phasors[idx]          = (float) cos(theta);
           ctx->h_phasors[idx+nbeamant] = (float) sin(theta);
 #endif
