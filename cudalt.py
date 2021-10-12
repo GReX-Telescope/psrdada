@@ -3,7 +3,14 @@
 import sys
 import os
 
-basedir = os.path.dirname(os.path.realpath(__file__))
+def find_libtool():
+  """ Libtool should exist in the build directory, or in the system path """
+  search_path = os.getcwd()
+  while len(search_path) > 1:
+    if os.path.exists(search_path + "/libtool"):
+      return search_path + "/libtool"
+    search_path = os.path.dirname(search_path)
+  return "libtool"
 
 lo_filepath = sys.argv[1]
 o_filepath = lo_filepath.replace(".lo", ".o")
@@ -59,11 +66,8 @@ if rv != 0:
     sys.exit(1)
 
 # get libtool version
-fd = 0
-if os.path.exists(basedir + "/libtool"):
-  fd = os.popen(basedir + "/libtool --version")
-else:
-  fd = os.popen("libtool --version")
+libtool = find_libtool()
+fd = os.popen(libtool + " --version")
 libtool_version = fd.readline()
 # this loop supresses the broken pipe errors
 # you get by not reading all the data
