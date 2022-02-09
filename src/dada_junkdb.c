@@ -28,6 +28,7 @@ void usage()
      " -c char    fill data with char\n"
      " -g         write gaussian distributed data\n"
      " -m mean    use mean for gaussian data\n"
+     " -n         skip writing to data to ring buffer, for performance testing only\n"
      " -s stddev  use stddev for gaussian data\n"
      " -k         hexadecimal shared memory key  [default: %x]\n"
      " -r rate    data rate MB/s [default %f]\n"
@@ -79,9 +80,11 @@ typedef struct {
 
   unsigned verbose;
 
+  unsigned perform_memcpy;
+
 } dada_junkdb_t;
 
-#define DADA_JUNKDB_INIT { "", 0, 0, 0, 0, 0, 0, "", 0, 0, 0, 0, 0, 0 }
+#define DADA_JUNKDB_INIT { "", 0, 0, 0, 0, 0, 0, "", 0, 0, 0, 0, 0, 0, 1 }
 
 
 /*! Pointer to the function that transfers data to/from the target */
@@ -140,7 +143,8 @@ int64_t transfer_data (dada_client_t* client, void* data, uint64_t data_size)
         bytes = junkdb->data_size;
 
       // copy
-      memcpy (data + bytes_copied, junkdb->data, bytes);
+      if (junkdb->perform_memcpy)
+        memcpy (data + bytes_copied, junkdb->data, bytes);
 
       // increment 
       bytes_copied += bytes;            // destination offset
@@ -326,6 +330,9 @@ int main (int argc, char **argv)
   /* zero copy direct shm access */
   char zero_copy = 0;
 
+  /* perform memcpy for junk data */
+  unsigned perform_memcpy = 1;
+
   uint64_t rate_base = 1024*1024;
 
   int64_t total_bytes = -1;
@@ -335,7 +342,7 @@ int main (int argc, char **argv)
   junkdb.mean = 0;
   junkdb.stddev = 10;
 
-  while ((arg=getopt(argc,argv,"b:c:ghk:m:r:R:s:t:vz")) != -1)
+  while ((arg=getopt(argc,argv,"b:c:ghk:m:nr:R:s:t:vz")) != -1)
     switch (arg) {
 
     case 'b':
@@ -378,6 +385,10 @@ int main (int argc, char **argv)
         usage();
         return EXIT_FAILURE;
       }
+      break;
+
+    case 'n':
+      perform_memcpy = 0;
       break;
 
     case 'r':
@@ -466,6 +477,7 @@ int main (int argc, char **argv)
 
   junkdb.data_size = (uint64_t) rate * rate_base;
   junkdb.transfer_size = write_time * junkdb.data_size;
+  junkdb.perform_memcpy = perform_memcpy;
 
   // never "generate" more than 4 MB
   if (junkdb.data_size > 4 * 1024 * 1024)
