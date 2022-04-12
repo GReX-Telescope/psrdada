@@ -1,8 +1,0 @@
-# 
-# Processing File for dspsr to detect and fold MOPSR data
-#   -D 0        disable coherrent de-dispersion
-#   -L 10       second sub-integrations
-#   -skzs 4     discard data that exceeds SK estimator by 4 sigma
-#   -skzm 512   integrate 512 samples to form SK estimate
-#
-PROC_CMD dspsr <DADA_INFO> -Q -D 0 -L 10 -minram=64 -skz -skzs 3 -skzm 512

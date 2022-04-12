@@ -1,1 +1,0 @@
-PROC_CMD dspsr -Q -t 7 SELECT -s -W -2c0 -b 8192 <DADA_INFO>

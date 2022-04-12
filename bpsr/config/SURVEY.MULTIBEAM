@@ -1,1 +1,0 @@
-PROC_CMD the_decimator -b 2 -B 10 -x -c <DADA_INFO>

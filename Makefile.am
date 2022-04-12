@@ -1,8 +1,4 @@
-
 ACLOCAL_AMFLAGS = -I config
 
-SUBDIRS = Management
+SUBDIRS = Management 3rdparty src apps examples
 
-SUBDIRS	+= 3rdparty src web scripts config apsr bpsr caspsr comap examples gmrt leda mopsr psrix ska1 
-
-EXTRA_DIST = cudalt.py

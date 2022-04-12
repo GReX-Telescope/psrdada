@@ -1,49 +1,58 @@
-dnl @synopsis SWIN_LIB_RDMACM
-dnl 
-AC_DEFUN([SWIN_LIB_RDMACM],
-[
-  AC_PROVIDE([SWIN_LIB_RDMACM])
+#
+# LIB_RDMACM([ACTION-IF-FOUND [,ACTION-IF-NOT-FOUND]])
+#
+# This m4 macro checks availablity of the RDMA CM library
+#
+# RDMACM_CFLAGS - autoconfig variable with flags required for compiling
+# RDMACM_LIBS   - autoconfig variable with flags required for linking
+# HAVE_RDMADM   - automake conditional
+# HAVE_RDMADM   - pre-processor macro in config.h
+#
+# This macro tries to get RDMACM CFLAGS and LIBS using the
+# pkg-config program.  If that is not available, it
+# will try to link using:
+#
+# ----------------------------------------------------------
 
-  AC_REQUIRE([SWIN_PACKAGE_OPTIONS])
-  SWIN_PACKAGE_OPTIONS([rdmacm])
+AC_DEFUN([LIB_RDMACM],
+[
+  AC_PROVIDE([LIB_RDMACM])
+
+  AC_ARG_WITH([rdmacm-dir],
+              AC_HELP_STRING([--with-rdmacm-dir=DIR],
+                             [RDMACM is installed in DIR]))
 
   AC_MSG_CHECKING([for RDMACM Library (Infiniband) installation])
 
-  if test x"$RDMACM" == x; then
-    RDMACM=rdmacm
-  fi
+  RDMACM_CFLAGS=""
+  RDMACM_LIBS="-lrdmacm -libverbs"
 
-  if test "$have_rdmacm" != "user disabled"; then
+  ac_save_CFLAGS="$CFLAGS"
+  ac_save_LIBS="$LIBS"
 
-    SWIN_PACKAGE_FIND([rdmacm],[rdma/rdma_cma.h])
-    SWIN_PACKAGE_TRY_COMPILE([rdmacm],[#include <rdma/rdma_cma.h>])
+  LIBS="$ac_save_LIBS $RDMACM_LIBS"
+  CFLAGS="$ac_save_CFLAGS $RDMACM_CFLAGS"
 
-    SWIN_PACKAGE_FIND([rdmacm],[lib$RDMACM.*])
-    SWIN_PACKAGE_TRY_LINK([rdmacm],[#include <rdma/rdma_cma.h>],
-                          [ rdma_create_event_channel();],
-                          [-l$RDMACM -libverbs])
+  AC_TRY_LINK([#include <rdma/rdma_cma.h>],[rdma_create_event_channel();],
+              have_rdmacm=yes, have_rdmacm=no)
 
-  fi
+  AC_MSG_RESULT($have_rdmacm)
 
-  AC_MSG_RESULT([$have_rdmacm])
+  LIBS="$ac_save_LIBS"
+  CFLAGS="$ac_save_CFLAGS"
 
   if test x"$have_rdmacm" = xyes; then
-
-    AC_DEFINE([HAVE_RDMACM],[1],
-              [Define if the RDMACM Library is present])
+    AC_DEFINE([HAVE_RDMACM], [1], [Define to 1 if you have the RDMACM library])
     [$1]
-
   else
-    :
+    AC_MSG_WARN([RDMACM dependent code will not be compiled.])
+    RDMACM_CFLAGS=""
+    RDMACM_LIBS=""
     [$2]
   fi
 
-  RDMACM_LIBS="$rdmacm_LIBS"
-  RDMACM_CFLAGS="$rdmacm_CFLAGS"
-
-  AC_SUBST(RDMACM_LIBS)
   AC_SUBST(RDMACM_CFLAGS)
-  AM_CONDITIONAL(HAVE_RDMACM,[test "$have_rdmacm" = yes])
+  AC_SUBST(RDMACM_LIBS)
+  AM_CONDITIONAL(HAVE_RDMACM, [test x"$have_rdmacm" = xyes])
 
 ])
-

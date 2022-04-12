@@ -10,7 +10,7 @@ install-exec-hook: fix_prefix
 # scripts are up-to-date with respect to where the software was installed.
 #
 
-FIX_PREFIX := ${prefix}/bin/psrdada_ldflags ${prefix}/bin/psrdada_cflags
+FIX_PREFIX = ${prefix}/bin/psrdada_ldflags ${prefix}/bin/psrdada_cflags
 
 fix_prefix: install-binSCRIPTS
 	perl -p -i -e "s|PREFIX|${prefix}|" ${FIX_PREFIX}

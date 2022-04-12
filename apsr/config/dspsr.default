@@ -1,1 +1,0 @@
-PROC_CMD dspsr -F 128:D -L 10 <DADA_INFO>

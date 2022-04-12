@@ -1,4 +1,0 @@
-#
-# Processing file for baseband over IB
-#
-PROC_CMD dada_dbib -s -k <DADA_KEY> -p 400<DADA_ANT_ID> 192.168.5.10

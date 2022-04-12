@@ -1,1 +1,0 @@
-PROC_CMD dspsr -q --repeat --cuda=0,1 -F256:D --fft-bench -minram 512 -L 8 --Lmin 0 -skz -skzn 4 -skzm 256 -overlap -skz_start 85 -skz_end 160 -skzs 4 -Z IPP -skz_no_tscr -skz_no_fscr <DADA_INFO>

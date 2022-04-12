@@ -1,9 +1,0 @@
-#!/usr/bin/env psrsh
-
-zap median window=25
-zap median cutoff=10
-zap median
-
-zap median exp={$off:max-$all:min}
-zap median
-

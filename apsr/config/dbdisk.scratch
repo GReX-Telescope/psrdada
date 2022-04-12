@@ -1,1 +1,0 @@
-PROC_CMD dada_dbdisk -s -D /lfs/data0/apsr/scratch -k <DADA_KEY>

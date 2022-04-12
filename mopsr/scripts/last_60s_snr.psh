@@ -1,7 +1,0 @@
-#!/usr/bin/env psrsh
-
-if ( $nsubint > 6 ) extract {$nsubint-6}-{$nsubint-1}
-edit nsubint
-tscrunch
-edit length
-edit snr

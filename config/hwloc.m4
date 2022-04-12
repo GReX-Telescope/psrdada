@@ -1,5 +1,5 @@
 #
-# SWIN_LIB_HWLOC([ACTION-IF-FOUND [,ACTION-IF-NOT-FOUND]])
+# LIB_HWLOC([ACTION-IF-FOUND [,ACTION-IF-NOT-FOUND]])
 #
 # This m4 macro checks availability of the HWLOC Library
 #
@@ -9,17 +9,19 @@
 # HAVE_HWLOC   - pre-processor macro in config.h
 #
 # This macro tries to get HWLOC cflags and libs using the
-# pkg-config program.  If that is not available, it 
+# pkg-config program.  If that is not available, it
 # will try to link using:
 #
 #    -lhwloc
 #
 # ----------------------------------------------------------
-AC_DEFUN([SWIN_LIB_HWLOC],
+AC_DEFUN([LIB_HWLOC],
 [
-  AC_PROVIDE([SWIN_LIB_HWLOC])
+  AC_PROVIDE([LIB_HWLOC])
 
-  SWIN_PACKAGE_OPTIONS([hwloc])
+  AC_ARG_WITH([hwloc-dir],
+              AC_HELP_STRING([--with-hwloc-dir=DIR],
+                             [HWLOC is installed in DIR]))
 
   AC_MSG_CHECKING([for HWLOC libary installation])
 

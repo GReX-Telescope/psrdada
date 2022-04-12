@@ -1,6 +1,6 @@
-AC_DEFUN([SWIN_FUNC_AFFINITY],
+AC_DEFUN([FUNC_AFFINITY],
 [
-  AC_PROVIDE([SWIN_FUNC_AFFINITY])
+  AC_PROVIDE([FUNC_AFFINITY])
 
   AC_CHECK_HEADERS([sched.h])
   AC_CHECK_FUNCS([sched_setaffinity],have_affinity=yes,have_affinity=no)

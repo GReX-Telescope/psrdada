@@ -1,6 +1,0 @@
-#
-# Processing File for dspsr to detect and fold MOPSR data
-#   -D 0  Disable coherrent de-dispersion
-#   -L 10 10 second sub-integrations
-#
-PROC_CMD dada_dbdisk -s -k <DADA_KEY> -D /data/mopsr/scratch/<DADA_PFB_ID>
