@@ -80,6 +80,7 @@ AC_CONFIG_FILES([Makefile
   Management/Makefile
   Management/psrdada_ldflags
   Management/psrdada_cflags
+  Management/psrdada.pc
   apps/Makefile
   examples/Makefile
   examples/src/Makefile

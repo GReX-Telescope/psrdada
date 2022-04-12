@@ -59,6 +59,7 @@ Makefile.in
 3rdparty/vsib_send
 Management/psrdada_cflags
 Management/psrdada_ldflags
+Management/psrdada.pc
 apps/dada_corrplot
 apps/dada_db
 apps/dada_dbNdb

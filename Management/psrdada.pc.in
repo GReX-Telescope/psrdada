@@ -1,0 +1,13 @@
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
+
+Name: @PACKAGE_NAME@
+Description: PSRDADA: Distributed Data Acquisition
+Version: @PACKAGE_VERSION@
+Libs: @CUDA_LIBS@ @RDMACM_LIBS@ @HWLOC_LIBS -L${libdir} -lpsrdada
+Libs.private: @LIBS@
+Cflags: -I${includedir}
+URL: http://psrdada.sourceforge.net/
+

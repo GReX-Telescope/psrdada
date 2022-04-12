@@ -1,5 +1,5 @@
 
-bin_SCRIPTS = psrdada_ldflags psrdada_cflags
+bin_SCRIPTS = psrdada_ldflags psrdada_cflags psrdada.pc
 
 libs: fix_prefix
 
