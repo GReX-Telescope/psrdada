@@ -32,7 +32,6 @@ set(HAVE_SYS_VFS_H on)
 
 configure_file(cmake_config.h.in config.h)
 
-add_subdirectory(3rdparty)
 add_subdirectory(src)
 add_subdirectory(apps)
 

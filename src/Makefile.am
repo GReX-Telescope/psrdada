@@ -13,29 +13,28 @@ psrdada_hdr= \
   median_smooth_zap.h monitor.h multilog.h nexus.h      \
   node_array.h sock.h string_array.h tmutil.h udp.h
 
-libpsrdada_la_SOURCES = $(psrdada_hdr) ascii_header.c multilog.c sock.c monitor.c		\
-  ipcutil.c ipcbuf.c ipcio.c disk_array.c node_array.c		\
-  command_parse.c command_parse_server.c string_array.c		\
-  diff_time.c nexus.c filesize.c fileread.c tmutil.c daemon.c	\
-  dada_hdu.c dada_pwc.c dada_pwc_nexus.c dada_ni.c		\
-  dada_pwc_main.c dada_pwc_main_multi.c dada_client.c					\
-  dada_pwc_nexus_config.c dada_pwc_nexus_header_parse.c		\
-  multilog_server.c dada_udp.c dada_generator.c dada_affinity.c
+libpsrdada_la_SOURCES = $(psrdada_hdr) \
+  ascii_header.c multilog.c sock.c monitor.c                  \
+  ipcutil.c ipcbuf.c ipcio.c disk_array.c node_array.c        \
+  command_parse.c command_parse_server.c string_array.c       \
+  diff_time.c nexus.c filesize.c fileread.c tmutil.c daemon.c \
+  dada_hdu.c dada_pwc.c dada_pwc_nexus.c dada_ni.c            \
+  dada_pwc_main.c dada_pwc_main_multi.c dada_client.c         \
+  dada_pwc_nexus_config.c dada_pwc_nexus_header_parse.c       \
+  multilog_server.c dada_udp.c dada_generator.c dada_affinity.c \
+  stopwatch.c mach_gettime.c
 
-include_HEADERS = ascii_header.h multilog.h sock.h monitor.h	  \
-  ipcutil.h ipcbuf.h ipcio.h disk_array.h node_array.h	  \
-  command_parse.h command_parse_server.h string_array.h	  \
-  diff_time.h nexus.h futils.h tmutil.h daemon.h dada_def.h \
-  dada_hdu.h dada_pwc.h dada_pwc_nexus.h dada_ni.h	  \
-  dada_pwc_main.h dada_pwc_main_multi.h dada_client.h udp.h \
-  dada_udp.h dada_generator.h dada_affinity.h dada_msg.h
+include_HEADERS = ascii_header.h multilog.h sock.h monitor.h \
+  ipcutil.h ipcbuf.h ipcio.h disk_array.h node_array.h       \
+  command_parse.h command_parse_server.h string_array.h      \
+  diff_time.h nexus.h futils.h tmutil.h daemon.h dada_def.h  \
+  dada_hdu.h dada_pwc.h dada_pwc_nexus.h dada_ni.h           \
+  dada_pwc_main.h dada_pwc_main_multi.h dada_client.h udp.h  \
+  dada_udp.h dada_generator.h dada_affinity.h dada_msg.h     \
+  stopwatch.h mach_gettime.h
 
-AM_CPPFLAGS = -I$(top_srcdir)/3rdparty
-LDADD = $(top_builddir)/3rdparty/libtimers.la
-
-libpsrdada_la_LIBADD = 
-
-AM_CFLAGS = -I$(top_srcdir)/3rdparty
+AM_CPPFLAGS =
+libpsrdada_la_LIBADD = -lrt
 
 if HAVE_HWLOC
 

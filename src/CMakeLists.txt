@@ -22,6 +22,7 @@ set(public_headers
     ipcbuf.h
     ipcio.h
     ipcutil.h
+    mach_gettime.h
     median_smooth_zap.h
     monitor.h
     multilog.h
@@ -29,6 +30,7 @@ set(public_headers
     node_array.h
     sock.h
     string_array.h
+    stopwatch.h
     tmutil.h
 )
 
@@ -56,6 +58,7 @@ set(sources
     ipcbuf.c
     ipcio.c
     ipcutil.c
+    mach_gettime.c
     monitor.c
     multilog.c
     multilog_server.c
@@ -63,6 +66,7 @@ set(sources
     node_array.c
     sock.c
     string_array.c
+    stopwatch.c
     tmutil.c
 )
 
@@ -117,7 +121,7 @@ target_include_directories(
 target_link_libraries(
     psrdada
     PUBLIC
-        m
+        m rt
 )
 
 # Add required libraries to the psrdada target if they are available

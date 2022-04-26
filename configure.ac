@@ -85,8 +85,7 @@ AC_CONFIG_FILES([Makefile
   examples/Makefile
   examples/src/Makefile
   src/Makefile
-  src/tests/Makefile
-  3rdparty/Makefile])
+  src/tests/Makefile])
 
 AC_OUTPUT
 
