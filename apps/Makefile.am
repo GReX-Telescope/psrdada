@@ -36,11 +36,9 @@ bin_SCRIPTS = \
   ipcrme
 
 AM_CFLAGS = \
-  -I$(top_srcdir)/3rdparty \
   -I$(top_srcdir)/src
 
 LDADD = \
-  $(top_builddir)/3rdparty/libtimers.la \
   $(top_builddir)/src/libpsrdada.la 
 
 EXTRA_DIST = ipcrme

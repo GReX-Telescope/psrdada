@@ -127,7 +127,7 @@ if ((RDMACM_FOUND) AND (IBVERBS_FOUND))
     target_link_libraries(dada_dbib PUBLIC psrdada)
     target_link_libraries(dada_dbud PUBLIC psrdada)
     target_link_libraries(dada_ibdb PUBLIC psrdada)
-    target_link_libraries(dada_udgen PUBLIC psrdada 3rdparty)
+    target_link_libraries(dada_udgen PUBLIC psrdada)
     target_link_libraries(dada_udheader PUBLIC psrdada)
 
     install(
