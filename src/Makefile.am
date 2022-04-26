@@ -1,4 +1,6 @@
 
+SUBDIRS = . tests
+
 lib_LTLIBRARIES = libpsrdada.la
 
 psrdada_hdr= \
@@ -27,24 +29,6 @@ include_HEADERS = ascii_header.h multilog.h sock.h monitor.h	  \
   dada_hdu.h dada_pwc.h dada_pwc_nexus.h dada_ni.h	  \
   dada_pwc_main.h dada_pwc_main_multi.h dada_client.h udp.h \
   dada_udp.h dada_generator.h dada_affinity.h dada_msg.h
-
-check_PROGRAMS = \
-  test_multilog \
-  test_ipcbuf \
-  loop_ipcio \
-  test_command_parser \
-  test_multilog_server telnecho \
-  test_command_parse_server \
-  test_dada_nexus\
-  dada_writer \
-  dada_reader \
-  $(TESTS)
-
-TESTS = \
-  test_uint64_t \
-  test_disk_array \
-  test_ipcio \
-  test_ascii_header
 
 AM_CPPFLAGS = -I$(top_srcdir)/3rdparty
 LDADD = $(top_builddir)/3rdparty/libtimers.la
