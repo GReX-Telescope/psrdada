@@ -37,6 +37,9 @@
 /stamp-h1
 /test-driver
 
+# CMake
+build/
+
 # M4
 config/libtool.m4
 config/ltoptions.m4

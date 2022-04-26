@@ -208,7 +208,7 @@ float dada_cuda_device_transfer (void * from, void * to, size_t size, memory_mod
                         cudaGetErrorString(error_id));
       return -1;
     }
-    cudaThreadSynchronize();
+    cudaDeviceSynchronize();
   }
   gettimeofday (&end, 0);
 

@@ -157,11 +157,14 @@ int command_parse (command_parse_t* parser, char* command)
 }
 
 /* parse a command */
-int command_parse_output (command_parse_t* parser, char* cmd, FILE* out)
+int command_parse_output (command_parse_t* parser, char* raw_cmd, FILE* out)
 {
   const char* whitespace = " \r\t\n";
   unsigned icmd = 0;
   char* key = 0;
+
+  char * dupcmd = strdup(raw_cmd);
+  char * cmd = dupcmd;
 
   /* skip leading whitespace */
   while (*cmd && strchr (whitespace, *cmd))
@@ -184,24 +187,32 @@ int command_parse_output (command_parse_t* parser, char* cmd, FILE* out)
       fprintf (stderr, "command_parse: match %d\n", icmd);
 #endif
 
-      /* skip leading whitespace */
-      while (*cmd && strchr (whitespace, *cmd))
-	cmd ++;
+      if (cmd != NULL)
+      {
+        /* skip leading whitespace */
+        while (*cmd && strchr (whitespace, *cmd))
+        {
+          fprintf(stderr, "cmd=%s\n", cmd);
+          cmd ++;
+        }
 
-      /* cut trailing whitespace */
-      key = strchr (cmd, '\0') -1 ;
-      while (key > cmd && strchr (whitespace, *key)) {
-	*key = '\0'; key --;
+        /* cut trailing whitespace */
+        key = strchr (cmd, '\0') - 1;
+        while (key > cmd && strchr (whitespace, *key)) {
+          *key = '\0'; key --;
+        }
+
+        /* ignore null strings */
+        if (! *cmd)
+          cmd = 0;
       }
 
-      /* ignore null strings */
-      if (! *cmd)
-	cmd = 0;
-
-      return parser->cmds[icmd].cmd (parser->cmds[icmd].context, out, cmd);
+      int rval = parser->cmds[icmd].cmd (parser->cmds[icmd].context, out, cmd);
+      free(dupcmd);
+      return rval;
     }
-
   }
+  free(dupcmd);
 
   return -1;
 }

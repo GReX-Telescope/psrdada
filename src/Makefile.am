@@ -52,12 +52,6 @@ LDADD = $(top_builddir)/3rdparty/libtimers.la
 libpsrdada_la_LIBADD = 
 
 AM_CFLAGS = -I$(top_srcdir)/3rdparty
-#LDADD = libpsrdada.la 
-#AM_CFLAGS = 
-#AM_CPPFLAGS =
-
-# AM_CFLAGS += @OPENMP_CFLAGS@
-# libpsrdada_la_LIBADD += @OPENMP_CFLAGS@
 
 if HAVE_HWLOC
 

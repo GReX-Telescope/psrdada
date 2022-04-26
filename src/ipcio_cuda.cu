@@ -101,7 +101,7 @@ ssize_t ipcio_read_cuda_work (ipcio_t* ipc, char* ptr, char * zero_ptr, size_t b
       if (stream)
         cudaStreamSynchronize (stream);
       else
-        cudaThreadSynchronize ();
+        cudaDeviceSynchronize ();
 
       if (ipc -> rdwrt == 'R' && ipcbuf_mark_cleared ((ipcbuf_t*)ipc) < 0)
       {

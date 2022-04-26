@@ -1,0 +1,6 @@
+#define HAVE_CONFIG_H
+#cmakedefine HAVE_CUDA
+#cmakedefine HAVE_RDMACM
+#cmakedefine HAVE_HWLOC
+#cmakedefine HAVE_SYS_STATVFS_H
+#cmakedefine HAVE_SYS_VFS_H

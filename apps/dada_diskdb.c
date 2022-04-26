@@ -508,9 +508,10 @@ int main (int argc, char **argv)
     case 'f':
       if (optarg)
       {
-        diskdb.filenames[n_files] = (char *) malloc (sizeof(char) * (strlen(optarg) + 1));
-        memset ((void *) diskdb.filenames[n_files], 0, (sizeof(char) * (strlen(optarg) + 1)));
-        strncpy (diskdb.filenames[n_files], optarg, strlen(optarg));
+        size_t maxlen = sizeof(char) * (strlen(optarg) + 1);
+        diskdb.filenames[n_files] = (char *) malloc (maxlen);
+        memset ((void *) diskdb.filenames[n_files], 0, maxlen);
+        strncpy (diskdb.filenames[n_files], optarg, maxlen);
         n_files++;
         break;
       }

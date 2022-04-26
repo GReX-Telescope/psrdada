@@ -1,11 +1,8 @@
 /* To enable the use of O_DIRECT */
 #define _GNU_SOURCE
 
-#ifdef HAVE_CONFIG_H
-#include <config.h>
-#endif
-
 #include "disk_array.h"
+#include "config.h"
 
 #ifdef HAVE_SYS_STATVFS_H
 #include <sys/statvfs.h>
