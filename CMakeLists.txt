@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.18)
+cmake_minimum_required(VERSION 3.13.4)
 
 file(STRINGS version.txt PSRDada_VERSION)
 message(STATUS "Building PSRDada version ${PSRDada_VERSION}")
@@ -46,13 +46,6 @@ add_subdirectory(Management)
 # ---------------------------------------------------------------------------------------
 
 set(export_dest_dir "${CMAKE_INSTALL_PREFIX}/cmake/psrdada")
-
-install(
-  TARGETS psrdada
-  EXPORT psrdada
-  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # Install cmake config + version + target files
 include(CMakePackageConfigHelpers)
