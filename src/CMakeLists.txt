@@ -121,7 +121,7 @@ target_include_directories(
 target_link_libraries(
     psrdada
     PUBLIC
-        m rt
+        m pthread rt
 )
 
 # Add required libraries to the psrdada target if they are available
@@ -135,7 +135,7 @@ if(HWLOC_FOUND)
 endif()
 
 if((RDMACM_FOUND) AND (IBVERBS_FOUND))
-    target_link_libraries(psrdada PUBLIC rdmacm ibverbs)
+    target_link_libraries(psrdada PUBLIC RDMA::RDMAcm ibverbs)
 endif()
 
 if (BUILD_TESTING)

@@ -1,0 +1,3 @@
+#!/bin/sh
+
+echo -n " -L@CMAKE_INSTALL_PREFIX@/lib -lpsrdada @linkflags@"
