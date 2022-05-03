@@ -39,7 +39,8 @@ AM_CFLAGS = \
   -I$(top_srcdir)/src
 
 LDADD = \
-  $(top_builddir)/src/libpsrdada.la 
+  $(top_builddir)/src/libpsrdada.la \
+  -lm
 
 EXTRA_DIST = ipcrme
 

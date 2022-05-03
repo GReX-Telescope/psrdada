@@ -83,9 +83,9 @@ int main (int argc, char** argv)
 #endif
 #else
 #ifdef HAVE_CUDA
-  while ((arg = getopt(argc, argv, "a:b:dg:hk:ln:pr:")) != -1) {
+  while ((arg = getopt(argc, argv, "a:b:dg:hk:ln:pr:w")) != -1) {
 #else
-  while ((arg = getopt(argc, argv, "a:b:dhk:ln:pr:")) != -1) {
+  while ((arg = getopt(argc, argv, "a:b:dhk:ln:pr:w")) != -1) {
 #endif
 #endif
 
