@@ -124,8 +124,16 @@ target_link_libraries(
         m pthread rt
 )
 
-# Add required libraries to the psrdada target if they are available
+file(STRINGS ../version.txt PSRDADA_VERSION)
+string(REPLACE "." ";" VERSION_LIST ${PSRDADA_VERSION})
+list(GET VERSION_LIST 0 VERSION_MAJOR)
+list(GET VERSION_LIST 1 VERSION_MINOR)
+list(GET VERSION_LIST 2 VERSION_PATCH)
 
+set_target_properties(psrdada PROPERTIES VERSION ${PSRDADA_VERSION}
+                                         SOVERSION ${VERSION_MAJOR})
+
+# Add required libraries to the psrdada target if they are available
 if(CUDAToolkit_FOUND)
     target_link_libraries(psrdada PUBLIC CUDA::cudart)
 endif()

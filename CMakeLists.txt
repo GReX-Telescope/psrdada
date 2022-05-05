@@ -1,10 +1,18 @@
 cmake_minimum_required(VERSION 3.13.4)
 
 file(STRINGS version.txt PSRDada_VERSION)
-message(STATUS "Building PSRDada version ${PSRDada_VERSION}")
 
 # Project configuration, specifying version, languages,
 project(PSRDada LANGUAGES C VERSION ${PSRDada_VERSION})
+
+IF(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+  if(DEFINED ENV{PSRHOME})
+    SET(CMAKE_INSTALL_PREFIX $ENV{PSRHOME})
+  endif(DEFINED ENV{PSRHOME})
+ENDIF(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+
+message(STATUS "Building PSRDada ${PSRDada_VERSION} into ${CMAKE_INSTALL_PREFIX}")
+
 set(CMAKE_PROJECT_HOMEPAGE_URL http://psrdada.sourceforge.net/)
 set(CMAKE_PROJECT_DESCRIPTION "PSRDADA: Distributed Data Acquisition")
 

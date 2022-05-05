@@ -6,6 +6,10 @@ AC_PREREQ(2.61)
 
 AC_INIT([DADA],[1.0],[straten@astron.nl])
 
+# Check the README.md for more information on versioning the library
+# values are current:revision:age
+AC_SUBST([PSRDADA_SO_VERSION], [1:0:0])
+
 AC_CONFIG_MACRO_DIR([config])
 AC_CONFIG_SRCDIR([src/dada_def.h])
 AC_PROG_LIBTOOL
@@ -18,23 +22,19 @@ AM_CONFIG_HEADER([config.h])
 # Checks for programs.
 AC_PROG_CC
 AC_PROG_CPP
-#AC_PROG_CXX
-#AM_PROG_CC_C_O
 AC_PROG_INSTALL
 AC_PROG_LIBTOOL
 
-#ACX_PTHREAD
-#LIBS="$PTHREAD_LIBS $LIBS"
-#CFLAGS="$CFLAGS $PTHREAD_CFLAGS"
-#CXXFLAGS="$CXXFLAGS $PTHREAD_CFLAGS"
+ACX_PTHREAD
+LIBS="$PTHREAD_LIBS $LIBS"
+CFLAGS="$CFLAGS $PTHREAD_CFLAGS"
+CXXFLAGS="$CXXFLAGS $PTHREAD_CFLAGS"
 
-#AX_OPENMP
 LIB_CUDA
 LIB_RDMACM
 LIB_HWLOC
 
-#AC_CHECK_LIB([m], [sin])
-#AC_CHECK_LIB([gomp], [omp_get_num_threads])
+AC_CHECK_LIB([m], [sin])
 
 #
 # Checks for header files.
@@ -54,7 +54,6 @@ AC_STRUCT_TM
 #
 # Checks for library functions.
 #
-#FUNC_AFFINITY
 AC_FUNC_FORK
 AC_FUNC_MALLOC
 AC_FUNC_MEMCMP

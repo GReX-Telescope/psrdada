@@ -77,4 +77,6 @@ include_HEADERS += \
 AM_CPPFLAGS += @RDMACM_CFLAGS@
 libpsrdada_la_LIBADD += @RDMACM_LIBS@
 
+libpsrdada_la_LDFLAGS = -version-info $(PSRDADA_SO_VERSION)
+
 endif
