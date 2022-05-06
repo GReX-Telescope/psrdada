@@ -57,9 +57,6 @@ Makefile.in
 .libs/
 
 # compiled executeables
-3rdparty/vsib_proxy
-3rdparty/vsib_recv
-3rdparty/vsib_send
 Management/psrdada_cflags
 Management/psrdada_ldflags
 Management/psrdada.pc
