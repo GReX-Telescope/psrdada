@@ -103,4 +103,7 @@ apps/slow_rm
 apps/test_disk_perf
 examples/src/dada_example_client_writer
 examples/src/dada_example_writer
+src/tests/test_command_parse_server
+src/tests/test_ipcio
+src/tests/test_multilog_server
 

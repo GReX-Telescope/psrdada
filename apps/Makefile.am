@@ -35,6 +35,7 @@ bin_PROGRAMS = \
 bin_SCRIPTS = \
   ipcrme
 
+AM_CPPFLAGS =
 AM_CFLAGS = \
   -I$(top_srcdir)/src
 
@@ -66,6 +67,7 @@ if HAVE_CUDA
 
 bin_PROGRAMS += dada_dbgpu
 
+AM_CPPFLAGS += @CUDA_CFLAGS@
 LDADD += @CUDA_LIBS@
 
 include $(top_srcdir)/config/Makefile.cuda
