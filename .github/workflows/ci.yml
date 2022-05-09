@@ -18,7 +18,7 @@ jobs:
           - windows-msvc
 
         configuration:
-          - Debug
+          - Release
 
         include:
           - toolchain: linux-gcc
@@ -42,3 +42,9 @@ jobs:
 
     - name: Build with ${{ matrix.compiler }}
       run: cmake --build build
+
+    - name: Upload
+      uses: actions/upload-artifact@v1
+      with:
+        path: ./${ { matrix.config.artifact } }
+        name: ${ { matrix.config.artifact } }
