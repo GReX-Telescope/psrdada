@@ -45,6 +45,8 @@ set(HAVE_SYS_VFS_H on)
 
 configure_file(cmake_config.h.in config.h)
 
+include(GNUInstallDirs)
+
 add_subdirectory(src)
 add_subdirectory(apps)
 add_subdirectory(Management)
@@ -52,35 +54,5 @@ add_subdirectory(Management)
 # ---------------------------------------------------------------------------------------
 # Install
 # ---------------------------------------------------------------------------------------
-
-set(export_dest_dir "${CMAKE_INSTALL_PREFIX}/cmake/psrdada")
-
-# Install cmake config + version + target files
-include(CMakePackageConfigHelpers)
-configure_package_config_file(
-  cmake/PSRDadaConfig.cmake.in
-  "${CMAKE_CURRENT_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/PSRDadaConfig.cmake"
-  INSTALL_DESTINATION
-    share/ska-pst-recv/cmake
-)
-write_basic_package_version_file(
-  "${CMAKE_CURRENT_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/PSRDadaVersion.cmake"
-  COMPATIBILITY
-    AnyNewerVersion
-)
-
-install(
-  FILES
-    ${CMAKE_CURRENT_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/PSRDadaConfig.cmake
-    ${CMAKE_CURRENT_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/PSRDadaVersion.cmake
-  DESTINATION
-    "${export_dest_dir}"
-)
-
-#install(EXPORT PSRDadaTargets
-#  FILE
-#    PSRDadaTargets.cmake
-#  DESTINATION
-#    share/ska/pst/recv/cmake
-#)
-
+export(TARGETS psrdada FILE "${CMAKE_CURRENT_BINARY_DIR}/PSRDadaConfig.cmake")
+install(EXPORT PSRDadaConfig DESTINATION "${CMAKE_INSTALL_DATADIR}/PSRDada/cmake")

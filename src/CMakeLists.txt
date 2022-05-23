@@ -1,4 +1,3 @@
-
 set(public_headers
     ascii_header.h
     command_parse.h
@@ -151,15 +150,10 @@ if (BUILD_TESTING)
 endif()
 
 install(
-    TARGETS
-        psrdada
-    LIBRARY DESTINATION
-        lib
-)
+    TARGETS psrdada
+    EXPORT PSRDadaConfig
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 install(
-    FILES
-        ${public_headers}
-    DESTINATION
-        include
-)
+    FILES ${public_headers}
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
