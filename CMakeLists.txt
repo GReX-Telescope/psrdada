@@ -32,7 +32,7 @@ endif()
 
 if (CUDAToolkit_FOUND)
   if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
-    set(CMAKE_CUDA_ARCHITECTURES "35;50;72")
+    set(CMAKE_CUDA_ARCHITECTURES "60;75;80")
   endif()
   enable_language(CUDA)
   set(HAVE_CUDA on)
